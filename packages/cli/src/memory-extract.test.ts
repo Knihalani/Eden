@@ -33,3 +33,29 @@ describe("eden memory extract --jsonl -", () => {
     ]);
   });
 });
+
+describe("eden memory extract --jsonl -: slot records (P3.3, D7)", () => {
+  test("a slot statement answers `{kind: slot, slot, op, value}`, a set and each value it invalidates", () => {
+    const out = run([
+      { id: 0, text: "use biome for formatting, not prettier" },
+      { id: 1, text: "we don't use yarn anymore" },
+      { id: 2, text: "the auth is broken" },
+    ]);
+    expect(out).toEqual([
+      {
+        id: 0,
+        records: [
+          { kind: "slot", slot: "formatter", op: "set", value: "biome" },
+          { kind: "slot", slot: "formatter", op: "invalidate", value: "prettier" },
+        ],
+      },
+      { id: 1, records: [{ kind: "slot", slot: "pkg.manager", op: "invalidate", value: "yarn" }] },
+      { id: 2, records: [] },
+    ]);
+  });
+
+  test("a slot statement inside a pasted span is stripped first (D12)", () => {
+    const out = run([{ id: 0, text: "<pasted_content id=1>\nwe use pnpm here\n</pasted_content id=1>\nthoughts?" }]);
+    expect(out).toEqual([{ id: 0, records: [] }]);
+  });
+});

@@ -4,6 +4,7 @@
  */
 import { memoryNow } from "./memory-clock";
 import type { RuleRef } from "./memory-policy";
+import type { SlotRef } from "./memory-slots";
 
 export const PACKET_KIND = "rule|fact|episode|gist|procedure";
 /** Matches `[fact]`, `[fact · 3h · user]`, `[fact | 3h | user]`, `[procedure · verified]`. */
@@ -26,6 +27,8 @@ export type ProvenanceNote = {
   update?: { was?: string; renews?: { cid: string; ver: string; rule: boolean; sw?: string[] } };
   /** D9: the rules a rule row states, by key (`memory-policy.ts`). */
   rules?: readonly RuleRef[];
+  /** D7: the slots a slot row states, by key (`memory-slots.ts`). */
+  slots?: readonly SlotRef[];
   /** Where in the repo the row is true (A4 §1, D3); absent on a row written before P3.2 placed encoded rows. */
   scope?: string;
   /** The rows a two-scope bullet shows (`memory-place.ts`): what the ledger records for it (A4 §4). */
