@@ -198,6 +198,8 @@ export type MemoryRecord = {
   slots?: SlotRef[];
   /** How many times the user typed the row's value again, which wrote no row of its own (A4 §3.2). */
   reps?: number;
+  /** A4 §3.2: the row superseded another value of its slot at its own scope (a correction). */
+  corrected?: 1;
   /** Where in the repo the row is true (A4 §1, D3): a scope of its catalog. Absent is the repo root, `""`. */
   scope?: string;
 };
@@ -1350,6 +1352,7 @@ export class AgentMemory {
         row.invalidBy = incoming.id;
         this.changed.add(row.id);
       }
+      if (lost.length && row.scope === incoming.scope) incoming.corrected = 1;
     }
     for (const ref of refs)
       for (const old of ref.x ?? []) end(ref.k, old, incoming.scope, typedValue(incoming.text, ref.k, old));
@@ -1559,8 +1562,12 @@ export class AgentMemory {
         let coveredChars = 0,
           skippedIdentity = false;
         for (const [j, text] of durables[i]!.entries()) {
-          // D7: a statement of a slot is a fact keyed by it (A4 §3.1).
-          const slotted = !it.untyped && slotsIn(text).length > 0;
+          // D7: a statement of a slot is a fact keyed by it (A4 §3.1). A retraction's "don't" is no rule word: it
+          // states a slot, not a rule ("we don't use yarn anymore"); a statement that also sets a value beside a rule
+          // word stays a rule row with its keys ("we use pnpm, never npm").
+          const slots = it.untyped ? [] : slotsIn(text);
+          const slotted = slots.length > 0;
+          const retraction = slotted && slots.every((stated) => stated.value === undefined);
           try {
             const fact = it.untyped || placed ? undefined : objectAsserted(text);
             if (fact) {
@@ -1602,7 +1609,7 @@ export class AgentMemory {
               ? "episode"
               : pin || rules.length
                 ? "constraint"
-                : LEGACY_RULE.test(withoutExcludedWording(text))
+                : LEGACY_RULE.test(withoutExcludedWording(text)) && !retraction
                   ? "constraint"
                   : slotted
                     ? "fact"

@@ -90,6 +90,9 @@ describe("supersession by key (A4 §3.1–3.2)", () => {
     mem.remember("packages/cli uses mysql for its database.", { tags: ["src:user"], scope: "packages/cli" });
     expect(superseded(said(mem, "is sqlite"))).toBe(true);
     expect(superseded(said(mem, "postgres"))).toBe(false);
+    // A4 §3.2: a different value at the same scope is a correction.
+    expect(said(mem, "uses mysql").corrected).toBe(1);
+    expect(said(mem, "is sqlite").corrected).toBeUndefined();
     expect(keyed(mem).map((row) => [row.scope, row.slots])).toEqual([
       ["apps/web", [{ k: "db.engine", v: "postgres" }]],
       ["packages/cli", [{ k: "db.engine", v: "mysql" }]],
@@ -104,6 +107,8 @@ describe("supersession by key (A4 §3.1–3.2)", () => {
     mem.observe([typed("We use yarn.", 2)]);
     mem.observe([typed("We don't use yarn anymore.", 3)]);
     expect(superseded(mem.memories().find((row) => row.text === "We use yarn")!)).toBe(true);
+    // A retraction states a slot, not a rule: its "don't" is no rule word (D6).
+    expect(said(mem, "don't use yarn").kind).toBe("fact");
     expect(keyed(mem).filter((row) => row.slots!.some((slot) => slot.k === "pkg.manager" && slot.v))).toEqual([]);
   });
 
