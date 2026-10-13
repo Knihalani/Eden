@@ -573,18 +573,36 @@ function carriesSlotValue(sentence: string, slot: SlotId, value: string): boolea
   });
 }
 
+/** A clause's own place, when it opens by naming its folder ("In apps/web the …", "packages/cli uses …"). */
+const PLACE_PHRASE = /^(?:(?:[Ii]n|[Ff]or|[Oo]n)\s+)?([a-z0-9@_-][a-z0-9@._-]*(?:\/[a-z0-9@._-]+)+)(?:'s)?[\s,:]/;
+
 /**
- * D31's `stale_for` by key: a fact or episode clause carrying a slot value a statement ended, at a scope the record
- * holds for (its row's, and the folders the clause names), older than the record; never a rule clause, a clause
- * giving another subject that value, nor the clause stating the change.
+ * Whether a slot's ended value holds where a clause is read: at the row's scope, or at a folder the reader is in and
+ * the row is visible from (an ancestor's row, A4 §2: "we use pnpm and vitest" kept at `""` for its package manager is
+ * read at apps/web, where vitest was ended), never where the clause names another folder of its own.
  */
-function staleForSlot(record: Retraction & { slot: SlotId }, sentence: string, scope: string | undefined): boolean {
-  if (scope !== undefined && record.in !== undefined && !within(scope, record.in, record.except)) return false;
+function holdsAt(record: Retraction, clause: string, scope: string | undefined, readAt: readonly string[]): boolean {
+  if (record.in === undefined) return true;
+  const holds = (at: string) => within(at, record.in!, record.except);
+  const place = PLACE_PHRASE.exec(clause.replace(/^\W+/, ""))?.[1];
+  if (place) return holds(place);
+  if (scope === undefined) return true;
+  return holds(scope) || readAt.some((at) => holds(at) && within(at, scope));
+}
+
+/**
+ * D31's `stale_for` by key: a fact or episode clause carrying a slot value a statement ended, where the record holds
+ * (`holdsAt`), older than the record; never a rule clause, a clause giving another subject that value, nor the clause
+ * stating the change.
+ */
+function staleForSlot(
+  record: Retraction & { slot: SlotId },
+  sentence: string,
+  scope: string | undefined,
+  readAt: readonly string[],
+): boolean {
   const clause = stripPacketLabel(sentence).body;
-  // A clause naming its folder is that folder's ("In apps/web the database is postgres"), whatever row holds it.
-  const paths = (clause.match(PATH) ?? []).map((path) => path.toLowerCase());
-  if (record.in !== undefined && paths.length && !paths.some((path) => within(path, record.in!, record.except)))
-    return false;
+  if (!holdsAt(record, clause, scope, readAt)) return false;
   if (RULE_SENTENCE.test(clause) || !carriesSlotValue(clause, record.slot, record.o)) return false;
   const stated = slotsIn(clause);
   if (stated.some((statement) => statement.slot === record.slot && statement.was.includes(record.o))) return false;
@@ -604,12 +622,17 @@ function statesOtherSubject(clause: string, slot: SlotId): boolean {
   }
 }
 
-function invalidates(record: Invalidation, sentence: string, scope: string | undefined): boolean {
+function invalidates(
+  record: Invalidation,
+  sentence: string,
+  scope: string | undefined,
+  readAt: readonly string[] = [],
+): boolean {
   if (record.k === "revoke") return forbids(sentence, record);
   if (record.k === "oppose") return statesRule(sentence, record.r);
   // An end is applied to the whole text first (`withoutEnded`).
   if (record.k === "end") return false;
-  if (record.slot) return staleForSlot({ ...record, slot: record.slot }, sentence, scope);
+  if (record.slot) return staleForSlot({ ...record, slot: record.slot }, sentence, scope, readAt);
   if (record.in !== undefined && scope !== undefined && record.in !== scope) return false;
   if (RULE_SENTENCE.test(sentence)) return false;
   if (!mentions(sentence, record)) return false;
@@ -624,9 +647,16 @@ function invalidates(record: Invalidation, sentence: string, scope: string | und
  * supersedes statements: a rule clause yields only to a revocation, which takes its whole sentence (the clauses after
  * a `;` qualify the rule: "never push to main; ask first"); a fact or episode clause yields to a retraction
  * (supersession, `stale_for`), even inside a pinned row. `scope` is the row's (A4 §2), when it has one: a supersession
- * at another scope leaves it as it is.
+ * at another scope leaves it as it is. `readAt` are the folders it is read at (the read set), where a slot's value
+ * ended there no longer holds in an ancestor's row (`holdsAt`).
  */
-export function validText(text: string, at: unknown, records: readonly Invalidation[], scope?: string): string {
+export function validText(
+  text: string,
+  at: unknown,
+  records: readonly Invalidation[],
+  scope?: string,
+  readAt: readonly string[] = [],
+): string {
   const time = typeof at === "number" && Number.isFinite(at) ? at : 0;
   const newer = records.filter((record) => record.t > time && record.k !== "end");
   const raw = withoutEnded(
@@ -641,7 +671,7 @@ export function validText(text: string, at: unknown, records: readonly Invalidat
       .split(CLAUSE_BREAK)
       .map((clause) => clause.trim())
       .filter(Boolean);
-    const valid = (clause: string) => !newer.some((record) => invalidates(record, clause, scope));
+    const valid = (clause: string) => !newer.some((record) => invalidates(record, clause, scope, readAt));
     const revoked = clauses.some((clause) => revokes(newer, clause));
     const left = revoked ? otherRules(sentence, newer).filter(valid) : clauses.filter(valid);
     if (revoked || left.length < clauses.length) dropped = true;

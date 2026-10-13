@@ -108,3 +108,28 @@ describe("round 1: a statement of a root and a working slot (D7's default scopes
     expect(live(mem).find((row) => row.text === "We use yarn")?.scope).toBe("");
   });
 });
+
+describe("round 2: rows visible at the reader's folder", () => {
+  test("a split statement's root part, read at apps/web, loses the test runner apps/web switched away from", () => {
+    const web = store("apps/web");
+    web.observe([typed("We use pnpm and vitest.", 0)]);
+    web.observe([typed("We switched from vitest to jest.", 1)]);
+    const invalid = readInvalidations(web.dir);
+    const root = live(web).find((row) => row.scope === "" && /pnpm and vitest/.test(row.text))!;
+    expect(validText(root.text, root.at, invalid, root.scope, ["apps/web"])).toBe("");
+    // At a sibling the ended value was never held: the text stays as it is there (filed to P3.5).
+    expect(validText(root.text, root.at, invalid, root.scope, ["packages/cli"])).toBe(root.text);
+  });
+
+  test("a slash word is no folder: an apps/web episode naming CI/CD or and/or still loses the ended value", () => {
+    const mem = store("apps/web");
+    mem.observe([typed("We use jest.", 1)]);
+    mem.observe([typed("We switched from jest to vitest.", 2)]);
+    const invalid = readInvalidations(mem.dir);
+    for (const old of ["Our CI/CD runs jest on every push.", "Run jest with --watch and/or --coverage."])
+      expect(validText(old, T0, invalid, "apps/web")).toBe("");
+    expect(validText("In packages/cli the test runner is jest", T0, invalid, "apps/web")).toBe(
+      "In packages/cli the test runner is jest",
+    );
+  });
+});
