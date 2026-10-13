@@ -48,7 +48,34 @@ const TABLE: [string, string[]][] = [
   ["use biome for formatting, not prettier", ["formatter=biome !prettier"]],
   ["we use yarn berry", ["pkg.manager=yarn"]],
   ["we're not on heroku anymore, it's render", ["deploy.target !heroku", "deploy.target=render"]],
-  // Status words, questions, conditionals and instructions state no slot (D7, R7 §9).
+  // The same forms, in other words D7's forms take.
+  ["Clerk is our auth provider", ["auth.provider=clerk"]],
+  ["our tests use vitest", ["test.runner=vitest"]],
+  ["Node version is pinned to 20.11 in .nvmrc", ["node.version=20.11"]],
+  ["auth is handled by Clerk", ["auth.provider=clerk"]],
+  ["we're on GitHub Actions for CI", ["ci.system=github actions"]],
+  ["we just switched to vitest", ["test.runner=vitest"]],
+  ["we replaced jest with vitest", ["test.runner=vitest !jest"]],
+  ["we use pnpm and vitest", ["pkg.manager=pnpm", "test.runner=vitest"]],
+  ["we lint with biome", ["linter=biome"]],
+  ["The web app deploys on Vercel.", ["deploy.target=vercel"]],
+  ["We use node 20 across the repo.", ["node.version=20"]],
+  ["apps/web runs node 22.", ["node.version=22"]],
+  ["packages/cli uses yarn as its package manager.", ["pkg.manager=yarn"]],
+  // Status words, questions, conditionals, reminders and instructions state no slot (D7, R7 §9); nor does a value
+  // that is an everyday word without its slot, or a word outside the class where the form takes class values only.
+  ["don't forget to use Clerk for auth because SSO", []],
+  ["I switched branches to main", []],
+  ["Render the login form server-side.", []],
+  ["tests run in CI", []],
+  ["the tests run on Fridays", []],
+  ["test the endpoint with Postgres", []],
+  // A qualified subject is another instance, whose value is not the slot's.
+  ["The staging database is postgres.", []],
+  ["End-to-end tests use Playwright.", []],
+  // An instruction is one task, not the repo's practice.
+  ["install the dependencies with npm", []],
+  ["lint with biome", []],
   ["the auth is broken", []],
   ["auth is broken", []],
   ["the db is down again", []],
