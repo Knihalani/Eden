@@ -75,7 +75,7 @@ describe("extractCandidates", () => {
     expect(got.some((tr) => tr.o === "Bob" && tr.t === 1001 && tr.recId === "b")).toBe(true);
     expect(got.some((tr) => /label|28|positive|great/i.test(tr.o) || tr.p === "label")).toBe(false);
     expect(got.some((tr) => /failing/i.test(tr.o))).toBe(false);
-    expect(got.some((tr) => tr.s === "stack" && tr.p === "uses" && /sqlite/i.test(tr.o))).toBe(true);
+    expect(got.some((tr) => tr.s === "database" && tr.p === "is" && /sqlite/i.test(tr.o))).toBe(true);
   });
 
   test("A1 D8: a list number is not a time: 8. The chairperson is X keeps its row's time", () => {
@@ -111,7 +111,9 @@ describe("extractCandidates", () => {
 
   test("M48.2: decided-to-use ADR extracts auth is Clerk; don't-forget and ICL do not", () => {
     const got = extractCandidates([{ text: "We decided to use Clerk for auth because SSO.", t: 10, id: "adr" }]);
-    expect(got.some((tr) => tr.s === "auth" && tr.p === "is" && /Clerk/i.test(tr.o) && tr.recId === "adr")).toBe(true);
+    expect(
+      got.some((tr) => tr.s === "auth provider" && tr.p === "is" && /Clerk/i.test(tr.o) && tr.recId === "adr"),
+    ).toBe(true);
     expect(extractCandidates([{ text: "don't forget to use Clerk for auth because SSO.", t: 11 }])).toEqual([]);
     expect(extractCandidates([{ text: "We decided to use Clerk for auth because SSO. label: 7", t: 12 }])).toEqual([]);
     expect(extractCandidates([{ text: "We decided to use Clerk for auth because SSO.", t: 13, lane: "icl" }])).toEqual(

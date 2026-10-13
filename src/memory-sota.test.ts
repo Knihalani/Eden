@@ -233,20 +233,20 @@ describe("P1 sleep", () => {
       const mem = openMemory({ dir });
       mem.observe([{ role: "user", content: "Auth is Clerk." }]);
       await sleep({ dir, mem });
-      const before = new SemanticStore(dir).live().filter((t) => t.s === "auth" && t.p === "is");
+      const before = new SemanticStore(dir).live().filter((t) => t.s === "auth provider" && t.p === "is");
       expect(before.some((t) => /Clerk/i.test(t.o))).toBe(true);
       mem.remember("Auth is Clerk.");
       await sleep({ dir, mem });
-      const again = new SemanticStore(dir).get("auth", "is");
+      const again = new SemanticStore(dir).get("auth provider", "is");
       expect(String(again?.o ?? "")).toMatch(/Clerk/i);
-      const liveSame = new SemanticStore(dir).live().filter((t) => t.s === "auth" && t.p === "is");
+      const liveSame = new SemanticStore(dir).live().filter((t) => t.s === "auth provider" && t.p === "is");
       expect(liveSame.length).toBe(1);
 
       mem.observe([{ role: "user", content: "Auth is Auth0." }]);
       await sleep({ dir, mem });
       const store = new SemanticStore(dir);
-      expect(String(store.get("auth", "is")?.o ?? "")).toMatch(/Auth0/i);
-      expect(store.supersededObject("Clerk", "auth", "is")).toBe(true);
+      expect(String(store.get("auth provider", "is")?.o ?? "")).toMatch(/Auth0/i);
+      expect(store.supersededObject("clerk", "auth provider", "is")).toBe(true);
       const pkt = packetOf(mem.inject([{ role: "user", content: "what is auth?" }]));
       expect(pkt).toMatch(/Auth0/);
       expect(pkt).not.toMatch(/Clerk/);

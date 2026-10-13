@@ -30,12 +30,14 @@ describe("A4 §3.1, D7: what invalidates a value", () => {
   test("a retraction or a switch with a 'we' subject, of a capitalized or identifier-shaped value ending its clause", () => {
     const cases: [string, string[]][] = [
       ["We no longer use Redis.", ["retract:redis"]],
-      ["we don't use Jest anymore", ["retract:jest"]],
-      ["We're not using Jest anymore.", ["retract:jest"]],
       ["We dropped Sentry.", ["retract:sentry"]],
       ["We no longer use Redis, so drop the cache flag.", ["retract:redis"]],
-      ["We switched apps/web from Auth0 to Clerk.", ["retract:auth0"]],
       ["We migrated the queue from SQS to Kafka.", ["retract:sqs"]],
+      // P3.3: a value of a D7 slot is logged by key, at its scope, by the store that encodes the statement
+      // (`recordSlotChanges`, memory-slot-store.test.ts), not here at every scope.
+      ["we don't use Jest anymore", []],
+      ["We're not using Jest anymore.", []],
+      ["We switched apps/web from Auth0 to Clerk.", []],
     ];
     for (const [text, expected] of cases) expect(shown(text)).toEqual(expected);
   });
@@ -100,7 +102,8 @@ describe("D7: a value shaped by its capitals alone is matched as typed", () => {
       ["We no longer use React.", "React is our UI library."],
       ["We no longer use Redis.", "redis is our cache"],
       ["We moved the login handler from GET to POST.", "The login handler answers GET requests."],
-      ["We switched apps/web from Auth0 to Clerk.", "the auth provider is auth0"],
+      // A value with a digit is matched in any case (a D7 slot's value is logged by key: memory-slot-store.test.ts).
+      ["We switched the cache from Redis7 to Valkey.", "the cache is redis7"],
     ];
     for (const [said, text] of dropped) expect(after(said, text)).toBe("");
   });
@@ -109,11 +112,12 @@ describe("D7: a value shaped by its capitals alone is matched as typed", () => {
 describe("D7: a switch stays within its scope and subject", () => {
   const after = (switched: string) => (text: string) => validText(text, 50, invalidationsIn(switched, 100));
   test("a scoped switch keeps the value in another scope", () => {
-    const valid = after("We switched packages/cli from Postgres to SQLite.");
-    expect(valid("apps/web uses Postgres.")).toBe("apps/web uses Postgres.");
-    expect(valid("packages/cli uses Postgres.")).toBe("");
-    expect(valid("packages/cli/src/db.ts opens Postgres.")).toBe("");
-    expect(valid("The database is Postgres.")).toBe("");
+    // A value of no D7 slot; a slot's switch is held at its scope by key (memory-slot-store.test.ts).
+    const valid = after("We switched packages/cli from Kafka to SQS.");
+    expect(valid("apps/web uses Kafka.")).toBe("apps/web uses Kafka.");
+    expect(valid("packages/cli uses Kafka.")).toBe("");
+    expect(valid("packages/cli/src/queue.ts opens Kafka.")).toBe("");
+    expect(valid("The queue is Kafka.")).toBe("");
   });
 
   test("a switch of a subject keeps the value for another subject", () => {
@@ -202,19 +206,19 @@ describe("A4 §3.1, D9: what revokes a rule", () => {
 describe("A4 §5.1 step 5: validity at delivery", () => {
   const records = [
     ...invalidationsIn("We no longer use Redis.", 100),
-    ...invalidationsIn("We switched apps/web from Auth0 to Clerk.", 100),
+    ...invalidationsIn("We switched apps/web from Zipkin to Jaeger.", 100),
   ];
 
   test("a sentence older than an invalidation that still names its value is dropped", () => {
     expect(validText("stack uses Redis", 50, records)).toBe("");
-    expect(validText("in apps web the auth provider is Auth0, and the database is postgres", 50, records)).toBe("");
+    expect(validText("in apps web the tracer is Zipkin, and the database is postgres", 50, records)).toBe("");
     expect(validText("stack uses Redis. Never commit .env files", 50, records)).toBe("Never commit .env files");
   });
 
   test("newer text, the change itself, and the value inside a path or a filename stay", () => {
     expect(validText("We use Redis again", 150, records)).toBe("We use Redis again");
-    expect(validText("We switched apps/web from Auth0 to Clerk", 50, records)).toBe(
-      "We switched apps/web from Auth0 to Clerk",
+    expect(validText("We switched apps/web from Zipkin to Jaeger", 50, records)).toBe(
+      "We switched apps/web from Zipkin to Jaeger",
     );
     expect(validText("redis.conf sets maxmemory", 50, records)).toBe("redis.conf sets maxmemory");
     expect(validText("see vendor/redis/README", 50, records)).toBe("see vendor/redis/README");
@@ -276,10 +280,11 @@ describe("P0.2 review round 4, closed in P0.3", () => {
   });
 
   test("what is left of a dropped item is not a bare list marker", () => {
-    expect(after("We switched the database from SQLite to Postgres.", "1. The database is SQLite")).toBe("");
-    expect(
-      after("We switched the database from SQLite to Postgres.", "1. The database is SQLite. 2. Logs go to stdout."),
-    ).toBe("2. Logs go to stdout.");
+    // A value of no D7 slot; a slot's switch is logged by key (memory-slot-store.test.ts has the same case).
+    expect(after("We switched the queue from SQS to Kafka.", "1. The queue is SQS")).toBe("");
+    expect(after("We switched the queue from SQS to Kafka.", "1. The queue is SQS. 2. Logs go to stdout.")).toBe(
+      "2. Logs go to stdout.",
+    );
   });
 
   test("a revocation keeps a joined rule about another action", () => {

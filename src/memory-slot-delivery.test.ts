@@ -43,7 +43,12 @@ describe("the ledger keys a slot by (scope, slot) (A4 §4)", () => {
     const yarn = ledgerKey(fact("We use yarn.", [{ k: "pkg.manager", v: "yarn" }], ""), REPO);
     const live = [{ cid: yarn.cid, ver: yarn.ver }];
     const gone = fact("We don't use yarn anymore.", [{ k: "pkg.manager", x: ["yarn"] }], "");
-    expect(novelNotes([gone], live, { repo: REPO })[0]?.update).toEqual({ was: "yarn" });
+    // Its delivery renews the slot at the empty value, so a second retraction of yarn is refractory.
+    const [item] = novelNotes([gone], live, { repo: REPO });
+    expect(item?.update).toEqual({ was: "yarn", renews: { cid: yarn.cid, ver: expect.any(String), rule: false } });
+    const renewed = [{ cid: yarn.cid, ver: item!.update!.renews!.ver }];
+    const again = fact("We no longer use yarn.", [{ k: "pkg.manager", x: ["yarn"] }], "");
+    expect(novelNotes([again], renewed, { repo: REPO })).toEqual([]);
     const other = fact("We don't use npm anymore.", [{ k: "pkg.manager", x: ["npm"] }], "");
     expect(novelNotes([other], live, { repo: REPO })[0]?.update).toBeUndefined();
   });
@@ -69,8 +74,8 @@ describe("D26's slot rule on keys: a subject alias and the value, or the value's
   test("a value in exactly one slot's class states it by `use` alone; a question or a negation states nothing", () => {
     const pnpm = fact("The package manager is pnpm.", [{ k: "pkg.manager", v: "pnpm" }]);
     expect(unsaidText(pnpm, residualSentences(["use pnpm to install it"]))).toBe("");
-    expect(unsaidText(db, residualSentences(["is the db sqlite?"]))).toBe(db.text);
-    expect(unsaidText(db, residualSentences(["we don't use sqlite for the db anymore"]))).toBe(db.text);
+    expect(unsaidText(db, residualSentences(["is the db sqlite?"]))).toBe(db.text!);
+    expect(unsaidText(db, residualSentences(["we don't use sqlite for the db anymore"]))).toBe(db.text!);
   });
 });
 
@@ -78,10 +83,8 @@ describe("the two-scope bullet takes the other scope's keyed value (A4 §2, D4)"
   test("one bullet with each scope's value of the slot, named by the slot's label", () => {
     const web = { id: "w", ...fact("In apps/web the database is postgres.", [{ k: "db.engine", v: "postgres" }]) };
     const cli = { id: "c", ...fact("packages/cli uses sqlite for its database.", [{ k: "db.engine", v: "sqlite" }]) };
-    const notes = twoScopeNotes(
-      [{ ...web, scope: "apps/web" }],
-      ["apps/web", "packages/cli"],
-      (scope) => (scope === "packages/cli" ? [{ ...cli, scope }] : []),
+    const notes = twoScopeNotes([{ ...web, scope: "apps/web" }], ["apps/web", "packages/cli"], (scope) =>
+      scope === "packages/cli" ? [{ ...cli, scope }] : [],
     );
     expect(notes.map((note) => note.text)).toEqual(["database — apps/web: postgres · packages/cli: sqlite"]);
   });

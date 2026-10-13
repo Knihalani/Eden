@@ -21,10 +21,10 @@ export type ProvenanceNote = {
   lane?: string;
   at?: number;
   /**
-   * An `Updated:` item (A4 §4): the window was given this item's earlier value, named when the store logged it, and
-   * the slot entry its delivery renews (`memory-ledger.ts`).
+   * An `Updated:` item (A4 §4): the window was given this item's earlier value, named when it is known, and the slot
+   * entry a retraction's delivery renews (`memory-ledger.ts`).
    */
-  update?: { was?: string; renews?: { cid: string; ver: string; rule: boolean; sw?: string[] } };
+  update?: { was?: string; renews?: { cid: string; ver: string; rule: boolean } };
   /** D9: the rules a rule row states, by key (`memory-policy.ts`). */
   rules?: readonly RuleRef[];
   /** D7: the slots a slot row states, by key (`memory-slots.ts`). */
