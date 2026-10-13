@@ -28,6 +28,7 @@ import { applyProvenanceLabel, isUntyped, stripPacketLabel } from "./memory-prov
 import { logMemoryNotes } from "./memory-log";
 import { legacySlot } from "./memory-residual";
 import { namesRootSlot, rowScope, type EncodePlace } from "./memory-place";
+import type { SlotRef } from "./memory-slots";
 import {
   counteredKeys,
   isForget,
@@ -182,6 +183,10 @@ export type MemoryRecord = {
   promptId?: string;
   /** D9: the rules the row states, by key. */
   rules?: RuleRef[];
+  /** D7: the slots the row states, by key (A4 §3.1). */
+  slots?: SlotRef[];
+  /** How many times the user typed the row's value again, which wrote no row of its own (A4 §3.2). */
+  reps?: number;
   /** Where in the repo the row is true (A4 §1, D3): a scope of its catalog. Absent is the repo root, `""`. */
   scope?: string;
 };
