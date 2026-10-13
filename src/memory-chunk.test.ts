@@ -383,7 +383,7 @@ describe("M18 leftover identity + empty cue + torn JSONL", () => {
     expect(extract).toBeGreaterThan(nar);
     expect(observeSrc.slice(nar, extract)).toMatch(/\bcontinue;/);
     expect(observeSrc).toMatch(
-      /lanes\[i\] === "icl" \|\| lanes\[i\] === "narrative" \? \[\] : this\.durables\(it\.text\)/,
+      /lanes\[i\] === "icl" \|\| lanes\[i\] === "narrative" \? \[\] : this\.durables\(it\.text, it\.lines\)/,
     );
     expect(observeSrc).not.toMatch(/extractDurable\(extractSrc\)/);
   });

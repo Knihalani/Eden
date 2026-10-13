@@ -109,9 +109,14 @@ function candidateFromNote(n: NoteLike, text?: string): CandidateText {
  * The items must count 1, 2, … so a number inside a sentence ("version 2. Then …") never splits one. The heading is
  * not a speaker label: no item carries it.
  */
+/**
+ * A heading's numbered items ("Notes:\n1. …\n2. …"), or undefined. Where the text keeps its line breaks, an item ends
+ * at its own: the next line is no part of it ("2. Logs go to stdout\nReply with just OK").
+ */
 export function listUnderHeading(text: string): string[] | undefined {
-  const [heading, ...items] = text.trim().split(/\s+(?=\d{1,3}[.)]\s+\S)/);
-  if (!heading?.endsWith(":") || items.length < 2) return undefined;
+  const [heading, ...parts] = text.trim().split(/\s+(?=\d{1,3}[.)]\s+\S)/);
+  if (!heading?.endsWith(":") || parts.length < 2) return undefined;
+  const items = parts.map((item) => item.split("\n")[0]!.trim());
   return items.every((item, i) => item.startsWith(`${i + 1}.`) || item.startsWith(`${i + 1})`)) ? items : undefined;
 }
 

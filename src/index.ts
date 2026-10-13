@@ -559,13 +559,14 @@ const ACK_PREFIX = new RegExp(
 );
 const SPEAKER_LABEL = /^([A-Z][A-Za-z0-9 /._-]{1,32}:)(?=\s)/;
 
-function extractDurable(blob: string): string[] {
+/** A message's durable statements; `lines` is its text with line breaks kept, where a heading's list ends its items. */
+function extractDurable(blob: string, lines = blob): string[] {
   const seen = new Set<string>(),
     out: string[] = [];
   let whole = blob.trim().replace(/\s+/g, " ").replace(ACK_PREFIX, "");
   if (SPEAKER_LABEL.test(whole) && whole.endsWith("?") && /[.!]/.test(whole.slice(0, -1)))
     whole = whole.replace(/\s+[^.!?]+\?\s*$/, "").trim();
-  const listed = listUnderHeading(blob),
+  const listed = listUnderHeading(lines),
     labeledWhole = !listed && SPEAKER_LABEL.test(whole) && whole.length <= 800 && !whole.endsWith("?"),
     numberedWhole = /^\d+[.)]\s+\S/.test(whole),
     label = listed ? undefined : whole.match(SPEAKER_LABEL)?.[1];
@@ -656,7 +657,15 @@ const TEXT_SOURCES = new Set<string>(["user", "paste", "tool", "agent"]);
 /** Where a message came from, when the caller knows: its transcript line, that line's time and turn (A4 §3.3). */
 type MessageOrigin = { at?: number; srcUuid?: string; promptId?: string };
 
-type ObservedItem = { role: string; src?: TextSource; untyped: boolean; text: string; origin: MessageOrigin };
+/** `text` has its whitespace collapsed; `lines` keeps its line breaks (a heading's list reads them). */
+type ObservedItem = {
+  role: string;
+  src?: TextSource;
+  untyped: boolean;
+  text: string;
+  lines: string;
+  origin: MessageOrigin;
+};
 
 /**
  * A message's source: the one its caller marks (`src`), else `agent` for the assistant's text; a user message with
@@ -679,8 +688,8 @@ function observedItem(message: unknown): ObservedItem {
     ...(typeof fields.uuid === "string" && fields.uuid ? { srcUuid: fields.uuid } : {}),
     ...(typeof fields.promptId === "string" && fields.promptId ? { promptId: fields.promptId } : {}),
   };
-  const text = (untyped ? withoutInstructions(raw) : raw).trim().replace(/\s+/g, " ");
-  return { role, src, untyped, text, origin };
+  const lines = (untyped ? withoutInstructions(raw) : raw).trim().replace(/[^\S\n]+/g, " ");
+  return { role, src, untyped, text: lines.replace(/\s+/g, " "), lines, origin };
 }
 
 const finite = (value: unknown): number | undefined =>
@@ -1024,6 +1033,7 @@ export class AgentMemory {
   private path: string;
   private batch = 0;
   private dirty = false;
+  /** Every row's text, lowercased, and again as `<scope>\0<text>` (the scope `\0` where it is unknown). */
   private seenLower = new Set<string>();
   /** `seenLower` without end punctuation: an episode is not stored twice for a final period. */
   private seenKeys = new Set<string>();
@@ -1197,7 +1207,7 @@ export class AgentMemory {
     this.knownIds.add(rec.id);
     this.unsaved.add(rec.id);
     this.post = null;
-    this.noteSeen(rec.text);
+    this.noteSeen(rec.text, rec.scope);
     return (this.flush(true), rec);
   }
 
@@ -1405,14 +1415,37 @@ export class AgentMemory {
     this.seenKeys = new Set();
     this.stored = new Set();
     this.post = null;
-    for (const c of this.compiled) this.noteSeen(c.rec.text);
+    for (const c of this.compiled) this.noteSeen(c.rec.text, c.rec.scope);
   }
 
-  private noteSeen(text: string): void {
+  private noteSeen(text: string, scope: string | undefined): void {
     const lower = text.toLowerCase();
-    this.seenLower.add(lower);
-    this.seenKeys.add(lower.replace(/[.!?]+$/g, ""));
+    const key = lower.replace(/[.!?]+$/g, "");
+    for (const [set, value] of [
+      [this.seenLower, lower],
+      [this.seenKeys, key],
+    ] as const)
+      set.add(value).add(`${scope ?? "\0"}\0${value}`);
     this.stored.add(text);
+  }
+
+  /**
+   * Whether a row already holds a text (lowercased; in `seenKeys`, without its closing stop) where it would be stored
+   * (A4 §3.2): at its scope, or at no known scope, which is every scope's. Where the place is unknown, any row.
+   */
+  private seenAt(value: string, scope: string | undefined, set = this.seenLower): boolean {
+    const lower = value.toLowerCase();
+    if (scope === undefined) return set.has(lower);
+    return set.has(`${scope}\0${lower}`) || set.has(`\0\0${lower}`);
+  }
+
+  /** The scope `remember` stores a typed text at, read before it is stored (`encodedScope`). */
+  private scopeFor(text: string, untyped: boolean): string | undefined {
+    if (!this.place) return undefined;
+    const rules = untyped ? [] : rulesIn(text);
+    const slots = untyped || rules.length ? [] : slotsIn(text);
+    const root = rules.length > 0 || (slots.length > 0 && slots.every(({ slot }) => DEFAULT_SCOPES[slot] === "root"));
+    return this.encodedScope(text, root, slots);
   }
 
   /**
@@ -1483,7 +1516,9 @@ export class AgentMemory {
         placed = !!this.place?.repo(),
         batchLive = new Map<string, string>(),
         lanes = items.map((it) => encodeLane(it.text)),
-        durables = items.map((it, i) => (lanes[i] === "icl" || lanes[i] === "narrative" ? [] : this.durables(it.text))),
+        durables = items.map((it, i) =>
+          lanes[i] === "icl" || lanes[i] === "narrative" ? [] : this.durables(it.text, it.lines),
+        ),
         // Where the user last typed a statement about each subject: the only place a restatement can be.
         lastTyped = new Map<string, string>();
       durables.forEach((texts, i) => {
@@ -1554,7 +1589,7 @@ export class AgentMemory {
           } catch {}
           const lastTypedHere = lastTyped.get(restatementKey(text) ?? "") === `${i}:${j}`;
           const learnAgain = !opts.reread && this.restated(text, lastTypedHere);
-          if (this.seenLower.has(text.toLowerCase()) && !learnAgain) {
+          if (this.seenAt(text, this.scopeFor(text, it.untyped)) && !learnAgain) {
             if (!it.untyped && !opts.reread) this.noteRuleSaidAgain(text, it.origin.srcUuid);
             continue;
           }
@@ -1600,10 +1635,11 @@ export class AgentMemory {
               (out.length === before || coveredChars / Math.max(1, safe.length) < 0.85)
             ) {
               const key = safe.replace(/[.!?]+$/g, "").toLowerCase();
+              const at = this.place && rowScope(safe, false, this.place);
               if (
-                !this.seenLower.has(safe.toLowerCase()) &&
+                !this.seenAt(safe, at) &&
                 !out.some((r) => r.text.replace(/[.!?]+$/g, "").toLowerCase() === key) &&
-                !this.seenKeys.has(key)
+                !this.seenAt(key, at, this.seenKeys)
               )
                 out.push(this.remember(safe, { kind: "episode", tags: srcTags(it), origin: it.origin }));
             }
@@ -1622,8 +1658,8 @@ export class AgentMemory {
    * A message's durable statements as rows hold them: "X instead of Y" as X alone, the store's redaction applied. A
    * slot statement keeps its words: its keys hold what it invalidates (A4 §3.1).
    */
-  private durables(text: string): string[] {
-    return extractDurable(text).map((raw) => {
+  private durables(text: string, lines?: string): string[] {
+    return extractDurable(text, lines).map((raw) => {
       let said = raw;
       try {
         const asserted = slotsIn(said).length ? undefined : objectAsserted(said);

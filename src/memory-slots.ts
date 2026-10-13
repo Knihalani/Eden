@@ -25,6 +25,8 @@
  * - **No slot** in a question, a conditional ("if we use pnpm, …"), a reminder ("don't forget to use …"), an
  *   instruction that only mentions a value ("use vitest's fake timers"), a status ("the db is down"), or a value of
  *   no class without its slot named ("we use Redis for caching", "use a Set instead of an array").
+ * - **Another instance.** A word before the subject names another instance of it ("the staging database", "end-to-end
+ *   tests"), whose value is not the slot's: such a subject states no slot.
  * - **Common words.** A value that is also an everyday word ("main", "next", "render", "express") is read only where
  *   its slot is named in the same sentence: "we switched to main" is a checkout, not the base branch.
  */
@@ -205,6 +207,7 @@ const TABLE: Readonly<Record<SlotId, SlotSpec>> = {
       "hosting provider",
       "deployments",
       "deployment",
+      "deploys",
       "deploy",
       "hosting",
     ],
@@ -431,13 +434,17 @@ function leadingVersion(phrase: string, slot?: SlotId): { slot?: SlotId; value: 
   return { ...(named || slot ? { slot: named ?? slot } : {}), value: match[2]! };
 }
 
-/** How a value is read: by a pattern naming its slot (any value of its class, or one shaped token), or by its class. */
-type Reading = { slot: SlotId } | { slot?: undefined };
+/**
+ * How a value is read: by its class alone; or for a slot a pattern names, any value of its class or, unless `classOnly`,
+ * one shaped token (D7's rule for a value outside the class).
+ */
+type Reading = { slot: SlotId; classOnly?: boolean } | { slot?: undefined };
 
 /**
  * The value a phrase gives, read as `reading` allows (see the header): a class name at its start (with one qualifier
- * word after it, or anything after it when the slot is named), a version, or, for a named slot, one shaped token.
- * `named` are the slots the sentence names, which an everyday word needs.
+ * word after it, or anything after it when the slot is named), a version, or, for a named slot, one shaped token that
+ * is no status word and names no slot itself ("tests run in CI" names no test runner). `named` are the slots the
+ * sentence names, which an everyday word needs.
  */
 function valueOf(
   raw: string,
@@ -461,11 +468,11 @@ function valueOf(
   );
   const fit = names.filter((name) => !commonWord(name.typed) || named.includes(name.slot));
   if (fit.length) return fit;
-  if (!slot || names.length) return [];
+  if (!slot || reading.classOnly || names.length) return [];
   const token = slot === "gh.account" ? accountToken(phrase) : phrase;
   if (!token || /\s|\//.test(token) || !SHAPED.test(token)) return [];
   const lower = token.toLowerCase();
-  if (STATUS_LEXICON.has(lower) || NOT_A_VALUE.has(lower)) return [];
+  if (STATUS_LEXICON.has(lower) || NOT_A_VALUE.has(lower) || slotOfAlias(lower)) return [];
   return [{ slot, value: lower, typed: token }];
 }
 
@@ -524,27 +531,36 @@ function splitNot(phrase: string): { value: string; not?: string } {
 }
 
 /** The statement a phrase sets in a slot it names, with any `, not B` it carries. */
-function setNamed(slot: SlotId, phrase: string, named: readonly SlotId[]): Found | undefined {
+function setNamed(reading: Reading & { slot: SlotId }, phrase: string, named: readonly SlotId[]): Found[] {
   const { value, not } = splitNot(phrase);
-  const set = valueOf(value, { slot }, named)[0];
-  if (!set) return undefined;
-  const was = not ? valueOf(not, { slot }, named).map((found) => found.value) : [];
-  return { slot, value: set.value, was };
+  const set = valueOf(value, reading, [...named, reading.slot])[0];
+  if (!set) return [];
+  const was = not ? valueOf(not, reading, [...named, reading.slot]).map((found) => found.value) : [];
+  return [{ slot: reading.slot, value: set.value, was }];
 }
 
-/** The slots a value phrase can be of, by its class; with `prefer`, those of them that also hold that value. */
-function bySlots(phrase: string, named: readonly SlotId[]) {
-  return valueOf(phrase, {}, named);
+/** A value phrase read by its class: the statement when the value is in exactly one slot's class. */
+function setByClass(phrase: string, named: readonly SlotId[]): Found[] {
+  const sets = valueOf(phrase, {}, named);
+  return sets.length === 1 ? [{ slot: sets[0]!.slot, value: sets[0]!.value, was: [] }] : [];
 }
 
-const COPULA = new RegExp(
-  String.raw`^(?:(?:in|for|on)\s+\S+,?\s+)?(?:the\s+|our\s+|its\s+|this repo'?s\s+|\S+\/\S+'s\s+)?(${ALIAS})` +
-    String.raw`\s*(?:\s(?:is|are)\s+(?:now\s+|still\s+|actually\s+|currently\s+|just\s+)?|=\s*|:\s*)(.+)$`,
+/** Optional words between a subject and its verb ("we just switched", "we've since moved"). */
+const ADVERBS = String.raw`(?:\s+(?:just|recently|finally|already|now|also|since|then|eventually|officially|all))*`;
+const SUBJECT = String.raw`(?:we|i|they|it|the team|\S+\/\S+)(?:'ve|'re|\s+have|\s+had|\s+are)?`;
+/** What may stand before a copula's subject: a place ("In apps/web"), an article or a possessive. */
+const COPULA_LEAD = String.raw`^(?:(?:in|for|on)\s+\S+,?\s+)?(?:the\s+|our\s+|its\s+|this repo'?s\s+|\S+\/\S+'s\s+)?`;
+/** Words between a copula and its value that say how, not what ("is hosted on", "is handled by"). */
+const COPULA_HOW = String.raw`(?:now\s+|still\s+|actually\s+|currently\s+|just\s+)?(?:(?:hosted|running|deployed|pinned|set)\s+(?:on|to)\s+|handled by\s+|on\s+)?`;
+
+const COPULA = new RegExp(String.raw`${COPULA_LEAD}(${ALIAS})\s*(?:\s(?:is|are)\s+${COPULA_HOW}|=\s*|:\s*)(.+)$`, "i");
+const COPULA_NOT = new RegExp(
+  String.raw`${COPULA_LEAD}(${ALIAS})\s+(?:is not|isn'?t|is no longer|are not|aren'?t|are no longer)\s+(.+)$`,
   "i",
 );
-const COPULA_NOT = new RegExp(
-  String.raw`^(?:(?:in|for|on)\s+\S+,?\s+)?(?:the\s+|our\s+|its\s+)?(${ALIAS})\s+(?:is not|isn'?t|is no longer|` +
-    String.raw`are not|aren'?t)\s+(.+)$`,
+/** `V is our S` ("Clerk is our auth provider"): the copula the other way round. */
+const COPULA_BACK = new RegExp(
+  String.raw`^(\S+(?:\s+\S+)?)\s+(?:is|=)\s+(?:our|the|its)\s+(?:main\s+|default\s+|primary\s+|current\s+)?(${ALIAS})$`,
   "i",
 );
 const USE_FOR = new RegExp(
@@ -555,23 +571,51 @@ const USE_NOT = new RegExp(
   String.raw`(?:^|\b(?:we|i)\s+(?:always\s+)?)use\s+(\S+(?:\s+\S+)?)\s*,?\s+${NOT}\s+(\S+(?:\s+\S+)?)`,
   "i",
 );
-const SWITCH = /^(?:(?:we|i|they|it|\S+\/\S+)(?:'ve|\s+have|\s+had)?\s+)?(?:switched|moved|migrated)\b(.*)$/i;
-const BARE_USE = /^(?:(?:we|i)\s+)?(?:(?:always|now|also|still|just|currently|mostly)\s+)?use\s+(.+)$/i;
+const SWITCH = new RegExp(String.raw`^(?:${SUBJECT}${ADVERBS}\s+)?(?:switched|moved|migrated)\b(.*)$`, "i");
+const REPLACED = new RegExp(
+  String.raw`^${SUBJECT}${ADVERBS}\s+(?:replaced|swapped)\s+(.+?)\s+(?:with|for)\s+(.+)$`,
+  "i",
+);
 const RETRACT = new RegExp(
-  String.raw`^(?:we|i)(?:'re|'ve|\s+are|\s+have)?\s+(?:(?:don'?t|do not|no longer)\s+(?:use|run|need)|` +
-    String.raw`(?:are\s+|'re\s+)?(?:not|no longer)\s+(?:on|using|running)|` +
+  String.raw`^(?:we|i)(?:'re|'ve|\s+are|\s+have)?${ADVERBS}\s+(?:(?:don'?t|do not|no longer)\s+(?:use|run|need)|` +
+    String.raw`(?:aren'?t|are not|not|no longer)\s+(?:on|using|running)|` +
     String.raw`dropping|dropped|ditched|removed|got rid of|stopped using|moving off|moved off)\s+(.+)$`,
+  "i",
+);
+const BARE_USE = new RegExp(
+  String.raw`^(?:(?:we|i|let'?s)\s+)?(?:(?:always|now|also|still|just|currently|mostly)\s+)?` +
+    String.raw`(?:use|went with|go with|chose|picked|settled on|standardized on|decided on)\s+(.+)$`,
   "i",
 );
 const ON = /^(?:we|i)(?:'re|\s+are|'m|\s+am)\s+(?:now\s+)?(?:on|using|running)\s+(?:now\s+)?(.+)$/i;
 const RUNS_ON = new RegExp(
-  String.raw`^(?:our|the|all)\s+(${ALIAS})\s+(?:run|runs|are run|is run)\s+(?:on|with|in|through|via)\s+(.+)$`,
+  String.raw`^(?:(?:our|the|all)\s+)?(${ALIAS})\s+(?:run|runs|go|goes|are run|is run|use|uses|are using|is using)` +
+    String.raw`(?:\s+(?:on|with|in|through|via|by|to|against))?\s+(.+)$`,
   "i",
 );
-const DEPLOY = /^(?:we|i)\s+(?:(?:now|currently|always)\s+)?(?:deploy|host)\s+(?:\S+\s+)?(?:to|on)\s+(.+)$/i;
+/**
+ * A practice that names its slot, with the tool it is done with ("we lint with biome"): only with "we", since an
+ * instruction is one task ("install the dependencies with npm" sets no package manager).
+ */
+const VERB_WITH =
+  /^we\s+(?:always\s+)?(lint|format|test|install|package)\s+(?:\S+\s+){0,2}?(?:with|using|via)\s+(.+)$/i;
+const VERB_SLOTS: Readonly<Record<string, SlotId>> = {
+  lint: "linter",
+  format: "formatter",
+  test: "test.runner",
+  install: "pkg.manager",
+  package: "pkg.manager",
+};
+const DEPLOY = new RegExp(
+  String.raw`^(?:we|i|it|the\s+[\w-]+(?:\s+[\w-]+)?|\S+\/\S+)\s+(?:(?:now|currently|always)\s+)?` +
+    String.raw`(?:deploy|deploys|host|hosts|is deployed|is hosted)\s+(?:\S+\s+){0,3}?(?:to|on)\s+(.+)$`,
+  "i",
+);
 const PRS = /^(?:our\s+|all\s+)?(?:prs|pull requests)\s+(?:go|goes|should go|target)\s+(?:against|into|to)\s+(.+)$/i;
 const PATH_USES = /^\S+\/\S+\s+(?:uses|runs|runs on|is on)\s+(.+)$/i;
 const ANAPHORA = /^(?:now\s+)?(?:it'?s|it is)\s+(?:now\s+)?(.+)$/i;
+/** A value read by its class with its slot named after it ("on GitHub Actions for CI"). */
+const FOR_SLOT = new RegExp(String.raw`^(.+?)\s+(?:for|as)\s+(?:the\s+|our\s+|its\s+)?(${ALIAS})\b`, "i");
 
 /** A switch's tail after its verb: `X from B to A`, `X to A from B`, or `X from B`. */
 function switchOf(tail: string, named: readonly SlotId[]): Found[] {
@@ -599,90 +643,130 @@ function switchOf(tail: string, named: readonly SlotId[]): Found[] {
       const gone = valueOf(fromOnly, reading, named);
       return gone[0] ? [{ slot: gone[0].slot, was: [gone[0].value] }] : [];
     }
-    const sets = valueOf(to!, reading, named);
-    const olds = from ? valueOf(from, reading, named) : [];
-    const pick = sets.find((set) => olds.some((old) => old.slot === set.slot)) ?? sets[0];
-    if (!pick) return [];
-    const was = olds.filter((old) => old.slot === pick.slot && old.value !== pick.value).map((old) => old.value);
-    return [{ slot: pick.slot, value: pick.value, was }];
+    return changeOf(valueOf(to!, reading, named), from ? valueOf(from, reading, named) : []);
   }
   return [];
 }
 
-/** `use A not B`: A and B in one slot's class (B's slot when A's is ambiguous), A set and B invalidated. */
-function useNot(a: string, b: string, named: readonly SlotId[]): Found[] {
-  const sets = bySlots(a, named);
-  const olds = bySlots(b, named);
+/** A change from the old values to one of the new: the new one sharing a slot with an old one, else the first. */
+function changeOf(sets: ReturnType<typeof valueOf>, olds: ReturnType<typeof valueOf>): Found[] {
   const pick = sets.find((set) => olds.some((old) => old.slot === set.slot)) ?? sets[0];
-  if (pick) {
-    const was = olds.filter((old) => old.slot === pick.slot).map((old) => old.value);
-    return [{ slot: pick.slot, value: pick.value, was }];
-  }
+  if (!pick) return [];
+  const was = olds.filter((old) => old.slot === pick.slot && old.value !== pick.value).map((old) => old.value);
+  return [{ slot: pick.slot, value: pick.value, was }];
+}
+
+/** `use A not B`: A and B in one slot's class (B's slot when A's is in none), A set and B invalidated. */
+function useNot(a: string, b: string, named: readonly SlotId[]): Found[] {
+  const sets = valueOf(a, {}, named);
+  const olds = valueOf(b, {}, named);
+  if (sets.length) return changeOf(sets, olds);
   const old = olds[0];
   const set = old && valueOf(a, { slot: old.slot }, named)[0];
   return old && set ? [{ slot: old.slot, value: set.value, was: [old.value] }] : [];
 }
 
-/** What one clause states (see the header), given the slots its sentence names and those stated before it. */
-function clauseStatements(clause: string, named: readonly SlotId[], previous: readonly Found[]): Found[] {
-  let match = COPULA_NOT.exec(clause);
-  if (match) {
-    const slot = slotOfAlias(match[1]!)!;
-    const gone = valueOf(match[2]!, { slot }, named)[0];
-    return gone ? [{ slot, was: [gone.value] }] : [];
-  }
-  if ((match = COPULA.exec(clause))) {
-    const found = setNamed(slotOfAlias(match[1]!)!, match[2]!, named);
-    return found ? [found] : [];
-  }
-  if ((match = USE_FOR.exec(clause))) {
-    const slot = slotOfAlias(match[2]!)!;
-    const found = setNamed(slot, match[1]!, named);
+/** What a clause states when one of D7's forms reads it; undefined when the form does not match. */
+type Reader = (clause: string, named: readonly SlotId[], previous: readonly Found[]) => Found[] | undefined;
+const alias = (text: string) => slotOfAlias(text)!;
+
+/** D7's forms (see the header), in the order they are tried: the first that states something wins. */
+const READERS: readonly Reader[] = [
+  (clause, named) => {
+    const match = COPULA_NOT.exec(clause);
+    const gone = match && valueOf(match[2]!, { slot: alias(match[1]!) }, named)[0];
+    return gone ? [{ slot: gone.slot, was: [gone.value] }] : undefined;
+  },
+  (clause, named) => {
+    const match = COPULA.exec(clause);
+    return match ? setNamed({ slot: alias(match[1]!) }, match[2]!, named) : undefined;
+  },
+  (clause, named) => {
+    const match = COPULA_BACK.exec(clause);
+    return match ? setNamed({ slot: alias(match[2]!) }, match[1]!, named) : undefined;
+  },
+  (clause, named) => {
+    const match = USE_FOR.exec(clause);
+    if (!match) return undefined;
+    const slot = alias(match[2]!);
+    const found = setNamed({ slot }, match[1]!, named);
     const not = splitNot(match[3]!).not;
-    if (found && not) found.was.push(...valueOf(not, { slot }, named).map((old) => old.value));
-    return found ? [found] : [];
-  }
-  if ((match = USE_NOT.exec(clause))) return useNot(match[1]!, match[2]!, named);
-  if ((match = SWITCH.exec(clause))) return switchOf(match[1]!, named);
-  if ((match = RETRACT.exec(clause))) {
-    const gone = valueOf(match[1]!, {}, named);
+    if (found[0] && not) found[0].was.push(...valueOf(not, { slot }, named).map((old) => old.value));
+    return found;
+  },
+  (clause, named) => {
+    const match = USE_NOT.exec(clause);
+    return match ? useNot(match[1]!, match[2]!, named) : undefined;
+  },
+  (clause, named) => {
+    const match = SWITCH.exec(clause);
+    return match ? switchOf(match[1]!, named) : undefined;
+  },
+  (clause, named) => {
+    const match = REPLACED.exec(clause);
+    return match ? useNot(match[2]!, match[1]!, named) : undefined;
+  },
+  (clause, named) => {
+    const match = RETRACT.exec(clause);
+    const gone = match ? valueOf(match[1]!, {}, named) : [];
     const pick = gone.find((found) => named.includes(found.slot)) ?? gone[0];
-    return pick ? [{ slot: pick.slot, was: [pick.value] }] : [];
-  }
-  if ((match = RUNS_ON.exec(clause))) {
-    const found = setNamed(slotOfAlias(match[1]!)!, match[2]!, named);
-    return found ? [found] : [];
-  }
-  if ((match = DEPLOY.exec(clause))) {
-    const found = setNamed("deploy.target", match[1]!, named);
-    return found ? [found] : [];
-  }
-  if ((match = PRS.exec(clause))) {
-    const found = setNamed("branch.base", match[1]!, [...named, "branch.base"]);
-    return found ? [found] : [];
-  }
-  if ((match = ANAPHORA.exec(clause)) && previous.length) {
-    const found = setNamed(previous.at(-1)!.slot, match[1]!, [...named, previous.at(-1)!.slot]);
-    return found ? [found] : [];
-  }
-  const valued = ON.exec(clause) ?? PATH_USES.exec(clause) ?? BARE_USE.exec(clause);
-  if (!valued) return [];
-  const sets = bySlots(valued[1]!, named);
-  return sets.length === 1 ? [{ slot: sets[0]!.slot, value: sets[0]!.value, was: [] }] : [];
+    return pick ? [{ slot: pick.slot, was: [pick.value] }] : undefined;
+  },
+  (clause, named) => {
+    const match = RUNS_ON.exec(clause);
+    return match ? setNamed({ slot: alias(match[1]!), classOnly: true }, match[2]!, named) : undefined;
+  },
+  (clause, named) => {
+    const match = VERB_WITH.exec(clause);
+    return match
+      ? setNamed({ slot: VERB_SLOTS[match[1]!.toLowerCase()]!, classOnly: true }, match[2]!, named)
+      : undefined;
+  },
+  (clause, named) => {
+    const match = DEPLOY.exec(clause);
+    return match ? setNamed({ slot: "deploy.target" }, match[1]!, named) : undefined;
+  },
+  (clause, named) => {
+    const match = PRS.exec(clause);
+    return match ? setNamed({ slot: "branch.base" }, match[1]!, named) : undefined;
+  },
+  (clause, named, previous) => {
+    const match = ANAPHORA.exec(clause);
+    return match && previous.length ? setNamed({ slot: previous.at(-1)!.slot }, match[1]!, named) : undefined;
+  },
+];
+
+/** D7's forms read by the value's class alone (`we're on V`, `<scope> uses V`, the bare `use V`). */
+function valued(clause: string, named: readonly SlotId[]): Found[] | undefined {
+  const match = ON.exec(clause) ?? PATH_USES.exec(clause) ?? BARE_USE.exec(clause);
+  if (!match) return undefined;
+  const forSlot = FOR_SLOT.exec(match[1]!);
+  return forSlot ? setNamed({ slot: alias(forSlot[2]!) }, forSlot[1]!, named) : setByClass(match[1]!, named);
 }
 
 /** A reminder to do something ("don't forget to use …"), which states no slot (as D9's fix 2 states no rule). */
 const REMINDER = /^(?:don'?t|do not|never) forget to\b|^(?:remember|make sure) to\b/i;
 
-/** The statements of one sentence, a question, a conditional or a reminder giving none. */
+/**
+ * The statements of one sentence, a question, a conditional or a reminder giving none. A clause of a value alone
+ * after a clause read by its class is read the same way ("we use pnpm and vitest").
+ */
 function sentenceStatements(sentence: string): Found[] {
   const plain = sentence.trim().replace(LEAD, "");
   if (/\?\s*$/.test(plain) || ASKS.test(plain) || REMINDER.test(plain)) return [];
   const named = aliasedSlots(plain);
   const found: Found[] = [];
+  let byClass = false;
   for (const clause of clausesOf(plain)) {
     if (ASKS.test(clause)) break;
-    found.push(...clauseStatements(clause, [...named, ...found.map((f) => f.slot)], found));
+    const context = [...named, ...found.map((f) => f.slot)];
+    let read: Found[] | undefined;
+    for (const reader of READERS) if ((read = reader(clause, context, found))) break;
+    const stated: Found[] = read?.length
+      ? read
+      : (valued(clause, context) ?? (byClass ? setByClass(clause, context) : []));
+    byClass = !read?.length && stated.length > 0;
+    found.push(...stated);
   }
   return found;
 }
