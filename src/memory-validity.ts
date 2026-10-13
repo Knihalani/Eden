@@ -575,12 +575,16 @@ function carriesSlotValue(sentence: string, slot: SlotId, value: string): boolea
 
 /**
  * D31's `stale_for` by key: a fact or episode clause carrying a slot value a statement ended, at a scope the record
- * holds for, older than the record; never a rule clause, a clause giving another subject that value, nor the clause
- * stating the change.
+ * holds for (its row's, and the folders the clause names), older than the record; never a rule clause, a clause
+ * giving another subject that value, nor the clause stating the change.
  */
 function staleForSlot(record: Retraction & { slot: SlotId }, sentence: string, scope: string | undefined): boolean {
   if (scope !== undefined && record.in !== undefined && !within(scope, record.in, record.except)) return false;
   const clause = stripPacketLabel(sentence).body;
+  // A clause naming its folder is that folder's ("In apps/web the database is postgres"), whatever row holds it.
+  const paths = (clause.match(PATH) ?? []).map((path) => path.toLowerCase());
+  if (record.in !== undefined && paths.length && !paths.some((path) => within(path, record.in!, record.except)))
+    return false;
   if (RULE_SENTENCE.test(clause) || !carriesSlotValue(clause, record.slot, record.o)) return false;
   const stated = slotsIn(clause);
   if (stated.some((statement) => statement.slot === record.slot && statement.was.includes(record.o))) return false;

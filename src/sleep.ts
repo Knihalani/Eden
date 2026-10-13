@@ -908,17 +908,18 @@ function isIntent(r: MemoryRecord): boolean {
  * a sentence the slot table reads back ("In packages/cli the database is sqlite").
  */
 function slotFacts(mem: SleepMem, own: (id: string) => boolean, invalid: readonly Invalidation[]): string[] {
-  const newest = new Map<string, { text: string; at: number }>();
+  const newest = new Map<string, { text: string; at: number; scope: string | undefined }>();
   const rows = mem.memories().filter((row) => !superseded(row) && !isUntyped(row));
   for (const row of [...rows].sort((a, b) => (a.at ?? 0) - (b.at ?? 0)))
     for (const ref of noteSlots(row)) {
       if (ref.v === undefined) continue;
       const subject = `${row.scope ? `In ${row.scope} the` : "The"} ${slotLabel(ref.k)}`;
       const text = `${subject} is ${typedValue(row.text, ref.k, ref.v)}`;
-      newest.set(`${row.scope ?? ""}\0${ref.k}`, own(row.id) ? { text, at: row.at ?? 0 } : { text: "", at: 0 });
+      const fact = own(row.id) ? { text, at: row.at ?? 0, scope: row.scope } : { text: "", at: 0, scope: row.scope };
+      newest.set(`${row.scope ?? ""}\0${ref.k}`, fact);
     }
-  return [...newest.values()].flatMap(({ text, at }) => {
-    const fact = text && validText(text, at, invalid);
+  return [...newest.values()].flatMap(({ text, at, scope }) => {
+    const fact = text && validText(text, at, invalid, scope);
     return fact ? [fact] : [];
   });
 }
