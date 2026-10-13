@@ -208,6 +208,36 @@ describe("D31: stale_for, at the superseded value's scope and its non-overriding
   });
 });
 
+describe("encoding a typed list (P0.2's follow-up, refiled to P3.3)", () => {
+  test("a heading's numbered list ends at its line break: the next line is no part of its last item", () => {
+    const mem = store();
+    mem.observe([typed("Notes for this repo:\n1. The database is sqlite\n2. Logs go to stdout\nReply with just OK")]);
+    const texts = mem.memories().map((row) => row.text);
+    expect(texts.some((text) => /Logs go to stdout$/.test(text))).toBe(true);
+    expect(texts.some((text) => /stdout Reply/.test(text) && !/^Notes for this repo/.test(text))).toBe(false);
+    expect(keyed(mem).map((row) => row.slots)).toEqual([[{ k: "db.engine", v: "sqlite" }]]);
+  });
+});
+
+describe("the same text typed in two folders (P3.2's follow-up)", () => {
+  test("is a row at each folder's scope, not one row for both", () => {
+    const mem = store("apps/web");
+    mem.observe([typed("The database is postgres.", 0)]);
+    const cli = openMemory({
+      dir: mem.dir,
+      session: "s2",
+      perRepo: true,
+      place: { repo: () => ({ repo: "r", top: "/repo", scopes: CATALOG }), working: () => "packages/cli" },
+    });
+    cli.observe([typed("The database is postgres.", 1)]);
+    expect(
+      keyed(cli)
+        .map((row) => row.scope)
+        .sort(),
+    ).toEqual(["apps/web", "packages/cli"]);
+  });
+});
+
 describe("forget --all-in (A6 §3) reaches keyed slot rows", () => {
   test("a scope's keyed slot rows go to history with its rules", () => {
     const mem = store();

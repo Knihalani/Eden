@@ -123,7 +123,8 @@ describe("M17 encode lanes (flipped M16.3 extract tax)", () => {
   test("chat path still calls extractDurable", () => {
     const indexSrc = readFileSync(join(import.meta.dir, "index.ts"), "utf8");
     expect(indexSrc).toMatch(/for \(const \[j, text\] of durables\[i\]!\.entries\(\)\)/);
-    expect(indexSrc).toMatch(/return extractDurable\(text\)/);
+    // P3.3: with the message's line breaks, where a heading's list ends its items.
+    expect(indexSrc).toMatch(/return extractDurable\(text, lines\)/);
     expect(indexSrc).toMatch(/function extractDurable/);
     expect(indexSrc).not.toMatch(/peelIdentitySentences/);
     expect(indexSrc).not.toMatch(/\blet\s+extractSrc\s*=\s*it\.text/);
