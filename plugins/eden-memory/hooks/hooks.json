@@ -42,6 +42,8 @@
     ],
     "PostToolBatch": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true" }] }],
     "SubagentStop": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true", "async": true }] }],
-    "InstructionsLoaded": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true", "async": true }] }]
+    "InstructionsLoaded": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true", "async": true }] }],
+    "FileChanged": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true", "timeout": 10 }] }],
+    "CwdChanged": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true", "timeout": 10 }] }]
   }
 }

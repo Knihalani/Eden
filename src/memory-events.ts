@@ -62,6 +62,12 @@ export interface WideEvent {
   catalog?: number;
   /** How many scopes the read set of a human Submit or a SubagentStart holds (D4, `memory-place.ts`): 1 or 2. */
   read?: number;
+  /**
+   * D31: how many folders a FileChanged read again, and how many files a SessionStart, CwdChanged or FileChanged
+   * named to watch.
+   */
+  recheck?: number;
+  watch?: number;
   spawn?: { type: string; paths: number; classes: string[] };
   /** The cids of the packet the point delivered, or in shadow would have, and the ids of their rows. */
   cids?: string[];

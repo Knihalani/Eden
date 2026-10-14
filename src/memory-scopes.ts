@@ -139,7 +139,8 @@ const NOT_TOP_LEVEL_SCOPES = new Set(["src", "lib", "source", "include", "docs",
 /** Step 7: a scope other than the root owns at least this many files. */
 const MIN_FILES = 2;
 
-function jsonObject(text: string): Record<string, unknown> | undefined {
+/** A JSON text's top-level object; undefined for anything else. */
+export function jsonObject(text: string): Record<string, unknown> | undefined {
   try {
     const value = JSON.parse(text) as unknown;
     return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
@@ -584,9 +585,14 @@ export function listedFile(checkout: string, rel: string): boolean {
  * this store's repo. A store with no catalog yet waits for a turn's end, which knows where its repo is.
  */
 export function rebuildRecorded(store: string): ScopeCatalog | undefined {
+  const checkout = recordedCheckout(store);
+  return checkout === undefined ? undefined : buildCatalog(store, checkout);
+}
+
+/** The checkout a store's catalog was built from, while it exists and is still this store's repo. */
+export function recordedCheckout(store: string): string | undefined {
   const recorded = readCatalog(store);
   if (!recorded || !existsSync(recorded.checkout)) return undefined;
   const place = gitPlace(recorded.checkout);
-  if (!place || repoKeyOf(place.common) !== basename(store)) return undefined;
-  return buildCatalog(store, recorded.checkout);
+  return place && repoKeyOf(place.common) === basename(store) ? recorded.checkout : undefined;
 }
