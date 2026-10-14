@@ -725,14 +725,8 @@
       ],
       "a5": "a lockfile swap from npm to pnpm with no chat -> pkg.manager=pnpm (cited); a user statement overrides it",
       "on": {
-        "state": "red",
-        "failed": [
-          "cited",
-          "mined-npm",
-          "mined-pnpm",
-          "user-overrides"
-        ],
-        "why": "no repo-fact mining: no packet states the package manager, and the user's 'bun' does not reach the later session"
+        "state": "green",
+        "why": "passes since P3.4: the heavy sleep (D34) mines package-lock.json and then pnpm-lock.yaml into cited src:tool rows (D8), the swap supersedes npm by key, SessionStart briefs the changed value as an Updated: item naming pnpm-lock.yaml (A4 §5.2), R2's seed lexicon brings the package manager to \"install the dependencies\" by key, and the user's \"Use bun\", typed after the files' last reading, stays when the unchanged lockfile is read again"
       },
       "off": {
         "state": "green",
@@ -751,11 +745,8 @@
       ],
       "a5": "@clerk/nextjs removed with no chat -> the Clerk bullet is skipped (stale)",
       "on": {
-        "state": "red",
-        "failed": [
-          "control-packs"
-        ],
-        "why": "no repo-fact mining: the Clerk fact mined from apps/web/package.json never packs (no citation exists to fail; skipped-after-removal holds only because nothing is delivered)"
+        "state": "green",
+        "why": "passes since P3.4: apps/web/package.json's @clerk/nextjs is mined into a cited row at apps/web (D8), found by the cue's slot words; the sleep after its removal fails the citation, which sends the row to history with no successor (D31)"
       },
       "off": {
         "state": "green",

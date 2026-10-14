@@ -8,7 +8,8 @@
  * - **Wording.** Project information, never an instruction to Claude (R0 F20). A rule the user set reads "Rule you
  *   set: …"; every other bullet ends with its source and age, e.g. "(you said, 3 weeks ago)". An `Updated:` item
  *   says so and names the value it replaces, "(was jest; you said, …)", unless its text already names it. The
- *   source comes from the row's `src`, and a row without one claims no authority (A6 §2.1): a plain bullet,
+ *   source comes from the row's `src`, a mined fact's from the files it cites ("from pnpm-lock.yaml", D8), and a row
+ *   without one claims no authority (A6 §2.1): a plain bullet,
  *   "… (3 weeks ago)", even for a rule. The header is every packet's (`MEMORY_PACKET_MARK`).
  * - **Size.** The packet stays within 900 bytes; a bullet that does not fit is skipped, never cut.
  */
@@ -70,6 +71,13 @@ function names(text: string, value: string): boolean {
   return new RegExp(`(?<![\\w@.-])${escaped}(?![\\w@-])`, "i").test(text);
 }
 
+/** A6 §2.1's source label: a mined fact names the files it cites ("from pnpm-lock.yaml"). */
+function sourceWords(note: ProvenanceNote): string | undefined {
+  if (note.cite?.length) return `from ${note.cite.join(" and ")}`;
+  const source = knownNoteSource(note);
+  return source && SOURCE_WORDS[source];
+}
+
 /** D11: a rule the user keeps for every repo says so. */
 function allProjects(note: ProvenanceNote): string {
   return (note.tags ?? []).includes(ALL_PROJECTS) ? " (all projects)" : "";
@@ -78,14 +86,14 @@ function allProjects(note: ProvenanceNote): string {
 /** One bullet, worded as information about the project (D14), claiming only the source the row shows (A6 §2.1). */
 export function declarativeBullet(note: ProvenanceNote, now: number): string {
   const text = body(note);
-  const source = knownNoteSource(note);
-  const provenance = [source && SOURCE_WORDS[source], ageInWords(note.at, now)].filter(Boolean).join(", ");
+  const provenance = [sourceWords(note), ageInWords(note.at, now)].filter(Boolean).join(", ");
   if (note.update) {
     const was = note.update.was && !names(text, note.update.was) ? `was ${note.update.was}` : "";
     const said = [was, provenance].filter(Boolean).join("; ");
     return `Updated: ${text}${said ? ` (${said})` : ""}`;
   }
-  if (packetKind(note) === "rule" && source === "user") return `Rule you set: ${text}${allProjects(note)}`;
+  if (packetKind(note) === "rule" && knownNoteSource(note) === "user")
+    return `Rule you set: ${text}${allProjects(note)}`;
   return provenance ? `${text} (${provenance})` : text;
 }
 
