@@ -86,6 +86,8 @@ export function matchedField(payload: HookPayload): string | undefined {
       return String(payload.trigger);
     case "InstructionsLoaded":
       return String(payload.load_reason);
+    case "FileChanged":
+      return basename(String(payload.file_path));
     default:
       return undefined;
   }

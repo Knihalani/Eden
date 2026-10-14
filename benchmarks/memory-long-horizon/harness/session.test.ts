@@ -4,7 +4,7 @@
  */
 import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { loadPlugin } from "./runner";
 import { DECLINED, SimWorld, type SimSession } from "./session";
 import { generateSession, play } from "./shape";
@@ -307,4 +307,69 @@ describe("generated sessions play through", () => {
       expect(files.some((name) => String(name).endsWith(".jsonl"))).toBe(true);
     }
   }, 120_000);
+});
+
+describe("Claude Code's file watcher (FileChanged)", () => {
+  const changes = (probe: Probe) =>
+    probe
+      .recorded()
+      .filter((entry) => entry.payload.hook_event_name === "FileChanged")
+      .sort((a, b) => a.pid - b.pid);
+
+  test("a repo change to a watched file fires FileChanged before the next event, with 2.1.296's keys", async () => {
+    const projectFiles = { "package.json": "{}\n", ".nvmrc": "20\n", "README.md": "# demo\n" };
+    const probe = probeWorld({ mode: "watch", env: { PROBE_WATCH: "package.json,.nvmrc" }, projectFiles });
+    const session = await started(probe);
+    await session.prompt("first prompt");
+    probe.world.changeRepo({ "package.json": '{ "name": "x" }\n', "README.md": "# x\n", ".nvmrc": null }, []);
+    expect(changes(probe)).toHaveLength(0);
+    await session.prompt("second prompt");
+    const fired = changes(probe);
+    expect(fired.map((entry) => [entry.payload.file_path, entry.payload.event])).toEqual([
+      [join(probe.world.projectDir, "package.json"), "change"],
+      [join(probe.world.projectDir, ".nvmrc"), "unlink"],
+    ]);
+    // Captured from Claude Code 2.1.296 on 2026-10-14 (a probe plugin, P3.4): the keys, in order.
+    expect(Object.keys(fired[0]!.payload)).toEqual([
+      "session_id",
+      "transcript_path",
+      "cwd",
+      "prompt_id",
+      "hook_event_name",
+      "file_path",
+      "event",
+    ]);
+    const order = probe.world.log.map((record) => record.event);
+    expect(order.slice(order.indexOf("FileChanged"), order.indexOf("FileChanged") + 3)).toEqual([
+      "FileChanged",
+      "FileChanged",
+      "UserPromptSubmit",
+    ]);
+  });
+
+  test("each FileChanged answer replaces the list, a new file is an add, and an ended session watches nothing", async () => {
+    const env = { PROBE_WATCH: "package.json", PROBE_WATCH_AFTER: "pnpm-lock.yaml" };
+    const probe = probeWorld({ mode: "watch", env });
+    const session = await started(probe);
+    probe.world.changeRepo({ "package.json": "{}\n" }, []);
+    await session.prompt("one");
+    probe.world.changeRepo({ "package.json": '{ "a": 1 }\n', "pnpm-lock.yaml": "lockfileVersion: '9.0'\n" }, []);
+    await session.prompt("two");
+    expect(changes(probe).map((entry) => [basename(String(entry.payload.file_path)), entry.payload.event])).toEqual([
+      ["package.json", "change"],
+      ["pnpm-lock.yaml", "add"],
+    ]);
+    await session.end();
+    probe.world.changeRepo({ "pnpm-lock.yaml": null }, []);
+    await probe.world.newSession().start();
+    expect(changes(probe)).toHaveLength(2);
+  });
+
+  test("a plugin that returns no watchPaths is never told of a change", async () => {
+    const probe = probeWorld({ mode: "silent" });
+    const session = await started(probe);
+    probe.world.changeRepo({ "package.json": "{}\n" }, []);
+    await session.prompt("one");
+    expect(changes(probe)).toHaveLength(0);
+  });
 });

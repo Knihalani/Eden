@@ -12,7 +12,11 @@
  */
 import { toolResultContent, type ToolCall } from "./tools";
 
-/** The hook events the simulator fires. Claude Code has more (FileChanged, CwdChanged, …) that it does not model. */
+/**
+ * The hook events the simulator fires. Claude Code has more (DirectoryAdded, …) that it does not model. FileChanged
+ * fires for a watched file a repo change writes or deletes in a live session (`SimWorld.changeRepo`); CwdChanged only
+ * when a script fires it (`SimSession.cwdChanged`).
+ */
 export const HOOK_EVENTS = [
   "SessionStart",
   "InstructionsLoaded",
@@ -27,6 +31,8 @@ export const HOOK_EVENTS = [
   "PreCompact",
   "PostCompact",
   "SessionEnd",
+  "FileChanged",
+  "CwdChanged",
 ] as const;
 
 export type HookEvent = (typeof HOOK_EVENTS)[number];
@@ -248,4 +254,24 @@ export function postCompactPayload(ctx: EventContext, trigger: CompactTrigger, c
 
 export function sessionEndPayload(ctx: EventContext, reason: SessionEndReason): HookPayload {
   return payload(ctx, "SessionEnd", SESSION, { reason });
+}
+
+/** What happened to a watched file: modified, created or deleted (hooks reference, "FileChanged input"). */
+export type FileEvent = "change" | "add" | "unlink";
+
+/**
+ * FileChanged as Claude Code 2.1.296 sends it, captured by a probe plugin on 2026-10-14 (P3.4): the common fields
+ * with `prompt_id` once the process had a prompt, then `file_path` (absolute) and `event`. The 2.1.285 capture
+ * (`fixtures/payload-keys.claude-2.1.285.json`) registered no watch list, so it holds none.
+ */
+export function fileChangedPayload(ctx: EventContext, filePath: string, event: FileEvent): HookPayload {
+  return payload(ctx, "FileChanged", SESSION, { file_path: filePath, event });
+}
+
+/**
+ * CwdChanged as the hooks reference documents it ("CwdChanged input": the common fields, `old_cwd`, `new_cwd`), with
+ * `cwd` the new folder. Not captured: Claude Code 2.1.296 under `claude -p` fired none on a `cd` (probe, 2026-10-14).
+ */
+export function cwdChangedPayload(ctx: EventContext, oldCwd: string): HookPayload {
+  return payload(ctx, "CwdChanged", SESSION, { old_cwd: oldCwd, new_cwd: ctx.cwd });
 }
