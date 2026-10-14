@@ -310,7 +310,7 @@ function keysSlot(row: ProvenanceNote, slot: SlotId): boolean {
  * The notes without the mined facts D5 overrides at the read set (see the header): `live` is the store's live rows,
  * the prompt's own included, as delivery reads them after the prompt is stored.
  */
-export function withoutOverriddenMined<T extends ProvenanceNote>(
+export function withoutOverridden<T extends ProvenanceNote>(
   notes: readonly T[],
   live: readonly ProvenanceNote[],
   readSet: readonly string[],
@@ -331,6 +331,11 @@ export function withoutOverriddenMined<T extends ProvenanceNote>(
       );
     return !slots.every((slot) => below.some((read) => overrides(slot, read)));
   });
+}
+
+/** A4 §5.5's first-touch candidates: a scope's own slot facts (P3.5 stub: none). */
+export function scopeFacts<T extends ProvenanceNote>(_live: readonly T[], _scope: string): T[] {
+  return [];
 }
 
 /**

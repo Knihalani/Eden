@@ -656,6 +656,7 @@ export function validText(
   records: readonly Invalidation[],
   scope?: string,
   readAt: readonly string[] = [],
+  _catalog?: readonly string[],
 ): string {
   const time = typeof at === "number" && Number.isFinite(at) ? at : 0;
   const newer = records.filter((record) => record.t > time && record.k !== "end");

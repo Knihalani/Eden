@@ -52,7 +52,7 @@ import {
   underTop,
   visibleFrom,
   windowPlace,
-  withoutOverriddenMined,
+  withoutOverridden,
   type EncodePlace,
   type Place,
   type RepoScopes,
@@ -944,7 +944,7 @@ function subagentStart(ctx: HookContext): Record<string, unknown> | null {
   const residual = type === "fork" ? recentConversation(ctx.transcriptPath, "", Infinity).residual : [];
   const against = { prompt: cue, parts: { prompt: cue }, residual, shadow, invalid, readSet: place?.readSet };
   const found = mem.taskNotes(scope.paths, classes, place && visibleFrom(place));
-  const candidates = place ? withoutOverriddenMined(found, mem.memories().filter(isLiveRow), place.readSet) : found;
+  const candidates = place ? withoutOverridden(found, mem.memories().filter(isLiveRow), place.readSet) : found;
   const { notes: novel, drops } = selectNotes(candidates, against, (fresh) =>
     novelNotes(fresh, liveDeliveries(win, off, ledger?.file), { repo: ctx.repo, invalid }),
   );
@@ -1214,8 +1214,8 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   const shadow = shadowSentences(win, ctx.place);
   const invalid = readInvalidations(mem.dir);
   const against = { prompt, parts, residual: recent.residual, shadow, invalid, readSet: place?.readSet };
-  // D5 for mined facts (`withoutOverriddenMined`): read after the prompt is stored, which may override one.
-  const placed = place ? withoutOverriddenMined(notes, mem.memories().filter(isLiveRow), place.readSet) : notes;
+  // D5 for mined facts (`withoutOverridden`): read after the prompt is stored, which may override one.
+  const placed = place ? withoutOverridden(notes, mem.memories().filter(isLiveRow), place.readSet) : notes;
   const { notes: novel, drops } = selectNotes(placed, against, (fresh) =>
     win
       ? novelNotes(fresh, liveDeliveries(win, off, ledger?.file), { repo: ctx.repo, invalid: against.invalid })

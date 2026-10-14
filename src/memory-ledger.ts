@@ -513,6 +513,11 @@ export function humanTurns(dir: string): number {
   return live.turns + shadow.turns - both;
 }
 
+/** A4 §5.5: the scopes a batch touched first in this epoch (P3.5 stub: none). */
+export function firstTouches(_dir: string, _scopes: readonly string[], _file: LedgerFile = LIVE_LEDGER): string[] {
+  return [];
+}
+
 /** The tokens delivered in this epoch, in the ledgers a point reads: A4 §4's budget. */
 export function epochTokens(dir: string, file: LedgerFile = LIVE_LEDGER): number {
   return readLedgers(file).reduce((sum, ledger) => sum + readLedger(dir, ledger).tokensEpoch, 0);
