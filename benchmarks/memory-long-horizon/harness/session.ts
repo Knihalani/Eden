@@ -443,7 +443,10 @@ export class SimWorld {
   }
 }
 
-/** A path with its folder's links resolved, so a watched path and a written one compare (macOS `/var` → `/private/var`). */
+/**
+ * A path with its folder's links resolved, so a watched path and a written one compare (macOS `/var` →
+ * `/private/var`).
+ */
 function canonicalPath(path: string): string {
   try {
     return join(realpathSync(dirname(path)), basename(path));
