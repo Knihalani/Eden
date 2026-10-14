@@ -56,7 +56,7 @@ import {
   underTop,
   visibleFrom,
   windowPlace,
-  withoutOverridden,
+  cascaded,
   type EncodePlace,
   type Place,
   type RepoScopes,
@@ -757,15 +757,16 @@ function toolBatch(ctx: HookContext): Record<string, unknown> | null {
   return batch ? firstTouch(ctx, batch) : null;
 }
 
-/** A4 §5.5: a first touch delivers at most 2 items. */
+/** A4 §5.5: a first touch delivers at most 2 items, and reads at most 2 new scopes, as a read set holds (D4). */
 const TOUCH_BULLETS = 2;
+const TOUCH_SCOPES = 2;
 
 /**
  * A4 §5.5, D23: the first touch of a scope in this epoch delivers at most 2 STRONG items, the slot facts of that
- * scope itself (`scopeFacts`), once per batch; gotchas and procedures anchored to the touched paths are P4.5's and
+ * scope itself (`scopeFacts`), once per batch, for at most 2 new scopes (the rest stay new for the next batch); gotchas and procedures anchored to the touched paths are P4.5's and
  * P4.6's. A scope is a catalog scope below the root: the root is where every session already is, and its facts reach
  * the cue that needs them. What a batch touched is the window ledger's, by epoch (`firstTouches`), so a compaction or
- * a clear makes every scope new again. The facts pass validity, D5 (`withoutOverridden`), the residual, the shadow
+ * a clear makes every scope new again. The facts pass validity, D5 (`cascaded`), the residual, the shadow
  * set, the ledger and the epoch's budget, as a Submit's do. X7: `off` records and delivers nothing; `shadow` writes
  * the shadow ledger and prints nothing.
  */
@@ -776,7 +777,8 @@ function firstTouch(ctx: HookContext, batch: BatchRecord): Record<string, unknow
   if (!win || !ledger || !at) return null;
   const scopeOf = scopeMapper(at);
   const scopes = [...batch.paths, ...batch.bash].flatMap((path) => scopeOf(path) || []);
-  const touched = firstTouches(win, scopes, ledger.file);
+  if (!scopes.length) return null;
+  const touched = firstTouches(win, scopes, ledger.file, TOUCH_SCOPES);
   if (!touched.length) return null;
   trace.touch = touched.length;
   // D25: a subagent's window is measured, and its conversation read, on its own transcript.
@@ -784,9 +786,9 @@ function firstTouch(ctx: HookContext, batch: BatchRecord): Record<string, unknow
   const off = transcriptOffset(transcript);
   const invalid = readInvalidations(mem.dir);
   const live = mem.memories().filter(isLiveRow);
-  const place = { readSet: touched.slice(0, 2), named: [] };
+  const place = { readSet: touched, named: [] };
   const found = place.readSet.flatMap((scope) => scopeFacts(live, scope));
-  const candidates = withoutOverridden(found, live, place.readSet);
+  const candidates = cascaded(found, live, place.readSet);
   const residual = recentConversation(transcript, "").residual;
   // D27: a subagent's instruction files are its parent's, by its type, as at its start.
   const shadow = ctx.child
@@ -1021,7 +1023,7 @@ function subagentStart(ctx: HookContext): Record<string, unknown> | null {
   const catalog = ctx.repoScopes()?.scopes;
   const against = { prompt: cue, parts: { prompt: cue }, residual, shadow, invalid, readSet: place?.readSet, catalog };
   const found = mem.taskNotes(scope.paths, classes, place && visibleFrom(place));
-  const candidates = place ? withoutOverridden(found, mem.memories().filter(isLiveRow), place.readSet) : found;
+  const candidates = place ? cascaded(found, mem.memories().filter(isLiveRow), place.readSet) : found;
   const { notes: novel, drops } = selectNotes(candidates, against, (fresh) =>
     novelNotes(fresh, liveDeliveries(win, off, ledger?.file), { repo: ctx.repo, invalid }),
   );
@@ -1305,8 +1307,8 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   const invalid = readInvalidations(mem.dir);
   const catalog = ctx.repoScopes()?.scopes;
   const against = { prompt, parts, residual: recent.residual, shadow, invalid, readSet: place?.readSet, catalog };
-  // D5 (`withoutOverridden`): read after the prompt is stored, which may override a value.
-  const placed = place ? withoutOverridden(notes, mem.memories().filter(isLiveRow), place.readSet) : notes;
+  // D5 (`cascaded`): read after the prompt is stored, which may override a value.
+  const placed = place ? cascaded(notes, mem.memories().filter(isLiveRow), place.readSet) : notes;
   const { notes: novel, drops } = selectNotes(placed, against, (fresh) =>
     win
       ? novelNotes(fresh, liveDeliveries(win, off, ledger?.file), { repo: ctx.repo, invalid: against.invalid })

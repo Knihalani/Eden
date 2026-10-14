@@ -24,13 +24,13 @@
  *   place was unknown (before P3.2, or in a repo with no catalog, outside git included): it stays visible everywhere,
  *   as every row was, and a window in such a repo reads every row.
  * - **D5's override (P3.4 for mined facts, P3.5 for typed ones).** A slot fact is not delivered at a read-set folder
- *   below its scope that holds its own live value of one of its slots, typed or mined (the newest at the nearest
- *   folder between): "We use node 20 across the repo" says nothing at apps/web once "apps/web runs node 22", nor at a
- *   turn reading apps/web and packages/cli, where a bullet naming no folder would be read as apps/web's (G2 outranks
- *   G1, A4 §0). A row stating two slots goes when either is overridden. A statement split by its slots' scopes keeps
- *   its whole text at each part (A4 §3.2), so a part is shown only where every value its text states holds: "we use
- *   pnpm and vitest", typed in apps/web, is apps/web's text at the root too, and says nothing at packages/cli. A value
- *   ended at the row's own scope is validity's (D31), clause by clause.
+ *   below its scope where a folder between has its own live row of one of its slots, typed or mined, whatever its
+ *   value: "We use node 20 across the repo" says nothing at apps/web once "apps/web runs node 22", nor at a turn
+ *   reading apps/web and packages/cli, where a bullet naming no folder would be read as apps/web's (G2 outranks G1,
+ *   A4 §0). A row stating two slots goes when either is overridden. A statement split by its slots' scopes keeps its
+ *   whole text at each part (A4 §3.2), so where the other part's value does not hold, a part is said by its own keys
+ *   alone: "we use pnpm and vitest", typed in apps/web, is "Package manager: pnpm" at the root and at packages/cli. A
+ *   value ended at the row's own scope is validity's (D31), clause by clause.
  * - **A first touch (A4 §5.5).** The candidates of a PostToolBatch's first touch of a scope are that scope's own slot
  *   facts (`scopeFacts`).
  * - **A row's scope (A4 §3.2).** The one scope of the catalog its text names (the root's by a file path in its own
@@ -59,7 +59,16 @@ import {
 import { legacySlot } from "./memory-residual";
 import { realpathOrSelf } from "./memory-repo";
 import { repoPathOf, scopeOfDir } from "./memory-scopes";
-import { namesSlot, noteSlots, slotAliases, slotLabel, slotsIn, typedValue, type SlotId } from "./memory-slots";
+import {
+  mayStateSlot,
+  namesSlot,
+  noteSlots,
+  slotAliases,
+  slotLabel,
+  slotsIn,
+  typedValue,
+  type SlotId,
+} from "./memory-slots";
 import { subjectWords } from "./memory-validity";
 import { STATUS_WORDS } from "./memory-transcript";
 import { appendRecord, windowRecords } from "./memory-window";
@@ -306,45 +315,50 @@ export function visibleFrom(place: Place): (row: ProvenanceNote) => boolean {
   };
 }
 
-/** A slot's keyed values by folder: each folder's newest live row's (typed or mined), read once per delivery. */
-type HeldValues = Map<SlotId, Map<string, string>>;
-
-function heldValues(live: readonly ProvenanceNote[]): HeldValues {
-  const held: HeldValues = new Map();
-  const newestFirst = [...live].sort((a, b) => (b.at ?? 0) - (a.at ?? 0) || String(b.id).localeCompare(String(a.id)));
-  for (const row of newestFirst) {
-    if (typeof row.scope !== "string" || (isUntyped(row) && !isCited(row))) continue;
-    for (const { k, v } of noteSlots(row)) {
-      if (v === undefined) continue;
-      const at = held.get(k) ?? held.set(k, new Map()).get(k)!;
-      if (!at.has(row.scope)) at.set(row.scope, v);
-    }
-  }
-  return held;
+/**
+ * The live rows keying the slots a delivery's candidates state (typed or mined; rows of unknown scope are no
+ * folder's), read once per delivery: each slot's value at each folder, the newest row's, and the folders each text
+ * is keyed at (a split statement's parts share it). A row is read by its stored keys, or, written before P3.3 kept
+ * keys, by its text only when that names one of the slots (`noteSlots`), so the cost is one cheap test per row.
+ */
+interface Keyed {
+  held: Map<SlotId, Map<string, { value: string; row: ProvenanceNote }>>;
+  texts: Map<string, Set<string>>;
 }
 
-/**
- * The values a fact states, by slot: the ones it keys, and, for a row the user typed, the ones its text states. A
- * statement split by its slots' scopes keeps its whole text at each part (A4 §3.2), so a part's text also states the
- * other part's values ("we use pnpm and vitest" at `""` keys the package manager, and states apps/web's runner).
- */
-function statedValues(note: ProvenanceNote): Map<SlotId, { value: string; keyed: boolean }> {
-  const stated = new Map<SlotId, { value: string; keyed: boolean }>();
-  for (const { k, v } of noteSlots(note)) if (v !== undefined) stated.set(k, { value: v, keyed: true });
-  if (!note.slots || isUntyped(note)) return stated;
-  for (const { slot, value } of slotsIn(bodyOf(note)))
-    if (value !== undefined && !stated.has(slot)) stated.set(slot, { value, keyed: false });
-  return stated;
+/** Whether row `a` was written after row `b`: by time, then by id (ULIDs sort by time). */
+function newer(a: ProvenanceNote, b: ProvenanceNote): boolean {
+  return (a.at ?? 0) > (b.at ?? 0) || ((a.at ?? 0) === (b.at ?? 0) && String(a.id) > String(b.id));
+}
+
+function keyedRows(live: readonly ProvenanceNote[], slots: ReadonlySet<SlotId>, texts: ReadonlySet<string>): Keyed {
+  const keyed: Keyed = { held: new Map(), texts: new Map() };
+  for (const row of live) {
+    if (typeof row.scope !== "string" || row.rules?.length) continue;
+    if (row.slots ? !row.slots.some((ref) => slots.has(ref.k)) : noteKindToken(row) !== "fact") continue;
+    if (isUntyped(row) && !isCited(row)) continue;
+    if (!row.slots && ![...slots].some((slot) => mayStateSlot(String(row.text ?? ""), slot))) continue;
+    const refs = noteSlots(row).filter((ref) => ref.v !== undefined && slots.has(ref.k));
+    if (!refs.length) continue;
+    for (const { k, v } of refs) {
+      const at = keyed.held.get(k) ?? keyed.held.set(k, new Map()).get(k)!;
+      const held = at.get(row.scope);
+      if (!held || newer(row, held.row)) at.set(row.scope, { value: v!, row });
+    }
+    const text = String(row.text ?? "").trim();
+    if (texts.has(text)) (keyed.texts.get(text) ?? keyed.texts.set(text, new Set()).get(text)!).add(row.scope);
+  }
+  return keyed;
 }
 
 /**
  * D5's value of a slot at a folder (A4 §2): the one held at the folder itself, else at its nearest ancestor that
- * holds one, looking no higher than `below` (exclusive) when given. Rows of unknown scope are no folder's.
+ * holds one, looking no higher than `below` (exclusive) when given.
  */
-function heldValue(held: HeldValues, slot: SlotId, folder: string, below?: string): string | undefined {
-  const values = held.get(slot);
+function heldValue(keyed: Keyed, slot: SlotId, folder: string, below?: string): string | undefined {
+  const values = keyed.held.get(slot);
   for (let at: string | undefined = folder; values && at !== undefined && at !== below; at = parentScope(at))
-    if (values.has(at)) return values.get(at);
+    if (values.has(at)) return values.get(at)!.value;
   return undefined;
 }
 
@@ -353,33 +367,64 @@ export function parentScope(scope: string): string | undefined {
   return scope ? scope.slice(0, Math.max(0, scope.lastIndexOf("/"))) : undefined;
 }
 
+/** The slots a typed fact's text states: a split part's other part's among them (`otherPartValues`). */
+function textSlots(note: ProvenanceNote): SlotId[] {
+  return note.slots && !isUntyped(note) ? slotsIn(bodyOf(note)).map(({ slot }) => slot) : [];
+}
+
 /**
- * The notes without the facts D5 does not show at the read set (see the header): a fact is left out when, at a
- * read-set folder at or below its scope, a folder between overrides a value it keys, or a value its text states
- * without keying it (a split statement's other part) does not hold there. `live` is the store's live rows, the
- * prompt's own included, as delivery reads them after the prompt is stored. A value its own scope ended is
- * validity's (D31), clause by clause; a row of unknown scope is shown as before.
+ * The values a split statement's part states without keying them (A4 §3.2: a statement of a root and a working slot
+ * typed in a folder is two rows of one text, each keyed at its own scope): its text's other values, when another
+ * live row keys the same text at another scope. None for any other row.
  */
-export function withoutOverridden<T extends ProvenanceNote>(
+function otherPartValues(note: ProvenanceNote, keyed: Keyed): { slot: SlotId; value: string }[] {
+  if (!note.slots || isUntyped(note)) return [];
+  const body = bodyOf(note);
+  if (![...(keyed.texts.get(body) ?? [])].some((scope) => scope !== note.scope)) return [];
+  const own = new Set(note.slots.map((ref) => ref.k));
+  return slotsIn(body).flatMap(({ slot, value }) => (value === undefined || own.has(slot) ? [] : [{ slot, value }]));
+}
+
+/** A slot fact said by its own keys alone ("Package manager: pnpm"), after the label a retrieved note carries. */
+function ownValues<T extends ProvenanceNote>(note: T): T {
+  const { label, body } = stripPacketLabel(String(note.text ?? ""));
+  const said = noteSlots(note).flatMap(({ k, v }) => {
+    if (v === undefined) return [];
+    const name = slotLabel(k);
+    return [`${name.charAt(0).toUpperCase()}${name.slice(1)}: ${typedValue(body, k, v)}`];
+  });
+  return { ...note, text: `${label}${said.join("; ")}` };
+}
+
+/**
+ * D5 at the read set (see the header): each fact as a reader there may be given it. A slot fact is left out when, at
+ * a read-set folder at or below its scope, a folder between holds its own value of a slot it keys (equal or not: that
+ * folder has a row of its own). A split statement's part is said by its own keys alone where the other part's value
+ * does not hold. `live` is the store's live rows, the prompt's own included, as delivery reads them after the prompt
+ * is stored. A value its own scope ended is validity's (D31), clause by clause; a row of unknown scope is shown as
+ * before.
+ */
+export function cascaded<T extends ProvenanceNote>(
   notes: readonly T[],
   live: readonly ProvenanceNote[],
   readSet: readonly string[],
 ): T[] {
-  let held: HeldValues | undefined;
-  return notes.filter((note) => {
+  const slotsOf = (note: ProvenanceNote) => noteSlots(note).flatMap((ref) => (ref.v === undefined ? [] : [ref.k]));
+  let keyed: Keyed | undefined;
+  return notes.flatMap((note) => {
     const scope = note.scope;
-    if (typeof scope !== "string") return true;
-    const stated = statedValues(note);
-    if (!stated.size) return true;
-    held ??= heldValues(live);
-    return readSet
-      .filter((read) => within(scope, read))
-      .every((read) =>
-        [...stated].every(([slot, { value, keyed }]) => {
-          const there = heldValue(held!, slot, read, keyed ? scope : undefined);
-          return there === undefined ? keyed : there === value;
-        }),
-      );
+    const slots = slotsOf(note);
+    if (typeof scope !== "string" || !slots.length) return [note];
+    keyed ??= keyedRows(
+      live,
+      new Set(notes.flatMap((each) => [...slotsOf(each), ...textSlots(each)])),
+      new Set(notes.map(bodyOf)),
+    );
+    const reads = readSet.filter((read) => within(scope, read));
+    if (reads.some((read) => slots.some((slot) => heldValue(keyed!, slot, read, scope) !== undefined))) return [];
+    const others = otherPartValues(note, keyed);
+    const holds = (read: string) => others.every(({ slot, value }) => heldValue(keyed!, slot, read) === value);
+    return [reads.every(holds) ? note : ownValues(note)];
   });
 }
 

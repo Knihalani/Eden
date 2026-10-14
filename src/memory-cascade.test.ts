@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { GistStore } from "./gist-store";
 import { openMemory } from "./index";
 import { firstTouches, foldLedger, startEpoch } from "./memory-ledger";
-import { namedScopes, scopeFacts, withoutOverridden } from "./memory-place";
+import { namedScopes, scopeFacts, cascaded } from "./memory-place";
 import type { ProvenanceNote } from "./memory-provenance";
 import { validText } from "./memory-validity";
 import { SHADOW_LEDGER } from "./memory-window";
@@ -45,7 +45,7 @@ function typed(id: string, text: string, scope: string, slots: Record<string, st
 const rootNode = typed("root", "We use node 20 across the repo.", "", { "node.version": "20" });
 const webNode = typed("web", "apps/web runs node 22.", "apps/web", { "node.version": "22" }, 2);
 const shown = (notes: ProvenanceNote[], live: ProvenanceNote[], readSet: string[]) =>
-  withoutOverridden(notes, live, readSet).map((note) => note.id);
+  cascaded(notes, live, readSet).map((note) => note.id);
 
 describe("D5: cascade with override, for typed slot facts (A5 `cascade`)", () => {
   const live = [rootNode, webNode];
@@ -61,6 +61,15 @@ describe("D5: cascade with override, for typed slot facts (A5 `cascade`)", () =>
     expect(shown([rootNode], live, ["packages/cli", "apps/web"])).toEqual([]);
     expect(shown([rootNode], live, ["apps/web/app"])).toEqual([]);
     expect(shown([webNode], live, ["apps/web"])).toEqual(["web"]);
+  });
+
+  test("a folder holding the same value has a row of its own: the ancestor's is not shown there (review round 1)", () => {
+    for (const tags of [["src:user"], ["src:tool"]]) {
+      const cite = tags[0] === "src:tool" ? { cite: [".nvmrc"] } : {};
+      const root = { ...typed("r", "The node version is 20", "", { "node.version": "20" }), tags, ...cite };
+      const web = { ...typed("w", "The node version is 20", "apps/web", { "node.version": "20" }, 2), tags, ...cite };
+      expect(shown([root, web], [root, web], ["apps/web"])).toEqual(["w"]);
+    }
   });
 
   test("a folder's value deeper than the reader overrides nothing there", () => {
@@ -94,24 +103,36 @@ describe("D5: cascade with override, for typed slot facts (A5 `cascade`)", () =>
   });
 });
 
-describe("a statement split by its slots' scopes (P3.3's follow-up): shown where every value it states holds", () => {
+describe("a statement split by its slots' scopes (P3.3's follow-up): its whole text where every value holds", () => {
   // "we use pnpm and vitest" typed in apps/web: the package manager at the root, the test runner at apps/web.
   const text = "We use pnpm and vitest.";
   const rootPart = typed("p-root", text, "", { "pkg.manager": "pnpm" });
   const webPart = typed("p-web", text, "apps/web", { "test.runner": "vitest" });
   const live = [rootPart, webPart];
+  const texts = (notes: ProvenanceNote[], rows: ProvenanceNote[], readSet: string[]) =>
+    cascaded(notes, rows, readSet).map((note) => note.text);
 
-  test("at apps/web both values hold; at a sibling or the root the runner does not, so the text is not shown", () => {
-    expect(shown([rootPart, webPart], live, ["apps/web"])).toEqual(["p-root", "p-web"]);
-    expect(shown([rootPart], live, ["packages/cli"])).toEqual([]);
-    expect(shown([rootPart], live, [""])).toEqual([]);
+  test("at apps/web both values hold; at a sibling or the root the part says its own value alone", () => {
+    expect(texts([rootPart, webPart], live, ["apps/web"])).toEqual([text, text]);
+    expect(texts([rootPart], live, ["packages/cli"])).toEqual(["Package manager: pnpm"]);
+    expect(texts([rootPart], live, [""])).toEqual(["Package manager: pnpm"]);
   });
 
-  test("a sibling holding the same runner of its own shows it; one holding another does not", () => {
+  test("a sibling holding the same runner of its own gets the whole text; one holding another does not", () => {
     const cliVitest = typed("c1", "packages/cli uses vitest.", "packages/cli", { "test.runner": "vitest" }, 3);
-    expect(shown([rootPart], [...live, cliVitest], ["packages/cli"])).toEqual(["p-root"]);
+    expect(texts([rootPart], [...live, cliVitest], ["packages/cli"])).toEqual([text]);
     const cliJest = typed("c2", "packages/cli uses jest.", "packages/cli", { "test.runner": "jest" }, 3);
-    expect(shown([rootPart], [...live, cliJest], ["packages/cli"])).toEqual([]);
+    expect(texts([rootPart], [...live, cliJest], ["packages/cli"])).toEqual(["Package manager: pnpm"]);
+  });
+
+  test("only a split part: a row whose text states a value nothing keys is shown whole (review round 1)", () => {
+    const alone = typed("alone", text, "", { "pkg.manager": "pnpm" });
+    expect(texts([alone], [alone], ["packages/cli"])).toEqual([text]);
+  });
+
+  test("the label a retrieved note carries stays before the restated value", () => {
+    const labelled = { ...rootPart, text: `[fact · 1d · user] ${text}` };
+    expect(texts([labelled], [labelled, webPart], [""])).toEqual(["[fact · 1d · user] Package manager: pnpm"]);
   });
 });
 
@@ -149,6 +170,15 @@ describe("A4 §5.5: a window's first touches, by epoch", () => {
     expect(firstTouches(win, ["apps/web", "apps/api"])).toEqual(["apps/api"]);
     startEpoch(win, "compact", 100);
     expect(firstTouches(win, ["packages/cli"])).toEqual(["packages/cli"]);
+  });
+
+  test("at most `limit` new scopes are recorded; the rest stay new", () => {
+    const win = tempDir();
+    expect(firstTouches(win, ["packages/cli", "apps/web", "apps/api"], "delivery.log", 2)).toEqual([
+      "packages/cli",
+      "apps/web",
+    ]);
+    expect(firstTouches(win, ["apps/api", "apps/web"], "delivery.log", 2)).toEqual(["apps/api"]);
   });
 
   test("touches survive a fold, and the ledger keeps them hashed: no path is written (X11)", () => {
@@ -236,5 +266,19 @@ describe("the light sleep's gist states each scope's legacy winner by its scope 
     const gist = new GistStore(dir).latest("s1", 1)[0]?.text ?? "";
     expect(gist).toContain("In apps/web, cache is Redis");
     expect(gist).toContain("In packages/cli, cache is Memcached");
+  });
+});
+
+describe("a legacy supersession in a folder, read in a session gist at the root (review round 1)", () => {
+  // As the store logs "The cache is Memcached." superseding "The cache is Redis." in apps/web.
+  const ended = [{ k: "retract" as const, o: "redis", f: "Redis", t: 10, w: ["cach"], in: "apps/web" }];
+
+  test("a line naming the folder, or one naming none read from the folder, yields; elsewhere it stays", () => {
+    expect(validText("In apps/web, cache is Redis", 1, ended, "", [])).toBe("");
+    expect(validText("cache is Redis", 1, ended, "", ["apps/web"])).toBe("");
+    expect(validText("cache is Redis", 1, ended, "", ["packages/cli"])).toBe("cache is Redis");
+    expect(validText("In packages/cli, cache is Redis", 1, ended, "", ["apps/web"])).toBe(
+      "In packages/cli, cache is Redis",
+    );
   });
 });

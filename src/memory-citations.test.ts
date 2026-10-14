@@ -21,7 +21,7 @@ import {
   type Citation,
 } from "./memory-citations";
 import { admitNotes } from "./memory-gate";
-import { withoutOverridden } from "./memory-place";
+import { cascaded } from "./memory-place";
 import { declarativeBullet } from "./memory-hook-packet";
 import type { MinedFact, Reading } from "./memory-repo-facts";
 import { cuedSlots } from "./memory-slots";
@@ -253,7 +253,7 @@ describe("delivery of a cited fact", () => {
   });
 });
 
-describe("D5's override for mined facts (withoutOverridden)", () => {
+describe("D5's override for mined facts (cascaded)", () => {
   const rootNode: MemoryRecord = {
     id: "n",
     text: "The node version is 20",
@@ -273,7 +273,7 @@ describe("D5's override for mined facts (withoutOverridden)", () => {
     scope: "apps/web",
     slots: [{ k: "node.version", v: "22" }],
   };
-  const kept = (readSet: string[]) => withoutOverridden([rootNode], [rootNode, webNode], readSet).length;
+  const kept = (readSet: string[]) => cascaded([rootNode], [rootNode, webNode], readSet).length;
 
   test("a folder of the read set with its own value drops the root's mined value, whatever the other folder", () => {
     expect(kept(["apps/web"])).toBe(0);
@@ -292,8 +292,8 @@ describe("D5's override for mined facts (withoutOverridden)", () => {
     expect(kept(["packages/cli"])).toBe(1);
     expect(kept([""])).toBe(1);
     const typedRoot = { ...rootNode, tags: ["src:user"], cite: undefined };
-    expect(withoutOverridden([typedRoot], [typedRoot, webNode], ["apps/web"])).toHaveLength(0);
-    expect(withoutOverridden([typedRoot], [typedRoot, webNode], ["packages/cli"])).toHaveLength(1);
+    expect(cascaded([typedRoot], [typedRoot, webNode], ["apps/web"])).toHaveLength(0);
+    expect(cascaded([typedRoot], [typedRoot, webNode], ["packages/cli"])).toHaveLength(1);
   });
 });
 
