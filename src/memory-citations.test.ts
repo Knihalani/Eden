@@ -281,6 +281,13 @@ describe("D5's override for mined facts (withoutOverriddenMined)", () => {
     expect(kept(["packages/cli", "apps/web"])).toBe(0);
   });
 
+  test("a read set holding the fact's own folder and an overriding one drops it too (review round 4)", () => {
+    expect(kept(["", "apps/web"])).toBe(0);
+    expect(kept(["apps/web", ""])).toBe(0);
+    expect(kept([])).toBe(1);
+    expect(kept(["", "packages/cli"])).toBe(1);
+  });
+
   test("a read set with no overriding folder keeps it; a typed row is never dropped here (P3.5's cascade)", () => {
     expect(kept(["packages/cli"])).toBe(1);
     expect(kept([""])).toBe(1);
