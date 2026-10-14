@@ -123,11 +123,12 @@ export const webPackage = (dependencies: Record<string, string> = {}) =>
   JSON.stringify({ name: "web", private: true, dependencies: { next: "15.0.0", ...dependencies } }, null, 2) + "\n";
 
 /**
- * The two-package repo most arms run in: apps/web and packages/cli, npm by its lockfile, node 20 by `.nvmrc`. The
- * truth starts empty unless an arm adds the repo's own facts (`initialTruth`).
+ * The two-package repo most arms run in: apps/web and packages/cli, npm by its lockfile, node 20 by `.nvmrc`. Since
+ * P3.4 mines a repo's files (D8), its truth holds what they say, npm and node 20 at the root, before what an arm adds
+ * (`initialTruth`, which may override them).
  */
 export function monorepo(extra: Partial<WorldSpec> = {}): WorldSpec {
-  const { projectFiles = {}, ...rest } = extra;
+  const { projectFiles = {}, initialTruth = [], ...rest } = extra;
   return {
     scopes: ["", "apps/web", "packages/cli"],
     subjects: SUBJECTS,
@@ -143,7 +144,7 @@ export function monorepo(extra: Partial<WorldSpec> = {}): WorldSpec {
       "packages/cli/src/index.ts": "export function main() {}\n",
       ...projectFiles,
     },
-    initialTruth: [],
+    initialTruth: [set(PKG, "", "npm"), set(NODE, "", "20"), ...initialTruth],
     secrets: [],
     poison: [],
     ...rest,
