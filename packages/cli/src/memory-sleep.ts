@@ -148,3 +148,8 @@ export async function sleepCli(args: readonly string[]): Promise<number> {
   } catch {}
   return 0;
 }
+
+/** D34's heavy tier's quiet time: a stub for P3.4's red-first commit. */
+export function sleepHeavyMs(_raw?: string): number {
+  return 0;
+}

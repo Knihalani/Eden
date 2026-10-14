@@ -99,6 +99,9 @@ describe("every registered entry point fails open (EXECUTION §5)", () => {
   test("hooks.json registers the memory events, each command ending in the fail-open suffix", () => {
     expect(ENTRY_POINTS.map((point) => point.event).sort()).toEqual(
       [
+        // D31's citation re-check and watch list (P3.4).
+        "CwdChanged",
+        "FileChanged",
         "InstructionsLoaded",
         "PostCompact",
         "PostToolBatch",

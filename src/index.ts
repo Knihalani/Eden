@@ -203,6 +203,8 @@ export type MemoryRecord = {
   corrected?: 1;
   /** Where in the repo the row is true (A4 §1, D3): a scope of its catalog. Absent is the repo root, `""`. */
   scope?: string;
+  /** D8: the repo files a mined slot row cites, relative to the repo's top (`memory-citations.ts`). */
+  cite?: string[];
 };
 
 /** Whether a newer row has superseded this one (A4 §3.1). */
