@@ -16,6 +16,11 @@
  *   in `background_tasks` in between; its events do not interleave with the main thread's;
  * - a hook cannot keep the agent going: Stop and SubagentStop continuations (exit 2, `decision: "block"`,
  *   `additionalContext`) and a PostToolBatch block are recorded in the event log but not acted on;
+ * - Claude Code's file watcher is modelled for repo changes only (`changeRepo`): a live session watches the paths
+ *   of the plugin's FileChanged matchers and the last `watchPaths` its SessionStart or FileChanged hooks returned
+ *   (R0 F29: each return replaces the list), and a change to one fires FileChanged before the session's next
+ *   event. The agent's own writes are not modelled, nor a `cd`: CwdChanged fires only when a script fires it, and the
+ *   session's later events keep its folder;
  * - time is a simulated clock; context size is estimated at 4 characters per token of conversation text, with
  *   the run directory counted as a fixed placeholder. Hook-injected context is not counted: a hook's answer
  *   acts on the session only through control flow (a block, a denial) and the transcript, so a plugin whose
@@ -25,10 +30,12 @@
  *   `<subagent_tokens>`, `message.usage`, and `compactMetadata.preTokens`.
  */
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import type { Cue, CueRecord } from "./cues";
 import { Oracle, type Effect, type Subject } from "./oracle";
 import {
+  cwdChangedPayload,
+  fileChangedPayload,
   instructionsLoadedPayload,
   postCompactPayload,
   postToolBatchPayload,
@@ -46,6 +53,7 @@ import {
   type CompactTrigger,
   type EffortLevel,
   type EventContext,
+  type FileEvent,
   type HookEvent,
   type HookPayload,
   type MemoryType,
@@ -232,6 +240,11 @@ export class SimWorld {
   /** The simulated time of the last event, and the folders (with their session) used since the last idle sleep. */
   private lastEventAt?: number;
   private readonly active = new Map<string, string>();
+  /** The live sessions (SessionStart to SessionEnd) and the files Claude Code watches for each (see the header). */
+  private readonly watching = new Map<SimSession, Set<string>>();
+  /** File changes not yet reported: each fires FileChanged in its session before the next event. */
+  private fileChanges: { session: SimSession; path: string; event: FileEvent }[] = [];
+  private reportingChanges = false;
   /** Every run of `idleSleep`. */
   readonly idleSleeps: IdleSleep[] = [];
 
@@ -307,6 +320,7 @@ export class SimWorld {
    * exited (`settle`). The log entry is taken at dispatch, so concurrent events keep dispatch order.
    */
   async dispatch(payload: HookPayload, window: string, env: Record<string, string> = {}): Promise<Invocation[]> {
+    await this.reportFileChanges();
     const record: EventRecord = {
       seq: this.log.length,
       event: payload.hook_event_name,
@@ -325,6 +339,41 @@ export class SimWorld {
     record.invocations = await this.runner.dispatch(payload, { ...clock, ...env });
     this.records.set(record.invocations, record);
     return record.invocations;
+  }
+
+  /** Fires the queued FileChanged events, in order, before any other event (see the header). */
+  private async reportFileChanges(): Promise<void> {
+    if (this.reportingChanges) return;
+    this.reportingChanges = true;
+    try {
+      while (this.fileChanges.length) {
+        const { session, path, event } = this.fileChanges.shift()!;
+        if (this.watching.has(session)) await session.fileChanged(path, event);
+      }
+    } finally {
+      this.reportingChanges = false;
+    }
+  }
+
+  /**
+   * A session's watch list after a hook ran (see the header): the FileChanged matchers' names in its folder, plus
+   * the last `watchPaths` a handler returned; `fresh` for a new process, which watches nothing else yet.
+   */
+  watch(session: SimSession, invocations: readonly Invocation[], fresh = false): void {
+    const named = (this.options.plugin.hooks.FileChanged ?? []).flatMap((group) =>
+      (group.matcher ?? "").split("|").flatMap((name) => (name ? [join(session.place.cwd, name)] : [])),
+    );
+    const returned = invocations.flatMap((invocation) => {
+      const paths = (invocation.outcome.json?.hookSpecificOutput as { watchPaths?: unknown } | undefined)?.watchPaths;
+      return Array.isArray(paths) && paths.every((path) => typeof path === "string") ? [paths as string[]] : [];
+    });
+    const kept = returned.length ? returned.at(-1)! : fresh ? [] : [...(this.watching.get(session) ?? [])];
+    this.watching.set(session, new Set([...named, ...kept].map(canonicalPath)));
+  }
+
+  /** A session's process ended: it watches nothing. */
+  unwatch(session: SimSession): void {
+    this.watching.delete(session);
   }
 
   /** Runs `idleSleep` in each folder used since the last run (see `WorldOptions.idleSleep`). */
@@ -363,11 +412,16 @@ export class SimWorld {
   changeRepo(files: Readonly<Record<string, string | null>>, sets: readonly Effect[]): void {
     for (const [path, content] of Object.entries(files)) {
       const target = join(this.projectDir, path);
+      const existed = existsSync(target);
       if (content === null) rmSync(target, { force: true });
       else {
         mkdirSync(join(target, ".."), { recursive: true });
         writeFileSync(target, content);
       }
+      const event: FileEvent = content === null ? "unlink" : existed ? "change" : "add";
+      if (content === null && !existed) continue;
+      for (const [session, watched] of this.watching)
+        if (watched.has(canonicalPath(target))) this.fileChanges.push({ session, path: target, event });
     }
     commitAll(this.projectDir, this.home, "repo change", this.now());
     this.oracle.apply(sets, "repo", this.at());
@@ -386,6 +440,15 @@ export class SimWorld {
     const cwd = join(this.projectDir, rel);
     git(this.projectDir, this.home, ["worktree", "add", "-q", "-b", branch, cwd]);
     return { cwd: realpathSync(cwd), gitBranch: branch };
+  }
+}
+
+/** A path with its folder's links resolved, so a watched path and a written one compare (macOS `/var` → `/private/var`). */
+function canonicalPath(path: string): string {
+  try {
+    return join(realpathSync(dirname(path)), basename(path));
+  } catch {
+    return path;
   }
 }
 
@@ -646,6 +709,7 @@ export class SimSession {
   async start(source: "startup" | "clear" = "startup"): Promise<void> {
     await this.loadInstructions("session_start");
     const invocations = await this.dispatch(sessionStartPayload(this.ctx(), source), this.main);
+    this.world.watch(this, invocations, true);
     this.attach(this.main, "SessionStart", invocations, "SessionStart");
     this.endStep();
   }
@@ -664,8 +728,21 @@ export class SimSession {
       estimatedCacheWriteUsd: Math.round(contextTokens * 80) / 10_000_000,
     };
     const invocations = await this.dispatch(sessionStartPayload(this.ctx(), "resume", { resumeCost }), this.main);
+    this.world.watch(this, invocations, true);
     this.attach(this.main, "SessionStart", invocations, "SessionStart");
     this.endStep();
+  }
+
+  /** A `cd` to `to` (see the header): CwdChanged, whose `watchPaths` replace the list; later events keep the folder. */
+  async cwdChanged(to: string): Promise<void> {
+    const invocations = await this.dispatch(cwdChangedPayload({ ...this.ctx(), cwd: to }, this.place.cwd), this.main);
+    this.world.watch(this, invocations);
+  }
+
+  /** Claude Code's watcher saw a watched file change (see the header): FileChanged, whose answer sets the list. */
+  async fileChanged(path: string, event: FileEvent): Promise<void> {
+    const invocations = await this.dispatch(fileChangedPayload(this.ctx(), path, event), this.main);
+    this.world.watch(this, invocations);
   }
 
   /**
@@ -838,6 +915,7 @@ export class SimSession {
 
   async end(reason: SessionEndReason = "other"): Promise<void> {
     await this.dispatch(sessionEndPayload(this.ctx(), reason), this.main);
+    this.world.unwatch(this);
     this.endStep();
   }
 

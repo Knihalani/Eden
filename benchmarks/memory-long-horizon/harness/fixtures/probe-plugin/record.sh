@@ -9,6 +9,8 @@
 #   invalid           stdout that starts with { but is not JSON
 #   slow              sleep $PROBE_SLEEP seconds (default 0.3), then no output
 #   ask, deny         that permissionDecision on PreToolUse; no output elsewhere
+#   watch             watchPaths on SessionStart ($PROBE_WATCH) and FileChanged ($PROBE_WATCH_AFTER, else
+#                     $PROBE_WATCH): comma-separated names in the hook's folder
 # With PROBE_SNAPSHOT=1 it also copies the transcript as it is when the hook runs.
 payload="$PROBE_OUT/$$.json"
 cat > "$payload"
@@ -30,6 +32,14 @@ case "${PROBE_MODE:-silent}" in
   fail) echo "probe failed" >&2; exit 1 ;;
   invalid) printf '{not json' ; printf '}' ;;
   slow) sleep "${PROBE_SLEEP:-0.3}" ;;
+  watch)
+    case "$event" in
+      SessionStart) names=$PROBE_WATCH ;;
+      FileChanged) names=${PROBE_WATCH_AFTER:-$PROBE_WATCH} ;;
+      *) exit 0 ;;
+    esac
+    paths=$(printf '%s' "$names" | tr ',' '\n' | sed "s|.*|\"$PWD/&\"|" | paste -sd, -)
+    printf '{"hookSpecificOutput":{"hookEventName":"%s","watchPaths":[%s]}}' "$event" "$paths" ;;
   ask | deny)
     if [ "$event" = PreToolUse ]; then
       printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"%s"}}' "$PROBE_MODE"
