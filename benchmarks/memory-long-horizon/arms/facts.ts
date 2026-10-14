@@ -87,7 +87,9 @@ const repoFacts: Arm = {
 
 /**
  * A cited fact (D8, D31): mined from apps/web/package.json, so its citation can fail. A user statement is not used:
- * D8 lets a user statement override a mined fact, and nothing in DECISIONS invalidates one when a file changes.
+ * D8 lets a user statement override a mined fact. The later session asks as the control did, so the Clerk row would
+ * be retrieved if its failed citation had left it live (P3.4's review: "how does apps/web authenticate?" reaches no
+ * row by its words, so it passed with or without the failure).
  */
 const citation: Arm = {
   id: "citation",
@@ -111,7 +113,7 @@ const citation: Arm = {
     const from = world.log.length;
     const second = await Driver.start(world, spec);
     await second.turn("open apps/web/app/login.ts", { tools: [[read("apps/web/app/login.ts", "export {};\n")]] });
-    await second.ask("how does apps/web authenticate?", { scope: "apps/web", allowed: [id(AUTH, "apps/web")] });
+    await second.ask("which auth provider does apps/web use?", { scope: "apps/web", allowed: [id(AUTH, "apps/web")] });
     await second.end();
     const clerk = bulletsIn(judged(world, spec), from).filter((bullet) => states(bullet, AUTH, "Clerk"));
     return [
