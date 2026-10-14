@@ -34,13 +34,15 @@ export function stillValid(
   invalid: readonly Invalidation[],
   prompt: string,
   readSet: readonly string[] = [],
+  catalog?: readonly string[],
 ): MemoryRecord[] {
   const history = asksHistory(prompt);
   return notes.flatMap((note) => {
     const kind = noteKindToken(note);
     const episode = kind !== "rule" && kind !== "fact" && !isPinnedIntention(note);
     const said = withoutExpiredIntents(note.text, note.at);
-    const text = validText(said, note.at, history && episode ? invalid.filter(isForget) : invalid, note.scope, readSet);
+    const records = history && episode ? invalid.filter(isForget) : invalid;
+    const text = validText(said, note.at, records, note.scope, readSet, catalog);
     return text ? [{ ...note, text }] : [];
   });
 }
@@ -56,6 +58,8 @@ export interface DeliveryCue {
   invalid: readonly Invalidation[];
   /** The folders the prompt is read at (A4 §2's read set), when the caller knows its place. */
   readSet?: readonly string[];
+  /** The repo's scope catalog (D3), when the caller has one: it tells a clause's own folder (`validText`). */
+  catalog?: readonly string[];
 }
 
 /** How many notes each step dropped, in the order the steps run. */
@@ -82,7 +86,7 @@ export function selectNotes(
   cue: DeliveryCue,
   refractory: (notes: MemoryRecord[]) => MemoryRecord[],
 ): { notes: MemoryRecord[]; drops: DeliveryDrops } {
-  const valid = stillValid(notes, cue.invalid, cue.prompt, cue.readSet);
+  const valid = stillValid(notes, cue.invalid, cue.prompt, cue.readSet, cue.catalog);
   const admitted = admitNotes(valid, cue.parts);
   const residual = residualSentences(cue.residual);
   const said = admitted.filter((note) => !isResidualNote(note, residual));

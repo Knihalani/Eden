@@ -29,7 +29,7 @@ import type { FailedCitation } from "./memory-citations";
 import type { MinedFact } from "./memory-repo-facts";
 import { logMemoryNotes } from "./memory-log";
 import { legacySlot } from "./memory-residual";
-import { rowScope, type EncodePlace } from "./memory-place";
+import { parentScope, rowScope, type EncodePlace } from "./memory-place";
 import {
   cuedSlots,
   DEFAULT_SCOPES,
@@ -242,11 +242,6 @@ function isRootSlot({ slot }: { slot: SlotId }): boolean {
 function slotValue(row: MemoryRecord, slot: SlotId): string | undefined {
   if (!mayHoldSlot(row, slot)) return undefined;
   return noteSlots(row).find((ref) => ref.k === slot && ref.v !== undefined)?.v;
-}
-
-/** A scope's parent ("packages/cli" → "packages" → ""); none above the root. */
-function parentScope(scope: string): string | undefined {
-  return scope ? scope.slice(0, Math.max(0, scope.lastIndexOf("/"))) : undefined;
 }
 
 /** Whether row `a` was written after row `b`: by time, then by id (ULIDs sort by time). */
