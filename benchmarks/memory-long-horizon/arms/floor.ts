@@ -309,8 +309,9 @@ const SIMULATED_EVENTS = new Set<string>(HOOK_EVENTS);
 /**
  * A fault in every entry point (A5 `fail-open`, EXECUTION §5): the memory root is a regular file, so any read or
  * write of the store throws. The script fires every event the simulator models (`covered` checks the plugin's
- * registered ones among them all ran; FileChanged and CwdChanged are not modelled, and are named if registered),
- * with a command the PreToolUse guard's `if` rules match (`git commit`), so the guard runs too.
+ * registered ones among them all ran), with a command the PreToolUse guard's `if` rules match (`git commit`), so the
+ * guard runs too. FileChanged and CwdChanged are fired directly: under the fault no SessionStart names a file to
+ * watch, and the simulator models no `cd`.
  */
 const failOpen: Arm = {
   id: "fail-open",
@@ -333,6 +334,8 @@ const failOpen: Arm = {
     ]);
     await session.compact(BLANK_SUMMARY);
     await session.turn("continue");
+    await session.session.fileChanged(join(world.projectDir, "package.json"), "change");
+    await session.session.cwdChanged(join(world.projectDir, "apps", "web"));
     await session.end();
     const calls = world.log.flatMap((record) => record.invocations);
     const registered = Object.keys(world.options.plugin.hooks);
