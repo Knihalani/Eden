@@ -25,7 +25,7 @@ import {
 import { isIclExemplar, objectAsserted, SemanticStore } from "./semantic-store";
 import { stripPastes, withoutInstructions, type TextSource } from "./memory-authority";
 import { applyProvenanceLabel, isCited, isUntyped, stripPacketLabel } from "./memory-provenance";
-import type { Citation } from "./memory-citations";
+import type { FailedCitation } from "./memory-citations";
 import type { MinedFact } from "./memory-repo-facts";
 import { logMemoryNotes } from "./memory-log";
 import { legacySlot } from "./memory-residual";
@@ -1277,25 +1277,27 @@ export class AgentMemory {
   }
 
   /**
-   * D31: a failed citation invalidates the fact. At its scope, the rows giving its slot the value it cited, when
-   * mined or typed no later than the files' last reading that still said it, lose that value: a row with nothing
-   * else to say of its slots goes to history with no successor (A4 §3.1), and text carrying the value is `stale_for`
-   * there and below, but for the descendants that hold their own value (`recordSlotChanges`).
+   * D31: a failed citation invalidates the fact (`memory-citations.ts`). At its scope, the rows giving its slot the
+   * value it cited lose that value: the mined rows always; when the files say for sure that the value is gone (`sure`),
+   * also the typed rows typed no later than their last reading that still said it, and text carrying the value turns
+   * `stale_for` there and below, but for the descendants that hold their own value (`recordSlotChanges`). A row with
+   * nothing else to say of its slots goes to history with no successor (A4 §3.1).
    */
-  endCitations(failed: readonly Citation[]): void {
+  endCitations(failed: readonly FailedCitation[]): void {
     if (!failed.length || this.consent() !== "on") return;
     const live = this.compiled.filter((c) => !superseded(c.rec));
     const gone: Compiled[] = [];
     const changes: SlotChange[] = [];
-    for (const citation of failed) {
+    for (const { citation, sure } of failed) {
       const ending = live.filter(({ rec }) => {
-        const vouched = isCited(rec) || (!isUntyped(rec) && (rec.at ?? 0) <= citation.checked);
+        const vouched = isCited(rec) || (sure && !isUntyped(rec) && (rec.at ?? 0) <= citation.checked);
         return (rec.scope ?? "") === citation.scope && vouched && slotValue(rec, citation.slot) === citation.value;
       });
       if (!ending.length) continue;
       const keepsOther = (rec: MemoryRecord) =>
         noteSlots(rec).some((ref) => ref.v !== undefined && !(ref.k === citation.slot && ref.v === citation.value));
       gone.push(...ending.filter(({ rec }) => !keepsOther(rec)));
+      if (!sure) continue;
       const except = overridingScopes(
         live.map((c) => c.rec),
         citation.slot,

@@ -102,7 +102,7 @@ export function isUntyped(r: ProvenanceNote): boolean {
 
 /** Whether a row was mined from the repo's files (D8): a `src:tool` slot row with a citation, keyed as typed. */
 export function isCited(r: ProvenanceNote): boolean {
-  return Array.isArray(r.cite) && r.cite.length > 0;
+  return Array.isArray(r.cite) && r.cite.length > 0 && (r.tags ?? []).includes("src:tool");
 }
 
 /** A note's source when the note shows it, else undefined: a row with no `src` makes no authority claim (A6 §2.1). */

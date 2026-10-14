@@ -214,26 +214,26 @@ function valuesOf(names: readonly string[], map: DependencyMap): string[] {
   return [...found];
 }
 
-/** One value, or none when there are several (see the header). */
-function single(values: readonly string[]): string | undefined {
-  return values.length === 1 ? values[0] : undefined;
-}
+/**
+ * What a folder's file gives a slot: one value, the values it is torn between (several: it states none, see the
+ * header), or none; with the files that say so.
+ */
+type Add = (slot: SlotId, values: string | readonly string[] | undefined, files: string[]) => void;
 
 function stringRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 /** A folder's facts from its `package.json`, and from the files beside it for the slots they share. */
-function nodeFacts(folder: Folder, add: (slot: SlotId, value: string | undefined, files: string[]) => void): void {
+function nodeFacts(folder: Folder, add: Add): void {
   const text = readSmall(folder, "package.json");
   const pkg = text === undefined ? undefined : jsonObject(text);
   const manifest = pkg ? [relPath(folder, "package.json")] : [];
   const locks = Object.keys(LOCKFILES).filter((name) => hasFile(folder, name));
   const declared = typeof pkg?.packageManager === "string" ? /^([a-z]+)@/.exec(pkg.packageManager)?.[1] : undefined;
-  const managers = new Set([...locks.map((name) => LOCKFILES[name]!), ...(declared ? [declared] : [])]);
-  const manager = single([...managers]);
-  if (manager && Object.values(LOCKFILES).includes(manager))
-    add("pkg.manager", manager, [...locks.map((name) => relPath(folder, name)), ...(declared ? manifest : [])]);
+  const known = declared && Object.values(LOCKFILES).includes(declared) ? [declared] : [];
+  const managers = [...new Set([...locks.map((name) => LOCKFILES[name]!), ...known])];
+  add("pkg.manager", managers, [...locks.map((name) => relPath(folder, name)), ...(known.length ? manifest : [])]);
   const versionFile = [".nvmrc", ".node-version"].find((name) => hasFile(folder, name));
   const pinned = versionFile ? exactVersion(readSmall(folder, versionFile)?.split("\n")[0] ?? "") : undefined;
   if (versionFile) add("node.version", pinned, [relPath(folder, versionFile)]);
@@ -245,25 +245,29 @@ function nodeFacts(folder: Folder, add: (slot: SlotId, value: string | undefined
   const names = [...Object.keys(stringRecord(pkg.dependencies)), ...Object.keys(stringRecord(pkg.devDependencies))];
   const frameworks = valuesOf(names, FRAMEWORKS);
   const built = frameworks.flatMap((value) => BUILDS_ON[value] ?? []);
-  add("framework", single(frameworks.filter((value) => !built.includes(value))), manifest);
-  add("test.runner", testRunner(pkg, names), manifest);
-  add("auth.provider", single(valuesOf(names, AUTH)), manifest);
-  add("db.engine", single(valuesOf(names, DATABASES)), manifest);
-  add("orm", single(valuesOf(names, ORMS)), manifest);
-  add("formatter", single(valuesOf(names, FORMATTERS)), manifest);
-  add("linter", single(valuesOf(names, LINTERS)), manifest);
+  add(
+    "framework",
+    frameworks.filter((value) => !built.includes(value)),
+    manifest,
+  );
+  add("test.runner", testRunners(pkg, names), manifest);
+  add("auth.provider", valuesOf(names, AUTH), manifest);
+  add("db.engine", valuesOf(names, DATABASES), manifest);
+  add("orm", valuesOf(names, ORMS), manifest);
+  add("formatter", valuesOf(names, FORMATTERS), manifest);
+  add("linter", valuesOf(names, LINTERS), manifest);
 }
 
-/** A package's test runner: its `test` script's command, else its one unit runner, else its one end-to-end runner. */
-function testRunner(pkg: Record<string, unknown>, names: readonly string[]): string | undefined {
+/** A package's test runners: its `test` script's command, else its unit runners, else its end-to-end runners. */
+function testRunners(pkg: Record<string, unknown>, names: readonly string[]): string[] {
   const script = stringRecord(pkg.scripts).test;
   if (typeof script === "string")
     for (const command of script.split(/&&|;|\|\|/)) {
       const runner = SCRIPT_RUNNERS.find(([pattern]) => pattern.test(command.trim()))?.[1];
-      if (runner) return runner;
+      if (runner) return [runner];
     }
   const units = valuesOf(names, UNIT_RUNNERS);
-  return units.length ? single(units) : single(valuesOf(names, E2E_RUNNERS));
+  return units.length ? units : valuesOf(names, E2E_RUNNERS);
 }
 
 /** The dependency names a `pyproject.toml` lists: PEP 621's arrays and Poetry's tables. */
@@ -287,22 +291,26 @@ function pythonDependencies(text: string): string[] {
 }
 
 /** A folder's facts from its Python and Rust files (D8's `pyproject`, `Cargo.toml`). */
-function otherFacts(folder: Folder, add: (slot: SlotId, value: string | undefined, files: string[]) => void): void {
+function otherFacts(folder: Folder, add: Add): void {
   const pyproject = readSmall(folder, "pyproject.toml");
-  const versions: { value: string; file: string; language: string }[] = [];
+  const versions: { value: string; file: string }[] = [];
   if (pyproject !== undefined) {
     const file = [relPath(folder, "pyproject.toml")];
     const names = pythonDependencies(pyproject);
-    add("framework", single(valuesOf(names, PYTHON_FRAMEWORKS)), file);
+    add("framework", valuesOf(names, PYTHON_FRAMEWORKS), file);
     const pytest = names.includes("pytest") || /^\s*\[tool\.pytest\.ini_options\]/m.test(pyproject);
     add("test.runner", pytest ? "pytest" : undefined, file);
-    add("orm", single(valuesOf(names, PYTHON_ORMS)), file);
+    add("orm", valuesOf(names, PYTHON_ORMS), file);
   }
   const python = exactVersion(readSmall(folder, ".python-version")?.split("\n")[0] ?? "");
-  if (python) versions.push({ value: python, file: relPath(folder, ".python-version"), language: "python" });
+  if (python) versions.push({ value: python, file: relPath(folder, ".python-version") });
   const rust = rustVersion(folder);
-  if (rust) versions.push({ ...rust, language: "rust" });
-  if (versions.length === 1) add("lang.version", versions[0]!.value, [versions[0]!.file]);
+  if (rust) versions.push(rust);
+  add(
+    "lang.version",
+    versions.map((version) => version.value),
+    versions.map((version) => version.file),
+  );
 }
 
 /** A Rust project's pinned version: `rust-toolchain(.toml)`'s channel, else `Cargo.toml`'s `rust-version`. */
@@ -320,14 +328,13 @@ function rustVersion(folder: Folder): { value: string; file: string } | undefine
   return value ? { value, file: relPath(folder, "Cargo.toml") } : undefined;
 }
 
-/** The repo's CI system, from the files at its top (one system, else none). */
-function ciFacts(folder: Folder, add: (slot: SlotId, value: string | undefined, files: string[]) => void): void {
+/** The repo's CI system, from the files at its top. */
+function ciFacts(folder: Folder, add: Add): void {
   const found = new Map<string, string[]>();
   for (const [file, system] of Object.entries(CI_FILES)) if (hasFile(folder, file)) found.set(system, [file]);
   const workflows = workflowFiles(folder);
   if (workflows.length) found.set("github actions", workflows);
-  const system = single([...found.keys()]);
-  if (system) add("ci.system", system, found.get(system)!);
+  add("ci.system", [...found.keys()], [...found.values()].flat());
 }
 
 /** The workflow files of `.github/workflows`, sorted. */
@@ -342,43 +349,56 @@ function workflowFiles(folder: Folder): string[] {
   }
 }
 
-/** A folder's deploy target, from a host's own config file (one host, else none). */
-function deployFacts(folder: Folder, add: (slot: SlotId, value: string | undefined, files: string[]) => void): void {
+/** A folder's deploy target, from a host's own config file. */
+function deployFacts(folder: Folder, add: Add): void {
   const found = Object.entries(DEPLOY_FILES).filter(([file]) => hasFile(folder, file));
-  const target = single([...new Set(found.map(([, value]) => value))]);
-  if (target)
-    add(
-      "deploy.target",
-      target,
-      found.filter(([, value]) => value === target).map(([f]) => relPath(folder, f)),
-    );
+  add(
+    "deploy.target",
+    [...new Set(found.map(([, value]) => value))],
+    found.map(([file]) => relPath(folder, file)),
+  );
 }
 
-/** The facts one folder's files state (see the header); the top's CI files only at the top. */
-export function mineFolder(top: string, scope: string): MinedFact[] {
-  const folder = { top, scope };
-  const facts = new Map<SlotId, MinedFact>();
-  const torn = new Set<SlotId>();
-  // Two files of the folder giving a slot two values state none of it (see the header).
-  const add = (slot: SlotId, value: string | undefined, files: string[]) => {
-    if (value === undefined || !files.length || torn.has(slot)) return;
-    const known = facts.get(slot);
-    if (known && known.value !== value) {
-      facts.delete(slot);
-      torn.add(slot);
-    } else if (known) known.files = [...new Set([...known.files, ...files])];
-    else facts.set(slot, { scope, slot, value, files: [...new Set(files)] });
-  };
-  nodeFacts(folder, add);
-  otherFacts(folder, add);
-  deployFacts(folder, add);
-  if (scope === "") ciFacts(folder, add);
-  return [...facts.values()];
+/**
+ * What some folders' files state (see the header), read from the checkout at `top`: the facts, and the slots a folder's
+ * files are torn on (two values: none is stated, and nothing can be said of the value they last stated).
+ */
+export interface Reading {
+  top: string;
+  facts: MinedFact[];
+  torn: { scope: string; slot: SlotId }[];
 }
 
-/** The facts of every folder of a checkout's scope catalog. */
-export function mineRepo(top: string, scopes: readonly string[]): MinedFact[] {
-  return scopes.flatMap((scope) => mineFolder(top, scope));
+/** Reads each folder (a catalog scope; the top's CI files only at the top). */
+export function readFolders(top: string, scopes: readonly string[]): Reading {
+  const reading: Reading = { top, facts: [], torn: [] };
+  for (const scope of scopes) {
+    const folder = { top, scope };
+    const facts = new Map<SlotId, MinedFact>();
+    const torn = new Set<SlotId>();
+    const add: Add = (slot, values, files) => {
+      const said = values === undefined ? [] : typeof values === "string" ? [values] : values;
+      if (!said.length || !files.length || torn.has(slot)) return;
+      const known = facts.get(slot);
+      if (said.length > 1 || (known && known.value !== said[0])) {
+        facts.delete(slot);
+        torn.add(slot);
+      } else if (known) known.files = [...new Set([...known.files, ...files])];
+      else facts.set(slot, { scope, slot, value: said[0]!, files: [...new Set(files)] });
+    };
+    nodeFacts(folder, add);
+    otherFacts(folder, add);
+    deployFacts(folder, add);
+    if (scope === "") ciFacts(folder, add);
+    reading.facts.push(...facts.values());
+    reading.torn.push(...[...torn].map((slot) => ({ scope, slot })));
+  }
+  return reading;
+}
+
+/** Whether a repo-relative file is a regular file of the checkout: a citation's file still there to read. */
+export function presentFile(top: string, rel: string): boolean {
+  return isRegularFile(join(top, ...rel.split("/")));
 }
 
 /** `lang.version`'s label by the file that pins it: one language's version, which D7's table keys as one slot. */

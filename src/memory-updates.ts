@@ -7,19 +7,19 @@
  * - **A non-human Submit** (D24) reads its own window: a value changed while the agent ran on its own.
  *
  * Only a changed value is news: a value the window was never given is not, and a value that ended with no successor
- * (a failed citation) has no row to state it. The last session's window is the newest other main-thread window whose
- * ledger holds one of the repo's cids, among the 64 most recently written.
+ * (a failed citation) has no row to state it. The last session's window is the one the repo's store names in
+ * `last-session.json`, which each main-thread SessionStart rewrites with its own after reading it.
  */
-import { readdirSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { writeFileAtomic } from "../packages/cli/src/home";
 import { isLiveRow, type MemoryRecord } from "./index";
-import { deliveredKeys, liveDeliveries, novelNotes, readLedger, type LiveDelivery } from "./memory-ledger";
+import { deliveredKeys, liveDeliveries, novelNotes, type LiveDelivery } from "./memory-ledger";
 import { isCited, isUntyped, type ProvenanceNote } from "./memory-provenance";
 import type { Invalidation } from "./memory-validity";
-import { LIVE_LEDGER } from "./memory-window";
+import { windowDir } from "./memory-window";
 
-/** How many of the most recently written windows are read for the repo's last session. */
-const RECENT_WINDOWS = 64;
+const LAST_SESSION = "last-session.json";
 
 /** The `Updated:` items for what a window holds (see the header), newest row first. */
 export function updatedItems(
@@ -35,33 +35,24 @@ export function updatedItems(
   return novelNotes(candidates, held, opts).filter((note) => note.update);
 }
 
-/** The window's ledger file's last write; 0 when it has none. */
-function writtenAt(dir: string): number {
-  let newest = 0;
-  for (const name of [LIVE_LEDGER, LIVE_LEDGER.replace(/\.log$/, ".json")])
-    newest = Math.max(newest, statSync(join(dir, name), { throwIfNoEntry: false })?.mtimeMs ?? 0);
-  return newest;
-}
-
-/** What the repo's last session was given (see the header); none when no other window of the repo has a ledger. */
-export function lastSessionDeliveries(windowsRoot: string, repo: string, except?: string): LiveDelivery[] {
-  let names: string[];
+/**
+ * What the repo's last session was given (see the header), however long its transcript grew; none before the
+ * repo's first session, or when its window is gone.
+ */
+export function lastSessionDeliveries(store: string, root: string, repo: string): LiveDelivery[] {
+  let win: unknown;
   try {
-    names = readdirSync(join(windowsRoot, "windows"));
+    win = (JSON.parse(readFileSync(join(store, LAST_SESSION), "utf8")) as { win?: unknown }).win;
   } catch {
     return [];
   }
+  const dir = typeof win === "string" ? windowDir(root, win) : undefined;
   const prefix = `${repo.slice(0, 8)}/`;
-  const windows = names
-    .filter((name) => !name.includes("--") && join(windowsRoot, "windows", name) !== except)
-    .map((name) => ({ dir: join(windowsRoot, "windows", name), at: writtenAt(join(windowsRoot, "windows", name)) }))
-    .filter((window) => window.at > 0)
-    .sort((a, b) => b.at - a.at)
-    .slice(0, RECENT_WINDOWS);
-  for (const { dir } of windows) {
-    if (![...readLedger(dir).delivered.keys()].some((cid) => cid.startsWith(prefix))) continue;
-    // Everything the last session was given, however long its transcript grew: size 0 keeps every delivery.
-    return liveDeliveries(dir, 0).filter((delivery) => delivery.cid.startsWith(prefix));
-  }
-  return [];
+  // Size 0 keeps every delivery of the window's current epoch.
+  return dir ? liveDeliveries(dir, 0).filter((delivery) => delivery.cid.startsWith(prefix)) : [];
+}
+
+/** Names a session as the repo's last session (see the header): its id, which names its window. */
+export function noteLastSession(store: string, win: string): void {
+  writeFileAtomic(join(store, LAST_SESSION), `${JSON.stringify({ win })}\n`, 0o600);
 }
