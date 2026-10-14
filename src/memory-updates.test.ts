@@ -52,7 +52,9 @@ function auth0Ended() {
 }
 
 const auth = (row: MemoryRecord) =>
-  deliveredKeys(row, REPO).filter((key) => key.cid.endsWith("auth.provider")).map(({ cid, ver }) => ({ cid, ver }));
+  deliveredKeys(row, REPO)
+    .filter((key) => key.cid.endsWith("auth.provider"))
+    .map(({ cid, ver }) => ({ cid, ver }));
 
 describe("updatedItems", () => {
   test("a window given Auth0 is told the mined clerk, once; the cut typed row is no item", () => {
