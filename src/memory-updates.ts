@@ -7,7 +7,8 @@
  * - **A non-human Submit** (D24) reads its own window: a value changed while the agent ran on its own.
  *
  * Only a changed value is news: a value the window was never given is not, and a value that ended with no successor
- * (a failed citation) has no row to state it. The last session's window is the one the repo's store names in
+ * (a failed citation) has no row to state it. A row is read through validity first (A4 §5.1 step 5), as a Submit's
+ * notes are: one that validity cuts at all (a row stating two slots, one of them since ended) states no change. The last session's window is the one the repo's store names in
  * `last-session.json`, which each main-thread SessionStart rewrites with its own after reading it.
  */
 import { readFileSync } from "node:fs";
@@ -16,7 +17,7 @@ import { writeFileAtomic } from "../packages/cli/src/home";
 import { isLiveRow, type MemoryRecord } from "./index";
 import { deliveredKeys, liveDeliveries, novelNotes, type LiveDelivery } from "./memory-ledger";
 import { isCited, isUntyped, type ProvenanceNote } from "./memory-provenance";
-import type { Invalidation } from "./memory-validity";
+import { validText, type Invalidation } from "./memory-validity";
 import { windowDir } from "./memory-window";
 
 const LAST_SESSION = "last-session.json";
@@ -28,8 +29,10 @@ export function updatedItems(
   opts: { repo?: string; invalid?: readonly Invalidation[] },
 ): (MemoryRecord & Pick<ProvenanceNote, "update">)[] {
   const changed = (key: LiveDelivery) => held.some((delivery) => delivery.cid === key.cid && delivery.ver !== key.ver);
+  const invalid = opts.invalid ?? [];
   const candidates = rows
     .filter((row) => isLiveRow(row) && (isCited(row) || !isUntyped(row)) && row.slots?.length)
+    .filter((row) => validText(row.text, row.at, invalid, row.scope) === row.text)
     .filter((row) => deliveredKeys(row, opts.repo).some(changed))
     .sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
   return novelNotes(candidates, held, opts).filter((note) => note.update);
