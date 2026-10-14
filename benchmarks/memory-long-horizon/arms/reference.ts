@@ -231,10 +231,13 @@ const TABLES: Record<string, Reference> = {
   },
   citation: {
     answers: [
-      submit(
-        "which auth provider does apps/web use?",
-        "Auth provider in apps/web: Clerk (cited: apps/web/package.json)",
-      ),
+      {
+        ...submit(
+          "which auth provider does apps/web use?",
+          "Auth provider in apps/web: Clerk (cited: apps/web/package.json)",
+        ),
+        once: true,
+      },
     ],
   },
   gotcha: {
