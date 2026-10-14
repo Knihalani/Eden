@@ -74,10 +74,27 @@ const TABLE: [string, string[]][] = [
   // After the disclosed look at E3 batch B's misses (2026-10-14): D7's and R8's forms they use, in other words.
   ["we migrated from mysql to postgres in the summer", ["db.engine=postgres !mysql"]],
   ["use Drizzle for queries, not TypeORM", ["orm=drizzle !typeorm"]],
-  ["switched the worker to hono from express", ["framework=hono !express"]],
+  ["switched the api to hono from express", ["framework=hono !express"]],
   ["everything is pnpm now", ["pkg.manager=pnpm"]],
   ["my gh account is kn-dev", ["gh.account=kn-dev"]],
   ["we switched from main to develop", []],
+  // Review round 4: another instance's switch, a one-task purpose, an environment's value, a person's own setup.
+  ["We moved the docs site from Netlify to Vercel.", []],
+  ["We migrated the users table from mysql to postgres.", []],
+  ["We switched the e2e tests from cypress to playwright.", []],
+  ["We switched the button from react to vue.", []],
+  ["We migrated our backend from express to fastify.", ["framework=fastify !express"]],
+  ["use npm for the global install, not pnpm", []],
+  ["use yarn for this one script, not pnpm", []],
+  ["use sqlite for local dev, not postgres", []],
+  ["use jest for the legacy package, not vitest", []],
+  ["use postgres for analytics, not mysql", []],
+  ["our db is sqlite for local dev and postgres in prod", []],
+  ["the database is sqlite in tests and postgres in production", []],
+  ["we deploy to fly.io in production", ["deploy.target=fly.io"]],
+  ["my node version is 18", []],
+  ["my formatter is prettier", []],
+  ["my github account is acme-dev", ["gh.account=acme-dev"]],
   // Status words, questions, conditionals, reminders and instructions state no slot (D7, R7 §9); nor does a value
   // that is an everyday word without its slot, or a word outside the class where the form takes class values only.
   ["don't forget to use Clerk for auth because SSO", []],
