@@ -38,6 +38,11 @@ function sleep(run: ArmRun, world: SimWorld): number | null {
   return run.cli(world, ["sleep", "--idle", "--after", "0"]).exitCode;
 }
 
+/**
+ * A repo fact mined from its files (D8), cited, and overridden by the user. `cited` reads the bullets the second
+ * session got from its start through its cue: since P3.4 a value that changed since the repo's last session comes as
+ * an `Updated:` item at SessionStart (A4 §5.2), which then makes the cue's own bullet refractory (A4 §4).
+ */
 const repoFacts: Arm = {
   id: "repo-facts",
   flagged: true,
@@ -53,6 +58,7 @@ const repoFacts: Arm = {
       set(PKG, "", "pnpm"),
     ]);
     sleeps.push(sleep(run, world));
+    const secondFrom = world.log.length;
     const second = await Driver.start(world, spec);
     const pnpm = await second.ask("install the dependencies", install);
     await second.say("Use bun as the package manager here.", [set(PKG, "", "bun")]);
@@ -62,7 +68,7 @@ const repoFacts: Arm = {
     const third = await Driver.start(world, spec);
     const bun = await third.ask("install the dependencies", install);
     await third.end();
-    const cited = bulletsAt(world, spec, pnpm.seq).filter(
+    const cited = bulletsIn(judged(world, spec), secondFrom, pnpm.seq + 1).filter(
       (bullet) => states(bullet, PKG, "pnpm") && bullet.text.includes("pnpm-lock.yaml"),
     );
     const stale = bulletsIn(judged(world, spec), from).filter((bullet) => bullet.stale);
