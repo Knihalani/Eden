@@ -289,6 +289,12 @@ const subagent: Arm = {
   },
 };
 
+/**
+ * A5 `first-touch` (A4 §5.5, D23). Contract, confirmed in P3.5: the plugin answers a PostToolBatch with
+ * `hookSpecificOutput.additionalContext` when `deliver.batch` is on (every point is, in this arm's `on` state); the
+ * first batch whose paths fall in a scope below the root no batch touched in this epoch is that scope's first touch,
+ * which delivers at most 2 of the scope's own slot facts; a later batch in the same scope delivers nothing.
+ */
 const firstTouch: Arm = {
   id: "first-touch",
   flagged: true,
