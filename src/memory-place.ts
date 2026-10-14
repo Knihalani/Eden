@@ -23,9 +23,10 @@
  *   ancestor only when the prompt names its scope; nothing at a sibling. A row with no `scope` was written where its
  *   place was unknown (before P3.2, or in a repo with no catalog, outside git included): it stays visible everywhere,
  *   as every row was, and a window in such a repo reads every row.
- * - **D5's override, for mined facts (P3.4).** A value the repo's files state at a folder (D8) is not delivered where
- *   each read-set folder below it holds its own live value of the slot: the root's `.nvmrc` says nothing at apps/web
- *   once "apps/web runs node 22". A typed row's override is P3.5's (`cascade`).
+ * - **D5's override, for mined facts (P3.4).** A value the repo's files state at a folder (D8) is not delivered when a
+ *   read-set folder below it holds its own live value of the slot: the root's `.nvmrc` says nothing at apps/web once
+ *   "apps/web runs node 22", nor at a turn reading apps/web and packages/cli, where a bullet naming no folder would
+ *   be read as apps/web's (G2 outranks G1, A4 §0). A typed row's override is P3.5's (`cascade`).
  * - **A row's scope (A4 §3.2).** The one scope of the catalog its text names (the root's by a file path in its own
  *   folders, "scripts/db.ts"); of several, the working scope (the
  *   read set's first) when it is one of them, else their common ancestor; naming none, the working scope, or `""` for
@@ -318,7 +319,6 @@ export function withoutOverriddenMined<T extends ProvenanceNote>(
     if (!isCited(note)) return true;
     const scope = note.scope ?? "";
     const below = readSet.filter((read) => read !== scope && within(scope, read));
-    if (!below.length || below.length < readSet.filter((read) => within(scope, read)).length) return true;
     const slots = noteSlots(note).flatMap((ref) => (ref.v === undefined ? [] : [ref.k]));
     const overrides = (slot: SlotId, read: string) =>
       live.some(
@@ -329,7 +329,7 @@ export function withoutOverriddenMined<T extends ProvenanceNote>(
           within(row.scope, read) &&
           keysSlot(row, slot),
       );
-    return !slots.every((slot) => below.every((read) => overrides(slot, read)));
+    return !slots.every((slot) => below.some((read) => overrides(slot, read)));
   });
 }
 
