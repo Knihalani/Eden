@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { exactVersion, minedText, mineFolder, mineRepo, type MinedFact } from "./memory-repo-facts";
+import { exactVersion, minedText, presentFile, readFolders, type MinedFact } from "./memory-repo-facts";
 import { slotsIn } from "./memory-slots";
 
 let top = "";
@@ -27,6 +27,7 @@ function files(tree: Record<string, string>): void {
   }
 }
 
+const mineFolder = (at: string, scope: string) => readFolders(at, [scope]).facts;
 const pkg = (fields: Record<string, unknown>) => JSON.stringify({ name: "app", ...fields });
 const bySlot = (facts: readonly MinedFact[]) =>
   Object.fromEntries(facts.map((fact) => [fact.slot, [fact.value, fact.files.join(" ")]]));
@@ -205,17 +206,32 @@ describe("what is read", () => {
     expect(mineFolder(top, "big")).toEqual([]);
   });
 
-  test("mineRepo reads every folder it is given, each fact at its folder", () => {
+  test("readFolders reads every folder it is given, each fact at its folder, and names the slots it found torn", () => {
     files({
       "package-lock.json": "{}",
       "apps/web/package.json": pkg({ dependencies: { "@auth0/nextjs-auth0": "3" } }),
       "packages/cli/package.json": pkg({}),
     });
-    const facts = mineRepo(top, ["", "apps/web", "packages/cli"]);
-    expect(facts.map((fact) => `${fact.scope}|${fact.slot}=${fact.value}`)).toEqual([
-      "|pkg.manager=npm",
+    files({ "packages/cli/package.json": pkg({ devDependencies: { jest: "29", vitest: "2" } }), "yarn.lock": "" });
+    const reading = readFolders(top, ["", "apps/web", "packages/cli"]);
+    expect(reading.top).toBe(top);
+    expect(reading.facts.map((fact) => `${fact.scope}|${fact.slot}=${fact.value}`)).toEqual([
       "apps/web|auth.provider=auth0",
     ]);
+    expect(reading.torn).toEqual([
+      { scope: "", slot: "pkg.manager" },
+      { scope: "packages/cli", slot: "test.runner" },
+    ]);
+  });
+});
+
+describe("presentFile", () => {
+  test("a citation's file is there to read only as a regular file of the checkout", () => {
+    files({ "apps/web/package.json": "{}" });
+    symlinkSync(join(top, "apps", "web", "package.json"), join(top, "linked.json"));
+    expect(presentFile(top, "apps/web/package.json")).toBe(true);
+    expect(presentFile(top, "linked.json")).toBe(false);
+    expect(presentFile(top, "package-lock.json")).toBe(false);
   });
 });
 

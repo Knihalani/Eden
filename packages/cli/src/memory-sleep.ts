@@ -9,7 +9,9 @@
  * - **The heavy tier** (D34: the same process at ≥ 30 quiet minutes, `EDEN_SLEEP_HEAVY`) then mines the repo's
  *   files (D8, `memory-citations.ts`). The sleeper waits on for it, sleeping again whenever the repo was active
  *   meanwhile; `--after 0`, a caller that has seen the idle time itself (the harness), waits for neither and runs
- *   each tier the store's quiet time already allows. `--heavy` is SessionStart's detached launch: it mines at once.
+ *   each tier the store's quiet time already allows. `--heavy` is SessionStart's detached launch: it mines at once,
+ *   whether or not an idle sleeper is pending (it has its own marker, `mine.pending`; the citation lock serialises
+ *   two minings).
  * - Activity is the mtime of the store's `activity` file, which every hook invocation touches (`noteRepoActivity`),
  *   set to the memory clock (`EDEN_NOW` in the harness, so its skipped minutes count as quiet).
  * - One sleeper per store: a sleeper writes its pid to `sleep.pending` as it starts. A hook starts none while that
@@ -23,7 +25,7 @@ import { closeSync, existsSync, openSync, readFileSync, rmSync, statSync, utimes
 import { join } from "node:path";
 import { openMemory } from "../../../src/index";
 import { applyMined } from "../../../src/memory-citations";
-import { mineRepo } from "../../../src/memory-repo-facts";
+import { readFolders } from "../../../src/memory-repo-facts";
 import { markStoreFormat, readableStore, repoIdentity, repoStoreDir } from "../../../src/memory-repo";
 import { buildCatalog, readCatalog, rebuildRecorded, recordedCheckout } from "../../../src/memory-scopes";
 import { consolidate, sleepIdleMs } from "../../../src/sleep";
@@ -35,6 +37,8 @@ import { memoryRoot } from "./memory-hook";
 
 const ACTIVITY = "activity";
 const PENDING = "sleep.pending";
+/** The heavy launch's own marker: one mining per store at a time, beside a pending idle sleeper. */
+const MINE_PENDING = "mine.pending";
 /** A sleeper that has not found 5 quiet minutes in 6 hours leaves the store to the next one. */
 const MAX_WAIT_MS = 6 * 60 * 60 * 1000;
 /** D34: the heavy tier runs after this long without activity. */
@@ -73,9 +77,9 @@ function quietMs(store: string): number {
   return memoryNow() - lastActivity(store);
 }
 
-function pendingPid(store: string): number | undefined {
+function pendingPid(store: string, marker = PENDING): number | undefined {
   try {
-    const pid = (JSON.parse(readFileSync(join(store, PENDING), "utf8")) as { pid?: unknown }).pid;
+    const pid = (JSON.parse(readFileSync(join(store, marker), "utf8")) as { pid?: unknown }).pid;
     return typeof pid === "number" && Number.isInteger(pid) && pid > 0 ? pid : undefined;
   } catch {
     return undefined;
@@ -93,18 +97,21 @@ function alive(pid: number): boolean {
 
 /** Starts the store's detached idle sleeper unless one is pending (see the header). */
 export function spawnIdleSleeper(store: string, session: string | undefined): void {
-  spawnSleeper(store, ["--idle", ...(session ? ["--session", session] : [])]);
+  spawnSleeper(store, ["--idle", ...(session ? ["--session", session] : [])], PENDING);
 }
 
 /** D34: SessionStart's detached heavy sleep, which mines the repo's files at once (see the header). */
 export function spawnHeavySleeper(store: string): void {
-  spawnSleeper(store, ["--heavy"]);
+  spawnSleeper(store, ["--heavy"], MINE_PENDING);
 }
 
-/** Starts a detached `eden sleep` over the store unless a sleeper is pending; none while `EDEN_SLEEP_IDLE` is off. */
-function spawnSleeper(store: string, args: readonly string[]): void {
+/**
+ * Starts a detached `eden sleep` over the store unless one with the same marker is pending; none while
+ * `EDEN_SLEEP_IDLE` is off.
+ */
+function spawnSleeper(store: string, args: readonly string[], marker: string): void {
   if (!(sleepIdleMs() > 0)) return;
-  const pending = pendingPid(store);
+  const pending = pendingPid(store, marker);
   if (pending !== undefined && alive(pending)) return;
   // A compiled `eden` binary runs its own commands; a checkout runs the CLI's entry with bun.
   const script = join(import.meta.dir, "cli.ts");
@@ -148,7 +155,7 @@ export function mineStore(store: string): void {
   if (checkout === undefined || !catalog || memoryConsent() !== "on") return;
   const mem = openMemory({ dir: store, perRepo: true });
   try {
-    applyMined(mem, mineRepo(checkout, catalog.scopes));
+    applyMined(mem, readFolders(checkout, catalog.scopes));
   } finally {
     mem.close();
   }
@@ -212,14 +219,16 @@ export async function sleepCli(args: readonly string[]): Promise<number> {
     if (!store || !existsSync(store) || !readableStore(store)) return 0;
     const session = option(args, "--session");
     if (args.includes("--idle") || args.includes("--heavy")) {
+      const heavy = args.includes("--heavy");
+      const marker = heavy ? MINE_PENDING : PENDING;
       const after = Number(option(args, "--after"));
       const afterMs = Number.isFinite(after) && after >= 0 ? after * 1000 : sleepIdleMs();
-      writeFileAtomic(join(store, PENDING), JSON.stringify({ pid: process.pid, t: Date.now() }), 0o600);
+      writeFileAtomic(join(store, marker), JSON.stringify({ pid: process.pid, t: Date.now() }), 0o600);
       try {
-        if (args.includes("--heavy")) mineStore(store);
+        if (heavy) mineStore(store);
         else await sleepWhenIdle(store, session, afterMs);
       } finally {
-        if (pendingPid(store) === process.pid) rmSync(join(store, PENDING), { force: true });
+        if (pendingPid(store, marker) === process.pid) rmSync(join(store, marker), { force: true });
       }
     } else {
       sleepStore(store, session);
