@@ -71,6 +71,13 @@ const TABLE: [string, string[]][] = [
   ["We use node 20 across the repo.", ["node.version=20"]],
   ["apps/web runs node 22.", ["node.version=22"]],
   ["packages/cli uses yarn as its package manager.", ["pkg.manager=yarn"]],
+  // After the disclosed look at E3 batch B's misses (2026-10-14): D7's and R8's forms they use, in other words.
+  ["we migrated from mysql to postgres in the summer", ["db.engine=postgres !mysql"]],
+  ["use Drizzle for queries, not TypeORM", ["orm=drizzle !typeorm"]],
+  ["switched the worker to hono from express", ["framework=hono !express"]],
+  ["everything is pnpm now", ["pkg.manager=pnpm"]],
+  ["my gh account is kn-dev", ["gh.account=kn-dev"]],
+  ["we switched from main to develop", []],
   // Status words, questions, conditionals, reminders and instructions state no slot (D7, R7 §9); nor does a value
   // that is an everyday word without its slot, or a word outside the class where the form takes class values only.
   ["don't forget to use Clerk for auth because SSO", []],

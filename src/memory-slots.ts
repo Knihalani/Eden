@@ -19,9 +19,11 @@
  *   - a bare `(we|i) (always) use V (here)`, when V is in exactly one slot's class;
  *   - retractions, D7's and A4 §3.1's only: `we (don't|do not|no longer) use V (anymore)`, `we're dropping V`, `we
  *     dropped V`, `we're not (on|using) V anymore`, `we're no longer on V`: V invalidated, with no successor;
- *   - `we're (on|using|now on) V`; `our <alias> run(s) on V`; `we (deploy|host) (to|on) V`, with no other subject or
- *     object; `PRs go (against|into) V`; `<scope path> (uses|runs) V`;
- *   - words that say where or when, not what ("here", "now", "across the repo", "last month");
+ *   - `we're (on|using|now on) V`; R8's `everything is V now`; `our <alias> run(s) on V`; `we (deploy|host) (to|on)
+ *     V`, with no other subject or object; `PRs go (against|into) V`; `<scope path> (uses|runs) V`;
+ *   - D7's `use A for X, not B` when X names no slot (A's and B's class do), and a switch of a component ("switched
+ *     the api to fastify from express") when its values share a class, each read in the other's slot;
+ *   - words that say where or when, not what ("here", "now", "across the repo", "last month", "in the spring");
  *   - `it's V` after a clause about a slot, in the same sentence ("we're not on heroku anymore, it's render").
  * - **No slot** in a question, a conditional ("if we use pnpm, …"), a reminder ("don't forget to use …"), an
  *   instruction that only mentions a value ("use vitest's fake timers"), a status ("the db is down"), or a value of
@@ -406,7 +408,7 @@ const FILLER = new RegExp(
   String.raw`(?:\s+(?:here|now|too|please|again|instead|everywhere|anymore|any more|these days|for now|today|` +
     String.raw`across the (?:repo|board|codebase)|in this repo|repo-wide|for everything|for all of it|` +
     String.raw`(?:last|this|next) (?:week|month|year|sprint|quarter)|(?:a|one|two|few) (?:days?|weeks?|months?) ago|` +
-    String.raw`since \S+))+$`,
+    String.raw`since \S+|in (?:the )?(?:spring|summer|autumn|fall|winter)|in (?:q[1-4]|20\d\d)|earlier this year))+$`,
   "i",
 );
 const LEADING = /^(?:(?:the|our|my|its|their|a|an|this|that)\s+)+/i;
@@ -580,7 +582,7 @@ function setByClass(phrase: string, named: readonly SlotId[]): Found[] {
 const ADVERBS = String.raw`(?:\s+(?:just|recently|finally|already|now|also|since|then|eventually|officially|all))*`;
 const SUBJECT = String.raw`(?:we|i|they|it|the team|\S+\/\S+)(?:'ve|'re|\s+have|\s+had|\s+are)?`;
 /** What may stand before a copula's subject: a place ("In apps/web"), an article or a possessive. */
-const COPULA_LEAD = String.raw`^(?:(?:in|for|on)\s+\S+,?\s+)?(?:the\s+|our\s+|its\s+|this repo'?s\s+|\S+\/\S+'s\s+)?`;
+const COPULA_LEAD = String.raw`^(?:(?:in|for|on)\s+\S+,?\s+)?(?:the\s+|our\s+|my\s+|its\s+|this repo'?s\s+|\S+\/\S+'s\s+)?`;
 /** Words between a copula and its value that say how, not what ("is hosted on", "is handled by"). */
 const COPULA_HOW = String.raw`(?:now\s+|still\s+|actually\s+|currently\s+|just\s+)?(?:(?:hosted|running|deployed|pinned|set)\s+(?:on|to)\s+|handled by\s+|on\s+)?`;
 
@@ -598,8 +600,9 @@ const USE_FOR = new RegExp(
   String.raw`\b(?:use|uses|using|with)\s+(.+?)\s+(?:for|as)\s+(?:the\s+|our\s+|its\s+|all\s+)?(${ALIAS})\b(.*)$`,
   "i",
 );
+/** `use A not B`, and D7's `use A for X, not B` where X names no slot: A's and B's class name it. */
 const USE_NOT = new RegExp(
-  String.raw`(?:^|\b(?:we|i)\s+(?:always\s+)?)use\s+(\S+(?:\s+\S+)?)\s*,?\s+${NOT}\s+(\S+(?:\s+\S+)?)`,
+  String.raw`(?:^|\b(?:we|i)\s+(?:always\s+)?)use\s+(\S+(?:\s+\S+)?)(?:\s+for\s+[^,]{1,40}?)?\s*,?\s+${NOT}\s+(\S+(?:\s+\S+)?)`,
   "i",
 );
 const SWITCH = new RegExp(String.raw`^(?:${SUBJECT}${ADVERBS}\s+)?(?:switched|moved|migrated)\b(.*)$`, "i");
@@ -623,6 +626,8 @@ const BARE_USE = new RegExp(
   "i",
 );
 const ON = /^we(?:'re|\s+are)\s+(?:now\s+)?(?:on|using)\s+(?:now\s+)?(.+)$/i;
+/** R8's `everything is V now`, read by V's class. */
+const EVERYTHING = /^everything(?:'s|\s+is)\s+(?:now\s+)?(?:on\s+|in\s+)?(.+)$/i;
 const RUNS_ON = new RegExp(
   String.raw`^(?:(?:our|the|all)\s+)?(${ALIAS})\s+(?:run|runs|go|goes|are run|is run|use|uses|are using|is using)` +
     String.raw`(?:\s+(?:on|with|in|through|via|by|to|against))?\s+(.+)$`,
@@ -664,18 +669,28 @@ function switchOf(tail: string, named: readonly SlotId[]): Found[] {
     const [to, from] = at === 0 ? [match[3], match[2]] : at === 1 ? [match[2], match[3]] : at === 2 ? [match[2]] : [];
     const fromOnly = at === 3 ? match[2] : undefined;
     const slot = aliasedSlots(subject)[0];
-    // X names something that is no slot ("the helpers", "branches"): the switch is about it, not a slot. A path in X
-    // says where ("we switched apps/web from Auth0 to Clerk").
+    // X names something that is no slot ("the helpers", "branches"): the switch is about it, not a slot, unless it
+    // goes from one value of a class to another ("switched the api to fastify from express"). A path in X says where
+    // ("we switched apps/web from Auth0 to Clerk").
     const rest = subject
       .replace(/\S*\/\S*/g, " ")
       .replace(/\b(?:over|everything|all|it|things|stuff|back|fully|entirely)\b/gi, "");
-    if (!slot && /\w{3,}/.test(rest)) return [];
     const reading: Reading = slot ? { slot } : {};
+    let sets = to ? valueOf(to, reading, named) : [];
+    let olds = from ? valueOf(from, reading, named) : [];
+    // One side's class names the slot the other is read in ("to fastify from express": express is a framework there).
+    const within = (phrase: string, found: ReturnType<typeof valueOf>) =>
+      found.flatMap((other) => valueOf(phrase, { slot: other.slot, classOnly: true }, [...named, other.slot]));
+    if (to && from && sets.length && !olds.length) olds = within(from, sets);
+    else if (to && from && olds.length && !sets.length) sets = within(to, olds);
+    // A switch of the component X ("the api") changes a slot when its old and new values share one's class.
+    const classChange = !!from && sets.some((set) => olds.some((old) => old.slot === set.slot));
+    if (!slot && /\w{3,}/.test(rest) && !classChange) return [];
     if (fromOnly) {
       const gone = valueOf(fromOnly, reading, named);
       return gone[0] ? [{ slot: gone[0].slot, was: [gone[0].value] }] : [];
     }
-    return changeOf(valueOf(to!, reading, named), from ? valueOf(from, reading, named) : []);
+    return changeOf(sets, olds);
   }
   return [];
 }
@@ -772,7 +787,7 @@ const READERS: readonly Reader[] = [
 
 /** D7's forms read by the value's class alone (`we're on V`, `<scope> uses V`, the bare `use V`). */
 function valued(clause: string, named: readonly SlotId[]): Found[] | undefined {
-  const match = ON.exec(clause) ?? PATH_USES.exec(clause) ?? BARE_USE.exec(clause);
+  const match = ON.exec(clause) ?? EVERYTHING.exec(clause) ?? PATH_USES.exec(clause) ?? BARE_USE.exec(clause);
   if (!match) return undefined;
   const forSlot = FOR_SLOT.exec(match[1]!);
   return forSlot ? setNamed({ slot: alias(forSlot[2]!) }, forSlot[1]!, named) : setByClass(match[1]!, named);
