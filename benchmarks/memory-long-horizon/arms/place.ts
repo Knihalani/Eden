@@ -19,7 +19,6 @@ import {
   judged,
   needCheck,
   noStale,
-  packetsAt,
   quote,
   read,
   type Arm,
@@ -211,19 +210,21 @@ const fanOut: Arm = {
     world.advance(DAY_MS);
     const session = await Driver.start(world, spec);
     const files = ["apps/web/app/login.ts", "packages/cli/src/login.ts"];
+    const from = world.log.length;
     await session.turn("look at both login flows", { tools: [files.map((path) => read(path, `// ${path}\n`))] });
     const cue = await session.ask(`make login in ${files[0]} and ${files[1]} behave the same`, {
       needs: [id(AUTH, "apps/web"), id(AUTH, "packages/cli")],
     });
     await session.end();
-    const bullets = packetsAt(judged(world, spec), cue.seq).flatMap((packet) => packet.bullets);
+    // The turn's packets: its batch's first touch of both folders (A4 §5.5, since P3.5), then the cue's.
+    const bullets = bulletsIn(judged(world, spec), from, cue.seq + 1);
     const twoScope = bullets.filter(
       (bullet) =>
         bullet.stated.some((s) => s.item === id(AUTH, "apps/web") && s.value === "Clerk") &&
         bullet.stated.some((s) => s.item === id(AUTH, "packages/cli") && s.value === "none"),
     );
     return [
-      check("two-scope-bullet", twoScope.length > 0, `the cue's packet: ${quote(bullets)}`),
+      check("two-scope-bullet", twoScope.length > 0, `the turn's packets: ${quote(bullets)}`),
       needCheck("needs-met", world, spec, [cue]),
     ];
   },
