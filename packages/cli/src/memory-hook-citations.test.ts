@@ -128,13 +128,15 @@ describe("watchPaths (D31, R0 F29)", () => {
 });
 
 describe("FileChanged's re-check (D31)", () => {
-  test("a dependency removed fails its citation: the fact goes to history, and the list loses the file", async () => {
+  test("a dependency removed fails its citation: the fact goes to history, and its file stays watched", async () => {
     await mined();
     expect(live().map((row) => row.text)).toContain("In apps/web the auth provider is clerk");
     write({ "apps/web/package.json": web({}) });
     const out = specific(hook("FileChanged", "s2", { file_path: join(top, "apps/web/package.json"), event: "change" }));
     expect(live().map((row) => row.text)).not.toContain("In apps/web the auth provider is clerk");
-    expect([...out.watchPaths!].sort()).toEqual([join(top, ".nvmrc"), join(top, "package-lock.json")]);
+    expect([...out.watchPaths!].sort()).toEqual(
+      [join(top, ".nvmrc"), join(top, "apps/web/package.json"), join(top, "package-lock.json")].sort(),
+    );
     const packet = specific(hook("UserPromptSubmit", "s2", { prompt: "which auth provider does apps/web use?" }));
     expect(packet.additionalContext ?? "").not.toMatch(/clerk/i);
   });
@@ -199,6 +201,7 @@ describe("Updated: items outside a human Submit (A4 §5.2, D24)", () => {
 
   test("SessionStart briefs a value that changed since the repo's last session, naming the old one", async () => {
     await mined();
+    hook("SessionStart", "s1", { source: "startup" });
     expect(
       specific(hook("UserPromptSubmit", "s1", { prompt: "install the dependencies" })).additionalContext,
     ).toContain("The package manager is npm");
@@ -214,6 +217,7 @@ describe("Updated: items outside a human Submit (A4 §5.2, D24)", () => {
 
   test("a value the last session was never given, or did not change, is no item", async () => {
     await mined();
+    hook("SessionStart", "s1", { source: "startup" });
     hook("UserPromptSubmit", "s1", { prompt: "install the dependencies" });
     hook("SessionEnd", "s1", { reason: "other" });
     expect(specific(hook("SessionStart", "s2", { source: "startup" })).additionalContext ?? "").not.toContain(

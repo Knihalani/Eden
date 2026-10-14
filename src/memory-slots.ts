@@ -948,13 +948,13 @@ export function typedValue(text: string, slot: SlotId, value: string): string {
 
 /**
  * A4 §5.1 step 4a's slot detector, as far as P3.4 takes it: R2 §6.1b's cold-start seed lexicon for the package
- * manager ("install deps" never says "pnpm"; it does say "install", A7 §1 layer 2), so a mined `pkg.manager` reaches
- * the prompt that needs it. Its other seeds (`test`, `login`, `token`, …) are generic words whose thresholds R2
- * calibrates on the silence set, and wait for P4.4 with the rest of the lexicon and the indirect bundles.
+ * manager, its words only (`install`, `deps`, `lockfile`, `add package`: "high precision, low recall"; "install deps"
+ * never says "pnpm", it does say "install", A7 §1 layer 2), so a mined `pkg.manager` reaches the prompt that needs
+ * it. Its other seeds (`test`, `login`, `token`, …) are generic words whose thresholds R2 calibrates on the silence
+ * set, and wait for P4.4 with the rest of the lexicon and the indirect bundles.
  */
 const CUE_SEEDS: Partial<Record<SlotId, RegExp>> = {
-  "pkg.manager":
-    /\b(?:(?:re)?install(?:s|ed|ing)?|deps|dependenc(?:y|ies)|lock ?file|add(?:s|ed|ing)? (?:a |the |another )?package)\b/i,
+  "pkg.manager": /\b(?:(?:re)?install(?:s|ed|ing)?|deps|lock ?file|add(?:s|ed|ing)? (?:a |another )?packages?)\b/i,
 };
 
 /** The slots a cue names by D7's seed lexicon (see `CUE_SEEDS`): each one's live value is looked up by key. */

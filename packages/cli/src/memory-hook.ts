@@ -2,7 +2,7 @@ import { basename, join, resolve } from "node:path";
 import { redact } from "@eden/ir";
 import { authoredTexts, splitPastes, type TextSource } from "../../../src/memory-authority";
 import { isLiveRow, openMemory, storeRows, type MemoryRecord } from "../../../src/index";
-import { lastSessionDeliveries, updatedItems } from "../../../src/memory-updates";
+import { lastSessionDeliveries, noteLastSession, updatedItems } from "../../../src/memory-updates";
 import { GistStore, scrubTombstonedIdentity } from "../../../src/gist-store";
 import { memoryConsent } from "../../../src/memory-consent";
 import { packetOf, shapePacket } from "../../../src/memory-hook-packet";
@@ -37,6 +37,7 @@ import {
   buildCatalog,
   listedFile,
   readCatalog,
+  recordedCheckout,
   rebuildsCatalog,
   repoPathOf,
   type ScopeCatalog,
@@ -140,7 +141,7 @@ import {
   watchPaths,
   type Citation,
 } from "../../../src/memory-citations";
-import { mineFolder } from "../../../src/memory-repo-facts";
+import { readFolders } from "../../../src/memory-repo-facts";
 import {
   asRec,
   eventRepo,
@@ -1023,10 +1024,14 @@ function sessionStart(ctx: HookContext): Record<string, unknown> | null {
   const updates =
     compact || !ctx.repo
       ? []
-      : updatedItems(mem.memories(), lastSessionDeliveries(ctx.root, ctx.repo, win), {
+      : updatedItems(mem.memories(), lastSessionDeliveries(ctx.store, ctx.root, ctx.repo), {
           repo: ctx.repo,
           invalid: readInvalidations(mem.dir),
         });
+  if (!compact && writes && !ctx.child && ctx.session)
+    try {
+      noteLastSession(ctx.store, ctx.session);
+    } catch {}
   const briefed = [...unsaid.slice(0, BRIEFED_PINS), ...updates];
   const { packet, cids, ids } = deliver(briefed, ledger, { off, att: "", repo: ctx.repo });
   Object.assign(trace, {
@@ -1064,7 +1069,7 @@ function withWatch(
   citations: readonly Citation[] = readCitations(ctx.store),
 ): Record<string, unknown> | null {
   if (ctx.flags["deliver.session_start"].mode !== "on") return out;
-  const paths = watchPaths(citations, ctx.top);
+  const paths = watchPaths(citations, citedCheckout(ctx));
   if (!paths.length && ctx.event === "SessionStart") return out;
   ctx.trace.watch = paths.length;
   const specific = { ...asRec(out?.hookSpecificOutput), hookEventName: ctx.event, watchPaths: paths };
@@ -1072,21 +1077,27 @@ function withWatch(
 }
 
 /**
+ * The checkout whose files the repo's citations read: the one its catalog was built from, which the heavy sleep also
+ * reads (every worktree of a repo shares its store, D1, so one checkout states its facts); the session's own when the
+ * store has no catalog yet.
+ */
+function citedCheckout(ctx: HookContext): string {
+  return recordedCheckout(ctx.store) ?? ctx.top;
+}
+
+/**
  * D31's re-check: a cited file changed on disk (Claude Code's FileChanged, whatever wrote it), so the folders citing
- * it read their files again (`applyMined`): a changed value is cited anew, a vanished one fails its citation. The
- * session's own checkout is read, whose files the agent works on. Read-only, it only names the files again.
+ * it read their files again (`applyMined`): a changed value is cited anew, a vanished one fails its citation.
+ * Read-only, it only names the files again.
  */
 function fileChanged(ctx: HookContext): Record<string, unknown> | null {
   let citations = readCitations(ctx.store);
+  const checkout = citedCheckout(ctx);
   const file = str(ctx.r.file_path);
-  const rel = file ? repoRelative(realpathOrSelf(ctx.top), realpathOrSelf(file)) : undefined;
+  const rel = file ? repoRelative(realpathOrSelf(checkout), realpathOrSelf(file)) : undefined;
   const scopes = rel === undefined ? [] : scopesCiting(citations, rel);
   if (ctx.writes && scopes.length) {
-    citations = applyMined(
-      ctx.mem,
-      scopes.flatMap((scope) => mineFolder(ctx.top, scope)),
-      scopes,
-    );
+    citations = applyMined(ctx.mem, readFolders(checkout, scopes), scopes);
     ctx.trace.recheck = scopes.length;
   }
   return withWatch(ctx, null, citations);
