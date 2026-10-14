@@ -945,3 +945,8 @@ export function typedValue(text: string, slot: SlotId, value: string): string {
   }
   return value;
 }
+
+/** A4 §5.1 step 4a's slot detector: a stub for P3.4's red-first commit. */
+export function cuedSlots(_text: string): SlotId[] {
+  return [];
+}
