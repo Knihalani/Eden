@@ -21,6 +21,7 @@ import {
   type Citation,
 } from "./memory-citations";
 import { admitNotes } from "./memory-gate";
+import { withoutOverriddenMined } from "./memory-place";
 import { declarativeBullet } from "./memory-hook-packet";
 import type { MinedFact, Reading } from "./memory-repo-facts";
 import { cuedSlots } from "./memory-slots";
@@ -249,6 +250,42 @@ describe("delivery of a cited fact", () => {
     applyMined(mem, read([pnpm]), undefined, at(1));
     const notes = mem.recall([{ role: "user", content: "install the dependencies" }]);
     expect(notes.map((note: MemoryRecord) => note.cite)).toEqual([["pnpm-lock.yaml"]]);
+  });
+});
+
+describe("D5's override for mined facts (withoutOverriddenMined)", () => {
+  const rootNode: MemoryRecord = {
+    id: "n",
+    text: "The node version is 20",
+    kind: "fact",
+    tags: ["src:tool"],
+    at: T0,
+    scope: "",
+    slots: [{ k: "node.version", v: "20" }],
+    cite: [".nvmrc"],
+  };
+  const webNode: MemoryRecord = {
+    id: "w",
+    text: "apps/web runs node 22",
+    kind: "fact",
+    tags: ["src:user"],
+    at: T0 + MIN,
+    scope: "apps/web",
+    slots: [{ k: "node.version", v: "22" }],
+  };
+  const kept = (readSet: string[]) => withoutOverriddenMined([rootNode], [rootNode, webNode], readSet).length;
+
+  test("a folder of the read set with its own value drops the root's mined value, whatever the other folder", () => {
+    expect(kept(["apps/web"])).toBe(0);
+    expect(kept(["apps/web", "packages/cli"])).toBe(0);
+    expect(kept(["packages/cli", "apps/web"])).toBe(0);
+  });
+
+  test("a read set with no overriding folder keeps it; a typed row is never dropped here (P3.5's cascade)", () => {
+    expect(kept(["packages/cli"])).toBe(1);
+    expect(kept([""])).toBe(1);
+    const typedRoot = { ...rootNode, tags: ["src:user"], cite: undefined };
+    expect(withoutOverriddenMined([typedRoot], [typedRoot, webNode], ["apps/web"])).toHaveLength(1);
   });
 });
 
