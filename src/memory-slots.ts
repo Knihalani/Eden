@@ -479,7 +479,7 @@ type Reading = { slot: SlotId; classOnly?: boolean } | { slot?: undefined };
  * token with a letter that is no status word, no placeholder and names no slot itself ("tests run in CI" names no test
  * runner). `named` are the slots the sentence names, which an everyday word needs.
  */
-function valueOf(
+function readValue(
   raw: string,
   reading: Reading,
   named: readonly SlotId[],
@@ -507,6 +507,20 @@ function valueOf(
   const lower = token.toLowerCase();
   if (STATUS_LEXICON.has(lower) || NOT_A_VALUE.has(lower) || slotOfAlias(lower)) return [];
   return [{ slot, value: lower, typed: token }];
+}
+
+/**
+ * `readValue`, but a value said for one environment is that environment's ("sqlite for local dev", "node 18 in CI"),
+ * whatever the form: it reads none; a deploy target is production's anyway ("we deploy to fly.io in production").
+ */
+function valueOf(
+  raw: string,
+  reading: Reading,
+  named: readonly SlotId[],
+): { slot: SlotId; value: string; typed: string }[] {
+  const env = ENVIRONMENT.exec(` ${raw}`)?.[0];
+  const found = readValue(raw, reading, named);
+  return env ? found.filter(({ slot }) => slot === "deploy.target" && /\bprod/i.test(env)) : found;
 }
 
 /** A GitHub account in a phrase: its identifier-shaped token ("my work account acme-dev"), else the phrase. */
@@ -570,10 +584,6 @@ const ENVIRONMENT =
 /** The statement a phrase sets in a slot it names, with any `, not B` it carries. */
 function setNamed(reading: Reading & { slot: SlotId }, phrase: string, named: readonly SlotId[]): Found[] {
   const { value, not } = splitNot(phrase);
-  // A value said for one environment is that environment's ("sqlite for local dev", "postgres in CI"), not the slot's;
-  // a deploy target is production's anyway ("we deploy to fly.io in production").
-  const env = ENVIRONMENT.exec(value)?.[0] ?? "";
-  if (env && !(reading.slot === "deploy.target" && /\bprod/i.test(env))) return [];
   const set = valueOf(value, reading, [...named, reading.slot])[0];
   if (!set) return [];
   const was = not ? valueOf(not, reading, [...named, reading.slot]).map((found) => found.value) : [];
