@@ -8,8 +8,9 @@
  *
  * Only a changed value is news: a value the window was never given is not, and a value that ended with no successor
  * (a failed citation) has no row to state it. A row is read through validity first (A4 §5.1 step 5), as a Submit's
- * notes are: one that validity cuts at all (a row stating two slots, one of them since ended) states no change. The last session's window is the one the repo's store names in
- * `last-session.json`, which each main-thread SessionStart rewrites with its own after reading it.
+ * notes are: one that validity cuts at all (a row stating two slots, one of them since ended) states no change. The
+ * last session's window is the one the repo's store names in `last-session.json`, which each main-thread
+ * SessionStart rewrites with its own after reading it.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
