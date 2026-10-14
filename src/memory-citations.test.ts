@@ -70,7 +70,12 @@ const pnpm = fact("", "pkg.manager", "pnpm", ["pnpm-lock.yaml"]);
 const clerk = fact("apps/web", "auth.provider", "clerk", ["apps/web/package.json"]);
 
 /** A reading of the checkout's files: what they state, and the slots they are torn on. */
-const read = (facts: MinedFact[], torn: Reading["torn"] = []): Reading => ({ top: checkout, facts, torn });
+const read = (facts: MinedFact[], torn: Reading["torn"] = [], scopes = CATALOG): Reading => ({
+  top: checkout,
+  scopes,
+  facts,
+  torn,
+});
 
 type Mem = ReturnType<typeof store>;
 const live = (mem: Mem) => mem.memories().filter((row) => !superseded(row));
@@ -208,6 +213,8 @@ describe("a reading of the files, applied by key (A4 §3.2)", () => {
     const again = citationChanges(all.kept, read([npm]), [], T0 + 2 * MIN);
     expect(again.fail).toEqual([]);
     expect(again.kept.find((c) => c.slot === "auth.provider")?.failed).toBe(true);
+    const gone = citationChanges(again.kept, read([npm], [], [""]), [], T0 + 3 * MIN);
+    expect(gone.kept.map((c) => c.slot)).toEqual(["pkg.manager"]);
   });
 });
 

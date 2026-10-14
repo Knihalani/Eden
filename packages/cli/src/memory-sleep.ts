@@ -147,12 +147,14 @@ export function sleepStore(store: string, session: string | undefined): void {
 
 /**
  * D34's heavy tier, as far as it is built: D8's repo-fact mining over the checkout the store's catalog was built
- * from, every folder of the catalog (`memory-citations.ts`).
+ * from, every folder of the catalog, rebuilt first (a folder gone from the repo keeps no citation,
+ * `memory-citations.ts`).
  */
 export function mineStore(store: string): void {
+  if (memoryConsent() !== "on") return;
   const checkout = recordedCheckout(store);
-  const catalog = readCatalog(store);
-  if (checkout === undefined || !catalog || memoryConsent() !== "on") return;
+  const catalog = checkout === undefined ? undefined : (rebuildRecorded(store) ?? readCatalog(store));
+  if (checkout === undefined || !catalog) return;
   const mem = openMemory({ dir: store, perRepo: true });
   try {
     applyMined(mem, readFolders(checkout, catalog.scopes));

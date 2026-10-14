@@ -15,7 +15,8 @@
  *   value is `stale_for`. When a cited file is missing (a lockfile deleted mid-`npm install`) or the folder's files
  *   now give two values, nothing can be said of it: only the cited row goes to history, and A4 §3.1's "a user
  *   statement beats a tool citation" keeps what the user typed. Either way the citation is kept as failed, so its
- *   files stay watched and a file that comes back is read again; a failed value read again is cited anew.
+ *   files stay watched and a file that comes back is read again; a failed value read again is cited anew. A folder
+ *   no longer in the catalog keeps none: a reading of the whole repo drops its citations.
  *
  * The files are read at sleep's heavy tier (D34), for the whole repo, and when Claude Code's FileChanged fires on a
  * cited file (D31), for the folders citing it. SessionStart, CwdChanged and FileChanged return the cited files as
@@ -119,7 +120,7 @@ export function citationChanges(
   const torn = new Set(reading.torn.map(keyOf));
   for (const citation of known) {
     if (!read(citation.scope) || minedKeys.has(keyOf(citation))) continue;
-    changes.kept.push({ ...citation, failed: true });
+    if (reading.scopes.includes(citation.scope)) changes.kept.push({ ...citation, failed: true });
     if (citation.failed) continue;
     const readable = citation.files.every((file) => presentFile(reading.top, file));
     changes.fail.push({ citation, sure: readable && !torn.has(keyOf(citation)) });

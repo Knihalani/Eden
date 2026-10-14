@@ -2,7 +2,9 @@
  * P3.4's code review, round 1: the reviewer's probes, kept as regression tests. A user's statement survives a
  * lockfile deleted mid-install and a stray second lockfile (A4 §3.1), whose file stays watched; an equal value at a
  * folder and its ancestor is one bullet; SessionStart's heavy launch mines while an idle sleeper is pending (D34); and
- * a FileChanged in a linked worktree does not flip the repo's facts against the heavy sleep (D1: one store).
+ * a FileChanged in a linked worktree does not flip the repo's facts against the heavy sleep (D1: one store). Round 2:
+ * a lockfile deleted and re-added is cited again; a sure failure still ends a typed row; a folder deleted for good is
+ * no longer watched.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -109,7 +111,7 @@ describe("P3.4 review round 1", () => {
     expect(live().some((row) => /We use npm/.test(row.text))).toBe(true);
   });
 
-  test("probe 3: an equal value at the folder and its ancestor is one bullet (A4 §3.2 equal -> no new row)", async () => {
+  test("probe 3: an equal value at a folder and its ancestor is two cited rows, and one bullet", async () => {
     hook("SessionStart", "s0", { source: "startup" });
     hook("SessionEnd", "s0", { reason: "other" });
     await sleepCli(["--heavy", "--store", store()]);
@@ -175,5 +177,66 @@ describe("P3.4 review round 1", () => {
     const afterSleep = manager();
     // Expected: one repo store keeps one stable value; a branch's lockfile does not flip it back and forth.
     expect(afterWorktree).toEqual(afterSleep);
+  });
+});
+
+async function mined(): Promise<void> {
+  hook("SessionStart", "s0", { source: "startup" });
+  hook("SessionEnd", "s0", { reason: "other" });
+  await sleepCli(["--heavy", "--store", store()]);
+}
+
+const manager = () =>
+  live()
+    .filter((row) => row.slots?.some((slot) => slot.k === "pkg.manager"))
+    .map((row) => row.text);
+
+describe("P3.4 review round 2", () => {
+  test("probe 6: a mined lockfile deleted then regenerated is cited again by its add, and reaches the next install", async () => {
+    await mined();
+    expect(manager()).toEqual(["The package manager is npm"]);
+    hook("SessionStart", "s2", { source: "startup" });
+    rmSync(join(top, "package-lock.json"));
+    hook("FileChanged", "s2", { file_path: join(top, "package-lock.json"), event: "unlink" });
+    expect(manager()).toEqual([]);
+    write({ "package-lock.json": "{}" });
+    const out = specific(hook("FileChanged", "s2", { file_path: join(top, "package-lock.json"), event: "add" }));
+    expect(manager()).toEqual(["The package manager is npm"]);
+    expect(out.watchPaths ?? []).toContain(join(top, "package-lock.json"));
+    const packet = specific(hook("UserPromptSubmit", "s2", { prompt: "install the dependencies", prompt_id: "p1" }));
+    expect(packet.additionalContext ?? "").toContain("The package manager is npm");
+  });
+
+  test("probe 7: an unsure failure records no stale_for; a sure one (dependency removed) still ends a typed row", async () => {
+    write({
+      "apps/web/package.json": JSON.stringify({ name: "web", dependencies: { next: "15", "@clerk/nextjs": "5" } }),
+    });
+    hook("SessionStart", "s1", { source: "startup" });
+    hook("UserPromptSubmit", "s1", { prompt: "open apps/web/app/login.ts", prompt_id: "p0" });
+    hook("UserPromptSubmit", "s1", { prompt: "In apps/web the auth provider is Clerk.", prompt_id: "p1" });
+    hook("SessionEnd", "s1", { reason: "other" });
+    await sleepCli(["--heavy", "--store", store()]);
+    const clerk = () => live().filter((row) => /clerk/i.test(row.text) && row.slots?.length);
+    expect(clerk().length).toBeGreaterThan(0);
+    write({ "apps/web/package.json": JSON.stringify({ name: "web", dependencies: { next: "15" } }) });
+    hook("SessionStart", "s2", { source: "startup" });
+    hook("FileChanged", "s2", { file_path: join(top, "apps/web/package.json"), event: "change" });
+    expect(clerk()).toEqual([]);
+  });
+
+  test("probe 8: a folder deleted for good stops being watched eventually (failed citations do not pile up)", async () => {
+    await mined();
+    rmSync(join(top, "apps"), { recursive: true, force: true });
+    git("add", "-A");
+    git("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "drop apps");
+    for (let i = 0; i < 3; i++) {
+      process.env.EDEN_NOW = String(Number(process.env.EDEN_NOW) + 60 * 60_000);
+      hook("SessionStart", `s${i + 2}`, { source: "startup" });
+      hook("SessionEnd", `s${i + 2}`, { reason: "other" });
+      await sleepCli(["--heavy", "--store", store()]);
+    }
+    const out = specific(hook("SessionStart", "s9", { source: "startup" }));
+    expect(readCitations(store()).some((citation) => citation.scope === "apps/web")).toBe(false);
+    expect(out.watchPaths ?? []).not.toContain(join(top, "apps/web/package.json"));
   });
 });
