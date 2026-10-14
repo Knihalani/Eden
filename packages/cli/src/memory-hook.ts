@@ -1,8 +1,9 @@
+import { existsSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { redact } from "@eden/ir";
 import { authoredTexts, splitPastes, type TextSource } from "../../../src/memory-authority";
 import { isLiveRow, openMemory, storeRows, type MemoryRecord } from "../../../src/index";
-import { lastSessionDeliveries, noteLastSession, updatedItems } from "../../../src/memory-updates";
+import { lastSessionDeliveries, lastSessionWindow, noteLastSession, updatedItems } from "../../../src/memory-updates";
 import { GistStore, scrubTombstonedIdentity } from "../../../src/gist-store";
 import { memoryConsent } from "../../../src/memory-consent";
 import { packetOf, shapePacket } from "../../../src/memory-hook-packet";
@@ -15,6 +16,7 @@ import { inheritFork, markFork, parentLines } from "../../../src/memory-fork";
 import {
   deliveredKeys,
   epochTokens,
+  firstTouches,
   foldWindow,
   holdSummarized,
   humanTurns,
@@ -45,6 +47,8 @@ import {
 import {
   recordPrompt,
   recordSubagentPaths,
+  scopeFacts,
+  scopeMapper,
   taskPaths,
   taskPlace,
   twoScopeNotes,
@@ -214,13 +218,17 @@ function additional(event: string, packet: string): Record<string, unknown> | nu
  *   briefed and an intent never is; a rule on no action class is briefed as a pinned row was before. A row the rules
  *   kept for all projects leave with no rule of its own briefs what else it says as a fact, not as a rule (P2.4's
  *   follow-up: a keyed row is no candidate of the lexical path, so this is where its fact still reaches Claude).
- * Pins are not filtered by scope: the likely scope is P3.2's read set, so every pin is in it. Gists, P0.2's carrier
- * between sessions, are no longer briefed: since P0.5 a later session retrieves the same row at its Submit. `Updated:`
- * items (values changed since the repo's last session) are P3.4's: since P3.3 a delivered slot's cid names its
- * `(scope, slot)`, whose live keyed row holds the current value, and P3.4's mining is what changes a value between
- * sessions.
+ * Pins are those visible from the likely scope (`likely`, A4 §5.2: the last session's read set, so a pin at a folder
+ * is briefed only from there and below; the repo's first session leaves none out). Gists, P0.2's carrier between
+ * sessions, are no longer briefed: since P0.5 a later session retrieves the same row at its Submit. `Updated:` items
+ * (values changed since the repo's last session) are P3.4's: since P3.3 a delivered slot's cid names its `(scope,
+ * slot)`, whose live keyed row holds the current value, and P3.4's mining is what changes a value between sessions.
  */
-function briefing(mem: ReturnType<typeof openMemory>, root: string): { notes: ProvenanceNote[]; proposal?: Proposal } {
+function briefing(
+  mem: ReturnType<typeof openMemory>,
+  root: string,
+  likely?: Place,
+): { notes: ProvenanceNote[]; proposal?: Proposal } {
   const seen = new Set<string>(),
     notes: ProvenanceNote[] = [],
     invalid = readInvalidations(mem.dir),
@@ -235,7 +243,7 @@ function briefing(mem: ReturnType<typeof openMemory>, root: string): { notes: Pr
     };
   const live = mem.memories().filter(isLiveRow);
   const own = live
-    .filter(isPinnedIntention)
+    .filter((row) => isPinnedIntention(row) && (!likely || visibleFrom(likely)(row)))
     .flatMap(pinnedPart)
     .sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at);
   const proposal = proposalToShow(root, new Set(own.flatMap((row) => (row.rules ?? []).map(ruleIdentity))));
@@ -261,9 +269,15 @@ function briefing(mem: ReturnType<typeof openMemory>, root: string): { notes: Pr
  * SessionStart(compact)'s packet: the 3 latest valid gists, without their rule clauses (pins come back on their next
  * cue). A4 §5.2 re-arms the compaction's dropped rows for their next cue; until that cue's words reach a row's
  * (P4.2: "how should we cache sessions?" misses "We use Redis for caching", A5 `negation`), the gists, P0.2's carrier,
- * stay here. A startup or a clear briefs pins only (`briefing`).
+ * stay here. A startup or a clear briefs pins only (`briefing`). A gist is the session's, read at the root and at
+ * the window's read set (`readAt`): a line naming no folder yields to a value ended there, not to one ended only in
+ * another folder; a line opening with its folder is that folder's (`validText`).
  */
-function compactGists(mem: ReturnType<typeof openMemory>, session = ""): ProvenanceNote[] {
+function compactGists(
+  mem: ReturnType<typeof openMemory>,
+  session = "",
+  readAt: readonly string[] = [],
+): ProvenanceNote[] {
   const invalid = readInvalidations(mem.dir);
   const notes: ProvenanceNote[] = [];
   try {
@@ -273,6 +287,8 @@ function compactGists(mem: ReturnType<typeof openMemory>, session = ""): Provena
         withoutRules(g.text, () => true),
         g.t,
         invalid,
+        "",
+        readAt,
       );
       try {
         text = scrubTombstonedIdentity(text, mem.dir).trim();
@@ -720,9 +736,10 @@ function toolResult(ctx: HookContext, tool = "tool"): boolean {
 /**
  * PostToolBatch (A4 §5.5): one `ctx.log` record for the batch (`memory-batch.ts`), its tool traces, and the main
  * window's delta. A subagent's lines are its own transcript's, which SubagentStop encodes; its batch's paths also go
- * to its session's window, where they are subagent paths (D2, `memory-place.ts`).
+ * to its session's window, where they are subagent paths (D2, `memory-place.ts`). Then the batch's delivery point:
+ * the first touch of a scope in this epoch (`firstTouch`).
  */
-function toolBatch(ctx: HookContext): void {
+function toolBatch(ctx: HookContext): Record<string, unknown> | null {
   let batch: BatchRecord | undefined;
   inTurn(
     () => {
@@ -737,6 +754,65 @@ function toolBatch(ctx: HookContext): void {
     () => labelAsks(ctx),
     () => ctx.writes && rebuildAfterWrites(ctx, batchCalls(ctx.r)),
   );
+  return batch ? firstTouch(ctx, batch) : null;
+}
+
+/** A4 §5.5: a first touch delivers at most 2 items. */
+const TOUCH_BULLETS = 2;
+
+/**
+ * A4 §5.5, D23: the first touch of a scope in this epoch delivers at most 2 STRONG items, the slot facts of that
+ * scope itself (`scopeFacts`), once per batch; gotchas and procedures anchored to the touched paths are P4.5's and
+ * P4.6's. A scope is a catalog scope below the root: the root is where every session already is, and its facts reach
+ * the cue that needs them. What a batch touched is the window ledger's, by epoch (`firstTouches`), so a compaction or
+ * a clear makes every scope new again. The facts pass validity, D5 (`withoutOverridden`), the residual, the shadow
+ * set, the ledger and the epoch's budget, as a Submit's do. X7: `off` records and delivers nothing; `shadow` writes
+ * the shadow ledger and prints nothing.
+ */
+function firstTouch(ctx: HookContext, batch: BatchRecord): Record<string, unknown> | null {
+  const { r, win, mode, mem, trace } = ctx;
+  const ledger = ctx.ledgerOf(mode);
+  const at = ctx.repoScopes();
+  if (!win || !ledger || !at) return null;
+  const scopeOf = scopeMapper(at);
+  const scopes = [...batch.paths, ...batch.bash].flatMap((path) => scopeOf(path) || []);
+  const touched = firstTouches(win, scopes, ledger.file);
+  if (!touched.length) return null;
+  trace.touch = touched.length;
+  // D25: a subagent's window is measured, and its conversation read, on its own transcript.
+  const transcript = ctx.child ? childTranscript(r) : ctx.transcriptPath;
+  const off = transcriptOffset(transcript);
+  const invalid = readInvalidations(mem.dir);
+  const live = mem.memories().filter(isLiveRow);
+  const place = { readSet: touched.slice(0, 2), named: [] };
+  const found = place.readSet.flatMap((scope) => scopeFacts(live, scope));
+  const candidates = withoutOverridden(found, live, place.readSet);
+  const residual = recentConversation(transcript, "").residual;
+  // D27: a subagent's instruction files are its parent's, by its type, as at its start.
+  const shadow = ctx.child
+    ? shadowSentences(ctx.sessionWin, ctx.place, { kind: childShadowKind(str(r.agent_type) ?? ""), onDisk: true })
+    : shadowSentences(win, ctx.place);
+  const against = {
+    prompt: "",
+    parts: { prompt: "" },
+    residual,
+    shadow,
+    invalid,
+    readSet: place.readSet,
+    catalog: at.scopes,
+  };
+  const { notes: novel, drops } = selectNotes(candidates, against, (fresh) =>
+    novelNotes(fresh, liveDeliveries(win, off, ledger.file), { repo: ctx.repo, invalid }),
+  );
+  drops.validity += found.length - candidates.length;
+  const allowed = withinBudget(novel, epochTokens(win, ledger.file));
+  const shown = twoScopeNotes(allowed, place.readSet, scopeRows(mem, invalid));
+  const shaped = shapePacket(shown).slice(0, TOUCH_BULLETS);
+  const att = str(r.prompt_id) ?? "";
+  const { packet, cids, ids, notes: given } = deliver(shaped, ledger, { off, att, repo: ctx.repo });
+  Object.assign(trace, { cids, ids });
+  trace.drops = { ...drops, budget: novel.length - allowed.length, shape: shown.length - given };
+  return mode === "on" ? additional(ctx.event, packet) : null;
 }
 
 /** A batch blocks the agent: a rebuild it starts lists the repo's files for at most this long (fail open). */
@@ -942,7 +1018,8 @@ function subagentStart(ctx: HookContext): Record<string, unknown> | null {
   const shadow = shadowSentences(ctx.sessionWin, ctx.place, { kind: childShadowKind(type), onDisk: true });
   // D26: a fork's context is its parent's whole conversation; a typed subagent's, its task, which no payload carries.
   const residual = type === "fork" ? recentConversation(ctx.transcriptPath, "", Infinity).residual : [];
-  const against = { prompt: cue, parts: { prompt: cue }, residual, shadow, invalid, readSet: place?.readSet };
+  const catalog = ctx.repoScopes()?.scopes;
+  const against = { prompt: cue, parts: { prompt: cue }, residual, shadow, invalid, readSet: place?.readSet, catalog };
   const found = mem.taskNotes(scope.paths, classes, place && visibleFrom(place));
   const candidates = place ? withoutOverridden(found, mem.memories().filter(isLiveRow), place.readSet) : found;
   const { notes: novel, drops } = selectNotes(candidates, against, (fresh) =>
@@ -1018,7 +1095,10 @@ function sessionStart(ctx: HookContext): Record<string, unknown> | null {
   if (mode === "off") return withNotice(null, notice);
   // A4 §5.1 step 7 holds here too: what the window's instruction files state is never briefed (D27), the CLAUDE.md
   // files read from disk, as InstructionsLoaded may not have reported them yet. Then D23's cap.
-  const { notes, proposal } = compact ? { notes: compactGists(mem, ctx.session) } : briefing(mem, ctx.root);
+  const readAt = compact ? (ctx.workPlace()?.readSet ?? []) : [];
+  const { notes, proposal } = compact
+    ? { notes: compactGists(mem, ctx.session, readAt) }
+    : briefing(mem, ctx.root, likelyPlace(ctx));
   const unsaid = notes.length ? unsaidNotes(notes, shadowSentences(win, ctx.place, { onDisk: true })) : notes;
   // A4 §5.2: then the values that changed since the repo's last session (`memory-updates.ts`).
   const updates =
@@ -1055,6 +1135,16 @@ function sessionStart(ctx: HookContext): Record<string, unknown> | null {
       trace.proposed = shown.r;
     } catch {}
   return withNotice(mode === "on" ? withWatch(ctx, additional(ctx.event, packet)) : null, notice);
+}
+
+/**
+ * A4 §5.2's likely scope: the read set of the repo's last session, from its window's last 3 turns (`ctx.log`); none
+ * before the repo's first session, where a place is unknown, or once that window is gone.
+ */
+function likelyPlace(ctx: HookContext): Place | undefined {
+  const at = ctx.repoScopes();
+  const last = lastSessionWindow(ctx.store, ctx.root);
+  return at && last && existsSync(last) ? { readSet: windowPlace(last, at).readSet, named: [] } : undefined;
 }
 
 /**
@@ -1213,8 +1303,9 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   const parts = { prompt, turn: recent.previousTyped, prev };
   const shadow = shadowSentences(win, ctx.place);
   const invalid = readInvalidations(mem.dir);
-  const against = { prompt, parts, residual: recent.residual, shadow, invalid, readSet: place?.readSet };
-  // D5 for mined facts (`withoutOverridden`): read after the prompt is stored, which may override one.
+  const catalog = ctx.repoScopes()?.scopes;
+  const against = { prompt, parts, residual: recent.residual, shadow, invalid, readSet: place?.readSet, catalog };
+  // D5 (`withoutOverridden`): read after the prompt is stored, which may override a value.
   const placed = place ? withoutOverridden(notes, mem.memories().filter(isLiveRow), place.readSet) : notes;
   const { notes: novel, drops } = selectNotes(placed, against, (fresh) =>
     win
@@ -1392,7 +1483,7 @@ function respond(
   };
   try {
     if (event === "PostToolUse") toolResult(ctx);
-    else if (event === "PostToolBatch") toolBatch(ctx);
+    else if (event === "PostToolBatch") return toolBatch(ctx);
     else if (event === "SubagentStop") subagentStop(ctx);
     else if (event === "Stop" || event === "SessionEnd") sleepAfterTurn(ctx);
     else if (event === "SessionStart") return sessionStart(ctx);

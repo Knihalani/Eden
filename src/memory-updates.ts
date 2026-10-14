@@ -44,16 +44,23 @@ export function updatedItems(
  * repo's first session, or when its window is gone.
  */
 export function lastSessionDeliveries(store: string, root: string, repo: string): LiveDelivery[] {
-  let win: unknown;
-  try {
-    win = (JSON.parse(readFileSync(join(store, LAST_SESSION), "utf8")) as { win?: unknown }).win;
-  } catch {
-    return [];
-  }
-  const dir = typeof win === "string" ? windowDir(root, win) : undefined;
+  const dir = lastSessionWindow(store, root);
   const prefix = `${repo.slice(0, 8)}/`;
   // Size 0 keeps every delivery of the window's current epoch.
   return dir ? liveDeliveries(dir, 0).filter((delivery) => delivery.cid.startsWith(prefix)) : [];
+}
+
+/**
+ * The repo's last session's window (see the header): none before the repo's first session. Its `ctx.log` also gives
+ * that session's last read set, SessionStart's likely scope (A4 §5.2).
+ */
+export function lastSessionWindow(store: string, root: string): string | undefined {
+  try {
+    const win = (JSON.parse(readFileSync(join(store, LAST_SESSION), "utf8")) as { win?: unknown }).win;
+    return typeof win === "string" ? windowDir(root, win) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Names a session as the repo's last session (see the header): its id, which names its window. */

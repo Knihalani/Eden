@@ -209,6 +209,7 @@ export function pointOf(event: string): Flag | undefined {
   if (event === "UserPromptSubmit") return "deliver.submit";
   if (event === "SessionStart") return "deliver.session_start";
   if (event === "SubagentStart") return "deliver.subagent";
+  if (event === "PostToolBatch") return "deliver.batch";
   return undefined;
 }
 
