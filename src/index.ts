@@ -24,11 +24,14 @@ import {
 } from "./memory-policy";
 import { isIclExemplar, objectAsserted, SemanticStore } from "./semantic-store";
 import { stripPastes, withoutInstructions, type TextSource } from "./memory-authority";
-import { applyProvenanceLabel, isUntyped, stripPacketLabel } from "./memory-provenance";
+import { applyProvenanceLabel, isCited, isUntyped, stripPacketLabel } from "./memory-provenance";
+import type { Citation } from "./memory-citations";
+import type { MinedFact } from "./memory-repo-facts";
 import { logMemoryNotes } from "./memory-log";
 import { legacySlot } from "./memory-residual";
 import { rowScope, type EncodePlace } from "./memory-place";
 import {
+  cuedSlots,
   DEFAULT_SCOPES,
   mayStateSlot,
   noteSlots,
@@ -466,11 +469,15 @@ function isNeedle(word: string): boolean {
   );
 }
 
-/** A row's needles, with repeats: its tags, then its text's words. */
+/**
+ * A row's needles, with repeats: its tags, then its text's words. A mined row's folder is where it is true, which
+ * the read set decides (A4 §2), not what it is about: a cue naming only the folder does not find it.
+ */
 function* needleWords(rec: MemoryRecord): Generator<string> {
-  for (const tag of rec.tags ?? []) if (isNeedle(tag)) yield tag;
+  const place = isCited(rec) ? queryHay(rec.scope ?? "") : undefined;
+  for (const tag of rec.tags ?? []) if (isNeedle(tag) && !place?.has(tag)) yield tag;
   for (const [word] of rec.text.toLowerCase().matchAll(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g))
-    if (isNeedle(word)) yield word;
+    if (isNeedle(word) && !place?.has(word)) yield word;
 }
 
 /** Whether a row has at most `SCORABLE_NEEDLES` distinct needles, read no further than the next one. */
@@ -1216,6 +1223,11 @@ export class AgentMemory {
       const fact = untyped || rec.scope !== undefined ? undefined : objectAsserted(rec.text);
       if (fact && !STATUS_OBJECT.test(fact.o)) this.semantic().put(fact.s, fact.p, fact.o, rec.at);
     } catch {}
+    return this.add(rec);
+  }
+
+  /** Adds a row to the store: it supersedes what it overturns (A4 §3.1), and is written. */
+  private add(rec: MemoryRecord): MemoryRecord {
     const c = compileNeedles(rec),
       i = this.compiled.findIndex((x) => x.rec.id === rec.id);
     i >= 0 && this.compiled.splice(i, 1);
@@ -1234,6 +1246,66 @@ export class AgentMemory {
     this.post = null;
     this.noteSeen(rec.text, rec.scope);
     return (this.flush(true), rec);
+  }
+
+  /**
+   * D8: slot values the repo's files state (`memory-citations.ts` decides which), each a `src:tool` row keyed by its
+   * slot at its folder's scope, citing its files. Like a typed statement, it supersedes the older values of its slot
+   * at its scope (A4 §3.2). The store is written once for them all.
+   */
+  citeFacts(facts: readonly (MinedFact & { text: string })[]): MemoryRecord[] {
+    if (!facts.length || this.consent() !== "on") return [];
+    this.batch++;
+    try {
+      return facts.map((fact) => {
+        const at = memoryNow();
+        return this.add({
+          id: ulid(at),
+          text: this.persistText(fact.text),
+          kind: "fact",
+          tags: ["src:tool"],
+          at,
+          scope: fact.scope,
+          slots: [{ k: fact.slot, v: fact.value }],
+          cite: [...fact.files],
+        });
+      });
+    } finally {
+      this.batch--;
+      this.flush(false);
+    }
+  }
+
+  /**
+   * D31: a failed citation invalidates the fact. At its scope, the rows giving its slot the value it cited, when
+   * mined or typed no later than the files' last reading that still said it, lose that value: a row with nothing
+   * else to say of its slots goes to history with no successor (A4 §3.1), and text carrying the value is `stale_for`
+   * there and below, but for the descendants that hold their own value (`recordSlotChanges`).
+   */
+  endCitations(failed: readonly Citation[]): void {
+    if (!failed.length || this.consent() !== "on") return;
+    const live = this.compiled.filter((c) => !superseded(c.rec));
+    const gone: Compiled[] = [];
+    const changes: SlotChange[] = [];
+    for (const citation of failed) {
+      const ending = live.filter(({ rec }) => {
+        const vouched = isCited(rec) || (!isUntyped(rec) && (rec.at ?? 0) <= citation.checked);
+        return (rec.scope ?? "") === citation.scope && vouched && slotValue(rec, citation.slot) === citation.value;
+      });
+      if (!ending.length) continue;
+      const keepsOther = (rec: MemoryRecord) =>
+        noteSlots(rec).some((ref) => ref.v !== undefined && !(ref.k === citation.slot && ref.v === citation.value));
+      gone.push(...ending.filter(({ rec }) => !keepsOther(rec)));
+      const except = overridingScopes(
+        live.map((c) => c.rec),
+        citation.slot,
+        citation.scope,
+      );
+      const typed = typedValue(ending[0]!.rec.text, citation.slot, citation.value);
+      changes.push({ slot: citation.slot, value: citation.value, typed, scope: citation.scope, except });
+    }
+    recordSlotChanges(this.dir, changes);
+    this.toHistory(gone);
   }
 
   /**
@@ -1387,7 +1459,10 @@ export class AgentMemory {
   private supersedeSlots(incoming: MemoryRecord): void {
     const refs = incoming.slots ?? [];
     if (!refs.length) return;
-    const typed = this.compiled.map((c) => c.rec).filter((row) => !superseded(row) && !isUntyped(row));
+    // A mined row (D8) is keyed like a typed one: either supersedes the other's older value (A4 §3.2).
+    const typed = this.compiled
+      .map((c) => c.rec)
+      .filter((row) => !superseded(row) && (!isUntyped(row) || isCited(row)));
     const rows = typed.filter((row) => refs.some((ref) => mayHoldSlot(row, ref.k)));
     const ended = new Map<string, SlotChange>();
     const end = (slot: SlotId, value: string, scope: string | undefined, typed: string) => {
@@ -1550,6 +1625,26 @@ export class AgentMemory {
     } catch {
       return [];
     }
+  }
+
+  /**
+   * A4 §5.1 step 4a: the slots the user's own words cue (`cuedSlots`), looked up by key: at each scope the reader
+   * sees, the newest live row that keys the slot, typed or mined (D8). A keyed hit is STRONG evidence (A7 §4).
+   */
+  private keyed(own: string, visible: RowFilter): MemoryRecord[] {
+    const slots = cuedSlots(own);
+    if (!slots.length) return [];
+    const newest = new Map<string, MemoryRecord>();
+    for (const { rec } of this.compiled) {
+      if (!isLiveRow(rec) || (isUntyped(rec) && !isCited(rec)) || !visible(rec)) continue;
+      for (const slot of slots) {
+        if (slotValue(rec, slot) === undefined) continue;
+        const key = `${rec.scope ?? ""}\0${slot}`;
+        const known = newest.get(key);
+        if (!known || compareRecency(rec, known) > 0) newest.set(key, rec);
+      }
+    }
+    return labelledNotes([...new Set(newest.values())]);
   }
 
   /** Encodes messages (`ObserveOptions`). */
@@ -1975,8 +2070,9 @@ export class AgentMemory {
             packet = visible === EVERY_ROW ? assembleNotes(packet, this.dir) : assembleWithin(packet);
         } catch {}
         // A trigger hit is STRONG evidence (A7 §4), so it leads, whatever the lexical path makes of the cue.
-        const triggered = this.triggered(typedText(list, encode), visible);
-        packet = [...triggered, ...packet.filter((note) => !triggered.some((rule) => rule.id === note.id))];
+        const own = typedText(list, encode);
+        const strong = [...this.triggered(own, visible), ...this.keyed(own, visible)];
+        packet = [...strong, ...packet.filter((note) => !strong.some((first) => first.id === note.id))];
         if (packet.length)
           try {
             logMemoryNotes(packet);

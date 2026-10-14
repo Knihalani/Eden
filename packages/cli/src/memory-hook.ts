@@ -1,7 +1,8 @@
 import { basename, join, resolve } from "node:path";
 import { redact } from "@eden/ir";
 import { authoredTexts, splitPastes, type TextSource } from "../../../src/memory-authority";
-import { isLiveRow, openMemory, type MemoryRecord } from "../../../src/index";
+import { isLiveRow, openMemory, storeRows, type MemoryRecord } from "../../../src/index";
+import { lastSessionDeliveries, updatedItems } from "../../../src/memory-updates";
 import { GistStore, scrubTombstonedIdentity } from "../../../src/gist-store";
 import { memoryConsent } from "../../../src/memory-consent";
 import { packetOf, shapePacket } from "../../../src/memory-hook-packet";
@@ -50,6 +51,7 @@ import {
   underTop,
   visibleFrom,
   windowPlace,
+  withoutOverriddenMined,
   type EncodePlace,
   type Place,
   type RepoScopes,
@@ -116,6 +118,7 @@ import {
   cronHashes,
   existingLedgers,
   ledgerFor,
+  LIVE_LEDGER,
   readLastAssistant,
   recordBatch,
   recordCrons,
@@ -128,7 +131,16 @@ import {
 import { lightSleep } from "../../../src/sleep";
 import { memoryNow } from "../../../src/memory-clock";
 import { parseHookToolTraces, persistToolTraces } from "../../../src/tool-trace";
-import { noteRepoActivity, spawnIdleSleeper } from "./memory-sleep";
+import { noteRepoActivity, spawnHeavySleeper, spawnIdleSleeper } from "./memory-sleep";
+import {
+  applyMined,
+  readCitations,
+  repoRelative,
+  scopesCiting,
+  watchPaths,
+  type Citation,
+} from "../../../src/memory-citations";
+import { mineFolder } from "../../../src/memory-repo-facts";
 import {
   asRec,
   eventRepo,
@@ -155,6 +167,8 @@ const MEMORY_EVENTS = new Set([
   "PostToolBatch",
   "SubagentStop",
   "InstructionsLoaded",
+  "FileChanged",
+  "CwdChanged",
 ]);
 
 /**
@@ -928,10 +942,12 @@ function subagentStart(ctx: HookContext): Record<string, unknown> | null {
   // D26: a fork's context is its parent's whole conversation; a typed subagent's, its task, which no payload carries.
   const residual = type === "fork" ? recentConversation(ctx.transcriptPath, "", Infinity).residual : [];
   const against = { prompt: cue, parts: { prompt: cue }, residual, shadow, invalid, readSet: place?.readSet };
-  const candidates = mem.taskNotes(scope.paths, classes, place && visibleFrom(place));
+  const found = mem.taskNotes(scope.paths, classes, place && visibleFrom(place));
+  const candidates = place ? withoutOverriddenMined(found, mem.memories().filter(isLiveRow), place.readSet) : found;
   const { notes: novel, drops } = selectNotes(candidates, against, (fresh) =>
     novelNotes(fresh, liveDeliveries(win, off, ledger?.file), { repo: ctx.repo, invalid }),
   );
+  drops.validity += found.length - candidates.length;
   const allowed = withinBudget(novel, epochTokens(win, ledger?.file));
   const shown = twoScopeNotes(allowed, place?.readSet ?? [], scopeRows(mem, invalid));
   const shaped = shapePacket(shown).slice(0, SUBAGENT_BULLETS);
@@ -966,13 +982,19 @@ function sessionStart(ctx: HookContext): Record<string, unknown> | null {
     ledger = ctx.ledgerOf(mode),
     source = r.source,
     compact = source === "compact";
-  if (source === "resume") return withNotice(null, notice);
+  // D34: the heavy tier, detached, so the session's first response does not wait for it (R0 F28). A compaction is
+  // the same process, whose files the watch list below already covers.
+  if (writes && !ctx.child && !compact)
+    try {
+      spawnHeavySleeper(ctx.store);
+    } catch {}
+  if (source === "resume") return withNotice(withWatch(ctx, null), notice);
   if (source === "fork") {
     if (win && writes)
       try {
         markFork(win, memoryNow(), r.seconds_since_last_response);
       } catch {}
-    return withNotice(null, notice);
+    return withNotice(withWatch(ctx, null), notice);
   }
   // The epoch belongs to the window: each ledger it has, and each a built point writes in its mode, starts one,
   // so a point that turned from on to shadow re-arms what it delivered live (A4 §4).
@@ -997,12 +1019,20 @@ function sessionStart(ctx: HookContext): Record<string, unknown> | null {
   // files read from disk, as InstructionsLoaded may not have reported them yet. Then D23's cap.
   const { notes, proposal } = compact ? { notes: compactGists(mem, ctx.session) } : briefing(mem, ctx.root);
   const unsaid = notes.length ? unsaidNotes(notes, shadowSentences(win, ctx.place, { onDisk: true })) : notes;
-  const briefed = unsaid.slice(0, BRIEFED_PINS);
+  // A4 §5.2: then the values that changed since the repo's last session (`memory-updates.ts`).
+  const updates =
+    compact || !ctx.repo
+      ? []
+      : updatedItems(mem.memories(), lastSessionDeliveries(ctx.root, ctx.repo, win), {
+          repo: ctx.repo,
+          invalid: readInvalidations(mem.dir),
+        });
+  const briefed = [...unsaid.slice(0, BRIEFED_PINS), ...updates];
   const { packet, cids, ids } = deliver(briefed, ledger, { off, att: "", repo: ctx.repo });
   Object.assign(trace, {
     cids,
     ids,
-    drops: { shadow: notes.length - unsaid.length, shape: unsaid.length - cids.length },
+    drops: { shadow: notes.length - unsaid.length, shape: unsaid.length + updates.length - cids.length },
   });
   // A6 §2.5: the revocations the session was shown, which its "that rule is gone" may answer.
   const revoked = briefed.filter((note) => isRevocation(note) && ids.includes(String(note.id ?? "")));
@@ -1019,7 +1049,47 @@ function sessionStart(ctx: HookContext): Record<string, unknown> | null {
       markProposalShown(ctx.root, shown, memoryNow(), place);
       trace.proposed = shown.r;
     } catch {}
-  return withNotice(mode === "on" ? additional(ctx.event, packet) : null, notice);
+  return withNotice(mode === "on" ? withWatch(ctx, additional(ctx.event, packet)) : null, notice);
+}
+
+/**
+ * D31: the cited files Claude Code watches for this session, beside what the event says. SessionStart names them (a
+ * new process watches nothing), and CwdChanged and FileChanged name them again, each return replacing the list (R0
+ * F29). They ride on SessionStart's point: only an `on` point names files (X7: `off` is identity, `shadow` prints
+ * nothing), so a session whose SessionStart is not `on` is re-checked at sleep only.
+ */
+function withWatch(
+  ctx: HookContext,
+  out: Record<string, unknown> | null,
+  citations: readonly Citation[] = readCitations(ctx.store),
+): Record<string, unknown> | null {
+  if (ctx.flags["deliver.session_start"].mode !== "on") return out;
+  const paths = watchPaths(citations, ctx.top);
+  if (!paths.length && ctx.event === "SessionStart") return out;
+  ctx.trace.watch = paths.length;
+  const specific = { ...asRec(out?.hookSpecificOutput), hookEventName: ctx.event, watchPaths: paths };
+  return { ...(out ?? {}), hookSpecificOutput: specific };
+}
+
+/**
+ * D31's re-check: a cited file changed on disk (Claude Code's FileChanged, whatever wrote it), so the folders citing
+ * it read their files again (`applyMined`): a changed value is cited anew, a vanished one fails its citation. The
+ * session's own checkout is read, whose files the agent works on. Read-only, it only names the files again.
+ */
+function fileChanged(ctx: HookContext): Record<string, unknown> | null {
+  let citations = readCitations(ctx.store);
+  const file = str(ctx.r.file_path);
+  const rel = file ? repoRelative(realpathOrSelf(ctx.top), realpathOrSelf(file)) : undefined;
+  const scopes = rel === undefined ? [] : scopesCiting(citations, rel);
+  if (ctx.writes && scopes.length) {
+    citations = applyMined(
+      ctx.mem,
+      scopes.flatMap((scope) => mineFolder(ctx.top, scope)),
+      scopes,
+    );
+    ctx.trace.recheck = scopes.length;
+  }
+  return withWatch(ctx, null, citations);
 }
 
 /**
@@ -1133,7 +1203,9 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   const shadow = shadowSentences(win, ctx.place);
   const invalid = readInvalidations(mem.dir);
   const against = { prompt, parts, residual: recent.residual, shadow, invalid, readSet: place?.readSet };
-  const { notes: novel, drops } = selectNotes(notes, against, (fresh) =>
+  // D5 for mined facts (`withoutOverriddenMined`): read after the prompt is stored, which may override one.
+  const placed = place ? withoutOverriddenMined(notes, mem.memories().filter(isLiveRow), place.readSet) : notes;
+  const { notes: novel, drops } = selectNotes(placed, against, (fresh) =>
     win
       ? novelNotes(fresh, liveDeliveries(win, off, ledger?.file), { repo: ctx.repo, invalid: against.invalid })
       : fresh,
@@ -1146,8 +1218,35 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   const shown = twoScopeNotes([...acknowledged, ...allowed], place?.readSet ?? [], others);
   const { packet, cids, ids, notes: given } = deliver(shapePacket(shown), ledger, { off, att, repo: ctx.repo });
   Object.assign(trace, { cids, ids, tokens_epoch: tokens });
+  drops.validity += notes.length - placed.length;
   trace.drops = { ...drops, budget: novel.length - allowed.length, shape: shown.length - given };
   return answer === "shadow" ? null : additional(event, packet);
+}
+
+/**
+ * D24: a non-human Submit gets nothing but `Updated:` items, read against its own window's ledger
+ * (`memory-updates.ts`); a window given no slot opens no store.
+ */
+function nonHumanUpdates(
+  r: Record<string, unknown>,
+  win: string,
+  store: string,
+  repo: string,
+  writes: boolean,
+  trace: Trace,
+): Record<string, unknown> | null {
+  const off = transcriptOffset(transcriptOf(r));
+  const held = liveDeliveries(win, off);
+  if (!held.some((delivery) => delivery.cid.includes("/s:")) || !readableStore(store)) return null;
+  const items = updatedItems(storeRows(join(store, "memories.jsonl")), held, {
+    repo,
+    invalid: readInvalidations(store),
+  });
+  if (!items.length) return null;
+  const ledger: Ledger | undefined = writes ? { dir: win, file: LIVE_LEDGER } : undefined;
+  const { packet, cids, ids } = deliver(items, ledger, { off, att: str(r.prompt_id) ?? "", repo });
+  Object.assign(trace, { cids, ids });
+  return additional("UserPromptSubmit", packet);
 }
 
 /** Events that only write: read-only consent leaves them nothing to do. */
@@ -1205,8 +1304,9 @@ function respond(
   // the summary, which the main transcript's compact summary line already carries to the delta encoder; it is given
   // nothing either.
   if ((event === "SubagentStop" || event === "SubagentStart") && r.agent_type === "") return null;
-  // D24, A4 §5.1 step 0: a non-human submit gets nothing, before any store is opened. Its wide event names the rule
-  // it matched, so the live shape of each kind can be checked from ids alone (R0 F34).
+  // D24, A4 §5.1 step 0: a non-human submit gets nothing but `Updated:` items (`nonHumanUpdates`, which opens the
+  // store only when its window was given a slot). Its wide event names the rule it matched, so the live shape of each
+  // kind can be checked from ids alone (R0 F34).
   const nonHuman = event === "UserPromptSubmit" ? nonHumanKind(prompt, win ? cronHashes(win) : []) : undefined;
   if (nonHuman) {
     const promptId = str(r.prompt_id);
@@ -1221,7 +1321,9 @@ function respond(
       try {
         trace.hturn = humanTurns(win);
       } catch {}
-    return null;
+    return mode === "on" && win && repo
+      ? nonHumanUpdates(r, win, repoStoreDir(root, repo.key), repo.key, writes, trace)
+      : null;
   }
   const store = repo && repoStoreDir(root, repo.key);
   // EXECUTION §9: a store in a format this code does not know is never read or written.
@@ -1284,6 +1386,8 @@ function respond(
     else if (event === "Stop" || event === "SessionEnd") sleepAfterTurn(ctx);
     else if (event === "SessionStart") return sessionStart(ctx);
     else if (event === "SubagentStart") return subagentStart(ctx);
+    else if (event === "FileChanged") return fileChanged(ctx);
+    else if (event === "CwdChanged") return withWatch(ctx, null);
     else return submit(ctx);
     return null;
   } finally {

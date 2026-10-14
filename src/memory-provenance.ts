@@ -33,6 +33,8 @@ export type ProvenanceNote = {
   scope?: string;
   /** The rows a two-scope bullet shows (`memory-place.ts`): what the ledger records for it (A4 §4). */
   parts?: readonly ProvenanceNote[];
+  /** D8: the repo files a mined slot row cites, relative to the repo's top (`memory-citations.ts`). */
+  cite?: readonly string[];
 };
 
 /** Times are epoch ms (~1.7e12); a smaller number is a list serial a store from before P0.3 kept, not a time. */
@@ -96,6 +98,11 @@ const UNTYPED_SOURCES = new Set(["src:tool", "src:agent", "src:paste", "src:lega
 /** Whether a row's source shows the user did not type it. A row with no `src` (written before P0.4) does not. */
 export function isUntyped(r: ProvenanceNote): boolean {
   return (r.tags ?? []).some((tag) => UNTYPED_SOURCES.has(tag));
+}
+
+/** Whether a row was mined from the repo's files (D8): a `src:tool` slot row with a citation, keyed as typed. */
+export function isCited(r: ProvenanceNote): boolean {
+  return Array.isArray(r.cite) && r.cite.length > 0;
 }
 
 /** A note's source when the note shows it, else undefined: a row with no `src` makes no authority claim (A6 §2.1). */

@@ -15,7 +15,13 @@ import { memoryHookResponse } from "./memory-hook";
 import { sleepCli } from "./memory-sleep";
 
 const NOW = Date.parse("2026-10-14T12:00:00Z");
-const ENV_KEYS = ["EDEN_MEMORY_DIR", "EDEN_HOME", "EDEN_MEMORY", "EDEN_NOW", "EDEN_FLAG_DELIVER_SESSION_START"] as const;
+const ENV_KEYS = [
+  "EDEN_MEMORY_DIR",
+  "EDEN_HOME",
+  "EDEN_MEMORY",
+  "EDEN_NOW",
+  "EDEN_FLAG_DELIVER_SESSION_START",
+] as const;
 const prev = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 
 let dir = "";
@@ -159,7 +165,9 @@ describe("FileChanged's re-check (D31)", () => {
   test("a payload with no file, or a file outside the repo, still answers with the list (fail open)", async () => {
     await mined();
     expect(specific(hook("FileChanged", "s2", {})).watchPaths).toHaveLength(3);
-    expect(specific(hook("FileChanged", "s2", { file_path: "/etc/hosts", event: "change" })).watchPaths).toHaveLength(3);
+    expect(specific(hook("FileChanged", "s2", { file_path: "/etc/hosts", event: "change" })).watchPaths).toHaveLength(
+      3,
+    );
   });
 });
 
@@ -175,7 +183,10 @@ describe("delivery of mined facts", () => {
     hook("UserPromptSubmit", "s2", { prompt: "open apps/web/app/login.ts", prompt_id: "p1" });
     const said = hook("UserPromptSubmit", "s2", { prompt: "apps/web runs node 22.", prompt_id: "p2" });
     expect(specific(said).additionalContext ?? "").not.toContain("node version is 20");
-    const cli = hook("UserPromptSubmit", "s3", { prompt: "which node version does packages/cli use?", prompt_id: "p3" });
+    const cli = hook("UserPromptSubmit", "s3", {
+      prompt: "which node version does packages/cli use?",
+      prompt_id: "p3",
+    });
     expect(specific(cli).additionalContext).toContain("The node version is 20 (from .nvmrc");
   });
 });
@@ -188,24 +199,26 @@ describe("Updated: items outside a human Submit (A4 §5.2, D24)", () => {
 
   test("SessionStart briefs a value that changed since the repo's last session, naming the old one", async () => {
     await mined();
-    expect(specific(hook("UserPromptSubmit", "s1", { prompt: "install the dependencies" })).additionalContext).toContain(
-      "The package manager is npm",
-    );
+    expect(
+      specific(hook("UserPromptSubmit", "s1", { prompt: "install the dependencies" })).additionalContext,
+    ).toContain("The package manager is npm");
     hook("SessionEnd", "s1", { reason: "other" });
     swapLockfile();
     await sleepCli(["--heavy", "--store", store()]);
     const brief = specific(hook("SessionStart", "s2", { source: "startup" })).additionalContext;
     expect(brief).toContain("Updated: The package manager is pnpm (was npm; from pnpm-lock.yaml");
-    expect(specific(hook("UserPromptSubmit", "s2", { prompt: "install the dependencies" })).additionalContext ?? "").not.toContain(
-      "pnpm",
-    );
+    expect(
+      specific(hook("UserPromptSubmit", "s2", { prompt: "install the dependencies" })).additionalContext ?? "",
+    ).not.toContain("pnpm");
   });
 
   test("a value the last session was never given, or did not change, is no item", async () => {
     await mined();
     hook("UserPromptSubmit", "s1", { prompt: "install the dependencies" });
     hook("SessionEnd", "s1", { reason: "other" });
-    expect(specific(hook("SessionStart", "s2", { source: "startup" })).additionalContext ?? "").not.toContain("Updated:");
+    expect(specific(hook("SessionStart", "s2", { source: "startup" })).additionalContext ?? "").not.toContain(
+      "Updated:",
+    );
   });
 
   test("a non-human Submit gets only the Updated: items of its own window", async () => {
@@ -214,7 +227,9 @@ describe("Updated: items outside a human Submit (A4 §5.2, D24)", () => {
     expect(hook("UserPromptSubmit", "s1", { prompt: "<task-notification>done</task-notification>" })).toBeNull();
     swapLockfile();
     hook("FileChanged", "s1", { file_path: join(top, "package-lock.json"), event: "unlink" });
-    const notice = specific(hook("UserPromptSubmit", "s1", { prompt: "<task-notification>tests passed</task-notification>" }));
+    const notice = specific(
+      hook("UserPromptSubmit", "s1", { prompt: "<task-notification>tests passed</task-notification>" }),
+    );
     expect(notice.additionalContext).toContain("Updated: The package manager is pnpm (was npm;");
     expect(notice.additionalContext?.split("\n- ")).toHaveLength(2);
     expect(hook("UserPromptSubmit", "s1", { prompt: "<task-notification>again</task-notification>" })).toBeNull();

@@ -187,7 +187,10 @@ describe("CI, deploy targets, Python and Rust", () => {
   });
 
   test("a framework that package.json and pyproject give differently states none", () => {
-    files({ "package.json": pkg({ dependencies: { express: "4" } }), "pyproject.toml": '[project]\ndependencies = ["flask"]\n' });
+    files({
+      "package.json": pkg({ dependencies: { express: "4" } }),
+      "pyproject.toml": '[project]\ndependencies = ["flask"]\n',
+    });
     expect(bySlot(mineFolder(top, "")).framework).toBeUndefined();
   });
 });

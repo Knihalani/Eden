@@ -10,10 +10,10 @@
  *   prompt, the previous typed prompt (`q_turn`) and the agent's last message (`q_prev`); a function word is WEAK and
  *   never counts.
  *
- * BM25F and τ_repo, which A7 also asks of an episode, arrive with P4.2 and P4.3. Rows the user typed, rows of
- * unknown source and gists keep today's lexical admission.
+ * BM25F and τ_repo, which A7 also asks of an episode, arrive with P4.2 and P4.3. Rows the user typed, rows mined
+ * from the repo's files (D8), rows of unknown source and gists keep today's lexical admission.
  */
-import { isUntyped, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
+import { isCited, isUntyped, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
 import { contentWords as words } from "./memory-transcript";
 
 const IDENTIFIER_SHAPES = [
@@ -74,7 +74,10 @@ export function admitsEpisode(note: ProvenanceNote, cue: CueParts): boolean {
   return parts.length >= 2;
 }
 
-/** The notes the gate admits, in their order: an untyped row only on A7 §4's evidence, every other row as today. */
+/**
+ * The notes the gate admits, in their order: an untyped row only on A7 §4's evidence, every other row as today. A
+ * row mined from the repo's files (D8) is a slot fact, not an episode (A4 §3.1): it is admitted as a typed one is.
+ */
 export function admitNotes<T extends ProvenanceNote>(notes: readonly T[], cue: CueParts): T[] {
-  return notes.filter((note) => !isUntyped(note) || admitsEpisode(note, cue));
+  return notes.filter((note) => !isUntyped(note) || isCited(note) || admitsEpisode(note, cue));
 }
