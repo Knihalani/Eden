@@ -763,12 +763,12 @@ const TOUCH_SCOPES = 2;
 
 /**
  * A4 §5.5, D23: the first touch of a scope in this epoch delivers at most 2 STRONG items, the slot facts of that
- * scope itself (`scopeFacts`), once per batch, for at most 2 new scopes (the rest stay new for the next batch); gotchas and procedures anchored to the touched paths are P4.5's and
- * P4.6's. A scope is a catalog scope below the root: the root is where every session already is, and its facts reach
- * the cue that needs them. What a batch touched is the window ledger's, by epoch (`firstTouches`), so a compaction or
- * a clear makes every scope new again. The facts pass validity, D5 (`cascaded`), the residual, the shadow
- * set, the ledger and the epoch's budget, as a Submit's do. X7: `off` records and delivers nothing; `shadow` writes
- * the shadow ledger and prints nothing.
+ * scope itself (`scopeFacts`), once per batch, for at most 2 new scopes (the rest stay new for the next batch);
+ * gotchas and procedures anchored to the touched paths are P4.5's and P4.6's. A scope is a catalog scope below the
+ * root: the root is where every session already is, and its facts reach the cue that needs them. What a batch touched
+ * is the window ledger's, by epoch (`firstTouches`), so a compaction or a clear makes every scope new again. The facts
+ * pass validity, D5 (`cascaded`), the residual, the shadow set, the ledger and the epoch's budget, as a Submit's do.
+ * X7: `off` records and delivers nothing; `shadow` writes the shadow ledger and prints nothing.
  */
 function firstTouch(ctx: HookContext, batch: BatchRecord): Record<string, unknown> | null {
   const { r, win, mode, mem, trace } = ctx;
