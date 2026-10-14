@@ -62,6 +62,8 @@ export interface WideEvent {
   catalog?: number;
   /** How many scopes the read set of a human Submit or a SubagentStart holds (D4, `memory-place.ts`): 1 or 2. */
   read?: number;
+  /** PostToolBatch (A4 §5.5): how many scopes the batch touched first in its epoch. */
+  touch?: number;
   /**
    * D31: how many folders a FileChanged read again, and how many files a SessionStart, CwdChanged or FileChanged
    * named to watch.

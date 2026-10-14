@@ -246,11 +246,8 @@
       ],
       "a5": "root node 20; web node 22 -> web 22, cli 20, root 20",
       "on": {
-        "state": "red",
-        "failed": [
-          "no-stale"
-        ],
-        "why": "since P0.5 the apps/web override reaches the later session through the repo store (web-22 met), but the root's 'We use node 20 across the repo' is delivered at the apps/web cue too, stale there: cascade with override (D5) is P3.5's"
+        "state": "green",
+        "why": "passes since P3.5: D5's override for typed slot facts (withoutOverridden) leaves the root's 'We use node 20 across the repo' out at apps/web, which holds its own value (node 22, delivered by the first touch of apps/web); packages/cli, with no value of its own, is given the root's at its cue, and the root cue is met"
       },
       "off": {
         "state": "green",
@@ -290,7 +287,7 @@
       "a5": "a turn touching web and cli -> the two-scope bullet `auth - apps/web: Clerk . packages/cli: none`",
       "on": {
         "state": "green",
-        "why": "passes since P3.2: the cue names a file of each folder after a turn that read both, so the read set (D4) is apps/web and packages/cli, 50% each; the web row's slot (the legacy copula reading until P3.3) takes packages/cli's value from that folder's newest typed row naming its subject, and the packet holds one bullet, 'auth provider — apps/web: Clerk · packages/cli: has no auth' (A4 §2), the ledger recording both rows"
+        "why": "passes since P3.2: the cue names a file of each folder after a turn that read both, so the read set (D4) is apps/web and packages/cli, 50% each; the web row's slot (the legacy copula reading until P3.3) takes packages/cli's value from that folder's newest typed row naming its subject, and the packet holds one bullet, 'auth provider — apps/web: Clerk · packages/cli: has no auth' (A4 §2), the ledger recording both rows; since P3.5 the batch that reads both folders is their first touch (A4 §5.5), whose two-scope read set gives that bullet there, and the cue finds it refractory: the check reads the turn's packets"
       },
       "off": {
         "state": "green",
@@ -420,11 +417,8 @@
       ],
       "a5": "the first Read in packages/cli -> PostToolBatch delivers the cli slot facts once",
       "on": {
-        "state": "red",
-        "failed": [
-          "first-touch-delivers"
-        ],
-        "why": "no PostToolBatch handler"
+        "state": "green",
+        "why": "passes since P3.5: the first batch reading packages/cli is that scope's first touch in the epoch, and PostToolBatch delivers its own slot facts ('packages/cli has no auth, and its database is sqlite'); the second batch in packages/cli delivers nothing"
       },
       "off": {
         "state": "green",

@@ -5,8 +5,9 @@
  * - **Records.** A window's `delivery.log` is append-only. It holds `turn` records (human Submits,
  *   `memory-window.ts`); one `deliver` record per bullet, `{cid, ver, off, att, ht}`, where `off` is the transcript's
  *   size, `att` the Submit's `prompt_id` and `ht` the human-turn count; one `packet` record with the packet's tokens;
- *   `epoch` records (SessionStart `compact` or `clear`); and `held` records (PostCompact, below). Records hold ids and
- *   hashes, never row text (X11).
+ *   `epoch` records (SessionStart `compact` or `clear`); `held` records (PostCompact, below); and `touch` records, the
+ *   scopes a PostToolBatch touched first in its epoch (A4 §5.5, `firstTouches`). Records hold ids and hashes, never
+ *   row text or paths (X11).
  * - **Snapshot.** At Stop and SubagentStop the log is folded under `delivery.lock`: it is rotated by rename
  *   (`delivery.log.<n>`), the snapshot and every rotated log it does not hold yet are folded into a new
  *   `delivery.json`, written by rename, and the rotated logs are removed. A line a writer appended to a rotated log
@@ -235,10 +236,12 @@ export interface LedgerState {
   tokensEpoch: number;
   turns: number;
   recentTurns: string[];
+  /** The scopes this epoch's batches touched, hashed (A4 §5.5's first touch). */
+  touched: Set<string>;
 }
 
 function emptyState(): LedgerState {
-  return { epoch: 0, delivered: new Map(), tokensEpoch: 0, turns: 0, recentTurns: [] };
+  return { epoch: 0, delivered: new Map(), tokensEpoch: 0, turns: 0, recentTurns: [], touched: new Set() };
 }
 
 /** A record's list of hashes (`vt`, `cids`): its strings, none when it has no list. */
@@ -250,6 +253,9 @@ function applyRecord(state: LedgerState, record: Record<string, unknown>): void 
   if (record.k === "epoch") {
     state.epoch++;
     state.tokensEpoch = 0;
+    state.touched = new Set();
+  } else if (record.k === "touch") {
+    for (const scope of hashList(record.s)) state.touched.add(scope);
   } else if (record.k === "turn") {
     const id = record.prompt_id;
     if (typeof id !== "string" || !id || state.recentTurns.includes(id)) return;
@@ -304,6 +310,7 @@ interface Snapshot {
   tokens_epoch: number;
   turns: number;
   recent_turns: string[];
+  touched?: string[];
   through: number;
 }
 
@@ -318,6 +325,7 @@ function readSnapshot(dir: string, file: LedgerFile): { state: LedgerState; thro
       tokensEpoch: Number(raw.tokens_epoch) || 0,
       turns: Number(raw.turns) || 0,
       recentTurns: Array.isArray(raw.recent_turns) ? raw.recent_turns.filter((id) => typeof id === "string") : [],
+      touched: new Set(hashList(raw.touched)),
     };
     return { state, through: raw.through };
   } catch {
@@ -333,6 +341,7 @@ function snapshotOf(state: LedgerState, through: number): Snapshot {
     tokens_epoch: state.tokensEpoch,
     turns: state.turns,
     recent_turns: state.recentTurns,
+    ...(state.touched.size ? { touched: [...state.touched] } : {}),
     through,
   };
 }
@@ -513,9 +522,21 @@ export function humanTurns(dir: string): number {
   return live.turns + shadow.turns - both;
 }
 
-/** A4 §5.5: the scopes a batch touched first in this epoch (P3.5 stub: none). */
-export function firstTouches(_dir: string, _scopes: readonly string[], _file: LedgerFile = LIVE_LEDGER): string[] {
-  return [];
+/**
+ * A4 §5.5: of the scopes a batch touched, the ones no batch touched before in this epoch, in the ledgers a point reads,
+ * which are then recorded as touched in its own (hashed, X11). A compaction or a clear starts an epoch, after which
+ * every scope is new again.
+ */
+export function firstTouches(dir: string, scopes: readonly string[], file: LedgerFile = LIVE_LEDGER): string[] {
+  const touched = new Set(readLedgers(file).flatMap((ledger) => [...readLedger(dir, ledger).touched]));
+  const fresh = [...new Set(scopes)].filter((scope) => !touched.has(scopeHash(scope)));
+  if (fresh.length) appendRecords(dir, file, [{ k: "touch", s: fresh.map(scopeHash) }]);
+  return fresh;
+}
+
+/** A scope as the ledger keeps it: a hash, never the path (X11). */
+function scopeHash(scope: string): string {
+  return hash(`scope:${scope}`);
 }
 
 /** The tokens delivered in this epoch, in the ledgers a point reads: A4 §4's budget. */

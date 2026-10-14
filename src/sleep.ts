@@ -927,17 +927,21 @@ function slotFacts(mem: SleepMem, own: (id: string) => boolean, invalid: readonl
 /**
  * The session gist: the winning value of each subject the session stated, its slots' values, then its pins. A4
  * §3.3, §5.1 step 5: it is rewritten at every sleep, later than what it states, so each source is checked against
- * the validity log at its own time; SessionStart checks the gist again at the gist's time.
+ * the validity log at its own time; SessionStart checks the gist again at the gist's time. `winners` are each
+ * scope's (`scopedWinners`), and a winner below the root is stated by its scope ("In apps/web, stack uses Redis"), as
+ * a slot's value is (`slotFacts`).
  */
 function writeSessionGist(mem: SleepMem, winners: readonly Triple[], session: string | undefined): void {
   const invalid = readInvalidations(mem.dir);
   const own = ownRows(mem, session);
-  // A slot row's value is stated by its scope (`slotFacts`): the winners are the store's, across scopes.
-  const keyed = new Set(mem.memories().flatMap((row) => (noteSlots(row).length ? [row.id] : [])));
+  const rows = new Map(mem.memories().map((row) => [row.id, row]));
   const facts: string[] = [];
   for (const w of winners) {
-    if ((w.recId && !own(w.recId)) || (w.recId && keyed.has(w.recId))) continue;
-    const fact = validText(w.p === "uses" ? `${w.s} uses ${w.o}` : `${w.s} is ${w.o}`, w.t, invalid);
+    const row = w.recId ? rows.get(w.recId) : undefined;
+    if (w.recId && (!own(w.recId) || (row && noteSlots(row).length))) continue;
+    const scope = row?.scope;
+    const said = w.p === "uses" ? `${w.s} uses ${w.o}` : `${w.s} is ${w.o}`;
+    const fact = validText(scope ? `In ${scope}, ${said}` : said, w.t, invalid, scope);
     if (fact) facts.push(fact);
   }
   facts.push(...slotFacts(mem, own, invalid));
@@ -968,7 +972,7 @@ export function lightSleep(mem: SleepMem, session: string | undefined): void {
   } catch {}
   const ordered = liveInStoreOrder(mem);
   try {
-    writeSessionGist(mem, assemble(identityCandidates(ordered)), session);
+    writeSessionGist(mem, scopedWinners(ordered).winners, session);
   } catch {}
   promoteHowTo(
     mem,
@@ -998,6 +1002,18 @@ function scopeGroups<T extends { row: SleepRecord }>(ordered: readonly T[]): T[]
   const scopes = [...new Set(ordered.flatMap(({ row }) => (typeof row.scope === "string" ? [row.scope] : [])))];
   if (!scopes.length) return [[...ordered]];
   return scopes.map((scope) => ordered.filter(({ row }) => row.scope === undefined || row.scope === scope));
+}
+
+/**
+ * Each scope's assembly (A4 §3.2: a value competes only at its own scope, `scopeGroups`), and the winners of them
+ * all, each once.
+ */
+function scopedWinners(ordered: readonly { row: SleepRecord; t: number }[]) {
+  const groups = scopeGroups(ordered).map((rows) => {
+    const candidates = identityCandidates(rows);
+    return { recs: rows.map(({ row }) => row), candidates, winners: assemble(candidates) };
+  });
+  return { groups, winners: distinctTriples(groups.flatMap((group) => group.winners)) };
 }
 
 /** Triples once each: a row of unknown scope wins in every group it is in. */
@@ -1058,11 +1074,7 @@ export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
     settlePendingRows(mem.dir);
   } catch {}
   const ordered = liveInStoreOrder(mem);
-  const groups = scopeGroups(ordered).map((rows) => {
-    const candidates = identityCandidates(rows);
-    return { recs: rows.map(({ row }) => row), candidates, winners: assemble(candidates) };
-  });
-  const winners = distinctTriples(groups.flatMap((group) => group.winners));
+  const { groups, winners } = scopedWinners(ordered);
   const mode: SleepMode = opts?.mode === "incremental" ? "incremental" : "full";
   // Incremental rest must not tombstone a fact the open goal still references.
   // Full replay (Stop / SessionEnd / idle > EDEN_SLEEP_IDLE) keeps today's drops.

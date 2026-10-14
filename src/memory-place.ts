@@ -19,14 +19,20 @@
  *   met first, newest source first. When none reaches 30%, it is the scope owning the paths' common folder; with no
  *   path, `""`. A path of another repo, or outside git, is no place of this one.
  * - **Visibility (A4 §2).** A slot fact (a legacy fact too), a policy or an intent is visible at its scope and
- *   below it (D5's cascade, without P3.5's override); a gotcha, procedure or episode at its scope only, and from an
+ *   below it (D5's cascade; the override below); a gotcha, procedure or episode at its scope only, and from an
  *   ancestor only when the prompt names its scope; nothing at a sibling. A row with no `scope` was written where its
  *   place was unknown (before P3.2, or in a repo with no catalog, outside git included): it stays visible everywhere,
  *   as every row was, and a window in such a repo reads every row.
- * - **D5's override, for mined facts (P3.4).** A value the repo's files state at a folder (D8) is not delivered when a
- *   read-set folder below it holds its own live value of the slot: the root's `.nvmrc` says nothing at apps/web once
- *   "apps/web runs node 22", nor at a turn reading apps/web and packages/cli, where a bullet naming no folder would
- *   be read as apps/web's (G2 outranks G1, A4 §0). A typed row's override is P3.5's (`cascade`).
+ * - **D5's override (P3.4 for mined facts, P3.5 for typed ones).** A slot fact is not delivered at a read-set folder
+ *   below its scope that holds its own live value of one of its slots, typed or mined (the newest at the nearest
+ *   folder between): "We use node 20 across the repo" says nothing at apps/web once "apps/web runs node 22", nor at a
+ *   turn reading apps/web and packages/cli, where a bullet naming no folder would be read as apps/web's (G2 outranks
+ *   G1, A4 §0). A row stating two slots goes when either is overridden. A statement split by its slots' scopes keeps
+ *   its whole text at each part (A4 §3.2), so a part is shown only where every value its text states holds: "we use
+ *   pnpm and vitest", typed in apps/web, is apps/web's text at the root too, and says nothing at packages/cli. A value
+ *   ended at the row's own scope is validity's (D31), clause by clause.
+ * - **A first touch (A4 §5.5).** The candidates of a PostToolBatch's first touch of a scope are that scope's own slot
+ *   facts (`scopeFacts`).
  * - **A row's scope (A4 §3.2).** The one scope of the catalog its text names (the root's by a file path in its own
  *   folders, "scripts/db.ts"); of several, the working scope (the
  *   read set's first) when it is one of them, else their common ancestor; naming none, the working scope, or `""` for
@@ -41,7 +47,7 @@
  *   scope unless its text names it.
  */
 import { existsSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, normalize, relative } from "node:path";
+import { basename, dirname, isAbsolute, join, normalize, posix, relative } from "node:path";
 import {
   isCited,
   isUntyped,
@@ -53,7 +59,7 @@ import {
 import { legacySlot } from "./memory-residual";
 import { realpathOrSelf } from "./memory-repo";
 import { repoPathOf, scopeOfDir } from "./memory-scopes";
-import { namesSlot, noteSlots, slotAliases, slotLabel, typedValue, type SlotId } from "./memory-slots";
+import { namesSlot, noteSlots, slotAliases, slotLabel, slotsIn, typedValue, type SlotId } from "./memory-slots";
 import { subjectWords } from "./memory-validity";
 import { STATUS_WORDS } from "./memory-transcript";
 import { appendRecord, windowRecords } from "./memory-window";
@@ -300,42 +306,98 @@ export function visibleFrom(place: Place): (row: ProvenanceNote) => boolean {
   };
 }
 
-/** Whether a row gives a slot a value, as a keyed row (typed or mined) does. */
-function keysSlot(row: ProvenanceNote, slot: SlotId): boolean {
-  if (isUntyped(row) && !isCited(row)) return false;
-  return noteSlots(row).some((ref) => ref.k === slot && ref.v !== undefined);
+/** A slot's keyed values by folder: each folder's newest live row's (typed or mined), read once per delivery. */
+type HeldValues = Map<SlotId, Map<string, string>>;
+
+function heldValues(live: readonly ProvenanceNote[]): HeldValues {
+  const held: HeldValues = new Map();
+  const newestFirst = [...live].sort((a, b) => (b.at ?? 0) - (a.at ?? 0) || String(b.id).localeCompare(String(a.id)));
+  for (const row of newestFirst) {
+    if (typeof row.scope !== "string" || (isUntyped(row) && !isCited(row))) continue;
+    for (const { k, v } of noteSlots(row)) {
+      if (v === undefined) continue;
+      const at = held.get(k) ?? held.set(k, new Map()).get(k)!;
+      if (!at.has(row.scope)) at.set(row.scope, v);
+    }
+  }
+  return held;
 }
 
 /**
- * The notes without the mined facts D5 overrides at the read set (see the header): `live` is the store's live rows,
- * the prompt's own included, as delivery reads them after the prompt is stored.
+ * The values a fact states, by slot: the ones it keys, and, for a row the user typed, the ones its text states. A
+ * statement split by its slots' scopes keeps its whole text at each part (A4 §3.2), so a part's text also states the
+ * other part's values ("we use pnpm and vitest" at `""` keys the package manager, and states apps/web's runner).
+ */
+function statedValues(note: ProvenanceNote): Map<SlotId, { value: string; keyed: boolean }> {
+  const stated = new Map<SlotId, { value: string; keyed: boolean }>();
+  for (const { k, v } of noteSlots(note)) if (v !== undefined) stated.set(k, { value: v, keyed: true });
+  if (!note.slots || isUntyped(note)) return stated;
+  for (const { slot, value } of slotsIn(bodyOf(note)))
+    if (value !== undefined && !stated.has(slot)) stated.set(slot, { value, keyed: false });
+  return stated;
+}
+
+/**
+ * D5's value of a slot at a folder (A4 §2): the one held at the folder itself, else at its nearest ancestor that
+ * holds one, looking no higher than `below` (exclusive) when given. Rows of unknown scope are no folder's.
+ */
+function heldValue(held: HeldValues, slot: SlotId, folder: string, below?: string): string | undefined {
+  const values = held.get(slot);
+  for (let at: string | undefined = folder; values && at !== undefined && at !== below; at = parentScope(at))
+    if (values.has(at)) return values.get(at);
+  return undefined;
+}
+
+/** A scope's parent ("packages/cli" → "packages" → ""); none above the root. */
+export function parentScope(scope: string): string | undefined {
+  return scope ? scope.slice(0, Math.max(0, scope.lastIndexOf("/"))) : undefined;
+}
+
+/**
+ * The notes without the facts D5 does not show at the read set (see the header): a fact is left out when, at a
+ * read-set folder at or below its scope, a folder between overrides a value it keys, or a value its text states
+ * without keying it (a split statement's other part) does not hold there. `live` is the store's live rows, the
+ * prompt's own included, as delivery reads them after the prompt is stored. A value its own scope ended is
+ * validity's (D31), clause by clause; a row of unknown scope is shown as before.
  */
 export function withoutOverridden<T extends ProvenanceNote>(
   notes: readonly T[],
   live: readonly ProvenanceNote[],
   readSet: readonly string[],
 ): T[] {
+  let held: HeldValues | undefined;
   return notes.filter((note) => {
-    if (!isCited(note)) return true;
-    const scope = note.scope ?? "";
-    const below = readSet.filter((read) => read !== scope && within(scope, read));
-    const slots = noteSlots(note).flatMap((ref) => (ref.v === undefined ? [] : [ref.k]));
-    const overrides = (slot: SlotId, read: string) =>
-      live.some(
-        (row) =>
-          typeof row.scope === "string" &&
-          row.scope !== scope &&
-          within(scope, row.scope) &&
-          within(row.scope, read) &&
-          keysSlot(row, slot),
+    const scope = note.scope;
+    if (typeof scope !== "string") return true;
+    const stated = statedValues(note);
+    if (!stated.size) return true;
+    held ??= heldValues(live);
+    return readSet
+      .filter((read) => within(scope, read))
+      .every((read) =>
+        [...stated].every(([slot, { value, keyed }]) => {
+          const there = heldValue(held!, slot, read, keyed ? scope : undefined);
+          return there === undefined ? keyed : there === value;
+        }),
       );
-    return !slots.every((slot) => below.some((read) => overrides(slot, read)));
   });
 }
 
-/** A4 §5.5's first-touch candidates: a scope's own slot facts (P3.5 stub: none). */
-export function scopeFacts<T extends ProvenanceNote>(_live: readonly T[], _scope: string): T[] {
-  return [];
+/**
+ * A4 §5.5's first touch: the slot facts of a scope itself, keyed there by the user or cited from the repo's files
+ * (STRONG: a keyed slot, never an episode), newest first. An ancestor's values reach the folder by cascade, at the
+ * cue that needs them.
+ */
+export function scopeFacts<T extends ProvenanceNote>(live: readonly T[], scope: string): T[] {
+  return live
+    .filter(
+      (row) =>
+        row.scope === scope &&
+        (isCited(row) || !isUntyped(row)) &&
+        !row.rules?.length &&
+        noteSlots(row).some((ref) => ref.v !== undefined),
+    )
+    .sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
 }
 
 /**
@@ -363,11 +425,18 @@ export function namedScopes(text: string, scopes: readonly string[], top: string
       .replace(/\/+$/, "");
     const rel = isAbsolute(token) ? (token.startsWith(`${top}/`) ? token.slice(top.length + 1) : "") : token;
     if (!rel) continue;
-    const reads = isAbsolute(token) || !cwd ? [rel] : [rel, `${cwd}/${rel}`];
+    const reads = (isAbsolute(token) || !cwd ? [rel] : [rel, `${cwd}/${rel}`]).flatMap(insideRepo);
+    if (!reads.length) continue;
     const scope = reads.map((read) => scopeOfDir(scopes, read)).find(Boolean) ?? "";
     if ((scope || FILE_NAME.test(basename(rel))) && !named.includes(scope)) named.push(scope);
   }
   return named;
+}
+
+/** A relative reading of a path with its `.` and `..` resolved; none when it leaves the repo. */
+function insideRepo(read: string): string[] {
+  const resolved = posix.normalize(read);
+  return resolved === ".." || resolved.startsWith("../") ? [] : [resolved.replace(/^\.\/?/, "")];
 }
 
 /**
