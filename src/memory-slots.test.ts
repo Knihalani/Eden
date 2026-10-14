@@ -92,6 +92,11 @@ const TABLE: [string, string[]][] = [
   ["our db is sqlite for local dev and postgres in prod", []],
   ["the database is sqlite in tests and postgres in production", []],
   ["we deploy to fly.io in production", ["deploy.target=fly.io"]],
+  // Review round 5: the environment rule on every form.
+  ["we switched the database to sqlite for local dev", []],
+  ["we switched from jest to vitest in CI", []],
+  ["We're on node 18 in CI", []],
+  ["we use node 18 in CI", []],
   ["my node version is 18", []],
   ["my formatter is prettier", []],
   ["my github account is acme-dev", ["gh.account=acme-dev"]],
