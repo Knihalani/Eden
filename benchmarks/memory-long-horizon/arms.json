@@ -590,7 +590,7 @@
       "a5": "E3: regex false durable <= 1% on no-durable items; batch-B slot recall >= 0.70 and rule recall >= 0.80",
       "on": {
         "state": "green",
-        "why": "passes since P3.3: `eden memory extract` answers D7's slot records (`src/memory-slots.ts`) beside D9's rules. Batch-B slot recall was 8/16 held out (the measurement on 1a7074da6); after one disclosed look at batch B's misses (2026-10-14), the reader takes four of D7's and R8's forms more widely (a trailing time phrase, `use A for X, not B`, a component's switch whose values share a class, `everything is V now`): 15/16, false durables 0/217, rule recall 16/18. The one miss is R8's judgement call (\"sqlite for local dev and postgres in prod\" -> postgres)"
+        "why": "passes since P3.3: `eden memory extract` answers D7's slot records (`src/memory-slots.ts`) beside D9's rules. Batch-B slot recall was 8/16 held out (the measurement on 1a7074da6); after one disclosed look at batch B's misses (2026-10-14), the reader takes four of D7's and R8's forms more widely (a trailing time phrase, `use A for X, not B` where X is the slot's job, a switch of the whole app or one side of it whose values share a class, `everything is V now`), narrowed again in review round 4: 15/16, false durables 0/217, rule recall 16/18. The one miss, \"our db is sqlite for local dev and postgres in prod\" (gold postgres, R8's judgement call), reads no value: a value said for one environment is that environment's"
       }
     },
     {

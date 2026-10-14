@@ -563,9 +563,17 @@ function splitNot(phrase: string): { value: string; not?: string } {
   return match ? { value: match[1]!, not: match[2]! } : { value: phrase };
 }
 
+/** An environment a value is said for: another instance of the slot's subject. */
+const ENVIRONMENT =
+  /\s(?:for|in|on)\s+(?:the\s+)?(?:local(?:\s+dev)?|dev|development|tests?|testing|staging|prod|production|ci)\b|\slocally\b/i;
+
 /** The statement a phrase sets in a slot it names, with any `, not B` it carries. */
 function setNamed(reading: Reading & { slot: SlotId }, phrase: string, named: readonly SlotId[]): Found[] {
   const { value, not } = splitNot(phrase);
+  // A value said for one environment is that environment's ("sqlite for local dev", "postgres in CI"), not the slot's;
+  // a deploy target is production's anyway ("we deploy to fly.io in production").
+  const env = ENVIRONMENT.exec(value)?.[0] ?? "";
+  if (env && !(reading.slot === "deploy.target" && /\bprod/i.test(env))) return [];
   const set = valueOf(value, reading, [...named, reading.slot])[0];
   if (!set) return [];
   const was = not ? valueOf(not, reading, [...named, reading.slot]).map((found) => found.value) : [];
@@ -577,6 +585,19 @@ function setByClass(phrase: string, named: readonly SlotId[]): Found[] {
   const sets = valueOf(phrase, {}, named);
   return sets.length === 1 ? [{ slot: sets[0]!.slot, value: sets[0]!.value, was: [] }] : [];
 }
+
+/**
+ * The jobs a slot's value does, as `use A for X, not B` names them when X is no alias ("use Kysely for queries"). Any
+ * other X is a part or an instance of the work ("for analytics", "for the global install"), not the slot.
+ */
+const PURPOSES: Partial<Record<SlotId, readonly string[]>> = {
+  orm: ["queries", "query building", "data access", "models"],
+  "db.engine": ["storage", "persistence", "data"],
+  "auth.provider": ["login", "logins", "sign-in", "sessions"],
+  "pkg.manager": ["dependencies", "deps"],
+  framework: ["routing", "rendering", "the ui"],
+  "ci.system": ["builds", "pipelines"],
+};
 
 /** Optional words between a subject and its verb ("we just switched", "we've since moved"). */
 const ADVERBS = String.raw`(?:\s+(?:just|recently|finally|already|now|also|since|then|eventually|officially|all))*`;
@@ -600,9 +621,12 @@ const USE_FOR = new RegExp(
   String.raw`\b(?:use|uses|using|with)\s+(.+?)\s+(?:for|as)\s+(?:the\s+|our\s+|its\s+|all\s+)?(${ALIAS})\b(.*)$`,
   "i",
 );
-/** `use A not B`, and D7's `use A for X, not B` where X names no slot: A's and B's class name it. */
+/**
+ * `use A not B`, and D7's `use A for X, not B` where X names no alias but the slot's job (A's and B's class name the
+ * slot, `PURPOSES`): "use Kysely for queries, not Prisma", not "use npm for the global install, not pnpm" (one task).
+ */
 const USE_NOT = new RegExp(
-  String.raw`(?:^|\b(?:we|i)\s+(?:always\s+)?)use\s+(\S+(?:\s+\S+)?)(?:\s+for\s+[^,]{1,40}?)?\s*,?\s+${NOT}\s+(\S+(?:\s+\S+)?)`,
+  String.raw`(?:^|\b(?:we|i)\s+(?:always\s+)?)use\s+(\S+(?:\s+\S+)?)(?:\s+for\s+([^,]{1,30}?))?\s*,?\s+${NOT}\s+(\S+(?:\s+\S+)?)`,
   "i",
 );
 const SWITCH = new RegExp(String.raw`^(?:${SUBJECT}${ADVERBS}\s+)?(?:switched|moved|migrated)\b(.*)$`, "i");
@@ -654,6 +678,9 @@ const ANAPHORA = /^(?:now\s+)?(?:it'?s|it is)\s+(?:now\s+)?(.+)$/i;
 /** A value read by its class with its slot named after it ("on GitHub Actions for CI"). */
 const FOR_SLOT = new RegExp(String.raw`^(.+?)\s+(?:for|as)\s+(?:the\s+|our\s+|its\s+)?(${ALIAS})\b`, "i");
 
+/** A switch's subject that is the whole app or one side of it, not another instance ("the api", "our backend"). */
+const WHOLE_APP = /^(?:(?:the|our|its)\s+)?(?:api|app|backend|frontend|server|client|web)$/i;
+
 /** A switch's tail after its verb: `X from B to A`, `X to A from B`, or `X from B`. */
 function switchOf(tail: string, named: readonly SlotId[]): Found[] {
   const shapes = [
@@ -669,12 +696,21 @@ function switchOf(tail: string, named: readonly SlotId[]): Found[] {
     const [to, from] = at === 0 ? [match[3], match[2]] : at === 1 ? [match[2], match[3]] : at === 2 ? [match[2]] : [];
     const fromOnly = at === 3 ? match[2] : undefined;
     const slot = aliasedSlots(subject)[0];
-    // X names something that is no slot ("the helpers", "branches"): the switch is about it, not a slot, unless it
-    // goes from one value of a class to another ("switched the api to fastify from express"). A path in X says where
-    // ("we switched apps/web from Auth0 to Clerk").
+    // X names something that is no slot ("the helpers", "branches"): the switch is about it, not a slot, unless X is
+    // the whole app or one side of it and the switch goes from one value of a class to another ("switched the api to
+    // fastify from express"); "the docs site", "the users table" are other instances. A path in X says where ("we
+    // switched apps/web from Auth0 to Clerk").
     const rest = subject
       .replace(/\S*\/\S*/g, " ")
       .replace(/\b(?:over|everything|all|it|things|stuff|back|fully|entirely)\b/gi, "");
+    // An alias with another word beside it is another instance ("the e2e tests"), but for a word naming the whole
+    // app or one side of it ("web auth").
+    const qualified = rest
+      .toLowerCase()
+      .replace(new RegExp(String.raw`(?<![\w-])(?:${ALIAS})(?![\w-])`, "g"), " ")
+      .split(/\s+/)
+      .filter((word) => word.length > 2 && !/^(?:the|our|its)$/.test(word) && !WHOLE_APP.test(word));
+    if (slot && qualified.length) return [];
     const reading: Reading = slot ? { slot } : {};
     let sets = to ? valueOf(to, reading, named) : [];
     let olds = from ? valueOf(from, reading, named) : [];
@@ -685,7 +721,7 @@ function switchOf(tail: string, named: readonly SlotId[]): Found[] {
     else if (to && from && olds.length && !sets.length) sets = within(to, olds);
     // A switch of the component X ("the api") changes a slot when its old and new values share one's class.
     const classChange = !!from && sets.some((set) => olds.some((old) => old.slot === set.slot));
-    if (!slot && /\w{3,}/.test(rest) && !classChange) return [];
+    if (!slot && /\w{3,}/.test(rest) && !(classChange && WHOLE_APP.test(rest.trim()))) return [];
     if (fromOnly) {
       const gone = valueOf(fromOnly, reading, named);
       return gone[0] ? [{ slot: gone[0].slot, was: [gone[0].value] }] : [];
@@ -728,7 +764,10 @@ const READERS: readonly Reader[] = [
   },
   (clause, named) => {
     const match = COPULA.exec(clause);
-    return match ? setNamed({ slot: alias(match[1]!) }, match[2]!, named) : undefined;
+    if (!match) return undefined;
+    // A person's own setup is no repo's slot ("my node version is 18"); an account is a person's by nature.
+    if (/^my\s/i.test(clause) && alias(match[1]!) !== "gh.account") return [];
+    return setNamed({ slot: alias(match[1]!) }, match[2]!, named);
   },
   (clause, named) => {
     const match = COPULA_BACK.exec(clause);
@@ -745,7 +784,10 @@ const READERS: readonly Reader[] = [
   },
   (clause, named) => {
     const match = USE_NOT.exec(clause);
-    return match ? useNot(match[1]!, match[2]!, named) : undefined;
+    if (!match) return undefined;
+    const found = useNot(match[1]!, match[3]!, named);
+    const job = match[2]?.trim().toLowerCase();
+    return job && !found.every(({ slot }) => PURPOSES[slot]?.includes(job)) ? [] : found;
   },
   (clause, named) => {
     const match = SWITCH.exec(clause);
