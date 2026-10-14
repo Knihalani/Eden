@@ -53,7 +53,7 @@ Consolidation budgets in `src/sleep.ts`.
 |---|---|---|
 | `EDEN_SLEEP_EVERY` | 32 turns | `0` / `off` disables. `"8"` is 8 turns. `"64k"` (also `kb` / `mb` / `b`) is a byte threshold and sets turns to 0 |
 | `EDEN_SLEEP_IDLE` | 5 min (300000 ms) | `0` / `off` disables idle full-sleep. A plain integer is milliseconds. The memory hook's idle sleeper (`eden sleep --idle`, which Stop and SessionEnd start detached) waits this long without hook activity in the repo |
-| `EDEN_SLEEP_HEAVY` | 30 min (1800000 ms) | `0` / `off` never mines from the idle sleeper. A plain integer is milliseconds. Once the repo's hooks have been quiet this long, the idle sleeper runs the heavy tier: it mines the repo's lockfiles, manifests and CI files into cited facts. SessionStart also starts `eden sleep --heavy` detached, which mines at once |
+| `EDEN_SLEEP_HEAVY` | 30 min (1800000 ms) | `0` / `off` never mines from the idle sleeper. A plain integer is milliseconds. Once the repo's hooks have been quiet this long, the idle sleeper runs the heavy tier: it mines the repo's lockfiles, manifests and CI files into cited facts. SessionStart also starts `eden sleep --heavy` detached, which mines at once. With `EDEN_SLEEP_IDLE` `0` / `off` no detached sleeper starts at all, SessionStart's included: the repo's files are then mined only by a manual `eden sleep` |
 | `EDEN_SLEEP_BUDGET` | 25ms incremental budget | A non-negative number of milliseconds. Blank, non-finite, or negative stays 25 |
 
 ### Import

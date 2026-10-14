@@ -365,13 +365,15 @@ function deployFacts(folder: Folder, add: Add): void {
  */
 export interface Reading {
   top: string;
+  /** The folders read. */
+  scopes: string[];
   facts: MinedFact[];
   torn: { scope: string; slot: SlotId }[];
 }
 
 /** Reads each folder (a catalog scope; the top's CI files only at the top). */
 export function readFolders(top: string, scopes: readonly string[]): Reading {
-  const reading: Reading = { top, facts: [], torn: [] };
+  const reading: Reading = { top, scopes: [...scopes], facts: [], torn: [] };
   for (const scope of scopes) {
     const folder = { top, scope };
     const facts = new Map<SlotId, MinedFact>();
