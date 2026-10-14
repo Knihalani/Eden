@@ -49,6 +49,8 @@ beforeEach(() => {
     "packages/cli/package.json": JSON.stringify({ name: "cli" }),
     "packages/cli/src/index.ts": "export function main() {}\n",
     "packages/cli/src/login.ts": "export function login() {}\n",
+    "apps/api/package.json": JSON.stringify({ name: "api" }),
+    "apps/api/src/index.ts": "export function api() {}\n",
   };
   for (const [path, text] of Object.entries(files)) {
     mkdirSync(dirname(join(top, path)), { recursive: true });
@@ -293,5 +295,65 @@ describe("SessionStart's pins for the likely scope (A4 §5.2; P3.2's follow-up)"
     submit("s0", "Never edit packages/cli/migrations by hand.", "q1");
     rmSync(join(process.env.EDEN_MEMORY_DIR!, "windows", "s0"), { recursive: true, force: true });
     expect(context(hook("SessionStart", "s1", { source: "startup" }))).toContain("migrations");
+  });
+});
+
+describe("review round 1's probes", () => {
+  /** A session that reads a folder, then states facts there, then ends; a day passes. */
+  function plantAt(file: string, ...facts: string[]): void {
+    hook("SessionStart", "s-at", { source: "startup" });
+    read("s-at", file);
+    facts.forEach((fact, n) => {
+      submit("s-at", fact, `a${n}`);
+      tick();
+    });
+    hook("SessionEnd", "s-at", { reason: "other" });
+    tick(DAY);
+  }
+
+  test("a split statement's root part reaches the root and a sibling, by its own value (D5: its scope and below)", () => {
+    process.env.EDEN_FLAG_DELIVER_BATCH = "off";
+    plantAt("apps/web/app/login.ts", "We use pnpm and vitest.");
+    hook("SessionStart", "s1", { source: "startup" });
+    const atRoot = submit("s1", "should I install the deps with pnpm or npm?", "q1");
+    expect(atRoot).toContain("Package manager: pnpm");
+    expect(atRoot).not.toContain("vitest");
+    hook("SessionStart", "s2", { source: "startup" });
+    read("s2", "packages/cli/src/index.ts");
+    const atCli = submit("s2", "in packages/cli which package manager do we use? pnpm or npm?", "q2");
+    expect(atCli).toContain("pnpm");
+    expect(atCli).not.toContain("vitest");
+  });
+
+  test("a compaction does not brief a legacy value the folder the window reads has since replaced", () => {
+    process.env.EDEN_FLAG_DELIVER_BATCH = "off";
+    hook("SessionStart", "s0", { source: "startup" });
+    read("s0", "apps/web/app/login.ts");
+    submit("s0", "The cache is Redis.", "q0");
+    hook("SessionEnd", "s0", { reason: "other" });
+    tick(DAY);
+    hook("SessionStart", "s1", { source: "startup" });
+    read("s1", "apps/web/app/login.ts");
+    submit("s1", "The cache is Memcached.", "q1");
+    hook("Stop", "s1", {});
+    tick();
+    read("s1", "apps/web/app/login.ts");
+    const packet = context(hook("SessionStart", "s1", { source: "compact" }));
+    expect(packet).toContain("Memcached");
+    expect(packet).not.toContain("Redis");
+  });
+
+  test("a batch touching three new scopes delivers for two; the third is new at its next batch", () => {
+    plant("packages/cli has no auth.", "apps/web uses Clerk for auth.", "apps/api's database is postgres.");
+    hook("SessionStart", "s1", { source: "startup" });
+    const first = context(read("s1", "packages/cli/src/index.ts", "apps/web/app/login.ts", "apps/api/src/index.ts"));
+    expect(first).not.toContain("postgres");
+    expect(context(read("s1", "apps/api/src/index.ts"))).toContain("postgres");
+  });
+
+  test("a batch naming no scope below the root reads no ledger and records nothing", () => {
+    hook("SessionStart", "s1", { source: "startup" });
+    read("s1", "README.md");
+    expect(records("s1", "delivery.log").some((record) => record.k === "touch")).toBe(false);
   });
 });

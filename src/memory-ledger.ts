@@ -523,13 +523,18 @@ export function humanTurns(dir: string): number {
 }
 
 /**
- * A4 §5.5: of the scopes a batch touched, the ones no batch touched before in this epoch, in the ledgers a point reads,
- * which are then recorded as touched in its own (hashed, X11). A compaction or a clear starts an epoch, after which
- * every scope is new again.
+ * A4 §5.5: of the scopes a batch touched, the first `limit` no batch touched before in this epoch, in the ledgers a
+ * point reads, which are then recorded as touched in its own (hashed, X11); a scope past the limit stays new for the
+ * next batch. A compaction or a clear starts an epoch, after which every scope is new again.
  */
-export function firstTouches(dir: string, scopes: readonly string[], file: LedgerFile = LIVE_LEDGER): string[] {
+export function firstTouches(
+  dir: string,
+  scopes: readonly string[],
+  file: LedgerFile = LIVE_LEDGER,
+  limit = Infinity,
+): string[] {
   const touched = new Set(readLedgers(file).flatMap((ledger) => [...readLedger(dir, ledger).touched]));
-  const fresh = [...new Set(scopes)].filter((scope) => !touched.has(scopeHash(scope)));
+  const fresh = [...new Set(scopes)].filter((scope) => !touched.has(scopeHash(scope))).slice(0, limit);
   if (fresh.length) appendRecords(dir, file, [{ k: "touch", s: fresh.map(scopeHash) }]);
   return fresh;
 }
