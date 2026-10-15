@@ -464,9 +464,10 @@ function answerTurn(
     .filter((message) => message.src === "user")
     .map((message) => message.content)
     .join("\n");
-  // D11, as at the hook's Submit: the user's own words keep or end rules for all projects (P2.4's follow-up).
+  // D11, as at the hook's Submit: the user's own words keep or end rules for all projects (P2.4's follow-up). Only a
+  // repo's store reads them back (`_user/` under the memory root).
   const global =
-    newPrompt && mem.writable() && typed
+    newPrompt && mem.writable() && mem.repoKey && typed
       ? answerUserGlobal(mem.windowsRoot, mem.storableText(typed), memoryNow(), answerPlace(mem))
       : { kept: [], dropped: [], acknowledged: [] };
   const cue = [{ role: "user", content: prompt, ...(opts.paths?.length ? { open_files: [...opts.paths] } : {}) }];

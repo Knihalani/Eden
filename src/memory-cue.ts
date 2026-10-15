@@ -15,7 +15,7 @@
  * (`weightsFor`, A7 §3's table). A context part adds at most `PART_MASS` matched words to a row (R2 §5.2's per-part
  * mass limit), so a long, busy context cannot make every row look relevant.
  */
-import { identifierForms, type CueParts } from "./memory-gate";
+import { identifierTokens, sharesIdentifier, type CueParts } from "./memory-gate";
 import { underTop } from "./memory-place";
 import { proposalSentences, type TurnMode } from "./memory-turn";
 
@@ -88,6 +88,12 @@ export function singular(word: string): string {
   return word.endsWith("s") ? word.slice(0, -1) : word;
 }
 
+/** The words `singular` maps to a stem: the stem itself and its plural forms. */
+export function pluralForms(stem: string): string[] {
+  const forms = [stem, `${stem}s`, `${stem}es`, ...(stem.endsWith("y") ? [`${stem.slice(0, -1)}ies`] : [])];
+  return forms.filter((form) => singular(form) === stem);
+}
+
 /**
  * `q_path`'s text: each path's basename and non-generic folders, relative to the repo's top (see the header). With no
  * top to read them against (the wrap's request paths), the basenames alone.
@@ -133,9 +139,15 @@ export interface SituationCue {
   proposal: string;
 }
 
-/** Eden's own tokens, which `q_prev` drops: every token and identifier form of the packets it delivered. */
+/** Eden's own tokens, which `q_prev` drops: every token of the packets it delivered. */
 function deliveredTokens(packets: readonly string[]): Set<string> {
-  return new Set(packets.flatMap((packet) => [...cueTokens(packet), ...identifierForms(packet)]));
+  return new Set(packets.flatMap((packet) => [...cueTokens(packet)]));
+}
+
+/** A continuation's STRONG tokens: the identifiers of the agent's last message that no packet of Eden's gave it. */
+function strongTokens(prev: string, packets: readonly string[]): Set<string> {
+  const own = new Set(packets.flatMap((packet) => [...identifierTokens(packet)]));
+  return new Set([...identifierTokens(prev)].filter((token) => !sharesIdentifier(new Set([token]), own)));
 }
 
 const without = (tokens: ReadonlySet<string>, own: ReadonlySet<string>) =>
@@ -153,7 +165,7 @@ export function situationCue(situation: Situation, mode: TurnMode): SituationCue
       path: cueTokens(situation.path ?? ""),
       prev: without(cueTokens(prev), own),
     },
-    strong: continuation ? without(identifierForms(prev), own) : new Set(),
+    strong: continuation ? strongTokens(prev, situation.delivered ?? []) : new Set(),
     proposal: continuation ? proposalSentences(prev).join(" ") : "",
   };
 }

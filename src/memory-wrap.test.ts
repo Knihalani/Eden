@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openMemory, type AgentMemory } from "./index";
 import { MEMORY_PACKET_MARK, MEMORY_PACKET_MARKS } from "./memory-sota";
+import { storeFor } from "./memory-repo";
 import { readUserRules } from "./memory-user-global";
 
 type Message = Record<string, unknown>;
@@ -397,7 +398,11 @@ describe("P4.1: a restarted wrap's turn reads D12's split (P2.2's follow-up)", (
 });
 
 describe("P4.1: a wrap-only session keeps and ends rules for all projects (D11; P2.4's follow-up)", () => {
-  const kept = () => readUserRules(mem.windowsRoot).map((row) => row.text);
+  // A repo's store, under the memory root whose `_user/` every repo reads.
+  beforeEach(() => {
+    mem = openMemory({ dir: storeFor(join(home, "memory")), perRepo: true });
+  });
+  const kept = () => readUserRules(join(home, "memory")).map((row) => row.text);
 
   test("a policy said with D11's phrase is kept for all projects; said again with it, its opposite ends it", () => {
     mem.inject([user("Never force-push, in all my projects.")]);
@@ -408,6 +413,13 @@ describe("P4.1: a wrap-only session keeps and ends rules for all projects (D11; 
 
   test("without the phrase, nothing is kept for all projects", () => {
     mem.inject([user("Never force-push.")]);
+    expect(kept()).toEqual([]);
+  });
+
+  test("a store of no repo keeps nothing for all projects: nothing would read it", () => {
+    const other = openMemory({ dir: join(home, "store") });
+    other.inject([user("Never force-push, in all my projects.")]);
+    expect(readUserRules(join(home, "store"))).toEqual([]);
     expect(kept()).toEqual([]);
   });
 

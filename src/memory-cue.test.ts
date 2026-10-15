@@ -7,7 +7,16 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openMemory, type MemoryRecord } from "./index";
-import { cueTokens, gateParts, pathCue, singular, situationCue, weightsFor, type Situation } from "./memory-cue";
+import {
+  cueTokens,
+  gateParts,
+  pathCue,
+  pluralForms,
+  singular,
+  situationCue,
+  weightsFor,
+  type Situation,
+} from "./memory-cue";
 import type { TurnMode } from "./memory-turn";
 
 const dirs: string[] = [];
@@ -42,6 +51,12 @@ describe("A7 §3: identifier-split tokens", () => {
     for (const token of ["publicroutes", "public", "routes", "vitest.config.ts", "vitest.config", "vitest", "config"])
       expect(tokens.has(token)).toBe(true);
     for (const token of ["user", "id", "drizzle", "kit"]) expect(tokens.has(token)).toBe(true);
+  });
+
+  test("a stem's words are itself and the plural forms that stem to it", () => {
+    expect(pluralForms("query")).toEqual(["query", "querys", "queries"]);
+    expect(pluralForms("box")).toEqual(["box", "boxs", "boxes"]);
+    expect(pluralForms("clas")).toEqual([]);
   });
 
   test("R1's plural s-stemming of plain words; names with digits, dots or underscores stay", () => {

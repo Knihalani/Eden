@@ -55,11 +55,13 @@ import {
   typedValueRow,
   underTop,
   visibleFrom,
+  placeOf,
   windowPaths,
   windowPlace,
   cascaded,
   type EncodePlace,
   type Place,
+  type PlacePaths,
   type RepoScopes,
 } from "../../../src/memory-place";
 import {
@@ -562,6 +564,8 @@ interface HookContext {
   repoScopes: () => RepoScopes | undefined;
   /** The window's place (A4 §2), none where it is unknown: read when first asked, and again after `movePlace`. */
   workPlace: () => Place | undefined;
+  /** The window's recent paths by source (`memory-place.ts`), read once per invocation. */
+  recentPaths: () => PlacePaths | undefined;
   /** The window moved: a Submit's prompt names `prompt`'s places, or the catalog was built. */
   movePlace: (prompt?: readonly string[]) => void;
 }
@@ -1222,12 +1226,8 @@ function previousAssistant(win: string | undefined, recent: RecentConversation):
  * (`ctx.log`, newest first), and the agent's last message without the packets Eden gave the turn it answers.
  */
 function situationOf(ctx: HookContext, recent: RecentConversation, prev: string, mode: TurnMode): SituationCue {
-  let path = "";
-  if (ctx.win)
-    try {
-      const paths = windowPaths(ctx.win);
-      path = pathCue([...paths.turns, ...paths.bash], ctx.top);
-    } catch {}
+  const paths = ctx.recentPaths();
+  const path = paths ? pathCue([...paths.turns, ...paths.bash], ctx.top) : "";
   return situationCue({ turn: recent.previousTyped, path, prev, delivered: recent.delivered }, mode);
 }
 
@@ -1303,7 +1303,12 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   const place = ctx.workPlace();
   if (human && place) trace.read = place.readSet.length;
   // A7 §3: a human turn the mode answers is cued by its situation; PreCompact by its text alone.
-  const situation = human && isAnswered(turn) ? situationOf(ctx, recent, prev, turn) : undefined;
+  let situation: SituationCue | undefined;
+  // A cue that cannot be read falls back to the prompt alone, as before P4.1.
+  if (human && isAnswered(turn))
+    try {
+      situation = situationOf(ctx, recent, prev, turn);
+    } catch {}
   if (prompt && isAnswered(turn) && answer !== "off")
     notes = mem.recall(cue, encode, place && visibleFrom(place), { situation });
   else if (prompt) mem.observeCue(cue, undefined, encode);
@@ -1458,9 +1463,13 @@ function respond(
   });
   // A subagent's prompt is its task, whose places its first SubagentStart stored (A4 §5.3).
   let named = (): readonly string[] | undefined => (resolved.child && win ? storedScope(win)?.paths : undefined);
+  // The window's recent paths (`ctx.log`), read once for the place and the situation cue (A7 §3's `q_path`).
+  const paths = lazily((): PlacePaths | undefined => (win ? windowPaths(win, named()) : undefined));
   const placed = lazily((): Place | undefined => {
     const at = scopesAt.get();
-    return at && windowPlace(win, at, named());
+    if (!at) return undefined;
+    const recent = paths.get();
+    return recent ? placeOf(recent, at) : taskPlace(named() ?? [], at);
   });
   const place = { repo: scopesAt.get, working: () => placed.get()?.readSet[0] ?? "" };
   const mem = hookMemory({ dir: store, session: resolved.session, child: resolved.child, cwd, place });
@@ -1489,9 +1498,11 @@ function respond(
     },
     repoScopes: scopesAt.get,
     workPlace: placed.get,
-    movePlace: (paths) => {
-      if (paths) named = () => paths;
+    recentPaths: paths.get,
+    movePlace: (moved) => {
+      if (moved) named = () => moved;
       scopesAt.reset();
+      paths.reset();
       placed.reset();
     },
   };

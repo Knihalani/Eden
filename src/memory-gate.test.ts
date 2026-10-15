@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { admitNotes, admitsEpisode, identifierForms, identifierTokens } from "./memory-gate";
+import { admitNotes, admitsEpisode, identifierTokens, sharesIdentifier } from "./memory-gate";
 import { isUntyped } from "./memory-provenance";
 
 const tool = (text: string) => ({ id: text, text, tags: ["src:tool"] });
@@ -45,11 +45,14 @@ describe("A4 §3.0, A7 §4: an episode the user did not type needs STRONG eviden
     expect(admitsEpisode(tool("File created at apps/web/app/db.ts"), { prompt: "explain the db layer" })).toBe(false);
   });
 
-  test("P4.1: a path's basename matches it wherever it sits", () => {
-    expect([...identifierForms("see apps/web/middleware.ts")]).toEqual(["apps/web/middleware.ts", "middleware.ts"]);
-    expect(admitsEpisode(tool("Edited src/middleware.ts"), { prompt: "why does apps/web/middleware.ts loop?" })).toBe(
-      true,
-    );
+  test("P4.1: a bare filename matches a path ending in it; two paths match only whole", () => {
+    const ids = (text: string) => identifierTokens(text);
+    expect(sharesIdentifier(ids("see middleware.ts"), ids("apps/web/middleware.ts loops"))).toBe(true);
+    expect(sharesIdentifier(ids("packages/cli/src/server.ts"), ids("packages/wrap/src/server.ts"))).toBe(false);
+    expect(sharesIdentifier(ids("vitest.config.ts"), ids("vitest.config"))).toBe(true);
+    expect(admitsEpisode(tool("Edited middleware.ts"), { prompt: "why does apps/web/middleware.ts loop?" })).toBe(true);
+    const other = tool("The file packages/wrap/src/server.ts has been updated");
+    expect(admitsEpisode(other, { prompt: "add validation to packages/cli/src/server.ts" })).toBe(false);
   });
 
   test("P4.1: the paths just touched are a cue part (q_path)", () => {
