@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { admitNotes, admitsEpisode, identifierTokens } from "./memory-gate";
+import { admitNotes, admitsEpisode, identifierForms, identifierTokens } from "./memory-gate";
 import { isUntyped } from "./memory-provenance";
 
 const tool = (text: string) => ({ id: text, text, tags: ["src:tool"] });
@@ -43,6 +43,26 @@ describe("A4 §3.0, A7 §4: an episode the user did not type needs STRONG eviden
       true,
     );
     expect(admitsEpisode(tool("File created at apps/web/app/db.ts"), { prompt: "explain the db layer" })).toBe(false);
+  });
+
+  test("P4.1: a path's basename matches it wherever it sits", () => {
+    expect([...identifierForms("see apps/web/middleware.ts")]).toEqual(["apps/web/middleware.ts", "middleware.ts"]);
+    expect(admitsEpisode(tool("Edited src/middleware.ts"), { prompt: "why does apps/web/middleware.ts loop?" })).toBe(
+      true,
+    );
+  });
+
+  test("P4.1: the paths just touched are a cue part (q_path)", () => {
+    const row = said("The billing retries back off exponentially");
+    expect(admitsEpisode(row, { prompt: "why do billing jobs pile up?", path: "retries.ts billing" })).toBe(true);
+    expect(admitsEpisode(row, { prompt: "why is it slow?", path: "retries.ts billing" })).toBe(false);
+    expect(admitsEpisode(row, { prompt: "why is it slow?", turn: "and the billing?", path: "retries.ts" })).toBe(true);
+  });
+
+  test("P4.1: on a continuation an identifier of the agent's last message is STRONG; a plain word is not", () => {
+    const row = tool("vitest.config.ts sets environment: node");
+    expect(admitsEpisode(row, { prompt: "yes do it", strong: new Set(["vitest.config.ts"]) })).toBe(true);
+    expect(admitsEpisode(row, { prompt: "yes do it", prev: "the environment is wrong" })).toBe(false);
   });
 
   test("MEDIUM from two cue parts: the prompt and the previous typed prompt or the agent's last message", () => {

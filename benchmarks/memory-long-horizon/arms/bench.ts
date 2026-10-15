@@ -20,6 +20,7 @@ import {
   precisionByCategory,
   r1Cues,
   recallAt4,
+  recallInContext,
   share,
   show,
   type BenchCue,
@@ -71,6 +72,56 @@ const cuebenchCode: Arm = {
       check("planted", true, outcome.detail),
       check("recall", share(recall) >= 0.5, `R1 test recall@4 ${show(recall)}; gate ≥ 0.50. ${reported}`),
       check("fir", share(falseInjects) <= 0.075, `R1 test FIR ${show(falseInjects)}; gate ≤ 7.5%`),
+    ];
+  },
+};
+
+/** A negative asked in a ctx cue's situation: after its previous turn and Reads, at its scope. */
+const inSituationOf = (negative: BenchCue, ctx: BenchCue): BenchCue => ({
+  ...negative,
+  id: `${negative.id}@${ctx.id}`,
+  scope: ctx.scope,
+  last_paths: ctx.last_paths,
+  prev_turn: ctx.prev_turn,
+});
+
+/**
+ * The situation cue on CueBench (A7 §3, D16; ROADMAP P4.1's gate): recall@4 of the R1 test split's 22 `ctx` cues,
+ * whose subject only their previous turn or Reads carry, counted in context (`recallInContext`: a gold memory the
+ * previous turn's own packet gave is not repeated, A4 §4), and the test negatives asked twice, bare and each in a ctx
+ * cue's situation (round robin), so a busy context that made everything look relevant would show as new false
+ * injects. CI asks every ctx cue and one negative of each class; `--scale full` every test negative.
+ */
+const cuebenchCtx: Arm = {
+  id: "cuebench-ctx",
+  flagged: true,
+  async run(run) {
+    const test = r1Cues().filter((cue) => cue.split === "test");
+    const ctx = test.filter((cue) => cue.cat === "ctx");
+    const bare = subset(run, test.filter(isNegative), 1);
+    const situated = bare.map((negative, n) => inSituationOf(negative, ctx[n % ctx.length]!));
+    const outcome = await bench(run, [...ctx, ...bare, ...situated]);
+    if (!outcome) return ["planted", "ctx-recall", "fir-in-context"].map((id) => check(id, false, NOT_PLANTED));
+    const of = (cues: readonly BenchCue[]) => outcome.results.filter((result) => cues.includes(result.cue));
+    const recall = recallInContext(of(ctx));
+    const atCue = recallAt4(of(ctx));
+    const [firBare, firSituated] = [fir(of(bare)), fir(of(situated))];
+    const fired = of(situated)
+      .filter((result) => result.packet)
+      .map((result) => result.cue.id);
+    return [
+      check("planted", true, outcome.detail),
+      check(
+        "ctx-recall",
+        share(recall) >= 0.4,
+        `R1 test ctx recall@4 in context ${show(recall)} (in the cue's packet ${show(atCue)}); gate ≥ 0.40`,
+      ),
+      check(
+        "fir-in-context",
+        firSituated.k <= firBare.k,
+        `R1 test negatives with a packet: in a ctx cue's situation ${show(firSituated)} ${JSON.stringify(fired)}, ` +
+          `bare ${show(firBare)}`,
+      ),
     ];
   },
 };
@@ -201,6 +252,7 @@ const aliasBatch: Arm = {
 
 export const BENCH_ARMS: Arm[] = [
   cuebenchCode,
+  cuebenchCtx,
   policyTrigger,
   aliasBatch,
   scaleArm("scale-20k", 20_000),

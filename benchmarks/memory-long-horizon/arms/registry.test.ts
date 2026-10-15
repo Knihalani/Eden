@@ -13,10 +13,10 @@ const record = loadRecord();
 const PROGRESS = readFileSync(join(import.meta.dir, "../../../docs/memory-ship/PROGRESS.md"), "utf8");
 
 describe("arms.json", () => {
-  test("holds the 45 arms of A5 §4, each implemented once", () => {
+  test("holds the 45 arms of A5 §4 and P4.1's `cuebench-ctx`, each implemented once", () => {
     const ids = record.arms.map((arm) => arm.id);
-    expect(ids.length).toBe(45);
-    expect(new Set(ids).size).toBe(45);
+    expect(ids.length).toBe(46);
+    expect(new Set(ids).size).toBe(46);
     expect([...ARMS.keys()].sort()).toEqual([...ids].sort());
   });
 
