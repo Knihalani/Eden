@@ -57,7 +57,17 @@ import { appendPending, claimSeqs, compareRecency, takePending, ulid, type DiskR
 import { markStoreFormat, readableStore, storeFor } from "./memory-repo";
 import type { ActionClass } from "./memory-classes";
 import { firedClasses, triggeredRows } from "./memory-triggers";
-import type { SituationCue } from "./memory-cue";
+import {
+  CONTEXT_PARTS,
+  PART_MASS,
+  singular,
+  queryHay,
+  RARE_DF,
+  REFERENCE_WEIGHT,
+  type CuePart,
+  type SituationCue,
+} from "./memory-cue";
+import { identifierForms } from "./memory-gate";
 import { writeRuleIndex } from "./memory-rule-index";
 import { readUserRules, withUserGlobal } from "./memory-user-global";
 import { childSessionName, memorySessionName } from "./memory-session";
@@ -129,6 +139,14 @@ export function encodeLane(text: string): MemoryLaneKind {
 function rankKindBoost(r: MemoryRecord): number {
   const k = String(r.kind ?? "");
   return k === "constraint" ? 50 : k === "procedure" ? 40 : k === "fact" || k === "preference" ? 25 : 0;
+}
+
+/**
+ * The kind prior `relevant` ranks with. With a situation cue it is D17's: it never exceeds one rare-token match (a
+ * hundredth of the old prior, so it orders rows of equal evidence as before), so the cue parts' weighted sum ranks.
+ */
+function kindPrior(r: MemoryRecord, cue: SituationCue | undefined): number {
+  return cue ? rankKindBoost(r) / 100 : rankKindBoost(r);
 }
 
 /** Notes as retrieval hands them on: each body capped and labelled with its kind and source. */
@@ -483,14 +501,94 @@ function fewNeedles(rec: MemoryRecord): boolean {
   return true;
 }
 
-/** Red-first stub (P4.1): what a turn adds to its messages' cue; not read yet. */
+export { queryHay };
+
+/**
+ * What a turn adds to its messages' cue (`recall`). `situation` is its situation cue (A7 §3, `memory-cue.ts`): its
+ * parts rank the lexical path's rows, and a continuation, whose prompt carries nothing to match, is answered from the
+ * proposal it accepts: the proposal's classes and slots, and rows sharing an identifier-shaped token with the agent's
+ * last message (STRONG, A7 §4). `typed` is the user's own words when the caller split them off but encodes nothing.
+ */
 export interface RecallCue {
   situation?: SituationCue;
   typed?: string;
 }
 
-export function queryHay(text: string): Set<string> {
-  return new Set(((s) => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text));
+/** A cue part as `relevant` reads it: its tokens, its weight against a default-mode prompt, and its mass limit. */
+interface HayPart {
+  part: CuePart;
+  hay: ReadonlySet<string>;
+  weight: number;
+  mass: number;
+}
+
+/**
+ * A token set as the situation cue is scored (R1's tokenizer, `singular`). Function words and short words are left
+ * out as they are written, as a row's needles are (`isNeedle`): "apps" stays, as "app".
+ */
+function stemmed(tokens: Iterable<string>): Set<string> {
+  const out = new Set<string>();
+  for (const token of tokens) if (token.length >= 3 && !STOP.has(token)) out.add(singular(token));
+  return out;
+}
+
+/**
+ * The parts `relevant` scores: the prompt's words alone without a situation cue (as before P4.1); with one, the
+ * prompt's words and the context parts' identifier-split tokens, stemmed, `q_prev` read for its rare and
+ * identifier-shaped tokens only (`memory-cue.ts`). `post` is the postings of the same token space.
+ * The prompt's dotted and camelCase names stay whole until P4.3's τ: a prompt word admits a row alone, and "Node.js"
+ * split to "node" admitted a mined node-version fact on R1's hard negative "who created the Node.js runtime?".
+ */
+function hayParts(text: string, cue: SituationCue | undefined, post: Map<string, Compiled[]>): HayPart[] {
+  if (!cue) {
+    const words = [...queryHay(text)].filter((t) => t.length >= 3 && !STOP.has(t));
+    return [{ part: "prompt", hay: new Set(words), weight: 1, mass: Infinity }];
+  }
+  const weight = (part: CuePart) => cue.weights[part] / REFERENCE_WEIGHT;
+  const strong = stemmed(cue.strong);
+  const rare = (token: string) => strong.has(token) || (post.get(token)?.length ?? 0) <= RARE_DF;
+  const context = CONTEXT_PARTS.map((part): HayPart => ({
+    part,
+    hay: part === "prev" ? new Set([...stemmed(cue.parts.prev)].filter(rare)) : stemmed(cue.parts[part]),
+    weight: weight(part),
+    mass: PART_MASS,
+  }));
+  const prompt: HayPart = { part: "prompt", hay: stemmed(queryHay(text)), weight: weight("prompt"), mass: Infinity };
+  return [prompt, ...context].filter((part) => part.hay.size && part.weight > 0);
+}
+
+/** A row's score against the parts (A7 §3): each part's matched needles, rarest first up to its mass, weighted. */
+function situatedScore(needles: readonly string[], parts: readonly HayPart[], post: Map<string, Compiled[]>) {
+  const df = (token: string) => Math.max(1, post.get(token)?.length ?? 1);
+  const matched: Partial<Record<CuePart, number>> = {};
+  let n = 0,
+    rare = 0;
+  for (const part of parts) {
+    const hits = needles
+      .filter((needle) => part.hay.has(needle))
+      .sort((a, b) => df(a) - df(b))
+      .slice(0, part.mass);
+    if (!hits.length) continue;
+    matched[part.part] = hits.length;
+    n += part.weight * hits.length;
+    rare += part.weight * hits.reduce((sum, hit) => sum + 1 / df(hit), 0);
+  }
+  return { n, rare, matched };
+}
+
+/**
+ * Whether the lexical path admits a row (A7 §4, until P4.3's τ): a continuation only on STRONG evidence from `q_prev`
+ * (an identifier-shaped token), any other turn on a word it shares with the prompt, as before. The context parts rank
+ * the rows the prompt admits; they never admit a row alone.
+ */
+function lexicallyAdmitted(
+  rec: MemoryRecord,
+  matched: Partial<Record<CuePart, number>>,
+  cue: SituationCue | undefined,
+): boolean {
+  if (cue?.mode !== "continuation") return (matched.prompt ?? 0) > 0;
+  for (const form of identifierForms(rec.text)) if (cue.strong.has(form)) return true;
+  return false;
 }
 
 const TOOL_ROLES = new Set(["tool", "function"]),
@@ -1069,6 +1167,7 @@ export class AgentMemory {
   /** Every row's text exactly: a text a row already holds has passed the gate, which `observe` need not run again. */
   private stored = new Set<string>();
   private post: Map<string, Compiled[]> | null = null;
+  private stems?: { of: Map<string, Compiled[]>; map: Map<string, Compiled[]> };
   /** The live rule rows (D9 keys), which triggers deliver; built with `post`. */
   private ruleRows: MemoryRecord[] = [];
   private knownIds = new Set<string>();
@@ -1608,6 +1707,25 @@ export class AgentMemory {
   }
 
   /**
+   * The postings by stemmed needle (`stemmed`, R1's tokenizer), which the situation cue is scored in: built from
+   * `post` when a situated Submit first needs them, and again whenever `post` was rebuilt.
+   */
+  private stemmedPostings(): Map<string, Compiled[]> {
+    if (this.stems?.of === this.post) return this.stems.map;
+    const merged = new Map<string, Set<Compiled>>();
+    for (const [needle, rows] of this.post!) {
+      for (const stem of stemmed([needle])) {
+        const into = merged.get(stem);
+        if (into) for (const row of rows) into.add(row);
+        else merged.set(stem, new Set(rows));
+      }
+    }
+    const map = new Map([...merged].map(([stem, rows]) => [stem, [...rows]]));
+    this.stems = { of: this.post!, map };
+    return map;
+  }
+
+  /**
    * The policies and intents the classes the user's own words fire deliver (A4 §5.1 step 4b, `memory-triggers.ts`):
    * `own` is the text D12 left the user, without pasted spans or spans copied from a recent tool result. A per-repo
    * store's rules sit beside the rules the user keeps for all projects (D11), which a repo row of the same rule gives
@@ -1958,49 +2076,61 @@ export class AgentMemory {
     this.post = null;
   }
 
-  relevant(text: string, cap = memoryRetrieveCap(), visible = EVERY_ROW, _cue?: SituationCue): MemoryRecord[] {
-    const hay = queryHay(text);
+  /**
+   * Adds to `pool` the visible rows of a part's tokens, rarest token first, up to `budget` rows for the part; a fat
+   * token (df ≥ 80) is read only while the pool is empty.
+   */
+  private fillPool(
+    post: Map<string, Compiled[]>,
+    hay: ReadonlySet<string>,
+    budget: number,
+    visible: RowFilter,
+    seen: Set<Compiled>,
+    pool: Compiled[],
+  ): void {
+    const ranked = [...hay]
+      .map((t) => ({ t, df: post.get(t)?.length ?? 0 }))
+      .filter((x) => x.df > 0)
+      .sort((a, b) => a.df - b.df);
+    let added = 0;
+    for (const { t, df } of ranked) {
+      if (df >= 80 && pool.length) break;
+      for (const c of post.get(t) ?? []) {
+        if (seen.has(c) || !visible(c.rec)) continue;
+        seen.add(c);
+        pool.push(c);
+        if (++added >= budget) break;
+      }
+      if (df >= 80 || added >= budget) break;
+    }
+  }
+
+  relevant(text: string, cap = memoryRetrieveCap(), visible = EVERY_ROW, cue?: SituationCue): MemoryRecord[] {
     try {
       this.ensureIndex();
-      const ranked = [...hay]
-        .filter((t) => t.length >= 3 && !STOP.has(t))
-        .map((t) => ({ t, df: this.post!.get(t)?.length ?? 0 }))
-        .filter((x) => x.df > 0)
-        .sort((a, b) => a.df - b.df);
+      const post = cue ? this.stemmedPostings() : this.post!;
+      const parts = hayParts(text, cue, post);
+      const hay = new Set(parts.flatMap((part) => [...part.hay]));
       const poolCap = Math.max(cap * 6, 30),
         seen = new Set<Compiled>(),
         pool: Compiled[] = [];
-      for (const { t, df } of ranked) {
-        if (df >= 80 && pool.length) break;
-        for (const c of this.post!.get(t) ?? []) {
-          if (seen.has(c) || !visible(c.rec)) continue;
-          seen.add(c);
-          pool.push(c);
-          if (pool.length >= poolCap) break;
-        }
-        if (df >= 80 || pool.length >= poolCap) break;
-      }
+      for (const part of parts) this.fillPool(post, part.hay, poolCap, visible, seen, pool);
       const scored: { rec: MemoryRecord; n: number; rare: number }[] = [];
       for (const c of pool) {
-        let n = 0,
-          rare = 0;
-        for (const x of c.needles)
-          if (hay.has(x)) {
-            n++;
-            rare += 1 / Math.max(1, this.post?.get(x)?.length ?? 1);
-          }
+        const needles = cue ? [...stemmed(c.needles)] : c.needles;
         if (
-          n &&
-          c.needles.length <= SCORABLE_NEEDLES &&
-          !c.needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x)) &&
-          !/\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text)
+          c.needles.length > SCORABLE_NEEDLES ||
+          needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x)) ||
+          /\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text)
         )
-          scored.push({ rec: c.rec, n, rare });
+          continue;
+        const { n, rare, matched } = situatedScore(needles, parts, post);
+        if (lexicallyAdmitted(c.rec, matched, cue)) scored.push({ rec: c.rec, n, rare });
       }
       return liveCopulaLatest(scored)
         .sort(
           (a, b) =>
-            b.n + rankKindBoost(b.rec) - (a.n + rankKindBoost(a.rec)) ||
+            b.n + kindPrior(b.rec, cue) - (a.n + kindPrior(a.rec, cue)) ||
             b.rare - a.rare ||
             compareRecency(b.rec, a.rec),
         )
@@ -2011,7 +2141,7 @@ export class AgentMemory {
     }
   }
 
-  notesFor(text = "", k = memoryRetrieveCap(), visible: RowFilter = EVERY_ROW): MemoryRecord[] {
+  notesFor(text = "", k = memoryRetrieveCap(), visible: RowFilter = EVERY_ROW, cue?: SituationCue): MemoryRecord[] {
     const cap = Math.max(0, Math.floor(Number(k) || 0)),
       route = routeMemory(text),
       all = this.compiled.map((c) => c.rec),
@@ -2022,7 +2152,7 @@ export class AgentMemory {
       const { rows, hidden } = lane();
       recs = mergeIclLane(text, cap, this.dir, rows, hidden);
     } else {
-      recs = this.relevant(text, k, visible);
+      recs = this.relevant(text, k, visible, cue);
       if (route === "gist-chunk") {
         const { rows, hidden } = lane();
         recs = mergeNarrativeLane(recs, text, cap, this.dir, rows, hidden);
@@ -2050,13 +2180,9 @@ export class AgentMemory {
    * and `inject` (`memory-wrap.ts`) select, shape and word them (`memory-delivery.ts`, `memory-hook-packet.ts`). Fails
    * open: a throw is counted in `memoryInjectSwallows` and recalls nothing. `encode` replaces what is encoded when
    * the caller knows more of its sources than the cue shows (the hook splits a prompt's pasted spans off, D12).
+   * `cue` adds the turn's situation (`RecallCue`).
    */
-  recall(
-    messages: unknown[],
-    encode?: unknown[],
-    visible: RowFilter = EVERY_ROW,
-    _cue: RecallCue = {},
-  ): MemoryRecord[] {
+  recall(messages: unknown[], encode?: unknown[], visible: RowFilter = EVERY_ROW, cue: RecallCue = {}): MemoryRecord[] {
     const list = Array.isArray(messages) ? messages : [];
     try {
       if (this.consent() === "off") return [];
@@ -2064,30 +2190,34 @@ export class AgentMemory {
       return [];
     }
     try {
-      const cue = attachPlaceCues(cueFor(list), placePathsFrom(list)),
+      const { situation, typed } = cue;
+      const text = attachPlaceCues(cueFor(list), placePathsFrom(list)),
         blob = convBlob(list);
       let packet: MemoryRecord[] = [];
       if (!MEMORY_PACKET_MARKS.some((mark) => blob.includes(mark))) {
+        // A continuation's prompt ("yes, do it") is chatter by its words: its cue is the proposal it accepts.
+        const proposal = situation?.mode === "continuation" ? situation.proposal : undefined;
         let silent = false;
+        if (proposal === undefined)
+          try {
+            silent = (!!text && isNoopCue(text)) || hookLane(text) === "none";
+          } catch {}
+        packet = !silent && text ? this.notesFor(text, memoryRetrieveCap(), visible, situation) : [];
         try {
-          if (cue && isNoopCue(cue)) silent = true;
-          else if (hookLane(cue) === "none") silent = true;
-        } catch {}
-        packet = !silent && cue ? this.notesFor(cue, memoryRetrieveCap(), visible) : [];
-        try {
-          if (packet.length && cue && routeMemory(cue) === "sf-assemble")
+          if (packet.length && text && routeMemory(text) === "sf-assemble")
             packet = visible === EVERY_ROW ? assembleNotes(packet, this.dir) : assembleWithin(packet);
         } catch {}
         // A trigger hit is STRONG evidence (A7 §4), so it leads, whatever the lexical path makes of the cue.
-        const own = typedText(list, encode);
-        const strong = [...this.triggered(own, visible), ...this.keyed(own, visible)];
+        const own = typed ?? typedText(list, encode);
+        const said = proposal === undefined ? own : `${own}\n${proposal}`;
+        const strong = [...this.triggered(said, visible), ...this.keyed(said, visible)];
         packet = [...strong, ...packet.filter((note) => !strong.some((first) => first.id === note.id))];
         if (packet.length)
           try {
             logMemoryNotes(packet);
           } catch {}
       }
-      this.observeCue(list, cue, encode ?? list);
+      this.observeCue(list, text, encode ?? list);
       return packet;
     } catch {
       memoryInjectSwallows.n++;
