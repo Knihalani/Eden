@@ -59,7 +59,9 @@ import type { ActionClass } from "./memory-classes";
 import { firedClasses, triggeredRows } from "./memory-triggers";
 import {
   CONTEXT_PARTS,
+  cueTokens,
   PART_MASS,
+  pluralForms,
   singular,
   queryHay,
   RARE_DF,
@@ -67,7 +69,7 @@ import {
   type CuePart,
   type SituationCue,
 } from "./memory-cue";
-import { identifierForms } from "./memory-gate";
+import { identifierTokens, sharesIdentifier } from "./memory-gate";
 import { writeRuleIndex } from "./memory-rule-index";
 import { readUserRules, withUserGlobal } from "./memory-user-global";
 import { childSessionName, memorySessionName } from "./memory-session";
@@ -142,11 +144,12 @@ function rankKindBoost(r: MemoryRecord): number {
 }
 
 /**
- * The kind prior `relevant` ranks with. With a situation cue it is D17's: it never exceeds one rare-token match (a
- * hundredth of the old prior, so it orders rows of equal evidence as before), so the cue parts' weighted sum ranks.
+ * The kind prior `relevant` ranks with. With a situation cue it is D17's, never more than one match: a thousandth of
+ * the old prior (at most 0.05), under the least a matched word adds (debug's `q_turn`, 0.10 / 0.55), so it orders
+ * rows of equal evidence only and the cue parts' weighted sum ranks.
  */
 function kindPrior(r: MemoryRecord, cue: SituationCue | undefined): number {
-  return cue ? rankKindBoost(r) / 100 : rankKindBoost(r);
+  return cue ? rankKindBoost(r) / 1000 : rankKindBoost(r);
 }
 
 /** Notes as retrieval hands them on: each body capped and labelled with its kind and source. */
@@ -514,6 +517,11 @@ export interface RecallCue {
   typed?: string;
 }
 
+/** The rows of each token `relevant` reads: the store's postings, or their stemmed view (`stemmedPostings`). */
+interface Postings {
+  get(token: string): readonly Compiled[] | undefined;
+}
+
 /** A cue part as `relevant` reads it: its tokens, its weight against a default-mode prompt, and its mass limit. */
 interface HayPart {
   part: CuePart;
@@ -539,13 +547,13 @@ function stemmed(tokens: Iterable<string>): Set<string> {
  * The prompt's dotted and camelCase names stay whole until P4.3's τ: a prompt word admits a row alone, and "Node.js"
  * split to "node" admitted a mined node-version fact on R1's hard negative "who created the Node.js runtime?".
  */
-function hayParts(text: string, cue: SituationCue | undefined, post: Map<string, Compiled[]>): HayPart[] {
+function hayParts(text: string, cue: SituationCue | undefined, post: Postings): HayPart[] {
   if (!cue) {
     const words = [...queryHay(text)].filter((t) => t.length >= 3 && !STOP.has(t));
     return [{ part: "prompt", hay: new Set(words), weight: 1, mass: Infinity }];
   }
   const weight = (part: CuePart) => cue.weights[part] / REFERENCE_WEIGHT;
-  const strong = stemmed(cue.strong);
+  const strong = stemmed([...cue.strong].flatMap((token) => [...cueTokens(token)]));
   const rare = (token: string) => strong.has(token) || (post.get(token)?.length ?? 0) <= RARE_DF;
   const context = CONTEXT_PARTS.map((part): HayPart => ({
     part,
@@ -558,7 +566,7 @@ function hayParts(text: string, cue: SituationCue | undefined, post: Map<string,
 }
 
 /** A row's score against the parts (A7 §3): each part's matched needles, rarest first up to its mass, weighted. */
-function situatedScore(needles: readonly string[], parts: readonly HayPart[], post: Map<string, Compiled[]>) {
+function situatedScore(needles: readonly string[], parts: readonly HayPart[], post: Postings) {
   const df = (token: string) => Math.max(1, post.get(token)?.length ?? 1);
   const matched: Partial<Record<CuePart, number>> = {};
   let n = 0,
@@ -587,8 +595,7 @@ function lexicallyAdmitted(
   cue: SituationCue | undefined,
 ): boolean {
   if (cue?.mode !== "continuation") return (matched.prompt ?? 0) > 0;
-  for (const form of identifierForms(rec.text)) if (cue.strong.has(form)) return true;
-  return false;
+  return sharesIdentifier(identifierTokens(rec.text), cue.strong);
 }
 
 const TOOL_ROLES = new Set(["tool", "function"]),
@@ -1167,7 +1174,6 @@ export class AgentMemory {
   /** Every row's text exactly: a text a row already holds has passed the gate, which `observe` need not run again. */
   private stored = new Set<string>();
   private post: Map<string, Compiled[]> | null = null;
-  private stems?: { of: Map<string, Compiled[]>; map: Map<string, Compiled[]> };
   /** The live rule rows (D9 keys), which triggers deliver; built with `post`. */
   private ruleRows: MemoryRecord[] = [];
   private knownIds = new Set<string>();
@@ -1707,22 +1713,21 @@ export class AgentMemory {
   }
 
   /**
-   * The postings by stemmed needle (`stemmed`, R1's tokenizer), which the situation cue is scored in: built from
-   * `post` when a situated Submit first needs them, and again whenever `post` was rebuilt.
+   * The postings by stemmed needle (`stemmed`, R1's tokenizer), which the situation cue is scored in. A stem's rows are
+   * read from `post` at the words it stems from (`pluralForms`), as a cue asks for them: a Submit is a fresh process,
+   * and one pass over every posting costs it milliseconds.
    */
-  private stemmedPostings(): Map<string, Compiled[]> {
-    if (this.stems?.of === this.post) return this.stems.map;
-    const merged = new Map<string, Set<Compiled>>();
-    for (const [needle, rows] of this.post!) {
-      for (const stem of stemmed([needle])) {
-        const into = merged.get(stem);
-        if (into) for (const row of rows) into.add(row);
-        else merged.set(stem, new Set(rows));
-      }
-    }
-    const map = new Map([...merged].map(([stem, rows]) => [stem, [...rows]]));
-    this.stems = { of: this.post!, map };
-    return map;
+  private stemmedPostings(): Postings {
+    const post = this.post!;
+    const read = new Map<string, Compiled[]>();
+    const get = (stem: string): Compiled[] => {
+      const known = read.get(stem);
+      if (known) return known;
+      const rows = [...new Set(pluralForms(stem).flatMap((form) => post.get(form) ?? []))];
+      read.set(stem, rows);
+      return rows;
+    };
+    return { get: (stem) => get(stem) };
   }
 
   /**
@@ -2081,7 +2086,7 @@ export class AgentMemory {
    * token (df ≥ 80) is read only while the pool is empty.
    */
   private fillPool(
-    post: Map<string, Compiled[]>,
+    post: Postings,
     hay: ReadonlySet<string>,
     budget: number,
     visible: RowFilter,

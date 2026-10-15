@@ -47,15 +47,16 @@ export function identifierTokens(text: string): Set<string> {
   return found;
 }
 
-/** A text's identifier-shaped tokens, and each path's basename: `apps/web/middleware.ts` matches `middleware.ts`. */
-export function identifierForms(text: string): Set<string> {
-  const forms = new Set<string>();
-  for (const token of identifierTokens(text)) {
-    forms.add(token);
-    const name = token.split("/").filter(Boolean).at(-1);
-    if (name && name.length >= 3) forms.add(name);
-  }
-  return forms;
+/**
+ * Whether two sets of identifier-shaped tokens share one (A7 §4's STRONG match): the same token, or a bare filename
+ * and a path ending in it (`middleware.ts`, `apps/web/middleware.ts`). Two paths match only whole: `server.ts` of one
+ * package is not another's.
+ */
+export function sharesIdentifier(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  const ends = (path: string, name: string) => !name.includes("/") && path.endsWith(`/${name}`);
+  for (const x of a) if (b.has(x)) return true;
+  for (const x of a) for (const y of b) if (ends(x, y) || ends(y, x)) return true;
+  return false;
 }
 
 /** A7 §4's MEDIUM words: content words of three letters or more (a function word is WEAK, never evidence). */
@@ -83,8 +84,9 @@ export interface CueParts {
 /** Whether A7 §4 admits an episode on this cue (see the header). */
 export function admitsEpisode(note: ProvenanceNote, cue: CueParts): boolean {
   const body = stripPacketLabel(String(note.text ?? "")).body;
-  const ids = new Set([...identifierForms(cue.prompt), ...(cue.strong ?? [])]);
-  if (ids.size && shares(identifierForms(body), ids)) return true;
+  const own = identifierTokens(body);
+  if (sharesIdentifier(own, identifierTokens(cue.prompt)) || (cue.strong && sharesIdentifier(own, cue.strong)))
+    return true;
   const words = contentWords(body);
   const parts = [cue.prompt, cue.turn, cue.path, cue.prev].filter((part) => part && shares(words, contentWords(part)));
   return parts.length >= 2;
