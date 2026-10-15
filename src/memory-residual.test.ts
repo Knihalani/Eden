@@ -32,6 +32,30 @@ function transcript(lines: object[]): string {
   return path;
 }
 
+const packet = (text: string) => ({
+  type: "attachment",
+  attachment: { type: "hook_additional_context", content: [text], hookName: "UserPromptSubmit", hookEvent: "x" },
+});
+
+describe("A7 §3: the packets Eden gave the turn before the current prompt", () => {
+  test("Eden's packets since the previous typed prompt, newest first; never another hook's context or an older one", () => {
+    const path = transcript([
+      typed("first ask"),
+      packet("Eden memory, recalled from earlier sessions:\n- The db is postgres"),
+      said("Done."),
+      typed("second ask"),
+      packet("Eden memory, recalled from earlier sessions:\n- Auth is Clerk"),
+      packet("Some other hook's context"),
+      said("Next I'll touch middleware.ts. Shall I?"),
+      packet("Eden memory, recalled from earlier sessions:\n- middleware.ts sets publicRoutes"),
+    ]);
+    expect(recentConversation(path, "yes").delivered).toEqual([
+      "Eden memory, recalled from earlier sessions:\n- middleware.ts sets publicRoutes",
+      "Eden memory, recalled from earlier sessions:\n- Auth is Clerk",
+    ]);
+  });
+});
+
 describe("D26: the residual", () => {
   test("the current prompt, the last 2 typed prompts and the assistant text between them, newest first", () => {
     const path = transcript([
@@ -71,6 +95,7 @@ describe("D26: the residual", () => {
       toolResults: [],
       residual: ["hi"],
       previousTyped: "",
+      delivered: [],
     });
   });
 

@@ -57,6 +57,7 @@ import { appendPending, claimSeqs, compareRecency, takePending, ulid, type DiskR
 import { markStoreFormat, readableStore, storeFor } from "./memory-repo";
 import type { ActionClass } from "./memory-classes";
 import { firedClasses, triggeredRows } from "./memory-triggers";
+import type { SituationCue } from "./memory-cue";
 import { writeRuleIndex } from "./memory-rule-index";
 import { readUserRules, withUserGlobal } from "./memory-user-global";
 import { childSessionName, memorySessionName } from "./memory-session";
@@ -480,6 +481,12 @@ function fewNeedles(rec: MemoryRecord): boolean {
   const seen = new Set<string>();
   for (const word of needleWords(rec)) if (seen.add(word).size > SCORABLE_NEEDLES) return false;
   return true;
+}
+
+/** Red-first stub (P4.1): what a turn adds to its messages' cue; not read yet. */
+export interface RecallCue {
+  situation?: SituationCue;
+  typed?: string;
 }
 
 export function queryHay(text: string): Set<string> {
@@ -1951,7 +1958,7 @@ export class AgentMemory {
     this.post = null;
   }
 
-  relevant(text: string, cap = memoryRetrieveCap(), visible: RowFilter = EVERY_ROW): MemoryRecord[] {
+  relevant(text: string, cap = memoryRetrieveCap(), visible = EVERY_ROW, _cue?: SituationCue): MemoryRecord[] {
     const hay = queryHay(text);
     try {
       this.ensureIndex();
@@ -2044,7 +2051,12 @@ export class AgentMemory {
    * open: a throw is counted in `memoryInjectSwallows` and recalls nothing. `encode` replaces what is encoded when
    * the caller knows more of its sources than the cue shows (the hook splits a prompt's pasted spans off, D12).
    */
-  recall(messages: unknown[], encode?: unknown[], visible: RowFilter = EVERY_ROW): MemoryRecord[] {
+  recall(
+    messages: unknown[],
+    encode?: unknown[],
+    visible: RowFilter = EVERY_ROW,
+    _cue: RecallCue = {},
+  ): MemoryRecord[] {
     const list = Array.isArray(messages) ? messages : [];
     try {
       if (this.consent() === "off") return [];

@@ -12,7 +12,7 @@
  */
 import { createHash } from "node:crypto";
 
-export type TurnMode = "nonhuman" | "ack" | "continuation" | "imperative";
+export type TurnMode = "nonhuman" | "ack" | "continuation" | "debug" | "how-to" | "question" | "imperative";
 
 /**
  * The openers of non-human submits (D24). A peer message's transcript line opens with a one-line preamble before
@@ -65,6 +65,16 @@ export function nonHumanKind(prompt: string, cronHashes: readonly string[] = [])
 
 export function isProposal(assistant: string): boolean {
   return assistant.trimEnd().endsWith("?") || PROPOSAL.test(assistant);
+}
+
+/** Red-first stub (P4.1). */
+export function proposalSentences(_assistant: string): string[] {
+  return [];
+}
+
+/** Red-first stub (P4.1): only the default mode is answered. */
+export function isAnswered(mode: TurnMode): boolean {
+  return mode === "imperative";
 }
 
 /** The prompt read as A7 §2's chatter phrases, or undefined when any word is not one. */

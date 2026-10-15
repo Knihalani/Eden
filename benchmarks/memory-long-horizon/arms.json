@@ -551,6 +551,29 @@
       }
     },
     {
+      "id": "cuebench-ctx",
+      "group": "cues",
+      "slices": [
+        "P4.1"
+      ],
+      "a5": "CueBench ctx recall@4 >= 0.40 on the R1 test split (ROADMAP P4.1; R1 M7); the test negatives asked in a ctx cue's situation get no more packets than bare",
+      "on": {
+        "state": "red",
+        "failed": [
+          "ctx-recall"
+        ],
+        "why": "the cue is the prompt alone (with the basenames of the paths it names): R1 test ctx recall@4 in context 7/22 (in the cue's packet 5/22) on 11b6bc5fb's plugin, gate >= 9/22; the negatives asked in a ctx cue's situation get as many packets as bare (2/4, 2/4)"
+      },
+      "off": {
+        "state": "green",
+        "why": "passes: with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded), as every flagged arm has since P0.8 (X7)"
+      },
+      "shadow": {
+        "state": "green",
+        "why": "passes: with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/, as every flagged arm has since P0.8 (X7)"
+      }
+    },
+    {
       "id": "policy-trigger",
       "group": "cues",
       "slices": [

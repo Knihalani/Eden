@@ -61,7 +61,14 @@ function shares(a: Set<string>, b: Set<string>): boolean {
 export interface CueParts {
   prompt: string;
   turn?: string;
+  path?: string;
   prev?: string;
+  strong?: ReadonlySet<string>;
+}
+
+/** Red-first stub (P4.1): no basename forms yet. */
+export function identifierForms(text: string): Set<string> {
+  return identifierTokens(text);
 }
 
 /** Whether A7 §4 admits an episode on this cue (see the header). */

@@ -325,6 +325,7 @@ function scaleTable(): Reference {
 export function referenceFor(id: string): Reference {
   if (TABLES[id]) return TABLES[id]!;
   if (["cuebench-code", "policy-trigger", "alias-batch"].includes(id)) return benchTable(ciCues());
+  if (id === "cuebench-ctx") return benchTable(r1Cues().filter((cue) => cue.split === "test" && cue.cat === "ctx"));
   if (id === "scale-20k" || id === "scale-1e6") return scaleTable();
   return { answers: [] };
 }
