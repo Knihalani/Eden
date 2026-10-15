@@ -388,3 +388,27 @@ export function keepShownProposals(root: string, typed: string, now: number, at:
 export function keptNote(proposal: Proposal): ProvenanceNote {
   return { id: `kept:${proposal.r}`, text: `Kept for all projects: ${proposal.text}`, kind: "fact" };
 }
+
+/** What D11 makes of a human turn's typed words (`answerUserGlobal`). */
+export interface UserGlobalAnswer {
+  /** The rules kept for all projects that the words ended there. */
+  dropped: string[];
+  /** The rules the words kept for all projects: by D11's phrase, or a confirmed proposal. */
+  kept: string[];
+  /** The confirmed proposals the turn acknowledges: kept in the session after the one that showed them. */
+  acknowledged: ProvenanceNote[];
+}
+
+/**
+ * D11 at a human turn, the hook's Submit or the wrap's (see the header): the rules kept for all projects that the
+ * words overturn with D11's phrase end, the policies they state with it are kept for all projects, and "yes,
+ * everywhere" keeps the proposals it answers where they were shown (`at`: the repo and the session's `ep`). `typed`
+ * is the user's own words as the store keeps them (`storableText`).
+ */
+export function answerUserGlobal(root: string, typed: string, now: number, at?: AnswerPlace): UserGlobalAnswer {
+  const dropped = overturnUserRules(root, typed, now);
+  const confirmed = at ? keepShownProposals(root, typed, now, at) : [];
+  const kept = [...keepForAllProjects(root, rulesForAllProjects(typed), now), ...confirmed.map(({ r }) => r)];
+  const acknowledged = confirmed.filter(({ shown }) => shown?.ep !== at?.ep).map(keptNote);
+  return { dropped, kept, acknowledged };
+}

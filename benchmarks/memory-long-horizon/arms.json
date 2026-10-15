@@ -476,7 +476,7 @@
       "a5": "\"continue\" after a report -> no packet; after a proposal -> a packet only on STRONG q_prev evidence",
       "on": {
         "state": "green",
-        "why": "passes: 'continue' after a report is an ack and after a proposal a continuation (A7 §2); P0.2 gives neither a packet, since STRONG evidence from the previous assistant message needs the situation cue (P4.1)"
+        "why": "passes: 'continue' after a report is an ack (A7 §2), which gets no packet; after a proposal it is a continuation, which since P4.1 is answered on STRONG evidence from the proposal only, so it gets nothing outside the proposal's item"
       },
       "off": {
         "state": "green",
@@ -558,11 +558,8 @@
       ],
       "a5": "CueBench ctx recall@4 >= 0.40 on the R1 test split (ROADMAP P4.1; R1 M7); the test negatives asked in a ctx cue's situation get no more packets than bare",
       "on": {
-        "state": "red",
-        "failed": [
-          "ctx-recall"
-        ],
-        "why": "the cue is the prompt alone (with the basenames of the paths it names): R1 test ctx recall@4 in context 7/22 (in the cue's packet 5/22) on 11b6bc5fb's plugin, gate >= 9/22; the negatives asked in a ctx cue's situation get as many packets as bare (2/4, 2/4)"
+        "state": "green",
+        "why": "passes since P4.1: the situation cue (A7 §3: the previous typed prompt and the paths just read rank the rows the prompt admits, mode weights, R2's mass limit; R1's plural stemming and D17's kind prior on that path) gives 9/22 in context (7/22 in the cue's packet; base 7/22, 5/22); the negatives asked in a ctx cue's situation get no more packets than bare (2/4, 2/4)"
       },
       "off": {
         "state": "green",
@@ -848,11 +845,8 @@
       ],
       "a5": "\"yes do it\" after a proposal naming vitest.config -> the vitest-config memory packs",
       "on": {
-        "state": "red",
-        "failed": [
-          "packs"
-        ],
-        "why": "'yes do it' gets no packet: the cue is the prompt alone"
+        "state": "green",
+        "why": "passes since P4.1: 'yes do it' after a proposal is a continuation (A7 §2), answered on STRONG evidence from the proposal it accepts: vitest.config.ts, an identifier the agent's last message shares with the row (A7 §4); the turn before shares no word with the row (fixture commit), so only the proposal cues it"
       },
       "off": {
         "state": "green",

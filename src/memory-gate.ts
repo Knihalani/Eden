@@ -1,14 +1,14 @@
 /**
- * A7 §4's admission of an episode, as far as P0.2 can tell one: a row whose source shows the user did not type it
- * (`src:tool`, `src:agent`) is an episode (A4 §3.0, "everything else, including assistant, tool and paste text"),
- * delivered "lexically, only with MEDIUM+ evidence" (A4 §3.1). A7 §4 admits it on one STRONG match, or on MEDIUM
- * evidence from at least two different cue parts:
- * - **STRONG**: an identifier-shaped token it shares with the prompt: a path, a filename with an extension (or a
- *   dotted name, `vitest.config`), an `ERR_*` or `E123` code, a CLI flag, a version string, an id mixing letters and
- *   digits, a symbol with an inner capital or underscore.
- * - **MEDIUM**: a content word it shares with a cue part. The parts available before P4.1's situation cue are the
- *   prompt, the previous typed prompt (`q_turn`) and the agent's last message (`q_prev`); a function word is WEAK and
- *   never counts.
+ * A7 §4's admission of an episode, as far as the lexical path can tell one: a row whose source shows the user did not
+ * type it (`src:tool`, `src:agent`) is an episode (A4 §3.0, "everything else, including assistant, tool and paste
+ * text"), delivered "lexically, only with MEDIUM+ evidence" (A4 §3.1). A7 §4 admits it on one STRONG match, or on
+ * MEDIUM evidence from at least two different cue parts:
+ * - **STRONG**: an identifier-shaped token it shares with the prompt, or, on a continuation, with the agent's last
+ *   message (A7 §2): a path, a filename with an extension (or a dotted name, `vitest.config`), an `ERR_*` or `E123`
+ *   code, a CLI flag, a version string, an id mixing letters and digits, a symbol with an inner capital or underscore.
+ * - **MEDIUM**: a content word it shares with a cue part: the prompt, the previous typed prompt (`q_turn`), the paths
+ *   just touched (`q_path`) and the agent's last message without Eden's own words (`q_prev`, P4.1's situation cue,
+ *   `memory-cue.ts`). A function word is WEAK and never counts.
  *
  * BM25F and τ_repo, which A7 also asks of an episode, arrive with P4.2 and P4.3. Rows the user typed, rows mined
  * from the repo's files (D8), rows of unknown source and gists keep today's lexical admission.
@@ -47,6 +47,17 @@ export function identifierTokens(text: string): Set<string> {
   return found;
 }
 
+/** A text's identifier-shaped tokens, and each path's basename: `apps/web/middleware.ts` matches `middleware.ts`. */
+export function identifierForms(text: string): Set<string> {
+  const forms = new Set<string>();
+  for (const token of identifierTokens(text)) {
+    forms.add(token);
+    const name = token.split("/").filter(Boolean).at(-1);
+    if (name && name.length >= 3) forms.add(name);
+  }
+  return forms;
+}
+
 /** A7 §4's MEDIUM words: content words of three letters or more (a function word is WEAK, never evidence). */
 function contentWords(text: string): Set<string> {
   return new Set(words(text).filter((word) => word.length >= 3));
@@ -57,7 +68,10 @@ function shares(a: Set<string>, b: Set<string>): boolean {
   return false;
 }
 
-/** The cue parts P0.2 has: the prompt, the previous typed prompt and the agent's last message. */
+/**
+ * The cue parts the gate reads: the prompt, the previous typed prompt, the paths just touched and the agent's last
+ * message, as text; and, on a continuation, the identifier forms of the agent's last message that are STRONG.
+ */
 export interface CueParts {
   prompt: string;
   turn?: string;
@@ -66,18 +80,13 @@ export interface CueParts {
   strong?: ReadonlySet<string>;
 }
 
-/** Red-first stub (P4.1): no basename forms yet. */
-export function identifierForms(text: string): Set<string> {
-  return identifierTokens(text);
-}
-
 /** Whether A7 §4 admits an episode on this cue (see the header). */
 export function admitsEpisode(note: ProvenanceNote, cue: CueParts): boolean {
   const body = stripPacketLabel(String(note.text ?? "")).body;
-  const ids = identifierTokens(cue.prompt);
-  if (ids.size && shares(identifierTokens(body), ids)) return true;
+  const ids = new Set([...identifierForms(cue.prompt), ...(cue.strong ?? [])]);
+  if (ids.size && shares(identifierForms(body), ids)) return true;
   const words = contentWords(body);
-  const parts = [cue.prompt, cue.turn ?? "", cue.prev ?? ""].filter((part) => shares(words, contentWords(part)));
+  const parts = [cue.prompt, cue.turn, cue.path, cue.prev].filter((part) => part && shares(words, contentWords(part)));
   return parts.length >= 2;
 }
 
