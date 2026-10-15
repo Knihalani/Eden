@@ -279,7 +279,8 @@ const continuation: Arm = {
     const session = await Driver.start(world, spec);
     await session.say("In vitest.config.ts we set the test environment to jsdom.", [set(VITEST_ENV, "", "jsdom")]);
     await session.compact(BLANK_SUMMARY);
-    await session.turn("the web tests fail in CI", {
+    // The turn before shares no word with the row, so only the proposal can cue it at "yes do it".
+    await session.turn("CI is red again", {
       reply: "Next I'll update vitest.config.ts so the web tests run in the right environment. Shall I go ahead?",
     });
     const cue = await session.ask("yes do it", { mode: "continuation", needs: [id(VITEST_ENV, "")] });
