@@ -4,6 +4,7 @@
 # up a slow test file, from the last three runs or so:
 #   gh run view <run> --log > /tmp/run-<run>.log  (for each run)
 #   bun scripts/test-shard.ts --times /tmp/run-*.log > scripts/test-times.txt
+# P4.1 (Actions off): the facts files' times are local runs with cuebench-ctx scaled by each file's local/CI ratio without it.
 96.5 benchmarks/memory-long-horizon/arms/floor-store.gate.test.ts
 59.1 benchmarks/campaign/edge.test.ts
 52.3 benchmarks/memory-long-horizon/arms/delivery-soak.gate.test.ts
@@ -11,7 +12,7 @@
 29.8 benchmarks/memory-long-horizon/arms/delivery.gate.test.ts
 25.4 benchmarks/memory-long-horizon/arms/place.gate.test.ts
 23.8 benchmarks/memory-long-horizon/arms/bench.reference.test.ts
-21.1 benchmarks/memory-long-horizon/arms/facts.gate.test.ts
+41.5 benchmarks/memory-long-horizon/arms/facts.gate.test.ts
 20.2 benchmarks/memory-long-horizon/arms/floor-store.reference.test.ts
 18.9 benchmarks/campaign/witness-8.test.ts
 17.8 benchmarks/memory-long-horizon/arms/policy.gate.test.ts
@@ -32,7 +33,7 @@
 6.4 packages/know/src/store-journal.test.ts
 6.1 benchmarks/memory-long-horizon/arms/place.reference.test.ts
 5.8 benchmarks/campaign/horizon-extra.test.ts
-5.6 benchmarks/memory-long-horizon/arms/facts.reference.test.ts
+11.5 benchmarks/memory-long-horizon/arms/facts.reference.test.ts
 5.2 benchmarks/memory-long-horizon/harness/session.test.ts
 4.6 packages/cli/src/resilience.test.ts
 4.6 benchmarks/campaign/failsafe-fuzz.test.ts

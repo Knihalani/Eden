@@ -25,6 +25,7 @@ import { noteKindToken, stripPacketLabel, type ProvenanceNote } from "./memory-p
 import { commonWord, slotAliases, slotsIn, slotsOfName, valueNames, type SlotStatement } from "./memory-slots";
 import { contentWords, STATUS_WORDS, tailLines, textOf, typedPrompt, type TranscriptLine } from "./memory-transcript";
 import { objectAsserted } from "./semantic-store";
+import { MEMORY_PACKET_MARKS } from "./memory-sota";
 
 const TAIL_BYTES = 256 * 1024;
 const TYPED_PROMPTS = 2;
@@ -39,7 +40,10 @@ export interface RecentConversation {
   /** A7 §3's `q_turn`: the typed prompt before the current one, or "" (the current one's line may be written already,
    * R0 F8). */
   previousTyped: string;
-  /** Red-first stub (P4.1): Eden's packets of the turn before; none read yet. */
+  /**
+   * The packets Eden gave the turn before the current prompt (transcript `hook_additional_context` attachments since
+   * the previous typed prompt), newest first: what A7 §3 strips from `q_prev`.
+   */
   delivered: string[];
   /** The tail's last 10 tool results, oldest first. */
   toolResults: string[];
@@ -50,6 +54,18 @@ export interface RecentConversation {
    * logged beside the transcript's bytes so A4 §4's distances can be refit (A5 `re-eligibility`).
    */
   contextTokens?: number;
+}
+
+/**
+ * The text of an Eden packet a hook returned, if the line is one: Claude Code saves a hook's context as a
+ * `hook_additional_context` attachment (R0 F5).
+ */
+function edenPacket(line: TranscriptLine): string | undefined {
+  const attachment = line.type === "attachment" ? (line.attachment as Record<string, unknown> | undefined) : undefined;
+  if (attachment?.type !== "hook_additional_context") return undefined;
+  const content = attachment.content;
+  const text = (Array.isArray(content) ? content : [content]).filter((part) => typeof part === "string").join("\n");
+  return MEMORY_PACKET_MARKS.some((mark) => text.trimStart().startsWith(mark)) ? text : undefined;
 }
 
 /** A line's `message.usage` as one context size, when it has one. */
@@ -103,11 +119,14 @@ export function recentConversation(
   let typed = 0;
   let sawCurrent = false;
   const lines = transcriptPath ? tailLines(transcriptPath, TAIL_BYTES) : [];
+  const delivered: string[] = [];
   const { toolResults, lastAssistant, contextTokens } = latest(lines);
   for (let at = lines.length - 1; at >= 0 && typed < typedPrompts; at--) {
     const line = lines[at]!;
     if (line.isSidechain === true) continue;
     if (line.isCompactSummary === true || line.subtype === "compact_boundary") break;
+    const packet = previousTyped ? undefined : edenPacket(line);
+    if (packet) delivered.push(packet);
     if (line.type === "assistant") {
       const text = textOf((line.message as { content?: unknown } | undefined)?.content)?.trim();
       if (text) residual.push(text);
@@ -126,7 +145,7 @@ export function recentConversation(
   return {
     residual,
     previousTyped,
-    delivered: [],
+    delivered,
     toolResults,
     ...(lastAssistant ? { lastAssistant } : {}),
     ...(contextTokens !== undefined ? { contextTokens } : {}),

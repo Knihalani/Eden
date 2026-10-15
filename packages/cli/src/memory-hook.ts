@@ -55,6 +55,7 @@ import {
   typedValueRow,
   underTop,
   visibleFrom,
+  windowPaths,
   windowPlace,
   cascaded,
   type EncodePlace,
@@ -90,24 +91,21 @@ import { pinnedRules, pinnedText, policyRecurrences } from "../../../src/memory-
 import { ruleIdentity, withoutRules } from "../../../src/memory-policy";
 import type { IndexedRow } from "../../../src/memory-rule-index";
 import {
+  answerUserGlobal,
   dropUserRules,
-  keepForAllProjects,
-  keepShownProposals,
-  keptNote,
   markProposalShown,
   noteNextSession,
-  overturnUserRules,
   proposalNote,
   proposalToShow,
   readUserRules,
-  rulesForAllProjects,
   withUserGlobal,
   type AnswerPlace,
   type Proposal,
 } from "../../../src/memory-user-global";
 import { intentsReleasedBy } from "../../../src/memory-guard";
 import { askedRules, labelFromTranscript, labelGuardCalls, type Labelled } from "../../../src/memory-guard-log";
-import { nonHumanKind, promptHash, turnMode } from "../../../src/memory-turn";
+import { isAnswered, nonHumanKind, promptHash, turnMode, type TurnMode } from "../../../src/memory-turn";
+import { gateParts, pathCue, situationCue, type SituationCue } from "../../../src/memory-cue";
 import {
   readInvalidations,
   recordInvalidations,
@@ -911,15 +909,10 @@ function answerPlace(ctx: HookContext): AnswerPlace | undefined {
  */
 function userGlobalRules(ctx: HookContext, said: string): ProvenanceNote[] {
   if (!said) return [];
-  const typed = ctx.mem.storableText(said);
-  const now = memoryNow();
-  const place = answerPlace(ctx);
-  const dropped = overturnUserRules(ctx.root, typed, now);
-  const confirmed = place ? keepShownProposals(ctx.root, typed, now, place) : [];
-  const kept = [...keepForAllProjects(ctx.root, rulesForAllProjects(typed), now), ...confirmed.map(({ r }) => r)];
-  if (dropped.length) ctx.trace.dropped = [...(ctx.trace.dropped ?? []), ...dropped];
-  if (kept.length) ctx.trace.kept = kept;
-  return confirmed.filter(({ shown }) => shown?.ep !== place?.ep).map(keptNote);
+  const answer = answerUserGlobal(ctx.root, ctx.mem.storableText(said), memoryNow(), answerPlace(ctx));
+  if (answer.dropped.length) ctx.trace.dropped = [...(ctx.trace.dropped ?? []), ...answer.dropped];
+  if (answer.kept.length) ctx.trace.kept = answer.kept;
+  return answer.acknowledged;
 }
 
 /**
@@ -1224,6 +1217,20 @@ function previousAssistant(win: string | undefined, recent: RecentConversation):
   return saved && (!tail || tail.t <= saved.t) ? saved.text : (tail?.text ?? "");
 }
 
+/**
+ * A7 §3's situation cue of a human turn: the previous typed prompt, the paths the window's recent tool calls touched
+ * (`ctx.log`, newest first), and the agent's last message without the packets Eden gave the turn it answers.
+ */
+function situationOf(ctx: HookContext, recent: RecentConversation, prev: string, mode: TurnMode): SituationCue {
+  let path = "";
+  if (ctx.win)
+    try {
+      const paths = windowPaths(ctx.win);
+      path = pathCue([...paths.turns, ...paths.bash], ctx.top);
+    } catch {}
+  return situationCue({ turn: recent.previousTyped, path, prev, delivered: recent.delivered }, mode);
+}
+
 /** UserPromptSubmit (A4 §5.1), and PreCompact, which a host maps here (`hook.ts`): answered as a Submit would be. */
 function submit(ctx: HookContext): Record<string, unknown> | null {
   const { r, event, writes, win, mem, trace, flags, mode, transcriptPath } = ctx;
@@ -1295,14 +1302,19 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
     } catch {}
   const place = ctx.workPlace();
   if (human && place) trace.read = place.readSet.length;
-  if (prompt && turn === "imperative" && answer !== "off") notes = mem.recall(cue, encode, place && visibleFrom(place));
+  // A7 §3: a human turn the mode answers is cued by its situation; PreCompact by its text alone.
+  const situation = human && isAnswered(turn) ? situationOf(ctx, recent, prev, turn) : undefined;
+  if (prompt && isAnswered(turn) && answer !== "off")
+    notes = mem.recall(cue, encode, place && visibleFrom(place), { situation });
   else if (prompt) mem.observeCue(cue, undefined, encode);
   // X7: an `off` point answers nothing, a kept proposal's acknowledgement included.
   if (answer === "off" || (!notes.length && !acknowledged.length)) return null;
   // A4 §5.1: validity (step 5); the gate on episodes the user did not type (step 6, A7 §4); novelty (step 7):
   // what the last turns already say (D26), then what this window was already given (the ledger, which also marks
   // `Updated:` items); the epoch's budget (A4 §4); shape (step 8).
-  const parts = { prompt, turn: recent.previousTyped, prev };
+  const parts = situation
+    ? gateParts(prompt, recent.previousTyped, situation)
+    : { prompt, turn: recent.previousTyped, prev };
   const shadow = shadowSentences(win, ctx.place);
   const invalid = readInvalidations(mem.dir);
   const catalog = ctx.repoScopes()?.scopes;

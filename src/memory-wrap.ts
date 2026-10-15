@@ -37,7 +37,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, rmSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { writeFileAtomic } from "../packages/cli/src/home";
-import type { MemoryRecord, ObserveOptions } from "./index";
+import type { MemoryRecord, ObserveOptions, RecallCue } from "./index";
 import { authoredTexts, splitPastes, userTyped, type TextSource } from "./memory-authority";
 import { memoryNow } from "./memory-clock";
 import { selectNotes, type DeliveryDrops } from "./memory-delivery";
@@ -59,7 +59,9 @@ import {
 } from "./memory-ledger";
 import { sentencesOf } from "./memory-residual";
 import { MEMORY_PACKET_MARKS } from "./memory-sota";
-import { nonHumanKind, promptHash, turnMode } from "./memory-turn";
+import { gateParts, pathCue, situationCue } from "./memory-cue";
+import { isAnswered, nonHumanKind, promptHash, turnMode } from "./memory-turn";
+import { answerUserGlobal, type AnswerPlace } from "./memory-user-global";
 import { readInvalidations, recordInvalidations, withoutForgets, type Invalidation } from "./memory-validity";
 import { appendRecords, appendTurn, ledgerFor, SHADOW_LEDGER, windowDir, windowRecords } from "./memory-window";
 
@@ -152,8 +154,15 @@ export interface WrapMemory {
   /** The memory root its conversations' windows live under, and the repo key that prefixes their cids. */
   readonly windowsRoot: string;
   readonly repoKey?: string;
+  /** The session's `ep`, where a D11 proposal is shown and answered. */
+  readonly episode?: string;
   readonly turns: WrapTurns;
-  recall(messages: unknown[], encode?: unknown[]): MemoryRecord[];
+  recall(
+    messages: unknown[],
+    encode?: unknown[],
+    visible?: (row: MemoryRecord) => boolean,
+    cue?: RecallCue,
+  ): MemoryRecord[];
   observeCue(messages: unknown[], cue?: string, encode?: unknown[]): void;
   observe(messages: unknown[], opts?: ObserveOptions): MemoryRecord[];
   forget(records: readonly Invalidation[]): void;
@@ -405,6 +414,19 @@ function heldBefore(reads: readonly Read[], tails: Map<number, TurnTail>, at: nu
   return { live, tokens };
 }
 
+/** Where a D11 proposal is shown and answered: the repo and the session's `ep`. */
+function answerPlace(mem: WrapMemory): AnswerPlace | undefined {
+  return mem.repoKey && mem.episode ? { repo: mem.repoKey, ep: mem.episode } : undefined;
+}
+
+/** The packets the wrap gave the turn before message `at` (its tail's Eden packet), which `q_prev` drops (A7 §3). */
+function packetsBefore(tails: Map<number, TurnTail>, at: number): string[] {
+  const before = [...tails.keys()].filter((h) => h < at);
+  if (!before.length) return [];
+  const texts = tails.get(Math.max(...before))!.texts;
+  return texts.filter((text) => MEMORY_PACKET_MARKS.some((mark) => text.startsWith(mark)));
+}
+
 /** A new turn's answer: its tail, and what its wide event logs. */
 interface Answer {
   tail: TurnTail;
@@ -415,6 +437,9 @@ interface Answer {
   tokensEpoch: number;
   /** The user's own words, which `would_preempt` compares with recent shadow deliveries. */
   said: string[];
+  /** What D11 made of them (`answerUserGlobal`): rules kept for all projects, and ended there. */
+  kept: string[];
+  dropped: string[];
 }
 
 /** A new turn's tail (A4 §5.1 as the hook runs it; see the header). */
@@ -432,22 +457,39 @@ function answerTurn(
   const { residual, previousTyped, prev } = conversationBefore(reads, at, prompt);
   // A4 §3.1: what the user just retracted or revoked is invalid from this turn on (typed text only, once).
   if (newPrompt && mem.writable()) mem.forget(recordInvalidations(mem.dir, mem.storableText(prompt)));
-  const encode = newPrompt ? promptMessages(prompt, tools) : [];
+  // D12's split, which the triggers read even when a restarted wrap does not encode the turn again.
+  const split = promptMessages(prompt, tools);
+  const encode = newPrompt ? split : [];
+  const typed = split
+    .filter((message) => message.src === "user")
+    .map((message) => message.content)
+    .join("\n");
+  // D11, as at the hook's Submit: the user's own words keep or end rules for all projects (P2.4's follow-up).
+  const global =
+    newPrompt && mem.writable() && typed
+      ? answerUserGlobal(mem.windowsRoot, mem.storableText(typed), memoryNow(), answerPlace(mem))
+      : { kept: [], dropped: [], acknowledged: [] };
   const cue = [{ role: "user", content: prompt, ...(opts.paths?.length ? { open_files: [...opts.paths] } : {}) }];
   const mood = turnMode(prompt, { previousAssistant: prev });
+  // A7 §3: the request's paths have no repo top to be read against, so `q_path` holds their basenames.
+  const situation = situationCue(
+    { turn: previousTyped, path: pathCue(opts.paths ?? []), prev, delivered: packetsBefore(tails, at) },
+    mood,
+  );
   let notes: MemoryRecord[] = [];
   // X7: an `off` point answers nothing, but the turn is still encoded.
-  if (mood === "imperative" && mode !== "off") notes = mem.recall(cue, encode);
+  if (isAnswered(mood) && mode !== "off") notes = mem.recall(cue, encode, undefined, { situation, typed });
   else mem.observeCue(cue, undefined, encode);
   const invalid = readInvalidations(mem.dir);
-  const against = { prompt, parts: { prompt, turn: previousTyped, prev }, residual, invalid };
+  const against = { prompt, parts: gateParts(prompt, previousTyped, situation), residual, invalid };
   const { live, tokens } = heldBefore(reads, tails, at, mode);
   const novelty = (fresh: MemoryRecord[]) => novelNotes(fresh, live, { repo: mem.repoKey, invalid });
   const selected: { notes: MemoryRecord[]; drops?: DeliveryDrops } = notes.length
     ? selectNotes(notes, against, novelty)
     : { notes: [] };
   const allowed = withinBudget(selected.notes, tokens);
-  const { packet, delivered } = packetOf(shapePacket(allowed), memoryNow());
+  // D11: a kept proposal's acknowledgement leads; it states nothing the store retrieves.
+  const { packet, delivered } = packetOf(shapePacket([...global.acknowledged, ...allowed]), memoryNow());
   let extra: string | undefined;
   try {
     extra = opts.extra?.();
@@ -468,6 +510,8 @@ function answerTurn(
     drops: { ...selected.drops, budget, shape: allowed.length - delivered.length },
     tokensEpoch: tokens,
     said: encode.filter((message) => message.src === "user").map((message) => message.content),
+    kept: global.kept,
+    dropped: global.dropped,
   };
 }
 
@@ -518,6 +562,8 @@ function recordAnswer(
     cids: tail.given.map((key) => key.cid),
     ids: answer.ids,
     drops: answer.drops,
+    ...(answer.kept.length ? { kept: answer.kept } : {}),
+    ...(answer.dropped.length ? { dropped: answer.dropped } : {}),
     ...(preempted.length ? { would_preempt: preempted } : {}),
     off,
     tokens_epoch: answer.tokensEpoch,
