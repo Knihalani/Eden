@@ -15,7 +15,7 @@ export const GROUPS: Record<string, readonly string[]> = {
   delivery: ["nonhuman", "repeat", "compaction", "resume", "subagent", "first-touch", "residual", "shadow", "continue"],
   "delivery-soak": ["budget", "re-eligibility"],
   policy: ["policy-guard", "guard-modes", "guard-dedup", "policy-recur", "intent-expiry"],
-  facts: ["repo-facts", "citation", "gotcha", "stale-episode", "restate-learn", "continuation"],
+  facts: ["repo-facts", "citation", "gotcha", "stale-episode", "restate-learn", "continuation", "cuebench-ctx"],
   bench: ["cuebench-code", "policy-trigger", "extraction", "alias-batch", "scale-20k", "scale-1e6"],
 };
 

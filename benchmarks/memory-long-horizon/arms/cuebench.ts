@@ -100,12 +100,19 @@ export function matchMemory(bullet: string, pool: readonly Memory[]): Memory | u
   return best?.memory;
 }
 
-/** What one cue got: whether a packet came, and the memories of its bullets in order (undefined: no match). */
+/**
+ * What one cue got: whether a packet came, and the memories of its bullets in order (undefined: no match); `earlier`
+ * the memories of the bullets its session was given before it (SessionStart, the previous turn and its Reads).
+ */
 export interface CueResult {
   cue: BenchCue;
   packet: boolean;
   matched: (string | undefined)[];
+  earlier: (string | undefined)[];
 }
+
+/** A packet's bullet lines. */
+const bulletsOf = (content: string) => content.split("\n").filter((line) => /^\s*(?:[-*•]|\d+[.)])\s+/.test(line));
 
 /** Asks one cue as a real turn in a fresh session: its previous turn and Reads, then the cue itself. */
 export async function askCue(
@@ -114,6 +121,7 @@ export async function askCue(
   cue: BenchCue,
   pool: readonly Memory[],
 ): Promise<CueResult> {
+  const first = world.deliveries.length;
   const session = await Driver.start(world, spec);
   if (cue.prev_turn || cue.last_paths.length) {
     const reads = cue.last_paths.map((path) => read(path, `// ${path}\n`));
@@ -121,11 +129,24 @@ export async function askCue(
   }
   const turn = await session.ask(cue.cue, { scope: spec.scopes.includes(cue.scope) ? cue.scope : "" });
   await session.end();
-  const delivered = world.deliveries.filter((delivery) => delivery.seq === turn.seq);
-  const bullets = delivered.flatMap((delivery) =>
-    delivery.content.split("\n").filter((line) => /^\s*(?:[-*•]|\d+[.)])\s+/.test(line)),
-  );
-  return { cue, packet: delivered.length > 0, matched: bullets.map((bullet) => matchMemory(bullet, pool)?.id) };
+  const ofSession = world.deliveries.slice(first);
+  const delivered = ofSession.filter((delivery) => delivery.seq === turn.seq);
+  const before = ofSession.filter((delivery) => delivery.seq < turn.seq);
+  const ids = (deliveries: typeof ofSession) =>
+    deliveries.flatMap((delivery) => bulletsOf(delivery.content)).map((bullet) => matchMemory(bullet, pool)?.id);
+  return { cue, packet: delivered.length > 0, matched: ids(delivered), earlier: ids(before) };
+}
+
+/**
+ * Recall@4 in context: positives whose gold memory is among the first 4 bullets, or was given earlier in the cue's
+ * session. The ledger rightly does not repeat what the previous turn delivered (A4 §4), and the agent has it.
+ */
+export function recallInContext(results: readonly CueResult[]): { k: number; n: number } {
+  const positives = results.filter((result) => !isNegative(result.cue));
+  const k = positives.filter((result) =>
+    [...result.matched.slice(0, 4), ...result.earlier].some((id) => id && result.cue.gold.includes(id)),
+  ).length;
+  return { k, n: positives.length };
 }
 
 /** Recall@4: positives whose gold memory is among the first 4 bullets. */

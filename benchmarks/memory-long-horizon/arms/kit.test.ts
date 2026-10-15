@@ -5,7 +5,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { removeTempDirs, scriptedWorld } from "../harness/testkit";
 import { keptOnlyIf, readVerdict } from "./bench";
-import { fir, matchMemory, memories, recallAt4, type BenchCue, type CueResult } from "./cuebench";
+import { fir, matchMemory, memories, recallAt4, recallInContext, type BenchCue, type CueResult } from "./cuebench";
 import { e3Items, normValue, parseGold, readExtraction, scoreE3, type ExtractRecord } from "./extraction";
 import { flagChecks, writeFlags, type ArmResult } from "./kit";
 import { readReport } from "./migrate";
@@ -164,13 +164,33 @@ describe("CueBench judging", () => {
       split: "test",
     });
     const results: CueResult[] = [
-      { cue: cue("lex", ["p01"]), packet: true, matched: ["a", "b", "c", "p01"] },
-      { cue: cue("para", ["p01"]), packet: true, matched: ["a", "b", "c", "d", "p01"] },
-      { cue: cue("neg-hard", []), packet: true, matched: [undefined] },
-      { cue: cue("neg-chat", []), packet: false, matched: [] },
+      { cue: cue("lex", ["p01"]), packet: true, matched: ["a", "b", "c", "p01"], earlier: [] },
+      { cue: cue("para", ["p01"]), packet: true, matched: ["a", "b", "c", "d", "p01"], earlier: [] },
+      { cue: cue("neg-hard", []), packet: true, matched: [undefined], earlier: [] },
+      { cue: cue("neg-chat", []), packet: false, matched: [], earlier: ["p01"] },
     ];
     expect(recallAt4(results)).toEqual({ k: 1, n: 2 });
     expect(fir(results)).toEqual({ k: 1, n: 2 });
+  });
+
+  test("recall in context also counts a gold memory given earlier in the cue's session, never a later bullet", () => {
+    const cue = (gold: string[]): BenchCue => ({
+      id: "c",
+      cat: "ctx",
+      scope: "",
+      gold,
+      cue: "it loops",
+      last_paths: [],
+      prev_turn: "",
+      split: "test",
+    });
+    const results: CueResult[] = [
+      { cue: cue(["w06"]), packet: false, matched: [], earlier: ["r04", "w06"] },
+      { cue: cue(["w06"]), packet: true, matched: ["a", "b", "c", "d", "w06"], earlier: [] },
+      { cue: cue(["w06"]), packet: true, matched: ["w06"], earlier: [] },
+    ];
+    expect(recallInContext(results)).toEqual({ k: 2, n: 3 });
+    expect(recallAt4(results)).toEqual({ k: 1, n: 3 });
   });
 
   test("an alias batch is kept only if FIR does not rise and recall drops by 0.02 at most", () => {
@@ -178,6 +198,7 @@ describe("CueBench judging", () => {
       cue: { id: "n", cat: "neg-hard", scope: "", gold: [], cue: "", last_paths: [], prev_turn: "", split: "test" },
       packet,
       matched: [],
+      earlier: [],
     });
     expect(keptOnlyIf(true, [neg(false)], [neg(true)]).ok).toBe(false);
     expect(keptOnlyIf(false, [neg(false)], [neg(true)]).ok).toBe(true);

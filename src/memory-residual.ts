@@ -39,6 +39,8 @@ export interface RecentConversation {
   /** A7 §3's `q_turn`: the typed prompt before the current one, or "" (the current one's line may be written already,
    * R0 F8). */
   previousTyped: string;
+  /** Red-first stub (P4.1): Eden's packets of the turn before; none read yet. */
+  delivered: string[];
   /** The tail's last 10 tool results, oldest first. */
   toolResults: string[];
   /** The tail's newest assistant text, and its line's time (epoch ms; 0 when the line has none). */
@@ -124,6 +126,7 @@ export function recentConversation(
   return {
     residual,
     previousTyped,
+    delivered: [],
     toolResults,
     ...(lastAssistant ? { lastAssistant } : {}),
     ...(contextTokens !== undefined ? { contextTokens } : {}),

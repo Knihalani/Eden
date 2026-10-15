@@ -35,15 +35,28 @@ afterEach(() => {
   }
 });
 
-/** A transcript whose last assistant message is `assistant`. */
-function transcript(assistant: string): string {
+/** A transcript whose last assistant message is `assistant`, after the packets Eden gave that turn (`given`). */
+function transcript(assistant: string, given: string[] = []): string {
   const path = join(dir, `t-${Math.random().toString(36).slice(2)}.jsonl`);
   const lines = [
     { type: "user", message: { role: "user", content: "look at the setup" } },
+    ...given.map((packet) => ({
+      type: "attachment",
+      attachment: { type: "hook_additional_context", content: [packet], hookName: "UserPromptSubmit" },
+    })),
     { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: assistant }] } },
   ];
   writeFileSync(path, lines.map((line) => JSON.stringify(line)).join("\n") + "\n");
   return path;
+}
+
+/** The wide events of the human Submits (`hook.log.d/`, P0.8). */
+function submitEvents(): Record<string, unknown>[] {
+  return storeText(true)
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter((event) => event.ev === "UserPromptSubmit" && event.submit === "human");
 }
 
 function submit(prompt: string, extra: Record<string, unknown> = {}): string | undefined {
@@ -117,7 +130,7 @@ describe("D24: non-human submits are silent and do not count as turns", () => {
   });
 });
 
-describe("A7 §2: ack and continuation turns are silent until the situation cue (P4.1)", () => {
+describe("A7 §2: an ack is silent; a continuation is answered on STRONG evidence only (P4.1)", () => {
   test("an ack after a report gets no packet, but counts as a human turn", () => {
     submit("Great care is needed with the payments migration.", { prompt_id: "p1" });
     const report = transcript("I checked the setup: all 42 tests pass and nothing needs changing.");
@@ -126,12 +139,41 @@ describe("A7 §2: ack and continuation turns are silent until the situation cue 
     expect(humanTurns()).toBe(3);
   });
 
-  test("'yes, do it' and a short reply after a proposal get no packet", () => {
+  test("'yes, do it' and a short reply after a proposal sharing only plain words get no packet (MEDIUM never admits)", () => {
     submit("Yes, the staging replica runs postgres 15.", { prompt_id: "p1" });
     const proposal = transcript("I can migrate the staging database next. Shall I go ahead?");
     expect(submit("yes do it", { prompt_id: "p2", transcript_path: proposal })).toBeUndefined();
     expect(submit("use the replica", { prompt_id: "p3", transcript_path: proposal })).toBeUndefined();
     expect(humanTurns()).toBe(3);
+  });
+
+  test("'yes do it' after a proposal naming a file gets the row naming that file (A5 `continuation`)", () => {
+    submit("In vitest.config.ts we set the test environment to jsdom.", { prompt_id: "p1" });
+    const proposal = transcript("Next I'll update vitest.config.ts so the web tests run. Shall I go ahead?");
+    const packet = submit("yes do it", { prompt_id: "p2", transcript_path: proposal }) ?? "";
+    expect(packet).toContain("In vitest.config.ts we set the test environment to jsdom");
+    expect(submitEvents().at(-1)!.turn_mode).toBe("continuation");
+  });
+
+  test("a reply to 'Shall I merge the PR?' gets the rule its proposal fires (D18, A7 §4)", () => {
+    submit("Never merge pull requests yourself; let me merge them.", { prompt_id: "p1" });
+    const proposal = transcript("The checks are green. Shall I merge the PR?");
+    expect(submit("yes do it", { prompt_id: "p2", transcript_path: proposal })).toContain("Never merge pull requests");
+  });
+
+  test("an identifier only Eden's own packet gave the agent is no evidence (D16)", () => {
+    submit("In vitest.config.ts we set the test environment to jsdom.", { prompt_id: "p1" });
+    const echo = "Eden memory, recalled from earlier sessions:\n- vitest.config.ts sets the environment";
+    const proposal = transcript("Since vitest.config.ts is set, shall I run the suite?", [echo]);
+    expect(submit("yes do it", { prompt_id: "p2", transcript_path: proposal })).toBeUndefined();
+  });
+
+  test("the wide event names A7 §2's mode: question, debug, how-to, imperative", () => {
+    submit("where does the session cookie get set?", { prompt_id: "p1" });
+    submit("the login test is failing", { prompt_id: "p2" });
+    submit("how do I run the worker locally", { prompt_id: "p3" });
+    submit("add a retry to the fetch wrapper", { prompt_id: "p4" });
+    expect(submitEvents().map((event) => event.turn_mode)).toEqual(["question", "debug", "how-to", "imperative"]);
   });
 
   test("an unanswered reply to a proposal is still stored, so a later prompt can recall it (A4 §5.1 step 1)", () => {

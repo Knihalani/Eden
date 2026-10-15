@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { isNonHumanSubmit, isProposal, nonHumanKind, promptHash, turnMode } from "./memory-turn";
+import {
+  isAnswered,
+  isNonHumanSubmit,
+  isProposal,
+  nonHumanKind,
+  promptHash,
+  proposalSentences,
+  turnMode,
+} from "./memory-turn";
 
 const REPORT = "I checked the test setup: all 42 tests pass and nothing needs changing.";
 const PROPOSAL = "Next I'll update vitest.config.ts so the web tests run in jsdom. Shall I go ahead?";
@@ -66,6 +74,26 @@ describe("A7 §2: proposals", () => {
     expect(isProposal("I cannot reach the staging host.")).toBe(false);
     expect(isProposal("")).toBe(false);
   });
+
+  test("P4.1: 'I can' before what the agent sees or concludes reports; before an action it offers", () => {
+    for (const report of [
+      "I can see the bug in apps/web/middleware.ts.",
+      "I can confirm the tests pass.",
+      "I can now see why the build fails.",
+      "I can tell the cache is stale.",
+      "I can reproduce it locally.",
+    ])
+      expect(isProposal(report)).toBe(false);
+    expect(isProposal("I can add a retry to the fetch wrapper.")).toBe(true);
+    expect(isProposal("I can see the bug. I can fix it in auth.ts.")).toBe(true);
+  });
+
+  test("P4.1: the proposing sentences are the offers and the questions, not the report before them", () => {
+    const message = "I merged the docs PR and ran the tests. Next I'll bump vitest. Shall I merge the release PR?";
+    expect(proposalSentences(message)).toEqual(["Next I'll bump vitest.", "Shall I merge the release PR?"]);
+    expect(proposalSentences(REPORT)).toEqual([]);
+    expect(proposalSentences("")).toEqual([]);
+  });
 });
 
 describe("A7 §2: turn modes", () => {
@@ -99,6 +127,48 @@ describe("A7 §2: turn modes", () => {
     expect(turnMode("use the jsdom one", { previousAssistant: PROPOSAL })).toBe("continuation");
     expect(turnMode("no, keep node and fix the setup file", { previousAssistant: PROPOSAL })).toBe("imperative");
     expect(turnMode("use the jsdom one", { previousAssistant: REPORT })).toBe("imperative");
-    expect(turnMode("which test environment does vitest.config use?")).toBe("imperative");
+    expect(turnMode("which test environment does vitest.config use?")).toBe("question");
+  });
+
+  test("P4.1, debug: error-shaped text or a word of failure", () => {
+    for (const prompt of [
+      "the build fails with ERR_REQUIRE_ESM",
+      "TypeError: cannot read properties of undefined",
+      "Traceback (most recent call last):\n  File app.py",
+      "fix this:\n    at login (src/auth.ts:12:5)",
+      "login is broken since the deploy",
+      "why are the web tests failing?",
+      "how do I fix this error?",
+    ])
+      expect(turnMode(prompt)).toBe("debug");
+    expect(turnMode("add error handling to the fetch wrapper")).toBe("debug");
+    expect(turnMode("explain the terror module")).toBe("imperative");
+  });
+
+  test("P4.1, how-to: a procedure is asked for", () => {
+    for (const prompt of ["how do I run the worker locally?", "how to release the CLI", "run the tests", "set up CI"])
+      expect(turnMode(prompt)).toBe("how-to");
+    // "set up" the verb, not the noun "setup".
+    expect(turnMode("add the setup file to the repo")).toBe("imperative");
+  });
+
+  test("P4.1, question: a trailing ? or a WH-word first; imperative otherwise", () => {
+    expect(turnMode("where does the session cookie get set?")).toBe("question");
+    expect(turnMode("is the cache warm")).toBe("imperative");
+    expect(turnMode("is the cache warm?")).toBe("question");
+    expect(turnMode("Why so slow")).toBe("question");
+    expect(turnMode("add a retry to the fetch wrapper")).toBe("imperative");
+  });
+
+  test("P4.1: a reply to a proposal stays a continuation whatever its words", () => {
+    expect(turnMode("yes, fix the error", { previousAssistant: PROPOSAL })).toBe("continuation");
+    expect(turnMode("how?", { previousAssistant: PROPOSAL })).toBe("continuation");
+  });
+
+  test("P4.1: every human mode but chatter is answered", () => {
+    for (const mode of ["continuation", "debug", "how-to", "question", "imperative"] as const)
+      expect(isAnswered(mode)).toBe(true);
+    expect(isAnswered("ack")).toBe(false);
+    expect(isAnswered("nonhuman")).toBe(false);
   });
 });

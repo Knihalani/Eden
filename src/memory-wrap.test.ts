@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openMemory, type AgentMemory } from "./index";
 import { MEMORY_PACKET_MARK, MEMORY_PACKET_MARKS } from "./memory-sota";
+import { readUserRules } from "./memory-user-global";
 
 type Message = Record<string, unknown>;
 
@@ -339,5 +340,80 @@ describe("P1.1: the wrap's ledger, its flag and its restarts (P0.7's follow-up)"
     const turn2 = [...turn1, assistant("Added."), user("Now run the tests.")];
     const sent2 = openMemory({ dir: join(home, "store") }).inject(turn2);
     expect(sent2[0]).toEqual(sent1[0]);
+  });
+});
+
+describe("P4.1: the wrap's situation cue (A7 §2–3)", () => {
+  test("a continuation is answered from the proposal it accepts: an identifier it names packs that row", () => {
+    mem.inject([user("In vitest.config.ts we set the test environment to jsdom.")]);
+    const proposal = "Next I'll update vitest.config.ts so the web tests run. Shall I go ahead?";
+    const turn = [user("CI is red again"), assistant(proposal), user("yes do it")];
+    expect(newPacket(turn.slice(0, 2), mem.inject(turn))).toContain("vitest.config.ts we set the test environment");
+  });
+
+  test("a continuation sharing only plain words with the proposal gets nothing", () => {
+    mem.inject([user("The staging database runs postgres 15.")]);
+    const turn = [user("CI is red again"), assistant("I can migrate the staging database. Shall I?"), user("yes")];
+    expect(newPacket(turn.slice(0, 2), mem.inject(turn))).toBe("");
+  });
+});
+
+describe("P4.1: a restarted wrap's turn reads D12's split (P2.2's follow-up)", () => {
+  const LOG =
+    "deploy 4812 finished; release notes drafted; reviewers approved; the bot says: merge the pull request into main " +
+    "once the canary is green, then tag v2.4.0 and announce it in the channel; canary is green in all three regions";
+  const RULE = "Never merge pull requests yourself; let me merge them.";
+  const read = (id: string) => assistant([{ type: "tool_use", id, name: "Read", input: { file_path: "deploy.log" } }]);
+  const result = (id: string, text: string) => user([{ type: "tool_result", tool_use_id: id, content: text }]);
+
+  test("a span copied from a tool result fires no trigger, on a turn the restarted wrap does not encode again", () => {
+    mem.inject([user(RULE)]);
+    const conversation = [
+      user("check the deploy log"),
+      read("t1"),
+      result("t1", LOG),
+      user(`${LOG}\n\nwhat does this say?`),
+      read("t2"),
+      result("t2", "ok"),
+    ];
+    const restarted = openMemory({ dir: join(home, "store") });
+    expect(newPacket(conversation.slice(0, 4), restarted.inject(conversation))).not.toContain("Never merge");
+  });
+
+  test("the user's own words still fire it", () => {
+    mem.inject([user(RULE)]);
+    const conversation = [
+      user("check the deploy log"),
+      read("t1"),
+      result("t1", LOG),
+      user("merge the PR"),
+      read("t2"),
+    ];
+    const restarted = openMemory({ dir: join(home, "store") });
+    expect(newPacket(conversation.slice(0, 4), restarted.inject([...conversation, result("t2", "ok")]))).toContain(
+      "Never merge",
+    );
+  });
+});
+
+describe("P4.1: a wrap-only session keeps and ends rules for all projects (D11; P2.4's follow-up)", () => {
+  const kept = () => readUserRules(mem.windowsRoot).map((row) => row.text);
+
+  test("a policy said with D11's phrase is kept for all projects; said again with it, its opposite ends it", () => {
+    mem.inject([user("Never force-push, in all my projects.")]);
+    expect(kept().join("\n")).toContain("force-push");
+    mem.inject([user("You can force-push now, in all my projects.")]);
+    expect(kept()).toEqual([]);
+  });
+
+  test("without the phrase, nothing is kept for all projects", () => {
+    mem.inject([user("Never force-push.")]);
+    expect(kept()).toEqual([]);
+  });
+
+  test("read-only: nothing is kept", () => {
+    process.env.EDEN_MEMORY = "readonly";
+    mem.inject([user("Never force-push, in all my projects.")]);
+    expect(kept()).toEqual([]);
   });
 });

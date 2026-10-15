@@ -54,8 +54,9 @@ hook is pointed at, and no product code imports the harness (`independence.test.
 
 ## The A5 §4 arms (`arms/`, `arms.json`, P0.0c)
 
-Each of A5 §4's 45 arms is a script played through a plugin's hooks in the simulator (or, for the fixture arms, a
-product entry point driven as a process), returning named checks. A failing check names the A5 assertion, or a
+Each of A5 §4's 45 arms, and P4.1's `cuebench-ctx` (ROADMAP's CueBench ctx gate), is a script played through a
+plugin's hooks in the simulator (or, for the fixture arms, a product entry point driven as a process), returning named
+checks. A failing check names the A5 assertion, or a
 control the assertion needs, that did not hold. `arms.json` records, per arm and flag state, whether it passes on
 today's `plugins/eden-memory` and, when not, exactly which checks fail and why.
 
