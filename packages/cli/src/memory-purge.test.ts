@@ -175,14 +175,21 @@ describe("eden memory purge", () => {
       expect(existsSync(join(store, SNAPSHOT_FILE))).toBe(false);
     });
 
-  test("a purge that matches nothing keeps the snapshots", async () => {
+  // Review round 2: a row dropped after the build leaves its words only in the snapshot, which no other file matches.
+  test("every purge deletes the snapshots, so a word only a snapshot still holds goes too", async () => {
     const store = join(root, "s1");
     const mem = openMemory({ dir: store });
+    mem.remember("Ticket from Zebulonix shipped late again on Friday.", { tags: ["src:user"] });
     mem.remember("The database is postgres.", { tags: ["src:user"] });
-    mem.refreshPostings();
+    expect(mem.refreshPostings()).toBe(true);
+    mem.dropWhere((row) => row.text.includes("Zebulonix"));
     mem.close();
-    expect((await run(["purge", "nowhere-[0-9]+"])).code).toBe(0);
-    expect(existsSync(join(store, SNAPSHOT_FILE))).toBe(true);
+    expect(readFileSync(join(store, "memories.jsonl"), "utf8")).not.toContain("Zebulonix");
+    expect(readFileSync(join(store, SNAPSHOT_FILE), "utf8")).toContain("zebulonix");
+    const { code, out } = await run(["purge", "Zebulonix"]);
+    expect(code).toBe(0);
+    expect(out).toContain("purged 0 matches");
+    expect(existsSync(join(store, SNAPSHOT_FILE))).toBe(false);
   });
 
   test("an invalid pattern changes nothing", async () => {
