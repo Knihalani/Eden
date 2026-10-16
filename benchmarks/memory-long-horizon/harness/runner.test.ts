@@ -221,6 +221,7 @@ describe("processes (target 3)", () => {
         "EDEN_HOME",
         "EDEN_MEMORY_DIR",
         "EDEN_SLEEP_IDLE",
+        "EDEN_SUBMIT_BUDGET_MS",
         "HOME",
         "LANG",
         "PATH",

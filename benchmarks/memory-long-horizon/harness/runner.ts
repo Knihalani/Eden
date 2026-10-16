@@ -362,7 +362,9 @@ export function idleSleepOf(pluginDir: string): string[] | undefined {
  * HOME, EDEN_HOME and EDEN_MEMORY_DIR inside the run directory, so no hook can reach a real store. Nothing
  * else is inherited, so runs do not depend on the caller's shell. `EDEN_SLEEP_IDLE` is off: a simulated session
  * never sits idle for minutes of real time, so Eden's detached idle sleeper (D34) would only outlive the run and
- * write into its directory afterwards.
+ * write into its directory afterwards. A Submit's budget (A2 §2.8: 150 ms from its process's start, P4.2) is 1 s:
+ * a harness runs many hooks at once on one machine, where load, not Eden, would abort Submits and change what an
+ * arm counts. An arm's own latency check still reads every Submit's wall time; the abort has its own tests.
  */
 export function hookEnv(paths: {
   home: string;
@@ -378,6 +380,7 @@ export function hookEnv(paths: {
     EDEN_HOME: join(paths.home, ".eden"),
     EDEN_MEMORY_DIR: join(paths.home, ".eden", "memory"),
     EDEN_SLEEP_IDLE: "off",
+    EDEN_SUBMIT_BUDGET_MS: "1000",
     CLAUDE_PROJECT_DIR: paths.projectDir,
     CLAUDE_PLUGIN_ROOT: paths.plugin.root,
     CLAUDE_PLUGIN_DATA: join(paths.home, ".claude", "plugins", "data", paths.plugin.name),
