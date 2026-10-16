@@ -1,131 +1,91 @@
 # Eden
 
-The agent still talks and still decides. Eden sits on the **tool path**: it records repeated tool stretches, compiles them into one inspectable program, and serves that program after a **human Approve**. The model does not author the loop each time — Eden mines it once from traces.
+Passive memory for coding agents. You should almost never have to tell your agent something twice. Eden records what you say and what the agent learns about the repo, and on a later turn it puts the matching note in front of the agent, or stays silent. The agent never calls a memory tool and you never call `remember()`.
 
-Compile does not Approve. It does not hit the network. Unique work is 0 programs, not a win. Compile does not mint a wrap candidate.
+It runs as Claude Code hooks (a plugin), as hooks on Gemini CLI, Codex and OpenCode (`eden setup`), and inside an OpenAI-compatible proxy for other agents (`eden wrap`).
+
+## What it remembers
+
+- **Rules and intents you state.** "Never push to main", "use pnpm", "don't touch the billing module until the migration lands". A rule stated with "never" or "always", or said again in a second session, becomes a pin. An intent expires when its action is done.
+- **Facts, with history.** A newer statement replaces an older one; the old value stays as history, not as a live fact.
+- **Repo facts from the repo's own files.** Package manager, node version, framework, test runner, auth SDK, database, CI. Each is cited by the files that state it ("from pnpm-lock.yaml") and re-read when one of those files changes.
+- **Where you left off.** The agent's last message and a gist of the session, for the next prompt and the next session.
+
+## How it delivers
+
+- **On each prompt** (UserPromptSubmit): a small packet, at most 6 bullets and 900 bytes by default, or nothing. The cue is the situation, not only the prompt: what you typed, what the agent just said, and the files in play, so "yes, do it" after a proposal gets the memory for the files that proposal names. Non-human turns (task notifications, agent messages) and chatter after a report ("thanks", "ok") get nothing.
+- **At session start** (SessionStart): pins and gists.
+- **Never twice.** Each context window keeps a ledger of what it was given. Nothing already delivered, and nothing your `CLAUDE.md` (or `AGENTS.md` where there is none) or Claude's auto-memory `MEMORY.md` already states, is injected. A compaction or `/clear` re-arms what the window lost.
+- **Scoped to the repo and folder.** One store per repo, keyed by its git common dir, so every session, worktree and subagent of a repo shares it and two repos never do. Notes are scoped to product folders (`apps/web`, `packages/api`); a folder's rules apply in its subfolders, and a turn in one folder never gets a sibling folder's notes.
+
+Subagent briefs, tool-batch deliveries and the policy guard (which re-delivers a rule to the agent when a command is about to break it) ship in `shadow`: they record what they would have delivered and print nothing until their flag is turned on. The guard's ask, which stops an irreversible command for your confirmation, ships `off`. See [Delivery flags](packages/cli/README.md#delivery-flags).
+
+## Guarantees
+
+- **Fails open.** Every hook exits 0 and prints nothing on error. A broken Eden never blocks the agent or erases your prompt.
+- **No model on the hook path.** No LLM and no embedding call in any hook. Retrieval is lexical and local.
+- **Local.** The store is JSONL under `~/.eden/memory` (`EDEN_MEMORY_DIR` or `$EDEN_HOME/memory`), directories `0700`, files `0600`. Eden makes no network call of its own; what it injects reaches your model provider as part of the prompt, like anything else in context.
+- **Secrets stay out.** Pasted blocks are stripped and a gitleaks-plus-keyword scan drops secrets before anything is stored. `eden memory forget --secret <regex>` removes one after the fact.
+- **Off switches, narrowest first.** A delivery point's flag (next event), `EDEN_MEMORY=off` or `readonly` (next session), disabling the plugin, or Claude Code's `disableAllHooks`. An unhandled exception at a delivery point turns it to `shadow` for 24 hours on its own.
 
 ## Install
 
-Needs [Bun](https://bun.sh). The CLI package is **`@kaiavn/eden`** (`eden` on npmjs is someone else). This tree is private — install from this clone, not a public registry.
+Needs [Bun](https://bun.sh). This tree is private: install from a clone, not a registry (`eden` on npm is someone else's package).
 
 ```bash
+git clone <this repo> eden && cd eden
 bun install
 alias eden='bun packages/cli/src/cli.ts'   # or: bun run cli -- <command>
-eden init
 ```
 
-The first `eden wrap` writes a per-install key to `~/.eden/config.json` (mode 0600), replacing an `eden_dev` that an older `eden init --dev` saved there. Every `eden` command and both SDKs read it from there; run `eden init` again after that first start to wire MCP with it. `--dev` (or `EDEN_DEV=1`) uses the public `eden_dev` key instead: tests and throwaway sittings only.
-
-Hosted wrap (no local process): [https://useeden.vercel.app](https://useeden.vercel.app) — `POST /v1/signup`, then `eden login --url https://useeden.vercel.app --key <key>` and `OPENAI_BASE_URL=https://useeden.vercel.app/v1`. An Eden key is wrap auth, not OpenAI; your own provider key pays for model calls (see Your own agent).
-
-## Inspect (offline)
-
-`eden compile --traces` prints a letter. It does not Approve. It does not hit the network. It does not mint a wrap candidate.
-
-```bash
-eden compile --traces examples/compile-traces/repeating
-eden compile --traces examples/compile-traces/unique     # 0 programs
-eden compile --traces examples/compile-traces/foreach     # letter names foreach
-eden compile --traces examples/compile-traces/refuse     # underdetermined_write
-eden compile --traces examples/compile-traces/branch     # letter names branch
-eden compile --traces examples/compile-traces/poll       # letter names poll
-eden compile --traces examples/compile-traces/cursor     # letter names cursor
-eden compile --traces examples/compile-traces/offset     # letter names offset
-```
-
-## Wrap verdict (does not ship)
-
-Wrap stores traces and compiles on `POST /v1/traces`. That mints a candidate. It does not turn a tool On. Toy example traces will show **FAIL**, **INCONCLUSIVE**, or **pending** until shadow certifies measured token or time savings — do not fake duration or tokens to force PASS. Default wrap may print `pending` / uncovered tools; a wrap that can replay still will not PASS these traces without measured savings.
-
-```bash
-eden wrap
-eden import --traces examples/compile-traces/repeating
-eden approve                    # FAIL / INCONCLUSIVE / pending until shadow certifies; cannot ship
-```
-
-## Play a compiled tool in one sitting
-
-`eden demo` (same as `bun run demo`) is TicketShip: it compiles, Approves inside the demo, and plays **T-100**. Quote that demo. Do not fake metrics. It uses the public `eden_dev` key unless `EDEN_API_KEY` is already set, so play against it with `--key eden_dev`.
-
-```bash
-eden demo
-# then, if that wrap is still up:
-eden play <name> --key eden_dev --input '{"id":"T-100"}'
-```
-
-## Your own agent
-
-Start wrap, then point the agent at it. Compile still does not Approve.
-
-```bash
-eden wrap
-# OpenAI-compatible agents:
-export OPENAI_BASE_URL=http://127.0.0.1:8788/v1
-# keep OPENAI_API_KEY as the model key (an Eden key is wrap auth, not OpenAI)
-# memory and live tools serve only the operator: start wrap with the same OPENAI_API_KEY,
-# or send the Eden key as x-eden-api-key; any other caller gets a plain proxy
-# A compiled hit plays without a model key (model: eden). Miss fail-opens.
-# JS:  import { runTool } from "@kaiavn/sdk"        — POST /v1/wrap, then /v1/ingest
-# Py:  from eden import wrap_tools                  — same contract; wrap down runs original
-```
-
-Hosted `/v1`: send your provider key as `Authorization` (or `x-openai-api-key`) and the Eden key as `x-eden-api-key`. A chat call without a provider key gets 401 `provider_key_required`; the hosted site never pays for model calls. Self-hosting `apps/site` behind a reverse proxy: set `EDEN_TRUST_PROXY=1`, and have the proxy set `X-Real-IP` itself (nginx: `proxy_set_header X-Real-IP $remote_addr`). The signup rate limit then reads the client address from `x-real-ip`, else the last `x-forwarded-for` hop.
-
-Record through wrap. Then:
-
-```bash
-eden explain
-eden approve <id> --yes         # human gate — the only On switch
-eden play <name> --input '{...}'
-```
-
-See `examples/agent/` for a 20-line JS and Python wrap. A missing compiled tool or a down wrap runs the original callable.
-
-`examples/compile-traces/` is shipped StretchTrace JSON. Open a file; compile the dir (inspect) or import it (wrap verdict). See `examples/compile-traces/README.md`.
-
-Without `--yes`, `eden approve` prints the card (or FAIL / INCONCLUSIVE rows) and does not ship. A key never turns a tool On.
-
-## Commands
+**Claude Code (plugin).** In a Claude Code session started in the clone:
 
 ```
-eden init                 config, hooks, MCP
-eden wrap                 local proxy at 127.0.0.1:8788
-eden login --url --key    save a hosted key
-eden compile --traces     letter (programs, refusals, turns-saved). Local only
-eden import --traces      POST wrap /v1/traces. Does not Approve
-eden explain              why nothing compiled
-eden approve [--yes]     card; --yes ships canary
-eden play <tool> --input  run an approved tool (generic JSON)
-eden demo                 TicketShip: compile, Approve in the demo, play T-100, stays up
-bun run demo              same sitting as eden demo
-eden mcp --help           stdio MCP letter (does not start stdio)
-eden claims               published limits board (wins, analogue, limits, retired)
-eden doctor               health
+/plugin marketplace add .
+/plugin install eden-memory
 ```
 
-`eden` with no args prints grouped help. GitHub-shaped `eden play <tool> --ids 11,12` still works; generic tools use `--input`.
+Then `eden doctor --memory` checks that the hooks are registered, that the installed plugin copy matches the checkout, and that Eden loads within the 150 ms Submit budget. After pulling a new version: `claude plugin marketplace update`, then `claude plugin update eden-memory@eden`. Details: [plugins/eden-memory/README.md](plugins/eden-memory/README.md).
 
-## Honesty
+**Gemini CLI, Codex, OpenCode (and Claude Code without the plugin).** `eden setup` writes the memory hooks for every host it finds. Do not use it together with the plugin: both attach UserPromptSubmit. `eden doctor` names each host as ok, half-wired, skipped or not installed; Codex can drop hooks silently when a project is not trusted.
 
-- Repeating stretches can compile. Unique sequences compile **0 programs**. Sequential single-call turns do not benefit — that is not a token-savings win.
-- Named refusals (e.g. `underdetermined_write`) are printed as refusals, not wins.
-- Import + `eden approve` on the example traces is a **verdict**, not a ship. Shadow will not PASS toy traces without measured savings.
-- The path that actually plays in one sitting is `eden demo` / `bun run demo` (TicketShip), not Approve → play from those examples.
-- Wrap down: one sentence, not a stack dump. A broken Eden never breaks the agent (observe by default; hard guardrails are opt-in: `EDEN_ENFORCE=1`, `EDEN_STEER_HOOKS=1`).
-- Published numbers live on `eden claims` (`PUBLIC_CLAIMS`). Do not quote a figure that is not on that board. Helix short-launch (already-live 12-step) is measured in `benchmarks/campaign/HELIX.md`.
+**Other agents (OpenAI-compatible).** `eden wrap` starts a local proxy at `127.0.0.1:8788` that injects the same store into the request (`messages`, or Gemini `contents[]`). Point the agent at it with `OPENAI_BASE_URL=http://127.0.0.1:8788/v1` and keep `OPENAI_API_KEY` as your model key. Memory is served only to the operator: start wrap with the same `OPENAI_API_KEY`, or send the Eden key as `x-eden-api-key`.
 
-## Safety model: a broken Eden never breaks your agent
+## Everyday commands
 
-Enforced in code (`packages/wrap/src/failsafe.test.ts`):
+```
+eden doctor --memory                 hooks, plugin copy, load time, flags, kill switches
+eden memory remember "<text>"        store a note now (--global: a rule for every repo)
+eden memory dump [--json]            what the store holds
+eden memory scopes [<path>…]         the folder scopes Eden sees in this repo
+eden memory forget --all-in <scope>  send a folder's rules to history
+eden memory forget --secret <regex>  redact a secret everywhere in the store
+eden memory purge <regex>            redact matching text everywhere in the store
+eden memory import <path>            read existing transcripts into memory (local)
+eden memory migrate --dry-run        move pre-per-repo stores into per-repo ones
+eden sleep                           consolidate and mine repo facts now (it also runs on its own when idle)
+eden eval build-negatives            build your private set of prompts that need no memory
+```
 
-- **Default mode observes.** Eden records, measures, and steers where provably safe — it never blocks, halts, or refuses one of your agent's calls.
-- **Every Eden failure falls back.** Corrupt state, a throwing program list, a crash in our own bookkeeping — your tool call executes as if Eden were absent.
-- **The proxy never stands in the way.** Even a tripped kill switch only loses Eden its steering privilege; requests pass through.
-- **Writes are never duplicated.** A compiled run that fails after a mutating step returns a structured result; read-only stretches replay raw automatically.
-- **Hooks can't hang or deny by default.** The Claude Code hook answers "allow" on any internal error and races a hard timeout.
+Every environment variable, flag and file is documented in [packages/cli/README.md](packages/cli/README.md).
 
-| Package | What it is |
-| --- | --- |
-| `@kaiavn/eden` | CLI: compile, wrap, demo, approve |
-| `@kaiavn/sdk` | JS SDK: wrap tool calls onto compiled tools |
-| `eden-agent` | Pure-stdlib Python SDK: same wrap/fallback contract |
+## Status
+
+Early. The memory program is planned and tracked in [docs/memory-ship/](docs/memory-ship/): [PROGRESS.md](docs/memory-ship/PROGRESS.md) says which slices are done (the per-repo store, the trust gate, the ledger, rules and the guard, folder scopes, repo facts) and which are next (ranking, the evidence gate, gotchas, how-to). Each merged slice has a report in [docs/memory-ship/reports/](docs/memory-ship/reports/) with its measured numbers.
+
+## Repository
+
+| Path | What it is |
+|---|---|
+| `src/` | The memory engine: encode, store, retrieve, deliver, sleep |
+| `packages/cli/` | The `eden` CLI and the hook entry points ([README](packages/cli/README.md)) |
+| `plugins/eden-memory/` | The Claude Code plugin ([README](plugins/eden-memory/README.md)) |
+| `packages/wrap/` | The proxy: memory injection for OpenAI-compatible agents |
+| `benchmarks/memory-long-horizon/` | The evaluation harness and arms that gate each slice |
+| `docs/` | Specs, decisions and reports ([index](docs/README.md)) |
+
+Eden used to be a tool-path compiler (record repeated tool stretches, compile them, serve them after a human Approve) and, before that, an observability platform. Their code is still in the tree (`packages/compile`, `ir`, `runtime`, `shadow`, `measure`, `know`, `sdk-js`, `sdk-py`, the "compile traces into a tool" commands in `eden --help`) but it is not the product. Their documents are in [archived/compile-era/](archived/compile-era/README.md) and [archived/](archived/README.md).
+
+## Development
+
+CI is four steps, run locally (GitHub Actions is off): `bun run format:check`, `bun run typecheck`, `bun run test` (or `bun run test:parallel`), and `EDEN_SKIP_CHECKS=1 bash scripts/build-cli.sh`. Contributor and agent rules are in [CLAUDE.md](CLAUDE.md).
