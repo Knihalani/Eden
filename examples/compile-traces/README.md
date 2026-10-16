@@ -1,5 +1,7 @@
 # Example traces
 
+> **Compile era: retired.** These traces feed Eden's earlier tool-path compiler. The commands still run and the tests still use these files, but Eden is now passive memory for coding agents ([README](../../README.md)); the compile-era documents are in [archived/compile-era/](../../archived/compile-era/README.md).
+
 Shipped dirs a person can open. Honest paths: compile, unique work (0 programs), named refusal. Compile does not mint a wrap candidate. Import may mint one; that is a verdict, not a ship.
 
 ## Inspect (offline)

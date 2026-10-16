@@ -1,5 +1,7 @@
 # Zero data retention — guidance, not a badge
 
+> **Compile era: a retired product direction.** Eden is now passive memory for coding agents ([docs/README.md](README.md)). This file stays in `docs/` because the website's `/isolation` page and a test refer to it by path; the other compile-era documents are in [archived/compile-era/](../archived/compile-era/README.md).
+
 Eden is not ZDR certified. This note is not a certification of any kind. It tells an operator what **Eden** records on the PTC, island, and prompt-cache paths, and what still goes to a **model provider**. Provider ZDR is that provider’s org arrangement, sold by them, not an Eden flag.
 
 A critic who wants Anthropic’s contract should read [Anthropic zero data retention](https://docs.anthropic.com/en/docs/build-with-claude/zero-data-retention) and [API data retention](https://platform.claude.com/docs/en/manage-claude/api-and-data-retention). This page does not replace those. It maps Eden’s paths onto them so nobody mistakes a cache breakpoint, a local memo, or an `allowed_callers` field for a ZDR badge.

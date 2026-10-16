@@ -1,5 +1,7 @@
 # @kaiavn/sdk
 
+> **Compile era: retired.** This SDK is the client for Eden's earlier tool-path compiler (compiled tools played by wrap). It still works, but it is not the product: see the [root README](../../README.md) and [archived/compile-era/](../../archived/compile-era/README.md).
+
 ```ts
 import { Eden, runTool } from "@kaiavn/sdk";
 ```

@@ -1,5 +1,7 @@
 # Eden 10x improvement lab
 
+> **Compile era: retired.** This lab served Eden's earlier tool-path compiler. Eden is now passive memory for coding agents ([README](../../README.md)); the compile-era documents are in [archived/compile-era/](../../archived/compile-era/README.md).
+
 Every idea here was hypothesised from code+market research, proven with a
 benchmark or test against REAL production code, and — where marked **shipped**
 — promoted into production. Run everything: `./run-all.sh`.

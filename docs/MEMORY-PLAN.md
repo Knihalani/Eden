@@ -1,5 +1,7 @@
 # Eden Memory — product plan
 
+> **Superseded: history of the M1–M50 memory waves (September 2026).** The memory program now builds from [memory-ship/](memory-ship/): [ROADMAP.md](memory-ship/ROADMAP.md) orders the work, [DECISIONS.md](memory-ship/DECISIONS.md) wins every conflict, and [PROGRESS.md](memory-ship/PROGRESS.md) says what is done.
+
 **Locked 2026-09-16. Revised 2026-09-19** (50-wave program: SOTA mechanisms + a product that actually helps). This is what we build. Autopsy: `benchmarks/memoryagentbench/SOTA-GAP-REPORT.md`. Competitors: `docs/MEMORY-COMPETITORS.md`. **Builder waves:** `docs/MEMORY-WAVES.md`. **Next wave:** `/memory-wave` (must finish closed; now **M15**). Status: `docs/MEMORY-WAVE-STATUS.md`. Bakeoff retrieve@5 is not this product’s exam. `benchmarks/memory-bakeoff/brain/HYPOTHESES.md` is **superseded**.
 
 Company thesis (`docs/ROADMAP.md`): *the best tool surface is no surface.* Memory obeys the same law. Encode and retrieve without a memory UI. One brain on wrap and hook.

@@ -1,5 +1,7 @@
 # Logging — EU AI Act Article 12, aligned, not certified
 
+> **Compile era: a retired product direction.** Eden is now passive memory for coding agents ([docs/README.md](README.md)). This file stays in `docs/` because `isolation.md`, `evidence-pack.md` and `zdr.md` link to it; the other compile-era documents are in [archived/compile-era/](../archived/compile-era/README.md).
+
 [Article 12](https://artificialintelligenceact.eu/article/12/) (automatic recording of events) is cited as in force from **2 August 2026**.
 
 Eden is **not** claiming high-risk AI-system certification under the EU AI Act. This note is **not** a SOC 2 report. Alignment here means: automatic logs, exportable, tamper-evident, with a stated retention floor — and an explicit list of what we do not claim.
