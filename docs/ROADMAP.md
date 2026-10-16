@@ -1,5 +1,7 @@
 # Eden Roadmap — v4.0 Adversarial Edition
 
+> **Compile era: a retired product direction.** Eden is now passive memory for coding agents ([docs/README.md](README.md)). This is the compile-era company roadmap, not the memory program's ([memory-ship/ROADMAP.md](memory-ship/ROADMAP.md)). It stays in `docs/` because the website's `/isolation` page and tests refer to it by path; the other compile-era documents are in [archived/compile-era/](../archived/compile-era/README.md).
+
 **Date:** August 26, 2026 · Supersedes v3.1. This edition folds in the adversarial verification wave (`benchmarks/campaign/`): a positive campaign across six agent domains, a **negative-control campaign across nine regimes where Eden should not help**, and five capacity/degradation probes that broke Eden four times before the fixes landed. Every number below is either gated (paired, counterbalanced, A/A-checked) or labeled modeled. The companion ledger lives in `benchmarks/campaign/README.md`.
 
 ---

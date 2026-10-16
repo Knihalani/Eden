@@ -1,5 +1,7 @@
 # Isolation
 
+> **Compile era: a retired product direction.** Eden is now passive memory for coding agents ([docs/README.md](README.md)). This file stays in `docs/` because the website's `/isolation` page and its tests refer to it by path; the other compile-era documents are in [archived/compile-era/](../archived/compile-era/README.md).
+
 Each line is a fact we can open a test for. Nothing here is a badge. This is not a SOC 2 report and not an EU AI Act certification.
 
 The live page is `/isolation`. Graphite only.

@@ -1,5 +1,7 @@
 # Proof
 
+> **Compile era: a retired product direction.** Eden is now passive memory for coding agents ([docs/README.md](README.md)). This file stays in `docs/` because the website's `/proof` tests and the publication checks read it by path; the other compile-era documents are in [archived/compile-era/](../archived/compile-era/README.md).
+
 Campaign cells are paired and counterbalanced, with an A/A self-check, in `packages/measure`. WIN and LOSS are `decide()` verdicts. Negative-control parity is ±1%, registered once and never moved after seeing a result. Every number on this page links the file that measured it.
 
 Nothing public without methodology. UNCERTIFIED is never a win. Analogue cents are labeled analogue, not a live Claude Code invoice. Limits and retired claims print with the same file path as the wins.

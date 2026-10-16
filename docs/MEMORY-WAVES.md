@@ -1,5 +1,7 @@
 # Eden Memory — builder waves
 
+> **Superseded: history of the M1–M50 memory waves (September 2026).** The memory program now builds from [memory-ship/](memory-ship/): [ROADMAP.md](memory-ship/ROADMAP.md) orders the work, [DECISIONS.md](memory-ship/DECISIONS.md) wins every conflict, and [PROGRESS.md](memory-ship/PROGRESS.md) says what is done.
+
 **Canonical execution spec.** Product locks: `docs/MEMORY-PLAN.md`. Autopsy: `benchmarks/memoryagentbench/SOTA-GAP-REPORT.md` (cited as **Report §**). Company method: `docs/ROADMAP.md` §0 / §4.9 (rotation, hold-outs, red-team). UI rebuild is **not** this work (`apps/web/REBUILD.md`). Locked whatever harness: do not touch.
 
 **Orchestrator prompt:** `docs/MEMORY-WAVE-PROMPT.md`.  

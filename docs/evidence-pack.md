@@ -2,6 +2,8 @@
 
 Aligned, not certified.
 
+> **Compile era: a retired product direction.** Eden is now passive memory for coding agents ([docs/README.md](README.md)). This file stays in `docs/` because the website's `/isolation` page and its tests refer to it by path; the other compile-era documents are in [archived/compile-era/](../archived/compile-era/README.md).
+
 This binder maps four controls to files an auditor can open. It is not a SOC 2 report. There is no attestation. There is no letter to request.
 
 Isolation tests remain the shipped truth. A claim that cannot open a test does not belong here.

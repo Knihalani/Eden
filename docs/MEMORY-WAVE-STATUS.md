@@ -4,6 +4,8 @@ next: 51
 
 # Memory wave status
 
+> **Superseded: history of the M1–M50 memory waves (September 2026).** The memory program now builds from [memory-ship/](memory-ship/): [ROADMAP.md](memory-ship/ROADMAP.md) orders the work, [DECISIONS.md](memory-ship/DECISIONS.md) wins every conflict, and [PROGRESS.md](memory-ship/PROGRESS.md) says what is done. Its wave counter is not read by anything.
+
 **Next wave:** done  
 **Slash command:** removed (M50 shipped; `.cursor/commands/memory-wave.md` deleted)
 

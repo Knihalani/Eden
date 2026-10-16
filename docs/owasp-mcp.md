@@ -1,5 +1,7 @@
 # OWASP MCP Top 10
 
+> **Compile era: a retired product direction.** Eden is now passive memory for coding agents ([docs/README.md](README.md)). This file stays in `docs/` because `isolation.md`, `evidence-pack.md` and `zdr.md` link to it; the other compile-era documents are in [archived/compile-era/](../archived/compile-era/README.md).
+
 Source list: [OWASP MCP Top 10](https://owasp.org/www-project-mcp-top-10/) (v0.1 beta). Eden maps each row to a control or an honest gap. **MCP08 is the audit export.**
 
 This is not a certification. Live page: `/isolation`.

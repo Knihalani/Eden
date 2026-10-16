@@ -1,5 +1,7 @@
 # Fixture verticals
 
+> **Compile era: a retired product direction.** Eden is now passive memory for coding agents ([docs/README.md](README.md)). This file stays in `docs/` because the website's `/proof` tests and the publication checks read it by path; the other compile-era documents are in [archived/compile-era/](../archived/compile-era/README.md).
+
 These are campaign fixture verticals, not customers. Customer-approved measured studies: 0. Unpublished slots stay empty. No company names. Kind and Source use the same table chrome as the wins table so this cannot be read as a second unlabeled win board. The live heading on `/proof` is **Fixture verticals**, not Case studies.
 
 The live page is `/proof`. Graphite only. Numbers are rows in `packages/measure/src/claims.ts` (`PUBLIC_CLAIMS` via `fixtureStudies()`). Do not invent a company.
