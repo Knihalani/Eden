@@ -27,10 +27,10 @@ function packetOf(list: unknown[]): string {
 }
 
 describe("scale contract", () => {
-  test("store cap default is 2000 and retrieve k stays 6–10", () => {
+  test("store cap default is 20,000 (D33's hot path, P4.2) and retrieve k stays 6–10", () => {
     const prev = process.env.EDEN_MEMORY_STORE_CAP;
     delete process.env.EDEN_MEMORY_STORE_CAP;
-    expect(memoryStoreCap()).toBe(2000);
+    expect(memoryStoreCap()).toBe(20_000);
     if (prev === undefined) delete process.env.EDEN_MEMORY_STORE_CAP;
     else process.env.EDEN_MEMORY_STORE_CAP = prev;
   });
