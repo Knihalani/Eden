@@ -5,9 +5,12 @@
  */
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { MemoryRecord } from "../../../src/index";
+import { rowFields } from "../../../src/memory-bm25f";
+import { SNAPSHOT_FILE, writeSnapshot } from "../../../src/memory-postings";
 import { memoryCli } from "./memory-import";
 
 const SECRET = "zq-secret-4821937";
@@ -127,6 +130,21 @@ describe("eden memory purge", () => {
     } finally {
       chmodSync(locked, 0o600);
     }
+  });
+
+  test("a postings snapshot holding a match is deleted (derived, rebuilt at sleep); one without is kept", async () => {
+    const snapshot = (store: string, text: string) => {
+      mkdirSync(store, { recursive: true });
+      const rec: MemoryRecord = { id: "a", text, kind: "fact", at: 1, seq: 1 };
+      writeSnapshot(store, [{ rec, fields: rowFields(rec) }]);
+      return join(store, SNAPSHOT_FILE);
+    };
+    const holding = snapshot(join(root, "repos", "r1"), "The deploy token is tok4821937abc.");
+    const clean = snapshot(join(root, "repos", "r2"), "The database is postgres.");
+    const { code } = await run(["purge", "tok[0-9]+abc"]);
+    expect(code).toBe(0);
+    expect(existsSync(holding)).toBe(false);
+    expect(readFileSync(clean, "utf8")).toContain("database");
   });
 
   test("an invalid pattern changes nothing", async () => {

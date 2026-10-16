@@ -307,6 +307,12 @@ describe("A4 §2's two-scope bullet", () => {
     expect(shown.map((note) => note.text)).toEqual(["auth provider — apps/web: Clerk · packages/cli: has no auth"]);
   });
 
+  test("the other value's row is not given again on its own when it ranked first (P4.2: BM25F ranks it first)", () => {
+    const labelled = { ...cli, text: "[episode · 1d · user] packages/cli has no auth" };
+    const shown = twoScopeNotes([labelled, web], readSet, () => []);
+    expect(shown.map((note) => note.text)).toEqual(["auth provider — apps/web: Clerk · packages/cli: has no auth"]);
+  });
+
   test("a later row saying only a value the bullet gives is given by it (a prompt's row and its sentence's)", () => {
     const prompt = typed("packages/cli has no auth. Reply with just OK.", "packages/cli", "episode", 3);
     const sentence = { ...cli, text: "[episode · 1d · user] packages/cli has no auth" };
