@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { openMemory, storeRows, superseded } from "../../../src/index";
 import { readCitations } from "../../../src/memory-citations";
+import { SNAPSHOT_FILE } from "../../../src/memory-postings";
 import { repoIdentity, repoStoreDir } from "../../../src/memory-repo";
 import { buildCatalog, readCatalog } from "../../../src/memory-scopes";
 import { noteRepoActivity, sleepCli, sleepHeavyMs } from "./memory-sleep";
@@ -68,7 +69,9 @@ afterEach(() => {
 function sessionStore(minutes = 0): void {
   buildCatalog(store, top);
   const mem = openMemory({ dir: store, session: "s1", perRepo: true });
-  mem.observe([{ role: "user", content: "Never merge on Fridays.", src: "user" }]);
+  mem.observe([
+    { role: "user", content: "Never merge on Fridays. The release train leaves on Tuesdays.", src: "user" },
+  ]);
   mem.close();
   process.env.EDEN_NOW = String(T0 + minutes * MIN);
   noteRepoActivity(store);
@@ -78,7 +81,8 @@ const mined = () =>
   storeRows(join(store, "memories.jsonl"))
     .filter((row) => row.cite && !superseded(row))
     .map((row) => row.text);
-const slept = () => existsSync(join(store, "sleep-postings.jsonl"));
+/** What only the full sleep writes for a store this small: its postings snapshot (P4.2). */
+const slept = () => existsSync(join(store, SNAPSHOT_FILE));
 
 describe("D34's heavy tier", () => {
   test("--after 0 mines once the store has been quiet 30 minutes by the memory clock, not before", async () => {

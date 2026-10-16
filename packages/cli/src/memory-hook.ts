@@ -493,21 +493,32 @@ function payloadMessages(r: Record<string, unknown>): { role: string; content: s
 type Ledger = { dir: string; file: LedgerFile };
 
 /**
- * The memory hook for one event. It fails open: whatever throws, it returns null (so nothing is printed). Each
- * invocation appends one wide event, and an exception at an `on` delivery point lets the circuit breaker check that
- * point's budget (`memory-breaker.ts`). With `EDEN_MEMORY=off` it does nothing at all; read-only, it writes nothing.
+ * A4 §5.1 step 0, A2 §2.8: a human Submit answers within 150 ms of its process's start, or prints nothing. The budget
+ * is `EDEN_SUBMIT_BUDGET_MS` when that is a number of ms (0 or `off`: none; anything else: the default), else
+ * `SUBMIT_BUDGET_MS`.
  */
-/** P4.2 (red first): A4 §5.1 step 0's budget; nothing aborts yet. */
 export const SUBMIT_BUDGET_MS = 150;
 
-export function budgetOf(_origin: number, _env = process.env.EDEN_SUBMIT_BUDGET_MS): () => boolean {
-  return () => false;
+/** Whether the Submit's budget is spent: `origin` is when its clock started (the process's start, in a hook). */
+export function budgetOf(origin: number, env = process.env.EDEN_SUBMIT_BUDGET_MS): () => boolean {
+  const raw = env?.trim();
+  const set = raw === "off" ? 0 : Number(raw || NaN);
+  const ms = Number.isFinite(set) ? set : SUBMIT_BUDGET_MS;
+  if (ms <= 0) return () => false;
+  return () => performance.now() - origin > ms;
 }
 
+/**
+ * The memory hook for one event. It fails open: whatever throws, it returns null (so nothing is printed). Each
+ * invocation appends one wide event, and an exception or a budget abort at an `on` delivery point lets the circuit
+ * breaker check that point's budget (`memory-breaker.ts`). With `EDEN_MEMORY=off` it does nothing at all; read-only,
+ * it writes nothing. `origin` starts the Submit's budget clock: the process's start in a hook (`runMemoryHookStdin`);
+ * an in-process caller that passes none has no budget (A2 §2.8 budgets a hook's process, from its start).
+ */
 export function memoryHookResponse(
   raw: Record<string, unknown>,
   stage?: HookStage,
-  _origin?: number,
+  origin?: number,
 ): Record<string, unknown> | null {
   const started = performance.now();
   let writes: boolean, r: Record<string, unknown>, event: string;
@@ -527,7 +538,7 @@ export function memoryHookResponse(
   let out: Record<string, unknown> | null = null;
   try {
     flags = resolveFlags(str(r.cwd));
-    out = respond(r, event, writes, flags, trace, stage);
+    out = respond(r, event, writes, flags, trace, stage, origin === undefined ? () => false : budgetOf(origin));
   } catch (err) {
     trace.err = errorTag(err);
     out = null;
@@ -567,6 +578,8 @@ interface HookContext {
   sessionWin?: string;
   /** The delivery point's mode; undefined at an event that delivers nothing. */
   mode?: FlagMode;
+  /** Whether the Submit's budget is spent (`budgetOf`). */
+  spent: () => boolean;
   ledgerOf: (mode: FlagMode | undefined) => Ledger | undefined;
   /**
    * The repo as the window's paths are read against it (`memory-place.ts`), its catalog read once: none without a
@@ -1242,6 +1255,16 @@ function situationOf(ctx: HookContext, recent: RecentConversation, prev: string,
   return situationCue({ turn: recent.previousTyped, path, prev, delivered: recent.delivered }, mode);
 }
 
+/**
+ * Whether a human Submit's budget is spent (A4 §5.1 step 0): then it is aborted, prints nothing, and its wide event
+ * says so (A5 `abort_rate`), which the breaker counts. What it encoded stays.
+ */
+function aborted(ctx: HookContext): boolean {
+  if (ctx.event !== "UserPromptSubmit" || !ctx.spent()) return false;
+  ctx.trace.aborted = true;
+  return true;
+}
+
 /** UserPromptSubmit (A4 §5.1), and PreCompact, which a host maps here (`hook.ts`): answered as a Submit would be. */
 function submit(ctx: HookContext): Record<string, unknown> | null {
   const { r, event, writes, win, mem, trace, flags, mode, transcriptPath } = ctx;
@@ -1320,11 +1343,11 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
     try {
       situation = situationOf(ctx, recent, prev, turn);
     } catch {}
-  if (prompt && isAnswered(turn) && answer !== "off")
+  if (prompt && isAnswered(turn) && answer !== "off" && !aborted(ctx))
     notes = mem.recall(cue, encode, place && visibleFrom(place), { situation });
   else if (prompt) mem.observeCue(cue, undefined, encode);
-  // X7: an `off` point answers nothing, a kept proposal's acknowledgement included.
-  if (answer === "off" || (!notes.length && !acknowledged.length)) return null;
+  // X7: an `off` point answers nothing, a kept proposal's acknowledgement included; nor does an aborted Submit.
+  if (answer === "off" || ctx.trace.aborted || (!notes.length && !acknowledged.length)) return null;
   // A4 §5.1: validity (step 5); the gate on episodes the user did not type (step 6, A7 §4); novelty (step 7):
   // what the last turns already say (D26), then what this window was already given (the ledger, which also marks
   // `Updated:` items); the epoch's budget (A4 §4); shape (step 8).
@@ -1348,6 +1371,8 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   // values of one slot share a bullet.
   const others = scopeRows(mem, against.invalid, str(r.prompt_id));
   const shown = twoScopeNotes([...acknowledged, ...allowed], place?.readSet ?? [], others);
+  // The last point a Submit can abort at: past it the ledger records what is printed.
+  if (aborted(ctx)) return null;
   const { packet, cids, ids, notes: given } = deliver(shapePacket(shown), ledger, { off, att, repo: ctx.repo });
   Object.assign(trace, { cids, ids, tokens_epoch: tokens });
   drops.validity += notes.length - placed.length;
@@ -1399,6 +1424,7 @@ function respond(
   flags: FlagState,
   trace: Trace,
   stage: HookStage | undefined,
+  spent: () => boolean,
 ): Record<string, unknown> | null {
   const cwd = str(r.cwd);
   if (!writes && WRITING_EVENTS.has(event)) return null;
@@ -1502,6 +1528,7 @@ function respond(
     top,
     sessionWin,
     mode,
+    spent,
     /** The ledger this point writes: none when it is off or read-only. */
     ledgerOf: (m) => {
       const file = m && writes && win ? ledgerFor(m) : undefined;
@@ -1544,7 +1571,7 @@ export async function runMemoryHookStdin(arg?: string): Promise<void> {
   const body = await readHookPayload();
   // Fail open (EXECUTION §5): nothing to say prints nothing, and so does an error.
   try {
-    const out = memoryHookResponse(body, stageOf(arg));
+    const out = memoryHookResponse(body, stageOf(arg), 0);
     if (out) process.stdout.write(JSON.stringify(out));
   } catch {}
 }

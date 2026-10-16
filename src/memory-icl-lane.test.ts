@@ -374,7 +374,8 @@ const NOVEL_PARA =
   "villagers said the oak still slept under the silt, waiting.";
 
 describe("M19 locks: novel vs ICL, identity, hay, search, order", () => {
-  test.failing("ICL cue does not pull novel chunks; novel cue does not pull ICL", () => {
+  // Out of quarantine (#52) since P4.2: a typed paragraph of more than 12 needles ranks (BM25F's length normalization).
+  test("ICL cue does not pull novel chunks; novel cue does not pull ICL", () => {
     withMem((mem) => {
       expect(encodeLane(NOVEL_PARA)).toBe("narrative");
       seedIclAndClerk(mem);

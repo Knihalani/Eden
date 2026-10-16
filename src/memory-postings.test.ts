@@ -144,7 +144,8 @@ describe("the bounded candidate set", () => {
   });
 
   test("only the 4 rarest fat terms are intersected: an old row two fatter ones share is not read", () => {
-    // Oldest first: "rare-pair" is in the two rarest lists, "fat-pair" in the two fattest, both older than any newest 64.
+    // Oldest first: "rare-pair" is in the two rarest lists, "fat-pair" in the two fattest, both older than any
+    // newest 64.
     const fat = Array.from({ length: 6 }, (_, k) => {
       const oldest = k < 2 ? ["rare-pair"] : k >= 4 ? ["fat-pair"] : [];
       return list(`t${k}`, [...oldest, ...range(`t${k}-`, 100 + k)]);
@@ -193,7 +194,12 @@ describe("the view a reader reads", () => {
     const fresh = indexed("r2", "The queue moved to SQS.");
     const byId = new Map([...old, fresh].map((row) => [row.rec.id, row]));
     const delta = new DeltaIndex(snapshot.header.id, [fresh]);
-    const view = new PostingsView(snapshot, delta, (id) => byId.get(id), () => true);
+    const view = new PostingsView(
+      snapshot,
+      delta,
+      (id) => byId.get(id),
+      () => true,
+    );
     try {
       expect(view.df("queue")).toBe(2);
       expect([...view.rowsOf("queue").newest()].map((row) => row.rec.id)).toEqual(["r2", "r1"]);
@@ -315,7 +321,9 @@ describe("D33: the hot path's 20k rows", () => {
     const diary = readFileSync(join(dir, DIARY_FILE), "utf8").trim().split("\n");
     expect(diary).toHaveLength(3);
     expect(diary.join("\n")).toContain("Ticket 0 note");
-    const kept = openMemory({ dir, session: "s2", perRepo: true }).memories().map((row) => row.text);
+    const kept = openMemory({ dir, session: "s2", perRepo: true })
+      .memories()
+      .map((row) => row.text);
     expect(kept).toHaveLength(5);
     expect(kept.some((text) => text.includes("Ticket 7 note"))).toBe(true);
   });

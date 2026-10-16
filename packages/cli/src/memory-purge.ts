@@ -3,6 +3,8 @@
  *
  * - Every file under the memory root is rewritten without the matches, each replaced by `[REDACTED]`: in a JSON or
  *   JSON-lines file, inside its strings and keys, so every line still parses; in any other text file, in place. A
+ *   postings snapshot (`postings.snap`, P4.2) that holds a match is deleted instead: it is derived from the store,
+ *   its byte offsets would not survive a rewrite, and the next sleep builds it again from the purged rows. A
  *   SQLite store loses the rows that match, with `secure_delete`, a truncating WAL checkpoint and `VACUUM`, so no
  *   free page keeps them. A file is rewritten under its writers' lock (`<file>.lock`); other binary files are left
  *   as they are and named.
@@ -10,10 +12,11 @@
  *   are listed. Eden never edits them: the user decides.
  */
 import { Database } from "bun:sqlite";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { REDACTED } from "@eden/ir";
+import { SNAPSHOT_FILE } from "../../../src/memory-postings";
 import { withFileLock, writeFileAtomic } from "./home";
 import { memoryRoot } from "./memory-hook";
 
@@ -103,7 +106,15 @@ function purgeFile(path: string, pattern: RegExp): number {
   const bytes = readFileSync(path);
   if (bytes.subarray(0, SQLITE_HEADER.length).toString("latin1") === SQLITE_HEADER) return purgeSqlite(path, pattern);
   if (bytes.includes(0)) throw new BinaryFile();
+  if (basename(path) === SNAPSHOT_FILE) return purgeDerived(path, bytes.toString("utf8"), pattern);
   return withFileLock(`${path}.lock`, () => purgeText(path, pattern));
+}
+
+/** A derived index holding a match is deleted (see the header); returns how many matches it held. */
+function purgeDerived(path: string, text: string, pattern: RegExp): number {
+  const count = text.match(pattern)?.length ?? 0;
+  if (count) unlinkSync(path);
+  return count;
 }
 
 /** Rewrites a text file without the matches; returns how many it removed. */

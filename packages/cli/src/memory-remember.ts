@@ -80,6 +80,8 @@ export function rememberStatements(statements: readonly Statement[]): number {
       const scopeOf = rowScopes(dir);
       const scoped = said.map((statement) => ({ ...statement, scope: scopeOf(statement) }));
       remembered += mem.rememberTyped(scoped).length;
+      // A batch is sleep's kind of write, not a hook's: the next Submit reads its rows from the postings snapshot.
+      mem.refreshPostings();
     } finally {
       mem.close();
     }

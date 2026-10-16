@@ -865,14 +865,11 @@
       ],
       "a5": "20k rows: gold recall, silence, p99 < 150 ms; never an unbounded bm25 on a fat term",
       "on": {
-        "state": "red",
-        "failed": [
-          "gold-recall"
-        ],
+        "state": "green",
         "unstable": [
           "p99"
         ],
-        "why": "rows are planted since P2.2 (`eden memory remember`); at 2,000 rows the legacy lexical path meets 10 of the 15 needs it meets at the small store (prebuilt postings and BM25F are P4.2's); `p99` sat at 145.7-148 ms against its 150 ms gate at load 3, so it flips with load"
+        "why": "passes at CI scale since P4.2 (prebuilt postings, BM25F with R1's tokenizer, bounded C): gold recall 13/15 at 2,000 rows as at the small store (main 9/15), silence 0/5. `p99` is load- and place-dependent: 177.6 ms alone with the run directory under macOS os.tmpdir() (main 233.5 ms), where every Bun start is about 40-60 ms slower; see P4.2's report for the run with TMPDIR under the scratchpad"
       },
       "off": {
         "state": "green",
@@ -891,14 +888,11 @@
       ],
       "a5": "1e6 rows: gold recall, silence, p99 < 150 ms; never an unbounded bm25 on a fat term",
       "on": {
-        "state": "red",
-        "failed": [
-          "gold-recall"
-        ],
+        "state": "green",
         "unstable": [
           "p99"
         ],
-        "why": "rows are planted since P2.2 (`eden memory remember`); at 2,000 rows the legacy lexical path meets 10 of the 15 needs it meets at the small store (prebuilt postings and BM25F are P4.2's); `p99` sat at 145.7-148 ms against its 150 ms gate at load 3, so it flips with load"
+        "why": "at CI scale this is scale-20k's run (2,000 rows), green since P4.2: gold recall 13/15 as at the small store, silence 0/5; `p99` load- and place-dependent as there. The 10^6-row gate (`--scale full`) is P6.1's"
       },
       "off": {
         "state": "green",
