@@ -32,6 +32,16 @@ bun test benchmarks/memory-scale/locked-contract.test.ts
 
 Do not edit these two files. If the product's API changes under them, fix the import only and say so here.
 
+**Edited since the copy:** P4.2 raised D33's store cap from 2,000 to 20,000 rows (the user's choice, 2026-10-16), and
+each file asserted the old cap. Those two checks now read the new cap; nothing else changed:
+- `locked-contract.test.ts`: the store cap test expects 20,000 (`fixture:` commit 966f416ad);
+- `locked-2k.ts`: its last check was `n <= STORE_N` (2,000) and is now `n <= memoryStoreCap()`. The store keeps
+  all 2,004 rows the bench writes, so the unedited check scored `metric: 1`, that check only.
+
+Neither file's sha256 matches its source any more (`locked-2k.ts`
+`03395b88f0ca96d6853420a159d8546dbd93505dfb6a524bc2e080b1a47a57f1`, `locked-contract.test.ts`
+`22edb4980a5902ef4b3546915e1e2e229813897dad90717fc90bb452bdd2f084`).
+
 ## Hard bench
 
 ```bash
