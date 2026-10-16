@@ -43,6 +43,13 @@ describe("M49.4 memory env docs", () => {
     expect(cliReadme).toMatch(/\boff\b/);
   });
 
+  test("root README leads with memory and sends the compile era to the archive", () => {
+    const readme = readFileSync(join(root, "README.md"), "utf8");
+    expect(readme.slice(0, 400)).toMatch(/passive memory for coding agents/i);
+    expect(readme).toContain("archived/compile-era/");
+    expect(readme).not.toMatch(/eden compile --traces/);
+  });
+
   test("plugin README keeps three states and sleep names", () => {
     for (const needle of ["EDEN_SLEEP_EVERY", "EDEN_SLEEP_IDLE", "EDEN_SLEEP_BUDGET", "readonly", "off"]) {
       expect(pluginReadme).toContain(needle);

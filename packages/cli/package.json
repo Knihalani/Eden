@@ -1,7 +1,7 @@
 {
   "name": "@kaiavn/eden",
   "version": "0.1.0",
-  "description": "Compiles repeated agent tool-call patterns into single-call tools. Domain-general, fail-safe, measured.",
+  "description": "Eden CLI: passive memory for coding agents (hooks, setup, doctor, store maintenance). Also runs the retired compile-era commands.",
   "type": "module",
   "bin": {
     "eden": "./dist/eden.js"
