@@ -417,7 +417,7 @@ function compileRow(rec: MemoryRecord): Compiled {
       return (fields ??= rowFields(rec));
     },
     get rankable() {
-      return (ranks ??= rankable(rec, this.fields));
+      return (ranks ??= rankable(rec));
     },
   };
 }
