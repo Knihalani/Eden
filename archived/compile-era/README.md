@@ -24,7 +24,7 @@ The compile-era product documents, moved out of `docs/` and the repo root on 202
 
 The code these documents describe was not removed, and its tests still run in CI:
 
-- packages: `compile`, `ir`, `runtime`, `shadow`, `measure`, `know`, `sdk-js` (`@kaiavn/sdk`), `sdk-py` (`eden-agent`), and the compile and play paths of `wrap`;
+- packages: `compile`, `runtime`, `shadow`, `measure`, `know`, `sdk-js` (`@kaiavn/sdk`), `sdk-py` (`eden-agent`), and the compile and play paths of `wrap` (`ir` is shared: memory's secret gate uses its redactor);
 - CLI commands: `compile`, `import`, `explain`, `approve`, `play`, `demo`, `claims`, `savings`, `promote`, `schedule`, `audit`, `archive`, `know` and the others under "compile traces into a tool" in `eden --help`;
 - examples: `examples/compile-traces/` and `examples/agent/`;
 - benchmarks: `benchmarks/campaign/` and `benchmarks/poc/`.

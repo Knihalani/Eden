@@ -25,7 +25,7 @@ Eden is passive memory for coding agents. What it does and how to install it: th
 | [memory-ship/reports/](memory-ship/reports/) | One report per merged slice, with its measured numbers |
 | [memory-ship/research/](memory-ship/research/) | The evidence (R0–R9) behind the decisions |
 
-Benchmarks for memory live in `benchmarks/`: [memory-long-horizon/](../benchmarks/memory-long-horizon/README.md) is the harness and the arms that gate each slice; `memory-cues/`, `memory-scope/`, `memory-scale/`, `memory-holdout/`, `memoryagentbench/`, `lme-v2/` and `terminal-bench/` hold earlier and supporting measurements.
+Benchmarks for memory live in `benchmarks/`: [memory-long-horizon/](../benchmarks/memory-long-horizon/README.md) is the harness and the arms that gate each slice; `wrap-cache/` is the cached-prefix gate for wrap's injection (D29); `memory-cues/`, `memory-scope/`, `memory-scale/`, `memory-holdout/`, `memory-ambitious/`, `memory-bakeoff/`, `memoryagentbench/`, `lme-v2/` and `terminal-bench/` hold earlier and supporting measurements.
 
 ## History
 

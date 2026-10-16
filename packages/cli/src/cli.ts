@@ -7,7 +7,8 @@ agent and what it learned about the repo, and injects the matching note on a
 later turn. Hooks fail open. No model runs on the hook path.
 
 memory
-   setup       Write the memory hooks for Claude Code, Gemini CLI, Codex, OpenCode
+   setup       Write the hooks for Claude Code, Gemini CLI, Codex, OpenCode
+               (they also run the retired tool recorder; the plugin does not)
    doctor      Check that everything is healthy (--memory: memory only)
    memory      Remember, dump, scopes, forget, purge, import, migrate (eden memory --help)
    sleep       Consolidate this repo's store and mine its files now
@@ -17,9 +18,7 @@ memory
    wrap        Start the local proxy (127.0.0.1:8788): memory for OpenAI-compatible agents
 
 start a working area
-   init        setup, then start hookd and run doctor
-   login       Save a hosted key (eden login --url … --key …)
-   mcp         Stdio MCP in front of wrap (empty catalog; dispatch ≤1)
+   init        setup, then start hookd, run doctor and print the compile-era guide
 
 compile traces into a tool (retired: archived/compile-era)
    compile     Compile traces into a program letter (--traces <dir>). Local only
@@ -32,10 +31,13 @@ compile traces into a tool (retired: archived/compile-era)
    claims      Published limits board (wins, analogue, limits, retired)
    savings     Show cumulative savings
    bench       Benchmark compiled tools (--traces <dir>)
+   login       Save a hosted key (eden login --url … --key …)
+   mcp         Stdio MCP in front of wrap (empty catalog; dispatch ≤1)
 
 'eden help' and 'eden --help' print this screen. See 'eden help -a'
-for advanced commands. Most commands take --help. setup, sleep, hook,
-hookd, drain and login do not: they run.
+for advanced commands. Commands that run on any arguments, --help
+included: setup, sleep, hook, hookd, drain, login, status, savings,
+open, reject, fulfill, prefetch, recall, runner, manifest, mcp-headers.
 `;
 }
 

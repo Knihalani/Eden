@@ -14,13 +14,13 @@ eden --help
 
 | Command | What it does |
 |---|---|
-| `eden setup` | Write the memory hooks for Claude Code, Gemini CLI, Codex and OpenCode, whichever are present. Not together with the Claude plugin |
+| `eden setup` | Write the hooks for Claude Code (always), and Gemini CLI, Codex and OpenCode when their config folders exist (`--all-agents`: always). Not together with the Claude plugin. Its hooks also run the retired tool recorder (see Hooks) |
 | `eden doctor --memory` | Memory only: hooks, plugin copy, load time, flags, breaker, kill switches. Exits 0 when every line is ok |
-| `eden doctor` | Everything, memory included; names each extra host as ok, half-wired, skipped or not installed |
+| `eden doctor` | Everything, memory included; names each extra host as ok, half-wired, skipped or not installed. Its exit status follows the compile-era checks (`config`, `wrap`, `approve-gate`), so use `--memory` for memory's |
 | `eden memory remember [--global] "<text>"` | Store what a statement says now. `--global` keeps only its rules, for every repo. `--jsonl -` reads `{"text", "kind"?, "cwd"?, "scope"?}` lines from stdin |
 | `eden memory dump [--json]` | Print every row under the memory root and every window's ledger records |
 | `eden memory purge <regex>`, `eden memory forget --secret <regex>` | Rewrite every file under the memory root with each match replaced by `[REDACTED]`, and list the Claude Code transcripts that still hold one (Eden never edits them) |
-| `eden memory forget --all-in <scope>` | Send every rule stored for one folder scope of this repo to history |
+| `eden memory forget --all-in <scope>` | Send every keyed row of one folder scope of this repo (its rules, and slot facts such as the package manager) to history |
 | `eden memory scopes [--json] [<path>…]` | Build this repo's folder-scope catalog from its files now, and say which repo and scope each path belongs to |
 | `eden memory import [--dry-run] <path>` | Read JSONL or JSON transcripts into memory |
 | `eden memory migrate [--dry-run \| --apply \| --rollback \| --contract]` | Move stores written before per-repo memory (one per session) into per-repo stores |
@@ -31,7 +31,7 @@ eden --help
 
 ## Memory
 
-Default is **on**. No hook calls a model or an embedding service, and the store never leaves the machine. Delivery is silent injection: there is no memory UI, and `memory_search` is not the default loop.
+Default is **on**. No memory hook calls a model, an embedding service or the network, and the store stays local. Delivery is silent injection: there is no memory UI, and `memory_search` is not the default loop.
 
 ### Three states
 
@@ -43,7 +43,7 @@ Default is **on**. No hook calls a model or an embedding service, and the store 
 | read-only | `readonly`, `read-only`, or `ro` | Recall existing notes. No write |
 | off | `0`, `off`, `false`, or `none` | Identity. Inject returns the original body. No encode |
 
-Unknown values fail open to on.
+Any other value is off.
 
 ### Store
 
@@ -67,7 +67,7 @@ Each delivery point has a flag, `off`, `shadow` or `on` (`src/memory-flags.ts`),
 | `deliver.batch` | PostToolBatch delivery | shadow | `EDEN_FLAG_DELIVER_BATCH` |
 | `deliver.failure` | Delivery after a failed tool call (not wired to an event yet: P4.5) | shadow | `EDEN_FLAG_DELIVER_FAILURE` |
 | `guard.context` | The policy guard re-delivers a rule a command is about to break | shadow | `EDEN_FLAG_GUARD_CONTEXT` |
-| `guard.ask` | The guard asks you before an irreversible command a rule forbids | off | `EDEN_POLICY_GUARD` |
+| `guard.ask` | The guard asks you before an irreversible command a rule forbids, or a call a live intent covers. `EDEN_POLICY_GUARD=off` turns the whole guard off, `guard.context` included | off | `EDEN_POLICY_GUARD` |
 
 Sources, highest first: the environment, `<repo>/.eden/flags.json`, `$EDEN_HOME/flags.json`, then the default. Both files map a flag name to its value: `{"deliver.submit": "shadow"}`. A repo file may lower `guard.ask`, never raise it. An unknown value is `off` (`shadow` for `deliver.submit`). An unhandled exception at an `on` point forces it to `shadow` for 24 h (`$EDEN_HOME/flags.auto.json`), and the next SessionStart says so once.
 
@@ -95,7 +95,11 @@ Reads a JSONL or JSON transcript file or directory into local memory, each recor
 
 ### Hooks
 
-`eden setup` installs the ten memory events `eden doctor` checks: UserPromptSubmit, SessionStart, SubagentStart, PreCompact, PostCompact, Stop, SessionEnd, PostToolUse, SubagentStop and InstructionsLoaded. On Claude Code it also installs PostToolBatch, which records each tool batch, and PostToolUse leaves the recording to it. Its hooks call `eden hookd` when it runs (`eden wrap` starts it too) and fall back to `eden hook`. The Claude plugin registers its own set, which adds FileChanged, CwdChanged and the PreToolUse guard ([plugins/eden-memory/README.md](../../plugins/eden-memory/README.md)). Do not enable the Claude plugin and `eden setup` together — both attach UserPromptSubmit.
+On Claude Code, `eden setup` writes the ten memory events `eden doctor` checks: UserPromptSubmit, SessionStart, SubagentStart, PreCompact, PostCompact, Stop, SessionEnd, PostToolUse, SubagentStop and InstructionsLoaded, plus PostToolBatch, which records each tool batch (PostToolUse then leaves the recording to it). On Gemini CLI, Codex and OpenCode it writes the equivalents each host has. Its hooks call `eden hookd` when it runs (`eden wrap` starts it too) and fall back to `eden hook`.
+
+Besides memory, `eden hook` still runs the retired compile-era tool recorder, and `eden setup` still installs its PreToolUse hook on every host. Each tool call's redacted arguments and result are written to `~/.eden/runs/`. Once `~/.eden/config.json` holds a key (the first `eden wrap` writes one, and so does `eden login`), tool stretches are posted to that wrap's `/v1/traces`: loopback by default, a remote host after `eden login --url …`. The PreToolUse hook can steer or deny a call to serve a compiled tool. With a key, setup also writes `.mcp.json` in the current folder.
+
+The Claude plugin runs memory only. It registers its own set ([plugins/eden-memory/README.md](../../plugins/eden-memory/README.md)): PostToolBatch instead of PostToolUse, plus FileChanged, CwdChanged, the PreToolUse policy guard and the PreToolUse(Agent) hook that records a subagent's task paths. Do not enable the Claude plugin and `eden setup` together — both attach UserPromptSubmit.
 
 `eden doctor --memory` prints only the memory section and exits 0 when every line is ok: the hooks registered, the installed eden-memory plugin (enabled, and the same as the checkout it runs), a probe that runs that plugin's hook on a Submit (Eden loads in-process, median of 3 within 150 ms), the fallbacks the plugin logged, and how the store is keyed (repo key, scope catalog, guard).
 
