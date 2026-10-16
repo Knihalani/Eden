@@ -42,12 +42,20 @@ describe("rankable", () => {
 
   test("a tool result of more than 12 distinct needles does not rank (P0.6's cost, kept for untyped rows)", () => {
     const tool = row(long, { tags: ["src:tool"] });
-    expect(rankable(tool, rowFields(tool))).toBe(false);
+    expect(rankable(tool)).toBe(false);
+  });
+
+  test("the check reads a tool result only to its 13th distinct term (the soak's Submit grew with the session)", () => {
+    const huge = row(`${long} ${"stack frame at module.fn (file.ts:12:3) ".repeat(100_000)}`, { tags: ["src:tool"] });
+    const started = performance.now();
+    expect(rankable(huge)).toBe(false);
+    // Read whole (755402fb2) it took 318 ms here; read to its 13th term, well under 1 ms.
+    expect(performance.now() - started).toBeLessThan(25);
   });
 
   test("a row the user typed ranks at any length (A2 §2.2: the cut is for episodes only)", () => {
     const typed = row(long, { tags: ["src:user"] });
-    expect(rankable(typed, rowFields(typed))).toBe(true);
+    expect(rankable(typed)).toBe(true);
   });
 });
 

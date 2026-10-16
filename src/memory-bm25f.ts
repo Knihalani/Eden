@@ -131,23 +131,31 @@ const R1_TOKEN = /[a-z0-9@~][a-z0-9_.\-/@:~*]*[a-z0-9*]|[a-z0-9]/g;
 
 /** A row's text's terms (see the header), in order, repeats kept; `skip` holds words that are not the row's. */
 export function textTerms(text: string, skip?: ReadonlySet<string>): string[] {
-  const out: string[] = [];
-  const add = (token: string) => {
-    if (isTerm(token) && !skip?.has(token)) out.push(singular(token));
-  };
+  return [...termsOf(text, skip)];
+}
+
+/** `textTerms` one at a time, read no further than asked: a tool result can be tens of KB. */
+function* termsOf(text: string, skip?: ReadonlySet<string>): Generator<string> {
+  const term = (token: string) => (isTerm(token) && !skip?.has(token) ? singular(token) : undefined);
   // An apostrophe parts words, as Eden's needles did ("Kai's" is "kai"); R1 joined them ("kais").
   for (const [token] of String(text ?? "")
     .toLowerCase()
     .matchAll(R1_TOKEN)) {
     const parts = token.split(/[^a-z0-9]+/).filter(Boolean);
+    const found: (string | undefined)[] = [];
     if (parts.length > 1) {
-      add(token.replace(/[.:\-/]+$/, ""));
+      found.push(term(token.replace(/[.:\-/]+$/, "")));
       for (const segment of token.split(/[/\-_:@~*]+/))
-        if (/^[a-z0-9]+(?:\.[a-z0-9]+)+$/.test(segment) && segment !== token) add(segment);
+        if (/^[a-z0-9]+(?:\.[a-z0-9]+)+$/.test(segment) && segment !== token) found.push(term(segment));
     }
-    for (const part of parts) add(part);
+    for (const part of parts) found.push(term(part));
+    for (const t of found) if (t !== undefined) yield t;
   }
-  return out;
+}
+
+/** Words of a mined row's folder: where it is true, which the read set decides (A4 §2), not what it is about. */
+function placeWords(rec: Pick<MemoryRecord, "tags" | "cite" | "scope">): Set<string> | undefined {
+  return isCited(rec) ? new Set([...queryHay(rec.scope ?? ""), (rec.scope ?? "").toLowerCase()]) : undefined;
 }
 
 /** A prompt's terms (see the header): its words, a dotted name whole (`queryHay`). */
@@ -172,7 +180,7 @@ export type RowFields = Readonly<Record<Field, readonly string[]>>;
  * keys (A4 §3.1).
  */
 export function rowFields(rec: Pick<MemoryRecord, "text" | "tags" | "slots" | "cite" | "scope">): RowFields {
-  const place = isCited(rec) ? new Set([...queryHay(rec.scope ?? ""), (rec.scope ?? "").toLowerCase()]) : undefined;
+  const place = placeWords(rec);
   const body = textTerms(rec.text, place);
   const own = new Set(body);
   const alias = (rec.tags ?? [])
@@ -194,9 +202,15 @@ export function rowTerms(fields: RowFields): Set<string> {
   return new Set(FIELDS.flatMap((field) => fields[field]));
 }
 
-/** Whether the lexical path ranks a row at all (`UNTYPED_NEEDLES`). */
-export function rankable(rec: Pick<MemoryRecord, "tags">, fields: RowFields): boolean {
-  return !isUntyped(rec) || new Set(fields.body).size <= UNTYPED_NEEDLES;
+/**
+ * Whether the lexical path ranks a row at all (`UNTYPED_NEEDLES`), its text read only up to its 13th distinct term:
+ * every Submit asks this of the rows the postings snapshot does not hold, the store's tool results among them.
+ */
+export function rankable(rec: Pick<MemoryRecord, "text" | "tags" | "cite" | "scope">): boolean {
+  if (!isUntyped(rec)) return true;
+  const seen = new Set<string>();
+  for (const term of termsOf(rec.text, placeWords(rec))) if (seen.add(term).size > UNTYPED_NEEDLES) return false;
+  return true;
 }
 
 /** The rows a reader sees, as BM25F reads them: their number, each field's mean length, and each term's df. */
