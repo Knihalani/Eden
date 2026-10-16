@@ -1016,6 +1016,9 @@ const STATUS_OBJECT = new RegExp(
   "i",
 );
 
+/** P4.2 (red first): the file rows past D33's hot path go to; none goes there yet. */
+export const DIARY_FILE = "diary.jsonl";
+
 export const PACKET_CHAT_K_MIN = 6,
   PACKET_CHAT_K_MAX = 10,
   PACKET_CHAT_K_DEFAULT = PACKET_CHAT_K_MIN;
@@ -2363,6 +2366,11 @@ export class AgentMemory {
 
   close() {
     this.flush(false);
+  }
+
+  /** P4.2 (red first): the postings snapshot (`memory-postings.ts`); none is written yet. */
+  refreshPostings(_minDelta = 1): boolean {
+    return false;
   }
 
   async sleep(opts?: { session?: string }): Promise<void> {

@@ -497,7 +497,18 @@ type Ledger = { dir: string; file: LedgerFile };
  * invocation appends one wide event, and an exception at an `on` delivery point lets the circuit breaker check that
  * point's budget (`memory-breaker.ts`). With `EDEN_MEMORY=off` it does nothing at all; read-only, it writes nothing.
  */
-export function memoryHookResponse(raw: Record<string, unknown>, stage?: HookStage): Record<string, unknown> | null {
+/** P4.2 (red first): A4 §5.1 step 0's budget; nothing aborts yet. */
+export const SUBMIT_BUDGET_MS = 150;
+
+export function budgetOf(_origin: number, _env = process.env.EDEN_SUBMIT_BUDGET_MS): () => boolean {
+  return () => false;
+}
+
+export function memoryHookResponse(
+  raw: Record<string, unknown>,
+  stage?: HookStage,
+  _origin?: number,
+): Record<string, unknown> | null {
   const started = performance.now();
   let writes: boolean, r: Record<string, unknown>, event: string;
   try {
