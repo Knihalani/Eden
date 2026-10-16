@@ -1,5 +1,7 @@
 # Completeness without drowning
 
+> **Superseded: history of the M1–M50 memory waves (September 2026).** The memory program now builds from [memory-ship/](memory-ship/): [ROADMAP.md](memory-ship/ROADMAP.md) orders the work, [DECISIONS.md](memory-ship/DECISIONS.md) wins every conflict, and [PROGRESS.md](memory-ship/PROGRESS.md) says what is done.
+
 **Locked 2026-09-28.** Product intent: the user should not have to restate anything already given; the injected block stays ≤8 / ≤900 and **gold first**. Dump-all stays a miss. No embeddings on submit.
 
 Two stores, one brain:

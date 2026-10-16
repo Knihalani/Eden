@@ -1,5 +1,7 @@
 # Eden Memory — 2026 competitor autopsy
 
+> **Superseded: history of the M1–M50 memory waves (September 2026).** The memory program now builds from [memory-ship/](memory-ship/): [ROADMAP.md](memory-ship/ROADMAP.md) orders the work, [DECISIONS.md](memory-ship/DECISIONS.md) wins every conflict, and [PROGRESS.md](memory-ship/PROGRESS.md) says what is done.
+
 **Dated 2026-09-19.** Feeds `docs/MEMORY-PLAN.md` §5. **Not a clone spec.** We take mechanisms that fit Eden’s animal and leave everyone else’s product.
 
 **Name collision:** [two-tech-dev/memorable](https://github.com/two-tech-dev/memorable) and [taecontrol/memorable](https://github.com/taecontrol/memorable) are **MCP GraphRAG products**. They are **not** [memorable.sh](https://www.memorable.sh/). Do not install them.

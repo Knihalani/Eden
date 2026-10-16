@@ -1,5 +1,7 @@
 # The Eden campaign
 
+> **Compile era: retired.** This campaign measured Eden's earlier tool-path compiler. Its tests still run, but Eden is now passive memory for coding agents ([README](../../README.md)), measured by [benchmarks/memory-long-horizon/](../memory-long-horizon/README.md); the compile-era documents are in [archived/compile-era/](../../archived/compile-era/README.md).
+
 Multi-domain, paired, gated benchmarks plus adversarial end-to-end tests.
 Built to answer one question honestly: **does Eden actually help real agent
 workloads — short and long running — without ever corrupting state?**

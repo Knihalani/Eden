@@ -1,7 +1,7 @@
 {
   "name": "@kaiavn/sdk",
   "version": "0.1.0",
-  "description": "Eden JS SDK: wrap tool calls so repeated agent workflows route onto compiled tools, falling back to your originals on any failure.",
+  "description": "Retired compile-era client. Eden JS SDK: wrap tool calls so repeated agent workflows route onto compiled tools, falling back to your originals on any failure.",
   "type": "module",
   "main": "dist/index.js",
   "types": "src/index.ts",

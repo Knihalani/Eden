@@ -1,5 +1,7 @@
 # Prompt: execute memory Wave M{N}
 
+> **Superseded: history of the M1–M50 memory waves (September 2026).** The memory program now builds from [memory-ship/](memory-ship/): [ROADMAP.md](memory-ship/ROADMAP.md) orders the work, [DECISIONS.md](memory-ship/DECISIONS.md) wins every conflict, and [PROGRESS.md](memory-ship/PROGRESS.md) says what is done. The `/memory-wave` command this prompt served no longer exists; slices run with `/next` or `/slice`.
+
 Used by `/memory-wave`. `{N}` is the pending wave from `docs/MEMORY-WAVE-STATUS.md`.
 
 **CLOSED only. Zero leftovers.** Loop until every Done-when for M{N}.1–M{N}.4 holds **and** every finding is fixed. No pins, TODOs, follow-ups, or “later wave.” The Blocked template is the only exception (named external blocker the Done-when literally requires).

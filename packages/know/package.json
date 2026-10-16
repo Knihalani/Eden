@@ -14,7 +14,7 @@
   "scripts": {
     "test": "bun test src"
   },
-  "description": "Robots-honoring public ingest onto a knowledge graph. Query-time fact cards. Not wrap. Source closed; graph dumps open.",
+  "description": "Retired compile-era side line. Robots-honoring public ingest onto a knowledge graph. Query-time fact cards. Not wrap. Source closed; graph dumps open.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/KaiavN/Eden.git",

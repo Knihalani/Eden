@@ -1,5 +1,7 @@
 # What to build into Eden Memory
 
+> **Superseded: history of the M1–M50 memory waves (September 2026).** The memory program now builds from [memory-ship/](memory-ship/): [ROADMAP.md](memory-ship/ROADMAP.md) orders the work, [DECISIONS.md](memory-ship/DECISIONS.md) wins every conflict, and [PROGRESS.md](memory-ship/PROGRESS.md) says what is done.
+
 **Dated 2026-09-28.** SOTA / new / innovative agent-memory systems, filtered through Eden’s locked product: silent Claude-hook inject, copula + episode facts, ≤8 bullets ≤900 bytes, sub-millisecond fail-open, dump-all is not a win.
 
 This is a **build brief**, not a clone list. Earlier autopsies: `docs/MEMORY-COMPETITORS.md` (2026-09-19), `docs/MEMORY-PLAN.md` (locked animal). This file supersedes those as the **mechanism backlog** after Hindsight source review (`vectorize-io/hindsight` main, 2026-09-28) and 2025–2026 papers.

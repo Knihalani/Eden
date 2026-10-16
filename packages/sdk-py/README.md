@@ -1,5 +1,7 @@
 # eden-agent
 
+> **Compile era: retired.** This SDK is the client for Eden's earlier tool-path compiler (compiled tools played by wrap). It still works, but it is not the product: see the [root README](../../README.md) and [archived/compile-era/](../../archived/compile-era/README.md).
+
 Pure-stdlib Python client for Eden wrap. Not on PyPI (`eden-agent` there is someone else). From this clone: `pip install -e packages/sdk-py`.
 
 ```python
