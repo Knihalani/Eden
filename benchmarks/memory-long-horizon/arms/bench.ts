@@ -29,13 +29,17 @@ import {
 import { check, jsonOut, type Arm, type ArmRun, type Check } from "./kit";
 import { scaleArm } from "./scale";
 
-/** Plants the R1 memories in a fresh world and asks `cues`; undefined when nothing could be planted. */
+/**
+ * Plants the R1 memories in a fresh world and asks `cues`; undefined when nothing could be planted. A second world of
+ * one arm run needs a `home` of its own (`ArmRun.world`), which also gives it its own store.
+ */
 async function bench(
   run: ArmRun,
   cues: readonly BenchCue[],
+  home?: string,
 ): Promise<{ results: CueResult[]; detail: string } | undefined> {
   const spec = benchWorld();
-  const world = run.world(spec);
+  const world = run.world(spec, home === undefined ? {} : { home });
   const planted = plant(run, world, memoryRows(world));
   if (!planted || planted.remembered !== planted.rows) return undefined;
   const pool = memories();
@@ -90,7 +94,9 @@ const inSituationOf = (negative: BenchCue, ctx: BenchCue): BenchCue => ({
  * whose subject only their previous turn or Reads carry, counted in context (`recallInContext`: a gold memory the
  * previous turn's own packet gave is not repeated, A4 §4), and the test negatives asked twice, bare and each in a ctx
  * cue's situation (round robin), so a busy context that made everything look relevant would show as new false
- * injects. CI asks every ctx cue and one negative of each class; `--scale full` every test negative.
+ * injects. The two sets are asked in two stores planted alike: an asked prompt is stored as a row, so a set asked
+ * after the other would meet a fuller store (at full scale that alone moved the count by 2 to 3 either way). CI asks
+ * every ctx cue and one negative of each class; `--scale full` every test negative.
  */
 const cuebenchCtx: Arm = {
   id: "cuebench-ctx",
@@ -100,9 +106,12 @@ const cuebenchCtx: Arm = {
     const ctx = test.filter((cue) => cue.cat === "ctx");
     const bare = subset(run, test.filter(isNegative), 1);
     const situated = bare.map((negative, n) => inSituationOf(negative, ctx[n % ctx.length]!));
-    const outcome = await bench(run, [...ctx, ...bare, ...situated]);
-    if (!outcome) return ["planted", "ctx-recall", "fir-in-context"].map((id) => check(id, false, NOT_PLANTED));
-    const of = (cues: readonly BenchCue[]) => outcome.results.filter((result) => cues.includes(result.cue));
+    const outcome = await bench(run, [...ctx, ...bare]);
+    const apart = outcome && (await bench(run, situated, "situated"));
+    if (!outcome || !apart)
+      return ["planted", "ctx-recall", "fir-in-context"].map((id) => check(id, false, NOT_PLANTED));
+    const results = [...outcome.results, ...apart.results];
+    const of = (cues: readonly BenchCue[]) => results.filter((result) => cues.includes(result.cue));
     const recall = recallInContext(of(ctx));
     const atCue = recallAt4(of(ctx));
     const [firBare, firSituated] = [fir(of(bare)), fir(of(situated))];
