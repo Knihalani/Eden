@@ -213,11 +213,11 @@ describe("eden play", () => {
 });
 
 describe("person path copy", () => {
-  test("root help is git-grouped and names compile plus play --input", () => {
+  test("root help is git-grouped, leads with memory, and still names compile plus play --input", () => {
     const help = edenHelp();
     expect(help).toMatch(/^usage: eden /);
     expect(help).toMatch(/compile traces into a tool/i);
-    expect(help.indexOf("compile")).toBeLessThan(help.indexOf("hookd"));
+    expect(help.indexOf("setup")).toBeLessThan(help.indexOf("compile"));
     expect(help).toMatch(/eden compile|--traces/);
     expect(help).toMatch(/--input/);
     expect(help).toMatch(/Does not Approve/);

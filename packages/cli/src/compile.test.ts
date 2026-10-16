@@ -427,8 +427,9 @@ describe("eden compile", () => {
     expect(refuse.out).not.toMatch(/eden import/);
   });
 
-  test("README first screen names compile --traces and not deleted workshop chrome", async () => {
-    const readme = await Bun.file(join(import.meta.dir, "../../../README.md")).text();
+  test("the archived compile guide's first screen names compile --traces and not deleted workshop chrome", async () => {
+    const guide = "../../../archived/compile-era/docs/compile-guide.md";
+    const readme = await Bun.file(join(import.meta.dir, guide)).text();
     const head = readme.slice(0, 1800);
     expect(head).toMatch(/eden compile --traces/);
     expect(head).toMatch(/@kaiavn\/eden/);

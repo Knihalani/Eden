@@ -2,40 +2,40 @@
 export function edenHelp(): string {
   return `usage: eden [--help] <command> [<args>]
 
-Eden compiles repeated tool stretches into one inspectable program.
-Does not Approve. Does not hit the network.
+Eden is passive memory for coding agents. It remembers what you told the
+agent and what it learned about the repo, and injects the matching note on a
+later turn. Hooks fail open. No model runs on the hook path.
 
-These are common Eden commands used in various situations:
+memory
+   setup       Write the memory hooks for Claude Code, Gemini CLI, Codex, OpenCode
+   doctor      Check that everything is healthy (--memory: memory only)
+   memory      Remember, dump, scopes, forget, purge, import, migrate (eden memory --help)
+   sleep       Consolidate this repo's store and mine its files now
+   eval        Build your private real-negative set (eval build-negatives)
+   hook        The hook entry point (called by hooks)
+   hookd       Start the daemon the setup hooks call (they fall back to hook)
+   wrap        Start the local proxy (127.0.0.1:8788): memory for OpenAI-compatible agents
 
 start a working area
-   init        Set up config, hooks, and MCP in one step
-   wrap        Start the local proxy (127.0.0.1:8788)
+   init        setup, then start hookd and run doctor
    login       Save a hosted key (eden login --url … --key …)
+   mcp         Stdio MCP in front of wrap (empty catalog; dispatch ≤1)
 
-compile traces into a tool
+compile traces into a tool (retired: archived/compile-era)
    compile     Compile traces into a program letter (--traces <dir>). Local only
    import      Send traces to wrap (--traces dir, or --file LangSmith/OTel). Does not Approve
    explain     Why nothing compiled (exact counts)
    approve     Print the card; --yes ships canary (human gate)
    play        Run an approved tool (--input '{...}') — needs Approve PASS
    demo        TicketShip sitting (T-100; same as bun run demo)
-
-record the agent
-   hookd       Start the recording daemon for Claude Code hooks
-   hook        Record a single tool call (called by hooks)
-   drain       Flush pending recordings
-   memory      Import, dump or purge memory (eden memory help)
-   mcp         Stdio MCP in front of wrap (empty catalog; dispatch ≤1)
-
-inspect
-   doctor      Check that everything is healthy
+   drain       Flush pending tool recordings
    claims      Published limits board (wins, analogue, limits, retired)
    savings     Show cumulative savings
-   bench       Run benchmarks
-   eval        Build your private real-negative set (eval build-negatives)
+   bench       Benchmark compiled tools (--traces <dir>)
 
 'eden help' and 'eden --help' print this screen. See 'eden help -a'
-for advanced commands. 'eden <command> --help' for a specific command.
+for advanced commands. Most commands take --help. setup, sleep, hook,
+hookd, drain and login do not: they run.
 `;
 }
 
