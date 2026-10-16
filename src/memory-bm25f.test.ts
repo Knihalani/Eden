@@ -19,9 +19,9 @@ describe("rowFields", () => {
     expect(rowFields(row("The queues of the queue service")).body).toEqual(["queue", "queue", "service"]);
   });
 
-  test("a row's aliases are its tags its text does not hold", () => {
-    const fields = rowFields(row("We push jobs to SQS.", { tags: ["src:user", "dlq", "sqs", "pin"] }));
-    expect([...fields.alias].sort()).toEqual(["dlq", "pin"]);
+  test("a row's aliases are its tags' alias words its text does not hold; `pin`, `howto` and `src:` are none", () => {
+    const fields = rowFields(row("We push jobs to SQS.", { tags: ["src:user", "dlq", "sqs", "pin", "howto"] }));
+    expect([...fields.alias].sort()).toEqual(["dlq"]);
   });
 
   test("its D7 keys give the value and subject fields", () => {

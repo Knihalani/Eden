@@ -16,6 +16,10 @@ import type { MemoryRecord } from "./index";
 import { queryHay, singular } from "./memory-cue";
 import { isCited, isUntyped } from "./memory-provenance";
 import { slotLabel } from "./memory-slots";
+import { WRITE_ALIASES } from "./memory-sota";
+
+/** The alias words `writeAliasTags` adds to a row's tags: a tag that is none (`pin`, `howto`, `src:…`) is no alias. */
+const ALIAS_WORDS = new Set(Object.values(WRITE_ALIASES).flat());
 
 export type Field = "value" | "subject" | "alias" | "body";
 export const FIELDS: readonly Field[] = ["value", "subject", "alias", "body"];
@@ -163,8 +167,9 @@ export type RowFields = Readonly<Record<Field, readonly string[]>>;
 
 /**
  * A row's fields (see the header). A mined row's folder is where it is true, which the read set decides (A4 §2),
- * not what it is about: its text's folder words are not its needles. Its aliases are its tags that its text does not
- * hold (`writeAliasTags`' expansions), its keys' values and subjects come from its stored D7 keys (A4 §3.1).
+ * not what it is about: its text's folder words are not its needles. Its aliases are the alias words of its tags
+ * (`writeAliasTags`' expansions) that its text does not hold; its keys' values and subjects come from its stored D7
+ * keys (A4 §3.1).
  */
 export function rowFields(rec: Pick<MemoryRecord, "text" | "tags" | "slots" | "cite" | "scope">): RowFields {
   const place = isCited(rec) ? new Set([...queryHay(rec.scope ?? ""), (rec.scope ?? "").toLowerCase()]) : undefined;
@@ -172,7 +177,7 @@ export function rowFields(rec: Pick<MemoryRecord, "text" | "tags" | "slots" | "c
   const own = new Set(body);
   const alias = (rec.tags ?? [])
     .map((tag) => String(tag).toLowerCase())
-    .filter((tag) => /^[a-z0-9][a-z0-9.]*$/.test(tag) && isTerm(tag) && !place?.has(tag))
+    .filter((tag) => ALIAS_WORDS.has(tag) && isTerm(tag) && !place?.has(tag))
     .map(singular)
     .filter((tag) => !own.has(tag));
   const value: string[] = [];

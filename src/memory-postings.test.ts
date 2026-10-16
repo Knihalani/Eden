@@ -15,6 +15,7 @@ import {
   DeltaIndex,
   FAT_DF,
   PostingsView,
+  SNAPSHOT_DELTA,
   Snapshot,
   SNAPSHOT_FILE,
   snapshotBytes,
@@ -264,6 +265,33 @@ describe("retrieval through the snapshot (AgentMemory)", () => {
     reader.close();
   });
 
+  test("a held row whose tags change waits again: the next refresh finds it by its new tag (review round 1)", () => {
+    const dir = tempDir();
+    const mem = openMemory({ dir, session: "s1", perRepo: true });
+    mem.remember("The storefront queue is RabbitMQ.", { tags: ["src:user"], id: "q1" });
+    for (let i = 0; i < 5; i++) mem.remember(`Ticket T-${100 + i} moved on day ${i}.`, { tags: ["src:user"] });
+    expect(mem.refreshPostings()).toBe(true);
+    expect(mem.refreshPostings(1)).toBe(false);
+    // As sleep's alias healing and the miss taxonomy do: an alias word (`writeAliasTags`' expansion of "sqs").
+    mem.patchWhere((row) => (row.id === "q1" ? { ...row, tags: [...(row.tags ?? []), "dlq"] } : undefined));
+    expect(mem.refreshPostings(1)).toBe(true);
+    mem.close();
+    const reader = openMemory({ dir, session: "s2", perRepo: true });
+    expect(reader.relevant("which dlq?").map((row) => row.text)).toContain("The storefront queue is RabbitMQ.");
+    reader.close();
+  });
+
+  test("a snapshot whose bucket cannot be read is written again at the next refresh", () => {
+    const dir = tempDir();
+    const mem = distracted(dir);
+    mem.refreshPostings();
+    const path = join(dir, SNAPSHOT_FILE);
+    writeFileSync(path, readFileSync(path, "utf8").replace(/"storefront":/g, '"storefront":}'));
+    expect(mem.refreshPostings(SNAPSHOT_DELTA)).toBe(true);
+    expect(() => Snapshot.open(dir)!.verify()).not.toThrow();
+    mem.close();
+  });
+
   test("a snapshot cut short is set aside: the rows are indexed in process", () => {
     const dir = tempDir();
     const mem = distracted(dir);
@@ -326,6 +354,23 @@ describe("D33: the hot path's 20k rows", () => {
       .map((row) => row.text);
     expect(kept).toHaveLength(5);
     expect(kept.some((text) => text.includes("Ticket 7 note"))).toBe(true);
+  });
+
+  test("a row goes to the diary once, however many flushes and processes follow (review round 1)", () => {
+    process.env.EDEN_MEMORY_STORE_CAP = "5";
+    const dir = tempDir();
+    const mem = openMemory({ dir, session: "s1", perRepo: true });
+    for (let i = 0; i < 12; i++) mem.remember(`Fact number ${100 + i} about widget ${i}.`, { tags: ["src:user"] });
+    mem.close();
+    const again = openMemory({ dir, session: "s2", perRepo: true });
+    again.remember("One more fact about gizmos.", { tags: ["src:user"] });
+    again.close();
+    const diary = readFileSync(join(dir, DIARY_FILE), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => (JSON.parse(line) as { id: string }).id);
+    expect(diary).toHaveLength(8);
+    expect(new Set(diary).size).toBe(diary.length);
   });
 
   test("the cap is 20,000 rows by default", async () => {
