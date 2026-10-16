@@ -7,16 +7,18 @@
  *
  * - a header line (JSON): the snapshot's own id, the rows indexed by scope with their field lengths (BM25F's N and mean
  *   lengths, `memory-bm25f.ts`), and the byte range of each part below;
- * - the ids of the indexed rows, one per line, oldest first: a row's place in this list is its ordinal;
+ * - the ids of the indexed rows, one per line, oldest first, each with a digest of what its terms are read from: a
+ *   row's place in this list is its ordinal;
  * - buckets: a term's postings, by scope, as ordinals, ascending (so newest last). A term lives in the bucket its hash
  *   names, so a cue of ten words reads ten small buckets, never the whole index.
  *
  * Postings are scoped (03-BUILD, A2 §2.2: "filter by scope first"): a reader reads the lists of the scopes it may see
  * (`RowFilter.scopes`), so a term busy in a sibling folder costs it nothing. Rows the snapshot does not hold by id,
  * the delta, are indexed in process: rows written since, and rows another process wrote that its builder had not yet
- * read. The light sleep refreshes the snapshot once `SNAPSHOT_DELTA` rows wait, the idle sleeper whenever one does. A
- * row the snapshot names is always scored from its current text, so a stale posting can only add a candidate that
- * scores nothing.
+ * read. A row the snapshot holds is always scored from its current text, but found only by the terms it had at the
+ * build: one whose text, tags or keys changed since (sleep's alias passes, a rewrite) waits for the next snapshot as
+ * a new row does (`rowDigest`). The light sleep refreshes the snapshot once `SNAPSHOT_DELTA` rows wait, the idle
+ * sleeper whenever one does, and either whenever a part of it cannot be read.
  *
  * The candidate set (`candidateRows`) is bounded, |C| ≤ 200, and never walks a whole fat list in recency or score
  * order: a term in at most `FAT_DF` visible rows gives them all, rarest term first; of the fatter ones, the rarest 4
@@ -86,11 +88,24 @@ function scopeKey(rec: Pick<MemoryRecord, "scope">): string {
   return typeof rec.scope === "string" ? rec.scope : NO_SCOPE;
 }
 
-/** FNV-1a over a term: the bucket it lives in. */
-function bucketOf(term: string, buckets: number): number {
+/** FNV-1a over a string. */
+function fnv(text: string): number {
   let hash = 0x811c9dc5;
-  for (let i = 0; i < term.length; i++) hash = Math.imul(hash ^ term.charCodeAt(i), 0x01000193);
-  return (hash >>> 0) % buckets;
+  for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193);
+  return hash >>> 0;
+}
+
+/** The bucket a term lives in. */
+function bucketOf(term: string, buckets: number): number {
+  return fnv(term) % buckets;
+}
+
+/** A digest of what a row's terms are read from (`rowFields`) and where it is posted: its text, tags, keys, place. */
+export function rowDigest(rec: Pick<MemoryRecord, "text" | "tags" | "slots" | "scope" | "cite">): string {
+  const keys = JSON.stringify(rec.slots ?? []);
+  return fnv(
+    `${rec.text}\0${(rec.tags ?? []).join(" ")}\0${keys}\0${scopeKey(rec)}\0${(rec.cite ?? []).join(" ")}`,
+  ).toString(36);
 }
 
 /** Enough buckets that one holds about 2,000 postings. */
@@ -123,7 +138,8 @@ export function snapshotBytes(rows: readonly Indexed[]): Buffer {
   const count = bucketCount(postings);
   const buckets = Array.from({ length: count }, () => record<Record<string, number[]>>());
   for (const [term, byScope] of terms) buckets[bucketOf(term, count)]![term] = byScope;
-  const parts = [rows.map(({ rec }) => rec.id).join("\n"), ...buckets.map((bucket) => JSON.stringify(bucket))];
+  const ids = rows.map(({ rec }) => `${rec.id}\t${rowDigest(rec)}`).join("\n");
+  const parts = [ids, ...buckets.map((bucket) => JSON.stringify(bucket))];
   const bodies = parts.map((part) => Buffer.from(part, "utf8"));
   const ranges: [number, number][] = [];
   let at = 0;
@@ -160,7 +176,7 @@ export function writeSnapshot(dir: string, rows: readonly Indexed[]): void {
 /** One open snapshot, read part by part through one file descriptor (one version, whatever is written meanwhile). */
 export class Snapshot {
   private readonly buckets = new Map<number, Bucket>();
-  private idList?: string[];
+  private held?: { ids: string[]; digests: string[] };
 
   private constructor(
     private readonly fd: number,
@@ -185,15 +201,42 @@ export class Snapshot {
 
   /** The indexed rows' ids by ordinal. */
   ids(): string[] {
-    return (this.idList ??= this.header.rows ? this.read(this.header.ids).split("\n") : []);
+    return this.rows().ids;
+  }
+
+  /** Each indexed row's digest at the build (`rowDigest`), by id. */
+  digests(): Map<string, string> {
+    const { ids, digests } = this.rows();
+    return new Map(ids.map((id, at) => [id, digests[at]!]));
+  }
+
+  /** Reads every bucket: throws when one cannot be read, as a reader would at that term. */
+  verify(): void {
+    for (let at = 0; at < this.header.buckets.length; at++) this.bucket(at);
   }
 
   /** A term's ordinals by scope key, ascending; undefined when no indexed row holds it. */
   lists(term: string): Record<string, number[]> | undefined {
-    const at = bucketOf(term, this.header.buckets.length);
+    return own(this.bucket(bucketOf(term, this.header.buckets.length)), term);
+  }
+
+  private bucket(at: number): Bucket {
     let bucket = this.buckets.get(at);
     if (!bucket) this.buckets.set(at, (bucket = JSON.parse(this.read(this.header.buckets[at]!)) as Bucket));
-    return own(bucket, term);
+    return bucket;
+  }
+
+  private rows(): { ids: string[]; digests: string[] } {
+    if (this.held) return this.held;
+    const lines = this.header.rows ? this.read(this.header.ids).split("\n") : [];
+    const ids: string[] = [];
+    const digests: string[] = [];
+    for (const line of lines) {
+      const tab = line.indexOf("\t");
+      ids.push(tab < 0 ? line : line.slice(0, tab));
+      digests.push(tab < 0 ? "" : line.slice(tab + 1));
+    }
+    return (this.held = { ids, digests });
   }
 
   close(): void {

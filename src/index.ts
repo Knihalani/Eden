@@ -81,6 +81,7 @@ import {
   candidateRows,
   DeltaIndex,
   PostingsView,
+  rowDigest,
   Snapshot,
   writeSnapshot,
   type Indexed,
@@ -1673,10 +1674,21 @@ export class AgentMemory {
     return (this.deltaIndex = new DeltaIndex(version, this.outside(snapshot)));
   }
 
-  /** How many indexable rows wait outside a snapshot: all of them when it cannot be read, so it is written again. */
+  /**
+   * How many rows wait outside a snapshot: the indexable rows it does not hold, and those it holds whose text, tags or
+   * keys changed since its build (`rowDigest`); all of them when a part of it cannot be read, so it is written again.
+   */
   private waiting(snapshot: Snapshot | undefined): number {
+    if (!snapshot) return this.outside(undefined).length;
     try {
-      return this.outside(snapshot).length;
+      snapshot.verify();
+      const built = snapshot.digests();
+      let waiting = 0;
+      for (const c of this.compiled) {
+        const digest = built.get(c.rec.id);
+        if (digest === undefined ? indexable(c) : digest !== rowDigest(c.rec)) waiting++;
+      }
+      return waiting;
     } catch {
       return Number.POSITIVE_INFINITY;
     }
@@ -2054,7 +2066,8 @@ export class AgentMemory {
   /**
    * D33: the store holds its newest `memoryStoreCap()` rows (20k by default), pins and constraints always. An older
    * row leaves the hot path for `diary.jsonl` beside the store, which no hook reads (the diary on disk is unbounded;
-   * P6.1's store takes it in). Runs under the store's lock.
+   * P6.1's store takes it in). Runs under the store's lock; a store write that then fails can leave a row in the
+   * diary twice, so the diary is read by id.
    */
   private trimToStoreCap(): void {
     const cap = memoryStoreCap();

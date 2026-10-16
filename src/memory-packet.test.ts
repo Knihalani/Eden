@@ -610,7 +610,10 @@ describe("M39 diverse packet", () => {
     });
   });
 
-  test("mix budget keeps a fact and a procedure, not 10 copies", () => {
+  // P4.2: notesFor still gives a fact and the procedure; the packet, ranked by BM25F under D17's bounded kind prior,
+  // gives the procedure beside another row (here the episode, which names more of the cue than the facts left once
+  // the cue's own fact is residual, D26), and no row twice.
+  test("mix budget keeps one capped procedure beside another row, not 10 copies", () => {
     const verify = "verify: bun test src/task/migrate.ts";
     const steps = "step ".repeat(800);
     const procedure = `${steps} Migrate sqlite task files → src/task/schema.ts src/task/migrate.ts · ${verify}`;
@@ -648,14 +651,11 @@ describe("M39 diverse packet", () => {
       const bullets = bulletsOf(pkt);
       // D14 words bullets without kind tags: the procedure is the one with its verify step.
       const procLines = bullets.filter((l) => l.includes(verify));
-      const factLines = bullets.filter((l) => facts.some((fact) => l.startsWith(`- ${fact}`)));
       expect(pkt).toContain(MEMORY_MARK);
       expect(pkt).not.toMatch(KIND_TAG);
-      // P4.2: every path ranks by BM25F under D17's bounded kind prior, so the episode naming 5 of the cue's words may
-      // lead the facts naming 4 (the top fact is the cue's own residual, D26): the procedure comes with another row.
       expect(bullets.filter((l) => !l.includes(verify)).length).toBeGreaterThanOrEqual(1);
       expect(procLines).toHaveLength(1);
-      expect(new Set(factLines).size).toBe(factLines.length);
+      expect(new Set(bullets).size).toBe(bullets.length);
       expect(bullets.length).toBeLessThanOrEqual(PACKET_SOFT_BULLETS);
       const procBody = procLines[0]!.replace(/^- /, "").replace(/ \([^()]*just now\)$/, "");
       expect(procBody.length).toBeLessThanOrEqual(PROCEDURE_CHAR_CAP);

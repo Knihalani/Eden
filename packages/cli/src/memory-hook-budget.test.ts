@@ -5,10 +5,11 @@
  * in a hook; here the call passes an origin in the past instead of waiting, and the budget is 5 s, so a Submit meant
  * to be in budget stays so on a loaded machine (`budgetOf`'s tests cover the 150 ms default).
  */
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { AgentMemory } from "../../../src/index";
 import { budgetOf, memoryHookResponse, SUBMIT_BUDGET_MS } from "./memory-hook";
 
 const SESSION = "s-budget";
@@ -126,6 +127,25 @@ describe("the Submit's budget abort", () => {
     });
   });
 
+  test("a Submit whose budget runs out during retrieval aborts before the ledger records it (review round 1)", () => {
+    memoryHookResponse({ hook_event_name: "UserPromptSubmit", session_id: SESSION, prompt: RULE });
+    process.env.EDEN_SUBMIT_BUDGET_MS = "400";
+    const recall = AgentMemory.prototype.recall;
+    const slow = spyOn(AgentMemory.prototype, "recall").mockImplementation(function (this: AgentMemory, ...args) {
+      const out = recall.apply(this, args as Parameters<typeof recall>);
+      const until = performance.now() + 450;
+      while (performance.now() < until) {}
+      return out;
+    });
+    try {
+      expect(submit(CUE)).toBeUndefined();
+    } finally {
+      slow.mockRestore();
+    }
+    expect(wideEvents().at(-1)).toMatchObject({ ev: "UserPromptSubmit", aborted: true });
+    expect(ledger().filter((record) => record.k === "deliver")).toHaveLength(0);
+  });
+
   test("only a human Submit aborts: a non-human one and PreCompact never do", () => {
     submit(RULE);
     submit("<task-notification>build finished</task-notification>", LATE);
@@ -148,5 +168,6 @@ describe("budgetOf (EDEN_SUBMIT_BUDGET_MS)", () => {
     expect(budgetOf(at(10_000), "0")()).toBe(false);
     expect(budgetOf(at(10_000), "off")()).toBe(false);
     expect(budgetOf(at(SUBMIT_BUDGET_MS + 20), "soon")()).toBe(true);
+    expect(budgetOf(at(SUBMIT_BUDGET_MS + 20), "-5")()).toBe(true);
   });
 });

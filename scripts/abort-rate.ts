@@ -78,7 +78,11 @@ async function main(args: string[]): Promise<number> {
   }
   const events = readdirSync(join(root, "hook.log.d"))
     .filter((name) => name.endsWith(".jsonl"))
-    .flatMap((name) => readFileSync(join(root, "hook.log.d", name), "utf8").split("\n").filter(Boolean))
+    .flatMap((name) =>
+      readFileSync(join(root, "hook.log.d", name), "utf8")
+        .split("\n")
+        .filter(Boolean),
+    )
     .map((line) => JSON.parse(line) as { ev: string; aborted?: boolean; ms?: number })
     .filter((event) => event.ev === "UserPromptSubmit");
   const aborted = events.filter((event) => event.aborted).length;
