@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * A5 `abort_rate` at the budget that ships (A4 §5.1 step 0: 150 ms from a Submit's process start, P4.2): runs N
+ * A5 `abort_rate` at the budget that ships (A4 §5.1 step 0: 150 ms from a Submit's handler start, P4.2): runs N
  * human Submits one after another through a plugin's UserPromptSubmit command, as Claude Code runs it (`/bin/sh -c`),
  * with no `EDEN_SUBMIT_BUDGET_MS` (the harness sets 1 s), against a copy of a store, and counts the Submits whose wide
  * event says `aborted`. Prints the abort rate, the handler's `ms` and the process wall time.
