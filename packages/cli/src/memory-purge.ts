@@ -3,8 +3,10 @@
  *
  * - Every file under the memory root is rewritten without the matches, each replaced by `[REDACTED]`: in a JSON or
  *   JSON-lines file, inside its strings and keys, so every line still parses; in any other text file, in place. A
- *   postings snapshot (`postings.snap`, P4.2) that holds a match is deleted instead: it is derived from the store,
- *   its byte offsets would not survive a rewrite, and the next sleep builds it again from the purged rows. A
+ *   postings snapshot (`postings.snap`, P4.2) is deleted instead, every one under the root, once the purge removed a
+ *   match anywhere: it is derived from the store, holds its words lowercased, stemmed and split (so a pattern that
+ *   matched a row need not match it), its byte offsets would not survive a rewrite, and sleep builds it again from
+ *   the purged rows. A
  *   SQLite store loses the rows that match, with `secure_delete`, a truncating WAL checkpoint and `VACUUM`, so no
  *   free page keeps them. A file is rewritten under its writers' lock (`<file>.lock`); other binary files are left
  *   as they are and named.
@@ -86,8 +88,10 @@ function filesUnder(dir: string): string[] {
 
 function purgeTree(root: string, pattern: RegExp): Purged {
   const purged: Purged = { matches: 0, files: 0, skipped: [] };
-  for (const path of filesUnder(root)) {
-    if (path.endsWith(".lock") || SQLITE_COMPANION.test(path)) continue;
+  const files = filesUnder(root);
+  const snapshots = files.filter((path) => basename(path) === SNAPSHOT_FILE);
+  for (const path of files) {
+    if (path.endsWith(".lock") || SQLITE_COMPANION.test(path) || snapshots.includes(path)) continue;
     try {
       const matches = purgeFile(path, pattern);
       purged.matches += matches;
@@ -96,7 +100,18 @@ function purgeTree(root: string, pattern: RegExp): Purged {
       purged.skipped.push({ path, why: err instanceof BinaryFile ? "binary" : (err as Error).message });
     }
   }
+  if (purged.matches) for (const path of snapshots) dropDerived(path, purged);
   return purged;
+}
+
+/** A derived index, deleted (see the header); a file that cannot be deleted is named, as a rewrite would be. */
+function dropDerived(path: string, purged: Purged): void {
+  try {
+    unlinkSync(path);
+    purged.files++;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") purged.skipped.push({ path, why: (err as Error).message });
+  }
 }
 
 class BinaryFile extends Error {}
@@ -106,15 +121,7 @@ function purgeFile(path: string, pattern: RegExp): number {
   const bytes = readFileSync(path);
   if (bytes.subarray(0, SQLITE_HEADER.length).toString("latin1") === SQLITE_HEADER) return purgeSqlite(path, pattern);
   if (bytes.includes(0)) throw new BinaryFile();
-  if (basename(path) === SNAPSHOT_FILE) return purgeDerived(path, bytes.toString("utf8"), pattern);
   return withFileLock(`${path}.lock`, () => purgeText(path, pattern));
-}
-
-/** A derived index holding a match is deleted (see the header); returns how many matches it held. */
-function purgeDerived(path: string, text: string, pattern: RegExp): number {
-  const count = text.match(pattern)?.length ?? 0;
-  if (count) unlinkSync(path);
-  return count;
 }
 
 /** Rewrites a text file without the matches; returns how many it removed. */

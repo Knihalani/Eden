@@ -503,7 +503,7 @@ export const SUBMIT_BUDGET_MS = 150;
 export function budgetOf(origin: number, env = process.env.EDEN_SUBMIT_BUDGET_MS): () => boolean {
   const raw = env?.trim();
   const set = raw === "off" ? 0 : Number(raw || NaN);
-  const ms = Number.isFinite(set) ? set : SUBMIT_BUDGET_MS;
+  const ms = Number.isFinite(set) && set >= 0 ? set : SUBMIT_BUDGET_MS;
   if (ms <= 0) return () => false;
   return () => performance.now() - origin > ms;
 }

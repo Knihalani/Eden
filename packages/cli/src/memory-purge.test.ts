@@ -17,7 +17,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { MemoryRecord } from "../../../src/index";
+import { openMemory, type MemoryRecord } from "../../../src/index";
 import { rowFields } from "../../../src/memory-bm25f";
 import { SNAPSHOT_FILE, writeSnapshot } from "../../../src/memory-postings";
 import { memoryCli } from "./memory-import";
@@ -141,7 +141,7 @@ describe("eden memory purge", () => {
     }
   });
 
-  test("a postings snapshot holding a match is deleted (derived, rebuilt at sleep); one without is kept", async () => {
+  test("once a purge removes a match, every postings snapshot is deleted (derived, rebuilt at sleep)", async () => {
     const snapshot = (store: string, text: string) => {
       mkdirSync(store, { recursive: true });
       const rec: MemoryRecord = { id: "a", text, kind: "fact", at: 1, seq: 1 };
@@ -150,10 +150,39 @@ describe("eden memory purge", () => {
     };
     const holding = snapshot(join(root, "repos", "r1"), "The deploy token is tok4821937abc.");
     const clean = snapshot(join(root, "repos", "r2"), "The database is postgres.");
+    put(join(root, "s9", "memories.jsonl"), JSON.stringify({ id: "z", text: "token tok4821937abc", t: 1 }) + "\n");
     const { code } = await run(["purge", "tok[0-9]+abc"]);
     expect(code).toBe(0);
     expect(existsSync(holding)).toBe(false);
-    expect(readFileSync(clean, "utf8")).toContain("database");
+    expect(existsSync(clean)).toBe(false);
+  });
+
+  // P4.2 review round 1: the snapshot holds words lowercased, stemmed and split, so a pattern that matched a row
+  // need not match its copy there. Not secret-shaped (the write gate would redact those): text a user purges by hand.
+  for (const [label, text, pattern, leaked] of [
+    ["mixed case", "The pilot customer is Zebulonix Holdings.", "Zebulonix", "zebulonix"],
+    ["a phrase", "The pilot customer is quixotra holdings.", "quixotra holdings", "quixotra"],
+  ] as const)
+    test(`a purge of ${label} leaves no copy in postings.snap`, async () => {
+      const store = join(root, "s1");
+      const mem = openMemory({ dir: store });
+      mem.remember(text, { tags: ["src:user"] });
+      expect(mem.refreshPostings()).toBe(true);
+      mem.close();
+      expect(readFileSync(join(store, SNAPSHOT_FILE), "utf8")).toContain(leaked);
+      expect((await run(["purge", pattern])).code).toBe(0);
+      expect(readFileSync(join(store, "memories.jsonl"), "utf8").toLowerCase()).not.toContain(leaked);
+      expect(existsSync(join(store, SNAPSHOT_FILE))).toBe(false);
+    });
+
+  test("a purge that matches nothing keeps the snapshots", async () => {
+    const store = join(root, "s1");
+    const mem = openMemory({ dir: store });
+    mem.remember("The database is postgres.", { tags: ["src:user"] });
+    mem.refreshPostings();
+    mem.close();
+    expect((await run(["purge", "nowhere-[0-9]+"])).code).toBe(0);
+    expect(existsSync(join(store, SNAPSHOT_FILE))).toBe(true);
   });
 
   test("an invalid pattern changes nothing", async () => {
