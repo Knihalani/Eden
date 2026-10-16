@@ -178,6 +178,13 @@ describe("the budget clock in a hook process", () => {
     slowStartSubmit(RULE, 1_500, 1_000);
     expect(wideEvents().at(-1)).toMatchObject({ ev: "UserPromptSubmit", submit: "human", aborted: false });
   });
+
+  test("review round 5: a hook process still has a budget: its handler past it aborts", () => {
+    slowStartSubmit(RULE, 0, 5_000);
+    // A 1 ms budget, which any real Submit handler exceeds: fails if the hook process passes no budget clock.
+    slowStartSubmit(CUE, 0, 1);
+    expect(wideEvents().at(-1)).toMatchObject({ ev: "UserPromptSubmit", submit: "human", aborted: true });
+  });
 });
 
 describe("budgetOf (EDEN_SUBMIT_BUDGET_MS)", () => {
