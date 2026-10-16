@@ -1,6 +1,6 @@
 # Eden — agent instructions
 
-Eden is passive memory for coding agents ([README.md](README.md); docs index: [docs/README.md](docs/README.md)). The compile-era code still in the tree (`packages/compile`, `ir`, `runtime`, `shadow`, `measure`, `know`, `sdk-js`, `sdk-py`, the "compile traces into a tool" CLI commands) is not the product; its documents are in `archived/compile-era/`. Describe Eden from `docs/memory-ship/`, not from compile-era docs.
+Eden is passive memory for coding agents ([README.md](README.md); docs index: [docs/README.md](docs/README.md)). The compile-era code still in the tree (`packages/compile`, `runtime`, `shadow`, `measure`, `know`, `sdk-js`, `sdk-py`, the "compile traces into a tool" CLI commands) is not the product; its documents are in `archived/compile-era/`. Describe Eden from `docs/memory-ship/`, not from compile-era docs.
 
 Bun/TypeScript monorepo. The repo is `Knihalani/Eden`, and all work targets `main`. CI is four steps (`.github/workflows/test.yml` lists them):
 1. `bun run format:check` (`scripts/format.sh`; `bun run format` fixes all but long comments)
