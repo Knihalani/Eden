@@ -37,7 +37,8 @@ compile traces into a tool (retired: archived/compile-era)
 'eden help' and 'eden --help' print this screen. See 'eden help -a'
 for advanced commands. Commands that run on any arguments, --help
 included: setup, sleep, hook, hookd, drain, login, status, savings,
-open, reject, fulfill, prefetch, recall, runner, manifest, mcp-headers.
+open, reject, fulfill, prefetch, recall, runner, manifest, mcp-headers,
+know run, know compact. memory scopes --help builds the scope catalog.
 `;
 }
 
