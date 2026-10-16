@@ -19,7 +19,7 @@ import {
 } from "./intent";
 
 /**
- * Dispatch surface policy (docs/dispatch.md). The catalog lives in the
+ * Dispatch surface policy (archived/compile-era/docs/dispatch.md). The catalog lives in the
  * runtime; these tests pin how much of it a request may see, and what counts
  * as evidence to surface exactly one tool.
  */

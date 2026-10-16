@@ -5,7 +5,7 @@ import { codingRegistry, wrapTimeoutMs } from "@eden/wrap";
 import { edenHome, ensureHome, readConfig, resolveApiKey } from "./home";
 
 /**
- * eden runner (G1a, docs/generalization-plan.md §5): plays approved tools for the control plane.
+ * eden runner (G1a, archived/compile-era/docs/generalization-plan.md §5): plays approved tools for the control plane.
  *
  * Threat model: the control plane, and anything that answers at `base`, is untrusted. A job is
  * `{ id, tool_id, version, input }`: it may only name a program a human Approved on this host (the
