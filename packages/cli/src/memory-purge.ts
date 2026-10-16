@@ -3,10 +3,10 @@
  *
  * - Every file under the memory root is rewritten without the matches, each replaced by `[REDACTED]`: in a JSON or
  *   JSON-lines file, inside its strings and keys, so every line still parses; in any other text file, in place. A
- *   postings snapshot (`postings.snap`, P4.2) is deleted instead, every one under the root, once the purge removed a
- *   match anywhere: it is derived from the store, holds its words lowercased, stemmed and split (so a pattern that
- *   matched a row need not match it), its byte offsets would not survive a rewrite, and sleep builds it again from
- *   the purged rows. A
+ *   postings snapshot (`postings.snap`, P4.2) is deleted instead, every one under the root, at every purge: it is
+ *   derived from the store, holds its words lowercased, stemmed and split (so a pattern that matched a row need not
+ *   match it), may still hold the words of a row the store has since dropped, its byte offsets would not survive a
+ *   rewrite, and sleep builds it again from the purged rows. A
  *   SQLite store loses the rows that match, with `secure_delete`, a truncating WAL checkpoint and `VACUUM`, so no
  *   free page keeps them. A file is rewritten under its writers' lock (`<file>.lock`); other binary files are left
  *   as they are and named.
@@ -100,7 +100,7 @@ function purgeTree(root: string, pattern: RegExp): Purged {
       purged.skipped.push({ path, why: err instanceof BinaryFile ? "binary" : (err as Error).message });
     }
   }
-  if (purged.matches) for (const path of snapshots) dropDerived(path, purged);
+  for (const path of snapshots) dropDerived(path, purged);
   return purged;
 }
 
@@ -108,7 +108,6 @@ function purgeTree(root: string, pattern: RegExp): Purged {
 function dropDerived(path: string, purged: Purged): void {
   try {
     unlinkSync(path);
-    purged.files++;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") purged.skipped.push({ path, why: (err as Error).message });
   }
