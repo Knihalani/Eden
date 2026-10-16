@@ -6,7 +6,14 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MEMORY_MARK, memoryInjectSwallows, openMemory, PACKET_BYTE_CAP, PACKET_BULLET_MAX } from "../../src/index";
+import {
+  MEMORY_MARK,
+  memoryInjectSwallows,
+  memoryStoreCap,
+  openMemory,
+  PACKET_BYTE_CAP,
+  PACKET_BULLET_MAX,
+} from "../../src/index";
 import { storeFor } from "../../src/memory-repo";
 import { memoryHookResponse } from "../../packages/cli/src/memory-hook";
 import { withKnowFacts } from "../../packages/wrap/src/know-inject";
@@ -122,7 +129,8 @@ try {
   const jsonl = join(storeFor(dir), "memories.jsonl");
   const n = existsSync(jsonl) ? readFileSync(jsonl, "utf8").split("\n").filter(Boolean).length : 0;
   const bytes = existsSync(jsonl) ? statSync(jsonl).size : 0;
-  hit(n <= STORE_N);
+  // D33's store cap: 2,000 rows (STORE_N) until P4.2 raised it to 20,000 (the user's choice, 2026-10-16).
+  hit(n <= memoryStoreCap());
 
   console.log(`metric: ${misses}`);
   console.log(`ms: ${p50.toFixed(3)}`);
