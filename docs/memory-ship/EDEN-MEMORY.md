@@ -563,7 +563,8 @@ Sleep **may** write aliases or a cold posting file. Submit may not open vectors.
 | `EDEN_MEMORY` | on / readonly / off | Real. Unset → on |
 | `EDEN_MEMORY_DIR`, `EDEN_HOME` | store location | Real |
 | `EDEN_MEMORY_CAP` | retrieve k 6–10 | Real. Unset → **6** |
-| `EDEN_MEMORY_STORE_CAP` | JSONL 2000 | Real. JSONL only. Deletes unpinned facts |
+| `EDEN_MEMORY_STORE_CAP` | JSONL 20,000 (P4.2; 2000 before) | Real. JSONL only. Rows past it go to `diary.jsonl` (P4.2; deleted before) |
+| `EDEN_SUBMIT_BUDGET_MS` | 150 | P4.2: a human Submit past this many ms from its process's start prints nothing (`off` or 0: no budget) |
 | `EDEN_MEMORY_SESSION` / `PARENT` / `CHILD` | session file | Real |
 | `EDEN_MEMORY_LOG` | stderr ids | Real |
 | `EDEN_SLEEP_EVERY` / `IDLE` / `BUDGET` | 32 turns / 5 min / 25 ms | Real. Idle does not fire in a short hook |

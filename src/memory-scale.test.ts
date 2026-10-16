@@ -1,5 +1,5 @@
 /**
- * 2k-store accuracy / speed / cap. Product k stays 6–10. STORE_CAP default 2000.
+ * 2k-store accuracy / speed / cap. Product k stays 6–10. STORE_CAP default 20,000 (D33, P4.2).
  */
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
@@ -53,10 +53,10 @@ function pct(sorted: number[], p: number): number {
 }
 
 describe("2k store accuracy and speed", () => {
-  test("memoryStoreCap default is 2000 and distinct from retrieve k", () => {
+  test("memoryStoreCap default is 20,000 and distinct from retrieve k", () => {
     const prev = process.env.EDEN_MEMORY_STORE_CAP;
     delete process.env.EDEN_MEMORY_STORE_CAP;
-    expect(memoryStoreCap()).toBe(2000);
+    expect(memoryStoreCap()).toBe(20_000);
     process.env.EDEN_MEMORY_STORE_CAP = "10";
     expect(memoryStoreCap()).toBe(10);
     if (prev === undefined) delete process.env.EDEN_MEMORY_STORE_CAP;

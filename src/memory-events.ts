@@ -106,7 +106,7 @@ export interface WideEvent {
   copied?: number;
   /** Milliseconds inside the hook's handler (process start and module load are not in it). */
   ms: number;
-  /** A budget abort (A5 `abort_rate`). The hook has no budget abort yet (P4.2), so it is always false. */
+  /** A budget abort (A5 `abort_rate`): a human Submit past its 150 ms printed nothing (P4.2, `memory-hook.ts`). */
   aborted: boolean;
   err?: string;
 }

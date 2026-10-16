@@ -303,9 +303,12 @@ function inherits(row: ProvenanceNote): boolean {
   return kind === "fact" || kind === "rule" || !!row.rules?.length;
 }
 
-/** A4 §2's visibility from a place (see the header). */
-export function visibleFrom(place: Place): (row: ProvenanceNote) => boolean {
-  return (row) => {
+/**
+ * A4 §2's visibility from a place (see the header), and `scopes`: the folders a visible row may be stored at, whatever
+ * its kind (the read set's own, their ancestors, and named folders below them), which the postings are read by.
+ */
+export function visibleFrom(place: Place): ((row: ProvenanceNote) => boolean) & { scopes: (scope: string) => boolean } {
+  const visible = (row: ProvenanceNote) => {
     const scope = row.scope;
     if (typeof scope !== "string") return true;
     return place.readSet.some(
@@ -313,6 +316,9 @@ export function visibleFrom(place: Place): (row: ProvenanceNote) => boolean {
         scope === read || (inherits(row) ? within(scope, read) : within(read, scope) && place.named.includes(scope)),
     );
   };
+  const scopes = (scope: string) =>
+    place.readSet.some((read) => within(scope, read) || (within(read, scope) && place.named.includes(scope)));
+  return Object.assign(visible, { scopes });
 }
 
 /**
@@ -629,7 +635,8 @@ function namesScope(text: string, scope: string): boolean {
  * A4 §2's two-scope packet (see the header): the candidates, in order, with a slot's value at the other scope of a
  * two-scope read set merged into its bullet, and the rest labelled. `rowsAt` gives a scope's live rows that may give a
  * value (`typedValueRow`), as delivery reads them, newest first; it is asked only for a note that is a slot. A merged
- * or labelled note keeps the rows it shows as `parts`, which the ledger records.
+ * or labelled note keeps the rows it shows as `parts`, which the ledger records. A row a merged bullet shows is not
+ * given again on its own, whichever of the two ranked first.
  */
 export function twoScopeNotes<T extends ProvenanceNote>(
   notes: readonly T[],
@@ -644,12 +651,12 @@ export function twoScopeNotes<T extends ProvenanceNote>(
   const used = new Set<string>();
   // What merged bullets already say at a scope: a later row saying only that is given by them.
   const said = new Set<string>();
-  const out: ProvenanceNote[] = [];
+  const out: { key: string; note: ProvenanceNote; merged: boolean }[] = [];
   for (const note of notes) {
     if (used.has(rowKey(note))) continue;
     const scope = note.scope;
     if (scope === undefined || !pair.includes(scope)) {
-      out.push(note);
+      out.push({ key: rowKey(note), note, merged: false });
       continue;
     }
     if (said.has(saidAt(scope, withoutScope(bodyOf(note), scope)))) continue;
@@ -661,9 +668,9 @@ export function twoScopeNotes<T extends ProvenanceNote>(
     const merged = note.update ? undefined : mergedNote(note, other, pair, placeWords, candidates);
     for (const part of merged?.note.parts ?? []) used.add(rowKey(part));
     for (const [at, value] of merged?.values ?? []) said.add(saidAt(at, value));
-    out.push(merged?.note ?? labelled(note, scope));
+    out.push({ key: rowKey(note), note: merged?.note ?? labelled(note, scope), merged: !!merged });
   }
-  return out;
+  return out.filter((entry) => entry.merged || !used.has(entry.key)).map((entry) => entry.note);
 }
 
 /** A value as said at a scope, compared without case, spacing or a closing stop. */

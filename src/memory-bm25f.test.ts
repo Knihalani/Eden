@@ -90,7 +90,12 @@ describe("termScore", () => {
 
 describe("R1's tokenizer (lex.ts)", () => {
   test("a cue's tokens as rows are indexed: plurals stemmed, stop words and 1-letter tokens left out, `db` kept", () => {
-    expect([...cueTerms(["the", "queues", "db", "pages", "api.ts", "x", "42"])]).toEqual(["queue", "db", "page", "api.ts"]);
+    expect([...cueTerms(["the", "queues", "db", "pages", "api.ts", "x", "42"])]).toEqual([
+      "queue",
+      "db",
+      "page",
+      "api.ts",
+    ]);
   });
 
   test("a row gives a compound identifier whole, its dotted segments and its parts; numbers of 3+ digits count", () => {

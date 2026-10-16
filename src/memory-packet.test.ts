@@ -651,7 +651,9 @@ describe("M39 diverse packet", () => {
       const factLines = bullets.filter((l) => facts.some((fact) => l.startsWith(`- ${fact}`)));
       expect(pkt).toContain(MEMORY_MARK);
       expect(pkt).not.toMatch(KIND_TAG);
-      expect(factLines.length).toBeGreaterThanOrEqual(1);
+      // P4.2: every path ranks by BM25F under D17's bounded kind prior, so the episode naming 5 of the cue's words may
+      // lead the facts naming 4 (the top fact is the cue's own residual, D26): the procedure comes with another row.
+      expect(bullets.filter((l) => !l.includes(verify)).length).toBeGreaterThanOrEqual(1);
       expect(procLines).toHaveLength(1);
       expect(new Set(factLines).size).toBe(factLines.length);
       expect(bullets.length).toBeLessThanOrEqual(PACKET_SOFT_BULLETS);

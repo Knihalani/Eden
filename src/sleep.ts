@@ -17,6 +17,7 @@ import { GistStore, scrubTombstonedIdentity } from "./gist-store";
 import { promoteNarrativeGists } from "./gist-retrieve";
 import { HowToStore, mergeSharedPrefixHowTo, type HowTo, type HowToStep } from "./howto-store";
 import { memoryConsent } from "./memory-consent";
+import { SNAPSHOT_DELTA } from "./memory-postings";
 import { promotions } from "./memory-pins";
 import { isUntyped } from "./memory-provenance";
 import { opaqueId, scrubMemoryText } from "./memory-scrub";
@@ -61,6 +62,8 @@ export type SleepMem = {
   dropWhere?(pred: (r: MemoryRecord) => boolean): void;
   rewriteWhere?(fn: (r: MemoryRecord) => string | undefined): void;
   patchWhere?(fn: (r: MemoryRecord) => MemoryRecord | undefined): void;
+  /** Writes the postings snapshot when `minDelta` rows wait outside it (`AgentMemory.refreshPostings`). */
+  refreshPostings?(minDelta: number): boolean;
 };
 
 /** HowToStore lives on the constructor root (like semantic/gists), never beside session memories.jsonl. */
@@ -703,25 +706,17 @@ function healWriteAliases(mem: SleepMem): void {
   } catch {}
 }
 
-function writeSleepPostings(mem: SleepMem, recs: SleepRecord[]): void {
+/**
+ * The store's postings snapshot (P4.2, `memory-postings.ts`), when `minDelta` rows wait outside it. The legacy
+ * `sleep-postings.jsonl`, which no reader ever read (A1 #35), is removed.
+ */
+function refreshPostings(mem: SleepMem, minDelta: number): void {
+  try {
+    mem.refreshPostings?.(minDelta);
+  } catch {}
   try {
     const dir = typeof mem.jsonlDir === "string" && mem.jsonlDir ? mem.jsonlDir : mem.dir;
-    if (!dir) return;
-    const map = new Map<string, string[]>();
-    for (const r of recs) {
-      for (const t of writeAliasTags(r.tags ?? [], r.text)) {
-        if (t.length < 3) continue;
-        let arr = map.get(t);
-        if (!arr) map.set(t, (arr = []));
-        if (!arr.includes(r.id)) arr.push(r.id);
-      }
-    }
-    if (!map.size) return;
-    const path = join(dir, "sleep-postings.jsonl");
-    writeFileSync(path, [...map.entries()].map(([t, ids]) => JSON.stringify({ t, ids })).join("\n") + "\n");
-    try {
-      chmodSync(path, 0o600);
-    } catch {}
+    if (dir) unlinkSync(join(dir, "sleep-postings.jsonl"));
   } catch {}
 }
 
@@ -880,6 +875,13 @@ function ownRows(mem: SleepMem, session: string | undefined): (id: string) => bo
   };
 }
 
+/**
+ * The live rows a light sleep reads: a store's whole hot path before D33's 20k (P4.2). Its identity pass costs about
+ * 0.15 ms a row, so at 20k rows it took 2–3 s at every turn's end; the session it sleeps is in the newest rows, and the
+ * idle sleeper still reads them all.
+ */
+const LIGHT_SLEEP_ROWS = 2_000;
+
 /** The store's live rows in store order: a superseded row is history (A4 §3.1), neither a candidate nor a loser. */
 function liveInStoreOrder(mem: SleepMem): { row: SleepRecord; t: number }[] {
   return inStoreOrder(mem.memories().filter((r) => !superseded(r)));
@@ -907,9 +909,13 @@ function isIntent(r: MemoryRecord): boolean {
  * The session's slot values (D7): each `(scope, slot)`'s newest live value the session set, as its row types it, in
  * a sentence the slot table reads back ("In packages/cli the database is sqlite").
  */
-function slotFacts(mem: SleepMem, own: (id: string) => boolean, invalid: readonly Invalidation[]): string[] {
+function slotFacts(
+  read: readonly SleepRecord[],
+  own: (id: string) => boolean,
+  invalid: readonly Invalidation[],
+): string[] {
   const newest = new Map<string, { text: string; at: number; scope: string | undefined }>();
-  const rows = mem.memories().filter((row) => !superseded(row) && !isUntyped(row));
+  const rows = read.filter((row) => !superseded(row) && !isUntyped(row));
   for (const row of [...rows].sort((a, b) => (a.at ?? 0) - (b.at ?? 0)))
     for (const ref of noteSlots(row)) {
       if (ref.v === undefined) continue;
@@ -929,12 +935,18 @@ function slotFacts(mem: SleepMem, own: (id: string) => boolean, invalid: readonl
  * §3.3, §5.1 step 5: it is rewritten at every sleep, later than what it states, so each source is checked against
  * the validity log at its own time; SessionStart checks the gist again at the gist's time. `winners` are each
  * scope's (`scopedWinners`), and a winner below the root is stated by its scope ("In apps/web, stack uses Redis"), as
- * a slot's value is (`slotFacts`).
+ * a slot's value is (`slotFacts`). `read` is the rows the sleep reads (the light sleep's newest, `LIGHT_SLEEP_ROWS`);
+ * pins come from every row, as a store always kept them.
  */
-function writeSessionGist(mem: SleepMem, winners: readonly Triple[], session: string | undefined): void {
+function writeSessionGist(
+  mem: SleepMem,
+  winners: readonly Triple[],
+  session: string | undefined,
+  read: readonly SleepRecord[] = mem.memories(),
+): void {
   const invalid = readInvalidations(mem.dir);
   const own = ownRows(mem, session);
-  const rows = new Map(mem.memories().map((row) => [row.id, row]));
+  const rows = new Map(read.map((row) => [row.id, row]));
   const facts: string[] = [];
   for (const w of winners) {
     const row = w.recId ? rows.get(w.recId) : undefined;
@@ -944,7 +956,7 @@ function writeSessionGist(mem: SleepMem, winners: readonly Triple[], session: st
     const fact = validText(scope ? `In ${scope}, ${said}` : said, w.t, invalid, scope);
     if (fact) facts.push(fact);
   }
-  facts.push(...slotFacts(mem, own, invalid));
+  facts.push(...slotFacts(read, own, invalid));
   const pins = mem
     .memories()
     .filter((r) => r.kind === "constraint" && !superseded(r) && !isIntent(r) && !isIcl(r.text) && own(r.id))
@@ -958,8 +970,9 @@ function writeSessionGist(mem: SleepMem, winners: readonly Triple[], session: st
 /**
  * Light sleep (D34, A4 §6), at `stop-sleep` and SessionEnd: pending rows get their `seq`, the session gist is
  * rewritten, and the turn's verified tool run becomes a how-to, so the next turn's cue can retrieve both. Its cost is
- * one pass over the live rows' identity statements and the tool traces since the last how-to; every pass that
- * rewrites or rescans the store (narrative gists, aliases, postings, the miss taxonomy) is the idle sleeper's.
+ * one pass over the identity statements of the newest `LIGHT_SLEEP_ROWS` live rows and the tool traces since the last
+ * how-to; every pass that rewrites or rescans the store (narrative gists, aliases, the miss taxonomy) is the idle
+ * sleeper's, and so is the postings snapshot until `SNAPSHOT_DELTA` rows wait outside it.
  */
 export function lightSleep(mem: SleepMem, session: string | undefined): void {
   try {
@@ -970,15 +983,21 @@ export function lightSleep(mem: SleepMem, session: string | undefined): void {
   try {
     settlePendingRows(mem.dir);
   } catch {}
-  const ordered = liveInStoreOrder(mem);
+  const ordered = liveInStoreOrder(mem).slice(-LIGHT_SLEEP_ROWS);
   try {
-    writeSessionGist(mem, scopedWinners(ordered).winners, session);
+    writeSessionGist(
+      mem,
+      scopedWinners(ordered).winners,
+      session,
+      ordered.map(({ row }) => row),
+    );
   } catch {}
   promoteHowTo(
     mem,
     ordered.map(({ row }) => row),
     sleepSession(mem, { session }),
   );
+  refreshPostings(mem, SNAPSHOT_DELTA);
 }
 
 /** D9's promotion (A4 §6, §7 `recurring_policy`): a policy said in 2 sessions is a pin (`memory-pins.ts`). */
@@ -1167,7 +1186,7 @@ export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
       new HowToStore(howtoRoot(mem)).pruneStale(child ? { child: true } : undefined);
     } catch {}
     try {
-      writeSleepPostings(mem, mem.memories());
+      refreshPostings(mem, 1);
     } catch {}
     try {
       writeMissTaxonomy(mem.dir, mem.memories());
