@@ -207,6 +207,7 @@ The categories come from R2 §8.1, extended with R6's classes. Measured rows cit
 
 - The PreToolUse guard runs on `if`-matched commands **and** on commands Claude Code cannot parse (`$()`, `$VAR`): startup, a `dirmap.json` read, and ≤ 3 small file reads.
 - PostToolBatch: startup plus the ctx update, under 30 ms.
+- **Measured in P4.2** (`scripts/abort-rate.ts`, 500 sequential plugin Submits, Apple M3, load 2.2–7.9): on a 2,000-row store a Submit's process takes p50 106.8–111.4 ms, of which the handler is p50 29.6–30.5 ms; the shell, Bun's start and the module load are the rest, not 10–25 ms. At 20,000 rows the handler is p50 58.4–61.4 ms (the JSONL store reparsed per process, P6.1's). So the 150 ms budget timer starts at the handler (A4 §5.1 step 0).
 
 ---
 
