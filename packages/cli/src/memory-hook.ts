@@ -493,13 +493,15 @@ function payloadMessages(r: Record<string, unknown>): { role: string; content: s
 type Ledger = { dir: string; file: LedgerFile };
 
 /**
- * A4 §5.1 step 0, A2 §2.8: a human Submit answers within 150 ms of its process's start, or prints nothing. The budget
- * is `EDEN_SUBMIT_BUDGET_MS` when that is a number of ms (0 or `off`: none; anything else: the default), else
+ * A4 §5.1 step 0, A2 §2.8: a human Submit answers within 150 ms of its handler's start, or prints nothing. The clock
+ * starts at step 0, after Bun's start and the module load (about 75 ms of a 2,000-row Submit's p50 on an M3, which
+ * would abort 1.4% of Submits under light load if counted; the user's choice, 2026-10-16). The budget is
+ * `EDEN_SUBMIT_BUDGET_MS` when that is a number of ms (0 or `off`: none; anything else: the default), else
  * `SUBMIT_BUDGET_MS`.
  */
 export const SUBMIT_BUDGET_MS = 150;
 
-/** Whether the Submit's budget is spent: `origin` is when its clock started (the process's start, in a hook). */
+/** Whether the Submit's budget is spent: `origin` is when its clock started (the handler's start, in a hook). */
 export function budgetOf(origin: number, env = process.env.EDEN_SUBMIT_BUDGET_MS): () => boolean {
   const raw = env?.trim();
   const set = raw === "off" ? 0 : Number(raw || NaN);
@@ -512,8 +514,8 @@ export function budgetOf(origin: number, env = process.env.EDEN_SUBMIT_BUDGET_MS
  * The memory hook for one event. It fails open: whatever throws, it returns null (so nothing is printed). Each
  * invocation appends one wide event, and an exception or a budget abort at an `on` delivery point lets the circuit
  * breaker check that point's budget (`memory-breaker.ts`). With `EDEN_MEMORY=off` it does nothing at all; read-only,
- * it writes nothing. `origin` starts the Submit's budget clock: the process's start in a hook (`runMemoryHookStdin`);
- * an in-process caller that passes none has no budget (A2 §2.8 budgets a hook's process, from its start).
+ * it writes nothing. `origin` starts the Submit's budget clock: the handler's start in a hook (`runMemoryHookStdin`);
+ * an in-process caller that passes none has no budget (A2 §2.8 budgets a hook's process).
  */
 export function memoryHookResponse(
   raw: Record<string, unknown>,
@@ -1571,7 +1573,7 @@ export async function runMemoryHookStdin(arg?: string): Promise<void> {
   const body = await readHookPayload();
   // Fail open (EXECUTION §5): nothing to say prints nothing, and so does an error.
   try {
-    const out = memoryHookResponse(body, stageOf(arg), 0);
+    const out = memoryHookResponse(body, stageOf(arg), performance.now());
     if (out) process.stdout.write(JSON.stringify(out));
   } catch {}
 }
