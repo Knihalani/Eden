@@ -1,9 +1,9 @@
 /**
  * P4.2 at the hook: the Submit's budget abort (A4 §5.1 step 0, A2 §2.8). A human Submit past its 150 ms prints
  * nothing, says so in its wide event (A5 `abort_rate`), records no delivery and keeps what it encoded; two aborts at
- * an `on` point trip the breaker (EXECUTION §5: aborts ≤ 0.5% of 200). The budget clock starts at the process's start
- * in a hook; here the call passes an origin in the past instead of waiting, and the budget is 5 s, so a Submit meant
- * to be in budget stays so on a loaded machine (`budgetOf`'s tests cover the 150 ms default).
+ * an `on` point trip the breaker (EXECUTION §5: aborts ≤ 0.5% of 200). The budget clock starts when a hook's handler
+ * does, not at its process's start; here the call passes an origin in the past instead of waiting, and the budget is
+ * 5 s, so a Submit meant to be in budget stays so on a loaded machine (`budgetOf`'s tests cover the 150 ms default).
  */
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
@@ -151,6 +151,32 @@ describe("the Submit's budget abort", () => {
     submit("<task-notification>build finished</task-notification>", LATE);
     submit(CUE, LATE, "PreCompact");
     expect(wideEvents().some((event) => event.aborted)).toBe(false);
+  });
+});
+
+describe("the budget clock in a hook process", () => {
+  /** A hook process whose start is `before` ms slower than usual (a loaded machine, a cold module cache). */
+  function slowStartSubmit(prompt: string, before: number, budget: number): void {
+    const hook = join(import.meta.dir, "memory-hook.ts");
+    const script = [
+      `const until = performance.now() + ${before};`,
+      "while (performance.now() < until) {}",
+      `const { runMemoryHookStdin } = await import(${JSON.stringify(hook)});`,
+      "await runMemoryHookStdin();",
+    ].join("\n");
+    const child = Bun.spawnSync({
+      cmd: [process.execPath, "-e", script],
+      env: { ...process.env, EDEN_SUBMIT_BUDGET_MS: String(budget) },
+      stdin: new TextEncoder().encode(
+        JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: SESSION, prompt }),
+      ),
+    });
+    expect(child.exitCode).toBe(0);
+  }
+
+  test("starts at the handler, not the process: a slow start alone does not abort (user's choice, 2026-10-16)", () => {
+    slowStartSubmit(RULE, 1_500, 1_000);
+    expect(wideEvents().at(-1)).toMatchObject({ ev: "UserPromptSubmit", submit: "human", aborted: false });
   });
 });
 
