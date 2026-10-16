@@ -1675,8 +1675,9 @@ export class AgentMemory {
   }
 
   /**
-   * How many rows wait outside a snapshot: the indexable rows it does not hold, and those it holds whose text, tags or
-   * keys changed since its build (`rowDigest`); all of them when a part of it cannot be read, so it is written again.
+   * How many rows wait for a new snapshot: the indexable rows it does not hold; those it holds whose text, tags or
+   * keys changed since its build (`rowDigest`); and those it holds that left the store or were taken back, whose words
+   * it should no longer keep. All of them when a part of it cannot be read, so it is written again.
    */
   private waiting(snapshot: Snapshot | undefined): number {
     if (!snapshot) return this.outside(undefined).length;
@@ -1687,6 +1688,10 @@ export class AgentMemory {
       for (const c of this.compiled) {
         const digest = built.get(c.rec.id);
         if (digest === undefined ? indexable(c) : digest !== rowDigest(c.rec)) waiting++;
+      }
+      for (const id of built.keys()) {
+        const c = this.rowOf(id);
+        if (!c || c.rec.rules?.length || !isLiveRow(c.rec)) waiting++;
       }
       return waiting;
     } catch {

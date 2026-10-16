@@ -281,6 +281,18 @@ describe("retrieval through the snapshot (AgentMemory)", () => {
     reader.close();
   });
 
+  test("a held row the store dropped waits: the next refresh keeps none of its words (review round 2)", () => {
+    const dir = tempDir();
+    const mem = openMemory({ dir, session: "s1", perRepo: true });
+    mem.remember("Ticket from Zebulonix shipped late again on Friday.", { tags: ["src:user"] });
+    mem.remember("The database is postgres.", { tags: ["src:user"] });
+    expect(mem.refreshPostings()).toBe(true);
+    mem.dropWhere((row) => row.text.includes("Zebulonix"));
+    expect(mem.refreshPostings(1)).toBe(true);
+    mem.close();
+    expect(readFileSync(join(dir, SNAPSHOT_FILE), "utf8")).not.toContain("zebulonix");
+  });
+
   test("a snapshot whose bucket cannot be read is written again at the next refresh", () => {
     const dir = tempDir();
     const mem = distracted(dir);
