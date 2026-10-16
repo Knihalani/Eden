@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
+import { appendFileSync, chmodSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { withFileLock, writeFileAtomic } from "../packages/cli/src/home";
@@ -59,16 +59,33 @@ import type { ActionClass } from "./memory-classes";
 import { firedClasses, triggeredRows } from "./memory-triggers";
 import {
   CONTEXT_PARTS,
-  cueTokens,
   PART_MASS,
-  pluralForms,
-  singular,
   queryHay,
   RARE_DF,
   REFERENCE_WEIGHT,
   type CuePart,
   type SituationCue,
 } from "./memory-cue";
+import {
+  cueTerms,
+  promptTerms,
+  rankable,
+  rowFields,
+  rowTerms,
+  STOP,
+  termScore,
+  type Corpus,
+  type RowFields,
+} from "./memory-bm25f";
+import {
+  candidateRows,
+  DeltaIndex,
+  PostingsView,
+  Snapshot,
+  writeSnapshot,
+  type Indexed,
+  type RowFilter,
+} from "./memory-postings";
 import { identifierTokens, sharesIdentifier } from "./memory-gate";
 import { writeRuleIndex } from "./memory-rule-index";
 import { readUserRules, withUserGlobal } from "./memory-user-global";
@@ -144,12 +161,11 @@ function rankKindBoost(r: MemoryRecord): number {
 }
 
 /**
- * The kind prior `relevant` ranks with. With a situation cue it is D17's, never more than one match: a thousandth of
- * the old prior (at most 0.05), under the least a matched word adds (debug's `q_turn`, 0.10 / 0.55), so it orders
- * rows of equal evidence only and the cue parts' weighted sum ranks.
+ * The kind prior `relevant` ranks with, on every path (D17: never more than one match): a thousandth of the legacy
+ * prior (at most 0.05), under what any matched word adds to a BM25F score, so it orders rows of equal evidence only.
  */
-function kindPrior(r: MemoryRecord, cue: SituationCue | undefined): number {
-  return cue ? rankKindBoost(r) / 1000 : rankKindBoost(r);
+function kindPrior(r: MemoryRecord): number {
+  return rankKindBoost(r) / 1000;
 }
 
 /** Notes as retrieval hands them on: each body capped and labelled with its kind and source. */
@@ -385,123 +401,32 @@ export type MemoryOptions = {
 };
 
 /** Which rows a reader may see (A4 §2's visibility, `memory-place.ts`); every row by default. */
-export type RowFilter = (row: MemoryRecord) => boolean;
+export type { RowFilter };
 const EVERY_ROW: RowFilter = () => true;
 
-type Compiled = { rec: MemoryRecord; needles: string[]; scorable: boolean };
+/** A store row and its BM25F fields (`memory-bm25f.ts`), computed on first use: most paths never ask. */
+type Compiled = Indexed & { readonly rankable: boolean };
 
-const STOP = new Set([
-  "the",
-  "of",
-  "is",
-  "a",
-  "an",
-  "on",
-  "to",
-  "and",
-  "in",
-  "for",
-  "this",
-  "that",
-  "with",
-  "from",
-  "into",
-  "about",
-  "these",
-  "then",
-  "still",
-  "has",
-  "out",
-  "please",
-  "how",
-  "should",
-  "what",
-  "why",
-  "was",
-  "are",
-  "you",
-  "your",
-  "its",
-  "our",
-  "not",
-  "never",
-  "use",
-  "used",
-  "just",
-  "last",
-  "week",
-  "down",
-  "look",
-  "next",
-  "need",
-  "before",
-  "merge",
-  "prefers",
-  "user",
-  "memory",
-  "ran",
-  "fact",
-  "such",
-  "or",
-  "no",
-  "app",
-  "where",
-  "who",
-  "whom",
-  "whose",
-  "does",
-  "did",
-  "which",
-  "when",
-]);
-
-/** `relevant` scores a row of at most 12 needles; a longer one (a tool result, a narrative) never ranks there. */
-const SCORABLE_NEEDLES = 12;
-
-/**
- * A row with its needles, computed on first use: a narrative row can be tens of KB and most paths never ask. Whether
- * `relevant` can score it reads only as far as its 13th needle.
- */
-function compileNeedles(rec: MemoryRecord): Compiled {
-  let needles: string[] | undefined;
-  let scorable: boolean | undefined;
+function compileRow(rec: MemoryRecord): Compiled {
+  let fields: RowFields | undefined;
+  let ranks: boolean | undefined;
   return {
     rec,
-    get needles() {
-      return (needles ??= [...new Set(needleWords(rec))]);
+    get fields() {
+      return (fields ??= rowFields(rec));
     },
-    get scorable() {
-      return (scorable ??= needles ? needles.length <= SCORABLE_NEEDLES : fewNeedles(rec));
+    get rankable() {
+      return (ranks ??= rankable(rec, this.fields));
     },
   };
 }
 
-function isNeedle(word: string): boolean {
-  return (
-    word.length >= 3 &&
-    !STOP.has(word) &&
-    !/^\d+$/.test(word) &&
-    !/^[a-z]\d[a-z]$/.test(word) &&
-    !/^[a-z]{3,}\d+[a-z]$/.test(word)
-  );
-}
+/** Every scope: a reader that cannot tell which scopes its rows may be at reads them all. */
+const everyScope = () => true;
 
-/**
- * A row's needles, with repeats: its tags, then its text's words. A mined row's folder is where it is true, which
- * the read set decides (A4 §2), not what it is about: a cue naming only the folder does not find it.
- */
-function* needleWords(rec: MemoryRecord): Generator<string> {
-  const place = isCited(rec) ? queryHay(rec.scope ?? "") : undefined;
-  for (const tag of rec.tags ?? []) if (isNeedle(tag) && !place?.has(tag)) yield tag;
-  for (const [word] of rec.text.toLowerCase().matchAll(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g))
-    if (isNeedle(word) && !place?.has(word)) yield word;
-}
-
-/** Whether a row has at most `SCORABLE_NEEDLES` distinct needles, read no further than the next one. */
-function fewNeedles(rec: MemoryRecord): boolean {
-  const seen = new Set<string>();
-  for (const word of needleWords(rec)) if (seen.add(word).size > SCORABLE_NEEDLES) return false;
-  return true;
+/** Whether the lexical path ranks a row: live, no rule row (D18), and rankable at its length (`memory-bm25f.ts`). */
+function indexable(c: Compiled): boolean {
+  return !c.rec.rules?.length && isLiveRow(c.rec) && c.rankable;
 }
 
 export { queryHay };
@@ -517,12 +442,7 @@ export interface RecallCue {
   typed?: string;
 }
 
-/** The rows of each token `relevant` reads: the store's postings, or their stemmed view (`stemmedPostings`). */
-interface Postings {
-  get(token: string): readonly Compiled[] | undefined;
-}
-
-/** A cue part as `relevant` reads it: its tokens, its weight against a default-mode prompt, and its mass limit. */
+/** A cue part as `relevant` reads it: its terms, its weight against a default-mode prompt, and its mass limit. */
 interface HayPart {
   part: CuePart;
   hay: ReadonlySet<string>;
@@ -530,58 +450,54 @@ interface HayPart {
   mass: number;
 }
 
-/**
- * A token set as the situation cue is scored (R1's tokenizer, `singular`). Function words and short words are left
- * out as they are written, as a row's needles are (`isNeedle`): "apps" stays, as "app".
- */
-function stemmed(tokens: Iterable<string>): Set<string> {
-  const out = new Set<string>();
-  for (const token of tokens) if (token.length >= 3 && !STOP.has(token)) out.add(singular(token));
-  return out;
+/** A word of an identifier that is itself identifier-shaped: a dotted name (`api.ts`) or letters with digits. */
+function identifierWord(word: string): boolean {
+  return word.includes(".") || (/\d/.test(word) && /[a-z]/.test(word));
 }
 
 /**
- * The parts `relevant` scores: the prompt's words alone without a situation cue (as before P4.1); with one, the
- * prompt's words and the context parts' identifier-split tokens, stemmed, `q_prev` read for its rare and
- * identifier-shaped tokens only (`memory-cue.ts`). `post` is the postings of the same token space.
+ * The parts `relevant` scores, in the index's terms (`memory-bm25f.ts`, R1's tokenizer): the prompt's words alone
+ * without a situation cue; with one, the context parts' identifier-split tokens too, `q_prev` read for its rare words
+ * (df ≤ 50 among the rows the reader sees, A7 §4) and the identifier-shaped words of its STRONG tokens
+ * (`memory-cue.ts`), not their plain parts ("apps", "web" of `apps/web/lib/api.ts` must be rare to count).
  * The prompt's dotted and camelCase names stay whole until P4.3's τ: a prompt word admits a row alone, and "Node.js"
  * split to "node" admitted a mined node-version fact on R1's hard negative "who created the Node.js runtime?".
  */
-function hayParts(text: string, cue: SituationCue | undefined, post: Postings): HayPart[] {
-  if (!cue) {
-    const words = [...queryHay(text)].filter((t) => t.length >= 3 && !STOP.has(t));
-    return [{ part: "prompt", hay: new Set(words), weight: 1, mass: Infinity }];
-  }
+function hayParts(text: string, cue: SituationCue | undefined, corpus: Corpus): HayPart[] {
+  const prompt = promptTerms(text);
+  if (!cue) return [{ part: "prompt", hay: prompt, weight: 1, mass: Infinity }];
   const weight = (part: CuePart) => cue.weights[part] / REFERENCE_WEIGHT;
-  const strong = stemmed([...cue.strong].flatMap((token) => [...cueTokens(token)]));
-  const rare = (token: string) => strong.has(token) || (post.get(token)?.length ?? 0) <= RARE_DF;
+  const spared = cueTerms([...cue.strong].flatMap((token) => [...queryHay(token)].filter(identifierWord)));
+  const rare = (token: string) => spared.has(token) || corpus.df(token) <= RARE_DF;
   const context = CONTEXT_PARTS.map((part): HayPart => ({
     part,
-    hay: part === "prev" ? new Set([...stemmed(cue.parts.prev)].filter(rare)) : stemmed(cue.parts[part]),
+    hay: part === "prev" ? new Set([...cueTerms(cue.parts.prev)].filter(rare)) : cueTerms(cue.parts[part]),
     weight: weight(part),
     mass: PART_MASS,
   }));
-  const prompt: HayPart = { part: "prompt", hay: stemmed(queryHay(text)), weight: weight("prompt"), mass: Infinity };
-  return [prompt, ...context].filter((part) => part.hay.size && part.weight > 0);
+  return [{ part: "prompt" as const, hay: prompt, weight: weight("prompt"), mass: Infinity }, ...context].filter(
+    (part) => part.hay.size && part.weight > 0,
+  );
 }
 
-/** A row's score against the parts (A7 §3): each part's matched needles, rarest first up to its mass, weighted. */
-function situatedScore(needles: readonly string[], parts: readonly HayPart[], post: Postings) {
-  const df = (token: string) => Math.max(1, post.get(token)?.length ?? 1);
+/**
+ * A row's score against the parts (A7 §3, D17): each part's BM25F over the terms it shares with the row, the rarest
+ * up to its mass, weighted by the part.
+ */
+function situatedScore(fields: RowFields, parts: readonly HayPart[], corpus: Corpus) {
+  const terms = rowTerms(fields);
   const matched: Partial<Record<CuePart, number>> = {};
-  let n = 0,
-    rare = 0;
+  let score = 0;
   for (const part of parts) {
-    const hits = needles
-      .filter((needle) => part.hay.has(needle))
-      .sort((a, b) => df(a) - df(b))
+    const hits = [...part.hay]
+      .filter((term) => terms.has(term))
+      .sort((a, b) => corpus.df(a) - corpus.df(b))
       .slice(0, part.mass);
     if (!hits.length) continue;
     matched[part.part] = hits.length;
-    n += part.weight * hits.length;
-    rare += part.weight * hits.reduce((sum, hit) => sum + 1 / df(hit), 0);
+    score += part.weight * hits.reduce((sum, term) => sum + termScore(term, fields, corpus), 0);
   }
-  return { n, rare, matched };
+  return { score, matched };
 }
 
 /**
@@ -900,7 +816,7 @@ function load(path: string): Compiled[] {
     try {
       const rec = fromDisk(JSON.parse(t));
       if (rec?.id && rec.text) {
-        const c = compileNeedles(rec),
+        const c = compileRow(rec),
           at = idx.get(rec.id);
         if (at != null) out[at] = c;
         else (idx.set(rec.id, out.length), out.push(c));
@@ -978,6 +894,16 @@ function resolveSupersessions(rows: MemoryRecord[]): MemoryRecord[] {
   });
 }
 
+/** Appends rows that left the store's hot path to its diary (`trimToStoreCap`), as the store writes them. */
+function appendDiary(dir: string, rows: readonly MemoryRecord[]): void {
+  if (!rows.length) return;
+  try {
+    const path = join(dir, DIARY_FILE);
+    appendFileSync(path, rows.map((r) => JSON.stringify(toDisk(r))).join("\n") + "\n", { mode: 0o600 });
+    chmodSync(path, 0o600);
+  } catch {}
+}
+
 function writeStore(path: string, rows: readonly MemoryRecord[]): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileAtomic(path, rows.map((r) => JSON.stringify(toDisk(r))).join("\n") + (rows.length ? "\n" : ""));
@@ -1016,7 +942,8 @@ const STATUS_OBJECT = new RegExp(
   "i",
 );
 
-/** P4.2 (red first): the file rows past D33's hot path go to; none goes there yet. */
+/** D33's hot-path row cap, and the file the rows past it go to (`trimToStoreCap`). */
+const STORE_CAP = 20_000;
 export const DIARY_FILE = "diary.jsonl";
 
 export const PACKET_CHAT_K_MIN = 6,
@@ -1030,9 +957,10 @@ export function memoryRetrieveCap(): number {
     : Math.min(PACKET_CHAT_K_MAX, Math.max(PACKET_CHAT_K_MIN, Math.floor(raw)));
 }
 
+/** The rows a store keeps on the hot path (D33: the newest 20k until SQLite, P6.1); `EDEN_MEMORY_STORE_CAP` sets it. */
 export function memoryStoreCap(): number {
   const raw = Number(process.env.EDEN_MEMORY_STORE_CAP);
-  return !Number.isFinite(raw) || raw <= 0 ? 2000 : Math.floor(raw);
+  return !Number.isFinite(raw) || raw <= 0 ? STORE_CAP : Math.floor(raw);
 }
 
 function mergeNarrativeLane(
@@ -1154,6 +1082,29 @@ function assembleWithin(notes: MemoryRecord[]): MemoryRecord[] {
   return [...byScope.values()].flatMap((group) => assembleNotes(group));
 }
 
+/**
+ * The texts a store holds (A4 §3.2), which `observe` checks a text against: `lower`, every row's text lowercased, and
+ * again as `<scope>\0<text>` (the scope `\0` where it is unknown); `keys`, the same without end punctuation (an
+ * episode is not stored twice for a final period); `exact`, every text as written (a text a row already holds has
+ * passed the gate, which `observe` need not run again).
+ */
+interface Seen {
+  lower: Set<string>;
+  keys: Set<string>;
+  exact: Set<string>;
+}
+
+function noteText(seen: Seen, text: string, scope: string | undefined): void {
+  const lower = text.toLowerCase();
+  const key = lower.replace(/[.!?]+$/g, "");
+  for (const [set, value] of [
+    [seen.lower, lower],
+    [seen.keys, key],
+  ] as const)
+    set.add(value).add(`${scope ?? "\0"}\0${value}`);
+  seen.exact.add(text);
+}
+
 export class AgentMemory {
   readonly dir: string;
   readonly session?: string;
@@ -1170,15 +1121,14 @@ export class AgentMemory {
   private path: string;
   private batch = 0;
   private dirty = false;
-  /** Every row's text, lowercased, and again as `<scope>\0<text>` (the scope `\0` where it is unknown). */
-  private seenLower = new Set<string>();
-  /** `seenLower` without end punctuation: an episode is not stored twice for a final period. */
-  private seenKeys = new Set<string>();
-  /** Every row's text exactly: a text a row already holds has passed the gate, which `observe` need not run again. */
-  private stored = new Set<string>();
-  private post: Map<string, Compiled[]> | null = null;
-  /** The live rule rows (D9 keys), which triggers deliver; built with `post`. */
-  private ruleRows: MemoryRecord[] = [];
+  /** The texts the store holds (`Seen`), read from the rows when first asked: a Submit writing nothing never asks. */
+  private seenTexts: Seen | null = null;
+  /** The live rule rows (D9 keys), which triggers deliver; read from the rows when first asked. */
+  private ruleRows: MemoryRecord[] | null = null;
+  /** The rows by id, for the postings snapshot's ordinals; read when first asked. */
+  private rowsById: Map<string, Compiled> | null = null;
+  /** The rows the postings snapshot does not hold, indexed (`DeltaIndex`); kept until the rows change. */
+  private deltaIndex: DeltaIndex<Compiled> | null = null;
   private knownIds = new Set<string>();
   /** Rows this process wrote that no store file holds yet. */
   private unsaved = new Set<string>();
@@ -1209,7 +1159,6 @@ export class AgentMemory {
     this.path = join(this.dir, this.subdir, "memories.jsonl");
     this.compiled = load(this.path);
     this.knownIds = new Set(this.compiled.map((c) => c.rec.id));
-    this.rebuildSeen();
   }
 
   /**
@@ -1338,7 +1287,7 @@ export class AgentMemory {
 
   /** Adds a row to the store: it supersedes what it overturns (A4 §3.1), and is written. */
   private add(rec: MemoryRecord): MemoryRecord {
-    const c = compileNeedles(rec),
+    const c = compileRow(rec),
       i = this.compiled.findIndex((x) => x.rec.id === rec.id);
     i >= 0 && this.compiled.splice(i, 1);
     try {
@@ -1353,7 +1302,7 @@ export class AgentMemory {
     this.compiled.push(c);
     this.knownIds.add(rec.id);
     this.unsaved.add(rec.id);
-    this.post = null;
+    this.indexChanged();
     this.noteSeen(rec.text, rec.scope);
     return (this.flush(true), rec);
   }
@@ -1635,7 +1584,7 @@ export class AgentMemory {
       c.rec.invalidAt = seq;
       this.changed.add(c.rec.id);
     }
-    this.post = null;
+    this.indexChanged();
     this.flush(true);
   }
 
@@ -1652,30 +1601,36 @@ export class AgentMemory {
     this.toHistory(taken.filter((c) => !said.some((text) => text.includes(c.rec.text.toLowerCase()))));
   }
 
+  /** Forgets everything read from the rows, after another process's rows were merged in. */
   private rebuildSeen() {
-    this.seenLower = new Set();
-    this.seenKeys = new Set();
-    this.stored = new Set();
-    this.post = null;
-    for (const c of this.compiled) this.noteSeen(c.rec.text, c.rec.scope);
+    this.seenTexts = null;
+    this.indexChanged();
+  }
+
+  /** Forgets what retrieval read from the rows (the rule rows, the rows by id), after a row changed. */
+  private indexChanged(): void {
+    this.ruleRows = null;
+    this.rowsById = null;
+    this.deltaIndex = null;
+  }
+
+  /** The texts the store holds (`Seen`), read from the rows once. */
+  private seen(): Seen {
+    if (this.seenTexts) return this.seenTexts;
+    const seen: Seen = (this.seenTexts = { lower: new Set(), keys: new Set(), exact: new Set() });
+    for (const c of this.compiled) noteText(seen, c.rec.text, c.rec.scope);
+    return seen;
   }
 
   private noteSeen(text: string, scope: string | undefined): void {
-    const lower = text.toLowerCase();
-    const key = lower.replace(/[.!?]+$/g, "");
-    for (const [set, value] of [
-      [this.seenLower, lower],
-      [this.seenKeys, key],
-    ] as const)
-      set.add(value).add(`${scope ?? "\0"}\0${value}`);
-    this.stored.add(text);
+    if (this.seenTexts) noteText(this.seenTexts, text, scope);
   }
 
   /**
-   * Whether a row already holds a text (lowercased; in `seenKeys`, without its closing stop) where it would be stored
+   * Whether a row already holds a text (lowercased; in `keys`, without its closing stop) where it would be stored
    * (A4 §3.2): at its scope, or at no known scope, which is every scope's. Where the place is unknown, any row.
    */
-  private seenAt(value: string, scope: string | undefined, set = this.seenLower): boolean {
+  private seenAt(value: string, scope: string | undefined, set = this.seen().lower): boolean {
     const lower = value.toLowerCase();
     if (scope === undefined) return set.has(lower);
     return set.has(`${scope}\0${lower}`) || set.has(`\0\0${lower}`);
@@ -1691,46 +1646,69 @@ export class AgentMemory {
   }
 
   /**
-   * The postings `relevant` ranks from: the live rows it can score (P0.6). A row of more than 12 needles never
-   * ranks, so it neither fills the candidate pool nor counts in a term's df, and it is never tokenized whole: a
-   * store's tool results made this index the Submit's cost that grew with the session. A live rule row with D9 keys
-   * is a policy or an intent, which its classes' triggers deliver and word overlap never does (D18): it is kept
-   * apart, in `ruleRows`.
+   * The live rule rows (D9 keys): each a policy or an intent, which its classes' triggers deliver and word overlap
+   * never does (D18), so the lexical path never ranks one.
    */
-  private ensureIndex() {
-    if (this.post) return;
-    const post = new Map<string, Compiled[]>();
-    const ruleRows: MemoryRecord[] = [];
-    for (const c of this.compiled) {
-      if (!isLiveRow(c.rec)) continue;
-      if (c.rec.rules?.length) ruleRows.push(c.rec);
-      else if (c.scorable)
-        for (const w of c.needles) {
-          let arr = post.get(w);
-          if (!arr) post.set(w, (arr = []));
-          arr.push(c);
-        }
-    }
-    this.post = post;
-    this.ruleRows = ruleRows;
+  private liveRules(): MemoryRecord[] {
+    return (this.ruleRows ??= this.compiled.filter((c) => c.rec.rules?.length && isLiveRow(c.rec)).map((c) => c.rec));
+  }
+
+  /** The row of an id, as this process holds it. */
+  private rowOf(id: string): Compiled | undefined {
+    return (this.rowsById ??= new Map(this.compiled.map((c) => [c.rec.id, c]))).get(id);
   }
 
   /**
-   * The postings by stemmed needle (`stemmed`, R1's tokenizer), which the situation cue is scored in. A stem's rows are
-   * read from `post` at the words it stems from (`pluralForms`), as a cue asks for them: a Submit is a fresh process,
-   * and one pass over every posting costs it milliseconds.
+   * The index as a reader sees it (`memory-postings.ts`): the snapshot's postings of the scopes it may see, and the
+   * rows the snapshot does not hold (written since, or with no `seq`), indexed here.
    */
-  private stemmedPostings(): Postings {
-    const post = this.post!;
-    const read = new Map<string, Compiled[]>();
-    const get = (stem: string): Compiled[] => {
-      const known = read.get(stem);
-      if (known) return known;
-      const rows = [...new Set(pluralForms(stem).flatMap((form) => post.get(form) ?? []))];
-      read.set(stem, rows);
-      return rows;
-    };
-    return { get: (stem) => get(stem) };
+  private postingsView(snapshot: Snapshot | undefined, visible: RowFilter): PostingsView<Compiled> {
+    return new PostingsView(snapshot, this.delta(snapshot), (id) => this.rowOf(id), visible.scopes ?? everyScope);
+  }
+
+  /** The rows a snapshot does not hold by id (every row without one), indexed once per snapshot. */
+  private delta(snapshot: Snapshot | undefined): DeltaIndex<Compiled> {
+    const version = snapshot?.header.id;
+    if (this.deltaIndex && this.deltaIndex.snapshot === version) return this.deltaIndex;
+    return (this.deltaIndex = new DeltaIndex(version, this.outside(snapshot)));
+  }
+
+  /** How many indexable rows wait outside a snapshot: all of them when it cannot be read, so it is written again. */
+  private waiting(snapshot: Snapshot | undefined): number {
+    try {
+      return this.outside(snapshot).length;
+    } catch {
+      return Number.POSITIVE_INFINITY;
+    }
+  }
+
+  /** The indexable rows a snapshot does not hold by id: every one, without a snapshot. */
+  private outside(snapshot: Snapshot | undefined): Compiled[] {
+    const held = new Set(snapshot?.ids() ?? []);
+    return this.compiled.filter((c) => !held.has(c.rec.id) && indexable(c));
+  }
+
+  /**
+   * Writes the store's postings snapshot (`memory-postings.ts`) when at least `minDelta` indexable rows wait outside
+   * the current one (every row, when there is none): the light sleep passes `SNAPSHOT_DELTA`, so a small store is
+   * indexed in process; the idle sleeper and `eden memory remember` pass 1. Returns whether it wrote one.
+   */
+  refreshPostings(minDelta = 1): boolean {
+    const dir = dirname(this.path);
+    const snapshot = Snapshot.open(dir);
+    try {
+      if (this.consent() !== "on" || this.sealed) return false;
+      if (this.waiting(snapshot) < Math.max(1, minDelta)) return false;
+      writeSnapshot(
+        dir,
+        this.compiled.filter(indexable).sort((a, b) => compareRecency(a.rec, b.rec)),
+      );
+      return true;
+    } catch {
+      return false;
+    } finally {
+      snapshot?.close();
+    }
   }
 
   /**
@@ -1747,10 +1725,9 @@ export class AgentMemory {
   private triggeredBy(classes: readonly ActionClass[], visible: RowFilter): MemoryRecord[] {
     try {
       if (!classes.length) return [];
-      this.ensureIndex();
       const global = this.perRepo ? (readUserRules(this.windowsRoot) as MemoryRecord[]) : [];
       const invalid = global.length ? readInvalidations(this.dir) : [];
-      const rows = withUserGlobal(this.ruleRows.filter(visible), global, invalid);
+      const rows = withUserGlobal(this.liveRules().filter(visible), global, invalid);
       return labelledNotes(triggeredRows(rows, classes));
     } catch {
       return [];
@@ -1812,7 +1789,7 @@ export class AgentMemory {
         const it = items[i]!,
           plain = stripMemoryPacket(it.text),
           // A re-read message a row already holds is stored as it is (the gate is idempotent), and is skipped below.
-          safe = this.stored.has(plain) ? plain : this.persistText(plain),
+          safe = this.seen().exact.has(plain) ? plain : this.persistText(plain),
           lane = lanes[i]!;
         if (lane === "icl" || lane === "narrative") {
           let text = safe;
@@ -1820,7 +1797,7 @@ export class AgentMemory {
             try {
               text = omitConflictingIdentity(text, this.semantic());
             } catch {}
-          if (text && !this.seenLower.has(text.toLowerCase())) {
+          if (text && !this.seen().lower.has(text.toLowerCase())) {
             const rec = this.remember(text, {
               kind: lane === "narrative" || it.untyped ? "episode" : "fact",
               lane,
@@ -1923,7 +1900,7 @@ export class AgentMemory {
               if (
                 !this.seenAt(safe, at) &&
                 !out.some((r) => r.text.replace(/[.!?]+$/g, "").toLowerCase() === key) &&
-                !this.seenAt(key, at, this.seenKeys)
+                !this.seenAt(key, at, this.seen().keys)
               )
                 out.push(this.remember(safe, { kind: "episode", tags: srcTags(it), origin: it.origin }));
             }
@@ -2017,14 +1994,14 @@ export class AgentMemory {
           }
           for (const c of this.compiled) {
             const merged = mergeRow(byId.get(c.rec.id)?.rec, c.rec);
-            byId.set(c.rec.id, merged === c.rec ? c : compileNeedles(merged));
+            byId.set(c.rec.id, merged === c.rec ? c : compileRow(merged));
           }
           this.compiled = [...byId.values()];
           for (const c of this.compiled) this.knownIds.add(c.rec.id);
         } catch {}
         this.trimToStoreCap();
         const resolved = resolveSupersessions(this.compiled.map((c) => c.rec));
-        this.compiled = this.compiled.map((c, i) => (resolved[i] === c.rec ? c : compileNeedles(resolved[i]!)));
+        this.compiled = this.compiled.map((c, i) => (resolved[i] === c.rec ? c : compileRow(resolved[i]!)));
         const written = this.compiled.filter((c) => !this.pended.has(c.rec.id)).map((c) => c.rec);
         writeStore(this.path, written);
         try {
@@ -2074,79 +2051,76 @@ export class AgentMemory {
     }
   }
 
+  /**
+   * D33: the store holds its newest `memoryStoreCap()` rows (20k by default), pins and constraints always. An older
+   * row leaves the hot path for `diary.jsonl` beside the store, which no hook reads (the diary on disk is unbounded;
+   * P6.1's store takes it in). Runs under the store's lock.
+   */
   private trimToStoreCap(): void {
     const cap = memoryStoreCap();
     if (!Number.isFinite(cap) || cap <= 0 || this.compiled.length <= cap) return;
     const pinned = (r: MemoryRecord) => (r.tags ?? []).includes("pin") || r.kind === "constraint",
       keep = this.compiled.filter((c) => pinned(c.rec)),
       rest = this.compiled.filter((c) => !pinned(c.rec)).sort((a, b) => compareRecency(a.rec, b.rec));
-    this.compiled = keep.concat(rest.slice(Math.max(0, rest.length - Math.max(0, cap - keep.length))));
-    this.post = null;
+    const leaving = Math.max(0, rest.length - Math.max(0, cap - keep.length));
+    appendDiary(
+      dirname(this.path),
+      rest.slice(0, leaving).map((c) => c.rec),
+    );
+    this.compiled = keep.concat(rest.slice(leaving));
+    this.indexChanged();
   }
 
   /**
-   * Adds to `pool` the visible rows of a part's tokens, rarest token first, up to `budget` rows for the part; a fat
-   * token (df ≥ 80) is read only while the pool is empty.
+   * The lexical path (A4 §5.1 step 4c, D17): BM25F over a bounded candidate set from the store's postings snapshot
+   * and the rows written since (`memory-postings.ts`), for every reader alike. A row is admitted on a word it shares
+   * with the prompt, or, on a continuation, on STRONG evidence from the agent's last message (`lexicallyAdmitted`,
+   * until P4.3's τ), then ranked by its weighted BM25F sum over the cue's parts, the kind prior, and recency. A
+   * snapshot that cannot be read (cut short, or rewritten by hand) is set aside: the rows are indexed in process.
    */
-  private fillPool(
-    post: Postings,
-    hay: ReadonlySet<string>,
-    budget: number,
-    visible: RowFilter,
-    seen: Set<Compiled>,
-    pool: Compiled[],
-  ): void {
-    const ranked = [...hay]
-      .map((t) => ({ t, df: post.get(t)?.length ?? 0 }))
-      .filter((x) => x.df > 0)
-      .sort((a, b) => a.df - b.df);
-    let added = 0;
-    for (const { t, df } of ranked) {
-      if (df >= 80 && pool.length) break;
-      for (const c of post.get(t) ?? []) {
-        if (seen.has(c) || !visible(c.rec)) continue;
-        seen.add(c);
-        pool.push(c);
-        if (++added >= budget) break;
+  relevant(text: string, cap = memoryRetrieveCap(), visible = EVERY_ROW, cue?: SituationCue): MemoryRecord[] {
+    const snapshot = Snapshot.open(dirname(this.path));
+    try {
+      return this.ranked(text, cap, visible, cue, snapshot);
+    } catch {
+      try {
+        return snapshot ? this.ranked(text, cap, visible, cue, undefined) : [];
+      } catch {
+        return [];
       }
-      if (df >= 80 || added >= budget) break;
+    } finally {
+      snapshot?.close();
     }
   }
 
-  relevant(text: string, cap = memoryRetrieveCap(), visible = EVERY_ROW, cue?: SituationCue): MemoryRecord[] {
-    try {
-      this.ensureIndex();
-      const post = cue ? this.stemmedPostings() : this.post!;
-      const parts = hayParts(text, cue, post);
-      const hay = new Set(parts.flatMap((part) => [...part.hay]));
-      const poolCap = Math.max(cap * 6, 30),
-        seen = new Set<Compiled>(),
-        pool: Compiled[] = [];
-      for (const part of parts) this.fillPool(post, part.hay, poolCap, visible, seen, pool);
-      const scored: { rec: MemoryRecord; n: number; rare: number }[] = [];
-      for (const c of pool) {
-        const needles = cue ? [...stemmed(c.needles)] : c.needles;
-        if (
-          c.needles.length > SCORABLE_NEEDLES ||
-          needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x)) ||
-          /\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text)
-        )
-          continue;
-        const { n, rare, matched } = situatedScore(needles, parts, post);
-        if (lexicallyAdmitted(c.rec, matched, cue)) scored.push({ rec: c.rec, n, rare });
-      }
-      return liveCopulaLatest(scored)
-        .sort(
-          (a, b) =>
-            b.n + kindPrior(b.rec, cue) - (a.n + kindPrior(a.rec, cue)) ||
-            b.rare - a.rare ||
-            compareRecency(b.rec, a.rec),
-        )
-        .slice(0, Math.max(0, Math.floor(Number(cap) || 0)))
-        .map((x) => x.rec);
-    } catch {
-      return [];
+  private ranked(
+    text: string,
+    cap: number,
+    visible: RowFilter,
+    cue: SituationCue | undefined,
+    snapshot: Snapshot | undefined,
+  ): MemoryRecord[] {
+    const view = this.postingsView(snapshot, visible);
+    const parts = hayParts(text, cue, view);
+    const hay = new Set(parts.flatMap((part) => [...part.hay]));
+    const pool = candidateRows(
+      [...hay].map((term) => view.rowsOf(term)),
+      (c) => indexable(c) && visible(c.rec),
+    );
+    const scored: { rec: MemoryRecord; score: number }[] = [];
+    for (const c of pool) {
+      if (
+        c.fields.body.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x)) ||
+        /\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text)
+      )
+        continue;
+      const { score, matched } = situatedScore(c.fields, parts, view);
+      if (lexicallyAdmitted(c.rec, matched, cue)) scored.push({ rec: c.rec, score });
     }
+    return liveCopulaLatest(scored)
+      .sort((a, b) => b.score + kindPrior(b.rec) - (a.score + kindPrior(a.rec)) || compareRecency(b.rec, a.rec))
+      .slice(0, Math.max(0, Math.floor(Number(cap) || 0)))
+      .map((x) => x.rec);
   }
 
   notesFor(text = "", k = memoryRetrieveCap(), visible: RowFilter = EVERY_ROW, cue?: SituationCue): MemoryRecord[] {
@@ -2333,7 +2307,7 @@ export class AgentMemory {
 
   dropWhere(pred: (r: MemoryRecord) => boolean): void {
     this.compiled = this.compiled.filter((c) => !pred(c.rec));
-    this.post = null;
+    this.indexChanged();
     this.flush(true);
   }
 
@@ -2343,9 +2317,9 @@ export class AgentMemory {
       const next = pred(c.rec);
       if (typeof next !== "string" || next === c.rec.text) return c;
       dirty = true;
-      return compileNeedles({ ...c.rec, text: next });
+      return compileRow({ ...c.rec, text: next });
     });
-    if (dirty) ((this.post = null), this.flush(true));
+    if (dirty) (this.indexChanged(), this.flush(true));
   }
 
   patchWhere(fn: (r: MemoryRecord) => MemoryRecord | undefined): void {
@@ -2359,18 +2333,13 @@ export class AgentMemory {
       }
       if (!next || next === c.rec) return c;
       dirty = true;
-      return compileNeedles(next);
+      return compileRow(next);
     });
-    if (dirty) ((this.post = null), this.flush(true));
+    if (dirty) (this.indexChanged(), this.flush(true));
   }
 
   close() {
     this.flush(false);
-  }
-
-  /** P4.2 (red first): the postings snapshot (`memory-postings.ts`); none is written yet. */
-  refreshPostings(_minDelta = 1): boolean {
-    return false;
   }
 
   async sleep(opts?: { session?: string }): Promise<void> {

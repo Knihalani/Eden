@@ -10,8 +10,8 @@
  *   just touched (`q_path`) and the agent's last message without Eden's own words (`q_prev`, P4.1's situation cue,
  *   `memory-cue.ts`). A function word is WEAK and never counts.
  *
- * BM25F and τ_repo, which A7 also asks of an episode, arrive with P4.2 and P4.3. Rows the user typed, rows mined
- * from the repo's files (D8), rows of unknown source and gists keep today's lexical admission.
+ * The lexical path ranks by BM25F since P4.2; τ_repo, which A7 also asks of an episode, is P4.3's. Rows the user
+ * typed, rows mined from the repo's files (D8), rows of unknown source and gists keep today's lexical admission.
  */
 import { isCited, isUntyped, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
 import { contentWords as words } from "./memory-transcript";

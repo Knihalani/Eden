@@ -27,10 +27,13 @@ export function str(v: unknown): string | undefined {
   return typeof v === "string" && v ? v : undefined;
 }
 
-/** What one invocation logs (`memory-events.ts`), filled in as the handler runs. */
-export type Trace = Omit<WideEvent, "t" | "ms" | "aborted" | "flags">;
+/** What one invocation logs (`memory-events.ts`), filled in as the handler runs; `aborted` only when it was. */
+export type Trace = Omit<WideEvent, "t" | "ms" | "aborted" | "flags"> & { aborted?: true };
 
-/** Appends the invocation's wide event; after an exception at a delivery point, the breaker checks its budget. */
+/**
+ * Appends the invocation's wide event; after an exception or a budget abort at a delivery point, the breaker checks
+ * its budget.
+ */
 export function logInvocation(trace: Trace, flags: FlagState | undefined, ms: number): void {
   try {
     const root = memoryRoot(),
@@ -40,9 +43,9 @@ export function logInvocation(trace: Trace, flags: FlagState | undefined, ms: nu
       ...trace,
       ...(flags ? { flags: flagModes(flags) } : {}),
       ms: Math.round(ms * 100) / 100,
-      aborted: false,
+      aborted: trace.aborted === true,
     });
-    if (trace.err && trace.point && flags) tripIfOverBudget(root, trace.point, flags, t);
+    if ((trace.err || trace.aborted) && trace.point && flags) tripIfOverBudget(root, trace.point, flags, t);
   } catch {}
 }
 

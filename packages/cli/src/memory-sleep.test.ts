@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openMemory } from "../../../src/index";
+import { SNAPSHOT_FILE } from "../../../src/memory-postings";
 import { sleepCli, noteRepoActivity, spawnIdleSleeper } from "./memory-sleep";
 
 let dir = "";
@@ -30,8 +31,11 @@ afterEach(() => {
   }
 });
 
-/** What only the full sleep writes: its postings snapshot (`writeSleepPostings`). */
-const slept = () => existsSync(join(store, "sleep-postings.jsonl"));
+/**
+ * What only the full sleep writes for a store this small: its postings snapshot (P4.2; the light sleep waits until
+ * 256 rows are outside one).
+ */
+const slept = () => existsSync(join(store, SNAPSHOT_FILE));
 
 describe("D34: the idle sleeper", () => {
   test("it waits until the repo's hooks have been quiet for --after, and activity restarts the wait", async () => {

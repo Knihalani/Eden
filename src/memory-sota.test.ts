@@ -17,6 +17,7 @@ import {
   isNoopCue,
   sleep,
 } from "./index";
+import { SNAPSHOT_FILE } from "./memory-postings";
 import { SemanticStore } from "./semantic-store";
 
 function tmpDir(): string {
@@ -272,8 +273,9 @@ describe("P1 sleep", () => {
       expect(pin).toBeTruthy();
       const pinHeat = Number(pin!.heat ?? pin!.sal ?? 1);
       expect(pinHeat).toBeGreaterThanOrEqual(1);
-      expect(existsSync(join(dir, "sleep-postings.jsonl"))).toBe(true);
-      expect(readFileSync(join(dir, "sleep-postings.jsonl"), "utf8")).toMatch(/clerk|auth|banner/i);
+      // P4.2: the full sleep writes the postings snapshot; the legacy sleep-postings.jsonl is gone.
+      expect(existsSync(join(dir, "sleep-postings.jsonl"))).toBe(false);
+      expect(readFileSync(join(dir, SNAPSHOT_FILE), "utf8")).toMatch(/clerk|auth|banner/i);
       if (existsSync(join(dir, "miss.jsonl"))) {
         const miss = readFileSync(join(dir, "miss.jsonl"), "utf8");
         expect(miss).toMatch(/Encode|Store|Retrieve|Maintain/);

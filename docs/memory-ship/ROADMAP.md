@@ -167,7 +167,7 @@ Upper bound at the sizes above: 53 working days (~11 weeks) for one engineer, pl
 
 ## Hygiene carried over
 
-- Delete `sleep-postings.jsonl` or read it (superseded by P4.2).
+- ~~Delete `sleep-postings.jsonl` or read it (superseded by P4.2).~~ Done in P4.2: sleep writes `postings.snap`, which the Submit reads, and removes the old file.
 - Delete the WAL unlink.
 - Compact `semantic.jsonl` tombstones at sleep.
 - Remove dead env knobs from the docs.

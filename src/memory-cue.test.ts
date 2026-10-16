@@ -164,15 +164,16 @@ describe("A7 §3–4: the lexical path with a situation cue", () => {
     mem.remember("Image jobs resize uploads to 3 sizes.", { kind: "fact" });
     const ranked = texts(mem.relevant("the image build fails on alpine", 6, undefined, cue("debug")));
     expect(ranked[0]).toContain("sharp");
-    // Without a situation cue the prior is as before P4.1: the fact leads.
-    expect(texts(mem.relevant("the image build fails on alpine"))[0]).toContain("resize");
+    // P4.2: every reader ranks one way, so without a situation cue too the better match leads.
+    expect(texts(mem.relevant("the image build fails on alpine"))[0]).toContain("sharp");
   });
 
   test("R1's tokenizer: a plural meets its singular", () => {
     const mem = store();
     mem.remember("Every table has an org_id column and queries must filter by it.", { kind: "fact" });
     expect(texts(mem.relevant("anything to watch in this query?", 6, undefined, cue("question")))).toHaveLength(1);
-    expect(mem.relevant("anything to watch in this query?")).toEqual([]);
+    // P4.2: every reader reads the cue in the index's terms, so without a situation cue too.
+    expect(texts(mem.relevant("anything to watch in this query?"))).toHaveLength(1);
   });
 
   test("a continuation admits only on an identifier its agent's last message shares, never on a plain word", () => {

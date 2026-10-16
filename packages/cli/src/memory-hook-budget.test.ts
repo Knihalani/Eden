@@ -120,7 +120,10 @@ describe("the Submit's budget abort", () => {
     submit(CUE, LATE);
     expect(breakerFile()["deliver.submit"]).toBeUndefined();
     submit("which package manager again?", LATE);
-    expect(breakerFile()["deliver.submit"]).toMatchObject({ mode: "shadow", cause: expect.stringMatching(/2 budget aborts/) });
+    expect(breakerFile()["deliver.submit"]).toMatchObject({
+      mode: "shadow",
+      cause: expect.stringMatching(/2 budget aborts/),
+    });
   });
 
   test("only a human Submit aborts: a non-human one and PreCompact never do", () => {
