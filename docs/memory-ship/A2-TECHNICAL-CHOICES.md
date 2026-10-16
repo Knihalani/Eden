@@ -256,7 +256,7 @@ CREATE TABLE fact_hist(scope TEXT, s TEXT, p TEXT, o TEXT, seq INTEGER, valid_fr
 
 **Recommendation.**
 - Keep a fresh process; it is what makes fail-open trivial.
-- Add a **hard internal budget** (e.g. 150 ms wall from process start). If exceeded, print nothing and exit 0. This protects against the fat-posting 2 s tail (§1).
+- Add a **hard internal budget** (e.g. 150 ms wall from process start). If exceeded, print nothing and exit 0. This protects against the fat-posting 2 s tail (§1). *P4.2 built it from the handler's start instead (A4 §5.1): from the process's start, Bun's start and the module load alone aborted 1.4% of Submits under light load.*
 - `bun build --compile` produces a single binary. Its startup is roughly Bun's own. *unverified whether it beats `bun file.ts` materially.* Worth a 5-minute measurement; not a slice.
 - **Do not** add a daemon: it breaks fail-open semantics and the doc says speed is not a slice.
 
