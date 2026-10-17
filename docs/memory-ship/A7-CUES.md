@@ -94,6 +94,12 @@ This revises R2 §7.4 using R1's calibration. R1 found that 90 of 150 negatives 
 
 R1 measured that lexical thresholds transfer poorly: dev FIR 0 became test FIR 7.5%. So τ is always per repo, always refit, and always reported.
 
+**Built in P4.3** (`src/memory-tau.ts`, `AgentMemory.refitTau`; A4 §5.1 step 6 for the gate):
+- **Scale.** τ_repo = `norm × mean idf`, the mean of the store's terms' idf. The fixture's is 4.55 (its 205 live memories index as 182 rows: rule rows are delivered by their classes, D18), so R1's strict point is `norm` = 4.1 / 4.55.
+- **The sum.** The gate compares τ with the cue parts' BM25F scores summed unweighted, each part mass-limited (§3), the scale R1's M7 cue measured τ on; ranking keeps §3's weights.
+- **The silence set.** The seeds are R1's 70 **dev** negatives (its test negatives stay held out for CueBench) and R8's 98. A human Submit logs an `ack`, or a prompt on which no candidate had MEDIUM or STRONG evidence, by its hash; the refit replays a logged prompt from the row that stored it, without that row (a question is never stored, so it is left out), and counts `ack`s. The other repos' stores pool their logged prompts' normalized scores and counts (`tau.json`).
+- **The fit** is the smallest `norm` above every prompt's top MEDIUM-path sum over its store's mean idf; prompts a STRONG identifier answers are counted apart, as no τ silences them. It is used from 300 pooled prompts on; until then R1's point is. The gold-recall check on annotated cues has no product source yet (a repo has no annotated cues); it is a follow-up.
+
 ---
 
 ## 5. Triggers (compiled at write and at sleep)
