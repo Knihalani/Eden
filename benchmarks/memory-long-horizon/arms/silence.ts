@@ -14,6 +14,8 @@
  * - The sets: R1's and R8's negatives, and the private set when `EDEN_EVAL_NEGATIVES` names one. Without it, the
  *   report's `real` says `skipped: private set absent`.
  * - `--per-category N` asks only the first N negatives of each category (a quick look); by default, all of them.
+ * - `--store cuebench` asks them against the CueBench store instead (P4.3, the gate's own store): the R1 fixture's live
+ *   memories planted with `eden memory remember` (`cuebench.ts`), with six of R1's dev `lex` cues as the control.
  */
 import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -21,9 +23,9 @@ import { join, resolve } from "node:path";
 import { rate, type Rate } from "../harness/metrics";
 import { loadPlugin } from "../harness/runner";
 import { SimWorld } from "../harness/session";
-import { generateWorldScenario, playScenario, type Scenario } from "../harness/world";
-import { askCue, perCategory, type BenchCue } from "./cuebench";
-import { EDEN_PLUGIN } from "./kit";
+import { generateWorldScenario, playScenario, type Scenario, type WorldSpec } from "../harness/world";
+import { askCue, benchWorld, memoryRows, perCategory, plant, r1Cues, type BenchCue } from "./cuebench";
+import { ArmRun, EDEN_CLI, EDEN_PLUGIN } from "./kit";
 import {
   askable,
   fixtureNegatives,
@@ -70,6 +72,18 @@ export async function replaySilence(options: SilenceOptions): Promise<SilenceRep
     initialTruth: store.world.initialTruth,
   });
   await playScenario(store, world);
+  return askAgainst(world, store.world, options);
+}
+
+/**
+ * Asks every control and every negative against a world's store as it stands, Eden's files restored before each, so
+ * no negative is answered from an earlier one.
+ */
+async function askAgainst(
+  world: SimWorld,
+  spec: WorldSpec,
+  options: Pick<SilenceOptions, "controls" | "sets" | "runDir">,
+): Promise<SilenceReport> {
   const state = edenState(world);
   const saved = state.map((_, i) => join(options.runDir, "store-after-seeding", String(i)));
   state.forEach((dir, i) => copyOver(dir, saved[i]!));
@@ -78,7 +92,7 @@ export async function replaySilence(options: SilenceOptions): Promise<SilenceRep
     const ids: string[] = [];
     for (const cue of cues) {
       state.forEach((dir, i) => copyOver(saved[i]!, dir));
-      if ((await askCue(world, store.world, cue, [])).packet) ids.push(cue.id);
+      if ((await askCue(world, spec, cue, [])).packet) ids.push(cue.id);
     }
     return ids;
   };
@@ -89,6 +103,23 @@ export async function replaySilence(options: SilenceOptions): Promise<SilenceRep
     sources.push({ source: set.source, fir: rate(falseFires.length, set.cues.length), falseFires });
   }
   return { control: rate(control.length, options.controls.length), sources };
+}
+
+/** The CueBench store (`--store cuebench`): the R1 fixture planted, then every set asked against it. */
+async function replayBenchSilence(options: Omit<SilenceOptions, "store" | "controls">): Promise<SilenceReport> {
+  const run = new ArmRun(
+    { pluginDir: options.pluginDir, cli: EDEN_CLI, scale: "full", flags: "on", env: options.env },
+    options.runDir,
+  );
+  const spec = benchWorld();
+  const world = run.world(spec);
+  const planted = plant(run, world, memoryRows(world));
+  if (!planted || planted.remembered !== planted.rows) throw new Error("the CueBench store could not be planted");
+  const controls = perCategory(
+    r1Cues().filter((cue) => cue.split === "dev" && cue.cat === "lex"),
+    6,
+  );
+  return askAgainst(world, spec, { ...options, controls });
 }
 
 /** The store's prompts that need an item (A5 §3.6 `needs`), once each, as controls. */
@@ -119,6 +150,8 @@ function argument(args: string[], name: string): string | undefined {
 
 export interface SilenceRun extends SilenceReport {
   plugin: string;
+  /** The store the negatives met: a world scenario's (of `seed`), or the CueBench store. */
+  store: "world" | "cuebench";
   seed: number;
   /** The private set's file and sha256, or why it was skipped. */
   real: { path: string; sha256: string; looks: number } | typeof PRIVATE_SET_ABSENT;
@@ -132,7 +165,7 @@ export interface SilenceRun extends SilenceReport {
 export async function measureSilence(options: {
   pluginDir: string;
   seed?: number;
-  store?: Required<Scenario>;
+  store?: Required<Scenario> | "cuebench";
   perCategory?: number;
   env?: Record<string, string | undefined>;
   hookEnv?: Record<string, string>;
@@ -143,21 +176,17 @@ export async function measureSilence(options: {
   const sets = [...fixtureNegatives(), ...(real.status === "loaded" ? [real.set] : [])].map((set) =>
     per === undefined ? set : { ...set, cues: perCategory(set.cues, per) },
   );
-  const store = options.store ?? generateWorldScenario(seed);
   const runDir = mkdtempSync(join(tmpdir(), "eden-silence-"));
   const started = performance.now();
   try {
-    const controls = storeControls(store);
-    const { control, sources } = await replaySilence({
-      pluginDir: options.pluginDir,
-      store,
-      controls,
-      sets,
-      runDir,
-      env: options.hookEnv,
-    });
+    const common = { pluginDir: options.pluginDir, sets, runDir, env: options.hookEnv };
+    const scenario = options.store === "cuebench" ? undefined : (options.store ?? generateWorldScenario(seed));
+    const { control, sources } = scenario
+      ? await replaySilence({ ...common, store: scenario, controls: storeControls(scenario) })
+      : await replayBenchSilence(common);
     return {
       plugin: options.pluginDir,
+      store: scenario ? "world" : "cuebench",
       seed,
       control,
       sources,
@@ -174,6 +203,7 @@ async function main(args: string[]): Promise<void> {
   const run = await measureSilence({
     pluginDir: resolve(argument(args, "--plugin") ?? EDEN_PLUGIN),
     seed: Number(argument(args, "--seed") ?? 1),
+    ...(argument(args, "--store") === "cuebench" ? { store: "cuebench" as const } : {}),
     perCategory: per === undefined ? undefined : Number(per),
     env: process.env,
   });
