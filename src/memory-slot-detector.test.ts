@@ -32,6 +32,12 @@ describe("the detector's lexicon (R2 §6.1b)", () => {
     expect(silence.filter((prompt) => cuedSlots(prompt).length)).toEqual([]);
   });
 
+  test("a seed names its slot as a word of the cue's prose, not as a segment of a path or a filename", () => {
+    expect(cuedSlots("open apps/web/app/login.ts")).toEqual([]);
+    expect(cuedSlots("see docs/db/schema.md")).toEqual([]);
+    expect(cuedSlots("the login page redirects twice")).toEqual(["auth.provider"]);
+  });
+
   test("a seed names its slot alone", () => {
     expect(cuedSlots("install deps")).toEqual(["pkg.manager"]);
     expect(cuedSlots("which test runner do I run this with?")).toEqual(["test.runner"]);
