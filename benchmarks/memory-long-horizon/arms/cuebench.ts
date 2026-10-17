@@ -50,7 +50,8 @@ export const r1Cues = (): BenchCue[] => JSON.parse(readFileSync(join(FIXTURE, "c
 export const nimCues = (): BenchCue[] => JSON.parse(readFileSync(join(FIXTURE, "cues-nim.json"), "utf8")) as BenchCue[];
 export const ALIASES = join(FIXTURE, "aliases-gemma.json");
 
-export const isNegative = (cue: BenchCue) => cue.cat.startsWith("neg");
+/** R1's `neg-*` categories and R8's `nim-neg` (98 vocabulary-rich negatives, reported apart: A5 `CueBench-code`). */
+export const isNegative = (cue: BenchCue) => cue.cat.startsWith("neg") || cue.cat === "nim-neg";
 export const isPolicyMemory = (id: string) => id.startsWith("p");
 
 /** The R1 repo: one world with the fixture's scopes. */
@@ -162,6 +163,15 @@ export function recallAt4(results: readonly CueResult[]): { k: number; n: number
 export function fir(results: readonly CueResult[]): { k: number; n: number } {
   const negatives = results.filter((result) => isNegative(result.cue));
   return { k: negatives.filter((result) => result.packet).length, n: negatives.length };
+}
+
+/** Recall@4 per positive category (A5 CueBench-code: P4.4's gate reads `indirect`). */
+export function recallByCategory(results: readonly CueResult[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  const positives = results.filter((result) => !isNegative(result.cue));
+  for (const cat of [...new Set(positives.map((result) => result.cue.cat))].sort())
+    out[cat] = show(recallAt4(positives.filter((result) => result.cue.cat === cat)));
+  return out;
 }
 
 /** Bullet precision per category: bullets that carry a gold memory ÷ bullets. */
