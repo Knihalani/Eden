@@ -1015,13 +1015,17 @@ const TOPIC_WORDS: Partial<Record<SlotId, readonly string[]>> = {
   formatter: ["reformat"],
 };
 
-/** A cue about the user's own project: "we", "our", "us" (not "let us", "tell us"), "this repo" (see `cuedSlots`). */
+/**
+ * A cue about the user's own project: "we", "our", "this repo", and "us" in lowercase, not after "let", "tell" (see
+ * `cuedSlots`): "US hosting" is a country.
+ */
 const OURS =
-  /(?<![a-z0-9])(?:we|we['’](?:re|ve|d)|our|ours|(?<!\b(?:let|tell|show|give|help|send|ask) )us|this (?:repo|project|codebase|app|service))(?![a-z0-9])/i;
+  /(?<![a-z0-9])(?:we|we['’](?:re|ve|d)|our|ours|this (?:repo|monorepo|workspace|project|codebase|app|service))(?![a-z0-9])/i;
+const US = /(?<![A-Za-z0-9])(?<!\b(?:[Ll]et|[Tt]ell|[Ss]how|[Gg]ive|[Hh]elp|[Ss]end|[Aa]sk) )us(?![A-Za-z0-9])/;
 /** A cue setting up this project (A7 §7's bundle): a setup word, and this repo, a new machine, or a local setup. */
 const SETUP = /(?<![a-z0-9])(?:set ?up|onboard(?:ing)?|get(?:ting)? started|bootstrap(?:ping)?)(?![a-z0-9])/i;
 const SETUP_HERE =
-  /(?<![a-z0-9])(?:the (?:repo|project|codebase|monorepo|workspace)|locally|new (?:laptop|machine|computer))(?![a-z0-9])/i;
+  /(?<![a-z0-9])(?:(?:the|this) (?:repo|project|codebase|monorepo|workspace)|locally|(?:new|my) (?:laptop|machine|computer))(?![a-z0-9])/i;
 export const SETUP_BUNDLE: readonly SlotId[] = ["pkg.manager", "node.version"];
 
 /** The slots each phrase names, and one expression matching any of them as words of a cue's prose (see the header). */
@@ -1049,7 +1053,7 @@ function named(cue: string, { slots, re }: ReturnType<typeof lexicon>): Set<Slot
 /** The slots a cue asks about (see the header): each one's live value is looked up by key. */
 export function cuedSlots(text: string): SlotId[] {
   const cue = String(text ?? "");
-  const ours = OURS.test(cue);
+  const ours = OURS.test(cue) || US.test(cue);
   const hits = named(cue, SEED_LEXICON);
   if (ours) for (const slot of named(cue, TOPIC_LEXICON)) hits.add(slot);
   if (SETUP.test(cue) && (ours || SETUP_HERE.test(cue))) for (const slot of SETUP_BUNDLE) hits.add(slot);
