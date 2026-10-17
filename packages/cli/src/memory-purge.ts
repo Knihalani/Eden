@@ -6,7 +6,8 @@
  *   postings snapshot (`postings.snap`, P4.2) is deleted instead, every one under the root, at every purge: it is
  *   derived from the store, holds its words lowercased, stemmed and split (so a pattern that matched a row need not
  *   match it), may still hold the words of a row the store has since dropped, its byte offsets would not survive a
- *   rewrite, and sleep builds it again from the purged rows. A
+ *   rewrite, and sleep builds it again from the purged rows. So is every silence log (`silence.jsonl`, P4.3): it
+ *   holds hashes of prompts, which no pattern can match, and τ_repo's next refit does without it. A
  *   SQLite store loses the rows that match, with `secure_delete`, a truncating WAL checkpoint and `VACUUM`, so no
  *   free page keeps them. A file is rewritten under its writers' lock (`<file>.lock`); other binary files are left
  *   as they are and named.
@@ -19,6 +20,7 @@ import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { REDACTED } from "@eden/ir";
 import { SNAPSHOT_FILE } from "../../../src/memory-postings";
+import { SILENCE_FILE } from "../../../src/memory-tau";
 import { withFileLock, writeFileAtomic } from "./home";
 import { memoryRoot } from "./memory-hook";
 
@@ -89,7 +91,7 @@ function filesUnder(dir: string): string[] {
 function purgeTree(root: string, pattern: RegExp): Purged {
   const purged: Purged = { matches: 0, files: 0, skipped: [] };
   const files = filesUnder(root);
-  const snapshots = files.filter((path) => basename(path) === SNAPSHOT_FILE);
+  const snapshots = files.filter((path) => [SNAPSHOT_FILE, SILENCE_FILE].includes(basename(path)));
   for (const path of files) {
     if (path.endsWith(".lock") || SQLITE_COMPANION.test(path) || snapshots.includes(path)) continue;
     try {

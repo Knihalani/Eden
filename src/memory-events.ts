@@ -80,6 +80,13 @@ export interface WideEvent {
   /** The tokens delivered in this epoch before the packet (A4 §4's budget). */
   tokens_epoch?: number;
   drops?: Partial<Record<DropStage, number>>;
+  /**
+   * A7 §4's gate on the lexical path at a human Submit (`GateTrace`): τ_repo, the candidates with evidence and their
+   * top BM25F sum, and the rows admitted on STRONG evidence and on the MEDIUM path. `silence`: the prompt joined the
+   * repo's silence set (`memory-tau.ts`).
+   */
+  gate?: { tau: number; ev: number; top: number; s: number; m: number };
+  silence?: "ack" | "empty";
   would_preempt?: string[];
   /** Which of Stop's two handlers ran (D34). */
   stage?: "stop-fast" | "stop-sleep";

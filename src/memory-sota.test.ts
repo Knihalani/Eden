@@ -19,6 +19,9 @@ import {
 } from "./index";
 import { SNAPSHOT_FILE } from "./memory-postings";
 import { SemanticStore } from "./semantic-store";
+import { cuesBelowTau } from "../scripts/test-below-tau";
+
+cuesBelowTau();
 
 function tmpDir(): string {
   return mkdtempSync(join(tmpdir(), "eden-sota-"));

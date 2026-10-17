@@ -30,6 +30,9 @@ import {
   sleepBudgetMs,
   sleepIdleMs,
 } from "./sleep";
+import { cuesBelowTau } from "../scripts/test-below-tau";
+
+cuesBelowTau();
 
 function tmpDir(prefix = "eden-m74-"): string {
   return mkdtempSync(join(tmpdir(), prefix));

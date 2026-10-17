@@ -6,7 +6,8 @@
  * need. The file is one atomic write (a reader that opened it keeps reading that version), in three parts:
  *
  * - a header line (JSON): the snapshot's own id, the rows indexed by scope with their field lengths (BM25F's N and mean
- *   lengths, `memory-bm25f.ts`), and the byte range of each part below;
+ *   lengths, `memory-bm25f.ts`), the store's mean idf (τ_repo's scale, `memory-tau.ts`), and the byte range of each
+ *   part below;
  * - the ids of the indexed rows, one per line, oldest first, each with a digest of what its terms are read from: a
  *   row's place in this list is its ordinal;
  * - buckets: a term's postings, by scope, as ordinals, ascending (so newest last). A term lives in the bucket its hash
@@ -29,9 +30,10 @@ import { chmodSync, closeSync, openSync, readSync, renameSync, unlinkSync, write
 import { join } from "node:path";
 import type { MemoryRecord } from "./index";
 import { FIELDS, rowTerms, type Corpus, type Field, type RowFields } from "./memory-bm25f";
+import { meanIdf } from "./memory-tau";
 
 export const SNAPSHOT_FILE = "postings.snap";
-const SNAPSHOT_VERSION = 1;
+const SNAPSHOT_VERSION = 2;
 /** |C| ≤ 200 (D17). */
 export const CANDIDATE_CAP = 200;
 /** A fat term: in more visible rows than this; it is read newest-64 (D17). */
@@ -69,6 +71,8 @@ interface Header {
   ids: [number, number];
   buckets: [number, number][];
   scopes: Record<string, ScopeStats>;
+  /** The mean idf of the indexed rows' terms, every scope's (`meanIdf`). */
+  meanIdf: number;
 }
 
 /** A term's postings in one bucket: ordinals by scope key. */
@@ -147,6 +151,7 @@ export function snapshotBytes(rows: readonly Indexed[]): Buffer {
     ranges.push([at, body.length]);
     at += body.length;
   }
+  const dfs = [...terms.values()].map((byScope) => Object.values(byScope).reduce((sum, list) => sum + list.length, 0));
   const header: Header = {
     v: SNAPSHOT_VERSION,
     id: `${Date.now().toString(36)}-${randomBytes(6).toString("hex")}`,
@@ -154,6 +159,7 @@ export function snapshotBytes(rows: readonly Indexed[]): Buffer {
     ids: ranges[0]!,
     buckets: ranges.slice(1),
     scopes,
+    meanIdf: meanIdf(rows.length, dfs),
   };
   return Buffer.concat([Buffer.from(`${JSON.stringify(header)}\n`, "utf8"), ...bodies]);
 }
@@ -307,6 +313,14 @@ export class DeltaIndex<T extends Indexed> {
   rowsOf(term: string): readonly T[] {
     return this.byTerm.get(term) ?? [];
   }
+
+  /** The mean idf of the delta's own terms, as if it were the whole store (`meanIdf`). */
+  meanIdf(): number {
+    return meanIdf(
+      this.rows.length,
+      [...this.byTerm.values()].map((rows) => rows.length),
+    );
+  }
 }
 
 /**
@@ -344,6 +358,14 @@ export class PostingsView<T extends Indexed> implements Corpus {
 
   df(term: string): number {
     return this.rowsOf(term).df;
+  }
+
+  /**
+   * The store's mean idf, τ_repo's scale: the snapshot's, every scope's (the rows written since are few: sleep
+   * indexes them once `SNAPSHOT_DELTA` wait); with no snapshot, the rows indexed in process.
+   */
+  meanIdf(): number {
+    return this.snapshot?.header.meanIdf ?? this.delta.meanIdf();
   }
 
   /** A term's visible rows (`TermRows`): the delta's, newest first, then the snapshot's scopes merged, newest first. */

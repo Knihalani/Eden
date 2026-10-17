@@ -49,7 +49,7 @@ Any other value is off.
 
 JSONL under `EDEN_MEMORY_DIR`, or `$EDEN_HOME/memory`, or `~/.eden/memory`. One store per repo, `<dir>/repos/<key>/`, keyed by the repo's git common dir, so every session, worktree and subagent of a repo shares it (outside git, by the folder a session starts in). Each context window keeps its ledger in `<dir>/windows/<window>/`. Directories `0700`, files `0600`.
 
-`EDEN_MEMORY_CAP` is retrieve k (default **6**), not store size. A set value stays in the 6–10 packet band. `EDEN_MEMORY_STORE_CAP` is the JSONL cap (default **2000**).
+`EDEN_MEMORY_CAP` is retrieve k (default **6**), not store size. A set value stays in the 6–10 packet band. `EDEN_MEMORY_STORE_CAP` is the JSONL cap (default **2000**). `EDEN_MEMORY_TAU` overrides τ_repo's normalized threshold, the BM25F sum a row needs on MEDIUM evidence (A7 §4; unset: the store's refit, R1's strict point until one is trusted; `0`: no τ).
 
 `EDEN_MEMORY_LOG=1` prints note ids and relative ages to stderr. Default off. `EDEN_MEMORY_INJECT_LOG` is a metric file path; unset writes nothing. Every hook invocation also appends one wide event (ids, hashes, counts, times; no text) to `hook.log.d/<date>.jsonl` under the memory root.
 

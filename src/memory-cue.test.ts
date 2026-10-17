@@ -169,7 +169,7 @@ describe("A7 §3–4: the lexical path with a situation cue", () => {
 
   test("D17: the kind prior never outweighs one matched word", () => {
     const mem = store();
-    // P4.3: an episode needs two cue parts (A7 §4), so the better match is a fact and the other row has the larger prior.
+    // P4.3: an episode needs two cue parts (A7 §4), so the better match is a fact, the other row has the larger prior.
     mem.remember("Gotcha: sharp fails on the alpine image; the worker dockerfile uses slim.", { kind: "fact" });
     mem.remember("Image jobs resize uploads to 3 sizes.", { kind: "procedure" });
     const ranked = texts(mem.relevant("the image build fails on alpine", 6, undefined, cue("debug")));

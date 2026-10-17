@@ -10,6 +10,9 @@ import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { HowToStore } from "./howto-store";
 import { childSessionName, MEMORY_MARK, openMemory, injectedPackets } from "./index";
 import { SemanticStore } from "./semantic-store";
+import { cuesBelowTau } from "../scripts/test-below-tau";
+
+cuesBelowTau();
 
 const PARENT = "parent";
 const AGENT = "agent-1";

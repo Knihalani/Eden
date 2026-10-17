@@ -7,6 +7,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MEMORY_MARK, memoryStoreCap, openMemory, PACKET_BYTE_CAP, PACKET_BULLET_MAX, sleep } from "./index";
 import { SemanticStore } from "./semantic-store";
+import { cuesBelowTau } from "../scripts/test-below-tau";
+
+cuesBelowTau();
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/62
 

@@ -1,8 +1,8 @@
 /**
- * A7 §4's admission of an episode, as far as the lexical path can tell one: a row whose source shows the user did not
- * type it (`src:tool`, `src:agent`) is an episode (A4 §3.0, "everything else, including assistant, tool and paste
- * text"), delivered "lexically, only with MEDIUM+ evidence" (A4 §3.1). A7 §4 admits it on one STRONG match, or on
- * MEDIUM evidence from at least two different cue parts:
+ * A7 §4's admission of an episode (`isEpisode`): a row whose source shows the user did not type it (`src:tool`,
+ * `src:agent`; A4 §3.0, "everything else, including assistant, tool and paste text"), or a request the user typed,
+ * delivered "lexically, only with MEDIUM+ evidence" (A4 §3.1). A7 §4 admits it on one STRONG match, or on MEDIUM
+ * evidence from at least two different cue parts:
  * - **STRONG**: an identifier-shaped token it shares with the prompt, or, on a continuation, with the agent's last
  *   message (A7 §2): a path, a filename with an extension (or a dotted name, `vitest.config`), an `ERR_*` or `E123`
  *   code, a CLI flag, a version string, an id mixing letters and digits, a symbol with an inner capital or underscore.
@@ -10,10 +10,11 @@
  *   just touched (`q_path`) and the agent's last message without Eden's own words (`q_prev`, P4.1's situation cue,
  *   `memory-cue.ts`). A function word is WEAK and never counts.
  *
- * The lexical path ranks by BM25F since P4.2; τ_repo, which A7 also asks of an episode, is P4.3's. Rows the user
- * typed, rows mined from the repo's files (D8), rows of unknown source and gists keep today's lexical admission.
+ * The lexical path (`AgentMemory.relevant`) also asks an episode for τ_repo (P4.3), and applies A7 §4 to every row
+ * there; this check is the delivery's (A4 §5.1 step 6), for the rows every lane gives. Rows the user typed that state
+ * something, rows mined from the repo's files (D8), rows of unknown source and gists pass it.
  */
-import { isCited, isUntyped, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
+import { isCited, isUntyped, noteKindToken, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
 import { contentWords as words } from "./memory-transcript";
 
 const IDENTIFIER_SHAPES = [
@@ -93,9 +94,29 @@ export function admitsEpisode(note: ProvenanceNote, cue: CueParts): boolean {
 }
 
 /**
- * The notes the gate admits, in their order: an untyped row only on A7 §4's evidence, every other row as today. A
- * row mined from the repo's files (D8) is a slot fact, not an episode (A4 §3.1): it is admitted as a typed one is.
+ * A request's opening: a request verb after a few discourse words ("Now add a logout button …", "please fix the
+ * build", "Reply with just OK"). The verbs leave out those that often open a statement as a noun ("List endpoints use
+ * cursor pagination", "Build output goes to dist/") or a standing rule ("Make sure …", "Keep diffs small").
  */
+const REQUEST = new RegExp(
+  String.raw`^\s*(?:(?:now|then|ok|okay|also|next|please|so|and|first)[,!.]?\s+)*(?:add|fix|create|write|update|` +
+    String.raw`remove|delete|rename|move|refactor|implement|try|explain|find|open|close|help|clean|debug|investigate|dig|` +
+    String.raw`research|reply|tell|give|go|continue|let'?s|show|look|review)\b`,
+  "i",
+);
+
+/**
+ * An episode as A7 §4's gate reads it: a row the user did not type (D17 as built in P0.2; a mined slot fact is not
+ * one), or a request the user typed, stored as an episode: it states what they asked for, not what is true (A4 §3.0;
+ * P0.2's one-off imperatives, "Reply with just OK"). A statement the user typed ("The billing service runs on port
+ * 8080") is admitted as a fact is, on τ_repo.
+ */
+export function isEpisode(note: ProvenanceNote): boolean {
+  if (isUntyped(note)) return !isCited(note);
+  return noteKindToken(note) === "episode" && REQUEST.test(stripPacketLabel(String(note.text ?? "")).body);
+}
+
+/** The notes the gate admits, in their order: an episode (`isEpisode`) only on A7 §4's evidence, every other row. */
 export function admitNotes<T extends ProvenanceNote>(notes: readonly T[], cue: CueParts): T[] {
-  return notes.filter((note) => !isUntyped(note) || isCited(note) || admitsEpisode(note, cue));
+  return notes.filter((note) => !isEpisode(note) || admitsEpisode(note, cue));
 }

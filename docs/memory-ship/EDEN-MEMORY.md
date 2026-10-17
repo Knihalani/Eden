@@ -564,6 +564,7 @@ Sleep **may** write aliases or a cold posting file. Submit may not open vectors.
 | `EDEN_MEMORY_DIR`, `EDEN_HOME` | store location | Real |
 | `EDEN_MEMORY_CAP` | retrieve k 6–10 | Real. Unset → **6** |
 | `EDEN_MEMORY_STORE_CAP` | JSONL 20,000 (P4.2; 2000 before) | Real. JSONL only. Rows past it go to `diary.jsonl` (P4.2; deleted before) |
+| `EDEN_MEMORY_TAU` | unset | P4.3: τ_repo's normalized threshold (τ = it × the store's mean idf, A7 §4), overriding the store's refit (`tau.json`); unset → the refit's, R1's strict point (4.1 / 4.55) until one is trusted. 0 lets every row with MEDIUM evidence past τ (the 0.7·top cut still holds) |
 | `EDEN_SUBMIT_BUDGET_MS` | 150 | P4.2: a human Submit past this many ms from its handler's start prints nothing (`off` or 0: no budget) |
 | `EDEN_MEMORY_SESSION` / `PARENT` / `CHILD` | session file | Real |
 | `EDEN_MEMORY_LOG` | stderr ids | Real |

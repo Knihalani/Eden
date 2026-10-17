@@ -23,6 +23,9 @@ import * as edenMem from "./index";
 import { MEMORY_LANE_KINDS } from "./memory-lanes";
 import { storeFor } from "./memory-repo";
 import { isIclExemplar, isRecsysShot, SemanticStore } from "./semantic-store";
+import { cuesBelowTau } from "../scripts/test-below-tau";
+
+cuesBelowTau();
 
 const INDEX_SRC = readFileSync(join(import.meta.dir, "index.ts"), "utf8");
 const WRAP_SRC = readFileSync(join(import.meta.dir, "../packages/wrap/src/know-inject.ts"), "utf8");

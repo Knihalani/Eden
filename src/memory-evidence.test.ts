@@ -69,7 +69,8 @@ describe("A7 §4: the MEDIUM path admits at τ_repo, R1's strict point until a r
   test("WEAK: words more than 50 visible rows hold never admit, whatever τ is", () => {
     const mem = store(0);
     mem.quiet(() => {
-      for (let i = 0; i < 60; i++) mem.remember(`Staging deploy number ${i} went out on host h${i}z.`, { kind: "fact" });
+      for (let i = 0; i < 60; i++)
+        mem.remember(`Staging deploy number ${i} went out on host h${i}z.`, { kind: "fact" });
     });
     const before = process.env.EDEN_MEMORY_TAU;
     process.env.EDEN_MEMORY_TAU = "0";

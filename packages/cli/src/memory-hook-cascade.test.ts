@@ -20,6 +20,9 @@ import { dirname, join } from "node:path";
 import { GistStore } from "../../../src/gist-store";
 import { recordSlotChanges } from "../../../src/memory-validity";
 import { memoryHookResponse } from "./memory-hook";
+import { cuesBelowTau } from "../../../scripts/test-below-tau";
+
+cuesBelowTau();
 
 const NOW = Date.parse("2026-10-14T12:00:00Z");
 const DAY = 86_400_000;

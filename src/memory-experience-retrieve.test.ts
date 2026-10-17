@@ -18,6 +18,9 @@ import {
 import { EXPERIENCE_DIRNAME, ExperienceStore, putExperience } from "./experience-store";
 import { extractCandidates } from "./assemble";
 import { AgentMemory, MEMORY_MARK, memoryInjectSwallows, openMemory, sleep, injectedPackets } from "./index";
+import { cuesBelowTau } from "../scripts/test-below-tau";
+
+cuesBelowTau();
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/46
 
