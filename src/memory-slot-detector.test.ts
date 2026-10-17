@@ -10,10 +10,6 @@ import { join } from "node:path";
 import { openMemory, type MemoryRecord } from "./index";
 import seeds from "./memory-silence-seeds.json";
 import { cuedSlots, SETUP_BUNDLE } from "./memory-slots";
-import { cuesBelowTau } from "../scripts/test-below-tau";
-
-// P4.3: these tests read the detector and the newest-per-subject rule on stores of a few rows, not the gate.
-cuesBelowTau();
 
 const dirs: string[] = [];
 afterEach(() => {

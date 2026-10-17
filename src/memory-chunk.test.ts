@@ -12,9 +12,6 @@ import { CHUNK_TARGET_TOKENS, ChunkStore, chunkText, reconstruct } from "./chunk
 import { retrieveNarrativeChunks } from "./chunk-retrieve";
 import { encodeLane, MEMORY_MARK, openMemory, queryHay, type AgentMemory, injectedPackets } from "./index";
 import * as edenMem from "./index";
-import { cuesBelowTau } from "../scripts/test-below-tau";
-
-cuesBelowTau();
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/40
 

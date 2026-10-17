@@ -11,9 +11,6 @@ import { MEMORY_HOOK_EVENTS } from "./doctor";
 import { respondToHook } from "./hook";
 import { memoryHookResponse, type HookStage } from "./memory-hook";
 import { installedHooks } from "./setup";
-import { cuesBelowTau } from "../../../scripts/test-below-tau";
-
-cuesBelowTau();
 
 const SESSION = "s-epochs";
 const NOW = Date.parse("2026-10-10T12:00:00Z");

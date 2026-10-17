@@ -20,9 +20,6 @@ import { GistStore } from "./gist-store";
 import { encodeLane, MEMORY_MARK, openMemory, sleep, type AgentMemory, injectedPackets } from "./index";
 import * as edenMem from "./index";
 import { isIclExemplar } from "./semantic-store";
-import { cuesBelowTau } from "../scripts/test-below-tau";
-
-cuesBelowTau();
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/49
 

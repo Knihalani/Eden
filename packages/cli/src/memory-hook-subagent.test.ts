@@ -11,9 +11,6 @@ import { join } from "node:path";
 import { readLedger } from "../../../src/memory-ledger";
 import { memoryHookResponse } from "./memory-hook";
 import { spawnHookResponse } from "./memory-spawn-hook";
-import { cuesBelowTau } from "../../../scripts/test-below-tau";
-
-cuesBelowTau();
 
 const NOW = Date.parse("2026-10-12T12:00:00Z");
 const PARENT = "s-main";

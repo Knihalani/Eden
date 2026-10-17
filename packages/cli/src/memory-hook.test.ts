@@ -10,9 +10,6 @@ import { HowToStore, howtoPath } from "../../../src/howto-store";
 import { observeToolTraces } from "../../wrap/src/tool-observe";
 import { storeFor } from "../../../src/memory-repo";
 import { opaqueId } from "../../../src/memory-scrub";
-import { cuesBelowTau } from "../../../scripts/test-below-tau";
-
-cuesBelowTau();
 
 /** The windows (D2) the hook's wide events name, in order (`memory-events.ts`). */
 function loggedWindows(root: string): unknown[] {

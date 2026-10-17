@@ -9,6 +9,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SILENCE_FILE } from "../../../src/memory-tau";
 import { memoryHookResponse } from "./memory-hook";
+import { tauGateOn } from "../../../scripts/test-gate";
+
+tauGateOn();
 
 const SESSION = "s-tau";
 let dir = "";
@@ -69,7 +72,7 @@ describe("A7 §4 at a human Submit", () => {
     expect(gate.top).toBeGreaterThanOrEqual(gate.tau!);
   });
 
-  test("an ack and a prompt no row has evidence for join the silence set by hash; an answered one does not", () => {
+  test("an ack and a prompt no row has evidence for join the silence set by prompt_id; an answered one does not", () => {
     submit("The billing service runs on port 8080 behind the gateway.", { prompt_id: "p1" });
     submit("ok thanks", { prompt_id: "p2" });
     submit("write a haiku about autumn leaves", { prompt_id: "p3" });
@@ -83,6 +86,14 @@ describe("A7 §4 at a human Submit", () => {
     expect(lines.map((line) => (line as { p?: string }).p)).toEqual(["p1", undefined, "p3"]);
     expect(log).not.toContain("haiku");
     expect(humanSubmits().map((event) => event.silence)).toEqual(["empty", "ack", "empty", undefined]);
+  });
+
+  // Review round 1: the store-then-recall flow with the gate on, at R1's strict point (A7 §4): two words of the fact
+  // recall it, one does not.
+  test("a durable fact typed in one Submit is given to a later Submit that names two of its words, not one", () => {
+    submit("Kai's timezone is Pacific", { prompt_id: "p1" });
+    expect(submit("What timezone is Kai in?", { prompt_id: "p2" })).toContain("Pacific");
+    expect(submit("ping Kai about the release", { prompt_id: "p3" })).toBeUndefined();
   });
 
   test("read-only memory logs nothing", () => {

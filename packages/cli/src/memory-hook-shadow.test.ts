@@ -12,9 +12,6 @@ import { dirname, join } from "node:path";
 import { MEMORY_HOOK_EVENTS } from "./doctor";
 import { memoryHookResponse, type HookStage } from "./memory-hook";
 import { installedHooks } from "./setup";
-import { cuesBelowTau } from "../../../scripts/test-below-tau";
-
-cuesBelowTau();
 
 const SESSION = "s-shadow";
 const NOW = Date.parse("2026-10-11T12:00:00Z");

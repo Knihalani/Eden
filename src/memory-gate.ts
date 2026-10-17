@@ -94,14 +94,18 @@ export function admitsEpisode(note: ProvenanceNote, cue: CueParts): boolean {
 }
 
 /**
- * A request's opening: a request verb after a few discourse words ("Now add a logout button …", "please fix the
- * build", "Reply with just OK"). The verbs leave out those that often open a statement as a noun ("List endpoints use
- * cursor pagination", "Build output goes to dist/") or a standing rule ("Make sure …", "Keep diffs small").
+ * A request's opening: a request verb after a few discourse words ("Now add a logout button …", "please fix the build",
+ * "Reply with just OK"), the verb followed by its object or its direction ("the", "a", "it", "with", "into", …). The
+ * verbs leave out those that often open a statement as a noun ("List endpoints use cursor pagination") or a standing
+ * rule ("Make sure …", "Keep diffs small"), and a verb used as a noun is no request ("Help text for the CLI lives in
+ * …", "Fix versions in Jira map to …", "Review apps deploy to …", "Find-in-page uses …").
  */
 const REQUEST = new RegExp(
-  String.raw`^\s*(?:(?:now|then|ok|okay|also|next|please|so|and|first)[,!.]?\s+)*(?:add|fix|create|write|update|` +
-    String.raw`remove|delete|rename|move|refactor|implement|try|explain|find|open|close|help|clean|debug|investigate|dig|` +
-    String.raw`research|reply|tell|give|go|continue|let'?s|show|look|review)\b`,
+  String.raw`^\s*(?:(?:now|then|ok|okay|also|next|please|so|and|first)[,!.]?\s+)*(?:let'?s\s|(?:add|fix|create|` +
+    String.raw`write|update|remove|delete|rename|move|refactor|implement|try|explain|find|open|close|help|clean|debug|` +
+    String.raw`investigate|dig|research|reply|tell|give|go|continue|show|look|review)\s+(?:the|a|an|this|that|these|` +
+    String.raw`those|it|them|me|us|my|our|your|some|all|any|up|out|with|to|for|on|in|into|at|how|why|what|where|` +
+    String.raw`whether|if)\b)`,
   "i",
 );
 

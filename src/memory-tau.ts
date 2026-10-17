@@ -10,7 +10,8 @@
  *   store it was scored in, so prompts of the user's other repos pool with this one's. The set is the seed hard
  *   negatives (`memory-silence-seeds.json`: R1's dev negatives and R8's 98), the repo's logged human prompts on which
  *   no row had MEDIUM evidence, and the prompts in `ack` mode (`silence.jsonl`). It is trusted from
- *   `TRUSTED_SILENCE` prompts on; until then the fit is recorded and R1's point is used.
+ *   `TRUSTED_SILENCE` prompts on and once its recall check exists (`RECALL_CHECK`); until then the fit is recorded
+ *   and R1's point is used.
  *
  * `tau.json` beside the store holds the last refit; `silence.jsonl` holds the logged prompts by their turn's
  * `prompt_id`, never their text: a prompt is replayed from the row its turn stored (`AgentMemory.refitTau`).
@@ -30,6 +31,12 @@ export const FIXTURE_TAU = 4.1;
 export const FIXTURE_MEAN_IDF = 4.55;
 /** A7 §4: never fewer prompts, pooled across the user's repos, before a refit's τ is trusted. */
 export const TRUSTED_SILENCE = 300;
+/**
+ * Whether a refit can check gold recall on the repo's annotated cues (A7 §4: if recall drops by more than 0.05, keep
+ * the old τ). No repo has annotated cues before restatement labels (P5.2), so no fit is trusted yet: a fit set by the
+ * seeds alone (168 seeds and 132 `ack`s reach 300) doubled τ and halved dev recall (P4.3's review).
+ */
+export const RECALL_CHECK = false;
 /** The logged prompts a repo keeps: the newest. */
 const SILENCE_KEPT = 2_000;
 /** D17's relative cut: a row the MEDIUM path admits scores at least this share of the top. */
