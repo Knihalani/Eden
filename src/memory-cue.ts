@@ -137,6 +137,8 @@ export interface SituationCue {
   strong: ReadonlySet<string>;
   /** The proposal a continuation accepts: what its action classes and slots are read from. */
   proposal: string;
+  /** The previous typed prompt as typed (D26's residual holds it: a stored copy of it is never delivered). */
+  turnText: string;
 }
 
 /** Eden's own tokens, which `q_prev` drops: every token of the packets it delivered. */
@@ -167,6 +169,7 @@ export function situationCue(situation: Situation, mode: TurnMode): SituationCue
     },
     strong: continuation ? strongTokens(prev, situation.delivered ?? []) : new Set(),
     proposal: continuation ? proposalSentences(prev).join(" ") : "",
+    turnText: situation.turn ?? "",
   };
 }
 
