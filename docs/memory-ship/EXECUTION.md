@@ -173,6 +173,7 @@ Every holdout look is logged. The holdout is refreshed after ~20 looks or at eac
 | `deliver.batch`, `deliver.failure` | PostToolBatch, PostToolUseFailure | shadow | 4 |
 | `guard.context` | PreToolUse `additionalContext` | shadow | 5 |
 | `guard.ask` (= `EDEN_POLICY_GUARD`) | PreToolUse `ask` | off → shadow | 6 |
+| `gate.tau` (P4.3; `EDEN_FLAG_GATE_TAU`) | A7 §4's evidence gate on the lexical path: `on` admits by it; `shadow` admits as before and the Submit's wide event records what it would drop (`gate.drop`, read with the prompt's names whole, so it approximates `on`); `off` computes nothing | shadow → on | — (set when its shadow data and the restatement bridges, P5.3, show recall held) |
 | `sleep.llm` | NIM calls at sleep (§7) | off | per repo, user opt-in |
 | `log.text` | text-bearing dogfood log | off | user opt-in |
 
