@@ -24,7 +24,7 @@ import {
 } from "./memory-policy";
 import { isIclExemplar, objectAsserted, SemanticStore } from "./semantic-store";
 import { stripPastes, withoutInstructions, type TextSource } from "./memory-authority";
-import { applyProvenanceLabel, isCited, isUntyped, stripPacketLabel } from "./memory-provenance";
+import { applyProvenanceLabel, isCited, isUntyped, noteKindToken, stripPacketLabel } from "./memory-provenance";
 import type { FailedCitation } from "./memory-citations";
 import type { MinedFact } from "./memory-repo-facts";
 import { logMemoryNotes } from "./memory-log";
@@ -365,10 +365,16 @@ function copulaKey(text: string): string | undefined {
 /**
  * Of the retrieved rows giving one subject a value at one scope, the newest. A row the user did not type is an
  * episode (A4 §3.0): it competes with no statement, so a newer tool result or assistant claim never displaces what
- * the user said. A row keyed by a D7 slot holds its subject's value as validity reads it (A4 §3.1), so a newer row
- * stating the same subject without a key (a prompt stored whole: "The database is postgres. Reply with just OK.")
- * never displaces it. Two scopes' values are two items (A4 §2): which one a cue sees is visibility's (D5, P3.5).
+ * the user said. A prompt stored whole as an episode ("The database is postgres. Reply with just OK.") never
+ * displaces the keyed fact (D7) it states, nor does an episode displace one either way; a newer fact the user typed
+ * does (A4 §3.1: the newest statement is the value). Two scopes' values are two items (A4 §2): which one a cue sees is
+ * visibility's (D5's override, P3.5).
  */
+/** Whether `row` is an episode and `other` a keyed fact (D7): the episode gives way (`liveCopulaLatest`). */
+function episodeOfKeyed(row: MemoryRecord, other: MemoryRecord): boolean {
+  return noteKindToken(row) === "episode" && !row.slots?.length && !!other.slots?.length;
+}
+
 function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
   const byKey = new Map<string, T>(),
     rest: T[] = [];
@@ -389,10 +395,8 @@ function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
       byKey.set(k, row);
       continue;
     }
-    const keyed = (rec: MemoryRecord) => !!rec.slots?.length;
-    if (keyed(prev.rec) !== keyed(row.rec)) {
-      if (keyed(row.rec)) byKey.set(k, row);
-    } else if (compareRecency(row.rec, prev.rec) >= 0) byKey.set(k, row);
+    const [rowGives, prevGives] = [episodeOfKeyed(row.rec, prev.rec), episodeOfKeyed(prev.rec, row.rec)];
+    if (prevGives || (!rowGives && compareRecency(row.rec, prev.rec) >= 0)) byKey.set(k, row);
   }
   return [...byKey.values(), ...rest];
 }

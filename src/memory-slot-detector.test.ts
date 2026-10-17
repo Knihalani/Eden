@@ -35,15 +35,14 @@ describe("the detector's lexicon (R2 §6.1b)", () => {
   test("a seed names its slot as a word of the cue's prose, not as a segment of a path or a filename", () => {
     expect(cuedSlots("open apps/web/app/login.ts")).toEqual([]);
     expect(cuedSlots("see docs/db/schema.md")).toEqual([]);
-    expect(cuedSlots("the login page redirects twice")).toEqual(["auth.provider"]);
+    expect(cuedSlots("which login do we use for app/login.ts?")).toEqual(["auth.provider"]);
   });
 
   test("a seed names its slot alone", () => {
     expect(cuedSlots("install deps")).toEqual(["pkg.manager"]);
     expect(cuedSlots("which test runner do I run this with?")).toEqual(["test.runner"]);
-    expect(cuedSlots("the login page redirects twice")).toEqual(["auth.provider"]);
+    expect(cuedSlots("swap the auth provider")).toEqual(["auth.provider"]);
     expect(cuedSlots("bump .nvmrc")).toEqual(["node.version"]);
-    expect(cuedSlots("fix the lint errors")).toEqual(["linter"]);
   });
 
   test('a word the silence set holds names no slot alone ("install node on Ubuntu", "database indexes")', () => {
@@ -52,8 +51,14 @@ describe("the detector's lexicon (R2 §6.1b)", () => {
     expect(cuedSlots("explain auth middleware in axum")).toEqual([]);
   });
 
-  test("any alias of a slot names it in a cue about this project (we, our, us, this repo)", () => {
+  test("a word of a slot's topic names it in a cue about this project (we, our, us, this repo), not otherwise", () => {
     expect(cuedSlots("what database do we use?")).toEqual(["db.engine"]);
+    expect(cuedSlots("how do we sign in locally?")).toEqual(["auth.provider"]);
+    expect(cuedSlots("what do we run the specs with?")).toEqual(["test.runner"]);
+    expect(cuedSlots("the login page redirects twice")).toEqual([]);
+    expect(cuedSlots("fix the lint errors")).toEqual([]);
+    expect(cuedSlots("let us set up the repo for the demo")).toEqual(["pkg.manager", "node.version"]);
+    expect(cuedSlots("let us talk about the database")).toEqual([]);
     expect(cuedSlots("which node version is this repo on?")).toEqual(["node.version"]);
     expect(cuedSlots("where do our deploys go?")).toEqual(["deploy.target"]);
   });
@@ -67,10 +72,15 @@ describe("the detector's lexicon (R2 §6.1b)", () => {
 });
 
 describe("A4 §5.1 step 4a: a slot hit looks up the slot's live value by key", () => {
-  test('a cue sharing no word with the row reaches it (P3.3\'s end-to-end: "which … test runner …")', () => {
+  // Review round 1: main also reaches "We switched from jest to vitest." from "which test runner do we use?" (BM25F's
+  // subject field from the row's D7 key), so these cues, which main answers with nothing, show the detector.
+  test("a cue sharing no word with the row reaches it", () => {
     const mem = store();
     mem.remember("We switched from jest to vitest.", { tags: ["src:user"] });
-    expect(ask(mem, "which test runner do we use?").join("\n")).toContain("vitest");
+    mem.remember("We are on node 20.11.", { tags: ["src:user"] });
+    mem.remember("The gateway logs to stdout.", { tags: ["src:user"] });
+    expect(ask(mem, "what do we run the specs with?").join("\n")).toContain("vitest");
+    expect(ask(mem, "bump .nvmrc").join("\n")).toContain("20.11");
   });
 
   test("the setup bundle gives the package manager and the node version", () => {
