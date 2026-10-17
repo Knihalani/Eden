@@ -959,6 +959,7 @@ export function typedValue(text: string, slot: SlotId, value: string): string {
  *   only in a cue about this project (`OURS`: "we", "our", "us", "this repo"): "what database do we use?" asks for this
  *   repo's value; "explain database indexes", "how does SSO work with SAML?" or "the log in the console" do not. No
  *   silence prompt holds an ownership word, and "let us", "tell us" are none.
+ * - **A question for a slot's value itself** (`VALUE_QUESTION`, P4.3): "what is auth", "what's the database?".
  * - **A bundle** (A7 §7, indirect need): a cue setting up this project ("how do I set up the repo on a new laptop?")
  *   names the slots a setup needs, the package manager and the node version (`SETUP_BUNDLE`). A7's "env location" is
  *   no D7 slot, so it has no key to look up.
@@ -1050,11 +1051,31 @@ function named(cue: string, { slots, re }: ReturnType<typeof lexicon>): Set<Slot
   return new Set([...cue.matchAll(re)].flatMap((match) => slots.get(match[1]!.toLowerCase()) ?? []));
 }
 
+/**
+ * A question asking for a slot's value itself (P4.3): its whole object is an alias ("what is auth", "what's the
+ * database?", "which test runner?"), so no other word competes; "what is the idiomatic way to structure JWT auth
+ * middleware" and "what are database indexes" ask about something else. An alias that names a technology itself
+ * ("node", "python", "github") is left out: "what is node" asks what Node is.
+ */
+const TECHNOLOGY_ALIASES = new Set(["node", "node.js", "nodejs", "python", "typescript", "github", "gh"]);
+const VALUE_QUESTION = new RegExp(
+  String.raw`^\s*(?:so\s+|and\s+)?(?:what|which)(?:['’]s|\s+is|\s+are|\s+was)?\s+(?:the\s+|our\s+|my\s+)?(` +
+    [...TOPIC_LEXICON.slots.keys()]
+      .filter((alias) => !TECHNOLOGY_ALIASES.has(alias))
+      .sort((a, b) => b.length - a.length)
+      .map(escape)
+      .join("|") +
+    String.raw`)\s*(?:again|here|now|then|using|used|in use)?\s*\??\s*$`,
+  "i",
+);
+
 /** The slots a cue asks about (see the header): each one's live value is looked up by key. */
 export function cuedSlots(text: string): SlotId[] {
   const cue = String(text ?? "");
   const ours = OURS.test(cue) || US.test(cue);
   const hits = named(cue, SEED_LEXICON);
+  const asked = VALUE_QUESTION.exec(cue)?.[1];
+  if (asked) for (const slot of TOPIC_LEXICON.slots.get(asked.toLowerCase()) ?? []) hits.add(slot);
   if (ours) for (const slot of named(cue, TOPIC_LEXICON)) hits.add(slot);
   if (SETUP.test(cue) && (ours || SETUP_HERE.test(cue))) for (const slot of SETUP_BUNDLE) hits.add(slot);
   return SLOT_IDS.filter((slot) => hits.has(slot));

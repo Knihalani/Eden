@@ -1277,7 +1277,15 @@ function traceGate(mem: AgentMemory, trace: Trace, turn: TurnMode, promptId: str
   const gate = mem.lastGate;
   if (gate) {
     const round = (x: number) => Math.round(x * 100) / 100;
-    trace.gate = { tau: round(gate.tau), ev: gate.evidenced, top: round(gate.top), s: gate.strong, m: gate.medium };
+    trace.gate = {
+      tau: round(gate.tau),
+      ev: gate.evidenced,
+      top: round(gate.top),
+      s: gate.strong,
+      m: gate.medium,
+      mode: gate.mode,
+      ...(gate.drop === undefined ? {} : { drop: gate.drop }),
+    };
   }
   const silence = turn === "ack" ? "ack" : gate?.evidenced === 0 ? "empty" : undefined;
   if (!silence) return;
@@ -1363,6 +1371,7 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
     try {
       situation = situationOf(ctx, recent, prev, turn);
     } catch {}
+  mem.gateFlag = flags["gate.tau"].mode;
   if (prompt && isAnswered(turn) && answer !== "off" && !aborted(ctx))
     notes = mem.recall(cue, encode, place && visibleFrom(place), { situation });
   else if (prompt) mem.observeCue(cue, undefined, encode);

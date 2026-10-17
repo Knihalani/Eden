@@ -12,9 +12,6 @@ import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { EXPERIENCE_DIRNAME, putExperience } from "./experience-store";
 import { MEMORY_MARK, memoryInjectSwallows, openMemory, type AgentMemory, injectedPackets } from "./index";
 import { storeFor } from "./memory-repo";
-import { cuesBelowTau } from "../scripts/test-below-tau";
-
-cuesBelowTau();
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/58
 

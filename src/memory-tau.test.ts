@@ -21,11 +21,15 @@ import {
   silentNorm,
   tauOf,
   TRUSTED_SILENCE,
+  RECALL_CHECK,
   trimSilence,
   writeTau,
   type TauRecord,
 } from "./memory-tau";
 import { sleep } from "./sleep";
+import { tauGateOn } from "../scripts/test-gate";
+
+tauGateOn();
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -132,7 +136,8 @@ describe("τ_repo's refit (heavy sleep)", () => {
     expect(readTau(dir)).toEqual(rec);
   });
 
-  test("300 prompts with the logged ones: the fit is trusted and τ is the smallest that keeps them silent", () => {
+  // Review round 1: no repo has the annotated cues A7 §4's recall check reads, so no fit is trusted yet.
+  test("300 prompts with the logged ones: the fit is recorded, R1's point used; at the fit every prompt is silent", () => {
     const dir = tempDir();
     const mem = seeded(dir);
     const logged = Array.from({ length: TRUSTED_SILENCE - SEED_NEGATIVES.length }, (_, i) => `what is ${i} squared`);
@@ -143,9 +148,11 @@ describe("τ_repo's refit (heavy sleep)", () => {
     const rec = mem.refitTau()!;
     expect(rec.n).toBe(TRUSTED_SILENCE);
     expect(rec.logged).toBe(logged.length);
-    expect(rec.source).toBe("fit");
-    expect(rec.norm).toBe(rec.fit!);
-    // Every seed and logged prompt stays silent at the refit's τ.
+    expect(rec.source).toBe("r1");
+    expect(rec.norm).toBe(R1_NORM);
+    expect(RECALL_CHECK).toBe(false);
+    // The fit is the smallest threshold keeping every seed and logged prompt silent: applied, none is admitted.
+    writeTau(dir, { ...rec, norm: rec.fit!, source: "fit" });
     for (const prompt of [...SEED_NEGATIVES, ...logged]) {
       mem.relevant(prompt);
       expect(mem.lastGate!.medium).toBe(0);
@@ -173,7 +180,18 @@ describe("τ_repo's refit (heavy sleep)", () => {
     writeTau(b, { ...record(0.3), scores: [0.01], logged: TRUSTED_SILENCE });
     const rec = seeded(a, true).refitTau()!;
     expect(rec.n).toBe(SEED_NEGATIVES.length + TRUSTED_SILENCE);
-    expect(rec.source).toBe("fit");
+    expect(rec.source).toBe("r1");
+  });
+
+  // Review round 1: 168 seeds and 132 acks reached 300 and set τ by the seeds alone, about twice R1's point.
+  test("acks count toward the 300, but never make a fit trusted", () => {
+    const dir = tempDir();
+    const mem = seeded(dir);
+    for (let i = 0; i < TRUSTED_SILENCE - SEED_NEGATIVES.length; i++) logSilence(dir, "ack", undefined, i);
+    const rec = mem.refitTau()!;
+    expect(rec.n).toBe(TRUSTED_SILENCE);
+    expect(rec.source).toBe("r1");
+    expect(tauOf(dir, 1)).toBeCloseTo(R1_NORM, 12);
   });
 
   test("the full sleep refits τ after writing the postings snapshot", async () => {

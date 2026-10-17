@@ -82,10 +82,10 @@ export interface WideEvent {
   drops?: Partial<Record<DropStage, number>>;
   /**
    * A7 §4's gate on the lexical path at a human Submit (`GateTrace`): τ_repo, the candidates with evidence and their
-   * top BM25F sum, and the rows admitted on STRONG evidence and on the MEDIUM path. `silence`: the prompt joined the
-   * repo's silence set (`memory-tau.ts`).
+   * top BM25F sum, the rows it admits on STRONG evidence and on the MEDIUM path, `gate.tau`'s mode and, in shadow, the
+   * rows admitted that it would drop. `silence`: the prompt joined the repo's silence set (`memory-tau.ts`).
    */
-  gate?: { tau: number; ev: number; top: number; s: number; m: number };
+  gate?: { tau: number; ev: number; top: number; s: number; m: number; mode: FlagMode; drop?: number };
   silence?: "ack" | "empty";
   would_preempt?: string[];
   /** Which of Stop's two handlers ran (D34). */

@@ -22,9 +22,6 @@ import { storeFor } from "../../../src/memory-repo";
 import { readCatalog } from "../../../src/memory-scopes";
 import { consolidate } from "../../../src/sleep";
 import { memoryHookResponse } from "./memory-hook";
-import { cuesBelowTau } from "../../../scripts/test-below-tau";
-
-cuesBelowTau();
 
 const NOW = Date.parse("2026-10-12T12:00:00Z");
 const CLERK = "In apps/web the auth provider is Clerk.";

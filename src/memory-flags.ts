@@ -78,6 +78,12 @@ export const FLAGS = {
     removeBy: RELEASE_FLAGS_REMOVED_BY,
   },
   "guard.ask": { env: "EDEN_POLICY_GUARD", default: "off", unknown: "off", repoRaises: false },
+  /**
+   * P4.3's evidence gate on the lexical path (A7 §4, τ_repo): `on` admits by it; `shadow` admits as before it (a word
+   * the row shares with the prompt) and records what it would drop; `off` admits as before it and computes nothing.
+   * Shadow by default: at R1's strict τ it costs recall that the user chose to measure before it ships (2026-10-17).
+   */
+  "gate.tau": { env: "EDEN_FLAG_GATE_TAU", default: "shadow", unknown: "shadow", removeBy: RELEASE_FLAGS_REMOVED_BY },
 } as const satisfies Record<string, FlagSpec>;
 
 export type Flag = keyof typeof FLAGS;

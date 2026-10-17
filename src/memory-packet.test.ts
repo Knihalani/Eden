@@ -37,9 +37,6 @@ import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
 import * as edenMem from "./index";
 import { storeFor } from "./memory-repo";
-import { cuesBelowTau } from "../scripts/test-below-tau";
-
-cuesBelowTau();
 
 const INDEX_SRC = readFileSync(join(import.meta.dir, "index.ts"), "utf8");
 
@@ -180,9 +177,9 @@ describe("M8.4 labeled inject packet", () => {
     withMem((mem) => {
       mem.remember("Kai prefers dark mode in the editor chrome", { kind: "preference" });
       mem.remember("[fact] already labeled Clerk provider", { kind: "fact" });
-      // P4.3: one cue per row, as D17's 0.7·top cut keeps the weaker of two topics out of one packet.
-      const pref = mem.notesFor("dark mode editor chrome").find((r) => /dark mode/i.test(r.text));
-      const labeled = mem.notesFor("already labeled Clerk provider").find((r) => /already labeled Clerk/i.test(r.text));
+      const notes = mem.notesFor("Clerk dark mode editor chrome provider");
+      const pref = notes.find((r) => /dark mode/i.test(r.text));
+      const labeled = notes.find((r) => /already labeled Clerk/i.test(r.text));
       expect(pref?.text).toMatch(/^\[fact(?:\s*·[^\]]*)?\]\s+Kai prefers dark mode in the editor chrome$/);
       expect(labeled?.text).toMatch(/^\[fact(?:\s*·[^\]]*)?\]\s+already labeled Clerk provider$/);
       notDoublePrefixed("fact", labeled?.text ?? "");
@@ -573,9 +570,7 @@ describe("M39 diverse packet", () => {
   const SQLITE_CUE = "what database do we use sqlite";
   const SQLITE_BASE = "Use sqlite as the primary database.";
   const MATH = "what's 2+2?";
-  // P4.3: the procedure's own path makes it STRONG (A7 §4); the facts naming sqlite task files alone fall under D17's
-  // 0.7·top cut, which the schema episode sets.
-  const MIX_CUE = "sqlite task files src/task/migrate.ts schema migrate";
+  const MIX_CUE = "sqlite task files src/task schema migrate";
 
   function sqliteClones(): string[] {
     return Array.from({ length: 10 }, (_, i) => `${SQLITE_BASE} (copy ${i + 1})`);
@@ -644,7 +639,7 @@ describe("M39 diverse packet", () => {
       });
       const notes = mem.notesFor(MIX_CUE);
       expect(notes.length).toBeLessThanOrEqual(10);
-      expect(notes.length).toBeGreaterThanOrEqual(2);
+      expect(notes.some((r) => r.kind === "fact" || new RegExp(kindLabel("fact")).test(r.text))).toBe(true);
       expect(notes.some((r) => r.kind === "procedure" || new RegExp(kindLabel("procedure")).test(r.text))).toBe(true);
       const noteProc = notes.find((r) => r.kind === "procedure" || new RegExp(kindLabel("procedure")).test(r.text));
       expect(noteProc).toBeTruthy();

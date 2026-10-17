@@ -9,9 +9,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { migrationStage, repoIdentity, storeFor } from "../../../src/memory-repo";
 import { memoryHookResponse } from "./memory-hook";
-import { cuesBelowTau } from "../../../scripts/test-below-tau";
-
-cuesBelowTau();
 
 let dir = "";
 let root = "";
