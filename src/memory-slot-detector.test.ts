@@ -40,7 +40,7 @@ describe("the detector's lexicon (R2 §6.1b)", () => {
     expect(cuedSlots("fix the lint errors")).toEqual(["linter"]);
   });
 
-  test("a word the silence set holds names no slot alone (\"install node on Ubuntu\", \"database indexes\")", () => {
+  test('a word the silence set holds names no slot alone ("install node on Ubuntu", "database indexes")', () => {
     expect(cuedSlots("how do I install node on Ubuntu for a different personal project?")).toEqual([]);
     expect(cuedSlots("What are database indexes, and why can too many indexes slow down writes?")).toEqual([]);
     expect(cuedSlots("explain auth middleware in axum")).toEqual([]);
@@ -61,7 +61,7 @@ describe("the detector's lexicon (R2 §6.1b)", () => {
 });
 
 describe("A4 §5.1 step 4a: a slot hit looks up the slot's live value by key", () => {
-  test("a cue sharing no word with the row reaches it (P3.3's end-to-end: \"which … test runner …\")", () => {
+  test('a cue sharing no word with the row reaches it (P3.3\'s end-to-end: "which … test runner …")', () => {
     const mem = store();
     mem.remember("We switched from jest to vitest.", { tags: ["src:user"] });
     expect(ask(mem, "which test runner do we use?").join("\n")).toContain("vitest");

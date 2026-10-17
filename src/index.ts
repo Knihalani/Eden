@@ -169,6 +169,22 @@ function kindPrior(r: MemoryRecord): number {
   return rankKindBoost(r) / 1000;
 }
 
+/**
+ * A row stating a value instead of another ("The database is sqlite instead of postgres") as the value it asserts
+ * ("The database is sqlite."): the replaced name is no memory to give.
+ */
+function assertedOnly(n: MemoryRecord): MemoryRecord {
+  const raw = String(n.text ?? "");
+  if (!/\b(?:instead of|rather than)\b/i.test(raw)) return n;
+  try {
+    const fact = objectAsserted(raw.replace(/^\[[^\]]+\]\s+/, ""));
+    if (!fact) return n;
+    return { ...n, text: fact.p === "uses" ? `${fact.s} uses ${fact.o}.` : `The ${fact.s} is ${fact.o}.` };
+  } catch {
+    return n;
+  }
+}
+
 /** Notes as retrieval hands them on: each body capped and labelled with its kind and source. */
 function labelledNotes(recs: MemoryRecord[]): MemoryRecord[] {
   try {
@@ -349,7 +365,9 @@ function copulaKey(text: string): string | undefined {
 /**
  * Of the retrieved rows giving one subject a value at one scope, the newest. A row the user did not type is an
  * episode (A4 §3.0): it competes with no statement, so a newer tool result or assistant claim never displaces what
- * the user said. Two scopes' values are two items (A4 §2): which one a cue sees is visibility's (D5's override, P3.5).
+ * the user said. A row keyed by a D7 slot holds its subject's value as validity reads it (A4 §3.1), so a newer row
+ * stating the same subject without a key (a prompt stored whole: "The database is postgres. Reply with just OK.")
+ * never displaces it. Two scopes' values are two items (A4 §2): which one a cue sees is visibility's (D5, P3.5).
  */
 function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
   const byKey = new Map<string, T>(),
@@ -371,7 +389,10 @@ function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
       byKey.set(k, row);
       continue;
     }
-    if (compareRecency(row.rec, prev.rec) >= 0) byKey.set(k, row);
+    const keyed = (rec: MemoryRecord) => !!rec.slots?.length;
+    if (keyed(prev.rec) !== keyed(row.rec)) {
+      if (keyed(row.rec)) byKey.set(k, row);
+    } else if (compareRecency(row.rec, prev.rec) >= 0) byKey.set(k, row);
   }
   return [...byKey.values(), ...rest];
 }
@@ -1768,7 +1789,7 @@ export class AgentMemory {
         if (!known || compareRecency(rec, known) > 0) newest.set(key, rec);
       }
     }
-    return labelledNotes([...new Set(newest.values())]);
+    return labelledNotes([...new Set(newest.values())].map(assertedOnly));
   }
 
   /** Encodes messages (`ObserveOptions`). */
@@ -2159,18 +2180,7 @@ export class AgentMemory {
       }
       recs = mergeHowtoLane(recs, text, cap, this.dir).filter(visible);
     }
-    const kept = recs.map((n) => {
-      const raw = String(n.text ?? "");
-      if (!/\b(?:instead of|rather than)\b/i.test(raw)) return n;
-      try {
-        const fact = objectAsserted(raw.replace(/^\[[^\]]+\]\s+/, ""));
-        if (!fact) return n;
-        return { ...n, text: fact.p === "uses" ? `${fact.s} uses ${fact.o}.` : `The ${fact.s} is ${fact.o}.` };
-      } catch {
-        return n;
-      }
-    });
-    return labelledNotes(kept);
+    return labelledNotes(recs.map(assertedOnly));
   }
 
   /**

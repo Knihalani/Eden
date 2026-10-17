@@ -241,7 +241,8 @@ describe("delivery of a cited fact", () => {
     expect(cuedSlots("install the dependencies")).toEqual(["pkg.manager"]);
     expect(cuedSlots("add a package for dates")).toEqual(["pkg.manager"]);
     expect(cuedSlots("the deps are out of date, bump them")).toEqual(["pkg.manager"]);
-    expect(cuedSlots("fix the login redirect")).toEqual([]);
+    // P4.4: "login" is R2 §6.1b's seed for the auth provider, which no silence-set prompt holds.
+    expect(cuedSlots("fix the login redirect")).toEqual(["auth.provider"]);
     expect(cuedSlots("which package should own this helper?")).toEqual([]);
     expect(cuedSlots("remove the circular dependency between the parser and the lexer")).toEqual([]);
     expect(cuedSlots("add the package name to the error message")).toEqual([]);
