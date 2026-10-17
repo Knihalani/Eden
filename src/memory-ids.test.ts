@@ -24,9 +24,6 @@ import { ageInWords } from "./memory-hook-packet";
 import { provenanceBracket } from "./memory-provenance";
 import { SemanticStore } from "./semantic-store";
 import { sleep } from "./sleep";
-import { cuesBelowTau } from "../scripts/test-below-tau";
-
-cuesBelowTau();
 
 const REPO = join(import.meta.dir, "..");
 const HOOK = join(REPO, "plugins", "eden-memory", "scripts", "hook.ts");

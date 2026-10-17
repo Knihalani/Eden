@@ -18,6 +18,7 @@ import {
   type Situation,
 } from "./memory-cue";
 import { writeTau } from "./memory-tau";
+import { tauGateOn } from "../scripts/test-gate";
 import type { TurnMode } from "./memory-turn";
 
 const dirs: string[] = [];
@@ -134,6 +135,7 @@ describe("A7 §3: the cue", () => {
 });
 
 describe("A7 §3–4: the lexical path with a situation cue", () => {
+  tauGateOn();
   const cue = (mode: TurnMode, parts: Situation = {}) => situationCue(parts, mode);
 
   test("the context parts rank the rows the prompt admits", () => {

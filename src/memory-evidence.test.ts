@@ -10,6 +10,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openMemory, type MemoryRecord } from "./index";
 import { situationCue } from "./memory-cue";
+import { resolveFlags } from "./memory-flags";
+import { tauGateOn } from "../scripts/test-gate";
+
+tauGateOn();
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -137,5 +141,36 @@ describe("A7 §4: an episode needs MEDIUM from two cue parts, and τ", () => {
     expect(texts(mem.relevant("how many retries does the billing webhook handler make?"))).toEqual([
       "The billing webhook handler retries three times.",
     ]);
+  });
+});
+
+describe("`gate.tau` (memory-flags.ts): shadow by default, the gate's admission only when on", () => {
+  test("the flag defaults to shadow", () => {
+    expect(resolveFlags(undefined, {})["gate.tau"]).toEqual({ mode: "shadow", source: "default" });
+  });
+
+  test("shadow admits as before the gate (a word shared with the prompt) and records what the gate would drop", () => {
+    const mem = store();
+    mem.remember(FACT, { kind: "fact" });
+    mem.gateFlag = "shadow";
+    expect(texts(mem.relevant("what about billing?"))).toEqual([FACT]);
+    expect(mem.lastGate).toMatchObject({ mode: "shadow", medium: 0, drop: 1 });
+  });
+
+  test("off admits as before the gate and computes nothing", () => {
+    const mem = store();
+    mem.remember(FACT, { kind: "fact" });
+    mem.gateFlag = "off";
+    expect(texts(mem.relevant("what about billing?"))).toEqual([FACT]);
+    expect(mem.lastGate).toBeUndefined();
+  });
+
+  test("on admits by the gate", () => {
+    const mem = store();
+    mem.remember(FACT, { kind: "fact" });
+    mem.gateFlag = "on";
+    expect(mem.relevant("what about billing?")).toEqual([]);
+    expect(mem.lastGate).toMatchObject({ mode: "on" });
+    expect(mem.lastGate!.drop).toBeUndefined();
   });
 });

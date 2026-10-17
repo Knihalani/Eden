@@ -437,11 +437,7 @@
       ],
       "a5": "\"auth is Clerk, fix login\" -> no Clerk bullet; a Read of a file containing \"Clerk\" does not suppress the bullet",
       "on": {
-        "state": "red",
-        "failed": [
-          "tool-output-no-suppress"
-        ],
-        "why": "since P4.3: P4.3's evidence gate at R1's strict point (A7 §4, D17; the user's choice of 2026-10-17 over a dev-calibrated τ) admits no row on one shared word; the arm's cue, \"fix the auth redirect\", shares only \"auth\" with \"Our auth provider is Clerk\" (sum 0.47 at τ 0.62), and calibration (P4.4) leaves bare \"auth\" out of the slot detector, so Clerk is not retrieved and the check, which reads D26's tool-output rule, cannot be asked. no-residual-bullet still passes"
+        "state": "green"
       },
       "off": {
         "state": "green",
@@ -543,7 +539,7 @@
         "failed": [
           "fir"
         ],
-        "why": "since P4.3, at R1's strict τ: R1 test FIR 2/12 at CI scale (main 5/12: the lexical path's single-word admission), recall 12/18; the gate wants 0/12 at this scale. Full scale is the slice report's"
+        "why": "rows are planted since P2.2 (`eden memory remember`); the lexical path puts a packet on 5 of the 12 CI negatives: main's lexical admission, which P4.3's BM25F and tau_repo gate replace"
       },
       "off": {
         "state": "green",
@@ -562,11 +558,8 @@
       ],
       "a5": "CueBench ctx recall@4 >= 0.40 on the R1 test split (ROADMAP P4.1; R1 M7); the test negatives asked in a ctx cue's situation get no more packets than bare",
       "on": {
-        "state": "red",
-        "failed": [
-          "ctx-recall"
-        ],
-        "why": "since P4.3: P4.3's evidence gate at R1's strict point (A7 §4, D17; the user's choice of 2026-10-17 over a dev-calibrated τ): R1 test ctx recall@4 in context 8/22 (6/22 in the cue's packet), gate 9/22; the negatives asked in a ctx cue's situation get no more packets than bare (1/4, 1/4)"
+        "state": "green",
+        "why": "passes since P4.1: the situation cue (A7 §3: the previous typed prompt and the paths just read rank the rows the prompt admits, mode weights, R2's mass limit; R1's plural stemming and D17's kind prior on that path) gives 9/22 in context (7/22 in the cue's packet; base 7/22, 5/22); the negatives asked in a ctx cue's situation get no more packets than bare (2/4, 2/4)"
       },
       "off": {
         "state": "green",
@@ -590,7 +583,7 @@
           "fir",
           "policy-on-positives"
         ],
-        "why": "since P4.3, at R1's strict τ: `fir` 2/8 (main 5/8) and `policy-on-positives` 1/5 (main 2/5); `policy-recall` 5/5. What is left are packets the lexical path's τ cannot silence (identifier or keyed STRONG evidence) and unkeyed rules matched on two words"
+        "why": "accepted by the user (2026-10-11) until P4.3: since P2.2 the compiled trigger delivers the keyed policies (`policy-recall` passes), and keyed rule rows leave the lexical path (D18); `fir` counts every packet on a negative and `policy-on-positives` every policy bullet, and the rest come from the lexical path: main's lexical admission, which P4.3's BM25F and tau_repo gate replace (a packet on 5 of the 8 CI negatives, an unkeyed policy such as p05 or p15 on 2 of the 5 non-policy positives)"
       },
       "off": {
         "state": "green",
@@ -872,14 +865,11 @@
       ],
       "a5": "20k rows: gold recall, silence, p99 < 150 ms; never an unbounded bm25 on a fat term",
       "on": {
-        "state": "red",
-        "failed": [
-          "gold-recall"
-        ],
+        "state": "green",
         "unstable": [
           "p99"
         ],
-        "why": "since P4.3: P4.3's evidence gate at R1's strict point (A7 §4, D17; the user's choice of 2026-10-17 over a dev-calibrated τ): needs met 4/15 at the small store, 2/15 at 2,000 rows (P4.2: 13/15 at both). The bench's cues are 1–2 words (\"Plover?\", \"what's the storefront queue?\") that its three repos share, so their sums fall below τ (1.91 vs 2.99 small); A7 admits no row on one rare plain word. Silence 0/5. `p99` stays load- and place-dependent"
+        "why": "passes at CI scale since P4.2 (prebuilt postings, BM25F with R1's tokenizer, bounded C): gold recall 13/15 at 2,000 rows as at the small store (main 9/15), silence 0/5. `p99` is load- and place-dependent: 177.6 ms alone with the run directory under macOS os.tmpdir() (main 233.5 ms), where every Bun start is about 40-60 ms slower; see P4.2's report for the run with TMPDIR under the scratchpad"
       },
       "off": {
         "state": "green",
@@ -898,14 +888,11 @@
       ],
       "a5": "1e6 rows: gold recall, silence, p99 < 150 ms; never an unbounded bm25 on a fat term",
       "on": {
-        "state": "red",
-        "failed": [
-          "gold-recall"
-        ],
+        "state": "green",
         "unstable": [
           "p99"
         ],
-        "why": "since P4.3: its CI-scale run is scale-20k's (see there): needs met 4/15 small, 2/15 at 2,000 rows; its 10^6 rows are P6.1's"
+        "why": "at CI scale this is scale-20k's run (2,000 rows), green since P4.2: gold recall 13/15 as at the small store, silence 0/5; `p99` load- and place-dependent as there. The 10^6-row gate (`--scale full`) is P6.1's"
       },
       "off": {
         "state": "green",

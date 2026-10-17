@@ -11,9 +11,6 @@ import { join } from "node:path";
 import { MEMORY_MARK, openMemory, type AgentMemory, injectedPackets } from "./index";
 import { routeMemory } from "./memory-router";
 import * as memoryRouter from "./memory-router";
-import { cuesBelowTau } from "../scripts/test-below-tau";
-
-cuesBelowTau();
 
 const ROOT = join(import.meta.dir, "..");
 const INDEX_PATH = join(import.meta.dir, "index.ts");
