@@ -190,7 +190,7 @@ The categories come from R2 §8.1, extended with R6's classes. Measured rows cit
 | C6 cross-file | editing an API route ↔ a note about the client hook | co-change graph | earn-in |
 | C7 true paraphrase | "why is sign-in slow" ↔ "Clerk session fetch adds 400 ms" | strong-model alias batch (opt-in); dense arm experiment | **measured**: lexical/small dense ≤ 0.05 on strong paraphrases; gemma aliases + τ refit 0.10; nemotron-embed-1b 0.32 at 5% FIR (experiment only) |
 | **P policy** | "looks done, land it" ↔ "never merge yourself" | guard at the command (primary) + compiled triggers (layers 3, 4) | **measured**: prompt trigger 0.47 on seen phrasing, **0.18 on unseen**; similarity ≤ 0.22 / 0.000 |
-| **I indirect need** | "set up on a new laptop" ↔ pkg manager, node version, env | slot bundles: `setup` → {pkg.manager, node.version, env location} | design; all methods measured ≤ 0.07 |
+| **I indirect need** | "set up on a new laptop" ↔ pkg manager, node version, env | slot bundles: `setup` → {pkg.manager, node.version, env location} | design; all methods measured ≤ 0.07. **Built in P4.4** (`cuedSlots`): a setup cue about this project gives the package manager and the node version by key; "env location" is no D7 slot, so it has no key |
 
 ---
 
