@@ -14,6 +14,7 @@
  * - The sets: R1's and R8's negatives, and the private set when `EDEN_EVAL_NEGATIVES` names one. Without it, the
  *   report's `real` says `skipped: private set absent`.
  * - `--per-category N` asks only the first N negatives of each category (a quick look); by default, all of them.
+ * - `--gate-tau on|shadow|off` runs every hook with `EDEN_FLAG_GATE_TAU` set (P4.3's gate, shadow by default).
  * - `--store cuebench` asks them against the CueBench store instead (P4.3, the gate's own store): the R1 fixture's live
  *   memories planted with `eden memory remember` (`cuebench.ts`), with six of R1's dev `lex` cues as the control.
  */
@@ -204,6 +205,7 @@ async function main(args: string[]): Promise<void> {
     pluginDir: resolve(argument(args, "--plugin") ?? EDEN_PLUGIN),
     seed: Number(argument(args, "--seed") ?? 1),
     ...(argument(args, "--store") === "cuebench" ? { store: "cuebench" as const } : {}),
+    ...(argument(args, "--gate-tau") ? { hookEnv: { EDEN_FLAG_GATE_TAU: argument(args, "--gate-tau")! } } : {}),
     perCategory: per === undefined ? undefined : Number(per),
     env: process.env,
   });

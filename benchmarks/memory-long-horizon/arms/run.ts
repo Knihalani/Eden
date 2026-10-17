@@ -3,8 +3,10 @@
  * Runs A5 §4 arms against a plugin and prints each run's checks, next to what `arms.json` records.
  *
  *   bun benchmarks/memory-long-horizon/arms/run.ts [--arm id,id] [--flags on|off|shadow|all]
- *       [--plugin DIR | --reference] [--scale ci|full] [--json]
+ *       [--plugin DIR | --reference] [--scale ci|full] [--gate-tau on|shadow|off] [--json]
  *
+ * `--gate-tau` runs every hook with `EDEN_FLAG_GATE_TAU` set (P4.3's evidence gate, shadow by default): the gate's own
+ * measures are taken with it on; the records in `arms.json` are the default's.
  * Defaults: every arm, every flag state the record has, `plugins/eden-memory` and the product CLI from this tree,
  * CI scale. `--reference` runs each arm against its reference instead (reference.ts), where every check must pass.
  * Exit code 1 when a run differs from what is expected (the gate's comparison: `unstable` checks are left out), when
@@ -48,6 +50,8 @@ async function main(args: string[]): Promise<number> {
   const pluginDir = resolve(argument(args, "--plugin") ?? EDEN_PLUGIN);
   const scale = (argument(args, "--scale") ?? "ci") as Scale;
   const reference = args.includes("--reference");
+  const gate = argument(args, "--gate-tau");
+  const env = gate === undefined ? {} : { env: { EDEN_FLAG_GATE_TAU: gate } };
   const results: (ArmResult & { recorded: StateRecord | null; matches: boolean })[] = [];
   for (const id of ids) {
     const arm = ARMS.get(id);
@@ -59,7 +63,7 @@ async function main(args: string[]): Promise<number> {
     for (const state of states) {
       const options: ArmOptions = reference
         ? { ...referenceOptions(id), scale, flags: state }
-        : { pluginDir, cli: EDEN_CLI, scale, flags: state };
+        : { pluginDir, cli: EDEN_CLI, scale, flags: state, ...env };
       const result = await runArm(arm, options);
       const recorded = reference
         ? { state: "green" as const }
