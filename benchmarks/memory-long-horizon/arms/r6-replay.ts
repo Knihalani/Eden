@@ -5,7 +5,7 @@
  * stage 0. It prints counts only, never text.
  *
  *   bun benchmarks/memory-long-horizon/arms/r6-replay.ts [--plugin DIR] [--sessions FILE] [--projects DIR]
- *       [--limit N]
+ *       [--limit N] [--gate-tau on|shadow|off]
  *
  * - **Sessions**: by default the ones R-7 snapshotted on 2026-09-29 (`~/.eden/migrate/session-map.json`), the corpus
  *   R6 measured, read from `~/.claude/projects` or a copy of it (`--projects`, laid out the same way, so two runs
@@ -22,6 +22,7 @@
  *   `task-notification` and `peer` lines (`origin.kind`). A skill invocation is submitted as `/name args`.
  * - **Measures**: packets, bullets and bytes per class; `packet_rate` = packets on human prompts ÷ human prompts
  *   (A5 §2); `bullet_volume` = bullets over every packet, SessionStart included; packets on chatter prompts.
+ * - **`--gate-tau`** runs every hook with `EDEN_FLAG_GATE_TAU` set (P4.3's evidence gate, shadow by default).
  * - **Privacy**: the run directory holds transcript copies and a store built from them; it is removed when the
  *   replay ends, whatever happens.
  */
@@ -233,13 +234,14 @@ export async function replayR6(options: {
   sessions: string[];
   projects: string;
   runDir: string;
+  extraEnv?: Record<string, string>;
 }): Promise<R6Replay> {
   const started = performance.now();
   const plugin = loadPlugin(options.pluginDir);
   const home = join(options.runDir, "home");
   const projectDir = join(options.runDir, "project");
   mkdirSync(projectDir, { recursive: true });
-  const env = hookEnv({ home, projectDir, plugin });
+  const env = hookEnv({ home, projectDir, plugin, extra: options.extraEnv });
   const runner = new HookRunner({ plugin, projectDir, env });
   const idleSleep = idleSleepOf(options.pluginDir);
   const transcripts = findTranscripts(options.sessions, options.projects);
@@ -337,7 +339,9 @@ async function main(args: string[]): Promise<void> {
   try {
     const pluginDir = resolve(argument(args, "--plugin") ?? EDEN_PLUGIN);
     const projects = resolve(argument(args, "--projects") ?? CLAUDE_PROJECTS);
-    console.log(JSON.stringify(await replayR6({ pluginDir, sessions, projects, runDir }), null, 2));
+    const gate = argument(args, "--gate-tau");
+    const extraEnv = gate === undefined ? undefined : { EDEN_FLAG_GATE_TAU: gate };
+    console.log(JSON.stringify(await replayR6({ pluginDir, sessions, projects, runDir, extraEnv }), null, 2));
   } finally {
     rmSync(runDir, { recursive: true, force: true });
   }
