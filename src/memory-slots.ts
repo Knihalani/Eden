@@ -947,17 +947,100 @@ export function typedValue(text: string, slot: SlotId, value: string): string {
 }
 
 /**
- * A4 §5.1 step 4a's slot detector, as far as P3.4 takes it: R2 §6.1b's cold-start seed lexicon for the package
- * manager, its words only (`install`, `deps`, `lockfile`, `add package`: "high precision, low recall"; "install deps"
- * never says "pnpm", it does say "install", A7 §1 layer 2), so a mined `pkg.manager` reaches the prompt that needs
- * it. Its other seeds (`test`, `login`, `token`, …) are generic words whose thresholds R2 calibrates on the silence
- * set, and wait for P4.4 with the rest of the lexicon and the indirect bundles.
+ * A4 §5.1 step 4a's slot detector (R2 §6.1b; A7 §1 layer 2): which slots a cue asks about, so each one's live value is
+ * looked up by key (STRONG, A7 §4) whatever words the cue shares with the row stating it. R2's cold-start lexicon,
+ * calibrated as R2 asks: no prompt of the silence set (`memory-silence-seeds.json`: R1's dev negatives and R8's 98,
+ * A7 §4's seeds) names a slot by it.
+ * - **A seed** (`SEEDS`) names its slot alone: a slot's distinctive aliases and R2's cold-start words that no silence
+ *   prompt holds ("package manager", "lockfile", "test runner", "login", ".nvmrc"). Calibration drops the words the
+ *   silence set holds ("install" alone in "how do I install node on Ubuntu": "install the dependencies" names the
+ *   package manager; "database" in "what are database indexes",
+ *   "auth", "node", "deploy", "ci", "test"), and the generic words a real prompt uses for anything ("session",
+ *   "format", "gh").
+ * - **Any alias of a slot in a cue about this project** (`OURS`: "we", "our", "us", "this repo"): "what database do we
+ *   use?" asks for this repo's value; "explain database indexes" does not. No silence prompt holds an ownership word.
+ * - **A bundle** (A7 §7, indirect need): a cue setting up this project ("how do I set up the repo on a new laptop?")
+ *   names the slots a setup needs, the package manager and the node version (`SETUP_BUNDLE`). A7's "env location" is
+ *   no D7 slot, so it has no key to look up.
  */
-const CUE_SEEDS: Partial<Record<SlotId, RegExp>> = {
-  "pkg.manager": /\b(?:(?:re)?install(?:s|ed|ing)?|deps|lock ?file|add(?:s|ed|ing)? (?:a |another )?packages?)\b/i,
+const SEEDS: Readonly<Record<SlotId, readonly string[]>> = {
+  "auth.provider": [
+    "auth provider",
+    "authentication provider",
+    "login provider",
+    "identity provider",
+    "authentication",
+    "login",
+    "log in",
+    "sign in",
+    "sign-in",
+    "signin",
+    "sso",
+  ],
+  "pkg.manager": [
+    "package manager",
+    "pkg manager",
+    "installs",
+    "installing",
+    "reinstall",
+    "deps",
+    "install deps",
+    "install the deps",
+    "install dependencies",
+    "install the dependencies",
+    "install packages",
+    "install the packages",
+    "lockfile",
+    "lock file",
+    "add a package",
+    "add package",
+  ],
+  "db.engine": ["database engine", "db engine", "db"],
+  orm: ["orm"],
+  "test.runner": ["test runner", "test framework", "test suite", "unit tests", "tests", "testing", "spec", "specs"],
+  "node.version": ["node.js version", "node version", "nodejs", ".nvmrc", "nvmrc", "nvm"],
+  "lang.version": [
+    "language version",
+    "typescript version",
+    "ts version",
+    "python version",
+    "go version",
+    "rust version",
+  ],
+  framework: ["web framework", "frontend framework", "backend framework"],
+  "deploy.target": ["deploy target", "deployment target", "hosting provider", "hosting"],
+  "ci.system": ["continuous integration", "ci system", "ci provider"],
+  formatter: ["code formatter", "formatter", "formatting", "reformat"],
+  linter: ["linter", "linting", "lint"],
+  "commit.style": ["commit message style", "commit convention", "commit messages", "commit style", "commits"],
+  "branch.base": ["base branch", "default branch"],
+  "gh.account": ["github account", "github user", "gh account"],
 };
 
-/** The slots a cue names by D7's seed lexicon (see `CUE_SEEDS`): each one's live value is looked up by key. */
+/** A cue about the user's own project: "we", "our", "us", "this repo" (see `cuedSlots`). */
+const OURS =
+  /(?<![a-z0-9])(?:we|we['’]re|we['’]ve|we['’]d|our|ours|us|this (?:repo|project|codebase|app|service))(?![a-z0-9])/i;
+/** A cue setting up this project (A7 §7's bundle): a setup word, and this repo, a new machine, or a local setup. */
+const SETUP = /(?<![a-z0-9])(?:set ?up|onboard(?:ing)?|get(?:ting)? started|bootstrap(?:ping)?)(?![a-z0-9])/i;
+const SETUP_HERE =
+  /(?<![a-z0-9])(?:we|we['’]re|our|us|(?:the|this) (?:repo|project|codebase|monorepo|workspace)|locally|new (?:laptop|machine|computer))(?![a-z0-9])/i;
+export const SETUP_BUNDLE: readonly SlotId[] = ["pkg.manager", "node.version"];
+
+/** Whether a text holds a phrase as whole words (lowercase). */
+function holds(lower: string, phrase: string): boolean {
+  return new RegExp(`(?<![a-z0-9])${escape(phrase)}(?![a-z0-9])`).test(lower);
+}
+
+/** The slots a cue asks about (see `SEEDS`): each one's live value is looked up by key. */
 export function cuedSlots(text: string): SlotId[] {
-  return SLOT_IDS.filter((slot) => CUE_SEEDS[slot]?.test(String(text ?? "")));
+  const cue = String(text ?? "");
+  const lower = cue.toLowerCase();
+  const ours = OURS.test(cue);
+  const setup = SETUP.test(cue) && SETUP_HERE.test(cue);
+  return SLOT_IDS.filter(
+    (slot) =>
+      SEEDS[slot].some((seed) => holds(lower, seed)) ||
+      (ours && slotAliases(slot).some((alias) => holds(lower, alias))) ||
+      (setup && SETUP_BUNDLE.includes(slot)),
+  );
 }
