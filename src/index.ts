@@ -2283,14 +2283,15 @@ export class AgentMemory {
     // §5.1 step 7): it sets no top.
     const said = residualSentences([text]);
     const echo = (rec: MemoryRecord) => noteKindToken(rec) === "episode" && restatesNote(rec, said);
-    const rows = this.evidenced(text, cue, view, visible).filter((row) => !echo(row.rec));
+    // Of the rows giving one subject a value, the newest (A4 §5.1 step 5's supersession), before the gate's cut.
+    const rows = liveCopulaLatest(this.evidenced(text, cue, view, visible).filter((row) => !echo(row.rec)));
     const passing = rows.filter((row) => row.strong || mediumAdmits(row.rec, row.sum, row.medium, tau, cue?.mode));
     // A4 §5.1 step 6: the cut is the MEDIUM path's; a STRONG row is admitted alone and sets no top.
     const top = passing.reduce((max, row) => (row.strong ? max : Math.max(max, row.score)), 0);
     const admitted = passing.filter((row) => row.strong || row.score >= RELATIVE_CUT * top);
     const strong = admitted.filter((row) => row.strong).length;
     this.lastGate = { tau, evidenced: rows.length, top: topSum(rows), strong, medium: admitted.length - strong };
-    return liveCopulaLatest(admitted)
+    return admitted
       .sort((a, b) => b.score + kindPrior(b.rec) - (a.score + kindPrior(a.rec)) || compareRecency(b.rec, a.rec))
       .slice(0, Math.max(0, Math.floor(Number(cap) || 0)))
       .map((x) => x.rec);
