@@ -17,6 +17,7 @@ import {
   weightsFor,
   type Situation,
 } from "./memory-cue";
+import { writeTau } from "./memory-tau";
 import type { TurnMode } from "./memory-turn";
 
 const dirs: string[] = [];
@@ -31,6 +32,11 @@ function store() {
 }
 
 const texts = (rows: readonly MemoryRecord[]) => rows.map((row) => row.text);
+
+/** Sets a store's τ_repo by its normalized threshold (`memory-tau.ts`), as a refit would. */
+function tauAt(mem: ReturnType<typeof store>, norm: number) {
+  writeTau(mem.jsonlDir, { v: 1, norm, source: "fit", n: 300, strong: 0, meanIdf: 1, scores: [], logged: 0, at: 0 });
+}
 
 describe("A7 §3: weights by mode", () => {
   test("default, continuation and debug as the table gives them; every other mode takes default", () => {
@@ -140,10 +146,12 @@ describe("A7 §3–4: the lexical path with a situation cue", () => {
     expect(texts(mem.relevant("how do I run the unit tests?", 6, undefined, web))[0]).toContain("web unit");
   });
 
-  test("a context part never admits a row alone", () => {
+  test("context parts admit a row alone only once their sum reaches τ_repo (A7 §4; P4.1 never let them)", () => {
     const mem = store();
     mem.remember("Every table has an org_id column; queries filter by it.", { kind: "fact" });
     const situated = cue("question", { turn: "look at the org table", path: "schema.ts db" });
+    expect(texts(mem.relevant("what next?", 6, undefined, situated))).toHaveLength(1);
+    tauAt(mem, 100);
     expect(mem.relevant("what next?", 6, undefined, situated)).toEqual([]);
   });
 
@@ -151,17 +159,19 @@ describe("A7 §3–4: the lexical path with a situation cue", () => {
     const mem = store();
     mem.remember("The billing worker retries stripe webhooks with backoff.", { kind: "fact" });
     mem.remember("The billing export runs nightly.", { kind: "fact" });
+    tauAt(mem, 0.01);
     const busy = cue("imperative", { turn: "stripe webhooks retries backoff worker" });
-    // Both rows share "billing" with the prompt; the context's 5 words count as 2 for the first.
-    const ranked = texts(mem.relevant("check billing", 6, undefined, busy));
-    expect(ranked[0]).toContain("webhooks");
-    expect(ranked).toHaveLength(2);
+    // Both rows share "billing" with the prompt; the context's 5 words count as 2 for the first, which leads.
+    expect(texts(mem.relevant("check billing", 6, undefined, busy))[0]).toContain("webhooks");
+    // The second row shares 2 prompt words: 2 context words at their weight do not outrank them; 5 would.
+    expect(texts(mem.relevant("check the billing export", 6, undefined, busy))[0]).toContain("export");
   });
 
   test("D17: the kind prior never outweighs one matched word", () => {
     const mem = store();
-    mem.remember("Gotcha: sharp fails on the alpine image; the worker dockerfile uses slim.", { kind: "episode" });
-    mem.remember("Image jobs resize uploads to 3 sizes.", { kind: "fact" });
+    // P4.3: an episode needs two cue parts (A7 §4), so the better match is a fact and the other row has the larger prior.
+    mem.remember("Gotcha: sharp fails on the alpine image; the worker dockerfile uses slim.", { kind: "fact" });
+    mem.remember("Image jobs resize uploads to 3 sizes.", { kind: "procedure" });
     const ranked = texts(mem.relevant("the image build fails on alpine", 6, undefined, cue("debug")));
     expect(ranked[0]).toContain("sharp");
     // P4.2: every reader ranks one way, so without a situation cue too the better match leads.
@@ -171,6 +181,7 @@ describe("A7 §3–4: the lexical path with a situation cue", () => {
   test("R1's tokenizer: a plural meets its singular", () => {
     const mem = store();
     mem.remember("Every table has an org_id column and queries must filter by it.", { kind: "fact" });
+    tauAt(mem, 0.01);
     expect(texts(mem.relevant("anything to watch in this query?", 6, undefined, cue("question")))).toHaveLength(1);
     // P4.2: every reader reads the cue in the index's terms, so without a situation cue too.
     expect(texts(mem.relevant("anything to watch in this query?"))).toHaveLength(1);
