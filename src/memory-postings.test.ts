@@ -69,7 +69,7 @@ describe("the snapshot file", () => {
     writeSnapshot(dir, rows);
     const snapshot = Snapshot.open(dir)!;
     try {
-      expect(snapshot.header).toMatchObject({ v: 2, rows: 4, id: expect.any(String) });
+      expect(snapshot.header).toMatchObject({ v: 1, rows: 4, id: expect.any(String) });
       // τ_repo's scale (P4.3): every term of the 4 rows, by its df over all of them, whatever its scope.
       const terms = rows.flatMap(({ fields }) => [...new Set(Object.values(fields).flat())]);
       const dfs = [...new Set(terms)].map((term) => terms.filter((t) => t === term).length);
@@ -221,7 +221,7 @@ describe("retrieval through the snapshot (AgentMemory)", () => {
 
   /**
    * These tests read the ranking and the snapshot's freshness, not the gate: τ_repo is set low enough that every
-   * candidate passes it (A7 §4's gate has tests of its own, `memory-gate.test.ts`).
+   * candidate passes it (A7 §4's gate has tests of its own, `memory-evidence.test.ts`).
    */
   const lowTau = (dir: string) =>
     writeTau(dir, { v: 1, norm: 0.001, source: "fit", n: 300, strong: 0, meanIdf: 1, scores: [], logged: 0, at: 0 });
@@ -403,5 +403,30 @@ describe("D33: the hot path's 20k rows", () => {
   test("the cap is 20,000 rows by default", async () => {
     const { memoryStoreCap } = await import("./index");
     expect(memoryStoreCap()).toBe(20_000);
+  });
+});
+
+describe("a snapshot written before P4.3 (no mean idf in its header)", () => {
+  test("is read as it is, and the light sleep's threshold writes it again with τ's scale", () => {
+    const dir = tempDir();
+    const mem = openMemory({ dir, session: "s1", perRepo: true });
+    mem.remember("The storefront queue is RabbitMQ.", { tags: ["src:user"] });
+    expect(mem.refreshPostings()).toBe(true);
+    const path = join(dir, SNAPSHOT_FILE);
+    const bytes = readFileSync(path);
+    const end = bytes.indexOf(0x0a);
+    const header = JSON.parse(bytes.subarray(0, end).toString("utf8")) as Record<string, unknown>;
+    delete header.meanIdf;
+    // The byte ranges are relative to the header's end, so a shorter header keeps every part readable.
+    writeFileSync(path, Buffer.concat([Buffer.from(`${JSON.stringify(header)}\n`), bytes.subarray(end + 1)]));
+    const old = Snapshot.open(dir)!;
+    expect(old.header.meanIdf).toBeUndefined();
+    expect(old.lists("rabbitmq")).toBeDefined();
+    old.close();
+    expect(mem.refreshPostings(SNAPSHOT_DELTA)).toBe(true);
+    const rebuilt = Snapshot.open(dir)!;
+    expect(rebuilt.header.meanIdf).toBeGreaterThan(0);
+    rebuilt.close();
+    mem.close();
   });
 });
