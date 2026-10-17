@@ -24,6 +24,9 @@ import { HowToStore } from "./howto-store";
 import { AgentMemory, MEMORY_MARK, memoryInjectSwallows, openMemory, sleep, injectedPackets } from "./index";
 import * as edenMem from "./index";
 import * as sleepMod from "./sleep";
+import { cuesBelowTau } from "../scripts/test-below-tau";
+
+cuesBelowTau();
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/47
 

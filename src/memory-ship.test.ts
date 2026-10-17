@@ -10,6 +10,9 @@ import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { withKnowFacts, withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
 import { AgentMemory, MEMORY_MARK, openMemory } from "./index";
 import { DENSE_RAG } from "./memory-dense";
+import { cuesBelowTau } from "../scripts/test-below-tau";
+
+cuesBelowTau();
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/63
 

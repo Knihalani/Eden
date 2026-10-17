@@ -64,6 +64,8 @@ export type SleepMem = {
   patchWhere?(fn: (r: MemoryRecord) => MemoryRecord | undefined): void;
   /** Writes the postings snapshot when `minDelta` rows wait outside it (`AgentMemory.refreshPostings`). */
   refreshPostings?(minDelta: number): boolean;
+  /** Refits τ_repo on the silence set (`AgentMemory.refitTau`, A7 §4's heavy sleep). */
+  refitTau?(): unknown;
 };
 
 /** HowToStore lives on the constructor root (like semantic/gists), never beside session memories.jsonl. */
@@ -1187,6 +1189,10 @@ export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
     } catch {}
     try {
       refreshPostings(mem, 1);
+    } catch {}
+    try {
+      // A7 §4: τ_repo is refit at heavy sleep, on the snapshot just written (its mean idf is τ's scale).
+      mem.refitTau?.();
     } catch {}
     try {
       writeMissTaxonomy(mem.dir, mem.memories());

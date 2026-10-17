@@ -11,6 +11,9 @@ import { openMemory, type AgentMemory } from "./index";
 import { MEMORY_PACKET_MARK, MEMORY_PACKET_MARKS } from "./memory-sota";
 import { storeFor } from "./memory-repo";
 import { readUserRules } from "./memory-user-global";
+import { cuesBelowTau } from "../scripts/test-below-tau";
+
+cuesBelowTau();
 
 type Message = Record<string, unknown>;
 

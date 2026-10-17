@@ -194,11 +194,12 @@ export function residualSentences(texts: readonly string[]): Said[] {
 
 /**
  * Whether one held sentence says a text: the same polarity ("Never force-push" does not say "Always force-push"), and
- * content-token Jaccard ≥ 0.6.
+ * content-token Jaccard ≥ 0.6. A question asserts nothing, so it says only a question ("how do the gateway tests run?"
+ * does not say "Gateway tests run with Playwright.", but restates a stored "how do the gateway tests run").
  */
 function saidIn(text: Said, sentences: readonly Said[]): boolean {
-  return sentences.some(({ tokens: sentence, negative }) => {
-    if (negative !== text.negative) return false;
+  return sentences.some(({ tokens: sentence, negative, lower }) => {
+    if (negative !== text.negative || (isQuestion(lower) && !isQuestion(text.lower))) return false;
     let shared = 0;
     for (const token of text.tokens) if (sentence.has(token)) shared++;
     return shared / (text.tokens.size + sentence.size - shared) >= JACCARD;
@@ -216,7 +217,7 @@ interface LegacySlot {
  * status word (D7: a value outside a slot's value class is a single capitalized or identifier-shaped token not in the
  * status lexicon).
  */
-function copulaSlot(sentence: string): LegacySlot | undefined {
+export function copulaSlot(sentence: string): LegacySlot | undefined {
   let fact: ReturnType<typeof objectAsserted>;
   try {
     fact = objectAsserted(sentence);
@@ -249,6 +250,11 @@ const QUESTION =
 const NEGATION =
   /\b(?:not|no longer|never|don'?t|doesn'?t|isn'?t|aren'?t|instead of|rather than|without|dropp(?:ed|ing))\b/;
 
+function isQuestion(lower: string): boolean {
+  const sentence = lower.trim();
+  return sentence.endsWith("?") || (QUESTION.test(sentence) && !CLAUSE_BREAK.test(sentence));
+}
+
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -259,8 +265,7 @@ function escapeRegExp(text: string): string {
  * states V's slot without its subject.
  */
 function asserts(lower: string, value: string, bare: boolean): boolean {
-  const sentence = lower.trim();
-  if (sentence.endsWith("?") || (QUESTION.test(sentence) && !CLAUSE_BREAK.test(sentence))) return false;
+  if (isQuestion(lower)) return false;
   const found = new RegExp(`(?<![a-z0-9])${escapeRegExp(value.toLowerCase())}(?![a-z0-9])`);
   return lower.split(CLAUSE_BREAK).some((clause) => {
     const at = clause.search(found);
@@ -339,6 +344,12 @@ export function unsaidText(note: ProvenanceNote, held: readonly Said[]): string 
   const kept = sentences.filter((sentence) => !statedSentence(sentence, slotKind, held));
   if (kept.length === sentences.length) return text;
   return kept.some((sentence) => contentTokens(sentence).size) ? `${label}${kept.join(" ")}` : "";
+}
+
+/** D26's whole-body test: whether one held sentence says all of a note at once (Jaccard ≥ 0.6, `saidIn`). */
+export function restatesNote(note: ProvenanceNote, held: readonly Said[]): boolean {
+  const whole = heldSentence(stripPacketLabel(String(note.text ?? "")).body);
+  return whole.tokens.size > 0 && saidIn(whole, held);
 }
 
 /** D26: whether the residual states all of a note, read sentence by sentence (`unsaidText`). */

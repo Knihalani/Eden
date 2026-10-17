@@ -13,6 +13,9 @@ import { readCitations } from "../../../src/memory-citations";
 import { storeFor } from "../../../src/memory-repo";
 import { memoryHookResponse } from "./memory-hook";
 import { sleepCli } from "./memory-sleep";
+import { cuesBelowTau } from "../../../scripts/test-below-tau";
+
+cuesBelowTau();
 
 const NOW = Date.parse("2026-10-14T12:00:00Z");
 const ENV_KEYS = [

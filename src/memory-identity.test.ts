@@ -17,6 +17,9 @@ import { AgentMemory, MEMORY_MARK, openMemory, sleep, injectedPackets } from "./
 import * as edenMem from "./index";
 import { storeFor } from "./memory-repo";
 import { SemanticStore } from "./semantic-store";
+import { cuesBelowTau } from "../scripts/test-below-tau";
+
+cuesBelowTau();
 
 const SESSION = "sess-m35-unique-session";
 const EMAIL = "kai-m35@example.com";

@@ -15,6 +15,9 @@ import {
   type IclIndexMechanism,
   type MemoryLaneKind,
 } from "./memory-lanes";
+import { cuesBelowTau } from "../scripts/test-below-tau";
+
+cuesBelowTau();
 
 const LANES_SRC = readFileSync(join(import.meta.dir, "memory-lanes.ts"), "utf8");
 

@@ -1,8 +1,8 @@
 /**
  * The situation cue (A7 §3, D16): a Submit is cued by its situation, not by its prompt alone. Four parts:
  *
- * - `prompt` (`q_prompt`): the prompt's words, as the lexical path has always read them (paths, snake and kebab case
- *   split; a dotted or camelCase name whole: see `relevant`'s `hayParts`, until P4.3).
+ * - `prompt` (`q_prompt`): the prompt's identifier-split words (`promptTerms`, `cueTokens`): a camelCase name or a
+ *   dotted filename gives its parts too, since P4.3's τ_repo gates the sum (A7 §4).
  * - `turn` (`q_turn`): the previous typed prompt of the window. It and the parts below are read as identifier-split
  *   tokens (`cueTokens`: a camelCase name or a dotted filename yields its parts too).
  * - `path` (`q_path`): the basename, its stem and the non-generic folders of each path the agent's recent tool calls

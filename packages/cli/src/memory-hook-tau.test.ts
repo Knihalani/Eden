@@ -67,7 +67,7 @@ describe("A7 §4 at a human Submit", () => {
     expect(gate.ev).toBeGreaterThanOrEqual(1);
     expect(gate.m).toBe(1);
     expect(gate.s).toBe(0);
-    expect(gate.top).toBeGreaterThanOrEqual(gate.tau);
+    expect(gate.top).toBeGreaterThanOrEqual(gate.tau!);
   });
 
   test("an ack and a prompt no row has evidence for join the silence set by hash; an answered one does not", () => {

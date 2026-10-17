@@ -15,6 +15,9 @@ import { GistStore } from "./gist-store";
 import * as forgetMod from "./memory-forget";
 import * as edenMem from "./index";
 import { storeFor } from "./memory-repo";
+import { cuesBelowTau } from "../scripts/test-below-tau";
+
+cuesBelowTau();
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/42
 
