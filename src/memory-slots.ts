@@ -1026,9 +1026,13 @@ const SETUP_HERE =
   /(?<![a-z0-9])(?:we|we['’]re|our|us|(?:the|this) (?:repo|project|codebase|monorepo|workspace)|locally|new (?:laptop|machine|computer))(?![a-z0-9])/i;
 export const SETUP_BUNDLE: readonly SlotId[] = ["pkg.manager", "node.version"];
 
-/** Whether a text holds a phrase as whole words (lowercase). */
+/**
+ * Whether a text holds a phrase as words of its prose (lowercase), not as a segment of a path or a filename: "login"
+ * names the auth provider in "the login page redirects", not in "open apps/web/app/login.ts" (a path is STRONG
+ * evidence of its own, A7 §4).
+ */
 function holds(lower: string, phrase: string): boolean {
-  return new RegExp(`(?<![a-z0-9])${escape(phrase)}(?![a-z0-9])`).test(lower);
+  return new RegExp(`(?<![\\w./-])${escape(phrase)}(?![\\w/-]|\\.\\w)`).test(lower);
 }
 
 /** The slots a cue asks about (see `SEEDS`): each one's live value is looked up by key. */
