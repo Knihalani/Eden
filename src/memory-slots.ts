@@ -948,41 +948,29 @@ export function typedValue(text: string, slot: SlotId, value: string): string {
 
 /**
  * A4 §5.1 step 4a's slot detector (R2 §6.1b; A7 §1 layer 2): which slots a cue asks about, so each one's live value is
- * looked up by key (STRONG, A7 §4) whatever words the cue shares with the row stating it. R2's cold-start lexicon,
- * calibrated as R2 asks: no prompt of the silence set (`memory-silence-seeds.json`: R1's dev negatives and R8's 98,
- * A7 §4's seeds) names a slot by it.
- * - **A seed** (`SEEDS`) names its slot alone: a slot's distinctive aliases and R2's cold-start words that no silence
- *   prompt holds ("package manager", "lockfile", "test runner", "login", ".nvmrc"). Calibration drops the words the
- *   silence set holds ("install" alone in "how do I install node on Ubuntu": "install the dependencies" names the
- *   package manager; "database" in "what are database indexes",
- *   "auth", "node", "deploy", "ci", "test"), and the generic words a real prompt uses for anything ("session",
- *   "format", "gh").
- * - **Any alias of a slot in a cue about this project** (`OURS`: "we", "our", "us", "this repo"): "what database do we
- *   use?" asks for this repo's value; "explain database indexes" does not. No silence prompt holds an ownership word.
+ * looked up by key (STRONG, A7 §4) whatever words the cue shares with the row stating it. It reads the user's own
+ * words: the typed prompt, and on a continuation the proposal it accepts (`AgentMemory.recall`). R2's cold-start
+ * lexicon, calibrated as R2 asks: no prompt of the silence set (`memory-silence-seeds.json`: R1's dev negatives and
+ * R8's 98, A7 §4's seeds) names a slot by it.
+ * - **A seed** (`SEEDS`) names its slot alone: a phrase that names nothing else ("package manager", "test runner",
+ *   "lockfile", ".nvmrc", "install the dependencies"). Calibration leaves out every word the silence set holds: bare
+ *   "install" ("how do I install node on Ubuntu"), "database", "auth", "node", "deploy", "ci", "test".
+ * - **A word of a slot's topic** (its aliases and R2's cold-start words: "database", "login", "spec", "sso") names it
+ *   only in a cue about this project (`OURS`: "we", "our", "us", "this repo"): "what database do we use?" asks for this
+ *   repo's value; "explain database indexes", "how does SSO work with SAML?" or "the log in the console" do not. No
+ *   silence prompt holds an ownership word, and "let us", "tell us" are none.
  * - **A bundle** (A7 §7, indirect need): a cue setting up this project ("how do I set up the repo on a new laptop?")
  *   names the slots a setup needs, the package manager and the node version (`SETUP_BUNDLE`). A7's "env location" is
  *   no D7 slot, so it has no key to look up.
+ *
+ * A phrase is matched as words of the cue's prose, never inside a path or a filename ("login" in `app/login.ts`): a
+ * path is STRONG evidence of its own. Each slot's phrases are one regular expression, compiled once.
  */
 const SEEDS: Readonly<Record<SlotId, readonly string[]>> = {
-  "auth.provider": [
-    "auth provider",
-    "authentication provider",
-    "login provider",
-    "identity provider",
-    "authentication",
-    "login",
-    "log in",
-    "sign in",
-    "sign-in",
-    "signin",
-    "sso",
-  ],
+  "auth.provider": ["auth provider", "authentication provider", "login provider", "identity provider"],
   "pkg.manager": [
     "package manager",
     "pkg manager",
-    "installs",
-    "installing",
-    "reinstall",
     "deps",
     "install deps",
     "install the deps",
@@ -990,15 +978,18 @@ const SEEDS: Readonly<Record<SlotId, readonly string[]>> = {
     "install the dependencies",
     "install packages",
     "install the packages",
+    "installs",
+    "installing",
+    "reinstall",
     "lockfile",
     "lock file",
     "add a package",
     "add package",
   ],
-  "db.engine": ["database engine", "db engine", "db"],
-  orm: ["orm"],
-  "test.runner": ["test runner", "test framework", "test suite", "unit tests", "tests", "testing", "spec", "specs"],
-  "node.version": ["node.js version", "node version", "nodejs", ".nvmrc", "nvmrc", "nvm"],
+  "db.engine": ["database engine", "db engine"],
+  orm: [],
+  "test.runner": ["test runner", "test framework"],
+  "node.version": ["node.js version", "node version", ".nvmrc", "nvmrc", "nvm"],
   "lang.version": [
     "language version",
     "typescript version",
@@ -1008,43 +999,59 @@ const SEEDS: Readonly<Record<SlotId, readonly string[]>> = {
     "rust version",
   ],
   framework: ["web framework", "frontend framework", "backend framework"],
-  "deploy.target": ["deploy target", "deployment target", "hosting provider", "hosting"],
-  "ci.system": ["continuous integration", "ci system", "ci provider"],
-  formatter: ["code formatter", "formatter", "formatting", "reformat"],
-  linter: ["linter", "linting", "lint"],
-  "commit.style": ["commit message style", "commit convention", "commit messages", "commit style", "commits"],
+  "deploy.target": ["deploy target", "deployment target", "hosting provider"],
+  "ci.system": ["ci system", "ci provider"],
+  formatter: [],
+  linter: [],
+  "commit.style": ["commit message style", "commit convention", "commit style"],
   "branch.base": ["base branch", "default branch"],
   "gh.account": ["github account", "github user", "gh account"],
 };
 
-/** A cue about the user's own project: "we", "our", "us", "this repo" (see `cuedSlots`). */
+/** R2 §6.1b's cold-start words beyond D7's aliases: words of a slot's topic, naming it in a cue about this project. */
+const TOPIC_WORDS: Partial<Record<SlotId, readonly string[]>> = {
+  "auth.provider": ["login", "log in", "sign in", "sign-in", "signin", "sso"],
+  "test.runner": ["spec", "specs", "test suite"],
+  formatter: ["reformat"],
+};
+
+/** A cue about the user's own project: "we", "our", "us" (not "let us", "tell us"), "this repo" (see `cuedSlots`). */
 const OURS =
-  /(?<![a-z0-9])(?:we|we['’]re|we['’]ve|we['’]d|our|ours|us|this (?:repo|project|codebase|app|service))(?![a-z0-9])/i;
+  /(?<![a-z0-9])(?:we|we['’](?:re|ve|d)|our|ours|(?<!\b(?:let|tell|show|give|help|send|ask) )us|this (?:repo|project|codebase|app|service))(?![a-z0-9])/i;
 /** A cue setting up this project (A7 §7's bundle): a setup word, and this repo, a new machine, or a local setup. */
 const SETUP = /(?<![a-z0-9])(?:set ?up|onboard(?:ing)?|get(?:ting)? started|bootstrap(?:ping)?)(?![a-z0-9])/i;
 const SETUP_HERE =
-  /(?<![a-z0-9])(?:we|we['’]re|our|us|(?:the|this) (?:repo|project|codebase|monorepo|workspace)|locally|new (?:laptop|machine|computer))(?![a-z0-9])/i;
+  /(?<![a-z0-9])(?:the (?:repo|project|codebase|monorepo|workspace)|locally|new (?:laptop|machine|computer))(?![a-z0-9])/i;
 export const SETUP_BUNDLE: readonly SlotId[] = ["pkg.manager", "node.version"];
 
-/**
- * Whether a text holds a phrase as words of its prose (lowercase), not as a segment of a path or a filename: "login"
- * names the auth provider in "the login page redirects", not in "open apps/web/app/login.ts" (a path is STRONG
- * evidence of its own, A7 §4).
- */
-function holds(lower: string, phrase: string): boolean {
-  return new RegExp(`(?<![\\w./-])${escape(phrase)}(?![\\w/-]|\\.\\w)`).test(lower);
+/** The slots each phrase names, and one expression matching any of them as words of a cue's prose (see the header). */
+function lexicon(bySlot: (slot: SlotId) => readonly string[]): { slots: Map<string, SlotId[]>; re: RegExp } {
+  const slots = new Map<string, SlotId[]>();
+  for (const slot of SLOT_IDS)
+    for (const phrase of bySlot(slot)) slots.set(phrase, [...(slots.get(phrase) ?? []), slot]);
+  const alternation = [...slots.keys()]
+    .sort((a, b) => b.length - a.length)
+    .map(escape)
+    .join("|");
+  // A character before the phrase is consumed rather than looked behind for: a look-behind at every position of a
+  // long prompt cost ten times as much.
+  return { slots, re: new RegExp(`(?:^|[^\\w./-])(${alternation})(?![\\w/-]|\\.\\w)`, "gi") };
 }
 
-/** The slots a cue asks about (see `SEEDS`): each one's live value is looked up by key. */
+const SEED_LEXICON = lexicon((slot) => SEEDS[slot]);
+const TOPIC_LEXICON = lexicon((slot) => [...TABLE[slot].aliases, ...(TOPIC_WORDS[slot] ?? [])]);
+
+/** The slots a lexicon's phrases name in a cue. */
+function named(cue: string, { slots, re }: ReturnType<typeof lexicon>): Set<SlotId> {
+  return new Set([...cue.matchAll(re)].flatMap((match) => slots.get(match[1]!.toLowerCase()) ?? []));
+}
+
+/** The slots a cue asks about (see the header): each one's live value is looked up by key. */
 export function cuedSlots(text: string): SlotId[] {
   const cue = String(text ?? "");
-  const lower = cue.toLowerCase();
   const ours = OURS.test(cue);
-  const setup = SETUP.test(cue) && SETUP_HERE.test(cue);
-  return SLOT_IDS.filter(
-    (slot) =>
-      SEEDS[slot].some((seed) => holds(lower, seed)) ||
-      (ours && slotAliases(slot).some((alias) => holds(lower, alias))) ||
-      (setup && SETUP_BUNDLE.includes(slot)),
-  );
+  const hits = named(cue, SEED_LEXICON);
+  if (ours) for (const slot of named(cue, TOPIC_LEXICON)) hits.add(slot);
+  if (SETUP.test(cue) && (ours || SETUP_HERE.test(cue))) for (const slot of SETUP_BUNDLE) hits.add(slot);
+  return SLOT_IDS.filter((slot) => hits.has(slot));
 }

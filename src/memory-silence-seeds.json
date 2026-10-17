@@ -1,5 +1,5 @@
 {
- "about": "A7 §4's seed hard negatives for τ_repo's refit (memory-tau.ts): R1's dev-split negatives (benchmarks/memory-cues/fixture/cues.json, neg-* categories, split dev; its test negatives stay held out for CueBench) and R8's 98 nim-neg (cues-nim.json), in id order. Generated text, no user data.",
+ "about": "A7 §4's seed hard negatives (the silence set's seeds): the slot detector's calibration (memory-slots.ts cuedSlots, memory-slot-detector.test.ts; P4.4) and τ_repo's refit (P4.3). R1's dev-split negatives (benchmarks/memory-cues/fixture/cues.json, neg-* categories, split dev; its test negatives stay held out for CueBench) and R8's 98 nim-neg (cues-nim.json), in id order. Generated text, no user data.",
  "r1": [
   "ok cool",
   "lgtm",
