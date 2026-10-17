@@ -12,8 +12,8 @@
  *   no row had MEDIUM evidence, and the prompts in `ack` mode (`silence.jsonl`). It is trusted from
  *   `TRUSTED_SILENCE` prompts on; until then the fit is recorded and R1's point is used.
  *
- * `tau.json` beside the store holds the last refit; `silence.jsonl` holds the logged prompts as hashes, never text:
- * a prompt is replayed from the row that stored it (`AgentMemory.refitTau`).
+ * `tau.json` beside the store holds the last refit; `silence.jsonl` holds the logged prompts by their turn's
+ * `prompt_id`, never their text: a prompt is replayed from the row its turn stored (`AgentMemory.refitTau`).
  */
 import { appendFileSync, chmodSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -122,12 +122,12 @@ export function silentNorm(scores: readonly number[]): number | undefined {
 export type SilenceKind = "ack" | "empty";
 
 /**
- * Logs a human prompt to the repo's silence set (see the header) by its hash (`memory-turn.ts` `promptHash`, the wide
- * event's `prompt_hash`): an `ack` by its kind alone, as no row stores it and it matches nothing. Fails open.
+ * Logs a human prompt to the repo's silence set (see the header) by its turn's `prompt_id`, the id the rows it stored
+ * carry: an `ack` by its kind alone, as no row stores it and it matches nothing. Fails open.
  */
-export function logSilence(dir: string, kind: SilenceKind, hash: string, at: number): void {
+export function logSilence(dir: string, kind: SilenceKind, promptId: string | undefined, at: number): void {
   try {
-    const line = kind === "ack" ? { k: kind, t: at } : { k: kind, h: hash, t: at };
+    const line = kind === "ack" || !promptId ? { k: kind, t: at } : { k: kind, p: promptId, t: at };
     appendFileSync(join(dir, SILENCE_FILE), `${JSON.stringify(line)}\n`, { mode: 0o600 });
   } catch {}
 }
@@ -135,7 +135,7 @@ export function logSilence(dir: string, kind: SilenceKind, hash: string, at: num
 export interface SilenceLog {
   /** How many prompts were logged in `ack` mode. */
   acks: number;
-  /** The hashes of the logged prompts no row had MEDIUM evidence for, oldest first. */
+  /** The `prompt_id`s of the logged prompts no row had evidence for, oldest first. */
   empty: string[];
 }
 
@@ -162,9 +162,9 @@ export function readSilence(dir: string): SilenceLog {
   }
   for (const line of lines) {
     try {
-      const rec = JSON.parse(line) as { k?: string; h?: unknown };
+      const rec = JSON.parse(line) as { k?: string; p?: unknown };
       if (rec.k === "ack") log.acks++;
-      else if (rec.k === "empty" && typeof rec.h === "string") log.empty.push(rec.h);
+      else if (rec.k === "empty" && typeof rec.p === "string") log.empty.push(rec.p);
     } catch {}
   }
   return log;

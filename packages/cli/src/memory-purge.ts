@@ -7,7 +7,7 @@
  *   derived from the store, holds its words lowercased, stemmed and split (so a pattern that matched a row need not
  *   match it), may still hold the words of a row the store has since dropped, its byte offsets would not survive a
  *   rewrite, and sleep builds it again from the purged rows. So is every silence log (`silence.jsonl`, P4.3): it
- *   holds hashes of prompts, which no pattern can match, and τ_repo's next refit does without it. A
+ *   names prompts by their turns' ids, which no pattern can match, and τ_repo's next refit does without it. A
  *   SQLite store loses the rows that match, with `secure_delete`, a truncating WAL checkpoint and `VACUUM`, so no
  *   free page keeps them. A file is rewritten under its writers' lock (`<file>.lock`); other binary files are left
  *   as they are and named.

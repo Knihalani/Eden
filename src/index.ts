@@ -101,7 +101,6 @@ import {
   writeTau,
   type TauRecord,
 } from "./memory-tau";
-import { promptHash } from "./memory-turn";
 import { writeRuleIndex } from "./memory-rule-index";
 import { readUserRules, withUserGlobal } from "./memory-user-global";
 import { childSessionName, memorySessionName } from "./memory-session";
@@ -1808,11 +1807,11 @@ export class AgentMemory {
   /**
    * τ_repo's refit (A7 §4, heavy sleep; `memory-tau.ts`): the silence set replayed against the store as a cue-less
    * prompt sees it (every scope), each prompt's top MEDIUM-path sum over the store's mean idf, and the smallest
-   * normalized threshold that keeps them all silent. A logged prompt is replayed from the row that stored it, without
-   * that row; one no row stores (a question, never stored) is left out. Prompts a STRONG identifier answers are
-   * counted apart: no τ silences them. The fit is used once `TRUSTED_SILENCE` prompts, pooled with the other repos'
-   * logged prompts, back it; until then R1's point is. Writes `tau.json`; returns the record, or undefined when the
-   * store cannot be refit (memory not on, no indexed row).
+   * normalized threshold that keeps them all silent. A logged prompt is replayed from the typed row its turn stored,
+   * without that turn's rows; one no row stores (a question, never stored) is left out. Prompts a STRONG identifier
+   * answers are counted apart: no τ silences them. The fit is used once `TRUSTED_SILENCE` prompts, pooled with the
+   * other repos' logged prompts, back it; until then R1's point is. Writes `tau.json`; returns the record, or undefined
+   * when the store cannot be refit (memory not on, no indexed row).
    */
   refitTau(): TauRecord | undefined {
     const dir = dirname(this.path);
@@ -1825,11 +1824,11 @@ export class AgentMemory {
       const silence = readSilence(dir);
       trimSilence(dir);
       const typed = new Map<string, MemoryRecord>();
-      for (const c of this.compiled) if (!isUntyped(c.rec)) typed.set(promptHash(c.rec.text), c.rec);
-      const logged = silence.empty.flatMap((hash) => (typed.has(hash) ? [typed.get(hash)!] : []));
-      const replay = (text: string, without?: string) => this.silenceTop(text, view, without);
+      for (const c of this.compiled) if (c.rec.promptId && !isUntyped(c.rec)) typed.set(c.rec.promptId, c.rec);
+      const logged = silence.empty.flatMap((id) => (typed.has(id) ? [typed.get(id)!] : []));
+      const replay = (text: string, turn?: string) => this.silenceTop(text, view, turn);
       const seeds = SEED_NEGATIVES.map((text) => replay(text));
-      const own = logged.map((row) => replay(row.text, row.id));
+      const own = logged.map((row) => replay(row.text, row.promptId));
       const scores = own.filter((top) => !top.strong).map((top) => top.score / mean);
       const pooled = [...seeds.filter((top) => !top.strong).map((top) => top.score / mean), ...scores];
       const others = this.siblingTaus();
@@ -1860,11 +1859,11 @@ export class AgentMemory {
 
   /**
    * A silence prompt's replay (`refitTau`): the top BM25F sum the MEDIUM path would admit at τ = 0 (a cue-less prompt,
-   * so an episode the user did not type never reaches it), and whether a STRONG identifier admits a row. `without` is
-   * the row that stored the prompt.
+   * so an episode the user did not type never reaches it), and whether a STRONG identifier admits a row. `turn` is the
+   * `prompt_id` of the turn that stored the prompt: its own rows are left out.
    */
-  private silenceTop(text: string, view: PostingsView<Compiled>, without?: string) {
-    const rows = this.evidenced(text, undefined, view, EVERY_ROW).filter((row) => row.rec.id !== without);
+  private silenceTop(text: string, view: PostingsView<Compiled>, turn?: string) {
+    const rows = this.evidenced(text, undefined, view, EVERY_ROW).filter((row) => !turn || row.rec.promptId !== turn);
     const medium = rows.filter((row) => !row.strong && mediumAdmits(row.rec, row.sum, row.medium, 0));
     return { score: topSum(medium), strong: rows.some((row) => row.strong) };
   }

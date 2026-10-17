@@ -25,7 +25,6 @@ import {
   writeTau,
   type TauRecord,
 } from "./memory-tau";
-import { promptHash } from "./memory-turn";
 import { sleep } from "./sleep";
 
 const dirs: string[] = [];
@@ -87,19 +86,18 @@ describe("τ_repo's scale", () => {
 });
 
 describe("the silence log (A7 §4: logged human prompts with no evidence, and acks)", () => {
-  test("an ack by its kind alone, a prompt by its hash, never its text; read back newest last", () => {
+  test("an ack by its kind alone, a prompt by its turn's prompt_id, never its text; read back newest last", () => {
     const dir = tempDir();
-    logSilence(dir, "ack", promptHash("ok thanks"), 1);
-    logSilence(dir, "empty", promptHash("write a haiku about autumn"), 2);
-    const text = readFileSync(join(dir, SILENCE_FILE), "utf8");
-    expect(text).not.toContain("haiku");
-    expect(text).not.toContain(promptHash("ok thanks"));
-    expect(readSilence(dir)).toEqual({ acks: 1, empty: [promptHash("write a haiku about autumn")] });
+    logSilence(dir, "ack", "turn-1", 1);
+    logSilence(dir, "empty", "turn-2", 2);
+    logSilence(dir, "empty", undefined, 3);
+    expect(readFileSync(join(dir, SILENCE_FILE), "utf8")).not.toContain("turn-1");
+    expect(readSilence(dir)).toEqual({ acks: 1, empty: ["turn-2"] });
   });
 
   test("the refit keeps the newest 2,000 lines", () => {
     const dir = tempDir();
-    const lines = Array.from({ length: 2_100 }, (_, i) => JSON.stringify({ k: "empty", h: `h${i}`, t: i }));
+    const lines = Array.from({ length: 2_100 }, (_, i) => JSON.stringify({ k: "empty", p: `h${i}`, t: i }));
     writeFileSync(join(dir, SILENCE_FILE), `${lines.join("\n")}\n`);
     trimSilence(dir);
     const kept = readSilence(dir).empty;
@@ -138,10 +136,10 @@ describe("τ_repo's refit (heavy sleep)", () => {
     const dir = tempDir();
     const mem = seeded(dir);
     const logged = Array.from({ length: TRUSTED_SILENCE - SEED_NEGATIVES.length }, (_, i) => `what is ${i} squared`);
-    for (const prompt of logged) {
-      mem.remember(prompt, { kind: "episode" });
-      logSilence(dir, "empty", promptHash(prompt), 1);
-    }
+    logged.forEach((prompt, i) => {
+      mem.remember(prompt, { kind: "episode", origin: { promptId: `turn-${i}` } });
+      logSilence(dir, "empty", `turn-${i}`, 1);
+    });
     const rec = mem.refitTau()!;
     expect(rec.n).toBe(TRUSTED_SILENCE);
     expect(rec.logged).toBe(logged.length);
@@ -154,14 +152,13 @@ describe("τ_repo's refit (heavy sleep)", () => {
     }
   });
 
-  test("a logged prompt is replayed without the row that stored it; one no row stores is left out", () => {
+  test("a logged prompt is replayed without its turn's rows; one no row stores is left out", () => {
     const dir = tempDir();
     const mem = seeded(dir);
-    const prompt = "zebrafish aquarium temperature tuning";
-    mem.remember(prompt, { kind: "episode" });
-    logSilence(dir, "empty", promptHash(prompt), 1);
-    logSilence(dir, "empty", promptHash("a question no row stores"), 2);
-    logSilence(dir, "ack", "", 3);
+    mem.remember("zebrafish aquarium temperature tuning", { kind: "episode", origin: { promptId: "turn-1" } });
+    logSilence(dir, "empty", "turn-1", 1);
+    logSilence(dir, "empty", "turn-2", 2);
+    logSilence(dir, "ack", "turn-3", 3);
     const rec = mem.refitTau()!;
     expect(rec.logged).toBe(2);
     expect(rec.scores).toEqual([0]);

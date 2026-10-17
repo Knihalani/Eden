@@ -1269,10 +1269,11 @@ function aborted(ctx: HookContext): boolean {
 }
 
 /**
- * A7 §4 at a human Submit: the lexical gate's trace into the wide event, and the prompt into the repo's silence set
- * when it is one (`memory-tau.ts`): an `ack`, or a prompt on which no row had MEDIUM or STRONG evidence.
+ * A7 §4 at a human Submit: the lexical gate's trace into the wide event, and the prompt, by its `prompt_id`, into the
+ * repo's silence set when it is one (`memory-tau.ts`): an `ack`, or a prompt on which no row had MEDIUM or STRONG
+ * evidence.
  */
-function traceGate(mem: AgentMemory, trace: Trace, turn: TurnMode, prompt: string, writes: boolean): void {
+function traceGate(mem: AgentMemory, trace: Trace, turn: TurnMode, promptId: string | undefined, writes: boolean) {
   const gate = mem.lastGate;
   if (gate) {
     const round = (x: number) => Math.round(x * 100) / 100;
@@ -1281,7 +1282,7 @@ function traceGate(mem: AgentMemory, trace: Trace, turn: TurnMode, prompt: strin
   const silence = turn === "ack" ? "ack" : gate?.evidenced === 0 ? "empty" : undefined;
   if (!silence) return;
   trace.silence = silence;
-  if (writes) logSilence(mem.jsonlDir, silence, promptHash(prompt), memoryNow());
+  if (writes) logSilence(mem.jsonlDir, silence, promptId, memoryNow());
 }
 
 /** UserPromptSubmit (A4 §5.1), and PreCompact, which a host maps here (`hook.ts`): answered as a Submit would be. */
@@ -1365,7 +1366,7 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   if (prompt && isAnswered(turn) && answer !== "off" && !aborted(ctx))
     notes = mem.recall(cue, encode, place && visibleFrom(place), { situation });
   else if (prompt) mem.observeCue(cue, undefined, encode);
-  if (human) traceGate(mem, trace, turn, prompt, writes);
+  if (human) traceGate(mem, trace, turn, str(r.prompt_id), writes);
   // X7: an `off` point answers nothing, a kept proposal's acknowledgement included; nor does an aborted Submit.
   if (answer === "off" || ctx.trace.aborted || (!notes.length && !acknowledged.length)) return null;
   // A4 §5.1: validity (step 5); the gate on episodes the user did not type (step 6, A7 §4); novelty (step 7):
