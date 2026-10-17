@@ -76,9 +76,17 @@ describe("termScore", () => {
     expect(idf(c, "database")).toBeGreaterThan(idf(c, "billing"));
   });
 
+  test("a typed row of no D7 slot takes its copula's subject (×2) and value (×3) as fields (P4.3)", () => {
+    const fields = rowFields(row("The storefront queue is RabbitMQ."));
+    expect(fields.subject).toEqual(["storefront", "queue"]);
+    expect(fields.value).toEqual(["rabbitmq"]);
+    expect(rowFields(row("The storefront queue is RabbitMQ.", { tags: ["src:tool"] })).subject).toEqual([]);
+    expect(rowFields(row("Installs go through pnpm.")).value).toEqual([]);
+  });
+
   test("a term in the value field weighs ×3 against the body's ×1 (D17)", () => {
     const keyed = rowFields(row("We use pnpm.", { slots: [{ k: "pkg.manager", v: "pnpm" }] }));
-    const said = rowFields(row("We use pnpm."));
+    const said = rowFields(row("Installs go through pnpm."));
     expect(termScore("pnpm", keyed, c)).toBeGreaterThan(termScore("pnpm", said, c));
   });
 
@@ -123,8 +131,13 @@ describe("R1's tokenizer (lex.ts)", () => {
     ]);
   });
 
-  test("a prompt keeps a dotted name whole, without its parts (P4.1)", async () => {
+  test("a prompt is identifier-split, its dotted name whole and in parts (A7 §3, P4.3)", async () => {
     const { promptTerms } = await import("./memory-bm25f");
-    expect([...promptTerms("who created the Node.js runtime?")]).toEqual(["created", "node.js", "runtime"]);
+    expect([...promptTerms("who created the Node.js runtime?")].sort()).toEqual(
+      ["created", "js", "node", "node.js", "runtime"].sort(),
+    );
+    expect([...promptTerms("fix vitest.config.ts")].sort()).toEqual(
+      ["config", "fix", "ts", "vitest", "vitest.config", "vitest.config.ts"].sort(),
+    );
   });
 });

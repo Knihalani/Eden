@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DIARY_FILE, openMemory, type MemoryRecord } from "./index";
 import { rowFields } from "./memory-bm25f";
+import { meanIdf, writeTau } from "./memory-tau";
 import {
   CANDIDATE_CAP,
   candidateRows,
@@ -63,12 +64,17 @@ describe("the snapshot file", () => {
     indexed("r4", "We deploy everything to Fly.io.", { scope: "" }),
   ];
 
-  test("reads back each term's ordinals by scope, the ids by ordinal, and N and field lengths by scope", () => {
+  test("reads back each term's ordinals by scope, the ids by ordinal, N and field lengths by scope, mean idf", () => {
     const dir = tempDir();
     writeSnapshot(dir, rows);
     const snapshot = Snapshot.open(dir)!;
     try {
-      expect(snapshot.header).toMatchObject({ v: 1, rows: 4, id: expect.any(String) });
+      expect(snapshot.header).toMatchObject({ v: 2, rows: 4, id: expect.any(String) });
+      // τ_repo's scale (P4.3): every term of the 4 rows, by its df over all of them, whatever its scope.
+      const terms = rows.flatMap(({ fields }) => [...new Set(Object.values(fields).flat())]);
+      const dfs = [...new Set(terms)].map((term) => terms.filter((t) => t === term).length);
+      expect(snapshot.header.meanIdf).toBeCloseTo(meanIdf(4, dfs), 10);
+      expect(snapshot.header.meanIdf).toBeGreaterThan(0);
       expect(snapshot.ids()).toEqual(["r1", "r2", "r3", "r4"]);
       expect(snapshot.lists("billing")).toEqual({ "services/billing": [0, 2] });
       expect(snapshot.lists("deploy")).toEqual({ "": [3] });
@@ -214,11 +220,19 @@ describe("retrieval through the snapshot (AgentMemory)", () => {
   const FACT = "The storefront queue is RabbitMQ.";
 
   /**
+   * These tests read the ranking and the snapshot's freshness, not the gate: τ_repo is set low enough that every
+   * candidate passes it (A7 §4's gate has tests of its own, `memory-gate.test.ts`).
+   */
+  const lowTau = (dir: string) =>
+    writeTau(dir, { v: 1, norm: 0.001, source: "fit", n: 300, strong: 0, meanIdf: 1, scores: [], logged: 0, at: 0 });
+
+  /**
    * A store where thirty newer, longer rows name a fact's subject words, as the scale bench's filler does: "one long
    * diary line that mentions `auth` … cannot outrank the short copula" (A2 §2.2).
    */
   function distracted(dir: string) {
     const mem = openMemory({ dir, session: "s1", perRepo: true });
+    lowTau(dir);
     mem.remember(FACT, { tags: ["src:user"] });
     for (let i = 0; i < 30; i++)
       mem.remember(`Moved ticket T-${100 + i} for storefront queue into the next sprint on day ${i}.`, {
@@ -268,6 +282,7 @@ describe("retrieval through the snapshot (AgentMemory)", () => {
   test("a held row whose tags change waits again: the next refresh finds it by its new tag (review round 1)", () => {
     const dir = tempDir();
     const mem = openMemory({ dir, session: "s1", perRepo: true });
+    lowTau(dir);
     mem.remember("The storefront queue is RabbitMQ.", { tags: ["src:user"], id: "q1" });
     for (let i = 0; i < 5; i++) mem.remember(`Ticket T-${100 + i} moved on day ${i}.`, { tags: ["src:user"] });
     expect(mem.refreshPostings()).toBe(true);

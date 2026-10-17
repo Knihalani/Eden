@@ -127,6 +127,15 @@ describe("D26: the residual", () => {
     expect(isResidual("", sentences)).toBe(false);
   });
 
+  // P4.3 (P4.2's follow-up): a question asserts nothing, so it states no fact whose words it shares; it restates only
+  // a question. "how do the gateway tests run?" dropped "Gateway tests run with Playwright." (scale-20k named-01).
+  test("a question says no fact it shares words with; it restates a stored question", () => {
+    const sentences = residualSentences(["how do the gateway tests run?"]);
+    expect(isResidual("Gateway tests run with Playwright.", sentences)).toBe(false);
+    expect(isResidualNote({ id: "f", text: "[fact · 0m] Gateway tests run with Playwright." }, sentences)).toBe(false);
+    expect(isResidual("how do the gateway tests run", sentences)).toBe(true);
+  });
+
   test("a bullet of several sentences is residual when each of its sentences is", () => {
     const prompt = "We use ZebraCache for caching. The Zebra billing service runs on port 4021. Reply with just OK.";
     const sentences = residualSentences([prompt, "Reply with just OK."]);
