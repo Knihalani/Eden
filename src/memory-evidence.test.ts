@@ -110,6 +110,15 @@ describe("D17's 0.7·top cut, on the MEDIUM path", () => {
   });
 });
 
+describe("D26's residual before the cut: a stored copy of the prompt or of the previous typed prompt", () => {
+  test("the previous typed prompt, stored as an episode, is never admitted on the context it is part of", () => {
+    const mem = store();
+    mem.remember("open apps/web/app/login.ts", { kind: "episode", tags: ["src:user"] });
+    const cue = situationCue({ turn: "open apps/web/app/login.ts", path: "login.ts web" }, "imperative");
+    expect(texts(mem.relevant("fix the redirect there", 6, undefined, cue))).toEqual([]);
+  });
+});
+
 describe("A7 §4: an episode needs MEDIUM from two cue parts, and τ", () => {
   const tool = (mem: ReturnType<typeof store>, text: string) => mem.remember(text, { tags: ["src:tool"] });
 

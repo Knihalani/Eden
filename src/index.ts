@@ -2279,9 +2279,9 @@ export class AgentMemory {
   ): MemoryRecord[] {
     const view = this.postingsView(snapshot, visible);
     const tau = tauOf(dirname(this.path), view.meanIdf());
-    // An episode restating the prompt whole (the prompt typed before, stored) is never delivered (D26's residual, A4
-    // §5.1 step 7): it sets no top.
-    const said = residualSentences([text]);
+    // An episode restating the prompt or the previous typed prompt whole (a prompt stored as it was typed) is never
+    // delivered (D26's residual, A4 §5.1 step 7): it sets no top.
+    const said = residualSentences([text, cue?.turnText ?? ""]);
     const echo = (rec: MemoryRecord) => noteKindToken(rec) === "episode" && restatesNote(rec, said);
     // Of the rows giving one subject a value, the newest (A4 §5.1 step 5's supersession), before the gate's cut.
     const rows = liveCopulaLatest(this.evidenced(text, cue, view, visible).filter((row) => !echo(row.rec)));
