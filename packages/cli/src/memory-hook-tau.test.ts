@@ -1,14 +1,13 @@
 /**
  * P4.3 at the hook: a human Submit's wide event carries A7 §4's gate trace (τ_repo, the candidates with evidence,
  * their top sum, the rows admitted by class), and a silence prompt (an `ack`, or one no row had evidence for) joins the
- * repo's silence set by its hash, never its text (`memory-tau.ts`).
+ * repo's silence set by its turn's `prompt_id`, never its text (`memory-tau.ts`).
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SILENCE_FILE } from "../../../src/memory-tau";
-import { promptHash } from "../../../src/memory-turn";
 import { memoryHookResponse } from "./memory-hook";
 
 const SESSION = "s-tau";
@@ -79,9 +78,9 @@ describe("A7 §4 at a human Submit", () => {
     const lines = log
       .split("\n")
       .filter(Boolean)
-      .map((line) => JSON.parse(line) as { k: string; h?: string });
+      .map((line) => JSON.parse(line) as { k: string; p?: string });
     expect(lines.map((line) => line.k)).toEqual(["empty", "ack", "empty"]);
-    expect(lines[2]!.h).toBe(promptHash("write a haiku about autumn leaves"));
+    expect(lines.map((line) => (line as { p?: string }).p)).toEqual(["p1", undefined, "p3"]);
     expect(log).not.toContain("haiku");
     expect(humanSubmits().map((event) => event.silence)).toEqual(["empty", "ack", "empty", undefined]);
   });

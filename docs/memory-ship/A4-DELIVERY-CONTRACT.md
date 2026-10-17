@@ -307,7 +307,7 @@ All points share the window ledger, the validity filter, the novelty filters and
 - **The MEDIUM path** admits a row whose BM25F sum over the cue's parts, unweighted, reaches τ_repo, on MEDIUM evidence (a prompt word in at most 50 visible rows, or a word of a context part; WEAK never admits), and whose ranking score is at least 0.7 of the MEDIUM path's top (a STRONG row sets no top, nor does a stored episode that restates the prompt whole). Ranking keeps A7 §3's weights; the gate reads the unweighted sum, the scale R1 measured τ on (its cue was the prompt, the previous turn and the paths together).
 - **An episode** (a row the user did not type, or a typed request stored as an episode) needs MEDIUM from two cue parts as well.
 - **τ_repo** is `norm × mean idf`, the store's mean idf from the postings snapshot (step 1's "tau"): R1's strict point, 4.1 over the fixture's 4.55, until a refit is trusted; `tau.json` holds the refit, `EDEN_MEMORY_TAU` overrides it.
-- A human Submit logs its gate trace in its wide event (`gate`), and a silence prompt (an `ack`, or no candidate with evidence) by its hash to the repo's `silence.jsonl`.
+- A human Submit logs its gate trace in its wide event (`gate`), and a silence prompt (an `ack`, or no candidate with evidence) by its `prompt_id` to the repo's `silence.jsonl`.
 
 ### 5.2 SessionStart
 
