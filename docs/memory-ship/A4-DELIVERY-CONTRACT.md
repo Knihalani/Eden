@@ -302,6 +302,13 @@ All points share the window ledger, the validity filter, the novelty filters and
 - **Step 4c:** sleep writes the store's postings snapshot, `postings.snap`: the idle sleeper and `eden memory remember` whenever a row waits outside it (one it does not hold, one it holds whose text, tags or keys changed since, or one it holds that the store dropped or took back), the light sleep once 256 do, and either when a part of it cannot be read. Every purge deletes it. It holds each term's rows by scope, as ordinals into its row ids, in term-hashed buckets, so a Submit reads the buckets of its cue's terms only, and the lists of the scopes it may see (§2). Rows the snapshot does not hold by id are indexed in process. The candidate set is |C| ≤ 200: a term in at most 64 visible rows gives them all, rarest first; a fatter term gives the rows it shares with another of the cue's terms, newest first, then its newest 64. Every reader ranks the candidates by D17's BM25F (`memory-bm25f.ts`).
 - **Step 6** is as before until P4.3: a row is admitted on a word it shares with the prompt, or, on a continuation, on a STRONG identifier; the 0.7·top cut comes with τ_repo.
 
+**Built in P4.3** (`src/index.ts` `relevant`, `src/memory-tau.ts`, `src/memory-gate.ts`): step 6 on the lexical path, for every reader:
+- **STRONG** admits a row alone: an identifier-shaped token it shares with the prompt; on a continuation, with the agent's last message only (A7 §2).
+- **The MEDIUM path** admits a row whose BM25F sum over the cue's parts, unweighted, reaches τ_repo, on MEDIUM evidence (a prompt word in at most 50 visible rows, or a word of a context part; WEAK never admits), and whose ranking score is at least 0.7 of the MEDIUM path's top (a STRONG row sets no top, nor does a stored episode that restates the prompt whole). Ranking keeps A7 §3's weights; the gate reads the unweighted sum, the scale R1 measured τ on (its cue was the prompt, the previous turn and the paths together).
+- **An episode** (a row the user did not type, or a typed request stored as an episode) needs MEDIUM from two cue parts as well.
+- **τ_repo** is `norm × mean idf`, the store's mean idf from the postings snapshot (step 1's "tau"): R1's strict point, 4.1 over the fixture's 4.55, until a refit is trusted; `tau.json` holds the refit, `EDEN_MEMORY_TAU` overrides it.
+- A human Submit logs its gate trace in its wide event (`gate`), and a silence prompt (an `ack`, or no candidate with evidence) by its hash to the repo's `silence.jsonl`.
+
 ### 5.2 SessionStart
 
 - **startup:** ≤ 3 policy pins for the likely scope (last session's read set), plus `Updated:` items (values that changed since this repo's last session).
