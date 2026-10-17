@@ -33,7 +33,7 @@ import { FIELDS, rowTerms, type Corpus, type Field, type RowFields } from "./mem
 import { meanIdf } from "./memory-tau";
 
 export const SNAPSHOT_FILE = "postings.snap";
-const SNAPSHOT_VERSION = 2;
+const SNAPSHOT_VERSION = 1;
 /** |C| ≤ 200 (D17). */
 export const CANDIDATE_CAP = 200;
 /** A fat term: in more visible rows than this; it is read newest-64 (D17). */
@@ -71,8 +71,12 @@ interface Header {
   ids: [number, number];
   buckets: [number, number][];
   scopes: Record<string, ScopeStats>;
-  /** The mean idf of the indexed rows' terms, every scope's (`meanIdf`). */
-  meanIdf: number;
+  /**
+   * The mean idf of the indexed rows' terms, every scope's (`meanIdf`); absent from a snapshot written before P4.3,
+   * which is then rebuilt at the next sleep (`AgentMemory.waiting`), not set aside: a 20k-row store indexed in process
+   * costs a Submit about 400 ms.
+   */
+  meanIdf?: number;
 }
 
 /** A term's postings in one bucket: ordinals by scope key. */

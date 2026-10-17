@@ -1777,6 +1777,8 @@ export class AgentMemory {
    */
   private waiting(snapshot: Snapshot | undefined): number {
     if (!snapshot) return this.outside(undefined).length;
+    // A snapshot written before P4.3 holds no mean idf (τ_repo's scale): it is written again.
+    if (snapshot.header.meanIdf === undefined) return Number.POSITIVE_INFINITY;
     try {
       snapshot.verify();
       const built = snapshot.digests();
