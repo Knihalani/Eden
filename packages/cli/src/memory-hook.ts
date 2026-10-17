@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { redact } from "@eden/ir";
 import { authoredTexts, splitPastes, type TextSource } from "../../../src/memory-authority";
-import { isLiveRow, openMemory, storeRows, type MemoryRecord } from "../../../src/index";
+import { isLiveRow, openMemory, storeRows, type AgentMemory, type MemoryRecord } from "../../../src/index";
 import { lastSessionDeliveries, lastSessionWindow, noteLastSession, updatedItems } from "../../../src/memory-updates";
 import { GistStore, scrubTombstonedIdentity } from "../../../src/gist-store";
 import { memoryConsent } from "../../../src/memory-consent";
@@ -135,6 +135,7 @@ import {
 } from "../../../src/memory-window";
 import { lightSleep } from "../../../src/sleep";
 import { memoryNow } from "../../../src/memory-clock";
+import { logSilence } from "../../../src/memory-tau";
 import { parseHookToolTraces, persistToolTraces } from "../../../src/tool-trace";
 import { noteRepoActivity, spawnHeavySleeper, spawnIdleSleeper } from "./memory-sleep";
 import {
@@ -1267,6 +1268,22 @@ function aborted(ctx: HookContext): boolean {
   return true;
 }
 
+/**
+ * A7 §4 at a human Submit: the lexical gate's trace into the wide event, and the prompt into the repo's silence set
+ * when it is one (`memory-tau.ts`): an `ack`, or a prompt on which no row had MEDIUM or STRONG evidence.
+ */
+function traceGate(mem: AgentMemory, trace: Trace, turn: TurnMode, prompt: string, writes: boolean): void {
+  const gate = mem.lastGate;
+  if (gate) {
+    const round = (x: number) => Math.round(x * 100) / 100;
+    trace.gate = { tau: round(gate.tau), ev: gate.evidenced, top: round(gate.top), s: gate.strong, m: gate.medium };
+  }
+  const silence = turn === "ack" ? "ack" : gate?.evidenced === 0 ? "empty" : undefined;
+  if (!silence) return;
+  trace.silence = silence;
+  if (writes) logSilence(mem.jsonlDir, silence, promptHash(prompt), memoryNow());
+}
+
 /** UserPromptSubmit (A4 §5.1), and PreCompact, which a host maps here (`hook.ts`): answered as a Submit would be. */
 function submit(ctx: HookContext): Record<string, unknown> | null {
   const { r, event, writes, win, mem, trace, flags, mode, transcriptPath } = ctx;
@@ -1348,6 +1365,7 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   if (prompt && isAnswered(turn) && answer !== "off" && !aborted(ctx))
     notes = mem.recall(cue, encode, place && visibleFrom(place), { situation });
   else if (prompt) mem.observeCue(cue, undefined, encode);
+  if (human) traceGate(mem, trace, turn, prompt, writes);
   // X7: an `off` point answers nothing, a kept proposal's acknowledgement included; nor does an aborted Submit.
   if (answer === "off" || ctx.trace.aborted || (!notes.length && !acknowledged.length)) return null;
   // A4 §5.1: validity (step 5); the gate on episodes the user did not type (step 6, A7 §4); novelty (step 7):

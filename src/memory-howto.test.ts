@@ -31,6 +31,9 @@ import * as edenMem from "./index";
 import { SemanticStore } from "./semantic-store";
 import * as sleepMod from "./sleep";
 import { loadToolTraces, memoryTracesDir, persistToolTraces, tracesPath, type ToolTrace } from "./tool-trace";
+import { cuesBelowTau } from "../scripts/test-below-tau";
+
+cuesBelowTau();
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/51
 

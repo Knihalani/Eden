@@ -1,20 +1,23 @@
 /**
  * BM25F (D17, A2 §2.2, R1 M1): how the lexical path ranks a row against a cue's words. A row's words fall in four
- * fields, weighted as D17 sets them: the values its D7 keys set (×3), the subjects of those keys (×2), its aliases
- * (×1.5) and its text (×1); k1 = 1.2 and b = 0.75. A term's weighted frequency is normalized field by field against
- * the field's mean length over the rows the reader sees, so a long row that names a cue word once cannot outrank a
- * short row that states it (A2: "one long diary line that mentions `auth` five times cannot outrank the short
- * copula"). Every reader ranks one way: the Submit's situation cue, SubagentStart, PreCompact and the wrap alike.
+ * fields, weighted as D17 sets them: the values its D7 keys set (×3), the subjects of those keys (×2) (a typed row of
+ * no D7 slot: its copula's, `rowFields`), its aliases (×1.5) and its text (×1); k1 = 1.2 and b = 0.75. A term's
+ * weighted frequency is normalized field by field against the field's mean length over the rows the reader sees, so a
+ * long row that names a cue word once cannot outrank a short row that states it (A2: "one long diary line that mentions
+ * `auth` five times cannot outrank the short copula"). Every reader ranks one way: the Submit's situation cue,
+ * SubagentStart, PreCompact and the wrap alike.
  *
- * Words are read with R1's tokenizer (`benchmarks/memory-cues/lex.ts`, which D17's BM25F was measured with): a term
- * is 2 characters or more, no stop word (R1's and Eden's own), no number of 1–2 digits, plurals stemmed (`singular`).
- * A row's text gives each compound identifier (`apps/web/middleware.ts`, `T-1264`) whole, its dotted segments whole
- * (`middleware.ts`, as Eden's needles were) and its parts; a prompt keeps a dotted name whole and gives no parts of it
- * (P4.1: "Node.js" split to "node" admitted a mined node-version fact on an R1 hard negative, until P4.3's τ).
+ * Words are read with R1's tokenizer (`benchmarks/memory-cues/lex.ts`, which D17's BM25F was measured with): a term is
+ * 2 characters or more, no stop word (R1's and Eden's own), no number of 1–2 digits, plurals stemmed (`singular`). A
+ * row's text gives each compound identifier (`apps/web/middleware.ts`, `T-1264`) whole, its dotted segments whole
+ * (`middleware.ts`, as Eden's needles were) and its parts; a prompt is identifier-split as every cue part is (A7 §3,
+ * `cueTokens`): "Node.js" gives node.js, node and js. A shared part alone admits nothing below τ_repo (P4.3), which
+ * P4.1 kept the prompt's names whole for ("node" had admitted a mined node-version fact on an R1 hard negative).
  */
 import type { MemoryRecord } from "./index";
-import { queryHay, singular } from "./memory-cue";
+import { cueTokens, queryHay, singular } from "./memory-cue";
 import { isCited, isUntyped } from "./memory-provenance";
+import { copulaSlot } from "./memory-residual";
 import { slotLabel } from "./memory-slots";
 import { WRITE_ALIASES } from "./memory-sota";
 
@@ -158,9 +161,9 @@ function placeWords(rec: Pick<MemoryRecord, "tags" | "cite" | "scope">): Set<str
   return isCited(rec) ? new Set([...queryHay(rec.scope ?? ""), (rec.scope ?? "").toLowerCase()]) : undefined;
 }
 
-/** A prompt's terms (see the header): its words, a dotted name whole (`queryHay`). */
+/** A prompt's terms (see the header): its words and each identifier's parts (`cueTokens`). */
 export function promptTerms(text: string): Set<string> {
-  return cueTerms(queryHay(text));
+  return cueTerms(cueTokens(text));
 }
 
 /** Tokens a cue part already split (`cueTokens`), as terms. */
@@ -177,7 +180,8 @@ export type RowFields = Readonly<Record<Field, readonly string[]>>;
  * A row's fields (see the header). A mined row's folder is where it is true, which the read set decides (A4 §2),
  * not what it is about: its text's folder words are not its needles. Its aliases are the alias words of its tags
  * (`writeAliasTags`' expansions) that its text does not hold; its keys' values and subjects come from its stored D7
- * keys (A4 §3.1).
+ * keys (A4 §3.1), or, for a row the user typed that states no D7 slot, from the legacy copula reader, as D26 reads a
+ * fact of no D7 slot (`copulaSlot`: "The package manager is pnpm" has the subject "package manager", the value pnpm).
  */
 export function rowFields(rec: Pick<MemoryRecord, "text" | "tags" | "slots" | "cite" | "scope">): RowFields {
   const place = placeWords(rec);
@@ -193,6 +197,13 @@ export function rowFields(rec: Pick<MemoryRecord, "text" | "tags" | "slots" | "c
   for (const key of rec.slots ?? []) {
     if (key.v) value.push(...textTerms(key.v));
     subject.push(...textTerms(slotLabel(key.k)));
+  }
+  if (!rec.slots?.length && !isUntyped(rec)) {
+    const slot = copulaSlot(rec.text);
+    if (slot) {
+      value.push(...textTerms(slot.value));
+      subject.push(...textTerms(slot.subject));
+    }
   }
   return { value, subject, alias: [...new Set(alias)], body };
 }
@@ -228,7 +239,7 @@ export function idf(corpus: Corpus, term: string): number {
 
 /**
  * One term's BM25F contribution to a row, as R1 scored it (`lex.ts`): its weighted frequency, each field's normalized
- * by that field's length against its mean (at least 1), saturated by k1. On R1's scale, so P4.3's τ can start at R1's
+ * by that field's length against its mean (at least 1), saturated by k1. On R1's scale, so τ_repo starts at R1's
  * points (3.2, 4.1).
  */
 export function termScore(term: string, fields: RowFields, corpus: Corpus): number {

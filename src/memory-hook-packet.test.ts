@@ -6,6 +6,9 @@ import { openMemory } from "./index";
 import { ageInWords, declarativeBullet, PACKET_SOFT_BULLETS, renderPacket, shapePacket } from "./memory-hook-packet";
 import type { ProvenanceNote } from "./memory-provenance";
 import { MEMORY_PACKET_MARK, stripMemoryPacket } from "./memory-sota";
+import { cuesBelowTau } from "../scripts/test-below-tau";
+
+cuesBelowTau();
 
 const NOW = Date.parse("2026-10-05T12:00:00Z");
 const ago = (ms: number) => NOW - ms;

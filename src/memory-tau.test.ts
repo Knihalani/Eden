@@ -23,6 +23,7 @@ import {
   TRUSTED_SILENCE,
   trimSilence,
   writeTau,
+  type TauRecord,
 } from "./memory-tau";
 import { promptHash } from "./memory-turn";
 import { sleep } from "./sleep";
@@ -38,8 +39,17 @@ function tempDir(): string {
   return dir;
 }
 
-const record = (norm: number) =>
-  ({ v: 1, norm, source: "fit", n: 300, strong: 0, meanIdf: 1, scores: [], logged: 0, at: 0 }) as const;
+const record = (norm: number): TauRecord => ({
+  v: 1,
+  norm,
+  source: "fit",
+  n: 300,
+  strong: 0,
+  meanIdf: 1,
+  scores: [],
+  logged: 0,
+  at: 0,
+});
 
 describe("τ_repo's scale", () => {
   test("mean idf is the mean of each distinct term's idf (R1's formula, never negative)", () => {
@@ -103,7 +113,8 @@ describe("the silence log (A7 §4: logged human prompts with no evidence, and ac
 function seeded(dir: string, perRepo = false) {
   const mem = openMemory(perRepo ? { dir, perRepo: true } : { dir });
   mem.quiet(() => {
-    for (let i = 0; i < 30; i++) mem.remember(`Gadget ${i} stores its q${i}x values in the w${i}a table.`, { kind: "fact" });
+    for (let i = 0; i < 30; i++)
+      mem.remember(`Gadget ${i} stores its q${i}x values in the w${i}a table.`, { kind: "fact" });
     mem.remember("Every python function in tools/ is typed with mypy strict.", { kind: "fact" });
   });
   mem.refreshPostings();

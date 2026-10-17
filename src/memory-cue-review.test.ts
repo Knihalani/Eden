@@ -9,6 +9,9 @@ import { join } from "node:path";
 import { openMemory, type MemoryRecord } from "./index";
 import { situationCue } from "./memory-cue";
 import { admitsEpisode } from "./memory-gate";
+import { cuesBelowTau } from "../scripts/test-below-tau";
+
+cuesBelowTau();
 
 const dirs: string[] = [];
 afterEach(() => {

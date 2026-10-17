@@ -22,6 +22,9 @@ import {
 import * as edenMem from "./index";
 import { SemanticStore } from "./semantic-store";
 import { storeFor } from "./memory-repo";
+import { cuesBelowTau } from "../scripts/test-below-tau";
+
+cuesBelowTau();
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/36
 

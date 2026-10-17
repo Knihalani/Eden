@@ -9,6 +9,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { injectedPackets, openMemory, storeRows, type MemoryRecord } from "../../../src/index";
 import { memoryHookResponse } from "./memory-hook";
+import { cuesBelowTau } from "../../../scripts/test-below-tau";
+
+cuesBelowTau();
 
 const SESSION = "s-trust";
 
