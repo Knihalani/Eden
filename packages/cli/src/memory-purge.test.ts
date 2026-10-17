@@ -21,7 +21,6 @@ import { openMemory, type MemoryRecord } from "../../../src/index";
 import { rowFields } from "../../../src/memory-bm25f";
 import { SNAPSHOT_FILE, writeSnapshot } from "../../../src/memory-postings";
 import { logSilence, SILENCE_FILE } from "../../../src/memory-tau";
-import { promptHash } from "../../../src/memory-turn";
 import { memoryCli } from "./memory-import";
 
 const SECRET = "zq-secret-4821937";
@@ -194,11 +193,11 @@ describe("eden memory purge", () => {
     expect(existsSync(join(store, SNAPSHOT_FILE))).toBe(false);
   });
 
-  // P4.3: a silence log holds hashes of prompts (τ_repo's refit), which no pattern can match.
+  // P4.3: a silence log holds the prompt_ids of prompts (τ_repo's refit), which no pattern can match.
   test("every purge deletes the silence logs", async () => {
     const store = join(root, "repos", "r1");
     mkdirSync(store, { recursive: true });
-    logSilence(store, "empty", promptHash("the deploy token is tok4821937abc"), 1);
+    logSilence(store, "empty", "turn-1", 1);
     put(join(root, "s9", "memories.jsonl"), JSON.stringify({ id: "z", text: "token tok4821937abc", t: 1 }) + "\n");
     expect(existsSync(join(store, SILENCE_FILE))).toBe(true);
     expect((await run(["purge", "tok[0-9]+abc"])).code).toBe(0);
