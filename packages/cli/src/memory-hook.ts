@@ -1371,7 +1371,6 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
     try {
       situation = situationOf(ctx, recent, prev, turn);
     } catch {}
-  mem.gateFlag = flags["gate.tau"].mode;
   if (prompt && isAnswered(turn) && answer !== "off" && !aborted(ctx))
     notes = mem.recall(cue, encode, place && visibleFrom(place), { situation });
   else if (prompt) mem.observeCue(cue, undefined, encode);
@@ -1382,8 +1381,8 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   // what the last turns already say (D26), then what this window was already given (the ledger, which also marks
   // `Updated:` items); the epoch's budget (A4 §4); shape (step 8).
   const parts = situation
-    ? gateParts(prompt, recent.previousTyped, situation)
-    : { prompt, turn: recent.previousTyped, prev };
+    ? { ...gateParts(prompt, recent.previousTyped, situation), requests: flags["gate.tau"].mode === "on" }
+    : { prompt, turn: recent.previousTyped, prev, requests: flags["gate.tau"].mode === "on" };
   const shadow = shadowSentences(win, ctx.place);
   const invalid = readInvalidations(mem.dir);
   const catalog = ctx.repoScopes()?.scopes;
@@ -1540,6 +1539,8 @@ function respond(
   });
   const place = { repo: scopesAt.get, working: () => placed.get()?.readSet[0] ?? "" };
   const mem = hookMemory({ dir: store, session: resolved.session, child: resolved.child, cwd, place });
+  // P4.3: every reader of this event (Submit, SubagentStart, PreCompact) gates by the event's flags.
+  mem.gateFlag = flags["gate.tau"].mode;
   const ctx: HookContext = {
     r,
     event,
