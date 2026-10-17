@@ -26,9 +26,19 @@ describe("finding 1: a newer typed statement the extractor leaves unkeyed is hid
   // 40851abb0: every case returns the older keyed value; main returns the newer statement.
   const cases: [string, string, string, string][] = [
     ["The database is postgres.", "The database is the managed cluster on neon.", "what database do we use?", "neon"],
-    ["The database is postgres.", "The database is now the shared one in frankfurt.", "what is the database?", "frankfurt"],
+    [
+      "The database is postgres.",
+      "The database is now the shared one in frankfurt.",
+      "what is the database?",
+      "frankfurt",
+    ],
     ["The test runner is jest.", "The test runner is our in-house harness.", "which test runner do we use?", "harness"],
-    ["The package manager is pnpm.", "The package manager is whatever corepack pins.", "the package manager is?", "corepack"],
+    [
+      "The package manager is pnpm.",
+      "The package manager is whatever corepack pins.",
+      "the package manager is?",
+      "corepack",
+    ],
   ];
   for (const [older, newer, cue, word] of cases)
     test(`"${newer}" is not displaced by "${older}"`, () => {
@@ -73,6 +83,8 @@ describe("finding 3: seed collisions name a slot on prompts that are not about i
     ["the log in the console says null"], // auth.provider
     ["implement the parser per the spec"], // test.runner: "spec" = specification
     ["let us set up a meeting tomorrow"], // setup bundle: "let us" is not ownership
+    ["is US hosting cheaper than EU hosting?"], // round 2: the country US is not ownership
+    ["what's the best database for the US market?"],
   ])("%s", (prompt) => {
     expect(cuedSlots(prompt)).toEqual([]);
   });
@@ -96,6 +108,12 @@ describe("finding 3 (judgement): general-knowledge questions about a slot's topi
   // Kept: P3.4's seeds, which main names the package manager by too; the full-scale FIR and the guards decide.
   test.each([["what is a lockfile in general?"], ["how do I go about installing rust on windows?"]])("%s", (prompt) => {
     expect(cuedSlots(prompt)).toEqual(["pkg.manager"]);
+  });
+});
+
+describe("round 2: setting up this monorepo on my laptop names the setup bundle", () => {
+  test("set up this monorepo on my laptop", () => {
+    expect(cuedSlots("set up this monorepo on my laptop")).toEqual(["pkg.manager", "node.version"]);
   });
 });
 
