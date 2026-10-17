@@ -80,6 +80,8 @@ export interface CueParts {
   path?: string;
   prev?: string;
   strong?: ReadonlySet<string>;
+  /** Whether a typed request is an episode here: only with P4.3's gate on (`gate.tau`, `isEpisode`). */
+  requests?: boolean;
 }
 
 /** Whether A7 §4 admits an episode on this cue (see the header). */
@@ -94,33 +96,41 @@ export function admitsEpisode(note: ProvenanceNote, cue: CueParts): boolean {
 }
 
 /**
- * A request's opening: a request verb after a few discourse words ("Now add a logout button …", "please fix the build",
- * "Reply with just OK"), the verb followed by its object or its direction ("the", "a", "it", "with", "into", …). The
- * verbs leave out those that often open a statement as a noun ("List endpoints use cursor pagination") or a standing
- * rule ("Make sure …", "Keep diffs small"), and a verb used as a noun is no request ("Help text for the CLI lives in
- * …", "Fix versions in Jira map to …", "Review apps deploy to …", "Find-in-page uses …").
+ * A request's opening: a request verb, after a few discourse words, then a space ("Now add a logout button …", "please
+ * fix the build", "update deps", "Reply with just OK"). The verbs leave out those that often open a statement as a
+ * noun ("List endpoints use cursor pagination") or a standing rule ("Make sure …", "Keep diffs small").
  */
 const REQUEST = new RegExp(
-  String.raw`^\s*(?:(?:now|then|ok|okay|also|next|please|so|and|first)[,!.]?\s+)*(?:let'?s\s|(?:add|fix|create|` +
-    String.raw`write|update|remove|delete|rename|move|refactor|implement|try|explain|find|open|close|help|clean|debug|` +
-    String.raw`investigate|dig|research|reply|tell|give|go|continue|show|look|review)\s+(?:the|a|an|this|that|these|` +
-    String.raw`those|it|them|me|us|my|our|your|some|all|any|up|out|with|to|for|on|in|into|at|how|why|what|where|` +
-    String.raw`whether|if)\b)`,
+  String.raw`^\s*(?:(?:now|then|ok|okay|also|next|please|so|and|first)[,!.]?\s+)*(?:let'?s|add|fix|create|write|` +
+    String.raw`update|remove|delete|rename|move|refactor|implement|try|explain|find|open|close|help|clean|debug|` +
+    String.raw`investigate|dig|research|reply|tell|give|go|continue|show|look|review)\s`,
   "i",
 );
+/**
+ * A verb that states what is after a request's opening: the opening's verb was a noun ("Help text for the CLI lives in
+ * …", "Fix versions in Jira map to …", "Review apps deploy to …"), so the row is a statement.
+ */
+const STATED =
+  /\b(?:is|are|was|were|lives|live|uses|runs|goes|go|maps|map|deploys|deploy|points|holds|has|have|means|sits|stays)\b/i;
+
+/** Whether a row's text is a request the user typed (see `REQUEST`, `STATED`). */
+function isRequest(body: string): boolean {
+  const opening = REQUEST.exec(body);
+  return !!opening && !STATED.test(body.slice(opening[0].length));
+}
 
 /**
  * An episode as A7 §4's gate reads it: a row the user did not type (D17 as built in P0.2; a mined slot fact is not
- * one), or a request the user typed, stored as an episode: it states what they asked for, not what is true (A4 §3.0;
- * P0.2's one-off imperatives, "Reply with just OK"). A statement the user typed ("The billing service runs on port
- * 8080") is admitted as a fact is, on τ_repo.
+ * one), or, with `requests` (the gate on, `gate.tau`), a request the user typed, stored as an episode: it states what
+ * they asked for, not what is true (A4 §3.0; P0.2's one-off imperatives, "Reply with just OK"). A statement the user
+ * typed ("The billing service runs on port 8080") is admitted as a fact is, on τ_repo.
  */
-export function isEpisode(note: ProvenanceNote): boolean {
+export function isEpisode(note: ProvenanceNote, requests = true): boolean {
   if (isUntyped(note)) return !isCited(note);
-  return noteKindToken(note) === "episode" && REQUEST.test(stripPacketLabel(String(note.text ?? "")).body);
+  return requests && noteKindToken(note) === "episode" && isRequest(stripPacketLabel(String(note.text ?? "")).body);
 }
 
 /** The notes the gate admits, in their order: an episode (`isEpisode`) only on A7 §4's evidence, every other row. */
 export function admitNotes<T extends ProvenanceNote>(notes: readonly T[], cue: CueParts): T[] {
-  return notes.filter((note) => !isEpisode(note) || admitsEpisode(note, cue));
+  return notes.filter((note) => !isEpisode(note, cue.requests ?? false) || admitsEpisode(note, cue));
 }

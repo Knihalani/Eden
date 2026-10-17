@@ -1052,16 +1052,22 @@ function named(cue: string, { slots, re }: ReturnType<typeof lexicon>): Set<Slot
 }
 
 /**
- * A question asking for a slot's value itself (P4.3): its whole object is an alias ("what is auth", "what's the
- * database?", "which test runner?"), so no other word competes; "what is the idiomatic way to structure JWT auth
- * middleware" and "what are database indexes" ask about something else. An alias that names a technology itself
- * ("node", "python", "github") is left out: "what is node" asks what Node is.
+ * A question asking for a slot's value itself (P4.3): its whole object is an alias that names the slot's role ("what
+ * is auth", "what's the database?", "which test runner?"), so no other word competes; "what is the idiomatic way to
+ * structure JWT auth middleware" and "what are database indexes" ask about something else. An alias that names a
+ * technology ("node", "python", "github") or a general concept ("sso", "ci", "deployment", "hosting", "testing",
+ * "linting", "orm") is left out: "what is node", "what is sso" ask what it is.
  */
-const TECHNOLOGY_ALIASES = new Set(["node", "node.js", "nodejs", "python", "typescript", "github", "gh"]);
+const NOT_A_ROLE = new Set([
+  ...["node", "node.js", "nodejs", "python", "typescript", "github", "gh"],
+  ...["sso", "ci", "continuous integration", "deployment", "deployments", "deploys", "deploy", "hosting"],
+  ...["testing", "tests", "unit tests", "formatting", "linting", "lint", "authentication", "commits"],
+  ...["commit messages", "framework", "orm"],
+]);
 const VALUE_QUESTION = new RegExp(
   String.raw`^\s*(?:so\s+|and\s+)?(?:what|which)(?:['’]s|\s+is|\s+are|\s+was)?\s+(?:the\s+|our\s+|my\s+)?(` +
     [...TOPIC_LEXICON.slots.keys()]
-      .filter((alias) => !TECHNOLOGY_ALIASES.has(alias))
+      .filter((alias) => !NOT_A_ROLE.has(alias))
       .sort((a, b) => b.length - a.length)
       .map(escape)
       .join("|") +
