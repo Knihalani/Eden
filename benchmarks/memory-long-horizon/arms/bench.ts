@@ -20,6 +20,7 @@ import {
   precisionByCategory,
   r1Cues,
   recallAt4,
+  recallByCategory,
   recallInContext,
   share,
   show,
@@ -71,7 +72,8 @@ const cuebenchCode: Arm = {
     const falseInjects = fir(ofR1);
     const reported =
       `test_nim: paraphrase recall@4 ${show(recallAt4(ofNim.filter((r) => r.cue.cat === "nim-para")))}, ` +
-      `negatives FIR ${show(fir(ofNim))}; precision ${JSON.stringify(precisionByCategory(ofR1))}`;
+      `negatives FIR ${show(fir(ofNim))}; recall ${JSON.stringify(recallByCategory(ofR1))}; ` +
+      `precision ${JSON.stringify(precisionByCategory(ofR1))}`;
     return [
       check("planted", true, outcome.detail),
       check("recall", share(recall) >= 0.5, `R1 test recall@4 ${show(recall)}; gate ≥ 0.50. ${reported}`),
