@@ -1,0 +1,577 @@
+{
+ "batch": "life-b12",
+ "author": "claude-subagent:stream-author-life-b12 + rewriter (rewrite.py)",
+ "sessions": [
+  {
+   "id": "life-s120",
+   "events": [
+    {
+     "t": "trigger",
+     "text": "[Scheduled 15:00] Weekend follow-ups: 'Payouts retry UX review' (Fri 7 Aug, 15:30-16:15, Aisha Rahman, Diego Fernández, Riya) ended with an outcome in the transcript. No write-up filed yet."
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "docs open \"Payouts retry UX review - transcript 2026-08-07\" --section summary"
+     },
+     "output": "Payouts retry UX review - auto-transcript (Google Meet)\nDate: 2026-08-07 15:30-16:15\nAttendees: Riya Malhotra, Aisha Rahman, Diego Fernández\n\n[15:41] Diego: merchants with 20+ failed payouts need a bulk retry, clicking one by one is painful\n[15:44] Aisha: bulk retry means a new batch endpoint plus idempotency work, that's two sprints we don't have before GA\n[15:52] Riya: ok, proposal: v1 ships per-payout retry only, bulk retry goes on the v1.1 list with Diego's flows attached\n[15:55] Diego: not thrilled, but fine, I'll park the bulk flows in Figma\n[15:56] Aisha: agreed\n[16:02] Riya: Diego to add an empty-state hint pointing to the CSV export for big batches\n[16:13] Meeting ended"
+    },
+    {
+     "t": "assistant",
+     "text": "Friday's retry review settled on shipping v1 with per-payout retry only; bulk retry moves to the v1.1 list. Diego argued for bulk retry but went along with it, and he owes an empty-state hint pointing to the CSV export. Nothing has been written up or shared since the call ended. Want me to draft a short write-up you can post for the team?"
+    },
+    {
+     "t": "human",
+     "k": 0,
+     "text": "not now. need failed payout breakdown by receiving bank for the past month, for wed's roadmap prep. can you get the data side on it"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "slack search \"failed payouts by bank\" --after 2026-07-01"
+     },
+     "output": "0 messages match \"failed payouts by bank\" (after 2026-07-01)\nRelated: 2 messages match \"failed payouts\"\n  #payouts-eng  2026-07-29  Aisha Rahman: failed payout reasons are now tagged in the ledger, see PAY-412\n  #payouts-eng  2026-07-30  bot: PAY-412 merged"
+    },
+    {
+     "t": "assistant",
+     "text": "Nobody has pulled this yet, though failed-payout reasons have been tagged in the ledger since PAY-412 merged on Thu 30 Jul, so the data should exist. I've drafted the ask:\n\n\"Hi, could you pull failed payouts for the last 30 days broken down by receiving bank, with counts and failure reasons? It's for roadmap prep on Wed 12 Aug. Thanks, Riya\"\n\nWho should I send it to, and as a DM or in a channel?"
+    },
+    {
+     "t": "notification",
+     "task": "Reconcile July credit card statement against the receipts folder",
+     "report": "Done. Matched 41 of 44 July transactions on the Visa statement to receipts in Drive/Receipts/2026-07.\nUnmatched:\n- Jul 06, Uber Eats, $38.22 (no receipt email found)\n- Jul 14, YVR Duty Free, $64.90 (paper receipt likely)\n- Jul 27, Shell Leslie St, $71.15\nNo duplicate charges found.\nSaved the match table to Drive/Receipts/2026-07/reconciliation.csv."
+    },
+    {
+     "t": "peer",
+     "from": "work-agent",
+     "text": "Weekend Slack/Linear digest (Sat 8 Aug):\n- 2 mentions: Olivia Grant in #sales-product asking for an updated pricing one-pager (no deadline given); Diego Fernández shared 'Retry flows v1' in Figma.\n- Linear: PAY-431 'Payout status webhook sends duplicate events' moved to In Review by Aisha.\n- No incidents. Payouts on-call quiet since Friday 18:00."
+    }
+   ]
+  },
+  {
+   "id": "life-s121",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "heading home past Te Aro, put in a pickup order pls, ready in 15 min"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "web open https://order.tearo.example.com/pickup"
+     },
+     "output": "Te Aro, 983 Queen St E - Pickup ordering\nOpen today until 20:00. Current pickup wait: 10-15 min\n\nMenu: espresso bar, drip, tea, bakery (full list in app)\nToday's specials: iced maple espresso tonic 5.75, peach iced tea 4.25\nBakery: morning bun, banana bread, ginger molasses cookie\nPayment on file: Visa ending 4417"
+    },
+    {
+     "t": "assistant",
+     "text": "Te Aro is open until 20:00 and the pickup wait is 10 to 15 minutes, so the timing works. What should I order for you? Send me the drink and milk and I'll put it in right away."
+    },
+    {
+     "t": "human",
+     "k": 1,
+     "text": "forget it, going home. remind me monday morning to renew leo's library card"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "reminders add \"Renew Leo's library card (expired) - TPL Pape/Danforth or online\" --at \"2026-08-10 08:30\""
+     },
+     "output": "Reminder created\n  id: rem_7f31c2\n  title: Renew Leo's library card (expired) - TPL Pape/Danforth or online\n  due: Mon 2026-08-10 08:30 America/Toronto\n  notify: push"
+    },
+    {
+     "t": "assistant",
+     "text": "Done, you'll get a reminder Mon 10 Aug at 08:30. Toronto Public Library cards can be renewed online with his card number, or at any branch."
+    },
+    {
+     "t": "notification",
+     "task": "Find a replacement patio umbrella under $80 that ships within a week",
+     "report": "Found 3 options that fit:\n1. Canadian Tire, CANVAS 9 ft tilt umbrella, navy, $69.99, in stock at Leaside, pickup tomorrow.\n2. Home Depot, Hampton Bay 9 ft market umbrella, beige, $74.98, ships in 3-5 days.\n3. Walmart, Mainstays 9 ft crank umbrella, grey, $49.97, ships in 5-7 days, reviews mention a weak crank.\nAll fit the existing 1.5 in table hole. Option 1 has the best reviews (4.5, 212 ratings).\nNothing ordered."
+    },
+    {
+     "t": "peer",
+     "from": "inbox-agent",
+     "text": "Evening triage (Sat 8 Aug): 9 new emails. 1 needs you: Northline Renovations sent the updated schedule PDF and asks you to confirm the countertop template date. 2 FYI: Morse Street PS summer newsletter; Air Canada survey for your July trip. 6 archived as promotions."
+    }
+   ]
+  },
+  {
+   "id": "life-s122",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "draft a linear ticket: payouts CSV export drops the currency column when a merchant has more than one payout account. P2, payouts project. dont file yet"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "linear search \"CSV export currency\" --project Payouts"
+     },
+     "output": "PAY-388  CSV export: dates in UTC instead of merchant timezone   Done      2026-06-18\nPAY-402  CSV export times out above 50k rows                     Backlog   2026-07-09\n(no open issue matches 'currency column')"
+    },
+    {
+     "t": "assistant",
+     "text": "No existing ticket covers this, so here's the draft (not filed):\n\n**Title:** CSV export drops currency column for merchants with multiple payout accounts\n**Project:** Payouts · **Priority:** P2\n**Description:** When a merchant has more than one payout account, the payouts CSV export omits the `currency` column entirely. Single-account merchants are unaffected.\n**Steps:** 1) Use a merchant with 2+ payout accounts (e.g. CAD and USD). 2) Payouts > Export CSV, any date range. 3) Open the file: no `currency` column.\n**Expected:** `currency` present on every row.\n**Related:** PAY-402 (export timeouts), same code path.\n\nSay the word and I'll file it."
+    },
+    {
+     "t": "peer",
+     "from": "calendar-agent",
+     "text": "Conflict found: 'Vendor demo: Modern Treasury' Thu 13 Aug 14:00-14:30 overlaps 'Payouts GA readiness check' Thu 13 Aug 14:00-14:45 (organizer: Aisha Rahman). The vendor demo was added from an email invite and has no other internal attendees. Suggest moving the demo; their calendar shows Thu 15:00 and Fri 10:00 open."
+    },
+    {
+     "t": "human",
+     "k": 1,
+     "text": "green bin day this week? holiday threw me off"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "web search \"Toronto collection calendar Leslieville week of August 10 2026\""
+     },
+     "output": "1. TOwaste - Collection schedule lookup | City of Toronto (toronto.example.ca/towaste)\n   Your collection day: WEDNESDAY. Week of Aug 10, 2026: Green Bin + Garbage. Week of Aug 17: Green Bin + Recycling.\n   Holiday note: collection was delayed one day the week of Aug 3 (Civic Holiday). Regular schedule resumes Aug 10.\n2. Collection calendar PDF 2026 - Zone 3 (toronto.example.ca/calendar-2026.pdf)"
+    },
+    {
+     "t": "assistant",
+     "text": "Wednesday, Wed 12 Aug, back to normal after the Civic Holiday delay. This week is green bin plus garbage; next week is green bin plus recycling. Bins out by 7:00."
+    },
+    {
+     "t": "human",
+     "k": 2,
+     "text": "background: find the carrier furnace warranty pdf, and list newsletters I never open to unsubscribe from"
+    },
+    {
+     "t": "assistant",
+     "text": "Started both in the background. I'll report back when each finishes."
+    },
+    {
+     "t": "notification",
+     "task": "Find the Carrier furnace warranty PDF in email and Drive",
+     "report": "Found it.\n- File: Carrier_Warranty_59SC5_Registration.pdf (Drive/Home/Appliances), also attached to an email from Carrier Canada dated 2021-11-04.\n- Model 59SC5B080E17, serial 2121A43817.\n- Coverage: 10-year parts limited warranty (registered), expires 2031-10-28. Labour not covered.\n- Heat exchanger: 20-year limited.\nAdded a shortcut to Drive/Home/Appliances/README."
+    },
+    {
+     "t": "notification",
+     "task": "List newsletters Riya never opens, as unsubscribe candidates",
+     "report": "Scanned the last 90 days of Gmail.\n12 senders with 0 opens and 4+ emails:\n- Wayfair Canada (31), Old Navy (24), Lenny's Podcast promos (11), Medium Daily Digest (88), Eventbrite Toronto (19), Sport Chek (22), Product Hunt Daily (63), Uber Eats offers (27), Hotels.com deals (14), CB Insights (12), Indeed job alerts (9), Fitbit tips (6).\nNone of them are receipts or account notices.\nI did not unsubscribe from anything. Reply with the ones to drop and I'll handle it."
+    }
+   ]
+  },
+  {
+   "id": "life-s123",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "Tanvi's landlord wants a 9% rent increase next year, condo in liberty village, built 2010 I think. legal in ontario?"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "web search \"Ontario rent increase guideline 2026 units occupied before November 2018\""
+     },
+     "output": "1. Rent increase guideline | ontario.example.ca\n   The 2026 rent increase guideline is 2.1%. It applies to most private residential rental units, including rented condominium units, first occupied for residential purposes before November 15, 2018.\n2. Above guideline increases (AGI) | Landlord and Tenant Board\n   A landlord must apply to the LTB to raise rent above the guideline, for example after major capital repairs. Tenants can dispute the application at a hearing.\n3. Notice of rent increase (Form N1) | tribunalsontario.example.ca\n   Landlords must give at least 90 days' written notice, and rent can only go up once every 12 months."
+    },
+    {
+     "t": "assistant",
+     "text": "No, not without LTB approval. A 2010 condo is covered by rent control, so for 2026 the cap is the 2.1% guideline.\n- Units first occupied before 15 Nov 2018 are capped; hers qualifies.\n- Anything above 2.1% needs an above-guideline increase approved by the Landlord and Tenant Board, which she can contest.\n- The landlord must give 90 days' written notice on Form N1, and only once every 12 months.\n- If she gets an N1 for 9% with no LTB application, she can simply pay the guideline amount.\n\nWant me to put the links and a short summary in a note she can use?"
+    },
+    {
+     "t": "peer",
+     "from": "school-portal",
+     "text": "Morse Street PS notice: The first day of school is Tuesday, September 8, 2026. Class lists will be posted on Edsby on Friday, September 4 after 15:00. Kindergarten staggered entry schedule is attached. Before-and-after-care registration closes Monday, August 24."
+    },
+    {
+     "t": "human",
+     "k": 1,
+     "text": "yes pls"
+    },
+    {
+     "t": "assistant",
+     "text": "On it, I'll put it together in the background."
+    },
+    {
+     "t": "notification",
+     "task": "Write a note for Tanvi on Ontario rent increase rules",
+     "report": "Created note 'Tanvi - rent increase (Ontario)' and a shareable copy.\nContents:\n- 2026 guideline: 2.1% for units first occupied before 2018-11-15\n- Above-guideline increases need an LTB order; tenant can dispute at the hearing\n- Form N1 required, 90 days' notice, max once per 12 months\n- What to do with a 9% N1 and no LTB application: pay the guideline amount, reply in writing\n- Links: Ontario guideline page, LTB AGI page, Form N1, Tenant Duty Counsel\nShare link: notes.example.com/s/k2v9tanvi"
+    },
+    {
+     "t": "human",
+     "k": 2,
+     "text": "perfect"
+    },
+    {
+     "t": "assistant",
+     "text": "The share link is notes.example.com/s/k2v9tanvi, ready to send her."
+    },
+    {
+     "t": "human",
+     "k": 3,
+     "text": "thx"
+    },
+    {
+     "t": "assistant",
+     "text": "Anytime."
+    },
+    {
+     "t": "human",
+     "k": 4,
+     "text": "rename the Scan_*.pdf files in Downloads by scan date"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "ls -l --time-style=+%Y-%m-%d ~/Downloads/Scan_*.pdf"
+     },
+     "output": "-rw-r--r-- 1 riya staff  412883 2026-07-21 Scan_0001.pdf\n-rw-r--r-- 1 riya staff  398102 2026-07-21 Scan_0002.pdf\n-rw-r--r-- 1 riya staff 1203344 2026-08-02 Scan_0003.pdf\n-rw-r--r-- 1 riya staff  221907 2026-08-11 Scan_0004.pdf\n-rw-r--r-- 1 riya staff  560014 2026-08-12 Scan_0005.pdf"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "cd ~/Downloads && for f in Scan_*.pdf; do d=$(stat -f %Sm -t %Y-%m-%d \"$f\"); n=1; t=\"$d-scan.pdf\"; while [ -e \"$t\" ]; do n=$((n+1)); t=\"$d-scan-$n.pdf\"; done; mv \"$f\" \"$t\" && echo \"$f -> $t\"; done"
+     },
+     "output": "Scan_0001.pdf -> 2026-07-21-scan.pdf\nScan_0002.pdf -> 2026-07-21-scan-2.pdf\nScan_0003.pdf -> 2026-08-02-scan.pdf\nScan_0004.pdf -> 2026-08-11-scan.pdf\nScan_0005.pdf -> 2026-08-12-scan.pdf"
+    },
+    {
+     "t": "assistant",
+     "text": "Renamed all 5. Two were scanned the same day (21 Jul), so the second got a -2 suffix."
+    }
+   ]
+  },
+  {
+   "id": "life-s124",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "finally reading. leo's at a party till 4, house so quiet lol"
+    },
+    {
+     "t": "assistant",
+     "text": "Two whole hours of quiet on a Saturday sounds glorious. Enjoy the book, I'll keep things to myself unless something actually needs you."
+    },
+    {
+     "t": "trigger",
+     "text": "[Scheduled 14:00] Weekly inbox sweep"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "mail search \"is:unread after:2026-08-08\" --limit 20"
+     },
+     "output": "id        from                      subject                                         date\nm_88a1    Toronto Hydro             Your August bill is ready                       Aug 14\nm_88a4    Morse Street PS           Before/after care registration reminder         Aug 13\nm_88b0    Figma                     Diego Fernández commented on 'Retry flows v1'   Aug 13\nm_88b7    LinkedIn                  You appeared in 14 searches this week           Aug 12\nm_88c2    Canada Post               Delivery notice: parcel left at side door       Aug 12\nm_88c9    Spotify                   Your week in music                              Aug 10\n6 results"
+    },
+    {
+     "t": "assistant",
+     "text": "Weekly sweep, nothing urgent:\n- Toronto Hydro August bill is ready (auto-pay, no action).\n- Morse Street PS reminder: before/after care registration closes Mon 24 Aug.\n- Diego left a Figma comment on 'Retry flows v1'.\n- Canada Post left a parcel at the side door on Wed 12 Aug.\nArchived the LinkedIn and Spotify emails."
+    }
+   ]
+  },
+  {
+   "id": "life-s125",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "has my passport renewal status changed? applied end of july"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "web open https://passport-status.example.gc.ca/check --ref P-2026-0729-77341"
+     },
+     "output": "Passport application status\nReference: P-2026-0729-77341\nApplicant: MALHOTRA, RIYA\nSubmitted: 2026-07-29 (Service Canada, Scarborough Town Centre)\nStatus: PRINTED - in transit\nUpdated: 2026-08-14\nExpected delivery: by 2026-08-21 by mail"
+    },
+    {
+     "t": "assistant",
+     "text": "Yes, it moved: printed and in transit as of Fri 14 Aug, expected by mail by Fri 21 Aug. Plenty of margin for December."
+    },
+    {
+     "t": "notification",
+     "task": "Get three quotes for gutter cleaning before October",
+     "report": "Collected 3 quotes for a semi-detached, 2 storeys, front and back gutters plus downspouts:\n- Clean Gutters Toronto: $189, available Sep 12 or Sep 19\n- iWash Exterior: $215 including a photo report, available Sep 5\n- Leaside Handyman Co.: $160, cash only, earliest Oct 3\nAll include debris haul-away. None booked.\nNote: Leaside Handyman has fewer reviews (14) than the others."
+    },
+    {
+     "t": "human",
+     "k": 1,
+     "text": "250 euros in CAD? the alfama apartment wants a damage deposit"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "fx convert 250 EUR CAD"
+     },
+     "output": "250.00 EUR = 371.40 CAD\nrate: 1 EUR = 1.48560 CAD\nreference date: 2026-08-14 (latest published, Bank of Canada)\nnext update: 2026-08-17 16:30 ET"
+    },
+    {
+     "t": "assistant",
+     "text": "371.40 CAD (250 EUR), at the 2026-08-14 rate of 1.4856. Your card's rate will likely add 2 to 2.5% on top unless you pay with a no-FX-fee card. Damage deposits are usually a hold, so it should come back after checkout."
+    },
+    {
+     "t": "notification",
+     "task": "Track the price of the Brother HL-L2460DW laser printer at Best Buy and Staples",
+     "report": "Price check (Mon 17 Aug):\n- Best Buy: $189.99, no change since last week\n- Staples: $169.99 (was $199.99), sale ends Aug 23\n- Costco.ca: out of stock\nLowest seen in the last 30 days: $169.99.\nNo order placed."
+    }
+   ]
+  },
+  {
+   "id": "life-s126",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "show me this month's personal notes, going to tidy them"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "notes list --folder Personal --since 2026-08-01"
+     },
+     "output": "Personal (7 notes since 2026-08-01)\n\n2026-08-03  Lisbon - things Leo might like\n            tram 28 early morning, Oceanário, pastel de nata class?\n2026-08-06  Gift ideas (misc)\n            Hannah: thank-you for the pool party, maybe a nice olive oil\n2026-08-12  Back to school\n            new indoor shoes, label everything, lunch bag zipper broken\n2026-08-17  Sleep\n            Decided (August 2026): stop caffeine after 2 pm. It's been hurting my sleep, awake at 1am three nights last week.\n2026-08-18  Sleep (2)\n            day 2 no afternoon coffee, fell asleep by 11\n2026-08-20  Spanish - reading\n            Reading 'Como agua para chocolate' in Spanish, one chapter a week. Practice for the DELE reading section. Ch. 1 (Enero) done.\n2026-08-21  Spanish - words to look up\n            rebozo, champurrado, torreja, nata"
+    },
+    {
+     "t": "assistant",
+     "text": "Seven notes; here's how I'd tidy them:\n- Merge the two Sleep notes into one: the rule is no caffeine after 2 pm, decided in August 2026 because it was hurting your sleep, plus the day-by-day log underneath.\n- Merge the two Spanish notes: you're reading 'Como agua para chocolate' in Spanish, one chapter a week, as DELE reading section practice (Chapter 1 done), with the look-up words as a list below.\n- Keep Lisbon, Gift ideas and Back to school as they are.\nWant me to do the merges?"
+    },
+    {
+     "t": "peer",
+     "from": "finance-agent",
+     "text": "August spending to date (1-22 Aug): $3,912 across the TD joint account and your Visa. Groceries $684 (on pace, slightly under July), dining $211, kids' activities $340. Two items to check: a $14.99 charge from 'AUDIBLE*CA' you haven't had before, and the Toronto Hydro bill auto-paid at $142.37, up 18% on August last year (A/C)."
+    },
+    {
+     "t": "notification",
+     "task": "Find two weekend activities for Leo near Leslieville for late August",
+     "report": "Two options for Sat 29 / Sun 30 Aug:\n1. Riverdale Park East, free outdoor movie night Sat 29 Aug, 20:15, 'Paddington in Peru', bring blankets.\n2. Evergreen Brick Works, Sunday kids' nature walk, 10:00-11:30, $12 per child, registration required, 6 spots left.\nBoth are under 10 minutes by car. Nothing booked."
+    },
+    {
+     "t": "human",
+     "k": 1,
+     "text": "heel's sore again first thing in the morning after my run with marcus. book me a physio next week, after work or saturday"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "web search \"physiotherapy Leslieville sports injury evening Saturday appointments\""
+     },
+     "output": "1. Queen East Physio & Sport, 1150 Queen St E. Mon-Thu until 20:00, Sat 9:00-14:00. Direct billing. 4.8 (312 reviews)\n2. Leslieville Physiotherapy Clinic, 721 Queen St E. Mon-Fri until 19:00. 4.7 (188 reviews)\n3. Riverside Sports Medicine, 650 Queen St E. Sat 8:00-13:00. 4.6 (97 reviews)"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "book availability --place \"Queen East Physio & Sport\" --service \"Initial physio assessment\" --from 2026-08-24 --to 2026-08-29"
+     },
+     "output": "Queen East Physio & Sport - Initial physiotherapy assessment (60 min, $120)\nMon 24 Aug  17:30  (Jamie Ko, PT)\nWed 26 Aug  18:15  (Jamie Ko, PT)\nThu 27 Aug  19:00  (Sara Bhatt, PT)\nSat 29 Aug  10:30  (Sara Bhatt, PT)"
+    },
+    {
+     "t": "assistant",
+     "text": "Queen East Physio & Sport (4.8, direct billing) has the best fit. Openings for a 60-minute initial assessment, $120:\n- Mon 24 Aug, 17:30\n- Wed 26 Aug, 18:15\n- Thu 27 Aug, 19:00\n- Sat 29 Aug, 10:30\nWhich one should I book? Until then, ice and taking it easy on the next run should help."
+    },
+    {
+     "t": "human",
+     "k": 2,
+     "text": "reorder the usual compostable poop bags"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "shop history --query \"poop bags\" --limit 1"
+     },
+     "output": "2026-06-03  Earth Rated compostable poop bags, unscented, 120 ct (8 rolls)  $17.99  Pet Valu (delivery)"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "shop order --store \"Pet Valu\" --item \"Earth Rated compostable poop bags, unscented, 120 ct\" --qty 1 --delivery standard"
+     },
+     "output": "Order placed\n  store: Pet Valu\n  order: PV-2290184\n  item: Earth Rated compostable poop bags, unscented, 120 ct x1\n  subtotal: $17.99  tax: $2.34  delivery: $0.00 (free over $15)\n  total: $20.33\n  arriving: Wed 26 Aug"
+    },
+    {
+     "t": "assistant",
+     "text": "Ordered the same Earth Rated unscented 120-count from Pet Valu, $20.33 with tax, free delivery, arriving Wed 26 Aug."
+    },
+    {
+     "t": "peer",
+     "from": "work-agent",
+     "text": "Heads-up: Aisha Rahman posted in #payouts-eng (Sat 21:10): staging payouts are failing with 'bank_timeout' for one partner since ~20:30. She's investigating and says it's not affecting production. No action needed from you tonight; I'll include the outcome in Monday's digest."
+    },
+    {
+     "t": "notification",
+     "task": "Check Audible charge on the Visa statement",
+     "report": "The $14.99 'AUDIBLE*CA' charge on Aug 19 is the first paid month of an Audible Premium Plus membership.\nThe free trial started Jul 19 from Sam's Amazon account, which uses your Visa as the default card.\nMembership renews monthly at $14.99. One credit is unused.\nNothing cancelled; you may want to ask Sam whether he meant to keep it."
+    },
+    {
+     "t": "human",
+     "k": 3,
+     "text": "shorter answers pls"
+    },
+    {
+     "t": "assistant",
+     "text": "Got it. Shorter from here."
+    },
+    {
+     "t": "notification",
+     "task": "Merge duplicate contacts in Google Contacts",
+     "report": "Merged 6 duplicate pairs (same phone or email):\n- Hannah Cho (x2)\n- Northline Renovations / Nate Northline\n- Morse Street PS office (x2)\n- Pet Valu Leslieville (x2)\n- Dr. Patel's clinic (x2)\n- Leslieville Pharmacy (x2)\nNo contacts deleted. 412 contacts remain."
+    },
+    {
+     "t": "human",
+     "k": 4,
+     "text": "add 'call plumber re basement laundry tap dripping' to monday's to-do"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "todo add \"Call plumber re basement laundry tap dripping\" --due 2026-08-24 --list Home"
+     },
+     "output": "Added to Home: \"Call plumber re basement laundry tap dripping\" (due Mon 2026-08-24)"
+    },
+    {
+     "t": "assistant",
+     "text": "Added for Mon 24 Aug."
+    },
+    {
+     "t": "human",
+     "k": 5,
+     "text": "bed soon. sam fell asleep on the couch 20 min into the movie again lol"
+    },
+    {
+     "t": "assistant",
+     "text": "A classic. Sounds like a full, good day. Sleep well."
+    }
+   ]
+  },
+  {
+   "id": "life-s127",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "going with the Bosch 800 Series dishwasher, $1,649 at Canadian Appliance Source, quieter for the price than the Miele. text nate the model for the cabinet opening"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "web search \"Bosch 800 Series dishwasher SHP78CM5N dimensions cutout\""
+     },
+     "output": "1. Bosch 800 Series SHP78CM5N - Specs | bosch-home.example.ca\n   Cutout: 24\" W x 33 7/8\" to 34 1/2\" H x 24\" D (60.9 x 86.0-87.6 x 61.0 cm). 42 dBA. Pocket handle, stainless.\n2. Canadian Appliance Source - Bosch 800 Series SHP78CM5N, $1,649"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "msg send --to Nate \"Hi Nate, it's Riya. We picked the dishwasher: Bosch 800 Series SHP78CM5N (stainless, pocket handle). Cutout 60.9 cm W x 86.0-87.6 cm H x 61.0 cm D. Spec sheet: bosch-home.example.ca/SHP78CM5N. Thanks!\""
+     },
+     "output": "Sent to Nate (Northline Renovations) at 22:53"
+    },
+    {
+     "t": "assistant",
+     "text": "Texted Nate the model, SHP78CM5N, with the cutout size in cm and a spec sheet link. It's rated 42 dBA, so it should be nice and quiet."
+    },
+    {
+     "t": "notification",
+     "task": "Compare grout sealers for the kitchen backsplash",
+     "report": "Three penetrating grout sealers suited to a kitchen backsplash:\n- Miracle Sealants 511 Impregnator, 946 mL, $42.97 at Home Depot, reapply every 3-5 years\n- Aqua Mix Sealer's Choice Gold, 946 mL, $54.99 at Tile Depot, best stain test results in reviews\n- StoneTech BulletProof, 710 mL, $49.98 at Lowe's\nAll are water-based and food-safe once cured (72 h). Nate's crew may already include sealing: worth asking before buying."
+    },
+    {
+     "t": "trigger",
+     "text": "[Calendar] 'Send bio + headshot to FinTech Toronto (panel Thu 27 Aug)' due tomorrow 09:00"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "mail read m_87f2"
+     },
+     "output": "From: events@fintechto.example.org\nTo: Riya Malhotra\nDate: Aug 14, 2026\nSubject: FinTech Toronto - panel 'Getting paid faster' Thu 27 Aug\n\nHi Riya,\n\nThanks again for joining the panel on Thursday, August 27 (18:30, MaRS Discovery District).\nCould you send us by Sunday, August 23:\n- a short bio (60-80 words, third person)\n- a headshot (square, at least 800 px)\n\nOther panelists: Dana Whitford (Wealthsimple), Arjun Kapoor (Shopify Payments).\n\nThanks,\nMeghan\nFinTech Toronto"
+    },
+    {
+     "t": "assistant",
+     "text": "Reminder: FinTech Toronto wants your bio (60 to 80 words, third person) and a square headshot by tomorrow, Sun 23 Aug, for Thursday's 'Getting paid faster' panel. I can draft the bio tonight so it's ready when you wake up. Is there anything you want in it beyond your current role, and which headshot should I send?"
+    }
+   ]
+  },
+  {
+   "id": "life-s128",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "did the dentist confirm our november appts, mine and leo's?"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "mail search \"Danforth Smiles appointment\" --after 2026-08-01"
+     },
+     "output": "id        from                         subject                                    date\nm_8a31    Danforth Smiles              Appointment confirmation - Nov 3, 2026     Aug 21\n1 result"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "mail read m_8a31"
+     },
+     "output": "From: Danforth Smiles <frontdesk@danforthsmiles.example.ca>\nTo: Riya Malhotra\nDate: Fri, Aug 21, 2026\nSubject: Appointment confirmation - Nov 3, 2026\n\nHi Riya,\n\nThis confirms the following appointments with Dr. Lin at 822 Danforth Ave:\n\n  Riya Malhotra   Cleaning   Tuesday 2026-11-03   8:00 am\n  Leo Malhotra    Checkup    Tuesday 2026-11-03   8:45 am\n\nPlease arrive 10 minutes early. Cancellations need 48 hours' notice.\nReply C to confirm or call 416-555-0182 to reschedule.\n\nDanforth Smiles"
+    },
+    {
+     "t": "assistant",
+     "text": "Yes, confirmed on Fri 21 Aug, both with Dr. Lin on Tue 3 Nov (2026-11-03):\n- You: cleaning at 8:00 am\n- Leo: checkup right after, at 8:45 am\nThey ask you to arrive 10 minutes early. Want me to add both to the calendar and reply C to confirm?"
+    },
+    {
+     "t": "peer",
+     "from": "calendar-agent",
+     "text": "Note for Tue 3 Nov: the 8:00-9:30 dentist window would make Leo late for school (bell at 8:45). Suggest letting the school know through Edsby closer to the date. No calendar conflicts otherwise."
+    }
+   ]
+  },
+  {
+   "id": "life-s129",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "which camp did we end up with this summer? and why did we say no to the other one. hannah's asking for next year"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "mail search \"camp registration 2026\" --after 2026-01-01"
+     },
+     "output": "0 results for \"camp registration 2026\" (Jan 1 - Aug 24, 2026)"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "notes search \"camp\""
+     },
+     "output": "No notes match \"camp\"."
+    },
+    {
+     "t": "assistant",
+     "text": "I can't find it: nothing in your email under camp registration this year and no notes about camps, so it was probably booked by phone or through Sam's email. Do you remember the camp's name? With that I can pull the receipt and dates for Hannah, or I can ask Sam."
+    }
+   ]
+  }
+ ]
+}

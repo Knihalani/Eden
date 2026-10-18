@@ -1,0 +1,12958 @@
+{
+ "world": "life-short",
+ "seed": 1,
+ "author": "plan.py (deterministic)",
+ "config": {
+  "start": "2025-04-01T07:00",
+  "end": "2026-10-25T22:00",
+  "sessions": 160,
+  "weekdays": false,
+  "hours": [
+   7,
+   23
+  ],
+  "scopes": false,
+  "neg": {
+   "task": 0.34,
+   "ack": 0.15,
+   "general": 0.12,
+   "other": 0.1,
+   "paste": 0.06,
+   "restate": 0.07,
+   "chitchat": 0.1,
+   "meta": 0.06
+  },
+  "nonhuman": {
+   "notification": 0.6,
+   "peer": 0.4
+  },
+  "triggers_per_session": 0.3,
+  "items": "benchmarks/memory-life/fixture/memories.json",
+  "need_rate": 0.14
+ },
+ "files": [],
+ "intro": {
+  "a016": 0,
+  "b001": 2,
+  "b002": 1,
+  "b003": 2,
+  "b004": 2,
+  "b005": 0,
+  "a001": 0,
+  "b006": 0,
+  "b007": 3,
+  "b008": 1,
+  "a021": 3,
+  "b009": 2,
+  "b010": 2,
+  "b011": 0,
+  "a004": 1,
+  "b012": 0,
+  "c049": 0,
+  "b013": 2,
+  "a050": 0,
+  "a052": 2,
+  "b014": 3,
+  "a010": 3,
+  "b015": 2,
+  "b016": 2,
+  "a075": 0,
+  "b017": 0,
+  "a027": 0,
+  "a031": 1,
+  "b018": 0,
+  "a035": 0,
+  "a097": 1,
+  "b019": 1,
+  "a003": 0,
+  "c009": 1,
+  "a022": 2,
+  "a070": 1,
+  "b020": 1,
+  "b021": 2,
+  "b022": 1,
+  "a084": 1,
+  "c080": 2,
+  "a039": 0,
+  "a041": 2,
+  "b023": 1,
+  "b024": 3,
+  "b025": 0,
+  "a079": 1,
+  "b026": 1,
+  "c051": 2,
+  "a043": 0,
+  "b027": 0,
+  "a007": 1,
+  "b028": 1,
+  "b029": 2,
+  "c059": 1,
+  "a073": 1,
+  "b030": 3,
+  "b031": 1,
+  "c019": 2,
+  "c067": 4,
+  "a014": 1,
+  "b032": 4,
+  "a017": 2,
+  "b033": 1,
+  "b034": 1,
+  "a082": 1,
+  "b035": 3,
+  "a085": 1,
+  "c036": 4,
+  "a054": 1,
+  "b036": 4,
+  "b037": 1,
+  "a074": 1,
+  "b038": 2,
+  "a005": 4,
+  "c079": 3,
+  "a030": 6,
+  "a019": 8,
+  "b039": 7,
+  "b040": 8,
+  "a086": 11,
+  "b041": 9,
+  "a083": 9,
+  "c048": 11,
+  "b042": 10,
+  "a029": 12,
+  "c071": 11,
+  "b043": 11,
+  "a009": 11,
+  "b044": 11,
+  "a044": 11,
+  "c005": 13,
+  "c081": 14,
+  "b045": 11,
+  "a046": 11,
+  "c065": 13,
+  "b046": 14,
+  "a071": 15,
+  "a101": 12,
+  "a087": 14,
+  "b047": 14,
+  "c011": 14,
+  "b048": 14,
+  "a006": 17,
+  "b049": 19,
+  "c063": 17,
+  "c090": 17,
+  "a015": 18,
+  "b050": 20,
+  "b051": 21,
+  "c050": 21,
+  "a096": 22,
+  "a042": 22,
+  "c068": 21,
+  "c082": 23,
+  "b052": 25,
+  "a024": 25,
+  "a025": 24,
+  "a099": 23,
+  "b053": 24,
+  "a020": 28,
+  "c021": 27,
+  "a062": 26,
+  "c094": 25,
+  "b054": 30,
+  "b055": 30,
+  "a057": 29,
+  "b056": 30,
+  "c060": 30,
+  "c064": 30,
+  "a037": 33,
+  "a012": 32,
+  "a058": 32,
+  "b057": 33,
+  "c070": 32,
+  "a049": 34,
+  "b058": 37,
+  "a063": 36,
+  "c078": 40,
+  "c073": 37,
+  "b059": 37,
+  "a033": 37,
+  "c095": 39,
+  "c062": 38,
+  "c100": 41,
+  "b060": 40,
+  "a080": 40,
+  "c020": 42,
+  "a013": 42,
+  "b061": 42,
+  "a088": 46,
+  "a059": 49,
+  "b062": 46,
+  "a100": 48,
+  "c087": 49,
+  "b063": 49,
+  "a047": 49,
+  "b064": 49,
+  "a032": 49,
+  "b065": 49,
+  "c083": 52,
+  "b066": 52,
+  "b067": 55,
+  "a008": 52,
+  "b068": 52,
+  "a028": 53,
+  "a091": 54,
+  "b069": 53,
+  "c053": 55,
+  "b070": 53,
+  "a068": 55,
+  "b071": 58,
+  "a089": 58,
+  "a065": 57,
+  "b072": 57,
+  "c015": 58,
+  "a045": 58,
+  "b073": 59,
+  "a060": 62,
+  "a090": 61,
+  "c085": 59,
+  "a048": 59,
+  "b074": 62,
+  "a081": 60,
+  "c055": 62,
+  "c066": 60,
+  "a055": 61,
+  "b075": 61,
+  "b076": 62,
+  "c056": 64,
+  "a094": 67,
+  "b077": 65,
+  "a067": 68,
+  "b078": 69,
+  "a076": 68,
+  "c047": 67,
+  "c010": 67,
+  "a098": 69,
+  "b079": 69,
+  "a023": 71,
+  "b080": 73,
+  "a018": 72,
+  "b081": 80,
+  "c016": 81,
+  "c091": 81,
+  "a072": 81,
+  "b082": 82,
+  "b083": 86,
+  "c092": 88,
+  "b084": 89,
+  "c013": 89,
+  "a011": 95,
+  "b085": 95,
+  "a104": 96,
+  "b086": 98,
+  "c069": 96,
+  "c022": 99,
+  "c076": 97,
+  "b087": 101,
+  "b088": 100,
+  "a040": 100,
+  "b089": 101,
+  "b090": 100,
+  "b091": 100,
+  "a051": 104,
+  "c052": 104,
+  "b092": 105,
+  "a092": 110,
+  "c054": 107,
+  "c101": 109,
+  "a102": 111,
+  "c061": 111,
+  "a064": 112,
+  "b093": 111,
+  "c088": 113,
+  "a103": 112,
+  "c084": 112,
+  "c001": 115,
+  "c077": 117,
+  "a036": 116,
+  "b094": 116,
+  "c003": 116,
+  "b095": 116,
+  "c025": 117,
+  "c097": 117,
+  "a093": 117,
+  "a061": 126,
+  "b096": 125,
+  "c057": 127,
+  "c034": 128,
+  "b097": 126,
+  "a066": 130,
+  "c007": 131,
+  "c098": 132,
+  "b098": 135,
+  "c012": 136,
+  "c093": 134,
+  "c044": 134,
+  "c002": 134,
+  "c058": 135,
+  "c046": 134,
+  "a095": 134,
+  "c030": 134,
+  "a056": 138,
+  "c006": 137,
+  "c004": 139,
+  "c029": 138,
+  "c089": 138,
+  "a002": 140,
+  "c023": 138,
+  "c105": 140,
+  "c086": 142,
+  "c096": 142,
+  "a069": 144,
+  "c014": 142,
+  "c074": 147,
+  "c075": 147,
+  "a026": 145,
+  "c024": 146,
+  "a034": 144,
+  "c035": 146,
+  "c026": 146,
+  "c040": 144,
+  "a053": 144,
+  "c017": 144,
+  "c104": 144,
+  "c039": 148,
+  "c072": 145,
+  "a077": 149,
+  "b099": 146,
+  "b100": 146,
+  "c038": 146,
+  "b101": 150,
+  "c008": 149,
+  "a038": 147,
+  "c033": 149,
+  "c042": 150,
+  "b102": 151,
+  "c027": 151,
+  "c103": 152,
+  "c099": 153,
+  "a105": 153,
+  "c037": 153,
+  "c043": 154,
+  "c028": 153,
+  "a078": 153,
+  "b103": 153,
+  "c031": 154,
+  "c102": 153,
+  "b104": 154,
+  "b105": 154,
+  "c018": 154,
+  "c045": 154,
+  "c032": 154,
+  "c041": 157
+ },
+ "sessions": [
+  {
+   "id": "life-s000",
+   "ts": "2025-05-29T20:07",
+   "kind": "startup",
+   "gap_days": null,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a001",
+        "a003"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a039"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b005"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "b006"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b012"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b018"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a035"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a075"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b011"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "a016",
+        "a027",
+        "b017",
+        "c049"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b025"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b027"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "a043"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a050"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s001",
+   "ts": "2025-07-15T17:30",
+   "kind": "startup",
+   "gap_days": 46.89,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a004",
+        "a007"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "a070"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b008"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a054"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b028"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b033"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b034"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b037"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a014"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b019"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b020"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "b002",
+        "b031",
+        "c009"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c059"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "a079"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "b023"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "a074",
+        "a084",
+        "a085",
+        "a097"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a031"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 9,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "a082"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "b022"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b026"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 10,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a073"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "peer"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "peer"
+    },
+    {
+     "after": 7,
+     "kind": "peer"
+    },
+    {
+     "after": 9,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s002",
+   "ts": "2025-07-19T07:01",
+   "kind": "startup",
+   "gap_days": 3.56,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a022"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "b021"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a041"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a017"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b038"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b004"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c051"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "b009"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b015"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a052"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "b001"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b013"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b016"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b029"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c019"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b003",
+        "c080"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b010"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "peer"
+    },
+    {
+     "after": 6,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s003",
+   "ts": "2025-07-25T09:40",
+   "kind": "startup",
+   "gap_days": 6.11,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b035"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "b007"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b014"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "b024"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a010"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c079"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b030"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a021"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s004",
+   "ts": "2025-07-30T08:16",
+   "kind": "startup",
+   "gap_days": 4.94,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a005",
+        "c067"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b032"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b036"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c036"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s005",
+   "ts": "2025-07-30T22:00",
+   "kind": "startup",
+   "gap_days": 0.57,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "direct",
+       "items": [
+        "b001"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": []
+  },
+  {
+   "id": "life-s006",
+   "ts": "2025-08-08T20:25",
+   "kind": "startup",
+   "gap_days": 8.93,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a030"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s007",
+   "ts": "2025-08-09T21:21",
+   "kind": "startup",
+   "gap_days": 1.04,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "c051",
+        "c079"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b039"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "c059"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 5,
+     "beat": {
+      "type": "trigger",
+      "trigger": "time",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s008",
+   "ts": "2025-08-14T09:01",
+   "kind": "startup",
+   "gap_days": 4.49,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a019"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b040"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s009",
+   "ts": "2025-08-27T18:18",
+   "kind": "startup",
+   "gap_days": 13.39,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b041"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a083"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "a030"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s010",
+   "ts": "2025-08-29T22:55",
+   "kind": "startup",
+   "gap_days": 2.19,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b042"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": []
+  },
+  {
+   "id": "life-s011",
+   "ts": "2025-09-15T12:58",
+   "kind": "startup",
+   "gap_days": 16.59,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a009"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a044"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a046"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a086"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b043"
+       ],
+       "corrects": [
+        "b015"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b044",
+        "c048"
+       ],
+       "corrects": [
+        "b011"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b045"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c071"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "message",
+      "items": [
+       "b018"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s012",
+   "ts": "2025-09-26T16:34",
+   "kind": "startup",
+   "gap_days": 11.15,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "a101"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a029"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "restate",
+       "items": [
+        "a029"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "peer"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [],
+   "compact_after": 5
+  },
+  {
+   "id": "life-s013",
+   "ts": "2025-09-29T22:41",
+   "kind": "startup",
+   "gap_days": 3.25,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c065"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c005"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "peer"
+    },
+    {
+     "after": 7,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s014",
+   "ts": "2025-10-02T14:23",
+   "kind": "startup",
+   "gap_days": 2.65,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a087"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b046"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "b047"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b048"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c011",
+        "c081"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": -1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "message",
+      "items": [
+       "b028"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s015",
+   "ts": "2025-10-03T22:52",
+   "kind": "startup",
+   "gap_days": 1.35,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a071"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "message",
+      "items": [
+       "a070"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s016",
+   "ts": "2025-10-08T13:26",
+   "kind": "startup",
+   "gap_days": 4.61,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": []
+  },
+  {
+   "id": "life-s017",
+   "ts": "2025-10-11T19:08",
+   "kind": "startup",
+   "gap_days": 3.24,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c063"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c090"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a006"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "a071"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "peer"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": -1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": [
+       "b029"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s018",
+   "ts": "2025-10-14T08:01",
+   "kind": "startup",
+   "gap_days": 2.54,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "c065",
+        "c036"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a015"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "peer"
+    },
+    {
+     "after": 4,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [],
+   "compact_after": 7
+  },
+  {
+   "id": "life-s019",
+   "ts": "2025-10-14T15:45",
+   "kind": "startup",
+   "gap_days": 0.32,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b049"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "a010"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s020",
+   "ts": "2025-10-19T18:13",
+   "kind": "startup",
+   "gap_days": 5.1,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b050"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 5,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s021",
+   "ts": "2025-10-20T17:15",
+   "kind": "startup",
+   "gap_days": 0.96,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b051"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c050"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c068"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": []
+  },
+  {
+   "id": "life-s022",
+   "ts": "2025-10-21T10:05",
+   "kind": "startup",
+   "gap_days": 0.7,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "b004"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "a005"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "a096"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a042"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s023",
+   "ts": "2025-11-02T22:51",
+   "kind": "startup",
+   "gap_days": 12.53,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "a099"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "stale",
+       "items": [
+        "b043"
+       ],
+       "forbidden": [
+        "b015"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c082"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 9,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 10,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "peer"
+    },
+    {
+     "after": 6,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "peer"
+    },
+    {
+     "after": 7,
+     "kind": "peer"
+    },
+    {
+     "after": 9,
+     "kind": "notification"
+    },
+    {
+     "after": 9,
+     "kind": "notification"
+    },
+    {
+     "after": 9,
+     "kind": "peer"
+    },
+    {
+     "after": 9,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "message",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s024",
+   "ts": "2025-11-03T07:49",
+   "kind": "startup",
+   "gap_days": 0.37,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "b053"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a025"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "peer"
+    },
+    {
+     "after": 4,
+     "kind": "peer"
+    },
+    {
+     "after": 5,
+     "kind": "peer"
+    },
+    {
+     "after": 5,
+     "kind": "peer"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 7,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 3,
+     "beat": {
+      "type": "trigger",
+      "trigger": "time",
+      "items": []
+     }
+    }
+   ],
+   "compact_after": 4
+  },
+  {
+   "id": "life-s025",
+   "ts": "2025-11-06T15:34",
+   "kind": "startup",
+   "gap_days": 3.32,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b052"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c094"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "restate",
+       "items": [
+        "b052"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "b003",
+        "b045"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a024"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 9,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 10,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 4,
+     "kind": "peer"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "peer"
+    },
+    {
+     "after": 7,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s026",
+   "ts": "2025-11-06T17:48",
+   "kind": "resume",
+   "gap_days": 0.09,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a062"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "b019"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "b027",
+        "a099"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "peer"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 4,
+     "beat": {
+      "type": "trigger",
+      "trigger": "message",
+      "items": [
+       "b045"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s027",
+   "ts": "2025-11-07T13:30",
+   "kind": "startup",
+   "gap_days": 0.82,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "b031"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c021"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 9,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "peer"
+    },
+    {
+     "after": 6,
+     "kind": "peer"
+    },
+    {
+     "after": 8,
+     "kind": "notification"
+    },
+    {
+     "after": 8,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 2,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s028",
+   "ts": "2025-11-11T09:24",
+   "kind": "startup",
+   "gap_days": 3.83,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a020"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 7,
+     "kind": "notification"
+    },
+    {
+     "after": 8,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s029",
+   "ts": "2025-11-18T07:45",
+   "kind": "startup",
+   "gap_days": 6.93,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a057"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s030",
+   "ts": "2025-11-27T16:28",
+   "kind": "startup",
+   "gap_days": 9.36,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b055"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "c064"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b054"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b056"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c060"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s031",
+   "ts": "2025-11-30T11:14",
+   "kind": "startup",
+   "gap_days": 2.78,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s032",
+   "ts": "2025-12-05T15:56",
+   "kind": "startup",
+   "gap_days": 5.2,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a012"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a058",
+        "c070"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s033",
+   "ts": "2025-12-07T09:21",
+   "kind": "startup",
+   "gap_days": 1.73,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a037"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b057"
+       ],
+       "corrects": [
+        "b014"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": -1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "message",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s034",
+   "ts": "2025-12-08T13:26",
+   "kind": "startup",
+   "gap_days": 1.17,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "a037"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a049"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "peer"
+    },
+    {
+     "after": 5,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s035",
+   "ts": "2025-12-09T18:50",
+   "kind": "startup",
+   "gap_days": 1.22,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s036",
+   "ts": "2025-12-10T14:00",
+   "kind": "startup",
+   "gap_days": 0.8,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a063"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": -1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s037",
+   "ts": "2025-12-26T11:07",
+   "kind": "startup",
+   "gap_days": 15.88,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "c094"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a033"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c073"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "b058",
+        "b059"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [],
+   "compact_after": 5
+  },
+  {
+   "id": "life-s038",
+   "ts": "2025-12-29T08:55",
+   "kind": "startup",
+   "gap_days": 2.91,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "direct",
+       "items": [
+        "a101"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c062"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "peer"
+    },
+    {
+     "after": 7,
+     "kind": "notification"
+    },
+    {
+     "after": 8,
+     "kind": "notification"
+    },
+    {
+     "after": 8,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 4,
+     "beat": {
+      "type": "trigger",
+      "trigger": "time",
+      "items": [
+       "c071"
+      ],
+      "need_type": "event"
+     }
+    }
+   ],
+   "compact_after": 4
+  },
+  {
+   "id": "life-s039",
+   "ts": "2026-01-04T08:06",
+   "kind": "startup",
+   "gap_days": 5.97,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c095"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s040",
+   "ts": "2026-01-08T15:47",
+   "kind": "startup",
+   "gap_days": 4.32,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "a080"
+       ],
+       "corrects": [
+        "a079"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b060"
+       ],
+       "corrects": [
+        "b019"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c078"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "message",
+      "items": [
+       "a050"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s041",
+   "ts": "2026-01-10T21:57",
+   "kind": "startup",
+   "gap_days": 2.26,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c100"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": -1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "message",
+      "items": [
+       "c019"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s042",
+   "ts": "2026-01-12T19:32",
+   "kind": "startup",
+   "gap_days": 1.9,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a013"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b061"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c020"
+       ],
+       "corrects": [
+        "c019"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "time",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s043",
+   "ts": "2026-01-13T17:12",
+   "kind": "startup",
+   "gap_days": 0.9,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "b030"
+       ],
+       "action": true
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": -1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s044",
+   "ts": "2026-01-16T22:40",
+   "kind": "startup",
+   "gap_days": 3.23,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "b037"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s045",
+   "ts": "2026-01-18T09:44",
+   "kind": "startup",
+   "gap_days": 1.46,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s046",
+   "ts": "2026-01-22T12:33",
+   "kind": "startup",
+   "gap_days": 4.12,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "b018"
+       ],
+       "action": true
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b062"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a088"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "c080"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 7,
+     "kind": "peer"
+    },
+    {
+     "after": 7,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [],
+   "compact_after": 6
+  },
+  {
+   "id": "life-s047",
+   "ts": "2026-01-22T19:02",
+   "kind": "startup",
+   "gap_days": 0.27,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "c082"
+       ],
+       "action": true
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "a075"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "stale",
+       "items": [
+        "b057"
+       ],
+       "forbidden": [
+        "b014"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "notification"
+    },
+    {
+     "after": 7,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [],
+   "compact_after": 6
+  },
+  {
+   "id": "life-s048",
+   "ts": "2026-02-01T13:33",
+   "kind": "startup",
+   "gap_days": 9.77,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "a100"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s049",
+   "ts": "2026-02-04T10:16",
+   "kind": "startup",
+   "gap_days": 2.86,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a032"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a047"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "a059",
+        "b063"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b064"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b065"
+       ],
+       "corrects": [
+        "b031"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c087"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": []
+  },
+  {
+   "id": "life-s050",
+   "ts": "2026-02-06T17:48",
+   "kind": "startup",
+   "gap_days": 2.31,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "b029"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "a022"
+       ],
+       "action": true
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "a009",
+        "a085",
+        "c060"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s051",
+   "ts": "2026-02-07T18:40",
+   "kind": "startup",
+   "gap_days": 1.04,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "b034"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "b039"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "peer"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s052",
+   "ts": "2026-02-12T16:58",
+   "kind": "startup",
+   "gap_days": 4.93,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "a008"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "b050",
+        "b062"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c083"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b066"
+       ],
+       "corrects": [
+        "b017"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b068"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 9,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "restate",
+       "items": [
+        "b068"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 10,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 11,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "restate",
+       "items": [
+        "b068"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 7,
+     "kind": "notification"
+    },
+    {
+     "after": 8,
+     "kind": "peer"
+    },
+    {
+     "after": 10,
+     "kind": "notification"
+    },
+    {
+     "after": 10,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s053",
+   "ts": "2026-02-21T20:06",
+   "kind": "startup",
+   "gap_days": 9.13,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b069"
+       ],
+       "corrects": [
+        "b026"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "b070"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a028"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": []
+  },
+  {
+   "id": "life-s054",
+   "ts": "2026-02-22T12:07",
+   "kind": "startup",
+   "gap_days": 0.67,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "direct",
+       "items": [
+        "a052"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a091"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s055",
+   "ts": "2026-02-24T13:46",
+   "kind": "startup",
+   "gap_days": 2.07,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a068"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b067"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c053"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s056",
+   "ts": "2026-02-27T15:21",
+   "kind": "startup",
+   "gap_days": 3.07,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "a008",
+        "a003",
+        "c067"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s057",
+   "ts": "2026-03-02T11:05",
+   "kind": "startup",
+   "gap_days": 2.82,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "b069",
+        "b029"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "direct",
+       "items": [
+        "a047"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b072"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a065"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "time",
+      "items": [
+       "c005"
+      ],
+      "need_type": "event"
+     }
+    }
+   ],
+   "compact_after": 3
+  },
+  {
+   "id": "life-s058",
+   "ts": "2026-03-03T09:37",
+   "kind": "startup",
+   "gap_days": 0.94,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c015"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "b071"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a089"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a045"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 4,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s059",
+   "ts": "2026-03-13T15:43",
+   "kind": "startup",
+   "gap_days": 10.25,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a048"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "b073"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c085"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s060",
+   "ts": "2026-03-17T17:26",
+   "kind": "startup",
+   "gap_days": 4.07,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c066"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a081"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [],
+   "compact_after": 4
+  },
+  {
+   "id": "life-s061",
+   "ts": "2026-03-24T13:17",
+   "kind": "startup",
+   "gap_days": 6.83,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "a055"
+       ],
+       "corrects": [
+        "a054"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a090"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b075"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": []
+  },
+  {
+   "id": "life-s062",
+   "ts": "2026-03-28T13:40",
+   "kind": "startup",
+   "gap_days": 4.02,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c055"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b076"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a060"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b074"
+       ],
+       "corrects": [
+        "b022"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s063",
+   "ts": "2026-03-29T10:24",
+   "kind": "startup",
+   "gap_days": 0.86,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "peer"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": [
+       "b001"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s064",
+   "ts": "2026-03-30T17:47",
+   "kind": "startup",
+   "gap_days": 1.31,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c056"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "direct",
+       "items": [
+        "a073"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "a065"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "peer"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 7,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 3,
+     "beat": {
+      "type": "trigger",
+      "trigger": "message",
+      "items": [
+       "a060"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s065",
+   "ts": "2026-04-04T11:19",
+   "kind": "startup",
+   "gap_days": 4.73,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b077"
+       ],
+       "corrects": [
+        "b013"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "time",
+      "items": [
+       "a029"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s066",
+   "ts": "2026-04-08T14:49",
+   "kind": "startup",
+   "gap_days": 4.15,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s067",
+   "ts": "2026-04-16T07:23",
+   "kind": "startup",
+   "gap_days": 7.69,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a094"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c010"
+       ],
+       "corrects": [
+        "c009"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c047"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": -1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s068",
+   "ts": "2026-04-19T16:59",
+   "kind": "startup",
+   "gap_days": 3.4,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a076"
+       ],
+       "corrects": [
+        "a075"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "direct",
+       "items": [
+        "a012"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "restate",
+       "items": [
+        "a076"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a067"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "b060"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "a045"
+       ],
+       "action": true
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 7,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [],
+   "compact_after": 5
+  },
+  {
+   "id": "life-s069",
+   "ts": "2026-04-19T17:51",
+   "kind": "resume",
+   "gap_days": 0.04,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "a098"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "b078"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b079"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s070",
+   "ts": "2026-04-20T18:53",
+   "kind": "startup",
+   "gap_days": 1.04,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 2,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": -1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "message",
+      "items": [
+       "b002"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s071",
+   "ts": "2026-04-21T13:06",
+   "kind": "startup",
+   "gap_days": 0.76,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a023"
+       ],
+       "corrects": [
+        "a022"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": -1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "message",
+      "items": [
+       "a022"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s072",
+   "ts": "2026-04-23T14:06",
+   "kind": "startup",
+   "gap_days": 2.04,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a018"
+       ],
+       "corrects": [
+        "a017"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "direct",
+       "items": [
+        "b064"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s073",
+   "ts": "2026-04-23T17:08",
+   "kind": "resume",
+   "gap_days": 0.13,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b080"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": [
+    {
+     "after": -1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s074",
+   "ts": "2026-04-23T22:26",
+   "kind": "startup",
+   "gap_days": 0.22,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "peer"
+    },
+    {
+     "after": 5,
+     "kind": "peer"
+    },
+    {
+     "after": 7,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 5,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": [
+       "a032"
+      ],
+      "need_type": "event"
+     }
+    }
+   ],
+   "compact_after": 4
+  },
+  {
+   "id": "life-s075",
+   "ts": "2026-04-24T16:06",
+   "kind": "startup",
+   "gap_days": 0.74,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "stale",
+       "items": [
+        "a080"
+       ],
+       "forbidden": [
+        "a079"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s076",
+   "ts": "2026-04-25T07:40",
+   "kind": "startup",
+   "gap_days": 0.65,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "c090"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "a001"
+       ],
+       "action": true
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": [
+       "c047"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s077",
+   "ts": "2026-04-25T11:58",
+   "kind": "startup",
+   "gap_days": 0.18,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "a088"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "c050",
+        "b076"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 9,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 10,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 11,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 7,
+     "kind": "notification"
+    },
+    {
+     "after": 7,
+     "kind": "notification"
+    },
+    {
+     "after": 7,
+     "kind": "peer"
+    },
+    {
+     "after": 8,
+     "kind": "notification"
+    },
+    {
+     "after": 9,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "time",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s078",
+   "ts": "2026-04-25T17:10",
+   "kind": "startup",
+   "gap_days": 0.22,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 3,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s079",
+   "ts": "2026-04-26T09:45",
+   "kind": "startup",
+   "gap_days": 0.69,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "direct",
+       "items": [
+        "c015"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "peer"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s080",
+   "ts": "2026-04-30T17:52",
+   "kind": "startup",
+   "gap_days": 4.34,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b081"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s081",
+   "ts": "2026-05-08T07:04",
+   "kind": "startup",
+   "gap_days": 7.55,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a072"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c016",
+        "c091"
+       ],
+       "corrects": [
+        "c015"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s082",
+   "ts": "2026-05-09T13:08",
+   "kind": "startup",
+   "gap_days": 1.25,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b082"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s083",
+   "ts": "2026-05-11T11:34",
+   "kind": "startup",
+   "gap_days": 1.93,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "c011",
+        "a014"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s084",
+   "ts": "2026-05-12T12:37",
+   "kind": "startup",
+   "gap_days": 1.04,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": -1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s085",
+   "ts": "2026-05-12T14:23",
+   "kind": "startup",
+   "gap_days": 0.07,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 9,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 10,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "notification"
+    },
+    {
+     "after": 8,
+     "kind": "notification"
+    },
+    {
+     "after": 9,
+     "kind": "notification"
+    },
+    {
+     "after": 9,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [],
+   "compact_after": 7
+  },
+  {
+   "id": "life-s086",
+   "ts": "2026-05-14T20:41",
+   "kind": "startup",
+   "gap_days": 2.26,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b083"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": -1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "time",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s087",
+   "ts": "2026-05-16T20:25",
+   "kind": "startup",
+   "gap_days": 1.99,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "b056"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 9,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "b083"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 10,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "notification"
+    },
+    {
+     "after": 7,
+     "kind": "peer"
+    },
+    {
+     "after": 9,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 10,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": []
+     }
+    }
+   ],
+   "compact_after": 9
+  },
+  {
+   "id": "life-s088",
+   "ts": "2026-05-18T08:11",
+   "kind": "startup",
+   "gap_days": 1.49,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "a100"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "b012",
+        "b081"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c092"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "b053"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "notification"
+    },
+    {
+     "after": 7,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 4,
+     "beat": {
+      "type": "trigger",
+      "trigger": "message",
+      "items": [
+       "a018"
+      ],
+      "need_type": "event"
+     }
+    }
+   ],
+   "compact_after": 7
+  },
+  {
+   "id": "life-s089",
+   "ts": "2026-05-19T22:33",
+   "kind": "startup",
+   "gap_days": 1.6,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b084"
+       ],
+       "corrects": [
+        "b008"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c013"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s090",
+   "ts": "2026-05-20T22:45",
+   "kind": "startup",
+   "gap_days": 1.01,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "c081"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 2,
+     "beat": {
+      "type": "trigger",
+      "trigger": "time",
+      "items": [
+       "c060"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s091",
+   "ts": "2026-05-21T13:08",
+   "kind": "startup",
+   "gap_days": 0.6,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "b002"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": -1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "message",
+      "items": [
+       "b053"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s092",
+   "ts": "2026-05-22T14:13",
+   "kind": "startup",
+   "gap_days": 1.05,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": []
+  },
+  {
+   "id": "life-s093",
+   "ts": "2026-05-23T15:22",
+   "kind": "startup",
+   "gap_days": 1.05,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s094",
+   "ts": "2026-05-27T08:53",
+   "kind": "startup",
+   "gap_days": 3.73,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "peer"
+    },
+    {
+     "after": 4,
+     "kind": "peer"
+    },
+    {
+     "after": 6,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [],
+   "compact_after": 3
+  },
+  {
+   "id": "life-s095",
+   "ts": "2026-05-27T20:07",
+   "kind": "startup",
+   "gap_days": 0.47,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a011"
+       ],
+       "corrects": [
+        "a010"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b085"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s096",
+   "ts": "2026-05-30T21:26",
+   "kind": "startup",
+   "gap_days": 3.05,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "a086"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "a104"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c069"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 9,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 10,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 7,
+     "kind": "peer"
+    },
+    {
+     "after": 9,
+     "kind": "notification"
+    },
+    {
+     "after": 10,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [],
+   "compact_after": 7
+  },
+  {
+   "id": "life-s097",
+   "ts": "2026-06-02T21:03",
+   "kind": "startup",
+   "gap_days": 2.98,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "c016"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "direct",
+       "items": [
+        "a016"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c076"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "message",
+      "items": []
+     }
+    }
+   ],
+   "compact_after": 3
+  },
+  {
+   "id": "life-s098",
+   "ts": "2026-06-05T07:03",
+   "kind": "startup",
+   "gap_days": 2.42,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "b086"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s099",
+   "ts": "2026-06-06T12:38",
+   "kind": "startup",
+   "gap_days": 1.23,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "b081"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c022"
+       ],
+       "corrects": [
+        "c021"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s100",
+   "ts": "2026-06-16T20:40",
+   "kind": "startup",
+   "gap_days": 10.33,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "a042",
+        "c068",
+        "a083"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a040"
+       ],
+       "corrects": [
+        "a039"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "c036",
+        "a021"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b091"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 9,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "b088",
+        "b090"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "peer"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 7,
+     "kind": "peer"
+    },
+    {
+     "after": 9,
+     "kind": "notification"
+    },
+    {
+     "after": 9,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [],
+   "compact_after": 8
+  },
+  {
+   "id": "life-s101",
+   "ts": "2026-06-16T21:06",
+   "kind": "startup",
+   "gap_days": 0.02,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b089"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "c062",
+        "c047"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b087"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": [
+       "b040"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s102",
+   "ts": "2026-06-18T17:45",
+   "kind": "startup",
+   "gap_days": 1.86,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "c076"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "b067"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": -1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": [
+       "b074"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s103",
+   "ts": "2026-06-20T09:57",
+   "kind": "startup",
+   "gap_days": 1.67,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "stale",
+       "items": [
+        "a076"
+       ],
+       "forbidden": [
+        "a075"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "time",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s104",
+   "ts": "2026-06-24T22:04",
+   "kind": "startup",
+   "gap_days": 4.5,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "c052"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "b061"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 9,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "a051"
+       ],
+       "corrects": [
+        "a050"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 7,
+     "kind": "peer"
+    },
+    {
+     "after": 9,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [],
+   "compact_after": 8
+  },
+  {
+   "id": "life-s105",
+   "ts": "2026-06-26T09:27",
+   "kind": "startup",
+   "gap_days": 1.47,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b092"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "restate",
+       "items": [
+        "b092"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "b071",
+        "a104"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 9,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "direct",
+       "items": [
+        "c073"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 10,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "peer"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 9,
+     "kind": "notification"
+    },
+    {
+     "after": 9,
+     "kind": "peer"
+    },
+    {
+     "after": 10,
+     "kind": "peer"
+    },
+    {
+     "after": 10,
+     "kind": "notification"
+    },
+    {
+     "after": 10,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s106",
+   "ts": "2026-06-28T22:00",
+   "kind": "startup",
+   "gap_days": 2.52,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "a006"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "direct",
+       "items": [
+        "a072"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s107",
+   "ts": "2026-07-01T19:14",
+   "kind": "startup",
+   "gap_days": 2.88,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c054"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "stale",
+       "items": [
+        "a023"
+       ],
+       "forbidden": [
+        "a022"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [],
+   "compact_after": 6
+  },
+  {
+   "id": "life-s108",
+   "ts": "2026-07-02T10:06",
+   "kind": "startup",
+   "gap_days": 0.62,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "b047"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s109",
+   "ts": "2026-07-05T08:04",
+   "kind": "startup",
+   "gap_days": 2.92,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "a067"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "b062",
+        "b035"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c101"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "b072"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "stale",
+       "items": [
+        "b084"
+       ],
+       "forbidden": [
+        "b008"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 3,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s110",
+   "ts": "2026-07-07T22:50",
+   "kind": "startup",
+   "gap_days": 2.62,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "c079"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "a092"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "peer"
+    },
+    {
+     "after": 8,
+     "kind": "notification"
+    },
+    {
+     "after": 8,
+     "kind": "notification"
+    },
+    {
+     "after": 8,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s111",
+   "ts": "2026-07-09T17:11",
+   "kind": "startup",
+   "gap_days": 1.76,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "a102",
+        "b093"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "a062"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    },
+    {
+     "k": 9,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "c061"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 10,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 11,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 8,
+     "kind": "notification"
+    },
+    {
+     "after": 9,
+     "kind": "notification"
+    },
+    {
+     "after": 11,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s112",
+   "ts": "2026-07-12T10:08",
+   "kind": "startup",
+   "gap_days": 2.71,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a064"
+       ],
+       "corrects": [
+        "a063"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "a103"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c084"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s113",
+   "ts": "2026-07-13T15:01",
+   "kind": "startup",
+   "gap_days": 1.2,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c088"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s114",
+   "ts": "2026-07-13T20:01",
+   "kind": "startup",
+   "gap_days": 0.21,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "a060",
+        "a041",
+        "c010"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "peer"
+    },
+    {
+     "after": 6,
+     "kind": "peer"
+    },
+    {
+     "after": 6,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": [
+       "b039"
+      ],
+      "need_type": "event"
+     }
+    }
+   ],
+   "compact_after": 6
+  },
+  {
+   "id": "life-s115",
+   "ts": "2026-07-14T18:03",
+   "kind": "startup",
+   "gap_days": 0.92,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c001"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "peer"
+    },
+    {
+     "after": 7,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s116",
+   "ts": "2026-07-26T21:10",
+   "kind": "startup",
+   "gap_days": 12.13,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a036"
+       ],
+       "corrects": [
+        "a035"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "b094"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b095"
+       ],
+       "corrects": [
+        "b072"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c003"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s117",
+   "ts": "2026-08-06T22:07",
+   "kind": "startup",
+   "gap_days": 11.04,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a093"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c025",
+        "c097"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c077"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": []
+  },
+  {
+   "id": "life-s118",
+   "ts": "2026-08-07T16:47",
+   "kind": "startup",
+   "gap_days": 0.78,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 9,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 10,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "peer"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "peer"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [],
+   "compact_after": 7
+  },
+  {
+   "id": "life-s119",
+   "ts": "2026-08-07T21:00",
+   "kind": "startup",
+   "gap_days": 0.18,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": -1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s120",
+   "ts": "2026-08-08T15:05",
+   "kind": "startup",
+   "gap_days": 0.75,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "b020"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": -1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "time",
+      "items": [
+       "b036"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s121",
+   "ts": "2026-08-08T19:20",
+   "kind": "startup",
+   "gap_days": 0.18,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "b077"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s122",
+   "ts": "2026-08-11T14:22",
+   "kind": "startup",
+   "gap_days": 2.79,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s123",
+   "ts": "2026-08-13T14:05",
+   "kind": "startup",
+   "gap_days": 1.99,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s124",
+   "ts": "2026-08-15T13:49",
+   "kind": "startup",
+   "gap_days": 1.99,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "time",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s125",
+   "ts": "2026-08-17T18:04",
+   "kind": "startup",
+   "gap_days": 2.18,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "b096"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s126",
+   "ts": "2026-08-22T21:04",
+   "kind": "startup",
+   "gap_days": 5.13,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "a061",
+        "b097"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "a090"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s127",
+   "ts": "2026-08-22T22:50",
+   "kind": "startup",
+   "gap_days": 0.07,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c057"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": [
+       "b001"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s128",
+   "ts": "2026-08-23T13:12",
+   "kind": "startup",
+   "gap_days": 0.6,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c034"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s129",
+   "ts": "2026-08-24T10:55",
+   "kind": "startup",
+   "gap_days": 0.9,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "direct",
+       "items": [
+        "c056"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": []
+  },
+  {
+   "id": "life-s130",
+   "ts": "2026-08-26T09:12",
+   "kind": "startup",
+   "gap_days": 1.93,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "a066"
+       ],
+       "corrects": [
+        "a065"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": []
+  },
+  {
+   "id": "life-s131",
+   "ts": "2026-08-26T16:30",
+   "kind": "startup",
+   "gap_days": 0.3,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c007"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "a007"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "stale",
+       "items": [
+        "b066"
+       ],
+       "forbidden": [
+        "b017"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "direct",
+       "items": [
+        "b021"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "peer"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s132",
+   "ts": "2026-08-27T12:08",
+   "kind": "startup",
+   "gap_days": 0.82,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c098"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s133",
+   "ts": "2026-08-31T18:20",
+   "kind": "startup",
+   "gap_days": 4.26,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "a044"
+       ],
+       "action": true
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": [
+       "c071"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s134",
+   "ts": "2026-09-05T13:10",
+   "kind": "startup",
+   "gap_days": 4.78,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c002",
+        "c030",
+        "c044",
+        "c046"
+       ],
+       "corrects": [
+        "c001"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a095"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c093"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "message",
+      "items": [
+       "b060"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s135",
+   "ts": "2026-09-07T15:02",
+   "kind": "startup",
+   "gap_days": 2.08,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b098"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c058"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s136",
+   "ts": "2026-09-09T07:17",
+   "kind": "startup",
+   "gap_days": 1.68,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c012"
+       ],
+       "corrects": [
+        "c011"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "restate",
+       "items": [
+        "c012"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "c013",
+        "a087",
+        "c085"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 9,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 10,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "peer"
+    },
+    {
+     "after": 8,
+     "kind": "peer"
+    },
+    {
+     "after": 9,
+     "kind": "notification"
+    },
+    {
+     "after": 9,
+     "kind": "notification"
+    },
+    {
+     "after": 10,
+     "kind": "notification"
+    },
+    {
+     "after": 10,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [],
+   "compact_after": 7
+  },
+  {
+   "id": "life-s137",
+   "ts": "2026-09-11T08:21",
+   "kind": "startup",
+   "gap_days": 2.04,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c006"
+       ],
+       "corrects": [
+        "c005"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 5,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": [
+       "a058"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s138",
+   "ts": "2026-09-17T13:45",
+   "kind": "startup",
+   "gap_days": 6.23,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c023"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c029",
+        "c089"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a056"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s139",
+   "ts": "2026-09-17T21:24",
+   "kind": "startup",
+   "gap_days": 0.32,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c004"
+       ],
+       "corrects": [
+        "c003"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [],
+   "compact_after": 4
+  },
+  {
+   "id": "life-s140",
+   "ts": "2026-09-20T16:56",
+   "kind": "startup",
+   "gap_days": 2.81,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c105"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "restate",
+       "items": [
+        "c105"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "assistant",
+       "items": [
+        "a002"
+       ],
+       "corrects": [
+        "a001"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 9,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 10,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "a058",
+        "b063"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 11,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "restate",
+       "items": [
+        "c105"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "peer"
+    },
+    {
+     "after": 7,
+     "kind": "notification"
+    },
+    {
+     "after": 8,
+     "kind": "notification"
+    },
+    {
+     "after": 10,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 9,
+     "beat": {
+      "type": "trigger",
+      "trigger": "message",
+      "items": [
+       "a073"
+      ],
+      "need_type": "event"
+     }
+    }
+   ],
+   "compact_after": 9
+  },
+  {
+   "id": "life-s141",
+   "ts": "2026-09-20T21:13",
+   "kind": "startup",
+   "gap_days": 0.18,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "chitchat"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "b044",
+        "b050",
+        "c048"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s142",
+   "ts": "2026-09-24T07:48",
+   "kind": "startup",
+   "gap_days": 3.44,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c014",
+        "c096"
+       ],
+       "corrects": [
+        "c013"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c086"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s143",
+   "ts": "2026-09-24T12:18",
+   "kind": "startup",
+   "gap_days": 0.19,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "c066"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s144",
+   "ts": "2026-10-02T09:24",
+   "kind": "startup",
+   "gap_days": 7.88,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a034"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a069"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c017",
+        "c104"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a053"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c040"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s145",
+   "ts": "2026-10-04T11:54",
+   "kind": "startup",
+   "gap_days": 2.1,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a026"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c072"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 0,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 4,
+     "beat": {
+      "type": "trigger",
+      "trigger": "time",
+      "items": [
+       "a036"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s146",
+   "ts": "2026-10-05T09:29",
+   "kind": "startup",
+   "gap_days": 0.9,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b099"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "b100",
+        "c024",
+        "c035",
+        "c038"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c026"
+       ],
+       "corrects": [
+        "c025"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s147",
+   "ts": "2026-10-07T09:34",
+   "kind": "startup",
+   "gap_days": 2.0,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "a038",
+        "c075"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c074"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": [
+       "b066"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s148",
+   "ts": "2026-10-07T14:20",
+   "kind": "resume",
+   "gap_days": 0.2,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c039"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "b075"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s149",
+   "ts": "2026-10-07T18:31",
+   "kind": "startup",
+   "gap_days": 0.17,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "a077"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "b049"
+       ],
+       "action": true
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "c067",
+        "a084"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c008",
+        "c033"
+       ],
+       "corrects": [
+        "c007"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": [
+       "c044"
+      ],
+      "need_type": "event"
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s150",
+   "ts": "2026-10-09T10:32",
+   "kind": "startup",
+   "gap_days": 1.67,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b101"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "stale",
+       "items": [
+        "a055"
+       ],
+       "forbidden": [
+        "a054"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c042"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 1,
+     "beat": {
+      "type": "trigger",
+      "trigger": "calendar",
+      "items": [
+       "a070"
+      ],
+      "need_type": "event"
+     }
+    }
+   ],
+   "compact_after": 3
+  },
+  {
+   "id": "life-s151",
+   "ts": "2026-10-09T18:52",
+   "kind": "startup",
+   "gap_days": 0.35,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b102"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c027"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": []
+  },
+  {
+   "id": "life-s152",
+   "ts": "2026-10-10T22:54",
+   "kind": "startup",
+   "gap_days": 1.17,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c103"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": [
+    {
+     "after": 0,
+     "beat": {
+      "type": "trigger",
+      "trigger": "message",
+      "items": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "life-s153",
+   "ts": "2026-10-14T13:50",
+   "kind": "startup",
+   "gap_days": 3.62,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "a078",
+        "a105",
+        "b103",
+        "c028"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c037"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "c099"
+       ]
+      },
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c102"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": []
+  },
+  {
+   "id": "life-s154",
+   "ts": "2026-10-16T22:34",
+   "kind": "startup",
+   "gap_days": 2.36,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "tool",
+       "items": [
+        "b104",
+        "c018",
+        "c032"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "meta"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c031"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "paste"
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c043"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "b105",
+        "c045"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "other"
+      }
+     ]
+    },
+    {
+     "k": 9,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 3,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "notification"
+    },
+    {
+     "after": 5,
+     "kind": "peer"
+    },
+    {
+     "after": 8,
+     "kind": "notification"
+    }
+   ],
+   "triggers": [
+    {
+     "after": 6,
+     "beat": {
+      "type": "trigger",
+      "trigger": "time",
+      "items": [
+       "c100"
+      ],
+      "need_type": "event"
+     }
+    }
+   ],
+   "compact_after": 7
+  },
+  {
+   "id": "life-s155",
+   "ts": "2026-10-18T17:34",
+   "kind": "startup",
+   "gap_days": 1.79,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "general"
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "ack"
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "multi",
+       "items": [
+        "c033",
+        "c087"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "peer"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 2,
+     "kind": "notification"
+    },
+    {
+     "after": 3,
+     "kind": "peer"
+    },
+    {
+     "after": 4,
+     "kind": "notification"
+    },
+    {
+     "after": 6,
+     "kind": "peer"
+    }
+   ],
+   "triggers": [],
+   "compact_after": 4
+  },
+  {
+   "id": "life-s156",
+   "ts": "2026-10-20T22:47",
+   "kind": "startup",
+   "gap_days": 2.22,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "indirect",
+       "items": [
+        "c032"
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "proactive",
+       "items": [
+        "c042"
+       ],
+       "action": true
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": []
+  },
+  {
+   "id": "life-s157",
+   "ts": "2026-10-22T08:03",
+   "kind": "startup",
+   "gap_days": 1.39,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "state",
+       "channel": "user",
+       "items": [
+        "c041"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 0,
+     "kind": "peer"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s158",
+   "ts": "2026-10-22T12:41",
+   "kind": "startup",
+   "gap_days": 0.19,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "beats": [
+      {
+       "type": "neg",
+       "neg": "task"
+      }
+     ]
+    }
+   ],
+   "nonhuman": [
+    {
+     "after": 1,
+     "kind": "notification"
+    },
+    {
+     "after": 1,
+     "kind": "notification"
+    }
+   ],
+   "triggers": []
+  },
+  {
+   "id": "life-s159",
+   "ts": "2026-10-25T21:26",
+   "kind": "startup",
+   "gap_days": 3.36,
+   "turns": [
+    {
+     "k": 0,
+     "beats": [
+      {
+       "type": "need",
+       "need_type": "stale",
+       "items": [
+        "c020"
+       ],
+       "forbidden": [
+        "c019"
+       ]
+      }
+     ]
+    }
+   ],
+   "nonhuman": [],
+   "triggers": []
+  }
+ ]
+}
