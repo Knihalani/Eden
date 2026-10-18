@@ -9,6 +9,7 @@ Options of `lex` (each one is a hypothesis family, so they combine):
   admit=1    write-side admission (F7): at sleep, rows are cut into sentences, and only declarative sentences with
              a fact signal are kept. Code, tool boilerplate, requests and questions are dropped
   ctx=1      context model (F10): drop a row whose content is ≥ 0.6 inside the window already
+  when=1     index the sleep compiler's `when` cues with the row text (F3/F11: compiled need predicates)
   gate=1     need-existence gate (F5): silent on non-human events (task notifications, peer messages, which a hook
              recognises by their wrapper) and on acknowledgements with no content
 
@@ -125,7 +126,7 @@ class Lex(Base):
     def __init__(self, rows, stream, items, cov, **kw):
         super().__init__(rows, stream, items, cov, **kw)
         self.tau = kw.get("tau", 6.0)
-        self.docs = {r["id"]: self._tf(r["text"]) for r in self.rows}
+        self.docs = {r["id"]: self._tf(self._doc(r)) for r in self.rows}
         n = len(self.rows)
         df = {}
         for tf in self.docs.values():
@@ -134,6 +135,14 @@ class Lex(Base):
         self.idf = {t: math.log(1 + (n - d + 0.5) / (d + 0.5)) for t, d in df.items()}
         self.len = {i: sum(tf.values()) for i, tf in self.docs.items()}
         self.avg = sum(self.len.values()) / max(1, n)
+
+    def _doc(self, r):
+        """Row text; with `when=1` also the sleep compiler's cue fields (F3/F11 need predicates)."""
+        if not self.kw.get("when"):
+            return r["text"]
+        w = r.get("when") or {}
+        extra = (r.get("entities") or []) + (w.get("entities") or []) + (w.get("activities") or [])
+        return r["text"] + " " + " ".join(extra)
 
     @staticmethod
     def _tf(text):
