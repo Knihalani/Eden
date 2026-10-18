@@ -1,0 +1,17 @@
+{"batch": "j06", "judge": "opus (claude-code subagent)", "cases": [
+{"event": "code-s108-e009", "needed": [], "why": "Test run notification for page-size change; nothing in memory needed."},
+{"event": "code-s097-e000", "needed": ["code-sleep-b06:m0017", "code-sleep-b01:m0034", "code-sleep-b00:m0037"], "why": "How to switch kubectl to acme-prod to inspect pods, and that prod alarms page the PagerDuty on-call via pagerduty-oncall SNS."},
+{"event": "code-s087-e006", "needed": [], "why": "next-themes class strategy already stated in recent context."},
+{"event": "code-s085-e014", "needed": ["code-sleep-b06:m0012", "code-sleep-b04:m0021"], "why": "API ingress uses AWS Load Balancer Controller; DNS is Cloudflare acme.dev via records.yaml, relevant to cert/validation records."},
+{"event": "code-s013-e037", "needed": [], "why": "Acknowledgement."},
+{"event": "code-s082-e005", "needed": ["code-sleep-b06:m0024"], "why": "Unrelated rename alongside the clock-skew fix: keep one concern per PR/branch."},
+{"event": "code-s075-e032", "needed": [], "why": "Informational dependency digest; no action needed."},
+{"event": "code-s071-e006", "needed": [], "why": "Test pass notification; nothing needed."},
+{"event": "code-s077-e019", "needed": [], "why": "General JS question; brevity preference already in recent."},
+{"event": "code-s040-e008", "needed": ["code-sleep-b03:m0002", "code-sleep-b00:m0035"], "why": "Logger swap must not log secrets/bodies (redaction rule); .env.example should hold only placeholders with source comment."},
+{"event": "code-s083-e005", "needed": [], "why": "Simple undo of the just-made change."},
+{"event": "code-s021-e011", "needed": [], "why": "Benchmark locally as stated; no relevant memory available."},
+{"event": "code-s045-e000", "needed": ["code-sleep-b02:m0016", "code-sleep-b01:m0022", "code-sleep-b03:m0007", "code-sleep-b04:m0004"], "why": "Outgoing webhooks must be HMAC-signed (X-Acme-Signature); enqueue from payment handler is billing code needing Jordan's review; worker retry/DLQ policy; worker queues/local run."},
+{"event": "code-s095-e011", "needed": [], "why": "Acknowledgement."},
+{"event": "code-s046-e016", "needed": ["code-sleep-b03:m0016"], "why": "User-facing CLI output change needs a changeset before the PR."}
+]}

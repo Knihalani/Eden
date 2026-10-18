@@ -1,0 +1,17 @@
+{"batch": "j09", "judge": "opus (claude-code subagent)", "cases": [
+{"event": "code-s047-e031", "needed": [], "why": "Test-pass notification; nothing in memory changes the next step."},
+{"event": "code-s091-e000", "needed": [], "why": "No memory about CLI update checks; telemetry row is unrelated."},
+{"event": "code-s007-e036", "needed": [], "why": "General React question."},
+{"event": "code-s047-e032", "needed": [], "why": "Acknowledgement."},
+{"event": "code-s051-e006", "needed": [], "why": "Release cache gotcha not yet in memory at this time; CI facts given by user."},
+{"event": "code-s038-e000", "needed": ["code-sleep-b01:m0008", "code-sleep-b00:m0054"], "why": "Helm chart locations (values-prod.yaml) and that infra/ is Priya's platform team for review."},
+{"event": "code-s058-e000", "needed": ["code-sleep-b03:m0009", "code-sleep-b04:m0007"], "why": "Round each line to whole cents before summing; web formatMoney rounding caveat."},
+{"event": "code-s022-e008", "needed": ["code-sleep-b00:m0023", "code-sleep-b00:m0004", "code-sleep-b00:m0050"], "why": "Exception tracker is Sentry; pino logging not console.log; Conventional Commits for check-in."},
+{"event": "code-s088-e000", "needed": [], "why": "General htmx how-to for side project."},
+{"event": "code-s068-e023", "needed": ["code-sleep-b03:m0024", "code-sleep-b00:m0025", "code-sleep-b06:m0024", "code-sleep-b06:m0005"], "why": "No major bumps without asking; never git stash (commit WIP); separate branch per concern; commit pnpm-lock."},
+{"event": "code-s045-e007", "needed": ["code-sleep-b04:m0006"], "why": "Priya owns infra/ and DNS; CODEOWNERS approval needed."},
+{"event": "code-s027-e007", "needed": [], "why": "Test-pass notification; nothing needed."},
+{"event": "code-s027-e049", "needed": ["code-sleep-b01:m0011", "code-sleep-b00:m0007", "code-sleep-b00:m0050", "code-sleep-b00:m0051"], "why": "CLI structure (yargs, commands dir, existing flags), changeset for user-facing change, commit style, docs/cli.md update."},
+{"event": "code-s003-e000", "needed": ["code-sleep-b00:m0003"], "why": "How worker tests run (pnpm --filter worker test, ioredis-mock)."},
+{"event": "code-s057-e028", "needed": [], "why": "General React question."}
+]}
