@@ -303,3 +303,27 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   | code (v1) | 0.0909 | 0.1042 | — | — | — |
 
 - **Verdict:** shorter prompts barely change Eden's false-fire rate (89% → 88%), so prompt length does not explain the gap with the real 31% (C1-E4). Next suspect: the real 31% was measured with P4.3's evidence gate, which is in shadow by default. A replay with `EDEN_FLAG_GATE_TAU=on` is running.
+
+## C3-E4 · 2026-10-18 · Downstream effect (BRIEF §4.7), code world
+- **Setup** (`downstream.py`, dev human turns): 60 turns (30 plan-need, 15 labeler-only need, 15 no-need).
+  - Conditions: no memory; oracle packet (plan ∪ labeler needs, empty on no-need turns); system = vote (bt .25, lt 6, st 4, strip).
+  - Responder: sonnet, one run per condition, the order shuffled per turn.
+  - Judge: opus, blind to condition, sees the world's reference facts at that time, scores 0–3.
+- **Numbers:**
+
+  | Group | n | Mean score: none / oracle / system | Oracle − none | Share with effect ≥ 1 | System − none |
+  |---|---|---|---|---|---|
+  | plan | 30 | 1.90 / 2.87 / 2.20 | +0.967 | 0.80 | +0.30 |
+  | labeler-only | 15 | 2.33 / 2.87 / 2.33 | +0.533 | 0.533 | 0.0 |
+  | no-need | 15 | 2.93 / 2.67 / 2.53 | −0.267 | 0.067 | −0.40 |
+
+  Effect distribution (oracle − none):
+  - plan: −1: 1, 0: 5, +1: 18, +2: 6
+  - labeler-only: 0: 7, +1: 8
+  - no-need: −2: 2, −1: 1, 0: 11, +1: 1 (the oracle packet is empty here, so this is responder and judge noise)
+- **Verdict:**
+  1. **Plan labels are valid.** Memory changes the outcome on 80% of plan-need turns. The noise floor, measured on no-need turns, is about 7% for "effect ≥ 1".
+  2. **About half of the labeler-only needs are real but mild** (mean +0.53). True need is between the plan's and the union's. The plan stays the primary label. Union becomes a lenient secondary.
+  3. **Wrong bullets hurt outcomes:** the vote packet is −0.40 on no-need turns. Precision and silence are outcome metrics, not only token costs.
+  4. **A hook-side packet keeps only about 30% of the available benefit** on need turns: +0.30 of +0.97.
+- **Caveats:** one responder run per condition; n = 15 per small group; all models are Claude.
