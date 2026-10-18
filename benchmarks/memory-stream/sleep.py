@@ -33,8 +33,11 @@ def prep(world, batch):
         print(name, len(sessions))
 
 
-def rows(stream, world, tag="out"):
-    """Store rows from the compiled ops: {id, text, kind, when, t, invalid_at} with t in event order."""
+def rows(stream, world, tag="out", strict=False):
+    """Store rows from the compiled ops: {id, text, kind, when, t, invalid_at} with t in event order.
+
+    strict=True (leak-free): a batch's rows become visible only after the batch's last session. The compiler read the
+    whole batch at once, so a row written for an early session may carry cues taken from a later one."""
     end = {}
     order = 0
     for s in stream["sessions"]:
@@ -45,8 +48,9 @@ def rows(stream, world, tag="out"):
     out = {}
     for p in sorted(glob.glob(os.path.join(HERE, "sleep", world, tag, "*.json"))):
         d = json.load(open(p))
+        last = max((end.get(s["id"], 0) for s in d["sessions"]), default=0)
         for s in d["sessions"]:
-            t = end.get(s["id"])
+            t = last if strict else end.get(s["id"])
             if t is None:
                 continue
             for op in s.get("ops", []):

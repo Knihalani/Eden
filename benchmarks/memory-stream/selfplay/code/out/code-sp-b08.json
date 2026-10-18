@@ -1,0 +1,726 @@
+{
+  "batch": "code-sp-b08",
+  "generator": "haiku (claude-code subagent)",
+  "rows": {
+    "code-sleep-b09:m0002": {
+      "pos": [
+        "add a route to re-send the receipt for an invoice, follow the same pattern as the resend one",
+        "wire up the frontend call for voiding an invoice, api side is done",
+        "can you write the curl to test the export endpoint on staging",
+        "the invoice export is 404ing from the dashboard, why",
+        "add a pagination test for the invoices list route",
+        "hook the new resend button to the api, keep the url shape consistent"
+      ],
+      "neg": [
+        "what does /v1 mean in a REST url in general?",
+        "what's the difference between api versioning in the url vs headers",
+        "remove the old v1 folder from the storybook build",
+        "the sdk readme has a stale version badge, fix it",
+        "explain how fastify route prefixes work",
+        "rename the export button label to 'Download CSV'"
+      ]
+    },
+    "code-sleep-b09:m0003": {
+      "pos": [
+        "the acme cli is spamming a notice at the end of every command in ci, can you fix",
+        "add a --json flag to the acme cli status command",
+        "write the changelog entry for the cli, we're cutting the release tomorrow",
+        "why does acme print something to stderr after I run it locally",
+        "ci logs are noisy from the cli, quiet them please",
+        "bump the cli for the release, what's the current published version"
+      ],
+      "neg": [
+        "how does update-notifier work in general?",
+        "what does NO_UPDATE_NOTIFIER do in other node tools",
+        "add a spinner to the acme cli deploy command",
+        "is 2.8.0 a prerelease or a stable semver release in general terms?",
+        "the cli help text has a typo in the deploy subcommand, fix it",
+        "redirect stdout to a file for the acme seed command"
+      ]
+    },
+    "code-sleep-b09:m0004": {
+      "pos": [
+        "the queue dashboard is missing the retry panel, add it and push",
+        "grafana is still showing the old p95 panel, fix it real quick",
+        "add an alert when the webhook queue backs up over 500",
+        "ok I tweaked the latency panel in grafana, can you make that stick",
+        "preview the monitoring changes before we merge",
+        "write the panel for api 5xx rate by route, I'll review it"
+      ],
+      "neg": [
+        "what's the difference between grafana and prometheus?",
+        "how do I write a promql rate query for 5xx errors",
+        "delete the unused json fixtures in the api test folder",
+        "the README in docs/ has a broken link to the design system, fix",
+        "explain what a repeatable job is in bullmq",
+        "sync my local git branch with origin main"
+      ]
+    },
+    "code-sleep-b09:m0005": {
+      "pos": [
+        "push the grafana changes, they were reviewed",
+        "is the billing-sync panel already live",
+        "ship the queue dashboard",
+        "what's left before the billing queue monitoring is done",
+        "run the grafana sync and push, I'm done",
+        "continue with the monitoring work from yesterday"
+      ],
+      "neg": [
+        "what's a job queue in general, like bullmq or sidekiq",
+        "add a waiting count panel for the email queue",
+        "why does bullmq count waiting and active jobs separately?",
+        "the invoice total is off by a cent, look at the rounding",
+        "clean up the stash from last week",
+        "write a changelog entry for the invoice export"
+      ]
+    },
+    "code-sleep-b09:m0006": {
+      "pos": [
+        "the clients table feels wrong, can you fix the default order",
+        "ok add a 'last activity' column to the clients table",
+        "new clients keep landing at the bottom of the list, can you fix that",
+        "add a sort toggle to the clients header",
+        "the clients hook is returning unsorted data after the refactor",
+        "make the clients page feel current, new signups should be visible first"
+      ],
+      "neg": [
+        "what's the default sort order in SQL if you don't specify ORDER BY",
+        "sort the invoices table by amount ascending, add the header",
+        "how do I write a stable sort comparator in typescript",
+        "the clients table has a typo in the column label, fix it",
+        "add a search box to the orgs page",
+        "explain what useQuery's staleTime does"
+      ]
+    },
+    "code-sleep-b09:m0007": {
+      "pos": [
+        "the api is throwing 401s on the first call after login again, dig in",
+        "look at the auth middleware for the api, I want to understand session handling",
+        "sentry got a spike, pull the last week of api errors grouped by route",
+        "the dashboard flickers on load for some users, probably auth, check it",
+        "another customer reported a logout loop, ticket 2231",
+        "I found the old ticket about the token thing, find the commit that touched session refresh"
+      ],
+      "neg": [
+        "how does an oauth refresh token flow work in general?",
+        "what's the difference between 401 and 403 in REST",
+        "add a logout button to the settings page",
+        "the sentry sdk init in web has a typo in the dsn env name, fix",
+        "write a test for the logout redirect",
+        "explain how clerk middleware matches routes"
+      ]
+    },
+    "code-sleep-b09:m0008": {
+      "pos": [
+        "add tests for the settings page, it's the one under app/settings",
+        "coverage dropped on the web app, what's uncovered",
+        "write tests for all the page files in apps/web/app/settings",
+        "make the vitest coverage gate pass for web",
+        "add a test for the old /billing route redirect",
+        "the pr needs tests, can you cover the new route files"
+      ],
+      "neg": [
+        "what does redirect() do in the next 15 app router?",
+        "write a unit test for the price formatter in format.ts",
+        "why does vitest coverage count type-only files?",
+        "add a settings link to the sidebar nav",
+        "move the settings page to the new layout",
+        "explain the difference between redirect and permanentRedirect in next"
+      ]
+    },
+    "code-sleep-b09:m0009": {
+      "pos": [
+        "in trailmix, the hike form shows a full page on bad input, fix it",
+        "add an edit form for hikes in trailmix, same style as create",
+        "trailmix: validation errors on the new hike page look broken",
+        "add a delete button to each hike row in trailmix",
+        "in trailmix the add hike form reloads the whole page, make it inline",
+        "trailmix hike create endpoint, add a notes field and keep the form working"
+      ],
+      "neg": [
+        "what is htmx and when should I use it over react?",
+        "why does django return a 302 after a post",
+        "add a dark mode toggle to the acme dashboard",
+        "trailmix needs a favicon, which size should it be?",
+        "explain django class-based views vs function views",
+        "write a readme section for installing trailmix"
+      ]
+    },
+    "code-sleep-b09:m0010": {
+      "pos": [
+        "the invoice row needs a new 'overdue' badge, add it",
+        "import the invoice row component in the reports page",
+        "tests for the invoice row are failing after the merge, look",
+        "add a click handler to the invoice row for the drawer",
+        "where's the invoice row file, I need to change padding",
+        "pull the invoice row out into its own hook"
+      ],
+      "neg": [
+        "what's a good pattern for list item components in react",
+        "rename the customer card component to ClientCard",
+        "invoice totals are off by one cent, check the formatCents function",
+        "explain react keys for list rendering",
+        "add a row count to the payments table footer",
+        "fix the typo in the invoice empty state text"
+      ]
+    },
+    "code-sleep-b09:m0011": {
+      "pos": [
+        "sam wants the finance export numbers, can you run the revenue query against prod",
+        "finish the monthly revenue sql for finance",
+        "write the sql for per org totals for last year",
+        "is the revenue query ready to hand to sam",
+        "add a running total column to the finance export",
+        "convert the revenue report to dollars instead of cents"
+      ],
+      "neg": [
+        "what's a window function in postgres, explain briefly",
+        "write a sql query for active users in the last 30 days",
+        "explain what SUM OVER PARTITION BY does",
+        "format the invoice csv export headers",
+        "what's the difference between left and inner join",
+        "rename the finance folder in tools to reports"
+      ]
+    },
+    "code-sleep-b09:m0012": {
+      "pos": [
+        "prod pods are crashing, check the logs and tell me what's happening",
+        "who's on call this weekend, can you page them",
+        "kubectl into the worker and restart it",
+        "tail the api pod logs in prod for the last hour",
+        "alert fired for high memory on the web pods, route it to the right person",
+        "run the rollout restart in production"
+      ],
+      "neg": [
+        "what does kubectl rollout restart do?",
+        "explain how kubernetes liveness probes work",
+        "write a dockerfile for the notifications service",
+        "rotate the staging api key in the env file",
+        "what's a good on-call rotation size for a small team?",
+        "fix the helm chart indentation in values.yaml"
+      ]
+    },
+    "code-sleep-b09:m0013": {
+      "pos": [
+        "the invoice reminder emails stopped going out, can you check",
+        "anything still open from the weekend, what's the status",
+        "re-enable the reminder schedule, it's safe now",
+        "the worker keeps restarting, write up what we know for the incident doc",
+        "monday, what's the next step on the scheduling thing",
+        "add a guard so the repeatable job doesn't register twice on startup"
+      ],
+      "neg": [
+        "what does a bullmq repeatable job mean in general",
+        "how do I write an incident postmortem template",
+        "explain feature flags as a way to kill a feature quickly",
+        "what's the usual way to run startup tasks in a node service?",
+        "delete the old reminder email template",
+        "add a test for the email subject line formatting"
+      ]
+    },
+    "code-sleep-b09:m0014": {
+      "pos": [
+        "add the copy share link button to invoice preview",
+        "the share link on invoice preview 404s, look into it",
+        "write the share page for invoices, server side",
+        "add the new env var to the env example file",
+        "can invoices be shared publicly without login, how",
+        "implement the expiry check on the public invoice page"
+      ],
+      "neg": [
+        "what's HMAC-SHA256 and when is it used?",
+        "how do expiry params work on S3 presigned urls",
+        "add a print button to the invoice preview",
+        "the env example file has a stale database url, update it",
+        "explain what JWT signing is",
+        "add an export pdf button to the invoices list"
+      ]
+    },
+    "code-sleep-b09:m0015": {
+      "pos": [
+        "the loading skeleton flashes on every page navigation, fix",
+        "add a loading state to the clients list, it's fast though",
+        "the spinner flickers for half a second on the invoice list",
+        "write loading.tsx for the payments page",
+        "make the orders page show a placeholder while it loads",
+        "why does the table jump when data loads, it's a layout thing"
+      ],
+      "neg": [
+        "what does suspense do in react 19",
+        "explain debounce vs throttle",
+        "add a 'no results' message to the search page",
+        "the loading gif in the readme is broken, replace it",
+        "what's a good skeleton color in dark mode",
+        "make the sidebar collapse on mobile"
+      ]
+    },
+    "code-sleep-b09:m0016": {
+      "pos": [
+        "trailmix hike page errors on elevation, what's wrong",
+        "add elevation gain to the trailmix hike form",
+        "run the trailmix tests, they were passing",
+        "the trailmix dev server throws a column error on the hikes table",
+        "add elevation to the trailmix hike list template",
+        "trailmix: can I see the hike model now"
+      ],
+      "neg": [
+        "what's the difference between null and blank in django fields",
+        "explain django migrations in general",
+        "add pagination to the trailmix hike list",
+        "the trailmix readme has a wrong python version, fix it",
+        "how do I reset a sqlite db in dev",
+        "add a map embed to the hike detail page"
+      ]
+    },
+    "code-sleep-b09:m0017": {
+      "pos": [
+        "add the org check on the api routes like we talked about",
+        "the web app sends x-org-id now, make the api validate it",
+        "lock down the api so people can't read other orgs' invoices",
+        "start the tenant guard on the api, pick the framework from package.json",
+        "the uploads route needs the same org header check as clients",
+        "api returns 403 for the other org, add a test for that"
+      ],
+      "neg": [
+        "what's the difference between a 403 and a 404 for tenant data",
+        "explain row level security in postgres",
+        "add a health check endpoint that returns uptime",
+        "the webhook handler logs too much, dial it down",
+        "what's problem+json in general?",
+        "add the x-request-id header to all api responses"
+      ]
+    },
+    "code-sleep-b09:m0018": {
+      "pos": [
+        "the resend invoice toast says the wrong thing, fix it",
+        "update the copy for the resend button success state",
+        "add a toast after resending an invoice",
+        "the success message after resend reads awkward, fix",
+        "write the i18n strings for the invoice resend flow",
+        "resend toast is missing from the bulk reminders page, add it"
+      ],
+      "neg": [
+        "what's a good length for a toast message",
+        "add a toast for when the clients export finishes",
+        "fix the sent date formatting on the invoice list",
+        "change the button color for destructive actions to red",
+        "what's the difference between sonner and react-hot-toast",
+        "rename the reminder button label to 'Send reminder'"
+      ]
+    },
+    "code-sleep-b09:m0019": {
+      "pos": [
+        "quick q, what does the auth middleware do",
+        "walk me through the whole deploy pipeline",
+        "summarize the diff for me",
+        "what changed in the last three commits",
+        "explain the whole billing flow",
+        "how does the webhook retry logic work end to end"
+      ],
+      "neg": [
+        "write a long-form blog post on how our billing architecture evolved",
+        "how do other teams keep chat replies short",
+        "summarize this 40-page pdf for me",
+        "draft a concise release note for version 2.7.1",
+        "explain the git log format options",
+        "what's the shortest way to write a for loop in python"
+      ]
+    },
+    "code-sleep-b09:m0020": {
+      "pos": [
+        "why didn't perf numbers show up on my last push",
+        "add a new ci job for the bundle size check after check",
+        "the ci run got cancelled when I pushed again, is that normal",
+        "push the fix and wait for the perf results",
+        "the perf numbers on this branch look wrong, check ci",
+        "can you grab the perf-results artifact from the pr"
+      ],
+      "neg": [
+        "what does cancel-in-progress do in github actions in general",
+        "add a lint job to the ci workflow for markdown",
+        "explain how github actions concurrency groups work",
+        "is canvas or svg faster for rendering a pdf in the browser",
+        "bump the node version in the dockerfile",
+        "what's a good timeout for a ci job"
+      ]
+    },
+    "code-sleep-b09:m0021": {
+      "pos": [
+        "the status badge on the invoice list crashes for voided ones",
+        "add a void option to the invoice status filter",
+        "type error in the invoice badge after the api-client bump",
+        "map all invoice statuses to badge colors",
+        "the api returns a status the web doesn't know, fix the types",
+        "add a status filter with all invoice statuses"
+      ],
+      "neg": [
+        "what's the difference between void and refund on an invoice in accounting",
+        "add a draft badge color to the design tokens",
+        "update the readme for the api client package",
+        "explain discriminated unions in typescript",
+        "the payment status enum has a typo, fix it",
+        "write a function to count paid invoices per month"
+      ]
+    },
+    "code-sleep-b09:m0022": {
+      "pos": [
+        "run the audit and fix whatever is high severity",
+        "renovate branch merges monday, do anything before that?",
+        "pnpm audit is red, what do I do",
+        "the git hooks package pulls in an ancient dependency, fix the deps",
+        "add a pnpm override for the storybook deps",
+        "is it safe to bump msw to the latest"
+      ],
+      "neg": [
+        "what does a pnpm override do in general",
+        "explain semver ranges like caret and tilde",
+        "add a security policy file to the repo root",
+        "what's the difference between a dev dependency and a runtime one",
+        "upgrade typescript to 5.6 in the web app",
+        "explain what msw does for api mocking"
+      ]
+    },
+    "code-sleep-b09:m0023": {
+      "pos": [
+        "deploys keep dropping jobs in the worker, check the helm chart",
+        "does the worker finish its current job before it dies on deploy",
+        "add a sigterm handler to the worker",
+        "jobs get stuck in active after a rollout, why",
+        "check the termination grace period for the queue workers",
+        "write a test that kills the worker mid job"
+      ],
+      "neg": [
+        "what does SIGTERM mean on linux",
+        "explain bullmq job retries and stalled jobs in general",
+        "add a health endpoint to the api",
+        "increase the worker memory limit in the dev compose file",
+        "write a cron expression for every 5 minutes",
+        "what's the default termination grace period in kubernetes"
+      ]
+    },
+    "code-sleep-b10:m0001": {
+      "pos": [
+        "turn on the new invoice editor for my local dev",
+        "add a flag for the bulk reminders feature, default off",
+        "the beta orgs need the expense attachments thing, enable it for them",
+        "where does the value for the new invoice editor flag come from",
+        "add a new feature flag for the csv importer",
+        "hide the bulk reminders button for everyone except admins"
+      ],
+      "neg": [
+        "what's a feature flag and when should I use one",
+        "compare launchdarkly and unleash in general",
+        "add a dark mode toggle to the design tokens file",
+        "explain what a boolean env var is",
+        "add a notifications toggle to the settings page",
+        "fix the typo in the flags readme in the wiki"
+      ]
+    },
+    "code-sleep-b10:m0002": {
+      "pos": [
+        "gate the invoice export feature for beta customers only",
+        "ship the invoice export, it's ready",
+        "add the export endpoint and the button, beta only",
+        "finish the invoice export feature, then open the pr",
+        "the export button should only show for some orgs",
+        "wire the export feature to the flag system in the web app"
+      ],
+      "neg": [
+        "how do beta flags usually work in saas products",
+        "explain csv export streaming for big datasets",
+        "add an xlsx export to the reports page",
+        "what does 'beta org' mean in b2b onboarding",
+        "fix the export filename date format",
+        "add a feature flag section to the team wiki template"
+      ]
+    },
+    "code-sleep-b10:m0003": {
+      "pos": [
+        "copy the invoice draft before editing, need a clean deep copy",
+        "the state update mutates the original object, fix the copy",
+        "clone the form defaults so edits don't leak",
+        "deep copy the org settings object in the reducer",
+        "save a snapshot of the cart before the user edits it",
+        "the invoice line items get shared between drafts, why"
+      ],
+      "neg": [
+        "what's the difference between a shallow and a deep copy in JS",
+        "explain how Object.assign works",
+        "add a deep equality helper for config objects",
+        "how do I parse JSON safely in node",
+        "write a JSON schema for the invoice payload",
+        "what does Date.parse return on invalid input"
+      ]
+    },
+    "code-sleep-b10:m0004": {
+      "pos": [
+        "trailmix: after I submit a hike the whole list reloads, just add the row",
+        "hike list in trailmix, add the new entry at the top",
+        "the htmx form in trailmix duplicates rows on submit",
+        "add an inline edit to the trailmix hike rows",
+        "trailmix hike form: change where the response goes",
+        "new hikes get added but the whole table flickers, fix the swap"
+      ],
+      "neg": [
+        "what does hx-swap do in htmx in general",
+        "explain django template inheritance",
+        "add a sort to the trailmix hike list by date",
+        "what's the difference between outerHTML and innerHTML",
+        "add a logout link to the trailmix nav",
+        "trailmix needs a 404 page, write one"
+      ]
+    },
+    "code-sleep-b10:m0005": {
+      "pos": [
+        "let users upload receipts on expenses, start on the api",
+        "add a file input to the expense form",
+        "install @fastify/multipart and wire it up",
+        "expense receipts: can we store them in s3 directly from the browser",
+        "attach a pdf to an expense and save it",
+        "the expense form needs a receipt upload, go ahead and build it"
+      ],
+      "neg": [
+        "what's the best way to upload big files in the browser in general",
+        "explain multipart form data",
+        "add a note field to the expense form",
+        "what does a 413 payload too large error mean",
+        "add currency formatting to expense totals",
+        "write a test for the expense category color validation"
+      ]
+    },
+    "code-sleep-b10:m0006": {
+      "pos": [
+        "who should I talk to about where uploaded files live, before I build it",
+        "we need to decide where the uploaded files go, who decides",
+        "draft a message for the backend lead about bucket layout",
+        "should the receipt files be in the db or object storage",
+        "which team owns file storage here",
+        "set up a call about the storage design this week"
+      ],
+      "neg": [
+        "what's the difference between s3 and EBS",
+        "explain presigned urls for uploads",
+        "who should own a shared library in a monorepo, in general",
+        "write a meeting agenda template for a design review",
+        "how do I stream a file download in node",
+        "which slack channel is usually for incidents"
+      ]
+    },
+    "code-sleep-b10:m0007": {
+      "pos": [
+        "run the web tests for me",
+        "add a test file for the new hook, match the existing setup",
+        "pr checks failed on vercel, look",
+        "install a new package in the web app, the right way for this repo",
+        "how do I run only the api package tests",
+        "what's the command to start the web dev server"
+      ],
+      "neg": [
+        "what's the difference between jest and vitest",
+        "how does turborepo caching work in general",
+        "add a button to the empty state of the orders page",
+        "explain react server components briefly",
+        "fastify vs express performance in general",
+        "write a dockerfile for a next.js app"
+      ]
+    },
+    "code-sleep-b10:m0008": {
+      "pos": [
+        "show the bank account number on the payout page masked",
+        "the iban shows in full on the invoice, hide most of it",
+        "add a test for the iban display",
+        "format the cents amount on the payout summary",
+        "the initials in the avatar are wrong for names with a middle name",
+        "write a masking helper for account numbers on the statement"
+      ],
+      "neg": [
+        "what's the iban format for germany",
+        "how do banks mask card numbers in general",
+        "explain Intl.NumberFormat currency options",
+        "add a phone number field to the client form",
+        "write a regex to validate an email",
+        "what does toUpperCase do with unicode"
+      ]
+    },
+    "code-sleep-b10:m0009": {
+      "pos": [
+        "add elevation to the trailmix hike form, in meters",
+        "trailmix hike form needs an elevation input, add it and test",
+        "show elevation on the trailmix hike list",
+        "trailmix: store how much climbing each hike had",
+        "can you fix the trailmix tests now",
+        "make elevation optional in the trailmix create view"
+      ],
+      "neg": [
+        "what's a good way to store measurements in django models",
+        "convert feet to meters in python",
+        "add a distance field to the trailmix hike model",
+        "explain django blank vs null on char fields",
+        "what's a typical elevation gain for a 10k hike",
+        "add a favicon to trailmix"
+      ]
+    },
+    "code-sleep-b10:m0010": {
+      "pos": [
+        "the reviewer left a nit on 431, can you handle it",
+        "the org dropdown doesn't close when I click away, why",
+        "clean up the org switcher code, it's a mess",
+        "write the test for org switcher closing",
+        "the org switcher in the nav needs a keyboard test",
+        "PR 1484 has a nit, do it before merging"
+      ],
+      "neg": [
+        "what's the difference between a popover and a dialog in accessibility",
+        "add a role switcher to the team settings page",
+        "why does a React portal help with z-index",
+        "explain focus trap in modals",
+        "add a theme toggle to the nav bar",
+        "fix the avatar image alt text in the nav"
+      ]
+    },
+    "code-sleep-b10:m0011": {
+      "pos": [
+        "add search to the invoices page, debounced",
+        "the orgs search box fires a request on every keystroke, fix",
+        "build a search input for the team members list",
+        "reuse whatever we did for client search on the vendors page",
+        "the search results flicker when typing, keep the old results visible",
+        "add a search box to the payments table"
+      ],
+      "neg": [
+        "what does debounce mean vs throttle",
+        "how do lodash debounce options work",
+        "add a clear button inside the search input",
+        "write a regex that matches phone numbers",
+        "explain react useEffect cleanup",
+        "make the search results page responsive"
+      ]
+    },
+    "code-sleep-b10:m0012": {
+      "pos": [
+        "the expense category endpoint lets bad colors through, tighten it",
+        "add parentId support to the expense category create route",
+        "write the zod schema for the expense category update",
+        "category names that are too long break the ui, cap them on the server",
+        "add a test for the category create body validation",
+        "let categories be nested under another category"
+      ],
+      "neg": [
+        "what's zod's refine method for",
+        "explain uuid v4 vs v7 for database keys",
+        "add a schema for the invoice line item body",
+        "what does z.coerce do in zod",
+        "validate a phone number with zod",
+        "add a color picker component to the tag editor"
+      ]
+    },
+    "code-sleep-b10:m0013": {
+      "pos": [
+        "the vercel prod build is failing on invoices, look",
+        "prod deploy broke, the error is about a key",
+        "check the env vars in vercel production scope",
+        "release branch won't build, what changed in the env",
+        "staging is fine but the prod build fails, why",
+        "auth key error in the prod build, fix it"
+      ],
+      "neg": [
+        "what's the difference between a publishable key and a secret key in general",
+        "how do I set env vars for preview deploys in vercel",
+        "add a maintenance banner to the dashboard",
+        "explain next.js prerendering for static pages",
+        "write a script to diff two env files",
+        "what's the difference between dev and prod builds in next"
+      ]
+    },
+    "code-sleep-b10:m0014": {
+      "pos": [
+        "getting a hydration error on the invoice due date, fix",
+        "the due date shows a different time in the browser than on the server",
+        "add a time to the invoice due date display",
+        "the console is full of hydration warnings on the invoices page",
+        "fix the date formatting on invoice detail, it's inconsistent",
+        "make the invoice date show in the user's timezone"
+      ],
+      "neg": [
+        "what causes hydration errors in react generally",
+        "how do I format a date with date-fns",
+        "add a created date column to the clients table",
+        "what's the difference between UTC and GMT",
+        "explain Intl.DateTimeFormat options",
+        "add a due soon badge to the invoice row"
+      ]
+    },
+    "code-sleep-b10:m0015": {
+      "pos": [
+        "add an option to see archived clients in the api list",
+        "the clients list endpoint doesn't return archived ones, that's a bug",
+        "wire the show-archived toggle through the clients api call",
+        "archived clients don't show up in the search, why",
+        "clients route: validate the query params, they're sloppy",
+        "write a test for the clients list with archived rows"
+      ],
+      "neg": [
+        "what's the best way to soft delete rows in postgres",
+        "explain z.coerce.boolean gotchas in general",
+        "add a pagination limit to the invoices endpoint",
+        "sort the orgs endpoint results by created date",
+        "what does a 204 response mean",
+        "add an archive button to the client detail page"
+      ]
+    },
+    "code-sleep-b10:m0016": {
+      "pos": [
+        "the clients list shows duplicates when scrolling, fix",
+        "some clients are missing from the list when paging",
+        "do the pagination for clients properly, go ahead",
+        "load more on the clients page skips rows",
+        "clients infinite scroll loses items, look at the api",
+        "page size on the clients list feels wrong, check it"
+      ],
+      "neg": [
+        "explain keyset pagination vs offset pagination",
+        "what's a cursor in graphql pagination",
+        "add a total count to the invoices list header",
+        "why is offset pagination slow on big tables",
+        "write an index for orders by created_at",
+        "fix the empty state text on the clients page"
+      ]
+    },
+    "code-sleep-b10:m0017": {
+      "pos": [
+        "make a branch for the ticket 452 page size thing",
+        "push this as a new branch and open a pr",
+        "create a branch for the error page work, ticket 447",
+        "open a pr for the org switcher ticket",
+        "git checkout -b for the new invoice filter, ticket 460",
+        "name the branch for the team page work, ticket 471 and push"
+      ],
+      "neg": [
+        "what's a good git branch naming convention in general",
+        "how do I rename a branch locally and on the remote",
+        "delete old merged branches on my machine",
+        "what does git switch -c do",
+        "write a commit message for the invoice filter change",
+        "list all remote branches with their last commit date"
+      ]
+    },
+    "code-sleep-b10:m0018": {
+      "pos": [
+        "push the render fallback branch, it's ready",
+        "the error page shows the raw error message to users, that's bad",
+        "add a retry button to the error boundary",
+        "open the pr for 447 with what we have",
+        "the whole app goes blank on a render error, add a fallback",
+        "add a test for the root error page"
+      ],
+      "neg": [
+        "what's a react error boundary and when do I need one",
+        "how does next.js handle errors in server components",
+        "add a 404 page for unknown invoice ids",
+        "the toast for failed saves shows too long, shorten it",
+        "explain the digest field in next error logs",
+        "write a custom error class for api validation failures"
+      ]
+    }
+  }
+}

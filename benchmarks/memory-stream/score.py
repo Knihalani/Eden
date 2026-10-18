@@ -228,12 +228,12 @@ def trace(text, idx, src):
     for t in c:
         for ev in idx.get(t, ()):
             hits[ev] = hits.get(ev, 0) + 1
-    best = max(hits, key=hits.get, default=None)
+    best = max(sorted(hits), key=hits.get, default=None)
     return src[best][0] if best and hits[best] / len(c) >= 0.7 else None
 
 
 def decompose(events, packets, stream, items):
-    """Classes of every injected bullet (human and trigger events): where the noise comes from."""
+    """Classes of every injected bullet on every scored event: where the noise comes from."""
     idx, src = source_index(stream)
     out = {}
     for e in events:
@@ -257,6 +257,25 @@ def decompose(events, packets, stream, items):
             out[k] = out.get(k, 0) + 1
     total = sum(out.values()) or 1
     return {k: [v, round(v / total, 3)] for k, v in sorted(out.items(), key=lambda kv: -kv[1])}
+
+
+def bootstrap(events, packets, cov, items, stream, n=500, seed=11):
+    """95% percentile intervals of human recall, silence and precision, resampling events with replacement."""
+    import random
+    rng = random.Random(seed)
+    hum = [e for e in events if e["labels"]["class"] == "human" and e["labels"].get("need_type") != "action"]
+    vals = {"recall": [], "silence": [], "precision": []}
+    for _ in range(n):
+        smp = [rng.choice(hum) for _ in hum]
+        r = score(smp, packets, cov, items, stream).get("human", {})
+        for k in vals:
+            if r.get(k) is not None:
+                vals[k].append(r[k])
+    ci = {}
+    for k, v in vals.items():
+        v.sort()
+        ci[k] = [round(v[int(0.025 * len(v))], 4), round(v[int(0.975 * len(v)) - 1], 4)] if v else None
+    return ci
 
 
 def eden_packets(run, cov):
@@ -307,6 +326,8 @@ def main():
     ap.add_argument("--store", default="write")
     ap.add_argument("--split", default="dev")
     ap.add_argument("--sleep-tag", default="out")
+    ap.add_argument("--strict", action="store_true", help="leak-free sleep store: rows visible after their batch")
+    ap.add_argument("--ci", action="store_true", help="bootstrap 95%% intervals (human recall, silence, precision)")
     ap.add_argument("--labels", default="plan", choices=["plan", "union"],
                     help="plan: the needs the stream was written to; union: plus the independent labeler's")
     ap.add_argument("--json")
@@ -335,13 +356,15 @@ def main():
             pk = eden_packets(run, cov)
             results[name] = score(events, pk, cov, items, stream)
             results[name]["bullet_classes"] = decompose(events, pk, stream, items)
+            if a.ci:
+                results[name]["ci95"] = bootstrap(events, pk, cov, items, stream)
             continue
         if a.store == "write":
             rows = write_store(run)
             clock = lambda e: times.get(e["id"], 0)
         elif a.store == "sleep":
             import sleep
-            rows = sleep.rows(stream, a.world, a.sleep_tag)
+            rows = sleep.rows(stream, a.world, a.sleep_tag, strict=a.strict)
             clock = lambda e: e["_order"]
         else:
             rows = oracle_store(stream, items, events)
@@ -356,9 +379,13 @@ def main():
             for r in rows:
                 r.setdefault("covers", cov.covers(r["text"]))
             jev = [e for e in events if e["id"] in jp]
-            pk = {e["id"]: [(byid[i]["text"], byid[i]["covers"]) for i in jp[e["id"]] if i in byid] for e in jev}
+            vis = lambda r, e: r["t"] < e["_order"] and (r.get("invalid_at") is None or r["invalid_at"] > e["_order"])
+            pk = {e["id"]: [(byid[i]["text"], byid[i]["covers"]) for i in jp[e["id"]] if i in byid and vis(byid[i], e)]
+                  for e in jev}
             results[f"judge@{a.store}"] = score(jev, pk, cov, items, stream)
             results[f"judge@{a.store}"]["bullet_classes"] = decompose(jev, pk, stream, items)
+            if a.ci:
+                results[f"judge@{a.store}"]["ci95"] = bootstrap(jev, pk, cov, items, stream)
             continue
         m = methods.make(name, rows, stream, items, cov)
         pk = {}
@@ -369,6 +396,8 @@ def main():
             pk[e["id"]] = [(byid[i]["text"], byid[i]["covers"]) for i in ids]
         results[f"{name}@{a.store}"] = score(events, pk, cov, items, stream)
         results[f"{name}@{a.store}"]["bullet_classes"] = decompose(events, pk, stream, items)
+        if a.ci:
+            results[f"{name}@{a.store}"]["ci95"] = bootstrap(events, pk, cov, items, stream)
     print(json.dumps(results, indent=1))
     if a.json:
         json.dump(results, open(a.json, "w"), indent=1)
