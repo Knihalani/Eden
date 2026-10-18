@@ -257,7 +257,7 @@ class Lex(Base):
         if self.silent(e):
             return []
         sc = self.habituate(self.scores(e, now), e)
-        ranked = [i for i in sorted(sc, key=lambda i: -sc[i]) if sc[i] >= self.tau]
+        ranked = [i for i in sorted(sc, key=lambda i: (-sc[i], i)) if sc[i] >= self.tau]
         if self.kw.get("ctx"):
             ranked = [i for i in ranked if not self.in_window(self.by_id[i], e)]
         return ranked[: self.k]
@@ -322,7 +322,7 @@ class Bank(Lex):
         if self.silent(e):
             return []
         sc = self.scores(e, now)
-        ranked = sorted(sc, key=lambda i: -sc[i])
+        ranked = sorted(sc, key=lambda i: (-sc[i], i))
         if self.kw.get("ctx"):
             ranked = [i for i in ranked if not self.in_window(self.by_id[i], e)]
         return ranked[: self.k]
@@ -382,7 +382,7 @@ class Situation(Base):
             if hit:
                 sc[r["id"]] = sum(self.kw_w[k] for k in hit)
         tau = self.kw.get("tau", 3.0)
-        return [i for i in sorted(sc, key=lambda i: -sc[i]) if sc[i] >= tau][: self.k]
+        return [i for i in sorted(sc, key=lambda i: (-sc[i], i)) if sc[i] >= tau][: self.k]
 
 
 class Vote(Base):
@@ -413,7 +413,7 @@ class Vote(Base):
             for i in group:
                 votes[i] = votes.get(i, 0) + 1
         ok = [i for i, v in votes.items() if v >= self.need]
-        return sorted(ok, key=lambda i: (-votes[i], -b.get(i, 0.0)))[: self.k]
+        return sorted(ok, key=lambda i: (-votes[i], -b.get(i, 0.0), i))[: self.k]
 
 
 REGISTRY = {"oracle-need": OracleNeed, "lex": Lex, "bm25": Lex, "bank": Bank, "situ": Situation, "vote": Vote}
