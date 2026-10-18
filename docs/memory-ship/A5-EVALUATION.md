@@ -207,6 +207,19 @@ Every arm is also run with its delivery point's flag `off` (asserting identity: 
 | continuation | "yes do it" after a proposal naming `vitest.config` → the vitest-config memory packs |
 | scale-20k / 1e6 | gold recall, silence, p99; never an unbounded bm25 on a fat term |
 
+**Beyond coding (proposed 2026-10-18 by R10; built by P8.6).** Fixture: `benchmarks/memory-life/` (LifeBench: one user's ~300 memories, incl. superseded rows and noise rows of past requests and tool output; cues by named authors; dev / test / a sealed holdout read only at an audit). Every cue arm reports recall@4, **bullet precision** (share of injected bullets in `gold ∪ allowed`), FIR on negatives, and is judged with CueBench-code on a Pareto frontier, never on one number ([research/R10/DOMAIN-AUDIT.md](research/R10/DOMAIN-AUDIT.md)).
+
+| Arm | Assert |
+|---|---|
+| cuebench-life | direct and zero-overlap paraphrase cues: recall@4, bullet precision, FIR at the store-calibrated τ |
+| proactive | the user never asks ("book dinner Friday with Sam") or an event wakes the agent ("Lunch with Priya in 1 hour"): the needed memory ("Sam is pescatarian") is in the packet; FIR on event negatives |
+| multi-need | cues needing 2–4 memories: full-coverage rate and recall |
+| stale-life | a corrected fact or a moved plan: the current row packs, the superseded or past-dated one never does (`stale_rate = 0`) |
+| life-silence | hard negatives sharing names, places and topics with the store ("what's the capital of Portugal?" with a Lisbon trip stored): FIR |
+| entity-cue | a cue naming only an entity in play gets that entity's rows relevant to the activity, not all of them |
+| space | two spaces (hosts with no repo) never share a row (P8.1) |
+| life-policy | standing instructions ("never book layovers over 3 h") fire on their action (book), not on topical mentions (P8.4) |
+
 ---
 
 ## 5. Dogfood (the only true G1 measure)

@@ -1,0 +1,3152 @@
+[
+ {
+  "id": "a001",
+  "kind": "person",
+  "subject": "Sam's diet",
+  "text": "Sam Okafor (Riya's partner) is vegetarian; he does not eat fish or seafood either.",
+  "date": "2025-04-09",
+  "superseded_by": "a002",
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a002",
+  "kind": "person",
+  "subject": "Sam's diet",
+  "text": "Sam Okafor (Riya's partner) has been pescatarian since September 2026: he eats fish and seafood but still no meat or poultry.",
+  "date": "2026-09-14",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a003",
+  "kind": "person",
+  "subject": "Sam's birthday",
+  "text": "Sam Okafor's birthday is March 22; he prefers a quiet dinner at home over a restaurant party.",
+  "date": "2025-05-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a004",
+  "kind": "person",
+  "subject": "Sam's job",
+  "text": "Sam teaches grade 11 and 12 chemistry at Riverdale Collegiate Institute and marks lab reports most Sunday evenings.",
+  "date": "2025-04-15",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a005",
+  "kind": "preference",
+  "subject": "Sam's coffee",
+  "text": "Sam drinks oat-milk flat whites and dislikes anything flavoured with hazelnut.",
+  "date": "2025-07-21",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a006",
+  "kind": "person",
+  "subject": "Sam's sensitivities",
+  "text": "Sam gets migraines from strong fragrances, so Riya avoids scented candles and air fresheners at home.",
+  "date": "2025-10-03",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a007",
+  "kind": "relationship",
+  "subject": "Anniversary",
+  "text": "Riya and Sam's anniversary is June 8; they met in 2015 at a friend's board-game night.",
+  "date": "2025-05-30",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a008",
+  "kind": "preference",
+  "subject": "Sam gift ideas",
+  "text": "Sam collects vintage Penguin paperbacks and has wanted a Fellow Ode coffee grinder for a while.",
+  "date": "2026-02-11",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a009",
+  "kind": "person",
+  "subject": "Leo basics",
+  "text": "Leo is Riya and Sam's son, born July 17, 2019; he is in grade 2 at Morse Street Public School with Ms. Alvarez.",
+  "date": "2025-09-04",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a010",
+  "kind": "person",
+  "subject": "Leo's allergy",
+  "text": "Leo is allergic to tree nuts; the family keeps all nuts out of his lunches.",
+  "date": "2025-04-20",
+  "superseded_by": "a011",
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a011",
+  "kind": "person",
+  "subject": "Leo's allergy",
+  "text": "An allergist at SickKids confirmed in May 2026 that Leo is allergic only to cashews and pistachios, not all tree nuts; he carries an EpiPen Jr. in his backpack.",
+  "date": "2026-05-27",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a012",
+  "kind": "preference",
+  "subject": "Leo's likes",
+  "text": "Leo is obsessed with dinosaurs and Lego, especially the Lego Jurassic World sets, and hates mushrooms.",
+  "date": "2025-11-30",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a013",
+  "kind": "routine",
+  "subject": "Leo's swimming",
+  "text": "Leo has swimming lessons Saturdays at 10:00 at the Pape Recreation Centre (Swimmer 3 level).",
+  "date": "2026-01-10",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a014",
+  "kind": "person",
+  "subject": "Leo's sleep",
+  "text": "Leo goes to bed at 7:45 pm on school nights and does not do well with sleepovers yet.",
+  "date": "2025-06-12",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a015",
+  "kind": "person",
+  "subject": "Leo's best friend",
+  "text": "Leo's best friend is Jun Cho, Hannah's son; they walk to Morse Street together most mornings.",
+  "date": "2025-10-14",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a016",
+  "kind": "person",
+  "subject": "Biscuit",
+  "text": "Biscuit is the family's beagle, born around April 2022; he is food-motivated and has a habit of stealing bread off the counter.",
+  "date": "2025-04-03",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a017",
+  "kind": "fact",
+  "subject": "Biscuit's vet",
+  "text": "Biscuit's vet is Dr. Moreau at Leslieville Animal Hospital on Queen Street East.",
+  "date": "2025-06-18",
+  "superseded_by": "a018",
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a018",
+  "kind": "fact",
+  "subject": "Biscuit's vet",
+  "text": "Since Dr. Moreau retired in April 2026, Biscuit's vet is Dr. Kaur at Riverside Veterinary Clinic on Broadview Ave.",
+  "date": "2026-04-22",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a019",
+  "kind": "fact",
+  "subject": "Biscuit's food",
+  "text": "Biscuit eats Purina Pro Plan Sensitive Skin & Stomach (salmon) because chicken-based food gave him itchy skin.",
+  "date": "2025-08-07",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a020",
+  "kind": "routine",
+  "subject": "Biscuit's walker",
+  "text": "A dog walker named Felipe (Paws on Pape) walks Biscuit at noon on Tuesdays and Thursdays for $25 a walk.",
+  "date": "2025-11-04",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a021",
+  "kind": "person",
+  "subject": "Anjali",
+  "text": "Anjali Malhotra is Riya's mother; she lives in Bandra, Mumbai, is a retired school principal and has type 2 diabetes.",
+  "date": "2025-04-12",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a022",
+  "kind": "routine",
+  "subject": "Call with mom",
+  "text": "Riya calls her mother Anjali every Sunday at 9:00 am Toronto time (6:30 pm in Mumbai).",
+  "date": "2025-05-04",
+  "superseded_by": "a023",
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a023",
+  "kind": "routine",
+  "subject": "Call with mom",
+  "text": "Riya's weekly call with her mother Anjali is now Saturdays at 8:30 am Toronto time (6:00 pm Mumbai), moved because of Leo's Sunday soccer.",
+  "date": "2026-04-19",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a024",
+  "kind": "person",
+  "subject": "Anjali's birthday",
+  "text": "Anjali Malhotra's birthday is November 3; Riya usually sends flowers through a Mumbai florist and calls at her morning.",
+  "date": "2025-10-28",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a025",
+  "kind": "preference",
+  "subject": "Anjali gifts",
+  "text": "Anjali loves Kanjeevaram silk sarees and Darjeeling tea, but finds gift cards impersonal.",
+  "date": "2025-10-29",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a026",
+  "kind": "plan",
+  "subject": "Anjali visit",
+  "text": "Anjali plans to visit Toronto from May 10 to June 21, 2027, staying in the guest room once the renovation is done.",
+  "date": "2026-09-28",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a027",
+  "kind": "person",
+  "subject": "Kabir",
+  "text": "Kabir Malhotra is Riya's younger brother; he is a software engineer at a game studio in Vancouver and married to Mei.",
+  "date": "2025-04-26",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a028",
+  "kind": "person",
+  "subject": "Ira",
+  "text": "Ira is Kabir and Mei's daughter, born February 14, 2026, in Vancouver; Riya is her godmother.",
+  "date": "2026-02-15",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a029",
+  "kind": "person",
+  "subject": "Mei",
+  "text": "Mei (Kabir's wife) is lactose intolerant and a big fan of Riya's chana masala.",
+  "date": "2025-08-30",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a030",
+  "kind": "person",
+  "subject": "Kabir's birthday",
+  "text": "Kabir's birthday is August 5; he and Riya always swap silly mugs instead of real gifts.",
+  "date": "2025-08-04",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a031",
+  "kind": "person",
+  "subject": "Grace & Daniel",
+  "text": "Grace and Daniel Okafor are Sam's parents in Ottawa (Alta Vista); Daniel is a retired civil engineer and Grace still teaches piano.",
+  "date": "2025-04-28",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a032",
+  "kind": "person",
+  "subject": "Daniel's health",
+  "text": "Daniel Okafor had knee replacement surgery in January 2026 and avoids long stairs and long drives.",
+  "date": "2026-02-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a033",
+  "kind": "person",
+  "subject": "Grace's diet",
+  "text": "Grace Okafor is allergic to shellfish and does not drink alcohol.",
+  "date": "2025-12-20",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a034",
+  "kind": "plan",
+  "subject": "Ottawa Thanksgiving",
+  "text": "Riya, Sam and Leo spent Thanksgiving 2026 (October 10–13) with Grace and Daniel in Ottawa.",
+  "date": "2026-09-30",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a035",
+  "kind": "person",
+  "subject": "Priya",
+  "text": "Priya Nair is Riya's best friend from McGill; she works as an architect in Montreal.",
+  "date": "2025-04-30",
+  "superseded_by": "a036",
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a036",
+  "kind": "person",
+  "subject": "Priya",
+  "text": "Priya Nair (Riya's best friend from McGill) moved back to Toronto in July 2026 and now lives in Roncesvalles; she still works as an architect.",
+  "date": "2026-07-16",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a037",
+  "kind": "person",
+  "subject": "Priya's birthday",
+  "text": "Priya's birthday is December 1; she is gluten-free (celiac) and loves Sichuan food.",
+  "date": "2025-11-25",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a038",
+  "kind": "commitment",
+  "subject": "Promise to Priya",
+  "text": "Riya promised Priya she would help review her architecture firm's website copy before November 15, 2026.",
+  "date": "2026-10-07",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a039",
+  "kind": "routine",
+  "subject": "Runs with Marcus",
+  "text": "Riya runs with Marcus Bell Tuesdays and Thursdays at 6:30 am along the Martin Goodman Trail.",
+  "date": "2025-05-13",
+  "superseded_by": "a040",
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a040",
+  "kind": "routine",
+  "subject": "Runs with Marcus",
+  "text": "Since Marcus started a new job in June 2026, Riya and he run Wednesdays at 6:15 am and Saturdays at 7:30 am, starting at Ashbridges Bay.",
+  "date": "2026-06-10",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a041",
+  "kind": "person",
+  "subject": "Marcus",
+  "text": "Marcus Bell is a friend Riya met at a running club; he is a physiotherapist and is training for the Chicago Marathon.",
+  "date": "2025-05-13",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a042",
+  "kind": "plan",
+  "subject": "Half marathon",
+  "text": "Riya ran the Toronto Waterfront Half Marathon on October 19, 2025, in 2:04:37.",
+  "date": "2025-10-20",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a043",
+  "kind": "person",
+  "subject": "Hannah Cho",
+  "text": "Hannah Cho lives two doors down from Riya; her kids are Ellie (10) and Jun (7). Hannah is a nurse at Michael Garron Hospital and works some night shifts.",
+  "date": "2025-05-22",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a044",
+  "kind": "commitment",
+  "subject": "School pickup swap",
+  "text": "Riya and Hannah swap school pickups: Riya picks up Leo and Jun on Wednesdays, Hannah does Fridays.",
+  "date": "2025-09-08",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a045",
+  "kind": "person",
+  "subject": "Ellie's allergy",
+  "text": "Ellie Cho (Hannah's daughter) is allergic to dairy, which matters when she comes over for snacks.",
+  "date": "2026-03-03",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a046",
+  "kind": "person",
+  "subject": "Ms. Alvarez",
+  "text": "Ms. Alvarez is Leo's grade 2 teacher at Morse Street PS; she prefers contact through the school's Edsby app rather than email.",
+  "date": "2025-09-12",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a047",
+  "kind": "preference",
+  "subject": "Tom's gift",
+  "text": "For Tom Becker's farewell-to-the-old-office card, Riya noted he likes single-malt Scotch, especially Lagavulin.",
+  "date": "2026-01-29",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a048",
+  "kind": "fact",
+  "subject": "Spare key",
+  "text": "Hannah Cho keeps a spare key to Riya's house and lets Nate's crew in when nobody is home.",
+  "date": "2026-03-09",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a049",
+  "kind": "person",
+  "subject": "Wen Li",
+  "text": "Wen Li (data analyst on Riya's team) is vegan, so team lunches Riya orders need a vegan option.",
+  "date": "2025-12-04",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a050",
+  "kind": "fact",
+  "subject": "Thyroid medication",
+  "text": "Riya takes levothyroxine 50 mcg every morning for hypothyroidism, 30 minutes before coffee.",
+  "date": "2025-04-17",
+  "superseded_by": "a051",
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a051",
+  "kind": "fact",
+  "subject": "Thyroid medication",
+  "text": "After her June 2026 blood test, Dr. Patel raised Riya's levothyroxine to 75 mcg each morning, still taken 30 minutes before coffee.",
+  "date": "2026-06-23",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a052",
+  "kind": "fact",
+  "subject": "Riya's allergy",
+  "text": "Riya is allergic to penicillin (hives) and has seasonal allergies in May, managed with Reactine.",
+  "date": "2025-04-17",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a053",
+  "kind": "plan",
+  "subject": "Physical",
+  "text": "Riya's annual physical with Dr. Patel is booked for November 12, 2026 at 8:40 am at the Carlaw Health Centre.",
+  "date": "2026-10-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a054",
+  "kind": "fact",
+  "subject": "Dentist",
+  "text": "Dr. Lin, Riya's dentist, practises at Queen East Dental, 1046 Queen St E.",
+  "date": "2025-07-08",
+  "superseded_by": "a055",
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a055",
+  "kind": "fact",
+  "subject": "Dentist",
+  "text": "Dr. Lin moved her practice in March 2026 to Danforth Smiles, 822 Danforth Ave; Riya and Leo still see her.",
+  "date": "2026-03-18",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a056",
+  "kind": "plan",
+  "subject": "Dental cleaning",
+  "text": "Riya had a dental cleaning with Dr. Lin on September 9, 2026; the next one is due in March 2027.",
+  "date": "2026-09-09",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a057",
+  "kind": "fact",
+  "subject": "Stress triggers",
+  "text": "Riya's stress spikes before quarterly roadmap reviews and when renovation costs creep; she sleeps badly the night before big presentations.",
+  "date": "2025-11-18",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a058",
+  "kind": "instruction",
+  "subject": "Venting mode",
+  "text": "When Riya says she just needs to vent, the agent should listen and not offer fixes or productivity tips unless she asks.",
+  "date": "2025-12-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a059",
+  "kind": "routine",
+  "subject": "Therapy",
+  "text": "Riya sees a therapist, Joanne, every other Tuesday at 5:30 pm over video; she keeps it private and it is not on the shared family calendar.",
+  "date": "2026-01-20",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a060",
+  "kind": "fact",
+  "subject": "Running injury",
+  "text": "Riya had mild plantar fasciitis in her left foot in early 2026; Marcus suggested calf stretches and she now replaces her Brooks Ghost shoes every 600 km.",
+  "date": "2026-03-05",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a061",
+  "kind": "decision",
+  "subject": "Caffeine cutoff",
+  "text": "Riya decided to stop caffeine after 2 pm in August 2026 because it was hurting her sleep.",
+  "date": "2026-08-12",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a062",
+  "kind": "fact",
+  "subject": "Renovation contractor",
+  "text": "Nate (Northline Renovations) is the contractor for the kitchen renovation; he prefers texts over calls and starts work at 7:30 am.",
+  "date": "2025-11-06",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a063",
+  "kind": "decision",
+  "subject": "Renovation budget",
+  "text": "The kitchen renovation budget is $48,000 including a 10% contingency.",
+  "date": "2025-12-10",
+  "superseded_by": "a064",
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a064",
+  "kind": "decision",
+  "subject": "Renovation budget",
+  "text": "After the electrical panel had to be upgraded to 200 A, Riya and Sam raised the kitchen renovation budget to $56,000; the contingency is now used up.",
+  "date": "2026-07-08",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a065",
+  "kind": "plan",
+  "subject": "Renovation finish",
+  "text": "Nate's schedule had the kitchen renovation finishing by August 28, 2026.",
+  "date": "2026-03-02",
+  "superseded_by": "a066",
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a066",
+  "kind": "plan",
+  "subject": "Renovation finish",
+  "text": "The kitchen renovation is now expected to finish around November 20, 2026, after a seven-week delay waiting on the custom cabinets.",
+  "date": "2026-08-25",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a067",
+  "kind": "decision",
+  "subject": "Countertops",
+  "text": "Riya and Sam chose Caesarstone 'Frosty Carrina' quartz countertops over marble because marble stains too easily.",
+  "date": "2026-04-04",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a068",
+  "kind": "decision",
+  "subject": "Cabinets",
+  "text": "They ordered custom white-oak cabinets from Barzotti through Nate; the deposit of $9,800 was paid February 20, 2026.",
+  "date": "2026-02-21",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a069",
+  "kind": "commitment",
+  "subject": "Nate payment",
+  "text": "The next renovation progress payment to Northline Renovations, $7,500, is due when the countertops are installed.",
+  "date": "2026-09-22",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a070",
+  "kind": "fact",
+  "subject": "House quirks",
+  "text": "The house's basement floods slightly near the back wall in heavy spring rain; the sump pump was replaced in 2024.",
+  "date": "2025-05-06",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a071",
+  "kind": "fact",
+  "subject": "House quirks",
+  "text": "The upstairs bathroom door sticks in humid weather and the furnace filter (16x25x1) needs replacing every three months.",
+  "date": "2025-09-19",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a072",
+  "kind": "fact",
+  "subject": "Temporary kitchen",
+  "text": "During the renovation the family uses a temporary kitchen in the basement with a microwave, induction hotplate and the old fridge.",
+  "date": "2026-05-01",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a073",
+  "kind": "fact",
+  "subject": "Bank accounts",
+  "text": "Riya banks with TD (joint chequing with Sam for household bills) and keeps her own savings in an EQ Bank account.",
+  "date": "2025-06-03",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a074",
+  "kind": "fact",
+  "subject": "RESP",
+  "text": "Riya contributes $208 a month to Leo's RESP at TD to get the full government grant.",
+  "date": "2025-07-15",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a075",
+  "kind": "fact",
+  "subject": "Car insurance",
+  "text": "The Mazda CX-5 is insured with Intact Insurance, renewal each April.",
+  "date": "2025-04-24",
+  "superseded_by": "a076",
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a076",
+  "kind": "fact",
+  "subject": "Car insurance",
+  "text": "In April 2026 Riya switched the Mazda's insurance from Intact to Belairdirect, saving about $410 a year; it renews in April.",
+  "date": "2026-04-11",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a077",
+  "kind": "fact",
+  "subject": "Car",
+  "text": "Riya drives a grey 2019 Mazda CX-5; it is due for its 80,000 km service and the winter tires are stored at Canadian Tire on Leslie St.",
+  "date": "2026-10-05",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a078",
+  "kind": "plan",
+  "subject": "Winter tires",
+  "text": "The winter tire swap for the Mazda is booked at Canadian Tire Leslie St on November 8, 2026 at 9:00 am.",
+  "date": "2026-10-14",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a079",
+  "kind": "fact",
+  "subject": "Internet provider",
+  "text": "Home internet is Bell Fibe at $95 a month.",
+  "date": "2025-05-19",
+  "superseded_by": "a080",
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a080",
+  "kind": "fact",
+  "subject": "Internet provider",
+  "text": "Since January 2026 the home internet is TekSavvy (1 Gbps) at $70 a month, after Riya cancelled Bell Fibe.",
+  "date": "2026-01-08",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a081",
+  "kind": "fact",
+  "subject": "Subscriptions",
+  "text": "Household subscriptions: Netflix (standard), Spotify Family, Crave, and The Globe and Mail digital; Riya cancelled Disney+ in March 2026.",
+  "date": "2026-03-14",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a082",
+  "kind": "instruction",
+  "subject": "Spending approvals",
+  "text": "The agent should never place an order over $200 without Riya confirming first.",
+  "date": "2025-06-27",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a083",
+  "kind": "fact",
+  "subject": "Property tax",
+  "text": "Toronto property tax is paid in instalments by pre-authorized debit from the TD joint account.",
+  "date": "2025-08-20",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a084",
+  "kind": "episode",
+  "subject": "Recipe request",
+  "text": "2025-05-11: Riya asked for a vegetarian lasagna recipe that Sam would like.",
+  "date": "2025-05-11",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a085",
+  "kind": "episode",
+  "subject": "Dinosaur question",
+  "text": "2025-07-02: Riya asked which dinosaur was the biggest, because Leo wanted to know before bed.",
+  "date": "2025-07-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a086",
+  "kind": "episode",
+  "subject": "Beagle article",
+  "text": "2025-08-15: Riya asked for a summary of an article about why beagles howl.",
+  "date": "2025-08-15",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a087",
+  "kind": "episode",
+  "subject": "Mumbai weather chat",
+  "text": "2025-09-21: Riya mentioned it was monsoon season in Mumbai and Anjali's street had flooded; just chit-chat.",
+  "date": "2025-09-21",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a088",
+  "kind": "episode",
+  "subject": "Backsplash ideas",
+  "text": "2026-01-17: Riya asked for photos of zellige tile backsplashes for inspiration; she did not pick one.",
+  "date": "2026-01-17",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a089",
+  "kind": "episode",
+  "subject": "Ottawa train times",
+  "text": "2026-02-27: Riya asked for VIA Rail times from Toronto to Ottawa on a Friday evening, just to compare with driving.",
+  "date": "2026-02-27",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a090",
+  "kind": "episode",
+  "subject": "Physio question",
+  "text": "2026-03-06: Riya asked what plantar fasciitis is and how long it usually lasts.",
+  "date": "2026-03-06",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a091",
+  "kind": "episode",
+  "subject": "Baby gift ideas",
+  "text": "2026-02-16: Riya asked for gift ideas for a newborn; she ended up buying a knitted blanket for Ira.",
+  "date": "2026-02-16",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a092",
+  "kind": "episode",
+  "subject": "Pun request",
+  "text": "2026-06-30: Riya asked for chemistry puns to put on Sam's end-of-year card for his students.",
+  "date": "2026-06-30",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a093",
+  "kind": "episode",
+  "subject": "Hannah chat",
+  "text": "2026-08-03: Riya chatted about Hannah's backyard pool party; nothing to remember.",
+  "date": "2026-08-03",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a094",
+  "kind": "episode",
+  "subject": "Tax question",
+  "text": "2026-04-02: Riya asked whether dog walking costs are tax deductible in Canada (they are not for her).",
+  "date": "2026-04-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a095",
+  "kind": "episode",
+  "subject": "Sourdough",
+  "text": "2026-09-05: Riya asked for a summary of an article about sourdough starters for Priya.",
+  "date": "2026-09-05",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a096",
+  "kind": "tool",
+  "subject": "Weather lookup",
+  "text": "Weather lookup 2025-10-18: Toronto 11°C, light rain, wind 20 km/h.",
+  "date": "2025-10-18",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a097",
+  "kind": "tool",
+  "subject": "Amazon order",
+  "text": "Amazon order #113-4820917-6631408 confirmed: HDMI cable (2 m) and AA batteries, arriving May 3.",
+  "date": "2025-04-30",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a098",
+  "kind": "tool",
+  "subject": "Vet search",
+  "text": "Search results 2026-04-15: three vets near Leslieville with weekend hours: Riverside Veterinary Clinic, Queen East Pet Hospital, Danforth Animal Clinic.",
+  "date": "2026-04-15",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a099",
+  "kind": "tool",
+  "subject": "Currency conversion",
+  "text": "Currency conversion 2025-11-01: 1 CAD = 63.4 INR.",
+  "date": "2025-11-01",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a100",
+  "kind": "tool",
+  "subject": "Weather lookup",
+  "text": "Weather lookup 2026-01-25: Ottawa -18°C, snow, wind chill -27.",
+  "date": "2026-01-25",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a101",
+  "kind": "tool",
+  "subject": "Home Depot order",
+  "text": "Home Depot order #W512339870 confirmed: 16x25x1 furnace filters (pack of 4), pickup at Leslie St store.",
+  "date": "2025-09-20",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a102",
+  "kind": "tool",
+  "subject": "Flight search",
+  "text": "Flight search 2026-07-03: Toronto–Vancouver, Air Canada AC 113, $486 return, economy.",
+  "date": "2026-07-03",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a103",
+  "kind": "tool",
+  "subject": "Lego order",
+  "text": "Indigo order #IND-778120 confirmed: Lego Jurassic World T. rex set, delivered July 15, 2026.",
+  "date": "2026-07-11",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a104",
+  "kind": "tool",
+  "subject": "Calendar export",
+  "text": "Calendar sync 2026-05-28: 14 events imported from Sam's school calendar.",
+  "date": "2026-05-28",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "a105",
+  "kind": "tool",
+  "subject": "Weather lookup",
+  "text": "Weather lookup 2026-10-11: Ottawa 9°C, sunny.",
+  "date": "2026-10-11",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-A",
+  "scope": ""
+ },
+ {
+  "id": "b001",
+  "kind": "fact",
+  "subject": "Riya's role at Lumen Pay",
+  "text": "Riya is a senior product manager at Lumen Pay and owns the merchant payouts and onboarding product areas. She reports to Tom Becker.",
+  "date": "2025-04-03",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b002",
+  "kind": "fact",
+  "subject": "Lumen Pay tool stack",
+  "text": "Lumen Pay uses Linear for tickets, Slack, Notion, Figma, Looker dashboards and Google Workspace.",
+  "date": "2025-04-03",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b003",
+  "kind": "instruction",
+  "subject": "Spelling",
+  "text": "Riya wants Canadian spelling in everything the agent writes for her (colour, centre, cheque, organize).",
+  "date": "2025-04-05",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b004",
+  "kind": "preference",
+  "subject": "Answer style",
+  "text": "Riya wants the answer first, then bullet points, with no preamble or restating her question.",
+  "date": "2025-04-05",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b005",
+  "kind": "person",
+  "subject": "Tom Becker, manager",
+  "text": "Tom Becker is VP Product at Lumen Pay and Riya's manager. He reads updates on his phone between meetings and dislikes long threads.",
+  "date": "2025-04-08",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b006",
+  "kind": "instruction",
+  "subject": "Emails to Tom",
+  "text": "Riya wants work emails to Tom kept under 5 sentences with the ask in the first line.",
+  "date": "2025-04-10",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b007",
+  "kind": "instruction",
+  "subject": "Work email tone",
+  "text": "Riya's work emails should be warm but brief, with no exclamation marks, signed 'Best, Riya'.",
+  "date": "2025-04-10",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b008",
+  "kind": "instruction",
+  "subject": "Sending emails",
+  "text": "The agent must never send an email on Riya's behalf without showing her the draft first.",
+  "date": "2025-04-10",
+  "superseded_by": "b084",
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b009",
+  "kind": "fact",
+  "subject": "Spanish level",
+  "text": "Riya's Spanish is at B1 and she is working toward B2; her goal is to hold an hour-long conversation without switching to English by the time of a 2027 trip to Mexico City.",
+  "date": "2025-04-12",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b010",
+  "kind": "person",
+  "subject": "Carlos Méndez, tutor",
+  "text": "Carlos Méndez is Riya's online Spanish tutor, from Guadalajara; lessons are on Zoom and paid monthly by Interac e-transfer at $180 CAD for four lessons.",
+  "date": "2025-04-12",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b011",
+  "kind": "routine",
+  "subject": "Spanish lesson day",
+  "text": "Riya's Spanish lesson with Carlos is on Tuesdays at 19:00.",
+  "date": "2025-04-12",
+  "superseded_by": "b044",
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b012",
+  "kind": "person",
+  "subject": "Aisha Rahman, eng lead",
+  "text": "Aisha Rahman is the engineering lead on Riya's team. She prefers async Slack threads over meetings and wants specs at least two weeks before sprint planning.",
+  "date": "2025-04-15",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b013",
+  "kind": "preference",
+  "subject": "Coffee order",
+  "text": "Riya's usual coffee order is an oat milk latte.",
+  "date": "2025-04-16",
+  "superseded_by": "b077",
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b014",
+  "kind": "instruction",
+  "subject": "Temperature units",
+  "text": "Riya wants temperatures given in both Celsius and Fahrenheit.",
+  "date": "2025-04-18",
+  "superseded_by": "b057",
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b015",
+  "kind": "instruction",
+  "subject": "Meeting hours",
+  "text": "The agent should not book meetings for Riya before 9:30 or after 17:00.",
+  "date": "2025-04-20",
+  "superseded_by": "b043",
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b016",
+  "kind": "person",
+  "subject": "Diego Fernández, designer",
+  "text": "Diego Fernández is the designer on Riya's team. He prefers feedback as Figma comments rather than DMs, and wants a problem statement instead of a proposed solution.",
+  "date": "2025-04-22",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b017",
+  "kind": "instruction",
+  "subject": "Purchase approval",
+  "text": "The agent must ask Riya before any purchase over $100.",
+  "date": "2025-04-25",
+  "superseded_by": "b066",
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b018",
+  "kind": "routine",
+  "subject": "Team standup",
+  "text": "Riya's team holds standup on Mondays, Wednesdays and Fridays at 9:45; Tuesday mornings are her no-meeting focus block.",
+  "date": "2025-04-29",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b019",
+  "kind": "routine",
+  "subject": "1:1 with Tom",
+  "text": "Riya's weekly 1:1 with Tom Becker is on Thursdays at 14:00.",
+  "date": "2025-05-01",
+  "superseded_by": "b060",
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b020",
+  "kind": "person",
+  "subject": "Wen Li, data analyst",
+  "text": "Wen Li is the data analyst Riya works with. Data requests go through the #data-requests Slack channel with at least three business days of notice and a written metric definition.",
+  "date": "2025-05-06",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b021",
+  "kind": "preference",
+  "subject": "How Riya likes to learn",
+  "text": "Riya learns best through role-play of real situations (ordering food, a work meeting, a doctor's visit) and wants Mexican rather than Castilian vocabulary, to match Carlos.",
+  "date": "2025-05-08",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b022",
+  "kind": "instruction",
+  "subject": "Spanish corrections",
+  "text": "When Riya writes in Spanish, the agent replies in Spanish and corrects every mistake inline.",
+  "date": "2025-05-08",
+  "superseded_by": "b074",
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b023",
+  "kind": "fact",
+  "subject": "PRD conventions",
+  "text": "Lumen Pay PRDs live in Notion using the PRD-v3 template: a one-page summary first, then requirements, with a decision log at the bottom and all dates in ISO format.",
+  "date": "2025-05-13",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b024",
+  "kind": "instruction",
+  "subject": "Drafting PRDs",
+  "text": "When Riya asks for a PRD draft, the agent always includes a Non-goals section and an Open questions table with owner and due date columns.",
+  "date": "2025-05-13",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b025",
+  "kind": "instruction",
+  "subject": "Flight bookings",
+  "text": "When booking flights, the agent should prefer WestJet, aisle seats, and never basic economy.",
+  "date": "2025-05-15",
+  "superseded_by": "b063",
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b026",
+  "kind": "person",
+  "subject": "Olivia Grant's role",
+  "text": "Olivia Grant is Director of Sales Enablement at Lumen Pay and often asks Riya for feature dates to share with prospects.",
+  "date": "2025-05-20",
+  "superseded_by": "b069",
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b027",
+  "kind": "instruction",
+  "subject": "Currency",
+  "text": "The agent should always show prices in CAD, converting foreign prices and showing the original in brackets.",
+  "date": "2025-05-22",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b028",
+  "kind": "preference",
+  "subject": "Food likes",
+  "text": "Riya loves South Indian food, especially masala dosa, and her favourite local spot is Saffron Lane on Queen Street East.",
+  "date": "2025-05-30",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b029",
+  "kind": "instruction",
+  "subject": "Dates for Olivia",
+  "text": "Riya never gives Olivia Grant or the sales team a feature date until Aisha Rahman has signed off on it; drafts to Olivia should say 'target' rather than 'launch date'.",
+  "date": "2025-06-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b030",
+  "kind": "instruction",
+  "subject": "Hotel bookings",
+  "text": "Riya only wants hotel bookings at fully refundable rates, ideally walking distance to transit.",
+  "date": "2025-06-03",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b031",
+  "kind": "plan",
+  "subject": "DELE B2 exam",
+  "text": "Riya plans to sit the DELE B2 exam in May 2026.",
+  "date": "2025-06-10",
+  "superseded_by": "b065",
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b032",
+  "kind": "episode",
+  "subject": "Synonym request",
+  "text": "Riya asked for a synonym for 'leverage' for a PRD; she chose 'use'.",
+  "date": "2025-06-17",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b033",
+  "kind": "instruction",
+  "subject": "Meeting notes format",
+  "text": "Riya wants meeting summaries formatted as three sections: Decisions, Action items (owner and date) and Open questions.",
+  "date": "2025-06-24",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b034",
+  "kind": "instruction",
+  "subject": "Date format",
+  "text": "In chat, Riya wants dates written like 'Mon 19 Oct'; in work documents, ISO format (2026-10-19).",
+  "date": "2025-06-24",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b035",
+  "kind": "preference",
+  "subject": "Vocabulary list format",
+  "text": "Riya wants Spanish vocabulary lists as a table with Spanish, English and an example sentence.",
+  "date": "2025-07-01",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b036",
+  "kind": "fact",
+  "subject": "Team decision norm",
+  "text": "Riya's team follows 'disagree and commit', and every product decision is written into the Notion decision log within 24 hours.",
+  "date": "2025-07-08",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b037",
+  "kind": "instruction",
+  "subject": "Time zones in invites",
+  "text": "Calendar invites the agent creates should state the time in Toronto time, and when Riya's mother in Mumbai is invited, also in IST.",
+  "date": "2025-07-14",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b038",
+  "kind": "preference",
+  "subject": "Food dislikes",
+  "text": "Riya dislikes cilantro and asks for it to be left out of recipes and orders.",
+  "date": "2025-07-19",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b039",
+  "kind": "instruction",
+  "subject": "Restaurant bookings",
+  "text": "When booking restaurants, the agent books for 19:00 and checks that there are good vegetarian options.",
+  "date": "2025-08-07",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b040",
+  "kind": "routine",
+  "subject": "Anki practice",
+  "text": "Riya does 15 minutes of Spanish Anki cards on the streetcar each weekday morning.",
+  "date": "2025-08-12",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b041",
+  "kind": "instruction",
+  "subject": "Work meeting invites",
+  "text": "When the agent schedules a work meeting for Riya, it defaults to 25 minutes and always puts an agenda in the invite; she declines meetings with no agenda.",
+  "date": "2025-08-19",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b042",
+  "kind": "episode",
+  "subject": "Tom's birthday card",
+  "text": "Riya asked for a one-line message for a team birthday card for Tom Becker.",
+  "date": "2025-08-28",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b043",
+  "kind": "instruction",
+  "subject": "Meeting hours",
+  "text": "The agent should not book meetings for Riya before 9:30 or after 16:30, and nothing after 15:00 on Fridays, because she does school pickup.",
+  "date": "2025-09-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b044",
+  "kind": "routine",
+  "subject": "Spanish lesson day",
+  "text": "Riya's Spanish lesson with Carlos moved to Thursdays at 19:30 from September 2025, after Carlos changed his teaching schedule.",
+  "date": "2025-09-04",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b045",
+  "kind": "preference",
+  "subject": "Shopping habits",
+  "text": "Riya prefers buying from Canadian retailers (MEC, Indigo, Simons) and avoids Amazon when a local option ships within a week.",
+  "date": "2025-09-10",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b046",
+  "kind": "preference",
+  "subject": "Working with Tom",
+  "text": "Riya has found Tom responds best to a recommendation with one alternative, not an open-ended list of options.",
+  "date": "2025-09-16",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b047",
+  "kind": "tool",
+  "subject": "Order confirmation",
+  "text": "Order confirmation from Indigo: 'Gramática de uso del español B1-B2', $42.99 CAD, delivered 2025-10-03.",
+  "date": "2025-09-29",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b048",
+  "kind": "instruction",
+  "subject": "Rescheduling Spanish lessons",
+  "text": "If a Spanish lesson clashes with work, the agent should message Carlos at least 24 hours ahead to move it, because later cancellations are charged.",
+  "date": "2025-10-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b049",
+  "kind": "episode",
+  "subject": "LinkedIn post rewrite",
+  "text": "Riya asked to rewrite a LinkedIn post celebrating the Onboarding 2.0 launch to sound less salesy.",
+  "date": "2025-10-09",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b050",
+  "kind": "fact",
+  "subject": "Spanish recurring mistakes",
+  "text": "Riya's recurring Spanish mistakes are ser versus estar with emotions and locations, por versus para, and forgetting the subjunctive after 'cuando' for future events.",
+  "date": "2025-10-16",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b051",
+  "kind": "routine",
+  "subject": "Friday status update",
+  "text": "Every Friday by 16:00 Riya posts a five-bullet payouts status update in #payouts-launch, with red/amber/green for each workstream.",
+  "date": "2025-10-17",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b052",
+  "kind": "preference",
+  "subject": "Books and TV",
+  "text": "Riya reads literary mysteries (Tana French is a favourite) and watches spy dramas; she enjoyed 'Slow Horses'.",
+  "date": "2025-10-22",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b053",
+  "kind": "preference",
+  "subject": "Punctuation in drafts",
+  "text": "Riya dislikes em dashes in her drafts and asks the agent to use commas or full stops instead.",
+  "date": "2025-11-03",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b054",
+  "kind": "fact",
+  "subject": "Onboarding 2.0 results",
+  "text": "Onboarding 2.0 launched on 2025-10-07 and cut KYC drop-off for new merchants from 38% to 24% in its first month.",
+  "date": "2025-11-12",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b055",
+  "kind": "episode",
+  "subject": "Spanish tongue twister",
+  "text": "Riya asked for a Spanish tongue twister to try on Carlos; the agent gave 'Tres tristes tigres'.",
+  "date": "2025-11-13",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b056",
+  "kind": "preference",
+  "subject": "When Riya vents",
+  "text": "When Riya vents about work stress, she wants the agent to listen and reflect first and only offer fixes if she asks.",
+  "date": "2025-11-20",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b057",
+  "kind": "instruction",
+  "subject": "Temperature units",
+  "text": "Riya wants temperatures in Celsius only, and all other measurements metric.",
+  "date": "2025-12-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b058",
+  "kind": "tool",
+  "subject": "Flight search",
+  "text": "Flight search Toronto-Ottawa on 2025-12-19: Air Canada AC452 at 17:00, $219 CAD; Porter PD471 at 18:15, $189 CAD.",
+  "date": "2025-12-08",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b059",
+  "kind": "preference",
+  "subject": "Podcasts",
+  "text": "Riya listens to product and fintech podcasts on her commute and likes episodes under 45 minutes.",
+  "date": "2025-12-15",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b060",
+  "kind": "routine",
+  "subject": "1:1 with Tom",
+  "text": "Riya's weekly 1:1 with Tom Becker moved to Wednesdays at 11:30 starting January 2026, because Thursdays clashed with Tom's exec staff meeting.",
+  "date": "2026-01-07",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b061",
+  "kind": "preference",
+  "subject": "Music",
+  "text": "Riya's focus music is Khruangbin and A. R. Rahman instrumentals.",
+  "date": "2026-01-12",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b062",
+  "kind": "fact",
+  "subject": "Spanish gender mistakes",
+  "text": "Riya often gets noun gender wrong on exceptions such as 'el problema', 'el mapa' and 'la mano'.",
+  "date": "2026-01-22",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b063",
+  "kind": "instruction",
+  "subject": "Flight bookings",
+  "text": "When booking flights, the agent should prefer Air Canada (Riya is Aeroplan 25K), aisle seats, never basic economy.",
+  "date": "2026-01-28",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b064",
+  "kind": "episode",
+  "subject": "Podcast summary",
+  "text": "Riya asked for a summary of a podcast episode about pricing for B2B APIs.",
+  "date": "2026-01-30",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b065",
+  "kind": "plan",
+  "subject": "DELE B2 exam",
+  "text": "Riya postponed the DELE B2 exam to 2026-11-21 at the Toronto test centre because the Instant Payouts beta left her no study time in spring.",
+  "date": "2026-02-03",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b066",
+  "kind": "instruction",
+  "subject": "Purchase approval",
+  "text": "The agent must ask Riya before any purchase over $150 CAD; smaller reorders of household staples can go through.",
+  "date": "2026-02-10",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b067",
+  "kind": "preference",
+  "subject": "Groceries",
+  "text": "Riya orders groceries from PC Express for Saturday morning pickup and prefers no-name brand staples.",
+  "date": "2026-02-10",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b068",
+  "kind": "episode",
+  "subject": "Haiku request",
+  "text": "2026-02-11: Riya asked for a haiku about Mondays.",
+  "date": "2026-02-11",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b069",
+  "kind": "person",
+  "subject": "Olivia Grant's role",
+  "text": "Olivia Grant became Head of Sales at Lumen Pay in February 2026 and now runs the quarterly business review with product.",
+  "date": "2026-02-18",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b070",
+  "kind": "tool",
+  "subject": "Spanish conjugation",
+  "text": "Conjugation table for 'haber' in the present subjunctive (haya, hayas, haya, hayamos, hayáis, hayan) saved during homework.",
+  "date": "2026-02-19",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b071",
+  "kind": "tool",
+  "subject": "Calendar lookup",
+  "text": "Calendar lookup for Tom Becker's free slots on 2026-02-24: 10:00-10:30 and 15:30-16:00.",
+  "date": "2026-02-23",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b072",
+  "kind": "plan",
+  "subject": "Instant Payouts launch date",
+  "text": "Instant Payouts is scheduled to reach general availability on 2026-09-15.",
+  "date": "2026-03-02",
+  "superseded_by": "b095",
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b073",
+  "kind": "tool",
+  "subject": "Word count lookup",
+  "text": "Word count of the Instant Payouts PRD-v3 draft in Notion: 4,812 words (2026-03-04).",
+  "date": "2026-03-04",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b074",
+  "kind": "instruction",
+  "subject": "Spanish corrections",
+  "text": "When Riya writes in Spanish, the agent replies in Spanish and lists only the three most important corrections in bold at the end, so the conversation is not interrupted.",
+  "date": "2026-03-12",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b075",
+  "kind": "preference",
+  "subject": "Contact channel",
+  "text": "Riya prefers the agent nudge her by push notification for work items and by a single evening digest for personal ones.",
+  "date": "2026-03-23",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b076",
+  "kind": "episode",
+  "subject": "Joke for standup",
+  "text": "Riya asked for a clean finance joke to open Friday standup.",
+  "date": "2026-03-27",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b077",
+  "kind": "preference",
+  "subject": "Coffee order",
+  "text": "Riya's usual coffee is now an oat milk cortado, and she switches to decaf after 14:00 because caffeine was hurting her sleep.",
+  "date": "2026-04-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b078",
+  "kind": "fact",
+  "subject": "Instant Payouts beta",
+  "text": "The Instant Payouts beta runs with 40 merchants; its success bar is a payout success rate of at least 99.5% and a median payout time under 30 minutes.",
+  "date": "2026-04-09",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b079",
+  "kind": "decision",
+  "subject": "Payout webhook retries",
+  "text": "In April 2026 the team chose exponential backoff with a 72-hour retry window for payout webhooks, following Aisha's proposal, over a fixed 24-hour window.",
+  "date": "2026-04-17",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b080",
+  "kind": "episode",
+  "subject": "Spreadsheet formula",
+  "text": "Riya asked how to write a Google Sheets formula to count payouts over $10,000; the agent gave a COUNTIF.",
+  "date": "2026-04-21",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b081",
+  "kind": "preference",
+  "subject": "Working with Aisha",
+  "text": "Riya pairs with Aisha Rahman on scope cuts before sprint planning and brings Wen Li's data, since Aisha pushes back on cuts that lack numbers.",
+  "date": "2026-04-28",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b082",
+  "kind": "episode",
+  "subject": "Slack emoji idea",
+  "text": "Riya asked for name ideas for a custom Slack emoji for the payouts team; she picked ':zoom-money:'.",
+  "date": "2026-05-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b083",
+  "kind": "decision",
+  "subject": "CAD-USD settlement cut",
+  "text": "Riya decided to drop same-day CAD-USD settlement from Instant Payouts v1 to protect the launch date; it is planned for v1.1.",
+  "date": "2026-05-14",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b084",
+  "kind": "instruction",
+  "subject": "Sending emails",
+  "text": "The agent may send routine scheduling replies (accepting, proposing or confirming times) directly; any other email still needs Riya to approve the draft first.",
+  "date": "2026-05-19",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b085",
+  "kind": "fact",
+  "subject": "Payouts dashboard",
+  "text": "Wen Li built the 'Payouts Health' Looker dashboard that Riya checks every Monday; it tracks success rate, median payout time and failed-payout reasons.",
+  "date": "2026-05-27",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b086",
+  "kind": "tool",
+  "subject": "Restaurant search",
+  "text": "Restaurant search near Lumen Pay office for a team lunch of 8: three results with vegetarian menus, top rated Saffron Lane (4.6).",
+  "date": "2026-05-29",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b087",
+  "kind": "episode",
+  "subject": "Offsite icebreaker",
+  "text": "Riya asked for five icebreaker questions for the Muskoka product offsite.",
+  "date": "2026-06-05",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b088",
+  "kind": "tool",
+  "subject": "Weather lookup",
+  "text": "Weather lookup for Muskoka on 2026-06-10: 22 C, chance of showers 40%.",
+  "date": "2026-06-08",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b089",
+  "kind": "decision",
+  "subject": "Multi-currency wallets postponed",
+  "text": "Multi-currency wallets were postponed to H1 2027 because Lumen Pay's compliance review of FINTRAC reporting would not finish in 2026.",
+  "date": "2026-06-11",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b090",
+  "kind": "episode",
+  "subject": "Acronym question",
+  "text": "Riya asked what FINTRAC stands for; it is the Financial Transactions and Reports Analysis Centre of Canada.",
+  "date": "2026-06-11",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b091",
+  "kind": "fact",
+  "subject": "Product offsite 2026",
+  "text": "The Lumen Pay product offsite was held 2026-06-09 to 2026-06-11 at Deerhurst Resort in Muskoka.",
+  "date": "2026-06-12",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b092",
+  "kind": "plan",
+  "subject": "Mid-year review",
+  "text": "Riya's mid-year performance self-review was due in Lattice on 2026-07-10.",
+  "date": "2026-06-25",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b093",
+  "kind": "episode",
+  "subject": "Spanish song lyrics",
+  "text": "Riya asked for a translation of the chorus of a Natalia Lafourcade song.",
+  "date": "2026-07-09",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b094",
+  "kind": "tool",
+  "subject": "Search results",
+  "text": "Web search 'Wavecrest Bank partner certification timeline' returned three results, none with a public timeline.",
+  "date": "2026-07-20",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b095",
+  "kind": "plan",
+  "subject": "Instant Payouts launch date",
+  "text": "Instant Payouts general availability moved to 2026-11-04 because Wavecrest Bank's partner certification slipped by seven weeks.",
+  "date": "2026-07-21",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b096",
+  "kind": "tool",
+  "subject": "Currency conversion",
+  "text": "Currency conversion: 250 EUR = 371.40 CAD at the 2026-08-14 rate.",
+  "date": "2026-08-14",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b097",
+  "kind": "plan",
+  "subject": "Spanish reading goal",
+  "text": "Riya is reading 'Como agua para chocolate' in Spanish, one chapter a week, as practice for the DELE reading section.",
+  "date": "2026-08-20",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b098",
+  "kind": "fact",
+  "subject": "Payout incident postmortem",
+  "text": "On 2026-08-26 a Wavecrest Bank outage delayed 1,140 beta payouts for about three hours; the postmortem added a status banner in the merchant dashboard.",
+  "date": "2026-08-28",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b099",
+  "kind": "plan",
+  "subject": "Q4 planning doc",
+  "text": "Riya's Q4 2026 planning doc for payouts is due to Tom Becker on 2026-10-30.",
+  "date": "2026-10-05",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b100",
+  "kind": "tool",
+  "subject": "Looker export",
+  "text": "Looker export from Payouts Health for week of 2026-09-28: success rate 99.31%, median payout time 34 minutes.",
+  "date": "2026-10-05",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b101",
+  "kind": "fact",
+  "subject": "Lumen Pay north-star metric",
+  "text": "Lumen Pay's north-star metric is monthly active paying merchants (MAPM); it stood at 18,400 at the end of Q3 2026.",
+  "date": "2026-10-06",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b102",
+  "kind": "plan",
+  "subject": "Q4 business review",
+  "text": "The quarterly business review with Olivia Grant's sales team is on 2026-11-12; Riya presents the payouts roadmap.",
+  "date": "2026-10-09",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b103",
+  "kind": "commitment",
+  "subject": "Launch readiness review",
+  "text": "Riya promised Tom a launch readiness review doc for Instant Payouts by 2026-10-28, a week before GA.",
+  "date": "2026-10-14",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b104",
+  "kind": "commitment",
+  "subject": "Diego's promotion packet",
+  "text": "Riya promised Diego Fernández written feedback on his senior designer promotion packet by Friday 2026-10-23.",
+  "date": "2026-10-15",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "b105",
+  "kind": "plan",
+  "subject": "Spanish homework",
+  "text": "Carlos assigned a 300-word essay on 'mi trabajo' using the present subjunctive, due at the lesson on Thursday 2026-10-22.",
+  "date": "2026-10-15",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-B",
+  "scope": ""
+ },
+ {
+  "id": "c001",
+  "kind": "plan",
+  "subject": "Lisbon flight dates",
+  "text": "Riya booked the family's Lisbon flights on TAP from Toronto Pearson, departing 2026-12-18 and returning 2026-12-30.",
+  "date": "2026-07-14",
+  "superseded_by": "c002",
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c002",
+  "kind": "plan",
+  "subject": "Lisbon flight dates",
+  "text": "Riya moved the family's Lisbon flights to TAP TP260 departing Toronto Pearson on 2026-12-20 at 22:10 (arriving 2026-12-21 morning) and returning on TP259 on 2027-01-02, because Leo's last school day is 2026-12-18 and Sam has exams to mark that week.",
+  "date": "2026-09-03",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c003",
+  "kind": "plan",
+  "subject": "Lisbon accommodation",
+  "text": "For Lisbon, Riya reserved a two-bedroom Airbnb apartment in Alfama near the Miradouro de Santa Luzia for the whole December stay.",
+  "date": "2026-07-20",
+  "superseded_by": "c004",
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c004",
+  "kind": "plan",
+  "subject": "Lisbon accommodation",
+  "text": "Riya cancelled the Alfama Airbnb (too many stairs and no elevator with luggage and Leo) and booked a family suite at the Memmo Príncipe Real hotel in Lisbon for 2026-12-21 to 2027-01-02, confirmation MPR-48213.",
+  "date": "2026-09-11",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c005",
+  "kind": "routine",
+  "subject": "Leo swim lessons",
+  "text": "Leo has swim lessons on Tuesdays at 5:30 pm at the Pam McConnell Aquatic Centre in Regent Park.",
+  "date": "2025-09-08",
+  "superseded_by": "c006",
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c006",
+  "kind": "routine",
+  "subject": "Leo swim lessons",
+  "text": "Leo's swim lessons moved to Wednesdays at 5:00 pm at the Pam McConnell Aquatic Centre (Level 4, instructor Kayla) starting 2026-09-16; Sam usually takes him.",
+  "date": "2026-09-10",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c007",
+  "kind": "plan",
+  "subject": "Ottawa visit November",
+  "text": "Riya, Sam and Leo plan to drive to Ottawa on 2026-11-13 to stay with Grace and Daniel Okafor for Grace's 68th birthday weekend, returning 2026-11-15.",
+  "date": "2026-08-25",
+  "superseded_by": "c008",
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c008",
+  "kind": "plan",
+  "subject": "Okafors visiting Toronto",
+  "text": "The November Ottawa trip was cancelled because Nate's crew is installing the kitchen cabinets that weekend; instead Grace and Daniel Okafor will come to Toronto by VIA Rail on 2026-11-20 and stay until 2026-11-23, and Riya will host Grace's birthday dinner on Saturday 2026-11-21.",
+  "date": "2026-10-06",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c009",
+  "kind": "routine",
+  "subject": "Running with Marcus",
+  "text": "Riya runs with Marcus Bell on Saturdays at 7:00 am, a 10 km loop along the Martin Goodman Trail starting at Woodbine Beach.",
+  "date": "2025-05-03",
+  "superseded_by": "c010",
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c010",
+  "kind": "routine",
+  "subject": "Running with Marcus",
+  "text": "Riya now runs with Marcus Bell on Sunday mornings at 7:30 am instead of Saturdays (Leo has Saturday morning soccer), meeting at the foot of Leslie Street and doing the Tommy Thompson Park out-and-back.",
+  "date": "2026-04-12",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c011",
+  "kind": "routine",
+  "subject": "Leo piano lessons",
+  "text": "Leo takes piano lessons with Mrs. Greene on Mondays at 4:30 pm at her home on Pape Avenue.",
+  "date": "2025-10-01",
+  "superseded_by": "c012",
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c012",
+  "kind": "routine",
+  "subject": "Leo piano lessons",
+  "text": "Leo's piano lesson with Mrs. Greene moved to Fridays at 4:15 pm starting in September 2026, because Mondays now clash with Riya's weekly roadmap review at Lumen Pay.",
+  "date": "2026-08-28",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c013",
+  "kind": "plan",
+  "subject": "Mumbai trip",
+  "text": "Riya plans to fly to Mumbai alone for about ten days in late March 2027 to see her mother Anjali.",
+  "date": "2026-05-19",
+  "superseded_by": "c014",
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c014",
+  "kind": "plan",
+  "subject": "Mumbai trip",
+  "text": "Riya moved her Mumbai trip to 2027-02-05 through 2027-02-16 so she can be there for her mother Anjali's 65th birthday on 2027-02-09; Sam and Leo are not coming because of school.",
+  "date": "2026-09-22",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c015",
+  "kind": "plan",
+  "subject": "Vancouver visit Kabir",
+  "text": "Riya planned to visit Kabir, Mei and newborn Ira in Vancouver over the August 2026 long weekend.",
+  "date": "2026-03-02",
+  "superseded_by": "c016",
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c016",
+  "kind": "plan",
+  "subject": "Vancouver visit Kabir",
+  "text": "Riya moved the Vancouver trip to 2026-07-09 through 2026-07-13 so the whole family could attend Ira's naming ceremony at Kabir and Mei's place in Kitsilano.",
+  "date": "2026-04-28",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c017",
+  "kind": "plan",
+  "subject": "Parent-teacher interview",
+  "text": "Riya's parent-teacher interview with Ms. Alvarez for Leo is booked for 2026-11-12 at 4:00 pm in Room 104 at Morse Street Public School.",
+  "date": "2026-10-02",
+  "superseded_by": "c018",
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c018",
+  "kind": "plan",
+  "subject": "Parent-teacher interview",
+  "text": "Riya rebooked Leo's parent-teacher interview with Ms. Alvarez to 2026-11-13 at 5:15 pm (Room 104, Morse Street Public School) because of the Lumen Pay quarterly planning offsite on 2026-11-12; Sam will join.",
+  "date": "2026-10-15",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c019",
+  "kind": "routine",
+  "subject": "Riya workouts",
+  "text": "Riya does a 6:00 am spin class at Spin Society on Queen Street East every Wednesday.",
+  "date": "2025-06-10",
+  "superseded_by": "c020",
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c020",
+  "kind": "routine",
+  "subject": "Riya workouts",
+  "text": "Riya dropped spin and now does strength training at the Leslieville YMCA on Tuesdays and Thursdays at 6:15 am, back home by 7:15 so Sam can leave for school.",
+  "date": "2026-01-08",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c021",
+  "kind": "routine",
+  "subject": "Biscuit dog walker",
+  "text": "Biscuit's walker, Jess from Rover, takes him out at noon on Mondays, Wednesdays and Fridays for $25 a walk.",
+  "date": "2025-11-04",
+  "superseded_by": "c022",
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c022",
+  "kind": "routine",
+  "subject": "Biscuit dog walker",
+  "text": "Jess (Rover) now walks Biscuit at noon on Tuesdays and Thursdays only, at $27 a walk; on Riya's work-from-home days (Monday, Wednesday, Friday) Riya walks him herself at lunch around Greenwood Park.",
+  "date": "2026-06-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c023",
+  "kind": "commitment",
+  "subject": "Priya birthday dinner",
+  "text": "Riya is organizing Priya Nair's 37th birthday dinner on 2026-11-07 at Alo and has promised to book a table for eight.",
+  "date": "2026-09-15",
+  "superseded_by": "c024",
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c024",
+  "kind": "commitment",
+  "subject": "Priya birthday dinner",
+  "text": "Priya's birthday dinner moved to Sunday 2026-11-08 at 7:00 pm at Bar Raval (Alo had no table for eight); Riya booked it under her name for eight people and promised to order the cake from Bobbette & Belle.",
+  "date": "2026-09-29",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c025",
+  "kind": "plan",
+  "subject": "Biscuit during Lisbon",
+  "text": "Riya planned to board Biscuit at Dogs Den Kennels in Scarborough while the family is in Lisbon in December.",
+  "date": "2026-08-02",
+  "superseded_by": "c026",
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c026",
+  "kind": "commitment",
+  "subject": "Biscuit during Lisbon",
+  "text": "Hannah Cho offered to keep Biscuit at her house during the Lisbon trip (2026-12-20 to 2027-01-02); Riya cancelled the Dogs Den booking and promised to bring Hannah back a box of pastéis de nata and pay for Biscuit's food.",
+  "date": "2026-10-01",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c027",
+  "kind": "plan",
+  "subject": "Lisbon Sintra day trip",
+  "text": "Riya booked a private driver for a Sintra day trip on 2026-12-23 (Pena Palace and Quinta da Regaleira), pickup 9:00 am at the hotel, €260 total.",
+  "date": "2026-10-09",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c028",
+  "kind": "plan",
+  "subject": "Lisbon Christmas dinner",
+  "text": "Riya reserved Christmas Eve dinner for three at Prado restaurant in Lisbon on 2026-12-24 at 7:30 pm and asked for a table near the window.",
+  "date": "2026-10-13",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c029",
+  "kind": "plan",
+  "subject": "Lisbon New Year's Eve",
+  "text": "On New Year's Eve 2026 in Lisbon the family plans to watch the fireworks at Praça do Comércio for only a short while, then go back to the hotel because Leo gets overtired.",
+  "date": "2026-09-11",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c030",
+  "kind": "commitment",
+  "subject": "Leo passport renewal",
+  "text": "Leo's Canadian passport expires 2027-03-04, which is too close to the Lisbon trip; Riya must submit the renewal at Service Canada by 2026-11-06 at the latest.",
+  "date": "2026-09-05",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c031",
+  "kind": "commitment",
+  "subject": "Morse Street bake sale",
+  "text": "Riya promised Hannah Cho she would bake two dozen oatmeal chocolate-chip cookies (nut-free) for the Morse Street Public School bake sale on 2026-10-30.",
+  "date": "2026-10-14",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c032",
+  "kind": "plan",
+  "subject": "Halloween plans",
+  "text": "On Halloween 2026 Leo is going trick-or-treating dressed as an astronaut with Ellie and Jun Cho; the kids leave from Hannah's house at 5:45 pm and Sam stays home to hand out candy.",
+  "date": "2026-10-16",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c033",
+  "kind": "plan",
+  "subject": "School winter concert",
+  "text": "Morse Street Public School's winter concert is on 2026-12-10 at 6:30 pm; Leo's grade 2 class is singing and Riya told Tom Becker she will leave work at 5:00 that day.",
+  "date": "2026-10-07",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c034",
+  "kind": "plan",
+  "subject": "Dentist appointment",
+  "text": "Riya has a cleaning with Dr. Lin on 2026-11-03 at 8:00 am; Leo's checkup is booked right after at 8:45 am.",
+  "date": "2026-08-19",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c035",
+  "kind": "plan",
+  "subject": "Dr. Patel physical",
+  "text": "Riya's annual physical with Dr. Patel is on 2026-10-27 at 10:30 am, with fasting bloodwork beforehand.",
+  "date": "2026-09-30",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c036",
+  "kind": "commitment",
+  "subject": "Mom weekly call",
+  "text": "Riya promised her mother Anjali she would video-call every Sunday at 9:00 pm Toronto time (6:30 am Monday in Mumbai) before Anjali's morning walk.",
+  "date": "2025-07-06",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c037",
+  "kind": "commitment",
+  "subject": "Kabir gift for Ira",
+  "text": "Riya promised Kabir she would send Ira a hand-knit blanket from the Leslieville Christmas market before 2026-12-10 so it arrives in Vancouver before Christmas.",
+  "date": "2026-10-11",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c038",
+  "kind": "plan",
+  "subject": "Kitchen cabinet install",
+  "text": "Nate from Northline Renovations scheduled the kitchen cabinet installation for 2026-11-14 to 2026-11-17, with countertop templating a week later.",
+  "date": "2026-10-05",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c039",
+  "kind": "plan",
+  "subject": "Lumen Pay offsite",
+  "text": "Riya is attending the Lumen Pay quarterly planning offsite on 2026-11-12 at the Gladstone House, 9:00 am to 6:00 pm.",
+  "date": "2026-10-03",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c040",
+  "kind": "commitment",
+  "subject": "Marcus half marathon",
+  "text": "Riya promised Marcus Bell she would run the Chilly Half Marathon in Burlington with him on 2027-03-07 and registered on 2026-10-01 for $95.",
+  "date": "2026-10-01",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c041",
+  "kind": "plan",
+  "subject": "Leo birthday party",
+  "text": "Leo turns 8 on 2027-01-22; Riya is planning a party at Wonder Workshop on Queen East on Saturday 2027-01-23 for twelve kids.",
+  "date": "2026-10-17",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c042",
+  "kind": "plan",
+  "subject": "Field trip volunteer",
+  "text": "Riya signed up to volunteer on Leo's class field trip to the Royal Ontario Museum on 2026-11-26, leaving the school at 9:15 am.",
+  "date": "2026-10-08",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c043",
+  "kind": "plan",
+  "subject": "Past: Thanksgiving dinner",
+  "text": "Riya hosted Thanksgiving dinner on 2026-10-11 for Priya, Hannah's family and Marcus, cooking on a hot plate because the kitchen was gutted.",
+  "date": "2026-10-12",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c044",
+  "kind": "plan",
+  "subject": "Past: Leo's first day",
+  "text": "Leo started grade 2 in Ms. Alvarez's class at Morse Street Public School on 2026-09-02; Riya and Sam both walked him in.",
+  "date": "2026-09-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c045",
+  "kind": "commitment",
+  "subject": "Spanish homework",
+  "text": "Riya told Carlos Méndez she would write a 300-word Spanish essay about the Lisbon trip plans before their lesson on 2026-10-22.",
+  "date": "2026-10-15",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c046",
+  "kind": "routine",
+  "subject": "School drop-off and pickup",
+  "text": "Sam drops Leo at Morse Street Public School at 8:35 am on his way to work; Riya does pickup at 3:30 pm on Mondays, Wednesdays and Fridays and Leo goes to the after-school program on Tuesdays and Thursdays until 5:45 pm.",
+  "date": "2026-09-04",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c047",
+  "kind": "routine",
+  "subject": "Leo Saturday soccer",
+  "text": "Leo plays in the Leslieville house soccer league on Saturdays at 9:00 am at Jimmie Simpson Park from April to June and September to October.",
+  "date": "2026-04-11",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c048",
+  "kind": "routine",
+  "subject": "Spanish lesson",
+  "text": "Riya has an online Spanish lesson with Carlos Méndez every Thursday at 8:00 pm on Zoom, 60 minutes.",
+  "date": "2025-08-21",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c049",
+  "kind": "routine",
+  "subject": "Office days",
+  "text": "Riya works in the Lumen Pay office on King Street West on Tuesdays and Thursdays and from home the rest of the week.",
+  "date": "2025-04-15",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c050",
+  "kind": "routine",
+  "subject": "Friday family dinner",
+  "text": "Friday is pizza and movie night at home; Leo picks the movie and Sam makes the dough.",
+  "date": "2025-10-17",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c051",
+  "kind": "routine",
+  "subject": "Biscuit morning walk",
+  "text": "Riya walks Biscuit every morning at 6:30 am around the Leslie Street Spit loop on weekends and around the block on weekdays; Sam does the 9:00 pm walk.",
+  "date": "2025-05-20",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c052",
+  "kind": "decision",
+  "subject": "Chose Lisbon over Mexico",
+  "text": "Riya chose Lisbon over Mexico City for the December 2026 holiday because the flights were direct from Toronto, Leo could handle the time change better than a long layover, and the mild winter suits walking around.",
+  "date": "2026-06-24",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c053",
+  "kind": "decision",
+  "subject": "Kept Leo at Morse Street",
+  "text": "Riya and Sam decided to keep Leo at Morse Street Public School rather than move him to the French immersion program at Duke of Connaught, because he has close friends there and the walk is five minutes.",
+  "date": "2026-02-18",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c054",
+  "kind": "decision",
+  "subject": "Northline for kitchen",
+  "text": "Riya hired Northline Renovations (Nate) for the kitchen over two other bids because Nate's quote of $68,500 was mid-range but he could start in September 2026 and had strong reviews from Hannah.",
+  "date": "2026-06-30",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c055",
+  "kind": "decision",
+  "subject": "Kept the Mazda",
+  "text": "Riya decided not to replace the 2019 Mazda CX-5 in 2026 and instead put the money toward the kitchen renovation; she will revisit buying an EV in 2028.",
+  "date": "2026-03-15",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c056",
+  "kind": "decision",
+  "subject": "Rejected summer camp",
+  "text": "Riya rejected the $1,900 two-week overnight camp for Leo in summer 2026 as too young; she chose the Riverdale Farm day camp instead.",
+  "date": "2026-03-28",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c057",
+  "kind": "decision",
+  "subject": "Bought Bosch dishwasher",
+  "text": "For the new kitchen Riya picked the Bosch 800 Series dishwasher ($1,649 at Canadian Appliance Source) over the Miele because it was quieter for the price.",
+  "date": "2026-08-14",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c058",
+  "kind": "decision",
+  "subject": "Window seats flights",
+  "text": "Riya paid the extra $180 to choose seats together on the Lisbon flights so Leo gets a window and sits between her and Sam.",
+  "date": "2026-09-03",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c059",
+  "kind": "preference",
+  "subject": "Flight preferences",
+  "text": "Riya prefers direct flights even if they cost up to $300 more, aisle seats for herself, and avoids red-eyes unless the arrival is in the morning.",
+  "date": "2025-06-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c060",
+  "kind": "preference",
+  "subject": "Hotel preferences",
+  "text": "Riya prefers hotels with an elevator, a separate sleeping space for Leo and a walkable neighbourhood; she dislikes all-inclusive resorts.",
+  "date": "2025-11-20",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c061",
+  "kind": "preference",
+  "subject": "Packing style",
+  "text": "Riya packs carry-on only for trips under a week and likes a shared packing checklist for Leo prepared three days before departure.",
+  "date": "2026-07-03",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c062",
+  "kind": "preference",
+  "subject": "Vacation pace",
+  "text": "On family trips Riya likes one main activity per day and a quiet afternoon break, because Leo melts down when the schedule is too full.",
+  "date": "2025-12-29",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c063",
+  "kind": "preference",
+  "subject": "Driving to Ottawa",
+  "text": "Riya prefers driving to Ottawa in the Mazda over the train for family trips, leaving early on Friday to beat the 401 traffic, with a stop at the Big Apple in Colborne.",
+  "date": "2025-10-09",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c064",
+  "kind": "fact",
+  "subject": "Sunday-night work dread",
+  "text": "Riya tends to feel anxious on Sunday evenings before big launch weeks; what helps most is writing a three-item list for Monday and then a short walk with Biscuit.",
+  "date": "2025-11-23",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c065",
+  "kind": "fact",
+  "subject": "Stress about mother's health",
+  "text": "Riya worries about her mother Anjali living alone in Mumbai since her father died; talking through practical plans calms her more than reassurance does.",
+  "date": "2025-09-14",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c066",
+  "kind": "fact",
+  "subject": "Father's death anniversary",
+  "text": "Riya's father, Vikram Malhotra, died on 2022-03-18; around that date each year she prefers a lighter schedule and lights a diya at home.",
+  "date": "2026-03-17",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c067",
+  "kind": "fact",
+  "subject": "Wedding anniversary",
+  "text": "Riya and Sam's anniversary is 2018-06-16 (they met on 2015-06-16 and kept the date); they usually go out for dinner without Leo.",
+  "date": "2025-06-10",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c068",
+  "kind": "fact",
+  "subject": "Proud of first half marathon",
+  "text": "Riya is proud of finishing her first half marathon (Toronto Waterfront 21K) on 2025-10-19 in 2:04:37, which she trained for with Marcus.",
+  "date": "2025-10-20",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c069",
+  "kind": "fact",
+  "subject": "Proud of payouts launch",
+  "text": "Riya is proud of shipping Lumen Pay's Instant Payouts launch in May 2026, the first project she led end to end as a senior PM.",
+  "date": "2026-05-29",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c070",
+  "kind": "preference",
+  "subject": "How to support her",
+  "text": "When Riya is venting she wants the agent to listen and reflect first, not jump to solutions, and to ask before offering advice.",
+  "date": "2025-12-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c071",
+  "kind": "fact",
+  "subject": "Sensitive: fertility",
+  "text": "Riya mentioned that she and Sam had a difficult time trying for a second child in 2024 and does not want the topic raised unless she brings it up.",
+  "date": "2025-08-30",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c072",
+  "kind": "fact",
+  "subject": "Renovation stress",
+  "text": "Living without a working kitchen since September 2026 is wearing on Riya; she says takeout fatigue and dust are the worst parts.",
+  "date": "2026-10-04",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c073",
+  "kind": "fact",
+  "subject": "Calms down with baking",
+  "text": "Baking on weekend mornings with Leo is one of Riya's favourite ways to unwind.",
+  "date": "2025-12-14",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c074",
+  "kind": "fact",
+  "subject": "Leo's school worry",
+  "text": "Riya worries Leo is falling behind in reading; Ms. Alvarez said in September 2026 he is slightly below grade level but improving with nightly reading.",
+  "date": "2026-09-25",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c075",
+  "kind": "commitment",
+  "subject": "Nightly reading with Leo",
+  "text": "Riya committed to reading with Leo for 20 minutes every night at 7:30 pm and logging it in his school reading log.",
+  "date": "2026-09-26",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c076",
+  "kind": "episode",
+  "subject": "Rainy-day activity ideas",
+  "text": "2026-06-02: Riya asked for ideas for a rainy-day activity with Leo and picked building a cardboard fort.",
+  "date": "2026-06-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c077",
+  "kind": "episode",
+  "subject": "Lisbon trivia",
+  "text": "2026-07-15: Riya asked why Lisbon has so many hills and trams and read the answer to Leo.",
+  "date": "2026-07-15",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c078",
+  "kind": "episode",
+  "subject": "Cookie recipe scaling",
+  "text": "2025-12-13: Riya asked how to scale a chocolate-chip cookie recipe from one dozen to three dozen.",
+  "date": "2025-12-13",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c079",
+  "kind": "episode",
+  "subject": "Beagle barking question",
+  "text": "2025-07-22: Riya asked why beagles howl at sirens after Biscuit howled at an ambulance.",
+  "date": "2025-07-22",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c080",
+  "kind": "episode",
+  "subject": "Ottawa tulip festival",
+  "text": "2025-05-12: Riya asked what dates the Canadian Tulip Festival in Ottawa runs; she did not end up going.",
+  "date": "2025-05-12",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c081",
+  "kind": "episode",
+  "subject": "Swim bag checklist",
+  "text": "2025-09-09: Riya asked what Leo should bring to his first swim lesson.",
+  "date": "2025-09-09",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c082",
+  "kind": "episode",
+  "subject": "Halloween costume brainstorm",
+  "text": "2025-10-20: Riya asked for easy homemade Halloween costume ideas for a six-year-old.",
+  "date": "2025-10-20",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c083",
+  "kind": "episode",
+  "subject": "Running shoe comparison",
+  "text": "2026-02-03: Riya asked for a comparison of the Brooks Ghost and Asics Novablast for long runs with Marcus.",
+  "date": "2026-02-03",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c084",
+  "kind": "episode",
+  "subject": "Vancouver restaurant chat",
+  "text": "2026-07-11: Riya asked for a dim sum spot near Kitsilano for lunch with Kabir and Mei.",
+  "date": "2026-07-11",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c085",
+  "kind": "episode",
+  "subject": "Mumbai time conversion",
+  "text": "2026-03-08: Riya asked what time it was in Mumbai to check whether she could call her mother.",
+  "date": "2026-03-08",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c086",
+  "kind": "episode",
+  "subject": "Portuguese phrases",
+  "text": "2026-09-20: Riya asked how to say 'thank you' and 'the bill, please' in Portuguese.",
+  "date": "2026-09-20",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c087",
+  "kind": "episode",
+  "subject": "Snow day chat",
+  "text": "2026-01-27: Riya chatted about the snow day closure at Morse Street and asked for indoor games.",
+  "date": "2026-01-27",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c088",
+  "kind": "tool",
+  "subject": "Flight search YYZ-LIS",
+  "text": "Flight search 2026-07-10: Toronto YYZ to Lisbon LIS, Dec 18 to Dec 30, TAP direct $1,284 per adult, Air Canada direct $1,412, Air Transat direct $1,096 (no seat selection).",
+  "date": "2026-07-10",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c089",
+  "kind": "tool",
+  "subject": "Weather Lisbon December",
+  "text": "Weather lookup 2026-09-12: Lisbon in late December averages 15°C highs and 8°C lows with about 10 rainy days.",
+  "date": "2026-09-12",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c090",
+  "kind": "tool",
+  "subject": "Directions Ottawa",
+  "text": "Directions 2025-10-10: Leslieville, Toronto to Glebe, Ottawa via Highway 401 and 416, 452 km, about 4 h 35 min without traffic.",
+  "date": "2025-10-10",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c091",
+  "kind": "tool",
+  "subject": "Vancouver booking confirmation",
+  "text": "Booking confirmation: Air Canada AC117 Toronto to Vancouver 2026-07-09 08:00, return AC120 2026-07-13, 3 passengers, ref QX7L2P.",
+  "date": "2026-04-29",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c092",
+  "kind": "tool",
+  "subject": "Weather Toronto run",
+  "text": "Weather lookup 2026-05-16: Toronto Saturday 7 am forecast 11°C, light wind, 20% chance of rain.",
+  "date": "2026-05-16",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c093",
+  "kind": "tool",
+  "subject": "Pool schedule lookup",
+  "text": "Search result 2026-09-01: Pam McConnell Aquatic Centre fall 2026 lessons register on 2026-09-02 at 7:00 am via the City of Toronto efun site.",
+  "date": "2026-09-01",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c094",
+  "kind": "tool",
+  "subject": "Order confirmation cake",
+  "text": "Order confirmation: Bobbette & Belle, one 8-inch vanilla cake, pickup 2025-11-08, $68.",
+  "date": "2025-11-06",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c095",
+  "kind": "tool",
+  "subject": "Ottawa hotel search",
+  "text": "Search result 2025-12-20: Ottawa hotels near the Glebe for Dec 26-28, Lord Elgin $219/night, Delta $189/night.",
+  "date": "2025-12-20",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c096",
+  "kind": "tool",
+  "subject": "Mumbai flight search",
+  "text": "Flight search 2026-09-21: Toronto to Mumbai, Feb 5 to Feb 16 2027, Air Canada via Delhi $1,690, Air India direct $1,540.",
+  "date": "2026-09-21",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c097",
+  "kind": "tool",
+  "subject": "Dog boarding quote",
+  "text": "Quote 2026-08-02: Dogs Den Kennels Scarborough, 13 nights for a beagle, $598 plus tax.",
+  "date": "2026-08-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c098",
+  "kind": "fact",
+  "subject": "Grace's birthday",
+  "text": "Grace Okafor, Sam's mother, turns 68 on 2026-11-19.",
+  "date": "2026-08-25",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c099",
+  "kind": "commitment",
+  "subject": "Priya moving help",
+  "text": "Riya promised Priya Nair she would help her pack for her move to the Junction on 2026-10-31 in the morning, before Halloween.",
+  "date": "2026-10-10",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c100",
+  "kind": "plan",
+  "subject": "Past: Ottawa Christmas 2025",
+  "text": "The family spent Christmas 2025 in Ottawa with Grace and Daniel Okafor from 2025-12-24 to 2025-12-28, driving up in the Mazda.",
+  "date": "2025-12-29",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c101",
+  "kind": "decision",
+  "subject": "No Christmas in Ottawa 2026",
+  "text": "Riya and Sam told Grace and Daniel they would not be in Ottawa for Christmas 2026 because of Lisbon, and agreed to the November visit in Toronto instead.",
+  "date": "2026-07-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c102",
+  "kind": "plan",
+  "subject": "Lisbon Oceanarium",
+  "text": "Riya bought tickets for the Lisbon Oceanarium for 2026-12-27 at 10:00 am because Leo loves sea otters.",
+  "date": "2026-10-14",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c103",
+  "kind": "commitment",
+  "subject": "Tom Becker deadline",
+  "text": "Riya committed to Tom Becker to deliver the 2027 roadmap draft for Lumen Pay by 2026-11-06.",
+  "date": "2026-10-09",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c104",
+  "kind": "plan",
+  "subject": "Leo skating lessons",
+  "text": "Riya registered Leo for Saturday 10:30 am learn-to-skate lessons at Jimmie Simpson rink from 2027-01-09 to 2027-03-13.",
+  "date": "2026-10-02",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ },
+ {
+  "id": "c105",
+  "kind": "decision",
+  "subject": "Travel insurance",
+  "text": "Riya chose Blue Cross family travel insurance for Lisbon ($212) over the credit card coverage because the card excludes trip interruption for kids.",
+  "date": "2026-09-18",
+  "superseded_by": null,
+  "author": "claude-subagent:memory-author-C",
+  "scope": ""
+ }
+]

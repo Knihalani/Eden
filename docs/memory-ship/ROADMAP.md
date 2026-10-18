@@ -144,6 +144,20 @@ Every slice follows the lifecycle and definition of done in EXECUTION §3. New b
 | **P6.1 SQLite store** | `bun:sqlite` live / history / episodes + FTS5 (external content, `tokenchars '._-/'`, scope as token), WAL; never an unbounded `bm25()` order | L | `scale-1e6`: p99 < 150 ms; gold recall unchanged |
 | **P6.2 Dense arm experiment (optional)** | A ≥ 1B embedder (nemotron-embed-1b class) served **warm** (daemon or self-hosted container) as a **separate** dense gate (not an RRF union), plus a cross-encoder veto on dense-only admissions; 5 ms connect budget. bge-small is dropped as the default candidate (R8 E5) | M | D15 re-open condition: > +0.05 recall@4 at equal FIR on ≥ 300 real hard negatives, within the Submit budget; else leave it off |
 
+## Phase 8 — Beyond coding: one core for every agent (added 2026-10-18, R10)
+
+Eden also serves personal assistants, proactive agents, coworkers, tutors and companions. [research/R10/DOMAIN-AUDIT.md](research/R10/DOMAIN-AUDIT.md) lists the coding-only assumptions in the retrieval core (F1–F14). These slices make the core host-neutral; the coding machinery (paths, D7 slots, git classes) stays as the coding host's adapter. Targets are set from R10's measurements on LifeBench (`benchmarks/memory-life/`) and are pre-registered by each slice. Order and scope may change as R10 reports; R10's report (`research/R10-retrieval.md`) is the evidence.
+
+| Slice | Build | Size | Gate |
+|---|---|---|---|
+| **P8.1 Space identity** | A store keyed by a host-declared **space** (`user`, `user/<project>`) where there is no git dir (F1); the coding host keeps D1 | S | `space` arm: two spaces never share a row; a coding session's store is unchanged |
+| **P8.2 Host-neutral situation** | The cue takes any of `{prompt, prev_turn, prev_assistant, paths, entities_in_play, now, calendar_window, recipient, event}` (F4); each present part is scored apart, as A7 §3 | M | LifeBench direct + paraphrase recall@4 at FIR ≤ 5%; CueBench-code unchanged |
+| **P8.3 Entity layer** | Entities (people, places, pets, projects, trips) extracted at write and at sleep; an entity mention is the place signal (F2) and STRONG evidence for that entity's rows when the name is not a common word (F3, a DECISIONS proposal) | M | `entity-cue`; LifeBench proactive recall; FIR unchanged |
+| **P8.4 Personal action classes + tool-call guard** | book / buy / send / schedule / pay / cancel / share in `classes.json`; guard matchers on MCP tool names and arguments (F5, F6) | M | `life-policy`: standing instructions fire on their action, not on topical mentions |
+| **P8.5 Dated validity** | Plans with dates expire when the date passes; routines recur; entity × attribute supersession (F8, F9) | M | `stale-life`: no superseded or past-dated bullet |
+| **P8.6 LifeBench arms in A5** | The LifeBench fixture as harness arms: `cuebench-life`, `proactive`, `stale-life`, `life-silence`, `entity-cue`; the sealed holdout read only at audit | S | arms land red with reasons (P0.0c's rule) |
+| **P8.7 Proactive delivery point** | An event-driven cue (`eden memory recall --situation <json>`, SDK and wrap) for hosts that wake with no prompt (F7) | M | `proactive`: event cues get their need at FIR ≤ 5% on event negatives |
+
 ## Phase 7 — Earn-in backlog and League B
 
 - Items in DECISIONS §7 enter only when their logged-data trigger fires: ACT-R activation, reconsolidation window, tag-and-capture, FlyHash, Stop-time LLM prediction, co-change graph, promotion across sibling scopes, pointer bullets, NLI contradiction.
