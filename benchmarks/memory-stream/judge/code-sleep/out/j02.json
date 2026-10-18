@@ -1,0 +1,17 @@
+{"batch": "j02", "judge": "opus (claude-code subagent)", "cases": [
+{"event": "code-s021-e035", "needed": ["code-sleep-b01:m0029", "code-sleep-b00:m0040", "code-sleep-b00:m0041", "code-sleep-b01:m0016"], "why": "Infra is now Pulumi; cost tags team/env (team=payments); an exports bucket already exists (30d) to reconcile; never apply from laptop."},
+{"event": "code-s040-e007", "needed": [], "why": "CI/deploy green notification; nothing to act on."},
+{"event": "code-s035-e058", "needed": ["code-sleep-b00:m0036"], "why": "Tailwind v4 CSS-first config in globals.css; font token goes there, no tailwind.config.js."},
+{"event": "code-s082-e025", "needed": ["code-sleep-b00:m0015", "code-sleep-b01:m0008", "code-sleep-b07:m0011"], "why": "Health endpoint is /healthz (checks Postgres+Redis, matters for liveness vs readiness); helm chart layout; infra changes need platform review."},
+{"event": "code-s013-e004", "needed": ["code-sleep-b00:m0011", "code-sleep-b00:m0024", "code-sleep-b00:m0007", "code-sleep-b00:m0051"], "why": "CLI structure (commander, src/commands), snapshot tests, changeset for user-facing change, update docs/cli.md."},
+{"event": "code-s007-e006", "needed": [], "why": "Trailmix htmx question; no relevant memory available yet."},
+{"event": "code-s008-e000", "needed": ["code-sleep-b00:m0020", "code-sleep-b00:m0021"], "why": "Turborepo orchestrates tasks; generated files must be regenerated, not hand-edited (openapi.yaml)."},
+{"event": "code-s088-e013", "needed": [], "why": "Ack."},
+{"event": "code-s022-e002", "needed": ["code-sleep-b00:m0030", "code-sleep-b00:m0007", "code-sleep-b02:m0001"], "why": "Locates CLI invoices export; header rename is user-facing so needs changeset; test end to end before PR."},
+{"event": "code-s106-e000", "needed": ["code-sleep-b05:m0016", "code-sleep-b06:m0015", "code-sleep-b10:m0013"], "why": "Auth provider is Clerk (not Auth0); login page uses Clerk SignIn; recent production publishable key change suspected dev-instance key may explain the change."},
+{"event": "code-s013-e018", "needed": [], "why": "Self-contained helper task; no relevant memory available yet."},
+{"event": "code-s093-e000", "needed": ["code-sleep-b09:m0001", "code-sleep-b09:m0002", "code-sleep-b04:m0019", "code-sleep-b07:m0014"], "why": "Use api() wrapper with credentials; /v1 routes; i18n keys needed for toast strings but Lena owns message files mid-refactor."},
+{"event": "code-s075-e000", "needed": ["code-sleep-b00:m0038"], "why": "Biome autofix (pnpm biome check --write) is the formatter to use."},
+{"event": "code-s003-e019", "needed": [], "why": "Ack."},
+{"event": "code-s055-e011", "needed": ["code-sleep-b05:m0016", "code-sleep-b05:m0017", "code-sleep-b05:m0022"], "why": "Current web stack (Clerk, shadcn, TanStack/zustand), app/api only webhooks with server actions, README link moved to docs/web/testing.md."}
+]}

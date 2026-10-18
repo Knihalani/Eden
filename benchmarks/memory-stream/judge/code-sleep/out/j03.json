@@ -1,0 +1,17 @@
+{"batch": "j03", "judge": "opus (claude-code subagent)", "cases": [
+{"event": "code-s045-e012", "needed": ["code-sleep-b00:m0048"], "why": "Recap request: Jordan wants a short bullet-list summary."},
+{"event": "code-s108-e018", "needed": ["code-sleep-b05:m0035", "code-sleep-b08:m0036"], "why": "Where CSV generation lives (api csv.ts helpers vs client-side export button) to locate the duplicate header."},
+{"event": "code-s088-e021", "needed": [], "why": "Acknowledgement."},
+{"event": "code-s028-e006", "needed": ["code-sleep-b02:m0001", "code-sleep-b02:m0015", "code-sleep-b02:m0011"], "why": "Before opening a PR: e2e check in the running app and say what was checked, use gh CLI, no emojis."},
+{"event": "code-s103-e029", "needed": [], "why": "Chit-chat."},
+{"event": "code-s022-e000", "needed": ["code-sleep-b00:m0006"], "why": "Direct answer: Express API verifies Clerk JWTs with @clerk/backend in plugins/auth.ts."},
+{"event": "code-s108-e000", "needed": ["code-sleep-b02:m0019", "code-sleep-b04:m0012", "code-sleep-b04:m0013"], "why": "How to run Playwright e2e against dev server, retrying-assertion gotcha, 'New invoice' button label for locators."},
+{"event": "code-s007-e012", "needed": ["code-sleep-b00:m0002"], "why": "Pagination/edit state fix must respect TanStack Query server state vs zustand client state split."},
+{"event": "code-s061-e020", "needed": ["code-sleep-b01:m0016", "code-sleep-b04:m0006", "code-sleep-b05:m0013"], "why": "Never apply infra from laptop (CI only), infra needs Priya's CODEOWNER approval, never merge PRs yourself."},
+{"event": "code-s098-e017", "needed": [], "why": "Background status and running tests; nothing in memory needed."},
+{"event": "code-s083-e017", "needed": ["code-sleep-b01:m0022", "code-sleep-b08:m0011"], "why": "Stripe handler is billing code needing Jordan's review; comment-only-the-why rule applies to the refactor."},
+{"event": "code-s098-e009", "needed": [], "why": "Acknowledgement."},
+{"event": "code-s075-e023", "needed": [], "why": "No available row covers the tfstate backend facts (stored later); answer from the session's work."},
+{"event": "code-s082-e017", "needed": ["code-sleep-b05:m0002", "code-sleep-b01:m0006", "code-sleep-b04:m0009"], "why": "Worker is BullMQ on Redis (use Redis key), Redis noeviction outage means idempotency keys need expiry, run full test suite before pushing."},
+{"event": "code-s068-e006", "needed": [], "why": "Chart validation passed; nothing needed."}
+]}
