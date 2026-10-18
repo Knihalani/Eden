@@ -85,3 +85,49 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - Still far from the judge (recall 0.84, silence 0.51) and from realistic silence.
   - Proactive recall falls under the AND (0.31 → 0.23). The two kinds of evidence disagree most on proactive needs.
   - Life world not yet run.
+
+## C2-E1 · 2026-10-18 · F14 negative-history pruning
+- **Hypothesis:** query tokens common in the user's own earlier human turns (unlabeled, mostly no-need) are not evidence. Dropping them raises silence.
+- **Kill criterion (pre-run):** silence +0.20 absolute at recall ≥ 0.30.
+- **Numbers (code dev, strict, coverage v1):**
+
+  | Method | Recall | Silence |
+  |---|---|---|
+  | lex+when, neghist 0.05 | 0.3212 | 0.2381 |
+  | lex+when, neghist 0.02 | 0.3121 | 0.3065 |
+  | lex+when, neghist 0.01 | 0.2636 | 0.4018 |
+  | base (no pruning) | 0.3545 | 0.2143 |
+  | bank, neghist 0.05 | 0.3455 | 0.3423 |
+  | bank ∧ lex, neghist 0.05 | 0.3333 | 0.5327 |
+  | bank ∧ lex, neghist 0.02 | 0.2303 | 0.6071 |
+
+- **Verdict: dead as a mechanism (graveyard).** At recall ≥ 0.30 the best silence gain is +0.09. It moves along the existing frontier, not past it.
+
+## C2-E2 · 2026-10-18 · Coverage rule v2 (critic C1 fix #1)
+- **Setup:** 200 bullets (100 Eden packet bullets, 100 sleep rows), 1,245 bullet–item pairs. A sonnet judge said which items each bullet conveys.
+- **Agreement with the judge:**
+
+  | Rule | κ | Precision | Recall |
+  |---|---|---|---|
+  | v1: plain share ≥ 0.5 | 0.609 | 0.49 | 0.97 |
+  | plain share ≥ 0.7 | 0.836 | — | — |
+  | v2: idf-weighted ≥ 0.6 | **0.859** | 0.843 | 0.901 |
+
+  v1 over-credited coverage, so every recall and precision number was inflated.
+- **Re-scored (code dev, strict, v2, 95% CI):**
+
+  | Method | Recall | Proactive | Precision | Silence |
+  |---|---|---|---|---|
+  | eden (write store) | 0.0909 [0.018, 0.172] | 0.0769 | 0.0062 | 0.1042 |
+  | lex+when | 0.2758 [0.159, 0.389] | 0.1538 | 0.0170 | 0.2143 |
+  | bank | 0.3364 [0.217, 0.461] | 0.1538 | 0.0284 | 0.3095 |
+  | bank ∧ lex ltau=2 | 0.3273 [0.208, 0.446] | 0.1538 | 0.0395 | 0.4702 |
+  | bank ∧ ltau=4 | 0.2939 | 0.1538 | 0.0461 | 0.5595 |
+  | judge (visibility enforced) | 0.6909 [0.576, 0.795] | 0.4615 | 0.2552 | 0.6364 [0.558, 0.726] |
+  | oracle-need (strict) | 0.8242 | 0.6154 | 1.0 | 1.0 |
+
+- **Verdict:**
+  - All later numbers use v2. The C1 tables above stay as written; they were measured under v1.
+  - The frontier ordering survives the fix.
+  - The extraction ceiling of the sleep store is 0.82, not 0.92: compiled rows paraphrase.
+  - v2 is calibrated on code only. It must be re-checked on life.
