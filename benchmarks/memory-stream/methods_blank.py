@@ -29,7 +29,9 @@ def params(spec):
     return name, kv
 
 
-SENT = re.compile(r"(?<=[.!?])\s+(?=[A-Za-z0-9\"'(])|\n+|\s+/\s+")
+SENT = re.compile(r"(?<=[.!?])\s+(?=[A-Za-z0-9\"'(])|\n+|\s+/\s+|;\s+|\s+[-*\u2022]\s+|\s+\u2014\s+|\s+--\s+|"
+                  r"(?<=[a-z0-9)]):\s+(?=[a-z])|,?\s+\b(?=(?:also|btw|oh and|and also|plus|separately|anyway)\b)")
+CLAUSE = re.compile(r",\s+(?=(?:and|but|so|which|since|because|then)\b)|,\s+")
 CODE = set("{}();=<>[]`|$\\")
 
 # Statement cues: language that marks a durable fact, rule, preference or past decision.
@@ -94,7 +96,15 @@ def frames_of(ws, side):
 
 
 def split_units(text):
-    parts = [p.strip() for p in SENT.split(text or "") if p and p.strip()]
+    parts = []
+    for p in SENT.split(text or ""):
+        p = (p or "").strip()
+        if not p:
+            continue
+        if len(content(p)) > 24:  # still long: fall back to clauses
+            parts.extend(x.strip() for x in CLAUSE.split(p) if x and x.strip())
+        else:
+            parts.append(p)
     out, buf = [], ""
     for p in parts:
         buf = (buf + " " + p).strip() if buf else p
@@ -134,6 +144,10 @@ class Blank:
         self.pst = kw.get("pst", 0.35)  # gate factor for fact-stating turns
         self.pnov = kw.get("pnov", 0.6)  # gate factor for prompts with 3+ never-seen tokens
         self.kappa = kw.get("kappa", 0.0)
+        self.lam = kw.get("lam", 0.0)
+        self.humanonly = bool(kw.get("humanonly", 0))
+        self.disp = int(kw.get("disp", 0))  # bullet shown: 0 the unit, 1 the unit and its neighbours, 2 short row
+        self.maxrow = kw.get("maxrow", 300)
         self.cov = cov
         # --- stream: flat events and context-window boundaries ---
         flat, start, sess_first = [], {}, []
@@ -156,6 +170,8 @@ class Blank:
         self.build_turns()
         self.compile_units(rows, cov)
         self.attach_context()
+        if self.lam:
+            self.attach_echoes()
         self.cps, self.spaces = [], []
         if self.gamma:
             self.cps = [o for i, o in enumerate(sess_first) if o is not None and i % self.every == 0 and i > 0]
@@ -177,7 +193,7 @@ class Blank:
                 if not tr:
                     continue
                 src, so = tr[0], self.eorder[tr[1]]
-            if src not in SRC_PRIOR:
+            if src not in SRC_PRIOR or (self.humanonly and src != "human"):
                 continue
             parts = [r["text"]] if self.oracle else split_units(r["text"])
             for j, u in enumerate(parts):
@@ -186,11 +202,17 @@ class Blank:
                 c = content(u)
                 if len(c) < 3:
                     continue
-                units.append({"id": f"{r['id']}#{j}", "text": u, "t": r["t"], "invalid_at": r.get("invalid_at"),
-                              "c": c, "src": src, "row": r, "so": so})
+                if self.disp == 2 and len(r["text"]) <= self.maxrow:
+                    shown = r["text"]
+                elif self.disp >= 1:
+                    shown = " ".join(parts[max(0, j - 1): j + 2])
+                else:
+                    shown = u
+                units.append({"id": f"{r['id']}#{j}", "text": shown, "core": u, "t": r["t"],
+                              "invalid_at": r.get("invalid_at"), "c": c, "src": src, "row": r, "so": so})
         tmpl = {}
         for u in units:
-            u["key"] = re.sub(r"[0-9a-f]{6,}|\d+", "#", u["text"].lower())
+            u["key"] = re.sub(r"[0-9a-f]{6,}|\d+", "#", u["core"].lower())
             tmpl[u["key"]] = tmpl.get(u["key"], 0) + 1
         units = [u for u in units if tmpl[u["key"]] < 4]
         df = {}
@@ -205,8 +227,8 @@ class Blank:
             if u["worth"] < self.minw:
                 continue
             u["w"] = sum(self.idf[t] for t in u["c"])
-            u["frames"] = frames_of(words(u["text"]), "m")
-            u["rule"] = bool(RULE.search(u["text"]))
+            u["frames"] = frames_of(words(u["core"]), "m")
+            u["rule"] = bool(RULE.search(u["core"]))
             u["covers"] = set(u["row"]["covers"]) if self.oracle and "covers" in u["row"] else cov.covers(u["text"])
             u["ix"] = len(keep)
             keep.append(u)
@@ -232,7 +254,7 @@ class Blank:
         return (etype[best], best) if hits[best] / len(c) >= 0.7 else None
 
     def worth(self, u):
-        s = u["text"]
+        s = u["core"]
         cue = 0.0
         if RULE.search(s):
             cue += 0.6
@@ -283,6 +305,35 @@ class Blank:
         for k, tu in enumerate(turns):
             for t in tu["q"]:
                 self.tinv.setdefault(t, []).append(k)
+
+    def attach_echoes(self):
+        """Salience by recurrence: the orders of later events, in other sessions, that restate the unit (>= 0.6 of
+        its idf weight). Facts that matter come back (restated, echoed by the agent, kept by compaction); one-off
+        task descriptions do not. Only echoes before `now` count at query time."""
+        sess = {}
+        eix = {}
+        for e in self.flat:
+            sess[e["_order"]] = e.get("session")
+            for t in content(e["text_all"]):
+                eix.setdefault(t, []).append(e["_order"])
+        cstem = {}
+        for u in self.units:
+            u["echo"] = []
+            if not u["c"]:
+                continue
+            rare = sorted(u["c"], key=lambda t: len(eix.get(t, ())))[:2]
+            cands = None
+            for t in rare:
+                ps = set(o for o in eix.get(t, ()) if o > u["so"])
+                cands = ps if cands is None else cands & ps
+            for o in sorted(cands or ()):
+                if sess.get(o) == sess.get(u["so"]):
+                    continue
+                st = cstem.get(o)
+                if st is None:
+                    st = cstem[o] = content(self.flat[self.pos[o]]["text_all"])
+                if sum(self.idf[t] for t in u["c"] if t in st) / u["w"] >= 0.6:
+                    u["echo"].append(o)
 
     def attach_context(self):
         """Encoding context: the situation a memory was stated in (its turn's prompt and the agent's replies).
@@ -491,7 +542,11 @@ class Blank:
                 m += self.gamma * max(0.0, float(sims[u["ix"]]) - self.c0)
             if qf:
                 m += len(qf & u["frames"]) * self.fw * (1.5 if u["rule"] else 1.0)
-            scored.append((m * novel * u["worth"] * g, u))
+            sal = 1.0
+            if self.lam:
+                ne = sum(1 for o in u["echo"] if o < e["_order"])
+                sal = 1.0 + self.lam * math.log(1 + ne)
+            scored.append((m * novel * u["worth"] * g * sal, u))
         scored.sort(key=lambda x: (-x[0], -x[1]["t"]))
         return scored
 
@@ -503,7 +558,7 @@ class Blank:
                 break
             if any(v["t"] > u["t"] and self.jac(u, v) > 0.35 for s2, v in top if s2 >= 0.5 * s):
                 continue
-            if any(self.jac(u, v) > 0.5 for v in alive):
+            if any(self.jac(u, v) > 0.5 or (self.disp and u["row"] is v["row"]) for v in alive):
                 continue
             alive.append(u)
             if len(alive) >= self.k:
