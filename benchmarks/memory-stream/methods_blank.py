@@ -209,6 +209,120 @@ class Blank:
             for f in u["frames"]:
                 self.by_frame.setdefault(f, []).append(u)
         self.by_id = {u["id"]: u for u in keep}
+        self.build_turns()
+        self.beta = kw.get("beta", 0.0)
+        self.gamma = kw.get("gamma", 0.0)
+        self.c0 = kw.get("c0", 0.2)
+        self.dim = int(kw.get("dim", 128))
+        if self.gamma:
+            self.build_lsa()
+        self.kprf = int(kw.get("kprf", 5))
+
+    def build_turns(self):
+        """Past episodes: each human prompt with what the agent then did (tools, replies) until the next submit."""
+        turns, cur = [], None
+        for e in self.flat:
+            if e["t"] in ("human", "trigger"):
+                cur = {"order": e["_order"], "end": e["_order"], "q": content(e["text_all"]), "rest": {}}
+                turns.append(cur)
+            elif e["t"] in ("tool", "assistant") and cur is not None:
+                cur["end"] = e["_order"]
+                for t in content(e["text_all"]):
+                    cur["rest"][t] = cur["rest"].get(t, 0) + 1
+            else:
+                cur = None
+        self.turns = turns
+        df = {}
+        for tu in turns:
+            for t in tu["q"]:
+                df[t] = df.get(t, 0) + 1
+        n = len(turns)
+        self.tidf = {t: math.log(1 + n / d) for t, d in df.items()}
+        rdf = {}
+        for tu in turns:
+            for t in tu["rest"]:
+                rdf[t] = rdf.get(t, 0) + 1
+        self.ridf = {t: math.log(1 + n / d) for t, d in rdf.items()}
+        self.tinv = {}
+        for k, tu in enumerate(turns):
+            for t in tu["q"]:
+                self.tinv.setdefault(t, []).append(k)
+
+    def build_lsa(self, upto=None):
+        """Latent semantic space of the agent's past episodes (turn = prompt + everything the agent did): terms that
+        occur in the same situations get close vectors, so 'bearer token' lands near the auth library it was read
+        with. numpy randomized SVD, sleep-time only."""
+        import numpy as np
+        turns = [tu for tu in self.turns if upto is None or tu["end"] < upto]
+        docs = []
+        for tu in turns:
+            d = dict(tu["rest"])
+            for t in tu["q"]:
+                d[t] = d.get(t, 0) + 2
+            docs.append(d)
+        df = {}
+        for d in docs:
+            for t in d:
+                df[t] = df.get(t, 0) + 1
+        vocab = [t for t, c in df.items() if 2 <= c <= 0.3 * len(docs)]
+        vocab.sort(key=lambda t: -df[t])
+        vocab = vocab[:9000]
+        vid = {t: i for i, t in enumerate(vocab)}
+        n = len(docs)
+        X = np.zeros((n, len(vocab)), dtype=np.float32)
+        for i, d in enumerate(docs):
+            for t, f in d.items():
+                j = vid.get(t)
+                if j is not None:
+                    X[i, j] = (1 + math.log(f)) * math.log(n / df[t])
+        X /= np.linalg.norm(X, axis=1, keepdims=True) + 1e-9
+        rng = np.random.default_rng(0)
+        k = min(self.dim, n - 1)
+        Om = rng.standard_normal((len(vocab), k + 20)).astype(np.float32)
+        Y = X @ Om
+        for _ in range(2):
+            Y = X @ (X.T @ Y)
+        Q, _ = np.linalg.qr(Y)
+        B = Q.T @ X
+        _, S, Vt = np.linalg.svd(B, full_matrices=False)
+        T = (Vt[:k].T * S[:k]).astype(np.float32)
+        T /= np.linalg.norm(T, axis=1, keepdims=True) + 1e-9
+        self.vid, self.T = vid, T
+        for u in self.units:
+            u["vec"] = self.embed(u["c"])
+
+    def embed(self, toks):
+        import numpy as np
+        ids = [self.vid[t] for t in toks if t in self.vid]
+        if not ids:
+            return None
+        w = np.array([self.idf.get(self.T_vocab_t(i), 1.0) for i in ids], dtype=np.float32) if False else None
+        v = self.T[ids].sum(axis=0)
+        nv = np.linalg.norm(v)
+        return v / nv if nv else None
+
+    def T_vocab_t(self, i):
+        return None
+
+    def expand(self, qc, order):
+        """Pseudo-relevance feedback from the agent's own past episodes: the vocabulary of what was done after
+        similar earlier prompts (only turns that ended before this event)."""
+        sim = {}
+        for t in qc:
+            for k in self.tinv.get(t, ()):
+                if self.turns[k]["end"] < order:
+                    sim[k] = sim.get(k, 0.0) + self.tidf[t]
+        top = sorted(sim, key=lambda k: -sim[k])[: self.kprf]
+        exp = {}
+        for k in top:
+            tu = self.turns[k]
+            norm = sum(self.tidf.get(t, 0) for t in tu["q"]) or 1
+            w = sim[k] / norm
+            for t, f in tu["rest"].items():
+                exp[t] = exp.get(t, 0.0) + w * self.ridf[t] * min(f, 3) / 3
+        best = sorted(exp, key=lambda t: -exp[t])[:40]
+        mx = max((exp[t] for t in best), default=1) or 1
+        return {t: exp[t] / mx for t in best}
 
     @staticmethod
     def trace(text, eidx, etype):
@@ -290,8 +404,9 @@ class Blank:
         qf = frames_of(words(q), "q")
         win = self.window(e) | qs
         vis = lambda u: u["t"] < now and (u["invalid_at"] is None or u["invalid_at"] > now)
+        exp = self.expand(qc, e["_order"]) if self.beta else {}
         cand = {}
-        for t in qc:
+        for t in list(qc) + list(exp):
             for u in self.inv.get(t, ()):
                 if vis(u):
                     cand[u["id"]] = u
@@ -299,10 +414,18 @@ class Blank:
             for u in self.by_frame.get(f, ()):
                 if vis(u):
                     cand[u["id"]] = u
+        qv = self.embed(qc) if self.gamma else None
+        if self.gamma and qv is not None:
+            for u in self.units:
+                if vis(u) and u.get("vec") is not None and u["id"] not in cand:
+                    cand[u["id"]] = u
         scored = []
         for u in cand.values():
             m = sum(self.idf[t] for t in u["c"] if t in qc)
+            m += self.beta * sum(exp[t] * self.idf[t] for t in u["c"] if t in exp and t not in qc)
             m = m / (1 + 0.02 * max(0, len(u["c"]) - 12))
+            if self.gamma and qv is not None and u.get("vec") is not None:
+                m += self.gamma * max(0.0, float(qv @ u["vec"]) - self.c0)
             fb = len(qf & u["frames"]) * self.fw * (1.5 if u["rule"] else 1.0)
             novel = sum(self.idf[t] for t in u["c"] if t not in win) / u["w"]
             if novel < self.nov:

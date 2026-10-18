@@ -1,0 +1,17 @@
+# Prompts used by StreamBench's model-run steps (for reproducibility; critic C2)
+
+Each step's full prompt template, with `<batch>` / `<world>` placeholders.
+
+| Step | Model | Template |
+|---|---|---|
+| Stream authors (`AUTHORING.md`, `briefs/`) | the session's default model (Claude Code subagents; model id not recorded per batch, a known gap) | "You are a stream author for StreamBench … Read AUTHORING.md, the world bible, your batch brief … Hard rules: one human event per planned turn …; state beats carry every specific token …; need beats must not contain the needed item's tokens …" |
+| Sleep compiler (`SLEEP-SPEC.md`) | sonnet | "You are a sleep compiler … Read SLEEP-SPEC.md (follow it exactly), then your input … Be selective: durable facts, preferences, rules, plans, decisions, gotchas only, with rich `when` cues …" |
+| Self-play (`selfplay.py`) | haiku | "For EACH row, write `pos`: 6 short, realistic prompts … where a careful assistant would NEED this memory, but the prompt must NOT mention or restate the memory's content …; `neg`: 6 realistic near-miss prompts … where the memory is NOT needed." |
+| Judge ceiling (`judge.py`) | opus (session default) | "For each case, decide which memory rows a careful expert assistant would want injected into its context RIGHT NOW to act well on this turn, including proactive needs. Pick NONE when nothing is needed (the common case) … never more than 4." |
+| Independent labeler (`label.py`) | sonnet | "List the item ids that a careful expert assistant would NEED in context to do this turn right: the item changes what the agent should say or do … STRICT: do NOT label items that are merely on-topic … most turns need nothing … Typical: 0 items; rarely more than 3." |
+| Agent-pull host (`agentpull.py`) | sonnet | "You are simulating a coding agent (life: a personal AI assistant for Riya) that has a memory tool … decide, as a good agent would before acting: do you need to look something up in long-term memory to do THIS turn right …? Call the tool only when it would plausibly change what you do; most turns … need no lookup. If you call, write a short search query." Batched: 55–60 cases per subagent prompt, which is not a turn-by-turn host (critic C2, §1d). |
+| Coverage check (C2-E2) | sonnet | "For each case decide which candidate facts the bullet actually CONVEYS … mentioning the same topic is not enough; a bullet that states an older/different value does NOT convey the fact." |
+| Prompt rewriter (`rewrite.py`) | sonnet | "Rewrite each prompt as Jordan (life: Riya) would actually type it: shorter, telegraphic … keeping the same intent and every `keep` token … never include `avoid` tokens; pastes keep their body verbatim." |
+| Blank-slate designer (cycle 3) | session default | No access to STATE, LEDGER, the methods, or the sleep/self-play/judge artifacts; builds `methods_blank.py` from the raw stream and the stores only. |
+
+All generators are Claude models. A non-Claude generator for a holdout is still open (BRIEF §4.9).
