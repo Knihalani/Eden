@@ -201,7 +201,7 @@ class Blank:
             u["rule"] = bool(RULE.search(u["text"]))
             for t in u["c"]:
                 self.inv.setdefault(t, []).append(u)
-            u["covers"] = set(r["covers"]) if self.oracle and "covers" in r else cov.covers(u["text"])
+            u["covers"] = set(u["row"]["covers"]) if self.oracle and "covers" in u["row"] else cov.covers(u["text"])
             keep.append(u)
         self.units = keep
         self.by_frame = {}
