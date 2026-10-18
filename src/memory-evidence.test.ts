@@ -157,6 +157,16 @@ describe("`gate.tau` (memory-flags.ts): shadow by default, the gate's admission 
     expect(mem.lastGate).toMatchObject({ mode: "shadow", medium: 0, drop: 1 });
   });
 
+  test("shadow leaves a stored copy of the prompt to the delivery's residual, as before, and drops none of it", () => {
+    // The world guards (P4.3's measurement): removing it before the cap let one more row into a packet.
+    const mem = store();
+    const prompt = "which port does the billing service use behind the gateway today?";
+    mem.remember(prompt, { kind: "episode" });
+    mem.gateFlag = "shadow";
+    expect(texts(mem.relevant(prompt))).toEqual([prompt]);
+    expect(mem.lastGate).toMatchObject({ mode: "shadow", drop: 0 });
+  });
+
   test("off admits as before the gate and computes nothing", () => {
     const mem = store();
     mem.remember(FACT, { kind: "fact" });
