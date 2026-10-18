@@ -143,3 +143,24 @@ Each item enters the build only when its trigger condition is met on logged data
 | Cross-scope promotion | `scope_miss` is ≥ 10% of logged restatements (R3 cut list) |
 | Pointer bullets | A long-content class shows `ignored` ≥ 50% |
 | NLI contradiction pass at sleep | Free-text contradictions cause ≥ 1 harmful packet per 100 on dogfood |
+
+## R10 proposals (pending the user's decision; not adopted)
+
+Raised by the R10 research programme (`research/R10-retrieval.md`; evidence in `research/R10/LEDGER.md`). Each is a proposal with measured grounds. None changes behaviour until the user accepts it and a slice ships it.
+
+- **R10-1 · A pull channel next to push (A4 §5).**
+  - *Evidence:* on StreamBench, no hook-side signal separates need turns from no-need turns above AUC ≈ 0.70. Five mechanisms were tried (C2–C3).
+  - The host model decides well when to look: it calls on 93% of code need turns. On the same events, it has 2.5× the precision (code) and 2.1× (life), with +0.18 and +0.26 silence (C3-E1).
+  - *Proposal:* hosts that support tools get a memory index and a `recall` tool. The hook keeps pushing only high-precision items (rules on actions, corrections, trigger agendas).
+  - *Cost:* an index of about 100 tokens in every turn, plus one tool step on about a third of human turns.
+  - D15 (no model on the hook) is unchanged. A4's "Eden decides what the model sees" becomes "Eden decides what is pushed; the model decides what to pull".
+- **R10-2 · StreamBench is the primary retrieval benchmark.**
+  - R1, R8 and LifeBench pairs are secondary arms. No slice may claim a retrieval gain on them alone.
+  - *Evidence:* pair fixtures overstated lexical recall (0.47–0.56 on pairs vs 0.21 on streams at a realistic silence; C1-E2).
+- **R10-3 · Bullet precision and silence are outcome metrics, not only token budgets.**
+  - *Evidence:* the downstream check shows a wrong packet lowers the response score by 0.40 (on 0–3) on no-need turns (C3-E4).
+  - *Proposal:* every retrieval slice reports `stream-downstream`, and must not lower it on no-need turns.
+- **R10-4 · Sleep-time models may write retrieval cues and situations, not only extract facts** (D34, §6a).
+  - *Evidence:* compiled `when` cues and self-play situations raised silence by +0.16–0.26 at equal recall on both worlds (C1-E6, C2-E7).
+  - This needs an offline model for the sleep step (NIM today). The model must differ from any model that writes evaluation data.
+
