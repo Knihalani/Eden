@@ -419,6 +419,16 @@ class Vote(Base):
 REGISTRY = {"oracle-need": OracleNeed, "lex": Lex, "bm25": Lex, "bank": Bank, "situ": Situation, "vote": Vote}
 
 
+def _plugins():
+    """Extra method families from `methods_*.py` files: each module defines REGISTRY = {name: class}."""
+    import glob, importlib, os
+    here = os.path.dirname(os.path.abspath(__file__))
+    for path in sorted(glob.glob(os.path.join(here, "methods_*.py"))):
+        mod = importlib.import_module(os.path.basename(path)[:-3])
+        REGISTRY.update(getattr(mod, "REGISTRY", {}))
+
+
 def make(spec, rows, stream, items, cov):
+    _plugins()
     name, kw = params(spec)
     return REGISTRY[name]([dict(r) for r in rows], stream, items, cov, **kw)
