@@ -1,0 +1,17 @@
+{"batch": "j11", "judge": "opus (claude-code subagent)", "cases": [
+{"event": "code-s030-e013", "needed": ["code-sleep-b00:m0004", "code-sleep-b02:m0030"], "why": "Logger is pino structured logging; re-check work for security before calling it done."},
+{"event": "code-s027-e035", "needed": ["code-sleep-b00:m0025"], "why": "Switching to the deps branch with local work: never git stash, commit WIP instead."},
+{"event": "code-s098-e035", "needed": [], "why": "Self-contained sort fix; nothing in memory needed."},
+{"event": "code-s046-e022", "needed": ["code-sleep-b00:m0005", "code-sleep-b00:m0050", "code-sleep-b00:m0025"], "why": "Branch naming with Linear id, Conventional Commits, and no git stash while leaving other changes uncommitted."},
+{"event": "code-s066-e024", "needed": [], "why": "Load test result notification; pool decision already in recent context."},
+{"event": "code-s003-e021", "needed": ["code-sleep-b00:m0023"], "why": "Invoices export is behind GrowthBook flag cli-invoices-export, not yet created; may block a staging run."},
+{"event": "code-s108-e045", "needed": [], "why": "General TypeScript question."},
+{"event": "code-s081-e007", "needed": ["code-sleep-b00:m0013", "code-sleep-b04:m0032"], "why": "Testcontainers hangs if Docker stopped; Jordan now uses OrbStack."},
+{"event": "code-s007-e045", "needed": [], "why": "Cause and affected usages already in recent context."},
+{"event": "code-s057-e017", "needed": [], "why": "User supplied the doc content directly."},
+{"event": "code-s057-e022", "needed": ["code-sleep-b05:m0021"], "why": "Customers table query state lives in nuqs (useCustomerQueryState); debounce should update the q param there."},
+{"event": "code-s020-e019", "needed": [], "why": "User stating a new rule; ack."},
+{"event": "code-s063-e013", "needed": ["code-sleep-b05:m0003"], "why": "Prod deploys go out from v* git tags via release.yml."},
+{"event": "code-s081-e000", "needed": ["code-sleep-b03:m0014"], "why": "CLI structure: commander, strict TS with noUncheckedIndexedAccess."},
+{"event": "code-s086-e000", "needed": ["code-sleep-b04:m0033", "code-sleep-b02:m0013", "code-sleep-b06:m0007", "code-sleep-b01:m0016"], "why": "Prod DB access via Tailscale with existing reader endpoint; infra is Terraform in infra/terraform; infra PR needs platform review plus plan; never apply from laptop."}
+]}
