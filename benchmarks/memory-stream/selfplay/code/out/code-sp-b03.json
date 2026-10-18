@@ -1,0 +1,726 @@
+{
+ "batch": "code-sp-b03",
+ "generator": "haiku (claude-code subagent)",
+ "rows": {
+  "code-sleep-b02:m0030": {
+   "pos": [
+    "split the invoice editor into pieces, it's getting unwieldy",
+    "add a line-item discount field to the invoice form component",
+    "ok that's working. wrap it up and tell me it's done",
+    "make a PricingSummary component for the dashboard, pull the totals logic out of the page",
+    "lena says the client detail page is huge, can you pull the contacts section into its own file",
+    "finished the refactor, anything else before i open the PR?"
+   ],
+   "neg": [
+    "what's a good way to split a long essay into sections",
+    "explain what a React component lifecycle is",
+    "how long is a typical pull request description supposed to be in general",
+    "the invoice pdf is 400kb, why is that so large",
+    "write a haiku about the invoice editor",
+    "what does 'done' mean in agile sprints"
+   ]
+  },
+  "code-sleep-b03:m0001": {
+   "pos": [
+    "the jest config won't load, it says require is not defined. fix it",
+    "add a small helper script under packages/cli that reads a json file",
+    "can you write a quick node script to dump the env vars for the worker",
+    "new package for the shared date utils, scaffold it under packages/",
+    "why is my test file throwing ReferenceError: module is not defined",
+    "port this old util from commonjs, the build is complaining"
+   ],
+   "neg": [
+    "what's the difference between cjs and esm in general",
+    "does node 20 support top-level await",
+    "explain how require caching works in node",
+    "why does my react native app show a white screen",
+    "write a haiku about modules",
+    "what's the history of the javascript module system"
+   ]
+  },
+  "code-sleep-b03:m0002": {
+   "pos": [
+    "add logging to the webhook handler so we can see what stripe sends",
+    "the error handler should log the full request for debugging, do that",
+    "debug why the oauth callback 401s, log the headers it gets",
+    "add a debug print of the config object at worker startup",
+    "wrap the external api client and log every outgoing call with its options",
+    "catch errors in the clerk middleware and include the error and the token in the message"
+   ],
+   "neg": [
+    "what does pino's redact option do in general",
+    "how do i rotate an api key on aws secrets manager",
+    "what's a bearer token versus a cookie",
+    "fix the typo in the logger README",
+    "explain jwt expiry claims",
+    "write a unit test for the string formatter in utils"
+   ]
+  },
+  "code-sleep-b03:m0003": {
+   "pos": [
+    "a sentry issue came in for the invoices route, find the matching api log line",
+    "trace this 500 from the dashboard through the backend, where do we start",
+    "add sentry tagging to the error handler",
+    "the web fetch client should send something so we can match logs, wire it up",
+    "why can't I find the api log for this checkout error from sentry",
+    "add a correlation id to the outgoing requests from apps/web"
+   ],
+   "neg": [
+    "what does an x-request-id header usually mean",
+    "how does sentry's setTag differ from setContext",
+    "explain uuid v4 generation",
+    "what's a good log retention period for api logs",
+    "fix the typo in the sentry readme",
+    "write a haiku about tracing"
+   ]
+  },
+  "code-sleep-b03:m0004": {
+   "pos": [
+    "add a new middleware for response compression on the api",
+    "write a test for the orders route handler, use the usual test setup",
+    "add rate limiting to the new /exports endpoint",
+    "the body-parser import is breaking, rip it out of the api",
+    "make a new plugin that adds a x-tenant header check",
+    "can you write the test for the clients list route using supertest"
+   ],
+   "neg": [
+    "what are the pros of fastify over express in general",
+    "how does express middleware ordering work",
+    "what is supertest used for",
+    "is body-parser deprecated in express 5",
+    "write a haiku about web servers",
+    "fix the typo in the express tutorial in the docs folder"
+   ]
+  },
+  "code-sleep-b03:m0005": {
+   "pos": [
+    "search on the clients page is slow with 50k rows, what should we use",
+    "add fuzzy search for invoice customer names",
+    "users want to search across orders and contacts, set that up",
+    "the search box needs typo tolerance, pick something and wire it up",
+    "add full text search for the products table",
+    "build a search endpoint for the audit log"
+   ],
+   "neg": [
+    "how does elasticsearch scoring work",
+    "what's the difference between like and ilike in sql",
+    "explain postgres indexes in general",
+    "write a haiku about search engines",
+    "fix the typo in the search placeholder text",
+    "compare algolia and meilisearch pricing"
+   ]
+  },
+  "code-sleep-b03:m0006": {
+   "pos": [
+    "the nightly export sometimes writes an empty csv, figure out why and fix it",
+    "that flaky webhook test, just make it pass",
+    "why does the invoice total drift by a cent on some orders",
+    "the worker occasionally double-sends reminders, find the cause",
+    "fix the race in the session refresh, i think it's the cache",
+    "something in the dunning job skips some customers, track it down"
+   ],
+   "neg": [
+    "what does it mean for a test to be flaky",
+    "what's the probability of a coin landing heads twice",
+    "explain the difference between a race condition and a deadlock",
+    "guess the next number in this sequence 2 4 8 16",
+    "how do i report a bug in an open source project",
+    "write a haiku about uncertainty"
+   ]
+  },
+  "code-sleep-b03:m0007": {
+   "pos": [
+    "add a retry for the reminders consumer if the email provider is down",
+    "the image processing worker should retry failed jobs, add that",
+    "what happens to a message that keeps failing in the exports queue",
+    "make the invoices consumer retry more times before giving up",
+    "write a consumer for the payments queue that calls stripe and acks",
+    "a job fails halfway, can the write be lost if we ack first"
+   ],
+   "neg": [
+    "what is exponential backoff in general",
+    "what's a dead letter queue used for in sqs",
+    "explain at least once versus exactly once delivery",
+    "how do i retry a git push after a network error",
+    "fix the typo in the queue readme",
+    "write a haiku about queues at the bank"
+   ]
+  },
+  "code-sleep-b03:m0008": {
+   "pos": [
+    "the cli config file path is hardcoded somewhere, check the cli for it",
+    "add a cache directory for the cli, store it under the user folder",
+    "a windows user says acme can't find its config, look at the path code",
+    "write the cli code that reads ~/.acme/config.json",
+    "the new export command writes to home, make it work on windows too",
+    "add a temp file under the home dir in the cli for uploads"
+   ],
+   "neg": [
+    "how do i open a file on windows from powershell",
+    "what's the difference between os.homedir and process.cwd in node",
+    "fix the typo in the windows install guide",
+    "why is my path separator wrong in git bash",
+    "what does the HOME env var mean on mac",
+    "write a haiku about file paths"
+   ]
+  },
+  "code-sleep-b03:m0009": {
+   "pos": [
+    "the invoice total on the pdf is off by a few cents for hourly lines, fix it",
+    "show the line total on the dashboard, format it nicely",
+    "add a function to sum the line items for the invoice preview",
+    "the orders table shows 1204.3000000002, can you clean that",
+    "compute tax on each invoice line and sum it up",
+    "add a currency formatter for the euro invoices on the web app"
+   ],
+   "neg": [
+    "how does Intl.NumberFormat handle currency in general",
+    "what's the history of floating point arithmetic",
+    "how many cents in a dollar in other currencies",
+    "why does 0.1 plus 0.2 not equal 0.3 in javascript",
+    "fix the typo in the pricing page copy",
+    "write a haiku about money"
+   ]
+  },
+  "code-sleep-b03:m0010": {
+   "pos": [
+    "add a new s3 bucket for the audit logs in terraform",
+    "set up a second region for disaster recovery in the infra folder",
+    "add a bucket for the export zips and tag it properly",
+    "add a provider block for eu-west-1 so the replica can deploy",
+    "write the terraform for the new backups bucket",
+    "terraform plan is failing on the state bucket, look into it"
+   ],
+   "neg": [
+    "what regions does aws offer in europe",
+    "what's the difference between s3 and glacier storage",
+    "explain terraform workspaces in general",
+    "why is my terraform version manager not installing",
+    "fix the typo in the infra readme",
+    "write a haiku about cloud regions"
+   ]
+  },
+  "code-sleep-b03:m0011": {
+   "pos": [
+    "why is the s3 policy denying the lambda, the json looks right to me",
+    "how do i wire up the new kms key",
+    "explain how the rate limiter works in the api",
+    "walk me through the migration steps for the new table",
+    "what's the best way to add an index on clients.email",
+    "can you explain what the reconciler job does"
+   ],
+   "neg": [
+    "what is terraform for someone brand new to it",
+    "explain what a bucket is in cloud storage",
+    "what does kms stand for",
+    "how do i install node on ubuntu",
+    "give me a long tutorial on react hooks",
+    "write a haiku about long answers"
+   ]
+  },
+  "code-sleep-b03:m0012": {
+   "pos": [
+    "we need an s3 bucket for the monthly invoice export zips, draft the terraform",
+    "add the bucket for the monthly zip exports to the infra folder",
+    "write the iam policy for the invoice export bucket",
+    "lifecycle rule for the monthly exports bucket, can you draft it",
+    "set up the bucket and the upload path for the export zips",
+    "ok do the s3 part of the monthly export feature"
+   ],
+   "neg": [
+    "what's the default lifecycle for s3 objects in general",
+    "how does s3 presigned upload work",
+    "explain what an iam policy is",
+    "how do i zip a folder on mac",
+    "fix the typo in the export csv header",
+    "write a haiku about cloud storage"
+   ]
+  },
+  "code-sleep-b03:m0013": {
+   "pos": [
+    "two invoices got the same number in the parallel tests, fix it",
+    "create an invoice from the draft endpoint, insert the row and return it",
+    "add an invoice creation function in the api service",
+    "the invoice number sequence has gaps after a failed insert, help",
+    "write a route that creates a new invoice for an org",
+    "make invoice numbers reset per org each year"
+   ],
+   "neg": [
+    "what is a sequence in postgres",
+    "how do upserts work in general",
+    "what does INV stand for in invoicing",
+    "fix the typo in the invoice pdf footer",
+    "explain database transactions to a junior dev",
+    "write a haiku about invoices"
+   ]
+  },
+  "code-sleep-b03:m0014": {
+   "pos": [
+    "add a 'customers list' subcommand to the cli",
+    "the cli needs a new 'webhooks' group, scaffold it",
+    "add a --json flag to acme clients list",
+    "register a new acme reports command",
+    "why is the cli build producing a dist file that doesn't run",
+    "make the cli's index file load a new command group"
+   ],
+   "neg": [
+    "what is commander.js used for in general",
+    "compare yargs and commander for a cli",
+    "how does tsup bundle an esm package",
+    "fix the typo in the cli help text for 'exports'",
+    "what's a good name for a cli binary",
+    "write a haiku about command lines"
+   ]
+  },
+  "code-sleep-b03:m0015": {
+   "pos": [
+    "bad --limit flag should fail the command, make it error out cleanly",
+    "the cli should reject a non-numeric page number, add the check",
+    "add validation for --format on the export command",
+    "the config subcommand calls process.exit on bad input, clean that up",
+    "validate the --since flag and make it exit with the right code",
+    "add an error for a missing --out path on invoices export"
+   ],
+   "neg": [
+    "what does process.exit do in node",
+    "what exit codes do unix commands usually use",
+    "how do i catch errors in a typescript async function",
+    "fix the typo in the usage text of the cli",
+    "explain what a custom error class is",
+    "write a haiku about exit codes"
+   ]
+  },
+  "code-sleep-b03:m0016": {
+   "pos": [
+    "ok the export command is done, open the PR",
+    "push the cli change and open a pr for the --since flag",
+    "ship the invoice export command, the branch is ready",
+    "the new cli flag is merged in my branch, get it ready for review",
+    "write the pr description for the cli export work",
+    "finish the cli feature and prep the release"
+   ],
+   "neg": [
+    "what is a changeset in general",
+    "how do semver version bumps work",
+    "fix the typo in the root readme",
+    "what's the difference between a pr and a merge request",
+    "explain the changelog format keep a changelog",
+    "write a haiku about releases"
+   ]
+  },
+  "code-sleep-b03:m0017": {
+   "pos": [
+    "where did i leave the invoices export branch",
+    "open a pr for the export work, the one on acme-240",
+    "check if the export command is on the remote yet",
+    "what state is the csv export in, did i push it",
+    "rebase the export branch on main and pick it back up",
+    "continue the export feature, where were we"
+   ],
+   "neg": [
+    "how do i list remote branches in git",
+    "what does a git rebase do in general",
+    "fix the typo in the branch naming guide",
+    "what's a good naming scheme for feature branches",
+    "explain git cherry-pick",
+    "write a haiku about git"
+   ]
+  },
+  "code-sleep-b03:m0018": {
+   "pos": [
+    "the team avatar image isn't loading on the settings page, check the config",
+    "add the stripe logo from their cdn to the invoice page",
+    "next image throws invalid src for the logo url, fix it",
+    "add a hero image from our assets host to the landing page",
+    "swap the profile pictures to the new host and make it load",
+    "the org logo returns a 400 from the image optimizer, figure out why"
+   ],
+   "neg": [
+    "what does next/image do in general",
+    "how do cdns cache images",
+    "fix the typo in the landing page alt text",
+    "why is my local dev server slow to start",
+    "explain what a remote pattern glob is",
+    "write a haiku about pictures"
+   ]
+  },
+  "code-sleep-b03:m0019": {
+   "pos": [
+    "htmx post in trailmix gives 403, look at the base template",
+    "add a delete button to the hike list in trailmix using htmx",
+    "the trailmix form submit says csrf failed, why",
+    "add an htmx endpoint to rename a segment in trailmix",
+    "write a test for the trailmix hike delete view",
+    "elevation gain on the trailmix list is wrong for some hikes, check the query"
+   ],
+   "neg": [
+    "what is a csrf token in general",
+    "how does django's test client work",
+    "explain what htmx does compared to react",
+    "what hiking trails are near toronto",
+    "fix the typo in the trailmix readme",
+    "write a haiku about mountains"
+   ]
+  },
+  "code-sleep-b03:m0020": {
+   "pos": [
+    "the invoice status test is flaky on ci, look at it",
+    "add a due date label for the invoice list",
+    "the overdue badge shows the wrong day for some users, fix it",
+    "write a test for the due label component",
+    "the due date is off by one in the pdf, help",
+    "the invoice list says overdue too early, check the date logic"
+   ],
+   "neg": [
+    "how do timezones work in general",
+    "what's the difference between utc and gmt",
+    "explain iso 8601 date format",
+    "fix the typo in the due date tooltip",
+    "what's a good date library for javascript",
+    "write a haiku about deadlines"
+   ]
+  },
+  "code-sleep-b03:m0021": {
+   "pos": [
+    "the invoice amounts in the table jump around when numbers change, fix the styling",
+    "add a font import for the new dashboard typography",
+    "style the invoice number column in the table",
+    "the totals column looks misaligned, tweak the css",
+    "add a google font to the web app",
+    "make the ledger table easier to scan"
+   ],
+   "neg": [
+    "what is a monospace font in general",
+    "what does tabular-nums mean in css",
+    "how do i add a google font to a static site",
+    "fix the typo in the about page footer",
+    "which font is best for body text",
+    "write a haiku about typography"
+   ]
+  },
+  "code-sleep-b03:m0022": {
+   "pos": [
+    "the payments list page is slow with lots of rows, check the query",
+    "add the contacts to the client list response",
+    "the clients endpoint takes two seconds, why",
+    "load the attempts for each payment in the list route",
+    "orders list is fast now, do the same for payments",
+    "the api logs show hundreds of queries on the clients page"
+   ],
+   "neg": [
+    "what is an n+1 query in general",
+    "how does a join differ from a subquery",
+    "explain drizzle's relational query api to a beginner",
+    "fix the typo in the orders page title",
+    "what is a good page size for a paginated api",
+    "write a haiku about databases"
+   ]
+  },
+  "code-sleep-b03:m0023": {
+   "pos": [
+    "finish the invoices export so finance can filter by date",
+    "wire the since option into the export command",
+    "where did i stop on the export date filter",
+    "add the date filter to acme invoices export and test it",
+    "pass the date from the cli flag down to the list call",
+    "export should only grab recent invoices, finish that"
+   ],
+   "neg": [
+    "what date format do most apis accept",
+    "how do i parse a date in typescript",
+    "fix the typo in the since help text",
+    "what does since mean in sql",
+    "write a haiku about dates",
+    "explain how unix timestamps work"
+   ]
+  },
+  "code-sleep-b03:m0024": {
+   "pos": [
+    "bump all the deps to latest and make ci green",
+    "update the next and react versions in apps/web",
+    "merge the deps-bot prs for the week",
+    "upgrade typescript to the newest major, fix anything broken",
+    "update drizzle to latest, it should be a quick one",
+    "the lint plugin is outdated, upgrade it to v9 and fix the config"
+   ],
+   "neg": [
+    "what is semver in general",
+    "what's the difference between a major and a minor version",
+    "how do i pin a dependency version in pnpm",
+    "fix the typo in the package.json description",
+    "what changed in node 20 lts",
+    "write a haiku about upgrades"
+   ]
+  },
+  "code-sleep-b03:m0025": {
+   "pos": [
+    "the zod pr is failing on typecheck, fix it so it merges",
+    "clean up the zod email validation in the api",
+    "update zod in the cli package and fix the breaks",
+    "ci is red on the deps pr, can you make it pass",
+    "migrate the z.string().email() calls to the new api",
+    "approve the zod bump and fix the failing tests"
+   ],
+   "neg": [
+    "what's new in zod 4 in general",
+    "how does zod compare to yup for validation",
+    "what does z.string().email() do",
+    "fix the typo in the zod schema comment",
+    "how do i write a custom zod refinement",
+    "write a haiku about schemas"
+   ]
+  },
+  "code-sleep-b03:m0026": {
+   "pos": [
+    "should we move the worker to prisma for better typing",
+    "add a prisma client to the new billing service",
+    "set up prisma studio so i can browse the db",
+    "the orm for the new reporting service, pick one and go",
+    "add prisma migrations for the new table",
+    "why is the api cold start so slow, could the orm be the cause"
+   ],
+   "neg": [
+    "what is prisma in general",
+    "compare prisma and typeorm for a new project",
+    "what is an orm and why use one",
+    "fix the typo in the prisma schema comment in the readme",
+    "how do i reset a prisma sqlite db",
+    "write a haiku about cold starts"
+   ]
+  },
+  "code-sleep-b03:m0027": {
+   "pos": [
+    "the new api needs a stripe webhook secret in prod, set it up",
+    "add the sendgrid key to the api deployment",
+    "the api pod can't read the new env var from secrets manager",
+    "add a feature flag secret for staging, make it available to the api",
+    "wire the resend api key into the api pods",
+    "the new secret isn't showing up in the pod, what's wrong"
+   ],
+   "neg": [
+    "what is external secrets operator in general",
+    "how do i read a secret from aws secrets manager with the cli",
+    "what is a kubernetes secret",
+    "fix the typo in the helm chart readme",
+    "how do helm values files work",
+    "write a haiku about kubernetes"
+   ]
+  },
+  "code-sleep-b03:m0028": {
+   "pos": [
+    "posthog events aren't showing up in prod, why",
+    "add posthog tracking to the api for the new endpoint",
+    "analytics is broken in prod but fine locally, check the config",
+    "the posthog client errors on startup in production",
+    "send an event from the api when an invoice is paid",
+    "priya says analytics are dead in prod again, look into it"
+   ],
+   "neg": [
+    "what is posthog used for",
+    "how do product analytics tools compare",
+    "what does an api key do in general",
+    "fix the typo in the analytics dashboard title",
+    "how do i add a script tag for analytics to a website",
+    "write a haiku about metrics"
+   ]
+  },
+  "code-sleep-b03:m0029": {
+   "pos": [
+    "ci takes forever on my one-line docs change, speed it up",
+    "the github actions pipeline is slow, what can we cache",
+    "add a job that only runs tests for the app i changed",
+    "my pr only touches the web app but the api tests still run",
+    "can you make the ci workflow skip what didn't change",
+    "set up turbo remote caching for the workflow"
+   ],
+   "neg": [
+    "what is continuous integration in general",
+    "how do github actions cache dependencies",
+    "what does pnpm filter do",
+    "fix the typo in the ci workflow name",
+    "explain the difference between unit and integration tests",
+    "write a haiku about build pipelines"
+   ]
+  },
+  "code-sleep-b03:m0030": {
+   "pos": [
+    "the nightly export keeps dying, look at the memory setup",
+    "the api pod restarted again overnight, what happened",
+    "bump the memory for the api deployment",
+    "export job is eating ram, stream the rows instead",
+    "why did the api pod restart at 3am",
+    "make the nightly export job use less memory"
+   ],
+   "neg": [
+    "what does oomkilled mean in kubernetes",
+    "how do i check pod memory usage with kubectl",
+    "what's a reasonable memory limit for a node app",
+    "fix the typo in the cron job name",
+    "explain garbage collection in v8",
+    "write a haiku about containers"
+   ]
+  },
+  "code-sleep-b03:m0031": {
+   "pos": [
+    "clean up old remote branches, list the stale ones first",
+    "find branches nobody touched in a few months",
+    "run the stale branch check with 90 days",
+    "delete the old feature branches from origin",
+    "which branches haven't been updated since summer",
+    "add a flag to the stale branch script for the remote name"
+   ],
+   "neg": [
+    "how do i delete a remote branch with git",
+    "what is a stale branch in git",
+    "how do i list branches sorted by date",
+    "fix the typo in the script header comment",
+    "what does tsx do for typescript scripts",
+    "write a haiku about old branches"
+   ]
+  },
+  "code-sleep-b03:m0032": {
+   "pos": [
+    "add a new email template for trial ending, copy the style of the others",
+    "the welcome email preview is broken, fix the props",
+    "write the react email for the subscription canceled notice",
+    "make a receipt email that matches invoice-sent",
+    "send a test email from the api with the receipt template",
+    "add the subject line to the welcome email"
+   ],
+   "neg": [
+    "what is react email in general",
+    "how do i preview an email in gmail dark mode",
+    "what's the best subject line length for marketing emails",
+    "fix the typo in the welcome email footer copy",
+    "how do i configure dkim for a domain",
+    "write a haiku about inboxes"
+   ]
+  },
+  "code-sleep-b03:m0033": {
+   "pos": [
+    "hook up the payment failed email, it should go out when a card fails",
+    "the dunning job should send the failed payment email, wire it up",
+    "customers aren't getting the card failed notice, fix it",
+    "add the retry payment button to the failed charge email",
+    "finish the dunning emails and send them after the third retry",
+    "can you connect payment-failed to the billing webhook"
+   ],
+   "neg": [
+    "what is dunning in saas billing",
+    "how do i handle a declined card in stripe",
+    "what should a payment failed email say in general",
+    "fix the typo in the payment failed page heading",
+    "how do stripe webhooks retry in general",
+    "write a haiku about declined cards"
+   ]
+  },
+  "code-sleep-b04:m0001": {
+   "pos": [
+    "the db migration failed locally with a syntax error, look at the sql",
+    "add a new migration for the reports table",
+    "set up my local env, the db url in the env file is wrong",
+    "write a query using json_agg for the orders page",
+    "the mysql query in the export job needs to change",
+    "docker compose up is failing on the db, check the image"
+   ],
+   "neg": [
+    "what's the difference between mysql and postgres in general",
+    "how do i install postgres on mac with brew",
+    "what does a database migration do",
+    "fix the typo in the db readme",
+    "explain postgres connection pooling",
+    "write a haiku about databases"
+   ]
+  },
+  "code-sleep-b04:m0002": {
+   "pos": [
+    "add some quick logging to the reminders consumer to debug it",
+    "print the request body in the api route so i can see it",
+    "log the full payload when the webhook fails",
+    "debug the worker, just dump the job data to the console",
+    "add a console.log in the invoice service and remove it later",
+    "ok the route works, commit the debugging changes too"
+   ],
+   "neg": [
+    "what's the difference between console.log and console.error",
+    "how do i read node stack traces",
+    "what does pino do differently from winston",
+    "fix the typo in the console message in the cli help",
+    "how do i log to a file in python",
+    "write a haiku about debugging"
+   ]
+  },
+  "code-sleep-b04:m0003": {
+   "pos": [
+    "add the stripe key to the web app env so the checkout button works",
+    "put the stripe key in .env.example for the new dev setup",
+    "the web app needs the stripe secret to render checkout, add it",
+    "copy the api key into NEXT_PUBLIC_API_KEY for the client fetch",
+    "the .env.example file is out of date, update it with the stripe key",
+    "pass the webhook signing secret to the frontend config"
+   ],
+   "neg": [
+    "what does NEXT_PUBLIC_ prefix do in next.js",
+    "what is the difference between a publishable and secret stripe key in general",
+    "how do i load env vars in a node script",
+    "fix the typo in the env.example comment",
+    "how do i rotate a stripe api key",
+    "write a haiku about environment variables"
+   ]
+  },
+  "code-sleep-b04:m0004": {
+   "pos": [
+    "the worker isn't picking up reminders on my machine, help me run it",
+    "start the local services so i can test the exports queue",
+    "bring up the worker, i need to test the image job",
+    "my local queue isn't consuming, what do i run",
+    "set up my env to test background jobs",
+    "the metrics endpoint for the worker isn't responding locally"
+   ],
+   "neg": [
+    "what is redis used for in general",
+    "how does docker compose work",
+    "what is tsx and how is it different from ts-node",
+    "fix the typo in the worker's log message",
+    "explain what a message queue is",
+    "write a haiku about background jobs"
+   ]
+  },
+  "code-sleep-b04:m0005": {
+   "pos": [
+    "lena says the cli install fails on her machine, can you look",
+    "the cli install script breaks on linux, check it",
+    "lena's pr needs the cli to run, make sure it works for her setup",
+    "review lena's pr that touches the cli package",
+    "the cli should work with pyenv installed, does it",
+    "write install instructions for the cli on linux"
+   ],
+   "neg": [
+    "how do i set up pyenv on ubuntu",
+    "what is pyenv used for in general",
+    "how do i review a pull request well",
+    "fix the typo in lena's pr title",
+    "what's the difference between pyenv and virtualenv",
+    "write a haiku about linux boxes"
+   ]
+  },
+  "code-sleep-b04:m0006": {
+   "pos": [
+    "i need prod db read access to debug this, who do i ask",
+    "the dns record for the staging host is wrong, can you update it",
+    "add a dns entry for the new status subdomain",
+    "who owns the callback url column, the migration needs review",
+    "open a pr to change the terraform for the dns zone",
+    "i need to query prod for the failed orders, how do i get access"
+   ],
+   "neg": [
+    "what is tailscale used for",
+    "how does dns propagation work in general",
+    "what does a cname record do",
+    "fix the typo in the callback url docs",
+    "what's a good way to ask a team lead for access",
+    "write a haiku about access requests"
+   ]
+  }
+ }
+}
