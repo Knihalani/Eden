@@ -395,6 +395,8 @@ def main():
                 if not q:
                     pk[e["id"]] = []
                     continue
+                if kw.get("mix"):
+                    q = q + " " + e["text_all"]
                 sc = lex.scores(dict(e, text_all=q), clock(e))
                 ids = sorted(sc, key=lambda i: -sc[i])[: int(kw.get("k", 2))]
                 pk[e["id"]] = [(lex.by_id[i]["text"], lex.by_id[i]["covers"]) for i in ids]
