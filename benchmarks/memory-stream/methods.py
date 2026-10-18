@@ -322,6 +322,8 @@ class Bank(Lex):
         if self.silent(e):
             return []
         sc = self.scores(e, now)
+        if not budget_gate(self, e, sc):
+            return []
         ranked = sorted(sc, key=lambda i: (-sc[i], i))
         if self.kw.get("ctx"):
             ranked = [i for i in ranked if not self.in_window(self.by_id[i], e)]
@@ -385,6 +387,24 @@ class Situation(Base):
         return [i for i in sorted(sc, key=lambda i: (-sc[i], i)) if sc[i] >= tau][: self.k]
 
 
+def budget_gate(obj, e, scores):
+    """Budgeted firing (from the blank-slate design, C3): a turn fires only when its evidence (sum of its top-3 row
+    scores) beats the `budget` quantile of the earlier scored turns' evidence. The packet rate then calibrates itself
+    to the user and the store. History is causal (events are scored in stream order)."""
+    q = obj.kw.get("budget")
+    if q is None:
+        return True
+    ev = sum(sorted(scores.values(), reverse=True)[:3])
+    hist = obj.__dict__.setdefault("_ev_hist", [])
+    fire = True
+    if len(hist) >= 20:
+        srt = sorted(hist)
+        fire = ev > srt[min(len(srt) - 1, int(q * len(srt)))]
+    if e["t"] in ("human", "trigger"):
+        hist.append(ev)
+    return fire
+
+
 class Vote(Base):
     """Evidence vote: a row fires when at least `need` of three independent detectors fire for it: the self-play bank
     (F4, tau=`bt`), lexical with compiled cues (F11, `lt`), and situation entry (F15, `st`). Ranked by the bank score,
@@ -413,6 +433,8 @@ class Vote(Base):
             for i in group:
                 votes[i] = votes.get(i, 0) + 1
         ok = [i for i, v in votes.items() if v >= self.need]
+        if not budget_gate(self, e, {i: votes[i] + b.get(i, 0.0) for i in ok}):
+            return []
         return sorted(ok, key=lambda i: (-votes[i], -b.get(i, 0.0), i))[: self.k]
 
 

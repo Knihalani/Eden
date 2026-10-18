@@ -144,6 +144,11 @@ class Blank:
         self.pst = kw.get("pst", 0.35)  # gate factor for fact-stating turns
         self.pnov = kw.get("pnov", 0.6)  # gate factor for prompts with 3+ never-seen tokens
         self.kappa = kw.get("kappa", 0.0)
+        self.qidf = kw.get("qidf", 0.0)
+        self.rho = kw.get("rho", 0.0)  # target packet rate on human turns (0: absolute threshold tau only)
+        self.rhot = kw.get("rhot", 0.5)
+        self.rel = kw.get("rel", 0.5)  # bullets must score >= rel x the top bullet
+        self.hist = {}
         self.lam = kw.get("lam", 0.0)
         self.humanonly = bool(kw.get("humanonly", 0))
         self.disp = int(kw.get("disp", 0))  # bullet shown: 0 the unit, 1 the unit and its neighbours, 2 short row
@@ -488,7 +493,22 @@ class Blank:
 
     def packet(self, e, now):
         scored = self.rank(e, now)
-        tau = self.ttau if e["labels"]["class"] == "trigger" else self.tau
+        cls = e["labels"]["class"]
+        tau = self.ttau if cls == "trigger" else self.tau
+        if self.rho and cls in ("human", "trigger"):
+            # Budgeted firing: the turn's evidence (sum of its top scores) must clear the (1 - rho) quantile of the
+            # evidence of earlier turns of the same class, so the packet rate self-calibrates to any user/store.
+            stat = sum(x[0] for x in scored[:3])
+            hist = self.hist.setdefault(cls, [])
+            past = sorted(v for o, v in hist if o < e["_order"])
+            hist.append((e["_order"], stat))
+            rho = self.rhot if cls == "trigger" else self.rho
+            if len(past) < 20:
+                return []
+            cut = past[min(len(past) - 1, int((1 - rho) * len(past)))]
+            if stat <= cut or stat <= 0:
+                return []
+            tau = max(tau, self.rel * scored[0][0])
         return self.select(scored, tau)
 
     def rank(self, e, now, gate=True):
@@ -531,7 +551,11 @@ class Blank:
             novel = sum(self.idf[t] for t in u["c"] if t not in win) / u["w"]
             if novel < self.nov:
                 continue
-            m = sum(self.idf[t] for t in u["c"] if t in qc)
+            if self.qidf:
+                # a token the user types all the time (their kid's name, "invoice") says little about need
+                m = sum(self.idf[t] * min(1.0, self.tidf.get(t, 8.0) / self.qidf) for t in u["c"] if t in qc)
+            else:
+                m = sum(self.idf[t] for t in u["c"] if t in qc)
             if exp:
                 m += self.beta * sum(exp[t] * self.idf[t] for t in u["c"] if t in exp and t not in qc)
             m = m / (1 + 0.02 * max(0, len(u["c"]) - 12))
@@ -570,4 +594,19 @@ class Blank:
         return len(u["c"] & v["c"]) / len(u["c"] | v["c"])
 
 
-REGISTRY = {"blank": Blank}
+DEFAULTS = {"kappa": 0.5, "beta": 0.5, "qidf": 4.0, "rho": 0.15, "tau": 1.0}
+
+
+def variant(**fixed):
+    class V(Blank):
+        def __init__(self, rows, stream, items, cov, **kw):
+            super().__init__(rows, stream, items, cov, **{**DEFAULTS, **fixed, **kw})
+    return V
+
+
+REGISTRY = {
+    "blank": variant(),                    # budgeted firing, lexical + encoding context + episode feedback
+    "blank-lsa": variant(gamma=20.0),      # + latent episode space (checkpointed randomized SVD)
+    "blank-abs": variant(rho=0.0, tau=7.0),  # absolute threshold instead of budgeted firing
+    "blank-raw": Blank,                    # no defaults: every signal off unless given (ablations)
+}

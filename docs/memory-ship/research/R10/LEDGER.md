@@ -342,3 +342,37 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - Length (C3-E3) and the gate together do not close the gap.
   - Remaining suspect: the negative mix. Acks are 10% of our dev no-need turns, while real prompts are 24% tiny. Next is the plan's ack share.
   - The P4.3 configuration is the fairer incumbent and is listed as such from now on.
+
+## C3-E6 · 2026-10-18 · Blank-slate system (BRIEF §5 rule 3) and its budgeted-firing gate
+- **Setup:** an independent designer with no access to STATE, LEDGER, methods or the sleep/self-play/judge artifacts built `methods_blank.py` (`BLANK-C3.md`):
+  - a statement compiler over write-path rows;
+  - an encoding-context index;
+  - episode feedback;
+  - leak-free LSA;
+  - prompt gates;
+  - budgeted firing.
+  The designer reported that it read dev labels for aggregate diagnostics and about 20 examples (a tuning risk, disclosed).
+- **Numbers (its report, dev):**
+
+  | World / store | Recall | Precision | Silence | Tokens |
+  |---|---|---|---|---|
+  | code / write | 0.0364 | 0.0057 | 0.7768 | 32.4 |
+  | code / oracle | 0.2242 | 0.0644 | 0.8542 | 12.8 |
+  | life / write | 0.0738 | 0.0166 | 0.8109 | 27.2 |
+  | life / oracle (LSA) | 0.1266 | 0.0312 | 0.829 | 22.7 |
+
+  Its ranking ceiling with no gate: about 0.26–0.29 recall@4 on the code oracle store and about 0.35 on life.
+- **Comparison:** below the current hook frontier in recall, above it in silence; a different point on the same curve.
+- **Convergence:** it concluded independently that "the lexical/statistical family tops out at about 0.3 recall@4". The two levers it named are a sleep-time model writing the situations that need each memory, and a sleep-time statement compiler. Those are F4 and F11, which the main line already has. That is evidence the plateau is real, not path-dependent.
+- **New mechanism adopted: budgeted firing.** A turn fires only when its evidence beats the q-quantile of the user's earlier turns. Added as `budget=q` to `lex`, `bank` and `vote`.
+
+  | World | Method | Recall | Silence | Precision |
+  |---|---|---|---|---|
+  | code | vote bt .2, lt 4, st 3, strip, budget .7 | 0.2939 | 0.6161 | 0.0333 |
+  | code | vote, budget .85 | 0.1879 | 0.7649 | — |
+  | code | bank ∧ lex, budget .7 | 0.2697 | 0.6071 | — |
+  | life | vote, budget .7 | 0.1751 | 0.6237 | 0.0202 |
+  | life | vote, budget .85 | 0.0992 | 0.7887 | — |
+
+  Code moves out about +0.1 silence at similar recall. Life stays on the frontier.
+- **Verdict:** budgeted firing is kept as a per-user calibration of the packet rate. It is not a breakthrough. The blank-slate cycle confirms the semantic wall.
