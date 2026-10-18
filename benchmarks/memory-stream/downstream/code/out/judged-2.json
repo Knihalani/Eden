@@ -1,0 +1,22 @@
+{"judge": "opus (claude-code subagent)", "cases": [
+{"event": "code-s083-e008", "scores": [3, 2, 2], "why": "R0 flags billing review and commits pnpm-lock.yaml (frozen-lockfile gotcha); R1/R2 skip the lockfile, R1 adds pager fluff"},
+{"event": "code-s085-e014", "scores": [2, 2, 2], "why": "R0/R2 ignore known EKS + AWS LB Controller facts; R1 uses them but asserts ACM as fact before checking"},
+{"event": "code-s021-e018", "scores": [2, 1, 3], "why": "R2 uses KEDA fact correctly; R1 invents replica/threshold numbers; R0 misses KEDA"},
+{"event": "code-s103-e007", "scores": [3, 3, 3], "why": "All locate the switcher and fix outside click; R1 points at shadcn/ui components"},
+{"event": "code-s083-e005", "scores": [3, 3, 3], "why": "All restore the uncommitted whoami change without stashing"},
+{"event": "code-s035-e000", "scores": [3, 3, 3], "why": "All add cdn.acme.dev to remotePatterns and verify"},
+{"event": "code-s035-e006", "scores": [3, 3, 3], "why": "All correctly explain the default /_next/image loader and options"},
+{"event": "code-s061-e012", "scores": [3, 2, 1], "why": "Repo uses yarn 1; R2 reproduces with pnpm install, R1 compares pnpm-lock.yaml; R0 just reads the log via gh"},
+{"event": "code-s066-e035", "scores": [3, 3, 2], "why": "R0/R1 fine sign-offs; R2 claims everything is saved without checking"},
+{"event": "code-s041-e000", "scores": [3, 2, 3], "why": "R0/R2 reproduce with a test first; R1 asserts an unverified cents signature and file path as fact"},
+{"event": "code-s041-e016", "scores": [3, 1, 3], "why": "R1 uses pnpm command though package manager is yarn 1; others are correct"},
+{"event": "code-s037-e000", "scores": [3, 3, 1], "why": "R2 fabricates a local commit and PR details; R0/R1 list with gh and respect the majors rule"},
+{"event": "code-s040-e008", "scores": [3, 3, 3], "why": "All swap console.log for pino, check the publishable key, start redis and run the worker"},
+{"event": "code-s078-e016", "scores": [3, 2, 2], "why": "R0 reuses components/ui Skeleton; R1 wrongly calls it a default export; R2 ignores the existing shadcn component"},
+{"event": "code-s063-e009", "scores": [3, 1, 3], "why": "R1 names Priya as reviewer instead of the platform team; R0/R2 include plan section and platform review"},
+{"event": "code-s002-e013", "scores": [3, 3, 3], "why": "All cover Sentry, GrowthBook flag, snapshot test and move the stash into a commit"},
+{"event": "code-s077-e000", "scores": [3, 3, 3], "why": "All apply sticky top-0 with background and check overflow ancestors"},
+{"event": "code-s082-e049", "scores": [3, 3, 3], "why": "All acknowledge and note the remaining default export"},
+{"event": "code-s030-e000", "scores": [3, 3, 3], "why": "All admit no memory and check git/PR state"},
+{"event": "code-s057-e006", "scores": [3, 3, 3], "why": "All acknowledge the concision preference briefly"}
+]}
