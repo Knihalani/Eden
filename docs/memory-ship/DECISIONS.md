@@ -158,7 +158,7 @@ Raised by the R10 research programme (`research/R10-retrieval.md`; evidence in `
   - R1, R8 and LifeBench pairs are secondary arms. No slice may claim a retrieval gain on them alone.
   - *Evidence:* pair fixtures overstated lexical recall (0.47–0.56 on pairs vs 0.21 on streams at a realistic silence; C1-E2).
 - **R10-3 · Bullet precision and silence are outcome metrics, not only token budgets.**
-  - *Evidence:* the downstream check shows a wrong packet lowers the response score by 0.40 (on 0–3) on no-need turns (C3-E4).
+  - *Evidence:* in the downstream check (C3-E4) the vote packet scored −0.40 against no memory on no-need turns. The empty oracle condition scored −0.27 on those same turns, which is responder and judge noise, so the packet's own effect is about −0.13 on 15 turns and one responder run: suggestive, not established. It must be re-measured at a larger n before this is adopted.
   - *Proposal:* every retrieval slice reports `stream-downstream`, and must not lower it on no-need turns.
 - **R10-4 · Sleep-time models may write retrieval cues and situations, not only extract facts** (D34, §6a).
   - *Evidence:* compiled `when` cues and self-play situations raised silence by +0.16–0.26 at equal recall on both worlds (C1-E6, C2-E7).

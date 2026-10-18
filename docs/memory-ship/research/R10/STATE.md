@@ -98,7 +98,7 @@ Families differ in mechanism. Every kill criterion was written before its run.
 - **Downstream effect (C3-E4):**
   - memory changes the outcome on 80% of plan-need turns (+0.97 on 0–3);
   - labeler-only needs are half real (+0.53);
-  - **a wrong packet costs −0.40 on no-need turns;**
+  - a wrong packet scores −0.40 on no-need turns against a noise floor of −0.27, so the harm is suggestive (about −0.13, n 15);
   - a hook-side packet keeps about 30% of the available benefit.
 - **Incumbent with P4.3's gate on (C3-E5):** silence 0.21. It still fires on 79% of no-need turns, against the real 31%.
 
