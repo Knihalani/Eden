@@ -1,0 +1,2864 @@
+{
+ "entities": [
+  {
+   "name": "Riya Malhotra",
+   "type": "person",
+   "aliases": [
+    "Riya",
+    "me",
+    "myself",
+    "I",
+    "Riya M",
+    "Ria",
+    "Riyah"
+   ],
+   "about": "the user; senior product manager at Lumen Pay, lives in Leslieville, Toronto"
+  },
+  {
+   "name": "Sam Okafor",
+   "type": "person",
+   "aliases": [
+    "Sam",
+    "Sam's",
+    "Samuel",
+    "Okafor",
+    "my partner",
+    "my husband",
+    "hubby",
+    "my hubby",
+    "my other half",
+    "my spouse",
+    "Leo's dad",
+    "his dad",
+    "the chemistry teacher",
+    "my better half"
+   ],
+   "about": "Riya's partner; high-school chemistry teacher at Riverdale Collegiate; pescatarian; migraines from fragrance"
+  },
+  {
+   "name": "Leo Okafor",
+   "type": "person",
+   "aliases": [
+    "Leo",
+    "Leo's",
+    "my son",
+    "my kid",
+    "the kid",
+    "the kiddo",
+    "our son",
+    "our kid",
+    "the little one",
+    "my boy",
+    "the boy",
+    "my little guy",
+    "my 7-year-old",
+    "my seven year old",
+    "the grade 2er",
+    "Leo O"
+   ],
+   "about": "Riya and Sam's son, born 2019-07-17, grade 2 at Morse Street PS; cashew and pistachio allergy"
+  },
+  {
+   "name": "Biscuit",
+   "type": "pet",
+   "aliases": [
+    "Biscuit",
+    "Biscuit's",
+    "the dog",
+    "our dog",
+    "my dog",
+    "the beagle",
+    "the pup",
+    "the puppy",
+    "doggo",
+    "Biscuits",
+    "Bisquit",
+    "the hound"
+   ],
+   "about": "family beagle, food-motivated bread thief"
+  },
+  {
+   "name": "Anjali Malhotra",
+   "type": "person",
+   "aliases": [
+    "Anjali",
+    "mom",
+    "my mom",
+    "mum",
+    "my mum",
+    "my mother",
+    "mother",
+    "Mummy",
+    "Ma",
+    "Leo's grandma",
+    "Leo's nani",
+    "Nani",
+    "Anjali Malhotra"
+   ],
+   "about": "Riya's mother in Bandra, Mumbai; retired principal; type 2 diabetes"
+  },
+  {
+   "name": "Vikram Malhotra",
+   "type": "person",
+   "aliases": [
+    "Vikram",
+    "my dad",
+    "my father",
+    "dad",
+    "Papa",
+    "my late father",
+    "late dad"
+   ],
+   "about": "Riya's late father, died 2022-03-18"
+  },
+  {
+   "name": "Kabir Malhotra",
+   "type": "person",
+   "aliases": [
+    "Kabir",
+    "my brother",
+    "little brother",
+    "younger brother",
+    "bro",
+    "my bro",
+    "Kabir's",
+    "Leo's uncle"
+   ],
+   "about": "Riya's younger brother, software engineer in Vancouver"
+  },
+  {
+   "name": "Mei",
+   "type": "person",
+   "aliases": [
+    "Mei",
+    "Kabir's wife",
+    "my sister-in-law",
+    "sister in law",
+    "SIL"
+   ],
+   "about": "Kabir's wife; lactose intolerant"
+  },
+  {
+   "name": "Ira",
+   "type": "person",
+   "aliases": [
+    "Ira",
+    "my niece",
+    "the baby",
+    "baby Ira",
+    "goddaughter",
+    "my goddaughter",
+    "Kabir's daughter"
+   ],
+   "about": "Kabir and Mei's daughter born 2026-02-14; Riya is godmother"
+  },
+  {
+   "name": "Grace Okafor",
+   "type": "person",
+   "aliases": [
+    "Grace",
+    "Sam's mom",
+    "Sam's mother",
+    "my mother-in-law",
+    "mother in law",
+    "MIL",
+    "Leo's grandma",
+    "Grandma Grace",
+    "the in-laws"
+   ],
+   "about": "Sam's mother in Ottawa; piano teacher; shellfish allergy, no alcohol; birthday 2026-11-19"
+  },
+  {
+   "name": "Daniel Okafor",
+   "type": "person",
+   "aliases": [
+    "Daniel",
+    "Dan",
+    "Sam's dad",
+    "Sam's father",
+    "my father-in-law",
+    "father in law",
+    "FIL",
+    "Grandpa",
+    "the in-laws"
+   ],
+   "about": "Sam's father in Ottawa; knee replacement Jan 2026"
+  },
+  {
+   "name": "Priya Nair",
+   "type": "person",
+   "aliases": [
+    "Priya",
+    "Priya's",
+    "my best friend",
+    "bestie",
+    "my BFF",
+    "BFF",
+    "my friend from McGill",
+    "Pri"
+   ],
+   "about": "Riya's best friend, architect, celiac; birthday Dec 1"
+  },
+  {
+   "name": "Marcus Bell",
+   "type": "person",
+   "aliases": [
+    "Marcus",
+    "Marcus's",
+    "my running buddy",
+    "running partner",
+    "my run buddy",
+    "the physio",
+    "Markus"
+   ],
+   "about": "running friend, physiotherapist"
+  },
+  {
+   "name": "Hannah Cho",
+   "type": "person",
+   "aliases": [
+    "Hannah",
+    "Hannah's",
+    "my neighbour",
+    "my neighbor",
+    "the neighbours",
+    "next door",
+    "two doors down",
+    "Jun's mom",
+    "Ellie's mom",
+    "Hana"
+   ],
+   "about": "neighbour, nurse at Michael Garron; school pickup swap; spare key"
+  },
+  {
+   "name": "Ellie Cho",
+   "type": "person",
+   "aliases": [
+    "Ellie",
+    "Hannah's daughter",
+    "the Cho kids"
+   ],
+   "about": "Hannah's daughter, 10, dairy allergy"
+  },
+  {
+   "name": "Jun Cho",
+   "type": "person",
+   "aliases": [
+    "Jun",
+    "Leo's best friend",
+    "Leo's buddy",
+    "Hannah's son",
+    "the Cho kids"
+   ],
+   "about": "Hannah's son, Leo's best friend"
+  },
+  {
+   "name": "Ms. Alvarez",
+   "type": "person",
+   "aliases": [
+    "Ms. Alvarez",
+    "Ms Alvarez",
+    "Alvarez",
+    "Leo's teacher",
+    "the teacher",
+    "his teacher",
+    "Miss Alvarez",
+    "Mrs Alvarez"
+   ],
+   "about": "Leo's grade 2 teacher; prefers Edsby"
+  },
+  {
+   "name": "Mrs. Greene",
+   "type": "person",
+   "aliases": [
+    "Mrs. Greene",
+    "Mrs Greene",
+    "Ms Green",
+    "piano teacher",
+    "Leo's piano teacher"
+   ],
+   "about": "Leo's piano teacher, Fridays 4:15"
+  },
+  {
+   "name": "Kayla",
+   "type": "person",
+   "aliases": [
+    "Kayla",
+    "swim instructor",
+    "Leo's swim teacher"
+   ],
+   "about": "Leo's swim instructor"
+  },
+  {
+   "name": "Tom Becker",
+   "type": "person",
+   "aliases": [
+    "Tom",
+    "Tom's",
+    "my manager",
+    "my boss",
+    "the boss",
+    "the VP",
+    "VP Product",
+    "Becker",
+    "my skip"
+   ],
+   "about": "VP Product, Riya's manager; short emails, recommendation plus one alternative"
+  },
+  {
+   "name": "Aisha Rahman",
+   "type": "person",
+   "aliases": [
+    "Aisha",
+    "Aisha's",
+    "eng lead",
+    "engineering lead",
+    "the tech lead",
+    "my eng lead",
+    "Aysha"
+   ],
+   "about": "engineering lead; async Slack, specs two weeks before sprint planning"
+  },
+  {
+   "name": "Diego Fernández",
+   "type": "person",
+   "aliases": [
+    "Diego",
+    "Diego Fernandez",
+    "the designer",
+    "our designer",
+    "my designer"
+   ],
+   "about": "designer; Figma comments; promotion packet feedback due 2026-10-23"
+  },
+  {
+   "name": "Wen Li",
+   "type": "person",
+   "aliases": [
+    "Wen",
+    "Wen Li",
+    "the data analyst",
+    "our analyst",
+    "data person",
+    "Wenli"
+   ],
+   "about": "data analyst; vegan; #data-requests with 3 days notice"
+  },
+  {
+   "name": "Olivia Grant",
+   "type": "person",
+   "aliases": [
+    "Olivia",
+    "Head of Sales",
+    "sales lead",
+    "the sales team",
+    "sales",
+    "Olivia's team"
+   ],
+   "about": "Head of Sales; no feature dates until Aisha signs off"
+  },
+  {
+   "name": "Carlos Méndez",
+   "type": "person",
+   "aliases": [
+    "Carlos",
+    "Carlos Mendez",
+    "my tutor",
+    "Spanish tutor",
+    "my Spanish teacher",
+    "profe",
+    "el profe"
+   ],
+   "about": "online Spanish tutor from Guadalajara; Thursday lessons"
+  },
+  {
+   "name": "Dr. Patel",
+   "type": "person",
+   "aliases": [
+    "Dr. Patel",
+    "Dr Patel",
+    "my doctor",
+    "my GP",
+    "family doctor",
+    "the doctor"
+   ],
+   "about": "Riya's family doctor"
+  },
+  {
+   "name": "Dr. Lin",
+   "type": "person",
+   "aliases": [
+    "Dr. Lin",
+    "Dr Lin",
+    "the dentist",
+    "my dentist",
+    "Leo's dentist"
+   ],
+   "about": "dentist at Danforth Smiles"
+  },
+  {
+   "name": "Dr. Kaur",
+   "type": "person",
+   "aliases": [
+    "Dr. Kaur",
+    "Dr Kaur",
+    "the vet",
+    "Biscuit's vet",
+    "our vet"
+   ],
+   "about": "Biscuit's vet at Riverside Veterinary Clinic"
+  },
+  {
+   "name": "Dr. Moreau",
+   "type": "person",
+   "aliases": [
+    "Dr. Moreau",
+    "Dr Moreau",
+    "old vet"
+   ],
+   "about": "Biscuit's former vet, retired"
+  },
+  {
+   "name": "Joanne",
+   "type": "person",
+   "aliases": [
+    "Joanne",
+    "my therapist",
+    "therapist",
+    "therapy",
+    "Jo"
+   ],
+   "about": "Riya's therapist, every other Tuesday 5:30 pm, private"
+  },
+  {
+   "name": "Nate",
+   "type": "person",
+   "aliases": [
+    "Nate",
+    "Nate's",
+    "the contractor",
+    "our contractor",
+    "the reno guy",
+    "Nate's crew",
+    "the crew",
+    "the builders",
+    "Nathan"
+   ],
+   "about": "contractor at Northline Renovations; prefers texts"
+  },
+  {
+   "name": "Jess",
+   "type": "person",
+   "aliases": [
+    "Jess",
+    "the dog walker",
+    "dog walker",
+    "Biscuit's walker",
+    "the walker"
+   ],
+   "about": "Rover dog walker, Tue/Thu noon, $27"
+  },
+  {
+   "name": "Felipe",
+   "type": "person",
+   "aliases": [
+    "Felipe",
+    "Paws on Pape"
+   ],
+   "about": "earlier dog walker"
+  },
+  {
+   "name": "Lumen Pay",
+   "type": "organisation",
+   "aliases": [
+    "Lumen Pay",
+    "Lumen",
+    "LumenPay",
+    "work",
+    "the office",
+    "my company",
+    "the company",
+    "the team",
+    "my team",
+    "the payouts team"
+   ],
+   "about": "Riya's employer, fintech; office on King Street West"
+  },
+  {
+   "name": "Instant Payouts",
+   "type": "project",
+   "aliases": [
+    "Instant Payouts",
+    "payouts",
+    "the payouts launch",
+    "the launch",
+    "GA",
+    "the beta",
+    "IP",
+    "instant payout",
+    "payouts v1",
+    "v1.1"
+   ],
+   "about": "Riya's product; GA 2026-11-04; beta 40 merchants"
+  },
+  {
+   "name": "Onboarding 2.0",
+   "type": "project",
+   "aliases": [
+    "Onboarding 2.0",
+    "onboarding",
+    "the onboarding launch",
+    "KYC flow"
+   ],
+   "about": "launched 2025-10-07"
+  },
+  {
+   "name": "Multi-currency wallets",
+   "type": "project",
+   "aliases": [
+    "multi-currency wallets",
+    "wallets",
+    "MCW"
+   ],
+   "about": "postponed to H1 2027 for FINTRAC review"
+  },
+  {
+   "name": "Payouts Health dashboard",
+   "type": "product",
+   "aliases": [
+    "Payouts Health",
+    "the dashboard",
+    "the Looker dashboard",
+    "Looker",
+    "payouts dashboard"
+   ],
+   "about": "Wen Li's Looker dashboard checked Mondays"
+  },
+  {
+   "name": "Wavecrest Bank",
+   "type": "organisation",
+   "aliases": [
+    "Wavecrest",
+    "the bank partner",
+    "partner bank",
+    "Wavecrest Bank"
+   ],
+   "about": "banking partner; certification slip, Aug 2026 outage"
+  },
+  {
+   "name": "Q4 planning doc",
+   "type": "project",
+   "aliases": [
+    "Q4 planning doc",
+    "the Q4 doc",
+    "planning doc",
+    "Q4 plan"
+   ],
+   "about": "due to Tom 2026-10-30"
+  },
+  {
+   "name": "2027 roadmap",
+   "type": "project",
+   "aliases": [
+    "2027 roadmap",
+    "the roadmap",
+    "roadmap draft",
+    "payouts roadmap"
+   ],
+   "about": "draft due to Tom 2026-11-06; presented at QBR 2026-11-12"
+  },
+  {
+   "name": "Launch readiness review",
+   "type": "project",
+   "aliases": [
+    "launch readiness review",
+    "readiness doc",
+    "LRR",
+    "launch review"
+   ],
+   "about": "due to Tom 2026-10-28"
+  },
+  {
+   "name": "Quarterly business review",
+   "type": "event",
+   "aliases": [
+    "QBR",
+    "quarterly business review",
+    "business review",
+    "the QBR"
+   ],
+   "about": "with Olivia's sales team 2026-11-12"
+  },
+  {
+   "name": "Lumen Pay planning offsite",
+   "type": "event",
+   "aliases": [
+    "the offsite",
+    "planning offsite",
+    "quarterly offsite",
+    "Gladstone House",
+    "product offsite"
+   ],
+   "about": "2026-11-12 at Gladstone House"
+  },
+  {
+   "name": "PRD-v3 template",
+   "type": "product",
+   "aliases": [
+    "PRD",
+    "PRDs",
+    "spec",
+    "the spec",
+    "PRD template",
+    "Notion",
+    "decision log"
+   ],
+   "about": "Lumen Pay PRD conventions in Notion"
+  },
+  {
+   "name": "Morse Street Public School",
+   "type": "organisation",
+   "aliases": [
+    "Morse Street",
+    "Morse Street PS",
+    "Morse St",
+    "the school",
+    "Leo's school",
+    "school",
+    "Edsby"
+   ],
+   "about": "Leo's school"
+  },
+  {
+   "name": "Riverdale Collegiate Institute",
+   "type": "organisation",
+   "aliases": [
+    "Riverdale Collegiate",
+    "Riverdale CI",
+    "Sam's school"
+   ],
+   "about": "where Sam teaches"
+  },
+  {
+   "name": "Kitchen renovation",
+   "type": "project",
+   "aliases": [
+    "the reno",
+    "reno",
+    "renovation",
+    "the kitchen",
+    "kitchen remodel",
+    "the remodel",
+    "the new kitchen",
+    "kitchen reno",
+    "construction",
+    "the build"
+   ],
+   "about": "budget $56,000, finish ~2026-11-20; cabinets install 11-14 to 11-17"
+  },
+  {
+   "name": "Northline Renovations",
+   "type": "organisation",
+   "aliases": [
+    "Northline",
+    "Northline Reno",
+    "the contractor company"
+   ],
+   "about": "Nate's company"
+  },
+  {
+   "name": "Temporary kitchen",
+   "type": "place",
+   "aliases": [
+    "temporary kitchen",
+    "basement kitchen",
+    "the hotplate",
+    "hot plate",
+    "the old fridge",
+    "makeshift kitchen"
+   ],
+   "about": "basement microwave, induction hotplate"
+  },
+  {
+   "name": "Home",
+   "type": "place",
+   "aliases": [
+    "the house",
+    "our house",
+    "home",
+    "my place",
+    "the basement",
+    "upstairs bathroom",
+    "the furnace",
+    "sump pump",
+    "guest room"
+   ],
+   "about": "the family house in Leslieville; basement floods, furnace filter 16x25x1"
+  },
+  {
+   "name": "Leslieville",
+   "type": "place",
+   "aliases": [
+    "Leslieville",
+    "the neighbourhood",
+    "our neighbourhood",
+    "Queen East",
+    "Leslie St"
+   ],
+   "about": "Riya's neighbourhood in Toronto"
+  },
+  {
+   "name": "Toronto",
+   "type": "place",
+   "aliases": [
+    "Toronto",
+    "TO",
+    "the city",
+    "T.O.",
+    "the 6ix",
+    "YYZ"
+   ],
+   "about": "where Riya lives"
+  },
+  {
+   "name": "Mumbai",
+   "type": "place",
+   "aliases": [
+    "Mumbai",
+    "Bombay",
+    "Bandra",
+    "India",
+    "back home"
+   ],
+   "about": "Anjali's home; trip 2027-02-05 to 02-16"
+  },
+  {
+   "name": "Ottawa",
+   "type": "place",
+   "aliases": [
+    "Ottawa",
+    "Alta Vista",
+    "the Glebe",
+    "Sam's parents' place"
+   ],
+   "about": "Grace and Daniel's city"
+  },
+  {
+   "name": "Vancouver",
+   "type": "place",
+   "aliases": [
+    "Vancouver",
+    "Van",
+    "Kitsilano",
+    "Kits",
+    "YVR"
+   ],
+   "about": "Kabir and Mei's city"
+  },
+  {
+   "name": "Lisbon trip",
+   "type": "event",
+   "aliases": [
+    "Lisbon",
+    "Lisboa",
+    "the Lisbon trip",
+    "Portugal",
+    "the holiday",
+    "Christmas trip",
+    "winter vacation",
+    "the trip",
+    "LIS",
+    "Sintra"
+   ],
+   "about": "family trip 2026-12-20 to 2027-01-02, TAP TP260/TP259, Memmo Príncipe Real"
+  },
+  {
+   "name": "Memmo Príncipe Real",
+   "type": "place",
+   "aliases": [
+    "Memmo",
+    "Memmo Principe Real",
+    "the Lisbon hotel",
+    "the hotel"
+   ],
+   "about": "Lisbon family suite, conf MPR-48213"
+  },
+  {
+   "name": "Mumbai trip",
+   "type": "event",
+   "aliases": [
+    "Mumbai trip",
+    "India trip",
+    "trip to Mumbai",
+    "going home"
+   ],
+   "about": "2027-02-05 to 2027-02-16, for Anjali's 65th"
+  },
+  {
+   "name": "Mexico City",
+   "type": "place",
+   "aliases": [
+    "Mexico City",
+    "CDMX",
+    "Mexico"
+   ],
+   "about": "planned 2027 trip for Spanish goal"
+  },
+  {
+   "name": "Spanish lessons",
+   "type": "activity",
+   "aliases": [
+    "Spanish",
+    "Spanish class",
+    "Spanish lesson",
+    "español",
+    "lesson with Carlos",
+    "Anki",
+    "Spanish homework",
+    "my Spanish"
+   ],
+   "about": "Thursday Zoom lessons, B1 to B2"
+  },
+  {
+   "name": "DELE B2 exam",
+   "type": "event",
+   "aliases": [
+    "DELE",
+    "DELE B2",
+    "the exam",
+    "B2 exam",
+    "Spanish exam"
+   ],
+   "about": "2026-11-21 Toronto test centre"
+  },
+  {
+   "name": "Mazda CX-5",
+   "type": "product",
+   "aliases": [
+    "the Mazda",
+    "Mazda",
+    "the car",
+    "my car",
+    "CX-5",
+    "CX5",
+    "our car"
+   ],
+   "about": "grey 2019; 80,000 km service; winter tires at Canadian Tire Leslie"
+  },
+  {
+   "name": "Canadian Tire Leslie St",
+   "type": "place",
+   "aliases": [
+    "Canadian Tire",
+    "CT",
+    "Crappy Tire",
+    "the tire place"
+   ],
+   "about": "winter tire swap 2026-11-08 9:00"
+  },
+  {
+   "name": "Belairdirect",
+   "type": "organisation",
+   "aliases": [
+    "Belairdirect",
+    "Belair",
+    "car insurance",
+    "auto insurance"
+   ],
+   "about": "car insurer, renews April"
+  },
+  {
+   "name": "TD Bank",
+   "type": "organisation",
+   "aliases": [
+    "TD",
+    "TD Bank",
+    "joint account",
+    "joint chequing",
+    "the bank"
+   ],
+   "about": "joint chequing, RESP"
+  },
+  {
+   "name": "EQ Bank",
+   "type": "organisation",
+   "aliases": [
+    "EQ",
+    "EQ Bank",
+    "my savings",
+    "savings account"
+   ],
+   "about": "Riya's savings"
+  },
+  {
+   "name": "Leo's RESP",
+   "type": "thing",
+   "aliases": [
+    "RESP",
+    "education savings",
+    "Leo's RESP",
+    "CESG"
+   ],
+   "about": "$208/month at TD"
+  },
+  {
+   "name": "TekSavvy",
+   "type": "organisation",
+   "aliases": [
+    "TekSavvy",
+    "the internet",
+    "wifi",
+    "Wi-Fi",
+    "ISP",
+    "Bell Fibe",
+    "Bell"
+   ],
+   "about": "home internet $70/month"
+  },
+  {
+   "name": "Subscriptions",
+   "type": "thing",
+   "aliases": [
+    "Netflix",
+    "Spotify",
+    "Crave",
+    "Globe and Mail",
+    "Disney+",
+    "streaming",
+    "subscriptions"
+   ],
+   "about": "household subscriptions"
+  },
+  {
+   "name": "Riverside Veterinary Clinic",
+   "type": "organisation",
+   "aliases": [
+    "Riverside Vet",
+    "Riverside Veterinary",
+    "the vet clinic",
+    "vet on Broadview"
+   ],
+   "about": "Biscuit's vet clinic"
+  },
+  {
+   "name": "Purina Pro Plan Sensitive Skin & Stomach",
+   "type": "product",
+   "aliases": [
+    "dog food",
+    "Biscuit's food",
+    "Pro Plan",
+    "kibble",
+    "salmon kibble"
+   ],
+   "about": "Biscuit's food; chicken gave him itchy skin"
+  },
+  {
+   "name": "SickKids",
+   "type": "organisation",
+   "aliases": [
+    "SickKids",
+    "Sick Kids",
+    "the allergist",
+    "allergist"
+   ],
+   "about": "confirmed Leo's allergy"
+  },
+  {
+   "name": "EpiPen Jr",
+   "type": "thing",
+   "aliases": [
+    "EpiPen",
+    "epi pen",
+    "Epi",
+    "epipen jr",
+    "auto-injector"
+   ],
+   "about": "Leo carries in backpack"
+  },
+  {
+   "name": "Levothyroxine",
+   "type": "thing",
+   "aliases": [
+    "levothyroxine",
+    "thyroid meds",
+    "thyroid pill",
+    "my meds",
+    "Synthroid",
+    "thyroid"
+   ],
+   "about": "75 mcg each morning, 30 min before coffee"
+  },
+  {
+   "name": "Carlaw Health Centre",
+   "type": "place",
+   "aliases": [
+    "Carlaw Health Centre",
+    "Carlaw clinic",
+    "the clinic"
+   ],
+   "about": "Dr. Patel's clinic"
+  },
+  {
+   "name": "Danforth Smiles",
+   "type": "organisation",
+   "aliases": [
+    "Danforth Smiles",
+    "dentist office",
+    "822 Danforth"
+   ],
+   "about": "Dr. Lin's practice"
+  },
+  {
+   "name": "Leslieville YMCA",
+   "type": "place",
+   "aliases": [
+    "the Y",
+    "YMCA",
+    "the gym",
+    "Leslieville Y",
+    "gym"
+   ],
+   "about": "strength training Tue/Thu 6:15 am"
+  },
+  {
+   "name": "Pam McConnell Aquatic Centre",
+   "type": "place",
+   "aliases": [
+    "Pam McConnell",
+    "the pool",
+    "aquatic centre",
+    "swim lessons",
+    "swimming"
+   ],
+   "about": "Leo's Wednesday 5 pm swim lessons"
+  },
+  {
+   "name": "Pape Recreation Centre",
+   "type": "place",
+   "aliases": [
+    "Pape Rec",
+    "Pape Recreation Centre",
+    "Pape pool"
+   ],
+   "about": "earlier swim lesson location"
+  },
+  {
+   "name": "Jimmie Simpson Park",
+   "type": "place",
+   "aliases": [
+    "Jimmie Simpson",
+    "Jimmy Simpson",
+    "the rink",
+    "soccer field",
+    "the park"
+   ],
+   "about": "Leo's soccer and skating"
+  },
+  {
+   "name": "Leslieville house soccer league",
+   "type": "organisation",
+   "aliases": [
+    "soccer",
+    "Leo's soccer",
+    "house league",
+    "footy"
+   ],
+   "about": "Saturdays 9 am"
+  },
+  {
+   "name": "Ashbridges Bay and Tommy Thompson Park",
+   "type": "place",
+   "aliases": [
+    "Ashbridges Bay",
+    "Tommy Thompson",
+    "Leslie Spit",
+    "the Spit",
+    "the lakeshore"
+   ],
+   "about": "running and dog-walk routes"
+  },
+  {
+   "name": "Greenwood Park",
+   "type": "place",
+   "aliases": [
+    "Greenwood Park",
+    "Greenwood"
+   ],
+   "about": "Biscuit's lunch walk on WFH days"
+  },
+  {
+   "name": "Chilly Half Marathon",
+   "type": "event",
+   "aliases": [
+    "Chilly Half",
+    "Chilly Half Marathon",
+    "Burlington half",
+    "the half",
+    "half marathon",
+    "the race"
+   ],
+   "about": "2027-03-07 with Marcus, registered"
+  },
+  {
+   "name": "Toronto Waterfront Half Marathon",
+   "type": "event",
+   "aliases": [
+    "Waterfront half",
+    "STWM",
+    "my first half",
+    "Toronto Waterfront"
+   ],
+   "about": "2025-10-19, 2:04:37"
+  },
+  {
+   "name": "Brooks Ghost",
+   "type": "product",
+   "aliases": [
+    "Brooks Ghost",
+    "Brooks",
+    "running shoes",
+    "my runners",
+    "sneakers"
+   ],
+   "about": "replaced every 600 km"
+  },
+  {
+   "name": "Saffron Lane",
+   "type": "place",
+   "aliases": [
+    "Saffron Lane",
+    "the dosa place",
+    "my favourite restaurant",
+    "South Indian place"
+   ],
+   "about": "favourite restaurant on Queen East"
+  },
+  {
+   "name": "Bar Raval",
+   "type": "place",
+   "aliases": [
+    "Bar Raval",
+    "Raval"
+   ],
+   "about": "Priya's birthday dinner 2026-11-08 7 pm for eight"
+  },
+  {
+   "name": "Bobbette & Belle",
+   "type": "organisation",
+   "aliases": [
+    "Bobbette & Belle",
+    "Bobbette and Belle",
+    "Bobbette",
+    "the cake place",
+    "the bakery"
+   ],
+   "about": "cake for Priya's birthday"
+  },
+  {
+   "name": "Prado",
+   "type": "place",
+   "aliases": [
+    "Prado",
+    "Prado restaurant",
+    "Christmas Eve dinner"
+   ],
+   "about": "Lisbon Christmas Eve dinner 2026-12-24 7:30 pm"
+  },
+  {
+   "name": "Lisbon Oceanarium",
+   "type": "place",
+   "aliases": [
+    "Oceanarium",
+    "Oceanário",
+    "the aquarium"
+   ],
+   "about": "tickets 2026-12-27 10 am"
+  },
+  {
+   "name": "Wonder Workshop",
+   "type": "place",
+   "aliases": [
+    "Wonder Workshop",
+    "party venue"
+   ],
+   "about": "Leo's 8th birthday party 2027-01-23"
+  },
+  {
+   "name": "Royal Ontario Museum",
+   "type": "place",
+   "aliases": [
+    "ROM",
+    "Royal Ontario Museum",
+    "the museum",
+    "field trip"
+   ],
+   "about": "Leo's class field trip 2026-11-26, Riya volunteers"
+  },
+  {
+   "name": "Service Canada",
+   "type": "organisation",
+   "aliases": [
+    "Service Canada",
+    "passport office",
+    "Passport Canada"
+   ],
+   "about": "Leo's passport renewal by 2026-11-06"
+  },
+  {
+   "name": "Leo's passport",
+   "type": "thing",
+   "aliases": [
+    "passport",
+    "Leo's passport",
+    "passport renewal",
+    "travel documents"
+   ],
+   "about": "expires 2027-03-04; renew by 2026-11-06"
+  },
+  {
+   "name": "Blue Cross travel insurance",
+   "type": "product",
+   "aliases": [
+    "Blue Cross",
+    "travel insurance",
+    "trip insurance"
+   ],
+   "about": "family Lisbon policy $212"
+  },
+  {
+   "name": "Air Canada / Aeroplan",
+   "type": "organisation",
+   "aliases": [
+    "Air Canada",
+    "AC",
+    "Aeroplan",
+    "Aeroplan 25K",
+    "TAP",
+    "TAP Air Portugal",
+    "airline"
+   ],
+   "about": "preferred airline; Lisbon on TAP"
+  },
+  {
+   "name": "PC Express",
+   "type": "organisation",
+   "aliases": [
+    "PC Express",
+    "Loblaws",
+    "groceries",
+    "no name",
+    "grocery pickup"
+   ],
+   "about": "Saturday morning grocery pickup"
+  },
+  {
+   "name": "Indigo",
+   "type": "organisation",
+   "aliases": [
+    "Indigo",
+    "Chapters",
+    "MEC",
+    "Simons",
+    "Amazon"
+   ],
+   "about": "preferred Canadian retailers"
+  },
+  {
+   "name": "Rover / Dogs Den",
+   "type": "organisation",
+   "aliases": [
+    "Rover",
+    "Dogs Den",
+    "kennel",
+    "dog boarding",
+    "boarding"
+   ],
+   "about": "Jess via Rover; Dogs Den booking cancelled"
+  },
+  {
+   "name": "Bosch dishwasher",
+   "type": "product",
+   "aliases": [
+    "dishwasher",
+    "Bosch",
+    "Bosch 800",
+    "appliances"
+   ],
+   "about": "chosen for new kitchen"
+  },
+  {
+   "name": "Caesarstone countertops",
+   "type": "product",
+   "aliases": [
+    "countertops",
+    "counters",
+    "quartz",
+    "Frosty Carrina",
+    "Caesarstone",
+    "templating"
+   ],
+   "about": "chosen over marble; $7,500 payment due at install"
+  },
+  {
+   "name": "Barzotti cabinets",
+   "type": "product",
+   "aliases": [
+    "cabinets",
+    "cupboards",
+    "white oak cabinets",
+    "Barzotti",
+    "custom cabinets"
+   ],
+   "about": "deposit $9,800; install 2026-11-14 to 11-17"
+  },
+  {
+   "name": "Michael Garron Hospital",
+   "type": "organisation",
+   "aliases": [
+    "Michael Garron",
+    "MGH",
+    "Toronto East General"
+   ],
+   "about": "Hannah's workplace"
+  },
+  {
+   "name": "Riverdale Farm day camp",
+   "type": "organisation",
+   "aliases": [
+    "Riverdale Farm",
+    "day camp",
+    "summer camp",
+    "camp"
+   ],
+   "about": "Leo's summer 2026 camp"
+  },
+  {
+   "name": "Halloween 2026",
+   "type": "event",
+   "aliases": [
+    "Halloween",
+    "trick-or-treating",
+    "trick or treat",
+    "astronaut costume",
+    "costume"
+   ],
+   "about": "Leo as astronaut with Cho kids from Hannah's 5:45 pm"
+  },
+  {
+   "name": "Morse Street bake sale",
+   "type": "event",
+   "aliases": [
+    "bake sale",
+    "the bake sale",
+    "cookies for school"
+   ],
+   "about": "2026-10-30, two dozen nut-free cookies"
+  },
+  {
+   "name": "Winter concert",
+   "type": "event",
+   "aliases": [
+    "winter concert",
+    "school concert",
+    "holiday concert",
+    "Leo's concert"
+   ],
+   "about": "2026-12-10 6:30 pm"
+  },
+  {
+   "name": "Parent-teacher interview",
+   "type": "event",
+   "aliases": [
+    "parent-teacher interview",
+    "parent teacher",
+    "PT interview",
+    "parent-teacher conference",
+    "Room 104"
+   ],
+   "about": "2026-11-13 5:15 pm"
+  },
+  {
+   "name": "Grace's birthday dinner",
+   "type": "event",
+   "aliases": [
+    "Grace's birthday",
+    "Okafors visit",
+    "in-laws visit",
+    "the in-laws coming",
+    "November visit"
+   ],
+   "about": "Grace and Daniel in Toronto 2026-11-20 to 23; dinner 2026-11-21"
+  },
+  {
+   "name": "Priya's birthday dinner",
+   "type": "event",
+   "aliases": [
+    "Priya's birthday",
+    "Priya's dinner",
+    "birthday dinner"
+   ],
+   "about": "2026-11-08 Bar Raval, cake from Bobbette & Belle"
+  },
+  {
+   "name": "Leo's birthday party",
+   "type": "event",
+   "aliases": [
+    "Leo's party",
+    "Leo's birthday",
+    "8th birthday",
+    "kids party"
+   ],
+   "about": "2027-01-23 Wonder Workshop, 12 kids"
+  },
+  {
+   "name": "Leo's skating lessons",
+   "type": "activity",
+   "aliases": [
+    "skating",
+    "learn to skate",
+    "skating lessons",
+    "rink"
+   ],
+   "about": "Saturdays 10:30 from 2027-01-09"
+  },
+  {
+   "name": "Leo's piano lessons",
+   "type": "activity",
+   "aliases": [
+    "piano",
+    "piano lesson",
+    "piano practice"
+   ],
+   "about": "Fridays 4:15 pm with Mrs. Greene"
+  },
+  {
+   "name": "Leo's reading log",
+   "type": "thing",
+   "aliases": [
+    "reading log",
+    "nightly reading",
+    "reading with Leo",
+    "bedtime reading",
+    "reading level"
+   ],
+   "about": "20 minutes nightly at 7:30 pm"
+  },
+  {
+   "name": "Lattice",
+   "type": "product",
+   "aliases": [
+    "Lattice",
+    "performance review",
+    "self-review",
+    "perf review"
+   ],
+   "about": "performance review tool"
+  },
+  {
+   "name": "Slack and Linear",
+   "type": "product",
+   "aliases": [
+    "Slack",
+    "Linear",
+    "Figma",
+    "#payouts-launch",
+    "#data-requests",
+    "Google Workspace",
+    "tickets"
+   ],
+   "about": "Lumen Pay tools"
+  },
+  {
+   "name": "FINTRAC",
+   "type": "organisation",
+   "aliases": [
+    "FINTRAC",
+    "compliance",
+    "compliance review",
+    "regulator"
+   ],
+   "about": "reporting review delaying wallets"
+  }
+ ],
+ "activities": [
+  {
+   "name": "plan a meal",
+   "words": [
+    "dinner",
+    "recipe",
+    "cook",
+    "cooking",
+    "meal plan",
+    "what's for dinner",
+    "supper",
+    "lunch ideas",
+    "menu",
+    "potluck",
+    "vegetarian",
+    "pescatarian",
+    "seafood",
+    "fish",
+    "chana masala",
+    "leftovers",
+    "meal prep",
+    "grocery list",
+    "hot plate",
+    "microwave meal"
+   ]
+  },
+  {
+   "name": "dining out",
+   "words": [
+    "restaurant",
+    "reservation",
+    "book a table",
+    "brunch",
+    "eat out",
+    "takeout",
+    "take-out",
+    "delivery",
+    "Uber Eats",
+    "DoorDash",
+    "dim sum",
+    "dosa",
+    "date night",
+    "order food",
+    "Skip",
+    "table for",
+    "patio",
+    "Sichuan"
+   ]
+  },
+  {
+   "name": "host guests",
+   "words": [
+    "host",
+    "hosting",
+    "dinner party",
+    "guests",
+    "company coming",
+    "visitors",
+    "house guests",
+    "guest room",
+    "staying with us",
+    "in-laws",
+    "have people over",
+    "Thanksgiving",
+    "gathering",
+    "sleepover",
+    "party at ours"
+   ]
+  },
+  {
+   "name": "buy a gift",
+   "words": [
+    "gift",
+    "present",
+    "birthday present",
+    "gift idea",
+    "what should I get",
+    "stocking stuffer",
+    "wrap",
+    "gift card",
+    "surprise",
+    "flowers",
+    "card for",
+    "mug",
+    "anniversary gift",
+    "Christmas gift",
+    "souvenir"
+   ]
+  },
+  {
+   "name": "celebrate a birthday",
+   "words": [
+    "birthday",
+    "bday",
+    "b-day",
+    "turning",
+    "cake",
+    "party",
+    "candles",
+    "celebrate",
+    "birthday dinner",
+    "birthday card",
+    "happy birthday",
+    "balloons",
+    "party favours",
+    "invites"
+   ]
+  },
+  {
+   "name": "mark an anniversary",
+   "words": [
+    "anniversary",
+    "our anniversary",
+    "wedding anniversary",
+    "date night",
+    "romantic",
+    "June",
+    "years together",
+    "babysitter",
+    "night out",
+    "restaurant for two",
+    "dinner without Leo"
+   ]
+  },
+  {
+   "name": "book travel",
+   "words": [
+    "flight",
+    "flights",
+    "fly",
+    "book a flight",
+    "airline",
+    "seat",
+    "aisle",
+    "window seat",
+    "layover",
+    "red-eye",
+    "Aeroplan",
+    "points",
+    "itinerary",
+    "check-in",
+    "boarding pass",
+    "airport",
+    "Pearson",
+    "YYZ",
+    "train",
+    "VIA Rail"
+   ]
+  },
+  {
+   "name": "book accommodation",
+   "words": [
+    "hotel",
+    "Airbnb",
+    "accommodation",
+    "stay",
+    "room",
+    "suite",
+    "refundable",
+    "check out",
+    "booking",
+    "lodging",
+    "resort",
+    "where to stay",
+    "nights"
+   ]
+  },
+  {
+   "name": "plan a family trip",
+   "words": [
+    "trip",
+    "vacation",
+    "holiday",
+    "travel",
+    "itinerary",
+    "day trip",
+    "sightseeing",
+    "things to do",
+    "Lisbon",
+    "Portugal",
+    "Sintra",
+    "Mumbai",
+    "Vancouver",
+    "Ottawa",
+    "Mexico City",
+    "Christmas break",
+    "winter break",
+    "New Year's"
+   ]
+  },
+  {
+   "name": "pack for a trip",
+   "words": [
+    "pack",
+    "packing",
+    "packing list",
+    "suitcase",
+    "carry-on",
+    "luggage",
+    "checklist",
+    "what to bring",
+    "bag",
+    "travel essentials",
+    "weather there",
+    "jacket"
+   ]
+  },
+  {
+   "name": "drive a road trip",
+   "words": [
+    "drive",
+    "road trip",
+    "401",
+    "highway",
+    "traffic",
+    "gas",
+    "car ride",
+    "Big Apple",
+    "stop on the way",
+    "driving to Ottawa",
+    "how long is the drive",
+    "Colborne"
+   ]
+  },
+  {
+   "name": "manage travel documents and insurance",
+   "words": [
+    "passport",
+    "renewal",
+    "visa",
+    "eTA",
+    "travel insurance",
+    "Service Canada",
+    "expiry",
+    "documents",
+    "ID",
+    "OCI",
+    "border",
+    "trip interruption"
+   ]
+  },
+  {
+   "name": "schedule a meeting",
+   "words": [
+    "meeting",
+    "invite",
+    "calendar invite",
+    "book time",
+    "schedule a call",
+    "set up a call",
+    "sync",
+    "1:1",
+    "one on one",
+    "agenda",
+    "find a slot",
+    "reschedule",
+    "availability",
+    "time slot",
+    "25 minutes"
+   ]
+  },
+  {
+   "name": "manage the calendar",
+   "words": [
+    "calendar",
+    "schedule",
+    "what's on",
+    "this week",
+    "next week",
+    "free",
+    "busy",
+    "clash",
+    "conflict",
+    "double booked",
+    "block time",
+    "focus time",
+    "today",
+    "tomorrow",
+    "weekend plans"
+   ]
+  },
+  {
+   "name": "write a work email",
+   "words": [
+    "email",
+    "e-mail",
+    "draft",
+    "reply",
+    "write to",
+    "message to",
+    "follow up",
+    "follow-up",
+    "respond",
+    "ping",
+    "note to",
+    "send a note",
+    "cc",
+    "inbox"
+   ]
+  },
+  {
+   "name": "write a PRD or spec",
+   "words": [
+    "PRD",
+    "spec",
+    "requirements",
+    "product doc",
+    "non-goals",
+    "open questions",
+    "Notion",
+    "template",
+    "user stories",
+    "scope",
+    "one-pager",
+    "write-up",
+    "design doc"
+   ]
+  },
+  {
+   "name": "summarize a meeting",
+   "words": [
+    "meeting notes",
+    "summary",
+    "recap",
+    "minutes",
+    "action items",
+    "decisions",
+    "takeaways",
+    "transcript",
+    "notes from",
+    "debrief"
+   ]
+  },
+  {
+   "name": "prepare a status update",
+   "words": [
+    "status update",
+    "weekly update",
+    "RAG",
+    "red amber green",
+    "update for",
+    "progress report",
+    "Friday update",
+    "#payouts-launch",
+    "stakeholder update",
+    "workstream"
+   ]
+  },
+  {
+   "name": "prepare a presentation or review",
+   "words": [
+    "presentation",
+    "slides",
+    "deck",
+    "QBR",
+    "business review",
+    "readiness review",
+    "roadmap",
+    "present",
+    "pitch",
+    "talking points",
+    "rehearse",
+    "big meeting"
+   ]
+  },
+  {
+   "name": "plan the roadmap and quarter",
+   "words": [
+    "roadmap",
+    "Q4",
+    "planning",
+    "quarterly planning",
+    "2027",
+    "OKRs",
+    "priorities",
+    "planning doc",
+    "offsite",
+    "H1",
+    "deadline",
+    "scope cut",
+    "v1.1"
+   ]
+  },
+  {
+   "name": "work on Instant Payouts",
+   "words": [
+    "payouts",
+    "Instant Payouts",
+    "launch",
+    "GA",
+    "beta",
+    "merchants",
+    "success rate",
+    "payout time",
+    "webhook",
+    "retries",
+    "settlement",
+    "Wavecrest",
+    "outage",
+    "postmortem",
+    "incident"
+   ]
+  },
+  {
+   "name": "request data or metrics",
+   "words": [
+    "data",
+    "metrics",
+    "dashboard",
+    "Looker",
+    "numbers",
+    "query",
+    "analysis",
+    "data request",
+    "KPI",
+    "north star",
+    "MAPM",
+    "chart",
+    "SQL",
+    "report"
+   ]
+  },
+  {
+   "name": "coordinate with the eng team",
+   "words": [
+    "engineering",
+    "eng",
+    "sprint",
+    "sprint planning",
+    "tickets",
+    "Linear",
+    "estimate",
+    "scope",
+    "tech lead",
+    "async",
+    "Slack thread",
+    "backlog",
+    "standup"
+   ]
+  },
+  {
+   "name": "give design feedback",
+   "words": [
+    "design",
+    "Figma",
+    "mockups",
+    "wireframes",
+    "feedback",
+    "designer",
+    "UX",
+    "UI",
+    "comments",
+    "critique",
+    "prototype"
+   ]
+  },
+  {
+   "name": "communicate with sales",
+   "words": [
+    "sales",
+    "customers",
+    "launch date",
+    "ETA",
+    "when will it ship",
+    "commit",
+    "sales team",
+    "deal",
+    "promise a date",
+    "customer ask",
+    "target date"
+   ]
+  },
+  {
+   "name": "manage up to the boss",
+   "words": [
+    "manager",
+    "boss",
+    "Tom",
+    "1:1",
+    "recommendation",
+    "options",
+    "escalate",
+    "ask for",
+    "approval",
+    "sign-off",
+    "promotion",
+    "feedback for my manager"
+   ]
+  },
+  {
+   "name": "give feedback on someone's work",
+   "words": [
+    "feedback",
+    "review",
+    "promotion packet",
+    "promo",
+    "peer review",
+    "performance",
+    "self-review",
+    "Lattice",
+    "write-up",
+    "recommend"
+   ]
+  },
+  {
+   "name": "write social or public posts",
+   "words": [
+    "LinkedIn",
+    "post",
+    "announcement",
+    "blog",
+    "tweet",
+    "caption",
+    "website copy",
+    "copy",
+    "proofread",
+    "edit my",
+    "rewrite"
+   ]
+  },
+  {
+   "name": "practise Spanish",
+   "words": [
+    "Spanish",
+    "español",
+    "en español",
+    "translate",
+    "conjugate",
+    "subjunctive",
+    "ser",
+    "estar",
+    "por",
+    "para",
+    "vocabulary",
+    "vocab",
+    "grammar",
+    "role-play",
+    "Anki",
+    "flashcards",
+    "tutor",
+    "Carlos",
+    "DELE",
+    "lesson",
+    "homework",
+    "essay"
+   ]
+  },
+  {
+   "name": "learn and study",
+   "words": [
+    "study",
+    "learn",
+    "exam",
+    "test",
+    "practice",
+    "quiz me",
+    "explain",
+    "teach me",
+    "course",
+    "reading",
+    "chapter",
+    "book"
+   ]
+  },
+  {
+   "name": "handle the kitchen renovation",
+   "words": [
+    "reno",
+    "renovation",
+    "kitchen",
+    "contractor",
+    "cabinets",
+    "countertops",
+    "quartz",
+    "backsplash",
+    "tile",
+    "permit",
+    "electrician",
+    "panel",
+    "install",
+    "budget",
+    "quote",
+    "dishwasher",
+    "appliances",
+    "dust",
+    "crew",
+    "progress payment"
+   ]
+  },
+  {
+   "name": "home maintenance",
+   "words": [
+    "furnace",
+    "filter",
+    "basement",
+    "flood",
+    "leak",
+    "sump pump",
+    "door sticks",
+    "repair",
+    "handyman",
+    "plumber",
+    "spare key",
+    "locked out",
+    "HVAC",
+    "humid",
+    "rain"
+   ]
+  },
+  {
+   "name": "budget and pay bills",
+   "words": [
+    "budget",
+    "bill",
+    "bills",
+    "pay",
+    "payment",
+    "e-transfer",
+    "Interac",
+    "bank",
+    "TD",
+    "savings",
+    "spending",
+    "afford",
+    "cost",
+    "invoice",
+    "property tax",
+    "how much"
+   ]
+  },
+  {
+   "name": "make a purchase",
+   "words": [
+    "buy",
+    "order",
+    "purchase",
+    "add to cart",
+    "checkout",
+    "shop",
+    "shopping",
+    "Amazon",
+    "Indigo",
+    "MEC",
+    "reorder",
+    "price",
+    "deal",
+    "sale",
+    "ship",
+    "delivery"
+   ]
+  },
+  {
+   "name": "order groceries",
+   "words": [
+    "groceries",
+    "grocery",
+    "PC Express",
+    "Loblaws",
+    "pickup",
+    "milk",
+    "bread",
+    "staples",
+    "shopping list",
+    "no name",
+    "produce",
+    "Saturday pickup"
+   ]
+  },
+  {
+   "name": "manage subscriptions and utilities",
+   "words": [
+    "subscription",
+    "Netflix",
+    "Spotify",
+    "Crave",
+    "Disney+",
+    "internet",
+    "wifi",
+    "TekSavvy",
+    "Bell",
+    "cancel",
+    "renew",
+    "plan",
+    "streaming",
+    "phone bill"
+   ]
+  },
+  {
+   "name": "manage the car",
+   "words": [
+    "car",
+    "Mazda",
+    "oil change",
+    "service",
+    "maintenance",
+    "tires",
+    "winter tires",
+    "snow tires",
+    "Canadian Tire",
+    "insurance",
+    "mileage",
+    "km",
+    "dealer",
+    "EV",
+    "parking"
+   ]
+  },
+  {
+   "name": "family finances and savings",
+   "words": [
+    "RESP",
+    "RRSP",
+    "TFSA",
+    "savings",
+    "invest",
+    "taxes",
+    "tax deductible",
+    "CRA",
+    "insurance",
+    "net worth",
+    "emergency fund",
+    "grant"
+   ]
+  },
+  {
+   "name": "manage health appointments",
+   "words": [
+    "doctor",
+    "appointment",
+    "physical",
+    "checkup",
+    "check-up",
+    "bloodwork",
+    "blood test",
+    "fasting",
+    "dentist",
+    "cleaning",
+    "clinic",
+    "GP",
+    "referral",
+    "book an appointment"
+   ]
+  },
+  {
+   "name": "manage medication and allergies",
+   "words": [
+    "medication",
+    "meds",
+    "pill",
+    "prescription",
+    "dose",
+    "thyroid",
+    "antibiotic",
+    "penicillin",
+    "allergy",
+    "allergic",
+    "Reactine",
+    "pharmacy",
+    "refill",
+    "EpiPen",
+    "hives"
+   ]
+  },
+  {
+   "name": "plan exercise and running",
+   "words": [
+    "run",
+    "running",
+    "jog",
+    "long run",
+    "half marathon",
+    "marathon",
+    "race",
+    "training plan",
+    "pace",
+    "km",
+    "gym",
+    "workout",
+    "strength",
+    "lift",
+    "spin",
+    "stretch",
+    "plantar fasciitis",
+    "shoes"
+   ]
+  },
+  {
+   "name": "sleep and caffeine",
+   "words": [
+    "sleep",
+    "insomnia",
+    "can't sleep",
+    "tired",
+    "coffee",
+    "caffeine",
+    "decaf",
+    "cortado",
+    "latte",
+    "espresso",
+    "tea",
+    "bedtime",
+    "nap",
+    "afternoon coffee"
+   ]
+  },
+  {
+   "name": "manage stress and vent",
+   "words": [
+    "stressed",
+    "stress",
+    "anxious",
+    "anxiety",
+    "overwhelmed",
+    "vent",
+    "rant",
+    "ugh",
+    "rough day",
+    "frustrated",
+    "burnt out",
+    "burned out",
+    "need to talk",
+    "sad",
+    "worried",
+    "Sunday scaries",
+    "can't cope"
+   ]
+  },
+  {
+   "name": "handle sensitive or emotional topics",
+   "words": [
+    "grief",
+    "anniversary of",
+    "my dad",
+    "miss him",
+    "death",
+    "therapy",
+    "therapist",
+    "second child",
+    "pregnant",
+    "fertility",
+    "baby",
+    "trying",
+    "lonely",
+    "diya"
+   ]
+  },
+  {
+   "name": "school logistics",
+   "words": [
+    "school",
+    "pickup",
+    "drop-off",
+    "dropoff",
+    "after-school",
+    "teacher",
+    "class",
+    "report card",
+    "Edsby",
+    "PA day",
+    "snow day",
+    "lunch",
+    "field trip",
+    "permission form",
+    "volunteer",
+    "bake sale"
+   ]
+  },
+  {
+   "name": "support Leo's learning",
+   "words": [
+    "reading",
+    "reading log",
+    "homework",
+    "spelling",
+    "math",
+    "practise reading",
+    "books for kids",
+    "below grade level",
+    "tutor",
+    "French immersion",
+    "phonics",
+    "bedtime story"
+   ]
+  },
+  {
+   "name": "kids' activities and lessons",
+   "words": [
+    "swim",
+    "swimming",
+    "swim lesson",
+    "piano",
+    "soccer",
+    "skating",
+    "camp",
+    "register",
+    "registration",
+    "lessons",
+    "practice",
+    "rec centre",
+    "efun",
+    "class"
+   ]
+  },
+  {
+   "name": "kids' snacks and food safety",
+   "words": [
+    "snack",
+    "snacks",
+    "nut-free",
+    "nuts",
+    "cashew",
+    "pistachio",
+    "dairy",
+    "lunchbox",
+    "playdate",
+    "treats",
+    "cookies",
+    "allergy-friendly",
+    "party food",
+    "candy"
+   ]
+  },
+  {
+   "name": "plan a kids' party or playdate",
+   "words": [
+    "playdate",
+    "party",
+    "birthday party",
+    "invites",
+    "goody bags",
+    "loot bags",
+    "kids party",
+    "venue",
+    "sleepover",
+    "friends over",
+    "Lego",
+    "dinosaur"
+   ]
+  },
+  {
+   "name": "entertain the kid",
+   "words": [
+    "bored",
+    "rainy day",
+    "activity",
+    "things to do with kids",
+    "game",
+    "craft",
+    "movie night",
+    "Lego",
+    "dinosaurs",
+    "museum",
+    "indoor",
+    "screen time",
+    "what to watch"
+   ]
+  },
+  {
+   "name": "care for the dog",
+   "words": [
+    "dog",
+    "walk",
+    "walker",
+    "vet",
+    "food",
+    "kibble",
+    "treats",
+    "itchy",
+    "sick",
+    "vomit",
+    "boarding",
+    "kennel",
+    "dog sitter",
+    "leash",
+    "grooming",
+    "bread",
+    "beagle",
+    "howling",
+    "vaccines"
+   ]
+  },
+  {
+   "name": "stay in touch with family abroad",
+   "words": [
+    "call mom",
+    "call",
+    "video call",
+    "FaceTime",
+    "WhatsApp",
+    "time difference",
+    "what time is it in",
+    "IST",
+    "Mumbai time",
+    "check in",
+    "weekly call",
+    "phone home"
+   ]
+  },
+  {
+   "name": "care for an aging parent",
+   "words": [
+    "diabetes",
+    "blood sugar",
+    "living alone",
+    "elderly",
+    "parent",
+    "aging",
+    "health scare",
+    "visit",
+    "caregiver",
+    "worried about mom",
+    "knee",
+    "surgery",
+    "stairs",
+    "mobility"
+   ]
+  },
+  {
+   "name": "keep promises and deadlines",
+   "words": [
+    "promised",
+    "promise",
+    "deadline",
+    "due",
+    "by Friday",
+    "remind me",
+    "reminder",
+    "to-do",
+    "todo",
+    "don't forget",
+    "follow up",
+    "commitment",
+    "owe",
+    "deliverable"
+   ]
+  },
+  {
+   "name": "help a friend",
+   "words": [
+    "friend",
+    "help",
+    "favour",
+    "moving",
+    "move",
+    "pack",
+    "boxes",
+    "review her",
+    "website",
+    "catch up",
+    "coffee with",
+    "hang out",
+    "drinks"
+   ]
+  },
+  {
+   "name": "coordinate with neighbours",
+   "words": [
+    "neighbour",
+    "neighbor",
+    "next door",
+    "spare key",
+    "carpool",
+    "swap",
+    "pickup swap",
+    "watch the dog",
+    "borrow",
+    "pool party",
+    "block party"
+   ]
+  },
+  {
+   "name": "bake and unwind on weekends",
+   "words": [
+    "bake",
+    "baking",
+    "cookies",
+    "muffins",
+    "banana bread",
+    "sourdough",
+    "weekend morning",
+    "pancakes",
+    "recipe",
+    "oven",
+    "scale a recipe",
+    "dozen"
+   ]
+  },
+  {
+   "name": "choose books, shows and music",
+   "words": [
+    "book",
+    "novel",
+    "recommend",
+    "what to read",
+    "mystery",
+    "show",
+    "series",
+    "watch",
+    "TV",
+    "Netflix",
+    "podcast",
+    "playlist",
+    "music",
+    "focus music",
+    "audiobook"
+   ]
+  },
+  {
+   "name": "write in her style",
+   "words": [
+    "write",
+    "draft",
+    "rewrite",
+    "polish",
+    "edit",
+    "tone",
+    "wording",
+    "proofread",
+    "make it shorter",
+    "tighten",
+    "spell",
+    "colour",
+    "punctuation",
+    "em dash"
+   ]
+  },
+  {
+   "name": "check the weather",
+   "words": [
+    "weather",
+    "forecast",
+    "temperature",
+    "rain",
+    "snow",
+    "cold",
+    "hot",
+    "degrees",
+    "umbrella",
+    "jacket",
+    "windchill",
+    "sunny"
+   ]
+  },
+  {
+   "name": "plan holidays and seasonal events",
+   "words": [
+    "Halloween",
+    "Christmas",
+    "Thanksgiving",
+    "Diwali",
+    "New Year",
+    "Easter",
+    "holiday",
+    "costume",
+    "trick-or-treat",
+    "decorations",
+    "fireworks",
+    "Christmas market",
+    "concert"
+   ]
+  },
+  {
+   "name": "personal admin and errands",
+   "words": [
+    "errand",
+    "errands",
+    "pick up",
+    "drop off",
+    "appointment",
+    "renew",
+    "forms",
+    "paperwork",
+    "post office",
+    "mail",
+    "return",
+    "dry cleaning"
+   ]
+  }
+ ],
+ "background": [
+  "What's the capital of Australia?",
+  "How many tablespoons are in a quarter cup?",
+  "Explain how compound interest works in simple terms.",
+  "Can you give me a synonym for 'important'?",
+  "What year did the Berlin Wall fall?",
+  "Tell me a fun fact about octopuses.",
+  "How do I convert a Google Doc to PDF?",
+  "What's the difference between affect and effect?",
+  "Write a haiku about autumn leaves.",
+  "How long should I boil an egg for a jammy yolk?",
+  "Why is the sky blue?",
+  "What does 'API rate limiting' mean?",
+  "Good morning!",
+  "Thanks, that was helpful.",
+  "lol that's funny",
+  "How do I make a pivot table in Google Sheets?",
+  "What's a good stretch for a stiff neck after sitting all day?",
+  "Summarize the plot of Pride and Prejudice in three sentences.",
+  "Who painted The Starry Night?",
+  "What's the population of Canada right now, roughly?",
+  "How do vaccines train the immune system?",
+  "Give me five icebreaker questions for a random group.",
+  "What's the time complexity of binary search?",
+  "Can you explain what a VLOOKUP does?",
+  "How many time zones does Russia have?",
+  "What rhymes with 'orange'?",
+  "Write a limerick about a cat who hates Mondays.",
+  "Is a tomato a fruit or a vegetable?",
+  "What does 'idempotent' mean?",
+  "How do I remove a red wine stain from a cotton shirt?",
+  "What is the speed of light?",
+  "Tell me a joke.",
+  "How do noise-cancelling headphones work?",
+  "What's the plural of 'octopus'?",
+  "Explain the difference between a Roth IRA and a 401k for an American friend.",
+  "What's the tallest mountain in Africa?",
+  "How do I clear my browser cache in Chrome?",
+  "Can you recommend a good stretch routine for beginners in general?",
+  "How many bones are in the human body?",
+  "What does 'mise en place' mean?",
+  "Why do cats purr?",
+  "What's the boiling point of water at high altitude?",
+  "How does a bill become law in the US?",
+  "What's the difference between weather and climate?",
+  "Write a two-line poem about coffee.",
+  "Explain photosynthesis to me like I'm twelve.",
+  "What's the difference between baking soda and baking powder?",
+  "How do I keep basil alive indoors?",
+  "What's a good name for a houseplant?",
+  "Translate 'good night' into French.",
+  "What's the origin of the word 'quarantine'?",
+  "How far is the Moon from Earth?",
+  "What is a blockchain, in one paragraph?",
+  "How do I unclog a slow bathroom sink?",
+  "Which planet has the most moons?",
+  "What's the best way to memorize a speech in general?",
+  "Give me a random motivational quote.",
+  "How many ounces in a pound?",
+  "Who wrote 'One Hundred Years of Solitude'?",
+  "Explain the Monty Hall problem.",
+  "What's the difference between latitude and longitude?",
+  "How do I take a screenshot on a Mac?",
+  "What is the Pythagorean theorem?",
+  "What's an easy way to fold a fitted sheet?",
+  "How do airplanes stay in the air?",
+  "How long does it take light from the Sun to reach Earth?",
+  "What does GDP measure?",
+  "Can you explain what a P/E ratio is?",
+  "What's the difference between a crocodile and an alligator?",
+  "How do I write a SQL query to find duplicate rows?",
+  "What's the etymology of 'salary'?",
+  "Make up a tongue twister about penguins.",
+  "How do I sharpen a kitchen knife with a whetstone?",
+  "What's a good icebreaker for a book club with strangers?",
+  "How do hurricanes get their names?",
+  "What was the Renaissance?",
+  "How many players are on a hockey team on the ice?",
+  "What's the rule for using 'whom'?",
+  "What is the Fibonacci sequence?",
+  "How do I make cold brew at home?",
+  "What is inflation and why does it happen?",
+  "What's the largest ocean?",
+  "How many calories does walking a kilometre burn, roughly?",
+  "Explain what a REST API is.",
+  "What does a product manager do, generally speaking?",
+  "What's the difference between UX and UI?",
+  "How does a credit score work in general?",
+  "What's a good template for a generic thank-you note?",
+  "Tell me something interesting about the Roman Empire.",
+  "Which is bigger, a megabyte or a gigabyte?",
+  "How do I convert Fahrenheit to Celsius in my head?",
+  "What causes the northern lights?",
+  "How do bees make honey?",
+  "Is it 'all right' or 'alright'?",
+  "What's a palindrome? Give me three examples.",
+  "Who was Ada Lovelace?",
+  "How do I format a date column in Excel?",
+  "What does 'agile' mean in software development?",
+  "What's the difference between a virus and bacteria?",
+  "Write a short riddle for adults.",
+  "What's the longest river in the world?",
+  "Why do onions make you cry?",
+  "How many countries are in the European Union?",
+  "What's the difference between espresso and drip coffee?",
+  "What's the origin of Valentine's Day?",
+  "What's a mnemonic for the planets?",
+  "How do solar panels work?",
+  "How do I turn on dark mode on my iPhone?",
+  "What's a good brain teaser?",
+  "What's the meaning of the idiom 'bite the bullet'?",
+  "Explain supply and demand briefly.",
+  "Who invented the telephone?",
+  "What does a sommelier do?",
+  "How does a microwave heat food?",
+  "What's the difference between 'its' and 'it's'?",
+  "What are the primary colours?",
+  "How do I politely decline a LinkedIn connection request from a stranger?",
+  "What's a good mental math trick for multiplying by 11?",
+  "What's the chemical formula for table salt?",
+  "Can you explain what an index fund is?",
+  "How many minutes are in a week?",
+  "What is the Turing test?",
+  "How do I make a paper airplane that flies far?",
+  "What's the history of the Olympic Games?",
+  "Explain the difference between 'fewer' and 'less'.",
+  "What are some good stretches after a long flight, generally?",
+  "How do I calculate a 15% tip?",
+  "What is the smallest country in the world?",
+  "Describe the water cycle.",
+  "How do tides work?",
+  "What does 'carpe diem' mean?",
+  "Give me a quick explanation of how DNS works.",
+  "What's the national animal of Scotland?",
+  "How many keys are on a standard piano?",
+  "What is a haiku's syllable structure?",
+  "Recommend a classic film from the 1950s.",
+  "Why do leaves change colour in the fall?",
+  "What's the difference between a hurricane and a typhoon?",
+  "How long do I let a steak rest?",
+  "Explain quantum entanglement simply.",
+  "What's the difference between 'e.g.' and 'i.e.'?",
+  "How do I create a strong password?",
+  "What's a sonnet?",
+  "Who discovered penicillin?",
+  "How much water should an adult drink daily, generally?",
+  "What's the difference between an emu and an ostrich?",
+  "What's an example of irony?",
+  "How do I write a good subject line in general?",
+  "What are the rules of chess castling?",
+  "What's the most spoken language in the world?",
+  "What makes bread rise?",
+  "What's the difference between a lake and a pond?",
+  "Why do we have leap years?",
+  "Is it going to be a long winter, do you think? Just curious what the Farmer's Almanac says.",
+  "Explain what a Gantt chart is.",
+  "What is a SWOT analysis?",
+  "How did dinosaurs go extinct?",
+  "What's the difference between a T. rex and a Spinosaurus?",
+  "What is the half-life of carbon-14?",
+  "Who won the first FIFA World Cup?",
+  "What's a good generic workout warm-up?",
+  "Explain what a mortgage is, simply.",
+  "What's the difference between a crêpe and a pancake?",
+  "Name three famous Portuguese explorers.",
+  "What does 'bon appétit' literally mean?",
+  "How is maple syrup made?",
+  "What's the difference between Celsius and Kelvin?",
+  "Tell me about the history of the CN Tower.",
+  "What's an Oxford comma?",
+  "How do I fix a squeaky door hinge?",
+  "What is the Great Barrier Reef?",
+  "What does a stock split mean?",
+  "What's the difference between a cold and the flu?",
+  "Who is the current Secretary-General of the UN?",
+  "What's a good brain break during work?",
+  "Explain the offside rule in soccer.",
+  "Why does ice float?",
+  "What's the difference between a violin and a fiddle?",
+  "How do I make my handwriting neater?",
+  "What's a fun fact about the Moon?",
+  "How do I say 'hello' in Japanese?",
+  "What's the history of chess?",
+  "What does 'ROI' stand for?",
+  "Recommend a podcast about history in general.",
+  "What's the difference between marble and granite?",
+  "How do I iron a shirt properly?",
+  "What's the difference between a sloth and a koala?",
+  "What is mindfulness?",
+  "What's the healthiest way to reheat rice?",
+  "Is it okay to wash a wool sweater in the machine?",
+  "What's an easy origami figure?",
+  "How does a bicycle stay upright?",
+  "Explain the Big Bang theory briefly.",
+  "What does a router do?",
+  "Tell me a pun about bread.",
+  "How do I add a signature in Gmail?",
+  "Can you define 'serendipity'?",
+  "What are the Seven Wonders of the Ancient World?",
+  "What's the difference between a latte and a flat white?",
+  "ok thanks!"
+ ]
+}
