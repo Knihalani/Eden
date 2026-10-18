@@ -1,0 +1,886 @@
+{
+ "batch": "life-b09",
+ "author": "claude-subagent:stream-author-life-b09 + rewriter (rewrite.py)",
+ "sessions": [
+  {
+   "id": "life-s090",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "checklist for the little guy's day camp at Riverdale Farm? starts Mon 29 Jun, I want to label everything this weekend so we're not scrambling"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "web search \"Riverdale Farm day camp what to pack parent info\""
+     },
+     "output": "1. Riverdale Farm Summer Day Camp | City of Toronto (toronto.example.com/riverdale-farm-camp)\n   Ages 6-9. Daily 9:00-16:00, extended care 8:00-17:30. Campers spend most of the day outdoors with the animals and in the gardens...\n2. Parent Handbook 2026 (PDF) | toronto.example.com/camps/handbook-2026.pdf\n   Please label all belongings. Campers need a hat, sunscreen applied before arrival, a refillable water bottle, closed-toe shoes (no sandals or Crocs in the barns), a rain jacket...\n3. Reddit r/toronto: 'Riverdale Farm camp, worth it?' (2025)\n   My kid loved it. Pack a spare pair of socks, the barn areas get muddy..."
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "notes add \"Day camp checklist (Riverdale Farm, Mon 29 Jun)\" --body \"Hat; sunscreen (apply at home); refillable water bottle; closed-toe shoes; rain jacket; spare socks + change of clothes in a zip bag; backpack; lunch + 2 snacks in labelled containers; label EVERYTHING\""
+     },
+     "output": "Note saved: 'Day camp checklist (Riverdale Farm, Mon 29 Jun)' (id n-4471)"
+    },
+    {
+     "t": "assistant",
+     "text": "Checklist is saved in your notes as 'Day camp checklist'.\n\n- Hat and sunscreen (the handbook wants it applied before drop-off)\n- Refillable water bottle\n- Closed-toe shoes, no sandals or Crocs in the barns\n- Rain jacket\n- Spare socks and a full change of clothes in a zip bag, the barns get muddy\n- Backpack, lunch and two snacks in labelled containers\n\nCamp runs 9:00 to 16:00 with extended care 8:00 to 17:30. I've started two background checks: drop-off details and forms, and where to get iron-on name labels quickly."
+    },
+    {
+     "t": "notification",
+     "task": "Check Riverdale Farm day camp page for drop-off procedure and required forms",
+     "report": "Drop-off is at the Winchester St gate, 8:45-9:15; pickup 15:45-16:15 at the same gate.\nForms required before day 1 (via the City's camp portal):\n- Camper health form\n- Authorized pickup list (photo ID checked for anyone not on it)\n- Photo consent (optional)\nNone of these are marked complete on your account yet.\nFirst-day orientation email goes out the Friday before camp."
+    },
+    {
+     "t": "human",
+     "k": 1,
+     "text": "perfect ty"
+    },
+    {
+     "t": "assistant",
+     "text": "You're welcome. The forms are on the City's camp portal whenever you have ten minutes, none are done yet."
+    },
+    {
+     "t": "notification",
+     "task": "Find iron-on or stick-on name labels that can arrive before Sat 23 May",
+     "report": "Options that ship within the week:\n- Mabel's Labels (Canadian), 'Camp Combo' pack, $46.99 CAD, ships in 3-5 business days. Too late for this weekend.\n- Indigo kids section: Avery stick-on clothing labels, 60 pack, $14.99, in stock at the Danforth store for pickup today.\n- Staples Queen/Carlaw: iron-on fabric label sheets, $12.49.\nFastest is the Indigo pickup. I did not order anything."
+    },
+    {
+     "t": "human",
+     "k": 2,
+     "text": "also remind me tmrw at 8 to call 311 about the cracked green bin lid. can we just request a new one online? and next hazardous waste drop-off near us, ~6 old paint cans from the reno"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "cal add \"Call 311: cracked green bin lid\" --at \"2026-05-21 08:00\" --remind 0"
+     },
+     "output": "Event created: 'Call 311: cracked green bin lid' Thu 21 May 08:00-08:15 (id ev-90213)"
+    },
+    {
+     "t": "assistant",
+     "text": "Reminder set for Thu 21 May at 8:00. I've kicked off three background checks: the online bin replacement request, the next household hazardous waste days near Leslieville, and whether any hardware store nearby takes leftover paint so you don't have to wait for a depot day."
+    },
+    {
+     "t": "notification",
+     "task": "Check whether a cracked green bin can be replaced through an online request",
+     "report": "Yes. The City accepts bin repair/replacement requests online at toronto.example.com/311 (Service Request > Solid Waste > Bin Repair).\n- Lid cracks count as a repair; no charge.\n- You'll need the bin's serial number (sticker under the front lip).\n- Typical turnaround: 7-10 business days, they swap the lid on site.\nYou can skip the phone call if you have the serial number handy."
+    },
+    {
+     "t": "notification",
+     "task": "Find the next household hazardous waste drop-off days near Leslieville",
+     "report": "Next Community Environment Days near you:\n- Sat 6 Jun, 10:00-14:00, Jimmie Simpson Recreation Centre parking lot\n- Sun 21 Jun, 10:00-14:00, Monarch Park Stadium lot\nBoth accept household paint, aerosol cans and small electronics.\nPermanent drop-off: Commissioners St depot, Mon-Sat 7:00-17:00."
+    },
+    {
+     "t": "notification",
+     "task": "Check if nearby hardware stores take leftover paint cans",
+     "report": "Product Care paint recycling sites near you:\n- Home Depot Leslie St: accepts up to 10 cans per visit, any brand, during store hours.\n- Gerrard Home Hardware: up to 5 cans, latex only.\nNo charge at either. Cans must have the original label and the lid on.\nHome Depot Leslie St is the easiest for 6 cans."
+    },
+    {
+     "t": "trigger",
+     "text": "[Scheduled 23:00] Reminder you set: 'Sort out Vancouver accommodation, Jul 9-13'"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "web search \"Kitsilano accommodation Jul 9-13 2026 3 guests refundable\""
+     },
+     "output": "Results for 9-13 Jul 2026, 3 guests, 4 nights\n1. The Kitsilano Inn (4th Ave)  CAD 289/night  Free cancellation until 7 Jul  Rating 4.4\n2. Granville Island Hotel  CAD 412/night  Free cancellation until 2 Jul  Rating 4.6\n3. Arbutus House B&B (W 2nd Ave)  CAD 245/night  Non-refundable  Rating 4.8\n4. Days Inn Broadway  CAD 199/night  Free cancellation until 8 Jul  Rating 3.7"
+    },
+    {
+     "t": "assistant",
+     "text": "Your flights for Thu 9 Jul to Mon 13 Jul are booked but there's no place to stay yet. Three refundable options near Kitsilano:\n\n- The Kitsilano Inn, CAD 289/night, free cancellation until 7 Jul\n- Granville Island Hotel, CAD 412/night, free cancellation until 2 Jul\n- Days Inn Broadway, CAD 199/night, cheapest but rated 3.7\n\nI left out Arbutus House because it's non-refundable. Any of these is over your purchase limit for four nights, so I won't book until you pick one. Want me to check room layouts before you decide?"
+    }
+   ]
+  },
+  {
+   "id": "life-s091",
+   "events": [
+    {
+     "t": "trigger",
+     "text": "[Message from Tom Becker] Riya, can you send me 3 lines on where the Instant Payouts beta stands for tomorrow's exec update? On my phone all afternoon."
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "docs open \"Instant Payouts beta tracker\" --section summary"
+     },
+     "output": "Instant Payouts beta: weekly summary (updated 2026-05-20)\nMerchants live: 40 / 40\nPayout success rate (7d): 99.7%  (bar: >= 99.5%)\nMedian payout time (7d): 18 min  (bar: < 30 min)\nOpen issues: 2 (webhook retries on one bank partner; dashboard copy)\nNext milestone: GA readiness review 2026-06-10"
+    },
+    {
+     "t": "assistant",
+     "text": "Here's a reply for Tom, not sent yet:\n\n'Can you include this in the exec update? Instant Payouts beta is on track: all 40 merchants are live. Success rate is 99.7% and median payout time is 18 minutes, both above the bar. Two minor issues are open and the GA readiness review is Wed 10 Jun.\n\nBest, Riya'\n\nSay the word and I'll send it."
+    },
+    {
+     "t": "human",
+     "k": 0,
+     "text": "good, send it. then a bike shop near us that can tune up Leo's bike this weekend, chain is making an awful noise"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "msg send --to \"Tom Becker\" \"Can you include this in the exec update? Instant Payouts beta is on track: all 40 merchants are live. Success rate is 99.7% and median payout time is 18 minutes, both above the bar. Two minor issues are open and the GA readiness review is Wed 10 Jun. Best, Riya\""
+     },
+     "output": "Message sent to Tom Becker (13:11)"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "web search \"bike shop tune-up Leslieville kids bike same week\""
+     },
+     "output": "1. Velotique Leslieville (Queen St E) 4.7 (212 reviews). Basic tune-up $69. 'Usually 2-3 day turnaround, walk-ins Sat morning.'\n2. Gears Bike Shop Gerrard 4.5. Kids bike tune-up $49. Booking online, next slot Sat 23 May 10:30.\n3. Bikes on Wheels Carlaw 4.3. Tune-up $85, 5-7 days in high season."
+    },
+    {
+     "t": "assistant",
+     "text": "Sent to Tom at 13:11.\n\nBest bet is Gears on Gerrard: kids' bike tune-up $49, next slot Sat 23 May at 10:30.\n- Velotique on Queen E takes walk-ins Saturday morning, $69, 2-3 days\n- Bikes on Wheels is slower this time of year, 5-7 days\n\nWant me to grab the 10:30 at Gears?"
+    },
+    {
+     "t": "peer",
+     "from": "work-agent",
+     "text": "Midday digest (13:15): 3 new items assigned to you: PAY-1182 'Beta merchant: payout email shows wrong currency symbol', PAY-1185 'GA readiness checklist', PAY-1187 'Copy review for payout status page'. In #payouts-launch, Aisha posted the retry metrics for the last 48 h. Diego shared new status page mocks for review."
+    },
+    {
+     "t": "human",
+     "k": 1,
+     "text": "beta merchants keep sending feedback all over: support emails, sales calls, random replies to my updates. set up a central place for the team to log it so we can triage weekly? give me a starting structure"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "mail search \"beta feedback OR instant payouts feedback\" --since 2026-04-25 --limit 6"
+     },
+     "output": "id      date        from                              subject\nm-8831  2026-05-19  ops@northbaycoffee.example.com    Re: Instant Payouts, quick thoughts\nm-8802  2026-05-15  support-escalations@             FW: merchant asking about payout cutoff\nm-8790  2026-05-14  maria@lunabakery.example.com      Love the speed, one request\nm-8744  2026-05-11  olivia.grant@                     Notes from Brightline call (payouts)\nm-8710  2026-05-07  dev@cartwheel.example.com         Webhook retries question\nm-8695  2026-05-05  owner@greenleafflorals.example.com payout notification wording"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "notes add \"Beta feedback log: structure\" --body \"Columns: date | merchant | source (support / sales call / email / other) | quote or summary | theme (speed, notifications, cutoff times, webhooks, copy, other) | severity (blocker / annoying / nice-to-have) | owner | status (new / triaged / planned / won't do) | link to original. Weekly triage: Mon, 20 min, sort by severity then count per theme.\""
+     },
+     "output": "Note saved: 'Beta feedback log: structure' (id n-4479)"
+    },
+    {
+     "t": "assistant",
+     "text": "I've drafted the structure and saved it in your notes as 'Beta feedback log: structure'.\n\n- Columns: date, merchant, source, quote or summary, theme, severity, owner, status, link to the original\n- Themes to start: speed, notifications, cutoff times, webhooks, copy, other\n- Severity: blocker, annoying, nice-to-have\n- Weekly triage: 20 minutes, sort by severity, then count per theme\n\nI found six feedback emails since late April and started a background job to pull them into the log as the first rows. Where does the team want the log to live? I can move it wherever they already work."
+    },
+    {
+     "t": "human",
+     "k": 2,
+     "text": "ugh office days. the 504 was so packed I stood the whole way with someone's backpack in my face"
+    },
+    {
+     "t": "assistant",
+     "text": "That's a rough start to the day. At least the ride home tends to thin out after 18:00 if you can wait it out."
+    },
+    {
+     "t": "peer",
+     "from": "calendar-agent",
+     "text": "Heads-up: 'GA readiness review' was just added by Aisha Rahman for Wed 10 Jun 10:00-10:25. No conflicts on your calendar."
+    },
+    {
+     "t": "notification",
+     "task": "Pull beta feedback emails since 2026-04-25 into the feedback log",
+     "report": "Added 6 rows to 'Beta feedback log: structure':\n- Northbay Coffee: wants payouts on weekends (theme: speed, nice-to-have)\n- Support escalation: merchant confused by 17:00 cutoff (cutoff times, annoying)\n- Luna Bakery: loves speed, wants SMS alert (notifications, nice-to-have)\n- Brightline (via Olivia's call notes): needs CSV export (other, annoying)\n- Cartwheel: unclear webhook retry behaviour (webhooks, annoying)\n- Greenleaf Florals: notification wording sounds like an error (copy, annoying)\nNo blockers so far. Most common theme: notifications/copy (2)."
+    },
+    {
+     "t": "peer",
+     "from": "inbox-agent",
+     "text": "Triage 13:40: 9 new emails. Needs you: Olivia Grant asking for 10 min Friday to talk Q3 pipeline. FYI: Morse Street PS June newsletter, PC Express order ready Sat 9:00-9:30. Archived 5 promos."
+    }
+   ]
+  },
+  {
+   "id": "life-s092",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "when's yard waste pickup on our street? backyard is a jungle after all this rain, big cleanup coming. put the next couple on the calendar"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "web search \"Toronto collection calendar yard waste Leslieville Tuesday week 1\""
+     },
+     "output": "Toronto Collection Schedule (toronto.example.com/collection) for your address:\nCollection day: Tuesday\nYard waste: every 2nd week, Mar-Dec\nUpcoming: Tue 26 May (Garbage, Green Bin, Yard Waste) | Tue 2 Jun (Recycling, Green Bin) | Tue 9 Jun (Garbage, Green Bin, Yard Waste) | Tue 16 Jun (Recycling, Green Bin)\nPut materials out by 7:00 am. Yard waste in paper bags or open bins, bundles under 1.2 m and 20 kg."
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "cal add \"Yard waste out (night before)\" --at \"2026-05-25 20:00\" --duration 15m && cal add \"Yard waste out (night before)\" --at \"2026-06-08 20:00\" --duration 15m"
+     },
+     "output": "Event created: 'Yard waste out (night before)' Mon 25 May 20:00-20:15 (id ev-90388)\nEvent created: 'Yard waste out (night before)' Mon 8 Jun 20:00-20:15 (id ev-90389)"
+    },
+    {
+     "t": "assistant",
+     "text": "Next yard waste pickups are Tue 26 May and Tue 9 Jun. I put reminders on the evenings before (Mon 25 May and Mon 8 Jun at 20:00), since it has to be out by 7:00.\n\n- Paper bags or open bins only, no plastic\n- Branch bundles under 1.2 m and 20 kg\n\nIf you clean up this weekend, the bags will sit for a few days before the 26th."
+    }
+   ]
+  },
+  {
+   "id": "life-s093",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "rain tomorrow afternoon, find me something to take Leo to? animated movie maybe, not too scary"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "web search \"family animated movies Toronto showtimes Sun 24 May 2026 Beaches Scotiabank\""
+     },
+     "output": "Showtimes Sun 24 May, near Leslieville\nCineplex Cinemas Beaches (Lakeshore Blvd E)\n  'The Wild Robot 2' (PG) 13:10, 15:40\n  'Paddington in Peru' (G, re-release) 12:30, 14:50\n  'Kung Fu Panda 5' (PG) 14:00, 16:30\nFox Theatre (Queen St E)\n  'My Neighbour Totoro' (G) Family matinee 14:00, $9 kids / $13 adults"
+    },
+    {
+     "t": "assistant",
+     "text": "A few good options for Sun 24 May:\n\n- My Neighbour Totoro at the Fox, 14:00, gentle and close to home, $9 kids and $13 adults\n- Paddington in Peru at Cineplex Beaches, 12:30 or 14:50, rated G\n- The Wild Robot 2 at Beaches, 13:10 or 15:40, PG with a couple of tense scenes\n\nI'm checking seat availability for the Fox and Beaches afternoon shows in the background."
+    },
+    {
+     "t": "notification",
+     "task": "Check seat availability for Sun 24 May afternoon family shows at the Fox and Cineplex Beaches",
+     "report": "Fox Theatre, My Neighbour Totoro 14:00: 41 of 280 seats left, no reserved seating, tickets online or at the door.\nCineplex Beaches, Paddington in Peru 14:50: good availability, pairs together in rows F-J.\nCineplex Beaches, The Wild Robot 2 13:10: nearly full, only front-row singles.\nThe Fox matinee is likely to sell out by Sunday morning if it rains."
+    }
+   ]
+  },
+  {
+   "id": "life-s094",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "morning. find Farah's (our accountant) email about the 2025 return? are we getting money back, how much"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "mail search \"from:farah 2025 return\" --limit 3"
+     },
+     "output": "id      date        from                          subject\nm-9012  2026-05-19  farah@khanaccounting.example.com  Your 2025 T1 returns: filed + summary\nm-8811  2026-04-02  farah@khanaccounting.example.com  Documents checklist for 2025 returns\nm-8650  2026-03-10  farah@khanaccounting.example.com  Booking your tax appointment"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "mail read m-9012"
+     },
+     "output": "From: Farah Khan <farah@khanaccounting.example.com>\nTo: Riya Malhotra, Sam Okafor\nDate: 2026-05-19 16:42\nSubject: Your 2025 T1 returns: filed + summary\n\nHi Riya and Sam,\n\nBoth returns were e-filed today. Summary:\n- Riya: refund of $1,284.60\n- Sam: balance owing of $212.15, due immediately (interest is accruing since Apr 30, so please pay this week)\n- Childcare expenses claimed on Sam's return as the lower-income spouse\n\nCRA usually issues direct-deposit refunds within 2 weeks of e-filing. Invoice for this year's prep is attached ($450 + HST).\n\nWarm regards,\nFarah"
+    },
+    {
+     "t": "assistant",
+     "text": "You're getting $1,284.60 back; Sam owes $212.15.\n\n- Both returns were e-filed Tue 19 May\n- Your refund should land by direct deposit within about two weeks\n- Sam's balance is overdue since 30 Apr, so interest is ticking, Farah asks that it's paid this week\n- Farah's invoice is $450 + HST, attached to the email"
+    },
+    {
+     "t": "notification",
+     "task": "Weekly receipts sweep: file new receipts from email into the household expenses note",
+     "report": "Filed 5 receipts from the past week into 'Household expenses 2026':\n- PC Express pickup, Sat 23 May: $147.32\n- Gears Bike Shop, kids tune-up: $49.00 + tax\n- Fox Theatre tickets: $22.00\n- Indigo Danforth (name labels): $14.99 + tax\n- Shell, Lakeshore: $61.40\nNothing unusual. Total this week: $303.88 before tax on items listed pre-tax."
+    },
+    {
+     "t": "human",
+     "k": 1,
+     "text": "support forwarded me this, tl;dr and what do they actually want from us\n\n---------- Forwarded message ---------\nFrom: Dana Whitfield <dana@northbaycoffee.example.com>\nDate: Tue, May 26, 2026 at 6:02 PM\nSubject: Re: Re: Re: Payout delayed AGAIN\nTo: support@lumenpay.example.com\n\nHi,\n\nI'm writing for the third time. Our Friday payout (ref PO-77120-F) still hasn't arrived and it's now Tuesday evening. We run three cafés and I have payroll going out Thursday.\n\nYour agent on Saturday said it was 'processing'. Your agent on Monday said it was 'returned by the receiving bank' and that it would be retried automatically. Nobody can tell me when.\n\nWe switched to your instant option specifically so this wouldn't happen. If it isn't fixed by Wednesday I'll have to move back to our old processor.\n\nDana\n\n> On Mon, May 25, 2026, Lumen Pay Support wrote:\n> Hi Dana, thanks for your patience. Our records show payout PO-77120-F\n> was returned by the receiving institution with code R03 (no account /\n> unable to locate account). Our system will automatically retry. You\n> can also update your bank details in Settings > Payouts.\n>\n> On Sat, May 23, 2026, Lumen Pay Support wrote:\n> Hi Dana, your payout is currently processing and should arrive\n> within 1-2 business days.\n>\n> On Sat, May 23, 2026, Dana Whitfield wrote:\n> Friday's payout hasn't shown up. Amount should be $8,412.55.\n> We changed banks two weeks ago (from RBC to Meridian) and updated\n> the details in your dashboard the same day.\n>\n> On Fri, May 22, 2026, Lumen Pay Payouts wrote:\n> Your payout of $8,412.55 is on its way to account ending 4471.\n\n-- \nDana Whitfield, Operations\nNorthbay Coffee Co. | 3 locations"
+    },
+    {
+     "t": "assistant",
+     "text": "TL;DR: a $8,412.55 payout bounced because it went to Northbay's old bank account, and support keeps telling Dana it will retry, which it won't succeed at until the account is fixed.\n\n- The 22 May confirmation shows account ending 4471, so the bank change Dana made two weeks earlier didn't take, or the payout was queued before it\n- An R03 return means the old account is closed, so automatic retries to it will keep failing\n- What she wants: the money in her new Meridian account before Thursday payroll, and a straight answer on when\n- Risk: she says she'll churn if it isn't fixed by Wednesday\n\nWorth getting ops to manually reissue to the new account today and having one person own the reply."
+    },
+    {
+     "t": "peer",
+     "from": "work-agent",
+     "text": "Morning digest (09:05): PAY-1199 opened by support: 'R03 returns retried to stale bank account after bank detail change' (priority: high, unassigned). Aisha commented: 'Looking. Suspect the account update didn't invalidate the cached destination.' Standup in 40 min."
+    },
+    {
+     "t": "human",
+     "k": 2,
+     "text": "shorter please, 3 bullets max unless I ask"
+    },
+    {
+     "t": "assistant",
+     "text": "Got it, three bullets max from here."
+    },
+    {
+     "t": "notification",
+     "task": "Draft a holding reply to Dana Whitfield for support to send",
+     "report": "Holding reply drafted in the support queue (not sent):\n'Hi Dana, I'm sorry, you've had three different answers and none of them helped. Your payout went to your previous account and was returned. We are reissuing $8,412.55 to your Meridian account manually today, and I'll confirm by 15:00 with a trace number. Thank you for your patience.'\nWaiting on ops to confirm the manual reissue before it goes out."
+    },
+    {
+     "t": "human",
+     "k": 3,
+     "text": "what have we done so far this morning? I've been in and out"
+    },
+    {
+     "t": "assistant",
+     "text": "- Found Farah's tax email: your refund $1,284.60, Sam owes $212.15 this week\n- Summarized the Northbay Coffee escalation and drafted a holding reply for support (waiting on ops)\n- Switched to short answers, three bullets max"
+    },
+    {
+     "t": "compact",
+     "summary": "Session so far (Wed 27 May, morning):\n- Riya asked for the 2025 tax return result from Farah Khan's email (m-9012): Riya's refund $1,284.60, Sam owes $212.15 (overdue since 30 Apr), Farah's invoice $450 + HST.\n- Weekly receipts sweep filed 5 receipts.\n- Riya pasted a support escalation from Dana Whitfield (Northbay Coffee): $8,412.55 payout PO-77120-F returned R03 because it went to the old bank account; Dana threatens to churn if not fixed by Wednesday. Ticket PAY-1199 opened; Aisha investigating cached destination.\n- A holding reply to Dana is drafted in the support queue, waiting on ops to confirm a manual reissue.\n- Riya asked for shorter answers: three bullets max unless she asks for more."
+    },
+    {
+     "t": "human",
+     "k": 4,
+     "text": "lol Biscuit refused to go out in the rain. just stood at the door looking betrayed"
+    },
+    {
+     "t": "assistant",
+     "text": "Very dramatic of him. Hopefully the rain eases by lunch."
+    },
+    {
+     "t": "peer",
+     "from": "calendar-agent",
+     "text": "Standup (09:45) moved to 10:00 today by Aisha Rahman: 'PAY-1199 triage first.' No conflicts."
+    },
+    {
+     "t": "peer",
+     "from": "school-portal",
+     "text": "Morse Street PS: Grade 2 field trip to the Toronto Zoo on Thu 11 Jun. Permission form and $18 fee due Fri 5 Jun via School Cash Online. Volunteers needed (2 per class)."
+    },
+    {
+     "t": "human",
+     "k": 5,
+     "text": "remind me friday to return the 3 library books, due saturday"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "cal add \"Return 3 library books (due Sat)\" --at \"2026-05-29 08:30\" --duration 10m"
+     },
+     "output": "Event created: 'Return 3 library books (due Sat)' Fri 29 May 08:30-08:40 (id ev-90544)"
+    },
+    {
+     "t": "assistant",
+     "text": "Done, reminder Fri 29 May at 8:30."
+    },
+    {
+     "t": "human",
+     "k": 6,
+     "text": "actually Pape library hours on saturday? maybe I'll go then"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "web search \"Toronto Public Library Pape/Danforth branch hours Saturday\""
+     },
+     "output": "Pape/Danforth Branch, Toronto Public Library\n701 Pape Ave\nMon-Thu 9:00-20:30 | Fri 9:00-17:00 | Sat 9:00-17:00 | Sun closed (summer)\nBook drop available 24/7."
+    },
+    {
+     "t": "assistant",
+     "text": "Sat 30 May, 9:00 to 17:00.\n\n- The book drop is open 24/7, so after-hours works too\n- Closed Sundays for the summer"
+    },
+    {
+     "t": "notification",
+     "task": "Track the manual reissue of payout PO-77120-F",
+     "report": "Ops confirmed manual reissue of $8,412.55 to Northbay Coffee's Meridian account at 10:52.\nTrace number: LP-TRC-2026052701187.\nExpected arrival: today by 15:00 (instant rail).\nSupport sent the holding reply to Dana at 10:58 with the trace number.\nPAY-1199 assigned to Aisha's team for the root-cause fix."
+    },
+    {
+     "t": "peer",
+     "from": "work-agent",
+     "text": "Update (11:05): Dana Whitfield replied 'Thank you, that's all I needed.' PAY-1199 moved to In Progress. Aisha: 'Fix is a one-liner, plus a backfill check for any other merchant who changed banks in the last 30 days.'"
+    }
+   ]
+  },
+  {
+   "id": "life-s095",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "two updates. 1) the SickKids allergist confirmed it after testing this May 2026: Leo is allergic only to cashews and pistachios, NOT all tree nuts. almonds, walnuts etc fine. he still carries his EpiPen Jr. in his backpack. 2) Wen Li built the 'Payouts Health' Looker dashboard, I check it every Monday. tracks success rate, median payout time and failed-payout reasons. Monday reminder with the link?"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "notes add \"Leo allergies (updated 2026-05-27)\" --body \"SickKids allergist, May 2026: allergic to cashews and pistachios only. Other tree nuts OK. EpiPen Jr. in backpack at all times.\""
+     },
+     "output": "Note saved: 'Leo allergies (updated 2026-05-27)' (id n-4502)"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "cal add \"Check Payouts Health dashboard\" --at \"2026-06-01 09:30\" --duration 10m --repeat weekly:mon --notes \"https://looker.example.com/dashboards/payouts-health\""
+     },
+     "output": "Recurring event created: 'Check Payouts Health dashboard' Mondays 09:30-09:40, starting Mon 1 Jun (id ev-90601)"
+    },
+    {
+     "t": "assistant",
+     "text": "That's a big relief, and it makes lunches a lot easier.\n\n- Saved the allergy update in your notes; I'm updating the school and camp health forms in the background so they say cashews and pistachios rather than all tree nuts\n- Monday reminder set at 9:30 with the dashboard link, starting Mon 1 Jun"
+    },
+    {
+     "t": "peer",
+     "from": "school-portal",
+     "text": "Morse Street PS: Reminder that student medical information (allergies, emergency medication) can be updated anytime in Edsby under Student Profile > Health. Changes are reviewed by the office within 2 school days."
+    },
+    {
+     "t": "notification",
+     "task": "Update Leo's allergy information on the school (Edsby) and Riverdale Farm camp health forms",
+     "report": "Edsby (Morse Street PS): Health section updated to 'Allergic to cashews and pistachios (confirmed SickKids, May 2026). Carries EpiPen Jr.' Pending office review (up to 2 school days).\nRiverdale Farm camp portal: camper health form completed with the same wording; still needs your e-signature before submission.\nOther camp forms (authorized pickup list, photo consent) remain incomplete."
+    }
+   ]
+  },
+  {
+   "id": "life-s096",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "remind me tomorrow at 8pm to take the recycling and green bin out"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "cal add \"Recycling + green bin out\" --at \"2026-05-31 20:00\" --duration 10m"
+     },
+     "output": "Event created: 'Recycling + green bin out' Sun 31 May 20:00-20:10 (id ev-90677)"
+    },
+    {
+     "t": "assistant",
+     "text": "Set for Sun 31 May at 20:00."
+    },
+    {
+     "t": "human",
+     "k": 1,
+     "text": "when does the 501 Queen diversion end? Sam says track work again near Leslie"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "web search \"TTC 501 Queen diversion track work Leslie May June 2026\""
+     },
+     "output": "TTC Service Advisories (ttc.example.com/advisories)\n501 Queen: Diversion, Sat 30 May to Sun 14 Jun 2026\n  Streetcars diverted between Broadview Ave and Woodbine Ave via Gerrard St due to track replacement at Queen/Leslie. Shuttle buses run on Queen St E between Broadview and Woodbine every 6 minutes.\n  Overnight 301 Queen also affected."
+    },
+    {
+     "t": "assistant",
+     "text": "It runs until Sun 14 Jun.\n\n- Streetcars go via Gerrard between Broadview and Woodbine\n- Shuttle buses cover Queen E every 6 minutes\n\nI set up a background check on next week's advisories so you hear if it changes."
+    },
+    {
+     "t": "notification",
+     "task": "Check TTC advisories for the week of 1 Jun affecting Riya's commute",
+     "report": "Week of Mon 1 Jun:\n- 501 Queen diversion via Gerrard continues (until Sun 14 Jun). Shuttle buses on Queen E.\n- 504 King: no planned diversions; signal work at King/Spadina overnight only.\n- Line 2: early closure Thu 4 Jun at 23:00 between Broadview and Woodbine.\nNo change to your Tuesday/Thursday morning trips other than the shuttle on Queen."
+    },
+    {
+     "t": "human",
+     "k": 2,
+     "text": "Biscuit went full opera at a fire truck on Logan tonight. Ellie wanted to know why he does it and I had nothing. something kid-friendly I can tell her tomorrow?"
+    },
+    {
+     "t": "assistant",
+     "text": "Try this: 'When Biscuit hears a siren, it sounds to him like a far-away dog calling out, so he sings back to say \"I'm here!\" It's how dogs talk to each other over long distances, like a really loud long-distance phone call.'\n\n- Add that it doesn't hurt his ears, he's just joining in\n- Ellie might like knowing some dogs stop once the 'other dog' goes quiet, which is why he stops when the truck has passed"
+    },
+    {
+     "t": "human",
+     "k": 3,
+     "text": "different thing. Priya's landlord in Montreal wants to raise her rent 7% for July. allowed in Quebec? she's stressing"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "web search \"Quebec rent increase 2026 TAL tenant refuse increase rules\""
+     },
+     "output": "1. Tribunal administratif du logement (TAL) | tal.example.gouv.qc.ca\n   A landlord must send written notice of a rent increase 3 to 6 months before the lease ends (for a 12-month lease). The tenant has one month after receiving the notice to refuse the increase in writing. If the tenant refuses, the landlord may apply to the TAL to set the rent; the tenant keeps the lease.\n2. Rent increase guidelines 2026 | TAL\n   For 2026 the TAL publishes a calculation method rather than a single cap. Indicative base increase for unheated dwellings: 4.5%...\n3. CBC: 'Quebec tenants face steepest rent hikes in decades' (Feb 2026)"
+    },
+    {
+     "t": "assistant",
+     "text": "Yes, a landlord can propose it, but Priya can refuse it and keep her lease.\n\n- The notice has to be in writing, 3 to 6 months before a 12-month lease ends\n- She has one month from receiving it to refuse in writing\n- If she refuses, the landlord has to go to the TAL, which sets the rent using its formula; the indicative base for 2026 is around 4.5% for an unheated unit\n\nI'm pulling the TAL's 2026 calculation details in the background so she can see what it would likely allow."
+    },
+    {
+     "t": "notification",
+     "task": "Get the TAL 2026 rent increase calculation details for an unheated Montreal apartment",
+     "report": "TAL 2026 calculation (unheated dwelling, no major work):\n- Base adjustment: 4.5% of current rent\n- Plus a share of any municipal/school tax increase and insurance increase (landlord must document these)\n- Major renovations add a capped amount only if the landlord shows invoices\nFor a typical Plateau 4 1/2 at $1,650/month with no major work: about $74/month (~4.5%), versus the $115.50 (7%) requested.\nRefusal letter template available on the TAL site (form 'Refusal of modification')."
+    },
+    {
+     "t": "human",
+     "k": 4,
+     "text": "did the sync with Sam's school calendar go through? want to see if his exam supervision days clash with anything in June"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "cal sync status --source \"Sam - Riverdale CI\""
+     },
+     "output": "Source: Sam's school calendar (Riverdale CI, shared by Sam Okafor)\nLast calendar sync: 2026-05-28 06:12 (completed)\nResult: 14 events imported, 0 errors\nNext sync: daily 06:00"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "cal list --from 2026-06-01 --to 2026-06-30 --source \"Sam - Riverdale CI\""
+     },
+     "output": "Thu 11 Jun  all day   Last day of classes (gr 11-12)\nFri 12 Jun  08:30-15:30  Exam supervision\nMon 15 Jun  08:30-15:30  Exam supervision\nWed 17 Jun  08:30-12:00  Exam supervision\nFri 19 Jun  08:30-12:00  Exam supervision\nTue 23 Jun  13:00-16:00  Marking day / dept meeting\nThu 25 Jun  18:00-21:00  Commencement\nFri 26 Jun  all day   PD day\nMon 29 Jun  all day   Staff last day"
+    },
+    {
+     "t": "assistant",
+     "text": "Yes, it synced on Thu 28 May and pulled in 14 events from Sam's school calendar.\n\n- Exam supervision: Fri 12, Mon 15, Wed 17 and Fri 19 Jun\n- Commencement Thu 25 Jun, 18:00 to 21:00\n- Staff last day Mon 29 Jun\n\nI'm running a conflict check against the family calendar in the background."
+    },
+    {
+     "t": "human",
+     "k": 5,
+     "text": "random q for a friend. Jae from work is choosing between two daycares for her toddler. near home: private, $1,900/mo. near her office: in the $10-a-day program, cheaper but a commute with the kid. what should she ask them?"
+    },
+    {
+     "t": "assistant",
+     "text": "The commute question usually decides it, so she should cost out the real day, not just the fee.\n\n- Sick days and closures: what happens when the kid is sick and she's downtown, how many PD days or holiday closures per year\n- Hours and late fees: pickup cutoff, and whether transit delays would make her late often\n- Waitlist and transfer: if she takes the office one now, can she switch to a home-side program spot later\n- Ratios, staff turnover, outdoor time, and how they handle naps and meals\n- Total cost per month including the extra commute, not just the daily rate"
+    },
+    {
+     "t": "notification",
+     "task": "Check Sam's June school events against the family calendar for conflicts",
+     "report": "2 possible conflicts in June:\n- Thu 25 Jun 18:00-21:00 Sam: Commencement. Family calendar: 'Leo end-of-year class picnic' 17:30-19:00 at Morse Street. Sam can't make the picnic.\n- Fri 12 Jun 08:30 Sam: Exam supervision (must arrive 08:00). Family calendar: Sam usually does Friday drop-off. Someone else needs to do it.\nNo other overlaps. Exam days don't affect evenings."
+    },
+    {
+     "t": "human",
+     "k": 6,
+     "text": "why does the sky go greenish before a big thunderstorm? it did that Thursday"
+    },
+    {
+     "t": "assistant",
+     "text": "It's mostly light scattering through a very tall, water-heavy storm cloud.\n\n- The deep cloud absorbs red light, so what gets through is shifted toward blue\n- Late in the day the sunlight itself is redder and more yellow, and blue cloud plus yellow light reads as green\n- It often means a lot of water or hail high up, so it's a decent sign of a strong storm, though not a reliable tornado sign on its own"
+    },
+    {
+     "t": "human",
+     "k": 7,
+     "text": "huh. difference between a tornado watch and a warning"
+    },
+    {
+     "t": "assistant",
+     "text": "A watch means conditions could produce tornadoes; a warning means one is happening or about to.\n\n- Watch: issued for a big region for several hours, stay alert and know where you'd shelter\n- Warning: a tornado has been seen or picked up on radar, take shelter now on the lowest floor, away from windows\n- In Canada, Environment Canada issues both and warnings also go out as emergency alerts on phones"
+    },
+    {
+     "t": "compact",
+     "summary": "Session so far (Sat 30 May, evening):\n- Reminder set: recycling + green bin out Sun 31 May 20:00.\n- 501 Queen diversion via Gerrard until Sun 14 Jun; background check on next week's TTC advisories done.\n- Gave Riya a kid-friendly explanation for Ellie about why Biscuit sings at sirens.\n- Priya's Montreal rent increase: she can refuse in writing within a month; TAL 2026 base about 4.5% (~$74 vs $115.50 asked on a $1,650 rent).\n- Sam's school calendar synced with June events; conflicts: Leo's class picnic Thu 25 Jun vs Sam's commencement, and Fri 12 Jun drop-off vs exam supervision.\n- Questions for Riya's coworker Jae on choosing a daycare.\n- General questions: green sky before storms; tornado watch vs warning."
+    },
+    {
+     "t": "peer",
+     "from": "finance-agent",
+     "text": "Month-end check (May): household spending at 92% of plan. Upcoming: Northline Renovations progress draw #3, $7,200, due Wed 3 Jun from the joint account. Farah Khan's invoice ($508.50 incl. HST) is still unpaid."
+    },
+    {
+     "t": "human",
+     "k": 8,
+     "text": "ok random but I want to say it out loud. I'm really proud of shipping the Instant Payouts launch at Lumen Pay this May 2026. first project I've led end to end as a senior PM and it worked"
+    },
+    {
+     "t": "assistant",
+     "text": "You should be. Taking something from idea to live in the hands of real merchants, and having it hold up, is a big deal, and it's yours.\n\nIf you want, I'll start pulling the launch wins together into a short record for your next review, so the details don't get lost while it's fresh. I've started on the numbers and the kudos in the background."
+    },
+    {
+     "t": "human",
+     "k": 9,
+     "text": "can you stop ending every message with an offer or a question lol"
+    },
+    {
+     "t": "assistant",
+     "text": "Fair. I'll stop tacking those on."
+    },
+    {
+     "t": "notification",
+     "task": "Gather Instant Payouts launch metrics for a wins record",
+     "report": "Launch metrics compiled into note 'Instant Payouts: wins record':\n- 40 merchants live, all onboarded on schedule\n- Payout success rate 99.7% (7-day), bar was 99.5%\n- Median payout time 18 min, bar was under 30 min\n- PAY-1199 (stale bank destination) found and fixed within 24 h, backfill found 3 affected merchants\n- Northbay Coffee retained after escalation"
+    },
+    {
+     "t": "human",
+     "k": 10,
+     "text": "ok good. night"
+    },
+    {
+     "t": "assistant",
+     "text": "Good night."
+    },
+    {
+     "t": "notification",
+     "task": "Collect kudos messages about the Instant Payouts launch from email",
+     "report": "Added 4 kudos to 'Instant Payouts: wins record':\n- Tom Becker (19 May): 'Cleanest beta we've run. Nice work, Riya.'\n- Olivia Grant (22 May): two prospects cited instant payouts as the reason they signed\n- Aisha Rahman (26 May): thanks for keeping scope tight\n- Dana Whitfield, Northbay Coffee (27 May): 'Thank you, that's all I needed.'"
+    }
+   ]
+  },
+  {
+   "id": "life-s097",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "text Hannah and ask if she could feed and walk Biscuit while we're away in July? she offered a while back. we'll pay obviously"
+    },
+    {
+     "t": "assistant",
+     "text": "Happy to. Which dates should I give her? I'd rather not guess and have her block the wrong days.\n\nHere's what I'll send once I have them:\n'Hi Hannah, you kindly offered to help with Biscuit a while back. Would you be able to feed and walk him while we're away from [dates]? We'll pay you, of course. No worries at all if it doesn't work.'"
+    },
+    {
+     "t": "trigger",
+     "text": "[Message from Sam] did you move the car? street cleaning on our side tomorrow 7am, they ticketed the Lees last time"
+    },
+    {
+     "t": "assistant",
+     "text": "Sam's asking whether the car's been moved: street cleaning on your side tomorrow at 7:00, and the Lees got ticketed last time. Want me to reply that you'll move it tonight?"
+    },
+    {
+     "t": "human",
+     "k": 1,
+     "text": "new vet intake form wants Biscuit's birth date and some 'behavioural notes'. what do I put?"
+    },
+    {
+     "t": "assistant",
+     "text": "I don't have his birth date saved, so check his adoption papers or the old clinic's records; the new vet can also request those directly.\n\nFor behavioural notes, they're looking for anything that helps the staff handle him:\n- How he is with strangers and other dogs\n- Anything to do with food: treats he'll work for, things he gets into\n- Fears (nail trims, sirens, being lifted)\n- Leash behaviour and whether he's ever nipped\n\nI'm pulling his vaccination record in the background since the form usually asks for that too."
+    },
+    {
+     "t": "notification",
+     "task": "Retrieve Biscuit's vaccination record for the vet intake form",
+     "report": "Found the last vaccination certificate in email (Leslieville Animal Hospital, Mar 2026 visit forwarded to Riverside):\n- Rabies: 2025-03-14, 3-year, next due 2028-03\n- DHPP: 2025-03-14, next due 2028-03\n- Bordetella: 2026-03-02, next due 2027-03\nSaved the PDF to notes as 'Biscuit: vaccinations'. The old clinic's full chart has not been transferred yet."
+    },
+    {
+     "t": "peer",
+     "from": "inbox-agent",
+     "text": "Triage 21:15: 4 new. Needs you: Riverside Veterinary Clinic intake form link (expires Fri 5 Jun). FYI: Morse Street PS June newsletter, Belairdirect pink slip PDF. Archived 2 promos."
+    },
+    {
+     "t": "human",
+     "k": 2,
+     "text": "June newsletter, anything I actually need to do?\n\nMORSE STREET PUBLIC SCHOOL: JUNE NEWSLETTER\n\nMessage from the Principal\nWhat a year it has been! Thank you to all our families for your support. As we head into the final weeks, please keep an eye on Edsby for class-specific notices.\n\nImportant Dates\n- Fri 5 Jun: PA Day (no school for students)\n- Thu 11 Jun: Grade 2 Toronto Zoo trip (forms + $18 due Fri 5 Jun... note: PA day, so submit by Thu 4 Jun)\n- Wed 17 Jun: Track and Field Day (rain date Thu 18 Jun)\n- Fri 19 Jun: Spirit Day, wear your house colours\n- Tue 23 Jun: Report cards go home digitally via Edsby\n- Thu 25 Jun: Primary class picnics, 17:30\n- Fri 26 Jun: Last day of school, early dismissal at 12:00\n\nLost and Found\nThe lost and found bin is overflowing. All unclaimed items will be donated on Mon 22 Jun. Please label clothing and water bottles!\n\nLibrary Books\nAll library books must be returned by Fri 12 Jun. Families will receive a notice for missing books.\n\nSchool Council\nThe final School Council meeting is Tue 9 Jun at 18:30 in the library and on Zoom. We will vote on the 2026-27 fundraising plan.\n\nSummer Reading\nThe TPL TD Summer Reading Club starts Sat 27 Jun. Sign up at any branch.\n\nKindergarten Registration\nIf you have a younger child starting JK in September 2026 and have not registered, please contact the office.\n\nVolunteers\nWe still need 4 volunteers for Track and Field Day. Please email the office if you can help for a morning or afternoon.\n\nHave a wonderful summer!\nMs. D. Fraser, Principal"
+    },
+    {
+     "t": "assistant",
+     "text": "- Zoo trip form and $18 by Thu 4 Jun, since Fri 5 Jun is a PA day\n- Return his library books by Fri 12 Jun\n- Fri 26 Jun is a 12:00 dismissal, so pickup needs planning\n\nThe rest is FYI: track and field Wed 17 Jun, report cards Tue 23 Jun, picnic Thu 25 Jun. I'm adding the dates to the family calendar in the background."
+    },
+    {
+     "t": "human",
+     "k": 3,
+     "text": "sorry, which of those had an actual deadline? got distracted by Sam"
+    },
+    {
+     "t": "assistant",
+     "text": "- Zoo form and $18: Thu 4 Jun\n- Library books: Fri 12 Jun\n- Lost and found donated Mon 22 Jun, if anything of his is missing"
+    },
+    {
+     "t": "compact",
+     "summary": "Session so far (Tue 2 Jun, evening):\n- Riya asked the agent to text Hannah about feeding and walking Biscuit while the family is away in July; the agent asked which dates before sending and has a draft ready.\n- Sam texted about moving the car for street cleaning tomorrow at 7:00; agent relayed it.\n- Vet intake form: agent didn't have Biscuit's birth date; suggested behavioural notes. Vaccination record found and saved to notes; inbox-agent flagged the Riverside intake link expires Fri 5 Jun.\n- Morse Street June newsletter: to-dos are zoo trip form + $18 by Thu 4 Jun, library books by Fri 12 Jun, early dismissal 12:00 Fri 26 Jun. Background job adding newsletter dates to the family calendar.\n- Riya wants short answers."
+    },
+    {
+     "t": "human",
+     "k": 4,
+     "text": "Sam needs a card line for his department head, retiring after 31 years at Riverdale. everything he writes sounds like a hallmark card. not cheesy"
+    },
+    {
+     "t": "assistant",
+     "text": "A few that stay on the right side of cheesy:\n\n- 'Thirty-one years of making the rest of us look organized. The department won't be the same, and it shouldn't be.'\n- 'Thank you for every timetable you untangled and every new teacher you quietly rescued. Enjoy the time that's finally yours.'\n- 'You set the standard for this department. Now go set a new one for retirement.'"
+    },
+    {
+     "t": "human",
+     "k": 5,
+     "text": "how long does a thunderstorm usually last? forecast says storms all day tomorrow, I don't believe it"
+    },
+    {
+     "t": "assistant",
+     "text": "A single thunderstorm cell usually lasts 30 to 60 minutes; 'storms all day' means several rounds, not one long storm.\n\n- Most cells build, peak and rain out within an hour\n- Lines or clusters can bring repeated rounds over several hours\n- Forecasts often say 'all day' when the timing of each round is uncertain"
+    },
+    {
+     "t": "notification",
+     "task": "Add Morse Street June newsletter dates to the family calendar",
+     "report": "Added 7 events to the family calendar:\n- Thu 4 Jun: Zoo form + $18 due (School Cash Online)\n- Fri 5 Jun: PA Day, no school\n- Thu 11 Jun: Grade 2 zoo trip\n- Fri 12 Jun: Library books due\n- Wed 17 Jun: Track and Field Day (rain date Thu 18 Jun)\n- Thu 25 Jun: Primary class picnic 17:30\n- Fri 26 Jun: Last day, dismissal 12:00\nSkipped School Council and Spirit Day."
+    },
+    {
+     "t": "peer",
+     "from": "calendar-agent",
+     "text": "New conflict: Fri 26 Jun 12:00 early dismissal overlaps 'Payouts GA go/no-go prep' 11:30-12:00 on your work calendar. Fri 5 Jun PA Day: no childcare booked yet."
+    },
+    {
+     "t": "human",
+     "k": 6,
+     "text": "speaking of rain, I asked Leo for rainy-day activity ideas for tomorrow after school and he picked building a cardboard fort. we have boxes in the basement. what else do I need?"
+    },
+    {
+     "t": "assistant",
+     "text": "Great pick. You'll mostly need ways to join and decorate the boxes.\n\n- Packing tape and masking tape (masking is easier for him to tear)\n- Box cutter for you, safety scissors for him\n- Markers, crayons or leftover paint for the walls\n- An old sheet or blanket for a roof\n- A flashlight or string lights for inside\n- Pillows to make it a reading den once it's built"
+    }
+   ]
+  },
+  {
+   "id": "life-s098",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "morning. place near the office for a team lunch next thursday? 8 of us, celebrating the beta wrapping up"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "web search \"restaurant near Lumen Pay office King St W team lunch party of 8 vegetarian menu\""
+     },
+     "output": "Restaurant search: near Lumen Pay office (King St W) | team lunch | party of 8\nShowing three results with vegetarian menus, sorted by rating:\n1. Saffron Lane  4.6 (top rated)  South Indian  $$  Group bookings up to 12, private corner table\n2. Planta Queen  4.4  Plant-based Asian  $$$  Groups of 8+ need a set menu\n3. Pai Northern Thai  4.3  Thai  $$  No reservations for lunch, walk-in only"
+    },
+    {
+     "t": "assistant",
+     "text": "Saffron Lane is the top rated of the three results, 4.6, and takes groups up to 12 with a private corner table.\n\n- Planta Queen, 4.4, fully plant-based, but 8+ need a set menu\n- Pai, 4.3, walk-in only at lunch, risky for 8\n\nTell me the time and I'll check Thursday's availability."
+    },
+    {
+     "t": "peer",
+     "from": "work-agent",
+     "text": "Reminder: weekly payouts status update in #payouts-launch is due today by 16:00. Last week's post had all workstreams green except 'GA docs' (amber)."
+    },
+    {
+     "t": "human",
+     "k": 1,
+     "text": "ok separate thing, basement dehumidifier died. bought it last summer I think, find the receipt and check if it's under warranty"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "mail search \"dehumidifier order OR receipt\" --since 2025-05-01"
+     },
+     "output": "id      date        from                          subject\nm-6120  2025-07-08  orders@canadiantire.example.com  Your order is ready for pickup: Frigidaire 50-pint dehumidifier\nm-6098  2025-07-06  orders@canadiantire.example.com  Order confirmation #CT-5523-118"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "mail read m-6098"
+     },
+     "output": "Canadian Tire: Order confirmation #CT-5523-118\nDate: 2025-07-06\nFrigidaire 50-Pint Dehumidifier with Pump (FFAP5033W1)  $279.99\nEnvironmental fee  $2.50\nHST  $36.72\nTotal  $319.21\nPickup: Canadian Tire Leaside\nManufacturer warranty: 1 year parts and labour; 5 years sealed system.\nKeep this email as your proof of purchase."
+    },
+    {
+     "t": "assistant",
+     "text": "Found it: a Frigidaire 50-pint from Canadian Tire, bought 6 Jul 2025, so it's still under the 1-year parts and labour warranty until about 6 Jul 2026.\n\n- Total paid was $319.21\n- The sealed system (compressor) is covered for 5 years\n- The order email is your proof of purchase\n\nI've started two background checks: Frigidaire's claim process and whether Canadian Tire will handle it in store."
+    },
+    {
+     "t": "notification",
+     "task": "Look up Frigidaire's warranty claim process for model FFAP5033W1",
+     "report": "Frigidaire Canada warranty claims: online form at frigidaire.example.ca/support or 1-800 line, Mon-Fri 8:00-20:00 ET.\nNeeded: model number (FFAP5033W1), serial number (label on the back), proof of purchase, description of the fault.\nFor portable units they usually either send a prepaid shipping label for repair or issue a replacement if the unit is under 1 year.\nTypical turnaround: 2-3 weeks."
+    },
+    {
+     "t": "notification",
+     "task": "Check if Canadian Tire handles in-store returns or exchanges for a failed dehumidifier under warranty",
+     "report": "Canadian Tire Leaside: standard returns are 90 days only, so an exchange isn't possible at 11 months.\nThey'll redirect warranty claims to Frigidaire unless you bought their Product Protection Plan (no plan on order #CT-5523-118).\nFastest path: go direct to Frigidaire."
+    },
+    {
+     "t": "human",
+     "k": 2,
+     "text": "warranty bit from the manual, does it cover a unit that stopped collecting water? fan still runs\n\nLIMITED WARRANTY\nYour appliance is covered by a one year limited warranty. For one year from your original date of purchase, Frigidaire will pay all costs for repairing or replacing any parts of this appliance that prove to be defective in materials or workmanship when such appliance is installed, used and maintained in accordance with the provided instructions.\n\nLIMITED 2ND-5TH YEAR WARRANTY ON SEALED SYSTEM\nIn the second through fifth years from your original date of purchase, Frigidaire will provide the sealed system parts (compressor, condenser, evaporator, dryer/strainer and connecting tubing) that prove to be defective in materials or workmanship. You are responsible for labour and transportation costs.\n\nEXCLUSIONS\nThis warranty does not cover the following:\n1. Products with original serial numbers that have been removed, altered or are not readily readable.\n2. Products that have been transferred from their original owner to another party or removed outside the USA or Canada.\n3. Rust on the interior or exterior of the unit.\n4. Products purchased 'as-is' are not covered by this warranty.\n5. Food loss due to any refrigerator or freezer failures.\n6. Products used in a commercial setting.\n7. Service calls which do not involve malfunction or defects in materials or workmanship, or for appliances not in ordinary household use or used other than in accordance with the provided instructions.\n8. Service calls to correct the installation of your appliance or to instruct you how to use your appliance.\n9. Expenses for making the appliance accessible for servicing.\n10. Service calls which involve replacement of house fuses, resetting of circuit breakers, or replacement of filters.\n11. Damages caused by services performed by service companies other than authorized Frigidaire servicers; use of parts other than genuine Frigidaire parts; external causes such as abuse, misuse, inadequate power supply, accidents, fires or acts of God.\n12. Incidental or consequential damages such as property damage.\n\nIF YOU NEED SERVICE\nKeep your receipt, delivery slip, or some other appropriate payment record to establish the warranty period should service be required."
+    },
+    {
+     "t": "assistant",
+     "text": "Yes, it should be covered: a running fan with no water collected usually means a failed compressor or refrigerant leak, which is a defect in the first year.\n\n- Year one covers parts and labour, and you're inside it until about 6 Jul 2026\n- Make sure the filter is clean first, since a filter-only fix is excluded\n- Don't let anyone other than an authorized Frigidaire servicer open it"
+    },
+    {
+     "t": "peer",
+     "from": "inbox-agent",
+     "text": "Triage 07:40: 6 new. Needs you: Olivia Grant 'quick Q on Q3 pipeline' (wants 10 min today). FYI: Riverdale Farm camp orientation info, Belairdirect payment receipt. Archived 3 promos."
+    },
+    {
+     "t": "human",
+     "k": 3,
+     "text": "Friday!! this week felt like a month"
+    },
+    {
+     "t": "assistant",
+     "text": "It really did. You made it, and the weekend's close."
+    },
+    {
+     "t": "human",
+     "k": 4,
+     "text": "remind me monday at lunch to call frigidaire, put the model and receipt number in the reminder"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "cal add \"Call Frigidaire: dehumidifier warranty claim\" --at \"2026-06-08 12:15\" --duration 20m --notes \"Model FFAP5033W1. Canadian Tire order #CT-5523-118, 2025-07-06, $319.21. Fault: fan runs, no water collected. Serial on back label. Mon-Fri 8:00-20:00 ET.\""
+     },
+     "output": "Event created: 'Call Frigidaire: dehumidifier warranty claim' Mon 8 Jun 12:15-12:35 (id ev-90822)"
+    },
+    {
+     "t": "assistant",
+     "text": "Set for Mon 8 Jun at 12:15, with the model, order number, purchase date and fault description in the notes. I'm grabbing the serial number from a photo of the label if you snap one, and pre-filling the online claim form in the background."
+    },
+    {
+     "t": "notification",
+     "task": "Pre-fill Frigidaire online warranty claim form",
+     "report": "Online claim form pre-filled and saved as a draft (not submitted):\n- Model: FFAP5033W1\n- Purchase: 2025-07-06, Canadian Tire, order #CT-5523-118 (receipt PDF attached)\n- Fault: unit powers on and fan runs, no water collected, filter cleaned\nMissing: serial number (needs the back label).\nDraft link saved to the Monday reminder."
+    },
+    {
+     "t": "notification",
+     "task": "Find a temporary dehumidifier option for the basement while the claim is processed",
+     "report": "Short-term options:\n- Home Depot Leslie St tool rental: commercial dehumidifier, $42/day or $126/week.\n- Hannah Cho mentioned in an April text that she has a spare small dehumidifier (30-pint) you could borrow.\n- Basement humidity sensor reading this morning: 61% (target under 50%).\nNothing booked or bought."
+    }
+   ]
+  },
+  {
+   "id": "life-s099",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "I need to cut two things from onboarding v2.1 for the 15th or we won't make it. help me get ready"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "docs open \"Onboarding v2.1 scope\" --section candidates"
+     },
+     "output": "Onboarding v2.1: scope (draft, 2026-06-03)\n# | Item                                   | Est (pts) | Owner   | Status\n1 | Bulk merchant import via CSV           | 13        | eng     | not started\n2 | Business-verification retry flow       | 8         | eng     | in design\n3 | Localized onboarding emails (FR)       | 5         | content | not started\n4 | Progress-saving across devices         | 8         | eng     | not started\n5 | Partner referral codes at signup       | 5         | eng     | not started\n6 | Accessibility fixes from audit         | 5         | eng     | in progress\nCapacity next sprint: 30 pts | Total: 44 pts | Over by 14"
+    },
+    {
+     "t": "assistant",
+     "text": "You're 14 points over, so cutting bulk CSV import (13) plus one 5-pointer gets you under, or the retry flow and progress-saving (16) together.\n\n- Strongest case to cut: bulk CSV import, biggest item and not started\n- Second: partner referral codes, low risk to the core flow\n- Keep: accessibility fixes (already in progress) and French emails (likely a compliance need)\n- For each cut, write one line on what we lose and when it comes back\n\nI'll turn this into a one-page cut proposal if you tell me who you're reviewing it with first."
+    },
+    {
+     "t": "human",
+     "k": 1,
+     "text": "fyi Jess from Rover is switching to just Tuesdays and Thursdays at noon, $27 a walk now. on my work-from-home days (Monday, Wednesday, Friday) I'll walk Biscuit myself at lunch around Greenwood Park. fix the Rover booking"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "web open \"https://rover.example.com/bookings/recurring\""
+     },
+     "output": "Recurring booking: Dog Walking with Jess M.\nPet: Biscuit\nCurrent schedule: Mon, Wed, Fri, 12:00, 30 min, $25.00/walk\nNext walk: Mon 8 Jun 12:00\nActions: [Edit schedule] [Pause] [Cancel]"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "cal add \"Biscuit lunch walk (Greenwood Park)\" --at \"2026-06-08 12:00\" --duration 30m --repeat weekly:mon,wed,fri"
+     },
+     "output": "Recurring event created: 'Biscuit lunch walk (Greenwood Park)' Mon/Wed/Fri 12:00-12:30, starting Mon 8 Jun (id ev-90871)"
+    },
+    {
+     "t": "assistant",
+     "text": "Your calendar now has a Mon/Wed/Fri 12:00 lunch walk around Greenwood Park, starting Mon 8 Jun. I'm switching the Rover recurring booking to Tue/Thu at noon at $27 in the background; Jess has to accept the change."
+    },
+    {
+     "t": "notification",
+     "task": "Change Biscuit's recurring Rover booking with Jess to Tue/Thu 12:00 at $27/walk",
+     "report": "Rover recurring booking updated and sent to Jess M. for approval:\n- Old: Mon, Wed, Fri 12:00, $25/walk\n- New: Tue, Thu 12:00, 30 min, $27/walk, starting Tue 9 Jun\nJess accepted at 12:51.\nMon 8 Jun walk cancelled with no fee (more than 24 h notice)."
+    },
+    {
+     "t": "peer",
+     "from": "finance-agent",
+     "text": "Dog walking budget updated: 2 walks/week at $27 = $54/week (was $75/week at 3 x $25). Monthly estimate drops from about $325 to about $234."
+    }
+   ]
+  }
+ ]
+}
