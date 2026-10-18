@@ -29,10 +29,10 @@ def prep(a):
     import score, sleep
     stream, items = score.load_stream(a.world)
     evs = [e for e in score.scored_events(stream) if e["_split"] == "dev" and e["t"] != "tool"]
-    rows = sleep.rows(stream, a.world) if a.store == "sleep" else score.oracle_store(stream, items, evs)
+    rows = sleep.rows(stream, a.world, strict=a.strict) if a.store == "sleep" else score.oracle_store(stream, items, evs)
     rng = random.Random(7)
     need = [e for e in evs if set(e["labels"]["needs"]) - set(e["labels"].get("in_context", []))]
-    negh = [e for e in evs if e["t"] == "human" and e not in need]
+    negh = [e for e in evs if e["t"] in ("human", "trigger") and e not in need]
     nonh = [e for e in evs if e["t"] in ("notification", "peer")]
     pick = need + rng.sample(negh, min(a.neg, len(negh))) + rng.sample(nonh, min(a.nonhuman, len(nonh)))
     rng.shuffle(pick)
@@ -69,4 +69,5 @@ if __name__ == "__main__":
     ap.add_argument("--per", type=int, default=15)
     ap.add_argument("--neg", type=int, default=110)
     ap.add_argument("--nonhuman", type=int, default=30)
+    ap.add_argument("--strict", action="store_true")
     prep(ap.parse_args())

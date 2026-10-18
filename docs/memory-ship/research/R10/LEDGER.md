@@ -198,3 +198,21 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 
 - **Eden's bullets:** user's own past prompts 58.7%, other items 18.8%, earlier triggers re-injected 8.4%, needed 0.3%.
 - **Verdict:** today's plugin is worse on the personal world than on code. It fires on 95% of no-need human turns and on every trigger, but surfaces none of the triggers' needs.
+
+## C2-E7 · 2026-10-18 · F4 bank and the vote on the life world
+- **Setup:** 611 life sleep rows, haiku self-play for all of them (16 batches). Strict, dev, plan labels, coverage v2.
+- **Numbers:**
+
+  | Method | Recall | Proactive | Silence | Trigger recall |
+  |---|---|---|---|---|
+  | oracle-need (strict) | 0.6667 | 0.6522 | 1.0 | 0.9231 |
+  | lex+when | 0.2321 | 0.0435 | 0.165 | 0.1154 |
+  | bank τ=0.2 | 0.2278 | 0.087 | 0.326 | 0.1538 |
+  | bank τ=0.3 | 0.0865 | — | 0.6982 | — |
+  | bank ∧ lex ltau=4 | 0.2025 | 0.087 | 0.5171 | 0.1154 |
+  | vote (bt .25, lt 6, st 4, strip) | 0.2152 | — | 0.4567 | — |
+
+- **Verdict:**
+  - F4 transfers on silence (+0.16 at equal recall versus lex+when, which passes its kill line on both worlds).
+  - Life proactive recall stays below 0.09, and trigger recall at or below 0.15. No hook-side method handles triggers.
+  - The strict life ceiling is 0.67: long 10-session batches delay rows across months. Leak-free per-session compilation would raise it.
