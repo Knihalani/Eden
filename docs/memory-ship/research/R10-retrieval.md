@@ -61,7 +61,7 @@ On realistic streams, lexical retrieval is far weaker than the pair fixtures sug
    - a gate distilled from a strong model's decisions;
    - static word vectors.
    An independent blank-slate design converged on the same wall (about 0.3 recall@4) and on the same remedies (sleep-time situations and clean statements). Its one new mechanism, budgeted firing calibrated per user, is adopted. It adds about +0.1 silence on code.
-7. **The labels are valid, and wrong bullets cost real quality** (downstream check, BRIEF §4.7). Memory changes the outcome on 80% of plan-labelled need turns (+0.97 on a 0–3 scale). Half of the independent labeler's extra needs are real but mild. A hook-side packet keeps only about 30% of the available benefit, and **a wrong packet lowers the score by 0.40 on turns that need nothing.**
+7. **The labels are valid, and wrong bullets cost real quality** (downstream check, BRIEF §4.7). Memory changes the outcome on 80% of plan-labelled need turns (+0.97 on a 0–3 scale). Half of the independent labeler's extra needs are real but mild. A hook-side packet keeps only about 30% of the available benefit, and a packet on turns that need nothing scored −0.40 against none, but the noise floor is −0.27, so the measured harm (about −0.13) is suggestive and needs a larger n.
 8. **Benchmark realism, after fixes.**
    - The coverage rule is calibrated against a judge (κ 0.86).
    - Prompts were shortened toward R6's lengths (p50 15 words; R6's is 12).

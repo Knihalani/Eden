@@ -376,3 +376,7 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 
   Code moves out about +0.1 silence at similar recall. Life stays on the frontier.
 - **Verdict:** budgeted firing is kept as a per-user calibration of the packet rate. It is not a breakthrough. The blank-slate cycle confirms the semantic wall.
+
+## C3-E7 · 2026-10-18 · Review corrections (independent PR reviewer, APPROVE)
+- C3-E4's "wrong bullets hurt outcomes (−0.40)" overstates it. The empty oracle condition scores −0.267 on the same no-need turns, which is noise, so the packet's own effect is about −0.13 (n 15, one responder run). The verdict becomes "suggestive"; re-measure at a larger n.
+- The harness edit (an optional `text` on Write specs in `benchmarks/memory-long-horizon/harness/shape.ts`) changes `harness_sha` from 07f8ef6d… to 2eecf75e…. Any slice pre-registered against main's harness amends its prereg visibly. None is in progress.
