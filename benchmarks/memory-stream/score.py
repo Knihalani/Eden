@@ -307,11 +307,21 @@ def main():
     ap.add_argument("--store", default="write")
     ap.add_argument("--split", default="dev")
     ap.add_argument("--sleep-tag", default="out")
+    ap.add_argument("--labels", default="plan", choices=["plan", "union"],
+                    help="plan: the needs the stream was written to; union: plus the independent labeler's")
     ap.add_argument("--json")
     a = ap.parse_args()
     stream, items = load_stream(a.world)
     cov = Coverage(items)
     events = scored_events(stream)
+    if a.labels == "union":
+        lab_path = os.path.join(HERE, "worlds", a.world, "labels.json")
+        extra = json.load(open(lab_path)) if os.path.exists(lab_path) else {}
+        for e in events:
+            add = [i for i in extra.get(e["id"], []) if i not in e["labels"]["needs"] and i not in e["_window"]]
+            if add:
+                e["labels"] = dict(e["labels"], needs=e["labels"]["needs"] + add)
+                e["labels"].setdefault("need_type", "incidental")
     if a.split != "all":
         events = [e for e in events if e["_split"] == a.split]
     run = a.run or os.path.join(HERE, "runs", a.world)
