@@ -1,0 +1,281 @@
+{
+ "batch": "p01",
+ "host": "sonnet (claude-code subagent)",
+ "cases": [
+  {
+   "event": "code-s083-e017",
+   "call": true,
+   "query": "billing code review rule stripe webhook handler"
+  },
+  {
+   "event": "code-s098-e009",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s075-e023",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s082-e017",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s068-e006",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s087-e012",
+   "call": true,
+   "query": "how to start api locally dev server"
+  },
+  {
+   "event": "code-s035-e033",
+   "call": true,
+   "query": "timezone UTC conventions flaky web tests"
+  },
+  {
+   "event": "code-s102-e006",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s027-e022",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s098-e007",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s007-e039",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s066-e025",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s060-e006",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s082-e052",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s097-e012",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s028-e012",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s015-e000",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s066-e019",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s098-e000",
+   "call": true,
+   "query": "api framework fastify version"
+  },
+  {
+   "event": "code-s003-e026",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s026-e000",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s087-e000",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s085-e000",
+   "call": true,
+   "query": "setup install node pnpm version fresh clone"
+  },
+  {
+   "event": "code-s082-e035",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s047-e035",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s108-e040",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s097-e021",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s017-e000",
+   "call": true,
+   "query": "web invoices table data fetching sorting conventions"
+  },
+  {
+   "event": "code-s020-e036",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s080-e028",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s106-e004",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s080-e020",
+   "call": true,
+   "query": "postgres pool max per pod"
+  },
+  {
+   "event": "code-s068-e008",
+   "call": true,
+   "query": "policy adding npm dependencies"
+  },
+  {
+   "event": "code-s020-e032",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s098-e032",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s108-e009",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s097-e000",
+   "call": true,
+   "query": "on-call rotation pagerduty prod cluster kubectl"
+  },
+  {
+   "event": "code-s087-e006",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s085-e014",
+   "call": true,
+   "query": "api public exposure ingress cert renewal"
+  },
+  {
+   "event": "code-s013-e037",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s082-e005",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s075-e032",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s071-e006",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s077-e019",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s040-e008",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s083-e005",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s021-e011",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s045-e000",
+   "call": true,
+   "query": "worker job conventions webhook delivery signing retries"
+  },
+  {
+   "event": "code-s095-e011",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s046-e016",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s021-e018",
+   "call": true,
+   "query": "worker concurrency replicas redis queue"
+  },
+  {
+   "event": "code-s091-e007",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s077-e018",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s075-e015",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s038-e021",
+   "call": false,
+   "query": ""
+  }
+ ]
+}
