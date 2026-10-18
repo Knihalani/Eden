@@ -68,6 +68,13 @@ This is the single source of truth for what is done and what is next. `/next` re
 | P5.4 | Sleep LLM extraction (NIM, opt-in) | P2.1, P3.3 | M | E3 admission gate | todo | | |
 | P6.1 | SQLite store + FTS5 with guards | P4.2 | L | `scale-1e6` | todo | | |
 | P6.2 | Dense-arm experiment (≥ 1B embedder, warm) | P6.1 | M | D15 re-open condition | todo | | |
+| P8.6 | LifeBench arms in A5 (non-coding cues, proactive, stale, silence; sealed holdout) | P0.0c | S | arms land red with reasons | todo | | |
+| P8.1 | Space identity for hosts with no repo | P0.5 | S | `space` | todo | | |
+| P8.2 | Host-neutral situation cue | P4.1, P8.6 | M | `cuebench-life` direct + paraphrase; CueBench-code unchanged | todo | | |
+| P8.3 | Entity layer (place + STRONG evidence) | P8.2 | M | `entity-cue`, `proactive` | todo | | |
+| P8.4 | Personal action classes + tool-call guard | P2.3, P8.2 | M | `life-policy` | todo | | |
+| P8.5 | Dated validity (plans, routines, entity × attribute supersession) | P3.3, P8.3 | M | `stale-life` | todo | | |
+| P8.7 | Proactive delivery point (event cue) | P8.2, P8.3 | M | `proactive` | todo | | |
 
 ## Follow-ups for later slices
 
