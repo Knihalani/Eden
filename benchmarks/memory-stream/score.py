@@ -339,6 +339,17 @@ def main():
         for r in rows:
             if "item" in r:
                 r["covers"] = {r["item"]}
+        if name == "judge":
+            import judge
+            jp = judge.packets(a.world, a.store)
+            byid = {r["id"]: r for r in rows}
+            for r in rows:
+                r.setdefault("covers", cov.covers(r["text"]))
+            jev = [e for e in events if e["id"] in jp]
+            pk = {e["id"]: [(byid[i]["text"], byid[i]["covers"]) for i in jp[e["id"]] if i in byid] for e in jev}
+            results[f"judge@{a.store}"] = score(jev, pk, cov, items, stream)
+            results[f"judge@{a.store}"]["bullet_classes"] = decompose(jev, pk, stream, items)
+            continue
         m = methods.make(name, rows, stream, items, cov)
         pk = {}
         for e in events:

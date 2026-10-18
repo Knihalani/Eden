@@ -1,0 +1,17 @@
+{"batch": "j00", "judge": "opus (claude-code subagent)", "cases": [
+{"event": "code-s036-e010", "needed": ["code-sleep-b03:m0017", "code-sleep-b03:m0015", "code-sleep-b03:m0016", "code-sleep-b03:m0014"], "why": "export command lives on acme-240 branch; bad --since must throw UsageError; user-facing change needs changeset; commander structure and strict indexing"},
+{"event": "code-s072-e000", "needed": ["code-sleep-b04:m0001", "code-sleep-b04:m0032", "code-sleep-b07:m0003"], "why": "local db is Postgres 16 with specific DATABASE_URL; Docker now OrbStack with fresh volume; env goes in .env.local"},
+{"event": "code-s057-e010", "needed": ["code-sleep-b00:m0032"], "why": "PgBouncer transaction mode requires prepare:false, the gotcha asked about"},
+{"event": "code-s105-e008", "needed": ["code-sleep-b05:m0021", "code-sleep-b05:m0015"], "why": "invoice filters hook is nuqs useInvoiceQueryState; URL state pattern with router.replace"},
+{"event": "code-s092-e010", "needed": [], "why": "ack"},
+{"event": "code-s061-e000", "needed": ["code-sleep-b04:m0015", "code-sleep-b04:m0019", "code-sleep-b04:m0028"], "why": "InvoicesEmptyState location; strings in en/fr/es messages; vitest without jest-dom"},
+{"event": "code-s056-e026", "needed": ["code-sleep-b05:m0017", "code-sleep-b05:m0016"], "why": "mutations via server actions not app/api; shadcn/ui for the dialog"},
+{"event": "code-s027-e000", "needed": [], "why": "no relevant memory available at this time"},
+{"event": "code-s048-e000", "needed": [], "why": "security headers fact not yet in memory"},
+{"event": "code-s028-e011", "needed": [], "why": "Clerk preview failure already explained in recent"},
+{"event": "code-s071-e000", "needed": ["code-sleep-b05:m0035", "code-sleep-b06:m0022"], "why": "existing csvCell RFC 4180 + formula guard helper and CRLF convention to reuse"},
+{"event": "code-s071-e012", "needed": [], "why": "ack"},
+{"event": "code-s060-e015", "needed": [], "why": "fix already stated in recent"},
+{"event": "code-s070-e012", "needed": [], "why": "no relevant memory available"},
+{"event": "code-s107-e000", "needed": ["code-sleep-b03:m0014", "code-sleep-b00:m0044", "code-sleep-b08:m0014"], "why": "noUncheckedIndexedAccess makes items[0] possibly undefined; lineItems can be missing; named exports"}
+]}

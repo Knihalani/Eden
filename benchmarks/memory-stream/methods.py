@@ -10,6 +10,7 @@ Options of `lex` (each one is a hypothesis family, so they combine):
              a fact signal are kept. Code, tool boilerplate, requests and questions are dropped
   ctx=1      context model (F10): drop a row whose content is ≥ 0.6 inside the window already
   when=1     index the sleep compiler's `when` cues with the row text (F3/F11: compiled need predicates)
+  hab=z      habituation (F12): fire only z standard deviations above the row's own score history
   gate=1     need-existence gate (F5): silent on non-human events (task notifications, peer messages, which a hook
              recognises by their wrapper) and on acknowledgements with no content
 
@@ -180,10 +181,30 @@ class Lex(Base):
         win = self.window.get(e["id"], set())
         return bool(c) and sum(1 for t in c if t in win) / len(c) >= 0.6
 
+    def habituate(self, sc, e):
+        """F12: a row fires only when its score is z standard deviations above its own causal history of scores
+        on earlier events (rows that match every prompt habituate). The history includes zeros."""
+        z = self.kw.get("hab")
+        if z is None:
+            return sc
+        if not hasattr(self, "_hist"):
+            self._hist, self._n = {}, 0
+        out = {}
+        n = self._n
+        for i, v in sc.items():
+            s1, s2 = self._hist.get(i, (0.0, 0.0))
+            mean = s1 / n if n else 0.0
+            sd = math.sqrt(max(0.0, s2 / n - mean * mean)) if n else 0.0
+            if n < 5 or v >= mean + z * max(sd, 1e-6):
+                out[i] = v
+            self._hist[i] = (s1 + v, s2 + v * v)
+        self._n += 1
+        return out
+
     def packet(self, e, now):
         if self.silent(e):
             return []
-        sc = self.scores(e, now)
+        sc = self.habituate(self.scores(e, now), e)
         ranked = [i for i in sorted(sc, key=lambda i: -sc[i]) if sc[i] >= self.tau]
         if self.kw.get("ctx"):
             ranked = [i for i in ranked if not self.in_window(self.by_id[i], e)]
