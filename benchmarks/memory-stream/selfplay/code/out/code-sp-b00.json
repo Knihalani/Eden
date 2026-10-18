@@ -80,7 +80,8 @@
         "new branch for the invoice pdf margins ticket, call it properly",
         "start a branch for ACME-519 and set it up for a PR",
         "branch for the webhook retry ticket, it's linear 77",
-        "create a feature branch for the agency export work tracked in linear"
+        "create a feature branch for the agency export work tracked in linear",
+        "make a new branch for the reminder dedupe ticket, linear 613"
       ],
       "neg": [
         "what's a good git branching strategy for a small team?",
@@ -115,7 +116,8 @@
         "fixed the currency rounding on invoice totals, get it ready",
         "added a due date column to the invoice list, prep the pr",
         "we changed the default invoice number format, finish up",
-        "ok make this ready for review, it changes what customers see"
+        "ok make this ready for review, it changes what customers see",
+        "the timezone change is in, get the pr ready to merge"
       ],
       "neg": [
         "what's semver and when do you bump the major?",
@@ -150,7 +152,8 @@
         "lower the connect timeout so the api fails faster",
         "tune the pool config for the new worker replicas",
         "the api should fail fast on db errors now, change the retry logic",
-        "cut the retry loop down, it's slowing down the 503 responses"
+        "cut the retry loop down, it's slowing down the 503 responses",
+        "during the next failover the api should hold on longer, adjust it"
       ],
       "neg": [
         "what is RDS multi-AZ?",
@@ -203,7 +206,8 @@
         "logo upload is broken on my laptop since the nvm switch",
         "the dashboard won't boot, it says it can't load the image lib",
         "switch me to node 18 and fix whatever breaks",
-        "uploads die the moment the dashboard starts on my machine"
+        "uploads die the moment the dashboard starts on my machine",
+        "dashboard startup broke after I pulled and changed node, help"
       ],
       "neg": [
         "how do I resize an image with sharp in node?",
@@ -220,14 +224,16 @@
         "run the api integration tests",
         "api tests timed out after three minutes, why?",
         "add an integration test for the refunds endpoint",
-        "the tests never finish on my machine since I restarted"
+        "the tests never finish on my machine since I restarted",
+        "run the refunds tests, they're stuck again"
       ],
       "neg": [
         "how do testcontainers work in java?",
         "what's in the docker compose file for the local stack?",
         "build the docker image for the api",
         "the web unit tests fail on a snapshot, fix it",
-        "docker prune to free up disk space, what's safe?"
+        "docker prune to free up disk space, what's safe?",
+        "how do I write a fixture that seeds a postgres row?"
       ]
     },
     "code-sleep-b00:m0014": {
@@ -236,14 +242,16 @@
         "write the rollback steps for the last deploy",
         "a bad migration corrupted some prod rows, what can we do",
         "a customer says they lost yesterday's invoices, how do we recover them",
-        "failed jobs aren't showing up anywhere, where do they go?"
+        "failed jobs aren't showing up anywhere, where do they go?",
+        "how many tries does a background job get before it gets dropped?"
       ],
       "neg": [
         "what's exponential backoff with jitter?",
         "how do I set up a dead letter queue in sqs?",
         "how long does rds take to create a read replica?",
         "write a post-mortem template",
-        "explain rabbitmq dead letter exchanges"
+        "explain rabbitmq dead letter exchanges",
+        "how do I write a retry loop with a max attempts count in node?"
       ]
     },
     "code-sleep-b00:m0015": {
@@ -252,14 +260,16 @@
         "add a readiness probe for the api pods",
         "k8s says the api pod is not ready, debug it",
         "the api is up but the deploy script waits forever, why?",
-        "make the status page show whether the api is ok"
+        "make the status page show whether the api is ok",
+        "the healthcheck says down but the api logs look fine, why?"
       ],
       "neg": [
         "what's the difference between liveness and readiness probes?",
         "add a /version endpoint to the web app",
         "how do I curl localhost with a custom header?",
         "healthcheck for postgres in docker compose",
-        "uptime monitoring tools comparison"
+        "uptime monitoring tools comparison",
+        "why does my docker container show unhealthy?"
       ]
     },
     "code-sleep-b00:m0016": {
@@ -268,14 +278,16 @@
         "I'm open sourcing the cli on github, check the license setup",
         "add a contributors section to the root readme",
         "write the license file for the new package",
-        "copy the license into the new sdk folder"
+        "copy the license into the new sdk folder",
+        "publishing the cli to npm this week, anything I need to check first?"
       ],
       "neg": [
         "what's the difference between MIT and Apache 2.0?",
         "update the copyright year in the apps/web footer",
         "add a license field to trailmix's package.json",
         "explain what copyleft means",
-        "how do I add an spdx identifier to a file?"
+        "how do I add an spdx identifier to a file?",
+        "what does an MIT license allow commercial users to do?"
       ]
     },
     "code-sleep-b00:m0017": {
@@ -302,7 +314,8 @@
         "messages on the exports queue keep piling up, look at the consumer",
         "the reminder job should also run for trial orgs, change the consumer",
         "add a second consumer for webhooks so they run in parallel",
-        "the worker stopped picking up messages after the deploy"
+        "the worker stopped picking up messages after the deploy",
+        "why are webhook deliveries arriving out of order, is the consumer the issue?"
       ],
       "neg": [
         "what's the difference between rabbitmq and kafka?",
@@ -319,14 +332,16 @@
         "moved the csv helper into a client component and now the build blows up",
         "the prod build fails after I imported the db client into the table component",
         "add a shared helper that reads the local config file, use it in the dashboard",
-        "the production build broke when I pulled the reports helper into a page"
+        "the production build broke when I pulled the reports helper into a page",
+        "the invoice table page started failing to build after I added the export helper"
       ],
       "neg": [
         "what's the difference between server and client components in next?",
         "how do I add an env var to next?",
         "fix the eslint warning about unused imports",
         "write a loading skeleton for the dashboard",
-        "what does 'use client' actually do?"
+        "what does 'use client' actually do?",
+        "how do I fix a hydration mismatch in next?"
       ]
     },
     "code-sleep-b00:m0020": {
@@ -335,7 +350,8 @@
         "spin up the local stack for the demo",
         "get the whole app running, web api and worker",
         "run it all, I need to test the invoice flow",
-        "bring up the local services for the QA call"
+        "bring up the local services for the QA call",
+        "run the stack, I want to see the worker process invoices"
       ],
       "neg": [
         "start just the web app in dev mode",
@@ -352,7 +368,8 @@
         "add a field to the openapi client output by hand",
         "fix the typo in the generated routes file",
         "tweak the stripe types.gen.ts so the build passes",
-        "the schema file is out of date, edit it directly"
+        "the schema file is out of date, edit it directly",
+        "the generated zod schema is missing a field, just add it in the output"
       ],
       "neg": [
         "what does generated code mean in typescript?",
@@ -369,7 +386,8 @@
         "the acme cli isn't picking up my new command when installed, rebuild and push dist",
         "clean up the built files in packages/cli before the release",
         "update packages/cli/dist/index.js with the fix",
-        "why does git status show the cli dist file as modified?"
+        "why does git status show the cli dist file as modified?",
+        "I rebuilt the cli, dist changed, add it to the next commit"
       ],
       "neg": [
         "why does node_modules show up in git status sometimes?",
@@ -386,14 +404,16 @@
         "the cli export is ready for everyone, turn it on",
         "errors from the cli aren't showing up anywhere, check the setup",
         "wire up the cli so crashes get reported",
-        "ship the invoices export behind a toggle"
+        "ship the invoices export behind a toggle",
+        "we need a way to turn the export off fast if it breaks"
       ],
       "neg": [
         "how do I add a sentry breadcrumb?",
         "what is a feature flag and when should I use one?",
         "what are sentry's pricing tiers?",
         "remove the old experiment flag from the web code",
-        "set an env var on vercel for preview deploys"
+        "set an env var on vercel for preview deploys",
+        "how do I set up source maps for a react app in production?"
       ]
     },
     "code-sleep-b00:m0024": {
@@ -402,14 +422,16 @@
         "add a test for the new acme command output",
         "the cli test is red after my table formatting change",
         "make sure the new acme subcommand is covered by tests",
-        "update whatever's broken in the packages/cli tests"
+        "update whatever's broken in the packages/cli tests",
+        "the output of acme list has a new column, update the expected output"
       ],
       "neg": [
         "what's the difference between jest and vitest?",
         "snapshot test for a react component with testing library",
         "how do I write a playwright e2e test?",
         "unit test the date helper in apps/web",
-        "vitest config for coverage reports"
+        "vitest config for coverage reports",
+        "how do I snapshot a json response in jest?"
       ]
     },
     "code-sleep-b00:m0025": {
@@ -418,7 +440,8 @@
         "I need to pull main and I've got half-done work",
         "save my changes real quick and go check out the other branch",
         "clean up the working tree before I rebase",
-        "park my edits, I need to look at the bug on main"
+        "park my edits, I need to look at the bug on main",
+        "i'm stuck with a dirty tree, need to check out the release branch now"
       ],
       "neg": [
         "what does git stash pop do?",
@@ -435,7 +458,8 @@
         "sort the invoice list copy without mutating the original",
         "add an array helper to lib/utils, use the newest js features",
         "use Promise.withResolvers in the worker for the deferred",
-        "use Array.fromAsync to collect the export stream"
+        "use Array.fromAsync to collect the export stream",
+        "replace the old-style sort in the invoice helper with a cleaner version"
       ],
       "neg": [
         "what's new in node 20?",
@@ -452,14 +476,16 @@
         "run acme against the staging api and show me the output",
         "i want to try the cli change before building",
         "quick run of the acme cli to list agencies",
-        "debug the cli command, I need to see its output live"
+        "debug the cli command, I need to see its output live",
+        "let me poke the new cli flag against the staging server right now"
       ],
       "neg": [
         "build the acme cli for production",
         "publish the acme cli to npm",
         "install the global acme cli from npm",
         "what does tsx do?",
-        "run the web app tests"
+        "run the web app tests",
+        "how do I set an env var for a single shell command in bash?"
       ]
     },
     "code-sleep-b00:m0028": {
@@ -468,14 +494,16 @@
         "add a new reminder type for invoices 30 days overdue",
         "the reminder job is sending too early on weekends, fix it",
         "retry the reminder job safely if it crashes midway",
-        "the reminder cron should run twice a day now, change it"
+        "the reminder cron should run twice a day now, change it",
+        "we're sending duplicate invoice emails again after the redeploy, look"
       ],
       "neg": [
         "what's an idempotency key in stripe?",
         "write a cron expression for every six hours",
         "explain at-least-once delivery",
         "copy edit the invoice reminder email template",
-        "unit test the reminder date calculation for leap years"
+        "unit test the reminder date calculation for leap years",
+        "how do I write a cron job in node that runs once a day?"
       ]
     },
     "code-sleep-b00:m0029": {
@@ -484,14 +512,16 @@
         "the worker image build is slow, optimize the dockerfile",
         "switch the worker dockerfile to alpine like the api",
         "multi-stage build for the worker, keep it small",
-        "the api image is way smaller than the worker, why not match them?"
+        "the api image is way smaller than the worker, why not match them?",
+        "the worker image is slow to pull in the cluster, make it smaller"
       ],
       "neg": [
         "why does alpine use musl instead of glibc?",
         "how do I use docker buildx for arm images?",
         "clean up old docker images on my laptop",
         "write a dockerignore for the web app",
-        "the api dockerfile healthcheck isn't running, why?"
+        "the api dockerfile healthcheck isn't running, why?",
+        "what's a multi-stage docker build in general?"
       ]
     },
     "code-sleep-b00:m0030": {
@@ -500,7 +530,8 @@
         "add a csv download for invoices to the dashboard",
         "the cli invoices export is unreadable for accountants",
         "make the agency export open cleanly in google sheets and excel",
-        "customers complain about question marks in names in the csv"
+        "customers complain about question marks in names in the csv",
+        "accountants say the csv opens with weird characters in the first column, fix"
       ],
       "neg": [
         "how do I open a csv in excel with the right delimiter?",
@@ -517,14 +548,16 @@
         "who needs to review the cli changes before merge?",
         "the pr for packages/cli needs approval, who do I ask?",
         "set up review requirements for the new payments service folder",
-        "add a codeowners entry for the new infra module"
+        "add a codeowners entry for the new infra module",
+        "the cli pr is waiting on a reviewer, who should I tag?"
       ],
       "neg": [
         "how do I request a review on github?",
         "what does the codeowners syntax look like?",
         "can I approve my own pr?",
         "fix the lint warnings in the cli",
-        "rebase my pr onto main"
+        "rebase my pr onto main",
+        "what does 'request changes' mean on a github review?"
       ]
     },
     "code-sleep-b00:m0032": {
@@ -533,14 +566,16 @@
         "add the new db pool option so connections work through the proxy",
         "the raw pool in the driver ignores my setting, fix it",
         "queries fail intermittently behind the connection pooler",
-        "wire up the db config so it works in transaction pooling"
+        "wire up the db config so it works in transaction pooling",
+        "migrate the db layer to use the proxy correctly, last piece of the pooler work"
       ],
       "neg": [
         "what is pgbouncer and when do I need it?",
         "how do I tune max pool size in node-postgres?",
         "explain transaction vs session pooling",
         "add a db index for invoice lookups",
-        "explain prepared statements in postgres"
+        "explain prepared statements in postgres",
+        "what's a connection leak and how do I detect one?"
       ]
     },
     "code-sleep-b00:m0033": {
@@ -549,14 +584,16 @@
         "check the worker pods for crash loops",
         "show me the logs for the worker in production",
         "kubectl into the api pods and check the restart count",
-        "why are the worker pods restarting, pull the logs"
+        "why are the worker pods restarting, pull the logs",
+        "any oomkilled events on the api pods in prod today?"
       ],
       "neg": [
         "what's the difference between EKS and ECS?",
         "install kubectl on mac",
         "write a helm chart for a cron job",
         "list the staging deployments",
-        "how do I read cloudwatch insights queries?"
+        "how do I read cloudwatch insights queries?",
+        "how do I tail logs from a local docker container?"
       ]
     },
     "code-sleep-b00:m0034": {
@@ -565,14 +602,16 @@
         "bump the typescript version in the root and push",
         "the ci install step is failing on the new branch, look",
         "add biome as a dev dependency to the repo",
-        "upgrade zod in apps/api, ci is red"
+        "upgrade zod in apps/api, ci is red",
+        "add zod to apps/web, install and push"
       ],
       "neg": [
         "why does yarn install print so many warnings?",
         "what's the difference between yarn berry and yarn classic?",
         "pnpm add vs npm install, which is faster?",
         "how do I pin a package manager version with corepack?",
-        "delete node_modules and reinstall locally, will that fix my build?"
+        "delete node_modules and reinstall locally, will that fix my build?",
+        "how do I resolve a yarn lockfile merge conflict in general?"
       ]
     },
     "code-sleep-b00:m0035": {
@@ -581,14 +620,16 @@
         "new env var for the sendgrid key, update the example file",
         "where do I get the value for the google maps key for local dev?",
         "I need the staging db password for my laptop setup",
-        "write the env example for the new payments worker"
+        "write the env example for the new payments worker",
+        "add a placeholder for the new paypal key to the env example"
       ],
       "neg": [
         "how do I load env vars in next.js?",
         "what's the difference between a secret manager and a parameter store?",
         "difference between .env and .env.local?",
         "gitignore the .env file in trailmix",
-        "what's the best way to share a password with a coworker?"
+        "what's the best way to share a password with a coworker?",
+        "how do I generate a random secret string in node?"
       ]
     },
     "code-sleep-b00:m0036": {
@@ -597,14 +638,16 @@
         "the card radius looks off, add a shared token for it",
         "set up tailwind for the new settings page so it matches",
         "the dashboard needs a dark theme token, add it",
-        "add a tailwind config for the marketing site"
+        "add a tailwind config for the marketing site",
+        "the dashboard card shadow needs a new token, put it with the others"
       ],
       "neg": [
         "what's new in tailwind v4?",
         "tailwind class for flex-wrap?",
         "how do I add a custom font in tailwind v3?",
         "css grid vs flexbox, when should I use each?",
-        "the trailmix app uses bulma, should I switch it to tailwind?"
+        "the trailmix app uses bulma, should I switch it to tailwind?",
+        "how do I use css custom properties in a plain stylesheet?"
       ]
     },
     "code-sleep-b00:m0037": {
@@ -613,14 +656,16 @@
         "add retry logic to the stripe webhook endpoint",
         "stripe events are failing, can you check the api handler",
         "change the stripe webhook alarm threshold so it's less noisy",
-        "the stripe webhook returns 500 on refunds, fix it and keep us from getting paged at night"
+        "the stripe webhook returns 500 on refunds, fix it and keep us from getting paged at night",
+        "stripe says our webhook endpoint returned errors for 20 minutes, dig in"
       ],
       "neg": [
         "how do stripe webhooks verify signatures?",
         "rotate stripe test-mode api keys, what's the process?",
         "write an e2e test for the checkout page",
         "what's the difference between 4xx and 5xx status codes?",
-        "cloudwatch metric filter syntax for counting errors"
+        "cloudwatch metric filter syntax for counting errors",
+        "how do I test a stripe webhook locally with the cli?"
       ]
     },
     "code-sleep-b00:m0038": {
@@ -629,14 +674,16 @@
         "fix the lint errors in apps/web, there are a bunch",
         "the pr is failing lint, clean it up",
         "run the linter on the worker folder",
-        "set up a pre-commit hook that formats code"
+        "set up a pre-commit hook that formats code",
+        "why does the commit hook reformat half my files?"
       ],
       "neg": [
         "what does the react-hooks eslint plugin check?",
         "how do I migrate from prettier to something else?",
         "why is tsc failing with a type error on an import?",
         "add a lint rule that bans unused variables",
-        "what line length should I use in python?"
+        "what line length should I use in python?",
+        "what's the difference between a linter and a formatter?"
       ]
     },
     "code-sleep-b00:m0039": {
@@ -645,14 +692,16 @@
         "add a min replica count of 2 for the api",
         "change the worker to scale on cpu like the api",
         "the queue is backed up but the pods don't increase, look",
-        "bump the max pods for the api for the month end spike"
+        "bump the max pods for the api for the month end spike",
+        "queue is at 4000 messages and only 2 workers are up, why"
       ],
       "neg": [
         "what is an HPA in kubernetes?",
         "write a deployment yaml for a cron job",
         "how do I see pod resource usage with kubectl top?",
         "scale down the staging cluster at night",
-        "kafka partitions vs consumers, what's the ratio?"
+        "kafka partitions vs consumers, what's the ratio?",
+        "how do I set a cpu request in a kubernetes container?"
       ]
     },
     "code-sleep-b00:m0040": {
@@ -661,14 +710,16 @@
         "add a new rds read replica in the infra folder",
         "add an sqs queue for the webhook retries in terraform",
         "terraform plan is failing on the new lambda, fix it",
-        "spin up an elasticache cluster for the sessions"
+        "spin up an elasticache cluster for the sessions",
+        "add tags to the new bucket, and the sub resources too"
       ],
       "neg": [
         "what's the difference between s3 and glacier?",
         "list the terraform provider versions I should pin",
         "estimate the monthly cost of a t3 instance",
         "explain terraform state locking",
-        "write a terraform module readme"
+        "write a terraform module readme",
+        "what does the terraform default tags block do?"
       ]
     }
   }
