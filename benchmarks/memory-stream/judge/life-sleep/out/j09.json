@@ -1,0 +1,155 @@
+{
+ "batch": "j09",
+ "judge": "opus (claude-code subagent)",
+ "cases": [
+  {
+   "event": "life-s097-e000",
+   "needed": [
+    "life-sleep-b08:m0004",
+    "life-sleep-b06:m0018",
+    "life-sleep-b00:m0079",
+    "life-sleep-b08:m0024"
+   ],
+   "why": "trip dates, Hannah's current number, Biscuit food rule, Hannah minding Biscuit/Jess walks"
+  },
+  {
+   "event": "life-s027-e038",
+   "needed": [],
+   "why": "ack of style request"
+  },
+  {
+   "event": "life-s056-e000",
+   "needed": [
+    "life-sleep-b00:m0002",
+    "life-sleep-b00:m0069",
+    "life-sleep-b00:m0001",
+    "life-sleep-b01:m0027"
+   ],
+   "why": "Sam bday Mar 22 quiet dinner, anniversary June 16 + sitter, vegetarian, no scented gifts"
+  },
+  {
+   "event": "life-s105-e030",
+   "needed": [
+    "life-sleep-b09:m0016"
+   ],
+   "why": "Sam's school calendar synced daily (June items); Tom openings not stored"
+  },
+  {
+   "event": "life-s110-e025",
+   "needed": [],
+   "why": "general question"
+  },
+  {
+   "event": "life-s088-e019",
+   "needed": [
+    "life-sleep-b07:m0007",
+    "life-sleep-b06:m0036"
+   ],
+   "why": "Biscuit's vet Dr. Kaur hours; weekend/other vets nearby"
+  },
+  {
+   "event": "life-s027-e014",
+   "needed": [
+    "life-sleep-b00:m0035",
+    "life-sleep-b00:m0047",
+    "life-sleep-b01:m0005",
+    "life-sleep-b00:m0061"
+   ],
+   "why": "DELE May 2026 goal, learning goals, current lesson schedule and price"
+  },
+  {
+   "event": "life-s011-e000",
+   "needed": [
+    "life-sleep-b00:m0009",
+    "life-sleep-b00:m0052",
+    "life-sleep-b00:m0084"
+   ],
+   "why": "superseded Spanish time and meeting rule; Leo birthday Oct 21 conflicts with July 17"
+  },
+  {
+   "event": "life-s050-e016",
+   "needed": [
+    "life-sleep-b00:m0066",
+    "life-sleep-b01:m0001",
+    "life-sleep-b00:m0013"
+   ],
+   "why": "refundable hotel rule, Leo's age for admission, purchase approval rule"
+  },
+  {
+   "event": "life-s123-e000",
+   "needed": [],
+   "why": "general legal question"
+  },
+  {
+   "event": "life-s071-e000",
+   "needed": [
+    "life-sleep-b00:m0073"
+   ],
+   "why": "usual call time Sunday 21:00 Toronto"
+  },
+  {
+   "event": "life-s133-e004",
+   "needed": [
+    "life-sleep-b00:m0054",
+    "life-sleep-b10:m0018",
+    "life-sleep-b12:m0014"
+   ],
+   "why": "questionnaire: penicillin allergy, levothyroxine 75 mcg, recurring heel pain"
+  },
+  {
+   "event": "life-s077-e007",
+   "needed": [
+    "life-sleep-b06:m0032"
+   ],
+   "why": "2026 market opens Sun May 10 at Jonathan Ashbridge Park"
+  },
+  {
+   "event": "life-s017-e000",
+   "needed": [
+    "life-sleep-b00:m0043",
+    "life-sleep-b00:m0006"
+   ],
+   "why": "no feature dates to prospects without Aisha sign-off; Tue focus block"
+  },
+  {
+   "event": "life-s131-e027",
+   "needed": [
+    "life-sleep-b00:m0047",
+    "life-sleep-b02:m0006"
+   ],
+   "why": "learns by role-play, Mexican vocab; recurring mistakes to drill"
+  },
+  {
+   "event": "life-s096-e009",
+   "needed": [],
+   "why": "general legal question"
+  },
+  {
+   "event": "life-s085-e004",
+   "needed": [],
+   "why": "status notification"
+  },
+  {
+   "event": "life-s147-e005",
+   "needed": [
+    "life-sleep-b05:m0015",
+    "life-sleep-b01:m0006",
+    "life-sleep-b10:m0014",
+    "life-sleep-b02:m0038"
+   ],
+   "why": "purchase limit, Canadian retailers, last shoe size, boot preferences"
+  },
+  {
+   "event": "life-s038-e006",
+   "needed": [],
+   "why": "chit-chat"
+  },
+  {
+   "event": "life-s103-e007",
+   "needed": [
+    "life-sleep-b06:m0031"
+   ],
+   "why": "Belairdirect policy for the CX-5"
+  }
+ ]
+}

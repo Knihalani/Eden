@@ -1,0 +1,189 @@
+{
+ "batch": "j08",
+ "judge": "opus (claude-code subagent)",
+ "cases": [
+  {
+   "event": "life-s113-e000",
+   "needed": [
+    "life-sleep-b00:m0063"
+   ],
+   "why": "OOO message wording: her email style (brief, no exclamation marks, sign-off)"
+  },
+  {
+   "event": "life-s020-e016",
+   "needed": [
+    "life-sleep-b00:m0047",
+    "life-sleep-b01:m0005"
+   ],
+   "why": "Carlos intake notes (role-play, Mexican vocab, weak spots) and when the next lesson is"
+  },
+  {
+   "event": "life-s075-e000",
+   "needed": [
+    "life-sleep-b04:m0001"
+   ],
+   "why": "current provider is TekSavvy (Bell cancelled) for outage check and ticket"
+  },
+  {
+   "event": "life-s043-e002",
+   "needed": [
+    "life-sleep-b00:m0066",
+    "life-sleep-b00:m0013"
+   ],
+   "why": "hotel rule fully refundable near transit; purchase-over-$100 rule has no exceptions"
+  },
+  {
+   "event": "life-s065-e003",
+   "needed": [
+    "life-sleep-b01:m0009",
+    "life-sleep-b00:m0065",
+    "life-sleep-b00:m0050",
+    "life-sleep-b05:m0024"
+   ],
+   "why": "lunch for Kabir/Mei: Mei lactose intolerant, Leo nut allergy, no cilantro, PC Express ordering"
+  },
+  {
+   "event": "life-s090-e014",
+   "needed": [
+    "life-sleep-b08:m0004",
+    "life-sleep-b08:m0005",
+    "life-sleep-b00:m0066",
+    "life-sleep-b05:m0015"
+   ],
+   "why": "trip details, Leo sleeping at Kabir's, refundable hotel rule, purchase limit"
+  },
+  {
+   "event": "life-s145-e023",
+   "needed": [
+    "life-sleep-b11:m0018",
+    "life-sleep-b03:m0012",
+    "life-sleep-b13:m0022"
+   ],
+   "why": "Priya now in Toronto, celiac, and her Nov birthday dinner booking plan (Oct 8 release)"
+  },
+  {
+   "event": "life-s105-e000",
+   "needed": [
+    "life-sleep-b02:m0005",
+    "life-sleep-b07:m0011"
+   ],
+   "why": "prior plumber options and frost-free advice for same tap; home address"
+  },
+  {
+   "event": "life-s136-e034",
+   "needed": [
+    "life-sleep-b08:m0034",
+    "life-sleep-b05:m0040",
+    "life-sleep-b10:m0029"
+   ],
+   "why": "Mumbai trip plan late March 2027; check Mumbai time before calling; use Zoom not WhatsApp video"
+  },
+  {
+   "event": "life-s038-e009",
+   "needed": [],
+   "why": "chit-chat"
+  },
+  {
+   "event": "life-s143-e000",
+   "needed": [],
+   "why": "no PAY-1602 info available yet"
+  },
+  {
+   "event": "life-s137-e015",
+   "needed": [],
+   "why": "status notification, nothing needed"
+  },
+  {
+   "event": "life-s150-e014",
+   "needed": [
+    "life-sleep-b00:m0071"
+   ],
+   "why": "Tom flags 'north star' jargon; doc header going to Tom"
+  },
+  {
+   "event": "life-s006-e015",
+   "needed": [],
+   "why": "ack; nothing available"
+  },
+  {
+   "event": "life-s058-e010",
+   "needed": [
+    "life-sleep-b01:m0026"
+   ],
+   "why": "VIA result not stored; driving preference and drive time for the comparison"
+  },
+  {
+   "event": "life-s057-e007",
+   "needed": [
+    "life-sleep-b04:m0009"
+   ],
+   "why": "tomorrow (Tue) YMCA 6:15, must be home by 7:15 for Sam"
+  },
+  {
+   "event": "life-s102-e009",
+   "needed": [
+    "life-sleep-b05:m0024",
+    "life-sleep-b05:m0015"
+   ],
+   "why": "PC Express Saturday pickup, no-name staples; staples can be ordered without asking under limit"
+  },
+  {
+   "event": "life-s087-e038",
+   "needed": [],
+   "why": "general question"
+  },
+  {
+   "event": "life-s155-e022",
+   "needed": [
+    "life-sleep-b13:m0007",
+    "life-sleep-b14:m0033",
+    "life-sleep-b04:m0035"
+   ],
+   "why": "Lisbon flights Dec 20, concert early leave Dec 10, snow-day games (floor is lava)"
+  },
+  {
+   "event": "life-s051-e000",
+   "needed": [],
+   "why": "general question"
+  },
+  {
+   "event": "life-s070-e000",
+   "needed": [
+    "life-sleep-b05:m0030",
+    "life-sleep-b06:m0038"
+   ],
+   "why": "beta numbers live in Notion rollout plan; beta success bar"
+  },
+  {
+   "event": "life-s041-e000",
+   "needed": [
+    "life-sleep-b00:m0058",
+    "life-sleep-b00:m0053"
+   ],
+   "why": "Wednesday 6:00 spin class; 6:30 Biscuit walk constrains a 6:15 class"
+  },
+  {
+   "event": "life-s085-e017",
+   "needed": [],
+   "why": "post from recent; pricing table needs nothing stored"
+  },
+  {
+   "event": "life-s150-e007",
+   "needed": [
+    "life-sleep-b14:m0025",
+    "life-sleep-b02:m0034"
+   ],
+   "why": "cabinet install schedule; Nate prefers texts"
+  },
+  {
+   "event": "life-s150-e015",
+   "needed": [
+    "life-sleep-b12:m0023",
+    "life-sleep-b07:m0011",
+    "life-sleep-b13:m0010",
+    "life-sleep-b13:m0019"
+   ],
+   "why": "Dr. Lin at Danforth Smiles contact, home address, Leo after-school routine, Wed swim"
+  }
+ ]
+}
