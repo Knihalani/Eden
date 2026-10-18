@@ -1,0 +1,767 @@
+{
+ "batch": "code-sleep-b07",
+ "compiler": "sonnet (claude-code subagent)",
+ "sessions": [
+  {
+   "id": "code-s070",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0001",
+     "text": "acme-platform uses pnpm 9 (pinned pnpm@9.12.0) since the September 2026 migration off yarn 1; npm and yarn must not be used. They write their own lockfiles (package-lock.json / yarn.lock) and CI rejects the PR. The only-allow pnpm preinstall guard does not catch `yarn add`.",
+     "kind": "rule",
+     "entities": [
+      "pnpm",
+      "acme-platform",
+      "yarn",
+      "npm"
+     ],
+     "when": {
+      "entities": [
+       "pnpm",
+       "npm",
+       "yarn",
+       "package manager",
+       "lockfile",
+       "yarn.lock",
+       "package-lock.json",
+       "dependency",
+       "dependencies",
+       "install",
+       "node_modules",
+       "husky"
+      ],
+      "activities": [
+       "add dependency",
+       "install packages",
+       "upgrade dependency",
+       "ci setup",
+       "git status shows stray lockfile",
+       "bump version"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0002",
+     "text": "An untracked yarn.lock keeps reappearing in acme-platform (written locally 2026-09-29); something runs `yarn` in the repo, probably a VS Code extension or shell alias. Jordan said he would check his VS Code extensions; do not commit it. yarn.lock was deleted in 3c81d0e.",
+     "kind": "episode",
+     "entities": [
+      "yarn.lock",
+      "Jordan",
+      "VS Code"
+     ],
+     "when": {
+      "entities": [
+       "yarn.lock",
+       "lockfile",
+       "vscode",
+       "editor extension",
+       "untracked file",
+       "git status"
+      ],
+      "activities": [
+       "git status",
+       "commit",
+       "clean up untracked files",
+       "gitignore"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0003",
+     "text": "acme-platform contributing conventions: run `nvm use` (reads .nvmrc); copy .env.example to .env.local and fill secrets from 1Password; branch names start with the Linear id, e.g. acme-412-retry-webhooks.",
+     "kind": "procedure",
+     "entities": [
+      "acme-platform",
+      "nvm",
+      "1Password",
+      "Linear",
+      ".env.local"
+     ],
+     "when": {
+      "entities": [
+       "branch",
+       "branch name",
+       "linear",
+       "ticket",
+       "setup",
+       "onboarding",
+       "env file",
+       "secrets",
+       "node version",
+       "nvmrc"
+      ],
+      "activities": [
+       "create a branch",
+       "open a PR",
+       "set up dev environment",
+       "commit"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s071",
+   "ops": []
+  },
+  {
+   "id": "code-s072",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0004",
+     "text": "Git hooks in acme-platform run through lefthook (lefthook.yml at repo root); husky was removed on 2026-09-29. Jordan wants any leftover .husky references removed.",
+     "kind": "rule",
+     "entities": [
+      "lefthook",
+      "husky",
+      "acme-platform"
+     ],
+     "when": {
+      "entities": [
+       "lefthook",
+       "husky",
+       "git hooks",
+       "pre-commit",
+       "prepare script",
+       "hook",
+       "commit checks"
+      ],
+      "activities": [
+       "add a pre-commit check",
+       "edit package.json scripts",
+       "commit",
+       "set up hooks"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0005",
+     "text": "The acme-platform API reads its database connection only from DATABASE_URL (commit 9e04b7a dropped the PG* fallbacks) and fails fast at boot if it is missing. apps/api/.env.local needs a DATABASE_URL line copied from .env.example; Jordan's local db connection broke on 2026-09-30 because his .env.local lacked it.",
+     "kind": "fact",
+     "entities": [
+      "DATABASE_URL",
+      "apps/api",
+      ".env.local",
+      "postgres",
+      "PG*"
+     ],
+     "when": {
+      "entities": [
+       "database",
+       "db",
+       "postgres",
+       "connection string",
+       "env var",
+       "DATABASE_URL",
+       "PGHOST",
+       "env",
+       "local db",
+       "api won't start",
+       "connect"
+      ],
+      "activities": [
+       "api fails to connect to db",
+       "configure environment",
+       "boot api",
+       "debug startup"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s073",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0006",
+     "text": "Primary keys for any new table in acme-platform must be UUID v7, generated app-side with uuidv7() via $defaultFn in drizzle; not serial and not UUID v4. New tables also follow the convention of org_id, created_at and deleted_at columns and an index on org_id. Migrations are generated with `pnpm --filter api db:generate` into apps/api/drizzle/ (latest: 0031_brisk_payment_reminders).",
+     "kind": "rule",
+     "entities": [
+      "UUID v7",
+      "uuidv7",
+      "drizzle",
+      "primary key",
+      "schema",
+      "apps/api",
+      "payment_reminders"
+     ],
+     "when": {
+      "entities": [
+       "primary key",
+       "id column",
+       "uuid",
+       "serial",
+       "uuid v4",
+       "new table",
+       "schema",
+       "drizzle",
+       "migration",
+       "database table",
+       "orm",
+       "model"
+      ],
+      "activities": [
+       "add a table",
+       "create schema",
+       "generate migration",
+       "design data model",
+       "add column"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s074",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0007",
+     "text": "Worker shutdown in acme-platform: on SIGTERM the worker stops taking jobs and drains in-flight ones with a 30s grace period (GRACE_PERIOD_MS in services/worker/src/shutdown.ts), matched by terminationGracePeriodSeconds: 30 in infra/helm/worker/values.yaml. Pods get killed mid-job during deploys: image-resize jobs can exceed 30s and w.close() can still pick up one more job. Priya says it is on our side; proposed fix (not yet made): pause workers before close and raise both values together (e.g. 90s app, 100s Helm).",
+     "kind": "fact",
+     "entities": [
+      "worker",
+      "SIGTERM",
+      "shutdown",
+      "BullMQ",
+      "helm",
+      "Priya",
+      "image-resize"
+     ],
+     "when": {
+      "entities": [
+       "worker",
+       "deploy",
+       "rollout",
+       "graceful shutdown",
+       "SIGTERM",
+       "stalled jobs",
+       "killed pods",
+       "grace period",
+       "terminationGracePeriodSeconds",
+       "image-resize",
+       "BullMQ"
+      ],
+      "activities": [
+       "deploy worker",
+       "change shutdown",
+       "fix stalled jobs",
+       "edit helm chart",
+       "investigate killed jobs"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0008",
+     "text": "Invoice PDF downloads are named invoice-<number>-<client-slug>.pdf (e.g. invoice-0042-smith-jones.pdf) using slugify in apps/api/src/lib/slug.ts; the clients list search (GET /v1/clients?q=) is debounced 300ms on the web side.",
+     "kind": "fact",
+     "entities": [
+      "invoice pdf",
+      "slugify",
+      "clients search",
+      "Content-Disposition"
+     ],
+     "when": {
+      "entities": [
+       "invoice pdf",
+       "filename",
+       "download",
+       "client search",
+       "debounce",
+       "slug"
+      ],
+      "activities": [
+       "change pdf filename",
+       "edit clients list",
+       "add search"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0009",
+     "text": "Jordan asked for a notification-preferences settings page shell (heading + empty form) in the dashboard but deferred it ('later'); the assistant was unsure of the web app's routing setup and should inspect apps/web and match existing settings screens.",
+     "kind": "plan",
+     "entities": [
+      "notification preferences",
+      "settings page",
+      "dashboard",
+      "Jordan"
+     ],
+     "when": {
+      "entities": [
+       "settings page",
+       "notification preferences",
+       "dashboard",
+       "new page",
+       "routing",
+       "form"
+      ],
+      "activities": [
+       "scaffold settings page",
+       "add dashboard page"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s075",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0010",
+     "text": "Terraform state for acme-platform lives in S3 bucket acme-tfstate (key platform/prod.tfstate, us-east-1, encrypted) with DynamoDB lock table acme-tfstate-lock, configured in infra/terraform/backend.tf. A committed backend_override.tf (b27f9aa) forced a local backend and made CI plans show 47 resources to add; removed on branch acme-438-remove-tf-local-backend (commit 5e0a1c4), not pushed and no PR yet. Anyone who ran terraform init with the override must run `terraform init -reconfigure`.",
+     "kind": "fact",
+     "entities": [
+      "terraform",
+      "acme-tfstate",
+      "DynamoDB",
+      "S3",
+      "backend_override.tf",
+      "acme-438-remove-tf-local-backend",
+      "infra/terraform"
+     ],
+     "when": {
+      "entities": [
+       "terraform",
+       "tfstate",
+       "state",
+       "backend",
+       "S3",
+       "dynamodb",
+       "lock",
+       "infra",
+       "plan",
+       "apply",
+       "override file",
+       "iac",
+       "infrastructure"
+      ],
+      "activities": [
+       "terraform init",
+       "terraform plan",
+       "terraform apply",
+       "change infra",
+       "review infra PR"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0011",
+     "text": "infra/ and .github/ in acme-platform are platform-owned: infra changes need a platform-team reviewer (Priya) and the plan output pasted in the PR description (for the Terraform backend fix, a plan showing 0 to add).",
+     "kind": "rule",
+     "entities": [
+      "Priya",
+      "platform team",
+      "infra",
+      "terraform",
+      ".github"
+     ],
+     "when": {
+      "entities": [
+       "infra",
+       "infrastructure",
+       "terraform",
+       "github actions",
+       "workflows",
+       "ci",
+       "helm",
+       "platform team",
+       "Priya",
+       "review",
+       "PR description"
+      ],
+      "activities": [
+       "open infra PR",
+       "change workflow",
+       "change helm chart",
+       "request review"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0012",
+     "text": "Jordan's side project is trailmix, a Django app with HTMX partials and Hike/Photo models; he sometimes asks Django ORM questions in work sessions.",
+     "kind": "fact",
+     "entities": [
+      "trailmix",
+      "Django",
+      "HTMX",
+      "Hike",
+      "Photo",
+      "Jordan"
+     ],
+     "when": {
+      "entities": [
+       "trailmix",
+       "django",
+       "orm",
+       "hike",
+       "photo",
+       "htmx",
+       "side project",
+       "python"
+      ],
+      "activities": [
+       "django query",
+       "annotate",
+       "filter queryset"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0013",
+     "text": "Code style in acme-platform TypeScript: 2-space indentation, single quotes, semicolons, imports with external packages first then local.",
+     "kind": "preference",
+     "entities": [
+      "acme-platform",
+      "prettier",
+      "TypeScript"
+     ],
+     "when": {
+      "entities": [
+       "formatting",
+       "code style",
+       "indent",
+       "quotes",
+       "semicolons",
+       "lint",
+       "imports"
+      ],
+      "activities": [
+       "format code",
+       "clean up file",
+       "write new file"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s076",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0014",
+     "text": "Lena owns the apps/web/messages files (e.g. en.json) and is mid-refactor on them as of 2026-10-02; do not edit them. Jordan reverted a 'recieve' typo fix in en.json (paymentPending string) for this reason and may mention the typo to Lena.",
+     "kind": "rule",
+     "entities": [
+      "Lena",
+      "messages",
+      "en.json",
+      "apps/web/messages",
+      "paymentPending"
+     ],
+     "when": {
+      "entities": [
+       "messages",
+       "en.json",
+       "i18n",
+       "copy",
+       "translations",
+       "strings",
+       "typo",
+       "Lena",
+       "locale",
+       "text change"
+      ],
+      "activities": [
+       "fix typo",
+       "change copy",
+       "edit messages",
+       "extract strings",
+       "rename text"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0015",
+     "text": "`pnpm --filter api db:seed` seeds local data: orgs Northwind Studio (120 clients, 640 invoices) and Bluebird Agency (45 clients, 210 invoices). API tests use their own Testcontainers database, so seeding does not affect them.",
+     "kind": "procedure",
+     "entities": [
+      "db:seed",
+      "Northwind Studio",
+      "Bluebird Agency",
+      "Testcontainers"
+     ],
+     "when": {
+      "entities": [
+       "seed",
+       "local data",
+       "fixtures",
+       "sample data",
+       "demo data",
+       "local db",
+       "testcontainers"
+      ],
+      "activities": [
+       "seed database",
+       "test ui with real data",
+       "click through feature"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0016",
+     "text": "Jordan planned a long-weekend hike near Tobermory (Bruce Peninsula) right after 2026-10-02.",
+     "kind": "episode",
+     "entities": [
+      "Tobermory",
+      "Bruce Peninsula",
+      "hike",
+      "Jordan"
+     ],
+     "when": {
+      "entities": [
+       "hike",
+       "hiking",
+       "long weekend",
+       "vacation",
+       "trip",
+       "tobermory",
+       "weekend",
+       "outdoors",
+       "time off"
+      ],
+      "activities": [
+       "plan weekend",
+       "ask about the weekend",
+       "small talk"
+      ],
+      "times": [
+       "2026-10-03",
+       "2026-10-12"
+      ]
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s077",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0017",
+     "text": "Jordan prefers shorter, tighter replies from the assistant (asked on 2026-10-05: 'you're being kinda long-winded, tighten it up').",
+     "kind": "preference",
+     "entities": [
+      "Jordan",
+      "response length"
+     ],
+     "when": {
+      "entities": [
+       "answer",
+       "reply",
+       "explain",
+       "explanation",
+       "verbosity",
+       "concise",
+       "summary"
+      ],
+      "activities": [
+       "answer a question",
+       "explain",
+       "report results",
+       "summarize"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0018",
+     "text": "tsx ^4.20.3 was added to packages/cli devDependencies so scripts (gen:completions, check:size) run directly from .ts without building; package.json was edited by hand and the pnpm lockfile was not yet updated (no install run), so run pnpm install before committing.",
+     "kind": "episode",
+     "entities": [
+      "tsx",
+      "packages/cli",
+      "pnpm lockfile",
+      "gen:completions",
+      "check:size"
+     ],
+     "when": {
+      "entities": [
+       "tsx",
+       "lockfile",
+       "pnpm-lock",
+       "packages/cli",
+       "devDependencies",
+       "scripts",
+       "install"
+      ],
+      "activities": [
+       "commit packages/cli",
+       "run pnpm install",
+       "add dev dependency"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0019",
+     "text": "deps-bot's @types/node 20.14.10 -> 20.16.5 bump (#493) breaks the packages/cli typecheck with 7 errors, because src/http.ts imports Response from 'undici' while globals come from @types/node and the DOM lib. Proposed fix, not yet applied (Jordan said 'later'): drop the undici type import, use global types and remove \"DOM\" from the CLI tsconfig lib.",
+     "kind": "plan",
+     "entities": [
+      "@types/node",
+      "packages/cli",
+      "undici",
+      "deps-bot",
+      "#493",
+      "tsconfig"
+     ],
+     "when": {
+      "entities": [
+       "typecheck",
+       "@types/node",
+       "undici",
+       "fetch",
+       "Response",
+       "AbortSignal",
+       "tsconfig",
+       "deps-bot",
+       "dependency bump",
+       "cli"
+      ],
+      "activities": [
+       "fix typecheck",
+       "merge deps-bot PR",
+       "edit packages/cli",
+       "upgrade types"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0020",
+     "text": "Cron jobs in the acme-platform worker are BullMQ repeatable jobs defined in services/worker/src/schedules.ts via upsertJobScheduler (no system cron or k8s CronJob). nightly-digest runs at 07:00 America/Toronto (moved from 06:00 on 2026-10-05); billing-sync every 15 min; purge-soft-deleted Sundays 03:30 UTC.",
+     "kind": "fact",
+     "entities": [
+      "schedules.ts",
+      "BullMQ",
+      "nightly-digest",
+      "billing-sync",
+      "purge-soft-deleted",
+      "worker",
+      "America/Toronto"
+     ],
+     "when": {
+      "entities": [
+       "cron",
+       "schedule",
+       "scheduled job",
+       "nightly digest",
+       "repeatable job",
+       "timezone",
+       "toronto",
+       "worker",
+       "billing sync"
+      ],
+      "activities": [
+       "change a schedule",
+       "add cron job",
+       "debug scheduled job",
+       "move digest time"
+      ],
+      "times": [
+       "Sundays 03:30 UTC",
+       "07:00 America/Toronto"
+      ]
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s078",
+   "ops": []
+  },
+  {
+   "id": "code-s079",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0021",
+     "text": "Jordan wants to add the k6 load test suite (about 40 min, hits staging) as a GitHub Actions CI job. The existing ci.yml has a single `check` job with timeout-minutes: 20 on every PR/push, so k6 would need its own job with a longer timeout, ideally workflow_dispatch or scheduled. No known team rule; .github/ is platform-owned, so check with Priya first.",
+     "kind": "plan",
+     "entities": [
+      "k6",
+      "load test",
+      "GitHub Actions",
+      "ci.yml",
+      "staging",
+      "Priya"
+     ],
+     "when": {
+      "entities": [
+       "k6",
+       "load test",
+       "performance test",
+       "github actions",
+       "ci",
+       "workflow",
+       "staging",
+       "pipeline",
+       "timeout"
+      ],
+      "activities": [
+       "add ci job",
+       "edit workflow",
+       "schedule load test"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  }
+ ]
+}
