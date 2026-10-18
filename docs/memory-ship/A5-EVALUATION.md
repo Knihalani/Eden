@@ -207,11 +207,14 @@ Every arm is also run with its delivery point's flag `off` (asserting identity: 
 | continuation | "yes do it" after a proposal naming `vitest.config` → the vitest-config memory packs |
 | scale-20k / 1e6 | gold recall, silence, p99; never an unbounded bm25 on a fat term |
 
-**Beyond coding (proposed 2026-10-18 by R10; built by P8.6).** Fixture: `benchmarks/memory-life/` (LifeBench: one user's ~300 memories, incl. superseded rows and noise rows of past requests and tool output; cues by named authors; dev / test / a sealed holdout read only at an audit). Every cue arm reports recall@4, **bullet precision** (share of injected bullets in `gold ∪ allowed`), FIR on negatives, and is judged with CueBench-code on a Pareto frontier, never on one number ([research/R10/DOMAIN-AUDIT.md](research/R10/DOMAIN-AUDIT.md)).
+**Beyond coding (proposed 2026-10-18 by R10; built by P8.6).** Primary fixture: **StreamBench** (`benchmarks/memory-stream/`). It holds multi-session streams in a coding world and a personal-assistant world, played through the real hooks, so the store comes from the write path. It also has an oracle store and a sleep store; per-turn need labels from a plan, audited by an independent labeler and by a downstream-effect check; non-human events at R6's share; triggers; and hard negatives (`research/R10/REALISM-AUDIT.md`). Secondary pair fixture: `benchmarks/memory-life/` (LifeBench memories). Every cue arm reports recall@4, **bullet precision** (share of injected bullets in `gold ∪ allowed`), FIR on negatives, and is judged with CueBench-code on a Pareto frontier, never on one number ([research/R10/DOMAIN-AUDIT.md](research/R10/DOMAIN-AUDIT.md)).
 
 | Arm | Assert |
 |---|---|
-| cuebench-life | direct and zero-overlap paraphrase cues: recall@4, bullet precision, FIR at the store-calibrated τ |
+| stream-code / stream-life | per human turn on dev: need recall (all, @4), bullet precision, human and non-human silence, proactive recall, redundancy, stale rate, tokens, reported at base rates 5/8/15%, with bootstrap CIs (`score.py --ci`) |
+| stream-trigger | life triggers (time, calendar, message): recall on trigger needs, silence on routine triggers |
+| stream-downstream | on a sampled set, the responder's score with the system's packet minus with none (`downstream.py`); it must not be negative on no-need turns |
+| cuebench-life | (secondary) LifeBench pairs: direct and zero-overlap paraphrase cues: recall@4, bullet precision, FIR at the store-calibrated τ |
 | proactive | the user never asks ("book dinner Friday with Sam") or an event wakes the agent ("Lunch with Priya in 1 hour"): the needed memory ("Sam is pescatarian") is in the packet; FIR on event negatives |
 | multi-need | cues needing 2–4 memories: full-coverage rate and recall |
 | stale-life | a corrected fact or a moved plan: the current row packs, the superseded or past-dated one never does (`stale_rate = 0`) |
