@@ -1,6 +1,6 @@
 # R10 — Retrieval research: report (living document)
 
-**Status:** cycle 2 of an open-ended programme (`research/R10/BRIEF.md`). Every number below comes from `research/R10/LEDGER.md`, which says where it came from. The current state, the hypothesis portfolio and the graveyard are in `research/R10/STATE.md`.
+**Status:** end of cycle 3 of an open-ended programme (`research/R10/BRIEF.md`). Every number below comes from `research/R10/LEDGER.md`, which says where it came from. The current state, the hypothesis portfolio and the graveyard are in `research/R10/STATE.md`.
 
 ## 1. The question
 
@@ -49,13 +49,24 @@ On realistic streams, lexical retrieval is far weaker than the pair fixtures sug
    - A third model family writes, at sleep, situations that need each memory and near misses. Matching the turn against those exemplars raises silence by +0.16–0.26 at equal recall, on both worlds.
    - AND-ing two independent kinds of evidence gives the best hook-side point: code recall 0.33 at silence 0.47 (coverage v2).
 4. **Every hand-built combination plateaus** at about 0.3 recall and 0.5–0.6 silence. That is a local optimum.
-5. **Agent-pull breaks the plateau** (F13).
-   - The host model already reads every turn. Given a ~150-token memory index and a `recall()` tool, it decides when to look and what to ask.
-   - Result on code: recall 0.47 at silence 0.74, with bullet precision 0.20, five times the best hook-side method.
-   - The hook stays model-free.
-6. **The labels need a downstream test.**
-   - An independent labeler confirms 83% of the planned needs, but labels 36% of human turns as needing something. Real use measured 8%.
-   - Strictness has to be settled by whether the packet changes the answer (BRIEF §4.7). Until then, results are shown under both label sets.
+5. **Agent-pull lifts precision and silence, but less than first reported** (F13).
+   - The host model already reads every turn. Given a ~100-token memory index and a `recall()` tool, it decides when to look and what to ask.
+   - On the same events (critic C2's correction), it gets 2.5× the precision and +0.18 silence on code, and 2.1× and +0.26 on life.
+   - It calls on 93% of need turns, but also on 28% of no-need code turns, which fails its own pre-registered 25% line.
+   - At an 8% base rate, 93% of its bullets are still unneeded. Retrieval *after* the call is now the weak half.
+6. **No cheap hook-side signal decides "is memory needed?"** All of these cap at AUC 0.62–0.70 on both worlds:
+   - lexical scores;
+   - self-play exemplars;
+   - situation tracking;
+   - a gate distilled from a strong model's decisions;
+   - static word vectors.
+   An independent blank-slate design converged on the same wall (about 0.3 recall@4) and on the same remedies (sleep-time situations and clean statements). Its one new mechanism, budgeted firing calibrated per user, is adopted. It adds about +0.1 silence on code.
+7. **The labels are valid, and wrong bullets cost real quality** (downstream check, BRIEF §4.7). Memory changes the outcome on 80% of plan-labelled need turns (+0.97 on a 0–3 scale). Half of the independent labeler's extra needs are real but mild. A hook-side packet keeps only about 30% of the available benefit, and **a wrong packet lowers the score by 0.40 on turns that need nothing.**
+8. **Benchmark realism, after fixes.**
+   - The coverage rule is calibrated against a judge (κ 0.86).
+   - Prompts were shortened toward R6's lengths (p50 15 words; R6's is 12).
+   - A leak-free sleep mode was added.
+   - The incumbent now also runs with P4.3's evidence gate on: silence 0.21, which is still a 79% fire rate against the real 31%.
 
 ## 5. Open problems, ranked by size
 
@@ -68,8 +79,12 @@ On realistic streams, lexical retrieval is far weaker than the pair fixtures sug
    - No sealed holdout yet.
    - LongMemEval is blocked by the environment's network policy.
 
-## 6. What this suggests for the plan (proposals, not yet slices)
+## 6. What this changed in the plan (consolidation, cycle 3)
 
-- **A pull channel next to the push channel.** The hook pushes only high-precision items (rules on actions, corrections). The host model gets a memory index and a `recall` tool for everything else. This needs a DECISIONS proposal: it changes A4's delivery model, but not D15's no-model hot path.
-- **Sleep-time compilation of memories with `when` cues and self-play exemplars.** This is the store format the hot path matches against.
-- **Benchmark arms in A5:** StreamBench code and life arms, gating the Phase 8 slices with pre-registered targets. The proposed targets will be set after the length-calibrated stream, version 1.1.
+- **ROADMAP and PROGRESS:**
+  - Phase 8 now measures on StreamBench.
+  - New slices: P8.8 (sleep compiler with need cues and self-play, shadow), P8.9 (pull channel), P8.10 (calibrated firing).
+  - P8.6 builds the StreamBench arms.
+  - Targets are pre-registerable from the R10 numbers above.
+- **A5:** arms `stream-code`, `stream-life`, `stream-trigger`, `stream-downstream`; LifeBench pairs secondary.
+- **DECISIONS:** proposals R10-1 (pull channel), R10-2 (StreamBench primary), R10-3 (precision and silence as outcome metrics) and R10-4 (sleep models write cues and situations). All are pending the user's decision.
