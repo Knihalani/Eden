@@ -1,0 +1,1221 @@
+{
+ "batch": "code-rw-b01",
+ "rewriter": "sonnet (claude-code subagent)",
+ "cases": [
+  {
+   "session": "code-s057",
+   "index": 30,
+   "text": "new queue invoice-reminders in the worker. daily per org, find invoices due in 3 days and enqueue a reminder email for each"
+  },
+  {
+   "session": "code-s057",
+   "index": 36,
+   "text": "reminder email needs a pay link from the api's internal endpoint locally. check api port in its env config, wire the base url"
+  },
+  {
+   "session": "code-s058",
+   "index": 0,
+   "text": "multi-line invoices off by a cent, total doesn't match sum of lines. northwind flagged it. fix"
+  },
+  {
+   "session": "code-s058",
+   "index": 7,
+   "text": "settings page: company profile form. company name, tax id, invoice sender email. name and email required"
+  },
+  {
+   "session": "code-s058",
+   "index": 12,
+   "text": "add optional memo to POST /v1/invoices, max 500 chars, show it in the api docs"
+  },
+  {
+   "session": "code-s058",
+   "index": 21,
+   "text": "invoice pdf download spins forever on safari, fine on chrome"
+  },
+  {
+   "session": "code-s058",
+   "index": 27,
+   "text": "trailmix: gpx upload on a hike, pull distance + elevation gain. django, gpxpy. cleanest way?"
+  },
+  {
+   "session": "code-s059",
+   "index": 0,
+   "text": "staging.acme.dev deploys automatically from main. check this morning's customer delete merge made it there"
+  },
+  {
+   "session": "code-s059",
+   "index": 4,
+   "text": "need an s3 bucket for invoice pdf exports. private, usual tags"
+  },
+  {
+   "session": "code-s059",
+   "index": 8,
+   "text": "api enqueues background jobs to the worker with BullMQ. after the export request row is created, enqueue 'invoice-pdf-export' with the export id"
+  },
+  {
+   "session": "code-s060",
+   "index": 0,
+   "text": "invoice status badge says Overdue on paid invoices once due date is past. fix"
+  },
+  {
+   "session": "code-s060",
+   "index": 7,
+   "text": "scripts/seed-demo throws ERR_REQUIRE_ESM. set \"type\": \"module\" in the package.json and import with .js extension instead of require()"
+  },
+  {
+   "session": "code-s060",
+   "index": 15,
+   "text": "factories.ts too? same ERR_REQUIRE_ESM fix"
+  },
+  {
+   "session": "code-s060",
+   "index": 21,
+   "text": "new laptop, clone is at ~/code/acme-platform. get deps in so the seed works"
+  },
+  {
+   "session": "code-s060",
+   "index": 26,
+   "text": "long day lol"
+  },
+  {
+   "session": "code-s061",
+   "index": 0,
+   "text": "empty state says \"No invoice yet\", should be \"No invoices yet\", subtext missing a period. fix + test"
+  },
+  {
+   "session": "code-s061",
+   "index": 7,
+   "text": "split apps/api/src/routes/invoices.ts, ~900 lines. show a plan and wait for approval before touching anything. same for any large refactor"
+  },
+  {
+   "session": "code-s061",
+   "index": 12,
+   "text": "plan fine but hold off. ci red on acme-207-invoice-copy, look"
+  },
+  {
+   "session": "code-s061",
+   "index": 20,
+   "text": "priya's redis sg change is on priya/acme-212-redis-sg. she's out, marco needs it for the worker rollout. get it live in prod"
+  },
+  {
+   "session": "code-s062",
+   "index": 0,
+   "text": "how does postgres pick index scan vs bitmap heap scan"
+  },
+  {
+   "session": "code-s062",
+   "index": 4,
+   "text": "add truncate helper to apps/web/lib/text.ts: cut at n chars on a word boundary, ellipsis, leave short strings alone. tests too"
+  },
+  {
+   "session": "code-s063",
+   "index": 0,
+   "text": "trailmix: htmx filter on trail list swaps whole page into #trails, not just the list. hikes/views.py trail_list"
+  },
+  {
+   "session": "code-s063",
+   "index": 6,
+   "text": "thx"
+  },
+  {
+   "session": "code-s063",
+   "index": 9,
+   "text": "infra/ changes need platform team review and plan output pasted in the PR. draft the PR description for priya's redis sg branch with a spot for plan output"
+  },
+  {
+   "session": "code-s063",
+   "index": 13,
+   "text": "rule: never deploy to production on fridays. get the changelog for a tag ready after lunch"
+  },
+  {
+   "session": "code-s063",
+   "index": 17,
+   "text": "dashboard header avatar sits 4px below the menu button on mobile. fix"
+  },
+  {
+   "session": "code-s063",
+   "index": 23,
+   "text": "dashboard js heavy since charts. run ANALYZE=true pnpm --filter web build to inspect bundle size, tell me whats big"
+  },
+  {
+   "session": "code-s064",
+   "index": 0,
+   "text": "typecheck failing in api on serializeClient after marco's merge, fix"
+  },
+  {
+   "session": "code-s064",
+   "index": 8,
+   "text": "customer says the acme cli crashes on launch after updating. repro from the repo, then patch release today"
+  },
+  {
+   "session": "code-s064",
+   "index": 13,
+   "text": "waiting on support. where's the invoices table defined? need a po_number column"
+  },
+  {
+   "session": "code-s064",
+   "index": 19,
+   "text": "trailmix: gpx upload on the Hike model, cleanest way in django?"
+  },
+  {
+   "session": "code-s064",
+   "index": 24,
+   "text": "why was staging ingress 404ing for a couple hours after last week's cluster upgrade? priya asked. dig through infra/, short version"
+  },
+  {
+   "session": "code-s065",
+   "index": 0,
+   "text": "notes: login page is apps/web/app/login/page.tsx, renders clerk's SignIn component. cli must support node 18 and later, no newer APIs without a fallback. switch kubectl context: aws eks update-kubeconfig --name acme-prod --region us-east-1. ask before adding a new dependency. commit messages: imperative mood, short body to explain why. now sanity check login page, then commit the po_number column work on its branch"
+  },
+  {
+   "session": "code-s066",
+   "index": 0,
+   "text": "csv export in api breaks on client names with commas, finance got shifted columns. fix"
+  },
+  {
+   "session": "code-s066",
+   "index": 8,
+   "text": "add test for double quotes inside a field. keep crlf, update the export test"
+  },
+  {
+   "session": "code-s066",
+   "index": 13,
+   "text": "download filename should include org slug, invoices-northwind.csv"
+  },
+  {
+   "session": "code-s066",
+   "index": 19,
+   "text": "staging api: too many connections under load. set postgres pool max to 10 per pod in apps/api/src/db/client.ts"
+  },
+  {
+   "session": "code-s066",
+   "index": 25,
+   "text": "ok"
+  },
+  {
+   "session": "code-s066",
+   "index": 28,
+   "text": "worker exposes prometheus metrics on port 9464 at /metrics. add a servicemonitor to the worker helm chart for grafana"
+  },
+  {
+   "session": "code-s066",
+   "index": 35,
+   "text": "im fried. good day tho"
+  },
+  {
+   "session": "code-s067",
+   "index": 0,
+   "text": "lena's contractor starts today, short slack msg on getting the repo working please. also get the csv export fix ready to go out"
+  },
+  {
+   "session": "code-s067",
+   "index": 6,
+   "text": "docker compose up -d vs docker compose start, difference?"
+  },
+  {
+   "session": "code-s068",
+   "index": 0,
+   "text": "csv branch picked up last night's pool max and servicemonitor commits. split them out, keep diffs small, one concern per pull request. csv alone"
+  },
+  {
+   "session": "code-s068",
+   "index": 8,
+   "text": "did we settle anything on you pulling in npm packages on your own?"
+  },
+  {
+   "session": "code-s068",
+   "index": 12,
+   "text": "marco changed clerk token verify on acme-215-clerk-verify. pull it, run pnpm --filter api test -- auth"
+  },
+  {
+   "session": "code-s068",
+   "index": 17,
+   "text": "yeah leave him a comment. lena wants a /reports page in web, where should it go?"
+  },
+  {
+   "session": "code-s068",
+   "index": 23,
+   "text": "update everything in web to latest per deps-bot's list from last night. half-finished edits on reports page in my tree, deal with them however"
+  },
+  {
+   "session": "code-s069",
+   "index": 0,
+   "text": "some stripe invoices show in dashboard 30+ min late but billing-sync pulls every 15 minutes. check services/worker/src/jobs/billing-sync.ts, tell me whats up, change nothing yet"
+  },
+  {
+   "session": "code-s069",
+   "index": 6,
+   "text": "lena says web on staging sometimes calls localhost:4000 from the browser. where does it get the api url?"
+  },
+  {
+   "session": "code-s069",
+   "index": 11,
+   "text": "add biome to the recommended list in .vscode/extensions.json (vs code extensions)"
+  },
+  {
+   "session": "code-s070",
+   "index": 0,
+   "text": "brain fried from q4 planning, 2 hours of roadmap slides lol"
+  },
+  {
+   "session": "code-s070",
+   "index": 2,
+   "text": "structuredClone(x) vs JSON.parse(JSON.stringify(x)), actual difference?"
+  },
+  {
+   "session": "code-s070",
+   "index": 4,
+   "text": "ok thanks"
+  },
+  {
+   "session": "code-s070",
+   "index": 6,
+   "text": "why does yarn.lock keep showing in git status after pull? thought we removed it"
+  },
+  {
+   "session": "code-s070",
+   "index": 12,
+   "text": "leave it. fix contact avatars showing \"U\" for single-name people, should be first letter of the name"
+  },
+  {
+   "session": "code-s071",
+   "index": 0,
+   "text": "csv export on clients table splits \"Smith, Jones & Co\" into 2 columns. fix"
+  },
+  {
+   "session": "code-s071",
+   "index": 7,
+   "text": "add test for the comma case + a quote in a name"
+  },
+  {
+   "session": "code-s071",
+   "index": 12,
+   "text": "nice"
+  },
+  {
+   "session": "code-s071",
+   "index": 14,
+   "text": "overdue reminder job in worker silently skips some orgs. add logging of what it decides per org"
+  },
+  {
+   "session": "code-s072",
+   "index": 0,
+   "text": "git hooks run through lefthook now, husky removed. kill leftover .husky refs. also api wont connect to my local db since pull, look"
+  },
+  {
+   "session": "code-s073",
+   "index": 0,
+   "text": "add payment_reminders table to drizzle schema: invoice id, sent_at, channel (email|sms), status. primary keys UUID v7 for anything new, not serial or v4. generate migration"
+  },
+  {
+   "session": "code-s074",
+   "index": 0,
+   "text": "invoice status badges unreadable in dark mode, esp overdue. fix"
+  },
+  {
+   "session": "code-s074",
+   "index": 5,
+   "text": "notification preferences settings page in dashboard, just shell: heading + empty form. where does it go?"
+  },
+  {
+   "session": "code-s074",
+   "index": 7,
+   "text": "later. first: search box on clients list, by name, email, company. backend + frontend"
+  },
+  {
+   "session": "code-s074",
+   "index": 18,
+   "text": "debounce the search, it fires on every keystroke. add the tests bg run suggested"
+  },
+  {
+   "session": "code-s074",
+   "index": 25,
+   "text": "worker pods killed mid-job on deploys, priya says it's on us. how does worker shutdown work rn?"
+  },
+  {
+   "session": "code-s074",
+   "index": 32,
+   "text": "ok ill tell priya. pdf downloads named \"Invoice 0042 Smith Jones.pdf\", make it invoice-0042-smith-jones.pdf"
+  },
+  {
+   "session": "code-s075",
+   "index": 0,
+   "text": "clean up apps/api/src/routes/payments.ts after marco's merge: mixed indent, semicolons, quotes. zero logic changes"
+  },
+  {
+   "session": "code-s075",
+   "index": 5,
+   "text": "Terraform state lives in S3 bucket acme-tfstate with a DynamoDB lock table. does backend config in infra/terraform point there? priya thinks someone committed a local backend override"
+  },
+  {
+   "session": "code-s075",
+   "index": 11,
+   "text": "yes do it"
+  },
+  {
+   "session": "code-s075",
+   "index": 15,
+   "text": "util to format ms durations like \"2h 5m\", \"45s\", \"1m 3s\" for the admin job runtime column"
+  },
+  {
+   "session": "code-s075",
+   "index": 20,
+   "text": "trailmix django orm: annotate each Hike with photo count, keep only hikes with >3 photos"
+  },
+  {
+   "session": "code-s075",
+   "index": 23,
+   "text": "so state is in S3 bucket acme-tfstate with dynamodb lock table, and nothing in the tree points at local state after your commit, right?"
+  },
+  {
+   "session": "code-s075",
+   "index": 27,
+   "text": "format-duration blew up the admin page test\n\n FAIL  app/(dashboard)/admin/jobs/jobs-table.test.tsx > JobsTable > renders runtime column\nTypeError: Cannot read properties of undefined (reading 'toFixed')\n ❯ formatRuntime app/(dashboard)/admin/jobs/jobs-table.tsx:22:31\n     20|   const cols: ColumnDef<JobRow>[] = [\n     21|     { accessorKey: 'name', header: 'Job' },\n     22|     { id: 'runtime', header: 'Runtime', cell: ({ row }) => formatRuntime(row.original) },\n       |                               ^\n     23|     { accessorKey: 'status', header: 'Status' },\n     24|   ];\n ❯ cell app/(dashboard)/admin/jobs/jobs-table.tsx:22:72\n ❯ flexRender node_modules/.pnpm/@tanstack+react-table@8.20.5/node_modules/@tanstack/react-table/build/lib/index.mjs:19:12\n ❯ renderWithHooks node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:5425:22\n ❯ updateFunctionComponent node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:8121:19\n ❯ beginWork node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:9801:18\n ❯ performUnitOfWork node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:14012:22\n ❯ workLoopSync node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:13889:41\n ❯ renderRootSync node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:13868:11\n ❯ performWorkOnRoot node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:13398:42\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n\nStderr | app/(dashboard)/admin/jobs/jobs-table.test.tsx > JobsTable > renders runtime column\nWarning: An error occurred in the <Cell> component.\n\nConsider adding an error boundary to your tree to customize error handling behavior.\n\n Test Files  1 failed | 66 passed (67)\n      Tests  1 failed | 424 passed (425)\n   Start at  15:02:44\n   Duration  20.3s (transform 3.1s, setup 4.4s, collect 11.8s, tests 6.0s, environment 9.2s, prepare 5.1s)\n\n ELIFECYCLE  Test failed. See above for more details."
+  },
+  {
+   "session": "code-s076",
+   "index": 0,
+   "text": "rename useOrgSwitcher hook to useActiveOrg across apps/web, file name too"
+  },
+  {
+   "session": "code-s076",
+   "index": 5,
+   "text": "friday energy is zero lol"
+  },
+  {
+   "session": "code-s076",
+   "index": 8,
+   "text": "seed local data: pnpm --filter api db:seed, db's up"
+  },
+  {
+   "session": "code-s076",
+   "index": 12,
+   "text": "Promise.all vs allSettled, when does it bite"
+  },
+  {
+   "session": "code-s076",
+   "index": 14,
+   "text": "nice. long weekend, finally hiking near tobermory"
+  },
+  {
+   "session": "code-s076",
+   "index": 17,
+   "text": "reports empty state says \"recieve\". fix and grep for other recieve typos"
+  },
+  {
+   "session": "code-s076",
+   "index": 21,
+   "text": "undo the en.json change, lena owns messages and is mid-refactor. keep the other two"
+  },
+  {
+   "session": "code-s076",
+   "index": 25,
+   "text": "http/2 multiplexing vs http/1.1 keep-alive, actual difference?"
+  },
+  {
+   "session": "code-s077",
+   "index": 0,
+   "text": "make invoices table header sticky on long lists"
+  },
+  {
+   "session": "code-s077",
+   "index": 5,
+   "text": "add tsx as dev dependency to packages/cli so scripts/ run directly without building"
+  },
+  {
+   "session": "code-s077",
+   "index": 11,
+   "text": "tsx vs ts-node, whats different under the hood"
+  },
+  {
+   "session": "code-s077",
+   "index": 13,
+   "text": "cool"
+  },
+  {
+   "session": "code-s077",
+   "index": 16,
+   "text": "too long-winded, tighten up"
+  },
+  {
+   "session": "code-s077",
+   "index": 19,
+   "text": "Map vs plain object for string keys, real perf difference?"
+  },
+  {
+   "session": "code-s077",
+   "index": 23,
+   "text": "and WeakMap, when to reach for it"
+  },
+  {
+   "session": "code-s077",
+   "index": 26,
+   "text": "ty"
+  },
+  {
+   "session": "code-s077",
+   "index": 28,
+   "text": "deps-bot's types bump broke cli typecheck. common cause?\n\npackages/cli/src/http.ts:14:29 - error TS2345: Argument of type 'AbortSignal' is not assignable to parameter of type 'import(\"undici-types\").AbortSignal'.\n  Types of property 'reason' are incompatible.\n\n14   const res = await fetch(url, { signal: ctrl.signal, headers });\n                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\npackages/cli/src/http.ts:22:11 - error TS2322: Type 'Response' is not assignable to type 'globalThis.Response'.\n  Property 'bytes' is missing in type 'Response' but required in type 'globalThis.Response'.\n\n22     return res;\n             ~~~\n\npackages/cli/src/commands/whoami.ts:31:5 - error TS2322: Type 'Response' is not assignable to type 'globalThis.Response'.\n  Property 'bytes' is missing in type 'Response' but required in type 'globalThis.Response'.\n\n31     return fetchJson(res);\n       ~~~~~~~~~~~~~~~~~~~~~\n\npackages/cli/src/commands/invoices/list.ts:48:7 - error TS2345: Argument of type 'Response' is not assignable to parameter of type 'globalThis.Response'.\n\n48       await assertOk(res);\n         ~~~~~~~~~~~~~~~~~~\n\npackages/cli/src/commands/invoices/export.ts:62:7 - error TS2345: Argument of type 'Response' is not assignable to parameter of type 'globalThis.Response'.\n\n62       await assertOk(res);\n         ~~~~~~~~~~~~~~~~~~\n\npackages/cli/src/commands/login.ts:77:20 - error TS2769: No overload matches this call.\n  Overload 1 of 2, '(input: string | URL | Request, init?: RequestInit): Promise<Response>', gave the following error.\n    Type 'AbortSignal' is not assignable to type 'import(\"undici-types\").AbortSignal'.\n\n77   const res = await fetch(DEVICE_CODE_URL, { method: 'POST', body, signal });\n                      ~~~~~\n\npackages/cli/test/helpers/mock-fetch.ts:9:3 - error TS2322: Type '(input: RequestInfo) => Promise<Response>' is not assignable to type 'typeof fetch'.\n\n9   globalThis.fetch = vi.fn(async () => new Response('{}'));\n    ~~~~~~~~~~~~~~~~\n\n\nFound 7 errors in 6 files.\n\n packages/cli/src/http.ts:2\n packages/cli/src/commands/whoami.ts:1\n packages/cli/src/commands/invoices/list.ts:1\n packages/cli/src/commands/invoices/export.ts:1\n packages/cli/src/commands/login.ts:1\n packages/cli/test/helpers/mock-fetch.ts:1"
+  },
+  {
+   "session": "code-s077",
+   "index": 31,
+   "text": "later. where do worker cron jobs live? move nightly digest from 6am to 7am toronto"
+  },
+  {
+   "session": "code-s078",
+   "index": 0,
+   "text": "reports revenue chart y axis labels overlap at 375px. fix"
+  },
+  {
+   "session": "code-s078",
+   "index": 6,
+   "text": "lunch was a disaster, poke place got my order wrong twice"
+  },
+  {
+   "session": "code-s078",
+   "index": 9,
+   "text": "container queries vs media queries quick"
+  },
+  {
+   "session": "code-s078",
+   "index": 11,
+   "text": "do that for the chart, it's in a half-width card so media query is wrong"
+  },
+  {
+   "session": "code-s078",
+   "index": 16,
+   "text": "add loading skeletons to the 4 summary cards on reports"
+  },
+  {
+   "session": "code-s079",
+   "index": 0,
+   "text": "can i add the k6 load test suite as a github actions ci job? hits staging ~40 min. any rule against that?"
+  },
+  {
+   "session": "code-s080",
+   "index": 0,
+   "text": "new cli command `acme invoices list`: GET /v1/invoices, prints a table. every cli command from now on must support --json output so people can script it. scaffold next to clients command"
+  },
+  {
+   "session": "code-s080",
+   "index": 9,
+   "text": "--json on every command, people pipe into jq. stable shape: no colors, no table, plain objects with fixed keys"
+  },
+  {
+   "session": "code-s080",
+   "index": 14,
+   "text": "pulled in cli-table3 for the human table. wrap up: make the pr. tag release on the 9th"
+  },
+  {
+   "session": "code-s080",
+   "index": 20,
+   "text": "staging api throwing `sorry, too many clients already` from pg under load. whats our pool limit again?"
+  },
+  {
+   "session": "code-s080",
+   "index": 24,
+   "text": "add msw as dev dependency in packages/cli for mocking http in the invoices tests"
+  },
+  {
+   "session": "code-s080",
+   "index": 28,
+   "text": "table wraps badly on long client names. truncate client to 28 chars with ellipsis"
+  },
+  {
+   "session": "code-s080",
+   "index": 36,
+   "text": "add --status filter to invoices list (draft|open|paid|void), as query param"
+  },
+  {
+   "session": "code-s080",
+   "index": 42,
+   "text": "trailmix: htmx trail list flickers on every hx-get swap. ideas?"
+  },
+  {
+   "session": "code-s080",
+   "index": 46,
+   "text": "fix 'recieved' -> 'received' in help text, probably in clients.ts too"
+  },
+  {
+   "session": "code-s081",
+   "index": 0,
+   "text": "acme invoices list throws `TypeError: Cannot read properties of undefined (reading 'map')` on org with no invoices. fix"
+  },
+  {
+   "session": "code-s081",
+   "index": 7,
+   "text": "orders route tests all time out in the before hook on my machine. get them green"
+  },
+  {
+   "session": "code-s081",
+   "index": 13,
+   "text": "priya wants a plan for the redis parameter group change. terraform plan locally: `make plan ENV=staging` from infra/. grab output for the pr"
+  },
+  {
+   "session": "code-s081",
+   "index": 17,
+   "text": "#1189 approved, checks green. wrap it up"
+  },
+  {
+   "session": "code-s082",
+   "index": 0,
+   "text": "still random 401s from api, ~1 in 200, no pattern. dig in"
+  },
+  {
+   "session": "code-s082",
+   "index": 5,
+   "text": "also rename getSessionClaims to readSessionClaims everywhere"
+  },
+  {
+   "session": "code-s082",
+   "index": 11,
+   "text": "user rule: no comments that restate the code, only the why. kill `// verify the token` and `// return claims`, keep the clock skew one"
+  },
+  {
+   "session": "code-s082",
+   "index": 17,
+   "text": "webhooks job double-delivers when a pod restarts mid-job. rule: every worker job handler must be idempotent, job id as idempotency key. fix services/worker/src/jobs/webhooks.ts"
+  },
+  {
+   "session": "code-s082",
+   "index": 25,
+   "text": "add readiness and liveness probes to api helm chart, traffic hit pods before ready last deploy"
+  },
+  {
+   "session": "code-s082",
+   "index": 29,
+   "text": "readiness vs liveness, and when does startupProbe matter"
+  },
+  {
+   "session": "code-s082",
+   "index": 33,
+   "text": "more concise pls"
+  },
+  {
+   "session": "code-s082",
+   "index": 35,
+   "text": "trailmix: make Trail.difficulty nullable without breaking existing rows, django 5.1"
+  },
+  {
+   "session": "code-s082",
+   "index": 38,
+   "text": "that 401 thing ate my whole afternoon"
+  },
+  {
+   "session": "code-s082",
+   "index": 40,
+   "text": "conventions: prefer named exports, no default exports except Next.js pages. python scripts in tools/ use python 3.12 managed by uv. fix default export in packages/cli/src/format.ts, make tools/backfill_org_ids.py run with uv"
+  },
+  {
+   "session": "code-s082",
+   "index": 49,
+   "text": "thx"
+  },
+  {
+   "session": "code-s082",
+   "index": 52,
+   "text": "what did we do this session? short list"
+  },
+  {
+   "session": "code-s083",
+   "index": 0,
+   "text": "acme whoami prints email twice with multiple orgs. fix"
+  },
+  {
+   "session": "code-s083",
+   "index": 5,
+   "text": "undo that, rethinking how whoami shows orgs"
+  },
+  {
+   "session": "code-s083",
+   "index": 8,
+   "text": "stripe webhooks fail signature verification on staging since the fastify move. gotcha: /v1/webhooks/stripe route needs raw body, register fastify-raw-body. wire it up"
+  },
+  {
+   "session": "code-s083",
+   "index": 17,
+   "text": "stripe handler's event-type switch is long, move handlers into a map by event type"
+  },
+  {
+   "session": "code-s084",
+   "index": 0,
+   "text": "trailmix: django management command importing every .gpx in a folder into Trail + TrackPoint"
+  },
+  {
+   "session": "code-s084",
+   "index": 6,
+   "text": "where does release.yml push the worker image? need prod's exact image"
+  },
+  {
+   "session": "code-s084",
+   "index": 10,
+   "text": "bump that workflow's build timeout to 25 min, timed out twice this week"
+  },
+  {
+   "session": "code-s084",
+   "index": 14,
+   "text": "worker queue names: email, images, billing-sync, webhooks. typed const in services/worker/src/queues.ts, we keep typoing billing_sync"
+  },
+  {
+   "session": "code-s084",
+   "index": 18,
+   "text": "swap string literals in services/worker/src/index.ts for the const"
+  },
+  {
+   "session": "code-s084",
+   "index": 27,
+   "text": "probably this, staging worker logs. whats going on?\n\n```\n{\"level\":50,\"time\":1791565312044,\"pid\":1,\"hostname\":\"worker-7c9d5b6f8-lp2sx\",\"jobId\":\"4471\",\"queue\":\"email\",\"msg\":\"job failed\"}\nTypeError: Cannot read properties of null (reading 'lines')\n    at renderLineItems (file:///app/services/worker/dist/pdf/invoice-pdf.js:88:31)\n    at renderInvoice (file:///app/services/worker/dist/pdf/invoice-pdf.js:41:5)\n    at async buildInvoiceAttachment (file:///app/services/worker/dist/jobs/email.js:63:19)\n    at async sendEmail (file:///app/services/worker/dist/jobs/email.js:27:24)\n    at async Worker.processJob (file:///app/node_modules/bullmq/dist/esm/classes/worker.js:455:28)\n    at async Worker.retryIfFailed (file:///app/node_modules/bullmq/dist/esm/classes/worker.js:638:24)\n{\"level\":30,\"time\":1791565313102,\"pid\":1,\"hostname\":\"worker-7c9d5b6f8-lp2sx\",\"jobId\":\"4471\",\"queue\":\"email\",\"attempt\":2,\"msg\":\"job retry scheduled\"}\n{\"level\":50,\"time\":1791565315220,\"pid\":1,\"hostname\":\"worker-7c9d5b6f8-lp2sx\",\"jobId\":\"4471\",\"queue\":\"email\",\"msg\":\"job failed\"}\nTypeError: Cannot read properties of null (reading 'lines')\n    at renderLineItems (file:///app/services/worker/dist/pdf/invoice-pdf.js:88:31)\n    at renderInvoice (file:///app/services/worker/dist/pdf/invoice-pdf.js:41:5)\n    at async buildInvoiceAttachment (file:///app/services/worker/dist/jobs/email.js:63:19)\n    at async sendEmail (file:///app/services/worker/dist/jobs/email.js:27:24)\n    at async Worker.processJob (file:///app/node_modules/bullmq/dist/esm/classes/worker.js:455:28)\n{\"level\":30,\"time\":1791565319301,\"pid\":1,\"hostname\":\"worker-7c9d5b6f8-lp2sx\",\"jobId\":\"4471\",\"queue\":\"email\",\"attempt\":3,\"msg\":\"job retry scheduled\"}\n<--- Last few GCs --->\n[1:0x7f2a1c000000]   604112 ms: Mark-Compact 1987.4 (2051.2) -> 1979.9 (2052.7) MB, 1412.07 / 0.00 ms  (average mu = 0.112, current mu = 0.031) allocation failure; scavenge might not succeed\n[1:0x7f2a1c000000]   606901 ms: Mark-Compact 1991.2 (2052.7) -> 1984.6 (2055.4) MB, 2731.55 / 0.00 ms  (average mu = 0.071, current mu = 0.019) allocation failure; scavenge might not succeed\n<--- JS stacktrace --->\nFATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory\n----- Native stack trace -----\n 1: 0xb8e4a1 node::OOMErrorHandler(char const*, v8::OOMDetails const&) [node]\n 2: 0xf0b2c0 v8::Utils::ReportOOMFailure(v8::internal::Isolate*, char const*, v8::OOMDetails const&) [node]\n 3: 0xf0b5a7 v8::internal::V8::FatalProcessOutOfMemory(v8::internal::Isolate*, char const*, v8::OOMDetails const&) [node]\n 4: 0x1138e95  [node]\n 5: 0x11510f0 v8::internal::Heap::CollectGarbage(v8::internal::AllocationSpace, v8::internal::GarbageCollectionReason, v8::GCCallbackFlags) [node]\n 6: 0x1127207 v8::internal::HeapAllocator::AllocateRawWithLightRetrySlowPath(v8::internal::AllocationType, v8::internal::AllocationOrigin, v8::internal::AllocationAlignment) [node]\n 7: 0x1128335 v8::internal::HeapAllocator::AllocateRawWithRetryOrFailSlowPath(v8::internal::AllocationType, v8::internal::AllocationOrigin, v8::internal::AllocationAlignment) [node]\n 8: 0x1105a2a v8::internal::Factory::NewFillerObject(int, v8::internal::AllocationAlignment, v8::internal::AllocationType, v8::internal::AllocationOrigin) [node]\n 9: 0x1567b31 v8::internal::Runtime_AllocateInYoungGeneration(int, unsigned long*, v8::internal::Isolate*) [node]\n```"
+  },
+  {
+   "session": "code-s084",
+   "index": 32,
+   "text": "ok go with that"
+  },
+  {
+   "session": "code-s084",
+   "index": 37,
+   "text": "add unit test for the null body case"
+  },
+  {
+   "session": "code-s084",
+   "index": 41,
+   "text": "lena's preview deploy gets blocked by cors. how does api decide who gets through?"
+  },
+  {
+   "session": "code-s084",
+   "index": 44,
+   "text": "team rule: date-fns for dates, moment is banned. swap moment import in apps/web/lib/format-date.ts"
+  },
+  {
+   "session": "code-s084",
+   "index": 50,
+   "text": "date-fns only, moment banned. grep web app for other moment imports"
+  },
+  {
+   "session": "code-s084",
+   "index": 54,
+   "text": "helper in apps/web/lib: name -> initials for avatar fallback. 'Lena Fischer' -> 'LF', single names one letter"
+  },
+  {
+   "session": "code-s085",
+   "index": 0,
+   "text": "new laptop, fresh clone of acme-platform in ~/code. get me a working setup"
+  },
+  {
+   "session": "code-s085",
+   "index": 5,
+   "text": "nice"
+  },
+  {
+   "session": "code-s085",
+   "index": 10,
+   "text": "email queue looks stuck locally, want a ui to eyeball the jobs"
+  },
+  {
+   "session": "code-s085",
+   "index": 14,
+   "text": "how's the api exposed publicly? priya asked about cert renewal"
+  },
+  {
+   "session": "code-s086",
+   "index": 0,
+   "text": "need a read replica for the db. set it up, then check replication lag"
+  },
+  {
+   "session": "code-s086",
+   "index": 4,
+   "text": "grafana dashboard for the image pipeline: throughput, failures, latency. json please"
+  },
+  {
+   "session": "code-s086",
+   "index": 8,
+   "text": "invoice detail hydration mismatch on due date. format dates on the client inside useEffect, or suppressHydrationWarning on the <time> element. go with useEffect"
+  },
+  {
+   "session": "code-s087",
+   "index": 0,
+   "text": "dark mode handled by next-themes, class strategy. invoice status badge stays light in dark mode, fix"
+  },
+  {
+   "session": "code-s087",
+   "index": 6,
+   "text": "right, next-themes class strategy, no prefers-color-scheme media queries. check other badges too"
+  },
+  {
+   "session": "code-s087",
+   "index": 12,
+   "text": "added paid_at to invoices in schema.ts + sql. start the server so i can hit GET /v1/invoices and check the new field"
+  },
+  {
+   "session": "code-s088",
+   "index": 0,
+   "text": "trailmix: htmx infinite scroll on trail list, load next page when last card scrolls into view"
+  },
+  {
+   "session": "code-s088",
+   "index": 4,
+   "text": "trailmix on fly.io: auto-run django migrations on every deploy"
+  },
+  {
+   "session": "code-s088",
+   "index": 8,
+   "text": "upgraded typescript in a branch, wall of these. common thread?\n\n```\napps/web/app/(dashboard)/clients/page.tsx(3,10): error TS1484: 'ClientRow' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\napps/web/app/(dashboard)/clients/page.tsx(4,10): error TS1484: 'SortKey' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\napps/web/app/(dashboard)/invoices/page.tsx(5,10): error TS1484: 'InvoiceRow' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\napps/web/app/(dashboard)/invoices/[id]/page.tsx(2,15): error TS1484: 'Invoice' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\napps/web/components/data-table/data-table.tsx(6,3): error TS1484: 'ColumnDef' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\napps/web/components/data-table/data-table.tsx(7,3): error TS1484: 'SortingState' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\napps/web/components/invoices/line-items.tsx(4,10): error TS1484: 'LineItem' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\napps/web/lib/api.ts(1,10): error TS1484: 'paths' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\napps/web/lib/api.ts(2,10): error TS1484: 'ApiError' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\napps/web/lib/query-keys.ts(1,10): error TS1484: 'InvoiceFilters' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\napps/web/hooks/use-invoices.ts(2,10): error TS1484: 'InvoiceFilters' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\napps/web/hooks/use-invoices.ts(3,10): error TS1484: 'Invoice' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\napps/web/hooks/use-clients.ts(2,10): error TS1484: 'ClientRow' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\napps/api/src/routes/invoices.ts(4,10): error TS1484: 'FastifyPluginAsync' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\napps/api/src/routes/clients.ts(3,10): error TS1484: 'FastifyPluginAsync' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\napps/api/src/plugins/auth.ts(4,10): error TS1484: 'JwtPayload' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\napps/api/src/lib/session.ts(1,10): error TS1484: 'JwtPayload' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\nservices/worker/src/jobs/email.ts(2,10): error TS1484: 'Job' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\nservices/worker/src/jobs/images.ts(2,10): error TS1484: 'Job' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\nservices/worker/src/jobs/billing-sync.ts(2,10): error TS1484: 'Job' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\npackages/cli/src/commands/invoices.ts(5,10): error TS1484: 'Invoice' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\npackages/cli/src/http.ts(1,10): error TS1484: 'AxiosInstance' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.\n\nFound 22 errors in 19 files.\n\nErrors  Files\n     2  apps/web/app/(dashboard)/clients/page.tsx\n     1  apps/web/app/(dashboard)/invoices/page.tsx\n     2  apps/web/components/data-table/data-table.tsx\n     2  apps/web/lib/api.ts\n     2  apps/web/hooks/use-invoices.ts\n```"
+  },
+  {
+   "session": "code-s088",
+   "index": 11,
+   "text": "`satisfies` vs `as` in ts, when which"
+  },
+  {
+   "session": "code-s088",
+   "index": 13,
+   "text": "ok"
+  },
+  {
+   "session": "code-s088",
+   "index": 17,
+   "text": "sam forwarded this customer thread. what do they want?\n\n---------- Forwarded message ---------\nFrom: Dana Whitcombe <dana@northwind-studio.example.com>\nDate: Mon, Oct 12, 2026 at 11:04 AM\nSubject: Re: Re: Exporting invoices\nTo: support@acme.example.com\nCc: Sam Ortiz <sam@acme.example.com>\n\nHi again,\n\nThanks for the quick reply on Friday. To clarify what we need, since I think my first email was vague:\n\nOur bookkeeper (external, she uses Xero) needs a monthly file of every invoice we issued, including voided ones, with these columns in this order:\n\n  invoice number, client name, client tax id, issue date, due date, subtotal, tax, total, currency, status, paid date\n\nThe CSV export you pointed me to on the Invoices page gives us number, client, status, total and due date only, and it only exports what is on screen (so 25 at a time), which means she has to click through pages and stitch files together.\n\nWe also have two clients billed in USD and the rest in CAD, and she needs them in separate files or at least a currency column she can filter on. She does NOT want amounts converted.\n\nNice to have, not essential: being able to schedule it so it lands in her inbox on the 1st of each month.\n\nIs any of this possible today? If not, is it on the roadmap? We have been happy with Acme otherwise and would rather not move invoicing to another tool just for this.\n\nThanks,\nDana\n\nOn Fri, Oct 9, 2026 at 3:12 PM Acme Support <support@acme.example.com> wrote:\n> Hi Dana, you can export invoices from the Invoices page using the Export CSV button\n> in the top right. Let us know if that covers what you need.\n>\n> On Thu, Oct 8, 2026 at 9:47 AM Dana Whitcombe wrote:\n>> Hello, is there a way to export all our invoices for our bookkeeper? Thanks."
+  },
+  {
+   "session": "code-s088",
+   "index": 21,
+   "text": "perfect"
+  },
+  {
+   "session": "code-s088",
+   "index": 23,
+   "text": "not yet. slugify helper for org names in packages/cli/src/util/slug.ts + couple tests. 'Northwind Studio, Inc.' -> 'northwind-studio-inc'"
+  },
+  {
+   "session": "code-s089",
+   "index": 0,
+   "text": "added index on invoices.org_id in schema.ts. after editing schema.ts generate a migration: `pnpm --filter api drizzle-kit generate`. run that"
+  },
+  {
+   "session": "code-s090",
+   "index": 0,
+   "text": "lena says invoices pages do raw fetch without the session cookie, 401 in staging. find them, switch to the shared wrapper. routes are versioned under /v1, fix paths hitting /invoices directly"
+  },
+  {
+   "session": "code-s091",
+   "index": 0,
+   "text": "does the acme cli nag about new versions? how often"
+  },
+  {
+   "session": "code-s091",
+   "index": 7,
+   "text": "util in apps/web/lib: byte count -> readable like 1.2 MB, for attachments list. with a test"
+  },
+  {
+   "session": "code-s092",
+   "index": 0,
+   "text": "clients empty state: should say \"No clients yet\", button \"Add client\", now says no data"
+  },
+  {
+   "session": "code-s092",
+   "index": 5,
+   "text": "flip clients table sort, newest on top"
+  },
+  {
+   "session": "code-s092",
+   "index": 10,
+   "text": "nice"
+  },
+  {
+   "session": "code-s092",
+   "index": 12,
+   "text": "where do worker metrics end up? want a panel for billing-sync queue depth"
+  },
+  {
+   "session": "code-s092",
+   "index": 20,
+   "text": "what did we do today"
+  },
+  {
+   "session": "code-s093",
+   "index": 0,
+   "text": "button on invoice detail page that re-emails the invoice via the endpoint for it, toast on success/failure"
+  },
+  {
+   "session": "code-s094",
+   "index": 0,
+   "text": "support ticket: some customers randomly bounced with unauthorized, fine on refresh. we chased this before, what was cause and fix?"
+  },
+  {
+   "session": "code-s094",
+   "index": 5,
+   "text": "park that. make /settings redirect to /settings/profile, blank now"
+  },
+  {
+   "session": "code-s094",
+   "index": 12,
+   "text": "profile form save button stays clickable while submitting, disable while pending"
+  },
+  {
+   "session": "code-s094",
+   "index": 17,
+   "text": "this week is so long lol"
+  },
+  {
+   "session": "code-s095",
+   "index": 0,
+   "text": "trailmix django: after creating a hike via htmx form, swap just the hike list partial, no reload. how?"
+  },
+  {
+   "session": "code-s095",
+   "index": 4,
+   "text": "back on acme. rename InvoiceRow to InvoiceListItem everywhere"
+  },
+  {
+   "session": "code-s095",
+   "index": 9,
+   "text": "useTransition vs useDeferredValue again"
+  },
+  {
+   "session": "code-s095",
+   "index": 11,
+   "text": "thanks"
+  },
+  {
+   "session": "code-s096",
+   "index": 0,
+   "text": "sam wants monthly revenue rollup per org for finance. raw sql: paid invoice totals per org per month, last year, plus running total per org. put in tools/sql/"
+  },
+  {
+   "session": "code-s097",
+   "index": 0,
+   "text": "crashlooping pods in prod, look and tell me whats going on. who actually gets woken up if it keeps going?"
+  },
+  {
+   "session": "code-s097",
+   "index": 5,
+   "text": "need a \"copy share link\" button on invoice preview. link carries hmac signature of invoice id + expiry. signing in apps/web/lib/share-link.ts, used by the preview"
+  },
+  {
+   "session": "code-s097",
+   "index": 12,
+   "text": "loading skeleton for invoices list, blank flash is ugly"
+  },
+  {
+   "session": "code-s097",
+   "index": 17,
+   "text": "trailmix: migration for nullable elevation_gain (meters, int) on Hike"
+  },
+  {
+   "session": "code-s097",
+   "index": 21,
+   "text": "invoices skeleton flashes ~50ms on fast loads. only show if loading > 200ms"
+  },
+  {
+   "session": "code-s098",
+   "index": 0,
+   "text": "guard on api: org routes need x-org-id header matching an org the session belongs to, else reject with problem+json. global for those routes"
+  },
+  {
+   "session": "code-s098",
+   "index": 7,
+   "text": "ok"
+  },
+  {
+   "session": "code-s098",
+   "index": 9,
+   "text": "k"
+  },
+  {
+   "session": "code-s098",
+   "index": 13,
+   "text": "shorter replies today, way shorter"
+  },
+  {
+   "session": "code-s098",
+   "index": 15,
+   "text": "422 vs 400 for validation errors"
+  },
+  {
+   "session": "code-s098",
+   "index": 17,
+   "text": "whats running in bg? if nothing, kick off web and cli tests"
+  },
+  {
+   "session": "code-s098",
+   "index": 19,
+   "text": "is structuredClone fine in node now"
+  },
+  {
+   "session": "code-s098",
+   "index": 23,
+   "text": "nice"
+  },
+  {
+   "session": "code-s098",
+   "index": 27,
+   "text": "script counting TODO/FIXME per package for eng channel"
+  },
+  {
+   "session": "code-s098",
+   "index": 32,
+   "text": "started failing on my branch, test didnt change\n\n FAIL  components/invoices/invoice-table.test.tsx > InvoiceTable > sorts by amount when header clicked\nTypeError: Cannot read properties of undefined (reading 'amountCents')\n ❯ compareRows components/invoices/invoice-table.tsx:42:31\n     40|   const compareRows = (a: Invoice, b: Invoice) => {\n     41|     const dir = sort.order === \"asc\" ? 1 : -1;\n     42|     return (a[sort.column].amountCents - b[sort.column].amountCents) * dir;\n       |                               ^\n     43|   };\n     44|\n ❯ Array.sort <anonymous>\n ❯ components/invoices/invoice-table.tsx:47:32\n ❯ mountMemo node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:7832:19\n ❯ Object.useMemo node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:23451:18\n ❯ exports.useMemo node_modules/.pnpm/react@19.0.0/node_modules/react/cjs/react.development.js:1216:34\n ❯ InvoiceTable components/invoices/invoice-table.tsx:46:24\n ❯ Object.react-stack-bottom-frame node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:23863:20\n ❯ renderWithHooks node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:5529:22\n ❯ updateFunctionComponent node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:8897:19\n ❯ beginWork node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:10522:18\n ❯ runWithFiberInDEV node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:1519:30\n ❯ performUnitOfWork node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:15132:22\n ❯ workLoopSync node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:14956:41\n ❯ renderRootSync node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:14936:11\n ❯ performWorkOnRoot node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:14462:44\n ❯ performSyncWorkOnRoot node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:16231:7\n ❯ flushSyncWorkAcrossRoots_impl node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:16079:21\n ❯ processRootScheduleInMicrotask node_modules/.pnpm/react-dom@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:16116:9\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n\n Test Files  1 failed | 67 passed (68)\n      Tests  1 failed | 423 passed (424)\n   Start at  10:31:07\n   Duration  23.12s\n\n ELIFECYCLE  Test failed. See above for more details."
+  },
+  {
+   "session": "code-s098",
+   "index": 35,
+   "text": "yeah fix, numbers and strings both need to sort"
+  },
+  {
+   "session": "code-s099",
+   "index": 0,
+   "text": "AbortSignal.timeout vs manual AbortController + setTimeout, one better?"
+  },
+  {
+   "session": "code-s099",
+   "index": 2,
+   "text": "InvoiceStatus type from the api client is missing \"void\", badge wont typecheck. patch the type in client package. then add a job to main workflow for the pdf perf suite (pnpm --filter @acme/pdf perf) on every push, ~25 min but want numbers per change"
+  },
+  {
+   "session": "code-s099",
+   "index": 12,
+   "text": "invoice number column truncated on mobile, let it wrap"
+  },
+  {
+   "session": "code-s099",
+   "index": 17,
+   "text": "when k8s kills a worker pod mid deploy, what happens to its in-flight work? how long before it's yanked?"
+  },
+  {
+   "session": "code-s099",
+   "index": 19,
+   "text": "deps-bot dumped this, anything urgent?\n\n┌─────────────────────┬────────────────────────────────────────────────────────┐\n│ moderate            │ Regular Expression Denial of Service in path-to-regexp │\n├─────────────────────┼────────────────────────────────────────────────────────┤\n│ Package             │ path-to-regexp                                         │\n├─────────────────────┼────────────────────────────────────────────────────────┤\n│ Vulnerable versions │ <0.1.12                                                │\n├─────────────────────┼────────────────────────────────────────────────────────┤\n│ Patched versions    │ >=0.1.12                                               │\n├─────────────────────┼────────────────────────────────────────────────────────┤\n│ Paths               │ apps/web > @storybook/nextjs > ... > path-to-regexp    │\n├─────────────────────┼────────────────────────────────────────────────────────┤\n│ More info           │ https://github.com/advisories/GHSA-example-0001        │\n└─────────────────────┴────────────────────────────────────────────────────────┘\n┌─────────────────────┬────────────────────────────────────────────────────────┐\n│ low                 │ cookie accepts cookie name, path, and domain with out  │\n│                     │ of bounds characters                                   │\n├─────────────────────┼────────────────────────────────────────────────────────┤\n│ Package             │ cookie                                                 │\n├─────────────────────┼────────────────────────────────────────────────────────┤\n│ Vulnerable versions │ <0.7.0                                                 │\n├─────────────────────┼────────────────────────────────────────────────────────┤\n│ Patched versions    │ >=0.7.0                                                │\n├─────────────────────┼────────────────────────────────────────────────────────┤\n│ Paths               │ apps/web > msw > @mswjs/interceptors > cookie          │\n├─────────────────────┼────────────────────────────────────────────────────────┤\n│ More info           │ https://github.com/advisories/GHSA-example-0002        │\n└─────────────────────┴────────────────────────────────────────────────────────┘\n┌─────────────────────┬────────────────────────────────────────────────────────┐\n│ high                │ cross-spawn Regular Expression Denial of Service       │\n├─────────────────────┼────────────────────────────────────────────────────────┤\n│ Package             │ cross-spawn                                            │\n├─────────────────────┼────────────────────────────────────────────────────────┤\n│ Vulnerable versions │ >=7.0.0 <7.0.5                                         │\n├─────────────────────┼────────────────────────────────────────────────────────┤\n│ Patched versions    │ >=7.0.5                                                │\n├─────────────────────┼────────────────────────────────────────────────────────┤\n│ Paths               │ . > lefthook > ... > cross-spawn                       │\n├─────────────────────┼────────────────────────────────────────────────────────┤\n│ More info           │ https://github.com/advisories/GHSA-example-0003        │\n└─────────────────────┴────────────────────────────────────────────────────────┘\n3 vulnerabilities found\nSeverity: 1 low | 1 moderate | 1 high"
+  },
+  {
+   "session": "code-s100",
+   "index": 0,
+   "text": "before invoice export: what do we use for feature flags? want export flagged for beta orgs only"
+  },
+  {
+   "session": "code-s101",
+   "index": 0,
+   "text": "structuredClone vs JSON.parse(JSON.stringify(x)), difference? reviewer flagged one in a PR"
+  },
+  {
+   "session": "code-s101",
+   "index": 3,
+   "text": "ok thx"
+  },
+  {
+   "session": "code-s101",
+   "index": 6,
+   "text": "trailmix: logging a hike, htmx swap replaces whole table instead of adding the row. view returns hikes/_row.html. whats wrong"
+  },
+  {
+   "session": "code-s101",
+   "index": 13,
+   "text": "wire up receipt PDF attachments on expenses in dashboard, form field through to where the file ends up"
+  },
+  {
+   "session": "code-s101",
+   "index": 19,
+   "text": "ill ask marco about storage. expenses total column cells aren't right aligned, header is. fix"
+  },
+  {
+   "session": "code-s102",
+   "index": 0,
+   "text": "util masking an IBAN for display, last 4 visible, groups of 4, in apps/web/lib/format.ts"
+  },
+  {
+   "session": "code-s102",
+   "index": 6,
+   "text": "what did we do today? for standup"
+  },
+  {
+   "session": "code-s103",
+   "index": 0,
+   "text": "trailmix: add nullable positive int elevation_gain_m to Hike + migration"
+  },
+  {
+   "session": "code-s103",
+   "index": 7,
+   "text": "acme: org switcher dropdown doesnt close on outside click. fix"
+  },
+  {
+   "session": "code-s103",
+   "index": 14,
+   "text": "debounce clients search box, 300ms"
+  },
+  {
+   "session": "code-s103",
+   "index": 21,
+   "text": "zod schema for expense category payload: name 1-60 chars trimmed, color #rrggbb, optional parentId uuid"
+  },
+  {
+   "session": "code-s103",
+   "index": 25,
+   "text": "slept terribly, neighbours dog at 3am"
+  },
+  {
+   "session": "code-s103",
+   "index": 29,
+   "text": "coffee #2 kicking in"
+  },
+  {
+   "session": "code-s103",
+   "index": 31,
+   "text": "vercel, release branch prerender blows up with this:\n\n```\nError occurred prerendering page \"/invoices\". Read more: https://nextjs.org/docs/messages/prerender-error\nError: Missing or invalid publishable key for production. Development keys cannot be used in production builds.\n    at assertValidKey (.next/server/chunks/8121.js:1:20433)\n```\n\nand preview logs `Warning: Text content did not match. Server: \"10/20/2026, 12:42 PM\" Client: \"10/20/2026, 8:42 AM\"` on the due column. sort both"
+  },
+  {
+   "session": "code-s104",
+   "index": 0,
+   "text": "GET /v1/clients should exclude archived unless ?includeArchived=true"
+  },
+  {
+   "session": "code-s104",
+   "index": 6,
+   "text": "nice"
+  },
+  {
+   "session": "code-s104",
+   "index": 8,
+   "text": "yeah add a test"
+  },
+  {
+   "session": "code-s104",
+   "index": 14,
+   "text": "clients list sort is case sensitive, make it insensitive"
+  },
+  {
+   "session": "code-s104",
+   "index": 20,
+   "text": "lgtm"
+  },
+  {
+   "session": "code-s104",
+   "index": 22,
+   "text": "this week dragging. only wednesday"
+  },
+  {
+   "session": "code-s105",
+   "index": 0,
+   "text": "dashboard white-screens in prod when something throws during render. make a fallback page with a 'try again' button. branch acme-447, commit it"
+  },
+  {
+   "session": "code-s105",
+   "index": 8,
+   "text": "invoice list filters (status, client, date range) reset after opening an invoice and going back. make them stick"
+  },
+  {
+   "session": "code-s105",
+   "index": 15,
+   "text": "slugify for client names: handle accents (Café Müller -> cafe-muller), collapse dashes, max 64 chars"
+  },
+  {
+   "session": "code-s105",
+   "index": 19,
+   "text": "trailmix: django admin list_display distance_km with 1 decimal and 'km' suffix?"
+  },
+  {
+   "session": "code-s105",
+   "index": 23,
+   "text": "slugify tests:\n\n```\n RUN  v2.1.4 /acme-platform/apps/web\n\n ❯ lib/slugify.test.ts (4 tests | 1 failed) 9ms\n   ✓ slugify > strips accents\n   ✓ slugify > collapses separators\n   ✓ slugify > caps length without a trailing dash\n   × slugify > handles ß and ø 4ms\n     → expected 'stra-e-rsted' to be 'strasse-orsted'\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  lib/slugify.test.ts > slugify > handles ß and ø\nAssertionError: expected 'stra-e-rsted' to be 'strasse-orsted' // Object.is equality\n\n- Expected\n+ Received\n\n- strasse-orsted\n+ stra-e-rsted\n\n ❯ lib/slugify.test.ts:19:40\n     17|\n     18|   it('handles ß and ø', () => {\n     19|     expect(slugify('Straße Ørsted')).toBe('strasse-orsted');\n       |                                        ^\n     20|   });\n     21| });\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n\n Test Files  1 failed (1)\n      Tests  1 failed | 3 passed (4)\n   Start at  11:48:52\n   Duration  598ms (transform 41ms, setup 0ms, collect 22ms, tests 9ms, environment 0ms, prepare 88ms)\n```\n\nfix it"
+  },
+  {
+   "session": "code-s106",
+   "index": 0,
+   "text": "customer says 'continue with google' vanished from sign in page since yesterday. where do i turn social login back on?"
+  },
+  {
+   "session": "code-s106",
+   "index": 4,
+   "text": "meanwhile onboarding video on getting started page, youtube embed id `aB3xK9qLm2Q`, responsive 16:9"
+  },
+  {
+   "session": "code-s106",
+   "index": 11,
+   "text": "lunch, back soon"
+  },
+  {
+   "session": "code-s107",
+   "index": 0,
+   "text": "getPrimaryCurrency(invoice, orgCurrency): currency of first line item, org currency if no items"
+  },
+  {
+   "session": "code-s107",
+   "index": 6,
+   "text": "next: /pricing (plans table from a ts file) and /settings/team listing org members, signed in only"
+  },
+  {
+   "session": "code-s108",
+   "index": 0,
+   "text": "test that clicks through creating and sending an invoice in a real browser on the local dev server: new invoice, pick client, add line, save, send"
+  },
+  {
+   "session": "code-s108",
+   "index": 4,
+   "text": "clients table page size select: 10/20/50, add 100"
+  },
+  {
+   "session": "code-s108",
+   "index": 11,
+   "text": "rename prop onSelect to onClientSelect on ClientPicker + call sites"
+  },
+  {
+   "session": "code-s108",
+   "index": 18,
+   "text": "expenses export csv button duplicates the header row"
+  },
+  {
+   "session": "code-s108",
+   "index": 25,
+   "text": "perfect"
+  },
+  {
+   "session": "code-s108",
+   "index": 27,
+   "text": "grep 'recieved' in apps/api and services/worker, fix spelling"
+  },
+  {
+   "session": "code-s108",
+   "index": 32,
+   "text": "ok, leave the api one"
+  },
+  {
+   "session": "code-s108",
+   "index": 36,
+   "text": "thanks"
+  },
+  {
+   "session": "code-s108",
+   "index": 38,
+   "text": "friday finally. weekend plans lol"
+  },
+  {
+   "session": "code-s108",
+   "index": 40,
+   "text": "ts script in scripts/ counting TODO and FIXME per package, print a table"
+  },
+  {
+   "session": "code-s108",
+   "index": 45,
+   "text": "satisfies vs as const in ts, keep mixing them up"
+  },
+  {
+   "session": "code-s108",
+   "index": 47,
+   "text": "how does ts 5.2 `using` / Symbol.dispose work"
+  },
+  {
+   "session": "code-s109",
+   "index": 0,
+   "text": "cli: `acme invoices list` truncate client column to 24 chars with ellipsis"
+  },
+  {
+   "session": "code-s109",
+   "index": 10,
+   "text": "add --since <date> to `acme invoices list`, filter by issue date"
+  },
+  {
+   "session": "code-s109",
+   "index": 17,
+   "text": "update cli README usage for invoices list"
+  }
+ ]
+}
