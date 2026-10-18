@@ -1,9 +1,18 @@
-"""Blank-slate retrieval (C3): compiled statements + frame bridges + novelty-gated scoring. See BLANK-C3.md.
+"""Blank-slate retrieval (C3): "situation memory". See BLANK-C3.md.
 
-Sleep time (constructor): rows -> sentence units -> keep memory-like statements (source event type, statement cues,
-specificity) -> per-unit tokens, entities, frames. Hot path (packet): class gate -> prompt gate -> candidate scoring
-(lexical idf overlap + frame bridges + entity anchors) x novelty (share of the unit not already in the context window)
--> supersession (newest of near-duplicates) -> threshold -> at most k bullets. Pure Python, no model calls.
+Sleep time (constructor, pure Python + numpy, reads only rows and raw stream text):
+  1. compile rows into statement units: split rows into sentences, trace each row to the event type it was copied
+     from, keep memory-like statements (source prior x statement cues x specificity), drop template boilerplate;
+  2. build an episode space: every past turn (a prompt plus everything the agent then did: tool calls, outputs,
+     replies) is a document; a randomized SVD gives term vectors where terms that occur in the same situations sit
+     close ("bearer token" near the auth library the agent read while handling it). Rebuilt at sleep checkpoints
+     (every N sessions) from turns that ended before the checkpoint, so no query sees the future;
+  3. index units by token, by frame (generic activity domains) and by vector.
+Hot path (packet, a few ms):
+  class gate (non-human events are silent) -> prompt gate (acks, small talk, general-knowledge questions, pastes,
+  fact-stating turns) -> candidate scoring: lexical idf overlap + latent similarity + episode feedback + frame
+  bridge -> x novelty (share of the unit not already in the context window or the prompt) x unit worth x gate ->
+  supersession (newest of near-duplicates) -> threshold tau -> at most k bullets.
 """
 import math, re
 from text import content, stems
@@ -32,73 +41,47 @@ FACT = re.compile(r"\b(we use|we're on|we are on|uses|is on|lives?|works? (at|as
 ASK = re.compile(r"^\s*(can|could|would|will|pls|please|how|what|why|where|which|who|when|is|are|does|do|should|"
                  r"fix|add|make|write|draft|book|order|send|show|find|check|look|run|start|help|give|tell|put|set)\b",
                  re.I)
+# Prompt gate cues (generic conversational acts, not world vocabulary).
 GENERAL = re.compile(r"\b(difference between|how does|how do .* work|what is an? |what's an? |explain|eli5|random q|"
                      r"unrelated|tl;?dr|in general|generally|trivia|history of)\b", re.I)
 SOCIAL = re.compile(r"^\s*(ok+|k|kk|thanks?|thank you|ty|lol|haha|nice|cool|great|perfect|yes|yep|yeah|no|nope|sure|"
                     r"continue|go ahead|do it|ship it|lgtm|sounds good|got it|done|awesome|ugh|wow|hmm+)\b", re.I)
+STATE = re.compile(r"\b(for the record|fyi|btw|heads up|context:|for context|for notes|put this in|note that|noting|"
+                   r"remember (that|this)|from now on|new rule|going forward|i decided|we decided|decided|"
+                   r"we're switching|we switched|switched to|moved to|is now|are now|now it's|turns \d+|i booked|"
+                   r"i chose|ended up|for future reference|just so you know|so you know|also,? my|my \w+ is|"
+                   r"our \w+ is|is allergic|always|never)\b", re.I)
 
-# Frames: generic activity domains (not world-specific). A prompt that triggers a frame is bridged to memories
-# whose text carries one of the frame's markers: "order dinner" -> diet/allergy memories, "add a dep" -> package
-# manager rules. In the product this table would be written by a model at sleep time; here it is a fixed ontology.
+# Frames: generic activity domains. A prompt that triggers a frame is bridged to memories whose text carries one of
+# the frame's markers ("order dinner" -> diet/allergy memories, "add a dep" -> package-manager rules). In a product
+# this table would be written by a model at sleep time; here it is a small fixed ontology.
 FRAMES = {
-    "food": ("dinner lunch breakfast brunch snack snacks food meal meals order restaurant cook cooking recipe menu "
-             "bake cake party picnic potluck groceries grocery takeout delivery cafe eat",
-             "vegetarian vegan allergic allergy allergies lactose dairy gluten nut nuts peanut fish seafood diet eat "
-             "eats spicy halal kosher intolerant celiac shellfish"),
-    "schedule": ("meeting meetings sync call calendar schedule book slot invite 1:1 time week tomorrow morning "
-                 "afternoon appointment availability reschedule session",
-                 "standup focus calendar meetings before after mornings afternoons mondays tuesdays wednesdays thursdays "
-                 "fridays weekly 1:1 block no-meeting book"),
-    "travel": ("trip travel flight flights hotel hotels fly book vacation weekend visit drive airport passport "
-               "luggage airbnb stay train",
-               "hotel refundable flight seat aisle window airline aeroplan passport transit points loyalty layover"),
-    "gift": ("gift gifts present birthday buy shop anniversary card surprise",
-             "birthday gift likes loves collects favourite favorite size wishlist"),
-    "message": ("email mail reply draft message text write send letter note memo post slack announce",
-                "tone sign signs sign-off formal casual emoji exclamation brief style greeting draft"),
-    "format": ("list table summary summarize rundown recap bullets overview format report notes",
-               "table bullets format dates celsius fahrenheit short concise length iso units"),
-    "money": ("pay payment bill budget cost price expense invoice transfer spend buy order purchase",
-              "budget card account limit split etransfer bank credit"),
-    "kids": ("school kid kids class teacher homework camp lessons pickup playdate daycare son daughter",
-             "school teacher grade class allergic pickup bedtime screen"),
-    "health": ("doctor dentist appointment sick medication pharmacy prescription clinic checkup symptoms",
-               "allergic medication doctor dr dentist prescription condition migraine"),
-    "home": ("house home repair cleaning chores maintenance garden furnace contractor reno renovation",
-             "furnace filter door contractor reno landlord"),
-    "deps": ("install dependency dependencies package add library lib upgrade bump npm add-on",
-             "pnpm npm yarn package manager banned instead library lockfile"),
-    "test": ("test tests testing spec coverage e2e unit vitest jest failing",
-             "test tests vitest jest playwright mock filter run"),
-    "git": ("pr commit push merge branch rebase review release changelog wrap ship tag",
-            "commit commits conventional branch pr merge gh squash rebase push main"),
-    "style": ("format formatting lint indent semicolons quotes prettier style cleanup clean",
-              "biome eslint prettier lint format formatting"),
-    "deploy": ("deploy deployment prod production staging terraform infra release rollout helm k8s probe",
-               "terraform apply deploy staging prod ci workflow helm aws"),
-    "db": ("database db migration migrations schema table column query sql index",
-           "postgres mysql migrate migration drizzle prisma schema db"),
-    "ui": ("button component page form modal dark mode color colour css styling icon layout font",
-           "aria-label tailwind font css component design tokens theme"),
-    "api": ("endpoint route api request response error status handler webhook",
-            "problem+json rfc error header signature hmac fastify express route"),
-    "env": ("setup install local locally run start spin env environment laptop clone docker",
-            "port docker compose env node version nvmrc pnpm dev"),
-    "dates": ("date dates time timezone format calendar",
-              "date-fns moment dayjs timezone utc format iso"),
-    "vent": ("stressed stress spiralling anxious upset frustrated tired vent overwhelmed sad angry",
-             "listen reflect fixes vent stress"),
+    "food": ("dinner lunch breakfast brunch snack snacks food meal meals restaurant cook cooking recipe menu "
+             "bake cake party picnic potluck groceries grocery takeout cafe eat",
+             "vegetarian vegan allergic allergy allergies lactose dairy gluten nut nuts peanut fish seafood diet "
+             "spicy halal kosher intolerant celiac shellfish"),
+    "schedule": ("meeting meetings sync calendar schedule slot invite 1:1 appointment availability reschedule",
+                 "standup focus no-meeting 1:1 mondays tuesdays wednesdays thursdays fridays"),
+    "travel": ("trip travel flight flights hotel hotels fly vacation airport passport luggage airbnb train",
+               "hotel refundable flight seat aisle airline aeroplan passport transit loyalty layover"),
+    "gift": ("gift gifts present birthday anniversary surprise", "birthday gift gifts collects wishlist"),
+    "message": ("email reply draft message text letter memo post announce note",
+                "tone sign-off formal casual emoji exclamation dashes greeting"),
+    "kids": ("school class teacher homework camp lessons pickup playdate daycare sleepover",
+             "school teacher grade pickup bedtime"),
+    "health": ("doctor dentist sick medication pharmacy prescription clinic checkup symptoms",
+               "allergic medication doctor dentist prescription migraine"),
+    "deps": ("install dependency dependencies package library upgrade bump", "pnpm npm yarn lockfile banned"),
+    "test": ("test tests testing spec coverage e2e", "vitest jest playwright mock"),
+    "git": ("pr commit push merge branch rebase release changelog", "commit commits conventional gh squash merge"),
+    "style": ("formatting lint indent semicolons quotes prettier cleanup", "biome eslint prettier lint"),
+    "deploy": ("deploy deployment prod production staging terraform infra rollout helm",
+               "terraform deploy workflow helm"),
+    "db": ("database db migration migrations schema column query sql", "postgres mysql migrate migration drizzle"),
+    "dates": ("date dates timezone", "date-fns moment dayjs timezone utc"),
+    "vent": ("stressed stress spiralling anxious upset frustrated overwhelmed vent", "listen reflect vent stress"),
 }
-
-
-def _frame_sets():
-    out = {}
-    for f, (trig, mark) in FRAMES.items():
-        out[f] = ({w for w in trig.split()}, {w for w in mark.split()})
-    return out
-
-
-FRAME_SETS = _frame_sets()
+FRAME_SETS = {f: (set(a.split()), set(b.split())) for f, (a, b) in FRAMES.items()}
 
 
 def words(text):
@@ -130,6 +113,7 @@ def codey(s):
 
 
 SRC_PRIOR = {"human": 1.0, "tool": 0.55, "assistant": 0.5, "compact": 0.6}
+_SPACE_CACHE = {}  # (stream, checkpoint, dim) -> fitted episode space; the fit depends only on the past stream
 
 
 class Blank:
@@ -137,16 +121,26 @@ class Blank:
         self.kw = kw
         self.k = int(kw.get("k", 4))
         self.tau = kw.get("tau", 6.0)
+        self.ttau = kw.get("ttau", self.tau)  # threshold for host triggers
         self.nov = kw.get("nov", 0.35)
-        self.fw = kw.get("fw", 2.5)
+        self.fw = kw.get("fw", 0.0)
         self.minw = kw.get("minw", 0.3)
+        self.beta = kw.get("beta", 0.0)
+        self.kprf = int(kw.get("kprf", 5))
+        self.gamma = kw.get("gamma", 0.0)
+        self.c0 = kw.get("c0", 0.3)
+        self.dim = int(kw.get("dim", 128))
+        self.every = int(kw.get("every", 10))
+        self.pst = kw.get("pst", 0.35)  # gate factor for fact-stating turns
+        self.pnov = kw.get("pnov", 0.6)  # gate factor for prompts with 3+ never-seen tokens
         self.cov = cov
-        # --- stream: flat events and window boundaries (only earlier events are ever read) ---
-        flat, start = [], {}
+        # --- stream: flat events and context-window boundaries ---
+        flat, start, sess_first = [], {}, []
         ws = 0
         for s in stream["sessions"]:
             if s["kind"] != "resume":
                 ws = len(flat)
+            sess_first.append(s["events"][0]["_order"] if s["events"] else None)
             for e in s["events"]:
                 if e["t"] == "compact":
                     ws = len(flat)
@@ -156,13 +150,21 @@ class Blank:
         self.pos = {e["_order"]: i for i, e in enumerate(flat)}
         self.start = start
         self._stems = {}
-        # source event type of a row: the event whose content tokens hold most of the row's (the row is a copy)
+        self.oracle = bool(rows) and all("item" in r for r in rows)
+        self.compile_units(rows, cov)
+        self.build_turns()
+        self.cps, self.spaces = [], []
+        if self.gamma:
+            self.cps = [o for i, o in enumerate(sess_first) if o is not None and i % self.every == 0 and i > 0]
+            self.spaces = [self.build_lsa(o) for o in self.cps]
+
+    # ---------------- sleep: compile ----------------
+    def compile_units(self, rows, cov):
         eidx, etype = {}, {}
-        for e in flat:
+        for e in self.flat:
             etype[e["id"]] = e["t"]
             for t in content(e["text_all"]):
                 eidx.setdefault(t, set()).add(e["id"])
-        self.oracle = all("item" in r for r in rows) and bool(rows)
         units = []
         for r in rows:
             src = "human" if self.oracle else self.trace(r["text"], eidx, etype)
@@ -179,150 +181,32 @@ class Blank:
                               "c": c, "src": src, "row": r})
         tmpl = {}
         for u in units:
-            key = re.sub(r"[0-9a-f]{6,}|\d+", "#", u["text"].lower())
-            u["key"] = key
-            tmpl[key] = tmpl.get(key, 0) + 1
+            u["key"] = re.sub(r"[0-9a-f]{6,}|\d+", "#", u["text"].lower())
+            tmpl[u["key"]] = tmpl.get(u["key"], 0) + 1
         units = [u for u in units if tmpl[u["key"]] < 4]
         df = {}
         for u in units:
             for t in u["c"]:
                 df[t] = df.get(t, 0) + 1
-        n = len(units)
+        n = max(1, len(units))
         self.idf = {t: math.log(1 + n / d) for t, d in df.items()}
-        self.inv = {}
-        keep = []
+        self.inv, self.by_frame, keep = {}, {}, []
         for u in units:
             u["worth"] = 1.0 if self.oracle else self.worth(u)
             if u["worth"] < self.minw:
                 continue
             u["w"] = sum(self.idf[t] for t in u["c"])
-            ws_ = words(u["text"])
-            u["frames"] = frames_of(ws_, "m")
+            u["frames"] = frames_of(words(u["text"]), "m")
             u["rule"] = bool(RULE.search(u["text"]))
+            u["covers"] = set(u["row"]["covers"]) if self.oracle and "covers" in u["row"] else cov.covers(u["text"])
+            u["ix"] = len(keep)
+            keep.append(u)
             for t in u["c"]:
                 self.inv.setdefault(t, []).append(u)
-            u["covers"] = set(u["row"]["covers"]) if self.oracle and "covers" in u["row"] else cov.covers(u["text"])
-            keep.append(u)
-        self.units = keep
-        self.by_frame = {}
-        for u in keep:
             for f in u["frames"]:
                 self.by_frame.setdefault(f, []).append(u)
+        self.units = keep
         self.by_id = {u["id"]: u for u in keep}
-        self.build_turns()
-        self.beta = kw.get("beta", 0.0)
-        self.gamma = kw.get("gamma", 0.0)
-        self.c0 = kw.get("c0", 0.2)
-        self.dim = int(kw.get("dim", 128))
-        if self.gamma:
-            self.build_lsa()
-        self.kprf = int(kw.get("kprf", 5))
-
-    def build_turns(self):
-        """Past episodes: each human prompt with what the agent then did (tools, replies) until the next submit."""
-        turns, cur = [], None
-        for e in self.flat:
-            if e["t"] in ("human", "trigger"):
-                cur = {"order": e["_order"], "end": e["_order"], "q": content(e["text_all"]), "rest": {}}
-                turns.append(cur)
-            elif e["t"] in ("tool", "assistant") and cur is not None:
-                cur["end"] = e["_order"]
-                for t in content(e["text_all"]):
-                    cur["rest"][t] = cur["rest"].get(t, 0) + 1
-            else:
-                cur = None
-        self.turns = turns
-        df = {}
-        for tu in turns:
-            for t in tu["q"]:
-                df[t] = df.get(t, 0) + 1
-        n = len(turns)
-        self.tidf = {t: math.log(1 + n / d) for t, d in df.items()}
-        rdf = {}
-        for tu in turns:
-            for t in tu["rest"]:
-                rdf[t] = rdf.get(t, 0) + 1
-        self.ridf = {t: math.log(1 + n / d) for t, d in rdf.items()}
-        self.tinv = {}
-        for k, tu in enumerate(turns):
-            for t in tu["q"]:
-                self.tinv.setdefault(t, []).append(k)
-
-    def build_lsa(self, upto=None):
-        """Latent semantic space of the agent's past episodes (turn = prompt + everything the agent did): terms that
-        occur in the same situations get close vectors, so 'bearer token' lands near the auth library it was read
-        with. numpy randomized SVD, sleep-time only."""
-        import numpy as np
-        turns = [tu for tu in self.turns if upto is None or tu["end"] < upto]
-        docs = []
-        for tu in turns:
-            d = dict(tu["rest"])
-            for t in tu["q"]:
-                d[t] = d.get(t, 0) + 2
-            docs.append(d)
-        df = {}
-        for d in docs:
-            for t in d:
-                df[t] = df.get(t, 0) + 1
-        vocab = [t for t, c in df.items() if 2 <= c <= 0.3 * len(docs)]
-        vocab.sort(key=lambda t: -df[t])
-        vocab = vocab[:9000]
-        vid = {t: i for i, t in enumerate(vocab)}
-        n = len(docs)
-        X = np.zeros((n, len(vocab)), dtype=np.float32)
-        for i, d in enumerate(docs):
-            for t, f in d.items():
-                j = vid.get(t)
-                if j is not None:
-                    X[i, j] = (1 + math.log(f)) * math.log(n / df[t])
-        X /= np.linalg.norm(X, axis=1, keepdims=True) + 1e-9
-        rng = np.random.default_rng(0)
-        k = min(self.dim, n - 1)
-        Om = rng.standard_normal((len(vocab), k + 20)).astype(np.float32)
-        Y = X @ Om
-        for _ in range(2):
-            Y = X @ (X.T @ Y)
-        Q, _ = np.linalg.qr(Y)
-        B = Q.T @ X
-        _, S, Vt = np.linalg.svd(B, full_matrices=False)
-        T = (Vt[:k].T * S[:k]).astype(np.float32)
-        T /= np.linalg.norm(T, axis=1, keepdims=True) + 1e-9
-        self.vid, self.T = vid, T
-        for u in self.units:
-            u["vec"] = self.embed(u["c"])
-
-    def embed(self, toks):
-        import numpy as np
-        ids = [self.vid[t] for t in toks if t in self.vid]
-        if not ids:
-            return None
-        w = np.array([self.idf.get(self.T_vocab_t(i), 1.0) for i in ids], dtype=np.float32) if False else None
-        v = self.T[ids].sum(axis=0)
-        nv = np.linalg.norm(v)
-        return v / nv if nv else None
-
-    def T_vocab_t(self, i):
-        return None
-
-    def expand(self, qc, order):
-        """Pseudo-relevance feedback from the agent's own past episodes: the vocabulary of what was done after
-        similar earlier prompts (only turns that ended before this event)."""
-        sim = {}
-        for t in qc:
-            for k in self.tinv.get(t, ()):
-                if self.turns[k]["end"] < order:
-                    sim[k] = sim.get(k, 0.0) + self.tidf[t]
-        top = sorted(sim, key=lambda k: -sim[k])[: self.kprf]
-        exp = {}
-        for k in top:
-            tu = self.turns[k]
-            norm = sum(self.tidf.get(t, 0) for t in tu["q"]) or 1
-            w = sim[k] / norm
-            for t, f in tu["rest"].items():
-                exp[t] = exp.get(t, 0.0) + w * self.ridf[t] * min(f, 3) / 3
-        best = sorted(exp, key=lambda t: -exp[t])[:40]
-        mx = max((exp[t] for t in best), default=1) or 1
-        return {t: exp[t] / mx for t in best}
 
     @staticmethod
     def trace(text, eidx, etype):
@@ -340,7 +224,6 @@ class Blank:
 
     def worth(self, u):
         s = u["text"]
-        w = SRC_PRIOR[u["src"]]
         cue = 0.0
         if RULE.search(s):
             cue += 0.6
@@ -356,8 +239,125 @@ class Blank:
             cue -= 0.3
         if len(s) > 400:
             cue -= 0.3
-        return w * max(0.0, min(1.2, 0.3 + cue))
+        return SRC_PRIOR[u["src"]] * max(0.0, min(1.2, 0.3 + cue))
 
+    # ---------------- sleep: episodes ----------------
+    def build_turns(self):
+        turns, cur = [], None
+        for e in self.flat:
+            if e["t"] in ("human", "trigger"):
+                cur = {"order": e["_order"], "end": e["_order"], "q": content(e["text_all"]), "rest": {}}
+                turns.append(cur)
+            elif e["t"] in ("tool", "assistant") and cur is not None:
+                cur["end"] = e["_order"]
+                for t in content(e["text_all"]):
+                    cur["rest"][t] = cur["rest"].get(t, 0) + 1
+            else:
+                cur = None
+        self.turns = turns
+        n = max(1, len(turns))
+        df, rdf = {}, {}
+        for tu in turns:
+            for t in tu["q"]:
+                df[t] = df.get(t, 0) + 1
+            for t in tu["rest"]:
+                rdf[t] = rdf.get(t, 0) + 1
+        self.tidf = {t: math.log(1 + n / d) for t, d in df.items()}
+        self.ridf = {t: math.log(1 + n / d) for t, d in rdf.items()}
+        self.tinv = {}
+        for k, tu in enumerate(turns):
+            for t in tu["q"]:
+                self.tinv.setdefault(t, []).append(k)
+
+    def build_lsa(self, upto):
+        """Episode space from turns that ended before `upto`: randomized SVD of the turn x term tf-idf matrix."""
+        import numpy as np
+        key = (id(self.flat[0]), upto, self.dim)
+        if key not in _SPACE_CACHE:
+            _SPACE_CACHE[key] = self._fit_space(upto)
+        fit = _SPACE_CACHE[key]
+        if fit is None:
+            return None
+        vid, T = fit
+        U = np.zeros((len(self.units), T.shape[1]), dtype=np.float32)
+        for u in self.units:
+            v = self._embed(u["c"], vid, T)
+            if v is not None:
+                U[u["ix"]] = v
+        return vid, T, U
+
+    def _fit_space(self, upto):
+        import numpy as np
+        turns = [tu for tu in self.turns if tu["end"] < upto]
+        docs = []
+        for tu in turns:
+            d = dict(tu["rest"])
+            for t in tu["q"]:
+                d[t] = d.get(t, 0) + 2
+            docs.append(d)
+        n = len(docs)
+        if n < 20:
+            return None
+        df = {}
+        for d in docs:
+            for t in d:
+                df[t] = df.get(t, 0) + 1
+        vocab = sorted((t for t, c in df.items() if 2 <= c <= 0.3 * n), key=lambda t: -df[t])[:9000]
+        vid = {t: i for i, t in enumerate(vocab)}
+        X = np.zeros((n, len(vocab)), dtype=np.float32)
+        for i, d in enumerate(docs):
+            for t, f in d.items():
+                j = vid.get(t)
+                if j is not None:
+                    X[i, j] = (1 + math.log(f)) * math.log(n / df[t])
+        X /= np.linalg.norm(X, axis=1, keepdims=True) + 1e-9
+        k = min(self.dim, n - 1)
+        Om = np.random.default_rng(0).standard_normal((len(vocab), k + 20)).astype(np.float32)
+        Y = X @ Om
+        for _ in range(2):
+            Y = X @ (X.T @ Y)
+        Q, _ = np.linalg.qr(Y)
+        _, S, Vt = np.linalg.svd(Q.T @ X, full_matrices=False)
+        T = (Vt[:k].T * S[:k]).astype(np.float32)
+        T /= np.linalg.norm(T, axis=1, keepdims=True) + 1e-9
+        return vid, T
+
+    def _embed(self, toks, vid, T):
+        import numpy as np
+        ids = [vid[t] for t in toks if t in vid]
+        if not ids:
+            return None
+        w = np.array([self.idf.get(t, 2.0) for t in toks if t in vid], dtype=np.float32)
+        v = (T[ids] * w[:, None]).sum(axis=0)
+        nv = float(np.linalg.norm(v))
+        return v / nv if nv else None
+
+    def space(self, order):
+        best = None
+        for o, sp in zip(self.cps, self.spaces):
+            if o <= order:
+                best = sp
+        return best
+
+    def expand(self, qc, order):
+        """Episode feedback: the vocabulary of what was done after similar earlier prompts (turns that ended)."""
+        sim = {}
+        for t in qc:
+            for k in self.tinv.get(t, ()):
+                if self.turns[k]["end"] < order:
+                    sim[k] = sim.get(k, 0.0) + self.tidf[t]
+        top = sorted(sim, key=lambda k: -sim[k])[: self.kprf]
+        exp = {}
+        for k in top:
+            tu = self.turns[k]
+            w = sim[k] / (sum(self.tidf.get(t, 0) for t in tu["q"]) or 1)
+            for t, f in tu["rest"].items():
+                exp[t] = exp.get(t, 0.0) + w * self.ridf[t] * min(f, 3) / 3
+        best = sorted(exp, key=lambda t: -exp[t])[:40]
+        mx = max((exp[t] for t in best), default=1) or 1
+        return {t: exp[t] / mx for t in best}
+
+    # ---------------- hot path ----------------
     def ev_stems(self, e):
         s = self._stems.get(e["_order"])
         if s is None:
@@ -365,81 +365,101 @@ class Blank:
         return s
 
     def window(self, e):
-        i = self.pos[e["_order"]]
         w = set()
-        for x in self.flat[self.start[e["_order"]]:i]:
+        for x in self.flat[self.start[e["_order"]]:self.pos[e["_order"]]]:
             w |= self.ev_stems(x)
         return w
 
-    def query_text(self, e):
-        txt = e["text_all"]
-        lines = txt.splitlines()
-        if len(lines) > 12:  # a paste: keep the ask around it
-            txt = "\n".join(lines[:3] + lines[-3:])
-        return txt
+    def first_seen(self):
+        """Order of the first event that contains each content token (prompt-novelty gate; reads only the past)."""
+        if not hasattr(self, "_first"):
+            self._first = {}
+            for x in self.flat:
+                for t in content(x["text_all"]):
+                    self._first.setdefault(t, x["_order"])
+        return self._first
 
-    def gate(self, e, q, qc):
-        """Prompt-level prior in [0, 1]: how likely this turn is to need memory at all."""
+    def gate(self, e, raw, qc):
         cls = e["labels"]["class"]
-        if cls in NONHUMAN:
+        if cls in NONHUMAN or len(qc) < 2:
             return 0.0
-        if len(qc) < 2:
+        if cls == "trigger":
+            return 1.0
+        if SOCIAL.match(raw) and len(qc) < 5:
+            return 0.0
+        if GENERAL.search(raw):
+            return 0.0
+        if len(raw.splitlines()) > 12:
             return 0.0
         g = 1.0
-        if SOCIAL.match(q) and len(qc) < 5:
-            g *= 0.3
-        if GENERAL.search(q):
-            g *= 0.4
-        if len(e["text_all"].splitlines()) > 12:
-            g *= 0.6
+        if STATE.search(raw):
+            g *= self.pst
+        first = self.first_seen()
+        new = sum(1 for t in qc if first.get(t, 0) >= e["_order"])
+        if new >= 3:
+            g *= self.pnov
         return g
 
     def packet(self, e, now):
-        q = self.query_text(e)
-        qc = content(q)
-        g = self.gate(e, q, qc)
+        scored = self.rank(e, now)
+        tau = self.ttau if e["labels"]["class"] == "trigger" else self.tau
+        return self.select(scored, tau)
+
+    def rank(self, e, now, gate=True):
+        """(score, unit) candidates, best first; [] when the prompt gate says the turn needs nothing."""
+        raw = e["text_all"]
+        qc = content(raw)
+        g = self.gate(e, raw, qc) if gate else 1.0
         if g <= 0:
             return []
-        qs = stems(q)
-        qf = frames_of(words(q), "q")
+        qs = stems(raw)
+        qf = frames_of(words(raw), "q") if self.fw else set()
         win = self.window(e) | qs
         vis = lambda u: u["t"] < now and (u["invalid_at"] is None or u["invalid_at"] > now)
         exp = self.expand(qc, e["_order"]) if self.beta else {}
         cand = {}
         for t in list(qc) + list(exp):
             for u in self.inv.get(t, ()):
-                if vis(u):
-                    cand[u["id"]] = u
+                cand[u["id"]] = u
         for f in qf:
             for u in self.by_frame.get(f, ()):
-                if vis(u):
-                    cand[u["id"]] = u
-        qv = self.embed(qc) if self.gamma else None
-        if self.gamma and qv is not None:
-            for u in self.units:
-                if vis(u) and u.get("vec") is not None and u["id"] not in cand:
-                    cand[u["id"]] = u
+                cand[u["id"]] = u
+        sims = None
+        if self.gamma:
+            sp = self.space(e["_order"])
+            if sp is not None:
+                qv = self._embed(qc, sp[0], sp[1])
+                if qv is not None:
+                    sims = sp[2] @ qv
+                    for ix in (sims > self.c0).nonzero()[0]:
+                        u = self.units[ix]
+                        cand[u["id"]] = u
         scored = []
         for u in cand.values():
-            m = sum(self.idf[t] for t in u["c"] if t in qc)
-            m += self.beta * sum(exp[t] * self.idf[t] for t in u["c"] if t in exp and t not in qc)
-            m = m / (1 + 0.02 * max(0, len(u["c"]) - 12))
-            if self.gamma and qv is not None and u.get("vec") is not None:
-                m += self.gamma * max(0.0, float(qv @ u["vec"]) - self.c0)
-            fb = len(qf & u["frames"]) * self.fw * (1.5 if u["rule"] else 1.0)
+            if not vis(u):
+                continue
             novel = sum(self.idf[t] for t in u["c"] if t not in win) / u["w"]
             if novel < self.nov:
                 continue
-            s = (m + fb) * novel * u["worth"] * g
-            scored.append((s, u))
+            m = sum(self.idf[t] for t in u["c"] if t in qc)
+            if exp:
+                m += self.beta * sum(exp[t] * self.idf[t] for t in u["c"] if t in exp and t not in qc)
+            m = m / (1 + 0.02 * max(0, len(u["c"]) - 12))
+            if sims is not None:
+                m += self.gamma * max(0.0, float(sims[u["ix"]]) - self.c0)
+            if qf:
+                m += len(qf & u["frames"]) * self.fw * (1.5 if u["rule"] else 1.0)
+            scored.append((m * novel * u["worth"] * g, u))
         scored.sort(key=lambda x: (-x[0], -x[1]["t"]))
-        top = scored[: 30]
-        # supersession: of near-duplicate candidates, keep the newest
+        return scored
+
+    def select(self, scored, tau):
+        top = scored[:30]
         alive = []
         for s, u in top:
-            if s < self.tau:
+            if s < tau:
                 break
-            if any(v["t"] > u["t"] and self.jac(u, v) > 0.35 for _, v in top if _ >= 0.5 * s):
+            if any(v["t"] > u["t"] and self.jac(u, v) > 0.35 for s2, v in top if s2 >= 0.5 * s):
                 continue
             if any(self.jac(u, v) > 0.5 for v in alive):
                 continue
