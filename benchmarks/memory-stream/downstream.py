@@ -80,7 +80,9 @@ def judge_prep(a):
 def report(a):
     d = os.path.join(HERE, "downstream", a.world)
     key = json.load(open(os.path.join(d, "key.json")))["key"]
-    judged = {c["event"]: c["scores"] for c in json.load(open(os.path.join(d, "out", "judged.json")))["cases"]}
+    judged = {}
+    for p in glob.glob(os.path.join(d, "out", "judged*.json")):
+        judged.update({c["event"]: c["scores"] for c in json.load(open(p))["cases"]})
     by = {}
     for eid, k in key.items():
         if eid not in judged:
