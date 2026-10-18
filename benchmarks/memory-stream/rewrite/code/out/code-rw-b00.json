@@ -1,0 +1,1256 @@
+{
+ "batch": "code-rw-b00",
+ "rewriter": "sonnet (claude-code subagent)",
+ "cases": [
+  {
+   "session": "code-s000",
+   "index": 0,
+   "text": "known gotcha: sign-in redirect loop happens when /login is missing from publicRoutes in middleware.ts, and afterSignInUrl has to be /dashboard. server state is TanStack Query, client state zustand, dont mix. worker tests: pnpm --filter worker test, in-memory ioredis-mock so no real redis. check apps/web/middleware.ts, lena saw the loop on staging"
+  },
+  {
+   "session": "code-s000",
+   "index": 9,
+   "text": "nice, commit. pino structured logging, no console.log. Linear is the issue tracker, ACME team, branch names start with the id like acme-123. api is built on Express 4, verifies Clerk session JWTs with @clerk/backend in src/plugins/auth.ts. next ACME-412: auth plugin returns 500 not 401 on expired token"
+  },
+  {
+   "session": "code-s001",
+   "index": 0,
+   "text": "invoice list due dates are in UTC, vancouver agencies see tomorrow's date at 6pm. use org timezone"
+  },
+  {
+   "session": "code-s001",
+   "index": 9,
+   "text": "per the last game day, RDS failover took 90 seconds and api retries connections for 2 minutes. add a comment by the retry config in the api db pool so nobody shortens it"
+  },
+  {
+   "session": "code-s001",
+   "index": 15,
+   "text": "ok. versioning is Changesets, pnpm changeset for user-facing stuff, tz fix counts. also never run destructive database commands (drop, truncate, reset) without asking me, even locally. commit"
+  },
+  {
+   "session": "code-s001",
+   "index": 20,
+   "text": "next: add `acme invoices export` to the cli. how's the cli built, whats the output"
+  },
+  {
+   "session": "code-s001",
+   "index": 27,
+   "text": "ok write it. acme invoices export --from --to --format csv|json, paginate GET /v1/invoices, stdout or --out file"
+  },
+  {
+   "session": "code-s001",
+   "index": 37,
+   "text": "separate: sam wants me to review what new hires are told. check docs/onboarding.md and the ops runbook for stale stuff"
+  },
+  {
+   "session": "code-s001",
+   "index": 42,
+   "text": "add testing section to onboarding: api tests run against a real Postgres started by Testcontainers, docker must be running or they hang"
+  },
+  {
+   "session": "code-s002",
+   "index": 0,
+   "text": "legal asks what licenses we ship under, check the LICENSE files. also architecture doc should say database is MySQL 8"
+  },
+  {
+   "session": "code-s002",
+   "index": 8,
+   "text": "pnpm dev at root starts web, api and worker together via Turborepo. rule: never hand-edit generated files in dist/ or *.gen.ts. check git log for hand-patched packages/cli/dist"
+  },
+  {
+   "session": "code-s002",
+   "index": 13,
+   "text": "yeah ask marco first, leave it. export: report errors to Sentry, DSN comes from SENTRY_DSN. put the command behind a feature flag, managed in GrowthBook. add a vitest snapshot test of stdout for csv. no git stash, commit work in progress to the branch instead"
+  },
+  {
+   "session": "code-s003",
+   "index": 0,
+   "text": "invoice-reminder job double-sends when rabbit redelivers a message, customer got 3 reminders yesterday. add idempotency check in services/worker/src/jobs/invoice-reminder.ts + a test"
+  },
+  {
+   "session": "code-s003",
+   "index": 7,
+   "text": "careful, node version is 18 LTS. no toSorted"
+  },
+  {
+   "session": "code-s003",
+   "index": 10,
+   "text": "yeah node 18 lts everywhere incl worker. make sure nothing else there needs newer node"
+  },
+  {
+   "session": "code-s003",
+   "index": 15,
+   "text": "q: structuredClone vs JSON.parse(JSON.stringify(x)) for deep copy, real difference or style"
+  },
+  {
+   "session": "code-s003",
+   "index": 19,
+   "text": "ok cool"
+  },
+  {
+   "session": "code-s003",
+   "index": 21,
+   "text": "later. try export locally first: pnpm --filter @acme/cli dev -- <args>, no build. invoices export --from 2026-08-01 --to 2026-08-18 against staging"
+  },
+  {
+   "session": "code-s003",
+   "index": 26,
+   "text": "yep excel mangles it. add --bom flag, utf-8 BOM prefix for csv"
+  },
+  {
+   "session": "code-s003",
+   "index": 35,
+   "text": "why is the worker docker image not alpine like the api? 3x the size"
+  },
+  {
+   "session": "code-s004",
+   "index": 0,
+   "text": "export branch toward review, dont open anything. PRs need one CODEOWNERS approval and green CI before merge, check CODEOWNERS covers packages/cli. gotcha: api db goes through PgBouncer in transaction mode so prepared statements must be disabled (prepare: false), check the api db config. api and worker runs on EKS, cluster named acme-prod. also CI install fails on my other branch, what package manager does root pin"
+  },
+  {
+   "session": "code-s005",
+   "index": 0,
+   "text": "need STRIPE_WEBHOOK_SECRET for local dev: add placeholder to .env.example with a comment on where to get it. team secrets live in 1Password vault acme-dev, production in AWS Secrets Manager. also restyle the web exports page banner next to the new skeletons. Tailwind CSS v4, CSS-first config in app/globals.css, no tailwind.config.js, dont create one. q: if stripe webhook handler fails in prod at 3am who gets woken up"
+  },
+  {
+   "session": "code-s006",
+   "index": 0,
+   "text": "linting and formatting is Biome, pnpm lint at root. fix what it flags on the export branch. update the banner test too, new copy is right"
+  },
+  {
+   "session": "code-s006",
+   "index": 7,
+   "text": "commit that. then debounce the dashboard invoice search box ~300ms, it fires every keystroke"
+  },
+  {
+   "session": "code-s006",
+   "index": 14,
+   "text": "priya asks if one huge export (50k invoices) gets throttled or starves other stuff. worker scales with KEDA on queue length, api HPA on CPU at 70%. draft a short reply i can paste"
+  },
+  {
+   "session": "code-s007",
+   "index": 0,
+   "text": "add private exports bucket in infra, 30 day object expiry. cost tags: every resource needs team and env tags, priya's script flags missing ones"
+  },
+  {
+   "session": "code-s007",
+   "index": 6,
+   "text": "team=payments is right. unrelated, trailmix: htmx 'add hike' form posts twice on double click save, duplicate hikes. how do i stop that"
+  },
+  {
+   "session": "code-s007",
+   "index": 12,
+   "text": "back to acme. editing a row inline in invoices table jumps pagination to page 1. fix"
+  },
+  {
+   "session": "code-s007",
+   "index": 19,
+   "text": "exports page shows blank table when no exports. add empty state"
+  },
+  {
+   "session": "code-s007",
+   "index": 25,
+   "text": "wait what have we done today, lost track"
+  },
+  {
+   "session": "code-s007",
+   "index": 27,
+   "text": "ok. staging api 502s during deploys and cli just dies. add retry w/ backoff in cli api client for 502/503/504, 3 tries"
+  },
+  {
+   "session": "code-s007",
+   "index": 36,
+   "text": "q: useLayoutEffect vs useEffect, when do i need which"
+  },
+  {
+   "session": "code-s007",
+   "index": 39,
+   "text": "lena sent this from prod, whats going on\n\nTypeError: Cannot read properties of undefined (reading 'map')\n    at InvoiceLineItems (webpack-internal:///(app-pages-browser)/./components/invoices/InvoiceLineItems.tsx:24:31)\n    at renderWithHooks (webpack-internal:///(app-pages-browser)/../../node_modules/react-dom/cjs/react-dom.development.js:11121:18)\n    at updateFunctionComponent (webpack-internal:///(app-pages-browser)/../../node_modules/react-dom/cjs/react-dom.development.js:16290:20)\n    at beginWork$1 (webpack-internal:///(app-pages-browser)/../../node_modules/react-dom/cjs/react-dom.development.js:18472:16)\n    at beginWork (webpack-internal:///(app-pages-browser)/../../node_modules/react-dom/cjs/react-dom.development.js:26927:14)\n    at performUnitOfWork (webpack-internal:///(app-pages-browser)/../../node_modules/react-dom/cjs/react-dom.development.js:25748:12)\n    at workLoopSync (webpack-internal:///(app-pages-browser)/../../node_modules/react-dom/cjs/react-dom.development.js:25464:5)\n    at renderRootSync (webpack-internal:///(app-pages-browser)/../../node_modules/react-dom/cjs/react-dom.development.js:25419:7)\n    at recoverFromConcurrentError (webpack-internal:///(app-pages-browser)/../../node_modules/react-dom/cjs/react-dom.development.js:24597:20)\n    at performConcurrentWorkOnRoot (webpack-internal:///(app-pages-browser)/../../node_modules/react-dom/cjs/react-dom.development.js:24542:26)\n    at workLoop (webpack-internal:///(app-pages-browser)/../../node_modules/scheduler/cjs/scheduler.development.js:256:34)\n    at flushWork (webpack-internal:///(app-pages-browser)/../../node_modules/scheduler/cjs/scheduler.development.js:225:14)\n    at MessagePort.performWorkUntilDeadline (webpack-internal:///(app-pages-browser)/../../node_modules/scheduler/cjs/scheduler.development.js:534:21)\n\nThe above error occurred in the <InvoiceLineItems> component:\n\n    at InvoiceLineItems (webpack-internal:///(app-pages-browser)/./components/invoices/InvoiceLineItems.tsx:19:11)\n    at div\n    at InvoiceDetail (webpack-internal:///(app-pages-browser)/./components/invoices/InvoiceDetail.tsx:22:11)\n    at Suspense\n    at InvoicePage (Server)\n    at InnerLayoutRouter (webpack-internal:///(app-pages-browser)/../../node_modules/next/dist/client/components/layout-router.js:243:11)\n    at RedirectErrorBoundary (webpack-internal:///(app-pages-browser)/../../node_modules/next/dist/client/components/redirect-boundary.js:74:9)\n    at RedirectBoundary (webpack-internal:///(app-pages-browser)/../../node_modules/next/dist/client/components/redirect-boundary.js:82:11)\n    at NotFoundBoundary (webpack-internal:///(app-pages-browser)/../../node_modules/next/dist/client/components/not-found-boundary.js:84:11)\n    at LoadingBoundary (webpack-internal:///(app-pages-browser)/../../node_modules/next/dist/client/components/layout-router.js:349:11)\n    at ErrorBoundary (webpack-internal:///(app-pages-browser)/../../node_modules/next/dist/client/components/error-boundary.js:160:11)\n    at InnerScrollAndViewportHandler (webpack-internal:///(app-pages-browser)/../../node_modules/next/dist/client/components/layout-router.js:153:9)\n    at ScrollAndViewportHandler (webpack-internal:///(app-pages-browser)/../../node_modules/next/dist/client/components/layout-router.js:228:11)\n    at RenderFromTemplateContext (webpack-internal:///(app-pages-browser)/../../node_modules/next/dist/client/components/render-from-template-context.js:16:44)\n    at OuterLayoutRouter (webpack-internal:///(app-pages-browser)/../../node_modules/next/dist/client/components/layout-router.js:370:11)\n    at body\n    at html\n    at RootLayout (Server)\n\nURL: /dashboard/invoices/inv_7Qx2m\nUser agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/605.1.15 Safari/605.1.15\nRelease: web@2026.08.19-3"
+  },
+  {
+   "session": "code-s007",
+   "index": 45,
+   "text": "fix it"
+  },
+  {
+   "session": "code-s008",
+   "index": 0,
+   "text": "walk me through how build tasks are wired. openapi spec is generated from zod schemas into apps/api/openapi.yaml, add the new from/to params on GET /v1/invoices. for later: release cli = merge Changesets version PR, then publish job runs npm publish --provenance. not now"
+  },
+  {
+   "session": "code-s008",
+   "index": 9,
+   "text": "coverage threshold 80% lines, CI fails below it. add tests for from/to filtering on the route. end-of-task: summarize in a short bullet list, no paragraphs"
+  },
+  {
+   "session": "code-s009",
+   "index": 0,
+   "text": "dashboard overdue badge says 14 but half are drafts. drafts cant be overdue. fix"
+  },
+  {
+   "session": "code-s009",
+   "index": 5,
+   "text": "lena's branch fails typecheck after rebasing on main, why\n\n> web@ typecheck /Users/lena/code/acme-platform/apps/web\n> tsc --noEmit -p .\n\ncomponents/invoices/InvoiceTableLoading.tsx:3:10 - error TS2305: Module '\"@/components/ui/Skeleton\"' has no exported member 'Skeleton'.\n\n3 import { Skeleton } from '@/components/ui/Skeleton';\n           ~~~~~~~~\n\ncomponents/invoices/InvoiceTableLoading.tsx:12:8 - error TS2604: JSX element type 'Skeleton' does not have any construct or call signatures.\n\n12       <Skeleton className=\"h-8 w-full\" />\n          ~~~~~~~~\n\ncomponents/invoices/InvoiceTableLoading.tsx:13:8 - error TS2604: JSX element type 'Skeleton' does not have any construct or call signatures.\n\n13       <Skeleton className=\"h-8 w-full\" />\n          ~~~~~~~~\n\ncomponents/invoices/InvoiceTableLoading.tsx:14:8 - error TS2604: JSX element type 'Skeleton' does not have any construct or call signatures.\n\n14       <Skeleton className=\"h-8 w-full\" />\n          ~~~~~~~~\n\ncomponents/invoices/InvoiceTable.tsx:9:3 - error TS2724: '\"./InvoiceRow\"' has no exported member named 'InvoiceRowProps'. Did you mean 'InvoiceRowProps_'?\n\n9   InvoiceRowProps,\n    ~~~~~~~~~~~~~~~\n\ncomponents/invoices/InvoiceTable.tsx:41:22 - error TS2339: Property 'timeZone' does not exist on type 'OrgSummary'.\n\n41     formatDate(row.dueDate, org.timeZone)\n                               ~~~~~~~~\n\napp/dashboard/invoices/page.tsx:18:7 - error TS2322: Type 'OrgSummary' is not assignable to type 'Org'.\n  Property 'timeZone' is missing in type 'OrgSummary' but required in type 'Org'.\n\n18       org={summary.org}\n         ~~~\n\n\nFound 7 errors in 3 files.\n"
+  },
+  {
+   "session": "code-s009",
+   "index": 9,
+   "text": "side q: is `satisfies` worth it over annotating config objects?"
+  },
+  {
+   "session": "code-s009",
+   "index": 11,
+   "text": "rename InvoiceRow to InvoiceListItem across web, confusing next to db row types"
+  },
+  {
+   "session": "code-s009",
+   "index": 16,
+   "text": "add loading skeleton to invoice detail page too, same style as the table's"
+  },
+  {
+   "session": "code-s009",
+   "index": 23,
+   "text": "fix that exports test fixture, then commit all. commit messages follow Conventional Commits (feat:, fix:, chore:) from now on. update docs/ pages when public behavior changes, cli export counts, add it to cli docs"
+  },
+  {
+   "session": "code-s009",
+   "index": 31,
+   "text": "local db is a mess from export testing, thousands of fake invoices. get it back to clean seeded state"
+  },
+  {
+   "session": "code-s009",
+   "index": 36,
+   "text": "ok"
+  },
+  {
+   "session": "code-s009",
+   "index": 40,
+   "text": "continue"
+  },
+  {
+   "session": "code-s009",
+   "index": 45,
+   "text": "thanks"
+  },
+  {
+   "session": "code-s009",
+   "index": 47,
+   "text": "trailmix: users upload a .gpx per hike. how do i make a django form field that checks it's really gpx, not just the extension"
+  },
+  {
+   "session": "code-s009",
+   "index": 55,
+   "text": "how do i run the acme cli from source? build + npm link is slow"
+  },
+  {
+   "session": "code-s010",
+   "index": 0,
+   "text": "acme login uses OAuth device code flow, token stored in OS keychain via keytar. polls forever if never approved. add timeout, nicer polling messages"
+  },
+  {
+   "session": "code-s010",
+   "index": 9,
+   "text": "ok keep the test update. marco wants worker rate limiter counters in redis in prod, not memory. production Redis is ElastiCache (single shard, cluster mode off). check services/worker/src/ratelimit.ts for anything that'd break"
+  },
+  {
+   "session": "code-s011",
+   "index": 0,
+   "text": "morning. 1. lena wants a posthog event when invoice sent from web app 2. 0042 migration (friday) has wrong default on invoices.reminder_days, 7 should be 3. never edit a merged migration, add a new one 3. worker died sat night, redis OOM, why. also dont rewrite or squash commits already pushed, marco branched off mine"
+  },
+  {
+   "session": "code-s012",
+   "index": 0,
+   "text": "lena's PR adds .eslintrc.json and .prettierrc to apps/api?? thought we dropped those. also tighten api CORS, it reflects any origin. allow only origins listed in CORS_ORIGINS (comma separated)"
+  },
+  {
+   "session": "code-s013",
+   "index": 0,
+   "text": "structuredClone vs JSON.parse(JSON.stringify(x)) for deep copies, real difference?"
+  },
+  {
+   "session": "code-s013",
+   "index": 4,
+   "text": "add --json flag to `acme invoices list` for piping to jq"
+  },
+  {
+   "session": "code-s013",
+   "index": 11,
+   "text": "lena says invoice table on web shows due dates a day early for some clients. timezone thing?"
+  },
+  {
+   "session": "code-s013",
+   "index": 18,
+   "text": "write formatMoney(cents, currency) in apps/web/lib/money.ts, <Money> does it inline and export page needs it too"
+  },
+  {
+   "session": "code-s013",
+   "index": 25,
+   "text": "does invoice attachment upload go through our api? lena wants a progress bar"
+  },
+  {
+   "session": "code-s013",
+   "index": 30,
+   "text": "rename getInvoicesForClient to listClientInvoices across api, only one not following list*"
+  },
+  {
+   "session": "code-s013",
+   "index": 37,
+   "text": "nice thanks"
+  },
+  {
+   "session": "code-s013",
+   "index": 40,
+   "text": "how are cli tests set up? want one for --json"
+  },
+  {
+   "session": "code-s013",
+   "index": 43,
+   "text": "later, first: add new staging domain to cors rule on uploads bucket. per priya never run terraform apply from a laptop, only the CI plan/apply workflow applies. just make the change and run a plan locally for the PR"
+  },
+  {
+   "session": "code-s014",
+   "index": 0,
+   "text": "seeing this in staging api logs every few min, whats going on\n\n{\"level\":50,\"time\":1756062117432,\"pid\":1,\"hostname\":\"api-7c9d8b6f5-qx2lp\",\"reqId\":\"req-4f1a\",\"msg\":\"unhandled error\"}\nTypeError: Cannot read properties of undefined (reading 'amountCents')\n    at /app/apps/api/dist/services/reconcile.js:47:38\n    at Array.reduce (<anonymous>)\n    at sumAllocations (/app/apps/api/dist/services/reconcile.js:46:22)\n    at reconcilePayment (/app/apps/api/dist/services/reconcile.js:71:19)\n    at async handleStripeEvent (/app/apps/api/dist/routes/webhooks/stripe.js:58:13)\n    at async /app/apps/api/dist/routes/webhooks/stripe.js:22:9\n    at async Layer.handle [as handle_request] (/app/node_modules/express/lib/router/layer.js:95:5)\n    at async next (/app/node_modules/express/lib/router/route.js:149:13)\n    at async Route.dispatch (/app/node_modules/express/lib/router/route.js:119:3)\n    at async Layer.handle [as handle_request] (/app/node_modules/express/lib/router/layer.js:95:5)\n    at async /app/node_modules/express/lib/router/index.js:284:15\n    at async Function.process_params (/app/node_modules/express/lib/router/index.js:346:12)\n    at async next (/app/node_modules/express/lib/router/index.js:280:10)\n    at async rawBody (/app/apps/api/dist/middleware/raw-body.js:12:5)\n{\"level\":30,\"time\":1756062117435,\"reqId\":\"req-4f1a\",\"res\":{\"statusCode\":500},\"responseTime\":41,\"msg\":\"request completed\"}\n{\"level\":30,\"time\":1756062178011,\"reqId\":\"req-4f2c\",\"req\":{\"method\":\"POST\",\"url\":\"/v1/webhooks/stripe\"},\"msg\":\"incoming request\"}\n{\"level\":40,\"time\":1756062178013,\"reqId\":\"req-4f2c\",\"event\":\"payment_intent.succeeded\",\"pi\":\"pi_3Pq...e81\",\"msg\":\"payment has 2 allocations, 1 refers to deleted invoice\"}\n{\"level\":50,\"time\":1756062178019,\"pid\":1,\"hostname\":\"api-7c9d8b6f5-qx2lp\",\"reqId\":\"req-4f2c\",\"msg\":\"unhandled error\"}\nTypeError: Cannot read properties of undefined (reading 'amountCents')\n    at /app/apps/api/dist/services/reconcile.js:47:38\n    at Array.reduce (<anonymous>)\n    at sumAllocations (/app/apps/api/dist/services/reconcile.js:46:22)\n    at reconcilePayment (/app/apps/api/dist/services/reconcile.js:71:19)\n    at async handleStripeEvent (/app/apps/api/dist/routes/webhooks/stripe.js:58:13)\n    at async /app/apps/api/dist/routes/webhooks/stripe.js:22:9\n{\"level\":30,\"time\":1756062178021,\"reqId\":\"req-4f2c\",\"res\":{\"statusCode\":500},\"responseTime\":10,\"msg\":\"request completed\"}\n{\"level\":30,\"time\":1756062239870,\"reqId\":\"req-4f3e\",\"req\":{\"method\":\"POST\",\"url\":\"/v1/webhooks/stripe\"},\"msg\":\"incoming request\"}\n{\"level\":50,\"time\":1756062239874,\"pid\":1,\"hostname\":\"api-7c9d8b6f5-m8hzd\",\"reqId\":\"req-4f3e\",\"msg\":\"unhandled error\"}\nTypeError: Cannot read properties of undefined (reading 'amountCents')\n    at /app/apps/api/dist/services/reconcile.js:47:38\n    at Array.reduce (<anonymous>)\n    at sumAllocations (/app/apps/api/dist/services/reconcile.js:46:22)\n{\"level\":30,\"time\":1756062239876,\"reqId\":\"req-4f3e\",\"res\":{\"statusCode\":500},\"responseTime\":6,\"msg\":\"request completed\"}"
+  },
+  {
+   "session": "code-s014",
+   "index": 4,
+   "text": "fix it, treat them as unapplied"
+  },
+  {
+   "session": "code-s014",
+   "index": 9,
+   "text": "what have we done so far this session"
+  },
+  {
+   "session": "code-s014",
+   "index": 11,
+   "text": "commit that. then invoice pdf filenames: add slugified client name, INV-2026-0412-northwind-creative.pdf instead of INV-2026-0412.pdf"
+  },
+  {
+   "session": "code-s014",
+   "index": 18,
+   "text": "random q: 302 vs 303 vs 307, when does it matter"
+  },
+  {
+   "session": "code-s014",
+   "index": 22,
+   "text": "quick script: take ~/Downloads/invoices-export.csv (number,client,status,total_cents,currency), print counts and totals per status"
+  },
+  {
+   "session": "code-s014",
+   "index": 27,
+   "text": "infra PR for bucket cors needs review. platform team owns infra/ and .github/ in CODEOWNERS so priya's team gets auto-requested. check CODEOWNERS says that, think the reorg broke it"
+  },
+  {
+   "session": "code-s014",
+   "index": 34,
+   "text": "add loading skeleton to clients page, flashes empty"
+  },
+  {
+   "session": "code-s014",
+   "index": 40,
+   "text": "support forwarded: customer gets \"Error [ERR_REQUIRE_ESM]: require() of ES Module /usr/local/lib/node_modules/@acme/cli/dist/index.js not supported\" running `acme invoices list` after upgrading the cli. worked last month. what do i tell them"
+  },
+  {
+   "session": "code-s015",
+   "index": 0,
+   "text": "contractor (dev) starts tomorrow, write local setup section of docs/onboarding.md for the new user. local env: copy .env.example to .env.local, pull secrets from 1Password vault acme-dev. dev will poke around billing, you too: dont change billing code without my review"
+  },
+  {
+   "session": "code-s015",
+   "index": 6,
+   "text": "make it clear it's .env.local not .env: copy .env.example to .env.local, secrets from 1password acme-dev. people create .env and web ignores it"
+  },
+  {
+   "session": "code-s015",
+   "index": 10,
+   "text": "add the placeholder. then public /pricing page in web for marketing. Clerk middleware lives in apps/web/middleware.ts, protects everything except publicRoutes, wire it in there"
+  },
+  {
+   "session": "code-s015",
+   "index": 17,
+   "text": "why does next middleware run on edge runtime by default? feels limiting"
+  },
+  {
+   "session": "code-s015",
+   "index": 22,
+   "text": "fix the reviewer's two comments"
+  },
+  {
+   "session": "code-s016",
+   "index": 0,
+   "text": "POST /v1/clients trusts req.body, someone sent a 4mb \"name\" lol. add validation. runtime validation is zod everywhere, no joi or hand-rolled ifs"
+  },
+  {
+   "session": "code-s017",
+   "index": 0,
+   "text": "invoices table in web needs sort by due date, click header toggles asc/desc. api already takes ?sort="
+  },
+  {
+   "session": "code-s018",
+   "index": 0,
+   "text": "spin everything up locally and tell me which port is what"
+  },
+  {
+   "session": "code-s018",
+   "index": 4,
+   "text": "priya wants an sqs queue for csv exports. where does infra code live now and what's it written in"
+  },
+  {
+   "session": "code-s018",
+   "index": 10,
+   "text": "later. pin node version for the repo: .nvmrc at root plus engines in root package.json. new hires get whatever homebrew gives them"
+  },
+  {
+   "session": "code-s018",
+   "index": 16,
+   "text": "ugh. staging signing in now bounces forever, chrome ERR_TOO_MANY_REDIRECTS. lena merged auth route stuff this morning i think"
+  },
+  {
+   "session": "code-s018",
+   "index": 21,
+   "text": "ok lena's on it, leave that. add a copy button next to invoice number in invoice header"
+  },
+  {
+   "session": "code-s019",
+   "index": 0,
+   "text": "useMemo vs useCallback, any difference beyond syntax"
+  },
+  {
+   "session": "code-s019",
+   "index": 4,
+   "text": "invoice-filters.test.tsx in web fails every night ~8pm toronto, passes by day. fix it"
+  },
+  {
+   "session": "code-s019",
+   "index": 11,
+   "text": "priya wants an alarm in prod that pages oncall before last saturday's worker outage can happen again. add to infra code"
+  },
+  {
+   "session": "code-s019",
+   "index": 18,
+   "text": "reminder emails subject: 'Reminder: INV-2026-0412 is due in 3 days' or 'INV-2026-0412 is 5 days overdue' depending, instead of \"Invoice reminder\""
+  },
+  {
+   "session": "code-s019",
+   "index": 24,
+   "text": "yeah clean that up. also add `acme invoices overdue` as shortcut for `invoices list --status overdue`"
+  },
+  {
+   "session": "code-s019",
+   "index": 31,
+   "text": "why failing on CI but fine on my machine\n\nRun pnpm --filter web build\n\n> web@0.1.0 build /home/runner/work/acme-platform/acme-platform/apps/web\n> next build\n\n   ▲ Next.js 15.4.6\n   - Environments: .env.production\n\n   Creating an optimized production build ...\nFailed to compile.\n\n./components/invoices/invoice-row.tsx\nModule not found: Can't resolve '@/components/Money'\n\nhttps://nextjs.org/docs/messages/module-not-found\n\nImport trace for requested module:\n./components/invoices/invoice-row.tsx\n./app/(app)/invoices/invoices-table.tsx\n./app/(app)/invoices/page.tsx\n\n./components/invoices/invoice-header.tsx\nModule not found: Can't resolve '@/components/Copy-Button'\n\nhttps://nextjs.org/docs/messages/module-not-found\n\nImport trace for requested module:\n./components/invoices/invoice-header.tsx\n./app/(app)/invoices/[id]/page.tsx\n\n\n> Build failed because of webpack errors\n ELIFECYCLE  Command failed with exit code 1.\nError: Process completed with exit code 1.\n\n##[group]Run actions/upload-artifact@v4\nWith:\n  name: web-build-logs\n  path: apps/web/.next/trace\n  if-no-files-found: warn\n##[endgroup]\nWarning: No files were found with the provided path: apps/web/.next/trace. No artifacts will be uploaded."
+  },
+  {
+   "session": "code-s019",
+   "index": 34,
+   "text": "yes fix those. then edit client form in web: name, email, currency, tax id. react-hook-form with zod resolvers, stick to that"
+  },
+  {
+   "session": "code-s020",
+   "index": 0,
+   "text": "invoice list table overflows on mobile, page scrolls sideways. make it scroll in its own container"
+  },
+  {
+   "session": "code-s020",
+   "index": 5,
+   "text": "this on invoice detail page in dev, only some invoices\n\n```\nUnhandled Runtime Error\nTypeError: Cannot read properties of undefined (reading 'map')\n\nSource\ncomponents/invoices/InvoiceSummary.tsx (21:28) @ map\n\n  19 |       <h3 className=\"font-medium\">Line items</h3>\n  20 |       <ul className=\"divide-y\">\n> 21 |         {invoice.lineItems.map((li) => (\n     |                            ^\n  22 |           <li key={li.id} className=\"flex justify-between py-1\">\n  23 |             <span>{li.description}</span>\n  24 |             <span>{formatMoney(li.amountCents, invoice.currency)}</span>\n\nCall Stack\nInvoiceSummary\n  components/invoices/InvoiceSummary.tsx (21:28)\nrenderWithHooks\n  node_modules/react-dom/cjs/react-dom.development.js (16305:18)\nmountIndeterminateComponent\n  node_modules/react-dom/cjs/react-dom.development.js (20074:13)\nbeginWork\n  node_modules/react-dom/cjs/react-dom.development.js (21587:16)\nHTMLUnknownElement.callCallback\n  node_modules/react-dom/cjs/react-dom.development.js (4164:14)\nObject.invokeGuardedCallbackDev\n  node_modules/react-dom/cjs/react-dom.development.js (4213:16)\ninvokeGuardedCallback\n  node_modules/react-dom/cjs/react-dom.development.js (4277:31)\nbeginWork$1\n  node_modules/react-dom/cjs/react-dom.development.js (27451:7)\nperformUnitOfWork\n  node_modules/react-dom/cjs/react-dom.development.js (26557:12)\nworkLoopSync\n  node_modules/react-dom/cjs/react-dom.development.js (26466:5)\nrenderRootSync\n  node_modules/react-dom/cjs/react-dom.development.js (26434:7)\nperformConcurrentWorkOnRoot\n  node_modules/react-dom/cjs/react-dom.development.js (25738:74)\nworkLoop\n  node_modules/scheduler/cjs/scheduler.development.js (266:34)\nflushWork\n  node_modules/scheduler/cjs/scheduler.development.js (239:14)\nMessagePort.performWorkUntilDeadline\n  node_modules/scheduler/cjs/scheduler.development.js (533:21)\n```"
+  },
+  {
+   "session": "code-s020",
+   "index": 10,
+   "text": "unrelated, dashboard font looks off in safari. what font do we load and where"
+  },
+  {
+   "session": "code-s020",
+   "index": 14,
+   "text": "ok do it"
+  },
+  {
+   "session": "code-s020",
+   "index": 19,
+   "text": "will check. going forward test changes end to end before opening a PR, not only unit tests. date picker passed unit tests last week but broke in the browser"
+  },
+  {
+   "session": "code-s020",
+   "index": 21,
+   "text": "invoice list due dates show UTC so some show wrong day in vancouver. show in browser's timezone"
+  },
+  {
+   "session": "code-s020",
+   "index": 28,
+   "text": "add test for formatDueDate, cover the vancouver case"
+  },
+  {
+   "session": "code-s020",
+   "index": 32,
+   "text": "cool"
+  },
+  {
+   "session": "code-s020",
+   "index": 34,
+   "text": "thanks"
+  },
+  {
+   "session": "code-s020",
+   "index": 38,
+   "text": "fix that type error while you're there"
+  },
+  {
+   "session": "code-s021",
+   "index": 0,
+   "text": "reminder job sends duplicate emails when it retries after a timeout. make it idempotent"
+  },
+  {
+   "session": "code-s021",
+   "index": 6,
+   "text": "later. install fails on my new laptop with an engines error. look into it"
+  },
+  {
+   "session": "code-s021",
+   "index": 11,
+   "text": "ok fixed. benchmark the pdf renderer before/after the font subsetting change on this branch. run it locally on my machine, no long benchmarks on the shared CI runners"
+  },
+  {
+   "session": "code-s021",
+   "index": 18,
+   "text": "reminder backlog is huge since end of month batch. worker concurrency is 5 jobs per process, bump that or add replicas"
+  },
+  {
+   "session": "code-s021",
+   "index": 22,
+   "text": "pdf jobs timing out a lot in staging, log below. why\n\n```\n{\"level\":30,\"time\":1756468801123,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91821\",\"msg\":\"job started\"}\n{\"level\":30,\"time\":1756468801130,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91822\",\"msg\":\"job started\"}\n{\"level\":30,\"time\":1756468801134,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91823\",\"msg\":\"job started\"}\n{\"level\":30,\"time\":1756468801139,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91824\",\"msg\":\"job started\"}\n{\"level\":30,\"time\":1756468801141,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91825\",\"msg\":\"job started\"}\n{\"level\":20,\"time\":1756468801502,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91821\",\"msg\":\"fetching logo\",\"url\":\"https://cdn.example.com/logos/org_4471.png\"}\n{\"level\":20,\"time\":1756468801507,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91822\",\"msg\":\"fetching logo\",\"url\":\"https://cdn.example.com/logos/org_4471.png\"}\n{\"level\":20,\"time\":1756468801511,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91823\",\"msg\":\"fetching logo\",\"url\":\"https://cdn.example.com/logos/org_4471.png\"}\n{\"level\":20,\"time\":1756468801515,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91824\",\"msg\":\"fetching logo\",\"url\":\"https://cdn.example.com/logos/org_4471.png\"}\n{\"level\":20,\"time\":1756468801518,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91825\",\"msg\":\"fetching logo\",\"url\":\"https://cdn.example.com/logos/org_4471.png\"}\n{\"level\":40,\"time\":1756468861503,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91821\",\"msg\":\"job timed out\",\"timeoutMs\":60000}\n{\"level\":40,\"time\":1756468861508,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91822\",\"msg\":\"job timed out\",\"timeoutMs\":60000}\n{\"level\":40,\"time\":1756468861512,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91823\",\"msg\":\"job timed out\",\"timeoutMs\":60000}\n{\"level\":40,\"time\":1756468861516,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91824\",\"msg\":\"job timed out\",\"timeoutMs\":60000}\n{\"level\":40,\"time\":1756468861519,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91825\",\"msg\":\"job timed out\",\"timeoutMs\":60000}\n{\"level\":30,\"time\":1756468861530,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91821\",\"msg\":\"retry scheduled\",\"attempt\":2,\"delayMs\":30000}\n{\"level\":30,\"time\":1756468861534,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91822\",\"msg\":\"retry scheduled\",\"attempt\":2,\"delayMs\":30000}\n{\"level\":30,\"time\":1756468861537,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91823\",\"msg\":\"retry scheduled\",\"attempt\":2,\"delayMs\":30000}\n{\"level\":30,\"time\":1756468861540,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91824\",\"msg\":\"retry scheduled\",\"attempt\":2,\"delayMs\":30000}\n{\"level\":30,\"time\":1756468861543,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"pdf\",\"jobId\":\"91825\",\"msg\":\"retry scheduled\",\"attempt\":2,\"delayMs\":30000}\n{\"level\":30,\"time\":1756468862011,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"reminders\",\"jobId\":\"77310\",\"msg\":\"job completed\",\"durationMs\":412}\n{\"level\":30,\"time\":1756468862480,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"reminders\",\"jobId\":\"77311\",\"msg\":\"job completed\",\"durationMs\":398}\n{\"level\":30,\"time\":1756468862901,\"pid\":7,\"hostname\":\"worker-7c9f6b-x2kqp\",\"queue\":\"reminders\",\"jobId\":\"77312\",\"msg\":\"job completed\",\"durationMs\":405}\n```"
+  },
+  {
+   "session": "code-s021",
+   "index": 28,
+   "text": "ok. keep benchmarks off the shared CI runners, dont add that bench as a CI job, someone suggested it in the PR"
+  },
+  {
+   "session": "code-s021",
+   "index": 31,
+   "text": "different thing. trailmix (django): htmx add-hike form posts twice when i hit enter. any idea"
+  },
+  {
+   "session": "code-s021",
+   "index": 35,
+   "text": "back to acme. new s3 bucket for monthly invoice exports, private, objects expire after 90 days. set it up"
+  },
+  {
+   "session": "code-s022",
+   "index": 0,
+   "text": "remind me how the backend checks the bearer token on requests? which lib and where's the code"
+  },
+  {
+   "session": "code-s022",
+   "index": 2,
+   "text": "nvm, later. export csv header says amountCents, finance wants amount_cents like other columns"
+  },
+  {
+   "session": "code-s022",
+   "index": 8,
+   "text": "pdf render job crashes silently, the catch swallows it. send crashes to our exception tracker and log them, then check it in"
+  },
+  {
+   "session": "code-s022",
+   "index": 17,
+   "text": "ok add a test for the rethrow. also no emojis in code, commits or docs, saw a rocket in the worker CHANGELOG"
+  },
+  {
+   "session": "code-s022",
+   "index": 25,
+   "text": "fix the unused param. then look at the invoice stats query in apps/api/src/routes/stats.ts, something's off"
+  },
+  {
+   "session": "code-s022",
+   "index": 32,
+   "text": "good catch. also sums come back as strings in the json, make them numbers"
+  },
+  {
+   "session": "code-s023",
+   "index": 0,
+   "text": "1) public endpoints rate limit: 100 requests per minute per IP, stored in Redis via @fastify/rate-limit, write the plugin. 2) find where yesterday's export bucket goes in infra and add it. use gh CLI for GitHub operations, open an issue to track the bucket rollout"
+  },
+  {
+   "session": "code-s024",
+   "index": 0,
+   "text": "while ur at it: webhooks settings page in dashboard documents the signature wrong, fix. `acme webhooks test` should read signing secret from CLI config stored in ~/.acme/config.json, not env var"
+  },
+  {
+   "session": "code-s025",
+   "index": 0,
+   "text": "someone in #support asks what the image job does with uploaded logos/attachments. quick summary?"
+  },
+  {
+   "session": "code-s026",
+   "index": 0,
+   "text": "run end-to-end tests for invoice pages before i call it a day: pnpm --filter web e2e, needs dev server up on port 3000 first"
+  },
+  {
+   "session": "code-s027",
+   "index": 0,
+   "text": "csv export button spins forever when org has zero invoices"
+  },
+  {
+   "session": "code-s027",
+   "index": 8,
+   "text": "what did we do the last few days? quick recap"
+  },
+  {
+   "session": "code-s027",
+   "index": 13,
+   "text": "random q: how is 103 early hints different from http/2 server push? someone said push is dead"
+  },
+  {
+   "session": "code-s027",
+   "index": 16,
+   "text": "write util parsing payment terms like 'net 30', 'Net45', 'due on receipt', 'NET 7' into days. throw on garbage"
+  },
+  {
+   "session": "code-s027",
+   "index": 22,
+   "text": "nice"
+  },
+  {
+   "session": "code-s027",
+   "index": 25,
+   "text": "why two auth packages in apps/web/package.json? noticed looking at the zod thing"
+  },
+  {
+   "session": "code-s027",
+   "index": 30,
+   "text": "yeah later. typecheck from the zod bump PR, which actually matter\n\n```\n> api@0.1.0 typecheck /home/runner/work/acme-platform/apps/api\n> tsc --noEmit\n\nsrc/routes/invoices.ts:62:7 - error TS2345: Argument of type '{ type: \"percent\"; value: number; } | { type: \"fixed\"; amountCents: number; } | undefined' is not assignable to parameter of type 'Discount'.\n  Type 'undefined' is not assignable to type 'Discount'.\n\n62       applyDiscount(invoice, body.discount);\n         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\nsrc/routes/clients.ts:88:24 - error TS2339: Property 'vatId' does not exist on type '{ type: \"individual\"; name: string; email: string; }'.\n\n88   if (body.type === 'company' || body.vatId) {\n                                         ~~~~~\n\nsrc/schemas/webhook.ts:14:3 - error TS2322: Type 'ZodEffects<ZodString, string, string>' is not assignable to type 'ZodString'.\n\n14   url: z.string().url().transform((u) => u.trim()),\n     ~~~\n\nsrc/schemas/webhook.ts:31:20 - error TS2589: Type instantiation is excessively deep and possibly infinite.\n\n31 export type Webhook = z.infer<typeof WebhookSchema>;\n                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\nFound 4 errors in 3 files.\n\nErrors  Files\n     1  src/routes/clients.ts:88\n     1  src/routes/invoices.ts:62\n     2  src/schemas/webhook.ts:14\n ELIFECYCLE  Command failed with exit code 2.\n\n> web@0.1.0 typecheck /home/runner/work/acme-platform/apps/web\n> tsc --noEmit\n\ncomponents/clients/ClientForm.tsx:47:11 - error TS2322: Type '\"company\" | \"individual\" | undefined' is not assignable to type '\"company\" | \"individual\"'.\n\n47           defaultValue={client?.type}\n             ~~~~~~~~~~~~\n\nFound 1 error in components/clients/ClientForm.tsx:47\n ELIFECYCLE  Command failed with exit code 2.\n```"
+  },
+  {
+   "session": "code-s027",
+   "index": 35,
+   "text": "fix all 5 on the zod branch"
+  },
+  {
+   "session": "code-s027",
+   "index": 44,
+   "text": "while that runs: structuredClone vs JSON.parse(JSON.stringify(x)), any reason to still use the json trick"
+  },
+  {
+   "session": "code-s027",
+   "index": 49,
+   "text": "ok commit that to the zod branch. then add --json flag to `acme invoices list` for jq"
+  },
+  {
+   "session": "code-s027",
+   "index": 58,
+   "text": "ugh. long tuesday. how's it going lol"
+  },
+  {
+   "session": "code-s028",
+   "index": 0,
+   "text": "lena wants redux for invoice editor state, didnt we decide something about that? also her preview build failed with some clerk key thing, check docs/gotchas.md"
+  },
+  {
+   "session": "code-s028",
+   "index": 6,
+   "text": "ok. editor store refactor branch is ready, put the pr up"
+  },
+  {
+   "session": "code-s028",
+   "index": 12,
+   "text": "reviewer flagged trash button in line item row, no screen reader label. icon-only buttons must have an aria-label, always. fix it"
+  },
+  {
+   "session": "code-s028",
+   "index": 17,
+   "text": "later. add duplicate-line button next to the trash one. components come from shadcn/ui and live in apps/web/components/ui, icons from lucide-react, not our hand-rolled icons"
+  },
+  {
+   "session": "code-s029",
+   "index": 0,
+   "text": "worker imports like ../../../../packages/shared/src/money are ridiculous. fix?"
+  },
+  {
+   "session": "code-s029",
+   "index": 7,
+   "text": "good point from reviewer, check that. then `acme invoices send` dies with stack trace on bad user args, make it exit properly. going forward prefer small components, under 150 lines, with colocated tests (invoice editor is 400 lines, split later). before saying a task is done, re-check the work for bugs and security issues"
+  },
+  {
+   "session": "code-s030",
+   "index": 0,
+   "text": "where did we leave things yesterday? lost track"
+  },
+  {
+   "session": "code-s030",
+   "index": 7,
+   "text": "ok continue"
+  },
+  {
+   "session": "code-s030",
+   "index": 13,
+   "text": "nice. reminder: all packages are ESM, every package.json has \"type\": \"module\", no require(). keep secrets and tokens out of logs and error messages (last incident was a bearer token in an error log). add redaction to api logger"
+  },
+  {
+   "session": "code-s030",
+   "index": 19,
+   "text": "can't line up api logs with the web request debugging a sentry issue. how are we tagging requests? check the middleware"
+  },
+  {
+   "session": "code-s030",
+   "index": 27,
+   "text": "q while that runs: what is AsyncLocalStorage for, is it slow? people suggest it for request context"
+  },
+  {
+   "session": "code-s031",
+   "index": 0,
+   "text": "pulled main, marco's big api PR landed. skim what changed in api + worker. next is search: full-text search uses postgres tsvector columns, not elasticsearch, no search service. if a fix is uncertain say so instead of guessing"
+  },
+  {
+   "session": "code-s032",
+   "index": 0,
+   "text": "two windows users: `acme config set org acme-co` writes to C:\\Users\\dana/.acme\\config.json and then `acme whoami` says not configured. look"
+  },
+  {
+   "session": "code-s033",
+   "index": 0,
+   "text": "invoice totals show $1,204.3000000002 on a couple invoices in the dashboard. fix pls"
+  },
+  {
+   "session": "code-s033",
+   "index": 9,
+   "text": "priya wants a bucket for monthly invoice export zips. check infra for region + provider setup first"
+  },
+  {
+   "session": "code-s033",
+   "index": 14,
+   "text": "yes but shorter answers pls, skip the terraform basics"
+  },
+  {
+   "session": "code-s033",
+   "index": 16,
+   "text": "park the bucket, priya will do it. more urgent: invoice numbers collide in api tests under parallel runs. apps/api/src/lib/invoice-number.ts"
+  },
+  {
+   "session": "code-s033",
+   "index": 20,
+   "text": "yep do it"
+  },
+  {
+   "session": "code-s033",
+   "index": 28,
+   "text": "fix that and then add a sort toggle on the due date column of invoices table in web"
+  },
+  {
+   "session": "code-s034",
+   "index": 0,
+   "text": "starting `acme invoices export` today. read the cli setup first, how commands get wired + what ts settings we have"
+  },
+  {
+   "session": "code-s034",
+   "index": 9,
+   "text": "ok go ahead"
+  },
+  {
+   "session": "code-s034",
+   "index": 16,
+   "text": "lgtm"
+  },
+  {
+   "session": "code-s035",
+   "index": 0,
+   "text": "client avatars on /settings/team broken since lena moved them to the cdn. allow remote images in next.config.ts remotePatterns, host cdn.acme.dev"
+  },
+  {
+   "session": "code-s035",
+   "index": 6,
+   "text": "q: does next/image proxy remote images through our server? every avatar hits our node process?"
+  },
+  {
+   "session": "code-s035",
+   "index": 8,
+   "text": "side thing, trailmix (django + htmx): hx-post fails with 403 CSRF verification failed after i moved the form into a partial. token is in base template. ideas?"
+  },
+  {
+   "session": "code-s035",
+   "index": 16,
+   "text": "back to acme. helper turning due date into 'due in 3 days' / 'due today' / 'overdue by 2 days' for invoice cards. apps/web/lib"
+  },
+  {
+   "session": "code-s035",
+   "index": 23,
+   "text": "unrelated: useMemo vs useCallback, real difference"
+  },
+  {
+   "session": "code-s035",
+   "index": 26,
+   "text": "invoices table pops in with no loading state. add a skeleton"
+  },
+  {
+   "session": "code-s035",
+   "index": 33,
+   "text": "invoice-status.test.tsx in web flaky, fails ~1 in 5 on CI with 'expected Overdue got Due today'. fix it properly, dont just retry"
+  },
+  {
+   "session": "code-s035",
+   "index": 47,
+   "text": "ok nice"
+  },
+  {
+   "session": "code-s035",
+   "index": 50,
+   "text": "clients page shows blank card when org has no clients. add empty state with 'add client' button"
+  },
+  {
+   "session": "code-s035",
+   "index": 58,
+   "text": "invoice numbers and amounts in tables jump around as digit widths change. put those columns in monospace, jetbrains mono or similar"
+  },
+  {
+   "session": "code-s036",
+   "index": 0,
+   "text": "morning. quick postgres q: when LATERAL join instead of normal left join"
+  },
+  {
+   "session": "code-s036",
+   "index": 2,
+   "text": "orders list endpoint slow, ~2s for 50 orders on staging. look at apps/api/src/routes/orders/list.ts"
+  },
+  {
+   "session": "code-s036",
+   "index": 10,
+   "text": "nice. different thing: add --since <date> to `acme invoices export` so finance can pull just this month. api supports ?since=YYYY-MM-DD"
+  },
+  {
+   "session": "code-s037",
+   "index": 0,
+   "text": "ok back. go through deps-bot PRs, which are safe. rule: dont bump major versions of dependencies without asking me, even if CI is green"
+  },
+  {
+   "session": "code-s037",
+   "index": 6,
+   "text": "ok approve + merge the 5 safe ones. also #eng asks why drizzle not prisma, do you know the reason?"
+  },
+  {
+   "session": "code-s037",
+   "index": 12,
+   "text": "thanks"
+  },
+  {
+   "session": "code-s038",
+   "index": 0,
+   "text": "priya says new POSTHOG_API_KEY isnt in the api pods in prod. kubernetes (k8s) secrets come from aws secrets manager through external secrets operator, check the ExternalSecret for api chart"
+  },
+  {
+   "session": "code-s038",
+   "index": 7,
+   "text": "later. CI takes 14 min, every PR rebuilds and retests all packages even for docs. make it only do affected stuff and reuse results between runs"
+  },
+  {
+   "session": "code-s038",
+   "index": 13,
+   "text": "ok come back to that. quick one: script listing remote branches with no commits in 60+ days, author + last commit date. dont delete anything"
+  },
+  {
+   "session": "code-s038",
+   "index": 19,
+   "text": "what have we done so far this session"
+  },
+  {
+   "session": "code-s038",
+   "index": 21,
+   "text": "unrelated, trailmix: django, annotate each Hike with total elevation gain summed from Segment rows, only positive gains"
+  },
+  {
+   "session": "code-s038",
+   "index": 28,
+   "text": "Deployment vs StatefulSet, when would you pick the second"
+  },
+  {
+   "session": "code-s039",
+   "index": 0,
+   "text": "switching to dunning. transactional email is sent through resend, react email templates in apps/api/emails. add 'payment failed' template: invoice number, amount, retry-payment button to hosted invoice page, last 4 of card"
+  },
+  {
+   "session": "code-s040",
+   "index": 0,
+   "text": "morning. pulled main after yesterday's db migration, check what local stack expects now and get my env going. also dont leave console.log in committed code, use the pino logger. few slipped into main"
+  },
+  {
+   "session": "code-s040",
+   "index": 8,
+   "text": "yes swap them. check apps/web .env.example, someone added a NEXT_PUBLIC_ var for stripe key. only NEXT_PUBLIC_ prefixed vars get exposed to the browser, never secrets in them, make sure it's the publishable one. then run worker locally: pnpm --filter worker dev, needs redis running"
+  },
+  {
+   "session": "code-s041",
+   "index": 0,
+   "text": "formatMoney rounds 2.005 down to 2.00 on invoice totals, lena saw it on a CAD invoice. fix"
+  },
+  {
+   "session": "code-s041",
+   "index": 5,
+   "text": "add tests for it, incl negatives (credit notes) and 2.005"
+  },
+  {
+   "session": "code-s041",
+   "index": 9,
+   "text": "lena wants to try the internal cli. package name we publish and the command?"
+  },
+  {
+   "session": "code-s041",
+   "index": 13,
+   "text": "unrelated, trailmix: hx-get on trail list re-renders whole table, flickers on every filter change. just hx-target=\"#trails\" hx-swap=\"outerHTML\". least dumb fix?"
+  },
+  {
+   "session": "code-s041",
+   "index": 16,
+   "text": "ok back to acme. rename `kind` prop on InvoiceStatusBadge to `status`, confusing next to invoice.kind (one-off vs recurring)"
+  },
+  {
+   "session": "code-s041",
+   "index": 21,
+   "text": "ran typecheck myself before yours finished, got this. whats going on\n\n```\n$ pnpm typecheck\n\n> acme-platform@ typecheck /Users/jordan/code/acme-platform\n> turbo run typecheck\n\n• Packages in scope: @acme/api, @acme/cli, @acme/ui, @acme/worker, web\n• Running typecheck in 5 packages\n• Remote caching disabled\n@acme/ui:typecheck: cache hit, replaying logs\n@acme/ui:typecheck: > tsc --noEmit\n@acme/cli:typecheck: cache hit, replaying logs\n@acme/api:typecheck: cache hit, replaying logs\n@acme/worker:typecheck: cache hit, replaying logs\nweb:typecheck: cache miss, executing 4be1e0a9d2c7f311\nweb:typecheck: > tsc --noEmit\nweb:typecheck: components/invoices/bulk-actions.tsx(52,34): error TS2322: Type '{ kind: InvoiceStatus; }' is not assignable to type 'IntrinsicAttributes & Props'.\nweb:typecheck:   Object literal may only specify known properties, and 'kind' does not exist in type 'IntrinsicAttributes & Props'.\nweb:typecheck: components/invoices/bulk-actions.tsx(52,35): error TS2552: Cannot find name 'kind'. Did you mean 'kinds'?\nweb:typecheck: components/invoices/status-filter.tsx(28,9): error TS2339: Property 'kind' does not exist on type 'Props'.\nweb:typecheck: components/invoices/status-filter.tsx(29,40): error TS2339: Property 'kind' does not exist on type 'Props'.\nweb:typecheck: components/invoices/status-filter.tsx(61,21): error TS2322: Type '{ kind: \"draft\" | \"sent\" | \"paid\" | \"overdue\" | \"void\"; onClick: () => void; }' is not assignable to type 'IntrinsicAttributes & Props'.\nweb:typecheck:   Object literal may only specify known properties, and 'kind' does not exist in type 'IntrinsicAttributes & Props'.\nweb:typecheck: components/invoices/status-badge.stories.tsx(14,13): error TS2353: Object literal may only specify known properties, and 'kind' does not exist in type 'Partial<Props>'.\nweb:typecheck: components/invoices/status-badge.stories.tsx(21,13): error TS2353: Object literal may only specify known properties, and 'kind' does not exist in type 'Partial<Props>'.\nweb:typecheck: components/invoices/status-badge.stories.tsx(28,13): error TS2353: Object literal may only specify known properties, and 'kind' does not exist in type 'Partial<Props>'.\nweb:typecheck: Found 8 errors in 3 files.\nweb:typecheck:\nweb:typecheck: Errors  Files\nweb:typecheck:      2  components/invoices/bulk-actions.tsx:52\nweb:typecheck:      3  components/invoices/status-filter.tsx:28\nweb:typecheck:      3  components/invoices/status-badge.stories.tsx:14\nweb:typecheck:  ELIFECYCLE  Command failed with exit code 2.\nweb:typecheck: ERROR: command finished with error: command (/Users/jordan/code/acme-platform/apps/web) pnpm run typecheck exited (2)\n\n Tasks:    4 successful, 5 total\nCached:    4 cached, 5 total\n  Time:    9.814s\nFailed:    web#typecheck\n\n ERROR  run failed: command  exited (2)\n```"
+  },
+  {
+   "session": "code-s041",
+   "index": 24,
+   "text": "do it. side q: does Intl.NumberFormat have roundingMode now?"
+  },
+  {
+   "session": "code-s041",
+   "index": 29,
+   "text": "badge too chunky in dense table. add size prop, sm and md, default md"
+  },
+  {
+   "session": "code-s041",
+   "index": 34,
+   "text": "ok push the branch. always run the full test suite before pushing, not just changed tests"
+  },
+  {
+   "session": "code-s041",
+   "index": 38,
+   "text": "nice thx"
+  },
+  {
+   "session": "code-s042",
+   "index": 0,
+   "text": "this e2e flakes ~1 in 5 runs on my machine. why\n\n```\nRunning 14 tests using 4 workers\n\n  ✓   1 [chromium] › invoices/list.spec.ts:12:7 › invoices list › shows first page (2.1s)\n  ✓   2 [chromium] › invoices/list.spec.ts:24:7 › invoices list › paginates (3.4s)\n  ✘   3 [chromium] › invoices/sort.spec.ts:18:7 › invoices sort › sorts by amount descending (5.8s)\n  ✓   4 [chromium] › invoices/sort.spec.ts:41:7 › invoices sort › sorts by due date (2.9s)\n  ✓   5 [chromium] › invoices/detail.spec.ts:9:7 › invoice detail › opens from row click (1.8s)\n  ...\n\n  1) [chromium] › invoices/sort.spec.ts:18:7 › invoices sort › sorts by amount descending\n\n    Error: expect(received).toEqual(expected) // deep equality\n\n    - Expected  - 3\n    + Received  + 3\n\n      Array [\n    -   \"$4,820.00\",\n    -   \"$3,100.50\",\n    -   \"$1,200.00\",\n    +   \"$1,200.00\",\n    +   \"$4,820.00\",\n    +   \"$3,100.50\",\n      ]\n\n      27 |     await page.getByRole('columnheader', { name: 'Amount' }).click()\n      28 |     const amounts = await page.locator('[data-col=amount]').allTextContents()\n    > 29 |     expect(amounts.slice(0, 3)).toEqual(['$4,820.00', '$3,100.50', '$1,200.00'])\n         |                                 ^\n      30 |   })\n      31 |\n      32 |   test('sorts by due date', async ({ page }) => {\n\n        at /Users/jordan/code/acme-platform/apps/web/e2e/invoices/sort.spec.ts:29:33\n\n    attachment #1: trace (application/zip) ──────────────────────\n    test-results/invoices-sort-sorts-by-amount-descending-chromium/trace.zip\n    Usage:\n\n        npx playwright show-trace test-results/invoices-sort-sorts-by-amount-descending-chromium/trace.zip\n\n  1 failed\n    [chromium] › invoices/sort.spec.ts:18:7 › invoices sort › sorts by amount descending\n  13 passed (24.6s)\n```"
+  },
+  {
+   "session": "code-s042",
+   "index": 5,
+   "text": "lena left a wall of review on #479, tldr? what does she actually want changed vs opinions\n\n> **Lena Fischer** reviewed 2 hours ago\n>\n> Overall direction is good, the new invoices empty state is way better than the old gray box. A bunch of notes, some blocking some not:\n>\n> **components/invoices/table.tsx**\n> - L88-131: the empty state markup is inline in the table component now and the file is at ~260 lines. Can we pull it out into its own component? It also makes it impossible to reuse on the clients page which needs the same thing. (blocking-ish, I'd really like this before merge)\n> - L140: `rows.length === 0 && !isLoading` — when the query errors this shows \"No invoices yet\" which is wrong. Error state should win. (blocking)\n> - L162: nit, `key={i}` on the skeleton rows, fine since they're static, ignore me\n>\n> **components/invoices/empty-illustration.svg**\n> - 48KB for an illustration feels heavy. Did you run it through svgo? Not blocking.\n> - Hardcoded fill colors (#6366F1 etc) won't flip in dark mode. Use currentColor and set text color on the wrapper. (I'd like this but can be a follow-up)\n>\n> **copy**\n> - \"Create your first invoice to get paid faster!\" — product said no exclamation marks in empty states, there's a doc somewhere. Not a code thing but please change.\n> - The button says \"New invoice\" but the header button says \"Create invoice\". Pick one, I'd go with \"New invoice\" everywhere.\n>\n> **tests**\n> - There's no test for the empty state at all. At least one rendering test for empty vs error vs loading. (blocking)\n>\n> Also, unrelated, I think we should eventually move all empty states to a shared EmptyState primitive in packages/ui but that's a separate conversation, not for this PR.\n>\n> Requesting changes for the error state and the tests mostly. Happy to re-review today."
+  },
+  {
+   "session": "code-s042",
+   "index": 8,
+   "text": "ok do 1 and 3 now, i'll do tests after. new component in components/invoices/empty-state.tsx"
+  },
+  {
+   "session": "code-s043",
+   "index": 0,
+   "text": "morning. add storybook stories for badge sizes, storybook runs on port 6006 with pnpm --filter web storybook. also sam asks do we track clicks on status filter?"
+  },
+  {
+   "session": "code-s044",
+   "index": 0,
+   "text": "trailmix q: want Hike updated_at to change on save AND on Hike.objects.filter(...).update(...). auto_now doesnt fire on update() right?"
+  },
+  {
+   "session": "code-s044",
+   "index": 4,
+   "text": "back on acme. badge labels are hardcoded english (draft, paid etc). make them translatable like rest of app"
+  },
+  {
+   "session": "code-s044",
+   "index": 11,
+   "text": "cool ty"
+  },
+  {
+   "session": "code-s044",
+   "index": 13,
+   "text": "lena's asking: on her linux box her python venv uses system python 3.10 though pyenv has 3.12. she does python -m venv .venv in the project. any idea"
+  },
+  {
+   "session": "code-s045",
+   "index": 0,
+   "text": "customers want notifications when an invoice gets paid. add worker job that POSTs invoice.paid event to org's configured endpoint (orgs.callback_url exists, marco added it last week)"
+  },
+  {
+   "session": "code-s045",
+   "index": 7,
+   "text": "also want hosted test receiver for sample deliveries, hooks-test.<our domain>. where do dns records get added now"
+  },
+  {
+   "session": "code-s045",
+   "index": 12,
+   "text": "ok that's it for this one. recap what we did for the ticket"
+  },
+  {
+   "session": "code-s045",
+   "index": 16,
+   "text": "thursday brain. how's your day going lol"
+  },
+  {
+   "session": "code-s046",
+   "index": 0,
+   "text": "invoice pdf downloads come out as \"Invoice INV 1042 Bright Pixel Studio.pdf\", spaces and sometimes slashes from client name. make filename slug-like"
+  },
+  {
+   "session": "code-s046",
+   "index": 8,
+   "text": "ok next: 'paid at' column in invoices table in web. timestamps stored in UTC, convert to local time only in the UI, no timezone math in api"
+  },
+  {
+   "session": "code-s046",
+   "index": 16,
+   "text": "different thing. cli `invoices list` terminal output is a wall of grey, color the status column (paid green, overdue red etc). picocolors, not chalk"
+  },
+  {
+   "session": "code-s046",
+   "index": 22,
+   "text": "paid-at column is its own ticket. commit just that part on its own, leave cli and pdf stuff uncommitted for now"
+  },
+  {
+   "session": "code-s047",
+   "index": 0,
+   "text": "invoices page crashes for one customer: TypeError: Cannot read properties of null (reading 'name') in table-row. imported invoices have no client. fix"
+  },
+  {
+   "session": "code-s047",
+   "index": 8,
+   "text": "write tests for the no-client fallback. unit tests are vitest across all packages, no jest or jest-dom"
+  },
+  {
+   "session": "code-s047",
+   "index": 12,
+   "text": "cli: `invoices void <id>` voids instantly, scary. add confirmation first, interactive prompts use @clack/prompts, skip with --yes"
+  },
+  {
+   "session": "code-s047",
+   "index": 20,
+   "text": "make confirm message show amount too, like \"Void INV-1042 ($2,400.00 CAD) for Northwind Agency?\""
+  },
+  {
+   "session": "code-s047",
+   "index": 26,
+   "text": "small web thing: invoices empty state says \"recieve\" somewhere and illustration eats half the screen on mobile"
+  },
+  {
+   "session": "code-s047",
+   "index": 32,
+   "text": "lgtm"
+  },
+  {
+   "session": "code-s048",
+   "index": 0,
+   "text": "customer security questionnaire asks if dashboard sends X-Frame-Options / frame-ancestors and a content security policy. check what we send"
+  },
+  {
+   "session": "code-s048",
+   "index": 5,
+   "text": "support forwarded ticket: someone at a client agency says our internal cli crashes right after install on their work laptop, no output pasted. draft reply with install steps, and add startup check that prints a clear colored warning when their runtime version is too low instead of crashing"
+  },
+  {
+   "session": "code-s048",
+   "index": 11,
+   "text": "also docker compose up failed: \"Cannot connect to the Docker daemon at unix:///Users/jordan/.docker/run/docker.sock\". switched to orbstack instead of docker desktop last week, local containers run on orbstack now. probably old socket"
+  },
+  {
+   "session": "code-s049",
+   "index": 0,
+   "text": "morning. sam wants number of invoices stuck in 'processing' in prod. how do i get at prod db again"
+  },
+  {
+   "session": "code-s049",
+   "index": 5,
+   "text": "different thing. add --json flag to `invoices list` in cli for jq"
+  },
+  {
+   "session": "code-s049",
+   "index": 10,
+   "text": "yes do it"
+  },
+  {
+   "session": "code-s049",
+   "index": 15,
+   "text": "q: cli output for jq, pretty json array or json lines? what do other tools do"
+  },
+  {
+   "session": "code-s050",
+   "index": 0,
+   "text": "picking status cmd back up. telemetry is opt-out, off with ACME_TELEMETRY=0, `acme status` should print on or off. queue section is wrong, we're off rabbitmq, worker consumes BullMQ queues on Redis 7. bull board mounted at /admin/queues on worker behind basic auth, link that instead of rabbit mgmt ui"
+  },
+  {
+   "session": "code-s051",
+   "index": 0,
+   "text": "side thing, trailmix not acme: django, how do i get htmx to swap just the form partial when validation fails? hike create view re-renders whole page"
+  },
+  {
+   "session": "code-s051",
+   "index": 6,
+   "text": "ok back to acme. ci runs on github actions (.github/workflows/ci.yml), production deploys from git tags v* via release.yml. last release run took ~40 min, normally ~12. pull logs in background, what happened"
+  },
+  {
+   "session": "code-s051",
+   "index": 11,
+   "text": "nice catch, i'll fix the cache ref. different thing: marketing pages use ISR revalidate = 60, pricing page probably got 3600 copy pasted from blog. fix pricing and check other marketing routes, background is fine"
+  },
+  {
+   "session": "code-s051",
+   "index": 18,
+   "text": "select-all checkbox in invoices table header does nothing. fix pls"
+  },
+  {
+   "session": "code-s051",
+   "index": 24,
+   "text": "trailmix again. hikes list slow with ~2k rows, each shows trail name and region. select_related or prefetch_related?"
+  },
+  {
+   "session": "code-s052",
+   "index": 0,
+   "text": "starting payouts list endpoint (acme-238). read docs/architecture/payments.md first for how money flows. rules: apply migrations with pnpm --filter api db:migrate, list endpoints use cursor pagination, never offset. money stored as integer cents, never floats, so amount_cents bigint"
+  },
+  {
+   "session": "code-s053",
+   "index": 0,
+   "text": "dashboard date range picker resets to last 30d on refresh. keep it in the url"
+  },
+  {
+   "session": "code-s053",
+   "index": 7,
+   "text": "re reviewer comment on 418, fix it and push to the PR branch. user rule going forward: never merge pull requests yourself, i do the merge"
+  },
+  {
+   "session": "code-s054",
+   "index": 0,
+   "text": "lena says web onboarding doc is stale. read apps/web/README.md, what's outdated vs the code. run checks in the bg"
+  },
+  {
+   "session": "code-s054",
+   "index": 8,
+   "text": "ok readme later. avatar shows 'J' only for single-name users but sometimes 'undefined'. look at it"
+  },
+  {
+   "session": "code-s054",
+   "index": 13,
+   "text": "add skeleton loader to invoices table while fetching, blank flash is ugly"
+  },
+  {
+   "session": "code-s054",
+   "index": 18,
+   "text": "rename useInvoiceFilters to useInvoiceQueryState everywhere, it does sort now too"
+  },
+  {
+   "session": "code-s054",
+   "index": 23,
+   "text": "ok nice"
+  },
+  {
+   "session": "code-s054",
+   "index": 26,
+   "text": "customers table default sort by last activity, newest first. its alphabetical now"
+  },
+  {
+   "session": "code-s054",
+   "index": 32,
+   "text": "helper formatting invoice numbers like INV-000123, zero padded to 6. over 999999 print as-is"
+  },
+  {
+   "session": "code-s054",
+   "index": 35,
+   "text": "empty state on /customers flashes while loading, fix that too"
+  },
+  {
+   "session": "code-s054",
+   "index": 41,
+   "text": "add unit tests for formatInvoiceNumber edge cases and run them"
+  },
+  {
+   "session": "code-s055",
+   "index": 0,
+   "text": "add request timing to the api: log method, route, status code and duration in ms per request"
+  },
+  {
+   "session": "code-s055",
+   "index": 5,
+   "text": "park timing. diff topic: seed script sometimes makes two customers with same email and unique index blows up. fix the seed"
+  },
+  {
+   "session": "code-s055",
+   "index": 11,
+   "text": "also web README project structure section is ancient. we're on Next.js 15 with App Router now, pages router / next 13 stuff is gone. rewrite that section"
+  },
+  {
+   "session": "code-s056",
+   "index": 0,
+   "text": "global errors handled in app/global-error.tsx which reports to Sentry, but events lack the error digest so we can't match them to server logs. take a look"
+  },
+  {
+   "session": "code-s056",
+   "index": 8,
+   "text": "what is this, got it on vercel preview for invoices page\n\n```\nError: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\n  ...\n    <InvoiceTable>\n      <Table>\n        <div className=\"relative w-full overflow-auto\">\n          <table className=\"w-full caption-bottom text-sm\">\n            <InvoiceTableHeader>\n            <TableBody>\n              <InvoiceRow invoice={{id:\"inv_8f2\",...}}>\n                <tr className=\"border-b transition-colors\">\n                  <TableCell>\n                  <TableCell>\n                  <TableCell>\n                  <TableCell className=\"text-right\">\n                    <td className=\"p-2 align-middle text-right\">\n+                     Sep 21, 2026\n-                     21 Sept 2026\n                  ...\n\n    at throwOnHydrationMismatch (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.0.3/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:4083:11)\n    at prepareToHydrateHostInstance (react-dom-client.development.js:4121:21)\n    at completeWork (react-dom-client.development.js:11937:15)\n    at runWithFiberInDEV (react-dom-client.development.js:1511:30)\n    at completeUnitOfWork (react-dom-client.development.js:15386:19)\n    at performUnitOfWork (react-dom-client.development.js:15267:5)\n    at workLoopConcurrent (react-dom-client.development.js:15244:9)\n    at renderRootConcurrent (react-dom-client.development.js:15219:15)\n    at performWorkOnRoot (react-dom-client.development.js:14532:13)\n    at performWorkOnRootViaSchedulerTask (react-dom-client.development.js:16120:7)\n```"
+  },
+  {
+   "session": "code-s056",
+   "index": 13,
+   "text": "yes do both files. also this keeps showing in staging worker logs, worry?\n\n```\n{\"level\":30,\"time\":1758463201112,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job started\",\"queue\":\"emails\",\"jobId\":\"8812\"}\n{\"level\":30,\"time\":1758463201390,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job completed\",\"queue\":\"emails\",\"jobId\":\"8812\",\"ms\":278}\n{\"level\":40,\"time\":1758463202004,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"stalled job detected, moving back to wait\",\"queue\":\"image-resize\",\"jobId\":\"5531\"}\n{\"level\":30,\"time\":1758463202011,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job started\",\"queue\":\"image-resize\",\"jobId\":\"5531\",\"attempt\":1}\n{\"level\":30,\"time\":1758463203877,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job started\",\"queue\":\"emails\",\"jobId\":\"8813\"}\n{\"level\":30,\"time\":1758463204102,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job completed\",\"queue\":\"emails\",\"jobId\":\"8813\",\"ms\":225}\n{\"level\":30,\"time\":1758463209551,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job completed\",\"queue\":\"image-resize\",\"jobId\":\"5531\",\"ms\":7540}\n{\"level\":40,\"time\":1758463232004,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"stalled job detected, moving back to wait\",\"queue\":\"image-resize\",\"jobId\":\"5534\"}\n{\"level\":30,\"time\":1758463232010,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job started\",\"queue\":\"image-resize\",\"jobId\":\"5534\",\"attempt\":1}\n{\"level\":30,\"time\":1758463238230,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job started\",\"queue\":\"pdf-render\",\"jobId\":\"1207\"}\n{\"level\":30,\"time\":1758463239906,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job completed\",\"queue\":\"pdf-render\",\"jobId\":\"1207\",\"ms\":1676}\n{\"level\":30,\"time\":1758463240198,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job completed\",\"queue\":\"image-resize\",\"jobId\":\"5534\",\"ms\":8188}\n{\"level\":40,\"time\":1758463262005,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"stalled job detected, moving back to wait\",\"queue\":\"image-resize\",\"jobId\":\"5537\"}\n{\"level\":30,\"time\":1758463262012,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job started\",\"queue\":\"image-resize\",\"jobId\":\"5537\",\"attempt\":1}\n{\"level\":30,\"time\":1758463263440,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job started\",\"queue\":\"emails\",\"jobId\":\"8814\"}\n{\"level\":30,\"time\":1758463263661,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job completed\",\"queue\":\"emails\",\"jobId\":\"8814\",\"ms\":221}\n{\"level\":30,\"time\":1758463270937,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job completed\",\"queue\":\"image-resize\",\"jobId\":\"5537\",\"ms\":8925}\n{\"level\":30,\"time\":1758463271350,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job started\",\"queue\":\"pdf-render\",\"jobId\":\"1208\"}\n{\"level\":30,\"time\":1758463272801,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job completed\",\"queue\":\"pdf-render\",\"jobId\":\"1208\",\"ms\":1451}\n{\"level\":40,\"time\":1758463292004,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"stalled job detected, moving back to wait\",\"queue\":\"image-resize\",\"jobId\":\"5540\"}\n{\"level\":30,\"time\":1758463292011,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job started\",\"queue\":\"image-resize\",\"jobId\":\"5540\",\"attempt\":1}\n{\"level\":30,\"time\":1758463300822,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job completed\",\"queue\":\"image-resize\",\"jobId\":\"5540\",\"ms\":8811}\n{\"level\":30,\"time\":1758463301004,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job started\",\"queue\":\"emails\",\"jobId\":\"8815\"}\n{\"level\":30,\"time\":1758463301229,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"job completed\",\"queue\":\"emails\",\"jobId\":\"8815\",\"ms\":225}\n{\"level\":40,\"time\":1758463322003,\"pid\":1,\"hostname\":\"worker-6c9d8f7b5-q2kzl\",\"msg\":\"stalled job detected, moving back to wait\",\"queue\":\"image-resize\",\"jobId\":\"5543\"}\n```"
+  },
+  {
+   "session": "code-s056",
+   "index": 20,
+   "text": "ok change the lock thing later. customer delete endpoint (acme-247): DELETE /v1/customers/:id. errors returned as RFC 7807 problem+json, rows soft-deleted with deleted_at column, never hard delete"
+  },
+  {
+   "session": "code-s056",
+   "index": 26,
+   "text": "now frontend: delete button on customer detail page with confirm dialog"
+  },
+  {
+   "session": "code-s056",
+   "index": 30,
+   "text": "lgtm"
+  },
+  {
+   "session": "code-s056",
+   "index": 32,
+   "text": "one more api side: 409 when customer still has open invoices. error must be problem+json per RFC 7807 like everything else, use the helper"
+  },
+  {
+   "session": "code-s056",
+   "index": 38,
+   "text": "change dialog copy to 'Archive customer' not delete, button too"
+  },
+  {
+   "session": "code-s057",
+   "index": 0,
+   "text": "customers csv export breaks when a name has a comma, row shifts columns. fix the escaping"
+  },
+  {
+   "session": "code-s057",
+   "index": 6,
+   "text": "more concise pls. just code + 1-2 lines"
+  },
+  {
+   "session": "code-s057",
+   "index": 10,
+   "text": "unrelated q. after every deploy prod gets a burst of weird postgres errors via the connection pooler then settles. known quirk with our pooler setup and what the db driver needs, what was it"
+  },
+  {
+   "session": "code-s057",
+   "index": 15,
+   "text": "ok"
+  },
+  {
+   "session": "code-s057",
+   "index": 17,
+   "text": "add 'Dependencies & testing' section to docs/onboarding.md: end-to-end tests use Playwright, Renovate opens dependency update PRs every Monday, automerge only patch updates, minor/major need a human"
+  },
+  {
+   "session": "code-s057",
+   "index": 22,
+   "text": "customers search box fires request on every keystroke. debounce 300ms"
+  },
+  {
+   "session": "code-s057",
+   "index": 28,
+   "text": "random q, difference between useTransition and useDeferredValue? always mix them up"
+  }
+ ]
+}

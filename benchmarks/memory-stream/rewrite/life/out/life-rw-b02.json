@@ -1,0 +1,991 @@
+{
+ "batch": "life-rw-b02",
+ "rewriter": "sonnet (claude-code subagent)",
+ "cases": [
+  {
+   "session": "life-s110",
+   "index": 16,
+   "text": "my cousin Neha has two job offers in Calgary. one pays 15k more but 50 min commute each way, the other is 10 min away and fully hybrid. what would you do?"
+  },
+  {
+   "session": "life-s110",
+   "index": 18,
+   "text": "long day lol. Sam fell asleep on the couch at 9, remote on his chest"
+  },
+  {
+   "session": "life-s110",
+   "index": 21,
+   "text": "text Hannah thanks for the zucchini, we made fritters and Leo actually ate them"
+  },
+  {
+   "session": "life-s110",
+   "index": 25,
+   "text": "is it true you shouldn't wake a sleepwalker? Leo did a hallway lap the other night"
+  },
+  {
+   "session": "life-s110",
+   "index": 27,
+   "text": "Hannah wants teacher card ideas. what puns did we come up with for Sam's card last week?"
+  },
+  {
+   "session": "life-s111",
+   "index": 0,
+   "text": "landed, at Kabir's. pull up the flight search you found before we booked, he wants to know what we'd have paid. also Mei wants that Lafourcade song thing"
+  },
+  {
+   "session": "life-s111",
+   "index": 5,
+   "text": "thanks"
+  },
+  {
+   "session": "life-s111",
+   "index": 7,
+   "text": "electrician says Monday's on after all. ping the reno crew and find a time that suits them"
+  },
+  {
+   "session": "life-s111",
+   "index": 9,
+   "text": "tldr? Mei says another heat event is coming\n\nBC Centre for Disease Control — Extreme Heat Preparedness Guide (2026 update)\n\nExtreme heat events are becoming more frequent in British Columbia. During the 2021 heat dome,\nhundreds of people died, most of them older adults living alone in homes without cooling.\n\nWho is most at risk\n- Older adults, especially those over 60\n- People who live alone\n- People with chronic conditions such as heart disease, diabetes or schizophrenia\n- People who use substances\n- Infants and young children\n- People who are pregnant\n- People with limited mobility\n\nBefore the heat\n- Identify the coolest room in your home. Basements are often cooler.\n- Buy a thermometer to monitor indoor temperature.\n- Set up a buddy system to check on people at risk.\n- Know where your nearest cooling centre is.\n- Shade windows with blinds or curtains; exterior shading is more effective.\n- If you have an air conditioner, make sure it works before summer.\n\nDuring a heat warning\n- Indoor temperatures above 31 C are dangerous for people at risk.\n- Spend time in a cool place: an air-conditioned building, a library, a mall.\n- Close windows and blinds during the day; open them at night if it is cooler outside.\n- Drink plenty of water, even if you are not thirsty.\n- Take a cool shower or bath, or sit with your feet in cool water.\n- Wear loose, light clothing.\n- Fans alone will not prevent heat illness when it is very hot.\n\nSigns of heat illness\n- Heat exhaustion: heavy sweating, dizziness, nausea, headache, fast breathing.\n- Heat stroke: high body temperature, confusion, fainting, no sweating. Call 911.\n\nAfter the heat\n- Continue to check on vulnerable people; effects can be delayed.\n- Report problems with building cooling to your landlord or strata.\n\nFor more information visit the BCCDC website or call HealthLinkBC at 8-1-1."
+  },
+  {
+   "session": "life-s111",
+   "index": 12,
+   "text": "Vancouver is unreal today. Leo found a crab in a tide pool and named it Steve"
+  },
+  {
+   "session": "life-s111",
+   "index": 15,
+   "text": "playground near Kits Beach for tomorrow morning, shade and washroom nearby"
+  },
+  {
+   "session": "life-s111",
+   "index": 19,
+   "text": "short thank-you card message for Kabir's neighbours, they lent us an air mattress and a pack and play"
+  },
+  {
+   "session": "life-s111",
+   "index": 21,
+   "text": "what time does the Museum of Vancouver close tomorrow"
+  },
+  {
+   "session": "life-s111",
+   "index": 24,
+   "text": "renting Saturday. anything sketchy in the fuel or damage parts?\n\nRENTAL AGREEMENT TERMS AND CONDITIONS\n1. DEFINITIONS. 'Vehicle' means the automobile identified on the rental record.\n'Renter' means the person signing the agreement.\n2. RENTAL PERIOD. The vehicle must be returned on the date and time listed.\nLate returns are charged at the hourly rate up to the daily rate, after a 29-minute grace period.\n3. AUTHORIZED DRIVERS. Only the renter and additional drivers listed may drive.\nSpouses and domestic partners are authorized at no charge in British Columbia.\n4. FUEL. The vehicle is supplied with a full tank.\nIf returned with less than a full tank, a refuelling charge of $9.49 per litre applies,\nplus a $25 service fee. The Fuel Purchase Option may be bought at pickup at the posted\nprice per litre; no refund is given for unused fuel.\n5. DAMAGE. The renter is responsible for all damage to the vehicle, regardless of fault,\nincluding loss of use, diminished value and administrative fees, unless the Loss Damage\nWaiver (LDW) is purchased. Credit-card coverage may apply; check with your issuer.\n6. LOSS DAMAGE WAIVER. LDW costs $32.99 per day and reduces renter responsibility to $0,\nexcept for damage caused by prohibited use.\n7. PROHIBITED USE. The vehicle may not be used off paved roads, to tow, for rideshare,\nor by any driver under the influence.\n8. TOLLS AND FINES. Renter pays all tolls, parking tickets and fines plus a $35 admin fee\nper violation.\n9. CLEANING. Excessive dirt, sand or pet hair may incur a cleaning fee of up to $250.\n10. SMOKING. Smoking in the vehicle incurs a $400 fee.\n11. MILEAGE. Unlimited kilometres within BC, Washington and Oregon.\nTravel outside these areas voids the agreement.\n12. ROADSIDE. Basic roadside assistance is included for mechanical failure.\nLockouts, lost keys and flat tires are charged unless Roadside Plus ($7.99/day) is purchased.\n13. PERSONAL PROPERTY. The company is not responsible for items left in the vehicle.\n14. DEPOSIT. A hold of $350 is placed on the renter's credit card and released\nwithin 10 business days of return.\n15. GOVERNING LAW. This agreement is governed by the laws of British Columbia."
+  },
+  {
+   "session": "life-s111",
+   "index": 27,
+   "text": "40 min bag wait at YVR and Leo's stuff was a disaster, forgot his swim shirt AND stuffie. set up packing for the trip home how I like it"
+  },
+  {
+   "session": "life-s111",
+   "index": 32,
+   "text": "is the Kitsilano pool open tomorrow? Leo is begging"
+  },
+  {
+   "session": "life-s111",
+   "index": 35,
+   "text": "off to dinner, Leo is vibrating about the pool lol"
+  },
+  {
+   "session": "life-s112",
+   "index": 0,
+   "text": "1. electrical panel upgraded to 200 A, so we raised the kitchen reno budget to $56,000, contingency basically used up. update the reno note\n2. did Leo's birthday present order go through?\n3. expenses log: 2026-07-11 lunch, dim sum near Kitsilano with Kabir and Mei, the place you found"
+  },
+  {
+   "session": "life-s113",
+   "index": 0,
+   "text": "turn off my out-of-office tomorrow morning, new message: I'm back but catching up"
+  },
+  {
+   "session": "life-s113",
+   "index": 6,
+   "text": "gate delayed 40 min ugh. pull up those Lisbon flight options from Friday?"
+  },
+  {
+   "session": "life-s113",
+   "index": 10,
+   "text": "Leo asleep on my lap at the gate, not moving"
+  },
+  {
+   "session": "life-s114",
+   "index": 0,
+   "text": "home. what did I miss in the family group chat?"
+  },
+  {
+   "session": "life-s114",
+   "index": 6,
+   "text": "thx, tomorrow"
+  },
+  {
+   "session": "life-s114",
+   "index": 8,
+   "text": "ugh heel killing me after all that walking in Van. skip my run this weekend? ask my buddy, would he know about this?"
+  },
+  {
+   "session": "life-s114",
+   "index": 10,
+   "text": "renew everything on Leo's library card, we haven't finished the dinosaur encyclopedia"
+  },
+  {
+   "session": "life-s114",
+   "index": 13,
+   "text": "yes pls"
+  },
+  {
+   "session": "life-s114",
+   "index": 17,
+   "text": "Sam's colleague wants to do the Ring Road in Iceland in February with his wife. terrible idea?"
+  },
+  {
+   "session": "life-s114",
+   "index": 19,
+   "text": "so good to be home. own pillow wins"
+  },
+  {
+   "session": "life-s114",
+   "index": 24,
+   "text": "caption for the Vancouver photo dump, short, not cheesy"
+  },
+  {
+   "session": "life-s115",
+   "index": 0,
+   "text": "booked the Lisbon flights, TAP out of Toronto Pearson, 2026-12-18 back 2026-12-30. put it on the family calendar for Sam"
+  },
+  {
+   "session": "life-s115",
+   "index": 6,
+   "text": "Toronto vs Lisbon time difference in December?"
+  },
+  {
+   "session": "life-s115",
+   "index": 8,
+   "text": "are our passports good for the trip? Leo's might expire soon"
+  },
+  {
+   "session": "life-s115",
+   "index": 14,
+   "text": "coworker Jasmine's landlord is raising rent 8% next year, 2015 building in Toronto. allowed?"
+  },
+  {
+   "session": "life-s115",
+   "index": 17,
+   "text": "do car seats count toward the allowance? Sam's asking\n\nTAP Air Portugal — Baggage information (North America routes)\n\nCarry-on baggage\nEconomy Discount, Basic and Classic: 1 piece up to 8 kg, max 55 x 40 x 20 cm, plus 1 personal item\n(handbag, laptop bag) up to 40 x 30 x 15 cm.\nEconomy Plus and Executive: 1 piece up to 8 kg plus personal item.\n\nChecked baggage\nEconomy Discount: no checked bag included.\nEconomy Basic: no checked bag included on routes to North America after 2025.\nEconomy Classic: 1 bag up to 23 kg.\nEconomy Plus: 2 bags up to 23 kg each.\nExecutive: 2 bags up to 32 kg each.\nMaximum dimensions: 158 cm (length + width + height).\n\nExtra bags\nFirst additional bag: from EUR 70 online, EUR 100 at the airport.\nOverweight (23-32 kg): EUR 100 per bag.\n\nTravelling with children\nInfants (under 2) may carry one bag up to 10 kg and one folding stroller.\nChildren from 2 to 11 receive the same allowance as the adult fare purchased.\nCar seats and booster seats: one per child may be checked free of charge,\nin addition to the baggage allowance. Car seats may be used on board only if\napproved for aircraft use and a seat has been purchased for the child.\nStrollers: one per child, checked free at the gate.\n\nSports equipment\nBicycles, golf bags and skis count as one piece of checked baggage if within weight limits.\nSurfboards: EUR 75 per segment.\n\nRestricted items\nLithium batteries above 100 Wh need approval. Power banks must be in carry-on only.\nE-cigarettes in carry-on only, not to be used on board.\n\nDelayed or damaged baggage\nReport at the TAP desk before leaving the baggage hall.\nClaims must be filed within 7 days for damage and 21 days for delay."
+  },
+  {
+   "session": "life-s115",
+   "index": 20,
+   "text": "how long should a maid of honour speech be? Tara from yoga is freaking out"
+  },
+  {
+   "session": "life-s115",
+   "index": 23,
+   "text": "where do pastéis de nata come from? Leo wants to know if we'll eat them daily"
+  },
+  {
+   "session": "life-s115",
+   "index": 25,
+   "text": "what's consoada? someone said we'll be there for it"
+  },
+  {
+   "session": "life-s115",
+   "index": 28,
+   "text": "last one, is fado the same everywhere in Portugal? Sam read Coimbra does it differently"
+  },
+  {
+   "session": "life-s116",
+   "index": 0,
+   "text": "Priya Nair, my best friend from McGill, officially moved back to Toronto in July 2026, Roncesvalles, still an architect, new firm on Spadina. update her contact\nwork: Instant Payouts general availability now 2026-11-04, Wavecrest Bank partner certification slipped seven weeks. has Wavecrest published a certification timeline? is 7 weeks optimistic?\nreserved a two-bedroom Airbnb apartment in Alfama near Miradouro de Santa Luzia for the whole December stay in Lisbon, add to trip note"
+  },
+  {
+   "session": "life-s117",
+   "index": 0,
+   "text": "Hannah's backyard pool party Mon 2026-08-03 was so fun, Leo was in the water 4 hrs. what did I decide about the dog for Lisbon? also Leo keeps bringing up what I asked you 2026-07-15, why Lisbon has so many hills and trams. I read him your answer, now he wants every tram"
+  },
+  {
+   "session": "life-s118",
+   "index": 0,
+   "text": "summarize what changed in the home insurance renewal vs last year"
+  },
+  {
+   "session": "life-s118",
+   "index": 3,
+   "text": "also search fall weekend stuff for families in Toronto, Sep and Oct, background, no rush"
+  },
+  {
+   "session": "life-s118",
+   "index": 7,
+   "text": "how fast does a Bank of Canada rate cut hit a variable mortgage?"
+  },
+  {
+   "session": "life-s118",
+   "index": 9,
+   "text": "Sam's friend Dev is buying a used car, 2021 RAV4 or 2021 CR-V, similar km. thoughts?"
+  },
+  {
+   "session": "life-s118",
+   "index": 13,
+   "text": "friday brain. same paragraph for 20 min"
+  },
+  {
+   "session": "life-s118",
+   "index": 16,
+   "text": "why is the sky hazy orange tonight? wildfire smoke?"
+  },
+  {
+   "session": "life-s118",
+   "index": 21,
+   "text": "weekend checklist: call insurance about reno clause, return library books, gift for kid's birthday party sunday, fix squeaky gate, pick up dry cleaning, book oil change"
+  },
+  {
+   "session": "life-s118",
+   "index": 24,
+   "text": "what have we done so far today?"
+  },
+  {
+   "session": "life-s118",
+   "index": 27,
+   "text": "next yard waste pickup on our street?"
+  },
+  {
+   "session": "life-s118",
+   "index": 30,
+   "text": "add the top fall events to the weekend note so I can show Sam"
+  },
+  {
+   "session": "life-s118",
+   "index": 33,
+   "text": "Sam's cousin Chidi's dog ate a couple of grapes an hour ago, seems fine. worry?"
+  },
+  {
+   "session": "life-s119",
+   "index": 2,
+   "text": "Sam did it. remind me monday to book Leo's eye exam, school sent a note"
+  },
+  {
+   "session": "life-s119",
+   "index": 7,
+   "text": "ok night"
+  },
+  {
+   "session": "life-s120",
+   "index": 3,
+   "text": "not now. need failed payout breakdown by receiving bank for the past month, for wed's roadmap prep. can you get the data side on it"
+  },
+  {
+   "session": "life-s121",
+   "index": 0,
+   "text": "heading home past Te Aro, put in a pickup order pls, ready in 15 min"
+  },
+  {
+   "session": "life-s121",
+   "index": 3,
+   "text": "forget it, going home. remind me monday morning to renew leo's library card"
+  },
+  {
+   "session": "life-s122",
+   "index": 0,
+   "text": "draft a linear ticket: payouts CSV export drops the currency column when a merchant has more than one payout account. P2, payouts project. dont file yet"
+  },
+  {
+   "session": "life-s122",
+   "index": 4,
+   "text": "green bin day this week? holiday threw me off"
+  },
+  {
+   "session": "life-s122",
+   "index": 7,
+   "text": "background: find the carrier furnace warranty pdf, and list newsletters I never open to unsubscribe from"
+  },
+  {
+   "session": "life-s123",
+   "index": 0,
+   "text": "Tanvi's landlord wants a 9% rent increase next year, condo in liberty village, built 2010 I think. legal in ontario?"
+  },
+  {
+   "session": "life-s123",
+   "index": 4,
+   "text": "yes pls"
+  },
+  {
+   "session": "life-s123",
+   "index": 7,
+   "text": "perfect"
+  },
+  {
+   "session": "life-s123",
+   "index": 9,
+   "text": "thx"
+  },
+  {
+   "session": "life-s123",
+   "index": 11,
+   "text": "rename the Scan_*.pdf files in Downloads by scan date"
+  },
+  {
+   "session": "life-s124",
+   "index": 0,
+   "text": "finally reading. leo's at a party till 4, house so quiet lol"
+  },
+  {
+   "session": "life-s125",
+   "index": 0,
+   "text": "has my passport renewal status changed? applied end of july"
+  },
+  {
+   "session": "life-s125",
+   "index": 4,
+   "text": "250 euros in CAD? the alfama apartment wants a damage deposit"
+  },
+  {
+   "session": "life-s126",
+   "index": 0,
+   "text": "show me this month's personal notes, going to tidy them"
+  },
+  {
+   "session": "life-s126",
+   "index": 5,
+   "text": "heel's sore again first thing in the morning after my run with marcus. book me a physio next week, after work or saturday"
+  },
+  {
+   "session": "life-s126",
+   "index": 9,
+   "text": "reorder the usual compostable poop bags"
+  },
+  {
+   "session": "life-s126",
+   "index": 15,
+   "text": "shorter answers pls"
+  },
+  {
+   "session": "life-s126",
+   "index": 18,
+   "text": "add 'call plumber re basement laundry tap dripping' to monday's to-do"
+  },
+  {
+   "session": "life-s126",
+   "index": 21,
+   "text": "bed soon. sam fell asleep on the couch 20 min into the movie again lol"
+  },
+  {
+   "session": "life-s127",
+   "index": 0,
+   "text": "going with the Bosch 800 Series dishwasher, $1,649 at Canadian Appliance Source, quieter for the price than the Miele. text nate the model for the cabinet opening"
+  },
+  {
+   "session": "life-s128",
+   "index": 0,
+   "text": "did the dentist confirm our november appts, mine and leo's?"
+  },
+  {
+   "session": "life-s129",
+   "index": 0,
+   "text": "which camp did we end up with this summer? and why did we say no to the other one. hannah's asking for next year"
+  },
+  {
+   "session": "life-s130",
+   "index": 0,
+   "text": "did Nate send the schedule? he said he'd text after his Barzotti call"
+  },
+  {
+   "session": "life-s131",
+   "index": 0,
+   "text": "Fri 2026-11-13 to Sun 2026-11-15 Sam, Leo and I are staying in Ottawa with Grace and Daniel Okafor for Grace's 68th birthday weekend. family cal: 'Ottawa: Riya, Sam, Leo @ Grace & Daniel's'"
+  },
+  {
+   "session": "life-s131",
+   "index": 8,
+   "text": "what's still open on payouts in linear? just mine"
+  },
+  {
+   "session": "life-s131",
+   "index": 12,
+   "text": "want a sweet little callback to how we got together, for the two of us this fall. ideas? at home once Leo's asleep"
+  },
+  {
+   "session": "life-s131",
+   "index": 15,
+   "text": "out of dishwasher pods and paper towels, grab more. also find me a cordless dyson like Hannah's"
+  },
+  {
+   "session": "life-s131",
+   "index": 20,
+   "text": "Priya needs a polite but firm note to send a client who wants her firm to redo facade drawings for free after changing the brief twice"
+  },
+  {
+   "session": "life-s131",
+   "index": 22,
+   "text": "short toast for my cousin Neha's engagement party saturday, 3-4 lines, funny not cringe"
+  },
+  {
+   "session": "life-s131",
+   "index": 27,
+   "text": "remind me how I learn spanish? and what vocab we should use. setting up tonight's practice"
+  },
+  {
+   "session": "life-s131",
+   "index": 29,
+   "text": "keep replies shorter today, on my phone"
+  },
+  {
+   "session": "life-s132",
+   "index": 0,
+   "text": "Grace turns 68 on 2026-11-19 (a thursday). add her bday to the cal and remind me 2 weeks before to sort a gift"
+  },
+  {
+   "session": "life-s133",
+   "index": 0,
+   "text": "set up a 25 min call with Olivia and Aisha on the 9th at 3:30pm, GA target wording for sales. agenda: 1) where certification stands 2) what sales can and can't say 3) next checkpoint"
+  },
+  {
+   "session": "life-s134",
+   "index": 0,
+   "text": "make a 'Fall 2026 logistics' note: merge the TAP change confirmation from email, my passport note for Leo and the school routine note"
+  },
+  {
+   "session": "life-s134",
+   "index": 10,
+   "text": "Priya sent this: 'Riya!! read this and tell me if I'm overthinking my starter' https://example.com/2026-09-05/sourdough-starters-what-actually-matters summary of the article for her pls. also did Pam McConnell fall swim registration open? think I missed it"
+  },
+  {
+   "session": "life-s135",
+   "index": 0,
+   "text": "notes. work, Q3 review deck: 2026-08-26 Wavecrest Bank outage delayed 1,140 beta payouts about three hours, postmortem fix was the status banner in the merchant dashboard. personal, file under 'Riya - Lisbon': paid extra $180 to choose seats together on the Lisbon flights, Leo gets a window and sits between me and Sam"
+  },
+  {
+   "session": "life-s136",
+   "index": 0,
+   "text": "family cal: Leo's piano with Mrs. Greene moved to Fridays 4:15 pm starting September 2026. Mondays clash with my weekly roadmap review at Lumen Pay now ('Roadmap review - Riya' block)"
+  },
+  {
+   "session": "life-s136",
+   "index": 8,
+   "text": "remind me at 7:50 to move the car, street cleaning today"
+  },
+  {
+   "session": "life-s136",
+   "index": 12,
+   "text": "Leo asks: why do leaves change colour in the fall?"
+  },
+  {
+   "session": "life-s136",
+   "index": 14,
+   "text": "text Sam: piano is Fridays at 4:15 now with Mrs. Greene, from September, because of my monday roadmap review"
+  },
+  {
+   "session": "life-s136",
+   "index": 17,
+   "text": "perfect thx"
+  },
+  {
+   "session": "life-s136",
+   "index": 21,
+   "text": "tfsa vs rrsp in two lines, sam keeps asking"
+  },
+  {
+   "session": "life-s136",
+   "index": 25,
+   "text": "tl;dr this\n\n---------- Forwarded message ---------\nFrom: Kofi Asante (Support) <kofi@lumenpay.example.com>\nDate: Tue, Sep 8, 2026 at 6:12 PM\nSubject: Fwd: Still can't finish verification!!\n\nRiya, escalating this one, third contact from the merchant. Thread below.\n\n---------- Original thread ---------\nFrom: Dana Whitfield <dana@mapleandmainbakery.example.com>\nDate: Tue, Sep 8, 2026 at 2:47 PM\nSubject: Re: Still can't finish verification!!\n\nHi Kofi,\n\nI tried again from my iPhone like you suggested. Same thing. I take the photo of my\ndriver's licence, it shows the preview, I hit Upload, the spinner goes for about\n10 seconds and then I get 'Something went wrong (code DOC-415)'. I tried the front\nand the back separately. I also tried from the Photos app instead of the camera.\n\nI need this sorted, I have a farmers' market this weekend and I was told I could\ntake card payments through you by then. My business partner did hers on a laptop\nlast week and it worked fine, but I don't own a laptop.\n\nDana\n\nOn Mon, Sep 7, 2026 at 11:03 AM Kofi Asante wrote:\n> Hi Dana, sorry for the trouble. Could you try uploading again from your phone's\n> camera directly rather than a saved photo? Make sure you're on the latest version\n> of Safari. If it fails, send me the error code you see.\n>\n> On Sun, Sep 6, 2026 at 8:20 PM Dana Whitfield wrote:\n>> Hello, I've been trying to finish my account setup since Thursday. Every time I\n>> upload my ID it fails at the last step. The bank part worked fine. I've attached\n>> a screenshot. Is your system down?\n>>\n>> Dana Whitfield\n>> Maple & Main Bakery, Guelph\n\nKofi's notes:\n- iOS 18.6, Safari, iPhone 15\n- Photo format HEIC (default camera setting)\n- DOC-415 = unsupported media type from the doc-verification service\n- Two similar tickets this week (Sep 3, Sep 5), both iPhone\n- Workaround that worked for one: Settings > Camera > Formats > Most Compatible"
+  },
+  {
+   "session": "life-s136",
+   "index": 30,
+   "text": "draft a short reply to Dana: apologize, we found the cause and the fix ships this week, give her the workaround to do today"
+  },
+  {
+   "session": "life-s136",
+   "index": 34,
+   "text": "mom's asking when exactly I'm coming, and should she worry about the rains then? also can I phone her now, what time is it there"
+  },
+  {
+   "session": "life-s136",
+   "index": 37,
+   "text": "add eggs, bananas and tortillas to the shopping list"
+  },
+  {
+   "session": "life-s136",
+   "index": 43,
+   "text": "quick to-do for today from my starred emails"
+  },
+  {
+   "session": "life-s137",
+   "index": 0,
+   "text": "Leo's in swim! Wednesdays 5:00 pm Pam McConnell Aquatic Centre, Level 4, instructor Kayla, starts 2026-09-16. Sam usually takes him. swap out the old tuesday slot on the cal"
+  },
+  {
+   "session": "life-s137",
+   "index": 7,
+   "text": "printable chore chart for a 7 year old, not too babyish"
+  },
+  {
+   "session": "life-s137",
+   "index": 12,
+   "text": "two line plain speaker bio for the Toronto Fintech Meetup page"
+  },
+  {
+   "session": "life-s137",
+   "index": 18,
+   "text": "friday finally. this week was a lot lol"
+  },
+  {
+   "session": "life-s137",
+   "index": 24,
+   "text": "ok thanks"
+  },
+  {
+   "session": "life-s137",
+   "index": 26,
+   "text": "dinner in 30 min with chickpeas, spinach, rice and coconut milk?"
+  },
+  {
+   "session": "life-s138",
+   "index": 0,
+   "text": "organizing Priya Nair's 37th birthday dinner Sat 2026-11-07 at Alo, promised a table for eight, book under Riya Malhotra. when do reservations open?"
+  },
+  {
+   "session": "life-s138",
+   "index": 7,
+   "text": "what's in my lisbon notes? Leo asks about new year's eve there and I need weather to pack"
+  },
+  {
+   "session": "life-s138",
+   "index": 11,
+   "text": "log: cleaning with Dr. Lin September 9, 2026, next due March 2027. receipt says 'Rhea', it's Riya"
+  },
+  {
+   "session": "life-s139",
+   "index": 0,
+   "text": "quick limerick for Sam's colleague Mr. Dube's retirement card, 30 years teaching physics"
+  },
+  {
+   "session": "life-s139",
+   "index": 2,
+   "text": "did the Memmo confirmation come through? and airbnb cancellation?"
+  },
+  {
+   "session": "life-s139",
+   "index": 9,
+   "text": "why is it called Príncipe Real"
+  },
+  {
+   "session": "life-s139",
+   "index": 11,
+   "text": "Leo's finally asleep. long day"
+  },
+  {
+   "session": "life-s139",
+   "index": 13,
+   "text": "sam's yelling at bake off about a soggy bottom lol"
+  },
+  {
+   "session": "life-s139",
+   "index": 16,
+   "text": "ok thanks"
+  },
+  {
+   "session": "life-s139",
+   "index": 18,
+   "text": "do I actually need to do anything?\n\nSubject: Fall Tree Planting Day + Street Tree Survey, please read!\nFrom: Leslieville Residents' Association <hello@leslievillera.example.org>\n\nHi neighbours,\n\nFall is here and so is our annual Tree Planting Day! This year we're partnering with\nthe City's urban forestry team and LEAF to plant 40 new street trees across the\nneighbourhood.\n\nWHEN: Saturday, October 3, 2026, 9:00 am to 1:00 pm (rain or shine)\nWHERE: Meet at Jonathan Ashbridge Park, near the playground\n\nWHAT TO BRING:\n- Work gloves (we have some extras)\n- A shovel if you have one\n- Water bottle\n- Kids are welcome with an adult!\n\nWe'll provide coffee, Timbits and a short training session at 9:00 sharp.\n\nSTREET TREE SURVEY\nThe City is updating its street tree inventory. If you have a City-owned tree on\nthe boulevard in front of your house, please fill out the 5-minute survey by\nOctober 15 so the forestry team can schedule pruning and inspections. The survey\nasks for:\n- Your address\n- Approximate tree height (small / medium / large)\n- Any visible damage, dead branches or roots lifting the sidewalk\n- A photo (optional)\n\nIf your boulevard has NO tree and you'd like one, the survey also lets you request\na free tree for spring 2027 planting. Species options this year are serviceberry,\nKentucky coffeetree, hackberry and Japanese tree lilac.\n\nPRUNING NOTICE\nCity crews will be pruning trees on Curzon, Leslie, Logan and Carlaw between\nOctober 19 and October 30. Please watch for temporary no-parking signs posted 24\nhours in advance.\n\nVOLUNTEERS NEEDED\nWe still need 6 people to help with registration and 4 people to bring wagons or\nwheelbarrows. Reply to this email if you can help.\n\nThanks for keeping Leslieville green!\nThe LRA Board"
+  },
+  {
+   "session": "life-s140",
+   "index": 0,
+   "text": "sorted Lisbon travel insurance: chose Blue Cross family travel insurance, $212, over the credit card coverage because the card excludes trip interruption for kids. already paid. find the policy email and file it with the trip stuff"
+  },
+  {
+   "session": "life-s140",
+   "index": 5,
+   "text": "perfect thx"
+  },
+  {
+   "session": "life-s140",
+   "index": 9,
+   "text": "text Sam: we went with Blue Cross family coverage, $212, over the credit card one because the card excludes trip interruption for kids"
+  },
+  {
+   "session": "life-s140",
+   "index": 12,
+   "text": "Diego's landlord is raising his rent 6% in January, 1990s building in the Annex. allowed in Ontario?"
+  },
+  {
+   "session": "life-s140",
+   "index": 20,
+   "text": "thanks!"
+  },
+  {
+   "session": "life-s140",
+   "index": 22,
+   "text": "how does tram 28 in Lisbon work, tickets in advance or on board? must-do or tourist trap"
+  },
+  {
+   "session": "life-s140",
+   "index": 29,
+   "text": "tl;dr please, don't have 10 min\n\nScreens, Sleep and the Second-Grade Brain\nBy a pediatric sleep researcher, Parents Weekly\n\nWhen children turn seven, many families loosen screen rules. Homework\nis light, siblings have tablets, and evening shows feel harmless. But a\ngrowing body of research suggests the hour before bed matters more than\nthe total hours in the day.\n\nIn a 2025 study of 1,200 children aged 6 to 9, those who used a screen\nin the 60 minutes before lights-out fell asleep an average of 19 minutes\nlater than those who did not. The effect was strongest for handheld\ndevices held close to the face, and weakest for a shared TV in the\nliving room.\n\nThe researchers point to three mechanisms:\n\n1. Light. Blue-weighted light from screens delays melatonin release,\n   especially in children, whose lenses let through more short-wave\n   light than adults'.\n2. Arousal. Games and short-form video are built to keep attention;\n   a calm documentary was far less disruptive than a game.\n3. Displacement. Screen time pushes out the wind-down routines,\n   such as baths, reading and talking, that signal bedtime.\n\nWhat helped? Families who set a fixed screens-off time, moved devices\nout of the bedroom and replaced the last half hour with reading saw\nsleep onset return to normal within two weeks. Total weekday screen\ntime mattered less than timing once it stayed under two hours.\n\nWeekend effects were smaller but real: late Saturday screens shifted\nSunday bedtimes and made Monday mornings harder.\n\nThe author's advice is simple. Pick a screens-off time an hour before\nbed and keep it every night, including weekends. Charge devices in the\nkitchen. Keep the TV in a shared room. And if a child protests, offer\na choice between two books rather than a negotiation about minutes.\n\nNone of this means screens are harmful in themselves, the author adds.\nThe evidence points to when, not whether.\n\n(Parents Weekly, September 2026)"
+  },
+  {
+   "session": "life-s140",
+   "index": 33,
+   "text": "check Sam's text about dinner, and what are we eating tonight, no hotplate again"
+  },
+  {
+   "session": "life-s140",
+   "index": 39,
+   "text": "yes go"
+  },
+  {
+   "session": "life-s140",
+   "index": 44,
+   "text": "what time is the leafs game tonight"
+  },
+  {
+   "session": "life-s140",
+   "index": 51,
+   "text": "vent: Tom moved the Wavecrest partner review to Tuesday morning, the one morning I protect, and now needs me in Montreal Thu the 8th for the bank meeting. in person, day trip. tired of always bending. get me there and back that day, out in the morning, home for dinner"
+  },
+  {
+   "session": "life-s140",
+   "index": 55,
+   "text": "Sam asked AGAIN about insurance. put at the very top of the Lisbon note: Blue Cross family plan, $212, over credit card coverage, since the card excludes trip interruption for kids"
+  },
+  {
+   "session": "life-s141",
+   "index": 0,
+   "text": "when does yard waste pickup end this year? 6 bags of leaves already"
+  },
+  {
+   "session": "life-s141",
+   "index": 7,
+   "text": "add those to the family calendar, night before"
+  },
+  {
+   "session": "life-s141",
+   "index": 10,
+   "text": "how long do the gardiner closures go this fall? Sam drives to Riverdale some days"
+  },
+  {
+   "session": "life-s141",
+   "index": 13,
+   "text": "what a weekend. two birthday parties back to back, sang happy birthday 4 times. wiped"
+  },
+  {
+   "session": "life-s141",
+   "index": 17,
+   "text": "help me prep for spanish this week, what to focus on? and block study time before class"
+  },
+  {
+   "session": "life-s141",
+   "index": 23,
+   "text": "Hannah's car got towed yesterday from Logan Ave, maybe a street-cleaning sign. how does she get it back and what will it cost"
+  },
+  {
+   "session": "life-s141",
+   "index": 28,
+   "text": "ty, sending her that"
+  },
+  {
+   "session": "life-s141",
+   "index": 32,
+   "text": "my open linear tickets tagged payouts-ga, titles and status"
+  },
+  {
+   "session": "life-s141",
+   "index": 35,
+   "text": "gist? want to sound smart tomorrow\n\nOpen Banking in Canada: What the Consumer-Driven Banking Act Means for Fintechs\n\nAfter years of consultation, Canada's framework for consumer-driven\nbanking is moving from policy to implementation. The federal\ngovernment has named the Financial Consumer Agency of Canada (FCAC)\nas the oversight body, and the first phase focuses on read access:\nletting consumers share their account and transaction data with\naccredited third parties through secure APIs instead of screen\nscraping.\n\nWhat changes for fintechs\n\n1. Accreditation. Any company that wants to receive data must be\n   accredited. Requirements include security standards, insurance,\n   complaint handling and a Canadian presence.\n2. Common technical standard. Banks and fintechs will use a single\n   API standard, expected to be based on FDX. This should end the\n   patchwork of bank-specific integrations.\n3. Liability. The framework sets out who pays when something goes\n   wrong. In most cases, the party at fault is liable, and consumers\n   are protected from losses they did not cause.\n4. Screen scraping. Once the framework is live, credential-based\n   scraping is expected to be phased out.\n\nWhat is not in phase one\n\nWrite access, or 'payment initiation', is deferred to a second phase.\nThat means fintechs cannot yet trigger payments from a consumer's\nbank account through the framework. Many in the industry had hoped\nboth would arrive together, and payments companies argue that the\nreal value lies in write access.\n\nTimeline\n\nThe government expects the first accredited participants to go live\nin 2026, with the largest banks required to participate first and\nsmaller institutions following. Industry groups warn the timeline is\ntight.\n\nWhy it matters\n\nFor small businesses, read access could speed up lending decisions\nand bookkeeping. For payments companies, the bigger shift comes with\nwrite access, which could make account-to-account payments a\nreal alternative to cards.\n\n(Fintech Weekly North, September 2026)"
+  },
+  {
+   "session": "life-s142",
+   "index": 0,
+   "text": "pull up my Mumbai trip note, do those fares still hold? streetcar in 5 min. also 'thank you' and 'the bill, please' in Portuguese again, I asked you Sunday and forgot lol"
+  },
+  {
+   "session": "life-s143",
+   "index": 0,
+   "text": "where's PAY-1602 at"
+  },
+  {
+   "session": "life-s143",
+   "index": 5,
+   "text": "what's actually going on here?\n\nTicket #48213 | Priority: High | Merchant: Northbound Coffee Co. (acct 77120)\n----------------------------------------------------------\nFrom: owner@northboundcoffee.example.com\nSubject: WHERE IS MY MONEY\n\nHi,\nThis is the third time I'm writing. My payouts used to show up the\nnext morning. Since last Thursday nothing has come in. Your dashboard\nsays 'Paid' for Sep 17, 18 and 21 but my bank has nothing. I have\npayroll on Friday for 6 people. I switched on the new instant thing\nlast week because your sales guy said it would be faster, now it's\nslower?? Please call me.\n\n-- Internal notes --\n[Tier 1, Sep 22] Checked payout log. 3 payouts status PAID,\n  rail = INSTANT, destination = debit card ending 0912.\n[Tier 1, Sep 22] Merchant says bank account ends 4410. Card 0912\n  added Sep 16 during instant payouts opt-in.\n[Tier 2, Sep 23] Card 0912 is a prepaid Visa debit, issuer accepted\n  push-to-card. Funds landed on the card, not the bank account.\n[Tier 2, Sep 23] Merchant didn't realize instant goes to card.\n  Opt-in screen shows card last-4 but not 'instead of your bank'.\n[Tier 2, Sep 23] Merchant asks to reverse. Push-to-card is final;\n  cannot recall. Merchant can spend or withdraw from prepaid card.\n[Tier 2, Sep 24] Merchant upset, wants credit for fees ($1.50 x 3).\n  Escalating to product: is this a UX issue?\n\nPayout summary:\n  Sep 17  $2,140.55  INSTANT  card 0912  PAID\n  Sep 18  $1,876.20  INSTANT  card 0912  PAID\n  Sep 21  $3,302.10  INSTANT  card 0912  PAID\n  Fees:   $4.50"
+  },
+  {
+   "session": "life-s143",
+   "index": 9,
+   "text": "Tom wants the Q1 2027 roadmap offsite mid-March. block Mon 15 to Thu 18 March: prep Mon/Tue, offsite Wed-Thu, plus 'roadmap deck due' Fri the 12th. tentative"
+  },
+  {
+   "session": "life-s143",
+   "index": 13,
+   "text": "keep it shorter today, back to backs till 5"
+  },
+  {
+   "session": "life-s144",
+   "index": 0,
+   "text": "Thanksgiving 2026 with Grace and Daniel in Ottawa, October 10-13, block on family cal. reno note: next renovation progress payment to Northline $7,500, due when countertops are installed. also dig out the school and city confirmation emails from this week and add to calendar"
+  },
+  {
+   "session": "life-s144",
+   "index": 8,
+   "text": "two more for the calendar: annual physical with Dr. Patel booked November 12, 2026, 8:40 am, Carlaw Health Centre. and I promised Marcus I'd run the Chilly Half Marathon in Burlington 2027-03-07, registered 2026-10-01, $95. send help"
+  },
+  {
+   "session": "life-s145",
+   "index": 0,
+   "text": "pumpkin patch this afternoon within 45 min, not a total zoo, leaving around 1:30"
+  },
+  {
+   "session": "life-s145",
+   "index": 8,
+   "text": "does any of this apply to grade 2?\n\nOntario Classroom Cellphone and Device Policy: What Parents Need to Know (2026-27)\n\nStarting this school year, all publicly funded schools in Ontario\nmust follow the updated provincial policy on personal mobile devices.\n\nKindergarten to Grade 6\n- Students must keep personal mobile devices, including phones\n  and smartwatches with messaging, turned off and out of sight for\n  the full school day, including recess and lunch.\n- Devices may be used only with a teacher's direction for learning,\n  for health and medical reasons, or for special education needs.\n\nGrades 7 to 12\n- Devices must be silent and out of sight during instructional time.\n- Use during breaks is set by each school's code of conduct.\n- Social media sites are blocked on school networks and devices.\n\nConsequences\n- Students who do not follow the rules will be asked to hand in the\n  device to the office until the end of the day.\n- Repeat issues are handled under the school's progressive\n  discipline approach, and parents will be contacted.\n\nVaping and cannabis\n- Schools will remove vaping products from students and notify\n  parents. Repeat incidents may lead to suspension.\n\nCommunication with families\n- Schools will share how families can reach students in an\n  emergency, usually through the main office.\n\nWhat parents can do\n- Talk with your child about the rules before the first day.\n- If your child wears a smartwatch for safety, check whether it can\n  be set to a school mode with messaging disabled.\n\n(Provincial education update, September 2026)"
+  },
+  {
+   "session": "life-s145",
+   "index": 12,
+   "text": "Anjali's visiting Toronto, plans May 10 to June 21, 2027, staying in the guest room once the renovation is done. big block on the family calendar"
+  },
+  {
+   "session": "life-s145",
+   "index": 18,
+   "text": "living without a working kitchen since September is wearing on me. takeout fatigue and the dust are the worst parts. I just want toast in my own kitchen"
+  },
+  {
+   "session": "life-s145",
+   "index": 20,
+   "text": "how do I get drywall dust off hardwood without scratching? Sam swept and I think made it worse"
+  },
+  {
+   "session": "life-s146",
+   "index": 0,
+   "text": "1. Q4 2026 payouts planning doc due to Tom Becker 2026-10-30, add deadline plus a writing block the week before\n2. last week's Payouts Health numbers\n3. anything from Bar Raval, Dr. Patel's office or Nate? (moved Priya's dinner, it's in my notes)\n4. Biscuit over Lisbon: Hannah offered to keep him at her house the whole trip, Dec 20 to Jan 2, so I cancelled the Dogs Den booking. promised to bring her back a box of pastéis de nata and pay for his food. update the Lisbon note"
+  },
+  {
+   "session": "life-s147",
+   "index": 0,
+   "text": "worried Leo's falling behind in reading. Ms. Alvarez said in September he's slightly below grade level but improving with nightly reading. check my commitments note, I feel like I promised a bunch this month and I'm dropping balls"
+  },
+  {
+   "session": "life-s148",
+   "index": 0,
+   "text": "attending the Lumen Pay quarterly planning offsite 2026-11-12, Gladstone House, 9:00 am to 6:00 pm. put it in my calendar"
+  },
+  {
+   "session": "life-s148",
+   "index": 3,
+   "text": "parking? and wifi ok for a full day of screen shares? that's all I care about\n\nTHE GLADSTONE HOUSE: EVENT INFORMATION PACKET\nLumen Pay, Quarterly Planning, Thursday November 12, 2026\n\nROOM\n  Ballroom (2nd floor), set for 30 in cabanas of 6\n  Natural light, blackout blinds available\n  Elevator access from the Queen St lobby\n\nAUDIO-VISUAL\n  2 x 86\" displays with HDMI and USB-C\n  Wireless presenter clicker, 2 handheld mics\n  Dedicated event Wi-Fi: 500 Mbps symmetric, separate SSID\n  Guest Wi-Fi also available in public areas (shared)\n  On-site AV tech available 08:30-10:00 and on call after\n\nFOOD & BEVERAGE\n  08:30 Continental breakfast\n  10:30 Coffee break\n  12:30 Lunch buffet (vegetarian, vegan, gluten-free labelled)\n  15:00 Afternoon snack\n  Dietary requests due 5 business days before the event\n\nGETTING HERE\n  Streetcar: 501 Queen, stop at Gladstone Ave (door to door)\n  Parking: no on-site parking. Green P lot at 1169 Queen St W\n  (3 min walk), approx. $18 for the day\n  Bike racks at the front entrance\n\nPOLICIES\n  Room available from 08:00, must be cleared by 18:30\n  No open flames or confetti\n  Art on walls may not be removed or covered\n\nCONTACT\n  Events office: events@gladstone.example.com"
+  },
+  {
+   "session": "life-s148",
+   "index": 8,
+   "text": "how old is the gladstone?"
+  },
+  {
+   "session": "life-s148",
+   "index": 10,
+   "text": "what have we done today so far?"
+  },
+  {
+   "session": "life-s148",
+   "index": 12,
+   "text": "remind me: send Tom my comments on the strategy memo by Friday, and pick up Leo's library books at the Pape branch Saturday morning"
+  },
+  {
+   "session": "life-s148",
+   "index": 18,
+   "text": "business days between tomorrow and the offsite?"
+  },
+  {
+   "session": "life-s148",
+   "index": 20,
+   "text": "slack diego: bring A3 printouts of the merchant journey map to the offsite if he can. send it"
+  },
+  {
+   "session": "life-s149",
+   "index": 0,
+   "text": "book the 80,000 km service for our grey 2019 Mazda CX-5, plus the winter tire swap (tires stored at Canadian Tire on Leslie St), first week of November"
+  },
+  {
+   "session": "life-s149",
+   "index": 5,
+   "text": "write a LinkedIn post congratulating the payouts team on winning the internal Ship It award for the merchant status banner. short. post it"
+  },
+  {
+   "session": "life-s149",
+   "index": 12,
+   "text": "once the kitchen's done I want to cook him that thing he loved, you found me a recipe ages ago, dig it up? and remind me in spring to plan our anniversary early this time"
+  },
+  {
+   "session": "life-s149",
+   "index": 17,
+   "text": "what did Sam's mom decide about November? and did school send anything about the winter concert, I told Tom something"
+  },
+  {
+   "session": "life-s150",
+   "index": 0,
+   "text": "pull my blocked linear tickets, want to clear some before standup next week"
+  },
+  {
+   "session": "life-s150",
+   "index": 4,
+   "text": "quick checklist for reviewing the two copy variants, the Diego one is on me, after lunch"
+  },
+  {
+   "session": "life-s150",
+   "index": 10,
+   "text": "Q4 planning doc header baseline: north-star metric at Lumen Pay is monthly active paying merchants (MAPM), stood at 18,400 end of Q3 2026. also grab the quarter's trend"
+  },
+  {
+   "session": "life-s150",
+   "index": 15,
+   "text": "my kid chipped his front tooth on the monkey bars yesterday. get him in with the dentist this week, after school ideally, and tell me how long it takes to get there from home"
+  },
+  {
+   "session": "life-s150",
+   "index": 20,
+   "text": "bonding vs crown for a chipped tooth, when do they do which?"
+  },
+  {
+   "session": "life-s150",
+   "index": 23,
+   "text": "did Leo's school send something about the museum trip? I said yes to helping"
+  },
+  {
+   "session": "life-s150",
+   "index": 28,
+   "text": "slack status heads down till 3 and a two line note for #payouts-team that I'm doing focus time"
+  },
+  {
+   "session": "life-s151",
+   "index": 0,
+   "text": "calendar: quarterly business review with Olivia Grant's sales team 2026-11-12, I'm presenting the payouts roadmap. booked a private driver for a Sintra day trip 2026-12-23, Pena Palace and Quinta da Regaleira, pickup 9:00 am at the hotel, €260 total"
+  },
+  {
+   "session": "life-s152",
+   "index": 0,
+   "text": "can't sleep. how does an interac e-transfer move money between two banks? instant for real or IOUs?"
+  },
+  {
+   "session": "life-s152",
+   "index": 4,
+   "text": "what did I tell Tom about roadmap timing? check sent mail, don't want to overpromise in monday's sync"
+  },
+  {
+   "session": "life-s153",
+   "index": 0,
+   "text": "10 min between meetings, catch me up on anything in mail/texts/calendar I've forgotten. Sam wants Sunday's weather in Ottawa for photo captions. notes: promised Kabir I'd send Ira a hand-knit blanket from the Leslieville Christmas market before 2026-12-10 so it arrives in Vancouver before Christmas. bought Lisbon Oceanarium tickets for 2026-12-27 at 10:00 am because Leo loves sea otters"
+  },
+  {
+   "session": "life-s154",
+   "index": 0,
+   "text": "is the Pape branch open saturday and till when? Leo has 3 library books due tomorrow"
+  },
+  {
+   "session": "life-s154",
+   "index": 3,
+   "text": "anything in today's email and texts I need to act on? in meetings since 9"
+  },
+  {
+   "session": "life-s154",
+   "index": 10,
+   "text": "tell Hannah yes that's the plan. remind me sunday night to put the green bin out"
+  },
+  {
+   "session": "life-s154",
+   "index": 14,
+   "text": "stop ending every message with a question lol, feels like homework"
+  },
+  {
+   "session": "life-s154",
+   "index": 17,
+   "text": "diego draft is fine, send. just remembered I promised Hannah Cho two dozen nut-free oatmeal chocolate-chip cookies for the Morse Street Public School bake sale 2026-10-30. no oven. how do I even"
+  },
+  {
+   "session": "life-s154",
+   "index": 22,
+   "text": "tl;dr in 3 bullets?\n\nThe Quiet Cost of Status Meetings\n\nMost product teams don't decide to have too many meetings. They accumulate them.\nA standup gets added during a crunch. A weekly sync is created for a launch and never removed.\nA 'quick alignment' call becomes recurring because nobody wants to be the person to cancel it.\n\nWe surveyed 212 product managers across 40 companies about their calendars.\nThe median PM spent 14.5 hours a week in recurring meetings.\nOf those hours, respondents said 38% were 'mostly status', meaning information that could have been written.\nOnly 21% of recurring meetings had been reviewed in the past six months.\n\nThe cost isn't only the hours. It's the fragmentation.\nA PM with four 30-minute meetings spread across a morning has no block longer than 50 minutes.\nDeep work, like writing a spec or analysing a funnel, needs 90 minutes or more to get going.\nTeams with 'meeting-free mornings' reported spec turnaround 1.6x faster.\n\nWhat worked for the teams we interviewed:\n1. A quarterly meeting audit. Every recurring meeting must justify itself or be deleted.\n2. Written status by default. Status goes in a doc or channel; meetings are for decisions.\n3. Default lengths of 25 or 50 minutes, not 30 or 60.\n4. A named owner for every recurring meeting, who must cancel it when it has no agenda.\n5. Protecting one long block per day for each PM.\n\nThe pushback is predictable.\nManagers worry that written updates get skimmed.\nEngineers worry that decisions will happen in docs they never see.\nBoth concerns are real, and both are solved by the same thing: a clear place where decisions are recorded.\n\nOne head of product told us: 'We didn't cut meetings. We cut the meetings that were pretending to be documents.'\n\nThe teams that stuck with it saw a second-order effect.\nWhen status moved to writing, the remaining meetings got better.\nPeople came prepared, because there was finally time to prepare.\n\nIf you run a team, try one experiment this month: find your oldest recurring meeting and ask whether it still needs to exist.\nIf nobody can say what it decided last time, you have your answer."
+  },
+  {
+   "session": "life-s154",
+   "index": 26,
+   "text": "hosted Thanksgiving dinner 2026-10-11 for Priya, Hannah's family and Marcus, cooked everything on a hot plate because the kitchen was gutted. chaos but the best one. text Hannah thanks for lending the folding chairs"
+  },
+  {
+   "session": "life-s154",
+   "index": 32,
+   "text": "Carlos assigned a 300-word essay on 'mi trabajo' using the present subjunctive, due at the lesson Thursday 2026-10-22. AND I told Carlos Méndez I'd also write a 300-word Spanish essay about the Lisbon trip plans before the lesson on 2026-10-22. two essays, help"
+  },
+  {
+   "session": "life-s154",
+   "index": 36,
+   "text": "Priya's old landlord won't return her last month's rent deposit over 'scuff marks'. can he do that in ontario?"
+  },
+  {
+   "session": "life-s154",
+   "index": 39,
+   "text": "add 'renew Leo's library card' to my errands note, then bed"
+  },
+  {
+   "session": "life-s155",
+   "index": 0,
+   "text": "move everything checked off in my notion to-do page into the archive page"
+  },
+  {
+   "session": "life-s155",
+   "index": 4,
+   "text": "why do clocks change on different weekends in Canada and Europe? confuses me calling Lisbon"
+  },
+  {
+   "session": "life-s155",
+   "index": 7,
+   "text": "what's unresolved in the instant payouts readiness doc in notion? comments, linked tickets"
+  },
+  {
+   "session": "life-s155",
+   "index": 13,
+   "text": "slack Aisha covering her two comments and the unowned runbook ticket. short"
+  },
+  {
+   "session": "life-s155",
+   "index": 17,
+   "text": "perfect, send it"
+  },
+  {
+   "session": "life-s155",
+   "index": 22,
+   "text": "what do I need to block for December OOO and early finishes in the team calendar by Fri? also what did we do last winter when school was shut, my kid wants 'that thing' again and I can't remember"
+  },
+  {
+   "session": "life-s155",
+   "index": 25,
+   "text": "will check with sam. add wrapping paper and tape to the shopping list"
+  },
+  {
+   "session": "life-s156",
+   "index": 0,
+   "text": "halloween's in 11 days and the costume is still a cardboard box and a dream 😩 what do I still need for that night"
+  },
+  {
+   "session": "life-s156",
+   "index": 4,
+   "text": "set up a 25 min onboarding review with Aisha and Diego, thursday nov 26 at 10. agenda: KYC retry screens, empty states, open questions"
+  },
+  {
+   "session": "life-s157",
+   "index": 0,
+   "text": "Leo turns 8 on 2027-01-22, planning a party at Wonder Workshop on Queen East Saturday 2027-01-23 for twelve kids. do they do parties that size, and cost?"
+  },
+  {
+   "session": "life-s158",
+   "index": 0,
+   "text": "status of PAY-1224? support keeps asking"
+  },
+  {
+   "session": "life-s158",
+   "index": 3,
+   "text": "I'll look after lunch. pull October incidents and open bugs on the payouts project for the readiness doc's risks section"
+  },
+  {
+   "session": "life-s159",
+   "index": 0,
+   "text": "lay out my mornings this week, which days am I out the door super early?"
+  }
+ ]
+}
