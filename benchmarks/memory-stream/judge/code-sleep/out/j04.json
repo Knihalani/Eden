@@ -1,0 +1,17 @@
+{"batch": "j04", "judge": "opus (claude-code subagent)", "cases": [
+{"event": "code-s087-e012", "needed": ["code-sleep-b05:m0008", "code-sleep-b08:m0026", "code-sleep-b05:m0038"], "why": "new column must be migrated locally before starting the api (db:migrate), local startup steps, api port 4000"},
+{"event": "code-s035-e033", "needed": ["code-sleep-b01:m0033", "code-sleep-b01:m0012"], "why": "date/TZ flakiness: pin clock with fake timers, test under TZ=America/Toronto and UTC; dueDate UTC-parse gotcha"},
+{"event": "code-s102-e006", "needed": ["code-sleep-b10:m0002", "code-sleep-b10:m0005", "code-sleep-b00:m0048"], "why": "earlier work today (invoice export flag, receipt attachments) not in recent; summary as short bullets"},
+{"event": "code-s027-e022", "needed": [], "why": "ack"},
+{"event": "code-s098-e007", "needed": ["code-sleep-b03:m0004"], "why": "assistant is blocked asking which framework; memory says Fastify 5 with plugins in apps/api/src/plugins"},
+{"event": "code-s007-e039", "needed": [], "why": "no available memory about the lineItems crash yet"},
+{"event": "code-s066-e025", "needed": [], "why": "ack after load test"},
+{"event": "code-s060-e006", "needed": ["code-sleep-b02:m0030", "code-sleep-b03:m0020", "code-sleep-b01:m0033"], "why": "components under 150 lines rule; date-only due dates as UTC calendar days and TZ testing conventions"},
+{"event": "code-s082-e052", "needed": [], "why": "session work is all in recent; short list already requested"},
+{"event": "code-s097-e012", "needed": ["code-sleep-b00:m0052", "code-sleep-b05:m0025", "code-sleep-b02:m0001"], "why": "Skeleton component export shape, App Router (loading.tsx), verify in running app"},
+{"event": "code-s028-e012", "needed": ["code-sleep-b01:m0005"], "why": "fix goes on an already-pushed branch: add a new commit, do not rewrite"},
+{"event": "code-s015-e000", "needed": ["code-sleep-b00:m0020", "code-sleep-b00:m0012", "code-sleep-b00:m0013", "code-sleep-b00:m0026"], "why": "onboarding setup facts: pnpm dev, Apple Silicon sharp gotcha, Docker for api tests, Node 18"},
+{"event": "code-s066-e019", "needed": ["code-sleep-b00:m0032", "code-sleep-b05:m0033"], "why": "client.ts goes through PgBouncer transaction mode; prepare:false may have been dropped in c81e02a"},
+{"event": "code-s098-e000", "needed": ["code-sleep-b03:m0004", "code-sleep-b05:m0030"], "why": "api is Fastify 5 (guard as plugin); errors via problem() helper"},
+{"event": "code-s003-e026", "needed": ["code-sleep-b00:m0011", "code-sleep-b00:m0024", "code-sleep-b00:m0007"], "why": "CLI structure (commander/tsup), snapshot tests, changeset for user-facing change"}
+]}

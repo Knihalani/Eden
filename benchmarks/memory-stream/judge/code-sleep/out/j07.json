@@ -1,0 +1,17 @@
+{"batch": "j07", "judge": "opus (claude-code subagent)", "cases": [
+{"event": "code-s021-e018", "needed": ["code-sleep-b00:m0039"], "why": "Worker autoscales with KEDA on queue length (1-20 replicas); informs replicas vs concurrency answer."},
+{"event": "code-s091-e007", "needed": ["code-sleep-b08:m0014", "code-sleep-b04:m0028"], "why": "New util + test: named exports only, vitest with plain assertions (no jest)."},
+{"event": "code-s077-e018", "needed": [], "why": "Peer review FYI on someone else's PR; no action needed."},
+{"event": "code-s075-e015", "needed": ["code-sleep-b04:m0028"], "why": "New util with tests: vitest, no jest."},
+{"event": "code-s038-e021", "needed": ["code-sleep-b03:m0019"], "why": "Memory records the trailmix Hike/Segment models and the Sum-with-positive-filter annotation."},
+{"event": "code-s108-e036", "needed": [], "why": "Ack."},
+{"event": "code-s082-e051", "needed": [], "why": "Lint result; the default-export convention is already in recent context."},
+{"event": "code-s066-e038", "needed": ["code-sleep-b05:m0013"], "why": "Approval arrives; never merge PRs yourself, just update the description."},
+{"event": "code-s066-e028", "needed": ["code-sleep-b01:m0008", "code-sleep-b06:m0007"], "why": "Helm chart location in infra/helm; infra changes need platform review and plan output in PR."},
+{"event": "code-s018-e010", "needed": ["code-sleep-b00:m0026"], "why": "Node 18 LTS is the version used everywhere; picks the major to pin."},
+{"event": "code-s035-e008", "needed": [], "why": "General Django/htmx CSRF question; no stored row covers the CSRF setup yet."},
+{"event": "code-s058-e012", "needed": ["code-sleep-b00:m0045", "code-sleep-b01:m0026", "code-sleep-b05:m0008"], "why": "OpenAPI is generated from zod schemas (don't hand-edit YAML); schemas location/safeParse; migrations via drizzle db:migrate for new column."},
+{"event": "code-s035-e044", "needed": [], "why": "FYI notification, no action."},
+{"event": "code-s033-e020", "needed": ["code-sleep-b00:m0013", "code-sleep-b02:m0012"], "why": "API tests need Docker running (Testcontainers); every query/table must be org_id scoped."},
+{"event": "code-s015-e010", "needed": ["code-sleep-b00:m0035", "code-sleep-b00:m0001", "code-sleep-b00:m0036"], "why": "Placeholder format for .env.example; keep /login in publicRoutes (redirect loop gotcha); Tailwind v4 theme tokens for the page."}
+]}
