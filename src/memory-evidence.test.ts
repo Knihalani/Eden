@@ -105,14 +105,15 @@ describe("P4.3 iteration (dev and R8's silence set): names in prose and one rare
   });
 
   test("two words that share letters are two words; a compound's parts are one (review round 5)", () => {
-    for (const [fact, cue] of [
+    const cases: [string, string][] = [
       ["Reporting listens on port 9443.", "reporting port?"],
       ["The login log rotates daily.", "login log?"],
       ["User prefers answers with the code first.", "code-first?"],
-    ]) {
+    ];
+    for (const [fact, cue] of cases) {
       const mem = store();
-      mem.remember(fact!, { kind: "fact" });
-      expect(texts(mem.relevant(cue!))).toEqual([fact]);
+      mem.remember(fact, { kind: "fact" });
+      expect(texts(mem.relevant(cue))).toEqual([fact]);
     }
   });
 
