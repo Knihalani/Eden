@@ -1,0 +1,246 @@
+{
+ "batch": "code-label-b04",
+ "labeler": "sonnet (claude-code subagent)",
+ "cases": [
+  {
+   "event": "code-s040-e000",
+   "needed": [
+    "r34",
+    "r05"
+   ],
+   "why": "local stack + env"
+  },
+  {
+   "event": "code-s040-e008",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s041-e000",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s041-e005",
+   "needed": [
+    "w14",
+    "w34"
+   ],
+   "why": "run web tests; colocated"
+  },
+  {
+   "event": "code-s041-e009",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s041-e013",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s041-e016",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s041-e021",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s041-e024",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s041-e029",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s041-e034",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s041-e038",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s042-e000",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s042-e005",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s042-e008",
+   "needed": [
+    "w34"
+   ],
+   "why": "extract component"
+  },
+  {
+   "event": "code-s043-e000",
+   "needed": [
+    "r27"
+   ],
+   "why": "analytics PostHog"
+  },
+  {
+   "event": "code-s044-e000",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s044-e004",
+   "needed": [
+    "w18"
+   ],
+   "why": "next-intl"
+  },
+  {
+   "event": "code-s044-e011",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s044-e013",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s045-e000",
+   "needed": [
+    "a27",
+    "a35",
+    "a34"
+   ],
+   "why": "timeout, signing, org_id"
+  },
+  {
+   "event": "code-s045-e007",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s045-e012",
+   "needed": [
+    "p17"
+   ],
+   "why": "summary format"
+  },
+  {
+   "event": "code-s045-e016",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s046-e000",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s046-e008",
+   "needed": [
+    "w18"
+   ],
+   "why": "column label translation"
+  },
+  {
+   "event": "code-s046-e016",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s046-e022",
+   "needed": [
+    "p03",
+    "r06",
+    "r46"
+   ],
+   "why": "branch/commit conventions"
+  },
+  {
+   "event": "code-s047-e000",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s047-e008",
+   "needed": [
+    "w14",
+    "w34"
+   ],
+   "why": "web tests, colocated"
+  },
+  {
+   "event": "code-s047-e012",
+   "needed": [
+    "c17"
+   ],
+   "why": "usage exit code"
+  },
+  {
+   "event": "code-s047-e020",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s047-e026",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s047-e032",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s048-e000",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s048-e005",
+   "needed": [
+    "c08",
+    "c11",
+    "c03"
+   ],
+   "why": "ESM/node gotcha, picocolors, package"
+  },
+  {
+   "event": "code-s048-e011",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s049-e000",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s049-e005",
+   "needed": [
+    "c01"
+   ],
+   "why": "commander flag"
+  },
+  {
+   "event": "code-s049-e010",
+   "needed": [],
+   "why": ""
+  },
+  {
+   "event": "code-s049-e015",
+   "needed": [],
+   "why": ""
+  }
+ ]
+}
