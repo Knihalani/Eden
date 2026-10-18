@@ -211,7 +211,66 @@ class Lex(Base):
         return ranked[: self.k]
 
 
-REGISTRY = {"oracle-need": OracleNeed, "lex": Lex, "bm25": Lex}
+class Bank(Lex):
+    """F4: prompt-to-exemplar matching. Each row carries sleep-time self-play exemplars (selfplay.py): situations
+    that need it (`pos`) and near misses (`neg`). A row fires when the turn's tf-idf cosine to its best `pos` is
+    ≥ tau and beats its best `neg` by `margin`. Rows without exemplars never fire."""
+
+    def __init__(self, rows, stream, items, cov, **kw):
+        super().__init__(rows, stream, items, cov, **kw)
+        import selfplay
+        ex = selfplay.exemplars(kw.get("world", stream["world"]))
+        self.ex = {}
+        df, n = {}, 0
+        for r in self.rows:
+            e = ex.get(r["id"])
+            if not e:
+                continue
+            self.ex[r["id"]] = ([content(t) for t in e.get("pos", [])], [content(t) for t in e.get("neg", [])])
+            for group in self.ex[r["id"]]:
+                for c in group:
+                    n += 1
+                    for t in c:
+                        df[t] = df.get(t, 0) + 1
+        self.eidf = {t: math.log((n + 1) / (d + 0.5)) for t, d in df.items()}
+        self.vecs = {i: ([self._vec(c) for c in pos], [self._vec(c) for c in neg]) for i, (pos, neg) in self.ex.items()}
+
+    def _vec(self, toks):
+        v = {t: self.eidf.get(t, math.log(2)) for t in toks}
+        norm = math.sqrt(sum(x * x for x in v.values())) or 1.0
+        return {t: x / norm for t, x in v.items()}
+
+    @staticmethod
+    def _cos(a, b):
+        if len(a) > len(b):
+            a, b = b, a
+        return sum(x * b.get(t, 0.0) for t, x in a.items())
+
+    def scores(self, e, now):
+        q = self._vec(content(e["text_all"]))
+        tau, margin = self.kw.get("tau", 0.3), self.kw.get("margin", 0.0)
+        out = {}
+        for r in self.visible(now):
+            v = self.vecs.get(r["id"])
+            if not v or not v[0]:
+                continue
+            sp = max(self._cos(q, x) for x in v[0])
+            sn = max((self._cos(q, x) for x in v[1]), default=0.0)
+            if sp >= tau and sp - sn >= margin:
+                out[r["id"]] = sp
+        return out
+
+    def packet(self, e, now):
+        if self.silent(e):
+            return []
+        sc = self.scores(e, now)
+        ranked = sorted(sc, key=lambda i: -sc[i])
+        if self.kw.get("ctx"):
+            ranked = [i for i in ranked if not self.in_window(self.by_id[i], e)]
+        return ranked[: self.k]
+
+
+REGISTRY = {"oracle-need": OracleNeed, "lex": Lex, "bm25": Lex, "bank": Bank}
 
 
 def make(spec, rows, stream, items, cov):

@@ -1,0 +1,900 @@
+{
+ "batch": "life-sleep-b13",
+ "compiler": "sonnet (claude-code subagent)",
+ "sessions": [
+  {
+   "id": "life-s130",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0001",
+     "text": "Riya's kitchen renovation by Northline Renovations (contact Nate) is now expected to finish around 2026-11-20, a seven-week delay from 2026-08-28, because Barzotti's custom cabinets are late; plumbing rough-in, panel and drywall are on track.",
+     "kind": "fact",
+     "entities": [
+      "kitchen reno",
+      "Northline Renovations",
+      "Nate",
+      "Barzotti"
+     ],
+     "when": {
+      "entities": [
+       "kitchen",
+       "renovation",
+       "contractor",
+       "Nate",
+       "Northline",
+       "cabinets",
+       "basement",
+       "builder",
+       "remodel"
+      ],
+      "activities": [
+       "kitchen timeline",
+       "schedule",
+       "hosting",
+       "plan a dinner party",
+       "move back in"
+      ],
+      "times": [
+       "2026-11-20"
+      ]
+     },
+     "valid_until": "2026-11-20"
+    }
+   ]
+  },
+  {
+   "id": "life-s131",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0002",
+     "text": "Riya, Sam and Leo drive to Ottawa Fri 2026-11-13 to Sun 2026-11-15 to stay with Grace and Daniel Okafor for Grace's birthday weekend (on family calendar).",
+     "kind": "plan",
+     "entities": [
+      "Ottawa",
+      "Grace Okafor",
+      "Daniel Okafor",
+      "Sam",
+      "Leo"
+     ],
+     "when": {
+      "entities": [
+       "Ottawa",
+       "road trip",
+       "Grace",
+       "Daniel",
+       "family weekend",
+       "in-laws",
+       "grandparents",
+       "Hwy 401",
+       "Hwy 416"
+      ],
+      "activities": [
+       "plan November",
+       "schedule meeting",
+       "book appointment",
+       "drive to Ottawa",
+       "pack"
+      ],
+      "times": [
+       "2026-11-13",
+       "2026-11-14",
+       "2026-11-15"
+      ]
+     },
+     "valid_until": "2026-11-15"
+    },
+    {
+     "op": "add",
+     "id": "m0003",
+     "text": "Work conflict: 'Instant Payouts GA retro' (organizer Aisha Rahman) is Fri 2026-11-13 13:00-13:25, which overlaps the Ottawa trip; calendar agent suggested asking Aisha to move it to Thu 2026-11-12. Riya said 'later' on this, unresolved.",
+     "kind": "plan",
+     "entities": [
+      "Instant Payouts GA retro",
+      "Aisha Rahman"
+     ],
+     "when": {
+      "entities": [
+       "retro",
+       "Aisha",
+       "GA retro",
+       "Instant Payouts",
+       "work calendar"
+      ],
+      "activities": [
+       "reschedule meeting",
+       "ask Aisha",
+       "Nov 13 meeting"
+      ],
+      "times": [
+       "2026-11-12",
+       "2026-11-13"
+      ]
+     },
+     "valid_until": "2026-11-13"
+    },
+    {
+     "op": "add",
+     "id": "m0004",
+     "text": "Open payouts tickets for Riya as of 2026-08-26: PAY-1182 GA readiness checklist (P1; still needs Legal and Support sign-off owners, Eng owner is Aisha) and PAY-1190 GA announcement email copy (P2; header done by Diego, copy is Riya's call) both block the GA milestone; PAY-1216 support macro 'my payout is late' needs Riya's tone review (Support wants it before GA, not a formal blocker); PAY-1203 and PAY-1211 not blocking.",
+     "kind": "fact",
+     "entities": [
+      "PAY-1182",
+      "PAY-1190",
+      "PAY-1216",
+      "PAY-1203",
+      "PAY-1211",
+      "Instant Payouts",
+      "GA"
+     ],
+     "when": {
+      "entities": [
+       "Linear",
+       "payouts tickets",
+       "GA blockers",
+       "GA readiness",
+       "sign-off",
+       "announcement email",
+       "support macro"
+      ],
+      "activities": [
+       "triage tickets",
+       "plan GA",
+       "review copy",
+       "status update"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s132",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0005",
+     "text": "Grace Okafor (a piano teacher, lives in Ottawa with Daniel) turns 68 on Thu 2026-11-19; birthday is on the Family calendar yearly. Riya asked for a gift reminder 2 weeks ahead (set for 2026-11-05 09:00). Gift ideas found: NAC Orchestra 'Chopin and Brahms' matinee Sun 2026-11-15 14:00 ($58 each, during the Ottawa weekend), engraved leather music folio ($64.99, Long & McQuade), Henle urtext Schubert Impromptus ($39.95, Indigo).",
+     "kind": "person",
+     "entities": [
+      "Grace Okafor",
+      "Daniel Okafor",
+      "Ottawa"
+     ],
+     "when": {
+      "entities": [
+       "Grace",
+       "birthday",
+       "gift",
+       "present",
+       "Sam's mother",
+       "in-laws",
+       "piano teacher",
+       "NAC Orchestra"
+      ],
+      "activities": [
+       "buy a gift",
+       "plan birthday",
+       "Ottawa trip",
+       "send card"
+      ],
+      "times": [
+       "2026-11-05",
+       "2026-11-19",
+       "2026-11-15"
+      ]
+     },
+     "valid_until": "2026-11-19"
+    }
+   ]
+  },
+  {
+   "id": "life-s133",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0006",
+     "text": "Riya has a 25-minute call 'GA target wording for Sales' with Olivia Grant and Aisha Rahman on Wed 2026-09-09 15:30-15:55 (Toronto time). Agenda: Wavecrest certification status, what Sales can and can't say about the GA target, next checkpoint.",
+     "kind": "plan",
+     "entities": [
+      "Olivia Grant",
+      "Aisha Rahman",
+      "GA target wording",
+      "Wavecrest"
+     ],
+     "when": {
+      "entities": [
+       "Olivia",
+       "Aisha",
+       "sales",
+       "GA target",
+       "certification",
+       "Wavecrest"
+      ],
+      "activities": [
+       "schedule meeting",
+       "prepare for call",
+       "sales messaging"
+      ],
+      "times": [
+       "2026-09-09"
+      ]
+     },
+     "valid_until": "2026-09-09"
+    }
+   ]
+  },
+  {
+   "id": "life-s134",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0007",
+     "text": "Lisbon flights: TAP TP260 Toronto Pearson (YYZ) Sun 2026-12-20 22:10 to Lisbon 2026-12-21 10:25; return TP259 Lisbon 2027-01-02 12:15 to YYZ 15:40; booking ref 4XK9TR; Riya, Sam, Leo; Economy Classic, 1 checked bag each. Moved to the 20th because Leo's last school day is Fri 2026-12-18 and Sam has exams to mark that week.",
+     "kind": "plan",
+     "entities": [
+      "Lisbon",
+      "TAP Air Portugal",
+      "TP260",
+      "TP259",
+      "4XK9TR",
+      "Leo",
+      "Sam"
+     ],
+     "when": {
+      "entities": [
+       "Lisbon",
+       "Portugal",
+       "flight",
+       "airport",
+       "vacation",
+       "holiday trip",
+       "winter break",
+       "travel",
+       "packing",
+       "Pearson"
+      ],
+      "activities": [
+       "book travel",
+       "plan Christmas",
+       "pack",
+       "airport transfer",
+       "arrange time off"
+      ],
+      "times": [
+       "2026-12-20",
+       "2027-01-02"
+      ]
+     },
+     "valid_until": "2027-01-02"
+    },
+    {
+     "op": "add",
+     "id": "m0008",
+     "text": "Leo's Canadian passport expires 2027-03-04, too close to the Lisbon trip; the renewal must be submitted at Service Canada by 2026-11-06 at the latest (about 20 business days processing). Needs: current passport, 2 photos, guarantor form, Sam's signature.",
+     "kind": "plan",
+     "entities": [
+      "Leo",
+      "passport",
+      "Service Canada",
+      "Sam"
+     ],
+     "when": {
+      "entities": [
+       "passport",
+       "renewal",
+       "Service Canada",
+       "photos",
+       "guarantor",
+       "travel documents",
+       "Leo's ID"
+      ],
+      "activities": [
+       "renew passport",
+       "errands",
+       "prepare for Lisbon trip",
+       "take photos"
+      ],
+      "times": [
+       "2026-11-06"
+      ]
+     },
+     "valid_until": "2026-11-06"
+    },
+    {
+     "op": "add",
+     "id": "m0009",
+     "text": "Leo started grade 2 in Ms. Alvarez's class at Morse Street Public School on 2026-09-02.",
+     "kind": "fact",
+     "entities": [
+      "Leo",
+      "Ms. Alvarez",
+      "Morse Street Public School"
+     ],
+     "when": {
+      "entities": [
+       "school",
+       "teacher",
+       "grade 2",
+       "son",
+       "kid",
+       "Morse Street PS",
+       "Edsby"
+      ],
+      "activities": [
+       "school forms",
+       "pick up",
+       "parent-teacher",
+       "school events"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0010",
+     "text": "Leo school routine: Sam drops him off at 8:35 am on his way to work; Riya does pickup at 3:30 pm on Mondays, Wednesdays and Fridays; Tuesdays and Thursdays Leo goes to the after-school program until 5:45 pm.",
+     "kind": "routine",
+     "entities": [
+      "Leo",
+      "Sam",
+      "Riya",
+      "after-school program"
+     ],
+     "when": {
+      "entities": [
+       "pickup",
+       "drop-off",
+       "school run",
+       "after-school",
+       "childcare",
+       "who picks up Leo"
+      ],
+      "activities": [
+       "schedule meeting",
+       "book appointment",
+       "plan afternoon",
+       "schedule a call"
+      ],
+      "times": [
+       "Mon/Wed/Fri 15:30",
+       "Tue/Thu 17:45",
+       "weekdays 08:35"
+      ]
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s135",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0011",
+     "text": "2026-08-26 Wavecrest Bank outage delayed 1,140 Instant Payouts beta payouts for about three hours (no funds lost); postmortem fix was a status banner in the merchant dashboard. Recorded in the 'Q3 review deck' (slide 7 'Beta reliability'), which still needs the Q3 payout success rate from the Payouts Health dashboard.",
+     "kind": "episode",
+     "entities": [
+      "Wavecrest Bank",
+      "Q3 review deck",
+      "Instant Payouts",
+      "1,140 payouts"
+     ],
+     "when": {
+      "entities": [
+       "outage",
+       "incident",
+       "postmortem",
+       "Q3 review",
+       "payout success rate",
+       "status banner",
+       "beta reliability"
+      ],
+      "activities": [
+       "write review deck",
+       "report incidents",
+       "QBR"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0012",
+     "text": "Riya paid an extra $180 for seats together on the Lisbon flights: Leo gets the window seat and sits between Riya and Sam. Noted in 'Riya - Lisbon'.",
+     "kind": "fact",
+     "entities": [
+      "Lisbon flights",
+      "Leo",
+      "Riya",
+      "Sam"
+     ],
+     "when": {
+      "entities": [
+       "seats",
+       "seat selection",
+       "flight",
+       "window seat",
+       "Lisbon"
+      ],
+      "activities": [
+       "check in online",
+       "pack",
+       "plan flight"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s136",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0013",
+     "text": "Leo's piano lessons with Mrs. Greene moved from Mondays to Fridays 16:15-16:45 starting 2026-09-11 (15 lessons through 2026-12-18) because Mondays clash with Riya's weekly 'Roadmap review - Riya' at Lumen Pay. Sam knows.",
+     "kind": "routine",
+     "entities": [
+      "Leo",
+      "Mrs. Greene",
+      "piano",
+      "Riya",
+      "Sam",
+      "roadmap review"
+     ],
+     "when": {
+      "entities": [
+       "piano lesson",
+       "music lesson",
+       "Friday afternoon",
+       "Monday roadmap review",
+       "Leo's activities"
+      ],
+      "activities": [
+       "schedule meeting",
+       "book appointment",
+       "plan Friday",
+       "schedule Monday"
+      ],
+      "times": [
+       "Fridays 16:15"
+      ]
+     },
+     "valid_until": "2026-12-18"
+    },
+    {
+     "op": "add",
+     "id": "m0014",
+     "text": "Leo's piano lesson on Fri 2026-11-13 clashes with the Ottawa trip; Mrs. Greene needs one week's notice, so remind Riya on 2026-11-06 to cancel it.",
+     "kind": "plan",
+     "entities": [
+      "Mrs. Greene",
+      "Leo",
+      "Ottawa trip"
+     ],
+     "when": {
+      "entities": [
+       "piano",
+       "cancel lesson",
+       "Mrs. Greene"
+      ],
+      "activities": [
+       "cancel lesson",
+       "Ottawa trip prep"
+      ],
+      "times": [
+       "2026-11-06",
+       "2026-11-13"
+      ]
+     },
+     "valid_until": "2026-11-13"
+    },
+    {
+     "op": "add",
+     "id": "m0015",
+     "text": "Morse Street PS picture day for Leo is Thu 2026-09-24; online orders close 2026-09-22 (forms in Edsby).",
+     "kind": "plan",
+     "entities": [
+      "Morse Street PS",
+      "Leo",
+      "picture day",
+      "Edsby"
+     ],
+     "when": {
+      "entities": [
+       "picture day",
+       "school photos",
+       "Edsby"
+      ],
+      "activities": [
+       "order photos",
+       "school forms"
+      ],
+      "times": [
+       "2026-09-22",
+       "2026-09-24"
+      ]
+     },
+     "valid_until": "2026-09-24"
+    },
+    {
+     "op": "add",
+     "id": "m0016",
+     "text": "Street cleaning on Riya's side of the street (north side) is the 2nd Wednesday of each month, 07:00-11:00, April to November (next 2026-10-14; Nov likely 2026-11-11); south side is 2nd Thursday. Parking ticket $50. Riya asked to be reminded to move the car; a recurring night-before reminder was offered, not confirmed.",
+     "kind": "routine",
+     "entities": [
+      "street cleaning",
+      "car",
+      "Riya's block",
+      "Toronto street sweeping"
+     ],
+     "when": {
+      "entities": [
+       "move the car",
+       "parking",
+       "street sweeping",
+       "car",
+       "ticket",
+       "overnight parking",
+       "guests parking"
+      ],
+      "activities": [
+       "park the car",
+       "have visitors over",
+       "reminder"
+      ],
+      "times": [
+       "2nd Wednesday monthly 07:00",
+       "2026-10-14",
+       "2026-11-11"
+      ]
+     },
+     "valid_until": "2026-11-30"
+    },
+    {
+     "op": "add",
+     "id": "m0017",
+     "text": "Northline Renovations invoice NR-2214 (progress draw #3) is due 2026-09-18 and needs Riya's review and payment.",
+     "kind": "plan",
+     "entities": [
+      "Northline Renovations",
+      "NR-2214"
+     ],
+     "when": {
+      "entities": [
+       "invoice",
+       "pay contractor",
+       "renovation payment",
+       "draw #3"
+      ],
+      "activities": [
+       "pay invoice",
+       "budget",
+       "review bills"
+      ],
+      "times": [
+       "2026-09-18"
+      ]
+     },
+     "valid_until": "2026-09-18"
+    },
+    {
+     "op": "add",
+     "id": "m0018",
+     "text": "Riya works at Lumen Pay as a product manager on merchant payouts and onboarding (Instant Payouts); colleagues include Aisha Rahman (eng), Olivia Grant (Sales), Wen Li, Diego (design), Kofi Asante (Support).",
+     "kind": "person",
+     "entities": [
+      "Riya",
+      "Lumen Pay",
+      "Aisha Rahman",
+      "Olivia Grant",
+      "Wen Li",
+      "Diego",
+      "Kofi Asante"
+     ],
+     "when": {
+      "entities": [
+       "work",
+       "job",
+       "colleague",
+       "coworker",
+       "product manager",
+       "Lumen Pay"
+      ],
+      "activities": [
+       "email a colleague",
+       "write bio",
+       "work meeting"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s137",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0019",
+     "text": "Leo's swim: Learn to Swim Level 4 with instructor Kayla, Wednesdays 17:00-17:45 at Pam McConnell Aquatic Centre (640 Dundas St E), 10 sessions 2026-09-16 to 2026-11-18, $118.40 paid. Sam usually takes him. Receipt/barcode saved in Drive > Family > Leo > Swim.",
+     "kind": "routine",
+     "entities": [
+      "Leo",
+      "Pam McConnell Aquatic Centre",
+      "Kayla",
+      "Sam",
+      "swim"
+     ],
+     "when": {
+      "entities": [
+       "swim lessons",
+       "swimming",
+       "Wednesday evening",
+       "Leo's activities"
+      ],
+      "activities": [
+       "schedule meeting",
+       "book appointment",
+       "plan Wednesday",
+       "dinner timing"
+      ],
+      "times": [
+       "Wednesdays 17:00",
+       "2026-09-16",
+       "2026-11-18"
+      ]
+     },
+     "valid_until": "2026-11-18"
+    },
+    {
+     "op": "add",
+     "id": "m0020",
+     "text": "Riya is listed as a (TBC) speaker at Toronto Fintech Meetup 'Moving Money for Small Business', Thu 2026-10-01 18:30 at MaRS Discovery District (organizer Farah Siddiqui). Needs a bio under 50 words, 400x400 headshot (ready: Drive > Work > Speaking > headshot-400.jpg) and talk title by 2026-09-18.",
+     "kind": "plan",
+     "entities": [
+      "Toronto Fintech Meetup",
+      "Farah Siddiqui",
+      "MaRS"
+     ],
+     "when": {
+      "entities": [
+       "speaking",
+       "talk",
+       "meetup",
+       "speaker bio",
+       "headshot",
+       "conference"
+      ],
+      "activities": [
+       "submit talk title",
+       "write bio",
+       "plan evening"
+      ],
+      "times": [
+       "2026-09-18",
+       "2026-10-01"
+      ]
+     },
+     "valid_until": "2026-10-01"
+    },
+    {
+     "op": "add",
+     "id": "m0021",
+     "text": "Morse Street PS Terry Fox Run is Fri 2026-09-25 at 10:00; students can wear red; parent volunteers for water stations sign up in Edsby.",
+     "kind": "plan",
+     "entities": [
+      "Morse Street PS",
+      "Terry Fox Run",
+      "Leo"
+     ],
+     "when": {
+      "entities": [
+       "Terry Fox",
+       "school event",
+       "volunteer"
+      ],
+      "activities": [
+       "school event",
+       "volunteer"
+      ],
+      "times": [
+       "2026-09-25"
+      ]
+     },
+     "valid_until": "2026-09-25"
+    }
+   ]
+  },
+  {
+   "id": "life-s138",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0022",
+     "text": "Riya is organizing Priya Nair's 37th birthday dinner Sat 2026-11-07 at Alo (Toronto), table for eight under Riya Malhotra. Alo tasting menu only, $225 per person before tax/tip, $50 per person refundable deposit (to 7 days before), dietary needs need 72 hours' notice. Parties of 7+ use the group dining enquiry form, which accepts dates up to 60 days out (not yet submitted; needs dietary notes). Regular Tock tables release 30 days ahead at 10:00, so 2026-10-08 10:00; reminder set 2026-10-08 09:55.",
+     "kind": "plan",
+     "entities": [
+      "Priya Nair",
+      "Alo",
+      "Tock",
+      "Riya Malhotra"
+     ],
+     "when": {
+      "entities": [
+       "Priya",
+       "birthday dinner",
+       "restaurant",
+       "book a restaurant",
+       "reservation",
+       "dinner guest",
+       "friend",
+       "group dinner",
+       "Alo"
+      ],
+      "activities": [
+       "book a restaurant",
+       "plan birthday",
+       "dietary notes",
+       "reserve table"
+      ],
+      "times": [
+       "2026-10-08",
+       "2026-11-07"
+      ]
+     },
+     "valid_until": "2026-11-07"
+    },
+    {
+     "op": "add",
+     "id": "m0023",
+     "text": "Lisbon New Year's Eve 2026 plan: watch the fireworks at Praça do Comércio only a short while, then go back to the hotel because Leo gets overtired. No early kids' fireworks; midnight fireworks over the Tagus; options: Ribeira das Naus steps (quieter) and early family dinner at Time Out Market. Late-December Lisbon averages 15C highs, 8C lows, ~10 rainy days: pack layers, light waterproof jacket, grippy shoes, compact umbrella.",
+     "kind": "plan",
+     "entities": [
+      "Lisbon",
+      "New Year's Eve",
+      "Praça do Comércio",
+      "Leo"
+     ],
+     "when": {
+      "entities": [
+       "New Year's Eve",
+       "NYE",
+       "fireworks",
+       "Lisbon weather",
+       "packing",
+       "Leo bedtime",
+       "what to pack"
+      ],
+      "activities": [
+       "pack",
+       "plan NYE",
+       "dinner reservation",
+       "weather"
+      ],
+      "times": [
+       "2026-12-31"
+      ]
+     },
+     "valid_until": "2027-01-02"
+    },
+    {
+     "op": "add",
+     "id": "m0024",
+     "text": "Riya had a dental cleaning with Dr. Lin (Danforth Smiles) on 2026-09-09; next cleaning due March 2027. Online booking only shows 90 days ahead, so March slots open around 2026-12-01 (reminder set); hygienist days Tue and Thu mornings. Receipt ($182, sent to Sun Life) wrongly lists patient as 'Rhea Malhotra'; correction not yet requested.",
+     "kind": "fact",
+     "entities": [
+      "Dr. Lin",
+      "Danforth Smiles",
+      "Sun Life",
+      "Riya"
+     ],
+     "when": {
+      "entities": [
+       "dentist",
+       "dental",
+       "cleaning",
+       "teeth",
+       "insurance claim",
+       "Sun Life",
+       "receipt"
+      ],
+      "activities": [
+       "book appointment",
+       "dental booking",
+       "insurance claim",
+       "email Danforth Smiles"
+      ],
+      "times": [
+       "2026-12-01",
+       "2027-03"
+      ]
+     },
+     "valid_until": "2027-03-31"
+    }
+   ]
+  },
+  {
+   "id": "life-s139",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0025",
+     "text": "Lisbon stay: Memmo Príncipe Real, Family Suite (king bed + kids' room), check-in 2026-12-21 from 15:00 (early check-in requested), check-out 2027-01-02 by 12:00, confirmation MPR-48213; flexible rate, free cancellation until 48 hours before arrival; pay at hotel; elevator access, 6-minute walk from Rato metro. The Alfama Airbnb was cancelled (too many stairs, no elevator with luggage and Leo) with full refund of $2,318.44 to Visa ending 4412.",
+     "kind": "plan",
+     "entities": [
+      "Memmo Príncipe Real",
+      "Lisbon",
+      "MPR-48213",
+      "Alfama Airbnb"
+     ],
+     "when": {
+      "entities": [
+       "hotel",
+       "accommodation",
+       "where we're staying",
+       "Lisbon",
+       "Airbnb",
+       "refund",
+       "check-in",
+       "lodging"
+      ],
+      "activities": [
+       "book accommodation",
+       "plan Lisbon",
+       "airport transfer",
+       "pack"
+      ],
+      "times": [
+       "2026-12-21",
+       "2027-01-02"
+      ]
+     },
+     "valid_until": "2027-01-02"
+    },
+    {
+     "op": "add",
+     "id": "m0026",
+     "text": "Leslieville Residents' Association: City street tree survey (for a boulevard tree or a free spring 2027 tree) due by 2026-10-15; Tree Planting Day Sat 2026-10-03 9:00-13:00 at Jonathan Ashbridge Park (optional, kids welcome); City pruning on Curzon, Leslie, Logan and Carlaw 2026-10-19 to 2026-10-30 with no-parking signs 24h ahead. Riya was offered a survey reminder, not confirmed.",
+     "kind": "plan",
+     "entities": [
+      "Leslieville Residents' Association",
+      "street tree survey",
+      "Jonathan Ashbridge Park"
+     ],
+     "when": {
+      "entities": [
+       "neighbourhood",
+       "tree",
+       "boulevard",
+       "parking",
+       "pruning",
+       "Curzon",
+       "Leslie",
+       "Logan",
+       "Carlaw"
+      ],
+      "activities": [
+       "park the car",
+       "fill out survey",
+       "weekend plans"
+      ],
+      "times": [
+       "2026-10-03",
+       "2026-10-15",
+       "2026-10-19"
+      ]
+     },
+     "valid_until": "2026-10-30"
+    }
+   ]
+  }
+ ]
+}

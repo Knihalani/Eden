@@ -1,0 +1,804 @@
+{
+ "batch": "life-sleep-b12",
+ "compiler": "sonnet (claude-code subagent)",
+ "sessions": [
+  {
+   "id": "life-s120",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0001",
+     "text": "Payouts retry UX review (Fri 7 Aug 2026, Riya, Aisha Rahman, Diego Fern\u00e1ndez): decided v1 ships per-payout retry only; bulk retry goes on the v1.1 list with Diego's flows (parked in Figma). Diego is to add an empty-state hint pointing to the CSV export for big batches.",
+     "kind": "plan",
+     "entities": [
+      "Payouts",
+      "Diego Fern\u00e1ndez",
+      "Aisha Rahman",
+      "bulk retry"
+     ],
+     "when": {
+      "entities": [
+       "payouts",
+       "retry",
+       "bulk retry",
+       "Diego",
+       "Aisha",
+       "v1",
+       "v1.1",
+       "GA",
+       "Figma",
+       "CSV export",
+       "empty state",
+       "roadmap"
+      ],
+      "activities": [
+       "write up the review",
+       "plan v1.1",
+       "scope payouts GA",
+       "follow up with Diego"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0002",
+     "text": "Failed-payout reasons have been tagged in the ledger since PAY-412 merged on 2026-07-30 (Aisha Rahman), so failure breakdowns by reason can be pulled from the ledger.",
+     "kind": "fact",
+     "entities": [
+      "PAY-412",
+      "ledger",
+      "Aisha Rahman"
+     ],
+     "when": {
+      "entities": [
+       "failed payouts",
+       "ledger",
+       "failure reasons",
+       "receiving bank",
+       "payout breakdown",
+       "PAY-412"
+      ],
+      "activities": [
+       "pull payout data",
+       "roadmap prep",
+       "analyze failures"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s121",
+   "ops": []
+  },
+  {
+   "id": "life-s122",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0003",
+     "text": "Riya's household green bin / garbage collection day is Wednesday (Leslieville, Toronto). Alternating weeks: week of 10 Aug 2026 green bin + garbage; week of 17 Aug green bin + recycling. Bins out by 7:00.",
+     "kind": "routine",
+     "entities": [
+      "green bin",
+      "garbage",
+      "recycling",
+      "Leslieville"
+     ],
+     "when": {
+      "entities": [
+       "green bin",
+       "garbage",
+       "recycling",
+       "bins",
+       "trash",
+       "collection day",
+       "waste",
+       "holiday"
+      ],
+      "activities": [
+       "take out bins",
+       "plan the week",
+       "what day is garbage"
+      ],
+      "times": [
+       "Wednesdays 07:00"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0004",
+     "text": "Carrier furnace: model 59SC5B080E17, serial 2121A43817. 10-year parts limited warranty (registered) expires 2031-10-28; labour not covered; heat exchanger 20-year limited. Warranty PDF is Carrier_Warranty_59SC5_Registration.pdf in Drive/Home/Appliances.",
+     "kind": "fact",
+     "entities": [
+      "Carrier",
+      "furnace",
+      "warranty",
+      "59SC5B080E17"
+     ],
+     "when": {
+      "entities": [
+       "furnace",
+       "HVAC",
+       "heating",
+       "warranty",
+       "Carrier",
+       "repair",
+       "appliance",
+       "boiler",
+       "heater"
+      ],
+      "activities": [
+       "furnace breaks",
+       "call repair",
+       "warranty claim"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0005",
+     "text": "Riya has a list of 12 never-opened newsletter senders (e.g. Wayfair Canada, Old Navy, Medium Daily Digest, Product Hunt) that were candidates to unsubscribe; nothing unsubscribed yet, awaiting Riya's choice.",
+     "kind": "episode",
+     "entities": [
+      "newsletters",
+      "unsubscribe"
+     ],
+     "when": {
+      "entities": [
+       "newsletter",
+       "unsubscribe",
+       "inbox cleanup",
+       "promotions",
+       "email"
+      ],
+      "activities": [
+       "clean inbox",
+       "weekly inbox sweep"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s123",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0006",
+     "text": "Morse Street PS (Leo's school) 2026: first day of school is Tue 8 Sep 2026; class lists posted on Edsby Fri 4 Sep after 15:00; before-and-after-care registration closes Mon 24 Aug 2026.",
+     "kind": "plan",
+     "entities": [
+      "Morse Street PS",
+      "Leo",
+      "Edsby",
+      "school",
+      "before-and-after care"
+     ],
+     "when": {
+      "entities": [
+       "school",
+       "Leo",
+       "son",
+       "child",
+       "kids",
+       "Edsby",
+       "back to school",
+       "before care",
+       "after care",
+       "registration",
+       "class list"
+      ],
+      "activities": [
+       "register for aftercare",
+       "back to school prep",
+       "plan September"
+      ],
+      "times": [
+       "2026-08-24",
+       "2026-09-04",
+       "2026-09-08"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0007",
+     "text": "Riya's friend Tanvi lives in a Liberty Village condo (built ~2010) and her landlord wants a 9% rent increase; Riya had a note made for her ('Tanvi - rent increase (Ontario)', share link notes.example.com/s/k2v9tanvi) on the 2.1% 2026 Ontario guideline and Form N1.",
+     "kind": "person",
+     "entities": [
+      "Tanvi",
+      "Liberty Village",
+      "rent increase"
+     ],
+     "when": {
+      "entities": [
+       "Tanvi",
+       "friend",
+       "landlord",
+       "rent",
+       "tenant",
+       "Ontario",
+       "LTB",
+       "condo"
+      ],
+      "activities": [
+       "help a friend",
+       "message Tanvi",
+       "rent advice"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s124",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0008",
+     "text": "Toronto Hydro bill is on auto-pay; no action needed when the monthly bill email arrives (August 2026 bill: $142.37, up 18% on last August, A/C).",
+     "kind": "routine",
+     "entities": [
+      "Toronto Hydro",
+      "hydro bill",
+      "auto-pay"
+     ],
+     "when": {
+      "entities": [
+       "Toronto Hydro",
+       "hydro",
+       "electricity",
+       "utility bill",
+       "bills",
+       "auto-pay"
+      ],
+      "activities": [
+       "review bills",
+       "budget",
+       "pay bills"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s125",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0009",
+     "text": "Riya's passport renewal (ref P-2026-0729-77341, applied 2026-07-29 at Service Canada Scarborough Town Centre) was printed and in transit on 2026-08-14, expected by mail by 2026-08-21. Needed for a December 2026 trip.",
+     "kind": "plan",
+     "entities": [
+      "passport",
+      "Riya",
+      "Service Canada"
+     ],
+     "when": {
+      "entities": [
+       "passport",
+       "renewal",
+       "travel",
+       "international trip",
+       "ID",
+       "Canada Post",
+       "mail"
+      ],
+      "activities": [
+       "book flights",
+       "plan trip",
+       "check mail",
+       "check passport status"
+      ],
+      "times": [
+       "2026-08-21"
+      ]
+     },
+     "valid_until": "2026-08-31"
+    },
+    {
+     "op": "add",
+     "id": "m0010",
+     "text": "Riya is planning a trip to Lisbon in December 2026; an Alfama apartment asks for a 250 EUR damage deposit (about 371 CAD at 1.4856 on 2026-08-14; a hold, returned after checkout). Riya's notes list Lisbon ideas for Leo: tram 28 early morning, Oceanario, pastel de nata class.",
+     "kind": "plan",
+     "entities": [
+      "Lisbon",
+      "Alfama apartment",
+      "Leo",
+      "December trip"
+     ],
+     "when": {
+      "entities": [
+       "Lisbon",
+       "Portugal",
+       "trip",
+       "vacation",
+       "holiday",
+       "Alfama",
+       "apartment",
+       "flights",
+       "euro",
+       "currency",
+       "damage deposit",
+       "travel",
+       "Leo"
+      ],
+      "activities": [
+       "book accommodation",
+       "plan trip",
+       "plan activities for Leo",
+       "currency conversion",
+       "pay deposit"
+      ],
+      "times": [
+       "December 2026"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0011",
+     "text": "Gutter cleaning quotes for Riya's semi-detached (2 storeys), wanted before October 2026, none booked: Clean Gutters Toronto $189 (Sep 12 or 19); iWash Exterior $215 incl. photo report (Sep 5); Leaside Handyman Co. $160 cash only, earliest Oct 3, only 14 reviews.",
+     "kind": "episode",
+     "entities": [
+      "gutter cleaning",
+      "Clean Gutters Toronto",
+      "iWash Exterior",
+      "Leaside Handyman Co."
+     ],
+     "when": {
+      "entities": [
+       "gutters",
+       "eavestroughs",
+       "house maintenance",
+       "home",
+       "quotes",
+       "fall prep"
+      ],
+      "activities": [
+       "book gutter cleaning",
+       "home maintenance"
+      ],
+      "times": [
+       "September 2026"
+      ]
+     },
+     "valid_until": "2026-10-03"
+    }
+   ]
+  },
+  {
+   "id": "life-s126",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0012",
+     "text": "Riya decided in August 2026 to stop caffeine after 2 pm because it was hurting her sleep (awake at 1am three nights in one week). Started around 17 Aug.",
+     "kind": "rule",
+     "entities": [
+      "Riya",
+      "caffeine",
+      "coffee",
+      "sleep"
+     ],
+     "when": {
+      "entities": [
+       "coffee",
+       "caffeine",
+       "tea",
+       "espresso",
+       "energy drink",
+       "latte",
+       "afternoon",
+       "sleep",
+       "insomnia",
+       "cafe"
+      ],
+      "activities": [
+       "order a drink",
+       "suggest a coffee",
+       "afternoon plans",
+       "pickup order"
+      ],
+      "times": [
+       "after 14:00"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0013",
+     "text": "Riya is reading 'Como agua para chocolate' in Spanish, one chapter a week (Ch. 1 done as of 2026-08-20), as practice for the DELE reading section; keeps a list of words to look up.",
+     "kind": "routine",
+     "entities": [
+      "Spanish",
+      "DELE",
+      "Como agua para chocolate"
+     ],
+     "when": {
+      "entities": [
+       "Spanish",
+       "DELE",
+       "reading",
+       "language learning",
+       "book",
+       "exam",
+       "vocabulary"
+      ],
+      "activities": [
+       "recommend a book",
+       "plan study time",
+       "weekly reading"
+      ],
+      "times": [
+       "weekly"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0014",
+     "text": "Riya has a recurring sore heel first thing in the morning, aggravated by long runs with Marcus (running partner). On 2026-08-22 she asked for a physio; Queen East Physio & Sport (1150 Queen St E, direct billing, 4.8) offered initial assessments ($120, 60 min): Mon 24 Aug 17:30, Wed 26 Aug 18:15, Thu 27 Aug 19:00, Sat 29 Aug 10:30. Not yet booked pending her choice; she prefers after work or Saturday.",
+     "kind": "plan",
+     "entities": [
+      "heel",
+      "physio",
+      "Marcus",
+      "Queen East Physio & Sport",
+      "running"
+     ],
+     "when": {
+      "entities": [
+       "heel",
+       "foot pain",
+       "injury",
+       "running",
+       "run",
+       "Marcus",
+       "physio",
+       "physiotherapy",
+       "long run",
+       "training",
+       "race"
+      ],
+      "activities": [
+       "book physio",
+       "plan a run",
+       "schedule appointment"
+      ],
+      "times": [
+       "2026-08-24",
+       "2026-08-29"
+      ]
+     },
+     "valid_until": "2026-08-29"
+    },
+    {
+     "op": "add",
+     "id": "m0015",
+     "text": "Riya's usual compostable poop bags (for the dog): Earth Rated unscented, 120 ct (8 rolls), from Pet Valu delivery, $17.99. Reordered 2026-08-22 (order PV-2290184, arriving Wed 26 Aug); previous order 2026-06-03, so roughly every 2.5 months.",
+     "kind": "routine",
+     "entities": [
+      "Earth Rated",
+      "poop bags",
+      "Pet Valu",
+      "dog"
+     ],
+     "when": {
+      "entities": [
+       "dog",
+       "poop bags",
+       "pet supplies",
+       "Pet Valu",
+       "reorder",
+       "dog food",
+       "walks"
+      ],
+      "activities": [
+       "reorder pet supplies",
+       "shop for dog"
+      ],
+      "times": []
+     },
+     "valid_until": "2026-10-31"
+    },
+    {
+     "op": "add",
+     "id": "m0016",
+     "text": "Riya prefers short answers. On 2026-08-22 she said the assistant was being long-winded and asked for shorter answers.",
+     "kind": "preference",
+     "entities": [
+      "Riya",
+      "answer length"
+     ],
+     "when": {
+      "entities": [
+       "reply",
+       "answer",
+       "summary",
+       "explanation",
+       "response style"
+      ],
+      "activities": [
+       "answer questions",
+       "write a summary",
+       "report back"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0017",
+     "text": "The Audible Premium Plus membership ($14.99/month, charged to Riya's Visa from 19 Aug 2026) comes from Sam's Amazon account whose default card is Riya's Visa; free trial started 19 Jul. Riya may ask Sam whether he meant to keep it. Not cancelled.",
+     "kind": "fact",
+     "entities": [
+      "Audible",
+      "Sam",
+      "Visa",
+      "Amazon"
+     ],
+     "when": {
+      "entities": [
+       "Audible",
+       "subscription",
+       "Visa",
+       "credit card statement",
+       "Sam",
+       "partner",
+       "Amazon",
+       "recurring charge"
+      ],
+      "activities": [
+       "review spending",
+       "reconcile statement",
+       "cancel subscription"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0018",
+     "text": "Riya's to-do: call plumber about the dripping basement laundry tap, due Mon 2026-08-24 (list: Home).",
+     "kind": "plan",
+     "entities": [
+      "plumber",
+      "basement laundry tap"
+     ],
+     "when": {
+      "entities": [
+       "plumber",
+       "plumbing",
+       "tap",
+       "leak",
+       "basement",
+       "home repair"
+      ],
+      "activities": [
+       "call plumber",
+       "home to-do"
+      ],
+      "times": [
+       "2026-08-24"
+      ]
+     },
+     "valid_until": "2026-08-24"
+    },
+    {
+     "op": "add",
+     "id": "m0019",
+     "text": "Sam is Riya's partner (lives with her and son Leo). Friends/contacts mentioned: Hannah Cho (friend; Riya considers an olive oil thank-you gift for the pool party), Marcus (running partner), Tanvi (friend).",
+     "kind": "person",
+     "entities": [
+      "Sam",
+      "Hannah Cho",
+      "Marcus",
+      "Leo",
+      "Tanvi"
+     ],
+     "when": {
+      "entities": [
+       "Sam",
+       "partner",
+       "husband",
+       "spouse",
+       "Hannah",
+       "Marcus",
+       "friend",
+       "gift",
+       "family",
+       "Leo",
+       "son"
+      ],
+      "activities": [
+       "buy a gift",
+       "plan weekend",
+       "book a restaurant",
+       "dinner guest",
+       "family plans"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s127",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0020",
+     "text": "Kitchen renovation decision (2026-08-22): Riya chose the Bosch 800 Series dishwasher SHP78CM5N (stainless, pocket handle, 42 dBA, $1,649 at Canadian Appliance Source) over the Miele because it is quieter for the price. Cutout 60.9 cm W x 86.0-87.6 cm H x 61.0 cm D. Nate at Northline Renovations was texted the model for the cabinet opening.",
+     "kind": "fact",
+     "entities": [
+      "Bosch 800 Series",
+      "SHP78CM5N",
+      "dishwasher",
+      "Nate",
+      "Northline Renovations",
+      "Miele"
+     ],
+     "when": {
+      "entities": [
+       "dishwasher",
+       "kitchen renovation",
+       "Nate",
+       "contractor",
+       "Northline",
+       "cabinet",
+       "appliance",
+       "Bosch",
+       "Miele",
+       "countertop",
+       "backsplash"
+      ],
+      "activities": [
+       "order appliances",
+       "message the contractor",
+       "plan the kitchen",
+       "choose finishes"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0021",
+     "text": "Riya is a panelist on 'Getting paid faster' at FinTech Toronto, Thu 27 Aug 2026, 18:30, MaRS Discovery District, with Dana Whitford (Wealthsimple) and Arjun Kapoor (Shopify Payments). Organizer Meghan wanted a 60-80 word third-person bio and square headshot (800 px+) by Sun 23 Aug; sent status unconfirmed.",
+     "kind": "plan",
+     "entities": [
+      "FinTech Toronto",
+      "MaRS Discovery District",
+      "panel",
+      "Riya",
+      "Meghan"
+     ],
+     "when": {
+      "entities": [
+       "panel",
+       "FinTech Toronto",
+       "speaking",
+       "MaRS",
+       "bio",
+       "headshot",
+       "conference",
+       "event",
+       "payments"
+      ],
+      "activities": [
+       "send bio",
+       "prepare talk",
+       "plan Thursday evening",
+       "schedule 27 Aug"
+      ],
+      "times": [
+       "2026-08-23",
+       "2026-08-27"
+      ]
+     },
+     "valid_until": "2026-08-27"
+    },
+    {
+     "op": "add",
+     "id": "m0022",
+     "text": "Nate is the contact at Northline Renovations (kitchen renovation). Northline asked Riya to confirm the countertop template date (updated schedule PDF sent 8 Aug 2026). Kitchen backsplash grout sealing may already be included by Nate's crew; ask before buying sealer.",
+     "kind": "person",
+     "entities": [
+      "Nate",
+      "Northline Renovations",
+      "countertop",
+      "grout sealer"
+     ],
+     "when": {
+      "entities": [
+       "Nate",
+       "Northline",
+       "renovation",
+       "contractor",
+       "countertop template",
+       "backsplash",
+       "grout",
+       "sealer"
+      ],
+      "activities": [
+       "email the contractor",
+       "buy sealer",
+       "confirm schedule"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s128",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0023",
+     "text": "Dental appointments with Dr. Lin at Danforth Smiles (822 Danforth Ave, 416-555-0182), confirmed 21 Aug 2026: Tue 2026-11-03 Riya cleaning 8:00 am, Leo checkup 8:45 am. Arrive 10 min early; cancellations need 48 hours' notice. Leo's school bell is 8:45, so he will be late; let Morse Street PS know via Edsby closer to the date.",
+     "kind": "plan",
+     "entities": [
+      "Dr. Lin",
+      "Danforth Smiles",
+      "Leo",
+      "dentist"
+     ],
+     "when": {
+      "entities": [
+       "dentist",
+       "dental",
+       "cleaning",
+       "checkup",
+       "Leo",
+       "Danforth Smiles",
+       "teeth",
+       "school",
+       "late"
+      ],
+      "activities": [
+       "schedule November",
+       "book appointments",
+       "tell school",
+       "calendar"
+      ],
+      "times": [
+       "2026-11-03",
+       "2026-11-01"
+      ]
+     },
+     "valid_until": "2026-11-03"
+    }
+   ]
+  },
+  {
+   "id": "life-s129",
+   "ops": []
+  }
+ ]
+}
