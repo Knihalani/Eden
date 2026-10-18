@@ -1,0 +1,17 @@
+{"batch": "j01", "judge": "opus (claude-code subagent)", "cases": [
+{"event": "code-s023-e000", "needed": ["code-sleep-b00:m0041", "code-sleep-b01:m0029", "code-sleep-b00:m0040", "code-sleep-b01:m0016"], "why": "Exports bucket spec/branch, infra now Pulumi (where it goes), required cost tags, never apply infra from laptop"},
+{"event": "code-s068-e010", "needed": ["code-sleep-b06:m0018"], "why": "Corrects the prior answer: rule is ask Jordan before adding a new dependency"},
+{"event": "code-s022-e015", "needed": ["code-sleep-b00:m0023"], "why": "Exception tracker is Sentry (SENTRY_DSN); assistant said it did not know which tracker to wire"},
+{"event": "code-s082-e032", "needed": ["code-sleep-b00:m0015"], "why": "Health endpoint is /healthz, correcting the guessed /health probe path still open in recent turns"},
+{"event": "code-s103-e031", "needed": ["code-sleep-b02:m0025", "code-sleep-b08:m0029", "code-sleep-b05:m0027"], "why": "Clerk dev-key production build gotcha; hydration fix preference (client-side useEffect formatting) and next-intl formatter guidance"},
+{"event": "code-s047-e008", "needed": [], "why": "User stated the test constraints; fallback context is in recent"},
+{"event": "code-s078-e023", "needed": [], "why": "Test result notification; nothing in memory needed"},
+{"event": "code-s067-e000", "needed": ["code-sleep-b01:m0023", "code-sleep-b02:m0004", "code-sleep-b06:m0022", "code-sleep-b06:m0008"], "why": "Local env setup steps and Node 20.11/nvm for the Slack message; CSV export change details to mention; it is Friday, no prod deploys"},
+{"event": "code-s058-e007", "needed": ["code-sleep-b01:m0037", "code-sleep-b05:m0017", "code-sleep-b04:m0019"], "why": "Forms use react-hook-form+zodResolver, submit via server actions, new strings need en/fr/es keys"},
+{"event": "code-s010-e009", "needed": [], "why": "User supplied the context; no relevant rows available yet"},
+{"event": "code-s003-e018", "needed": [], "why": "Engines notification; nothing relevant in memory"},
+{"event": "code-s085-e010", "needed": ["code-sleep-b05:m0002", "code-sleep-b04:m0004"], "why": "Bull Board at /admin/queues on the worker; worker must run locally to consume queues"},
+{"event": "code-s048-e005", "needed": ["code-sleep-b04:m0008", "code-sleep-b01:m0021", "code-sleep-b04:m0025"], "why": "CLI install steps (restricted npm pkg, engines >=18), ESM-only crash on old Node, use picocolors for the colored warning"},
+{"event": "code-s006-e000", "needed": ["code-sleep-b00:m0022", "code-sleep-b00:m0021"], "why": "Lint may flag dist files: tracked stale CLI dist must be left alone; never hand-edit generated files"},
+{"event": "code-s051-e024", "needed": [], "why": "General Django ORM question; answerable without memory"}
+]}
