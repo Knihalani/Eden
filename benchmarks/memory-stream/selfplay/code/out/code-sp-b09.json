@@ -1,0 +1,276 @@
+{
+  "batch": "code-sp-b09",
+  "generator": "haiku (claude-code subagent)",
+  "rows": {
+    "code-sleep-b10:m0019": {
+      "pos": [
+        "the back button on invoices kicks you out of your filters, fix it",
+        "add a draft option to the invoice status filter",
+        "add a last 30 days preset to the invoice date filters",
+        "clear all on the invoice filters should reset the client too",
+        "write a test for the invoice list filter component",
+        "add sort by amount to the invoices list, match the other columns"
+      ],
+      "neg": [
+        "what does useSearchParams do in the next app router?",
+        "explain how the browser back button interacts with history.pushState",
+        "fix the typo in the InvoiceFilters.tsx prop docstring",
+        "does router.push add a history entry compared to router.replace?",
+        "list the invoice statuses we support in the enum",
+        "why does my expenses filter component re-render on every keystroke"
+      ]
+    },
+    "code-sleep-b10:m0020": {
+      "pos": [
+        "client names with accents make ugly urls on the portal, sort that out",
+        "the slug for 'Café Nørd & Søn' comes out wrong, check it",
+        "add slugs to the new agency profile pages",
+        "cap the share link slugs at 40 chars",
+        "what should 'Straße Design' turn into in a url, german names break things",
+        "make a helper that turns client names into safe ids for export filenames"
+      ],
+      "neg": [
+        "what's the difference between NFC and NFKD normalization?",
+        "write a unit test for the formatCurrency helper in lib/money.ts",
+        "explain how kebab-case differs from snake_case",
+        "is there an npm package for slugifying that handles emoji",
+        "the regex in the sitemap generator is too greedy, check it",
+        "rename lib/strings.ts to lib/text-utils.ts and update imports"
+      ]
+    },
+    "code-sleep-b10:m0021": {
+      "pos": [
+        "trailmix admin list: sorting by distance is broken, fix the ordering",
+        "add an elevation gain column to the hikes admin list",
+        "the hike admin list shows raw floats for distance, make it readable",
+        "add a search box to the hikes changelist for trail names",
+        "trailmix list view should show the most recent hike first",
+        "add a readonly distance field to the hike detail form"
+      ],
+      "neg": [
+        "how do i write a custom admin action in django",
+        "what does @admin.display do compared to a plain property on the model",
+        "convert 12 miles to km in python, quick snippet",
+        "the htmx swap on the hike feed isn't firing after a post, what's wrong",
+        "add a Hikes link to the trailmix nav bar",
+        "write a django migration for a new Trail model, check the existing ones first"
+      ]
+    },
+    "code-sleep-b10:m0022": {
+      "pos": [
+        "the google button is still gone on prod, what do i look at in the login code",
+        "customer says they can't sign in with google anymore, where do i start",
+        "make sure the google option renders on every login layout, add a test",
+        "ok the sign-in card looks fine on mobile now, anything else on login to check",
+        "prod login is broken for one customer, draft a reply to support",
+        "what would make the sign-in options disappear without a deploy"
+      ],
+      "neg": [
+        "how do i add google oauth to a next app from scratch",
+        "what does the oauth prompt=select_account parameter do",
+        "explain the difference between an id token and an access token",
+        "lena's card component has a grid bug on safari, what's a fix",
+        "rotate the database password in the staging env",
+        "is the github sign-in button using the same component as google"
+      ]
+    },
+    "code-sleep-b10:m0023": {
+      "pos": [
+        "the sign-in card on mobile looks off, who should i ping about it",
+        "who owns the signup form styling these days",
+        "is it ok to change the spacing on the sign-in card, anything to check first",
+        "need someone to sanity check the auth page layout before we ship, who's around",
+        "write a changelog line for the login layout change",
+        "summarize who has touched the login layout file recently"
+      ],
+      "neg": [
+        "who wrote the billing webhook handler",
+        "what's the layout API for the shadcn card component",
+        "explain flexbox vs grid for a centered card",
+        "lena wants a dark mode toggle in the header, what's a simple approach",
+        "draft a team announcement for the sprint demo",
+        "sam wants the standup summary in slack format, can you write one"
+      ]
+    },
+    "code-sleep-b10:m0024": {
+      "pos": [
+        "getting started page: the video is slow to load, any tweaks",
+        "the onboarding video shows a cookie banner for eu users, can we avoid that",
+        "make the getting-started video responsive on phones",
+        "add a caption track to the onboarding video",
+        "swap the intro video on getting-started once the new cut is uploaded",
+        "add a watch the intro button above the fold on getting-started"
+      ],
+      "neg": [
+        "how do i make an iframe responsive with tailwind",
+        "what's the difference between youtube and youtube-nocookie",
+        "lazy load the images in the dashboard header",
+        "the video on the marketing page autoplays, is that bad for a11y",
+        "add a getting-started checklist component below the header",
+        "hook up a loom embed on the pricing page"
+      ]
+    },
+    "code-sleep-b10:m0025": {
+      "pos": [
+        "invoice pdf shows the wrong currency when line items are mixed, check the logic",
+        "org is set to cad but the invoice shows usd, why",
+        "add a currency column to the invoices table",
+        "draft invoices with no items show a blank currency, fix that",
+        "add gbp to the currency dropdown on the new invoice form",
+        "sanity check the totals for multi-currency clients in the dashboard"
+      ],
+      "neg": [
+        "what's the iso 4217 code for the swiss franc",
+        "format a number as currency with Intl.NumberFormat",
+        "how do i handle timezones for invoice due dates",
+        "explain the difference between a money type and a plain number in typescript",
+        "add a euro sign to the pricing page header",
+        "write a test for the vat calculation helper"
+      ]
+    },
+    "code-sleep-b10:m0026": {
+      "pos": [
+        "the team settings page shows members to anyone logged in, is that safe to ship",
+        "update the pricing cards, agency tier should say most popular",
+        "add a faq section under the pricing plans",
+        "the pricing page is missing the footer, can you add it",
+        "members list on settings needs pagination once orgs get big",
+        "wire the team page to show pending invite status"
+      ],
+      "neg": [
+        "what's the difference between a route group and a dynamic route in next",
+        "explain how getServerSideProps differs from server components",
+        "stripe price id vs product id, which one do i store",
+        "what's a good layout for a three-tier pricing table",
+        "add a link to the docs in the sidebar",
+        "the signed-in check in the middleware is redirecting too often, why"
+      ]
+    },
+    "code-sleep-b10:m0027": {
+      "pos": [
+        "write the e2e for creating and sending an invoice, go",
+        "add a playwright test for the invoice flow, sign in however makes sense",
+        "can you automate the send invoice flow against localhost",
+        "the send button test is flaky, make the selectors more stable",
+        "start the e2e suite for invoice creation, use what we already have",
+        "ok let's finish the browser test for new invoices"
+      ],
+      "neg": [
+        "what's the difference between cypress and playwright at a high level",
+        "why does my unit test for the invoice total fail on ci",
+        "explain aria-label vs aria-labelledby",
+        "how do i run the dev server on a different port",
+        "write a unit test for the draft save reducer",
+        "how do i gitignore a playwright storageState file"
+      ]
+    },
+    "code-sleep-b10:m0028": {
+      "pos": [
+        "fix the typos across the worker and api, the payments code has some too",
+        "spell check the payments route file before i merge",
+        "clean up the log messages in the payments worker, they have typos",
+        "add a refunded payment status, follow the naming of the existing ones",
+        "what does the payments test file assert for the in-flight status",
+        "rename the payment status values to proper english"
+      ],
+      "neg": [
+        "how do i run a spell check on markdown docs",
+        "is it received or recieved, what's the rule",
+        "add an expired status to the invoice enum in the web app",
+        "explain http 202 vs 201 for async jobs",
+        "fix the typo in the readme of the cli package",
+        "write a changelog entry for the payments fix in web"
+      ]
+    },
+    "code-sleep-b10:m0029": {
+      "pos": [
+        "clientpicker isn't firing when i pick a client in the expense form",
+        "add a clear button to the client picker",
+        "wire the client picker into the recurring invoice form",
+        "the new invoice form logs a console warning on client select, check it",
+        "add keyboard nav to the client dropdown",
+        "what page sizes should the clients table offer"
+      ],
+      "neg": [
+        "what does an onSelect prop do on a native select element",
+        "how do i debounce the client search input",
+        "explain event shadowing in react",
+        "list all the components in the components/forms folder",
+        "change the default page size on the transactions table to 25",
+        "write a storybook story for the date range picker"
+      ]
+    },
+    "code-sleep-b10:m0030": {
+      "pos": [
+        "the csv export has two header rows, fix it",
+        "add a csv export for expenses, same shape as the invoice one",
+        "export button for the clients list, csv please",
+        "the csv download is missing quotes around names with commas, check it",
+        "add a tax column to the invoice csv export",
+        "write the csv handler for payments, reuse what exists"
+      ],
+      "neg": [
+        "what's the rfc 4180 spec for csv quoting",
+        "parse a csv in node without a library, quick example",
+        "how do i stream a large download in next route handlers",
+        "explain the content-disposition header for downloads",
+        "add a pdf export button to the invoice detail page",
+        "the json export endpoint returns 500 for empty lists, look at it"
+      ]
+    },
+    "code-sleep-b10:m0031": {
+      "pos": [
+        "how many todos do we have in the api package right now",
+        "quick count of tech debt markers across the monorepo",
+        "how many of the todos reference linear tickets",
+        "write the weekly debt report, numbers included",
+        "add a script that fails ci if the todo count goes up",
+        "sam wants the todo numbers for the eng review, pull them"
+      ],
+      "neg": [
+        "how do i count lines of code with cloc",
+        "what's the best way to grep for FIXME in a large repo",
+        "explain the difference between a TODO and a FIXME comment convention",
+        "add a todo comment to the worker retry logic for the backoff",
+        "run the tsx seed script against my local db",
+        "how many open pull requests does the web package have"
+      ]
+    },
+    "code-sleep-b10:m0032": {
+      "pos": [
+        "acme invoices list cuts the client names off, make it show more",
+        "i need the full client name in the cli output for the script i'm writing",
+        "widen the columns in acme invoices list",
+        "the reviewer wants that truncate helper moved, what's involved",
+        "add a json flag to acme clients list",
+        "make the acme cli output work in a narrow terminal"
+      ],
+      "neg": [
+        "how do i truncate a string in javascript with an ellipsis",
+        "what's a good column width for a terminal table",
+        "explain how commander parses flags",
+        "add a verbose flag to the acme deploy command",
+        "write a test for the render module in packages/cli",
+        "what's the difference between text and json output formats in general"
+      ]
+    },
+    "code-sleep-b10:m0033": {
+      "pos": [
+        "acme invoices list should filter by date, finish that",
+        "pick up where you left off on the cli invoice date filter",
+        "add date filtering to acme invoices list so i can get last month",
+        "the cli readme mentions a date flag but it doesn't work, fix it",
+        "wire a date option through the api client for invoices",
+        "add tests for the date parsing in the cli"
+      ],
+      "neg": [
+        "how do i parse a date string in node without moment",
+        "what's the iso 8601 format for a date only",
+        "explain the exit code convention for cli usage errors",
+        "add an until flag to the deploy command",
+        "does our api support pagination cursors on list endpoints",
+        "update the cli readme table of contents"
+      ]
+    }
+  }
+}
