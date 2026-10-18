@@ -1,0 +1,2403 @@
+{
+ "batch": "life-sleep-b00",
+ "compiler": "sonnet (claude-code subagent)",
+ "sessions": [
+  {
+   "id": "life-s000",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0001",
+     "text": "Sam Okafor (Riya's partner) is vegetarian, which also means no fish or seafood (not pescatarian).",
+     "kind": "fact",
+     "entities": [
+      "Sam Okafor"
+     ],
+     "when": {
+      "entities": [
+       "Sam",
+       "partner",
+       "husband",
+       "dinner guest",
+       "vegetarian",
+       "fish",
+       "seafood"
+      ],
+      "activities": [
+       "cook dinner",
+       "book a restaurant",
+       "order food",
+       "plan a menu",
+       "recipe",
+       "grocery list",
+       "host guests"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0002",
+     "text": "Sam Okafor's birthday is March 22; he prefers a quiet dinner at home over a restaurant party, so never plan him a big event.",
+     "kind": "preference",
+     "entities": [
+      "Sam Okafor"
+     ],
+     "when": {
+      "entities": [
+       "Sam",
+       "partner",
+       "birthday"
+      ],
+      "activities": [
+       "plan birthday",
+       "book a restaurant",
+       "party planning",
+       "gift"
+      ],
+      "times": [
+       "03-22",
+       "March 22",
+       "March"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0003",
+     "text": "Riya runs with Marcus Bell on Tuesdays and Thursdays at 6:30 am along the Martin Goodman Trail, so those early mornings are unavailable.",
+     "kind": "routine",
+     "entities": [
+      "Marcus Bell",
+      "Martin Goodman Trail"
+     ],
+     "when": {
+      "entities": [
+       "Marcus",
+       "running",
+       "run",
+       "early morning",
+       "6:30 am"
+      ],
+      "activities": [
+       "schedule a meeting",
+       "book appointment",
+       "plan morning"
+      ],
+      "times": [
+       "Tuesdays 06:30",
+       "Thursdays 06:30"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0004",
+     "text": "Tom Becker is Riya's manager (VP Product at Lumen Pay). He reads everything on his phone between meetings and hates long threads: keep emails to Tom under 5 sentences with the ask in the first line.",
+     "kind": "person",
+     "entities": [
+      "Tom Becker",
+      "Lumen Pay"
+     ],
+     "when": {
+      "entities": [
+       "Tom",
+       "manager",
+       "boss",
+       "VP Product"
+      ],
+      "activities": [
+       "email Tom",
+       "write to Tom",
+       "draft update",
+       "reply to manager"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0005",
+     "text": "Aisha Rahman is the engineering lead on Riya's team. She prefers async Slack threads over meetings and wants specs at least two weeks before sprint planning.",
+     "kind": "person",
+     "entities": [
+      "Aisha Rahman"
+     ],
+     "when": {
+      "entities": [
+       "Aisha",
+       "engineering lead",
+       "eng lead",
+       "engineer"
+      ],
+      "activities": [
+       "message Aisha",
+       "schedule a meeting",
+       "send spec",
+       "sprint planning",
+       "plan spec timeline"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0006",
+     "text": "Team standup is Mondays, Wednesdays and Fridays at 9:45. Tuesday mornings (09:00-12:00) are Riya's no-meeting focus block; Payments guild sync series was declined.",
+     "kind": "routine",
+     "entities": [
+      "standup",
+      "focus block"
+     ],
+     "when": {
+      "entities": [
+       "standup",
+       "focus block",
+       "Tuesday morning",
+       "meeting"
+      ],
+      "activities": [
+       "schedule a meeting",
+       "book a meeting",
+       "find a time"
+      ],
+      "times": [
+       "Mon/Wed/Fri 09:45",
+       "Tuesday 09:00-12:00"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0007",
+     "text": "Priya Nair is Riya's best friend, from McGill; she is an architect now living in Montreal.",
+     "kind": "person",
+     "entities": [
+      "Priya Nair",
+      "Montreal",
+      "McGill"
+     ],
+     "when": {
+      "entities": [
+       "Priya",
+       "best friend",
+       "friend",
+       "Montreal",
+       "architect"
+      ],
+      "activities": [
+       "visit Montreal",
+       "plan trip",
+       "call a friend",
+       "book a hotel in Montreal"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0008",
+     "text": "Riya's car, a Mazda CX-5, is insured with Intact Insurance and renews each April; remind her in March.",
+     "kind": "fact",
+     "entities": [
+      "Mazda CX-5",
+      "Intact Insurance"
+     ],
+     "when": {
+      "entities": [
+       "car",
+       "CX-5",
+       "Mazda",
+       "car insurance",
+       "Intact",
+       "renewal"
+      ],
+      "activities": [
+       "renew insurance",
+       "car maintenance",
+       "budget"
+      ],
+      "times": [
+       "March",
+       "April"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0009",
+     "text": "Riya has a Spanish lesson with Carlos every Tuesday at 19:00.",
+     "kind": "routine",
+     "entities": [
+      "Carlos",
+      "Spanish lesson"
+     ],
+     "when": {
+      "entities": [
+       "Carlos",
+       "Spanish",
+       "tutor",
+       "lesson"
+      ],
+      "activities": [
+       "schedule evening",
+       "book dinner on Tuesday",
+       "schedule a meeting"
+      ],
+      "times": [
+       "Tuesdays 19:00"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0010",
+     "text": "Riya's household: partner Sam, son Leo (6, turning 7 in the fall), and Biscuit, a beagle born around April 2022 who is food-motivated and steals bread off the counter; do not leave bread out.",
+     "kind": "fact",
+     "entities": [
+      "Sam",
+      "Leo",
+      "Biscuit"
+     ],
+     "when": {
+      "entities": [
+       "Leo",
+       "son",
+       "kid",
+       "child",
+       "Biscuit",
+       "dog",
+       "beagle",
+       "bread",
+       "family"
+      ],
+      "activities": [
+       "grocery list",
+       "kitchen reminder",
+       "shopping",
+       "plan family event",
+       "pet care"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0011",
+     "text": "Kabir Malhotra is Riya's younger brother, a software engineer at a game studio in Vancouver, married to Mei Malhotra.",
+     "kind": "person",
+     "entities": [
+      "Kabir Malhotra",
+      "Mei Malhotra",
+      "Vancouver"
+     ],
+     "when": {
+      "entities": [
+       "Kabir",
+       "brother",
+       "Mei",
+       "sister-in-law",
+       "Vancouver"
+      ],
+      "activities": [
+       "book flight to Vancouver",
+       "plan visit",
+       "send gift",
+       "email Kabir"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0012",
+     "text": "Riya works in the Lumen Pay office on King Street West on Tuesdays and Thursdays and from home the rest of the week.",
+     "kind": "routine",
+     "entities": [
+      "Lumen Pay",
+      "King Street West"
+     ],
+     "when": {
+      "entities": [
+       "office",
+       "King St W",
+       "in office",
+       "work from home",
+       "commute"
+      ],
+      "activities": [
+       "book a room",
+       "schedule an in-person meeting",
+       "plan day",
+       "book an appointment"
+      ],
+      "times": [
+       "Tuesdays",
+       "Thursdays"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0013",
+     "text": "Rule: ask Riya before any purchase over $100. No exceptions.",
+     "kind": "rule",
+     "entities": [
+      "purchase",
+      "Riya"
+     ],
+     "when": {
+      "entities": [
+       "purchase",
+       "order",
+       "buy",
+       "shopping",
+       "payment",
+       "cost",
+       "price"
+      ],
+      "activities": [
+       "place an order",
+       "buy",
+       "book hotel",
+       "book flight",
+       "pay",
+       "shop online"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0014",
+     "text": "Rule: do not text Sam's parents (Grace and Daniel Okafor) on Riya's behalf.",
+     "kind": "rule",
+     "entities": [
+      "Grace Okafor",
+      "Daniel Okafor"
+     ],
+     "when": {
+      "entities": [
+       "Sam's parents",
+       "in-laws",
+       "Grace",
+       "Daniel",
+       "mother-in-law",
+       "father-in-law"
+      ],
+      "activities": [
+       "text",
+       "message",
+       "send a message",
+       "reply"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0015",
+     "text": "Flight preferences: WestJet first, aisle seat, never basic economy.",
+     "kind": "preference",
+     "entities": [
+      "WestJet"
+     ],
+     "when": {
+      "entities": [
+       "flight",
+       "airline",
+       "WestJet",
+       "seat",
+       "airfare"
+      ],
+      "activities": [
+       "book a flight",
+       "search flights",
+       "plan a trip"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0016",
+     "text": "Always show prices in CAD; convert any foreign currency and put the original in brackets, e.g. CA$137 (US$100).",
+     "kind": "preference",
+     "entities": [
+      "CAD"
+     ],
+     "when": {
+      "entities": [
+       "price",
+       "currency",
+       "USD",
+       "foreign",
+       "cost"
+      ],
+      "activities": [
+       "compare prices",
+       "book travel",
+       "shop",
+       "budget"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0017",
+     "text": "Hannah Cho is Riya's neighbour two doors down (added to contacts by Sam). She is a nurse at Michael Garron Hospital with some night shifts, so text before calling in daytime. Her kids are Ellie (10) and Jun (7). Mobile +1 416-555-0193.",
+     "kind": "person",
+     "entities": [
+      "Hannah Cho",
+      "Ellie Cho",
+      "Jun"
+     ],
+     "when": {
+      "entities": [
+       "Hannah",
+       "neighbour",
+       "neighbor",
+       "nurse",
+       "Ellie",
+       "Jun"
+      ],
+      "activities": [
+       "text Hannah",
+       "ask a neighbour",
+       "dog sitting",
+       "playdate",
+       "party invite"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0018",
+     "text": "Riya takes levothyroxine 50 mcg every morning for hypothyroidism, 30 minutes before coffee; daily reminder at 06:45.",
+     "kind": "routine",
+     "entities": [
+      "levothyroxine",
+      "hypothyroidism"
+     ],
+     "when": {
+      "entities": [
+       "medication",
+       "levothyroxine",
+       "thyroid",
+       "coffee",
+       "pharmacy"
+      ],
+      "activities": [
+       "morning routine",
+       "travel packing",
+       "doctor visit",
+       "refill prescription"
+      ],
+      "times": [
+       "daily 06:45"
+      ]
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s001",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0019",
+     "text": "Riya and Sam met in 2015 at a friend's board-game night; wedding/anniversary treated as June 8 (this is later corrected).",
+     "kind": "fact",
+     "entities": [
+      "Sam",
+      "Riya"
+     ],
+     "when": {
+      "entities": [
+       "anniversary",
+       "Sam",
+       "partner",
+       "date night"
+      ],
+      "activities": [
+       "plan anniversary",
+       "book dinner"
+      ],
+      "times": [
+       "June 8"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0020",
+     "text": "Sam Okafor teaches grade 11 and 12 chemistry at Riverdale Collegiate Institute; Sunday evenings he is often marking lab reports, so plan dates with Sam on Saturdays, not Sundays.",
+     "kind": "fact",
+     "entities": [
+      "Sam Okafor",
+      "Riverdale Collegiate Institute"
+     ],
+     "when": {
+      "entities": [
+       "Sam",
+       "partner",
+       "teacher",
+       "marking",
+       "Sunday evening"
+      ],
+      "activities": [
+       "plan a date",
+       "schedule family event",
+       "book a restaurant",
+       "plan the weekend"
+      ],
+      "times": [
+       "Sunday evenings"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0021",
+     "text": "House: basement floods slightly near the back wall in heavy spring rain (only that strip). Sump pump replaced May 2024 (Zoeller M53, $640). Furnace serviced 2023-09 (Reliance); eavestroughs cleaned 2024-10.",
+     "kind": "fact",
+     "entities": [
+      "basement",
+      "sump pump",
+      "Zoeller M53"
+     ],
+     "when": {
+      "entities": [
+       "basement",
+       "flood",
+       "water",
+       "sump pump",
+       "subfloor",
+       "house maintenance",
+       "furnace",
+       "eavestroughs"
+      ],
+      "activities": [
+       "renovation",
+       "contractor questions",
+       "home maintenance",
+       "spring prep"
+      ],
+      "times": [
+       "spring"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0022",
+     "text": "Kitchen reno is by Northline Renovations (contact Nate); deposit #2 of $8,500 was scheduled from TD joint chequing on 2025-07-24; cabinet install is Sat 2025-08-23 (all day). Nate prefers email.",
+     "kind": "plan",
+     "entities": [
+      "Northline Renovations",
+      "Nate"
+     ],
+     "when": {
+      "entities": [
+       "Nate",
+       "Northline",
+       "kitchen reno",
+       "renovation",
+       "contractor",
+       "cabinets"
+      ],
+      "activities": [
+       "email Nate",
+       "host guests",
+       "schedule weekend",
+       "pay deposit"
+      ],
+      "times": [
+       "2025-08-23"
+      ]
+     },
+     "valid_until": "2025-08-23"
+    },
+    {
+     "op": "add",
+     "id": "m0023",
+     "text": "Rule: never send an email on Riya's behalf without showing her the draft first, even a tiny one.",
+     "kind": "rule",
+     "entities": [
+      "email"
+     ],
+     "when": {
+      "entities": [
+       "email",
+       "draft",
+       "send",
+       "reply",
+       "message"
+      ],
+      "activities": [
+       "send an email",
+       "reply to",
+       "email Tom",
+       "email Nate",
+       "email Aisha"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0024",
+     "text": "Riya's dentist is Dr. Lin at Queen East Dental, 1046 Queen St E.",
+     "kind": "fact",
+     "entities": [
+      "Dr. Lin",
+      "Queen East Dental"
+     ],
+     "when": {
+      "entities": [
+       "dentist",
+       "Dr. Lin",
+       "dental",
+       "teeth"
+      ],
+      "activities": [
+       "book appointment",
+       "book dentist",
+       "cleaning"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0025",
+     "text": "Riya loves South Indian food, especially masala dosa; her favourite local spot is Saffron Lane on Queen Street East.",
+     "kind": "preference",
+     "entities": [
+      "Saffron Lane",
+      "masala dosa"
+     ],
+     "when": {
+      "entities": [
+       "South Indian",
+       "dosa",
+       "Saffron Lane",
+       "favourite restaurant",
+       "Indian food"
+      ],
+      "activities": [
+       "book a restaurant",
+       "order food",
+       "pick a restaurant",
+       "dinner plans",
+       "lunch"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0026",
+     "text": "Format meeting summaries as three sections: Decisions, Action items (with owner and date), Open questions.",
+     "kind": "preference",
+     "entities": [
+      "meeting summary"
+     ],
+     "when": {
+      "entities": [
+       "meeting summary",
+       "notes",
+       "minutes",
+       "recap"
+      ],
+      "activities": [
+       "summarize meeting",
+       "write meeting notes",
+       "tl;dr"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0027",
+     "text": "Date format: in chat write like 'Mon 19 Oct'; in work documents use ISO format like 2026-10-19.",
+     "kind": "preference",
+     "entities": [
+      "dates"
+     ],
+     "when": {
+      "entities": [
+       "date",
+       "format",
+       "document",
+       "PRD",
+       "chat"
+      ],
+      "activities": [
+       "write a document",
+       "write a PRD",
+       "send a date",
+       "draft"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0028",
+     "text": "Calendar invites Riya's agent creates must state the time in Toronto time, and also in IST if Riya's mother in Mumbai is invited.",
+     "kind": "rule",
+     "entities": [
+      "calendar invite",
+      "IST",
+      "Toronto"
+     ],
+     "when": {
+      "entities": [
+       "invite",
+       "time zone",
+       "IST",
+       "Mumbai",
+       "mother",
+       "Anjali"
+      ],
+      "activities": [
+       "create a calendar invite",
+       "schedule a call",
+       "schedule meeting"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0029",
+     "text": "Leo goes to bed at 7:45 pm on school nights: nothing after dinner on weeknights once school is back. Leo does not do well with sleepovers yet; decline politely if anyone asks.",
+     "kind": "rule",
+     "entities": [
+      "Leo"
+     ],
+     "when": {
+      "entities": [
+       "Leo",
+       "son",
+       "bedtime",
+       "sleepover",
+       "school night",
+       "kid"
+      ],
+      "activities": [
+       "plan evening",
+       "accept invitation",
+       "playdate",
+       "schedule weeknight event",
+       "book dinner"
+      ],
+      "times": [
+       "weeknights after dinner"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0030",
+     "text": "Riya's 1:1 with Tom Becker is weekly on Thursdays at 14:00.",
+     "kind": "routine",
+     "entities": [
+      "Tom Becker"
+     ],
+     "when": {
+      "entities": [
+       "Tom",
+       "1:1",
+       "manager"
+      ],
+      "activities": [
+       "schedule a meeting",
+       "book Thursday",
+       "book appointment"
+      ],
+      "times": [
+       "Thursdays 14:00"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0031",
+     "text": "Wen Li is the data analyst Riya works with. Data requests go through the #data-requests Slack channel with at least three business days of notice and a written metric definition, otherwise Wen bounces them.",
+     "kind": "procedure",
+     "entities": [
+      "Wen Li",
+      "#data-requests"
+     ],
+     "when": {
+      "entities": [
+       "Wen",
+       "data analyst",
+       "data request",
+       "analytics",
+       "metrics",
+       "Looker"
+      ],
+      "activities": [
+       "request data",
+       "ask for a report",
+       "prep a review",
+       "draft a data request"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0032",
+     "text": "Flight preferences beyond airline: prefer direct flights even if up to $300 more, aisle seat, and avoid red-eyes unless the arrival is in the morning.",
+     "kind": "preference",
+     "entities": [
+      "flights"
+     ],
+     "when": {
+      "entities": [
+       "flight",
+       "red-eye",
+       "direct",
+       "nonstop",
+       "layover",
+       "seat"
+      ],
+      "activities": [
+       "book a flight",
+       "search flights",
+       "plan trip"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0033",
+     "text": "Plan: Kabir wants Riya's family in Vancouver in the fall; Thanksgiving trip YYZ-YVR considered for Fri 2025-10-10 to Mon 2025-10-13 for 3 (2 adults + child). Nothing held; fare watch active. Flair via Calgary $1,128 (cheapest), WestJet $1,402 (red-eye return), Air Canada $1,596, WestJet midday $1,689.",
+     "kind": "plan",
+     "entities": [
+      "Vancouver",
+      "Kabir Malhotra"
+     ],
+     "when": {
+      "entities": [
+       "Vancouver",
+       "Kabir",
+       "Thanksgiving",
+       "YVR",
+       "brother"
+      ],
+      "activities": [
+       "book flight",
+       "plan trip",
+       "check fares"
+      ],
+      "times": [
+       "2025-10-10",
+       "2025-10-13",
+       "Thanksgiving"
+      ]
+     },
+     "valid_until": "2025-10-13"
+    },
+    {
+     "op": "add",
+     "id": "m0034",
+     "text": "Riya runs with Marcus Bell on Saturdays at 7:00 am, a 10 km loop along the Martin Goodman Trail starting at Woodbine Beach (standing weekly event since 2025-07-19).",
+     "kind": "routine",
+     "entities": [
+      "Marcus Bell",
+      "Woodbine Beach"
+     ],
+     "when": {
+      "entities": [
+       "Marcus",
+       "run",
+       "Saturday morning",
+       "Woodbine Beach"
+      ],
+      "activities": [
+       "plan the weekend",
+       "schedule Saturday",
+       "book appointment"
+      ],
+      "times": [
+       "Saturdays 07:00"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0035",
+     "text": "Riya plans to sit the DELE B2 Spanish exam in May 2026; registration for the May 2026 session opens in February 2026 (Instituto Cervantes, Toronto centres).",
+     "kind": "plan",
+     "entities": [
+      "DELE B2",
+      "Instituto Cervantes"
+     ],
+     "when": {
+      "entities": [
+       "DELE",
+       "Spanish exam",
+       "Cervantes",
+       "B2"
+      ],
+      "activities": [
+       "register for exam",
+       "study Spanish",
+       "plan May"
+      ],
+      "times": [
+       "2026-02",
+       "2026-05"
+      ]
+     },
+     "valid_until": "2026-05-31"
+    },
+    {
+     "op": "add",
+     "id": "m0036",
+     "text": "Lumen Pay tool stack: Linear for tickets, Slack for chat, Notion for docs, Figma for design, Looker for metrics, Google Workspace for mail and calendar.",
+     "kind": "fact",
+     "entities": [
+      "Lumen Pay",
+      "Linear",
+      "Slack",
+      "Notion",
+      "Figma",
+      "Looker"
+     ],
+     "when": {
+      "entities": [
+       "Linear",
+       "Slack",
+       "Notion",
+       "Figma",
+       "Looker",
+       "tickets",
+       "docs"
+      ],
+      "activities": [
+       "write a spec",
+       "file a ticket",
+       "share a doc",
+       "pull metrics"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0037",
+     "text": "Home internet is Bell Fibe at $95 a month.",
+     "kind": "fact",
+     "entities": [
+      "Bell Fibe"
+     ],
+     "when": {
+      "entities": [
+       "internet",
+       "Bell",
+       "Fibe",
+       "wifi",
+       "bill"
+      ],
+      "activities": [
+       "review bills",
+       "budget"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0038",
+     "text": "Payouts v2 PRD lives in Notion, created from the team's PRD-v3 template (one-page summary, Requirements, Design, Rollout, Decision log); dates in ISO. PRD drafts also include a Non-goals section and an Open questions table with owner and due-date columns.",
+     "kind": "procedure",
+     "entities": [
+      "Payouts v2 PRD",
+      "PRD-v3",
+      "Notion"
+     ],
+     "when": {
+      "entities": [
+       "PRD",
+       "spec",
+       "Notion",
+       "payouts v2",
+       "template"
+      ],
+      "activities": [
+       "write a PRD",
+       "draft a spec",
+       "edit PRD"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0039",
+     "text": "Commitment: Aisha needs the payouts v2 spec by Aug 25 for the Sep 8 sprint; on 2025-07-25 Riya told Aisha by email the spec will be in Notion by 2025-08-18, with open questions on ledger reconciliation flagged at the top.",
+     "kind": "plan",
+     "entities": [
+      "Aisha Rahman",
+      "payouts v2"
+     ],
+     "when": {
+      "entities": [
+       "Aisha",
+       "payouts v2",
+       "spec",
+       "sprint",
+       "ledger reconciliation"
+      ],
+      "activities": [
+       "write spec",
+       "sprint planning",
+       "update Aisha"
+      ],
+      "times": [
+       "2025-08-18",
+       "2025-08-25",
+       "2025-09-08"
+      ]
+     },
+     "valid_until": "2025-09-08"
+    },
+    {
+     "op": "add",
+     "id": "m0040",
+     "text": "Recurring finances: mortgage with TD (biweekly); RESP for Leo $208/month at TD (full CESG grant, 20% up to $500/yr); Spotify family and Netflix; monthly e-transfer to Carlos (Spanish tutor).",
+     "kind": "fact",
+     "entities": [
+      "TD",
+      "RESP",
+      "mortgage"
+     ],
+     "when": {
+      "entities": [
+       "mortgage",
+       "RESP",
+       "Spotify",
+       "Netflix",
+       "recurring payments",
+       "budget",
+       "Leo's savings"
+      ],
+      "activities": [
+       "review finances",
+       "monthly money check",
+       "budget"
+      ],
+      "times": [
+       "1st of month"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0041",
+     "text": "Sam's parents are Grace and Daniel Okafor, who live in Alta Vista, Ottawa. Daniel is a retired civil engineer who will have opinions about the reno; Grace still teaches piano.",
+     "kind": "person",
+     "entities": [
+      "Grace Okafor",
+      "Daniel Okafor",
+      "Ottawa"
+     ],
+     "when": {
+      "entities": [
+       "Sam's parents",
+       "in-laws",
+       "Grace",
+       "Daniel",
+       "Ottawa",
+       "father-in-law",
+       "mother-in-law"
+      ],
+      "activities": [
+       "host guests",
+       "plan visit",
+       "book dinner",
+       "plan the weekend",
+       "gift"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0042",
+     "text": "Plan: weekend of 16-17 Aug 2025 with Sam's parents Grace and Daniel Okafor; dinner Sat 2025-08-16 19:00 at Ascari Enoteca (Queen St E), party of 5, ref ASC-4471.",
+     "kind": "plan",
+     "entities": [
+      "Grace Okafor",
+      "Daniel Okafor",
+      "Ascari Enoteca"
+     ],
+     "when": {
+      "entities": [
+       "Sam's parents",
+       "Grace",
+       "Daniel",
+       "Ascari",
+       "dinner"
+      ],
+      "activities": [
+       "host",
+       "plan weekend",
+       "dinner"
+      ],
+      "times": [
+       "2025-08-16",
+       "2025-08-17"
+      ]
+     },
+     "valid_until": "2025-08-17"
+    },
+    {
+     "op": "add",
+     "id": "m0043",
+     "text": "Olivia Grant is Director of Sales Enablement at Lumen Pay and often asks Riya for feature dates to share with prospects. Never give Olivia or anyone in sales a feature date until Aisha Rahman has signed off; drafts to Olivia say 'target', not 'launch date'.",
+     "kind": "rule",
+     "entities": [
+      "Olivia Grant",
+      "Aisha Rahman",
+      "sales"
+     ],
+     "when": {
+      "entities": [
+       "Olivia",
+       "sales",
+       "sales enablement",
+       "prospects",
+       "feature dates",
+       "roadmap",
+       "launch date"
+      ],
+      "activities": [
+       "reply to Olivia",
+       "draft to sales",
+       "share roadmap",
+       "give a date"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0044",
+     "text": "When Riya writes in Spanish, reply in Spanish and correct every mistake inline. She wants to practise Spanish with the agent sometimes.",
+     "kind": "rule",
+     "entities": [
+      "Spanish"
+     ],
+     "when": {
+      "entities": [
+       "Spanish",
+       "español",
+       "Riya writes in Spanish"
+      ],
+      "activities": [
+       "reply to Riya in Spanish",
+       "practise Spanish"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0045",
+     "text": "Riya's banking: TD joint chequing with Sam is the household bills account; her own savings are in EQ Bank and must not be touched. Also a TD Visa.",
+     "kind": "fact",
+     "entities": [
+      "TD Joint Chequing",
+      "EQ Bank",
+      "TD Visa"
+     ],
+     "when": {
+      "entities": [
+       "bank",
+       "account",
+       "payment",
+       "chequing",
+       "savings",
+       "EQ Bank"
+      ],
+      "activities": [
+       "pay a bill",
+       "schedule payment",
+       "transfer money",
+       "pay deposit"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s002",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0046",
+     "text": "Riya calls her mother Anjali every Sunday at 9:00 am Toronto time (6:30 pm Mumbai); keep that slot clear (later corrected).",
+     "kind": "routine",
+     "entities": [
+      "Anjali Malhotra"
+     ],
+     "when": {
+      "entities": [
+       "mom",
+       "mother",
+       "Anjali",
+       "call mom"
+      ],
+      "activities": [
+       "schedule Sunday",
+       "schedule a call"
+      ],
+      "times": [
+       "Sundays 09:00"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0047",
+     "text": "Spanish learning: Carlos's intake notes say Riya learns best through role-play of real situations (ordering food, work meeting, doctor's visit) and wants Mexican vocabulary (carro, computadora) rather than Castilian. Weak spots: ser/estar, preterite vs imperfect, gender of -ma nouns, subjunctive after 'cuando'. Level B1 working toward B2; goal is an hour-long conversation without English by the 2027 trip to Mexico City.",
+     "kind": "fact",
+     "entities": [
+      "Spanish",
+      "Carlos",
+      "Mexico City"
+     ],
+     "when": {
+      "entities": [
+       "Spanish",
+       "Carlos",
+       "role-play",
+       "vocabulary",
+       "B2",
+       "Mexico City",
+       "practice"
+      ],
+      "activities": [
+       "practise Spanish",
+       "make vocab list",
+       "write Spanish",
+       "plan Mexico trip"
+      ],
+      "times": [
+       "2027"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0048",
+     "text": "Marcus Bell is Riya's friend from a running club, a physiotherapist training for the Chicago Marathon; he often pushes longer runs (e.g. 16k).",
+     "kind": "person",
+     "entities": [
+      "Marcus Bell"
+     ],
+     "when": {
+      "entities": [
+       "Marcus",
+       "running friend",
+       "physiotherapist",
+       "physio",
+       "knees",
+       "Chicago Marathon"
+      ],
+      "activities": [
+       "plan a run",
+       "knee pain",
+       "weather for run"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0049",
+     "text": "Biscuit's vet is Dr. Moreau at Leslieville Animal Hospital on Queen Street East.",
+     "kind": "fact",
+     "entities": [
+      "Dr. Moreau",
+      "Leslieville Animal Hospital",
+      "Biscuit"
+     ],
+     "when": {
+      "entities": [
+       "Biscuit",
+       "vet",
+       "dog",
+       "Dr. Moreau",
+       "ear"
+      ],
+      "activities": [
+       "book vet",
+       "pet care",
+       "dog sitting"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0050",
+     "text": "Riya dislikes cilantro: leave it out of recipes and food orders, always.",
+     "kind": "preference",
+     "entities": [
+      "cilantro"
+     ],
+     "when": {
+      "entities": [
+       "cilantro",
+       "coriander",
+       "recipe",
+       "food order",
+       "Thai"
+      ],
+      "activities": [
+       "order food",
+       "recipe",
+       "cook dinner",
+       "meal plan"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0051",
+     "text": "Style: when Riya asks something, give the answer first, then bullet points; no preamble, do not restate her question.",
+     "kind": "preference",
+     "entities": [
+      "style"
+     ],
+     "when": {
+      "entities": [
+       "answer",
+       "response format"
+      ],
+      "activities": [
+       "answer a question",
+       "reply",
+       "summarize"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0052",
+     "text": "Calendar rule: never book meetings for Riya before 9:30 or after 17:00.",
+     "kind": "rule",
+     "entities": [
+      "calendar"
+     ],
+     "when": {
+      "entities": [
+       "meeting",
+       "calendar",
+       "schedule"
+      ],
+      "activities": [
+       "schedule a meeting",
+       "book a meeting",
+       "find a time",
+       "propose times"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0053",
+     "text": "Biscuit walks (agreed with Sam, July 2025): Riya walks him every morning at 6:30 am (Leslie Street Spit loop on weekends, around the block on weekdays); Sam does the 9:00 pm walk.",
+     "kind": "routine",
+     "entities": [
+      "Biscuit",
+      "Sam"
+     ],
+     "when": {
+      "entities": [
+       "Biscuit",
+       "walk",
+       "dog walk",
+       "who walks the dog"
+      ],
+      "activities": [
+       "plan the day",
+       "travel",
+       "dog sitting"
+      ],
+      "times": [
+       "6:30 am daily",
+       "9:00 pm daily"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0054",
+     "text": "Health (private): Riya is allergic to penicillin (hives) and has seasonal allergies in May managed with Reactine. Mention the penicillin allergy whenever a doctor or pharmacy comes up.",
+     "kind": "fact",
+     "entities": [
+      "penicillin",
+      "Reactine"
+     ],
+     "when": {
+      "entities": [
+       "allergy",
+       "penicillin",
+       "antibiotic",
+       "doctor",
+       "pharmacy",
+       "medication",
+       "Reactine"
+      ],
+      "activities": [
+       "doctor visit",
+       "pharmacy",
+       "prescription",
+       "book a clinic"
+      ],
+      "times": [
+       "May"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0055",
+     "text": "Riya Malhotra is a Senior Product Manager at Lumen Pay (started 2024-02-05), owning Merchant payouts and Merchant onboarding; manager Tom Becker.",
+     "kind": "fact",
+     "entities": [
+      "Riya Malhotra",
+      "Lumen Pay"
+     ],
+     "when": {
+      "entities": [
+       "job title",
+       "role",
+       "bio",
+       "product areas",
+       "benefits form",
+       "speaker bio"
+      ],
+      "activities": [
+       "write a bio",
+       "fill a form",
+       "introduce Riya"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0056",
+     "text": "Riya's usual coffee order is an oat milk latte.",
+     "kind": "preference",
+     "entities": [
+      "coffee"
+     ],
+     "when": {
+      "entities": [
+       "coffee",
+       "latte",
+       "oat milk",
+       "cafe"
+      ],
+      "activities": [
+       "order coffee",
+       "coffee run"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0057",
+     "text": "Diego Fernández is the designer on Riya's team. Give him feedback as Figma comments, not DMs, and frame it as a problem statement rather than a proposed solution.",
+     "kind": "person",
+     "entities": [
+      "Diego Fernández",
+      "Figma"
+     ],
+     "when": {
+      "entities": [
+       "Diego",
+       "designer",
+       "design feedback",
+       "Figma"
+      ],
+      "activities": [
+       "give feedback",
+       "review designs",
+       "message Diego"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0058",
+     "text": "Riya does a 6:00 am spin class at Spin Society on Queen Street East every Wednesday (class may shift to 6:15 on occasion).",
+     "kind": "routine",
+     "entities": [
+      "Spin Society"
+     ],
+     "when": {
+      "entities": [
+       "spin",
+       "Spin Society",
+       "gym",
+       "workout",
+       "Wednesday morning"
+      ],
+      "activities": [
+       "schedule a meeting",
+       "book Wednesday morning"
+      ],
+      "times": [
+       "Wednesdays 06:00"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0059",
+     "text": "Use Canadian spelling in everything written for Riya (colour, centre, cheque, organize).",
+     "kind": "preference",
+     "entities": [
+      "Canadian spelling"
+     ],
+     "when": {
+      "entities": [
+       "spelling",
+       "colour",
+       "centre",
+       "cheque",
+       "organize"
+      ],
+      "activities": [
+       "write",
+       "draft",
+       "edit a document"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0060",
+     "text": "Idea: go to the Canadian Tulip Festival in Ottawa in May 2026 with Sam's parents (they did not go in 2025); check dates in April.",
+     "kind": "plan",
+     "entities": [
+      "Canadian Tulip Festival",
+      "Ottawa"
+     ],
+     "when": {
+      "entities": [
+       "Tulip Festival",
+       "Ottawa",
+       "Sam's parents"
+      ],
+      "activities": [
+       "plan trip",
+       "plan May"
+      ],
+      "times": [
+       "2026-04",
+       "2026-05"
+      ]
+     },
+     "valid_until": "2026-05-31"
+    },
+    {
+     "op": "add",
+     "id": "m0061",
+     "text": "Carlos Méndez is Riya's online Spanish tutor from Guadalajara (lessons on Zoom). Riya pays monthly by Interac e-transfer, $180 CAD for four lessons (carlos.mendez.es@example.com).",
+     "kind": "person",
+     "entities": [
+      "Carlos Méndez"
+     ],
+     "when": {
+      "entities": [
+       "Carlos",
+       "Spanish tutor",
+       "tutor",
+       "e-transfer"
+      ],
+      "activities": [
+       "pay Carlos",
+       "pay tutor",
+       "monthly payments"
+      ],
+      "times": [
+       "start of each month"
+      ]
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s003",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0062",
+     "text": "Spanish vocabulary lists go in a table: Spanish, English, example sentence (Riya studies them in Anki).",
+     "kind": "preference",
+     "entities": [
+      "Spanish vocabulary",
+      "Anki"
+     ],
+     "when": {
+      "entities": [
+       "vocab",
+       "vocabulary list",
+       "Anki",
+       "flashcards"
+      ],
+      "activities": [
+       "make a vocab list",
+       "study Spanish"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0063",
+     "text": "Riya's work email style: warm but brief, no exclamation marks, signed 'Best, Riya'.",
+     "kind": "preference",
+     "entities": [
+      "email"
+     ],
+     "when": {
+      "entities": [
+       "email",
+       "tone",
+       "signature"
+      ],
+      "activities": [
+       "draft an email",
+       "reply by email",
+       "write to Aisha"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0064",
+     "text": "Always give temperatures in both Celsius and Fahrenheit (Daniel Okafor only thinks in Fahrenheit).",
+     "kind": "preference",
+     "entities": [
+      "temperature",
+      "Daniel Okafor"
+     ],
+     "when": {
+      "entities": [
+       "weather",
+       "temperature",
+       "forecast",
+       "Fahrenheit",
+       "Celsius"
+      ],
+      "activities": [
+       "check the weather",
+       "forecast",
+       "plan trip"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0065",
+     "text": "Leo is allergic to tree nuts: the family keeps all nuts out of his lunches, no exceptions, even if camp or school says it is nut-aware.",
+     "kind": "rule",
+     "entities": [
+      "Leo",
+      "tree nuts"
+     ],
+     "when": {
+      "entities": [
+       "Leo",
+       "son",
+       "nuts",
+       "allergy",
+       "lunch",
+       "snack",
+       "school",
+       "camp",
+       "party"
+      ],
+      "activities": [
+       "pack lunch",
+       "recipe",
+       "grocery list",
+       "birthday party",
+       "order food",
+       "school event"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0066",
+     "text": "Hotel rule: only fully refundable rates, ideally within walking distance of transit.",
+     "kind": "rule",
+     "entities": [
+      "hotel"
+     ],
+     "when": {
+      "entities": [
+       "hotel",
+       "accommodation",
+       "lodging"
+      ],
+      "activities": [
+       "book a hotel",
+       "plan a trip"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0067",
+     "text": "Plan: Riya visits Priya Nair in Montreal Fri 2025-09-12 to Sun 2025-09-14; Hôtel Monville booked, fully refundable until 2025-09-10 ($548.70, confirmation MV-88213).",
+     "kind": "plan",
+     "entities": [
+      "Hôtel Monville",
+      "Priya Nair",
+      "Montreal"
+     ],
+     "when": {
+      "entities": [
+       "Montreal",
+       "Priya",
+       "Monville",
+       "hotel"
+      ],
+      "activities": [
+       "pack for trip",
+       "plan trip",
+       "visit Priya"
+      ],
+      "times": [
+       "2025-09-10",
+       "2025-09-12",
+       "2025-09-14"
+      ]
+     },
+     "valid_until": "2025-09-14"
+    },
+    {
+     "op": "add",
+     "id": "m0068",
+     "text": "Anjali Malhotra is Riya's mother, living in Bandra, Mumbai; retired school principal with type 2 diabetes, so gifts and sweets must be sugar-free. Riya sends a rakhi box each early August (ships about 7 days to Mumbai).",
+     "kind": "person",
+     "entities": [
+      "Anjali Malhotra",
+      "Mumbai"
+     ],
+     "when": {
+      "entities": [
+       "mom",
+       "mother",
+       "Anjali",
+       "Mumbai",
+       "diabetes",
+       "sugar-free",
+       "rakhi",
+       "gift"
+      ],
+      "activities": [
+       "send a gift",
+       "order sweets",
+       "plan a call",
+       "Raksha Bandhan"
+      ],
+      "times": [
+       "early August"
+      ]
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s004",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0069",
+     "text": "Riya and Sam's anniversary is June 16 (married 2018-06-16; met 2015-06-16). They usually go out for dinner without Leo, so a sitter is needed; dinner Tue 2026-06-16 for 2, restaurant reservations for June 2026 open in April 2026. Shortlist: Edulis, Ascari Enoteca, Planta Queen (vegetarian-friendly). Sitter candidates: Maya R. ($20/h), Josie T. ($22/h), Ana P. ($17/h).",
+     "kind": "plan",
+     "entities": [
+      "Sam",
+      "anniversary",
+      "Leo"
+     ],
+     "when": {
+      "entities": [
+       "anniversary",
+       "Sam",
+       "partner",
+       "sitter",
+       "babysitter",
+       "date night",
+       "wedding"
+      ],
+      "activities": [
+       "book a restaurant",
+       "find a sitter",
+       "plan date night",
+       "reserve dinner"
+      ],
+      "times": [
+       "06-16",
+       "2026-06-16",
+       "April 2026",
+       "June 2026"
+      ]
+     },
+     "valid_until": "2026-06-16"
+    },
+    {
+     "op": "supersede",
+     "old": "m0019",
+     "new": "m0069"
+    },
+    {
+     "op": "add",
+     "id": "m0070",
+     "text": "Sam drinks oat-milk flat whites and dislikes anything hazelnut-flavoured.",
+     "kind": "preference",
+     "entities": [
+      "Sam"
+     ],
+     "when": {
+      "entities": [
+       "Sam",
+       "partner",
+       "coffee",
+       "flat white",
+       "hazelnut"
+      ],
+      "activities": [
+       "coffee run",
+       "order coffee"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0071",
+     "text": "In the PRD and Riya's work writing: use 'use' instead of 'leverage'; Tom Becker also flags 'synergy', 'north star', 'low-hanging fruit', 'utilize'. Avoid that jargon.",
+     "kind": "preference",
+     "entities": [
+      "Tom Becker",
+      "PRD"
+     ],
+     "when": {
+      "entities": [
+       "jargon",
+       "leverage",
+       "utilize",
+       "synergy",
+       "north star",
+       "Tom",
+       "PRD"
+      ],
+      "activities": [
+       "write a PRD",
+       "edit a document",
+       "draft update"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0072",
+     "text": "Team practice: disagree and commit; every product decision goes into the Notion decision log within 24 hours.",
+     "kind": "rule",
+     "entities": [
+      "decision log",
+      "Notion"
+     ],
+     "when": {
+      "entities": [
+       "decision",
+       "decision log",
+       "PRD",
+       "disagree and commit"
+      ],
+      "activities": [
+       "make a decision",
+       "write meeting notes",
+       "update PRD",
+       "wrap up a meeting"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0073",
+     "text": "Riya's video call with her mother Anjali is every Sunday at 9:00 pm Toronto time (6:30 am Monday in Mumbai, before her morning walk); not the morning, since Anjali is at the temple then. Keep the slot clear.",
+     "kind": "routine",
+     "entities": [
+      "Anjali Malhotra"
+     ],
+     "when": {
+      "entities": [
+       "mom",
+       "mother",
+       "Anjali",
+       "call",
+       "Mumbai",
+       "Sunday evening"
+      ],
+      "activities": [
+       "schedule Sunday",
+       "schedule a call",
+       "book Sunday evening"
+      ],
+      "times": [
+       "Sundays 21:00"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "supersede",
+     "old": "m0046",
+     "new": "m0073"
+    }
+   ]
+  },
+  {
+   "id": "life-s005",
+   "ops": []
+  },
+  {
+   "id": "life-s006",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0074",
+     "text": "Kabir Malhotra's birthday is August 5. Riya and Kabir do not give real gifts; they swap silly novelty mugs as a tradition.",
+     "kind": "preference",
+     "entities": [
+      "Kabir Malhotra"
+     ],
+     "when": {
+      "entities": [
+       "Kabir",
+       "brother",
+       "birthday",
+       "gift",
+       "mug"
+      ],
+      "activities": [
+       "buy a gift",
+       "send a gift",
+       "birthday reminder"
+      ],
+      "times": [
+       "August 5",
+       "08-05"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0075",
+     "text": "Riya does not want a play-by-play narration of steps; just show the results/options when they come in.",
+     "kind": "preference",
+     "entities": [
+      "style"
+     ],
+     "when": {
+      "entities": [
+       "updates",
+       "progress",
+       "narration"
+      ],
+      "activities": [
+       "run background task",
+       "report results"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s007",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0076",
+     "text": "Restaurant booking rule: book for 19:00 and check there are good vegetarian options, every time.",
+     "kind": "rule",
+     "entities": [
+      "restaurant"
+     ],
+     "when": {
+      "entities": [
+       "restaurant",
+       "dinner",
+       "reservation",
+       "table",
+       "vegetarian"
+      ],
+      "activities": [
+       "book a restaurant",
+       "book dinner",
+       "reserve a table"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0077",
+     "text": "Leo's school year at Morse Street PS: first day Tue 2025-09-02; class list posts Thu 2025-08-28; before/after care registration closes Fri 2025-08-15.",
+     "kind": "plan",
+     "entities": [
+      "Morse Street PS",
+      "Leo"
+     ],
+     "when": {
+      "entities": [
+       "Leo",
+       "school",
+       "Morse Street PS",
+       "after care",
+       "class list"
+      ],
+      "activities": [
+       "register",
+       "plan September",
+       "back to school"
+      ],
+      "times": [
+       "2025-08-15",
+       "2025-08-28",
+       "2025-09-02"
+      ]
+     },
+     "valid_until": "2025-09-02"
+    },
+    {
+     "op": "add",
+     "id": "m0078",
+     "text": "Fare watch placed for YYZ-YVR Oct 10-13 2025, 3 travellers (reports any drop over $100); Thanksgiving fares usually rise after early September. Riya said not to hold any flight yet.",
+     "kind": "plan",
+     "entities": [
+      "YYZ",
+      "YVR"
+     ],
+     "when": {
+      "entities": [
+       "Vancouver",
+       "Thanksgiving",
+       "flights",
+       "fare"
+      ],
+      "activities": [
+       "book flight",
+       "check fares"
+      ],
+      "times": [
+       "early September 2025",
+       "2025-10-10"
+      ]
+     },
+     "valid_until": "2025-10-13"
+    }
+   ]
+  },
+  {
+   "id": "life-s008",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0079",
+     "text": "Biscuit eats only Purina Pro Plan Sensitive Skin & Stomach, Salmon & Rice (13.6 kg, ordered from Pet Valu); no chicken-based food, which gave him itchy skin. Check listings are not another flavour.",
+     "kind": "fact",
+     "entities": [
+      "Biscuit",
+      "Purina Pro Plan",
+      "Pet Valu"
+     ],
+     "when": {
+      "entities": [
+       "Biscuit",
+       "dog food",
+       "Purina",
+       "Pro Plan",
+       "chicken",
+       "salmon",
+       "treats",
+       "itchy skin"
+      ],
+      "activities": [
+       "reorder dog food",
+       "grocery list",
+       "pet shopping",
+       "dog sitting"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0080",
+     "text": "Riya does 15 minutes of Spanish Anki cards every weekday morning (on the streetcar).",
+     "kind": "routine",
+     "entities": [
+      "Anki",
+      "Spanish"
+     ],
+     "when": {
+      "entities": [
+       "Anki",
+       "Spanish",
+       "flashcards",
+       "streetcar"
+      ],
+      "activities": [
+       "morning routine",
+       "study Spanish"
+      ],
+      "times": [
+       "weekday mornings"
+      ]
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s009",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0081",
+     "text": "Rule (verbatim from Riya): when the agent schedules a work meeting for Riya, it defaults to 25 minutes and always puts an agenda in the invite. Riya declines meetings with no agenda.",
+     "kind": "rule",
+     "entities": [
+      "work meeting",
+      "agenda"
+     ],
+     "when": {
+      "entities": [
+       "meeting",
+       "agenda",
+       "invite",
+       "calendar"
+      ],
+      "activities": [
+       "schedule a meeting",
+       "send a calendar invite",
+       "book a meeting"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0082",
+     "text": "Property tax is paid by pre-authorized debit from the TD joint account (****4471): $612.40 on 2025-09-02, 2025-10-01 and 2025-11-03. No action needed.",
+     "kind": "routine",
+     "entities": [
+      "property tax",
+      "TD Joint Chequing"
+     ],
+     "when": {
+      "entities": [
+       "property tax",
+       "City of Toronto",
+       "instalment",
+       "TD joint"
+      ],
+      "activities": [
+       "review bills",
+       "budget",
+       "money check"
+      ],
+      "times": [
+       "2025-09-02",
+       "2025-10-01",
+       "2025-11-03"
+      ]
+     },
+     "valid_until": "2025-11-03"
+    },
+    {
+     "op": "add",
+     "id": "m0083",
+     "text": "Green bin and recycling go out Wednesdays at 19:00, before Leo's bedtime routine at 19:45.",
+     "kind": "routine",
+     "entities": [
+      "green bin",
+      "recycling",
+      "Leo"
+     ],
+     "when": {
+      "entities": [
+       "green bin",
+       "recycling",
+       "garbage",
+       "Leo bedtime"
+      ],
+      "activities": [
+       "plan Wednesday evening",
+       "reminders"
+      ],
+      "times": [
+       "Wednesdays 19:00"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0084",
+     "text": "Family birthdays: Sam March 22, Leo October 21 (turning 7 in 2025), Kabir August 5. Riya wants all family birthdays yearly in the calendar with a reminder a week before; dates still missing for Anjali, Mei, Grace Okafor, Daniel Okafor (ask Riya).",
+     "kind": "plan",
+     "entities": [
+      "Sam",
+      "Leo",
+      "Kabir Malhotra",
+      "Anjali Malhotra",
+      "Mei Malhotra",
+      "Grace Okafor",
+      "Daniel Okafor"
+     ],
+     "when": {
+      "entities": [
+       "birthday",
+       "family",
+       "mom",
+       "brother",
+       "Mei",
+       "Sam's parents",
+       "Leo"
+      ],
+      "activities": [
+       "set birthday reminders",
+       "plan birthday",
+       "buy gift",
+       "add to calendar"
+      ],
+      "times": [
+       "2025-10-21",
+       "03-22",
+       "08-05"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "drop",
+     "id": "m0039",
+     "why": "Spec deadline of 2025-08-18 has passed"
+    },
+    {
+     "op": "drop",
+     "id": "m0042",
+     "why": "Aug 16-17 weekend has passed"
+    }
+   ]
+  }
+ ]
+}

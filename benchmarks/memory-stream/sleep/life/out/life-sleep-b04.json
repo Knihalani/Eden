@@ -1,0 +1,1180 @@
+{
+ "batch": "life-sleep-b04",
+ "compiler": "sonnet (claude-code subagent)",
+ "sessions": [
+  {
+   "id": "life-s040",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0001",
+     "text": "Riya's home internet since January 2026 is TekSavvy Fibre 1 Gbps at $70/month ($79.10 with HST), pre-authorized debit on the 15th, service address Leslieville, Toronto; customer-owned modem. Bell Fibe was cancelled effective 2026-01-02 and is no longer used.",
+     "kind": "fact",
+     "entities": [
+      "TekSavvy",
+      "Bell",
+      "internet"
+     ],
+     "when": {
+      "entities": [
+       "internet",
+       "wifi",
+       "ISP",
+       "TekSavvy",
+       "Bell",
+       "Bell Fibe",
+       "broadband",
+       "modem",
+       "home network",
+       "utility bills"
+      ],
+      "activities": [
+       "pay bills",
+       "review monthly expenses",
+       "cancel a service",
+       "troubleshoot internet",
+       "budget"
+      ],
+      "times": [
+       "15th of each month"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0002",
+     "text": "Riya must return the Bell Home Hub modem by 2026-02-01 via Canada Post using the prepaid label in the Bell final-bill email, or Bell charges a $150 non-return fee. Bell final bill $31.67 (due 2026-01-28) autopays from the TD joint chequing account.",
+     "kind": "plan",
+     "entities": [
+      "Bell",
+      "Home Hub modem",
+      "Canada Post"
+     ],
+     "when": {
+      "entities": [
+       "Bell",
+       "modem",
+       "Home Hub",
+       "return label",
+       "Canada Post",
+       "final bill",
+       "non-return fee"
+      ],
+      "activities": [
+       "errands",
+       "mail a package",
+       "plan the weekend",
+       "check bills"
+      ],
+      "times": [
+       "2026-02-01",
+       "2026-01-28"
+      ]
+     },
+     "valid_until": "2026-02-01"
+    },
+    {
+     "op": "add",
+     "id": "m0003",
+     "text": "Riya's weekly 1:1 with her manager Tom Becker moved from Thursdays 14:00 to Wednesdays 11:30-12:00 starting 2026-01-14, because Thursdays clashed with Tom's exec staff meeting. Tom organizes the series. Wed 11 Mar 2026 will likely be skipped (Tom's own roadmap dry run); Wed 4 Feb has a clash with Diego's design crit.",
+     "kind": "routine",
+     "entities": [
+      "Tom Becker",
+      "1:1"
+     ],
+     "when": {
+      "entities": [
+       "Tom",
+       "Tom Becker",
+       "manager",
+       "boss",
+       "1:1",
+       "one on one",
+       "Wednesday",
+       "Thursday"
+      ],
+      "activities": [
+       "schedule a meeting",
+       "book time with Tom",
+       "plan the week",
+       "find a free slot",
+       "Wednesday morning"
+      ],
+      "times": [
+       "Wednesdays 11:30",
+       "2026-02-04",
+       "2026-03-11"
+      ]
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s041",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0004",
+     "text": "Grace and Daniel Okafor are Sam's parents (Riya's in-laws), living at 1419 Kilborn Pl, Ottawa (Alta Vista). The family spent Christmas 2025 with them (2025-12-24 to 2025-12-28), driving up in the Mazda. Riya sent a thank-you card from 'Riya, Sam and Leo'; no emoji in cards.",
+     "kind": "person",
+     "entities": [
+      "Grace Okafor",
+      "Daniel Okafor",
+      "Ottawa",
+      "Sam"
+     ],
+     "when": {
+      "entities": [
+       "Grace",
+       "Daniel",
+       "Okafor",
+       "in-laws",
+       "Sam's parents",
+       "mother-in-law",
+       "father-in-law",
+       "Leo's grandparents",
+       "Ottawa"
+      ],
+      "activities": [
+       "visit Ottawa",
+       "send a card",
+       "plan a family trip",
+       "write a thank-you",
+       "send a gift"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0005",
+     "text": "Marcus Bell (+1 416-555-0142) is a friend who exercises with Riya: Saturday 07:00 runs and an early Wednesday workout; he asked about a new 6:15 class at the Y. On 2026-01-10 Riya said she is reconsidering her whole routine and promised Marcus an answer by Monday 2026-01-12.",
+     "kind": "person",
+     "entities": [
+      "Marcus Bell",
+      "workout",
+      "run"
+     ],
+     "when": {
+      "entities": [
+       "Marcus",
+       "workout buddy",
+       "friend",
+       "running partner",
+       "gym",
+       "the Y"
+      ],
+      "activities": [
+       "reply to Marcus",
+       "plan a workout",
+       "schedule exercise"
+      ],
+      "times": [
+       "2026-01-12"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0006",
+     "text": "Household budget is $6,000/month on the TD joint chequing account; December 2025 came in $412 over ($6,412), mostly gifts (+$268) and groceries (+$190). January budget unchanged.",
+     "kind": "fact",
+     "entities": [
+      "household budget",
+      "TD joint chequing"
+     ],
+     "when": {
+      "entities": [
+       "budget",
+       "spending",
+       "TD joint chequing",
+       "joint account",
+       "groceries",
+       "gifts",
+       "finance-agent"
+      ],
+      "activities": [
+       "review spending",
+       "monthly budget summary",
+       "big purchase",
+       "buy a gift"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s042",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0007",
+     "text": "Leo (Riya and Sam's son, about 7, Grade 2 at Morse Street PS) passed to Swimmer 3 and has swim lessons Saturdays 10:00-10:45 at Pape Recreation Centre, 953 Gerrard St E, from 2026-01-17 to 2026-03-21 (family calendar series, 45-min reminder).",
+     "kind": "routine",
+     "entities": [
+      "Leo",
+      "Pape Recreation Centre",
+      "swim lessons"
+     ],
+     "when": {
+      "entities": [
+       "Leo",
+       "swim",
+       "swimming lessons",
+       "Swimmer 3",
+       "Pape Rec Centre",
+       "kids' activities",
+       "son"
+      ],
+      "activities": [
+       "plan Saturday",
+       "schedule something on Saturday",
+       "book an event",
+       "family outing"
+      ],
+      "times": [
+       "Saturdays 10:00",
+       "2026-01-17 to 2026-03-21"
+      ]
+     },
+     "valid_until": "2026-03-21"
+    },
+    {
+     "op": "add",
+     "id": "m0008",
+     "text": "Riya's focus music is Khruangbin and A. R. Rahman instrumentals (no vocal-heavy tracks); playlist 'Deep Work, Tue' (about 3 h, 41 tracks) was built for her on 2026-01-12.",
+     "kind": "preference",
+     "entities": [
+      "Khruangbin",
+      "A. R. Rahman",
+      "Deep Work playlist"
+     ],
+     "when": {
+      "entities": [
+       "music",
+       "playlist",
+       "focus",
+       "deep work",
+       "Khruangbin",
+       "A. R. Rahman",
+       "instrumentals"
+      ],
+      "activities": [
+       "make a playlist",
+       "focus time",
+       "recommend music",
+       "deep work block"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0009",
+     "text": "Riya dropped spin class (it wasn't working). Since 2026-01-13 she does strength training at the Leslieville YMCA on Tuesdays and Thursdays 06:15-07:05, and must be home by 7:15 so Sam can leave for school. Wednesday early slots are no longer her workout time.",
+     "kind": "routine",
+     "entities": [
+      "Leslieville YMCA",
+      "strength training",
+      "Sam"
+     ],
+     "when": {
+      "entities": [
+       "workout",
+       "gym",
+       "YMCA",
+       "the Y",
+       "strength training",
+       "spin",
+       "exercise",
+       "Tuesday",
+       "Thursday",
+       "Marcus"
+      ],
+      "activities": [
+       "schedule a meeting early morning",
+       "book Tuesday or Thursday morning",
+       "plan workouts",
+       "reply to Marcus about workout"
+      ],
+      "times": [
+       "Tuesdays 06:15",
+       "Thursdays 06:15"
+      ]
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s043",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0010",
+     "text": "Riya has a Montreal trip Fri 2026-02-06 to Sun 2026-02-08 to visit her friend Priya: booked Hotel Le Petit Plateau (Rue Rachel E, Plateau), confirmation HPP-55120, queen courtyard room, non-refundable, $433.94 charged to Visa ending 2291. Sam stays solo with Leo that weekend, including Leo's swim on Sat 2026-02-07 10:00.",
+     "kind": "plan",
+     "entities": [
+      "Montreal",
+      "Priya",
+      "Hotel Le Petit Plateau",
+      "HPP-55120",
+      "Sam",
+      "Leo"
+     ],
+     "when": {
+      "entities": [
+       "Montreal",
+       "Priya",
+       "hotel",
+       "trip",
+       "weekend away",
+       "train",
+       "Plateau"
+      ],
+      "activities": [
+       "plan the weekend",
+       "book travel",
+       "pack",
+       "tell Sam about plans",
+       "swim lesson logistics"
+      ],
+      "times": [
+       "2026-02-06",
+       "2026-02-07",
+       "2026-02-08"
+      ]
+     },
+     "valid_until": "2026-02-08"
+    }
+   ]
+  },
+  {
+   "id": "life-s044",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0011",
+     "text": "Riya's mother Anjali Malhotra lives in Bandra West, Mumbai (email anjali.malhotra@example.com, WhatsApp +91 98200 55117); her brother Kabir Malhotra lives in Vancouver (kabir.m@example.com, +1 604-555-0193) and has a baby, Ira. Mom is planning an April 2026 trip to Vancouver to meet Ira.",
+     "kind": "person",
+     "entities": [
+      "Anjali Malhotra",
+      "Kabir Malhotra",
+      "Ira",
+      "Vancouver",
+      "Mumbai"
+     ],
+     "when": {
+      "entities": [
+       "Mom",
+       "mother",
+       "Anjali",
+       "brother",
+       "Kabir",
+       "Ira",
+       "niece",
+       "nephew",
+       "Vancouver",
+       "Mumbai"
+      ],
+      "activities": [
+       "family call",
+       "plan Mom's trip",
+       "book flights for Mom",
+       "send a gift",
+       "call family",
+       "time zones"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0012",
+     "text": "Family video call (Riya, Mom, Kabir) on Sat 2026-01-24 11:00 Toronto time (8:00 Kabir) to plan Mom's April Vancouver trip. Flight options BOM-YVR priced one-way: Air India via DEL depart 2026-04-14 $1,412; Cathay via HKG depart 2026-04-12 $1,586; Air Canada via LHR depart 2026-04-15 $1,690; return legs not priced; Air India and Air Canada offer free meet-and-assist.",
+     "kind": "plan",
+     "entities": [
+      "Mom",
+      "Kabir",
+      "BOM",
+      "YVR",
+      "Air India"
+     ],
+     "when": {
+      "entities": [
+       "Mom's trip",
+       "Vancouver trip",
+       "flights BOM YVR",
+       "Air India",
+       "Cathay",
+       "meet-and-assist",
+       "Anjali",
+       "Kabir"
+      ],
+      "activities": [
+       "book flights for Mom",
+       "price return flights",
+       "family call",
+       "plan April"
+      ],
+      "times": [
+       "2026-01-24",
+       "2026-04"
+      ]
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s045",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0013",
+     "text": "Riya unsubscribed from promo emails of Old Navy, Wayfair, Uber Eats (marketing only; receipts kept), Lululemon and Dyson (marked spam, never signed up) on 2026-01-18 and archived 1,094 of them. She dislikes promo clutter; do not re-subscribe her or surface these senders' promotions.",
+     "kind": "preference",
+     "entities": [
+      "Old Navy",
+      "Wayfair",
+      "Uber Eats",
+      "Lululemon",
+      "Dyson"
+     ],
+     "when": {
+      "entities": [
+       "promo emails",
+       "newsletters",
+       "unsubscribe",
+       "Old Navy",
+       "Wayfair",
+       "Lululemon",
+       "Dyson",
+       "Uber Eats",
+       "inbox clutter"
+      ],
+      "activities": [
+       "clean inbox",
+       "sign up for something",
+       "online shopping",
+       "triage email"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s046",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0014",
+     "text": "Riya is a product manager at Lumen Pay (payouts). Colleagues: Tom Becker (manager), Aisha Rahman (engineer, owner of PAY-1164 serializer refactor), Diego Fernandez (design; prefers async in Figma), Wen (analyst, promoted to Senior Analyst Jan 2026), Olivia (Instant Payouts beta merchant list). Work projects: Instant Payouts beta, payouts dashboard empty states.",
+     "kind": "person",
+     "entities": [
+      "Lumen Pay",
+      "Aisha Rahman",
+      "Diego Fernandez",
+      "Wen",
+      "Olivia",
+      "Tom Becker",
+      "Instant Payouts"
+     ],
+     "when": {
+      "entities": [
+       "Aisha",
+       "Diego",
+       "Wen",
+       "Olivia",
+       "Tom",
+       "coworker",
+       "colleague",
+       "team",
+       "designer",
+       "engineer",
+       "Instant Payouts beta",
+       "payouts"
+      ],
+      "activities": [
+       "email a colleague",
+       "schedule a work meeting",
+       "write a Slack message",
+       "work update",
+       "congratulate"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0015",
+     "text": "Linear draft PAY-1207 (medium, bug+payouts): payout CSV export drops the currency column for merchants with 2+ payout accounts (e.g. mid_7Q2KX9), since the 2026-01-14 release; likely root cause PAY-1164 serializer refactor (Aisha Rahman). Zendesk #48812, #48655. Draft was not yet submitted.",
+     "kind": "episode",
+     "entities": [
+      "PAY-1207",
+      "PAY-1164",
+      "payout CSV export"
+     ],
+     "when": {
+      "entities": [
+       "PAY-1207",
+       "PAY-1164",
+       "CSV export",
+       "currency column",
+       "payouts bug",
+       "Linear",
+       "Zendesk",
+       "multi-account merchants"
+      ],
+      "activities": [
+       "submit a ticket",
+       "triage bugs",
+       "reply to support"
+      ],
+      "times": [
+       "2026-01-22"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0016",
+     "text": "Toronto Hydro (account 6620 1187 33) is not on pre-authorized payment and Riya has paid close to the due date twice, so bills are paid manually. January 2026 bill $164.28 due 2026-02-03; average bill $128.40/month; winter about 30% above average. Riya accepted payment reminders (set 2026-01-30 12:00 for this one).",
+     "kind": "fact",
+     "entities": [
+      "Toronto Hydro",
+      "hydro bill"
+     ],
+     "when": {
+      "entities": [
+       "hydro",
+       "Toronto Hydro",
+       "electricity",
+       "utility bill",
+       "autopay",
+       "pre-authorized payment"
+      ],
+      "activities": [
+       "pay bills",
+       "set a reminder",
+       "review expenses",
+       "budget"
+      ],
+      "times": [
+       "2026-02-03",
+       "2026-01-30"
+      ]
+     },
+     "valid_until": "2026-02-03"
+    },
+    {
+     "op": "add",
+     "id": "m0017",
+     "text": "Product terminology: payouts to merchants arrive by EFT (batched, next business day, low cost), not by wire (individual, same-day, $15-$50+); Riya is irritated when sales decks use them interchangeably.",
+     "kind": "fact",
+     "entities": [
+      "EFT",
+      "wire",
+      "payouts",
+      "sales decks"
+     ],
+     "when": {
+      "entities": [
+       "EFT",
+       "wire transfer",
+       "payout timing",
+       "sales deck",
+       "merchant payouts",
+       "Interac",
+       "Real-Time Rail"
+      ],
+      "activities": [
+       "review a sales deck",
+       "write payout copy",
+       "explain payouts"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0018",
+     "text": "Meeting 'Payouts dashboard: empty states' Tue 2026-01-27 10:00-10:25 with Aisha (accepted) and Diego (tentative, suggested async in Figma); Riya chose to keep the meeting. Agenda: empty-state copy, loading skeleton, owner of Looker link.",
+     "kind": "plan",
+     "entities": [
+      "Aisha Rahman",
+      "Diego Fernandez",
+      "payouts dashboard"
+     ],
+     "when": {
+      "entities": [
+       "empty states",
+       "payouts dashboard",
+       "Aisha",
+       "Diego",
+       "Looker link",
+       "Figma"
+      ],
+      "activities": [
+       "prepare for meeting",
+       "daily briefing"
+      ],
+      "times": [
+       "2026-01-27"
+      ]
+     },
+     "valid_until": "2026-01-27"
+    },
+    {
+     "op": "add",
+     "id": "m0019",
+     "text": "Riya is learning Spanish (writes to the assistant in Spanish for practice, accepts corrections) and is preparing for the DELE B2 exam. She often gets noun-gender exceptions wrong: el problema, el mapa, el tema, la mano.",
+     "kind": "fact",
+     "entities": [
+      "Spanish",
+      "DELE B2",
+      "noun gender"
+     ],
+     "when": {
+      "entities": [
+       "Spanish",
+       "español",
+       "DELE",
+       "quiz",
+       "grammar",
+       "gender exceptions",
+       "el problema",
+       "la mano"
+      ],
+      "activities": [
+       "practice Spanish",
+       "make a quiz",
+       "study plan",
+       "correct Spanish writing"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0020",
+     "text": "Kitchen renovation: contractor Nate (Northline Renovations) quoted the backsplash at $3,860 for zellige install vs $1,420 for ceramic lookalike and needs a decision by Fri 2026-01-30 to keep the tiling crew slot. Riya likes white or sage zellige; photos saved in notes 'kitchen reno / backsplash ideas 2'. Not yet decided as of 2026-01-22.",
+     "kind": "plan",
+     "entities": [
+      "Nate",
+      "Northline Renovations",
+      "backsplash",
+      "zellige"
+     ],
+     "when": {
+      "entities": [
+       "Nate",
+       "contractor",
+       "renovation",
+       "kitchen reno",
+       "backsplash",
+       "tile",
+       "zellige",
+       "Northline"
+      ],
+      "activities": [
+       "decide on tile",
+       "reply to Nate",
+       "kitchen renovation planning"
+      ],
+      "times": [
+       "2026-01-30"
+      ]
+     },
+     "valid_until": "2026-01-30"
+    },
+    {
+     "op": "add",
+     "id": "m0021",
+     "text": "Morse Street PS (Leo's school, Grade 2) deadlines: February pizza lunch order and payment in School Cash Online and Riverdale Farm trip permission form (trip Thu 2026-02-12) both due Fri 2026-01-30; school bake sale 2026-02-13. Riya added both to her to-do for Thu 2026-01-29.",
+     "kind": "plan",
+     "entities": [
+      "Morse Street PS",
+      "Leo",
+      "Riverdale Farm",
+      "School Cash Online"
+     ],
+     "when": {
+      "entities": [
+       "school",
+       "Morse Street",
+       "pizza lunch",
+       "field trip",
+       "permission form",
+       "School Cash Online",
+       "bake sale"
+      ],
+      "activities": [
+       "pay school fees",
+       "fill forms",
+       "plan the week"
+      ],
+      "times": [
+       "2026-01-29",
+       "2026-01-30",
+       "2026-02-12",
+       "2026-02-13"
+      ]
+     },
+     "valid_until": "2026-02-13"
+    },
+    {
+     "op": "add",
+     "id": "m0022",
+     "text": "Riya is thinking of taking Leo to visit Grace and Daniel in Ottawa over the Victoria Day long weekend, Sat 2026-05-16 to Mon 2026-05-18; no fun-activities research saved from last spring. Offered to search Leo-friendly activities.",
+     "kind": "plan",
+     "entities": [
+      "Ottawa",
+      "Grace Okafor",
+      "Daniel Okafor",
+      "Leo"
+     ],
+     "when": {
+      "entities": [
+       "Ottawa trip",
+       "Victoria Day",
+       "long weekend",
+       "May",
+       "Grace",
+       "Daniel",
+       "in-laws"
+      ],
+      "activities": [
+       "plan a trip to Ottawa",
+       "plan May",
+       "book travel"
+      ],
+      "times": [
+       "2026-05-16",
+       "2026-05-18"
+      ]
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s047",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0023",
+     "text": "Riya muted the 'Parking garage access changes' all-staff thread (Lumen Pay All) and archived 304 LinkedIn notification emails, keeping real messages; she may later want LinkedIn job alerts switched to weekly. She prefers low email noise.",
+     "kind": "preference",
+     "entities": [
+      "LinkedIn",
+      "Lumen Pay All",
+      "parking garage thread"
+     ],
+     "when": {
+      "entities": [
+       "LinkedIn",
+       "job alerts",
+       "parking garage",
+       "all-staff thread",
+       "email notifications"
+      ],
+      "activities": [
+       "clean inbox",
+       "triage email",
+       "email settings"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0024",
+     "text": "Riya told Morse Street School Council (reply sent 2026-01-22) she can't volunteer for the 2026-02-13 bake sale but will gladly help with the spring fair (setup, booth shift) and asked to be kept on that list.",
+     "kind": "plan",
+     "entities": [
+      "Morse Street School Council",
+      "spring fair",
+      "bake sale"
+     ],
+     "when": {
+      "entities": [
+       "school council",
+       "spring fair",
+       "bake sale",
+       "volunteer",
+       "Morse Street"
+      ],
+      "activities": [
+       "volunteer",
+       "reply to school council",
+       "plan spring"
+      ],
+      "times": [
+       "spring 2026"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0025",
+     "text": "Riya's car is a Mazda CX-5; auto insurance premium rose again in Jan 2026 and she wants to shop around. Policy number, insurer and term end date are NOT in email or notes (paper or insurer app); she planned to send a photo of the renewal letter. Plan: get quotes 30-45 days before term end.",
+     "kind": "plan",
+     "entities": [
+      "Mazda CX-5",
+      "car insurance"
+     ],
+     "when": {
+      "entities": [
+       "car insurance",
+       "auto policy",
+       "Mazda",
+       "CX-5",
+       "premium",
+       "insurer",
+       "renewal",
+       "quotes",
+       "Kanetix",
+       "broker"
+      ],
+      "activities": [
+       "shop for insurance",
+       "get quotes",
+       "set a reminder",
+       "cancel insurance"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0026",
+     "text": "Diego Fernandez is moving apartments in Ontario and his landlord wants to deduct from a 'damage deposit'; Riya was told damage deposits are not allowed under the Ontario Residential Tenancies Act, he can file an LTB T1 within a year, and she planned to forward the CLEO page.",
+     "kind": "episode",
+     "entities": [
+      "Diego Fernandez",
+      "Ontario landlord",
+      "damage deposit"
+     ],
+     "when": {
+      "entities": [
+       "Diego",
+       "landlord",
+       "damage deposit",
+       "moving",
+       "LTB",
+       "tenant"
+      ],
+      "activities": [
+       "advise Diego",
+       "follow up with Diego"
+      ],
+      "times": [
+       "2026-01"
+      ]
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s048",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0027",
+     "text": "Leo (age 6-7) is obsessed with chess from his school club. Recommended Dinosaur Chess ($6.99 one-time, no ads, no in-app purchases, ages 5-8) now and ChessKid free tier later; Riya wants kids' apps with no ads or loot-box mechanics. Purchase on the iPad not yet confirmed.",
+     "kind": "preference",
+     "entities": [
+      "Leo",
+      "chess",
+      "Dinosaur Chess",
+      "ChessKid"
+     ],
+     "when": {
+      "entities": [
+       "chess",
+       "Leo's apps",
+       "kids app",
+       "iPad",
+       "Dinosaur Chess",
+       "ChessKid",
+       "no ads",
+       "loot box"
+      ],
+      "activities": [
+       "buy an app for Leo",
+       "gift for Leo",
+       "screen time"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s049",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0028",
+     "text": "Daniel Okafor (Sam's father) had a knee replacement in January 2026; it went fine, but he is avoiding long stairs and long drives for a while. Keep in mind for visits and plans with Grace and Daniel in Ottawa.",
+     "kind": "person",
+     "entities": [
+      "Daniel Okafor",
+      "Grace Okafor",
+      "Ottawa"
+     ],
+     "when": {
+      "entities": [
+       "Daniel",
+       "Grace",
+       "Okafor",
+       "father-in-law",
+       "Sam's father",
+       "knee",
+       "Ottawa visit",
+       "in-laws"
+      ],
+      "activities": [
+       "plan a visit",
+       "plan the May Ottawa trip",
+       "pick activities",
+       "suggest a drive",
+       "host them"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0029",
+     "text": "Tom Becker likes single-malt Scotch, especially Lagavulin; for his farewell-to-the-old-office card the team is chipping in for a bottle (Lagavulin 16 about $150 at LCBO). Because it is over $100, collect who is chipping in before buying.",
+     "kind": "person",
+     "entities": [
+      "Tom Becker",
+      "Lagavulin",
+      "farewell card"
+     ],
+     "when": {
+      "entities": [
+       "Tom",
+       "Tom Becker",
+       "whisky",
+       "Scotch",
+       "Lagavulin",
+       "gift",
+       "farewell",
+       "old office",
+       "boss"
+      ],
+      "activities": [
+       "buy a gift",
+       "organize a collection",
+       "farewell card"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0030",
+     "text": "Riya's 'For the assistant' note (updated 2026-02-03) is her authoritative standing-instructions list; re-read it when she says it changed.",
+     "kind": "rule",
+     "entities": [
+      "For the assistant note"
+     ],
+     "when": {
+      "entities": [
+       "For the assistant",
+       "standing instructions",
+       "notes"
+      ],
+      "activities": [
+       "any task touching her preferences",
+       "start of session"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0031",
+     "text": "PRIVATE: Riya's therapist is Joanne; sessions every other Tuesday 17:30 over video. Keep it ONLY on her personal calendar, never on the shared family calendar, and never mention it in anything Sam or others can see.",
+     "kind": "rule",
+     "entities": [
+      "Joanne",
+      "therapist",
+      "therapy"
+     ],
+     "when": {
+      "entities": [
+       "therapist",
+       "therapy",
+       "Joanne",
+       "counselling",
+       "family calendar",
+       "shared calendar",
+       "Tuesday evening",
+       "Sam"
+      ],
+      "activities": [
+       "schedule a Tuesday evening",
+       "add to the family calendar",
+       "write a shared summary",
+       "plan the week"
+      ],
+      "times": [
+       "every other Tuesday 17:30"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0032",
+     "text": "Flights: book Air Canada by preference (Riya is Aeroplan 25K), aisle seats, never basic economy.",
+     "kind": "rule",
+     "entities": [
+      "Air Canada",
+      "Aeroplan",
+      "flights"
+     ],
+     "when": {
+      "entities": [
+       "flight",
+       "airline",
+       "Air Canada",
+       "Aeroplan",
+       "seat",
+       "aisle",
+       "basic economy",
+       "airfare"
+      ],
+      "activities": [
+       "book a flight",
+       "compare fares",
+       "plan a trip",
+       "book Mom's flights"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0033",
+     "text": "Bill reminders: set them 3 days before the due date.",
+     "kind": "rule",
+     "entities": [
+      "bills"
+     ],
+     "when": {
+      "entities": [
+       "bill",
+       "due date",
+       "invoice",
+       "payment",
+       "Hydro",
+       "reminder"
+      ],
+      "activities": [
+       "set a payment reminder",
+       "pay a bill",
+       "add a bill to the calendar"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0034",
+     "text": "Riya postponed the DELE B2 Spanish exam from Sat 2026-05-23 to Sat 2026-11-21 (09:00-14:00, Toronto test centre) because the Instant Payouts beta left no study time this spring. Offered to draft a study plan backwards from 21 Nov.",
+     "kind": "plan",
+     "entities": [
+      "DELE B2",
+      "Spanish exam",
+      "Toronto test centre"
+     ],
+     "when": {
+      "entities": [
+       "DELE",
+       "Spanish exam",
+       "exam",
+       "study plan",
+       "language test"
+      ],
+      "activities": [
+       "plan study time",
+       "schedule November",
+       "book Saturday 21 Nov"
+      ],
+      "times": [
+       "2026-11-21"
+      ]
+     },
+     "valid_until": "2026-11-21"
+    },
+    {
+     "op": "add",
+     "id": "m0035",
+     "text": "Snow-day indoor games for Leo (list from 2026-01-27, notes 'Snow day indoor games'): floor is lava, sock skating relay, blanket fort with flashlight reading, painter's tape hopscotch, indoor scavenger hunt, balloon keep-up. Leo wants floor-is-lava again.",
+     "kind": "episode",
+     "entities": [
+      "Leo",
+      "indoor games",
+      "floor is lava"
+     ],
+     "when": {
+      "entities": [
+       "snow day",
+       "indoor games",
+       "floor is lava",
+       "Leo",
+       "school closure"
+      ],
+      "activities": [
+       "entertain Leo",
+       "plan a rainy or snowy day",
+       "kids activities"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "drop",
+     "id": "m0002",
+     "why": "return deadline 2026-02-01 has passed"
+    },
+    {
+     "op": "drop",
+     "id": "m0018",
+     "why": "meeting date 2026-01-27 passed"
+    }
+   ]
+  }
+ ]
+}
