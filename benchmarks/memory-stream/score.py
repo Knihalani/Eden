@@ -383,6 +383,25 @@ def main():
         for r in rows:
             if "item" in r:
                 r["covers"] = {r["item"]}
+        if name.startswith("pull"):
+            import agentpull, methods as M
+            qs = agentpull.calls(a.world)
+            _, kw = M.params(name)
+            lex = M.make("lex:when=1", rows, stream, items, cov)
+            pev = [e for e in events if e["id"] in qs]
+            pk = {}
+            for e in pev:
+                q = qs[e["id"]]
+                if not q:
+                    pk[e["id"]] = []
+                    continue
+                sc = lex.scores(dict(e, text_all=q), clock(e))
+                ids = sorted(sc, key=lambda i: -sc[i])[: int(kw.get("k", 2))]
+                pk[e["id"]] = [(lex.by_id[i]["text"], lex.by_id[i]["covers"]) for i in ids]
+            results[f"{name}@{a.store}"] = score(pev, pk, cov, items, stream)
+            if a.ci:
+                results[f"{name}@{a.store}"]["ci95"] = bootstrap(pev, pk, cov, items, stream)
+            continue
         if name == "judge":
             import judge
             jp = judge.packets(a.world, a.store)

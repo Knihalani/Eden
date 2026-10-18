@@ -1,0 +1,166 @@
+{
+ "batch": "life-sp-b12",
+ "generator": "haiku (claude-code subagent)",
+ "rows": {
+  "life-sleep-b11:m0018": {
+   "pos": ["Is Priya free for coffee this weekend? Somewhere easy to get to by streetcar.", "[Calendar] 'Priya - studio visit' starts in 60 min", "Draft a text to Priya asking about Saturday brunch.", "Remind me to ask Priya how work is treating her before Sunday.", "Book a table for two on Saturday, Priya and me, somewhere with a patio.", "[Message from Priya] any chance you're free Thursday evening? I'm wiped out from client calls."],
+   "neg": ["What's a good moving-day checklist for renters in Ontario?", "Find me a coffee shop in Leslieville with good wifi.", "Who designed the Ontario Science Centre building?", "What's the weather in Montreal this weekend?", "Remind me to call Mom on Sunday.", "Write a short note to Marcus about Saturday's run."]
+  },
+  "life-sleep-b11:m0019": {
+   "pos": ["Draft a status update on the payouts launch date for the sales team.", "[Calendar] 'GA readiness sync' starts in 15 min", "Who do I ping about the Wavecrest certification? I need an actual date.", "Quick check: are we still on track for the GA date we told merchants?", "[Message from Olivia Grant] when does instant payouts actually go live? Sales needs to know what to tell clients.", "Summarize PAY-1242 and tell me who owns the follow-up."],
+   "neg": ["Set a reminder to submit the expense report on Friday.", "What's the difference between ACH and instant transfers in general?", "Find the Wavecrest Bank branch closest to Union Station.", "Pull up the PAY-1199 ticket description.", "Draft a LinkedIn post celebrating the Lumen Pay team's hiring push.", "How do I convert a Google Doc table to a Sheet?"]
+  },
+  "life-sleep-b11:m0020": {
+   "pos": ["Add the Lisbon place to my calendar as check-in on December 17.", "[Calendar] 'Lisbon packing list' starts in 60 min", "Message the host to say we'll be arriving a bit late on the 17th.", "Find a grocery store near our Lisbon place for the first morning.", "Do I need to bring anything for the key pickup at the apartment?", "Which bookings do I still need to confirm for December?"],
+   "neg": ["Compare flights from Toronto to Lisbon in late December.", "What's the weather usually like in Lisbon in winter?", "Find me a good Portuguese restaurant in Leslieville.", "Show me Airbnb listings in Mumbai for a week in February.", "Convert 300 euros to Canadian dollars.", "Set a reminder to pack sunscreen for the trip."]
+  },
+  "life-sleep-b11:m0021": {
+   "pos": ["Book Biscuit's boarding for the week of Christmas, I think it's the 17th.", "What paperwork does the kennel want for Biscuit's shots?", "Can you sort out a place for Biscuit while we're in Portugal?", "Pull up my notes on the dog kennel for the holidays.", "[Calendar] 'Biscuit drop-off planning' starts in 60 min", "Send Sam a note: we need to lock in the dog spot before the rates go up."],
+   "neg": ["What's a good dog-friendly hiking trail near Toronto?", "Is Biscuit's food on sale at Pet Valu this week?", "How often should a 4-year-old beagle get a dental check?", "Remind me to walk Biscuit before the 2pm call.", "Find a dog walker in Leslieville for Saturday.", "Write a funny caption for a photo of a sleepy beagle."]
+  },
+  "life-sleep-b11:m0022": {
+   "pos": ["Plan a fun morning activity for Leo in Lisbon before we leave the hotel.", "What should we bring to keep Leo busy on the flight to Portugal?", "Suggest a dessert shop for us to visit on our first day in Lisbon.", "Make a list of kid-friendly things for our December trip.", "[Message from Sam] should we do the zoo or the bakery with Leo on Saturday?", "Which transit rides would Leo enjoy most while we're in Portugal?"],
+   "neg": ["Find a good sushi place in Leslieville for a birthday dinner.", "Which bakery in Leslieville makes the best sourdough?", "Schedule a haircut for Leo next Saturday.", "Find a route map for Toronto's 501 streetcar line.", "How do I make puff pastry from scratch?", "Remind me to buy Leo new running shoes."]
+  },
+  "life-sleep-b11:m0023": {
+   "pos": ["Do I need to tell the insurer anything about the kitchen work before it starts?", "[Calendar] 'Call Northline about the invoice' starts in 30 min", "Compare my home insurance quotes for the renewal.", "Is Nate's crew covered if something gets damaged on our side?", "Draft an email to our broker about the renovation budget.", "Check what the home policy costs before the September renewal."],
+   "neg": ["What's the difference between a deductible and a premium in general?", "Find a car insurance comparison for a 2019 Mazda.", "Set a reminder to pay the Toronto Hydro bill.", "How do I file a damage claim for a cracked windshield?", "Summarize the Northline invoice in three bullets.", "What's the typical cost of a kitchen reno per square foot in Toronto?"]
+  },
+  "life-sleep-b11:m0024": {
+   "pos": ["What's on my weekend list for the house and the car?", "[Scheduled 07:00] Morning check-in", "Remind me to deal with the renovation paperwork this week.", "Which errands can I combine on Saturday?", "Book the car service for the weekend.", "[Calendar] 'Weekend errands' starts in 60 min"],
+   "neg": ["Find a gift for a 7-year-old's birthday party under $30.", "Is dry cleaning open on Sunday near Queen East?", "What's the best oil for a 2019 Mazda CX-5 in general?", "How long does a gate hinge repair usually take?", "Write a thank-you note for a birthday party gift.", "Set a reminder for a dentist call on Monday morning."]
+  },
+  "life-sleep-b11:m0025": {
+   "pos": ["Do the bins need to go out tonight or in the morning?", "[Scheduled 20:00] Anything to put out for pickup tomorrow?", "Can I put a plastic bag of leaves on the curb this week?", "Set a reminder for the garbage pickup before I go to bed.", "What time do I have to get the recycling out?", "Is it a yard waste week? I've got a pile of leaves."],
+   "neg": ["What's the schedule for Toronto's Christmas tree pickup in January?", "Find a good compost bin for the kitchen counter.", "Remind me to bring the library books back Thursday.", "How do I dispose of old paint in Toronto?", "What's the weather going to be like Thursday?", "Order more garbage bags from Amazon."]
+  },
+  "life-sleep-b11:m0026": {
+   "pos": ["What free family events are on in Toronto this fall?", "[Calendar] 'Sam - weekend plans' starts in 60 min", "Plan something for Sam and Leo this weekend, nothing expensive.", "Is there a pumpkin patch we can visit in October?", "When do tickets for the zoo's Halloween event go on sale?", "[Message from Sam] Saturday or Sunday for the Halloween thing? Can you check what's on?"],
+   "neg": ["What's the forecast for Toronto this Saturday?", "Find a pumpkin pie recipe for Thanksgiving.", "Show me Nuit Blanche's history in Toronto.", "Book a flight to Vancouver for Kabir's visit.", "Remind me to renew my gym membership in October.", "What's a good Halloween costume for a 7-year-old astronaut?"]
+  },
+  "life-sleep-b11:m0027": {
+   "pos": ["Find an optometrist that takes kids for an eye exam this month.", "[Message from Morse Street PS] Please book Leo's vision check by the end of the month.", "What's the cheapest place to get Leo's eyes checked?", "Book Leo's eye appointment for next week after school.", "Remind me to book the kids' vision check before school starts.", "Does Leo's school have a free eye program?"],
+   "neg": ["How often should adults get an eye exam?", "Set a reminder to buy Leo's new glasses frames.", "Find a good children's book about glasses.", "What's a good eye cream for dry skin?", "Book my dental cleaning for next month.", "Schedule Leo's swim lesson pickup at 5pm."]
+  },
+  "life-sleep-b11:m0028": {
+   "pos": ["Do I need to move money to cover the credit card this month?", "[Calendar] 'Visa statement' starts in 60 min", "Can you check whether chequing covers the card on the 1st?", "How much did I spend on the card this month so far?", "Set up a payment for my credit card for the rest of the year.", "[Message from finance-agent] the card is due next week, anything you want paid manually?"],
+   "neg": ["What's a good rewards card for groceries in Canada?", "How do I dispute a charge on my Visa?", "Remind me to pay the water bill on time.", "Transfer $200 to Sam for the hardware store.", "Summarize the TAP flight confirmation email.", "What's the interest rate on a personal loan right now?"]
+  },
+  "life-sleep-b12:m0001": {
+   "pos": ["Draft the v1 scope summary for the payouts retry feature for Tom.", "[Calendar] 'Payouts UX sync - Diego' starts in 15 min", "Can you write up the empty-state copy for big batches of failed payouts?", "What's in scope for the retry flow in the first release?", "[Message from Aisha Rahman] are we doing bulk retry in v1 or not? I need it for the sprint.", "Put together a Linear ticket for the empty-state work."],
+   "neg": ["Find the Figma link for the onboarding flow mockups.", "What's the best way to explain retries in a product FAQ in general?", "Summarize the last sprint retro notes.", "Remind me to reply to Diego about the color palette.", "Draft a Slack message welcoming the new designer to the team.", "Book a 30-minute review with Wen Li for next Wednesday."]
+  },
+  "life-sleep-b12:m0002": {
+   "pos": ["Pull failure counts by reason for last month's payouts.", "[Scheduled 08:30] Weekly payouts health numbers", "How many payouts failed last quarter and why, roughly?", "Break down the decline reasons from the ledger for the board deck.", "I need a table of payout failures by cause for the Q3 review.", "[Message from Olivia Grant] why did payouts fail for merchants last month? Sales is asking."],
+   "neg": ["What's the difference between a failed and a pending payment in general?", "Find the ledger reconciliation spreadsheet from April.", "Remind me to check the failed-login alerts on my personal email.", "Write a short explanation of double-entry bookkeeping for a newcomer.", "Set a reminder to review the Q3 budget variance next Monday.", "What's a good dashboard tool for small teams?"]
+  },
+  "life-sleep-b12:m0003": {
+   "pos": ["Do I need to put the green bin out tonight?", "[Scheduled 19:30] Bin check for tomorrow morning", "Is it garbage or recycling this week? I can't remember.", "What time do the bins need to be at the curb?", "[Calendar] 'Bins out' starts in 60 min", "Should I ask Sam to take the recycling out tomorrow?"],
+   "neg": ["Find a good spot to store the holiday decorations in the garage.", "What's the weather going to be like Wednesday afternoon?", "Remind me to buy dish soap on Wednesday.", "How do I recycle old batteries in Toronto?", "Schedule a window cleaning for next month.", "Set a reminder to water the front planters Wednesday."]
+  },
+  "life-sleep-b12:m0004": {
+   "pos": ["The furnace is making a noise. Who do I call and what do I need to give them?", "Is the furnace still under warranty? I need to check before calling a tech.", "[Message from Sam] the heating guy wants the model number, where is it?", "Find the paperwork for our furnace, I'm getting a quote.", "Book a furnace tune-up before winter.", "How many years of coverage are left on the heat exchanger?"],
+   "neg": ["What's the typical lifespan of a residential furnace?", "Set a reminder to change the furnace filter next month.", "Find a good air purifier for the bedroom.", "Compare two space heaters under $100.", "Remind me to call Dr. Patel about my blood test.", "Show me the Carrier thermostat setup guide."]
+  },
+  "life-sleep-b12:m0005": {
+   "pos": ["Clean up my inbox. Which newsletters am I not reading?", "[Scheduled 09:00] Inbox cleanup suggestions for this week", "Unsubscribe me from the stores I never open.", "Which of my email subscriptions should I cancel?", "Show me the list of promo emails I keep ignoring.", "[Message from inbox-agent] Want me to unsubscribe from the dormant senders you flagged?"],
+   "neg": ["Subscribe me to the Globe and Mail morning newsletter.", "Search my email for the Wayfair receipt from last spring.", "Draft a reply to the landlord asking about the furnace repair.", "What is the Medium Daily Digest and how does it work?", "Find the Product Hunt launch from last week.", "Delete all my spam emails from yesterday."]
+  },
+  "life-sleep-b12:m0006": {
+   "pos": ["When does school start for Leo and when do we see his class list?", "[Message from school-portal] Before-and-after care registration reminder for Morse Street PS.", "Do I need to sign Leo up for before and after care this month?", "Remind me when the class lists come out before the first day.", "[Calendar] 'Leo first day prep' starts in 60 min", "Book Leo's back-to-school haircut before the first day."],
+   "neg": ["What's a good lunchbox for a grade 2 kid?", "Find a summer camp for Leo in July.", "Remind me to buy school supplies at Staples.", "What time does the school bus leave in Scarborough?", "Summarize the Ontario Ministry of Education's new math curriculum.", "Book the family dentist for a cleaning next month."]
+  },
+  "life-sleep-b12:m0007": {
+   "pos": ["Tanvi's landlord just sent her a rent increase notice. What can she do?", "[Message from Tanvi] my landlord wants 9% more, is that legal?", "Draft a reply to Tanvi with what she should check first.", "Can you pull up the note we made for Tanvi about the rent?", "Send Tanvi the link to the rent increase guide.", "[Calendar] 'Call Tanvi re rent' starts in 20 min"],
+   "neg": ["What are my rights if my landlord won't fix the heating?", "Find a good real estate agent in Liberty Village.", "What are typical condo fees for a 2010 building in Toronto in general?", "Draft a birthday text to Tanvi for Saturday.", "What's the typical rent in Roncesvalles for a one-bedroom?", "Remind me to check my mortgage renewal date next year."]
+  },
+  "life-sleep-b12:m0008": {
+   "pos": ["[Message from finance-agent] A Toronto Hydro bill email came in, anything I need to do?", "Do I need to pay the hydro bill this month?", "Why did the electricity bill jump this month?", "Check whether the hydro payment went through.", "[Scheduled 09:00] Bills due this week", "Compare my hydro usage to last year, please."],
+   "neg": ["How do I cut down on air conditioning costs in summer?", "Find an energy-efficient heat pump installer near me.", "Remind me to pay the water bill on Thursday.", "What's the Ontario time-of-use rate schedule in general?", "Set up a budget category for car repairs.", "Show me my last three gas bills."]
+  },
+  "life-sleep-b12:m0009": {
+   "pos": ["Do I have everything I need for the Portugal trip? Anything still pending?", "[Calendar] 'Trip prep' starts in 60 min", "Will my passport be back in time for our December trip?", "What documents should I have ready for the flight in December?", "[Message from Sam] did your passport come back yet?", "Track the mail for the government packet, it's been a few weeks."],
+   "neg": ["How long is a passport valid in Canada in general?", "Find the cheapest place to get passport photos in Scarborough.", "Set a reminder to renew my driver's licence next year.", "What's the processing time for a US visa?", "Remind me to bring sunscreen to the beach on Sunday.", "Compare airport parking near Pearson for a week."]
+  },
+  "life-sleep-b12:m0010": {
+   "pos": ["Do we need to pay a deposit for the Lisbon place, or is it just a hold?", "[Calendar] 'Lisbon ideas' starts in 60 min", "Find a pastry class in Lisbon for Leo and me.", "Can you make a list of things for Leo to do in Lisbon?", "What's the cost of the aquarium visit we talked about for December?", "[Message from Sam] how much money do we need for the apartment deposit?"],
+   "neg": ["What's the exchange rate from Canadian dollars to euros today?", "Find a cheap hotel in Porto for a weekend in March.", "What's the best time of year to visit Madrid?", "Book a cooking class in Toronto for Sunday evening.", "Remind me to send the rent cheque by the 1st.", "Show me pictures of Lisbon's old trams for a presentation."]
+  },
+  "life-sleep-b12:m0011": {
+   "pos": ["Book the gutter cleaning before the leaves start falling.", "Get me a quote for gutter cleaning on a semi-detached.", "[Scheduled 08:00] Gutter cleaning deadline reminder", "Which gutter cleaner should I hire for the front and back of the house?", "Is anyone available to clean the eavestroughs in September?", "[Message from Sam] can we get someone to clean the gutters this fall?"],
+   "neg": ["How often should gutters be cleaned in general?", "Find a roofer near Leslieville for a leak check.", "Remind me to rake the front lawn this weekend.", "What's the best snow blower under $800?", "Compare window cleaning prices in Toronto.", "Book a plumber for the kitchen sink next week."]
+  },
+  "life-sleep-b12:m0012": {
+   "pos": ["Should I grab a latte at 3:30 with Priya?", "[Calendar] 'Afternoon coffee with Marcus' starts in 30 min", "Find me an afternoon pick-me-up that isn't coffee.", "Order a double espresso from the cafe on my walk home.", "Plan a coffee run for the 4pm meeting.", "[Message from Priya] meet at the cafe at 2:30? I'm dying for an iced latte."],
+   "neg": ["What's the caffeine content of green tea compared with black tea?", "Find the best decaf coffee beans for home brewing.", "Set a reminder to buy oat milk this weekend.", "Remind me to drink more water after the run.", "What's a good nap length for an afternoon slump?", "Recommend a podcast for the commute."]
+  },
+  "life-sleep-b12:m0013": {
+   "pos": ["Quiz me on the words from this week's reading.", "[Scheduled 19:00] Spanish reading check-in", "What chapter am I on and what should I read next?", "Help me with the vocabulary from my reading list.", "[Calendar] 'Spanish reading' starts in 30 min", "Give me a short Spanish passage to read tonight, around my level."],
+   "neg": ["Translate this email from Spanish to English, please.", "Find a good Spanish novel for beginners in general.", "Remind me to return the library book on Thursday.", "What's the difference between ser and estar?", "Book a flight to Mexico City for next spring.", "Set a reminder to read my book club chapter Monday."]
+  },
+  "life-sleep-b12:m0014": {
+   "pos": ["Book me a physio appointment after work this week.", "My heel is sore again. What should I do before my run?", "[Message from Marcus] still on for Wednesday's run? My hamstring's been acting up.", "Find a physiotherapist who can see me on a Saturday morning.", "[Calendar] 'Marcus run' starts in 60 min", "Can you check if my benefits cover a physio visit?"],
+   "neg": ["What's a good stretching routine for a runner in general?", "Find the best running shoes for flat feet.", "Set a reminder to sign up for the 10k in October.", "Book a massage for Sam on Friday.", "How do I register for the Toronto Waterfront marathon?", "Remind me to buy new socks for the gym."]
+  },
+  "life-sleep-b12:m0015": {
+   "pos": ["Do we have enough poop bags for Biscuit's walks?", "Reorder the dog bags from the usual place.", "[Scheduled 08:00] Pet supplies check", "Add the usual dog stuff to the Pet Valu cart.", "Is there a delivery coming for Biscuit's supplies this week?", "[Message from Sam] we're almost out of dog bags, can you order more?"],
+   "neg": ["What's the best brand of dog food for a beagle?", "Find a dog training class near Queen East.", "Remind me to take Biscuit to the vet for his shots.", "Compare prices for a reusable leash online.", "Order paper towels from Costco for the house.", "Track the status of my Amazon package from last week."]
+  },
+  "life-sleep-b12:m0016": {
+   "pos": ["Explain how the Lisbon train schedule works.", "[Scheduled 07:00] Morning check-in", "Walk me through the refund options for the Porter flight.", "Summarize the Lumen Pay board deck for me.", "How do I set up a new Google Calendar for the family?", "[Message from Tom Becker] can you give me a status on the payouts doc?"],
+   "neg": ["Set a reminder to buy birthday candles for Leo.", "Find a mechanic near Leslieville for an oil change.", "Add eggs and bread to the grocery list.", "Turn off the kitchen lights at 11pm.", "Play my focus playlist on the speaker.", "Schedule a haircut for Friday at 3."]
+  },
+  "life-sleep-b12:m0017": {
+   "pos": ["Why is there a $14.99 charge on my Visa from Amazon?", "[Message from finance-agent] new recurring charge on the Visa from Audible, did you approve it?", "Cancel the audiobook subscription if it's not being used.", "Check my subscriptions and tell me which ones I should look at.", "Find out who signed up for the audiobook plan on the Amazon account.", "[Scheduled 09:00] Subscription charges this month"],
+   "neg": ["Recommend an audiobook for a long road trip to Ottawa.", "Find a Kindle deal on new releases this week.", "Remind me to listen to my podcast on the walk home.", "How do I cancel a Netflix subscription?", "Compare two streaming bundles for the family.", "Set a reminder to renew the Spotify family plan."]
+  },
+  "life-sleep-b12:m0018": {
+   "pos": ["Find a plumber who can come look at the leaking tap this week.", "[Calendar] 'Plumber' starts in 60 min", "The laundry room is dripping again. What do I do?", "Get a plumber out here before the water bill jumps again.", "[Message from Sam] did you ever call the plumber about the drip?", "Remind me to deal with the house repairs on my list this week."],
+   "neg": ["How do I unclog a bathroom sink without chemicals?", "Find a good local electrician for a ceiling fan install.", "Order a new kitchen faucet under $200.", "What's the average cost of a bathroom reno in Toronto?", "Remind me to replace the smoke alarm batteries.", "Set a reminder to call Kabir on Sunday."]
+  },
+  "life-sleep-b12:m0019": {
+   "pos": ["What should I bring to Hannah's pool party?", "[Message from Hannah Cho] pool party Saturday, can you bring something?", "Pick up a thank-you gift for Hannah's pool party, something local?", "Order a small gift basket for the neighbour's family.", "[Calendar] 'Pool party at Hannah's' starts in 60 min", "Did I already thank Hannah for the pool invite?"],
+   "neg": ["Plan a surprise party for Sam's 40th in general terms.", "Find a good olive oil for salads.", "Set a reminder to call Priya about the moving boxes.", "Remind me to pick Leo up from soccer at 4.", "What is the best way to store fresh basil?", "Recommend a podcast about running for beginners."]
+  },
+  "life-sleep-b12:m0020": {
+   "pos": ["Do I need to check the dishwasher opening size before ordering?", "[Message from Nate] what's the model number for the dishwasher cutout?", "Find me a dishwasher that fits the cutout and won't be too pricey.", "What's the final price I agreed to for the dishwasher?", "[Calendar] 'Appliance delivery window' starts in 60 min", "Compare two dishwashers for the new kitchen before we finalize."],
+   "neg": ["What's the best way to load a dishwasher for crystal glasses?", "Find a repair guy for my old washing machine.", "Set a reminder to clean the fridge coils.", "Compare stainless steel vs black kitchen faucets.", "Remind me to reorder dish soap from Costco.", "What's the typical lifespan of a dishwasher in general?"]
+  },
+  "life-sleep-b12:m0021": {
+   "pos": ["Send the organizer the bio and headshot for the panel.", "[Calendar] 'Panel prep' starts in 60 min", "Draft a 70-word bio for the event listing.", "Can you check whether I already sent the headshot for Thursday's panel?", "[Message from Meghan] reminder: we still need your bio for the fintech event.", "What do I need to bring to the panel on Thursday night?"],
+   "neg": ["Find a good headshot photographer in Leslieville.", "Write a LinkedIn post about attending a fintech meetup.", "Remind me to reply to Dana about lunch on Friday.", "How do I format a bio for a conference brochure in general?", "Set a reminder to submit my expense report for Thursday's cab.", "Show me last year's MaRS event schedule."]
+  },
+  "life-sleep-b12:m0022": {
+   "pos": ["Should I buy grout sealer for the backsplash?", "[Message from Nate] when can we do the countertop template?", "Do I need to confirm the countertop date with the contractor?", "Book a template appointment with the stone shop.", "Find the contractor's schedule PDF and tell me what's due.", "[Calendar] 'Northline check-in' starts in 30 min"],
+   "neg": ["Find the best grout cleaner for bathroom tiles.", "What's a good colour for kitchen cabinets this year?", "Remind me to call the dentist about my check-up.", "Order paper towels from Costco.", "Compare quartz and granite countertops in general.", "Set a reminder to water the herbs on the windowsill."]
+  },
+  "life-sleep-b12:m0023": {
+   "pos": ["Do I need to tell Leo's school he'll be late next week?", "[Calendar] 'Dentist' starts in 60 min", "What time do Leo and I need to be at the dentist on Tuesday?", "[Scheduled 07:00] Morning check-in with Leo's schedule this week", "Cancel my dental cleaning for Tuesday.", "[Message from Sam] are we doing the dentist before school or after?"],
+   "neg": ["Find a dentist who does Saturday hours in Riverdale.", "What's a normal price for a teeth cleaning without insurance?", "Set a reminder to floss every night this week.", "Find a whitening toothpaste recommended by dentists.", "Remind me to schedule Sam's eye exam in the fall.", "Move my Tuesday standup to 10:15."]
+  },
+  "life-sleep-b13:m0001": {
+   "pos": ["When is the kitchen going to be finished? I need to plan the holiday hosting.", "[Message from Nate] are we still on track for the kitchen wrap-up?", "Should I push the Thanksgiving dinner plans until the kitchen's done?", "[Calendar] 'Kitchen check-in with Nate' starts in 30 min", "Draft a note to Grace about hosting a birthday dinner at our place.", "Can you check the status of the cabinets for the kitchen job?"],
+   "neg": ["Find a dinner recipe for a hot plate and a rice cooker.", "Remind me to pay the electrician for last week's visit.", "What's the average lead time for custom cabinets in general?", "Find a tile setter for a small bathroom.", "Set a reminder to call the bank about the mortgage rate.", "What's the best way to clean grout in a shower?"]
+  },
+  "life-sleep-b13:m0002": {
+   "pos": ["What's on the calendar for the weekend of November 13? I need to plan it.", "Book a hotel for Friday night near Sam's parents.", "[Message from Grace Okafor] are you coming up this Friday?", "Check whether anything is booked for the second weekend of November.", "Pack list for the long weekend away, what do we need for Leo?", "Plan the drive for Friday after school, what's the best time to leave?"],
+   "neg": ["Find a good Thanksgiving turkey recipe for four people.", "What's the forecast for Toronto this Sunday?", "Book a table for two in Kensington Market on Saturday night.", "Remind me to buy Sam's birthday card next week.", "What's the best route from Toronto to Montreal by car?", "Set a reminder to change the furnace filter in November."]
+  },
+  "life-sleep-b13:m0003": {
+   "pos": ["Can I move the Friday GA retro to Thursday? I'm not in Toronto then.", "[Calendar] 'Instant Payouts GA retro' starts in 30 min", "Draft a message to Aisha about moving the retro.", "[Message from calendar-agent] scheduling conflict Friday, want me to act on it?", "What's on my calendar on Friday the 13th?", "Tell Aisha I might dial in late on Friday, can you send that?"],
+   "neg": ["Schedule a 30-minute coffee chat with Wen Li next week.", "Find a retro template for a sprint review.", "Remind me to bring the laptop charger on Thursday.", "Move my 1:1 with Tom to Wednesday at 11:30.", "What's a good icebreaker for a retrospective meeting?", "Check the weather for Friday in Montreal."]
+  },
+  "life-sleep-b13:m0004": {
+   "pos": ["What tickets are blocking GA that I still have to do?", "[Scheduled 08:45] Open Linear items for today", "Review the GA checklist ticket and tell me what's still missing.", "Draft the GA announcement copy. The header is already done.", "Which support macro needs my tone review before launch?", "[Message from Kofi Asante] can you look at the 'my payout is late' macro this week?"],
+   "neg": ["Create a new Linear ticket for a bug in the dashboard filter.", "What's the difference between a P1 and a P2 bug?", "Find last year's launch checklist template for a fintech product.", "Remind me to reply to Diego's design comment on Monday.", "Show me my assigned tickets in Linear for last sprint.", "Summarize the last team retro in three bullets."]
+  },
+  "life-sleep-b13:m0005": {
+   "pos": ["Find a birthday gift for Sam's mom. She's a music teacher.", "[Scheduled 09:00] Gift reminder for Grace's birthday", "What can I get Grace for her birthday that's music-related?", "Book tickets for something on November 15 with Sam's parents in Ottawa.", "Order a gift for Grace for next week, nothing too big.", "[Message from Sam] what do you want to get my mum for her birthday?"],
+   "neg": ["Find a gift for a 65th birthday in Mumbai in February.", "Recommend a good piano method book for an adult beginner.", "Buy a birthday card for Marcus this week.", "Find a sheet music store in downtown Toronto.", "What's the parking situation for evening shows at a big concert hall in general?", "Set a reminder to call Mom in Mumbai on Sunday morning."]
+  },
+  "life-sleep-b13:m0006": {
+   "pos": ["Prep me for the sales call on the GA target wording.", "[Calendar] 'GA target wording for Sales' starts in 30 min", "What do I tell Olivia about the launch date if she asks?", "[Message from Olivia Grant] can we talk about what sales can say on the GA date before Wednesday?", "Draft three bullet points for the call with Olivia and Aisha.", "Remind me of the agenda for my Wednesday afternoon meeting."],
+   "neg": ["Schedule a 30-minute call with Diego about the mockups.", "Find the best time for a team sync next week across time zones.", "What's Olivia's usual coffee order in general?", "Set a reminder to send the sales newsletter draft Monday.", "Move my Wednesday check-in with Wen Li to Thursday.", "Write an email to Hannah about the block party on Saturday."]
+  }
+ }
+}

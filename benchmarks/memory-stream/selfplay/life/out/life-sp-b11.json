@@ -1,0 +1,726 @@
+{
+ "batch": "life-sp-b11",
+ "generator": "haiku (claude-code subagent)",
+ "rows": {
+  "life-sleep-b10:m0015": {
+   "pos": [
+    "Did my security key arrive yet?",
+    "[Message from IT] Has the key been delivered?",
+    "Track my package for the security key.",
+    "[Scheduled 10:00] Key delivery check",
+    "Enrol my new key today.",
+    "Can you check the Canada Post tracking for my package?"
+   ],
+   "neg": [
+    "Track a parcel from Amazon?",
+    "How long does Canada Post take for a letter?",
+    "What are Canada Post's Saturday hours?",
+    "Order a new laptop sleeve from Best Buy.",
+    "Which key chain fits a car fob?",
+    "Pick up my dry cleaning Tuesday?"
+   ]
+  },
+  "life-sleep-b10:m0016": {
+   "pos": [
+    "Someone hit my car in the parking lot, what do I do?",
+    "Help me start the insurance claim for the parking lot damage.",
+    "Where's my insurance policy number?",
+    "[Message from Sam] Did you report the bumper scrape?",
+    "Should I call the police about a hit and run?",
+    "Ask the store for their camera footage, how?"
+   ],
+   "neg": [
+    "Best body shop for a rear bumper repair?",
+    "How much is a bumper paint job?",
+    "What are the Loblaws store hours on Sunday?",
+    "Is a dinged car a total loss?",
+    "How do I file a claim with Belairdirect generally?",
+    "How do I pick a car wash for winter?"
+   ]
+  },
+  "life-sleep-b10:m0017": {
+   "pos": [
+    "What's the plan for the December holiday?",
+    "[Message from Sam] Lisbon or Mexico for the break?",
+    "Find the notes on our December trip options.",
+    "Book the flights for the holiday.",
+    "What did we decide for the December break?",
+    "Remind me why we picked the December destination."
+   ],
+   "neg": [
+    "Best things to do in Mexico City for a week?",
+    "Cheap direct flights from Toronto to Cancun in winter?",
+    "How cold is Lisbon in January?",
+    "Christmas markets in Toronto?",
+    "Is Mexico City safe for solo travel?",
+    "Book a New Year's Eve dinner in Toronto?"
+   ]
+  },
+  "life-sleep-b10:m0018": {
+   "pos": [
+    "[Scheduled 06:30] Morning meds reminder",
+    "I forgot my thyroid pill, can I take it now with coffee?",
+    "When should I take my morning pill?",
+    "[Calendar] Coffee at 7:00, meds first?",
+    "Is my prescription ready at Shoppers?",
+    "Refill my thyroid prescription at Queen and Carlaw."
+   ],
+   "neg": [
+    "Best coffee beans for a French press?",
+    "What time should I take a multivitamin?",
+    "Does tea affect thyroid medication in general?",
+    "Refill my ibuprofen prescription?",
+    "Is Shoppers Drug Mart open Sunday?",
+    "How to make a bulletproof coffee?"
+   ]
+  },
+  "life-sleep-b10:m0019": {
+   "pos": [
+    "Can Sam pick Leo up at 3:30?",
+    "[Message from Sam] I'm free after three today?",
+    "Is Sam around for a Tuesday dinner at six?",
+    "Book a call with Sam after school.",
+    "Does Sam have time to drive Leo to the dentist?",
+    "Can Sam meet me at four?"
+   ],
+   "neg": [
+    "Best after-school snacks for kids?",
+    "What time does the school bell ring for Grade 2?",
+    "Is Sam's school closed for the holiday?",
+    "Best coffee for a teachers' lounge?",
+    "Book a babysitter for six to nine tonight.",
+    "Sam's favourite cookies to bake?"
+   ]
+  },
+  "life-sleep-b10:m0020": {
+   "pos": [
+    "Do I need a blood test this summer?",
+    "[Calendar] Lab appointment reminder",
+    "Book my follow-up blood work.",
+    "Is the thyroid test due soon?",
+    "[Message from Dr. Patel's office] Requisition ready?",
+    "Where do I get my blood test done near Queen?"
+   ],
+   "neg": [
+    "What's a normal TSH range?",
+    "How long does a blood draw take?",
+    "Book a dentist cleaning in August?",
+    "What foods should I avoid before a blood test?",
+    "LifeLabs hours on Saturday?",
+    "Book a physio follow-up in mid-August?"
+   ]
+  },
+  "life-sleep-b10:m0021": {
+   "pos": [
+    "When is my self-review due?",
+    "[Scheduled Jun 30 10:00] Self-review nudge",
+    "Help me write my half-year self-review.",
+    "Where is my first-half evidence for the review?",
+    "[Message from Tom] Your self-review in yet?",
+    "When do manager reviews open?"
+   ],
+   "neg": [
+    "Best self-review questions for a teacher?",
+    "How to write a good goal for next year?",
+    "What's a typical performance review for a junior developer?",
+    "Remind me to renew my gym membership Friday.",
+    "Notion template for a weekly review?",
+    "How long is a typical half-year review in tech?"
+   ]
+  },
+  "life-sleep-b10:m0022": {
+   "pos": [
+    "[Calendar] Standup in 15 min",
+    "Am I in the office Monday?",
+    "What time is the team standup Monday?",
+    "Should I join the standup from home?",
+    "Move my Monday standup to 10.",
+    "What's on my Monday schedule?"
+   ],
+   "neg": [
+    "Best Monday morning routine?",
+    "What's the October Monday holiday?",
+    "Work-from-home tips with a kid at home?",
+    "Is Monday the best day for a haircut?",
+    "Book a dentist Monday at 9:45?",
+    "Standup meeting best practices?"
+   ]
+  },
+  "life-sleep-b10:m0023": {
+   "pos": [
+    "[Message from Jess] Running ten minutes late today?",
+    "Has Jess been paid for Biscuit's walk?",
+    "What time is Biscuit's walk this week?",
+    "[Scheduled 11:55] Dog walk coming up",
+    "Book an extra walk for Biscuit Friday.",
+    "Why did a Rover charge hit my card?"
+   ],
+   "neg": [
+    "Best dog walker app with GPS tracking?",
+    "How much do dog walkers make per hour in Toronto?",
+    "What time should I walk a beagle?",
+    "Book a noon lunch with Priya Wednesday.",
+    "What's on my Visa statement for July?",
+    "How much should I tip a dog walker?"
+   ]
+  },
+  "life-sleep-b10:m0024": {
+   "pos": [
+    "Is the car insurance due this week?",
+    "[Scheduled Jul 1] Auto premium charged today?",
+    "How much is my car insurance a month?",
+    "Switch my car insurance to a cheaper plan.",
+    "Is the auto bill out of the joint account?",
+    "Check my Belairdirect premium amount."
+   ],
+   "neg": [
+    "Best car insurance for a new driver in Ontario?",
+    "How to get a cheaper car insurance quote?",
+    "Tire rotation cost at Canadian Tire?",
+    "What's my Visa's annual fee?",
+    "Compare Intact and other insurers in general?",
+    "Mortgage rates this fall?"
+   ]
+  },
+  "life-sleep-b10:m0025": {
+   "pos": [
+    "[Message from LifeLabs] Your slot expires tomorrow, confirm?",
+    "Confirm the blood test booking.",
+    "Can I take the Wednesday morning blood test?",
+    "Is my lab slot still held?",
+    "[Calendar] Blood test 8:15 Wednesday, OK?",
+    "Move my blood test to a different morning."
+   ],
+   "neg": [
+    "What time does LifeLabs open on Wednesdays?",
+    "Is the Yonge LifeLabs open Saturdays?",
+    "Book a 7:30 workout Tuesday?",
+    "Which morning is best for a dentist visit?",
+    "How early can I eat before a blood draw?",
+    "Book a tailor appointment Thursday at seven?"
+   ]
+  },
+  "life-sleep-b10:m0026": {
+   "pos": [
+    "Why did we go with Nate for the kitchen?",
+    "[Message from Sam] Remind me who we hired for the kitchen.",
+    "How much is the kitchen contract?",
+    "I need to explain the contractor choice to Hannah.",
+    "What did we pay Northline in total?",
+    "Compare the kitchen bids for our file."
+   ],
+   "neg": [
+    "How to compare kitchen contractor quotes?",
+    "Is a $79,000 kitchen reno normal?",
+    "Best kitchen contractors in Toronto reviews?",
+    "What's the price of quartz for a kitchen counter?",
+    "Brickhouse Kitchens showroom hours?",
+    "Design a galley kitchen layout?"
+   ]
+  },
+  "life-sleep-b10:m0027": {
+   "pos": [
+    "Is the kitchen payment due soon?",
+    "[Message from Nate] Balance due?",
+    "How much have we paid for the kitchen so far?",
+    "Pay the kitchen balance before the 15th.",
+    "[Scheduled Jul 10] Reno payment due",
+    "What's left to pay on the kitchen?"
+   ],
+   "neg": [
+    "Who is Barzotti in the Italian food scene?",
+    "What's a fair deposit for a kitchen?",
+    "Best budget for kitchen appliances?",
+    "Pay the Hydro bill now?",
+    "How to chase a contractor for a late invoice?",
+    "Is a 10% contingency standard?"
+   ]
+  },
+  "life-sleep-b10:m0028": {
+   "pos": [
+    "Order Biscuit's food, the big bag.",
+    "[Message from Sam] Can you grab the dog food?",
+    "Should I stop at Pet Valu for poop bags?",
+    "Is Biscuit low on food?",
+    "Pick up dog supplies on the way home.",
+    "Pick up food at the store near Logan for Biscuit."
+   ],
+   "neg": [
+    "Best dog food for a beagle with allergies?",
+    "Poop bags that are truly compostable?",
+    "Does Pet Valu have a loyalty card?",
+    "Dog bed for a senior beagle?",
+    "Is a 13-kilo bag too big for a car?",
+    "How to store kibble in the summer?"
+   ]
+  },
+  "life-sleep-b10:m0029": {
+   "pos": [
+    "Set up a call with Mum this week.",
+    "[Message from Mum] Can we video call? WhatsApp isn't working.",
+    "Send Mum the Zoom invite for Saturday.",
+    "How do I help Mum join the video call?",
+    "Book the weekly call with Mum.",
+    "What's the link for our call with Mum?"
+   ],
+   "neg": [
+    "Best Zoom backgrounds for work?",
+    "How do I record a Zoom meeting?",
+    "WhatsApp video call quality tips on slow internet?",
+    "Set up FaceTime with Priya?",
+    "How to fix my camera on Zoom?",
+    "Zoom subscription cost for a family?"
+   ]
+  },
+  "life-sleep-b10:m0030": {
+   "pos": [
+    "[Calendar] Freeze begins at noon today",
+    "Post the release freeze notice to the launch channel.",
+    "Can I ship a payouts fix before the freeze?",
+    "Is the release freeze on this week?",
+    "[Message from Aisha] Did you post the freeze reminder?",
+    "What's the deploy window before Monday?"
+   ],
+   "neg": [
+    "Best coffee shop open at noon near King?",
+    "How do I freeze a column in Google Sheets?",
+    "How to freeze tomatoes for winter?",
+    "Cold weather freeze warning in Toronto?",
+    "Chrome keeps freezing on my laptop, fix?",
+    "Release notes template for a mobile app?"
+   ]
+  },
+  "life-sleep-b10:m0031": {
+   "pos": [
+    "[Message from Carlos] Did you get the grammar book?",
+    "Order the subjunctive book for me.",
+    "Which grammar book should I get for the subjunctive?",
+    "Check Indigo for the Spanish book.",
+    "Is the subjunctive book in stock downtown?",
+    "Carlos wants a grammar book, which one should I buy?"
+   ],
+   "neg": [
+    "Best Spanish grammar app?",
+    "Indigo return policy?",
+    "Order a Lululemon hoodie?",
+    "Which Spanish novel is good for B2?",
+    "Cheapest Spanish grammar book on Amazon?",
+    "What's the Spanish for book club?"
+   ]
+  },
+  "life-sleep-b10:m0032": {
+   "pos": [
+    "[Message from Carol Dempsey] Which date works for the street party?",
+    "Reply to Carol about the party date.",
+    "Should I volunteer for the Curzon street party?",
+    "What date should I pick for the block party?",
+    "Sign the street petition for the party.",
+    "[Scheduled Jul 2] Permit application for the party this week"
+   ],
+   "neg": [
+    "Best block party games for kids?",
+    "How to make potato salad for thirty people?",
+    "Leslieville street party permit rules in general?",
+    "Book a bouncy castle for the August weekend?",
+    "Sign up for a community garden volunteer shift?",
+    "What's the potluck etiquette guide?"
+   ]
+  },
+  "life-sleep-b10:m0033": {
+   "pos": [
+    "[Message from Nate] What countertop are we doing?",
+    "Pick the countertop material and edge today.",
+    "Is someone home Thursday at 8am for the countertop templating?",
+    "Send Nate the countertop choice.",
+    "Can Hannah let the installers in on Thursday?",
+    "[Scheduled Tue 09:00] Countertop decision due"
+   ],
+   "neg": [
+    "Best quartz countertop brands for a kitchen?",
+    "How to clean granite countertops?",
+    "Is a waterfall edge worth it?",
+    "What time does Home Depot open Thursday?",
+    "Book a cleaner for Thursday morning?",
+    "Hannah's favourite recipe?"
+   ]
+  },
+  "life-sleep-b10:m0034": {
+   "pos": [
+    "What are we doing for Christmas this year?",
+    "[Message from Grace] Are you coming for Christmas?",
+    "Plan the Toronto visit for Grace and Daniel.",
+    "[Calendar] Start planning Sam's parents' visit",
+    "What's the plan with Sam's parents for the holidays?",
+    "When do Grace and Daniel arrive?"
+   ],
+   "neg": [
+    "Best Christmas gifts for in-laws under $100?",
+    "Cheapest way to fly to Ottawa in December?",
+    "Christmas dinner recipe for a crowd?",
+    "Best things to do in Toronto in November?",
+    "What's Ottawa's Christmas market like?",
+    "Draft a holiday card for Grace?"
+   ]
+  },
+  "life-sleep-b10:m0035": {
+   "pos": [
+    "Book the cottage for Sam's week in September.",
+    "[Message from Sam] Did you hold that cottage yet?",
+    "What's the cheapest cottage with a dock for September 14?",
+    "Should we pick Loon Call or Birch Point?",
+    "Reserve a cottage for a week in mid-September.",
+    "How long is the drive to that lake place again?"
+   ],
+   "neg": [
+    "Best cottage rentals in Muskoka for a big group?",
+    "How to pack for a lake weekend?",
+    "Weather in Haliburton in late summer?",
+    "Best kayak for a beginner?",
+    "Cancellation policy for Airbnb in general?",
+    "Book a Muskoka cottage for Canada Day weekend?"
+   ]
+  },
+  "life-sleep-b10:m0036": {
+   "pos": [
+    "[Message from Jess Park] Can we move the QBR prep?",
+    "Is it okay to send the reply about the QBR prep?",
+    "[Calendar] QBR prep at 10 Tuesday, still on?",
+    "Reply to Olivia's EA about moving the prep.",
+    "Is the prep room free on Wednesday?",
+    "Should I accept the moved QBR prep time?"
+   ],
+   "neg": [
+    "Draft a reply to the dentist about rescheduling?",
+    "How long should a QBR deck be?",
+    "Book Tuesday lunch with Olivia?",
+    "What's a good QBR agenda template?",
+    "Move my Tuesday coffee with Priya to Thursday.",
+    "Who's Olivia's EA at the sales org?"
+   ]
+  },
+  "life-sleep-b10:m0037": {
+   "pos": [
+    "[Scheduled 20:00 Sunday] Bins out tonight?",
+    "Is it blue bin or garbage week?",
+    "Did we put the bins out for Monday?",
+    "[Message from Hannah] Which bin goes out Monday?",
+    "Garbage pickup is Monday, right?",
+    "Should I bring the bins back in after pickup?"
+   ],
+   "neg": [
+    "Best compost bin for a backyard?",
+    "What goes in a blue bin in Toronto?",
+    "Is recycling picked up on statutory holidays?",
+    "Garbage day in Ottawa on a Sunday?",
+    "How do I bundle branches for pickup?",
+    "Bin bags on sale at Metro?"
+   ]
+  },
+  "life-sleep-b11:m0001": {
+   "pos": [
+    "Unsubscribe me from the sales emails again.",
+    "[Message from Sam] Why is my inbox empty of Wayfair?",
+    "Should I unsubscribe from the Chapters newsletter?",
+    "Clean out my inbox from shopping senders.",
+    "Is Duolingo still in my inbox?",
+    "Filter the promo mail from my old stores."
+   ],
+   "neg": [
+    "How do I unsubscribe from a newsletter on Gmail?",
+    "Cancel my Spotify before June?",
+    "Best email filter for newsletters?",
+    "How do I remove a sender on Outlook?",
+    "Is Notion's pricing going up?",
+    "What's the best promo code for Old Navy?"
+   ]
+  },
+  "life-sleep-b11:m0002": {
+   "pos": [
+    "What's a dinosaur-themed gift for Leo?",
+    "[Scheduled 21:00] Check on Leo overnight?",
+    "Leo's going to be up at night, what do I do?",
+    "Book a dinosaur museum trip for Sunday.",
+    "Make a card for the end-of-year teacher gift.",
+    "What should we pack for Leo's sleepover at Jun's?"
+   ],
+   "neg": [
+    "Good chemistry experiment for high schoolers?",
+    "Dinosaur facts for a seven-year-old's book report?",
+    "How do I stop a dog barking at night?",
+    "How old should a child be for a bed rail?",
+    "Chemistry puns for a birthday card?",
+    "Best dino toy under $30?"
+   ]
+  },
+  "life-sleep-b11:m0003": {
+   "pos": [
+    "[Message from Hannah] Can Leo come over Saturday?",
+    "Call Hannah about the pool this weekend.",
+    "Text Hannah the pool plan for Leo.",
+    "Book a time with Hannah on Thursday.",
+    "What's Hannah's number?",
+    "[Scheduled 17:00] Leo's playdate with Ellie?"
+   ],
+   "neg": [
+    "Best backyard pool toys for kids?",
+    "How to chlorinate a pool?",
+    "Is a pool fence required in Toronto?",
+    "Garden planting ideas for a shady backyard?",
+    "Text Priya about the weekend.",
+    "Call Ellie's school about a late bus?"
+   ]
+  },
+  "life-sleep-b11:m0004": {
+   "pos": [
+    "[Message from Neha] Which job should I take?",
+    "Help me reply to Neha about her two offers.",
+    "What should I tell my cousin about the job?",
+    "Draft advice for Neha's job choice.",
+    "[Scheduled 19:00] Check in on Neha's decision",
+    "Reply to Neha's text about the commute."
+   ],
+   "neg": [
+    "How much is a 50-minute commute worth in salary?",
+    "Average salary for a product manager in Calgary?",
+    "Draft a cover letter for a PM job?",
+    "Send Priya a birthday text?",
+    "What's a good career coach?",
+    "Tips for negotiating a raise?"
+   ]
+  },
+  "life-sleep-b11:m0005": {
+   "pos": [
+    "Is the hydro bill higher this month?",
+    "[Scheduled Aug 18] Hydro bill due soon, check the balance",
+    "Why is the power bill so high?",
+    "Is there enough in the joint account for the hydro payment?",
+    "What's the August electricity estimate?",
+    "Should I turn the AC down to save on the bill?"
+   ],
+   "neg": [
+    "Best energy-saving thermostat settings?",
+    "How do I read a hydro meter?",
+    "What's Toronto Hydro's peak rate time?",
+    "Is the gas bill due this week?",
+    "Best fan for a hot bedroom?",
+    "How do I reduce power use on a laptop?"
+   ]
+  },
+  "life-sleep-b11:m0006": {
+   "pos": [
+    "[Message from Mum] Any news from Kabir's?",
+    "Post a photo of Ira in the family chat.",
+    "Did Kabir's package with the sock arrive?",
+    "Send the family group a photo of Ira.",
+    "[Scheduled 08:00 Sunday] Family chat check",
+    "Ask Kabir about the sock he's mailing."
+   ],
+   "neg": [
+    "What's a good baby name meaning brave?",
+    "How to keep a newborn warm in winter?",
+    "What time is it in Vancouver?",
+    "Good baby shower gift ideas?",
+    "Is my mum's Netflix password working?",
+    "How do I mute a group chat on iPhone?"
+   ]
+  },
+  "life-sleep-b11:m0007": {
+   "pos": [
+    "Start packing for the weekend trip.",
+    "[Calendar] Trip to Ottawa on Friday, pack now?",
+    "What should I bring for Leo on the Ottawa weekend?",
+    "Make the packing list for next week's trip.",
+    "Should I check a bag for the five-day trip?",
+    "Remind me to prep the family checklist before we leave."
+   ],
+   "neg": [
+    "Best carry-on suitcase under $200?",
+    "How to pack a suitcase efficiently?",
+    "What to pack for a beach week in Mexico?",
+    "A checklist for moving house?",
+    "Pack a lunch for Leo's field trip?",
+    "What do I bring to a baby shower?"
+   ]
+  },
+  "life-sleep-b11:m0008": {
+   "pos": [
+    "Book a rental car for the Ottawa weekend.",
+    "[Message from Sam] The rental counter wants insurance, what do I say?",
+    "Should I buy the rental insurance at the desk?",
+    "Rent a car for Friday, pick up at Pearson.",
+    "What's the fuel policy on the car we're renting?",
+    "[Scheduled 10:00 return day] Refill before returning the rental?"
+   ],
+   "neg": [
+    "Best insurance for a rental car in Mexico?",
+    "How to pick a rental car in Europe?",
+    "Cheapest car rental in Ottawa?",
+    "Late fee for returning a rental car?",
+    "Is Enterprise open Sunday?",
+    "How much is gas per litre in Quebec?"
+   ]
+  },
+  "life-sleep-b11:m0009": {
+   "pos": [
+    "Is the kitchen still within budget?",
+    "[Message from Sam] The crew needs us to approve extra for the panel.",
+    "How much have we spent on the reno so far?",
+    "Should I approve the extra electrical work?",
+    "What's the total reno budget left?",
+    "Tell Nate we're okay on the extra."
+   ],
+   "neg": [
+    "How to choose an electrician for a big panel upgrade?",
+    "What's a normal contingency for a kitchen reno?",
+    "Best kitchen reno budget tracker app?",
+    "How much does a basement bathroom cost?",
+    "What's the price of a range hood?",
+    "Can I DIY my own kitchen tiles?"
+   ]
+  },
+  "life-sleep-b11:m0010": {
+   "pos": [
+    "[Scheduled Jul 14] Leo's birthday is Friday, plan?",
+    "Is Leo's present on the way?",
+    "[Message from Mei] What's Leo's gift?",
+    "Track the Indigo order for Leo's birthday.",
+    "Plan Leo's party for the 17th.",
+    "Did the birthday gift get delivered?"
+   ],
+   "neg": [
+    "What's a good eighth birthday party theme?",
+    "Best LEGO sets for a seven-year-old?",
+    "Book a bounce house for a July party?",
+    "Birthday cake bakery near Queen?",
+    "Good birthday card message for a teacher?",
+    "T. rex facts for a kids' party?"
+   ]
+  },
+  "life-sleep-b11:m0011": {
+   "pos": [
+    "[Message from Sam] Any dinner plans Saturday?",
+    "Book a table for Saturday night for two.",
+    "What should I book for our date next weekend?",
+    "[Scheduled Jul 14 10:00] Pick a date night spot today",
+    "Saturday dinner, the place we wanted?",
+    "Reserve somewhere nice for Saturday."
+   ],
+   "neg": [
+    "Best date night restaurants in Toronto?",
+    "Book a sitter for Friday night?",
+    "Where to go on a first date in Leslieville?",
+    "Best wine for a romantic dinner?",
+    "Plan a surprise anniversary?",
+    "What's on at the ROM Saturday?"
+   ]
+  },
+  "life-sleep-b11:m0012": {
+   "pos": [
+    "When are Leo's library books due?",
+    "[Scheduled Aug 1] Library books due soon?",
+    "Renew Leo's books again.",
+    "Can you check the due date for the dinosaur book?",
+    "[Message from Leo] When do I have to return my Dog Man?",
+    "Is Leo's library stuff still out?"
+   ],
+   "neg": [
+    "Best dinosaur book for a seven-year-old?",
+    "Dog Man movie release date?",
+    "Are Toronto libraries open on the Monday holiday?",
+    "Reserve a study room at the library?",
+    "How many books can a child check out?",
+    "The Bad Guys movie review for kids?"
+   ]
+  },
+  "life-sleep-b11:m0013": {
+   "pos": [
+    "What time does the Lisbon flight leave in December?",
+    "[Message from Sam] Are our seats assigned for Lisbon?",
+    "[Calendar] Flight to Lisbon Friday night",
+    "Can we pick seats together for the December flight?",
+    "How many hours ahead is Lisbon from home?",
+    "What's our return flight time from Portugal?"
+   ],
+   "neg": [
+    "Cheapest seats on TAP to Lisbon?",
+    "What to eat on a seven-hour overnight flight?",
+    "Time difference between Toronto and London?",
+    "Book a flight from Montreal to Halifax.",
+    "How do airline seat fees usually work?",
+    "Best travel pillow for kids on planes?"
+   ]
+  },
+  "life-sleep-b11:m0014": {
+   "pos": [
+    "Do Leo's passport and the Lisbon trip work together?",
+    "[Scheduled Aug 1] Start Leo's passport renewal",
+    "Where's the passport form for Leo?",
+    "Book Leo's passport photos.",
+    "[Message from Sam] When does Leo's passport expire?",
+    "How do we renew Leo's passport before Lisbon?"
+   ],
+   "neg": [
+    "How long do Canadian adult passports take?",
+    "Does Portugal need a visa for Canadians?",
+    "Do I need to renew my passport for Mexico?",
+    "Best passport wallet?",
+    "How to get a child's SIN card?",
+    "Photo specs for a Canadian passport?"
+   ]
+  },
+  "life-sleep-b11:m0015": {
+   "pos": [
+    "How many bags can we take on the Lisbon flight?",
+    "[Calendar] Pack list due for Lisbon",
+    "Should Leo's booster go on the plane?",
+    "Can we check car seats for free to Portugal?",
+    "What's our carry-on weight limit for Lisbon?",
+    "Can I put the power bank in the checked bag?"
+   ],
+   "neg": [
+    "Best backless booster for a seven-year-old?",
+    "Is a car seat safe on a plane?",
+    "How much is a baggage fee on Air Canada?",
+    "How much is a taxi from the Lisbon airport?",
+    "What's the Bolt app like in Lisbon?",
+    "Suitcase weight limit for a small plane?"
+   ]
+  },
+  "life-sleep-b11:m0016": {
+   "pos": [
+    "[Scheduled Oct 1] Book Christmas Eve dinner in Lisbon?",
+    "Where should we eat on December 24 in Lisbon?",
+    "Find a restaurant open on Christmas Eve in Lisbon.",
+    "[Message from Sam] Any dinner options for Dec 24?",
+    "Can we book Ramiro on the 24th?",
+    "What's open on Christmas Eve when we're in Portugal?"
+   ],
+   "neg": [
+    "Best Lisbon food tour for a family?",
+    "Tips for eating out in Lisbon?",
+    "What's Ramiro's seafood menu like?",
+    "Book a Christmas Eve dinner in Toronto?",
+    "Best Portuguese custard tarts?",
+    "What's the Time Out Market in Toronto?"
+   ]
+  },
+  "life-sleep-b11:m0017": {
+   "pos": [
+    "[Message from Tara] Can you help me with my speech?",
+    "Draft a toast for Tara's wedding.",
+    "Help Tara prep for her maid of honour speech.",
+    "What should I send Tara before the wedding?",
+    "Book a rehearsal dinner for the wedding party.",
+    "What gift for Tara's big weekend?"
+   ],
+   "neg": [
+    "Best wedding speech tips for a best man?",
+    "How to write a funny toast?",
+    "What dress code for an October wedding?",
+    "Tara's yoga class schedule?",
+    "Book a yoga class Monday?",
+    "How long should a toast be?"
+   ]
+  }
+ }
+}
