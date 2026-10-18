@@ -1,0 +1,858 @@
+{
+ "batch": "life-b01",
+ "author": "claude-subagent:stream-author-life-b01 + rewriter (rewrite.py)",
+ "sessions": [
+  {
+   "id": "life-s010",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "last to sign the team card for Tom Becker's birthday. one-line message, warm not cheesy, nothing about him being old"
+    },
+    {
+     "t": "assistant",
+     "text": "Here are three, pick one:\n- 'Happy birthday, Tom — thanks for always making room for the hard questions.'\n- 'Happy birthday, Tom. Here's to a year with fewer fire drills and more good launches.'\n- 'Happy birthday — grateful to have a manager who actually reads the doc. Enjoy the day.'\nThe first is the safest for a shared card."
+    }
+   ]
+  },
+  {
+   "id": "life-s011",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "school's back, updates:\n- Leo (born July 17, 2019) is in grade 2 at Morse Street Public School, teacher Ms. Alvarez, she prefers we contact her through Edsby, not email\n- Hannah and I swap school pickups: I get Leo and Jun Wednesdays, Hannah Fridays\n- meeting rule change: don't book me anything before 9:30 or after 16:30 now (was 17:00), nothing after 15:00 Fridays because of pickup\n- Carlos changed his teaching schedule, from September 2025 Spanish moved to Thursdays 19:30. 19:30 is homework review, the lesson with Carlos Méndez is every Thursday 8:00 pm on Zoom, 60 minutes\n- I'd rather be buying from Canadian retailers (MEC, Indigo, Simons), skip Amazon when a local option ships within a week\n- Sam and I had a really difficult time trying for a second child in 2024, don't bring up that topic unless I do\n- that 2025-08-15 summary of the article about why beagles howl was spot on, Biscuit did his siren solo again last night"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "cal list --from 2025-09-15 --to 2025-09-21 --filter 'Spanish'"
+     },
+     "output": "Tue 16 Sep 19:00-20:00  Spanish with Carlos (Zoom)   [recurring weekly, Tue]\n"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "cal move 'Spanish with Carlos' --series --to 'Thu 19:30' --duration 90m --note 'Homework review 19:30, lesson with Carlos Méndez 20:00-21:00 on Zoom'"
+     },
+     "output": "Moved series 'Spanish with Carlos' (evt_7f21c9)\n  was: Tue 19:00-20:00 weekly\n  now: Thu 19:30-21:00 weekly, from Thu 18 Sep 2025\n"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "cal add 'School pickup: Leo + Jun' --at 'Wed 15:20' --duration 30m --repeat weekly --with 'Hannah Cho'"
+     },
+     "output": "Created evt_8a04d2  'School pickup: Leo + Jun'  Wed 15:20-15:50 weekly from Wed 17 Sep 2025\nInvite sent: hannah.cho@example.com\n"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "notes add 'Assistant rules' --append 'Meetings: none before 9:30 or after 16:30; nothing after 15:00 on Fridays (school pickup). Shopping: prefer MEC, Indigo, Simons over Amazon if local ships within a week. Ms. Alvarez: contact via Edsby, not email.'"
+     },
+     "output": "Updated note 'Assistant rules' (3 lines appended)\n"
+    },
+    {
+     "t": "assistant",
+     "text": "Done, and noted on the personal one. I won't bring it up.\n- Spanish moved: Thu 19:30 homework review, then the lesson with Carlos at 20:00 on Zoom for 60 min, starting Thu 18 Sep. I've cleared the old Tuesday slot\n- Wednesday pickup for Leo and Jun is on your calendar from Wed 17 Sep, and Hannah has the invite\n- New meeting window saved: 9:30 to 16:30, with nothing after 15:00 on Fridays\n- Ms. Alvarez goes through Edsby, and Canadian retailers come first for shopping\nGlad the beagle article helped. Sirens are basically Biscuit's group chat."
+    },
+    {
+     "t": "trigger",
+     "text": "[Message from Aisha Rahman] hey, any chance we can do a 30 min call tomorrow at 10 to go through the payouts v2 edge cases? I want to get tickets written this week"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "msg read --from 'Aisha Rahman' --last 3"
+     },
+     "output": "[Mon 15 Sep 12:41] Aisha Rahman: finished the first pass on the payouts v2 spec\n[Mon 15 Sep 12:44] Aisha Rahman: mostly good, a few edge cases on partial refunds + currency rounding\n[Mon 15 Sep 13:02] Aisha Rahman: hey, any chance we can do a 30 min call tomorrow at 10 to go through the payouts v2 edge cases? I want to get tickets written this week\n"
+    },
+    {
+     "t": "assistant",
+     "text": "Aisha wants a 30-minute call tomorrow at 10:00 about the payouts v2 edge cases (partial refunds and currency rounding). Should I accept it, offer her another time, or suggest she drop the questions in a Slack thread so you can answer them async?"
+    }
+   ]
+  },
+  {
+   "id": "life-s012",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "will the Bank of Canada cut again in October? came up in a payouts float conversation and I nodded like I knew"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "web search 'Bank of Canada October 2025 rate decision expectations'"
+     },
+     "output": "1. Bank of Canada cuts policy rate to 2.50% (Sep 17, 2025) - bankofcanada.example.ca\n   ...the Bank reduced its target for the overnight rate by 25 basis points, citing a weaker labour market...\n2. Economists split on another cut at Oct 29 meeting - financialpost.example.com\n   ...markets price roughly a 60% chance of a further 25 bp cut; core inflation remains near 3%...\n3. What a lower overnight rate means for savers and borrowers - cbc.example.ca\n"
+    },
+    {
+     "t": "assistant",
+     "text": "Probably, but it's not a sure thing. Markets were pricing about a 60% chance of another 25 bp cut at the Wed 29 Oct meeting.\n- The Bank cut to 2.50% on Wed 17 Sep, mostly because of a softer job market\n- The argument against: core inflation is still sitting near 3%\n- For a payouts float, a cut means slightly lower interest earned on balances held before payout\nI've started a background summary of this year's decisions in case you want the timeline."
+    },
+    {
+     "t": "notification",
+     "task": "Summarize Bank of Canada 2025 rate decisions",
+     "report": "2025 overnight rate decisions so far:\n- Jan 29: cut 25 bp to 3.00%\n- Mar 12: cut 25 bp to 2.75%\n- Apr 16: hold at 2.75%\n- Jun 4: hold at 2.75%\n- Jul 30: hold at 2.75%\n- Sep 17: cut 25 bp to 2.50%\nNext decision: Oct 29. Consensus leans to a 25 bp cut; a minority expects a hold given sticky core inflation."
+    },
+    {
+     "t": "peer",
+     "from": "work-agent",
+     "text": "Friday digest (Lumen Pay): 4 Linear tickets moved to Done in Merchant Onboarding (ONB-412, ONB-415, ONB-418, ONB-421). #payouts-v2 has a new thread from Aisha on currency rounding with 6 replies. No mentions of Riya awaiting reply."
+    },
+    {
+     "t": "human",
+     "k": 1,
+     "text": "Priya wants tips on negotiating a raise: 5 yrs at her firm, just led a big library project, boss keeps saying 'next cycle'. what should she say?"
+    },
+    {
+     "t": "assistant",
+     "text": "She should ask for a specific number with a date attached, not a vague promise.\n- Anchor on the library project: scope, budget, and what it did for the firm's reputation or pipeline\n- Bring market data for her title and city so the number isn't a feeling\n- Say the number first, then stop talking\n- If she hears 'next cycle' again, ask what exactly would need to be true then, and get it in writing with a review date\n- Have a fallback ask ready (title change, extra vacation, a training budget) in case the salary budget really is frozen\nWant me to draft a short script she can adapt?"
+    },
+    {
+     "t": "peer",
+     "from": "school-portal",
+     "text": "Morse Street PS notice: Picture Day is Thursday 9 October 2025. Order forms will come home in backpacks next week. Online ordering opens Mon 6 Oct."
+    },
+    {
+     "t": "human",
+     "k": 2,
+     "text": "did my home depot pickup order go through? never saw a confirmation"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "mail search 'from:homedepot order' --since 2025-09-26"
+     },
+     "output": "id: m_19c3a7e  Fri 26 Sep 09:14  The Home Depot Canada  'Your order #W512339870 is confirmed'\n"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "mail read m_19c3a7e"
+     },
+     "output": "From: The Home Depot Canada <orders@homedepot.example.ca>\nSubject: Your order #W512339870 is confirmed\n\nHi Riya,\n\nThanks for your order. We'll email you when it's ready for pickup.\n\nOrder #W512339870\n  1 x 16x25x1 Furnace Filter MERV 11 (pack of 4)    $54.97\n  Subtotal $54.97  HST $7.15  Total $62.12\n\nPickup: Leslie St store, 1 Leslie St, Toronto ON\nReady by: Sat 27 Sep, 12:00\nBring your order number and photo ID.\n"
+    },
+    {
+     "t": "assistant",
+     "text": "Yes, it went through. Order #W512339870 is confirmed: a pack of 4 16x25x1 furnace filters, $62.12 with tax, for pickup at the Leslie St store. They say it'll be ready by noon tomorrow (Sat 27 Sep); bring the order number and photo ID. The email went to your inbox at 9:14 this morning, so you probably just missed it."
+    },
+    {
+     "t": "human",
+     "k": 3,
+     "text": "Kabir and Mei are staying the second weekend of November, proper dinner on the Saturday. Mei is lactose intolerant and loves my chana masala, build the menu around that. sides + dessert ideas"
+    },
+    {
+     "t": "assistant",
+     "text": "Chana masala in the middle, with everything else dairy-free so Mei can eat the whole table.\n- Jeera rice, and garlic naan made with oil instead of ghee or yogurt (or buy a vegan naan)\n- Aloo gobi and a kachumber salad for crunch\n- Coconut raita in place of the usual yogurt one\n- Dessert: mango sorbet, or a coconut-milk kheer\nI've started a background search for a couple of tested dairy-free dessert recipes, so you can pick one."
+    },
+    {
+     "t": "notification",
+     "task": "Find dairy-free dessert recipes to pair with an Indian dinner",
+     "report": "Found 3 well-reviewed options, all dairy-free:\n1. Coconut milk kheer (rice pudding) with cardamom and saffron - 45 min, serves 6, 4.8 stars (1.2k reviews)\n2. Mango coconut panna cotta with agar - 20 min + 4 h set, serves 6\n3. Cardamom poached pears with pistachio-free crumble - 40 min\nAll three can be made a day ahead. #1 is the closest to a traditional finish for an Indian meal."
+    },
+    {
+     "t": "human",
+     "k": 4,
+     "text": "ty"
+    },
+    {
+     "t": "assistant",
+     "text": "You're welcome. The kheer is the easiest to make ahead, so I'd go with that."
+    },
+    {
+     "t": "peer",
+     "from": "finance-agent",
+     "text": "Heads-up: the Rogers mobile bill ($112.40) posted to the TD joint chequing account today and will auto-pay on Oct 3. September grocery spend is $1,084 so far, about 6% over the usual monthly amount."
+    },
+    {
+     "t": "human",
+     "k": 5,
+     "text": "message for our street's group chat: yard sale Sat Oct 4, 9 to 1, rain date the 5th. tables on your own driveway, no early birds before 9 lol"
+    },
+    {
+     "t": "assistant",
+     "text": "Here's a draft:\n\n'Hi neighbours, our street yard sale is on Sat 4 Oct, 9:00 to 13:00 (rain date Sun 5 Oct). Set up a table on your own driveway or front walk. Please no early birds before 9, we'll be setting up. Leftovers can go to the Goodwill drop-off on Queen after. Reply here if you're in so we can make one sign for the corner.'\n\nI've started a quick check on the City's rules for signs on poles, in case you want to put one at the corner."
+    },
+    {
+     "t": "compact",
+     "summary": "Session so far (Fri 26 Sep 2025):\n- Explained the Bank of Canada outlook: rate at 2.50% after the Sep 17 cut, roughly 60% odds of another 25 bp cut on Oct 29; background summary of 2025 decisions delivered.\n- Gave Priya raise-negotiation tips (specific number, market data, written review date, fallback asks).\n- Confirmed Home Depot order #W512339870: 16x25x1 furnace filters (pack of 4), $62.12, pickup at the Leslie St store, ready Sat 27 Sep noon.\n- Planning a dinner for Kabir and Mei's visit (second weekend of November): chana masala centrepiece, dairy-free sides (jeera rice, oil naan, aloo gobi, kachumber, coconut raita); dessert options found, coconut kheer recommended.\n- Drafted a street group-chat message for the yard sale Sat 4 Oct 9:00-13:00, rain date Sun 5 Oct.\n- Background task running: City of Toronto rules for yard-sale signs."
+    },
+    {
+     "t": "notification",
+     "task": "Check City of Toronto rules for temporary yard-sale signs",
+     "report": "City of Toronto Sign By-law, temporary signs on public property:\n- Signs may not be attached to utility poles, traffic signs or trees on City property.\n- Free-standing signs on the boulevard are allowed if they don't block sightlines or sidewalks.\n- Max size about 0.6 m x 0.6 m; remove within 24 h after the event.\nFines for pole postings start at $90 per sign. Recommendation: a sandwich board at the corner on the boulevard."
+    },
+    {
+     "t": "human",
+     "k": 6,
+     "text": "put in the dinner notes: Mei is lactose intolerant, loves my chana masala, whole menu is around her"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "notes add 'Nov dinner - Kabir & Mei' --content 'Mei is lactose intolerant; big fan of Riya's chana masala. Menu: chana masala, jeera rice, oil naan, aloo gobi, kachumber, coconut raita. Dessert: coconut milk kheer (make a day ahead).'"
+     },
+     "output": "Created note 'Nov dinner - Kabir & Mei' (id n_44b2)\n"
+    },
+    {
+     "t": "assistant",
+     "text": "Saved as 'Nov dinner - Kabir & Mei', with the menu and the kheer. Also, the City doesn't allow yard-sale signs on poles, so use a sandwich board on the boulevard at the corner."
+    },
+    {
+     "t": "peer",
+     "from": "calendar-agent",
+     "text": "No conflicts found for Sat 4 Oct 9:00-13:00 (yard sale). Note: Picture Day at Morse Street PS on Thu 9 Oct has no calendar entry yet; want one added?"
+    },
+    {
+     "t": "human",
+     "k": 7,
+     "text": "remind me saturday morning to return library books, due monday"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "cal add 'Return library books (due Mon)' --at 'Sat 27 Sep 10:00' --duration 15m --reminder 0m"
+     },
+     "output": "Created evt_9b11f0  'Return library books (due Mon)'  Sat 27 Sep 10:00-10:15\nReminder: at start time\n"
+    },
+    {
+     "t": "assistant",
+     "text": "Done. You'll get a reminder Sat 27 Sep at 10:00. The Home Depot pickup is ready at noon, so you can do both in one trip."
+    }
+   ]
+  },
+  {
+   "id": "life-s013",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "can't sleep. worrying about my mom Anjali living alone in Mumbai since my father died. she's 68, flat has stairs. talking through practical plans calms me more than reassurance. can we do that"
+    },
+    {
+     "t": "assistant",
+     "text": "Yes, let's make it concrete. Here are the four things that usually matter most for a parent living alone, and you can tell me which feel shaky:\n- Someone nearby: a neighbour or relative in Bandra who can check in within an hour, and who has a spare key\n- A daily signal: a simple 'good morning' text or WhatsApp tick each day, so silence becomes noticeable quickly\n- Medical: her prescriptions and doctor's number written down where a visitor can find them, and a medical alert pendant if she'd accept one\n- The stairs: grab rails, better lighting, or asking the building about a ground-floor flat if one comes up\nWhich of these does she already have?"
+    },
+    {
+     "t": "peer",
+     "from": "calendar-agent",
+     "text": "Tomorrow (Tue 30 Sep): focus block until 12:00, Leo swim registration reminder at 13:00, nothing else after 16:30."
+    },
+    {
+     "t": "peer",
+     "from": "inbox-agent",
+     "text": "Overnight triage: 14 new emails. 1 needs a reply: Northline Renovations (Nate) asking to confirm the cabinet delivery window. 3 newsletters archived, 10 receipts filed."
+    },
+    {
+     "t": "human",
+     "k": 1,
+     "text": "ok helps, I'll ask her about a neighbour. distraction: Priya is choosing between two Montreal condos, Plateau or Verdun. compare for her? she bikes downtown to work, no car"
+    },
+    {
+     "t": "assistant",
+     "text": "Good distraction. I've started three background lookups (commute by bike, typical prices and condo fees, and what each area is like to live in), and I'll put them together when they come back."
+    },
+    {
+     "t": "notification",
+     "task": "Bike commute: Plateau vs Verdun to downtown Montreal",
+     "report": "Bike to Place Ville Marie:\n- Plateau (Mont-Royal Ave / St-Denis): 3.8 km, about 14 min, almost all protected bike lanes (REV St-Denis).\n- Verdun (Wellington St): 6.1 km, about 22 min, via the Lachine Canal path; one stretch on Notre-Dame without a protected lane.\nWinter: both routes are on the 4-season cleared network."
+    },
+    {
+     "t": "notification",
+     "task": "Montreal condo prices and fees: Plateau vs Verdun, 2-bedroom",
+     "report": "Median asking price, 2-bed condo (Sep 2025):\n- Plateau-Mont-Royal: $629,000, condo fees typically $320-$450/month (older buildings, frequent special assessments).\n- Verdun: $519,000, condo fees $280-$380/month (more new builds near the river).\nWelcome tax (land transfer) on $600k in Montreal is about $8,900."
+    },
+    {
+     "t": "notification",
+     "task": "Neighbourhood feel: Plateau vs Verdun",
+     "report": "Plateau: dense, lively, lots of cafes and restaurants; noise and parking complaints common; close to Mount Royal park.\nVerdun: quieter, family-oriented, riverside paths and a beach; Wellington St is now a pedestrian street in summer with good restaurants.\nBoth have a metro (Mont-Royal on the orange line; Verdun and De l'Église on the green line)."
+    },
+    {
+     "t": "assistant",
+     "text": "If Priya's priority is the shortest daily ride, the Plateau wins. If it's space and value, Verdun.\n- Commute: Plateau 14 min almost all protected; Verdun 22 min along the canal, with one busier stretch\n- Price: Verdun about $110k cheaper at the median, with lower fees and newer buildings\n- Feel: Plateau is busy and central; Verdun is calmer, by the river, with a summer pedestrian street\n- Watch for: special assessments in older Plateau buildings, so she should ask for the reserve fund study\nWant this as a short message you can forward her?"
+    },
+    {
+     "t": "human",
+     "k": 2,
+     "text": "yes later. outline for my Q4 payouts planning doc from my notes, lots in 'payouts scratch'"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "notes show 'payouts scratch'"
+     },
+     "output": "payouts scratch\n- instant payouts adoption flat since July (~11% of eligible merchants)\n- fee sensitivity? survey says 1.5% feels high\n- scheduled payouts: merchants want weekly on a chosen day\n- reconciliation export is the #1 support ticket driver\n- Q4 capacity: Aisha says ~2.5 eng\n- risk: bank partner API migration in Nov\n- ideas: payout status webhooks, CSV export v2, fee experiment\n"
+    },
+    {
+     "t": "assistant",
+     "text": "I've started building the outline in the background from 'payouts scratch'. It'll be grouped into problem, bets, capacity and risks, and I'll post it when it's ready."
+    },
+    {
+     "t": "notification",
+     "task": "Draft outline for Q4 payouts planning doc from 'payouts scratch'",
+     "report": "Outline drafted (saved to notes as 'Q4 payouts plan - outline'):\n1. Where we are: instant payouts flat at ~11% adoption since July; reconciliation export is the top support driver\n2. Q4 bets: (a) reconciliation CSV export v2, (b) payout status webhooks, (c) instant payout fee experiment (test below 1.5%)\n3. Scheduled weekly payouts: discovery only\n4. Capacity: ~2.5 engineers; (a) and (b) fit, (c) needs data support\n5. Risks: bank partner API migration in November\n6. Open questions"
+    },
+    {
+     "t": "human",
+     "k": 3,
+     "text": "too wordy tonight, shorter pls, reading in bed"
+    },
+    {
+     "t": "assistant",
+     "text": "Got it. Shorter from here."
+    },
+    {
+     "t": "peer",
+     "from": "work-agent",
+     "text": "Slack: Diego left 3 Figma comments on 'Onboarding 2.0 - business verification' asking about the error state copy. Not urgent."
+    },
+    {
+     "t": "peer",
+     "from": "finance-agent",
+     "text": "Reminder: the Northline Renovations progress invoice #NR-2207 ($6,500) is due Fri 3 Oct."
+    },
+    {
+     "t": "human",
+     "k": 4,
+     "text": "why do I wake at 3am when stressed? cortisol?"
+    },
+    {
+     "t": "assistant",
+     "text": "Partly, yes. Cortisol naturally starts rising in the early morning hours, and stress pushes it up sooner and harder, so you surface from lighter sleep and your brain grabs the nearest worry. Alcohol and late screens make it worse. If it keeps happening for weeks, it's worth mentioning to your doctor."
+    },
+    {
+     "t": "human",
+     "k": 5,
+     "text": "Leo's swim lessons are Tuesdays 5:30 pm at Pam McConnell Aquatic Centre, Regent Park. add as recurring from tomorrow"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "cal add 'Leo swim lesson' --at 'Tue 30 Sep 17:30' --duration 45m --repeat weekly --location 'Pam McConnell Aquatic Centre, Regent Park'"
+     },
+     "output": "Created evt_a3c771  'Leo swim lesson'  Tue 17:30-18:15 weekly from Tue 30 Sep 2025\nLocation: Pam McConnell Aquatic Centre, 640 Dundas St E, Toronto\n"
+    },
+    {
+     "t": "assistant",
+     "text": "Added: Leo's swim lesson every Tuesday at 17:30 at Pam McConnell in Regent Park, starting tomorrow (Tue 30 Sep)."
+    },
+    {
+     "t": "human",
+     "k": 6,
+     "text": "add 'get passport photos for Leo' to my to-do list"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "notes add 'To-do' --append 'Get passport photos for Leo'"
+     },
+     "output": "Updated note 'To-do' (1 line appended, 7 open items)\n"
+    },
+    {
+     "t": "assistant",
+     "text": "Added to your to-do list."
+    },
+    {
+     "t": "human",
+     "k": 7,
+     "text": "trying to sleep again. thanks for the company"
+    },
+    {
+     "t": "assistant",
+     "text": "Anytime. Sleep well, Riya."
+    },
+    {
+     "t": "notification",
+     "task": "Format Plateau vs Verdun comparison as a forwardable message",
+     "report": "Draft ready for Priya:\n'Quick take on the two condos: Plateau = 14 min bike, almost all protected lanes, but ~$110k more and older buildings (ask for the reserve fund study). Verdun = 22 min along the canal, cheaper, newer, quieter, by the river. If the commute matters most, Plateau; if space and budget matter most, Verdun.'\nSaved to drafts; not sent."
+    }
+   ]
+  },
+  {
+   "id": "life-s014",
+   "events": [
+    {
+     "t": "trigger",
+     "text": "[Message from Sam] no energy to cook tonight. takeout? your call"
+    },
+    {
+     "t": "assistant",
+     "text": "Sam's asking about takeout tonight and leaving the choice to you. Do you want me to order something, and is there anything you're in the mood for?"
+    },
+    {
+     "t": "human",
+     "k": 0,
+     "text": "tell him yes, I'll pick in a bit. catching up:\n- mom's ok. on 2025-09-21 it was monsoon season in Mumbai and Anjali's street flooded\n- Tom responds better to one recommendation plus one alternative, not an open-ended list of options\n- did my Indigo order ship? the Spanish grammar book\n- Spanish rule: if a lesson clashes with work, message Carlos at least 24 hours ahead to move it, he charges for later cancellations\n- Leo started piano with Mrs. Greene, Mondays 4:30 pm at her home on Pape Avenue\n- the 2025-09-09 list I asked for of what Leo should bring to his first swim lesson was great"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "msg send --to Sam 'yes to takeout, I'll pick something in a bit'"
+     },
+     "output": "Sent to Sam Okafor (14:24)\n"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "mail search 'from:indigo' --since 2025-09-28"
+     },
+     "output": "id: m_1a02f9d  Wed 1 Oct 18:02  Indigo  'Your order is on its way'\nid: m_19f7c21  Mon 29 Sep 21:47  Indigo  'Order confirmation #IND-58130442'\n"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "mail read m_1a02f9d"
+     },
+     "output": "From: Indigo <orders@indigo.example.ca>\nSubject: Your order is on its way\n\nHi Riya,\n\nGood news, your order #IND-58130442 has shipped with Canada Post.\n\n  1 x Gramática de uso del español B1-B2 (paperback)   $42.99 CAD\n  Shipping: FREE (orders over $35)\n\nWill be delivered: 2025-10-03\nTracking: 7023 4410 8876 1095\n\nHappy reading,\nIndigo\n"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "cal add 'Leo piano - Mrs. Greene' --at 'Mon 6 Oct 16:30' --duration 45m --repeat weekly --location 'Pape Avenue (Mrs. Greene's home)'"
+     },
+     "output": "Created evt_b7e214  'Leo piano - Mrs. Greene'  Mon 16:30-17:15 weekly from Mon 6 Oct 2025\n"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "notes add 'Assistant rules' --append 'Tom: one recommendation + one alternative, not an open list. Spanish clash with work: message Carlos at least 24 h ahead (later cancellations are charged).'"
+     },
+     "output": "Updated note 'Assistant rules' (2 lines appended)\n"
+    },
+    {
+     "t": "assistant",
+     "text": "Told Sam yes. The rest:\n- Indigo: 'Gramática de uso del español B1-B2' ($42.99 CAD) shipped with Canada Post and will be delivered tomorrow, 2025-10-03\n- Leo's piano with Mrs. Greene is on the calendar, Mondays 16:30 on Pape Avenue, from Mon 6 Oct\n- Saved: for Tom, one recommendation plus one alternative; if Spanish clashes with work, I'll message Carlos at least 24 hours ahead\n- Floating rickshaws sounds wild. Glad Anjali's fine.\nI'm tracking the package in the background."
+    },
+    {
+     "t": "notification",
+     "task": "Track Indigo shipment 7023 4410 8876 1095",
+     "report": "Canada Post tracking 7023 4410 8876 1095:\n- Oct 1 19:40 Item accepted, Mississauga ON\n- Oct 2 06:15 Item processed, Toronto ON\n- Expected delivery: Oct 3 by end of day\nNo signature required. Will report again on delivery."
+    }
+   ]
+  },
+  {
+   "id": "life-s015",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "upstairs bathroom door sticking again in humid weather, quick fix that isn't calling Nate? also remind me to replace the furnace filter (16x25x1) every three months, got the 4-pack, start this weekend"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "cal add 'Replace furnace filter (16x25x1)' --at 'Sat 4 Jan 2026 10:00' --duration 15m --repeat 'every 3 months' --note 'Spare filters on the laundry room shelf (Home Depot 4-pack)'"
+     },
+     "output": "Created evt_c0d58e  'Replace furnace filter (16x25x1)'  Sat 4 Jan 2026 10:00-10:15, repeats every 3 months\nNext occurrences: 4 Jan 2026, 4 Apr 2026, 4 Jul 2026\n"
+    },
+    {
+     "t": "assistant",
+     "text": "Reminder set: replace the 16x25x1 furnace filter every three months, the first one on Sat 4 Jan 2026. Swap one in this weekend so the schedule lines up.\nFor the door:\n- Tighten the top hinge screws first; a sagging door is the usual cause. If they spin, use a 3-inch screw to bite into the stud\n- Rub a bar of soap or candle wax on the edge where it catches\n- If it still sticks, plane or sand that spot lightly and seal the bare wood so it doesn't swell again\n- A dehumidifier upstairs helps on muggy days"
+    },
+    {
+     "t": "peer",
+     "from": "inbox-agent",
+     "text": "Delivered: Indigo order #IND-58130442 ('Gramática de uso del español B1-B2') was left at the front door at 16:52, per Canada Post."
+    },
+    {
+     "t": "trigger",
+     "text": "[Weather alert] Environment Canada rainfall warning for the City of Toronto: 50 to 70 mm of rain expected Saturday night into Sunday. Ponding on roads and reduced visibility possible."
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "weather --city Toronto --days 3"
+     },
+     "output": "Toronto, ON\nSat 4 Oct  cloudy, rain after 20:00      high 17°C (63°F) low 12°C (54°F)  precip 15 mm\nSun 5 Oct  heavy rain, wind gusts 50 km/h  high 14°C (57°F) low 10°C (50°F)  precip 55 mm\nMon 6 Oct  showers ending, clearing     high 13°C (55°F) low 7°C (45°F)   precip 4 mm\n"
+    },
+    {
+     "t": "assistant",
+     "text": "Rainfall warning for Toronto: 50 to 70 mm from Saturday night into Sunday.\n- Sat 4 Oct stays dry until about 20:00 (high 17°C / 63°F), so the yard sale and your morning run are fine\n- Sun 5 Oct is the bad day: about 55 mm and gusts to 50 km/h (high 14°C / 57°F)\n- Worth bringing in the patio cushions and tying down the yard sale tables Saturday afternoon\nWant me to remind Sam and the street group chat to pack up by 18:00?"
+    }
+   ]
+  },
+  {
+   "id": "life-s016",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "month over month growth for new merchant activations: Jul 1,240, Aug 1,385, Sep 1,512, plus the average"
+    },
+    {
+     "t": "assistant",
+     "text": "Aug +11.7% and Sep +9.2% month over month; the average of the two is +10.4%.\n- Jul to Aug: 1,385 / 1,240 = 1.117, so +11.7%\n- Aug to Sep: 1,512 / 1,385 = 1.092, so +9.2%\n- Jul to Sep overall: +21.9% (compound about 10.4% per month)\nGrowth is slowing a little but still above 9%."
+    },
+    {
+     "t": "human",
+     "k": 1,
+     "text": "difference between ACH and EFT in Canada?"
+    },
+    {
+     "t": "assistant",
+     "text": "In Canada they're mostly the same thing; 'ACH' is the US term.\n- EFT (electronic funds transfer) is the Canadian name for batch bank-to-bank debits and credits, cleared through Payments Canada's ACSS (now moving to Lynx and the Real-Time Rail)\n- ACH is the US equivalent network run by Nacha and the Fed\n- Pre-authorized debits (PADs) are the Canadian version of ACH debits, governed by Payments Canada Rule H1\nSo for a Canadian merchant, 'EFT' is the right word; 'ACH' only fits if the money moves through the US system."
+    },
+    {
+     "t": "human",
+     "k": 2,
+     "text": "why are the maples on our street already red when the ones by the lake are still green?"
+    },
+    {
+     "t": "assistant",
+     "text": "Mostly stress and light. Red comes from anthocyanins, which maples make when sugars build up in leaves on sunny days followed by cool nights. Street trees have it rougher: compacted soil, heat from the pavement and drought stress make them colour and drop earlier. Trees near the lake stay milder at night, so they turn later."
+    }
+   ]
+  },
+  {
+   "id": "life-s017",
+   "events": [
+    {
+     "t": "trigger",
+     "text": "[Calendar] Reminder: 'Q4 roadmap preview for prospects' Tue 14 Oct 11:00-11:30 (Zoom). Prep doc not attached yet."
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "cal list --from 2025-10-14 --to 2025-10-14"
+     },
+     "output": "Tue 14 Oct\n  11:00-11:30  Q4 roadmap preview for prospects (Zoom)   organizer: Partnerships   agenda: 'roadmap walkthrough for Q4 pipeline'\n  17:30-18:15  Leo swim lesson (Pam McConnell Aquatic Centre)\n"
+    },
+    {
+     "t": "assistant",
+     "text": "Heads-up for after the long weekend: 'Q4 roadmap preview for prospects' is Tue 14 Oct, 11:00 to 11:30 on Zoom, and there's no prep doc attached yet. Want me to pull together a one-page roadmap summary from Notion on Monday evening so you have something to share?"
+    },
+    {
+     "t": "human",
+     "k": 0,
+     "text": "later. made it to Ottawa. for christmas planning: on family trips I prefer driving the Mazda over the train. we leave early Friday to beat the 401 traffic and stop at the Big Apple in Colborne, Leo thinks the stop is the law"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "notes add 'Travel preferences' --append 'Ottawa family trips: drive the Mazda (preferred over the train), leave early Friday to beat 401 traffic, stop at the Big Apple in Colborne.'"
+     },
+     "output": "Updated note 'Travel preferences' (1 line appended)\n"
+    },
+    {
+     "t": "assistant",
+     "text": "Glad you made it. Noted for Christmas and any other Ottawa trip: drive the Mazda, leave early on Friday ahead of the 401 traffic, and stop at the Big Apple in Colborne. I'm checking whether the Big Apple is open on Thanksgiving Monday for the drive home."
+    },
+    {
+     "t": "peer",
+     "from": "calendar-agent",
+     "text": "Thanksgiving Monday (13 Oct) is a stat holiday: Lumen Pay closed, no standup. Leo's piano with Mrs. Greene is still on the calendar for 16:30 Monday. Cancel or keep?"
+    },
+    {
+     "t": "notification",
+     "task": "Check Big Apple (Colborne) hours for Thanksgiving Monday",
+     "report": "The Big Apple, 262 Orchard Dr, Colborne ON (Hwy 401 exit 497):\n- Thanksgiving Monday, 13 Oct: open 8:00-20:00 (regular hours)\n- Bakery pie counter closes at 19:00\n- Weekend wait for the washrooms and bakery can be 15-20 min around midday\nRecommend stopping before 12:00 or after 15:00."
+    },
+    {
+     "t": "human",
+     "k": 1,
+     "text": "how long was the drive supposed to take? pull up yesterday's route"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "maps history --date 2025-10-10"
+     },
+     "output": "Directions 2025-10-10 07:12\nFrom: Leslieville, Toronto ON\nTo:   Glebe, Ottawa ON (Airbnb, 2nd Ave)\nRoute: Highway 401 E -> Highway 416 N -> Hwy 417\nDistance: 452 km\nEstimated time: about 4 h 35 min without traffic\nTolls: none\n"
+    },
+    {
+     "t": "assistant",
+     "text": "It was supposed to be about 4 h 35 min without traffic: 452 km from Leslieville to the Glebe, via the 401 and the 416 (route from Fri 10 Oct). With the Big Apple stop and holiday traffic, 5.5 to 6 hours is normal, so it wasn't just you."
+    },
+    {
+     "t": "peer",
+     "from": "school-portal",
+     "text": "Morse Street PS: no school Monday 13 October (Thanksgiving). Grade 2 field trip to the Toronto Zoo is on Wed 22 October; permission forms and $18 are due Fri 17 October through School Cash Online."
+    },
+    {
+     "t": "human",
+     "k": 2,
+     "text": "which background things do you have running? just the ones still going"
+    },
+    {
+     "t": "assistant",
+     "text": "Three are still running:\n- Thanksgiving Monday hours for a couple of Ottawa museums, in case you want an outing\n- Monday's westbound 401 traffic forecast for the drive home\n- A summary of your unread Slack mentions from Friday\nThe Big Apple check is done (open 8:00 to 20:00 Monday)."
+    },
+    {
+     "t": "notification",
+     "task": "Thanksgiving Monday hours for Ottawa museums",
+     "report": "Open Monday 13 Oct:\n- Canadian Museum of Nature: 9:00-17:00, family pass $45\n- Ingenium Canada Science and Technology Museum: 9:00-17:00, kids under 3 free\n- Canadian War Museum: closed Mondays\nBoth open ones are 10-15 min from the Glebe by car."
+    },
+    {
+     "t": "peer",
+     "from": "finance-agent",
+     "text": "Gas on the TD Visa yesterday: $78.40 at Petro-Canada, Belleville. October fuel is now $142, within the usual monthly amount."
+    },
+    {
+     "t": "notification",
+     "task": "401 westbound traffic forecast, Mon 13 Oct",
+     "report": "Holiday Monday return traffic peaks 13:00-19:00 on the 401 westbound from Kingston to Oshawa.\n- Leave Ottawa by 9:30 to clear Kingston before the peak\n- Construction: lane reduction near Port Hope (km 461-464), expect 10 min delay\nEstimated trip leaving 9:30: about 5 h with one stop."
+    },
+    {
+     "t": "human",
+     "k": 3,
+     "text": "grace made four pies. FOUR. leo has had pie for dinner"
+    },
+    {
+     "t": "assistant",
+     "text": "Four pies for seven people is the correct ratio, honestly. Leo will remember this Thanksgiving forever."
+    },
+    {
+     "t": "notification",
+     "task": "Summarize unread Slack mentions (Fri 10 Oct)",
+     "report": "3 unread mentions:\n- #payouts-v2: Aisha asked whether currency rounding goes in the v2 scope (needs an answer by Wed)\n- #onboarding: Diego shared the new business verification flow in Figma\n- DM from Wen: the September activation dashboard is refreshed in Looker\nNothing urgent before Tuesday."
+    },
+    {
+     "t": "human",
+     "k": 4,
+     "text": "Grace has vanilla candles all over and Sam's had a migraine since lunch. strong fragrances set him off, we never have scented candles or air fresheners at home. won't say anything to her. find a thank-you gift for Grace and Daniel that's NOT scented, pickup tomorrow in Ottawa"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "web search 'Glebe Ottawa gift shop open Sunday local'"
+     },
+     "output": "1. Octopus Books, 116 Third Ave (Glebe) - open Sun 11:00-17:00 - independent bookstore\n2. Kaliyana Artwear / Glebe Emporium, 724 Bank St - open Sun 11:00-17:00 - kitchenware, local pottery\n3. Ottawa Farmers' Market at Lansdowne - Sun 8:00-15:00 - local honey, maple syrup, preserves\n"
+    },
+    {
+     "t": "assistant",
+     "text": "Go to the Lansdowne farmers' market tomorrow morning; it's walkable from the Glebe and open 8:00 to 15:00.\n- Grace: a jar of local honey or maple syrup with a nice handmade pottery bowl from the Glebe Emporium on Bank St\n- Daniel: a book from Octopus Books on Third Ave (local history or bridges, given the civil engineering)\n- Skip soaps, candles and anything perfumed\nSorry about Sam. Cracking a window near him and keeping water handy might help until he can sleep it off."
+    },
+    {
+     "t": "peer",
+     "from": "inbox-agent",
+     "text": "New email from Northline Renovations (Nate): cabinet delivery confirmed for Thu 16 Oct, 8:00-10:00. Someone needs to be home to let the crew in."
+    },
+    {
+     "t": "human",
+     "k": 5,
+     "text": "we drive back monday. list of house stuff to do this week once we're home, before it gets properly cold"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "notes add 'House - week of 13 Oct' --content 'Thu 16 Oct 8:00-10:00: be home for cabinet delivery (Northline). Clean gutters once leaves drop. Shut off outdoor tap, drain and store hoses. Test smoke and CO detectors, replace batteries. Bring in patio furniture and cushions. Check window weatherstripping. Book snow tire swap for the Mazda.'"
+     },
+     "output": "Created note 'House - week of 13 Oct' (id n_51c9)\n"
+    },
+    {
+     "t": "assistant",
+     "text": "Here's the list, saved as 'House - week of 13 Oct':\n- Thu 16 Oct, 8:00 to 10:00: someone home for the cabinet delivery\n- Shut off the outdoor tap, drain and store the hoses before the first frost\n- Test the smoke and CO detectors and swap the batteries\n- Bring in the patio furniture and cushions\n- Check the weatherstripping on the windows\n- Clean the gutters once most of the leaves are down\n- Book the snow tire swap for the Mazda\nI'm looking up snow tire appointments near Leslieville now; they fill up fast in late October."
+    },
+    {
+     "t": "notification",
+     "task": "Find snow tire swap appointments near Leslieville",
+     "report": "Availability for a tire changeover (on rims):\n- Kal Tire, Eastern Ave: Sat 25 Oct 9:00 or 11:30, $79.95\n- Canadian Tire, Leslie St: Wed 22 Oct 18:00, $89.99\n- Leslieville Auto Service (independent): Fri 24 Oct 8:30, $70\nNone booked."
+    }
+   ]
+  },
+  {
+   "id": "life-s018",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "back home, wrecked. how is it only tuesday"
+    },
+    {
+     "t": "assistant",
+     "text": "Long weekends do that. Coffee first, then we'll go easy on the to-do list."
+    },
+    {
+     "t": "notification",
+     "task": "Overnight inbox cleanup (Thanksgiving weekend)",
+     "report": "Processed 41 emails from Sat 11 Oct to Tue 14 Oct:\n- 22 newsletters and promos archived\n- 9 receipts filed to 'Receipts 2025'\n- 6 work notifications (Linear, Notion) marked read\n- 4 left in inbox for you: Nate (cabinet delivery Thu), School Cash Online (field trip $18), Wen (Looker dashboard), Olivia (Q4 roadmap preview agenda)"
+    },
+    {
+     "t": "human",
+     "k": 1,
+     "text": "=VLOOKUP(A2,Merchants!A:D,4) pulls the wrong merchant's plan on some rows. what's wrong"
+    },
+    {
+     "t": "assistant",
+     "text": "It's missing the exact-match flag. Without a fourth argument, VLOOKUP does an approximate match and assumes column A is sorted, so it grabs the nearest smaller ID.\n- Fix: =VLOOKUP(A2,Merchants!A:D,4,FALSE)\n- Or switch to =XLOOKUP(A2,Merchants!A:A,Merchants!D:D,\"not found\"), which defaults to exact match and doesn't break if columns move\n- Also check for trailing spaces in the IDs; wrap with TRIM() if some still miss"
+    },
+    {
+     "t": "human",
+     "k": 2,
+     "text": "rule of thumb for calling a cohort retention curve 'flattened'?"
+    },
+    {
+     "t": "assistant",
+     "text": "Call it flat when the period-over-period drop stays under about 1 to 2 percentage points for three or more periods in a row.\n- Look at several cohorts together; one flat cohort can be noise\n- Plot on the same axis from period 0 so you compare like with like\n- If newer cohorts flatten higher than older ones, the product is improving; if they flatten lower, acquisition quality is slipping\n- For payments products, weekly active processing is a better signal than logins"
+    },
+    {
+     "t": "human",
+     "k": 3,
+     "text": "need to vent. didn't call my mom this weekend, and she hasn't picked up last night or answered my texts today. probably nothing, her phone's always dying, but I'm spinning"
+    },
+    {
+     "t": "assistant",
+     "text": "That's an unsettling combination, and missing a call on a travel weekend is completely understandable. Do you want me to send her a message from you now, or is there a relative or neighbour near her we could ask to check in? If you tell me who to try, I can draft the texts so you only have to hit send."
+    },
+    {
+     "t": "peer",
+     "from": "work-agent",
+     "text": "Tuesday digest: 2 new Linear tickets assigned to Riya (PAY-233 'Rounding rules for multi-currency payouts', PAY-236 'Payout status webhook spec'). #onboarding: Diego asked for a decision on the business verification error copy by Thu."
+    },
+    {
+     "t": "human",
+     "k": 4,
+     "text": "thanks, I'll try her cousin. distraction: Priya might get moved to her firm's Toronto office next year. which neighbourhoods? single, architect, bikes everywhere, likes old buildings"
+    },
+    {
+     "t": "assistant",
+     "text": "Little Portugal or Trinity Bellwoods would suit her best.\n- Little Portugal / Trinity Bellwoods: Victorian rowhouses, Dundas and Ossington bike lanes, great food\n- The Annex: big old houses, the Bloor bike lane straight downtown, close to U of T\n- Cabbagetown: the city's best preserved Victorian streets, quieter, a short ride to the core\n- Corktown / Distillery: converted industrial lofts, if she wants a condo\nIf her office is downtown, all four are under a 20-minute ride."
+    },
+    {
+     "t": "peer",
+     "from": "school-portal",
+     "text": "Morse Street PS reminder: Grade 2 Toronto Zoo field trip permission forms and $18 are due this Friday 17 October via School Cash Online. Volunteers needed: 2 parents per class."
+    },
+    {
+     "t": "human",
+     "k": 5,
+     "text": "Diego's partner wants a daycare spot in the Annex for their toddler, keeps hearing about waitlists. how do Toronto daycare waitlists work?"
+    },
+    {
+     "t": "assistant",
+     "text": "Mostly centre by centre, through the City's central waitlist.\n- Families register once on the City of Toronto Child Care Wait List and pick up to about 10 centres; there's no fee to join\n- Each centre fills spots from its own list, usually by sign-up date, with priority for siblings and staff\n- Infant and toddler spots are the scarcest; 12 to 18 months of waiting is common in the Annex\n- Calling the directors every couple of months genuinely helps, because spots open with little notice\n- Under the $10-a-day program (CWELCC), most licensed centres now charge about $22 a day, falling further over time"
+    },
+    {
+     "t": "human",
+     "k": 6,
+     "text": "when do the clocks go back?"
+    },
+    {
+     "t": "assistant",
+     "text": "Sun 2 Nov 2025 at 2:00, when clocks go back to 1:00. You get an extra hour of sleep, in theory."
+    },
+    {
+     "t": "human",
+     "k": 7,
+     "text": "where does pastel de nata come from? Leo has questions"
+    },
+    {
+     "t": "assistant",
+     "text": "From the Jerónimos Monastery in Belém, Lisbon. Monks used egg whites to starch clothes and baked the leftover yolks into custard tarts. When the monasteries closed in 1834, they sold the recipe to a nearby sugar refinery, which opened the Pastéis de Belém bakery in 1837. It still uses the secret recipe."
+    },
+    {
+     "t": "compact",
+     "summary": "Session so far (Tue 14 Oct 2025, morning):\n- Riya is back from the Ottawa Thanksgiving trip, tired.\n- Overnight inbox cleanup reported: 4 emails left (Nate cabinet delivery Thu, School Cash field trip $18, Wen Looker dashboard, Olivia roadmap preview agenda).\n- Fixed a VLOOKUP returning wrong rows: add FALSE for exact match, or use XLOOKUP.\n- Explained cohort retention 'flattening' (under 1-2 pt drop for 3+ periods).\n- Riya worried she hasn't reached her mother since the weekend; offered to message her or contact someone nearby; Riya will try her cousin.\n- Suggested Toronto neighbourhoods for Priya (Little Portugal/Trinity Bellwoods, Annex, Cabbagetown, Corktown).\n- Explained Toronto daycare waitlists for Diego's partner.\n- DST ends Sun 2 Nov 2025; history of pastel de nata for Leo.\n- New Linear tickets PAY-233 and PAY-236; zoo field trip form and $18 due Fri 17 Oct."
+    },
+    {
+     "t": "human",
+     "k": 8,
+     "text": "Jun's home sick so Leo walked to school with just me, grumpy. Jun Cho is his best friend (Hannah's son), they walk to Morse Street together most mornings. text Hannah we hope Jun feels better and Leo made him a card"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "msg send --to Hannah 'Hope Jun feels better soon! Leo missed him on the walk this morning and made him a get-well card, we can drop it by after school.'"
+     },
+     "output": "Sent to Hannah Cho (08:47)\n"
+    },
+    {
+     "t": "assistant",
+     "text": "Sent to Hannah: hoping Jun feels better, and Leo will drop off his card after school. Poor Leo, the walk to Morse Street isn't the same without Jun."
+    }
+   ]
+  },
+  {
+   "id": "life-s019",
+   "events": [
+    {
+     "t": "human",
+     "k": 0,
+     "text": "rewrite my LinkedIn post celebrating the Onboarding 2.0 launch, less salesy, it sounds like a press release:\n\n'Thrilled to announce that Onboarding 2.0 is LIVE!!! Our game-changing new flow gets small businesses accepting payments in minutes, not days. Huge thanks to our world-class team. If you're a merchant tired of slow onboarding, DM me to see how Lumen Pay can transform your business!'"
+    },
+    {
+     "t": "assistant",
+     "text": "Here's a calmer version:\n\n'Onboarding 2.0 shipped this week. For a small business, the gap between signing up and taking a first payment used to be a few days of document back-and-forth; now most merchants get there the same day. That came from a lot of unglamorous work: rewriting the business verification flow, cutting steps we didn't need, and listening to merchants who told us where they got stuck. Thank you to Aisha, Diego, Wen and the whole team for the care that went into it. Still more to do, and I'd love to hear from anyone who onboards with us.'\n\nI dropped the exclamation marks, 'game-changing' and the DM pitch, and swapped the hype for one concrete change and real names. I'm running a quick check that the 'same day' claim matches the Looker numbers before you post."
+    },
+    {
+     "t": "notification",
+     "task": "Check Onboarding 2.0 time-to-first-payment in Looker",
+     "report": "Looker 'Onboarding funnel' dashboard, merchants who started after the 2.0 rollout (Oct 6-13):\n- Median time from sign-up to first payment: 6.4 hours (was 2.9 days before 2.0)\n- 71% reach first payment within 24 hours\n- Sample: 1,104 merchants\n'Most merchants get there the same day' is supported."
+    },
+    {
+     "t": "peer",
+     "from": "work-agent",
+     "text": "Slack: Tom reacted with a party emoji to the Onboarding 2.0 announcement in #general. Olivia asked in #sales-enablement for a one-pager on the new flow by Friday."
+    },
+    {
+     "t": "peer",
+     "from": "school-portal",
+     "text": "Ms. Alvarez (Grade 2, Room 104) via Edsby: Thank you to families signed up for the class snack rotation. Snacks are shared at morning recess; please send enough for 22 students and label everything with ingredients."
+    },
+    {
+     "t": "human",
+     "k": 1,
+     "text": "numbers check out, posting it. Leo's turn to bring Friday's class snack. order from PC Express for 22 kids, under $50, I'll pick up Thursday after work"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "web search 'PC Express Leslieville pickup Loblaws Queen St E kids snack packs'"
+     },
+     "output": "1. Loblaws Queen & Portland - pickup available - pcexpress.example.ca/store/1047\n2. Real Canadian Superstore, Leslie St - pickup available - pcexpress.example.ca/store/2811\n3. 'Best class snacks for 20+ kids' - blog.example.com - fruit cups, crackers, mini muffins, granola bars\n"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "shop search --store pcexpress:2811 'kids snack multipack'"
+     },
+     "output": "1. Goldfish Cheddar Crackers, 30 x 28 g snack packs        $15.99\n2. Nature Valley Crunchy Granola Bars, Oats 'n Honey, 24 bars $10.49\n3. Clementines, 2 lb bag                                    $4.99\n4. PC Mini Banana Chocolate Chip Muffins, 24 pack            $9.99\n5. Mott's Fruitsations Fruit Cups, 12 pack                    $7.49\n"
+    },
+    {
+     "t": "tool",
+     "name": "Bash",
+     "input": {
+      "command": "shop order --store pcexpress:2811 --items 'Goldfish Cheddar Crackers 30-pack x1; PC Mini Banana Chocolate Chip Muffins 24-pack x1; Clementines 2 lb x2' --pickup 'Thu 16 Oct 17:30-18:00'"
+     },
+     "output": "Order confirmed: PCX-77310452\nStore: Real Canadian Superstore, 17 Leslie St, Toronto\n  1 x Goldfish Cheddar Crackers, 30 x 28 g      $15.99\n  1 x PC Mini Banana Chocolate Chip Muffins, 24  $9.99\n  2 x Clementines, 2 lb bag                      $9.98\nSubtotal $35.96  Pickup fee $3.99  HST $0.52  Total $40.47\nPickup: Thu 16 Oct, 17:30-18:00\n",
+     "action": true
+    },
+    {
+     "t": "assistant",
+     "text": "Ordered from the Real Canadian Superstore on Leslie St for Thu 16 Oct, 17:30 to 18:00 pickup, $40.47 total (order PCX-77310452).\n- Goldfish crackers, 30 snack packs\n- PC mini banana chocolate chip muffins, 24\n- 2 bags of clementines\nThat's at least one of each for all 22 kids, with a few spares. Ms. Alvarez asked that everything be labelled with ingredients, so keep the boxes or tape the labels on."
+    }
+   ]
+  }
+ ]
+}
