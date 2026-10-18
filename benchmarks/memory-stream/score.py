@@ -10,6 +10,7 @@ Systems
                           and until it is invalidated
                   oracle  one clean row per item, visible from the event that first states it, and until its
                           correction is stated (perfect extraction)
+                  sleep   the rows a sleep compiler wrote (sleep.py, SLEEP-SPEC.md), each visible after its session
 
 Which events are scored: every submit (human prompt, trigger, task notification, peer message), and every
 `action` tool call (scored apart). A need is a planned need that is not already in the context window
@@ -201,6 +202,58 @@ def score(events, packets, cov, items, stream):
     return res
 
 
+def source_index(stream):
+    """Content-token index of every event, to trace a bullet to the event it was copied from."""
+    idx, src = {}, {}
+    for s in stream["sessions"]:
+        for e in s["events"]:
+            c = content(e["text_all"])
+            src[e["id"]] = (e["t"], c)
+            for t in c:
+                idx.setdefault(t, set()).add(e["id"])
+    return idx, src
+
+
+def trace(text, idx, src):
+    """The event type a bullet most likely came from (≥ 0.7 of its content tokens), else None."""
+    c = content(text)
+    if not c:
+        return None
+    hits = {}
+    for t in c:
+        for ev in idx.get(t, ()):
+            hits[ev] = hits.get(ev, 0) + 1
+    best = max(hits, key=hits.get, default=None)
+    return src[best][0] if best and hits[best] / len(c) >= 0.7 else None
+
+
+def decompose(events, packets, stream, items):
+    """Classes of every injected bullet (human and trigger events): where the noise comes from."""
+    idx, src = source_index(stream)
+    out = {}
+    for e in events:
+        lab = e["labels"]
+        needs = set(lab["needs"]) - set(lab.get("in_context", []))
+        allowed = set(lab.get("allowed", []))
+        stale = stale_items(stream, items, e)
+        for text, c in packets.get(e["id"], []):
+            if c & needs:
+                k = "needed"
+            elif c & stale:
+                k = "stale"
+            elif c & e["_window"]:
+                k = "in-context"
+            elif c & allowed:
+                k = "allowed"
+            elif c:
+                k = "other-item"
+            else:
+                k = "noise:" + (trace(text, idx, src) or "untraced")
+            out[k] = out.get(k, 0) + 1
+    total = sum(out.values()) or 1
+    return {k: [v, round(v / total, 3)] for k, v in sorted(out.items(), key=lambda kv: -kv[1])}
+
+
 def eden_packets(run, cov):
     out = {}
     for line in open(os.path.join(run, "packets.jsonl")):
@@ -248,6 +301,7 @@ def main():
     ap.add_argument("--systems", default="eden lex oracle-need")
     ap.add_argument("--store", default="write")
     ap.add_argument("--split", default="dev")
+    ap.add_argument("--sleep-tag", default="out")
     ap.add_argument("--json")
     a = ap.parse_args()
     stream, items = load_stream(a.world)
@@ -265,10 +319,15 @@ def main():
         if name == "eden":
             pk = eden_packets(run, cov)
             results[name] = score(events, pk, cov, items, stream)
+            results[name]["bullet_classes"] = decompose(events, pk, stream, items)
             continue
         if a.store == "write":
             rows = write_store(run)
             clock = lambda e: times.get(e["id"], 0)
+        elif a.store == "sleep":
+            import sleep
+            rows = sleep.rows(stream, a.world, a.sleep_tag)
+            clock = lambda e: e["_order"]
         else:
             rows = oracle_store(stream, items, events)
             clock = lambda e: e["_order"]
@@ -283,6 +342,7 @@ def main():
             byid = m.by_id
             pk[e["id"]] = [(byid[i]["text"], byid[i]["covers"]) for i in ids]
         results[f"{name}@{a.store}"] = score(events, pk, cov, items, stream)
+        results[f"{name}@{a.store}"]["bullet_classes"] = decompose(events, pk, stream, items)
     print(json.dumps(results, indent=1))
     if a.json:
         json.dump(results, open(a.json, "w"), indent=1)
