@@ -75,7 +75,7 @@ describe("a typed request (an episode with the gate on) and a typed statement", 
     const request = typed("Add a retry with exponential backoff to the zorbix webhook handler.");
     const cue = { prompt: "where did we leave the zorbix webhook handler backoff?" };
     expect(admitNotes([request], cue)).toEqual([request]);
-    expect(admitNotes([request], { ...cue, requests: true })).toEqual([]);
+    expect(admitNotes([request], { ...cue, gate: true })).toEqual([]);
   });
 });
 
