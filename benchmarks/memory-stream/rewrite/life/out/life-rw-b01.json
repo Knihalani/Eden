@@ -1,0 +1,1256 @@
+{
+ "batch": "life-rw-b01",
+ "rewriter": "sonnet (claude-code subagent)",
+ "cases": [
+  {
+   "session": "life-s054",
+   "index": 0,
+   "text": "is paddington in peru streaming anywhere in canada? leo wants it for friday"
+  },
+  {
+   "session": "life-s054",
+   "index": 7,
+   "text": "dr patel's office is calling in an antibiotic for my sinus infection, they asked if I have any drug reactions on file. do I?"
+  },
+  {
+   "session": "life-s054",
+   "index": 11,
+   "text": "short replies today pls"
+  },
+  {
+   "session": "life-s054",
+   "index": 14,
+   "text": "fyi the newborn gift ideas I asked about on 2026-02-16, I ended up buying the knitted blanket for Ira"
+  },
+  {
+   "session": "life-s055",
+   "index": 0,
+   "text": "house stuff: 1) ordered the custom white-oak cabinets from Barzotti through Nate, $9,800 deposit paid February 20, 2026. 2) groceries: PC Express order for Saturday morning pickup, no-name brand on staples. 3) Sam and I decided to keep Leo at Morse Street Public School, not move him to the French immersion program at Duke of Connaught. close friends there, five minute walk. put #1 in the kitchen reno note"
+  },
+  {
+   "session": "life-s056",
+   "index": 0,
+   "text": "sam's bday is coming up and I'm drawing a blank. gift ideas + how to celebrate? also help me get ahead of our anniversary this time"
+  },
+  {
+   "session": "life-s056",
+   "index": 4,
+   "text": "Priya's contractor in Montreal took a $6k deposit for her bathroom and has been silent 5 weeks. her options in Quebec?"
+  },
+  {
+   "session": "life-s057",
+   "index": 0,
+   "text": "olivia wants the instant payouts GA date for her deck this week. short note to her with it?"
+  },
+  {
+   "session": "life-s057",
+   "index": 4,
+   "text": "where does the word 'sprint' in agile come from? Leo asked"
+  },
+  {
+   "session": "life-s057",
+   "index": 11,
+   "text": "yes ask her. and slack msg for #payouts-launch: who has the latest API error code list? the notion one looks stale"
+  },
+  {
+   "session": "life-s057",
+   "index": 15,
+   "text": "post. what's Tom's favourite whisky again? 5 yr work anniversary next week"
+  },
+  {
+   "session": "life-s057",
+   "index": 20,
+   "text": "thx. typical rent for a 1 bedroom in roncesvalles right now? diego's hunting"
+  },
+  {
+   "session": "life-s057",
+   "index": 23,
+   "text": "fyi Instant Payouts is scheduled to reach general availability 2026-09-15. put it in my payouts notes"
+  },
+  {
+   "session": "life-s057",
+   "index": 28,
+   "text": "Nate's updated schedule: kitchen renovation finishing by August 28, 2026. ugh. add it to the reno note"
+  },
+  {
+   "session": "life-s058",
+   "index": 0,
+   "text": "morning. snowing AGAIN. march is a liar"
+  },
+  {
+   "session": "life-s058",
+   "index": 2,
+   "text": "planning to visit Kabir, Mei and newborn Ira in Vancouver over the August long weekend 2026. just me, maybe Leo. rough flight costs?"
+  },
+  {
+   "session": "life-s058",
+   "index": 5,
+   "text": "cancel the price watch, too early. I'll ask in april"
+  },
+  {
+   "session": "life-s058",
+   "index": 7,
+   "text": "writing up why the pricing review slipped. pull Tom's calendar, when was he free on the 24th?"
+  },
+  {
+   "session": "life-s058",
+   "index": 10,
+   "text": "on 2026-02-27 I asked for VIA Rail times Toronto to Ottawa Friday evening, to compare with driving. what did we find?"
+  },
+  {
+   "session": "life-s058",
+   "index": 14,
+   "text": "ask olivia for 11. Ellie Cho (Hannah's daughter) is allergic to dairy, which matters because she comes over today after school with Jun. what snacks work?"
+  },
+  {
+   "session": "life-s059",
+   "index": 0,
+   "text": "Riya's house = Hannah keeps a spare key to our house and lets Nate's crew in when nobody is home. also word count on the Instant Payouts PRD draft? Tom asked if it's too long. and on 2026-03-08 I asked what time it was in Mumbai to check whether I could call my mother, she was asleep lol"
+  },
+  {
+   "session": "life-s060",
+   "index": 0,
+   "text": "ugh long day. streetcar packed both ways, stood the whole time"
+  },
+  {
+   "session": "life-s060",
+   "index": 2,
+   "text": "tomorrow is 4 years since my father Vikram Malhotra died, 2022-03-18. I prefer a lighter schedule around that date, thin out tomorrow? I'll light a diya at home like every year"
+  },
+  {
+   "session": "life-s060",
+   "index": 7,
+   "text": "send all three. also find a plumber for the dripping basement laundry tap, and pull last month's payout failure numbers from Looker for Thursday's deck"
+  },
+  {
+   "session": "life-s060",
+   "index": 13,
+   "text": "does daylight saving actually save energy or is that a myth"
+  },
+  {
+   "session": "life-s060",
+   "index": 15,
+   "text": "short slack msg for #payouts-team: mostly offline tomorrow afternoon, catching up thursday"
+  },
+  {
+   "session": "life-s060",
+   "index": 19,
+   "text": "schedule it for 9. Priya's firm wants her to transfer to their Toronto office and she's torn. what should she ask herself? something better than 'follow your heart'"
+  },
+  {
+   "session": "life-s060",
+   "index": 22,
+   "text": "yes pls. decluttering household subscriptions tonight: Netflix (standard), Spotify Family, Crave, Globe and Mail digital. cancelled Disney+ March 2026, did that charge actually stop?"
+  },
+  {
+   "session": "life-s061",
+   "index": 0,
+   "text": "book Leo's dental cleaning, Dr. Lin's office details? also on 2026-03-06 I asked what plantar fasciitis is and how long it usually lasts, resend. preference: nudge me by push notification for work items, personal ones as a single evening digest"
+  },
+  {
+   "session": "life-s062",
+   "index": 0,
+   "text": "mazda dealer keeps emailing trade-in offers. we decided not to replace the 2019 Mazda CX-5 in 2026, money toward the kitchen renovation instead, revisit buying an EV in 2028. get me off their lists?"
+  },
+  {
+   "session": "life-s062",
+   "index": 3,
+   "text": "thx. need a clean finance joke to open friday standup, nothing cringey or crypto"
+  },
+  {
+   "session": "life-s062",
+   "index": 7,
+   "text": "lol third one's good. left foot way better, plantar fasciitis early 2026 was mild, Marcus suggested calf stretches and they worked. I replace Brooks Ghost shoes every 600 km, keep an eye on that. how many km on my current pair?"
+  },
+  {
+   "session": "life-s062",
+   "index": 11,
+   "text": "change of plan on spanish corrections: when I write in Spanish, your replies in Spanish and list only the three most important corrections in bold at the end, no interrupting the conversation. ok probemos: Ayer fui a el mercado con Leo y estaba muy feliz porque compramos fresas, pero el problema es que la mano de Leo estaba pegajosa todo el día."
+  },
+  {
+   "session": "life-s063",
+   "index": 0,
+   "text": "Marcus has offers from two physio clinics: one pays ~10% more, the other is 10 min by bike vs 45 min on the subway. he asked what I'd do. help me think what to tell him"
+  },
+  {
+   "session": "life-s063",
+   "index": 2,
+   "text": "unrelated, how long does a canadian passport renewal by mail take right now?"
+  },
+  {
+   "session": "life-s063",
+   "index": 7,
+   "text": "later. sun's out, coffee on the porch, feels like spring"
+  },
+  {
+   "session": "life-s063",
+   "index": 9,
+   "text": "sort the march break photos in my Drive, rename by date, blurry ones into a separate folder. and summarize the ~12 unopened newsletters this week"
+  },
+  {
+   "session": "life-s063",
+   "index": 13,
+   "text": "keep replies shorter today, I'm on my phone"
+  },
+  {
+   "session": "life-s063",
+   "index": 15,
+   "text": "heading to the park with Leo, back in a bit"
+  },
+  {
+   "session": "life-s064",
+   "index": 0,
+   "text": "Sam and I rejected the $1,900 two-week overnight camp for Leo summer 2026, too young. chose Riverdale Farm day camp instead. registration page and which weeks have spots?"
+  },
+  {
+   "session": "life-s064",
+   "index": 7,
+   "text": "perfect"
+  },
+  {
+   "session": "life-s064",
+   "index": 10,
+   "text": "camp wants a $200 deposit by e-transfer before friday. which account do we usually pay family stuff from, and where's my personal money?"
+  },
+  {
+   "session": "life-s064",
+   "index": 15,
+   "text": "text Hannah, does Jun want the same weeks, Jul 13-24? we could split drop-offs"
+  },
+  {
+   "session": "life-s064",
+   "index": 20,
+   "text": "meh. when does yard waste pickup start this spring on our street? and price a pack of paper yard waste bags"
+  },
+  {
+   "session": "life-s064",
+   "index": 24,
+   "text": "thanks"
+  },
+  {
+   "session": "life-s064",
+   "index": 27,
+   "text": "ok cool"
+  },
+  {
+   "session": "life-s064",
+   "index": 29,
+   "text": "Kabir and Mei might fly in with Ira for a week in early September. offer them to stay with us, or will the house still be a construction zone?"
+  },
+  {
+   "session": "life-s064",
+   "index": 32,
+   "text": "yes pls. night"
+  },
+  {
+   "session": "life-s065",
+   "index": 0,
+   "text": "usual coffee is now an oat milk cortado, not the latte. I switch to decaf after 14:00 because caffeine was hurting my sleep. use that if you order for me"
+  },
+  {
+   "session": "life-s066",
+   "index": 0,
+   "text": "what's blocked in the instant payouts epic? pull the open linear tickets"
+  },
+  {
+   "session": "life-s066",
+   "index": 4,
+   "text": "ugh legal. meanwhile research: 1) what Stripe, Square, Shopify Payments and Helcim charge for instant payouts in Canada, 2) how they show the fee before confirming, 3) public complaints about instant payout failures on Reddit or Trustpilot, last 6 months, 4) Canada's Real-Time Rail timeline now"
+  },
+  {
+   "session": "life-s066",
+   "index": 10,
+   "text": "nice. turn those four into a tight PRD appendix, half a page max"
+  },
+  {
+   "session": "life-s066",
+   "index": 12,
+   "text": "paste it in. and grab the Q1 merchant churn chart from Looker for the appendix"
+  },
+  {
+   "session": "life-s066",
+   "index": 16,
+   "text": "do any of my docs still link to the old pricing page? marketing moved it, no broken links in the beta materials"
+  },
+  {
+   "session": "life-s066",
+   "index": 19,
+   "text": "I'll fix those after. unrelated: Diego's sister is moving from Madrid next month on a work permit, how does she get a SIN?"
+  },
+  {
+   "session": "life-s067",
+   "index": 3,
+   "text": "morning. 1) on 2026-04-02 I asked whether dog walking costs are tax deductible in Canada. not for me, take that receipts folder out of the tax stuff. 2) my runs moved: Marcus Bell and I now go Sunday mornings 7:30 am instead of Saturdays, Leo has Saturday morning soccer. we meet at the foot of Leslie Street, doing the Tommy Thompson Park out-and-back. 3) Leo plays in the Leslieville house soccer league, Saturdays 9:00 am at Jimmie Simpson Park, April to June and September to October. put both in the calendar pls"
+  },
+  {
+   "session": "life-s068",
+   "index": 0,
+   "text": "car admin: April 2026 I switched the Mazda's insurance from Intact to Belairdirect, saving about $410 a year, renews in April. make sure Intact actually cancelled, chase the unused refund, file the new pink slip, fix the budget sheet"
+  },
+  {
+   "session": "life-s068",
+   "index": 4,
+   "text": "Leo built a fort out of every couch cushion and Biscuit claimed it. nobody allowed in, including Leo"
+  },
+  {
+   "session": "life-s068",
+   "index": 8,
+   "text": "Grace wants to send Leo a little parcel from Ottawa, asked what he's into and any food to skip. remind me what he's into lately?"
+  },
+  {
+   "session": "life-s068",
+   "index": 11,
+   "text": "no I'll ask him. it's Belairdirect now, not Intact, $410 a year cheaper, renews in April. text Sam so he stops opening Intact mail thinking it's a bill"
+  },
+  {
+   "session": "life-s068",
+   "index": 14,
+   "text": "when does the leslieville farmers market start back up this year?"
+  },
+  {
+   "session": "life-s068",
+   "index": 17,
+   "text": "kitchen news: Sam and I chose Caesarstone 'Frosty Carrina' quartz countertops over marble because marble stains too easily. text Nate to lock in the order with the fabricator?"
+  },
+  {
+   "session": "life-s068",
+   "index": 21,
+   "text": "also book my dental cleaning with Dr. Lin. apr 22 if possible, late morning ideally"
+  },
+  {
+   "session": "life-s068",
+   "index": 24,
+   "text": "hold that thought. Jun and his big sister are at ours after school tomorrow, their mom's on a day shift. order something for them to eat from PC Express for pickup tomorrow at 3, enough for three kids"
+  },
+  {
+   "session": "life-s069",
+   "index": 0,
+   "text": "Moreau's clinic is weekdays only and Biscuit gets into stuff on weekends, pull up that weekend vets list you found. PRD decision log: April 2026 the team chose exponential backoff with a 72-hour retry window for payout webhooks, following Aisha's proposal, over a fixed 24-hour window. add it. and what's the beta's success bar? same section"
+  },
+  {
+   "session": "life-s070",
+   "index": 2,
+   "text": "ugh I'll deal with Tom after dinner. check my library holds? a couple should be ready, stuff due this week"
+  },
+  {
+   "session": "life-s070",
+   "index": 6,
+   "text": "perfect thanks"
+  },
+  {
+   "session": "life-s070",
+   "index": 8,
+   "text": "why do onions make me cry but shallots barely do?"
+  },
+  {
+   "session": "life-s071",
+   "index": 2,
+   "text": "yes reply but it changed: weekly call with my mother Anjali moved to Saturdays 8:30 am Toronto time, 6:00 pm Mumbai. Sundays are out because of Leo's Sunday soccer. tell her nicely, fix the calendar event, tell Kabir the new time too"
+  },
+  {
+   "session": "life-s072",
+   "index": 0,
+   "text": "Biscuit is due for annual shots + rabies booster. since early April 2026 his vet is Dr. Kaur at Riverside Veterinary Clinic on Broadview Ave (Dr. Moreau retired). update his contact and book next week, weekday after 5:30?"
+  },
+  {
+   "session": "life-s072",
+   "index": 5,
+   "text": "laptop charger died at the office. closest place near King and Spadina for a usb-c one, 65W+?"
+  },
+  {
+   "session": "life-s072",
+   "index": 10,
+   "text": "what was that one you summarized a while back, about how developer-platform companies decide what to charge? want to send it to Aisha"
+  },
+  {
+   "session": "life-s073",
+   "index": 2,
+   "text": "in Google Sheets how do I count payouts over $10,000? amounts in column D. COUNTIF or something fancier? write the formula"
+  },
+  {
+   "session": "life-s074",
+   "index": 0,
+   "text": "sweep today's inbox, what needs a reply before tomorrow? I'm wiped"
+  },
+  {
+   "session": "life-s074",
+   "index": 5,
+   "text": "ok. find me a decent video on fixing a running toilet, downstairs one again"
+  },
+  {
+   "session": "life-s074",
+   "index": 8,
+   "text": "tl;dr? does it affect us?\n\nCITY OF TORONTO\nNOTICE OF CONSTRUCTION\nWatermain Replacement and Road Resurfacing\n\nDate of Notice: April 20, 2026\nProject: Leslieville Watermain Renewal, Contract 26ECS-TI-08WR\n\nDear Resident/Business Owner,\n\nThe City of Toronto will be replacing the watermain on the streets\nlisted below. This work is part of the City's ongoing program to\nimprove the reliability of the water distribution system.\n\nLocation:\n- Curzon Street, from Queen Street East to Dundas Street East\n- Bertmount Avenue, from Queen Street East to Dundas Street East\n- Erie Terrace, full length\n\nAnticipated Start: May 11, 2026\nAnticipated Completion: September 4, 2026 (weather permitting)\n\nWhat to expect:\n- Work hours are 7:00 a.m. to 7:00 p.m., Monday to Friday.\n- Temporary water service will be provided through above-ground\n  hoses. A notice will be delivered 48 hours before your connection.\n- Water service interruptions of up to 8 hours may occur. Advance\n  notice will be provided.\n- On-street parking will be restricted within the work zone.\n- Driveway access may be restricted for short periods. The\n  contractor will notify you in advance.\n- Garbage and recycling collection will continue as scheduled.\n  Please label your bins with your house number.\n\nWater service connection:\nThe City will replace the City-owned portion of your water service\npipe. If your private portion is lead, you may be eligible for the\nPriority Lead Water Service Replacement Program.\n\nContractor: Bramco Civil Ltd.\nCity Field Inspector: M. Ostrowski, 416-555-0177\nConstruction Hotline: 416-338-2525\n\nThank you for your patience.\nEngineering & Construction Services"
+  },
+  {
+   "session": "life-s074",
+   "index": 11,
+   "text": "lol 10:30pm reading city notices and toilet videos. peak 36"
+  },
+  {
+   "session": "life-s074",
+   "index": 13,
+   "text": "add 'buy printer ink' to my to-do, and HP 67 cartridge prices?"
+  },
+  {
+   "session": "life-s074",
+   "index": 18,
+   "text": "ok thanks"
+  },
+  {
+   "session": "life-s074",
+   "index": 24,
+   "text": "yes do that"
+  },
+  {
+   "session": "life-s074",
+   "index": 26,
+   "text": "does phone in bed really delay melatonin or is that overblown?"
+  },
+  {
+   "session": "life-s075",
+   "index": 0,
+   "text": "internet keeps cutting out, dropped two calls today. check for an outage and open a ticket with our provider? need it stable before the weekend"
+  },
+  {
+   "session": "life-s076",
+   "index": 0,
+   "text": "morning. remind me tonight to put the recycling out, add 'hang hallway mirror' to the house list. what do I need to hang a ~15 kg mirror on plaster walls?"
+  },
+  {
+   "session": "life-s076",
+   "index": 7,
+   "text": "different thing. if we leave for Sam's parents' next Friday right after school pickup, roughly what time do we arrive?"
+  },
+  {
+   "session": "life-s076",
+   "index": 12,
+   "text": "order dinner tonight from Pai on Duncan, family style for the three of us, delivered at 6, under $100. surprise me"
+  },
+  {
+   "session": "life-s077",
+   "index": 0,
+   "text": "Nate needs to know by Monday what we want on the wall behind the stove and sink. pull up what I was looking at a few months ago?"
+  },
+  {
+   "session": "life-s077",
+   "index": 7,
+   "text": "ok. when does the Leslieville farmers market start up again?"
+  },
+  {
+   "session": "life-s077",
+   "index": 10,
+   "text": "ok cool"
+  },
+  {
+   "session": "life-s077",
+   "index": 12,
+   "text": "nah. draft a reply to the neighbourhood association email about the street party: I can do the 2-4pm lemonade table slot but not setup"
+  },
+  {
+   "session": "life-s077",
+   "index": 17,
+   "text": "send it. where can I drop off old paint cans, a dead printer and batteries nearby?"
+  },
+  {
+   "session": "life-s077",
+   "index": 23,
+   "text": "sun's out and Biscuit claimed the one sunny patch on the porch like it's his job"
+  },
+  {
+   "session": "life-s077",
+   "index": 26,
+   "text": "needed a lazy saturday. no meetings, no slack, just coffee on the steps"
+  },
+  {
+   "session": "life-s077",
+   "index": 28,
+   "text": "thinking ahead to end of next week. I run our team sync that morning and need something light to kick it off, and the evening is free for us. ideas for both?"
+  },
+  {
+   "session": "life-s077",
+   "index": 34,
+   "text": "ok. short spring cleaning checklist, 15 items max, into notes. also need someone to haul away the old couch in the basement"
+  },
+  {
+   "session": "life-s077",
+   "index": 38,
+   "text": "wait what have we done today? quick list pls"
+  },
+  {
+   "session": "life-s077",
+   "index": 41,
+   "text": "rename my 'House' note to 'House 2026' and archive anything already checked off"
+  },
+  {
+   "session": "life-s077",
+   "index": 44,
+   "text": "25 min timer, doing the garden beds"
+  },
+  {
+   "session": "life-s078",
+   "index": 0,
+   "text": "do tulips come back every year or do I replant the bulbs?"
+  },
+  {
+   "session": "life-s078",
+   "index": 2,
+   "text": "and why are some of mine flopping? they looked great wednesday"
+  },
+  {
+   "session": "life-s078",
+   "index": 4,
+   "text": "what's deadheading, whole stem or just the flower?"
+  },
+  {
+   "session": "life-s078",
+   "index": 6,
+   "text": "ok add compost and bone meal to the hardware store list"
+  },
+  {
+   "session": "life-s078",
+   "index": 10,
+   "text": "great ty"
+  },
+  {
+   "session": "life-s079",
+   "index": 0,
+   "text": "keep answers really short today, I'm on my phone"
+  },
+  {
+   "session": "life-s079",
+   "index": 2,
+   "text": "how long to rest after a long run before legs at the gym?"
+  },
+  {
+   "session": "life-s079",
+   "index": 5,
+   "text": "ran 14k with marcus, legs are jelly lol"
+  },
+  {
+   "session": "life-s079",
+   "index": 8,
+   "text": "when was I going to see my brother's family again? can't remember if we settled on a date"
+  },
+  {
+   "session": "life-s079",
+   "index": 12,
+   "text": "later. reminder to water the garden beds every other evening at 7, and find me a cheap soaker hose"
+  },
+  {
+   "session": "life-s079",
+   "index": 17,
+   "text": "how much water do new veggie seedlings need?"
+  },
+  {
+   "session": "life-s080",
+   "index": 0,
+   "text": "Sprint planning is the 11th, I want to cut the bulk-payout CSV export and the payout nickname thing. set up time with Aisha Rahman tomorrow for scope cuts, I always pair with her before planning and bring Wen Li's data. pull adoption numbers for both, she pushes back on any cut that lacks numbers"
+  },
+  {
+   "session": "life-s081",
+   "index": 0,
+   "text": "morning. demo crew starts today, family on the temporary basement kitchen during the renovation: microwave, induction hotplate, old fridge. 5 easy dinners for that setup next week? also never saw a confirmation for the Vancouver flights after we moved the trip, did they go through?"
+  },
+  {
+   "session": "life-s082",
+   "index": 0,
+   "text": "BIA newsletter, tl;dr? just tell me if anything matters for us this month\n\n---\nLESLIEVILLE BIA | MAY 2026 NEWSLETTER\n\nSpring is finally here on Queen East!\n\n1. STREET FESTIVAL DATES ANNOUNCED\nThe Leslieville Flea returns to Ashbridge Estate on Sundays May 24, June 28 and July 26, 10am-4pm. Over 80 vendors, vintage, makers, food trucks. Volunteers wanted for setup (8-10am).\n\n2. QUEEN STREET WATERMAIN WORK\nThe City of Toronto will replace the watermain on Queen St E between Leslie St and Jones Ave starting May 19. Expect lane restrictions eastbound, 7am-7pm weekdays, for about 9 weeks. The 501 streetcar will keep running but expect delays; some stops will be temporarily relocated. Local businesses remain open, please keep shopping local!\n\n3. FLOWER PLANTERS\nThanks to our sponsors, 46 new planters are going in along Queen this month. Adopt-a-planter sign-ups are open: you water it twice a week from June to September and get your family name on a little plaque.\n\n4. NEW MEMBERS\nWelcome to: Tidepool Books (children's and YA, 1102 Queen E), Hearth Bakehouse (sourdough and pastries, opening May 15), and Northbound Cycle (repairs and rentals, 1311 Queen E).\n\n5. SAFETY WALK\nThe 55 Division community safety walk is Thursday May 21 at 7pm, meeting at Jimmie Simpson Rec Centre. Light refreshments.\n\n6. PARKING\nGreen P lot at Coxwell & Queen will close for resurfacing June 1-14. Street parking permits are unaffected.\n\n7. SUMMER MOVIE NIGHTS\nMovies in the park return to Greenwood Park on the last Friday of June, July and August, starting at dusk. Bring a blanket. Titles voted by residents, poll closes May 31.\n\n8. BUSINESS SPOTLIGHT\nThis month we chat with the owners of Queen East Hardware, celebrating 40 years at the corner of Queen and Logan. 'We've seen the neighbourhood change a lot, but people still come in for one screw and a chat.'\n\nThat's all for May. See you on the street!\n---"
+  },
+  {
+   "session": "life-s082",
+   "index": 2,
+   "text": "ok different thing. I asked Diego for a custom slack emoji for the payouts team (money bag with speed lines), he wants name ideas from me. give me a few? I've picked :zoom-money: unless you have something way better"
+  },
+  {
+   "session": "life-s083",
+   "index": 0,
+   "text": "Hannah texted, Jun is begging for Leo to stay over at theirs. She'd grab both boys at 3:30, pizza and a movie, back tomorrow morning in time to walk in together. text her a yes and put it in the family calendar?"
+  },
+  {
+   "session": "life-s084",
+   "index": 3,
+   "text": "pull the open beta-payouts bugs from linear, 3 line summary I can say out loud"
+  },
+  {
+   "session": "life-s085",
+   "index": 0,
+   "text": "find the Q2 roadmap review deck Tom shared last week. any comments on it?"
+  },
+  {
+   "session": "life-s085",
+   "index": 6,
+   "text": "shorter pls, reading on my phone"
+  },
+  {
+   "session": "life-s085",
+   "index": 10,
+   "text": "random q, Diego's partner needs a daycare spot in Roncesvalles for their 1 year old, everywhere has a 2 yr waitlist. any ideas?"
+  },
+  {
+   "session": "life-s085",
+   "index": 15,
+   "text": "slack msg for #payouts-launch: beta retro thursday 2pm, room 4B, add sticky notes to the miro board before"
+  },
+  {
+   "session": "life-s085",
+   "index": 17,
+   "text": "post it. also table: Starter 2.9% + 30c, Growth 2.6% + 25c, Scale 2.2% + 20c, Enterprise custom. cost on a $100 and $1000 payment"
+  },
+  {
+   "session": "life-s085",
+   "index": 21,
+   "text": "need an OOO for Friday the 22nd. short. back Monday 25th, Aisha covers payouts questions"
+  },
+  {
+   "session": "life-s085",
+   "index": 23,
+   "text": "AC on our floor is set to arctic. wearing my coat at my desk lol"
+  },
+  {
+   "session": "life-s085",
+   "index": 27,
+   "text": "what have we done so far today? lost track"
+  },
+  {
+   "session": "life-s085",
+   "index": 30,
+   "text": "someone brought in Portuguese custard tarts from the place on Dundas. had two. no regrets"
+  },
+  {
+   "session": "life-s085",
+   "index": 34,
+   "text": "quick one, difference between ACH and a wire? sales keeps mixing them up"
+  },
+  {
+   "session": "life-s085",
+   "index": 39,
+   "text": "how does interac e-transfer autodeposit work, where does the money sit?"
+  },
+  {
+   "session": "life-s086",
+   "index": 4,
+   "text": "after today's call I decided: dropping same-day CAD-USD settlement from Instant Payouts v1 to protect the launch date, planned for v1.1. add to the decision log in notion with today's date. reasons: FX partner certification won't land in time, and the 40 beta merchants mostly settle CAD only"
+  },
+  {
+   "session": "life-s087",
+   "index": 0,
+   "text": "ugh. Tom messaged me at 6pm on a SATURDAY asking why the beta success rate dipped on Thursday and I've been spiralling all evening. was having a nice day with Leo and now my brain is in Looker. hate that one message can do this"
+  },
+  {
+   "session": "life-s087",
+   "index": 6,
+   "text": "fine. remind me Tuesday morning to return Leo's library books, due Wednesday, already paid one fine this year"
+  },
+  {
+   "session": "life-s087",
+   "index": 9,
+   "text": "thx"
+  },
+  {
+   "session": "life-s087",
+   "index": 11,
+   "text": "how do I fix the nest thermostat schedule? Sam 'adjusted' it and now heat comes on at 4am"
+  },
+  {
+   "session": "life-s087",
+   "index": 14,
+   "text": "different thing, a friend's sister is moving to Calgary in September for a downtown job. no car. which neighbourhoods?"
+  },
+  {
+   "session": "life-s087",
+   "index": 16,
+   "text": "go through my email this week, what needs a reply? I've been ignoring it"
+  },
+  {
+   "session": "life-s087",
+   "index": 21,
+   "text": "Leo spent the afternoon building a cardboard fort in the living room out of the reno boxes. door and a 'no grownups' sign. we may never get the couch back"
+  },
+  {
+   "session": "life-s087",
+   "index": 25,
+   "text": "lol ok. later"
+  },
+  {
+   "session": "life-s087",
+   "index": 29,
+   "text": "text Hannah, do she and the kids want to come to the playground + market thing tomorrow, 10:30 at Riverdale Park East"
+  },
+  {
+   "session": "life-s087",
+   "index": 31,
+   "text": "yes send. Olivia's email: she wants a short blurb on what's in the release for her sales deck monday. 4-5 lines max"
+  },
+  {
+   "session": "life-s087",
+   "index": 38,
+   "text": "Sam's colleague asked what a good first telescope is for her 12 year old, around $300. I know nothing about telescopes"
+  },
+  {
+   "session": "life-s088",
+   "index": 0,
+   "text": "happy long weekend! checklist for today pls: fix Leo's bike chain, hang the hallway mirror, sort the garage recycling, plant the tomato seedlings, find the good extension cord"
+  },
+  {
+   "session": "life-s088",
+   "index": 3,
+   "text": "why do we even have Victoria Day? is it literally her birthday"
+  },
+  {
+   "session": "life-s088",
+   "index": 9,
+   "text": "good spots for fireworks tonight in the east end? Leo is determined to stay up"
+  },
+  {
+   "session": "life-s088",
+   "index": 15,
+   "text": "Grace texted, they want all three of us up for Winterlude next February. sketch a Saturday with Leo? skating on the canal, beavertails, that kind of thing"
+  },
+  {
+   "session": "life-s088",
+   "index": 17,
+   "text": "perfect thanks"
+  },
+  {
+   "session": "life-s088",
+   "index": 23,
+   "text": "ok he's fine, ate chicken skin, napping now. ugh. I need to cut payout nicknames and the scheduled-payouts calendar view for Mon the 25th, help me get that sorted by Thursday?"
+  },
+  {
+   "session": "life-s088",
+   "index": 27,
+   "text": "hold off a sec. what's the difference between a sprint goal and the sprint backlog? Tom says our goals are just lists"
+  },
+  {
+   "session": "life-s088",
+   "index": 32,
+   "text": "Sam and I are arguing. what did the forecast say for Saturday 7am? he swears rain and that's why we bailed on the farmers market"
+  },
+  {
+   "session": "life-s088",
+   "index": 38,
+   "text": "lol sending him that. last thing, short note to the payouts team thanking them for the beta passing 10,000 payouts this week. warm, not cheesy, I'll post it tomorrow"
+  },
+  {
+   "session": "life-s089",
+   "index": 0,
+   "text": "new rule: you can send routine scheduling replies directly (accepting, proposing, confirming times) without showing me first. any other email still needs me to approve the draft. also pull my notes on the Mumbai trip for next year, I want to start watching fares"
+  },
+  {
+   "session": "life-s090",
+   "index": 0,
+   "text": "checklist for the little guy's day camp at Riverdale Farm? starts Mon 29 Jun, I want to label everything this weekend so we're not scrambling"
+  },
+  {
+   "session": "life-s090",
+   "index": 5,
+   "text": "perfect ty"
+  },
+  {
+   "session": "life-s090",
+   "index": 8,
+   "text": "also remind me tmrw at 8 to call 311 about the cracked green bin lid. can we just request a new one online? and next hazardous waste drop-off near us, ~6 old paint cans from the reno"
+  },
+  {
+   "session": "life-s091",
+   "index": 3,
+   "text": "good, send it. then a bike shop near us that can tune up Leo's bike this weekend, chain is making an awful noise"
+  },
+  {
+   "session": "life-s091",
+   "index": 8,
+   "text": "beta merchants keep sending feedback all over: support emails, sales calls, random replies to my updates. set up a central place for the team to log it so we can triage weekly? give me a starting structure"
+  },
+  {
+   "session": "life-s091",
+   "index": 12,
+   "text": "ugh office days. the 504 was so packed I stood the whole way with someone's backpack in my face"
+  },
+  {
+   "session": "life-s092",
+   "index": 0,
+   "text": "when's yard waste pickup on our street? backyard is a jungle after all this rain, big cleanup coming. put the next couple on the calendar"
+  },
+  {
+   "session": "life-s093",
+   "index": 0,
+   "text": "rain tomorrow afternoon, find me something to take Leo to? animated movie maybe, not too scary"
+  },
+  {
+   "session": "life-s094",
+   "index": 0,
+   "text": "morning. find Farah's (our accountant) email about the 2025 return? are we getting money back, how much"
+  },
+  {
+   "session": "life-s094",
+   "index": 5,
+   "text": "support forwarded me this, tl;dr and what do they actually want from us\n\n---------- Forwarded message ---------\nFrom: Dana Whitfield <dana@northbaycoffee.example.com>\nDate: Tue, May 26, 2026 at 6:02 PM\nSubject: Re: Re: Re: Payout delayed AGAIN\nTo: support@lumenpay.example.com\n\nHi,\n\nI'm writing for the third time. Our Friday payout (ref PO-77120-F) still hasn't arrived and it's now Tuesday evening. We run three cafés and I have payroll going out Thursday.\n\nYour agent on Saturday said it was 'processing'. Your agent on Monday said it was 'returned by the receiving bank' and that it would be retried automatically. Nobody can tell me when.\n\nWe switched to your instant option specifically so this wouldn't happen. If it isn't fixed by Wednesday I'll have to move back to our old processor.\n\nDana\n\n> On Mon, May 25, 2026, Lumen Pay Support wrote:\n> Hi Dana, thanks for your patience. Our records show payout PO-77120-F\n> was returned by the receiving institution with code R03 (no account /\n> unable to locate account). Our system will automatically retry. You\n> can also update your bank details in Settings > Payouts.\n>\n> On Sat, May 23, 2026, Lumen Pay Support wrote:\n> Hi Dana, your payout is currently processing and should arrive\n> within 1-2 business days.\n>\n> On Sat, May 23, 2026, Dana Whitfield wrote:\n> Friday's payout hasn't shown up. Amount should be $8,412.55.\n> We changed banks two weeks ago (from RBC to Meridian) and updated\n> the details in your dashboard the same day.\n>\n> On Fri, May 22, 2026, Lumen Pay Payouts wrote:\n> Your payout of $8,412.55 is on its way to account ending 4471.\n\n-- \nDana Whitfield, Operations\nNorthbay Coffee Co. | 3 locations"
+  },
+  {
+   "session": "life-s094",
+   "index": 8,
+   "text": "shorter please, 3 bullets max unless I ask"
+  },
+  {
+   "session": "life-s094",
+   "index": 11,
+   "text": "what have we done so far this morning? I've been in and out"
+  },
+  {
+   "session": "life-s094",
+   "index": 14,
+   "text": "lol Biscuit refused to go out in the rain. just stood at the door looking betrayed"
+  },
+  {
+   "session": "life-s094",
+   "index": 18,
+   "text": "remind me friday to return the 3 library books, due saturday"
+  },
+  {
+   "session": "life-s094",
+   "index": 21,
+   "text": "actually Pape library hours on saturday? maybe I'll go then"
+  },
+  {
+   "session": "life-s095",
+   "index": 0,
+   "text": "two updates. 1) the SickKids allergist confirmed it after testing this May 2026: Leo is allergic only to cashews and pistachios, NOT all tree nuts. almonds, walnuts etc fine. he still carries his EpiPen Jr. in his backpack. 2) Wen Li built the 'Payouts Health' Looker dashboard, I check it every Monday. tracks success rate, median payout time and failed-payout reasons. Monday reminder with the link?"
+  },
+  {
+   "session": "life-s096",
+   "index": 0,
+   "text": "remind me tomorrow at 8pm to take the recycling and green bin out"
+  },
+  {
+   "session": "life-s096",
+   "index": 3,
+   "text": "when does the 501 Queen diversion end? Sam says track work again near Leslie"
+  },
+  {
+   "session": "life-s096",
+   "index": 7,
+   "text": "Biscuit went full opera at a fire truck on Logan tonight. Ellie wanted to know why he does it and I had nothing. something kid-friendly I can tell her tomorrow?"
+  },
+  {
+   "session": "life-s096",
+   "index": 9,
+   "text": "different thing. Priya's landlord in Montreal wants to raise her rent 7% for July. allowed in Quebec? she's stressing"
+  },
+  {
+   "session": "life-s096",
+   "index": 13,
+   "text": "did the sync with Sam's school calendar go through? want to see if his exam supervision days clash with anything in June"
+  },
+  {
+   "session": "life-s096",
+   "index": 17,
+   "text": "random q for a friend. Jae from work is choosing between two daycares for her toddler. near home: private, $1,900/mo. near her office: in the $10-a-day program, cheaper but a commute with the kid. what should she ask them?"
+  },
+  {
+   "session": "life-s096",
+   "index": 20,
+   "text": "why does the sky go greenish before a big thunderstorm? it did that Thursday"
+  },
+  {
+   "session": "life-s096",
+   "index": 22,
+   "text": "huh. difference between a tornado watch and a warning"
+  },
+  {
+   "session": "life-s096",
+   "index": 26,
+   "text": "ok random but I want to say it out loud. I'm really proud of shipping the Instant Payouts launch at Lumen Pay this May 2026. first project I've led end to end as a senior PM and it worked"
+  },
+  {
+   "session": "life-s096",
+   "index": 28,
+   "text": "can you stop ending every message with an offer or a question lol"
+  },
+  {
+   "session": "life-s096",
+   "index": 31,
+   "text": "ok good. night"
+  },
+  {
+   "session": "life-s097",
+   "index": 0,
+   "text": "text Hannah and ask if she could feed and walk Biscuit while we're away in July? she offered a while back. we'll pay obviously"
+  },
+  {
+   "session": "life-s097",
+   "index": 4,
+   "text": "new vet intake form wants Biscuit's birth date and some 'behavioural notes'. what do I put?"
+  },
+  {
+   "session": "life-s097",
+   "index": 8,
+   "text": "June newsletter, anything I actually need to do?\n\nMORSE STREET PUBLIC SCHOOL: JUNE NEWSLETTER\n\nMessage from the Principal\nWhat a year it has been! Thank you to all our families for your support. As we head into the final weeks, please keep an eye on Edsby for class-specific notices.\n\nImportant Dates\n- Fri 5 Jun: PA Day (no school for students)\n- Thu 11 Jun: Grade 2 Toronto Zoo trip (forms + $18 due Fri 5 Jun... note: PA day, so submit by Thu 4 Jun)\n- Wed 17 Jun: Track and Field Day (rain date Thu 18 Jun)\n- Fri 19 Jun: Spirit Day, wear your house colours\n- Tue 23 Jun: Report cards go home digitally via Edsby\n- Thu 25 Jun: Primary class picnics, 17:30\n- Fri 26 Jun: Last day of school, early dismissal at 12:00\n\nLost and Found\nThe lost and found bin is overflowing. All unclaimed items will be donated on Mon 22 Jun. Please label clothing and water bottles!\n\nLibrary Books\nAll library books must be returned by Fri 12 Jun. Families will receive a notice for missing books.\n\nSchool Council\nThe final School Council meeting is Tue 9 Jun at 18:30 in the library and on Zoom. We will vote on the 2026-27 fundraising plan.\n\nSummer Reading\nThe TPL TD Summer Reading Club starts Sat 27 Jun. Sign up at any branch.\n\nKindergarten Registration\nIf you have a younger child starting JK in September 2026 and have not registered, please contact the office.\n\nVolunteers\nWe still need 4 volunteers for Track and Field Day. Please email the office if you can help for a morning or afternoon.\n\nHave a wonderful summer!\nMs. D. Fraser, Principal"
+  },
+  {
+   "session": "life-s097",
+   "index": 10,
+   "text": "sorry, which of those had an actual deadline? got distracted by Sam"
+  },
+  {
+   "session": "life-s097",
+   "index": 13,
+   "text": "Sam needs a card line for his department head, retiring after 31 years at Riverdale. everything he writes sounds like a hallmark card. not cheesy"
+  },
+  {
+   "session": "life-s097",
+   "index": 15,
+   "text": "how long does a thunderstorm usually last? forecast says storms all day tomorrow, I don't believe it"
+  },
+  {
+   "session": "life-s097",
+   "index": 19,
+   "text": "speaking of rain, I asked Leo for rainy-day activity ideas for tomorrow after school and he picked building a cardboard fort. we have boxes in the basement. what else do I need?"
+  },
+  {
+   "session": "life-s098",
+   "index": 0,
+   "text": "morning. place near the office for a team lunch next thursday? 8 of us, celebrating the beta wrapping up"
+  },
+  {
+   "session": "life-s098",
+   "index": 4,
+   "text": "ok separate thing, basement dehumidifier died. bought it last summer I think, find the receipt and check if it's under warranty"
+  },
+  {
+   "session": "life-s098",
+   "index": 10,
+   "text": "warranty bit from the manual, does it cover a unit that stopped collecting water? fan still runs\n\nLIMITED WARRANTY\nYour appliance is covered by a one year limited warranty. For one year from your original date of purchase, Frigidaire will pay all costs for repairing or replacing any parts of this appliance that prove to be defective in materials or workmanship when such appliance is installed, used and maintained in accordance with the provided instructions.\n\nLIMITED 2ND-5TH YEAR WARRANTY ON SEALED SYSTEM\nIn the second through fifth years from your original date of purchase, Frigidaire will provide the sealed system parts (compressor, condenser, evaporator, dryer/strainer and connecting tubing) that prove to be defective in materials or workmanship. You are responsible for labour and transportation costs.\n\nEXCLUSIONS\nThis warranty does not cover the following:\n1. Products with original serial numbers that have been removed, altered or are not readily readable.\n2. Products that have been transferred from their original owner to another party or removed outside the USA or Canada.\n3. Rust on the interior or exterior of the unit.\n4. Products purchased 'as-is' are not covered by this warranty.\n5. Food loss due to any refrigerator or freezer failures.\n6. Products used in a commercial setting.\n7. Service calls which do not involve malfunction or defects in materials or workmanship, or for appliances not in ordinary household use or used other than in accordance with the provided instructions.\n8. Service calls to correct the installation of your appliance or to instruct you how to use your appliance.\n9. Expenses for making the appliance accessible for servicing.\n10. Service calls which involve replacement of house fuses, resetting of circuit breakers, or replacement of filters.\n11. Damages caused by services performed by service companies other than authorized Frigidaire servicers; use of parts other than genuine Frigidaire parts; external causes such as abuse, misuse, inadequate power supply, accidents, fires or acts of God.\n12. Incidental or consequential damages such as property damage.\n\nIF YOU NEED SERVICE\nKeep your receipt, delivery slip, or some other appropriate payment record to establish the warranty period should service be required."
+  },
+  {
+   "session": "life-s098",
+   "index": 13,
+   "text": "Friday!! this week felt like a month"
+  },
+  {
+   "session": "life-s098",
+   "index": 15,
+   "text": "remind me monday at lunch to call frigidaire, put the model and receipt number in the reminder"
+  },
+  {
+   "session": "life-s099",
+   "index": 0,
+   "text": "I need to cut two things from onboarding v2.1 for the 15th or we won't make it. help me get ready"
+  },
+  {
+   "session": "life-s099",
+   "index": 3,
+   "text": "fyi Jess from Rover is switching to just Tuesdays and Thursdays at noon, $27 a walk now. on my work-from-home days (Monday, Wednesday, Friday) I'll walk Biscuit myself at lunch around Greenwood Park. fix the Rover booking"
+  },
+  {
+   "session": "life-s100",
+   "index": 0,
+   "text": "skim this afternoon's all-hands email, 4 things that actually matter? was in a vendor call"
+  },
+  {
+   "session": "life-s100",
+   "index": 6,
+   "text": "two form things. lumen's summer wellness challenge wants my half marathon PB and which race, can't remember my time lol. and the bank's mortgage renewal form asks 'how is property tax handled', blanking. fill in both?"
+  },
+  {
+   "session": "life-s100",
+   "index": 10,
+   "text": "long day. three back to back calls and Biscuit ate half a croissant off the counter during the last one"
+  },
+  {
+   "session": "life-s100",
+   "index": 12,
+   "text": "smug. runs changed. since Marcus started his new job in June 2026 we do Wednesdays 6:15 am and Saturdays 7:30 am, starting at Ashbridges Bay now. update the calendar and kill the old series?"
+  },
+  {
+   "session": "life-s100",
+   "index": 17,
+   "text": "Sam and I want to start that new spy series once Leo's down, 8:30 to 10. block it? also send my mom a box of mithai, just because, she sounded low. something nice from a good shop that ships"
+  },
+  {
+   "session": "life-s100",
+   "index": 22,
+   "text": "stop giving me three options, just recommend one. 9pm brain is soup"
+  },
+  {
+   "session": "life-s100",
+   "index": 25,
+   "text": "perfect, thanks"
+  },
+  {
+   "session": "life-s100",
+   "index": 27,
+   "text": "random q, difference between a stablecoin and a CBDC? Tom keeps saying them together"
+  },
+  {
+   "session": "life-s100",
+   "index": 30,
+   "text": "ugh ok, saw Tom's message. start the offsite recap doc for payouts. header: Lumen Pay product offsite, held 2026-06-09 to 2026-06-11 at Deerhurst Resort in Muskoka. decisions first"
+  },
+  {
+   "session": "life-s100",
+   "index": 35,
+   "text": "for the recap, one fun line about day 2, what was the weather up there? and what does FINTRAC stand for, for the compliance slide"
+  },
+  {
+   "session": "life-s101",
+   "index": 0,
+   "text": "one more recap decision: we postponed multi-currency wallets to H1 2027 because the Lumen Pay compliance review of FINTRAC reporting won't finish in 2026"
+  },
+  {
+   "session": "life-s101",
+   "index": 4,
+   "text": "yes add that one, owner me. ok fun stuff. plan us a weekend in Prince Edward County, Sat 27 to Sun 28? leave Saturday at 8: Sandbanks, two wineries, the cheese shop, Lake on the Mountain and the lavender farm all Saturday, Sunday whatever. Sam's driving"
+  },
+  {
+   "session": "life-s101",
+   "index": 12,
+   "text": "hold the PEC stuff, Sam wants to think. Diego asked for the five icebreaker questions from the Muskoka product offsite for the recap appendix, I never wrote them down. give me five I can pretend were them"
+  },
+  {
+   "session": "life-s102",
+   "index": 2,
+   "text": "maybe later. Hannah's on shift Saturday afternoon, can Jun come over from 1 to 4? supposed to pour all day. tell her yes and find something indoors for the boys so I'm not refereeing for 3 hours"
+  },
+  {
+   "session": "life-s102",
+   "index": 9,
+   "text": "I'll ask Sam about PEC tonight. also we're out of basically everything. sort groceries this week: milk, eggs, bread, rice, pasta, bananas, apples, yogurt tubes for lunches, cheddar, dish soap, paper towels, frozen veggie dumplings Sam likes"
+  },
+  {
+   "session": "life-s102",
+   "index": 14,
+   "text": "unrelated, why does the CN Tower turn different colours at night? Leo asked and I said 'for fun'"
+  },
+  {
+   "session": "life-s103",
+   "index": 0,
+   "text": "Leo's bike has a flat. any bike shop near us open today that can fix it while we wait?"
+  },
+  {
+   "session": "life-s103",
+   "index": 7,
+   "text": "ugh new problem. someone dinged the car in the Loblaws lot last night, scratch and dent on the rear bumper, no note. start an insurance claim?"
+  },
+  {
+   "session": "life-s104",
+   "index": 0,
+   "text": "turn these into linear tickets, payouts team, next sprint:\n- add CSV export to the payouts history page\n- show expected arrival date on each pending payout\n- rename 'transfer' to 'payout' everywhere in the merchant dashboard copy"
+  },
+  {
+   "session": "life-s104",
+   "index": 3,
+   "text": "thx. Sam asked why we didn't go with Mexico City for December, I forgot what tipped it. dig up my notes?"
+  },
+  {
+   "session": "life-s104",
+   "index": 7,
+   "text": "right, the layover thing. Sam's marking exams in the other room and it's SO quiet lol"
+  },
+  {
+   "session": "life-s104",
+   "index": 10,
+   "text": "ok cool"
+  },
+  {
+   "session": "life-s104",
+   "index": 13,
+   "text": "I'll sort pickup tomorrow. short message for Hannah's birthday card, she's 40 on saturday, funny but not mean about age"
+  },
+  {
+   "session": "life-s104",
+   "index": 15,
+   "text": "different thing. Diego's landlord says rent goes up 6% in September, 2019-built condo rental in Liberty Village. allowed in Ontario?"
+  },
+  {
+   "session": "life-s104",
+   "index": 19,
+   "text": "quick table: payouts volume Apr 1.2M, May 1.6M, Jun 1.9M (to date), with month over month growth"
+  },
+  {
+   "session": "life-s104",
+   "index": 21,
+   "text": "difference between ACH and RTP in the US? sales keeps asking"
+  },
+  {
+   "session": "life-s104",
+   "index": 24,
+   "text": "tomorrow I grind through the payouts PRD rewrite for 3 hours before lunch. set me up a proper deep work block, do not disturb, snooze slack, the works"
+  },
+  {
+   "session": "life-s104",
+   "index": 29,
+   "text": "will move the review. did Dr. Patel's office send my bloodwork results? nurse said something about changing my dose"
+  },
+  {
+   "session": "life-s105",
+   "index": 0,
+   "text": "outside tap at the back is dripping nonstop, hose won't shut off. plumber who can come today or monday?"
+  },
+  {
+   "session": "life-s105",
+   "index": 4,
+   "text": "yes book monday. and my mid-year performance self-review is due in Lattice 2026-07-10. remind me to start next week, and again the week of"
+  },
+  {
+   "session": "life-s105",
+   "index": 12,
+   "text": "my friend Nadia is choosing between two daycares for her 2 year old. one is a 5 min walk, 4.0 rating; the other a 20 min drive, great reviews, $300 more a month. what would you weigh?"
+  },
+  {
+   "session": "life-s105",
+   "index": 16,
+   "text": "FRIDAY. finally"
+  },
+  {
+   "session": "life-s105",
+   "index": 19,
+   "text": "nice, I'll read it tonight. fyi that mid-year performance self-review in Lattice is due 2026-07-10"
+  },
+  {
+   "session": "life-s105",
+   "index": 22,
+   "text": "ok"
+  },
+  {
+   "session": "life-s105",
+   "index": 25,
+   "text": "auto-reply for wednesday, canada day. short. back thursday"
+  },
+  {
+   "session": "life-s105",
+   "index": 28,
+   "text": "Biscuit is staring at me like I owe him money"
+  },
+  {
+   "session": "life-s105",
+   "index": 30,
+   "text": "two random lookups. what openings did he end up having that day back in feb when we were trying to grab time? and roughly how much came across in that big one in May?"
+  },
+  {
+   "session": "life-s105",
+   "index": 32,
+   "text": "nah not important. remind me what I said actually helps me relax? need a plan for tomorrow, I'm fried"
+  },
+  {
+   "session": "life-s105",
+   "index": 36,
+   "text": "what's still open from today?"
+  },
+  {
+   "session": "life-s106",
+   "index": 0,
+   "text": "house smells like drywall dust and old curry, driving me nuts. order something to fix the smell? gone before the week starts"
+  },
+  {
+   "session": "life-s106",
+   "index": 5,
+   "text": "ok don't order yet, let me ask Sam. what do we actually have in the temporary kitchen setup? figuring out what I can cook this week"
+  },
+  {
+   "session": "life-s106",
+   "index": 7,
+   "text": "k"
+  },
+  {
+   "session": "life-s106",
+   "index": 11,
+   "text": "short thank-you text to Hannah for grabbing Leo on the last day of school, she totally saved me"
+  },
+  {
+   "session": "life-s107",
+   "index": 0,
+   "text": "Leo asked why Canada Day is July 1 and I don't know the details. what happened?"
+  },
+  {
+   "session": "life-s107",
+   "index": 5,
+   "text": "pick up in store is fine, Sam can grab it. also slack note for the payouts team: release freeze thursday noon to monday 9, short and friendly"
+  },
+  {
+   "session": "life-s107",
+   "index": 9,
+   "text": "Sam's asking why we went with Nate over the other two contractors. pull up the reno notes?"
+  },
+  {
+   "session": "life-s107",
+   "index": 13,
+   "text": "ok. make a zoom link for this week's call with my mom and text it to her? whatsapp video keeps freezing on her end"
+  },
+  {
+   "session": "life-s107",
+   "index": 18,
+   "text": "I'll tell you the time later. order Biscuit's usual compostable poop bags"
+  },
+  {
+   "session": "life-s107",
+   "index": 22,
+   "text": "make this PRD sentence less clunky: 'The system shall in the event of a payout failure that is caused by a bank-side error automatically attempt to reinitiate the payout without merchant intervention being required.'"
+  },
+  {
+   "session": "life-s107",
+   "index": 24,
+   "text": "perfect"
+  },
+  {
+   "session": "life-s107",
+   "index": 27,
+   "text": "add sunscreen and freezies to the shopping list, hot week"
+  },
+  {
+   "session": "life-s108",
+   "index": 0,
+   "text": "Carlos says I need a proper book to drill the subjunctive, not just apps. find a good upper-intermediate one with exercises and an answer key and order it"
+  },
+  {
+   "session": "life-s108",
+   "index": 3,
+   "text": "hold on. tl;dr this, the street party thread is out of control\n\n---------- Forwarded thread ----------\nFrom: Carol Dempsey <carol.d@mail.example>\nSubject: Re: Re: Re: Curzon St summer party!!\n\nHi all, just following up, we still need to decide between Sat 25 Jul and Sat 8 Aug. The city permit takes 6 weeks so we need to apply THIS week.\n\nOn Tue, Jun 30, Mike Arsenault wrote:\n> 8 Aug is better for us, we're at the cottage the last two weekends of July.\n>\n> On Tue, Jun 30, Priti Shah wrote:\n>> We're away 8 Aug. 25 Jul works. Also can we not do a bouncy castle this year, last year it was right in front of our driveway for 9 hours.\n>>\n>> On Mon, Jun 29, Hannah Cho wrote:\n>>> Either date works for us. Happy to run the kids' games table again. Ellie wants to do face painting.\n>>>\n>>> On Mon, Jun 29, Carol Dempsey wrote:\n>>>> Recap of what we have so far:\n>>>> - Road closure 12:00-20:00, need 60% of households to sign the petition (we have 14 of 31)\n>>>> - Potluck, everyone brings a dish + their own chairs\n>>>> - Budget: $25 per household for permit ($180), insurance ($240) and supplies\n>>>> - Volunteers needed: setup (4), barriers (2), cleanup (6)\n>>>>\n>>>> On Sun, Jun 28, Gord Whitfield wrote:\n>>>>> Can we please keep music off after 19:00, some of us have early shifts.\n>>>>>\n>>>>> On Sun, Jun 28, Lena Kowalski wrote:\n>>>>>> I can lend the PA system again. Also I know a guy with a taco truck if people want that instead of potluck.\n>>>>>>\n>>>>>> On Sat, Jun 27, Carol Dempsey wrote:\n>>>>>>> Hi neighbours! Time to plan the Curzon St party. Please reply with:\n>>>>>>> 1. Which date works: Sat 25 Jul or Sat 8 Aug\n>>>>>>> 2. Whether you can volunteer\n>>>>>>> 3. Ideas for food and activities\n>>>>>>> Also please sign the road closure petition at #42.\n>>>>>>> Thanks, Carol"
+  },
+  {
+   "session": "life-s109",
+   "index": 0,
+   "text": "Nate texted, needs us to confirm the countertop order with his fabricator by Tuesday so they can template. write the reply confirming what we picked?"
+  },
+  {
+   "session": "life-s109",
+   "index": 4,
+   "text": "I'll check with Sam. different thing, Carlos wants me to drill vocab before Thursday. a list of 12 words, food and travel themed?"
+  },
+  {
+   "session": "life-s109",
+   "index": 7,
+   "text": "update for your notes: Sam and I told Grace and Daniel last night we won't be in Ottawa for Christmas 2026 because of Lisbon. we agreed they'll visit us in Toronto in November instead. remind me in September to start planning it?"
+  },
+  {
+   "session": "life-s109",
+   "index": 13,
+   "text": "Sam wants a week at a cottage in mid-September, Mon 14 to Fri 18 Sep, with a dock, 3 hours max from home. can you look?"
+  },
+  {
+   "session": "life-s109",
+   "index": 18,
+   "text": "Olivia's EA emailed asking to move our QBR prep from Tuesday to Wednesday at 10. just handle it"
+  },
+  {
+   "session": "life-s110",
+   "index": 0,
+   "text": "inbox is drowning in promo junk. unsubscribe me from stuff I never open, last month's"
+  },
+  {
+   "session": "life-s110",
+   "index": 7,
+   "text": "random q, difference between a heat warning and an extended heat warning in Ontario? phone keeps buzzing"
+  },
+  {
+   "session": "life-s110",
+   "index": 9,
+   "text": "ugh fire truck idling on our street blaring and the dog has his head back going full opera. now Leo's up asking why he does that. quick answer for a 7 yr old?"
+  },
+  {
+   "session": "life-s110",
+   "index": 13,
+   "text": "remind me tomorrow at noon to renew the library books, due Thursday"
+  }
+ ]
+}
