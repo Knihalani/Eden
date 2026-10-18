@@ -1,0 +1,1242 @@
+{
+ "batch": "life-sleep-b06",
+ "compiler": "sonnet (claude-code subagent)",
+ "sessions": [
+  {
+   "id": "life-s060",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0001",
+     "text": "Riya's father, Vikram Malhotra, died on 2022-03-18. Around March 18 each year Riya prefers a lighter schedule (thin out meetings, nothing sprint-like); she lights a diya at home in the evening.",
+     "kind": "routine",
+     "entities": [
+      "Vikram Malhotra",
+      "Riya",
+      "father"
+     ],
+     "when": {
+      "entities": [
+       "dad",
+       "father",
+       "Vikram",
+       "anniversary",
+       "diya",
+       "grief",
+       "memorial"
+      ],
+      "activities": [
+       "schedule meetings",
+       "plan the day",
+       "book a meeting",
+       "calendar planning",
+       "reschedule"
+      ],
+      "times": [
+       "03-18",
+       "every March 18",
+       "2027-03-18",
+       "mid March"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0002",
+     "text": "Riya's current subscriptions: Netflix (standard), Spotify Family, Crave, and The Globe and Mail digital. She cancelled Disney+ in March 2026 (access ended 2026-03-11, no charge since).",
+     "kind": "fact",
+     "entities": [
+      "Netflix",
+      "Spotify Family",
+      "Crave",
+      "Globe and Mail",
+      "Disney+"
+     ],
+     "when": {
+      "entities": [
+       "subscription",
+       "streaming",
+       "recurring charge",
+       "budget",
+       "Disney+",
+       "Netflix",
+       "Spotify",
+       "Crave"
+      ],
+      "activities": [
+       "review subscriptions",
+       "cancel subscription",
+       "budget review",
+       "declutter finances"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0003",
+     "text": "Wednesdays at 15:30 Riya does the pickup of Leo and Jun (Wed swap with Jun's family).",
+     "kind": "routine",
+     "entities": [
+      "Leo",
+      "Jun",
+      "Riya"
+     ],
+     "when": {
+      "entities": [
+       "pickup",
+       "school pickup",
+       "Wed swap",
+       "Jun",
+       "Hannah"
+      ],
+      "activities": [
+       "schedule a Wednesday meeting",
+       "plan Wednesday"
+      ],
+      "times": [
+       "Wednesdays 15:30"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0004",
+     "text": "Riya works at LumenPay on the Payouts team (Instant Payouts project). Colleagues: Tom Becker (her manager-level 1:1 on Wednesdays 11:30), Aisha Rahman (engineering, ledger), Olivia Grant (sales/product), Diego Fernandez (design), Mina Park, Tariq Osei. She commutes by streetcar on office days; Slack channels include #payouts-team and #payouts-eng.",
+     "kind": "person",
+     "entities": [
+      "Riya",
+      "LumenPay",
+      "Tom Becker",
+      "Aisha Rahman",
+      "Olivia Grant",
+      "Diego Fernandez",
+      "Mina Park",
+      "Tariq Osei"
+     ],
+     "when": {
+      "entities": [
+       "coworker",
+       "colleague",
+       "boss",
+       "team",
+       "Tom",
+       "Aisha",
+       "Olivia",
+       "Diego",
+       "Mina",
+       "Tariq",
+       "payouts",
+       "work"
+      ],
+      "activities": [
+       "email Tom",
+       "schedule a meeting",
+       "post in Slack",
+       "work planning"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0005",
+     "text": "Priya is a friend of Riya in Montreal whose law/professional firm asked her to transfer to its Toronto office (March 2026); she was torn about it.",
+     "kind": "episode",
+     "entities": [
+      "Priya",
+      "Montreal",
+      "Toronto"
+     ],
+     "when": {
+      "entities": [
+       "Priya",
+       "friend",
+       "transfer",
+       "Montreal"
+      ],
+      "activities": [
+       "text Priya",
+       "advise friend"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s061",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0006",
+     "text": "Dr. Lin (Riya's and Leo's dentist, cleanings every 6 months) moved in March 2026 to Danforth Smiles, 822 Danforth Ave near Pape station; phone 416-555-0144, booking at danforthsmiles.example.com. The old Queen East Dental address is outdated.",
+     "kind": "fact",
+     "entities": [
+      "Dr. Lin",
+      "Danforth Smiles",
+      "dentist",
+      "Leo",
+      "Riya"
+     ],
+     "when": {
+      "entities": [
+       "dentist",
+       "Dr. Lin",
+       "dental",
+       "teeth cleaning",
+       "hygiene",
+       "Queen East Dental"
+      ],
+      "activities": [
+       "book dental cleaning",
+       "book dentist appointment",
+       "call dentist",
+       "Leo's dental"
+      ],
+      "times": [
+       "every 6 months"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0007",
+     "text": "Notification preference: work items come as push notifications; personal items as a single evening digest at 20:30 (no all-day pings).",
+     "kind": "preference",
+     "entities": [
+      "notifications",
+      "digest"
+     ],
+     "when": {
+      "entities": [
+       "nudge",
+       "reminder",
+       "notification",
+       "personal",
+       "work",
+       "digest"
+      ],
+      "activities": [
+       "send a reminder",
+       "notify Riya",
+       "set reminder",
+       "follow up"
+      ],
+      "times": [
+       "20:30"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0008",
+     "text": "Riya asked on 2026-03-06 about plantar fasciitis (heel inflammation, sharp first steps in morning; most cases settle in 6-12 months with stretching, supportive shoes and load management, often sooner). Her heel was bothering her again on 2026-03-24.",
+     "kind": "episode",
+     "entities": [
+      "plantar fasciitis",
+      "Riya",
+      "heel",
+      "foot"
+     ],
+     "when": {
+      "entities": [
+       "heel pain",
+       "foot",
+       "plantar fasciitis",
+       "running injury"
+      ],
+      "activities": [
+       "running",
+       "buy shoes",
+       "health question"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s062",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0009",
+     "text": "Decision (Riya and Sam, March 2026): not replacing the 2019 Mazda CX-5 in 2026; the money goes to the kitchen renovation. Revisit buying an EV in 2028. CX-5 stays; keep Downtown Mazda service reminders (60,000 km service) but trade-in offers are unwanted and unsubscribed.",
+     "kind": "rule",
+     "entities": [
+      "Mazda CX-5",
+      "car",
+      "Sam",
+      "EV",
+      "Downtown Mazda"
+     ],
+     "when": {
+      "entities": [
+       "car",
+       "vehicle",
+       "trade-in",
+       "new car",
+       "EV",
+       "Mazda",
+       "dealer",
+       "lease"
+      ],
+      "activities": [
+       "shop for a car",
+       "car budget",
+       "respond to dealer email",
+       "plan big purchases",
+       "renovation budget"
+      ],
+      "times": [
+       "2028"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0010",
+     "text": "Plantar fasciitis in early 2026 was mild and her left foot is now much better; calf stretches suggested by Marcus worked.",
+     "kind": "fact",
+     "entities": [
+      "plantar fasciitis",
+      "Marcus",
+      "foot"
+     ],
+     "when": {
+      "entities": [
+       "foot",
+       "heel",
+       "plantar fasciitis",
+       "injury",
+       "stretching"
+      ],
+      "activities": [
+       "running plan",
+       "health question"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "supersede",
+     "old": "m0008",
+     "new": "m0010"
+    },
+    {
+     "op": "add",
+     "id": "m0011",
+     "text": "Riya replaces her Brooks Ghost running shoes every 600 km. Current pair (Ghost 15, black/teal, first run 2025-08-03) was at 571 km on 2026-03-22; flag when the running log passes 560 km and prompt a reorder (Ghost 17 women's 8.5, about $180-190 in Canada).",
+     "kind": "rule",
+     "entities": [
+      "Brooks Ghost",
+      "running shoes",
+      "running log"
+     ],
+     "when": {
+      "entities": [
+       "shoes",
+       "running shoes",
+       "Brooks",
+       "kilometres",
+       "run",
+       "gear",
+       "sneakers",
+       "sale"
+      ],
+      "activities": [
+       "log a run",
+       "buy running shoes",
+       "shoe sale",
+       "running plan",
+       "gear check"
+      ],
+      "times": [
+       "April 2026"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0012",
+     "text": "Spanish practice preference: when Riya writes in Spanish, reply in Spanish and list only the three most important corrections in bold at the end (not every mistake inline). Corrections are added to the Anki deck 'Español B2 - errores'.",
+     "kind": "preference",
+     "entities": [
+      "Spanish",
+      "Anki",
+      "corrections"
+     ],
+     "when": {
+      "entities": [
+       "Spanish",
+       "español",
+       "language practice",
+       "corrections",
+       "Anki"
+      ],
+      "activities": [
+       "reply in Spanish",
+       "correct my Spanish",
+       "language practice"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0013",
+     "text": "Riya wants clean workplace-safe finance jokes to open Friday standup; nothing cringey and nothing about crypto. Saved backups in notes as 'standup openers'.",
+     "kind": "preference",
+     "entities": [
+      "standup",
+      "jokes"
+     ],
+     "when": {
+      "entities": [
+       "joke",
+       "humor",
+       "standup opener",
+       "icebreaker",
+       "Friday standup"
+      ],
+      "activities": [
+       "open standup",
+       "write a joke",
+       "prepare standup"
+      ],
+      "times": [
+       "Fridays"
+      ]
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s063",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0014",
+     "text": "Leo's grade 2 Career Day is Tue 2026-03-31, 9:15 in Room 104 (Ms. Alvarez); Riya gives a talk of about 5 minutes plus questions, hands-on with props; parents arrive by 9:05.",
+     "kind": "plan",
+     "entities": [
+      "Leo",
+      "career day",
+      "Ms. Alvarez",
+      "Room 104"
+     ],
+     "when": {
+      "entities": [
+       "career day",
+       "talk",
+       "school event",
+       "Leo's school",
+       "Ms. Alvarez"
+      ],
+      "activities": [
+       "prepare talk",
+       "plan Tuesday",
+       "schedule meeting on 31 Mar"
+      ],
+      "times": [
+       "2026-03-31",
+       "Mar 31 9:15"
+      ]
+     },
+     "valid_until": "2026-03-31"
+    },
+    {
+     "op": "add",
+     "id": "m0015",
+     "text": "Morse Street PS dates: Spring Photo Day Thu 2026-04-09 (retakes 2026-05-14); Friday 2026-04-10 is a PA Day (school closed for students).",
+     "kind": "plan",
+     "entities": [
+      "Morse Street PS",
+      "Leo",
+      "photo day",
+      "PA Day"
+     ],
+     "when": {
+      "entities": [
+       "school",
+       "photo day",
+       "PA Day",
+       "day off",
+       "childcare"
+      ],
+      "activities": [
+       "plan childcare",
+       "schedule April",
+       "book appointment"
+      ],
+      "times": [
+       "2026-04-09",
+       "2026-04-10",
+       "2026-05-14"
+      ]
+     },
+     "valid_until": "2026-05-14"
+    },
+    {
+     "op": "add",
+     "id": "m0016",
+     "text": "Marcus Bell is Riya's running partner and a physiotherapist (as of March 2026 choosing between two physio clinic job offers; training for a marathon).",
+     "kind": "person",
+     "entities": [
+      "Marcus Bell",
+      "physio"
+     ],
+     "when": {
+      "entities": [
+       "Marcus",
+       "physio",
+       "running partner",
+       "friend"
+      ],
+      "activities": [
+       "plan a run",
+       "text Marcus"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s064",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0017",
+     "text": "Decision (Riya and Sam, March 2026): no $1,900 two-week overnight camp (Camp Wanakita) for Leo in summer 2026 (too young; decline email sent). Leo (age 6, turning 7 in July) does Riverdale Farm day camp Weeks 2 and 3 (Jul 13-24, 9:00-16:00, $245/week), $100 non-refundable deposit per week ($200 total, by e-transfer, ref RFC-26-0417), balance due 2026-06-01.",
+     "kind": "plan",
+     "entities": [
+      "Leo",
+      "Riverdale Farm day camp",
+      "Camp Wanakita",
+      "Sam"
+     ],
+     "when": {
+      "entities": [
+       "summer camp",
+       "camp",
+       "Leo summer",
+       "July",
+       "day camp",
+       "deposit"
+      ],
+      "activities": [
+       "plan summer",
+       "book camp",
+       "pay deposit",
+       "summer calendar",
+       "book vacation"
+      ],
+      "times": [
+       "2026-06-01",
+       "Jul 13-24 2026"
+      ]
+     },
+     "valid_until": "2026-07-24"
+    },
+    {
+     "op": "add",
+     "id": "m0018",
+     "text": "Riya asked Hannah Cho whether her son Jun wants the same Riverdale Farm camp weeks (Jul 13-24) so they could split drop-offs. Hannah's number is +1 416-555-0163; Jun is Leo's close friend.",
+     "kind": "episode",
+     "entities": [
+      "Hannah Cho",
+      "Jun",
+      "Leo"
+     ],
+     "when": {
+      "entities": [
+       "Hannah",
+       "Jun",
+       "friend",
+       "playdate",
+       "drop-off"
+      ],
+      "activities": [
+       "text Hannah",
+       "summer camp",
+       "carpool"
+      ],
+      "times": [
+       "Jul 13-24 2026"
+      ]
+     },
+     "valid_until": "2026-07-24"
+    },
+    {
+     "op": "add",
+     "id": "m0019",
+     "text": "A tentative Vancouver trip is on the calendar from Fri 2026-07-31 to Tue 2026-08-04; it overlaps camp Weeks 4 and 5, so only Weeks 2-3 are booked.",
+     "kind": "plan",
+     "entities": [
+      "Vancouver trip"
+     ],
+     "when": {
+      "entities": [
+       "Vancouver",
+       "trip",
+       "travel",
+       "vacation",
+       "July 31"
+      ],
+      "activities": [
+       "plan travel",
+       "book flights",
+       "plan summer"
+      ],
+      "times": [
+       "2026-07-31",
+       "2026-08-04"
+      ]
+     },
+     "valid_until": "2026-08-04"
+    },
+    {
+     "op": "add",
+     "id": "m0020",
+     "text": "Spending rule: the assistant asks Riya before any payment over $150. The assistant has no record of which account is used for family expenses vs. Riya's personal money; ask her or check the e-transfer 'From' dropdown (last four digits).",
+     "kind": "rule",
+     "entities": [
+      "payment",
+      "e-transfer",
+      "limit"
+     ],
+     "when": {
+      "entities": [
+       "payment",
+       "pay",
+       "transfer",
+       "e-transfer",
+       "account",
+       "purchase",
+       "order"
+      ],
+      "activities": [
+       "pay a deposit",
+       "buy something",
+       "send money",
+       "approve a purchase"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0021",
+     "text": "Toronto yard waste pickup for Riya's street (Leslieville, Thursday collection): resumes Thu 2026-04-09, then every other Thursday. Paper yard waste bags or labelled rigid containers only (no plastic); branches under 7.5 cm, bundled, max 1.2 m long and 20 kg. Cheapest paper bags: Home Depot Leslie St 10-pack $11.98.",
+     "kind": "fact",
+     "entities": [
+      "yard waste",
+      "Leslieville",
+      "Home Depot"
+     ],
+     "when": {
+      "entities": [
+       "yard waste",
+       "branches",
+       "garden",
+       "collection",
+       "garbage",
+       "Thursday pickup"
+      ],
+      "activities": [
+       "yard cleanup",
+       "buy bags",
+       "trash day"
+      ],
+      "times": [
+       "2026-04-09",
+       "every other Thursday"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0022",
+     "text": "Kitchen renovation is by Northline Renovations; contact Nate (+1 647-555-0119). As of 2026-03-30 no firm completion date was on file (Riya asked Nate); the house may be a construction zone into early September. Kabir, Mei and Ira might fly in for a week in early September 2026; the question is whether they can stay with Riya, else a furnished rental.",
+     "kind": "plan",
+     "entities": [
+      "Northline Renovations",
+      "Nate",
+      "kitchen renovation",
+      "Kabir",
+      "Mei",
+      "Ira"
+     ],
+     "when": {
+      "entities": [
+       "renovation",
+       "contractor",
+       "Nate",
+       "kitchen",
+       "guests",
+       "house guests",
+       "visitors",
+       "Kabir",
+       "Mei",
+       "Ira"
+      ],
+      "activities": [
+       "invite guests",
+       "book accommodation",
+       "plan September",
+       "renovation timeline"
+      ],
+      "times": [
+       "early September 2026",
+       "2026-09"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0023",
+     "text": "Sam Okafor is Riya's partner (husband); Leo is their son, Leo Okafor-Malhotra, age 6 (turning 7 in July 2026). They live in Leslieville, Toronto; they have a beagle named Biscuit.",
+     "kind": "person",
+     "entities": [
+      "Sam Okafor",
+      "Leo Okafor-Malhotra",
+      "Biscuit",
+      "Riya"
+     ],
+     "when": {
+      "entities": [
+       "partner",
+       "husband",
+       "spouse",
+       "son",
+       "Leo",
+       "Sam",
+       "dog",
+       "family",
+       "Biscuit"
+      ],
+      "activities": [
+       "plan dinner",
+       "gift",
+       "family plans",
+       "text Sam"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s065",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0024",
+     "text": "Riya's coffee order is an oat milk cortado (no longer a latte); she switches to decaf after 14:00 because caffeine hurts her sleep.",
+     "kind": "preference",
+     "entities": [
+      "coffee",
+      "oat milk cortado",
+      "decaf"
+     ],
+     "when": {
+      "entities": [
+       "coffee",
+       "cafe",
+       "latte",
+       "cortado",
+       "decaf",
+       "order drinks",
+       "coffee shop"
+      ],
+      "activities": [
+       "order coffee",
+       "afternoon meeting at a cafe",
+       "order for Riya",
+       "catering"
+      ],
+      "times": [
+       "after 14:00"
+      ]
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s066",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0025",
+     "text": "Instant Payouts project (LumenPay): PAY-1421 (AML threshold sign-off) was blocked on legal review and blocked PAY-1403 (per-merchant daily instant cap); legal sign-off meeting was set for 2026-04-16 14:30. PAY-1417 (payout.failed retry policy) was waiting on a decision from Riya.",
+     "kind": "fact",
+     "entities": [
+      "Instant Payouts",
+      "PAY-1421",
+      "PAY-1403",
+      "PAY-1417",
+      "legal"
+     ],
+     "when": {
+      "entities": [
+       "instant payouts",
+       "AML",
+       "legal review",
+       "blocked tickets",
+       "Linear",
+       "PAY-1421",
+       "PAY-1417"
+      ],
+      "activities": [
+       "check blocked tickets",
+       "status update",
+       "chase legal"
+      ],
+      "times": [
+       "2026-04-16"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0026",
+     "text": "Instant payout market scan (2026-04-08), in PRD Appendix C: Stripe 1.5% (min $0.50), Square 1.75%, Shopify Payments 1.5%, Helcim has no instant product; net amount received is the most prominent number at confirmation. Design principles: never charge a fee on a failed payout, show net first, explain ineligibility plainly. Real-Time Rail has a phased 2026 launch, so card rails remain the practical path.",
+     "kind": "fact",
+     "entities": [
+      "Instant Payouts PRD",
+      "Appendix C",
+      "Stripe",
+      "Square",
+      "Shopify Payments",
+      "Helcim"
+     ],
+     "when": {
+      "entities": [
+       "competitors",
+       "pricing",
+       "fees",
+       "instant payouts",
+       "fee display",
+       "Real-Time Rail"
+      ],
+      "activities": [
+       "write PRD",
+       "pricing discussion",
+       "design fee display"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0027",
+     "text": "The old pricing page lumenpay.example.com/pricing-legacy moved to lumenpay.example.com/pricing. Riya still needs to fix 5 links in: Instant Payouts PRD (Overview, Appendix B), Beta merchant FAQ, Onboarding 2.0 retro, Sales one-pager draft, before beta materials go out.",
+     "kind": "plan",
+     "entities": [
+      "pricing page",
+      "lumenpay.example.com/pricing",
+      "Beta merchant FAQ",
+      "Instant Payouts PRD"
+     ],
+     "when": {
+      "entities": [
+       "pricing link",
+       "broken link",
+       "beta materials",
+       "docs",
+       "FAQ"
+      ],
+      "activities": [
+       "edit beta materials",
+       "update docs",
+       "send beta materials"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s067",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0028",
+     "text": "Dog walking costs are not tax deductible for Riya; the dog walking receipts were moved out of the tax deductions folder (/Taxes/2025/Deductions) to /Household/Biscuit. Biscuit is the family dog.",
+     "kind": "fact",
+     "entities": [
+      "dog walking",
+      "Biscuit",
+      "taxes",
+      "receipts"
+     ],
+     "when": {
+      "entities": [
+       "tax",
+       "deductions",
+       "receipts",
+       "dog walking",
+       "Biscuit"
+      ],
+      "activities": [
+       "do taxes",
+       "file receipts",
+       "tax prep"
+      ],
+      "times": [
+       "tax season"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0029",
+     "text": "Running with Marcus Bell: Sundays 07:30 (since 2026-04-19, moved from Saturdays because Leo has Saturday morning soccer); meet at the foot of Leslie Street for the Tommy Thompson Park out-and-back.",
+     "kind": "routine",
+     "entities": [
+      "Marcus Bell",
+      "Tommy Thompson Park",
+      "Leslie Street"
+     ],
+     "when": {
+      "entities": [
+       "run",
+       "running",
+       "Marcus",
+       "Sunday morning",
+       "long run",
+       "Tommy Thompson"
+      ],
+      "activities": [
+       "schedule Sunday morning",
+       "plan a run",
+       "book brunch",
+       "plan the weekend"
+      ],
+      "times": [
+       "Sundays 07:30"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0030",
+     "text": "Leo plays in the Leslieville house league soccer (U8), Saturdays 9:00-10:00 at Jimmie Simpson Park field 2 (arrive 8:45), April to June and September to October. 2026 spring season: 2026-04-18 to 2026-06-20, no game Sat 2026-05-16, picture day Sat 2026-05-30. Saturday mornings are therefore busy.",
+     "kind": "routine",
+     "entities": [
+      "Leo",
+      "soccer",
+      "Jimmie Simpson Park",
+      "Leslieville Soccer Club"
+     ],
+     "when": {
+      "entities": [
+       "soccer",
+       "Leo",
+       "Saturday morning",
+       "league",
+       "game",
+       "Saturday"
+      ],
+      "activities": [
+       "plan the weekend",
+       "schedule Saturday morning",
+       "book appointment on Saturday",
+       "plan outing"
+      ],
+      "times": [
+       "Saturdays 09:00",
+       "2026-04-18",
+       "2026-05-30",
+       "Sep-Oct"
+      ]
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s068",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0031",
+     "text": "Car insurance for the 2019 Mazda CX-5 moved in April 2026 from Intact to Belairdirect: policy BD-AU-7731904, 2026-04-15 to 2027-04-15, $118.42/month, about $410/year cheaper; renews each April. Intact policy cancelled effective 2026-04-15 with a $61.27 prorated refund (ref RF-2026-0419-3381, 5-7 business days). Any Intact mail is just cancellation/refund. Documents are in Drive /Household/Car/Insurance.",
+     "kind": "fact",
+     "entities": [
+      "Belairdirect",
+      "Intact",
+      "car insurance",
+      "Mazda CX-5",
+      "Sam"
+     ],
+     "when": {
+      "entities": [
+       "insurance",
+       "car insurance",
+       "Intact",
+       "Belairdirect",
+       "policy",
+       "pink slip",
+       "renewal",
+       "premium"
+      ],
+      "activities": [
+       "renew insurance",
+       "budget review",
+       "insurance claim",
+       "file taxes",
+       "check refund"
+      ],
+      "times": [
+       "April 2027",
+       "2027-04-15"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0032",
+     "text": "Leslieville Farmers' Market 2026: opens Sun 2026-05-10 (Mother's Day), Sundays 9:00-14:00 at Jonathan Ashbridge Park, 1515 Queen St E, through 2026-10-25.",
+     "kind": "fact",
+     "entities": [
+      "Leslieville Farmers' Market",
+      "Jonathan Ashbridge Park"
+     ],
+     "when": {
+      "entities": [
+       "farmers market",
+       "groceries",
+       "produce",
+       "Sunday"
+      ],
+      "activities": [
+       "plan Sunday",
+       "grocery shopping",
+       "plan Mother's Day"
+      ],
+      "times": [
+       "2026-05-10",
+       "Sundays 9:00-14:00"
+      ]
+     },
+     "valid_until": "2026-10-25"
+    },
+    {
+     "op": "add",
+     "id": "m0033",
+     "text": "Decision (Riya and Sam, April 2026): kitchen countertops are Caesarstone 'Frosty Carrina' quartz, not marble (marble stains too easily). Nate at Northline Renovations was told to go ahead with the fabricator and give a template date.",
+     "kind": "rule",
+     "entities": [
+      "Caesarstone Frosty Carrina",
+      "countertops",
+      "Northline Renovations",
+      "Nate",
+      "Sam"
+     ],
+     "when": {
+      "entities": [
+       "countertop",
+       "quartz",
+       "marble",
+       "kitchen renovation",
+       "fabricator",
+       "template"
+      ],
+      "activities": [
+       "kitchen decisions",
+       "message Nate",
+       "renovation choices"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0034",
+     "text": "Grace (relative in Ottawa) wants to send Leo a just-because parcel; Riya will ask Leo what he is into. The assistant has no note of Leo's current interests; suggest nut-free items.",
+     "kind": "episode",
+     "entities": [
+      "Grace",
+      "Leo",
+      "Ottawa"
+     ],
+     "when": {
+      "entities": [
+       "Grace",
+       "gift",
+       "parcel",
+       "Leo's interests",
+       "Ottawa"
+      ],
+      "activities": [
+       "gift ideas",
+       "text Grace"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0035",
+     "text": "Riya wants a dental cleaning with Dr. Lin at Danforth Smiles on Wed 2026-04-22, late morning; slots offered 11:00 or 11:40 (60 min, about 15 min from home); not yet booked as of 2026-04-19.",
+     "kind": "plan",
+     "entities": [
+      "Dr. Lin",
+      "Danforth Smiles",
+      "dental cleaning",
+      "Riya"
+     ],
+     "when": {
+      "entities": [
+       "dentist",
+       "cleaning",
+       "Dr. Lin",
+       "dental"
+      ],
+      "activities": [
+       "book dentist",
+       "confirm appointment",
+       "plan Wednesday"
+      ],
+      "times": [
+       "2026-04-22"
+      ]
+     },
+     "valid_until": "2026-04-22"
+    }
+   ]
+  },
+  {
+   "id": "life-s069",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0036",
+     "text": "Biscuit's regular vet, Dr. Moreau's clinic, is weekdays only. Weekend vets near Leslieville (all accept new patients): Riverside Veterinary Clinic, 690 Queen St E (Sat 9-17, Sun 10-16, walk-ins Sat mornings); Danforth Animal Clinic, 1050 Danforth Ave (Sat-Sun 9-15, walk-ins, 30-60 min wait); Queen East Pet Hospital, 1286 Queen St E (Sat 8-14, no walk-ins, phone triage Sundays).",
+     "kind": "fact",
+     "entities": [
+      "Biscuit",
+      "Dr. Moreau",
+      "Riverside Veterinary Clinic",
+      "Danforth Animal Clinic",
+      "Queen East Pet Hospital"
+     ],
+     "when": {
+      "entities": [
+       "vet",
+       "dog",
+       "Biscuit",
+       "pet emergency",
+       "weekend",
+       "sick dog",
+       "veterinarian"
+      ],
+      "activities": [
+       "find a vet",
+       "dog sick",
+       "weekend emergency",
+       "book vet"
+      ],
+      "times": [
+       "Saturday",
+       "Sunday",
+       "weekends"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0037",
+     "text": "Decision (2026-04-19, PRD decision log, PAY-1417): payout webhook retries use exponential backoff with a 72-hour retry window (Aisha Rahman's proposal), chosen over a fixed 24-hour window. Owner: Riya Malhotra.",
+     "kind": "rule",
+     "entities": [
+      "payout webhooks",
+      "PAY-1417",
+      "Aisha Rahman",
+      "Instant Payouts PRD"
+     ],
+     "when": {
+      "entities": [
+       "retry policy",
+       "webhook",
+       "backoff",
+       "payout.failed",
+       "decision log",
+       "PAY-1417"
+      ],
+      "activities": [
+       "write PRD",
+       "engineering discussion",
+       "decide retry",
+       "update decision log"
+      ],
+      "times": [
+       "2026-04-19"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0038",
+     "text": "Instant Payouts beta: 40 merchants (mix of retail, food service, trades), 6 weeks. Success bar, all must hold for 2 consecutive weeks: payout success rate >= 99.5% and median payout time < 30 minutes. GA exit: success bar met and no Sev-1 incidents in the final 2 weeks.",
+     "kind": "fact",
+     "entities": [
+      "Instant Payouts beta",
+      "success bar",
+      "Instant Payouts PRD"
+     ],
+     "when": {
+      "entities": [
+       "beta",
+       "success criteria",
+       "success bar",
+       "GA",
+       "exit criteria",
+       "merchants"
+      ],
+      "activities": [
+       "write beta plan",
+       "status update",
+       "beta readiness",
+       "PRD"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  }
+ ]
+}

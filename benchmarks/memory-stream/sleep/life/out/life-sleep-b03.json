@@ -1,0 +1,1178 @@
+{
+ "batch": "life-sleep-b03",
+ "compiler": "sonnet (claude-code subagent)",
+ "sessions": [
+  {
+   "id": "life-s030",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0001",
+     "text": "Riya tends to feel anxious on Sunday evenings before big launch weeks; what helps most is writing a three-item list for Monday and then a short walk with Biscuit.",
+     "kind": "routine",
+     "entities": [
+      "Riya",
+      "Biscuit",
+      "Sunday"
+     ],
+     "when": {
+      "entities": [
+       "anxiety",
+       "stress",
+       "Sunday night",
+       "launch week",
+       "dread",
+       "dog walk",
+       "Biscuit"
+      ],
+      "activities": [
+       "plan Sunday evening",
+       "calendar nudge",
+       "launch prep",
+       "check in on Riya's mood"
+      ],
+      "times": [
+       "Sunday evenings",
+       "Sunday 18:30"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0002",
+     "text": "When Riya vents about work stress, listen and reflect first; only offer fixes if she asks.",
+     "kind": "rule",
+     "entities": [
+      "Riya",
+      "venting"
+     ],
+     "when": {
+      "entities": [
+       "vent",
+       "work stress",
+       "frustrated",
+       "Tom",
+       "bad day"
+      ],
+      "activities": [
+       "respond to venting",
+       "give advice",
+       "reply when Riya is upset"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0003",
+     "text": "Onboarding 2.0 launched 2025-10-07 and cut KYC drop-off for new merchants from 38% to 24% in its first month; Tom asked for under 20% by Q1 2026.",
+     "kind": "fact",
+     "entities": [
+      "Onboarding 2.0",
+      "KYC drop-off",
+      "Tom",
+      "board deck"
+     ],
+     "when": {
+      "entities": [
+       "KYC",
+       "drop-off",
+       "onboarding metrics",
+       "merchants",
+       "board deck",
+       "Q1 target",
+       "20%"
+      ],
+      "activities": [
+       "write board deck",
+       "report onboarding numbers",
+       "goal setting",
+       "performance review"
+      ],
+      "times": [
+       "Q1 2026"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0004",
+     "text": "Riya wants a hotel shortlist for a Lisbon family trip next December (2026): must have an elevator, a separate sleeping space for Leo, and a walkable neighbourhood; no all-inclusive resorts (she dislikes them). Shortlisted: Casa do Principe Apartments (Principe Real, from EUR160), Lisbon Family Suites (Chiado, EUR185), Hotel Avenida Lofts (EUR210).",
+     "kind": "plan",
+     "entities": [
+      "Lisbon",
+      "Leo",
+      "hotel"
+     ],
+     "when": {
+      "entities": [
+       "Lisbon",
+       "Portugal",
+       "trip",
+       "vacation",
+       "hotel",
+       "accommodation",
+       "all-inclusive",
+       "resort",
+       "elevator",
+       "family travel"
+      ],
+      "activities": [
+       "book a hotel",
+       "plan a trip",
+       "compare lodging",
+       "travel planning",
+       "December trip"
+      ],
+      "times": [
+       "December 2026"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0005",
+     "text": "Riya takes Spanish lessons with Carlos over Zoom, Thursday 19:30-20:30; she is working toward B1/B2.",
+     "kind": "routine",
+     "entities": [
+      "Riya",
+      "Carlos",
+      "Spanish"
+     ],
+     "when": {
+      "entities": [
+       "Spanish",
+       "lesson",
+       "tutor",
+       "Carlos",
+       "language learning",
+       "Zoom"
+      ],
+      "activities": [
+       "schedule Thursday evening",
+       "practice Spanish",
+       "tongue twister",
+       "plan evening"
+      ],
+      "times": [
+       "Thursdays 19:30"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0006",
+     "text": "Payouts launch: QA for risk rules Mon 1 Dec 2025, next scheduled release Tue 2 Dec 2025 10:00. PAY-388 (payout history export) was blocked on design sign-off; PAY-421 and PAY-423 unassigned.",
+     "kind": "plan",
+     "entities": [
+      "Payouts",
+      "Linear",
+      "PAY-388"
+     ],
+     "when": {
+      "entities": [
+       "payouts launch",
+       "release",
+       "Linear",
+       "PAY-388",
+       "QA",
+       "risk rules"
+      ],
+      "activities": [
+       "plan launch week",
+       "status update",
+       "assign issues"
+      ],
+      "times": [
+       "2025-12-01",
+       "2025-12-02"
+      ]
+     },
+     "valid_until": "2025-12-02"
+    }
+   ]
+  },
+  {
+   "id": "life-s031",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0007",
+     "text": "Riya's household: partner Sam Okafor, son Leo, and beagle Biscuit; they keep a shared family calendar named 'Okafor-Malhotra family' that the assistant checks for conflicts before adding events.",
+     "kind": "person",
+     "entities": [
+      "Sam",
+      "Leo",
+      "Biscuit",
+      "family calendar"
+     ],
+     "when": {
+      "entities": [
+       "partner",
+       "husband",
+       "spouse",
+       "son",
+       "kid",
+       "family",
+       "shared calendar",
+       "dog",
+       "Sam"
+      ],
+      "activities": [
+       "add a family event",
+       "check conflicts",
+       "plan the weekend",
+       "schedule with Sam"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0008",
+     "text": "Leo has a birthday party for his friend Max on Sat 13 Dec 2025 10:00-12:00 at Playground Paradise.",
+     "kind": "plan",
+     "entities": [
+      "Leo",
+      "Max",
+      "Playground Paradise"
+     ],
+     "when": {
+      "entities": [
+       "Max",
+       "birthday party",
+       "Leo",
+       "gift"
+      ],
+      "activities": [
+       "plan Saturday 13 Dec",
+       "buy a party gift",
+       "weekend plans"
+      ],
+      "times": [
+       "2025-12-13"
+      ]
+     },
+     "valid_until": "2025-12-13"
+    }
+   ]
+  },
+  {
+   "id": "life-s032",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0009",
+     "text": "Standing rule: when Riya says she just needs to vent, only listen and reflect; no fixes or productivity tips unless she asks, and ask before offering advice.",
+     "kind": "rule",
+     "entities": [
+      "Riya",
+      "venting"
+     ],
+     "when": {
+      "entities": [
+       "vent",
+       "venting",
+       "need to vent",
+       "frustrated",
+       "work stress",
+       "Tom",
+       "tired",
+       "upset"
+      ],
+      "activities": [
+       "respond to venting",
+       "give advice",
+       "offer solutions",
+       "reply when Riya is upset"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "supersede",
+     "old": "m0002",
+     "new": "m0009"
+    },
+    {
+     "op": "add",
+     "id": "m0010",
+     "text": "Leo is obsessed with dinosaurs and Lego, especially Lego Jurassic World sets, and hates mushrooms (a scene over mushroom gravy at a past Christmas Eve dinner).",
+     "kind": "person",
+     "entities": [
+      "Leo",
+      "Lego",
+      "dinosaurs",
+      "mushrooms"
+     ],
+     "when": {
+      "entities": [
+       "Leo",
+       "son",
+       "kid",
+       "gift",
+       "toys",
+       "Lego",
+       "dinosaur",
+       "Jurassic World",
+       "mushrooms",
+       "dinner menu",
+       "food dislikes"
+      ],
+      "activities": [
+       "buy a gift for Leo",
+       "plan a menu",
+       "plan a birthday",
+       "cook dinner",
+       "choose an activity for Leo"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s033",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0011",
+     "text": "Hannah Cho is Riya's friend and neighbour-style contact (daughter Ellie, son Jun); Jun walks to school on Mondays and picks things up; Hannah's number is on file for messages.",
+     "kind": "person",
+     "entities": [
+      "Hannah Cho",
+      "Ellie",
+      "Jun"
+     ],
+     "when": {
+      "entities": [
+       "Hannah",
+       "friend",
+       "Ellie",
+       "Jun",
+       "school walk",
+       "neighbour"
+      ],
+      "activities": [
+       "text Hannah",
+       "send a thank-you",
+       "arrange a pickup",
+       "playdate"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0012",
+     "text": "Priya is Riya's close friend in Montreal; she is strictly gluten-free (celiac) and loves Sichuan food; her birthday is December 1 (Riya missed it in 2025 and sent a late gift).",
+     "kind": "person",
+     "entities": [
+      "Priya",
+      "Montreal"
+     ],
+     "when": {
+      "entities": [
+       "Priya",
+       "friend",
+       "Montreal",
+       "gluten-free",
+       "celiac",
+       "birthday",
+       "Sichuan",
+       "dinner guest"
+      ],
+      "activities": [
+       "send a gift",
+       "book a restaurant",
+       "plan a dinner",
+       "cook for Priya",
+       "birthday reminder"
+      ],
+      "times": [
+       "December 1"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0013",
+     "text": "Riya wants temperatures in Celsius only and all other measurements metric; no Fahrenheit or imperial units.",
+     "kind": "preference",
+     "entities": [
+      "Riya",
+      "Celsius",
+      "metric"
+     ],
+     "when": {
+      "entities": [
+       "temperature",
+       "weather",
+       "Celsius",
+       "Fahrenheit",
+       "units",
+       "recipe",
+       "distance",
+       "weight"
+      ],
+      "activities": [
+       "give a forecast",
+       "convert units",
+       "share a recipe",
+       "answer any measurement"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s034",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0014",
+     "text": "Wen Li is the payouts team's data analyst and is vegan; team lunches Riya orders must include a proper vegan main, not just a side salad.",
+     "kind": "person",
+     "entities": [
+      "Wen Li",
+      "team lunch"
+     ],
+     "when": {
+      "entities": [
+       "Wen Li",
+       "vegan",
+       "analyst",
+       "team lunch",
+       "catering",
+       "dietary",
+       "payouts team"
+      ],
+      "activities": [
+       "order team lunch",
+       "book catering",
+       "plan a team event",
+       "pick a restaurant for the team"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0015",
+     "text": "Team lunch for the payouts crew Thu 11 Dec 2025 at the office around 12:30, 8 people; a cart is staged at Mezze & Co. (455 King St W) with mixed grill plus four vegan dishes, total $317.53, not yet placed (awaiting headcount); order cut-off 17:00 Wed 10 Dec. Room 4B has a merchant advisory call until 12:30.",
+     "kind": "plan",
+     "entities": [
+      "team lunch",
+      "Mezze & Co.",
+      "Wen Li",
+      "Room 4B"
+     ],
+     "when": {
+      "entities": [
+       "team lunch",
+       "Mezze",
+       "catering",
+       "headcount",
+       "Room 4B",
+       "vegan"
+      ],
+      "activities": [
+       "place the lunch order",
+       "confirm headcount",
+       "order food"
+      ],
+      "times": [
+       "2025-12-10 17:00",
+       "2025-12-11 12:30"
+      ]
+     },
+     "valid_until": "2025-12-11"
+    },
+    {
+     "op": "add",
+     "id": "m0016",
+     "text": "Leslieville Farmers' Market in winter runs Sundays 10:00-14:00 indoors at Jimmie Simpson Rec Centre (870 Queen St E) until Apr 26 2026; there is no Saturday winter market.",
+     "kind": "fact",
+     "entities": [
+      "Leslieville Farmers' Market",
+      "Jimmie Simpson Rec Centre"
+     ],
+     "when": {
+      "entities": [
+       "farmers market",
+       "Leslieville",
+       "Saturday market",
+       "produce",
+       "Jimmie Simpson"
+      ],
+      "activities": [
+       "take Leo to the market",
+       "weekend plans",
+       "Saturday outing",
+       "groceries"
+      ],
+      "times": [
+       "Sundays 10:00"
+      ]
+     },
+     "valid_until": "2026-04-26"
+    },
+    {
+     "op": "add",
+     "id": "m0017",
+     "text": "Family plan: Leslieville holiday farmers market with Leo on Sun 14 Dec 2025, 10:30-12:30 at Jimmie Simpson Rec Centre (on the family calendar); skating party at Greenwood Park that day 14:00-16:30 is optional.",
+     "kind": "plan",
+     "entities": [
+      "Leo",
+      "Leslieville holiday market",
+      "Greenwood Park"
+     ],
+     "when": {
+      "entities": [
+       "holiday market",
+       "skating",
+       "Leo",
+       "Sunday",
+       "Greenwood Park"
+      ],
+      "activities": [
+       "plan Sunday 14 Dec",
+       "weekend with Leo"
+      ],
+      "times": [
+       "2025-12-14"
+      ]
+     },
+     "valid_until": "2025-12-14"
+    },
+    {
+     "op": "add",
+     "id": "m0018",
+     "text": "Morse Street PS Primary Winter Concert is Thu 18 Dec 2025 at 18:30 in the gym; Grade 2 students arrive by 18:00 in a white top; bring a non-perishable food donation; doors open 18:10. Not yet added to the family calendar.",
+     "kind": "plan",
+     "entities": [
+      "Morse Street PS",
+      "Leo",
+      "winter concert"
+     ],
+     "when": {
+      "entities": [
+       "concert",
+       "school",
+       "Grade 2",
+       "white top",
+       "food donation",
+       "Leo"
+      ],
+      "activities": [
+       "add to calendar",
+       "pack for school",
+       "plan Thursday 18 Dec evening"
+      ],
+      "times": [
+       "2025-12-18"
+      ]
+     },
+     "valid_until": "2025-12-18"
+    },
+    {
+     "op": "add",
+     "id": "m0019",
+     "text": "Leo is in Grade 2 at Morse Street PS (Edsby is the school portal); Riya's parent council gets volunteer requests there.",
+     "kind": "fact",
+     "entities": [
+      "Leo",
+      "Morse Street PS",
+      "Edsby"
+     ],
+     "when": {
+      "entities": [
+       "school",
+       "Leo",
+       "Grade 2",
+       "teacher",
+       "permission form",
+       "Edsby",
+       "class trip"
+      ],
+      "activities": [
+       "fill out a school form",
+       "plan school events",
+       "pack school things"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s035",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0020",
+     "text": "Holiday code freeze: Fri 19 Dec 2025 17:00 until Mon 5 Jan 2026 09:00; hotfixes only, approved by Aisha, deploy window 10:00-14:00 on weekdays; last regular release v4.18 on Tue 16 Dec; v4.19 train resumes 5 Jan. Riya was drafting a #payouts-team Slack post about it.",
+     "kind": "plan",
+     "entities": [
+      "code freeze",
+      "Aisha",
+      "v4.18",
+      "v4.19",
+      "payouts-team"
+     ],
+     "when": {
+      "entities": [
+       "code freeze",
+       "hotfix",
+       "release",
+       "deploy",
+       "Aisha",
+       "v4.19",
+       "freeze"
+      ],
+      "activities": [
+       "schedule a release",
+       "deploy",
+       "announce to team",
+       "plan December work",
+       "approve hotfix"
+      ],
+      "times": [
+       "2025-12-16",
+       "2025-12-19",
+       "2026-01-05"
+      ]
+     },
+     "valid_until": "2026-01-05"
+    },
+    {
+     "op": "add",
+     "id": "m0021",
+     "text": "Conflict with the freeze: 'Instant payouts limit increase (tier 2)' was targeted Mon 22 Dec 2025 (not started); Riya planned to decide and move it to January. Merchant statements year-end job on 31 Dec was approved by Aisha, who is on call.",
+     "kind": "plan",
+     "entities": [
+      "instant payouts",
+      "tier 2 limit increase",
+      "Notion launch tracker"
+     ],
+     "when": {
+      "entities": [
+       "instant payouts",
+       "limit increase",
+       "tier 2",
+       "launch tracker",
+       "statements job"
+      ],
+      "activities": [
+       "reschedule",
+       "plan January work",
+       "update the tracker"
+      ],
+      "times": [
+       "2025-12-22",
+       "2025-12-31"
+      ]
+     },
+     "valid_until": "2025-12-31"
+    },
+    {
+     "op": "add",
+     "id": "m0022",
+     "text": "Riya's passport expires in March 2026; 'Renew passports' (hers and family's) is on her to-do note; closest passport photo place is Shoppers Drug Mart, 1014 Queen St E (0.6 km, $16.99, no appointment).",
+     "kind": "plan",
+     "entities": [
+      "passport",
+      "Riya"
+     ],
+     "when": {
+      "entities": [
+       "passport",
+       "renew",
+       "travel documents",
+       "photo",
+       "Lisbon",
+       "trip"
+      ],
+      "activities": [
+       "book international travel",
+       "renew passport",
+       "run errands",
+       "plan Lisbon trip"
+      ],
+      "times": [
+       "March 2026"
+      ]
+     },
+     "valid_until": "2026-03-31"
+    },
+    {
+     "op": "add",
+     "id": "m0023",
+     "text": "Leo's Grade 2 class trip to the Ontario Science Centre pop-up is Wed 21 Jan 2026 and needs a signed permission form.",
+     "kind": "plan",
+     "entities": [
+      "Leo",
+      "Ontario Science Centre",
+      "Grade 2"
+     ],
+     "when": {
+      "entities": [
+       "class trip",
+       "permission form",
+       "science centre",
+       "Leo",
+       "school"
+      ],
+      "activities": [
+       "sign a form",
+       "plan Wednesday 21 Jan"
+      ],
+      "times": [
+       "2026-01-21"
+      ]
+     },
+     "valid_until": "2026-01-21"
+    },
+    {
+     "op": "add",
+     "id": "m0024",
+     "text": "Olivia Grant asked Riya to present for 15 minutes at the Q1 merchant webinar in late January 2026; Riya had not replied as of 9 Dec.",
+     "kind": "plan",
+     "entities": [
+      "Olivia Grant",
+      "Q1 merchant webinar"
+     ],
+     "when": {
+      "entities": [
+       "Olivia",
+       "webinar",
+       "speakers",
+       "merchants",
+       "presentation"
+      ],
+      "activities": [
+       "reply to Olivia",
+       "schedule late January",
+       "prepare a talk"
+      ],
+      "times": [
+       "late January 2026"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0025",
+     "text": "Work contacts: Tom Becker (Riya's 1:1 and escalation contact, wants board-deck numbers), Aisha Rahman (engineering lead for payouts, approves hotfixes), Diego Fernandez (designer on Payouts v2), Olivia Grant (merchant/sales side), Wen Li (data analyst).",
+     "kind": "person",
+     "entities": [
+      "Tom Becker",
+      "Aisha Rahman",
+      "Diego Fernandez",
+      "Olivia Grant",
+      "Wen Li"
+     ],
+     "when": {
+      "entities": [
+       "Tom",
+       "boss",
+       "Aisha",
+       "Diego",
+       "Olivia",
+       "Wen Li",
+       "colleague",
+       "team"
+      ],
+      "activities": [
+       "email Tom",
+       "delegate",
+       "out-of-office",
+       "meeting prep",
+       "ask design question"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s036",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0026",
+     "text": "Kitchen renovation with Northline Renovations (contact Nate): budget $48,000 including 10% contingency (about $4,364); quote v3 of 2025-12-08 is $45,890 (v2 was $43,030; electrical rose to $7,850 for a 200A panel, backsplash to porcelain $1,640, permits $1,450), using about $2,254 of the contingency. Start Mon 12 Jan 2026, about 8 weeks. $9,600 deposit paid 2025-11-20; next payment $13,767 (30%) due 12 Jan 2026 from the TD joint chequing account.",
+     "kind": "plan",
+     "entities": [
+      "kitchen renovation",
+      "Northline Renovations",
+      "Nate",
+      "quote v3"
+     ],
+     "when": {
+      "entities": [
+       "kitchen",
+       "renovation",
+       "reno",
+       "Northline",
+       "Nate",
+       "contractor",
+       "quote",
+       "contingency",
+       "budget",
+       "electrician"
+      ],
+      "activities": [
+       "reply to Nate",
+       "approve changes",
+       "budget review",
+       "pay contractor",
+       "plan January"
+      ],
+      "times": [
+       "2026-01-12"
+      ]
+     },
+     "valid_until": "2026-03-31"
+    }
+   ]
+  },
+  {
+   "id": "life-s037",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0027",
+     "text": "Grace Okafor (Sam's mother; husband Daniel Okafor) is allergic to shellfish and does not drink alcohol; offer a real mocktail, not just orange juice.",
+     "kind": "person",
+     "entities": [
+      "Grace Okafor",
+      "Daniel Okafor",
+      "Sam"
+     ],
+     "when": {
+      "entities": [
+       "Grace",
+       "Sam's mother",
+       "in-laws",
+       "Sam's parents",
+       "mother-in-law",
+       "dinner guest",
+       "shellfish allergy",
+       "no alcohol",
+       "mocktail"
+      ],
+      "activities": [
+       "plan a menu",
+       "host a dinner",
+       "buy drinks",
+       "order catering",
+       "gift for Grace"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0028",
+     "text": "NYE 2025: Grace and Daniel Okafor arrive Wed 31 Dec around 15:00 and stay until Fri 2 Jan 2026; dinner for 5 (baked brie, mushroom-spinach Wellington, Pomegranate Rosemary Fizz with Noughty or Freixenet 0.0% from Loblaws Queen & Carlaw / Metro Gerrard Square); Riya wants the same cake as last time from 'that bakery' (bakery details unknown, she will look); Riya and Leo bake a chocolate yogurt loaf that morning.",
+     "kind": "plan",
+     "entities": [
+      "Grace Okafor",
+      "Daniel Okafor",
+      "NYE",
+      "Leo"
+     ],
+     "when": {
+      "entities": [
+       "New Year's Eve",
+       "NYE",
+       "Grace",
+       "Daniel",
+       "cake",
+       "bakery",
+       "dinner for five",
+       "in-laws"
+      ],
+      "activities": [
+       "order a cake",
+       "grocery shopping",
+       "plan the menu"
+      ],
+      "times": [
+       "2025-12-31",
+       "2026-01-02"
+      ]
+     },
+     "valid_until": "2026-01-02"
+    },
+    {
+     "op": "add",
+     "id": "m0029",
+     "text": "Baking on weekend mornings with Leo is one of Riya's favourite ways to unwind; she wants to do more of it in January 2026 with simple recipes Leo can help with (he is good at stirring, bad at waiting).",
+     "kind": "preference",
+     "entities": [
+      "Riya",
+      "Leo",
+      "baking"
+     ],
+     "when": {
+      "entities": [
+       "baking",
+       "weekend morning",
+       "unwind",
+       "Leo",
+       "recipe"
+      ],
+      "activities": [
+       "plan the weekend",
+       "suggest an activity",
+       "pick a recipe"
+      ],
+      "times": [
+       "weekend mornings",
+       "January 2026"
+      ]
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0030",
+     "text": "Riya's commute podcast tastes: product and fintech shows, episodes under 45 minutes (Lenny's Podcast short episodes, Fintech Business Weekly, This Week in Fintech); she skips anything over an hour and interview shows with long intros.",
+     "kind": "preference",
+     "entities": [
+      "Riya",
+      "podcasts"
+     ],
+     "when": {
+      "entities": [
+       "podcast",
+       "commute",
+       "listening",
+       "fintech",
+       "Lenny's Podcast"
+      ],
+      "activities": [
+       "recommend a podcast",
+       "make a playlist",
+       "commute"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0031",
+     "text": "Riya has 'Return Simons sweater' as a to-do with a deadline of Fri 2 Jan 2026.",
+     "kind": "plan",
+     "entities": [
+      "Simons",
+      "sweater"
+     ],
+     "when": {
+      "entities": [
+       "return",
+       "Simons",
+       "sweater",
+       "errands"
+      ],
+      "activities": [
+       "run errands",
+       "plan Friday 2 Jan"
+      ],
+      "times": [
+       "2026-01-02"
+      ]
+     },
+     "valid_until": "2026-01-02"
+    }
+   ]
+  },
+  {
+   "id": "life-s038",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0032",
+     "text": "Riya's 2026 goals (draft in notes): launch Payouts v2; KYC drop-off below 20%; grow as a manager of managers; Spanish B2 exam prep and a full hour with Carlos without English; keep running 3x a week, maybe a spring 10K; finish the kitchen with no other big projects; Lisbon trip, weekend baking with Leo, Sunday calls with Mom, monthly date night with Sam.",
+     "kind": "plan",
+     "entities": [
+      "Riya",
+      "2026 goals"
+     ],
+     "when": {
+      "entities": [
+       "goals",
+       "2026",
+       "resolutions",
+       "Spanish",
+       "running",
+       "date night",
+       "Mom",
+       "Sunday call"
+      ],
+      "activities": [
+       "year planning",
+       "schedule date night",
+       "set up calls with Mom",
+       "running plan",
+       "performance goals"
+      ],
+      "times": [
+       "2026"
+      ]
+     },
+     "valid_until": "2026-12-31"
+    },
+    {
+     "op": "add",
+     "id": "m0033",
+     "text": "On family trips Riya likes one main activity per day and a quiet afternoon break (14:00-16:00 rest block), because Leo melts down when the schedule is too full. A 5-day Lisbon day sketch is saved in her 'Lisbon' note.",
+     "kind": "preference",
+     "entities": [
+      "Riya",
+      "Leo",
+      "Lisbon"
+     ],
+     "when": {
+      "entities": [
+       "family trip",
+       "itinerary",
+       "Lisbon",
+       "vacation",
+       "schedule",
+       "Leo meltdown"
+      ],
+      "activities": [
+       "plan an itinerary",
+       "plan a trip",
+       "plan a day out",
+       "book activities"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0034",
+     "text": "Out-of-office for Riya until Mon 5 Jan 2026 08:00: Aisha Rahman covers payouts, Tom Becker for urgent issues (Tom is reachable for P1 incidents only during Dec 29-Jan 2); the draft (ooo_draft_118) was saved but not yet switched on.",
+     "kind": "plan",
+     "entities": [
+      "out-of-office",
+      "Aisha Rahman",
+      "Tom Becker"
+     ],
+     "when": {
+      "entities": [
+       "out of office",
+       "OOO",
+       "holiday",
+       "vacation",
+       "coverage",
+       "Aisha",
+       "Tom"
+      ],
+      "activities": [
+       "turn on out-of-office",
+       "reply to emails",
+       "escalate an issue"
+      ],
+      "times": [
+       "2026-01-05"
+      ]
+     },
+     "valid_until": "2026-01-05"
+    },
+    {
+     "op": "add",
+     "id": "m0035",
+     "text": "Biscuit is the family's beagle and steals food off the counter.",
+     "kind": "fact",
+     "entities": [
+      "Biscuit"
+     ],
+     "when": {
+      "entities": [
+       "Biscuit",
+       "dog",
+       "beagle",
+       "pet"
+      ],
+      "activities": [
+       "leave food out",
+       "dog walk",
+       "pet care"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "life-s039",
+   "ops": [
+    {
+     "op": "drop",
+     "id": "m0006",
+     "why": "launch date passed"
+    },
+    {
+     "op": "drop",
+     "id": "m0008",
+     "why": "party date passed"
+    },
+    {
+     "op": "drop",
+     "id": "m0015",
+     "why": "lunch date passed"
+    },
+    {
+     "op": "drop",
+     "id": "m0017",
+     "why": "date passed"
+    },
+    {
+     "op": "drop",
+     "id": "m0018",
+     "why": "concert date passed"
+    },
+    {
+     "op": "drop",
+     "id": "m0021",
+     "why": "Dec 22 target passed"
+    },
+    {
+     "op": "drop",
+     "id": "m0028",
+     "why": "NYE visit over"
+    },
+    {
+     "op": "drop",
+     "id": "m0031",
+     "why": "Jan 2 deadline passed"
+    }
+   ]
+  }
+ ]
+}
