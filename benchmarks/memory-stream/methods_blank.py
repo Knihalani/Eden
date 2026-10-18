@@ -133,6 +133,7 @@ class Blank:
         self.every = int(kw.get("every", 10))
         self.pst = kw.get("pst", 0.35)  # gate factor for fact-stating turns
         self.pnov = kw.get("pnov", 0.6)  # gate factor for prompts with 3+ never-seen tokens
+        self.kappa = kw.get("kappa", 0.0)
         self.cov = cov
         # --- stream: flat events and context-window boundaries ---
         flat, start, sess_first = [], {}, []
@@ -151,8 +152,10 @@ class Blank:
         self.start = start
         self._stems = {}
         self.oracle = bool(rows) and all("item" in r for r in rows)
-        self.compile_units(rows, cov)
+        self.eorder = {e["id"]: e["_order"] for e in flat}
         self.build_turns()
+        self.compile_units(rows, cov)
+        self.attach_context()
         self.cps, self.spaces = [], []
         if self.gamma:
             self.cps = [o for i, o in enumerate(sess_first) if o is not None and i % self.every == 0 and i > 0]
@@ -167,7 +170,13 @@ class Blank:
                 eidx.setdefault(t, set()).add(e["id"])
         units = []
         for r in rows:
-            src = "human" if self.oracle else self.trace(r["text"], eidx, etype)
+            if self.oracle:
+                src, so = "human", r["t"]
+            else:
+                tr = self.trace(r["text"], eidx, etype)
+                if not tr:
+                    continue
+                src, so = tr[0], self.eorder[tr[1]]
             if src not in SRC_PRIOR:
                 continue
             parts = [r["text"]] if self.oracle else split_units(r["text"])
@@ -178,7 +187,7 @@ class Blank:
                 if len(c) < 3:
                     continue
                 units.append({"id": f"{r['id']}#{j}", "text": u, "t": r["t"], "invalid_at": r.get("invalid_at"),
-                              "c": c, "src": src, "row": r})
+                              "c": c, "src": src, "row": r, "so": so})
         tmpl = {}
         for u in units:
             u["key"] = re.sub(r"[0-9a-f]{6,}|\d+", "#", u["text"].lower())
@@ -220,7 +229,7 @@ class Blank:
         if not hits:
             return None
         best = max(sorted(hits), key=hits.get)
-        return etype[best] if hits[best] / len(c) >= 0.7 else None
+        return (etype[best], best) if hits[best] / len(c) >= 0.7 else None
 
     def worth(self, u):
         s = u["text"]
@@ -243,13 +252,19 @@ class Blank:
 
     # ---------------- sleep: episodes ----------------
     def build_turns(self):
+        self.turn_of = {}
         turns, cur = [], None
         for e in self.flat:
             if e["t"] in ("human", "trigger"):
-                cur = {"order": e["_order"], "end": e["_order"], "q": content(e["text_all"]), "rest": {}}
+                cur = {"order": e["_order"], "end": e["_order"], "q": content(e["text_all"]), "rest": {},
+                       "asst": set()}
                 turns.append(cur)
+                self.turn_of[e["_order"]] = len(turns) - 1
             elif e["t"] in ("tool", "assistant") and cur is not None:
                 cur["end"] = e["_order"]
+                self.turn_of[e["_order"]] = len(turns) - 1
+                if e["t"] == "assistant":
+                    cur["asst"] |= content(e["text_all"])
                 for t in content(e["text_all"]):
                     cur["rest"][t] = cur["rest"].get(t, 0) + 1
             else:
@@ -268,6 +283,26 @@ class Blank:
         for k, tu in enumerate(turns):
             for t in tu["q"]:
                 self.tinv.setdefault(t, []).append(k)
+
+    def attach_context(self):
+        """Encoding context: the situation a memory was stated in (its turn's prompt and the agent's replies).
+        Retrieval cues that match the encoding situation recall the memory even when they share no words with it."""
+        for u in self.units:
+            k = self.turn_of.get(u["so"])
+            if k is None:
+                u["ctx"], u["ctx_end"] = {}, 0
+                continue
+            tu = self.turns[k]
+            ctx = {t: 0.5 for t in tu["asst"]}
+            ctx.update({t: 1.0 for t in tu["q"]})
+            for t in u["c"]:
+                ctx.pop(t, None)
+            u["ctx"], u["ctx_end"] = ctx, tu["end"]
+            u["ctxw"] = sum(self.tidf.get(t, 1.0) * w for t, w in ctx.items()) or 1.0
+        self.ctx_inv = {}
+        for u in self.units:
+            for t in u["ctx"]:
+                self.ctx_inv.setdefault(t, []).append(u)
 
     def build_lsa(self, upto):
         """Episode space from turns that ended before `upto`: randomized SVD of the turn x term tf-idf matrix."""
@@ -424,6 +459,10 @@ class Blank:
         for f in qf:
             for u in self.by_frame.get(f, ()):
                 cand[u["id"]] = u
+        if self.kappa:
+            for t in qc:
+                for u in self.ctx_inv.get(t, ()):
+                    cand[u["id"]] = u
         sims = None
         if self.gamma:
             sp = self.space(e["_order"])
@@ -445,6 +484,9 @@ class Blank:
             if exp:
                 m += self.beta * sum(exp[t] * self.idf[t] for t in u["c"] if t in exp and t not in qc)
             m = m / (1 + 0.02 * max(0, len(u["c"]) - 12))
+            if self.kappa and u["ctx"] and u["ctx_end"] < e["_order"]:
+                cx = sum(self.tidf.get(t, 1.0) * u["ctx"][t] for t in qc if t in u["ctx"])
+                m += self.kappa * cx / (1 + 0.01 * len(u["ctx"]))
             if sims is not None:
                 m += self.gamma * max(0.0, float(sims[u["ix"]]) - self.c0)
             if qf:
