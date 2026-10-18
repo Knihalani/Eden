@@ -1,0 +1,17 @@
+{"batch": "j08", "judge": "opus (claude-code subagent)", "cases": [
+{"event": "code-s081-e017", "needed": ["code-sleep-b05:m0013", "code-sleep-b00:m0048"], "why": "'wrap it up' on an approved PR: standing rule never merge PRs yourself; finish with short bullet summary"},
+{"event": "code-s010-e007", "needed": ["code-sleep-b00:m0007"], "why": "user-facing login change needs a changeset before wrapping up"},
+{"event": "code-s097-e005", "needed": ["code-sleep-b04:m0003", "code-sleep-b00:m0035", "code-sleep-b02:m0030"], "why": "HMAC secret must not be NEXT_PUBLIC/client-side; .env.example placeholder convention; re-check security before done"},
+{"event": "code-s095-e000", "needed": ["code-sleep-b05:m0007", "code-sleep-b03:m0019"], "why": "trailmix hike_create already returns partial on HX-Request; htmx CSRF header setup and tests skip CSRF"},
+{"event": "code-s013-e029", "needed": [], "why": "informational auto-resolving alert"},
+{"event": "code-s068-e017", "needed": ["code-sleep-b05:m0025"], "why": "App Router route groups ((dashboard) vs (marketing)) determine where /reports goes"},
+{"event": "code-s038-e007", "needed": ["code-sleep-b00:m0045", "code-sleep-b01:m0020"], "why": "Turborepo already orchestrates tasks/caching; .github/ is platform-owned and needs Priya's team review"},
+{"event": "code-s035-e047", "needed": [], "why": "ack"},
+{"event": "code-s108-e025", "needed": [], "why": "ack"},
+{"event": "code-s057-e006", "needed": [], "why": "preference stated in the prompt itself"},
+{"event": "code-s097-e017", "needed": ["code-sleep-b09:m0009"], "why": "trailmix location and hikes app for the Hike migration"},
+{"event": "code-s028-e010", "needed": ["code-sleep-b02:m0015", "code-sleep-b02:m0001"], "why": "PR not opened: Jordan prefers gh CLI; test end to end in running app before PR"},
+{"event": "code-s080-e014", "needed": ["code-sleep-b06:m0008", "code-sleep-b06:m0005", "code-sleep-b03:m0016", "code-sleep-b00:m0051"], "why": "the 9th is a Friday (no prod releases Fridays); new dep needs lockfile committed; CLI change needs changeset; new command goes in docs/cli.md"},
+{"event": "code-s080-e024", "needed": ["code-sleep-b07:m0001", "code-sleep-b06:m0005"], "why": "add with pnpm only (not npm/yarn) and commit pnpm-lock.yaml"},
+{"event": "code-s080-e046", "needed": ["code-sleep-b00:m0024"], "why": "CLI tests are stdout snapshots; help text change will need snapshot updates"}
+]}

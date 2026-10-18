@@ -1,0 +1,17 @@
+{"batch": "j10", "judge": "opus (claude-code subagent)", "cases": [
+{"event": "code-s097-e004", "needed": ["code-sleep-b06:m0017", "code-sleep-b01:m0034", "code-sleep-b07:m0020"], "why": "assistant lacks prod access and on-call routing: kubeconfig command for acme-prod, alarms route to pagerduty-oncall SNS; repeatable jobs are BullMQ upsertJobScheduler in schedules.ts (suspect commit)"},
+{"event": "code-s007-e000", "needed": ["code-sleep-b00:m0005"], "why": "new branch needed; branch names start with Linear id. No infra-tool memory exists yet"},
+{"event": "code-s077-e005", "needed": ["code-sleep-b07:m0001", "code-sleep-b06:m0005"], "why": "use pnpm (not yarn/npm) and commit updated pnpm-lock.yaml or CI frozen-lockfile fails"},
+{"event": "code-s096-e000", "needed": ["code-sleep-b04:m0001", "code-sleep-b05:m0030", "code-sleep-b05:m0010", "code-sleep-b04:m0024"], "why": "SQL dialect is Postgres 16; exclude soft-deleted rows; amounts are integer cents; timestamps stored UTC for month bucketing"},
+{"event": "code-s076-e021", "needed": [], "why": "user states the reason; simple revert"},
+{"event": "code-s107-e006", "needed": ["code-sleep-b01:m0025", "code-sleep-b06:m0025", "code-sleep-b01:m0024", "code-sleep-b05:m0025"], "why": "a /pricing page already exists in (marketing); authed pages go under (dashboard), public under (marketing); new public route must be in middleware publicRoutes; App Router only"},
+{"event": "code-s057-e030", "needed": ["code-sleep-b05:m0002", "code-sleep-b00:m0028", "code-sleep-b01:m0006"], "why": "worker uses BullMQ on Redis; reminders previously duplicated so must be idempotent; queues need removeOnComplete to avoid Redis OOM"},
+{"event": "code-s105-e000", "needed": ["code-sleep-b05:m0026", "code-sleep-b05:m0025", "code-sleep-b06:m0019"], "why": "existing global-error.tsx with Sentry digest pattern; App Router; commit message convention"},
+{"event": "code-s055-e000", "needed": ["code-sleep-b03:m0004", "code-sleep-b03:m0003", "code-sleep-b04:m0002"], "why": "API is Fastify 5 with plugins dir; request-id plugin to reuse; pino logger, no console.log"},
+{"event": "code-s108-e047", "needed": [], "why": "general TS question"},
+{"event": "code-s076-e012", "needed": [], "why": "general JS question"},
+{"event": "code-s071-e014", "needed": ["code-sleep-b04:m0002", "code-sleep-b05:m0037", "code-sleep-b03:m0002"], "why": "use shared pino logger in worker; where/how the reminder job fans out per org; keep secrets out of logs"},
+{"event": "code-s077-e015", "needed": [], "why": "test notification; lockfile caveat already in recent"},
+{"event": "code-s015-e017", "needed": [], "why": "general Next.js question"},
+{"event": "code-s062-e000", "needed": [], "why": "general Postgres question"}
+]}
