@@ -1,0 +1,366 @@
+{
+  "batch": "code-sp-b06",
+  "generator": "haiku (claude-code subagent)",
+  "rows": {
+    "code-sleep-b06:m0009": {
+      "pos": [
+        "we're good to ship, tag it and push",
+        "whats on main that hasnt gone out yet? draft the notes",
+        "make this week's release, you know the drill",
+        "pull origin and tell me what's new since the last cut",
+        "ok cut the release",
+        "prep the changelog for the next version"
+      ],
+      "neg": [
+        "what does calendar versioning mean vs semver?",
+        "git log --oneline -5 on this branch please",
+        "how do i delete a local tag that never got pushed",
+        "explain what an annotated git tag is",
+        "what's the difference between git log and git reflog",
+        "fix the release badge alignment in the readme"
+      ]
+    },
+    "code-sleep-b06:m0010": {
+      "pos": [
+        "dashboard feels heavy on mobile, what's making it slow to load",
+        "why is the dashboard page so big now, figure out what's pulling it in",
+        "can you check what the charting stuff costs us on the dashboard",
+        "trim whatever we can from the dashboard bundle, don't break the charts",
+        "first load on the dashboard jumped, dig in",
+        "the date formatting looks heavy, is it"
+      ],
+      "neg": [
+        "what does a bundle analyzer do in a next.js project generally",
+        "explain tree shaking in one paragraph",
+        "how do i reduce image sizes in a next app with next/image",
+        "why does my dashboard snapshot test fail after a css change",
+        "what's the difference between dynamic import and lazy in react",
+        "write a readme section on running storybook locally"
+      ]
+    },
+    "code-sleep-b06:m0011": {
+      "pos": [
+        "add po number to the invoice api responses, create and get",
+        "customers want a purchase order field on invoices, wire it through the api",
+        "generate the migration for the thing finance asked about",
+        "the invoice dto looks incomplete, can you check it against the db",
+        "expose the po number on invoice json",
+        "add the po field to the create invoice endpoint and validate it"
+      ],
+      "neg": [
+        "what's a drizzle schema vs a prisma schema",
+        "why does drizzle-kit push fail with a permissions error on local postgres",
+        "explain what a nullable column means in sql",
+        "add a created_at column to the seed script for clients",
+        "write a zod schema for an email field",
+        "what does po stand for in accounting"
+      ]
+    },
+    "code-sleep-b06:m0012": {
+      "pos": [
+        "priya wants the prod cluster bumped, draft the runbook steps for it",
+        "update the eks upgrade runbook with what we learned on staging",
+        "go through the eks checklist and tell me what's missing before tuesday",
+        "write the change plan for the 1.29 upgrade on prod",
+        "ingress is flaky after the last cluster change, check the helm chart versions",
+        "check which load balancer chart versions prod is on against latest"
+      ],
+      "neg": [
+        "what is an ingress controller in kubernetes generally",
+        "why does kubectl get pods show CrashLoopBackOff",
+        "how do i roll back a helm release",
+        "explain the difference between a service and an ingress",
+        "add a 404 page to the next app",
+        "what's the eks version support window in general"
+      ]
+    },
+    "code-sleep-b06:m0013": {
+      "pos": [
+        "what's on the calendar for the prod cluster next week",
+        "is the prod cluster work still happening this week?",
+        "remind me what priya and i agreed for the cluster",
+        "reorder the runbook so the prod steps are in sequence before the 6th",
+        "push the cluster upgrade to the front of the infra list",
+        "help me write the go/no-go checklist for the prod upgrade"
+      ],
+      "neg": [
+        "what's a good cadence for kubernetes minor version upgrades",
+        "is october 6 a statutory holiday in ontario",
+        "draft a status update template for the design team",
+        "explain blue green deploys in a sentence",
+        "how do i make a recurring event in google calendar",
+        "what's the typical lead time for a cloud maintenance window"
+      ]
+    },
+    "code-sleep-b06:m0014": {
+      "pos": [
+        "customer says the cli blows up on startup, can you look",
+        "cut a patch for the cli, the crash thing",
+        "any update from support on the cli bug report?",
+        "the acme cli crashes for someone after updating, what do you need from me",
+        "ok bump packages/cli and get the patch ready",
+        "someone's cli is dying on launch, see if you can repro it"
+      ],
+      "neg": [
+        "how do i check which node version is running my cli",
+        "what does --version print in commander by default",
+        "how do i link a local npm package to test a patch",
+        "common causes of crashes on launch for a react native app",
+        "write a bug report template for our support team",
+        "why does my bash alias for a cli not persist"
+      ]
+    },
+    "code-sleep-b06:m0015": {
+      "pos": [
+        "users say they can't get past the login screen after the redirect, look",
+        "the sign in page looks off on mobile, fix the layout",
+        "add a sign up link under the login form",
+        "where does the redirect after login land, it goes to the wrong page",
+        "login page needs a dark mode check",
+        "make the sign-in form respect the theme tokens"
+      ],
+      "neg": [
+        "what's the difference between authentication and authorization",
+        "how do i add a password reset flow in express",
+        "why is my magic link email landing in spam",
+        "write a plain html login form for a static page",
+        "explain oauth pkce in two lines",
+        "fix the button color in the marketing navbar"
+      ]
+    },
+    "code-sleep-b06:m0016": {
+      "pos": [
+        "add an export helper to the cli that sorts invoices by date",
+        "use import.meta.dirname to find the template folder in the cli",
+        "sort the invoice export rows newest first and keep it tidy",
+        "clean up the cli's file path handling for the templates folder",
+        "add a cli command that reads the template files at startup",
+        "the cli build target is old, anything new we can use in the code now"
+      ],
+      "neg": [
+        "what changed in node 20 generally",
+        "does array toSorted exist in deno",
+        "how do i polyfill a missing array method in browser code",
+        "is import.meta.dirname available in bun",
+        "tsup config for a library with esm and cjs output",
+        "explain the node release lts schedule"
+      ]
+    },
+    "code-sleep-b06:m0017": {
+      "pos": [
+        "i need to look at prod pods, get me set up",
+        "switch me over to the production cluster so i can check the ingress",
+        "check the prod deployment status before i ship",
+        "kubectl isn't pointing where i expect, sort it out",
+        "pull the logs from the prod api pods",
+        "where am i pointed right now, staging or prod"
+      ],
+      "neg": [
+        "how do i see which kubectl context i'm on",
+        "what's a kubeconfig file",
+        "switch my git branch to the staging one",
+        "how do i alias kubectl get pods",
+        "explain eks vs gke in one paragraph",
+        "why does the aws cli say unable to locate credentials"
+      ]
+    },
+    "code-sleep-b06:m0018": {
+      "pos": [
+        "need a date picker for the invoice form, add whatever you need",
+        "install a csv parser for the export, quick",
+        "add a schema-to-docs generator so we can publish the api spec",
+        "throw in a debounce helper, we need it for search",
+        "just pull in a pdf library for the invoice download",
+        "add a markdown renderer for the help pages"
+      ],
+      "neg": [
+        "what's the difference between dependencies and devDependencies",
+        "list the packages already in apps/web/package.json",
+        "why does pnpm install take so long on a cold cache",
+        "explain semver caret ranges",
+        "write a readme section about installing deps locally",
+        "what does the lockfile do in pnpm"
+      ]
+    },
+    "code-sleep-b06:m0019": {
+      "pos": [
+        "ok commit this and push",
+        "commit the invoice tweak",
+        "commit what's staged, then open the pr",
+        "ship it, commit and push",
+        "commit the po number changes",
+        "make a commit for the search debounce work"
+      ],
+      "neg": [
+        "what makes a good commit message in general, one line",
+        "undo my last commit but keep the changes",
+        "show me the last 5 commit messages",
+        "how do i amend a commit message on a branch that's already pushed",
+        "what's the lefthook config format for a commit-msg hook",
+        "fix the typo in the commit hook readme"
+      ]
+    },
+    "code-sleep-b06:m0020": {
+      "pos": [
+        "api is throwing too many connections on staging again, bump the pool",
+        "increase the db pool to 50 so the load test passes",
+        "raise the connection limit for the api, we're seeing timeouts",
+        "scale the api for the traffic spike, change whatever's needed",
+        "add a pool config option for the worker too",
+        "set max connections in the db client to match the new pod count"
+      ],
+      "neg": [
+        "what does a connection pool do in general",
+        "how do i check how many connections postgres allows",
+        "why does pgbouncer use transaction mode",
+        "write a healthcheck endpoint for the api",
+        "explain the difference between a pool and a singleton client",
+        "show me a drizzle config for a local sqlite db"
+      ]
+    },
+    "code-sleep-b06:m0021": {
+      "pos": [
+        "grafana has no data for the worker, can you check the chart",
+        "add a dashboard panel for queue depth from the worker",
+        "wire the worker up so we can see job durations",
+        "why isn't prometheus picking up the worker pods",
+        "add a histogram for job runtime in the worker",
+        "check the worker helm values, something's off with monitoring"
+      ],
+      "neg": [
+        "what's the difference between a counter and a gauge in prometheus",
+        "how do i write a promql query for error rate",
+        "explain what a servicemonitor is in general",
+        "add a /health route to the api",
+        "what port does postgres listen on by default",
+        "set up a grafana alert for disk usage on a generic vm"
+      ]
+    },
+    "code-sleep-b06:m0022": {
+      "pos": [
+        "the csv download looks weird in excel for some clients, fix it",
+        "customers with commas in their names are breaking the export",
+        "rename the export file so it includes the org",
+        "open a pr for the export fix, say what changes for customers",
+        "users say their spreadsheets split rows wrong, look at the export",
+        "add quote escaping to the invoice export and push"
+      ],
+      "neg": [
+        "what's rfc 4180 about in one line",
+        "how do i parse a csv in node with a streaming library",
+        "difference between crlf and lf line endings in git",
+        "write a unit test for a date formatter",
+        "how do i download a file from a next.js api route",
+        "explain what a utf-8 bom does to excel"
+      ]
+    },
+    "code-sleep-b06:m0023": {
+      "pos": [
+        "new contractor starts friday, what do they run to get going",
+        "my local env is busted after the pull, reset it",
+        "how do i get the api and web running on my machine",
+        "i need env vars for local dev, where do they come from",
+        "write the onboarding steps for someone joining the monorepo",
+        "docker db won't start on my laptop, check it"
+      ],
+      "neg": [
+        "what does docker compose up -d do",
+        "how do i install nvm on macos",
+        "what's the default port for redis",
+        "difference between mailpit and mailhog",
+        "how do i run only the web app in a turborepo",
+        "why does pnpm install fail with peer dependency warnings"
+      ]
+    },
+    "code-sleep-b06:m0024": {
+      "pos": [
+        "i also fixed the lint thing and the readme, put it all in one pr",
+        "add the retry tweak and the logging change together, one branch",
+        "clean up the old flags while we're here, same pr",
+        "ok open the pr with everything i've touched today",
+        "bundle the copy fixes and the api change into one commit and pr",
+        "start a new branch for this, it's different from the invoice work"
+      ],
+      "neg": [
+        "how do i split a commit into two with git",
+        "what does a draft pr mean on github",
+        "explain trunk based development in a paragraph",
+        "how do i rebase onto main without conflicts",
+        "what's a good pr title format for a feature",
+        "list open pull requests on this repo with gh"
+      ]
+    },
+    "code-sleep-b06:m0025": {
+      "pos": [
+        "make a reports page, lena asked for it",
+        "add a reports route with a table of monthly revenue",
+        "new settings page for the customer dashboard, put it in the right place",
+        "where should a new public pricing page go",
+        "pick up the reports page where i left off",
+        "add an about page to the marketing site"
+      ],
+      "neg": [
+        "what are next.js route groups in general",
+        "how do i add a dynamic route with a slug param in next",
+        "explain layout.tsx vs template.tsx",
+        "why is my next link not navigating on click",
+        "add a footer to the marketing homepage",
+        "how do i add a 404 page"
+      ]
+    },
+    "code-sleep-b06:m0026": {
+      "pos": [
+        "update the web app deps to latest, it's been a while",
+        "bump everything in apps/web and see what breaks",
+        "update the web deps to latest, then fix whatever's red",
+        "deps-bot opened a pile of prs, merge the web ones",
+        "clerk and zod are behind, bring them up",
+        "tidy up the web package versions, one big pr"
+      ],
+      "neg": [
+        "what's the difference between a major and minor semver bump",
+        "why does pnpm outdated show red packages",
+        "how do i pin a package version in package.json",
+        "explain what a changelog for an npm lib should contain",
+        "fix the test name typo in the button spec",
+        "what is dependabot and how does it differ from renovate"
+      ]
+    },
+    "code-sleep-b06:m0027": {
+      "pos": [
+        "finance says some invoices show up late in stripe, look at the sync",
+        "make the billing job run more often",
+        "finance flagged a few invoices that look missing, dig into the worker job",
+        "rewrite the stripe sync to use webhooks instead of polling",
+        "refactor the stripe webhook handler into smaller functions",
+        "add logs to the billing job so we can see run times"
+      ],
+      "neg": [
+        "how do stripe webhooks verify signatures",
+        "what's the difference between a stripe draft invoice and an open one",
+        "how do i write a cron expression for every 15 minutes",
+        "explain idempotency keys in payment apis",
+        "add a unit test for the currency formatter",
+        "why does my stripe test mode charge fail with card declined"
+      ]
+    },
+    "code-sleep-b06:m0028": {
+      "pos": [
+        "staging keeps hitting localhost, fix the env on vercel",
+        "the preview deploy can't reach the api, why",
+        "the dashboard on the staging link shows network errors, look at the config",
+        "reports server actions are failing on preview too",
+        "where does the web app get its api base url from",
+        "preview build can't hit the backend, check the variables"
+      ],
+      "neg": [
+        "what does the NEXT_PUBLIC prefix do in next.js in general",
+        "how do i set env vars in vercel for production only",
+        "why is cors blocking my fetch from localhost",
+        "how do i read a server env var in a next server action",
+        "explain what a preview deployment is",
+        "change the api port in my local docker compose"
+      ]
+    }
+  }
+}
