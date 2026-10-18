@@ -1,0 +1,22 @@
+{"judge": "opus (claude-code subagent)", "cases": [
+{"event": "code-s082-e025", "scores": [2, 3, 3], "why": "R2/R3 use /healthz (Postgres+Redis) for readiness and a light liveness check; R1 generic, rediscovers health endpoint"},
+{"event": "code-s022-e008", "scores": [2, 2, 3], "why": "R3 knows Sentry and pino; R1/R2 grep for tracker and logger they should know"},
+{"event": "code-s085-e010", "scores": [2, 3, 2], "why": "R2 knows Bull Board at /admin/queues behind basic auth; R1 misses it, R3 only guesses it may exist"},
+{"event": "code-s003-e000", "scores": [2, 2, 3], "why": "R3 uses Redis claim with ioredis-mock tests and the right worker test command; others generic"},
+{"event": "code-s086-e004", "scores": [2, 3, 3], "why": "R2/R3 know worker metrics on 9464 /metrics and fetch real names; R1 generic"},
+{"event": "code-s101-e013", "scores": [2, 2, 3], "why": "R3 uses presigned S3 via POST /v1/uploads; R2 adds invented specifics (300s, /complete); R1 misses upload flow"},
+{"event": "code-s046-e022", "scores": [2, 3, 3], "why": "R2/R3 use Linear-id branch naming and conventional commits (R3 no stash); R1 misses branch convention"},
+{"event": "code-s035-e058", "scores": [2, 3, 2], "why": "R2 uses Tailwind v4 CSS-first theme and next/font/google like Inter; R1/R3 less specific"},
+{"event": "code-s022-e000", "scores": [2, 2, 3], "why": "Known fact: Clerk JWTs via @clerk/backend in src/plugins/auth.ts; R1/R2 search for what they should know"},
+{"event": "code-s085-e000", "scores": [2, 2, 3], "why": "R3 uses nvm use (20.11), pnpm 9, .env.local and 1Password acme-dev; R2 invents a pin conflict; R1 generic"},
+{"event": "code-s075-e011", "scores": [2, 2, 3], "why": "All no-apply branch+PR; R3 adds Linear-id branch and conventional commit; R1/R2 miss branch naming"},
+{"event": "code-s030-e013", "scores": [3, 3, 3], "why": "All add logger redaction plus Bearer scrubbing, ESM only, with a test"},
+{"event": "code-s015-e000", "scores": [2, 3, 3], "why": "R2/R3 document env and billing rule with repo facts; R1 generic and adds pnpm install against yarn-era notes"},
+{"event": "code-s027-e025", "scores": [2, 2, 3], "why": "R3 knows Clerk via apps/web/middleware.ts and checks history; others start from zero"},
+{"event": "code-s056-e038", "scores": [3, 3, 2], "why": "R1/R2 handle translation keys (next-intl messages); R3 ignores translations"},
+{"event": "code-s092-e012", "scores": [3, 2, 2], "why": "R1 knows 9464 /metrics and infra/grafana dashboards; R2 unsure of Grafana; R3 knows neither"},
+{"event": "code-s042-e008", "scores": [3, 3, 3], "why": "All extract the component and fix error-over-empty, skipping tests as asked"},
+{"event": "code-s013-e004", "scores": [2, 3, 2], "why": "R2 adds stdout snapshot test, changeset and docs; R1/R3 miss changeset for user-facing change"},
+{"event": "code-s088-e023", "scores": [2, 2, 3], "why": "R3 uses named export, Vitest and the cli test command; R2 asserts an unverified api slugify"},
+{"event": "code-s003-e026", "scores": [2, 3, 2], "why": "R2 uses Vitest stdout snapshot test per CLI convention; all miss a changeset"}
+]}
