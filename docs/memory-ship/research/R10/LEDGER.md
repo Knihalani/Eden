@@ -216,3 +216,23 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - F4 transfers on silence (+0.16 at equal recall versus lex+when, which passes its kill line on both worlds).
   - Life proactive recall stays below 0.09, and trigger recall at or below 0.15. No hook-side method handles triggers.
   - The strict life ceiling is 0.67: long 10-session batches delay rows across months. Leak-free per-session compilation would raise it.
+
+## C2-E8 · 2026-10-18 · Life judge ceiling and F13 agent-pull on the life world
+- **Setup:**
+  - 10 opus judge batches on the strict life sleep store.
+  - Sample: 79 need events (human and trigger), plus 110 no-need human or trigger events and 30 non-human events.
+  - Agent-pull: sonnet hosts on the same moments; 107 calls of 245.
+- **Numbers (dev, plan labels, coverage v2, 95% CI):**
+
+  | Method | Recall | Proactive | Precision | Human silence | Trigger recall | Trigger silence | Non-human silence | Tokens |
+  |---|---|---|---|---|---|---|---|---|
+  | judge | 0.5696 [0.471, 0.658] | 0.5217 | 0.2385 | 0.6481 [0.551, 0.741] | 0.5 | 0.5 | 0.9 | 66.9 |
+  | pull k=2 | 0.2869 [0.201, 0.385] | 0.2174 | 0.1677 | 0.8426 [0.774, 0.905] | 0.1923 | 0.5 | 0.8667 | 39.6 |
+  | pull k=4 | 0.346 [0.25, 0.445] | — | 0.1129 | — | 0.2308 | — | — | 78.6 |
+
+  For comparison, the best hook-side point on life (bank ∧ lex ltau=4) is recall 0.2025, proactive 0.087, precision 0.0308, silence 0.5171.
+- **Verdict:**
+  - F13 holds on both worlds. On life it is +0.08 recall, +0.33 silence and 5× precision over the best hook-side method.
+  - The life judge ceiling is lower than code's (0.57 vs 0.69 recall). Personal needs are harder even for a strong model with the whole store.
+  - The pull's retrieval step (lexical on its query) is the weak half: recall about half the judge's.
+  - Life has no independent labeler run yet, so union = plan.
