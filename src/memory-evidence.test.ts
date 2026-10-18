@@ -108,6 +108,7 @@ describe("P4.3 iteration (dev and R8's silence set): names in prose and one rare
     for (const [fact, cue] of [
       ["Reporting listens on port 9443.", "reporting port?"],
       ["The login log rotates daily.", "login log?"],
+      ["User prefers answers with the code first.", "code-first?"],
     ]) {
       const mem = store();
       mem.remember(fact!, { kind: "fact" });

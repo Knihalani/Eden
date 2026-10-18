@@ -523,10 +523,11 @@ function hayParts(text: string, cue: SituationCue | undefined, corpus: Corpus, s
 }
 
 /**
- * The words a prompt's terms come from (`situatedScore`'s `words`): each term maps to one term of the whitespace token
- * that gave it, so a compound's parts are one word with it ("TypeScript" gives typescript, type and script;
- * `vitest.config.ts` its dotted names and parts), and two tokens that share a term are one word. Read as `hayParts`
- * reads the prompt (`split`). A context part's term that no prompt token gave is a word of its own.
+ * The words a prompt's terms come from (`situatedScore`'s `words`): each term maps to one term of the token that gave
+ * it, so a name's parts are one word with it ("TypeScript" gives typescript, type and script; `vitest.config.ts` its
+ * dotted names and parts), and two tokens that share a term are one word. A token is split at whitespace and hyphens:
+ * "code-first" is two words. Read as `hayParts` reads the prompt (`split`). A context part's term that no prompt token
+ * gave is a word of its own.
  */
 function promptWords(text: string, split: boolean): Map<string, string> {
   const parent = new Map<string, string>();
@@ -535,7 +536,7 @@ function promptWords(text: string, split: boolean): Map<string, string> {
     while (parent.get(root) !== root) root = parent.get(root)!;
     return root;
   };
-  for (const raw of String(text ?? "").split(/\s+/)) {
+  for (const raw of String(text ?? "").split(/[\s-]+/)) {
     const terms = [...(split ? promptTerms(raw) : cueTerms(queryHay(raw)))];
     for (const term of terms) if (!parent.has(term)) parent.set(term, term);
     for (const term of terms.slice(1)) parent.set(find(term), find(terms[0]!));
