@@ -2307,15 +2307,18 @@ export class AgentMemory {
   ): MemoryRecord[] {
     const view = this.postingsView(snapshot, visible);
     const mode = this.gateMode();
-    // An episode restating the prompt or the previous typed prompt whole (a prompt stored as it was typed) is never
-    // delivered (D26's residual, A4 §5.1 step 7): it sets no top.
-    const said = residualSentences([text, cue?.turnText ?? ""]);
-    const echo = (rec: MemoryRecord) => noteKindToken(rec) === "episode" && restatesNote(rec, said);
-    // Of the rows giving one subject a value, the newest (A4 §5.1 step 5's supersession), before the gate's cut.
-    const rows = liveCopulaLatest(this.scored(text, cue, view, visible, mode === "on").filter((row) => !echo(row.rec)));
-    const before = rows.filter((row) => admittedBefore(row, cue));
+    const scored = this.scored(text, cue, view, visible, mode === "on");
+    // `main`'s admission (gate.tau shadow or off), as it was: the newest row per subject among the rows admitted, and
+    // the echoes of the prompt left to the delivery's residual, after the cap.
+    const before = liveCopulaLatest(scored.filter((row) => admittedBefore(row, cue)));
     let admitted = before;
     if (mode !== "off") {
+      // An episode restating the prompt or the previous typed prompt whole (a prompt stored as it was typed) is never
+      // delivered (D26's residual, A4 §5.1 step 7): it sets no top.
+      const said = residualSentences([text, cue?.turnText ?? ""]);
+      const echo = (rec: MemoryRecord) => noteKindToken(rec) === "episode" && restatesNote(rec, said);
+      // Of the rows giving one subject a value, the newest (A4 §5.1 step 5's supersession), before the gate's cut.
+      const rows = liveCopulaLatest(scored.filter((row) => !echo(row.rec)));
       const tau = tauOf(dirname(this.path), view.meanIdf());
       const evidenced = rows.filter((row) => row.strong || row.medium.size);
       const passing = evidenced.filter(
@@ -2327,7 +2330,7 @@ export class AgentMemory {
       const strong = gated.filter((row) => row.strong).length;
       const trace = { tau, evidenced: evidenced.length, top: topSum(evidenced), strong, medium: gated.length - strong };
       const kept = new Set(gated.map((row) => row.rec.id));
-      const drop = before.filter((row) => !kept.has(row.rec.id)).length;
+      const drop = before.filter((row) => !echo(row.rec) && !kept.has(row.rec.id)).length;
       this.lastGate = { ...trace, mode, ...(mode === "shadow" ? { drop } : {}) };
       if (mode === "on") admitted = gated;
     }
