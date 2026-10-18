@@ -56,3 +56,32 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - R6 real typed prompts (R6 §3 table): p50 12 words, p90 42; 24.2% of prompts ≤ 3 words.
   - StreamBench prompts are about twice as long as real ones, with too few tiny prompts. This is a confirmed realism gap and a likely cause of the inflated lexical fire rate.
   - Cycle 2 fixes it in the plan (more acks and short prompts) and with a length-calibration rewrite pass, written by a different author, for the next stream version.
+
+## C1-E5 · 2026-10-18 · Correction to C1-E2's Eden bullet classes (critic C1)
+- The critic re-ran C1-E2. The counts it got were close to the ledger's, but the ledger omitted three classes, and `trace()` broke ties nondeterministically (set order).
+- Fixed: candidates are now sorted before the max.
+- Deterministic re-run on dev: user's own past prompts 519 (64.7%), other items 92, in context 57, untraced 47, tool 35, stale 20, assistant 10, allowed 8, notification 7, needed 5 (0.6%), compaction 2.
+- **Eden-today CIs (bootstrap, 500 resamples):** recall 0.0909 [0.0182, 0.1724]; silence 0.1042 [0.0712, 0.1339]; precision 0.0062 [0.0012, 0.0121].
+- Judge scoring now enforces row visibility at the event (1 of 259 picks was a later row).
+
+## C1-E6 · 2026-10-18 · F4 self-play exemplar bank, and its AND with compiled cues
+- **Hypothesis (F4):** prompt-to-exemplar matching beats prompt-to-fact matching. A third model family (haiku, 10 generators) writes the exemplars: 6 situations that need the memory and 6 near misses, per sleep row, from row text only. The generators never see the stream.
+- **Kill criterion (pre-run):** dead if it does not beat lex + when by ≥ 0.05 recall at equal silence, or ≥ 0.10 silence at equal recall, on code dev.
+- **Leak control:** the critic found the sleep compiler read whole 10-session batches. `--strict` makes a batch's rows visible only after its last session. That is leak-free, and it lowers the oracle-need ceiling to 0.9152.
+- **Numbers (strict, dev, plan labels, human turns, 95% CI):**
+
+  | Method | Recall | Proactive | Precision | Silence | Tokens |
+  |---|---|---|---|---|---|
+  | lex τ=4 | 0.2303 [0.126, 0.350] | 0.0769 | 0.0149 | 0.2232 [0.182, 0.263] | 168.8 |
+  | lex τ=4, when=1, gate | 0.3545 [0.226, 0.473] | 0.3077 | 0.0213 | 0.2143 [0.175, 0.255] | 173.2 |
+  | bank τ=0.2, gate | 0.4152 [0.293, 0.549] | 0.3077 | 0.0331 | 0.3095 [0.262, 0.355] | 125.7 |
+  | bank τ=0.2 ∧ lex+when ltau=2 | 0.3879 [0.264, 0.516] | 0.2308 | 0.0446 | 0.4702 [0.416, 0.524] | 88.8 |
+  | bank τ=0.2 ∧ lex+when ltau=4 | 0.3182 [0.199, 0.438] | 0.1538 | 0.0484 | 0.5595 [0.509, 0.615] | 66.4 |
+
+  Non-strict, for reference: bank ∧ ltau=2 gives recall 0.4303, silence 0.4226.
+- **Verdict:**
+  - F4 passes its kill criterion on silence (+0.26 at equal recall versus lex + when, with no CI overlap).
+  - The AND of two kinds of evidence (exemplar similarity, compiled cues) is the new code-world frontier point.
+  - Still far from the judge (recall 0.84, silence 0.51) and from realistic silence.
+  - Proactive recall falls under the AND (0.31 → 0.23). The two kinds of evidence disagree most on proactive needs.
+  - Life world not yet run.
