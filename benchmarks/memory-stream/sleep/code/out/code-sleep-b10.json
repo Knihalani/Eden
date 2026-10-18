@@ -1,0 +1,974 @@
+{
+ "batch": "code-sleep-b10",
+ "compiler": "sonnet (claude-code subagent)",
+ "sessions": [
+  {
+   "id": "code-s100",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0001",
+     "text": "In acme-platform, apps/web/lib/flags.ts holds only local dev defaults (newInvoiceEditor=false, bulkReminders=true, expenseAttachments=false); real flag values come from an unnamed external 'flag service', and which vendor it is was never confirmed. The org field betaFlags is just a free-form admin-panel label, not used for gating.",
+     "kind": "fact",
+     "entities": [
+      "flags.ts",
+      "feature flag",
+      "acme-platform"
+     ],
+     "when": {
+      "entities": [
+       "feature flag",
+       "flags",
+       "flag service",
+       "beta orgs",
+       "rollout",
+       "betaFlags",
+       "toggle",
+       "experiment"
+      ],
+      "activities": [
+       "add feature flag",
+       "gate a feature",
+       "beta rollout",
+       "target orgs"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0002",
+     "text": "Jordan plans to put the invoice export feature behind a feature flag (invoiceExport) for beta orgs only; assistant asked which flag service to use and was awaiting the answer.",
+     "kind": "plan",
+     "entities": [
+      "invoice export",
+      "invoiceExport",
+      "Jordan"
+     ],
+     "when": {
+      "entities": [
+       "invoice export",
+       "export invoices",
+       "beta orgs",
+       "feature flag"
+      ],
+      "activities": [
+       "build invoice export",
+       "add flag",
+       "beta rollout"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s101",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0003",
+     "text": "Jordan's reviewer prefers structuredClone over JSON.parse(JSON.stringify(x)) for deep copies (JSON round trip loses Dates, Maps, undefined and throws on cycles).",
+     "kind": "preference",
+     "entities": [
+      "structuredClone",
+      "JSON.parse",
+      "reviewer"
+     ],
+     "when": {
+      "entities": [
+       "deep copy",
+       "clone",
+       "structuredClone",
+       "JSON.stringify",
+       "object copy",
+       "code review"
+      ],
+      "activities": [
+       "deep clone object",
+       "review PR",
+       "copy state"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0004",
+     "text": "Jordan has a side project 'trailmix' in ~/code/trailmix: a Django app with htmx for logging hikes (models Hike, views hikes/views.py, templates hikes/list.html and _row.html). The hike form targets #hike-rows (tbody) with hx-swap=afterbegin; whole-table outerHTML swap was the bug.",
+     "kind": "fact",
+     "entities": [
+      "trailmix",
+      "Django",
+      "htmx",
+      "Hike"
+     ],
+     "when": {
+      "entities": [
+       "trailmix",
+       "hike",
+       "hikes",
+       "django",
+       "htmx",
+       "side project",
+       "hiking app"
+      ],
+      "activities": [
+       "htmx swap",
+       "add hike row",
+       "django view",
+       "trailmix templates"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0005",
+     "text": "Receipt PDF attachments on expenses (acme-platform): no attachment/multipart handling exists in the expense form or apps/api expenses route. Jordan said they would ask Marco about the storage side; the fallback proposal is a multipart POST via @fastify/multipart (new dependency, not to be added without Jordan's OK, sends all bytes through API pods) storing an attachment row with org_id. Blocked until Marco answers.",
+     "kind": "plan",
+     "entities": [
+      "receipt attachments",
+      "Marco",
+      "expenses",
+      "@fastify/multipart",
+      "storage"
+     ],
+     "when": {
+      "entities": [
+       "receipt",
+       "attachment",
+       "expense",
+       "upload",
+       "file upload",
+       "PDF",
+       "storage",
+       "S3",
+       "multipart",
+       "Marco",
+       "presigned"
+      ],
+      "activities": [
+       "attach file to expense",
+       "file upload",
+       "storage design",
+       "expense form"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0006",
+     "text": "Marco is the person Jordan consults about storage decisions (file storage for acme-platform).",
+     "kind": "person",
+     "entities": [
+      "Marco"
+     ],
+     "when": {
+      "entities": [
+       "Marco",
+       "storage",
+       "file storage",
+       "bucket",
+       "upload"
+      ],
+      "activities": [
+       "decide storage",
+       "file upload"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0007",
+     "text": "acme-platform stack: pnpm monorepo (apps/web Next.js + React + shadcn/ui + react-hook-form + zod + tanstack-query, apps/api Fastify + drizzle + zod, services/worker, packages/cli @acme/cli); tests use vitest (`pnpm --filter web test`); CI is ci.yml on PRs with Vercel previews and staging at staging.acme.dev.",
+     "kind": "fact",
+     "entities": [
+      "acme-platform",
+      "pnpm",
+      "Next.js",
+      "Fastify",
+      "drizzle",
+      "vitest",
+      "zod"
+     ],
+     "when": {
+      "entities": [
+       "acme-platform",
+       "pnpm",
+       "monorepo",
+       "stack",
+       "tests",
+       "vitest",
+       "CI",
+       "staging",
+       "install dependency",
+       "lint",
+       "typecheck"
+      ],
+      "activities": [
+       "run tests",
+       "add dependency",
+       "ci setup",
+       "onboard"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s102",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0008",
+     "text": "Utility maskIban(iban) lives in apps/web/lib/format.ts (keeps last 4 visible, groups in 4s, uppercases, strips spaces); tests in apps/web/lib/format.test.ts. formatCents and initials are also in format.ts.",
+     "kind": "fact",
+     "entities": [
+      "maskIban",
+      "format.ts"
+     ],
+     "when": {
+      "entities": [
+       "IBAN",
+       "mask",
+       "format helpers",
+       "bank account",
+       "format.ts",
+       "formatCents"
+      ],
+      "activities": [
+       "format value for display",
+       "add formatter"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s103",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0009",
+     "text": "trailmix Hike model has elevation_gain_m (PositiveIntegerField, null/blank) added in migration hikes/migrations/0007_hike_elevation_gain_m.py (applied to local SQLite; 41 tests pass).",
+     "kind": "fact",
+     "entities": [
+      "trailmix",
+      "Hike",
+      "elevation_gain_m",
+      "migration 0007"
+     ],
+     "when": {
+      "entities": [
+       "trailmix",
+       "hike",
+       "elevation",
+       "migration",
+       "django model",
+       "gain"
+      ],
+      "activities": [
+       "add model field",
+       "make migration",
+       "hike stats"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0010",
+     "text": "OrgSwitcher in acme web (apps/web/components/nav/OrgSwitcher.tsx) now uses the shadcn Popover component (closes on outside click and Escape); PR #1484 (acme-431-org-switcher-close) approved, reviewer nit: add a test that Escape closes it (non-blocking).",
+     "kind": "episode",
+     "entities": [
+      "OrgSwitcher",
+      "Popover",
+      "PR #1484"
+     ],
+     "when": {
+      "entities": [
+       "org switcher",
+       "dropdown",
+       "popover",
+       "outside click",
+       "#1484",
+       "acme-431"
+      ],
+      "activities": [
+       "fix dropdown",
+       "add escape test"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0011",
+     "text": "ClientSearch debounces its query 300ms via useDebouncedValue in apps/web/hooks/use-debounced-value.ts (placeholderData keeps previous results). Reuse this hook for other search boxes.",
+     "kind": "fact",
+     "entities": [
+      "useDebouncedValue",
+      "ClientSearch"
+     ],
+     "when": {
+      "entities": [
+       "debounce",
+       "search box",
+       "keystroke",
+       "hooks",
+       "useDebouncedValue",
+       "typeahead"
+      ],
+      "activities": [
+       "debounce input",
+       "add search"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0012",
+     "text": "Zod schema expenseCategoryBody (name trimmed 1-60, color #rrggbb hex, optional parentId uuid) is in apps/api/src/schemas/expenses.ts next to createExpenseBody.",
+     "kind": "fact",
+     "entities": [
+      "expenseCategoryBody",
+      "zod"
+     ],
+     "when": {
+      "entities": [
+       "expense category",
+       "category payload",
+       "zod schema",
+       "schemas/expenses.ts"
+      ],
+      "activities": [
+       "add category endpoint",
+       "validate payload"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0013",
+     "text": "Production build of the release branch on Vercel fails: 'Missing or invalid publishable key for production. Development keys cannot be used in production builds' on /invoices prerender. The env var NEXT_PUBLIC_AUTH_PUBLISHABLE_KEY in Production scope was changed ~3 days before 2026-10-20; suspected a dev-instance key pasted into Production. Jordan was to verify in the auth provider dashboard. Unresolved as of 2026-10-20.",
+     "kind": "episode",
+     "entities": [
+      "NEXT_PUBLIC_AUTH_PUBLISHABLE_KEY",
+      "Vercel",
+      "auth provider"
+     ],
+     "when": {
+      "entities": [
+       "vercel",
+       "production build",
+       "publishable key",
+       "env var",
+       "auth key",
+       "prerender",
+       "release branch",
+       "deploy fails",
+       "NEXT_PUBLIC_AUTH_PUBLISHABLE_KEY"
+      ],
+      "activities": [
+       "debug build failure",
+       "deploy",
+       "change env vars",
+       "auth setup"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0014",
+     "text": "Hydration mismatch gotcha: InvoiceDueDate (apps/web/components/invoices/InvoiceDueDate.tsx) used toLocaleString('en-US') in render, so server (UTC) and browser (Jordan is in Toronto, America/Toronto timezone) differ. Jordan had not decided between user-local time and a fixed timezone.",
+     "kind": "fact",
+     "entities": [
+      "InvoiceDueDate",
+      "hydration",
+      "Toronto",
+      "timezone"
+     ],
+     "when": {
+      "entities": [
+       "hydration",
+       "timezone",
+       "toLocaleString",
+       "dates",
+       "Toronto",
+       "UTC",
+       "text content did not match",
+       "due date"
+      ],
+      "activities": [
+       "render dates",
+       "fix hydration warning",
+       "format date"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s104",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0015",
+     "text": "GET /v1/clients excludes archived clients unless ?includeArchived=true. The flag is parsed as the literal enum 'true'/'false' (not z.coerce.boolean(), which would turn \"false\" into true). Sort is case-insensitive via lower(name), id tie-break.",
+     "kind": "fact",
+     "entities": [
+      "/v1/clients",
+      "includeArchived",
+      "archivedAt"
+     ],
+     "when": {
+      "entities": [
+       "clients endpoint",
+       "archived",
+       "query param",
+       "boolean query",
+       "z.coerce.boolean",
+       "clients list sort"
+      ],
+      "activities": [
+       "add query flag",
+       "parse boolean query",
+       "list clients"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0016",
+     "text": "Known bug: GET /v1/clients cursor pagination uses `id > cursor` while ordering by lower(name), id, so pages can skip or repeat rows. Proposed fix: (lower(name), id) keyset cursor, left as a follow-up pending Jordan's go-ahead.",
+     "kind": "plan",
+     "entities": [
+      "clients pagination",
+      "cursor",
+      "keyset"
+     ],
+     "when": {
+      "entities": [
+       "pagination",
+       "cursor",
+       "clients list",
+       "keyset",
+       "skip rows",
+       "page size"
+      ],
+      "activities": [
+       "paginate clients",
+       "fix cursor",
+       "add page size"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s105",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0017",
+     "text": "Jordan's branch naming for acme-platform: acme-<ticket number>-<slug> (e.g. acme-447-render-fallback, acme-431-org-switcher-close, acme-452-clients-page-size); PRs are tracked by those tickets.",
+     "kind": "preference",
+     "entities": [
+      "branch naming",
+      "acme-447"
+     ],
+     "when": {
+      "entities": [
+       "branch",
+       "branch name",
+       "ticket",
+       "PR",
+       "git checkout",
+       "commit"
+      ],
+      "activities": [
+       "create branch",
+       "open PR",
+       "commit work"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0018",
+     "text": "apps/web/app/error.tsx is the root error boundary fallback ('Something went wrong', digest reference, Try again calls reset()); it hides error messages so internal details don't leak. Committed 9b3e1d7 on acme-447-render-fallback, not pushed as of 2026-10-21.",
+     "kind": "episode",
+     "entities": [
+      "error.tsx",
+      "acme-447",
+      "render fallback"
+     ],
+     "when": {
+      "entities": [
+       "error boundary",
+       "white screen",
+       "error page",
+       "render error",
+       "reports page",
+       "fallback",
+       "acme-447"
+      ],
+      "activities": [
+       "handle render errors",
+       "push branch"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0019",
+     "text": "Invoice list filters (status, clientId, from, to) now live in URL search params via useSearchParams and router.replace in InvoiceFilters.tsx, so Back restores them (parseInvoiceFilters in lib/types/invoice.ts); merged in main as 7d20c4e 'url-backed invoice filters'.",
+     "kind": "fact",
+     "entities": [
+      "InvoiceFilters",
+      "URL state",
+      "parseInvoiceFilters"
+     ],
+     "when": {
+      "entities": [
+       "invoice filters",
+       "back button",
+       "search params",
+       "url state",
+       "filters reset"
+      ],
+      "activities": [
+       "persist filters",
+       "add filter",
+       "bookmark view"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0020",
+     "text": "slugify(input, maxLength=64) is in apps/web/lib/slugify.ts: NFKD accent stripping plus a lookup table for letters without decomposition (ß, ø, æ, œ, đ, ł, þ); collapses dashes and trims trailing dash after truncation.",
+     "kind": "fact",
+     "entities": [
+      "slugify"
+     ],
+     "when": {
+      "entities": [
+       "slug",
+       "slugify",
+       "accents",
+       "client name slug",
+       "url"
+      ],
+      "activities": [
+       "generate slug",
+       "make url from name"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0021",
+     "text": "Preference: Jordan wants the Django admin trailmix distance shown as '<n.n> km' via an @admin.display method `distance` with ordering='distance_km' in hikes/admin.py.",
+     "kind": "fact",
+     "entities": [
+      "trailmix",
+      "HikeAdmin"
+     ],
+     "when": {
+      "entities": [
+       "django admin",
+       "list_display",
+       "trailmix",
+       "distance_km"
+      ],
+      "activities": [
+       "customize admin",
+       "admin column"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s106",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0022",
+     "text": "On 2026-10-21 a customer reported the 'Continue with Google' sign-in button vanished since 2026-10-20. No code change explains it (only Lena Fischer's a81f2c3 login layout tweak). Suspects: Google social connection disabled for the production instance in the auth provider dashboard, or Google OAuth client secret expired/rotated. Jordan was checking the dashboard; the auth provider's identity was not stated.",
+     "kind": "episode",
+     "entities": [
+      "Continue with Google",
+      "social login",
+      "auth provider",
+      "Lena Fischer",
+      "a81f2c3"
+     ],
+     "when": {
+      "entities": [
+       "google sign in",
+       "social login",
+       "sso",
+       "oauth",
+       "login page",
+       "auth provider",
+       "sign in button",
+       "client secret"
+      ],
+      "activities": [
+       "debug login",
+       "configure auth",
+       "rotate secrets"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0023",
+     "text": "Lena Fischer is a teammate on acme-platform who works on the web login/layout (commit a81f2c3 'tighten sign-in card layout on small screens', 2026-10-19).",
+     "kind": "person",
+     "entities": [
+      "Lena Fischer"
+     ],
+     "when": {
+      "entities": [
+       "Lena",
+       "Lena Fischer",
+       "teammate",
+       "login page"
+      ],
+      "activities": [
+       "review login changes"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0024",
+     "text": "The getting-started page (apps/web/app/(dashboard)/getting-started/page.tsx) embeds the onboarding video via OnboardingVideo component using youtube-nocookie.com, video id aB3xK9qLm2Q, aspect-video 16:9.",
+     "kind": "fact",
+     "entities": [
+      "OnboardingVideo",
+      "getting-started",
+      "aB3xK9qLm2Q"
+     ],
+     "when": {
+      "entities": [
+       "onboarding video",
+       "youtube",
+       "embed",
+       "getting started page",
+       "video id"
+      ],
+      "activities": [
+       "change onboarding video",
+       "edit getting started"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s107",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0025",
+     "text": "getPrimaryCurrency(invoice, orgCurrency) in apps/web/lib/invoice-currency.ts returns the first line item's currency, else the org currency. Supported CurrencyCode: USD, CAD, EUR, GBP, AUD.",
+     "kind": "fact",
+     "entities": [
+      "getPrimaryCurrency",
+      "CurrencyCode"
+     ],
+     "when": {
+      "entities": [
+       "currency",
+       "invoice currency",
+       "line items",
+       "CAD",
+       "USD",
+       "EUR"
+      ],
+      "activities": [
+       "format money",
+       "multi-currency invoice"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0026",
+     "text": "Added public /pricing page (plans from apps/web/content/plans.ts: Starter $19, Growth $49, Agency $129 per month) and /settings/team page listing org members via getOrgMembers; both placed directly under apps/web/app and the layout/route group was not confirmed with Jordan; team page relies on upstream signed-in check, no own redirect.",
+     "kind": "episode",
+     "entities": [
+      "/pricing",
+      "/settings/team",
+      "plans.ts"
+     ],
+     "when": {
+      "entities": [
+       "pricing page",
+       "plans",
+       "team page",
+       "org members",
+       "settings",
+       "layout",
+       "route group"
+      ],
+      "activities": [
+       "change pricing",
+       "edit plans",
+       "add settings page",
+       "auth guard"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s108",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0027",
+     "text": "Pending: Jordan wanted a real-browser e2e test of create-invoice-and-send against the local dev server; assistant asked which browser test runner/folder to use and whether to sign in via UI or a saved session; Jordan said they'd find out. Selectors: Client label, 'Line N description/quantity/unit price' aria-labels, buttons 'Save draft' and 'Send invoice' (only shown for drafts).",
+     "kind": "plan",
+     "entities": [
+      "e2e test",
+      "invoice flow",
+      "NewInvoiceForm"
+     ],
+     "when": {
+      "entities": [
+       "e2e",
+       "end-to-end",
+       "browser test",
+       "playwright",
+       "cypress",
+       "create invoice",
+       "send invoice"
+      ],
+      "activities": [
+       "write e2e test",
+       "test invoice flow"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0028",
+     "text": "Deliberate decision: the misspelling 'recieved' in apps/api/src/routes/v1/payments.ts is an API response value (status: 'recieved') and is intentionally left as-is by Jordan (clients may match it; payments.test.ts expects it); only worker comment/log typos were fixed. Possible later API cleanup.",
+     "kind": "rule",
+     "entities": [
+      "payments.ts",
+      "recieved"
+     ],
+     "when": {
+      "entities": [
+       "recieved",
+       "received",
+       "typo",
+       "spelling",
+       "payments api",
+       "response status",
+       "breaking change"
+      ],
+      "activities": [
+       "fix typo",
+       "rename api value",
+       "api cleanup"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0029",
+     "text": "ClientPicker prop is now onClientSelect (renamed from onSelect, which shadows the DOM event); call sites NewInvoiceForm, InvoiceFilters, ExpenseFilters. ClientsTable PAGE_SIZES is [10,20,50,100]; API clients limit caps at 100.",
+     "kind": "fact",
+     "entities": [
+      "ClientPicker",
+      "onClientSelect",
+      "PAGE_SIZES"
+     ],
+     "when": {
+      "entities": [
+       "ClientPicker",
+       "client picker",
+       "page size",
+       "onSelect",
+       "clients table"
+      ],
+      "activities": [
+       "use ClientPicker",
+       "change page size"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0030",
+     "text": "toCsv in apps/web/lib/csv.ts already writes the header row and escapes cells; don't prepend your own header (ExportCsvButton had duplicated it, fixed).",
+     "kind": "fact",
+     "entities": [
+      "toCsv",
+      "csv.ts",
+      "ExportCsvButton"
+     ],
+     "when": {
+      "entities": [
+       "csv",
+       "export csv",
+       "header row",
+       "toCsv"
+      ],
+      "activities": [
+       "export csv",
+       "add csv export"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0031",
+     "text": "scripts/count-todos.ts counts TODO/FIXME per package (run `pnpm tsx scripts/count-todos.ts`). As of 2026-10-23: web 30, api 24, worker 10, cli 4; 9 of 54 markers reference a Linear id.",
+     "kind": "fact",
+     "entities": [
+      "count-todos.ts"
+     ],
+     "when": {
+      "entities": [
+       "TODO",
+       "FIXME",
+       "tech debt",
+       "scripts"
+      ],
+      "activities": [
+       "count todos",
+       "cleanup"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s109",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0032",
+     "text": "acme CLI (`acme invoices list`, packages/cli): client column truncated to 24 chars with an ellipsis (truncate() exported from render.ts; reviewer suggests moving it to src/lib/text.ts if reused); --json returns the full name.",
+     "kind": "fact",
+     "entities": [
+      "acme invoices list",
+      "truncate",
+      "@acme/cli"
+     ],
+     "when": {
+      "entities": [
+       "cli",
+       "acme invoices list",
+       "truncate",
+       "client name",
+       "render.ts",
+       "table output"
+      ],
+      "activities": [
+       "edit cli table",
+       "add cli column"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0033",
+     "text": "Unfinished: `acme invoices list --since <YYYY-MM-DD>` (issue date filter, validated by parseSince, UsageError exit code 2, passed as issuedFrom). Still to do: register the flag in packages/cli/src/index.ts, add issuedFrom to api/client.ts invoices.list types, confirm the API supports an issued-from filter, add tests for parseSince. The CLI README already documents --since, so it is ahead of the code.",
+     "kind": "plan",
+     "entities": [
+      "--since",
+      "parseSince",
+      "issuedFrom",
+      "acme CLI"
+     ],
+     "when": {
+      "entities": [
+       "--since",
+       "cli flag",
+       "issuedFrom",
+       "invoices list",
+       "packages/cli",
+       "date filter",
+       "README"
+      ],
+      "activities": [
+       "finish cli flag",
+       "add cli option",
+       "api filter"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,1135 @@
+{
+ "batch": "code-sleep-b03",
+ "compiler": "sonnet (claude-code subagent)",
+ "sessions": [
+  {
+   "id": "code-s030",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0001",
+     "text": "All packages in acme-platform are ESM: every package.json has \"type\": \"module\", so no require() anywhere; use import.",
+     "kind": "rule",
+     "entities": [
+      "ESM",
+      "acme-platform"
+     ],
+     "when": {
+      "entities": [
+       "ESM",
+       "esm",
+       "module",
+       "require",
+       "commonjs",
+       "cjs",
+       "package.json",
+       "import",
+       "script",
+       "node"
+      ],
+      "activities": [
+       "write a script",
+       "add a package",
+       "write node code",
+       "import a module",
+       "configure a package"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0002",
+     "text": "Rule: keep secrets and tokens out of logs and error messages (a bearer token once showed up in an error log). The api logger (apps/api/src/lib/logger.ts, pino) now redacts auth headers, cookies and password/token/secret/apiKey fields, and scrubMessage() strips Bearer tokens from free-text messages.",
+     "kind": "rule",
+     "entities": [
+      "logger",
+      "pino",
+      "bearer token",
+      "apps/api"
+     ],
+     "when": {
+      "entities": [
+       "secret",
+       "token",
+       "bearer",
+       "password",
+       "api key",
+       "logging",
+       "log",
+       "error message",
+       "redaction",
+       "credentials",
+       "pino",
+       "logger"
+      ],
+      "activities": [
+       "add logging",
+       "write an error handler",
+       "log a request",
+       "handle errors",
+       "debug auth",
+       "add a log line"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0003",
+     "text": "API request ids: apps/api request-id middleware takes the x-request-id header (or generates a UUID), puts it on every request log as requestId and echoes it on the response. As of 2026-09-03 the web app never sends x-request-id and the error handler does not tag Sentry with it, so API logs cannot be lined up with web requests when debugging Sentry issues; proposed fix (add header to web fetch client, Sentry.setTag('requestId')) was not yet approved.",
+     "kind": "fact",
+     "entities": [
+      "x-request-id",
+      "Sentry",
+      "request-id",
+      "apps/api",
+      "apps/web"
+     ],
+     "when": {
+      "entities": [
+       "request id",
+       "requestId",
+       "x-request-id",
+       "sentry",
+       "tracing",
+       "correlation id",
+       "logs",
+       "error handler",
+       "observability"
+      ],
+      "activities": [
+       "debug a sentry issue",
+       "correlate logs",
+       "add request tagging",
+       "write middleware",
+       "fetch client"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s031",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0004",
+     "text": "The acme-platform API was migrated from Express 4 to Fastify 5 (PR #412 by Marco, api 3.0.0). Middleware are now Fastify plugins in apps/api/src/plugins/ (auth, cors, rate-limit, request-id, error-handler), route handlers take (request, reply), tests use app.inject(). Express, body-parser and express-rate-limit are gone.",
+     "kind": "fact",
+     "entities": [
+      "Fastify",
+      "Express",
+      "apps/api",
+      "Marco"
+     ],
+     "when": {
+      "entities": [
+       "fastify",
+       "express",
+       "api",
+       "middleware",
+       "plugin",
+       "route handler",
+       "request",
+       "reply",
+       "app.inject",
+       "marco",
+       "rate limit",
+       "cors"
+      ],
+      "activities": [
+       "add a route",
+       "write middleware",
+       "add an endpoint",
+       "port a branch",
+       "rebase",
+       "write api tests"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0005",
+     "text": "Search in acme-platform uses Postgres tsvector columns (see apps/api/drizzle/0031_clients_search.sql and db/schema/clients.ts), not Elasticsearch; do not pull in any search service.",
+     "kind": "rule",
+     "entities": [
+      "tsvector",
+      "Postgres",
+      "search",
+      "Elasticsearch"
+     ],
+     "when": {
+      "entities": [
+       "search",
+       "tsvector",
+       "full text search",
+       "elasticsearch",
+       "algolia",
+       "meilisearch",
+       "typesense",
+       "postgres",
+       "index",
+       "query"
+      ],
+      "activities": [
+       "build the search feature",
+       "add search",
+       "search clients",
+       "choose a search service"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0006",
+     "text": "Preference: if a fix is uncertain, say so plainly instead of guessing; the user lost an hour to a confident wrong guess.",
+     "kind": "preference",
+     "entities": [
+      "Jordan"
+     ],
+     "when": {
+      "entities": [
+       "fix",
+       "bug",
+       "uncertain",
+       "guess",
+       "debug",
+       "diagnosis",
+       "root cause"
+      ],
+      "activities": [
+       "debug",
+       "propose a fix",
+       "diagnose a failure",
+       "answer with uncertainty"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0007",
+     "text": "Worker retry policy (services/worker/src/queue/retry.ts, shared by every consumer): maxRetries 3 with exponential backoff starting at 1s (1s, 2s, 4s), then the message goes to the dead-letter queue (DLQ). Worker acks after the write, not before.",
+     "kind": "fact",
+     "entities": [
+      "worker",
+      "retry",
+      "DLQ",
+      "queue"
+     ],
+     "when": {
+      "entities": [
+       "worker",
+       "retry",
+       "backoff",
+       "dead letter",
+       "dlq",
+       "queue",
+       "consumer",
+       "job",
+       "ack",
+       "amqp",
+       "redis"
+      ],
+      "activities": [
+       "add a queue consumer",
+       "write a job",
+       "change retries",
+       "debug failed jobs"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s032",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0008",
+     "text": "Gotcha: on Windows the CLI config path broke because paths were built from process.env.HOME with hard-coded '/'. Always use path.join and os.homedir() for anything under the home directory (fixed in packages/cli config.ts and cache.ts, ~/.acme/config.json). The fix was not tested on a real Windows machine.",
+     "kind": "fact",
+     "entities": [
+      "Windows",
+      "path.join",
+      "os.homedir",
+      "packages/cli",
+      "acme config"
+     ],
+     "when": {
+      "entities": [
+       "windows",
+       "path",
+       "home directory",
+       "homedir",
+       "HOME",
+       "config file",
+       "cross-platform",
+       "backslash",
+       "cli",
+       "acme whoami",
+       "acme config"
+      ],
+      "activities": [
+       "write file paths",
+       "add cli config",
+       "cache files",
+       "write cross-platform code",
+       "fix windows bug"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s033",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0009",
+     "text": "Money in acme-platform: API unit prices are integer cents and invoice line quantity can be fractional (hours like 2.5), so round each line to whole cents before summing. apps/web formatMoney(cents, currency) takes cents and uses Intl.NumberFormat (fixed the $1,204.3000000002 float noise).",
+     "kind": "fact",
+     "entities": [
+      "formatMoney",
+      "cents",
+      "invoice",
+      "apps/web"
+     ],
+     "when": {
+      "entities": [
+       "money",
+       "currency",
+       "price",
+       "amount",
+       "total",
+       "cents",
+       "float",
+       "rounding",
+       "decimal",
+       "invoice total",
+       "mrr",
+       "formatMoney"
+      ],
+      "activities": [
+       "format an amount",
+       "compute totals",
+       "show prices",
+       "add a billing feature",
+       "export invoices"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0010",
+     "text": "Infra: AWS single provider in infra/terraform/providers.tf, region us-east-1 for everything (app, data, backups, state bucket); do not add provider aliases for other regions without talking to platform. S3 buckets follow acme-${var.env}-<name> with public access blocked and KMS (aws:kms) encryption; default tags team/env. Terraform v1.8.5.",
+     "kind": "fact",
+     "entities": [
+      "AWS",
+      "us-east-1",
+      "terraform",
+      "S3",
+      "platform"
+     ],
+     "when": {
+      "entities": [
+       "aws",
+       "region",
+       "us-east-1",
+       "terraform",
+       "s3",
+       "bucket",
+       "provider",
+       "infra",
+       "kms",
+       "cloud",
+       "storage"
+      ],
+      "activities": [
+       "create a bucket",
+       "add terraform",
+       "provision infrastructure",
+       "choose a region",
+       "set up storage"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0011",
+     "text": "Preference: shorter answers; the user does not want basics explained (e.g. terraform basics).",
+     "kind": "preference",
+     "entities": [
+      "Jordan"
+     ],
+     "when": {
+      "entities": [
+       "answer length",
+       "explanation",
+       "terraform",
+       "basics",
+       "verbosity"
+      ],
+      "activities": [
+       "explain",
+       "answer a question",
+       "write a summary"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0012",
+     "text": "Plan: Priya will create the S3 bucket for monthly invoice export zips herself; the bucket work was parked and Claude should not draft it unless asked.",
+     "kind": "plan",
+     "entities": [
+      "Priya",
+      "S3",
+      "invoice export",
+      "bucket"
+     ],
+     "when": {
+      "entities": [
+       "priya",
+       "bucket",
+       "s3",
+       "invoice export",
+       "export zips",
+       "monthly export"
+      ],
+      "activities": [
+       "create a bucket",
+       "invoice export storage",
+       "terraform s3"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0013",
+     "text": "Invoice numbers (format INV-0042) come from a per-org counter table invoice_counters (migration apps/api/drizzle/0034_invoice_counters.sql); nextInvoiceNumber(tx, orgId) does an atomic upsert and must be called inside the same transaction that inserts the invoice. Fixes number collisions under parallel API tests. Drizzle migrations were at 0034.",
+     "kind": "fact",
+     "entities": [
+      "invoice_counters",
+      "nextInvoiceNumber",
+      "invoice number",
+      "drizzle"
+     ],
+     "when": {
+      "entities": [
+       "invoice number",
+       "INV-",
+       "counter",
+       "collision",
+       "race condition",
+       "concurrency",
+       "migration",
+       "drizzle",
+       "transaction",
+       "unique index",
+       "parallel tests"
+      ],
+      "activities": [
+       "create an invoice",
+       "add a migration",
+       "write api tests",
+       "debug flaky tests",
+       "number generation"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s034",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0014",
+     "text": "CLI (@acme/cli, packages/cli, binary 'acme') is built with commander (replaced yargs in #409): each command group exports registerX(program) and subcommands register next to each other (e.g. commands/invoices/index.ts registers list and export). ESM, bundled with tsup to dist/index.js. TypeScript is strict with noUncheckedIndexedAccess (tsconfig.base.json, NodeNext), so indexing returns T | undefined and needs a check.",
+     "kind": "fact",
+     "entities": [
+      "commander",
+      "@acme/cli",
+      "tsup",
+      "TypeScript",
+      "noUncheckedIndexedAccess"
+     ],
+     "when": {
+      "entities": [
+       "cli",
+       "acme command",
+       "commander",
+       "subcommand",
+       "typescript",
+       "strict",
+       "tsconfig",
+       "noUncheckedIndexedAccess",
+       "array index",
+       "tsup"
+      ],
+      "activities": [
+       "add a cli command",
+       "add a flag",
+       "write typescript",
+       "fix type errors"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0015",
+     "text": "Rule for CLI commands: throw UsageError (exit code 2) for bad flags instead of calling process.exit inside handlers (pattern in commands/config.ts); errors otherwise print the message and exit 1.",
+     "kind": "rule",
+     "entities": [
+      "UsageError",
+      "packages/cli"
+     ],
+     "when": {
+      "entities": [
+       "usage error",
+       "exit code",
+       "process.exit",
+       "flag validation",
+       "cli",
+       "option parsing"
+      ],
+      "activities": [
+       "add a cli command",
+       "validate a flag",
+       "handle cli errors"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0016",
+     "text": "A user-facing CLI change needs a changeset (release tooling) before the PR.",
+     "kind": "rule",
+     "entities": [
+      "changeset",
+      "@acme/cli"
+     ],
+     "when": {
+      "entities": [
+       "changeset",
+       "release",
+       "version bump",
+       "pr",
+       "cli"
+      ],
+      "activities": [
+       "open a pr",
+       "release the cli",
+       "ship a cli change"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0017",
+     "text": "Command `acme invoices export --format csv|json --out <file> [--status]` was implemented in packages/cli/src/commands/invoices/export.ts and pushed on branch acme-240-invoices-export (commit 7e31b05) on 2026-09-07; no PR opened yet and a changeset is still needed.",
+     "kind": "episode",
+     "entities": [
+      "acme invoices export",
+      "acme-240-invoices-export"
+     ],
+     "when": {
+      "entities": [
+       "invoices export",
+       "acme-240",
+       "export command",
+       "csv export",
+       "cli branch"
+      ],
+      "activities": [
+       "open a pr",
+       "continue export work",
+       "add export options"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s035",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0018",
+     "text": "Avatars are served from the CDN cdn.acme.dev (Lena moved them); apps/web/next.config.ts images.remotePatterns allows img.clerk.com and cdn.acme.dev. Any new remote image host must be added to remotePatterns, and config changes need a dev-server restart.",
+     "kind": "fact",
+     "entities": [
+      "cdn.acme.dev",
+      "next.config.ts",
+      "remotePatterns",
+      "Lena",
+      "Clerk"
+     ],
+     "when": {
+      "entities": [
+       "cdn",
+       "avatar",
+       "image",
+       "next/image",
+       "remotePatterns",
+       "next.config",
+       "remote images",
+       "lena",
+       "clerk",
+       "settings/team"
+      ],
+      "activities": [
+       "add images",
+       "load remote images",
+       "debug broken images",
+       "configure next"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0019",
+     "text": "trailmix is Jordan's Django + htmx side project (~/code/trailmix). htmx POSTs need the CSRF token: base.html has <body hx-headers='{\"X-CSRFToken\": \"{{ csrf_token }}\"}'>. Models: Hike (user, name, date) and Segment (hike, order, elevation_delta_m); hike list view annotates elevation_gain_m via Sum with filter positive deltas. Its tests use the Django test client, which skips CSRF checks, so CSRF fixes need a manual browser check.",
+     "kind": "fact",
+     "entities": [
+      "trailmix",
+      "Django",
+      "htmx",
+      "Hike",
+      "Segment"
+     ],
+     "when": {
+      "entities": [
+       "trailmix",
+       "django",
+       "htmx",
+       "csrf",
+       "hike",
+       "segment",
+       "elevation",
+       "side project",
+       "python",
+       "hx-post"
+      ],
+      "activities": [
+       "work on trailmix",
+       "fix csrf error",
+       "add a django view",
+       "write a queryset annotation",
+       "side project"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0020",
+     "text": "Gotcha for date tests in apps/web: mixing UTC dates (toISOString) with local-time dates caused a flaky invoice-status test (failed ~1 in 5 on CI, 11/50 under America/Los_Angeles). Components take an optional `now` prop and tests pass a fixed date; verify under several TZ values (UTC, America/Toronto, Asia/Tokyo). Date-only due dates are compared as UTC calendar days in apps/web/lib/due-label.ts.",
+     "kind": "fact",
+     "entities": [
+      "invoice-status.test.tsx",
+      "timezone",
+      "due-label"
+     ],
+     "when": {
+      "entities": [
+       "flaky test",
+       "timezone",
+       "TZ",
+       "date",
+       "due date",
+       "overdue",
+       "toISOString",
+       "local time",
+       "utc",
+       "ci flake",
+       "invoice status"
+      ],
+      "activities": [
+       "fix a flaky test",
+       "write date logic",
+       "write tests with dates",
+       "show due dates"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0021",
+     "text": "Preference: invoice numbers and amounts in tables use a monospace font with tabular-nums (JetBrains Mono, set as Tailwind --font-mono in apps/web/app/globals.css via Google Fonts import) so digits do not jump; loading typefaces via CSS @import was flagged as possibly not matching the app's existing font setup.",
+     "kind": "preference",
+     "entities": [
+      "JetBrains Mono",
+      "tabular-nums",
+      "globals.css",
+      "invoices table"
+     ],
+     "when": {
+      "entities": [
+       "font",
+       "monospace",
+       "typography",
+       "tabular-nums",
+       "table",
+       "invoice number",
+       "tailwind",
+       "globals.css",
+       "digits"
+      ],
+      "activities": [
+       "style a table",
+       "add a typeface",
+       "change fonts",
+       "show numbers in ui"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s036",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0022",
+     "text": "Drizzle gotcha: relation loading must be explicit via `with:` (db.query.X.findMany) or you get N+1 loops. The orders list (apps/api/src/routes/orders/list.ts) was fixed from 101 queries / 1874ms to 1 query / 61ms for 50 orders. A reviewer found the same per-row loop in routes/payments/list.ts (payment attempts) and routes/clients/list.ts (contacts); a follow-up ticket was suggested and not done.",
+     "kind": "fact",
+     "entities": [
+      "Drizzle",
+      "N+1",
+      "orders list",
+      "payments list",
+      "clients list"
+     ],
+     "when": {
+      "entities": [
+       "n+1",
+       "slow endpoint",
+       "performance",
+       "drizzle",
+       "with:",
+       "relations",
+       "query count",
+       "list endpoint",
+       "latency",
+       "orders",
+       "payments",
+       "clients"
+      ],
+      "activities": [
+       "optimize an endpoint",
+       "debug a slow list endpoint",
+       "write drizzle queries",
+       "add a list route"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0023",
+     "text": "Plan: add `--since <date>` to `acme invoices export` for finance (API supports ?since=YYYY-MM-DD). Done: ListInvoicesParams.since in packages/cli/src/api.ts and parseSince (packages/cli/src/parse-since.ts, throws UsageError) with tests. Remaining: declare the --since option on the export subcommand and pass parseSince(opts.since) to listInvoices.",
+     "kind": "plan",
+     "entities": [
+      "acme invoices export",
+      "--since",
+      "parseSince",
+      "finance"
+     ],
+     "when": {
+      "entities": [
+       "since",
+       "invoices export",
+       "finance",
+       "date filter",
+       "monthly export",
+       "cli flag"
+      ],
+      "activities": [
+       "finish export command",
+       "add export option",
+       "pull invoices for this month"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s037",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0024",
+     "text": "Rule: do not bump major versions of dependencies without asking the user first, even if CI is green. Patch/minor deps-bot PRs with green CI were approved and squash auto-merged on request; they still need a CODEOWNERS approval.",
+     "kind": "rule",
+     "entities": [
+      "deps-bot",
+      "dependencies",
+      "major version"
+     ],
+     "when": {
+      "entities": [
+       "dependency",
+       "upgrade",
+       "bump",
+       "major version",
+       "deps-bot",
+       "renovate",
+       "dependabot",
+       "package update",
+       "codeowners",
+       "semver"
+      ],
+      "activities": [
+       "upgrade a dependency",
+       "review dependency prs",
+       "merge deps-bot prs",
+       "bump versions"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0025",
+     "text": "Open decision: deps-bot PR #426 bumps zod 3.23.8 -> 4.1.5 (major); typecheck and api tests fail, 37 call sites in apps/api and packages/cli are affected (z.string().email() deprecation, changed error map API). Left alone pending the user's call.",
+     "kind": "plan",
+     "entities": [
+      "zod",
+      "#426",
+      "deps-bot"
+     ],
+     "when": {
+      "entities": [
+       "zod",
+       "zod 4",
+       "validation",
+       "schema",
+       "major upgrade",
+       "deps-bot",
+       "#426"
+      ],
+      "activities": [
+       "upgrade zod",
+       "review dependency prs",
+       "migrate validation library"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0026",
+     "text": "Why Drizzle instead of Prisma (ADR 0009, accepted 2026-05-12, docs/adr/0009-orm.md): Prisma's query engine made cold starts 3-4 s on new pods and job runners, slowing scale-out under bursts; Drizzle has no engine and cold start dropped to ~400 ms. Trade-offs: no Prisma Studio (use psql or TablePlus) and explicit relation loading (watch N+1).",
+     "kind": "fact",
+     "entities": [
+      "Drizzle",
+      "Prisma",
+      "ADR 0009"
+     ],
+     "when": {
+      "entities": [
+       "drizzle",
+       "prisma",
+       "orm",
+       "adr",
+       "cold start",
+       "why",
+       "decision",
+       "database",
+       "studio"
+      ],
+      "activities": [
+       "explain tech choices",
+       "answer why drizzle",
+       "consider switching orm",
+       "onboard a teammate"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s038",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0027",
+     "text": "Secrets in k8s come from AWS Secrets Manager via External Secrets Operator. The api Helm chart (infra/helm/api/templates/externalsecret.yaml) only pulls keys listed under `secrets:` in infra/helm/api/values-prod.yaml (and staging values), with secretsPrefix prod/api (refresh 1h). A new env secret must be added to that list, then ESO sync (or force-sync) and a pod restart. infra/ changes need Priya's review as CODEOWNER.",
+     "kind": "procedure",
+     "entities": [
+      "External Secrets Operator",
+      "AWS Secrets Manager",
+      "helm",
+      "ExternalSecret",
+      "Priya"
+     ],
+     "when": {
+      "entities": [
+       "secret",
+       "env var",
+       "api key",
+       "external secrets",
+       "eso",
+       "secrets manager",
+       "helm",
+       "values-prod",
+       "k8s",
+       "kubernetes",
+       "pods",
+       "priya",
+       "codeowner"
+      ],
+      "activities": [
+       "add an env var to prod",
+       "add a secret",
+       "debug missing env var",
+       "deploy api",
+       "edit helm chart"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0028",
+     "text": "Open: POSTHOG_API_KEY is missing in prod api pods because it is not in the `secrets:` list of infra/helm/api/values-prod.yaml; fix (add `- name: POSTHOG_API_KEY` there and in staging, deploy, restart pods) was proposed on 2026-09-08 but not made yet. Priya reported it.",
+     "kind": "plan",
+     "entities": [
+      "POSTHOG_API_KEY",
+      "PostHog",
+      "Priya",
+      "prod"
+     ],
+     "when": {
+      "entities": [
+       "posthog",
+       "POSTHOG_API_KEY",
+       "analytics",
+       "missing env",
+       "prod pods",
+       "priya"
+      ],
+      "activities": [
+       "fix missing secret",
+       "edit helm values",
+       "deploy"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0029",
+     "text": "CI problem (as of 2026-09-08): .github/workflows/ci.yml runs lint, typecheck, build and test on the whole repo for every PR; only the pnpm store is cached. Median 13m52s (install 1m05, lint 21s, typecheck 1m48, build 3m31, test 6m49; api tests 3m40s with Testcontainers); 12 of 20 runs touched only one app or docs. User wants affected-only runs (e.g. pnpm --filter \"...[origin/main]\" with fetch-depth 0) plus reused build/test results between runs; asked whether an orchestration layer for caching already exists in the repo before rewriting. Deferred ('come back to that').",
+     "kind": "plan",
+     "entities": [
+      "CI",
+      "ci.yml",
+      "pnpm",
+      "Testcontainers",
+      "GitHub Actions"
+     ],
+     "when": {
+      "entities": [
+       "ci",
+       "ci speed",
+       "build cache",
+       "affected",
+       "pnpm filter",
+       "monorepo",
+       "github actions",
+       "workflow",
+       "caching",
+       "turbo",
+       "nx",
+       "slow ci",
+       "pipeline"
+      ],
+      "activities": [
+       "speed up ci",
+       "edit ci workflow",
+       "set up caching",
+       "optimize the pipeline"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0030",
+     "text": "Ops note: api pod api-7c9f8d-x2kq was OOMKilled (512Mi limit) during the nightly export job on 2026-09-08, the second time that week; no user impact.",
+     "kind": "episode",
+     "entities": [
+      "api pod",
+      "OOMKilled",
+      "nightly export job"
+     ],
+     "when": {
+      "entities": [
+       "oomkilled",
+       "memory limit",
+       "512Mi",
+       "nightly export",
+       "api pod",
+       "restart",
+       "export job"
+      ],
+      "activities": [
+       "tune resource limits",
+       "debug pod restarts",
+       "work on export job"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0031",
+     "text": "scripts/stale-branches.ts (run: pnpm tsx scripts/stale-branches.ts [--days 60] [--remote origin]) lists remote branches with no commits in N days with author and date; read-only, never deletes. Reviewer suggests validating --days (NaN lists nothing). Uncommitted as of 2026-09-08.",
+     "kind": "fact",
+     "entities": [
+      "stale-branches.ts",
+      "git branches"
+     ],
+     "when": {
+      "entities": [
+       "stale branches",
+       "old branches",
+       "branch cleanup",
+       "git",
+       "remote branches"
+      ],
+      "activities": [
+       "clean up branches",
+       "list old branches"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  },
+  {
+   "id": "code-s039",
+   "ops": [
+    {
+     "op": "add",
+     "id": "m0032",
+     "text": "Transactional email in acme-platform is sent through Resend (apps/api/src/lib/mailer.ts, RESEND_API_KEY) and templates are React Email components in apps/api/emails (invoice-sent, receipt, welcome, payment-failed) using shared components/layout, button, footer. Templates export PreviewProps; reviewer asks for a SUBJECT constant per template as in invoice-sent.tsx.",
+     "kind": "fact",
+     "entities": [
+      "Resend",
+      "React Email",
+      "apps/api/emails",
+      "mailer.ts"
+     ],
+     "when": {
+      "entities": [
+       "email",
+       "resend",
+       "react email",
+       "template",
+       "transactional",
+       "mailer",
+       "notification",
+       "subject"
+      ],
+      "activities": [
+       "add an email template",
+       "send an email",
+       "change email copy",
+       "work on notifications"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    },
+    {
+     "op": "add",
+     "id": "m0033",
+     "text": "Dunning work in progress (2026-09-08): apps/api/emails/payment-failed.tsx (invoice number, amount, card last 4, Retry payment button to hosted invoice URL) is written but not hooked into mailer.ts or the dunning job; the user wants to review where it fires since it is billing flow. SUBJECT export still to add.",
+     "kind": "plan",
+     "entities": [
+      "dunning",
+      "payment-failed.tsx",
+      "payment failed",
+      "Resend"
+     ],
+     "when": {
+      "entities": [
+       "dunning",
+       "payment failed",
+       "retry payment",
+       "failed charge",
+       "billing",
+       "stripe",
+       "payment attempts",
+       "card",
+       "hosted invoice"
+      ],
+      "activities": [
+       "hook up payment failed email",
+       "write the dunning job",
+       "billing flow",
+       "send failure notice"
+      ],
+      "times": []
+     },
+     "valid_until": null
+    }
+   ]
+  }
+ ]
+}
