@@ -1,0 +1,17 @@
+{"batch": "j05", "judge": "opus (claude-code subagent)", "cases": [
+{"event": "code-s026-e000", "needed": [], "why": "User gave the command and port; the e2e known-failure row (b02:m0019) is not yet visible at 673."},
+{"event": "code-s087-e000", "needed": ["code-sleep-b00:m0036", "code-sleep-b04:m0011"], "why": "Tailwind v4 CSS-first config (no tailwind.config.js) matters for wiring class-based dark variant; badge component props/location."},
+{"event": "code-s085-e000", "needed": ["code-sleep-b06:m0023", "code-sleep-b02:m0004", "code-sleep-b07:m0001", "code-sleep-b07:m0003"], "why": "Local setup steps, Node 20.11 via nvm (engines error on fresh laptop), pnpm only, .env.local from 1Password."},
+{"event": "code-s082-e035", "needed": ["code-sleep-b08:m0005"], "why": "trailmix location and that Trail.difficulty nullable change (null=True, blank=True) is already recorded."},
+{"event": "code-s047-e035", "needed": [], "why": "CI status notification for a patch bump; nothing to act on from memory."},
+{"event": "code-s108-e040", "needed": ["code-sleep-b07:m0013", "code-sleep-b03:m0001"], "why": "New TS script should follow repo code style and ESM (import, no require)."},
+{"event": "code-s097-e021", "needed": [], "why": "Delayed-component row not yet available; task fully specified in recent context."},
+{"event": "code-s017-e000", "needed": ["code-sleep-b00:m0002"], "why": "Server-side sort should go through TanStack Query, not client state."},
+{"event": "code-s020-e036", "needed": [], "why": "Test-result notification; end-to-end rule already stated in recent."},
+{"event": "code-s080-e028", "needed": [], "why": "Simple display truncation; nothing in memory changes it."},
+{"event": "code-s106-e004", "needed": ["code-sleep-b04:m0030"], "why": "Web sends a strict CSP; a YouTube iframe needs frame-src allowance or it will be blocked."},
+{"event": "code-s080-e020", "needed": ["code-sleep-b06:m0020", "code-sleep-b00:m0039"], "why": "Pool max is 10 per pod (scale pods not pool); HPA 3-12 pods to compute total vs max_connections."},
+{"event": "code-s068-e008", "needed": ["code-sleep-b06:m0018"], "why": "Rule: ask Jordan before adding a new dependency."},
+{"event": "code-s020-e032", "needed": [], "why": "Acknowledgement."},
+{"event": "code-s098-e032", "needed": [], "why": "Debugging a local test failure from the stack trace; no memory row bears on it."}
+]}
