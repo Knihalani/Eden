@@ -10,6 +10,7 @@ Options of `lex` (each one is a hypothesis family, so they combine):
              a fact signal are kept. Code, tool boilerplate, requests and questions are dropped
   ctx=1      context model (F10): drop a row whose content is ≥ 0.6 inside the window already
   when=1     index the sleep compiler's `when` cues with the row text (F3/F11: compiled need predicates)
+  neghist=f  negative-history pruning (F14): drop query tokens found in more than f of the user's earlier human turns
   hab=z      habituation (F12): fire only z standard deviations above the row's own score history
   gate=1     need-existence gate (F5): silent on non-human events (task notifications, peer messages, which a hook
              recognises by their wrapper) and on acknowledgements with no content
@@ -82,6 +83,32 @@ class Base:
                     out.append({"id": f"{r['id']}#{n}", "text": s, "kind": r.get("kind"), "t": r["t"],
                                 "invalid_at": r.get("invalid_at")})
         return out
+
+    def _history(self):
+        """F14: per token, the stream orders of earlier human turns containing it (no labels: a user's past turns)."""
+        import bisect
+        self._hum_orders, self._tok_orders = [], {}
+        order = 0
+        for s in self.stream["sessions"]:
+            for ev in s["events"]:
+                order += 1
+                if ev["t"] == "human":
+                    self._hum_orders.append(order)
+                    for t in content(ev["text_all"]):
+                        self._tok_orders.setdefault(t, []).append(order)
+        self._bisect = bisect.bisect_left
+
+    def generic(self, tokens, now_order):
+        """Tokens found in more than `neghist` of the human turns before `now_order` (needs ≥ 20 of them)."""
+        thr = self.kw.get("neghist")
+        if thr is None:
+            return set()
+        if not hasattr(self, "_hum_orders"):
+            self._history()
+        n = self._bisect(self._hum_orders, now_order)
+        if n < 20:
+            return set()
+        return {t for t in tokens if self._bisect(self._tok_orders.get(t, []), now_order) / n > thr}
 
     def _windows(self):
         """Per event: stems of the window (the session so far, since the last compaction) and the last reply."""
@@ -163,6 +190,7 @@ class Lex(Base):
         q = content(e["text_all"])
         if self.kw.get("prev"):
             q |= content(self.prev.get(e["id"], ""))
+        q -= self.generic(q, e.get("_order", 0))
         out = {}
         k1, b = 1.2, 0.75
         for r in self.visible(now):
@@ -248,7 +276,8 @@ class Bank(Lex):
         return sum(x * b.get(t, 0.0) for t, x in a.items())
 
     def scores(self, e, now):
-        q = self._vec(content(e["text_all"]))
+        qt = content(e["text_all"])
+        q = self._vec(qt - self.generic(qt, e.get("_order", 0)))
         tau, margin = self.kw.get("tau", 0.3), self.kw.get("margin", 0.0)
         out = {}
         for r in self.visible(now):

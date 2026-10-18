@@ -17,8 +17,8 @@ Which events are scored: every submit (human prompt, trigger, task notification,
 (assemble.py `in_context`).
 
 What a bullet covers: an oracle row covers its item. A write-path row or a packet bullet covers item i when it
-holds ≥ 0.5 of i's content tokens and, if i is half of a correction pair, ≥ 0.5 of the tokens that tell the
-two apart. This is a mechanical reading, symmetric across systems. Its agreement with a judge is tracked in STATE.md.
+holds ≥ 0.6 of i's content tokens, weighted by rarity (class Coverage, v2; κ 0.859 against a judge on 200
+bullets).
 
 Metrics (per class: human, trigger, nonhuman = notification + peer)
   recall        mean over need events of |needs covered| / |needs|; recall@4 uses the first 4 bullets only
@@ -38,7 +38,7 @@ from text import content, stems
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 SUBMITS = ("human", "trigger", "notification", "peer")
-COVER = 0.5
+COVER = 0.6
 
 
 def split_of(session_index):
@@ -46,9 +46,19 @@ def split_of(session_index):
 
 
 class Coverage:
+    """Bullet → item coverage (v2, C2-E2): the idf-weighted share of the item's content tokens found in the bullet
+    is ≥ COVER (0.6). A token's weight is 1 / (number of items that contain it), so rare value tokens (names, numbers,
+    tools) count most. For a correction pair, the bullet must also hold ≥ 0.5 of the tokens that tell the two apart.
+    Calibrated against a sonnet judge on 200 code-world bullets: κ 0.859 (v1, plain share ≥ 0.5: κ 0.609)."""
+
     def __init__(self, items):
         self.items = items
         self.content = {i: content(x["text"]) for i, x in items.items()}
+        df = {}
+        for c in self.content.values():
+            for t in c:
+                df[t] = df.get(t, 0) + 1
+        self.w = {t: 1.0 / d for t, d in df.items()}
         self.distinct = {}
         for i, x in items.items():
             j = x.get("superseded_by")
@@ -68,10 +78,11 @@ class Coverage:
         out = set()
         for i in cand:
             c = self.content[i]
-            if not c or sum(1 for t in c if t in have) / len(c) < COVER:
+            total = sum(self.w[t] for t in c)
+            if not c or sum(self.w[t] for t in c if t in have) / total < COVER:
                 continue
             d = self.distinct.get(i)
-            if d and sum(1 for t in d if t in have) / len(d) < COVER:
+            if d and sum(1 for t in d if t in have) / len(d) < 0.5:
                 continue
             out.add(i)
         return out
