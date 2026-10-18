@@ -19,7 +19,9 @@ class Facet:
         self.fx, self.mem = fx, mem
         self.w = (we, wa, wea, wl)
         self.act_min = act_min
-        self.ent = PhraseMatcher({e["name"]: [e["name"]] + e.get("aliases", []) for e in user["entities"]})
+        pron = {"i", "me", "my", "myself", "mine", "we", "us", "our", "you", "your"}
+        self.ent = PhraseMatcher({e["name"]: [a for a in [e["name"]] + e.get("aliases", []) if a.lower() not in pron]
+                                  for e in user["entities"]})
         self.act = PhraseMatcher({a["name"]: [a["name"]] + a.get("words", []) for a in user["activities"]})
         self.lex = BM25(fx, ctx=True)
 
