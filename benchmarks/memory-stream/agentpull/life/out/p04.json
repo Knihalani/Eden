@@ -1,0 +1,7 @@
+{"batch": "p04", "host": "sonnet (claude-code subagent)", "cases": [
+{"event": "life-s096-e009", "call": false, "query": ""},
+{"event": "life-s085-e004", "call": false, "query": ""},
+{"event": "life-s147-e005", "call": true, "query": "Leo boots snow pants size Canadian retailers"},
+{"event": "life-s038-e006", "call": false, "query": ""},
+{"event": "life-s103-e007", "call": true, "query": "car insurance policy insurer Mazda CX-5"}
+]}
