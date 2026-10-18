@@ -1,0 +1,242 @@
+{"responder": "sonnet (claude-code subagent)", "cases": [
+{"event": "code-s087-e012", "responses": [
+"Applying the generated migration first so the column exists, then starting the api and hitting the endpoint. I won't touch any already-merged migration; if the generated sql needs changes it becomes a new one. Action: `pnpm --filter api db:migrate`, then start the api dev server (checking the api package.json for the script name), then `curl localhost:<port>/v1/invoices` and check paidAt is in the JSON.",
+"Migrating first, then starting the api on its local port (4000) so you can hit it. Action: `pnpm --filter api db:migrate`, start the api dev script, then `curl -s localhost:4000/v1/invoices | jq '.[0]'` (or `.data[0]`, depending on the envelope) and look for paid_at / paidAt.",
+"Before starting the api I need the new column applied to your local db. I don't know the exact migrate script, so I'm checking apps/api/package.json for the db scripts and dev command first. Action: read scripts in apps/api/package.json, run the migrate script, start the api, curl GET /v1/invoices and confirm paid_at shows (and in what casing)."]},
+{"event": "code-s057-e010", "responses": [
+"PgBouncer runs in transaction mode, so the driver needs prepared statements off (`prepare: false`). Post-deploy bursts fit that pattern. One catch: it's in pool.ts and the options type, but driver.ts doesn't pass it to the raw pool yet, so it may not be taking effect. Action: check driver.ts to see whether the flag reaches the raw pool, and offer a fix.",
+"I don't have the exact pooler setting in front of me. The usual culprit with a transaction-mode pooler is prepared statements, but I won't state it as our config without checking. Action: grep the db client/pool setup (apps/api/src/db) and the pooler config in infra for pooling mode and the driver's prepare option, then confirm.",
+"PgBouncer is in transaction mode, so prepared statements must be disabled: `prepare: false` on the driver. Action: none needed to answer; if you want, I can confirm in the pool config that the option is actually set."]},
+{"event": "code-s103-e031", "responses": [
+"Two separate causes. 1) The release build is using a Clerk dev publishable key (pk_test_); production needs the live pk_live_ key in Vercel's Production env vars. 2) Hydration: the server rendered the date in UTC and the client in local time, so format both with an explicit timezone instead of the runtime default. Action: check the Vercel Production env for NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, and find the due-date formatting in the invoices table.",
+"1) Clerk dev instance keys (pk_test_) fail production builds, so the release branch needs the live publishable key set for Production in Vercel. 2) The hydration mismatch comes from server vs client time zones: format the date on the client in useEffect, or add suppressHydrationWarning on the time element. Action: check the Vercel Production env var, then patch the due date cell.",
+"1) Clerk dev keys (pk_test_) fail production builds; set the live publishable key in Vercel's Production env. Preview builds also run NODE_ENV=production, and preview.yml:41 wrongly passes CLERK_PUBLISHABLE_KEY_DEV; that's under .github/, so it needs platform team approval. 2) Dates should render in the org time zone, not UTC or the browser: use formatDate(iso, org.timeZone) on the due date column so server and client agree. Action: fix the column, check Vercel env."]},
+{"event": "code-s061-e020", "responses": [
+"I can look at the branch and get it ready, but I shouldn't push infra changes to prod on my own. Priya's out and infra needs platform team (CODEOWNERS) approval. Action: diff priya/acme-212-redis-sg against main, open a PR from it with the plan output, and ping someone on the platform team to approve so it deploys through the normal pipeline.",
+"I can review the branch and open a PR, but I won't apply it from here: infra applies only go through the CI plan/apply workflow, and infra/ is owned by the platform team, so it needs their approval. Action: diff priya/acme-212-redis-sg, open a PR, attach the plan, and find another platform reviewer so Marco isn't blocked.",
+"I'll look at what's on her branch first. I won't run an apply from a laptop; I'd put it through whatever the repo's CI plan/apply path is, and since it's infra I'd confirm who can approve in her absence. Action: git diff main...priya/acme-212-redis-sg, check the Makefile/CODEOWNERS, open a PR and tell you what approval is needed."]},
+{"event": "code-s106-e000", "responses": [
+"I don't know yet which auth provider the sign-in page uses, so I won't guess the setting. Action: check apps/web/package.json and the login page to confirm the provider, then tell you where social connections live in its dashboard (and whether prod and dev instances differ).",
+"The login page renders Clerk's SignIn component, so Google is controlled in the Clerk dashboard under User & Authentication > Social connections, not in our code. Check it's enabled on the production instance and that the production Google OAuth credentials are still set. Action: check recent changes to apps/web/app/login/page.tsx for anything that hid it.",
+"We use Clerk. Social login is turned on in the Clerk dashboard (User & Authentication > Social connections > Google), per instance, so check the production one. Action: also glance at git log for the login page and Clerk config from yesterday, in case code removed it."]},
+{"event": "code-s098-e000", "responses": [
+"I'll add it as a global hook scoped to the org routes. Action: look at apps/api/src/app.ts and how org routes are registered, add a hook that reads x-org-id, checks it against the session's orgs, and returns a problem+json 400/403 on failure; add tests for missing, unknown and valid headers.",
+"I'll add the guard in the org route scope. Note that a browser sending a custom x-org-id header needs it in the CORS allowed headers, so I'll check that config. Rejections go through the problem() helper in lib/problem.ts. Action: add the hook, update CORS, tests for missing/mismatched/valid.",
+"Fastify 5, so I'll write an encapsulated plugin with an onRequest hook registered on the org routes only, returning RFC 7807 problem+json on failure. Action: check how org routes are registered in apps/api/src, add the plugin, tests with app.inject() for missing, foreign and valid x-org-id."]},
+{"event": "code-s107-e000", "responses": [
+"Action: I'm checking the Invoice and line item types for where currency lives, then adding the helper. `getPrimaryCurrency(invoice, orgCurrency)` returns `invoice.lineItems?.[0]?.currency ?? orgCurrency`; lineItems can be missing on drafts, so it must be guarded. Adding a test for empty, missing and populated.",
+"Here's the shape: `export function getPrimaryCurrency(invoice: Invoice, orgCurrency: string): string { return invoice.lineItems?.[0]?.currency ?? orgCurrency }`. Under noUncheckedIndexedAccess the `[0]` is possibly undefined, so the optional chain is needed. Action: confirm the line item's currency field name, put it in the invoice utils, add a test.",
+"I'll write it once I confirm where currency sits on a line item and whether lineItems can be undefined. Action: read the Invoice type, add the helper next to the other invoice utils with a fallback to orgCurrency for empty or missing items, and add a small test."]},
+{"event": "code-s096-e000", "responses": [
+"I'll write it for MySQL 8 as you stated, filtering by org_id, using amount in integer cents and a window function for the running total. Some docs still say Postgres, so I'll confirm against the migrations. Action: check apps/api/migrations and the invoice schema for the paid status and date columns, then write tools/sql/monthly_revenue_rollup.sql with SUM(...) OVER (PARTITION BY org_id ORDER BY month).",
+"Before writing, I want to confirm the dialect and column names. Action: check the api schema/migrations for the db engine, the invoices status and paid date columns and whether totals are in cents. Then write tools/sql/monthly_revenue_rollup.sql: paid invoices, last 12 months, grouped by org and month, with a SUM() OVER running total per org.",
+"Postgres 16. Writing tools/sql/monthly_revenue_rollup.sql: paid invoices, last 12 months, date_trunc('month', ...) in UTC, grouped by org_id, with `SUM(total) OVER (PARTITION BY org_id ORDER BY month)`, excluding soft-deleted rows (deleted_at IS NULL), totals in integer cents. Action: confirm column names in the schema first, then write and dry-run it on local data."]},
+{"event": "code-s081-e017", "responses": [
+"Checks are green and #1189 is approved, but I don't merge pull requests; that's yours. Everything is pushed to the branch.\n- Approved, CI green\n- Ready for you to merge\nAction: `gh pr view 1189` to confirm status and that the branch is pushed.",
+"I won't merge it myself; the branch is up to date and ready for you.\n- Reviewer approved, checks green\n- Nothing left to push\nAction: confirm with `gh pr view 1189 --json state,mergeable` and hand it back.",
+"Before wrapping up I'm confirming the PR is really ready. Action: `gh pr view 1189` for approval, checks and conflicts. If clean, do you want me to merge it (squash) or will you? I'd rather not assume which."]},
+{"event": "code-s013-e040", "responses": [
+"I don't remember the setup off-hand and won't guess. Action: look in packages/cli for the test config and an existing test (e.g. one for `whoami`), then show you the pattern so the --json test can copy it.",
+"The CLI tests are Vitest snapshot tests of stdout. For --json, run the command, capture stdout and snapshot the parsed JSON. Action: open an existing test in packages/cli, copy its pattern for the new case, run `pnpm --filter @acme/cli test`.",
+"I need to look rather than guess. Action: read packages/cli test files and the vitest config, then summarise the pattern and add the --json test based on it."]},
+{"event": "code-s080-e014", "responses": [
+"Committing and opening the PR, with a changeset since this is user-facing. I'm not tagging anything until you say go. Also check the date: if the 9th is a Friday, we don't cut prod tags on Fridays. Action: `pnpm changeset`, commit (including the cli-table3 lockfile change), push, `gh pr create`. Also flagging: org list, org switch and clients list still lack --json, and the new command has no tests.",
+"Committing with the lockfile and opening the PR. Before you plan the tag: I'm not sure the 9th is a weekday that's safe for a prod release, so check that. Note the new command has no tests, and org list, org switch and clients list still lack --json. Action: add pnpm-lock.yaml with the cli-table3 change, commit, push, `gh pr create`.",
+"Doing it, with two things first. Per our rules: run an end to end check of `acme invoices list` (table and --json), add a changeset, and commit pnpm-lock.yaml since CI uses --frozen-lockfile. No prod deploys on Fridays: the 9th may fall on one, so check. Action: e2e run, `pnpm changeset`, conventional commit (feat(cli): ...), push, `gh pr create`. I won't tag."]},
+{"event": "code-s055-e000", "responses": [
+"I'll add a request logging hook. Action: look at apps/api/src/app.ts for the framework and logger, then add an onResponse hook logging method, route pattern, status code and duration in ms, with a test.",
+"Fastify 5 with pino, so an onResponse hook is the right place. Action: add a plugin in apps/api/src/plugins/ that logs `{ method, route: request.routeOptions.url, statusCode, durationMs: reply.elapsedTime }` via request.log, so the x-request-id appears automatically; add a test with app.inject().",
+"Using the pino request logger, not console.log. Action: add an onResponse hook in the Fastify app logging method, route (the route pattern, not the raw URL), statusCode and durationMs through request.log. No bodies or auth headers, since the logger already redacts secrets. Test with app.inject()."]},
+{"event": "code-s105-e000", "responses": [
+"I'll add an error boundary with a try again button. Action: check whether the web app uses the App Router (error.tsx) or pages, create branch acme-447 if it doesn't exist, add the fallback, test it by throwing in a component, and commit.",
+"Careful with the working tree: you have half-finished edits in the reports page, so I'll commit only my files. Action: branch acme-447, add app/(dashboard)/error.tsx with a reset() try again button, stage only that file and its test with explicit paths, commit.",
+"Global errors already go through app/global-error.tsx to Sentry, so I'll add a route-level error.tsx for the dashboard that reports to Sentry too and offers a try again button calling reset(). Action: branch acme-447, add the files, test, commit as `feat(web): add dashboard error boundary` with a short why in the body."]},
+{"event": "code-s018-e016", "responses": [
+"A redirect loop right after lena's auth route change is almost certainly the middleware treating the new sign-in URL as protected. Action: check the diff of her merge, apps/web/middleware.ts (the public routes list) and the sign-in URL env vars.",
+"The staging deploy at 15:41 was web only (#828), which is the likely culprit. Action: read the #828 diff, compare the new auth page URL against the public routes in apps/web/middleware.ts, and the Clerk sign-in/after-sign-in URL settings.",
+"Known gotcha: the loop happens when the sign-in page is missing from publicRoutes in apps/web/middleware.ts, or afterSignInUrl isn't /dashboard. With the auth pages moved, the new path is probably protected. Action: check #828, update publicRoutes and the sign-in env URLs."]},
+{"event": "code-s038-e007", "responses": [
+"I'll look at the current pipeline first. Action: read .github/workflows and the build/test config to see what runs per PR, then propose running only affected packages and enabling a shared cache, with the changes in a single PR.",
+"Plan: filter to changed packages and cache between runs. Action: read the CI workflow and monorepo task config, then propose path filters for docs-only changes and an affected-only run, plus restoring caches between runs. Then measure a run.",
+"We're on Turborepo, so: run `turbo run lint typecheck test build --filter=...[origin/main]` in CI so only affected packages run, and enable remote caching so unchanged tasks replay. Action: read turbo.json and the CI workflow, make the change, check outputs are declared so caching works."]},
+{"event": "code-s028-e006", "responses": [
+"Opening the PR. Action: check the branch status, run the tests/typecheck, push, and `gh pr create` with a summary. Note the earlier preview failure: the Clerk key problem in preview.yml:41 will show up on the preview deploy until platform approves the fix.",
+"Opening it now. Action: git status/log on the branch, run web tests and typecheck, push, `gh pr create`. Heads up: the preview will fail on the dev Clerk key until preview.yml:41 is fixed, which needs platform approval.",
+"Before the PR, an end to end check of the editor flow, not only unit tests. Action: run web tests, typecheck and the editor flow locally, then push and `gh pr create`. The preview will still hit the Clerk key problem (preview.yml:41, needs platform approval)."]},
+{"event": "code-s067-e000", "responses": [
+"Slack draft: 'Welcome! Clone acme-platform, `nvm use` (Node 20.11), `pnpm install`, copy .env.example to .env.local and pull secrets from the 1Password vault acme-dev, start OrbStack, then `pnpm dev` at the root starts web, api and worker.' For the CSV fix: add a changeset, check CI, ready for you to release. Action: `pnpm changeset`, confirm the csv branch is clean.",
+"Slack draft needs real steps, and I don't know them from memory. Action: read the README and docs/onboarding.md, .nvmrc and .env.example, then write the short message from those. For the csv export fix: confirm the branch status, run tests and add a release note or changeset if the repo uses one.",
+"Slack draft will cover clone, install, env setup and `pnpm dev`; I'll take the exact steps from the README. Also tell the contractor billing code needs your review before any change. For the CSV fix: Conventional Commit message, and note the --bom flag for Excel accents. Action: read README/.env.example, then prep the csv branch for PR."]},
+{"event": "code-s080-e020", "responses": [
+"The pool max per pod is 10. 'Too many clients already' is the server's connection limit, so check pods times pool against that. Action: confirm in the api db client config and compare with Postgres max_connections on staging.",
+"Pool max is 10 per pod (apps/api/src/db/client.ts). The error means total connections exceed the server or PgBouncer limit, so pods times 10 is what matters: scale pods carefully, don't raise the pool. Action: check the staging pod count against the limit.",
+"I don't remember the number, so I'm checking. Action: read apps/api/src/db/client.ts for the pool max, count staging api pods, and compare pods times max with Postgres max_connections."]},
+{"event": "code-s097-e005", "responses": [
+"Writing the signing in apps/web/lib/share-link.ts with node:crypto: HMAC-SHA256 over `invoiceId.expires` using a server-side env secret, 7-day expiry. Since the secret must not reach the browser, the preview component calls it via a server action. Action: add the lib, a server action, the Copy share link button, a test of sign/verify, and add the secret to .env.example.",
+"I'll use HMAC-SHA256 from node:crypto over invoiceId plus expiry. Action: write share-link.ts with sign and a timing-safe verify, then call it from the preview component through a server action so the secret stays server-side. Tests for valid, expired and tampered links.",
+"The secret must stay server-only (NEXT_PUBLIC_ vars go to the browser), so share-link.ts imports 'server-only' and the preview component gets the link from a server action. Format: `/share/invoices/:id?expires=&sig=`, HMAC-SHA256 over `id.expires`, 7 days. Action: add lib, action, button, test; add the env var to .env.example."]},
+{"event": "code-s068-e008", "responses": [
+"I don't have a settled rule for that in front of me. Proposal: I ask before adding any new dependency and say why and what it weighs. Action: none until you confirm; I'll follow ask-first from now.",
+"Yes: ask before adding a new dependency. I'll tell you the package, why, and the alternative, and wait for your OK. Action: none now.",
+"Nothing I can point to as agreed. Easiest: I ask before adding any new dependency, and use existing ones where possible. Say if you want a different rule. Action: none."]},
+{"event": "code-s082-e025", "responses": [
+"Adding readiness and liveness probes to the api chart. Action: check infra/helm/api (deployment template and values), find the health endpoint in the api, add readinessProbe and livenessProbe with sensible delays and thresholds, and run `helm template` to validate.",
+"The api has GET /healthz, which checks Postgres and Redis, so it fits readiness. For liveness I'd avoid dependency checks so a database blip doesn't restart pods. Action: add both probes in the api deployment template, wired through values.yaml, then `helm lint` and `helm template`.",
+"/healthz on port 4000 returns 200 only when Postgres and Redis are up, so use it for readiness, and a lighter check for liveness so a dependency outage doesn't restart pods. Action: edit infra/helm/api templates and values.yaml/values-prod.yaml, add startup delay, `helm template` to check."]},
+{"event": "code-s022-e008", "responses": [
+"I'll look at the catch block first. Action: find the pdf render job, check how other code reports errors, then report in the catch (exception tracker plus log) and rethrow or mark the job failed rather than swallowing. Add a test, run it, commit.",
+"Action: locate the pdf render job, grep for the tracker and logger already in use, capture the exception in the catch with context (job id, invoice id) and log it, rethrow so the job fails visibly. Test, then commit.",
+"Using Sentry (SENTRY_DSN) and pino. Action: in the pdf render job's catch, call the Sentry capture with job context, log with the pino logger, and rethrow so it doesn't fail silently. Add a test for the error path, commit as `fix(worker): report pdf render crashes`."]},
+{"event": "code-s085-e010", "responses": [
+"The queue is stuck because the worker isn't running. Start it with `pnpm --filter worker dev` first. For a UI, I'll check whether the worker already mounts a queue dashboard before suggesting one. Action: grep services/worker for a queue UI.",
+"The worker has Bull Board at /admin/queues (basic auth). It needs the worker running, which it isn't locally. Action: run `pnpm --filter worker dev`, then open localhost:<worker port>/admin/queues and log in with the credentials from the worker env.",
+"The worker uses BullMQ, so Bull Board would work if it's mounted; I'll check. First `pnpm --filter worker dev` since nothing consumes the queue right now. Action: grep the worker for bull-board, else suggest RedisInsight."]},
+{"event": "code-s003-e000", "responses": [
+"Action: read services/worker/src/jobs/invoice-reminder.ts and its test setup, then dedupe on a stable key (invoice id plus reminder type or the message id) so a redelivery is skipped, and test with the same message delivered twice.",
+"I'll key idempotency on the reminder (invoice id plus reminder type), not on delivery. Action: check how the worker stores state (Redis or db), add a claim before sending, skip if already sent, and write a test delivering the same message twice and asserting one send.",
+"Plan: claim a key before sending (SET NX in Redis, via a stable invoice/reminder id), skip if already claimed. Action: edit invoice-reminder.ts, test in invoice-reminder.test.ts using the ioredis-mock setup, and run `pnpm --filter worker test`."]},
+{"event": "code-s086-e004", "responses": [
+"I need the real metric names before writing panels. Action: check services/worker for the metrics registry and the image pipeline, see where dashboards live in infra, then write the JSON with throughput, failures and latency panels.",
+"The worker exposes Prometheus metrics on 9464 and the ServiceMonitor scrapes every 30s. I won't guess names. Action: read the worker's metrics code, or curl localhost:9464/metrics, then write the dashboard JSON from the real names: throughput (rate), failures (rate), latency (histogram quantiles).",
+"Panels: jobs per second, failure rate, latency p50/p95/p99, maybe per output size (3 sizes, WebP to S3). Metric names must come from /metrics on port 9464. Action: run the worker locally, curl :9464/metrics, then write the dashboard JSON."]},
+{"event": "code-s101-e013", "responses": [
+"Action: trace the expense form and the API. I'll find the expenses form, the schema and the upload code already used for invoices, then add a file field, upload on submit, store the file reference on the expense, and add tests.",
+"Uploads go straight to S3: the form calls POST /v1/uploads for a presigned PUT URL (300s), PUTs the file, then calls POST /v1/uploads/:id/complete. Progress needs XMLHttpRequest. Action: add the file field to the expense form, reuse the upload flow with a progress bar, and link the upload id on the expense.",
+"We use presigned S3 URLs from POST /v1/uploads, not the API. Action: add a PDF-only file field to the expense form, request a presigned URL, PUT to S3, then attach the upload id to the expense via the API. I'll check the existing invoice attachment code first."]},
+{"event": "code-s046-e022", "responses": [
+"I need to see what's in the working tree first. Action: `git status`, create a branch for the ticket (I need its id for the name), stage only the paid-at files by explicit path, commit, and leave cli and pdf changes unstaged.",
+"Action: ask for the Linear id, since branch names start with it (acme-123-paid-at-column), then stage only the paid-at files by path (or `git add -p`), commit as `feat(web): add paid at column to invoices table`, leave cli and pdf changes uncommitted.",
+"What's the Linear id? Branch will be acme-<id>-paid-at-column. Action: `git status`, create the branch, stage only paid-at files (columns file, translations, api types if touched), commit with a conventional message. No stash; cli and pdf stay in the working tree untouched."]},
+{"event": "code-s035-e058", "responses": [
+"I can, though tabular-nums may fix the jumping without a new font. Action: check how fonts are set up in the web app, then apply a mono font class (or `tabular-nums`) to the invoice number and amount cells only.",
+"Tailwind v4 is CSS-first, so the font goes in `@theme` in app/globals.css. Action: load JetBrains Mono with next/font/google in app/layout.tsx like Inter, expose it as --font-mono, and apply `font-mono` to the number and amount columns. Alternatively Inter's `tabular-nums`, which avoids a second font.",
+"Yes. One alternative first: `tabular-nums` on the current font makes digits equal-width without a new font. If you want JetBrains Mono anyway, Action: load it via next/font/google, add it to the Tailwind theme, apply to the invoice number and amount columns."]},
+{"event": "code-s022-e000", "responses": [
+"I don't remember and don't want to guess. Action: search the backend for where the Authorization header is read, which will show the library and the file.",
+"I'm not certain. Action: grep apps/api for 'authorization' and bearer handling, then tell you the lib and file.",
+"The API verifies Clerk session JWTs with @clerk/backend in the auth plugin at apps/api/src/plugins/auth.ts. Action: open that file to confirm the path."]},
+{"event": "code-s085-e000", "responses": [
+"Action: look at the repo first: README, package.json packageManager, .nvmrc, lockfile and .env.example. Then install with the right package manager and Node version, set up env, and report what is left (secrets).",
+"Fresh install steps: check Node version against .nvmrc (`nvm install`/`nvm use`), then pnpm 9 install; no npm or yarn. The notes disagree about whether Node is pinned, so I'll check .nvmrc and the engines field. Action: run these, copy .env.example to .env.local, tell you what needs secrets.",
+"Action: `cd ~/code/acme-platform && nvm use` (Node 20.11), `pnpm install` (pnpm 9, never npm or yarn), copy .env.example to .env.local, and you pull secrets from the 1Password vault acme-dev. Then I'd try `pnpm dev`."]},
+{"event": "code-s075-e011", "responses": [
+"Yes: deleting infra/terraform/backend_override.tf on a branch so Terraform uses the S3 backend again. I won't apply anything, and the 47-resource plan from CI is an empty-state result, not a real change. Action: new branch off main, `git rm infra/terraform/backend_override.tf`, commit, push, and open a PR for Priya.",
+"Doing it. Action: create a branch off main, `git rm infra/terraform/backend_override.tf`, rerun `terraform init -backend=false`-style checks only (no apply), commit and open a PR for the platform team. The infra-plan peer warning shows nothing should be applied until this is merged.",
+"Deleting the override on a branch. I need the Linear id for the branch name; until then a local branch. Action: `git rm infra/terraform/backend_override.tf`, commit as `fix(infra): remove local backend override` with a body on why, push, open a PR. No apply."]},
+{"event": "code-s030-e013", "responses": [
+"Noted on ESM and secrets. I'll add redaction to the pino logger config. Action: find the api logger, add `redact` paths for authorization headers, cookies and token/password/secret fields, and scrub Bearer tokens from error messages; ESM imports only. Tests with a fake token.",
+"Adding redaction to the pino logger. The API has Express 4 notes in my head, so I'll confirm the framework. Action: edit the logger with redact paths (req.headers.authorization, cookie, password/token/secret) and a scrubber for 'Bearer ...' in messages; ESM imports, no require(); test that a token never appears.",
+"Action: find the api logger module, add redaction for auth headers, cookies and password/token/secret/apiKey fields, and a function that strips Bearer tokens from free-text error messages. ESM only, no require(), no console.log. Add a test logging a fake bearer token and asserting it doesn't appear."]},
+{"event": "code-s015-e000", "responses": [
+"I'll write the local setup section and add a note that billing changes need your review. Action: read README, .nvmrc, package.json scripts and .env.example, then write the section: clone, Node, pnpm install, `.env.example` to `.env.local`, secrets from the 1Password vault acme-dev, how to run.",
+"Writing the section from what's in the repo. `pnpm dev` at the root starts web, api and worker via Turborepo. Env: copy .env.example to .env.local, secrets from the 1Password vault acme-dev. I'll add a contribution note that billing changes need your review. Action: edit docs/onboarding.md.",
+"Writing it with env step: copy .env.example to .env.local, secrets from the 1Password vault acme-dev (production secrets are in AWS Secrets Manager, not for the contractor). Plus the billing rule: no billing changes without your review. Action: read README and scripts, then edit docs/onboarding.md."]},
+{"event": "code-s027-e025", "responses": [
+"Let me check. Action: read apps/web/package.json, grep the app for imports of each package, and check git log for when each was added, then tell you whether one is a leftover.",
+"I don't know yet. Action: look at both packages in apps/web/package.json, grep imports to see if both are used, and check git log -S on each to see why it was added.",
+"One of them is probably Clerk, which the middleware uses (apps/web/middleware.ts). The other may be a leftover from before. Action: check imports of each in apps/web and the git history to confirm."]},
+{"event": "code-s056-e038", "responses": [
+"Changing the dialog to 'Archive customer'. Action: edit DeleteCustomerButton: title, description and the confirm button label; check the file for hard-coded strings and translations.",
+"Changing the title, description and the action button text. The translations are in apps/web/messages/*.json (next-intl), so I'll update every locale if the dialog uses message keys. Action: edit DeleteCustomerButton and any message keys; leave the server action name alone.",
+"Updating the title, body and confirm button to 'Archive customer'. Action: edit DeleteCustomerButton's copy only (not the action name or API), and check any tests that look for the old text."]},
+{"event": "code-s092-e012", "responses": [
+"The worker exposes Prometheus metrics on port 9464 at /metrics; a ServiceMonitor scrapes them every 30s and Grafana reads from there. Dashboards are JSON in infra/grafana/dashboards (billing.json is the natural home). The queue depth metric name isn't verified. Action: curl :9464/metrics from a local worker for the real name before writing the panel.",
+"They go to Prometheus from port 9464 /metrics on the worker. Where Grafana reads from I'd confirm. Action: check infra/ for the ServiceMonitor and dashboards folder, and `curl localhost:9464/metrics` on a local worker to find the billing-sync queue depth metric before adding the panel.",
+"I don't know the full path yet. Action: check infra/helm/worker and infra/ for monitoring config, find the worker's metrics endpoint and the queue depth metric name, then add the panel to the right dashboard JSON."]},
+{"event": "code-s042-e008", "responses": [
+"Doing 1 and 3: extracting the empty state into components/invoices/empty-state.tsx and making the error state win over empty in table.tsx. Keeping the component small. Action: move the markup from table.tsx L88-131, render error before empty at table.tsx:140, no tests yet as you said.",
+"Doing 1 and 3 now. Action: create components/invoices/empty-state.tsx with the markup from table.tsx, import it there, fix the isError branch so the error state wins over empty. Tests are left to you.",
+"Doing 1 and 3. Action: extract the empty-state markup into components/invoices/empty-state.tsx, and update table.tsx so a failed query shows the error state rather than 'No invoices yet'. Tests skipped as requested; typecheck only."]},
+{"event": "code-s013-e004", "responses": [
+"Action: open packages/cli/src/commands/invoices.ts, add a `--json` option that prints the invoices as JSON (no table or colors), reusing printJson if it exists, and test it.",
+"Adding --json to `acme invoices list`: plain JSON to stdout, no colors or table. Action: edit the command, add a stdout snapshot test, add a changeset, update the CLI docs page.",
+"Adding `--json` so the output pipes into jq: plain JSON, no color. Action: edit the invoices list command, add a Vitest snapshot test of stdout, and check the invoices export command flag setup for consistency."]},
+{"event": "code-s088-e023", "responses": [
+"Creating packages/cli/src/util/slug.ts with `slugify` and a test. Lowercase, strip punctuation, collapse non-alphanumerics into single hyphens, trim hyphens. Action: write slug.ts and slug.test.ts including 'Northwind Studio, Inc.' to 'northwind-studio-inc', accents, empty input, run the cli tests.",
+"There's already a slugify in apps/api/src/lib/slug.ts, but the cli can't import from api, so I'll write the cli one as asked. Action: write util/slug.ts that strips accents, lowercases and hyphenates, with tests including your example.",
+"Writing it with a named export (no default exports) and Vitest tests. Action: create util/slug.ts and slug.test.ts: 'Northwind Studio, Inc.' to 'northwind-studio-inc', extra spaces, symbols, empty string. Run `pnpm --filter @acme/cli test`."]},
+{"event": "code-s003-e026", "responses": [
+"Adding `--bom` to the csv export. Off by default, CSV only. Action: find the invoices export command, prefix the output with \\uFEFF when the flag is set and format is csv, and error or ignore for json; add a test.",
+"Adding --bom, off by default and only for CSV. Action: edit the export command, write the UTF-8 BOM before the header when set, and add a stdout snapshot test (Vitest) for it.",
+"Action: find the export command in packages/cli, add `--bom` (default off), prepend the BOM to CSV output only, reject or ignore it for json, and add a test that the output starts with the BOM."]},
+{"event": "code-s083-e008", "responses": [
+"Wiring fastify-raw-body for the Stripe route. If the webhook handler lives under billing code, I'll make the change but leave it for your review before committing. Action: `pnpm --filter api add fastify-raw-body`, register it on /v1/webhooks/stripe, use rawBody in signature verification, and commit pnpm-lock.yaml. Test with a signed payload.",
+"Registering fastify-raw-body for the route. This is Stripe, so an alarm may page on-call if it keeps failing; verify on staging. Action: add the dependency, register the plugin in apps/api/src/plugins/, verify with the raw body (not parsed JSON), run tests via app.inject().",
+"Action: add fastify-raw-body to the api, register it for the Stripe webhook route only (global: false, runFirst), switch signature verification to request.rawBody, and add a test with a signed payload. Check the plugin version works with Fastify 5."]},
+{"event": "code-s085-e014", "responses": [
+"I don't want to guess for the cert conversation. Action: check infra/ for the ingress and cert config, then give you a short, accurate summary of how the api is exposed and how the certificate renews.",
+"It uses the AWS Load Balancer Controller with ACM certificates, so the public endpoint is an ALB with an ACM cert, and ACM renews automatically if it is DNS validated. Action: check the ingress annotation for the certificate ARN and validation method to be sure.",
+"Not sure yet. Action: look for the ingress/load balancer definitions and the certificate config under infra/, then explain it in a few sentences you can use with Priya."]},
+{"event": "code-s021-e018", "responses": [
+"Probably add replicas, since higher concurrency means more db connections and sockets per process. Action: check how the worker autoscales in infra and the max replica count before recommending.",
+"The worker already autoscales on queue length with KEDA (1 to 20 replicas, one per 50 messages), so check whether it's hitting the max of 20; if so raise the max replicas rather than concurrency. Action: look at the KEDA manifest and current replica count.",
+"The worker scales with KEDA on queue length, so I'd raise the max replica count rather than concurrency (more db connections and sockets per process). Action: check the manifest in infra/k8s and whether the backlog is at the replica ceiling."]},
+{"event": "code-s103-e007", "responses": [
+"I'll find the switcher component and fix the outside click. Action: locate the org switcher in apps/web, check whether it's built on a Radix popover or custom state, fix so outside click closes it, add a test.",
+"It's likely a custom dropdown rather than the shadcn one. Action: find the org switcher, check if it uses the shadcn/ui Popover or DropdownMenu from apps/web/components/ui (which close on outside click by default); if custom, switch to it.",
+"Action: find the org switcher component, read how open state is handled, and add outside-click handling (or move to the Radix popover), then add a test."]},
+{"event": "code-s083-e005", "responses": [
+"Reverting the whoami change. I won't stash it. Action: `git status`, then `git restore` the whoami file (it wasn't committed), and confirm the diff is clean.",
+"Undoing it. Action: check `git status`, restore packages/cli/src/commands/whoami.ts to HEAD, and confirm nothing else changed.",
+"Reverting it. Action: `git diff` to confirm the only change is the whoami file, then `git restore` it."]},
+{"event": "code-s035-e000", "responses": [
+"Adding the CDN host. Action: edit next.config.ts and add `{ protocol: 'https', hostname: 'cdn.acme.dev', pathname: '/**' }` to images.remotePatterns, then restart the dev server and check the avatars.",
+"Adding it now. Action: add cdn.acme.dev to images.remotePatterns in next.config.ts, restart the dev server, and check /settings/team.",
+"Done: cdn.acme.dev goes in images.remotePatterns in next.config.ts (https, any path). Action: edit the file, restart dev, check the avatars load."]},
+{"event": "code-s035-e006", "responses": [
+"Yes, by default. next/image optimises remote images through the Next server at /_next/image, so the first request for each image size hits our node process, which then caches it on disk. The built app confirmed this. Action: none; if you want avatars served directly from the CDN, use `unoptimized` or a custom loader.",
+"Yes, with the default loader. Requests go to /_next/image on our server, which fetches, resizes and caches. After the first hit they're served from cache, but it still passes through node. Action: none unless you want a custom loader.",
+"By default, yes. The browser requests /_next/image?url=..., our Next server fetches from cdn.acme.dev, optimises and caches it. To avoid the node hop, set `unoptimized` for those images or use a custom CDN loader. Action: none."]},
+{"event": "code-s061-e012", "responses": [
+"The CI failure is at install, 1 of 4 jobs, so lint, typecheck and test never ran. Action: pull the log for run 11408837121 with `gh run view 11408837121 --log-failed` and see why install failed; I'll then fix it on the branch.",
+"Looking at it. Install failed, so I suspect a lockfile mismatch, but I'll verify. Action: `gh run view 11408837121 --log-failed`, then compare pnpm-lock.yaml with package.json on the branch.",
+"Action: `gh run view 11408837121 --log-failed` to see the install error, reproduce with `pnpm install --frozen-lockfile` locally, and fix it. Not the infra work, so nothing there changes."]},
+{"event": "code-s066-e035", "responses": [
+"Good day indeed. Rest up. Worth remembering for tomorrow: the worker ServiceMonitor change is under infra/, so it needs platform review and the plan output on the PR. Action: none.",
+"Nice work today, and get some rest. Action: none.",
+"Good day. Get some rest; everything is saved on your branches. Action: none."]},
+{"event": "code-s041-e000", "responses": [
+"I'll reproduce it first. Action: read formatMoney, add a failing test for 2.005 in CAD, and find whether the issue is float arithmetic (e.g. a Math.round on x*100) or rounding mode.",
+"formatMoney takes integer cents, so a half-cent value like 200.5 means the amount is being built upstream as a float. Action: reproduce in apps/web/lib/money.ts with a test, find the caller producing the fractional cent, and round to whole cents per line at the source. Not by hard-coding cents / 100.",
+"Action: look at the money helper, write a failing test with 2.005 first, then fix the rounding (round half up using integer cents, not floats), and check other callers."]},
+{"event": "code-s041-e016", "responses": [
+"Renaming the prop. Action: grep for InvoiceStatusBadge usages, rename `kind` to `status` in the component and every call site (leaving invoice.kind alone), run typecheck and web tests.",
+"Action: rename the prop in InvoiceStatusBadge and update all usages with grep, keeping invoice.kind untouched; then `pnpm --filter web typecheck` and tests.",
+"Renaming now. Action: update the component's props, stories and tests, and all call sites, then run typecheck to catch anything missed."]},
+{"event": "code-s037-e000", "responses": [
+"Noted: no major version bumps without asking you. Action: `gh pr list --author app/deps-bot`, check each PR's version jump and CI, and report which are patch/minor and green, and which are major (those I'll ask about).",
+"Rule noted. Action: list the deps-bot PRs with `gh pr list`, classify each as patch, minor or major from the diff, check CI status and changelogs for breaking notes. I'll approve nothing major without asking you.",
+"Rule noted: majors need your OK. Action: list the deps-bot PRs and classify them. For zod PR #1312 (3.23.8 to 3.24.1), I have a local commit a8c4f31 with type fixes that isn't pushed; I'll ask before pushing it to the bot branch."]},
+{"event": "code-s040-e008", "responses": [
+"Swapping the three console.logs to the pino logger (without dumping the request body), checking .env.example for the Stripe var (it must be the publishable pk_ key), then the worker. Action: edit the three files, check apps/web/.env.example, then `docker compose up -d redis` and `pnpm --filter worker dev`.",
+"Action: replace the console.log calls with the pino logger (no request bodies), read apps/web/.env.example to confirm the NEXT_PUBLIC_ Stripe var holds the publishable key, not a secret, then start redis and run `pnpm --filter worker dev`.",
+"Action: swap the console.logs for the logger; check apps/web/.env.example (only NEXT_PUBLIC_ vars reach the browser, so it must be the pk_ publishable key); local env goes in .env.local; then `docker compose up -d redis` and `pnpm --filter worker dev`."]},
+{"event": "code-s078-e016", "responses": [
+"Adding skeletons for the four summary cards. Action: find the cards in the reports page, check for an existing Skeleton component in components/ui, add a loading state matching the card sizes, and run web tests.",
+"Adding skeletons.\n- Reuse the existing Skeleton (default export) from components/ui\n- Match each card's size\n- Show only while loading\nAction: edit the reports summary cards and run tests.",
+"Action: look in the reports page for the four cards, add a skeleton state while the query loads, matching the final layout to avoid shifts, and run the web tests."]},
+{"event": "code-s063-e009", "responses": [
+"Drafting the PR description. Action: read the branch diff (priya/acme-212-redis-sg vs main), write the summary, what changes, rollout and rollback notes, and a section marked 'Plan output' for you to paste, plus a request for platform team review.",
+"Drafting it. Action: `git diff main...priya/acme-212-redis-sg`, write the description with context, the change, risk, and a plan output section. Priya is the reviewer.",
+"Action: read the diff, check the Makefile for how the plan is produced (I'd only run plan, never apply), then write a PR body: summary, changes, why, rollout, and a fenced 'Plan output' placeholder. Platform team review requested."]},
+{"event": "code-s002-e013", "responses": [
+"Leaving the Marco question. Doing the rest: Sentry on failures (DSN from SENTRY_DSN), the export command behind a GrowthBook flag, a Vitest stdout snapshot test for the csv output. About the stash: no git stash from now on. Action: run `git stash list`, apply it onto the branch and commit the work, and ask before dropping the stash.",
+"Action: add Sentry capture on export failures using SENTRY_DSN, gate the command behind a GrowthBook flag (I'll pick a key and tell you), add a snapshot test of the csv stdout. Then `git stash list`, recover the stashed work into a commit on the branch, and ask before dropping it.",
+"Starting with the stash: `git stash list` and `git stash show -p`, move it into a WIP commit on the branch, and ask before dropping it. Then Sentry for export failures via SENTRY_DSN, the GrowthBook flag (key to confirm with you), and the CSV snapshot test."]},
+{"event": "code-s077-e000", "responses": [
+"Making the header sticky. Action: find the invoices table, add `sticky top-0` with a background to the header, and check the scroll container: sticky breaks if a parent has overflow hidden.",
+"Sticky header it is. Action: edit the table header cells with `sticky top-0 z-10 bg-background`, make sure no ancestor has overflow that breaks it, and check it in the browser.",
+"Action: add sticky positioning (top-0, solid background, z-index) to the invoices table header, confirm the scroll parent, and check dark mode."]},
+{"event": "code-s082-e049", "responses": [
+"Anytime. One loose end: packages/cli/src/version.ts still has a default export if you want that converted too.",
+"Anytime. Version.ts still has a default export if you want it named too.",
+"Anytime. The only default export left is in packages/cli/src/version.ts, say if you want it changed."]},
+{"event": "code-s030-e000", "responses": [
+"I don't have a record of yesterday's session. Action: check `git status`, `git log --since=yesterday`, current branches and any stashes, and summarize what the repo shows.",
+"I can't see yesterday's conversation. Action: `git log --since=yesterday --all --oneline`, `git status` and open PRs with `gh pr list --author @me`, then tell you what's in flight.",
+"Nothing carried over from yesterday on my side. Action: check git status, recent commits, and open PRs, then report where things stand."]},
+{"event": "code-s057-e006", "responses": [
+"Got it: code plus a line or two from now on.",
+"Understood. Code plus one or two lines from here.",
+"Will do. Code and a line or two."]}
+]}
