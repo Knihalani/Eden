@@ -6,6 +6,8 @@
  * - **STRONG**: an identifier-shaped token it shares with the prompt, or, on a continuation, with the agent's last
  *   message (A7 §2): a path, a filename with an extension (or a dotted name, `vitest.config`), an `ERR_*` or `E123`
  *   code, a CLI flag, a version string, an id mixing letters and digits, a symbol with an inner capital or underscore.
+ *   With P4.3's gate on, a name that starts with a capital and has an inner one ("TypeScript", "GitHub", "BullMQ") or
+ *   a product named like a script ("Next.js") is a word, not an identifier (`identifierTokens`' `strict`).
  * - **MEDIUM**: a content word it shares with a cue part: the prompt, the previous typed prompt (`q_turn`), the paths
  *   just touched (`q_path`) and the agent's last message without Eden's own words (`q_prev`, P4.1's situation cue,
  *   `memory-cue.ts`). A function word is WEAK and never counts.
@@ -25,21 +27,34 @@ const IDENTIFIER_SHAPES = [
   /^--?[a-z][\w-]*$/i, // a CLI flag
   /^v?\d+(?:\.\d+)+$/i, // a version
   /^(?=[\w-]*[a-z])(?=[\w-]*\d)[a-z][\w-]*$/i, // an id mixing letters and digits: c0042, p0b-canary
-  /^[a-z]+[A-Z]\w*$|^[A-Z][a-z]+[A-Z]\w*$/, // a symbol with an inner capital: getUser, ClerkProvider
+  /^[a-z]+[A-Z]\w*$/, // a camelCase symbol: getUser, noUncheckedIndexedAccess
   /^[a-z]\w*_\w+$/i, // a symbol with an underscore: user_id
 ];
+/**
+ * A name that starts with a capital and has an inner one: a class (`ClerkProvider`) as often as a product named in prose
+ * ("TypeScript", "GitHub", "BullMQ"). Before P4.3's gate it is an identifier; the gate reads it as a word (`strict`).
+ */
+const CAPITALIZED_SYMBOL = /^[A-Z][a-z]+[A-Z]\w*$/;
+/** A product named like a script ("Next.js", "Node.js"), a word to the gate; a file is lowercase (`next.config.js`). */
+const PRODUCT_SCRIPT = /^[A-Z][a-zA-Z]*\.js$/;
 
 /** Strips what never belongs to an identifier: quotes, brackets and sentence punctuation around it. */
 function bare(token: string): string {
   return token.replace(/^[`'"([{<]+/, "").replace(/[`'")\]}>,;:!?.]+$/, "");
 }
 
-/** The identifier-shaped tokens of a text, lowercased (`vitest.config.ts` also yields `vitest.config`). */
-export function identifierTokens(text: string): Set<string> {
+/**
+ * The identifier-shaped tokens of a text, lowercased (`vitest.config.ts` also yields `vitest.config`). `strict` (P4.3's
+ * gate, A7 §4): a capitalized name with an inner capital and a product named like a script are words, not identifiers.
+ * R8's 98 silence-set negatives fired on "TypeScript", "GitHub", "BullMQ" and "Next.js" as STRONG matches.
+ */
+export function identifierTokens(text: string, strict = false): Set<string> {
   const found = new Set<string>();
   for (const raw of String(text ?? "").split(/\s+/)) {
     const token = bare(raw);
-    if (token.length < 2 || !IDENTIFIER_SHAPES.some((shape) => shape.test(token))) continue;
+    if (token.length < 2 || (strict && PRODUCT_SCRIPT.test(token))) continue;
+    const shaped = IDENTIFIER_SHAPES.some((shape) => shape.test(token));
+    if (!shaped && (strict || !CAPITALIZED_SYMBOL.test(token))) continue;
     const lower = token.toLowerCase().replace(/^\.\//, "");
     found.add(lower);
     const stem = /^(.+\.[\w-]+)\.[a-z][a-z0-9]{0,4}$/i.exec(lower)?.[1];
@@ -80,15 +95,21 @@ export interface CueParts {
   path?: string;
   prev?: string;
   strong?: ReadonlySet<string>;
-  /** Whether a typed request is an episode here: only with P4.3's gate on (`gate.tau`, `isEpisode`). */
-  requests?: boolean;
+  /**
+   * Whether P4.3's gate is on (`gate.tau`): a typed request is then an episode (`isEpisode`), and identifiers are read
+   * strictly (`identifierTokens`).
+   */
+  gate?: boolean;
 }
 
 /** Whether A7 §4 admits an episode on this cue (see the header). */
 export function admitsEpisode(note: ProvenanceNote, cue: CueParts): boolean {
   const body = stripPacketLabel(String(note.text ?? "")).body;
-  const own = identifierTokens(body);
-  if (sharesIdentifier(own, identifierTokens(cue.prompt)) || (cue.strong && sharesIdentifier(own, cue.strong)))
+  const own = identifierTokens(body, cue.gate);
+  if (
+    sharesIdentifier(own, identifierTokens(cue.prompt, cue.gate)) ||
+    (cue.strong && sharesIdentifier(own, cue.strong))
+  )
     return true;
   const words = contentWords(body);
   const parts = [cue.prompt, cue.turn, cue.path, cue.prev].filter((part) => part && shares(words, contentWords(part)));
@@ -132,5 +153,5 @@ export function isEpisode(note: ProvenanceNote, requests = true): boolean {
 
 /** The notes the gate admits, in their order: an episode (`isEpisode`) only on A7 §4's evidence, every other row. */
 export function admitNotes<T extends ProvenanceNote>(notes: readonly T[], cue: CueParts): T[] {
-  return notes.filter((note) => !isEpisode(note, cue.requests ?? false) || admitsEpisode(note, cue));
+  return notes.filter((note) => !isEpisode(note, cue.gate ?? false) || admitsEpisode(note, cue));
 }

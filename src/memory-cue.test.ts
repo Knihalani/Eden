@@ -184,9 +184,12 @@ describe("A7 §3–4: the lexical path with a situation cue", () => {
     const mem = store();
     mem.remember("Every table has an org_id column and queries must filter by it.", { kind: "fact" });
     tauAt(mem, 0.01);
-    expect(texts(mem.relevant("anything to watch in this query?", 6, undefined, cue("question")))).toHaveLength(1);
+    // Two words: the gate never admits on one (P4.3); "query" meets "queries".
+    expect(
+      texts(mem.relevant("anything to watch in this query on the table?", 6, undefined, cue("question"))),
+    ).toHaveLength(1);
     // P4.2: every reader reads the cue in the index's terms, so without a situation cue too.
-    expect(texts(mem.relevant("anything to watch in this query?"))).toHaveLength(1);
+    expect(texts(mem.relevant("anything to watch in this query on the table?"))).toHaveLength(1);
   });
 
   test("a continuation admits only on an identifier its agent's last message shares, never on a plain word", () => {

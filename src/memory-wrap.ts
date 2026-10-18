@@ -484,7 +484,7 @@ function answerTurn(
   if (isAnswered(mood) && mode !== "off") notes = mem.recall(cue, encode, undefined, { situation, typed });
   else mem.observeCue(cue, undefined, encode);
   const invalid = readInvalidations(mem.dir);
-  const parts = { ...gateParts(prompt, previousTyped, situation), requests: mem.gateMode() === "on" };
+  const parts = { ...gateParts(prompt, previousTyped, situation), gate: mem.gateMode() === "on" };
   const against = { prompt, parts, residual, invalid };
   const { live, tokens } = heldBefore(reads, tails, at, mode);
   const novelty = (fresh: MemoryRecord[]) => novelNotes(fresh, live, { repo: mem.repoKey, invalid });
