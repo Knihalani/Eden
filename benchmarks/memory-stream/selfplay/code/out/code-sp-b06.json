@@ -361,6 +361,366 @@
         "explain what a preview deployment is",
         "change the api port in my local docker compose"
       ]
+    },
+    "code-sleep-b07:m0001": {
+      "pos": [
+        "install the new dependency with yarn add, it's quicker",
+        "npm i the date helper for the table, go",
+        "run the install again, the lockfile looks different",
+        "add tsx to the cli devtools, yarn is fine for that right",
+        "bootstrap the repo on my new laptop, install everything",
+        "pull main and reinstall, something's off in node_modules"
+      ],
+      "neg": [
+        "what's the difference between npm ci and npm install",
+        "how do i switch a project from yarn to pnpm in general",
+        "explain what a lockfile is for",
+        "how do i use corepack to pin a package manager version",
+        "why does yarn berry differ from yarn classic",
+        "what does the only-allow package do in general"
+      ]
+    },
+    "code-sleep-b07:m0002": {
+      "pos": [
+        "git status shows a weird untracked file, commit everything",
+        "stage everything and commit, we're done for the day",
+        "clean the working tree and commit whatever's left",
+        "why does a lock file keep showing up in the root after i pull",
+        "i see an untracked file in the root again, what is it",
+        "commit all the changes, git add ."
+      ],
+      "neg": [
+        "what does git add -p do",
+        "how do i ignore a file in git without committing the ignore",
+        "why does git status show untracked files after a checkout",
+        "how do i remove a file from git history",
+        "what's the difference between git stash and git reset",
+        "explain gitignore glob patterns"
+      ]
+    },
+    "code-sleep-b07:m0003": {
+      "pos": [
+        "make a branch for the retry webhook ticket, linear is ACME-412",
+        "i'm starting on acme 455, create the branch and get set up",
+        "new branch for the invoice pdf work",
+        "i'm on the wrong node version, fix it so the repo runs",
+        "set up my env file for local dev",
+        "open a pr from my current branch to main"
+      ],
+      "neg": [
+        "how do i create a branch in git and push it",
+        "what does nvm use do",
+        "how do i rename a git branch locally",
+        "explain what a .env file is for",
+        "what's a linear issue template",
+        "what does a .env.example usually contain in node projects"
+      ]
+    },
+    "code-sleep-b07:m0004": {
+      "pos": [
+        "commits are going through without lint, check the hooks",
+        "hooks aren't running on my commit, why",
+        "clean up the repo, any leftover junk from old tooling",
+        "add a pre-commit check for formatting",
+        "tidy the root folder, delete what's stale",
+        "remove the old prepare script from package.json if it's dead"
+      ],
+      "neg": [
+        "how does husky install git hooks in general",
+        "what's the difference between pre-commit and pre-push hooks",
+        "how do i skip a git hook for one commit",
+        "write a readme section about running the linter",
+        "what does lint-staged do",
+        "why is my eslint rule not firing on tsx files"
+      ]
+    },
+    "code-sleep-b07:m0005": {
+      "pos": [
+        "api won't start on my machine, says something about the database",
+        "the api crashes at boot after i pulled, look at the logs",
+        "set up the db connection for the api locally",
+        "why is the api failing fast on startup, it worked yesterday",
+        "copy the local config over to the api folder",
+        "reconnect my local postgres to the api"
+      ],
+      "neg": [
+        "what's the connection string format for postgres",
+        "how do i check if postgres is listening on 5432",
+        "explain environment variables in node in a sentence",
+        "why does dotenv not load my .env file",
+        "how do i rotate a database password on rds",
+        "write a healthcheck that pings the database"
+      ]
+    },
+    "code-sleep-b07:m0006": {
+      "pos": [
+        "add a comments table for invoices, follow the usual shape",
+        "new table for webhook deliveries, whatever you need",
+        "add a notes table with soft delete",
+        "generate a migration for the attachments table",
+        "create a table to store payment reminders per org",
+        "ok make the schema for line item discounts"
+      ],
+      "neg": [
+        "what's the difference between uuid v4 and uuid v7",
+        "how do i generate a uuid in the browser",
+        "explain drizzle relations vs foreign keys",
+        "why is serial a bad choice for distributed ids",
+        "add a column to the clients table to store a fax number",
+        "how do i write a drizzle migration rollback"
+      ]
+    },
+    "code-sleep-b07:m0007": {
+      "pos": [
+        "deploys keep killing image jobs halfway, look at the worker",
+        "pods get terminated mid job during rollouts, fix it",
+        "the worker shutdown is too aggressive, raise the timeouts",
+        "add graceful shutdown to the worker",
+        "resize jobs are failing on deploy, check the helm values",
+        "make rollouts safe for the worker, whatever it takes"
+      ],
+      "neg": [
+        "what does SIGTERM do in node by default",
+        "how do kubernetes readiness probes work",
+        "explain what a graceful shutdown means in a web server",
+        "how do i set a timeout on a fetch call",
+        "why does sharp crash on an arm mac",
+        "write a retry wrapper for an http call"
+      ]
+    },
+    "code-sleep-b07:m0008": {
+      "pos": [
+        "downloaded invoices come with weird filenames, fix the naming",
+        "the customer's pdf is named badly, clean that up",
+        "add a client search box that hits the api as you type",
+        "search on the clients page is hammering the api, slow it down",
+        "make the invoice download name match the invoice number",
+        "slugify the client name in the export filename"
+      ],
+      "neg": [
+        "what's a good slug for a blog post url",
+        "how do i debounce a function in lodash",
+        "explain throttle vs debounce",
+        "how do i stream a pdf from an express route",
+        "why does my search input lose focus on rerender",
+        "write a regex to strip punctuation from a string"
+      ]
+    },
+    "code-sleep-b07:m0009": {
+      "pos": [
+        "that settings page we punted, can you scaffold it now",
+        "scaffold the preferences screen under settings",
+        "add the empty settings form with a heading, match what's already there",
+        "the settings nav needs a new item, add it",
+        "where do settings screens live in the web app",
+        "start the notifications piece, just the skeleton"
+      ],
+      "neg": [
+        "what's the difference between a settings page and a profile page in ux",
+        "how do i add a tab to a tabs component in react",
+        "how do i set up a nested layout in the next app router",
+        "explain form validation with react hook form",
+        "write a settings toggle component with a switch",
+        "what's a good empty state for a list"
+      ]
+    },
+    "code-sleep-b07:m0010": {
+      "pos": [
+        "terraform plan wants to recreate half of prod, what's going on",
+        "run terraform plan and tell me the count",
+        "terraform init fails with a backend error, fix it",
+        "remove the local override thing so plans match ci",
+        "plan is showing a pile of resources to add, clean it up",
+        "set up the terraform backend on my laptop"
+      ],
+      "neg": [
+        "what's a terraform state file for",
+        "how do i import an existing aws resource into terraform",
+        "explain terraform workspaces vs separate state files",
+        "what does terraform fmt do",
+        "how do i lock a dynamodb table in aws",
+        "why does terraform say the provider version is unpinned"
+      ]
+    },
+    "code-sleep-b07:m0011": {
+      "pos": [
+        "open a pr for the terraform tweak and the ci yaml change, merge when green",
+        "push the infra change and mark the pr ready",
+        "add a github action step to cache deps, quick",
+        "fix the helm values for the worker and open a pr",
+        "bump the eks node group size in terraform, pr it",
+        "write the pr description for the infra change"
+      ],
+      "neg": [
+        "how do i write a github actions workflow that runs on push",
+        "what's a codeowners file for",
+        "how do i review someone else's pr with gh",
+        "explain terraform modules in a sentence",
+        "what does a PR template usually include",
+        "how do i squash commits before merging"
+      ]
+    },
+    "code-sleep-b07:m0012": {
+      "pos": [
+        "quick django question: how do i filter hikes by month in the orm",
+        "add a partial for the photo gallery on the hike page, htmx style",
+        "this django view returns 500 on the hike detail page, look",
+        "make the trailmix hike form submit via htmx",
+        "in trailmix, add a caption field to the photo model",
+        "check the migrations in trailmix before i push"
+      ],
+      "neg": [
+        "what does htmx hx-swap do",
+        "how do i define a many-to-many in django",
+        "what's the difference between django and flask",
+        "explain django's runserver port",
+        "write a typescript interface for an invoice",
+        "why does prisma generate fail on windows"
+      ]
+    },
+    "code-sleep-b07:m0013": {
+      "pos": [
+        "write a helper to format currency in the web app",
+        "add a util for splitting line items, keep it simple",
+        "clean up the imports in this file",
+        "the new component file needs a quick rewrite, go",
+        "format the api route handler and commit",
+        "write a small function to parse the invoice csv rows"
+      ],
+      "neg": [
+        "what does prettier do by default with quotes",
+        "why does eslint complain about unused vars in tsx",
+        "difference between type and interface in typescript",
+        "how do i enable strict mode in tsconfig",
+        "explain es module imports vs require",
+        "what's the best python formatter"
+      ]
+    },
+    "code-sleep-b07:m0014": {
+      "pos": [
+        "fix the typo in the payment pending message",
+        "add a new translation key for the empty invoices state",
+        "translate the dashboard labels into french, update the json",
+        "clean up the en.json file, it's messy",
+        "sort the keys in the locale files alphabetically",
+        "add the missing german strings for the settings page"
+      ],
+      "neg": [
+        "how do i add a new locale to next-intl",
+        "what's the difference between i18n and l10n",
+        "why does my json have a trailing comma error",
+        "how do i pluralize a string in react-intl",
+        "explain what a messages folder is in next-intl",
+        "fix the spelling in the readme intro"
+      ]
+    },
+    "code-sleep-b07:m0015": {
+      "pos": [
+        "reset my local data so i have invoices to look at",
+        "load demo data into the api db",
+        "my local db is empty, get me some clients and invoices",
+        "run the seed and check the counts",
+        "test data for the dashboard looks thin, add more",
+        "wipe local and reseed before i demo"
+      ],
+      "neg": [
+        "what's a database seed file used for generally",
+        "how do i drop all tables in postgres",
+        "explain testcontainers in one paragraph",
+        "why do my api integration tests hang",
+        "how do i write a faker generator for emails",
+        "difference between migrate and push in drizzle"
+      ]
+    },
+    "code-sleep-b07:m0016": {
+      "pos": [
+        "ci-watcher wants a deploy window next week, pick one for me",
+        "reschedule the design review to after the long weekend",
+        "draft an out of office message for the team",
+        "i need to ship the invoice fix before i go offline, what's left",
+        "review the open PRs and tell me what's urgent for monday",
+        "block off thursday for a deploy, i'll be reachable"
+      ],
+      "neg": [
+        "what's the best time of year to hike in ontario",
+        "how do i set an out of office in outlook",
+        "write a calendar invite for a team lunch",
+        "what does a long weekend mean in canada",
+        "what's the format for an hourly forecast api response",
+        "explain pto accrual in simple terms"
+      ]
+    },
+    "code-sleep-b07:m0017": {
+      "pos": [
+        "explain how the webhook retries work",
+        "what's the status on the export fix",
+        "summarize the last deploy",
+        "walk me through the auth flow",
+        "what does the api return on a 404",
+        "how do the queue retries behave"
+      ],
+      "neg": [
+        "give me the full long version of the migration guide, don't skip steps",
+        "what's the longest word in english",
+        "tighten up this paragraph for the readme",
+        "how do i shorten a url with a link shortener api",
+        "what does terse mean in code review culture",
+        "make the function name shorter in this file"
+      ]
+    },
+    "code-sleep-b07:m0018": {
+      "pos": [
+        "commit the cli script changes, good to go",
+        "push the completions script work",
+        "add a check:size script to the cli",
+        "run gen:completions and commit the output",
+        "ship the cli tweaks, lint's passing",
+        "pr the cli devtools change"
+      ],
+      "neg": [
+        "what's the difference between dependencies and devDependencies",
+        "how do i run a typescript file directly with node",
+        "what does ts-node do",
+        "why does my package.json lose formatting after an edit",
+        "explain what pnpm-lock.yaml is for",
+        "how do i write a script alias in package.json"
+      ]
+    },
+    "code-sleep-b07:m0019": {
+      "pos": [
+        "deps-bot bumped types, typecheck is red on the cli, fix it",
+        "cli typecheck fails after merging the types PR, look",
+        "the response type in http.ts is wrong after the update",
+        "merge the deps-bot types bump, fix whatever breaks",
+        "typecheck blew up in packages/cli, help",
+        "review deps-bot's latest pr and tell me if it's safe"
+      ],
+      "neg": [
+        "what does @types/node provide in general",
+        "how do i fix 'cannot find name fetch' in typescript",
+        "what's the difference between the dom lib and node types",
+        "what is undici",
+        "how do i pin a dependency version to avoid a bump",
+        "explain the tsconfig lib option"
+      ]
+    },
+    "code-sleep-b07:m0020": {
+      "pos": [
+        "the nightly digest went out at the wrong time, check the schedule",
+        "add a new daily job that emails account owners, schedule it",
+        "change the purge job to run on a different day",
+        "where do we set up the recurring jobs for the worker",
+        "billing reconciliation should run hourly, add it",
+        "why didn't the purge job run on sunday"
+      ],
+      "neg": [
+        "how do i write a cron expression for weekdays at 9",
+        "what is bullmq and how does it differ from bull",
+        "explain kubernetes cronjob vs deployment",
+        "how do i run a node script every minute on linux with crontab",
+        "what's the iana timezone name for toronto",
+        "difference between setInterval and a cron library"
+      ]
     }
   }
 }
