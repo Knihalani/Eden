@@ -30,7 +30,7 @@ import { bashCall, editCall, readCall, writeCall, type ToolCall } from "./tools"
 export type ToolSpec = (
   | { tool: "Read"; path: string; chars: number; text?: string }
   | { tool: "Edit"; path: string; oldString: string; newString: string }
-  | { tool: "Write"; path: string; chars: number }
+  | { tool: "Write"; path: string; chars: number; text?: string }
   | { tool: "Bash"; command: string; description: string; chars: number; exitCode: number; text?: string }
 ) & {
   /** Policy items (`key@scope`) the call breaks: an annotated guard case (A5 `guard_recall`). */
@@ -477,7 +477,7 @@ export function toolCall(world: SimWorld, spec: ToolSpec): ToolCall {
     case "Edit":
       return editCall(id, at(spec.path), spec.oldString, spec.newString);
     case "Write":
-      return writeCall(id, at(spec.path), filler(id, spec.chars));
+      return writeCall(id, at(spec.path), spec.text ?? filler(id, spec.chars));
     case "Bash":
       return bashCall(id, spec.command, spec.description, spec.text ?? filler(id, spec.chars), spec.exitCode);
   }
