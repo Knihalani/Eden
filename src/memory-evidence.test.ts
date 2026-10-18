@@ -88,6 +88,51 @@ describe("A7 §4: the MEDIUM path admits at τ_repo, R1's strict point until a r
   });
 });
 
+describe("P4.3 iteration (dev and R8's silence set): names in prose and one rare word", () => {
+  test("one rare word never admits a short row on the MEDIUM path, however high it scores; two do", () => {
+    const mem = store();
+    const rule = "Prefer Rustacean over Gopherish for new scripts.";
+    mem.remember(rule, { kind: "fact" });
+    process.env.EDEN_MEMORY_TAU = "0.5";
+    try {
+      expect(mem.relevant("write a Rustacean function that flattens a nested array")).toEqual([]);
+      expect(texts(mem.relevant("which language do we prefer for new scripts, Rustacean?"))).toEqual([rule]);
+    } finally {
+      delete process.env.EDEN_MEMORY_TAU;
+    }
+  });
+
+  test("a capitalized name with an inner capital is a word to the gate, not STRONG; a camelCase symbol is STRONG", () => {
+    const mem = store();
+    const queue = "The worker consumes BullMQ queues on Redis 7.";
+    const strict = "TypeScript runs in strict mode with noUncheckedIndexedAccess enabled.";
+    mem.remember(queue, { kind: "fact" });
+    mem.remember(strict, { kind: "fact" });
+    expect(mem.relevant("what does the Bull in BullMQ refer to?")).toEqual([]);
+    expect(mem.relevant("when was TypeScript first released?")).toEqual([]);
+    expect(texts(mem.relevant("why is noUncheckedIndexedAccess on?"))).toEqual([strict]);
+    expect(mem.lastGate).toMatchObject({ strong: 1 });
+  });
+
+  test("a product named like a script (Next.js) is a word to the gate; a lowercase file name is STRONG", () => {
+    const mem = store();
+    const app = "The web app is Next.js 15 with the App Router.";
+    const config = "Image domains are allowed in next.config.js.";
+    mem.remember(app, { kind: "fact" });
+    mem.remember(config, { kind: "fact" });
+    expect(mem.relevant("what does SSR stand for in Next.js?")).toEqual([]);
+    expect(texts(mem.relevant("open next.config.js"))).toEqual([config]);
+  });
+
+  test("in shadow, the admission before the gate still reads them as identifiers; the trace counts the drop", () => {
+    const mem = store();
+    mem.remember("The worker consumes BullMQ queues on Redis 7.", { kind: "fact" });
+    mem.gateFlag = "shadow";
+    expect(mem.relevant("what does the Bull in BullMQ refer to?")).toHaveLength(1);
+    expect(mem.lastGate).toMatchObject({ mode: "shadow", strong: 0, medium: 0, drop: 1 });
+  });
+});
+
 describe("D17's 0.7·top cut, on the MEDIUM path", () => {
   test("a row under 0.7 of the MEDIUM path's top score is left out", () => {
     const mem = store();

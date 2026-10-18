@@ -528,12 +528,15 @@ function hayParts(text: string, cue: SituationCue | undefined, corpus: Corpus, s
  * which the gate reads against τ_repo (A7 §4: "the gate sees the per-part scores as well as the sum"). τ starts at R1's
  * strict point, measured on a cue of the prompt, the previous turn and the paths taken together (R1 M7). And the parts
  * that give the row MEDIUM evidence (A7 §4): a rare plain word of the prompt (df ≤ 50 among the rows the reader sees; a
- * commoner one is WEAK, which ranks only) or any word of a context part (`q_prev`'s are rare already).
+ * commoner one is WEAK, which ranks only) or any word of a context part (`q_prev`'s are rare already). `words` counts
+ * the distinct words matched, a compound's parts with it ("TypeScript" also gives "type" and "script"): the gate never
+ * admits on one word (`mediumAdmits`).
  */
 function situatedScore(fields: RowFields, parts: readonly HayPart[], corpus: Corpus) {
   const terms = rowTerms(fields);
   const medium = new Set<CuePart>();
   const hit = new Set<CuePart>();
+  const matched = new Set<string>();
   let score = 0;
   let sum = 0;
   for (const part of parts) {
@@ -543,31 +546,47 @@ function situatedScore(fields: RowFields, parts: readonly HayPart[], corpus: Cor
       .slice(0, part.mass);
     if (!hits.length) continue;
     hit.add(part.part);
+    for (const term of hits) matched.add(term);
     if (part.part !== "prompt" || corpus.df(hits[0]!) <= RARE_DF) medium.add(part.part);
     const own = hits.reduce((total, term) => total + termScore(term, fields, corpus), 0);
     score += part.weight * own;
     sum += own;
   }
-  return { score, sum, medium, hit };
+  const all = [...matched];
+  const words = all.filter((term) => !all.some((other) => other !== term && other.includes(term))).length;
+  return { score, sum, medium, hit, words };
 }
 
 /**
  * A7 §4's STRONG evidence on the lexical path: an identifier-shaped token the row shares with the prompt, or, on a
- * continuation, with the agent's last message only (A7 §2: a continuation is answered from `q_prev`).
+ * continuation, with the agent's last message only (A7 §2: a continuation is answered from `q_prev`). `strict`: as the
+ * gate reads identifiers (`identifierTokens`).
  */
-function strongEvidence(rec: MemoryRecord, prompt: ReadonlySet<string>, cue: SituationCue | undefined): boolean {
-  const own = identifierTokens(rec.text);
+function strongEvidence(
+  rec: MemoryRecord,
+  prompt: ReadonlySet<string>,
+  cue: SituationCue | undefined,
+  strict = false,
+): boolean {
+  const own = identifierTokens(rec.text, strict);
   return sharesIdentifier(own, cue?.mode === "continuation" ? cue.strong : prompt);
 }
 
 /**
  * Whether A7 §4's MEDIUM path admits a row without STRONG evidence: its BM25F sum reaches τ_repo on MEDIUM evidence
- * (WEAK never admits), from two different cue parts when it is an episode (`isEpisode`: one the user did not type, or
- * a prompt stored as an episode). A continuation admits on STRONG evidence only (A7 §2).
+ * (WEAK never admits) and at least two words, from two different cue parts when it is an episode (`isEpisode`: one the
+ * user did not type, or a prompt stored as an episode). One rare word never admits (A7 §4: "a rule admitting on one
+ * rare word would fire on them"; R8's silence set fired on "TypeScript" alone). A continuation admits on STRONG evidence
+ * only (A7 §2).
  */
-function mediumAdmits(rec: MemoryRecord, sum: number, medium: ReadonlySet<CuePart>, tau: number, mode?: string) {
-  if (mode === "continuation" || !medium.size || sum < tau) return false;
-  return !isEpisode(rec) || medium.size >= 2;
+function mediumAdmits(
+  rec: MemoryRecord,
+  row: { sum: number; medium: ReadonlySet<CuePart>; words: number },
+  tau: number,
+  mode?: string,
+) {
+  if (mode === "continuation" || !row.medium.size || row.sum < tau || row.words < 2) return false;
+  return !isEpisode(rec) || row.medium.size >= 2;
 }
 
 /** A candidate as A7 §4's gate reads it (`AgentMemory.scored`): its ranking score and its gate sum. */
@@ -576,7 +595,11 @@ interface Evidenced {
   score: number;
   sum: number;
   medium: ReadonlySet<CuePart>;
+  /** STRONG evidence as the admission before the gate reads identifiers, and as the gate does (`identifierTokens`). */
   strong: boolean;
+  strongGate: boolean;
+  /** The distinct words it shares with the cue (`situatedScore`). */
+  words: number;
   /** The cue parts it shares any word with: the admission before the gate reads the prompt's. */
   hit: ReadonlySet<CuePart>;
 }
@@ -1887,13 +1910,11 @@ export class AgentMemory {
    * `prompt_id` of the turn that stored the prompt: its own rows are left out.
    */
   private silenceTop(text: string, view: PostingsView<Compiled>, turn?: string) {
-    const rows = this.scored(text, undefined, view, EVERY_ROW, true).filter(
+    const rows = this.scored(text, undefined, view, EVERY_ROW, true, true).filter(
       (row) => !turn || row.rec.promptId !== turn,
     );
-    const medium = rows.filter(
-      (row) => !row.strong && row.medium.size && mediumAdmits(row.rec, row.sum, row.medium, 0),
-    );
-    return { score: topSum(medium), strong: rows.some((row) => row.strong) };
+    const medium = rows.filter((row) => !row.strongGate && row.medium.size && mediumAdmits(row.rec, row, 0));
+    return { score: topSum(medium), strong: rows.some((row) => row.strongGate) };
   }
 
   /** The last refits of the user's other repos' stores (the siblings of this one), for the pooled silence set. */
@@ -2307,7 +2328,7 @@ export class AgentMemory {
   ): MemoryRecord[] {
     const view = this.postingsView(snapshot, visible);
     const mode = this.gateMode();
-    const scored = this.scored(text, cue, view, visible, mode === "on");
+    const scored = this.scored(text, cue, view, visible, mode === "on", mode !== "off");
     // `main`'s admission (gate.tau shadow or off), as it was: the newest row per subject among the rows admitted, and
     // the echoes of the prompt left to the delivery's residual, after the cap.
     const before = liveCopulaLatest(scored.filter((row) => admittedBefore(row, cue)));
@@ -2320,14 +2341,12 @@ export class AgentMemory {
       // Of the rows giving one subject a value, the newest (A4 §5.1 step 5's supersession), before the gate's cut.
       const rows = liveCopulaLatest(scored.filter((row) => !echo(row.rec)));
       const tau = tauOf(dirname(this.path), view.meanIdf());
-      const evidenced = rows.filter((row) => row.strong || row.medium.size);
-      const passing = evidenced.filter(
-        (row) => row.strong || mediumAdmits(row.rec, row.sum, row.medium, tau, cue?.mode),
-      );
+      const evidenced = rows.filter((row) => row.strongGate || row.medium.size);
+      const passing = evidenced.filter((row) => row.strongGate || mediumAdmits(row.rec, row, tau, cue?.mode));
       // A4 §5.1 step 6: the cut is the MEDIUM path's; a STRONG row is admitted alone and sets no top.
-      const top = passing.reduce((max, row) => (row.strong ? max : Math.max(max, row.score)), 0);
-      const gated = passing.filter((row) => row.strong || row.score >= RELATIVE_CUT * top);
-      const strong = gated.filter((row) => row.strong).length;
+      const top = passing.reduce((max, row) => (row.strongGate ? max : Math.max(max, row.score)), 0);
+      const gated = passing.filter((row) => row.strongGate || row.score >= RELATIVE_CUT * top);
+      const strong = gated.filter((row) => row.strongGate).length;
       const trace = { tau, evidenced: evidenced.length, top: topSum(evidenced), strong, medium: gated.length - strong };
       const kept = new Set(gated.map((row) => row.rec.id));
       const drop = before.filter((row) => !echo(row.rec) && !kept.has(row.rec.id)).length;
@@ -2351,7 +2370,7 @@ export class AgentMemory {
   /**
    * The lexical path's candidates for a cue (see `relevant`), each with its BM25F scores, the parts it shares a word
    * with, the parts that give it MEDIUM evidence and whether it has STRONG. `split`: the prompt identifier-split
-   * (A7 §3), as the gate reads it.
+   * (A7 §3), as the gate reads it. `gate`: STRONG as the gate reads identifiers too (`strongGate`).
    */
   private scored(
     text: string,
@@ -2359,10 +2378,12 @@ export class AgentMemory {
     view: PostingsView<Compiled>,
     visible: RowFilter,
     split: boolean,
+    gate: boolean,
   ) {
     const parts = hayParts(text, cue, view, split);
     const hay = new Set(parts.flatMap((part) => [...part.hay]));
     const promptIds = identifierTokens(text);
+    const promptStrict = gate ? identifierTokens(text, true) : promptIds;
     const pool = candidateRows(
       [...hay].map((term) => view.rowsOf(term)),
       (c) => indexable(c) && visible(c.rec),
@@ -2374,9 +2395,10 @@ export class AgentMemory {
         /\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text)
       )
         continue;
-      const { score, sum, medium, hit } = situatedScore(c.fields, parts, view);
+      const { score, sum, medium, hit, words } = situatedScore(c.fields, parts, view);
       const strong = strongEvidence(c.rec, promptIds, cue);
-      if (strong || hit.size) rows.push({ rec: c.rec, score, sum, medium, strong, hit });
+      const strongGate = gate && strong && strongEvidence(c.rec, promptStrict, cue, true);
+      if (strong || hit.size) rows.push({ rec: c.rec, score, sum, medium, strong, strongGate, words, hit });
     }
     return rows;
   }

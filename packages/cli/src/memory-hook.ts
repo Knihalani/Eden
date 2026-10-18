@@ -1381,8 +1381,8 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   // what the last turns already say (D26), then what this window was already given (the ledger, which also marks
   // `Updated:` items); the epoch's budget (A4 §4); shape (step 8).
   const parts = situation
-    ? { ...gateParts(prompt, recent.previousTyped, situation), requests: flags["gate.tau"].mode === "on" }
-    : { prompt, turn: recent.previousTyped, prev, requests: flags["gate.tau"].mode === "on" };
+    ? { ...gateParts(prompt, recent.previousTyped, situation), gate: flags["gate.tau"].mode === "on" }
+    : { prompt, turn: recent.previousTyped, prev, gate: flags["gate.tau"].mode === "on" };
   const shadow = shadowSentences(win, ctx.place);
   const invalid = readInvalidations(mem.dir);
   const catalog = ctx.repoScopes()?.scopes;
