@@ -1,0 +1,17 @@
+{"batch": "j12", "judge": "opus (claude-code subagent)", "cases": [
+{"event": "code-s013-e040", "needed": ["code-sleep-b00:m0024"], "why": "CLI tests are Vitest snapshot tests of stdout"},
+{"event": "code-s038-e019", "needed": ["code-sleep-b00:m0048"], "why": "session recap; Jordan wants short bullet-list summaries"},
+{"event": "code-s005-e000", "needed": [], "why": "user stated secrets/tailwind facts; paging row not yet available"},
+{"event": "code-s101-e013", "needed": ["code-sleep-b01:m0014", "code-sleep-b10:m0001", "code-sleep-b09:m0001", "code-sleep-b05:m0017"], "why": "presigned S3 upload flow, expenseAttachments flag, api wrapper with credentials, server actions for forms"},
+{"event": "code-s036-e000", "needed": [], "why": "general SQL question"},
+{"event": "code-s047-e000", "needed": ["code-sleep-b04:m0019"], "why": "a 'No client' fallback label needs i18n keys in en/fr/es"},
+{"event": "code-s018-e016", "needed": ["code-sleep-b00:m0001", "code-sleep-b01:m0024"], "why": "known redirect-loop gotcha: auth pages must be in publicRoutes in middleware.ts"},
+{"event": "code-s047-e018", "needed": ["code-sleep-b00:m0022"], "why": "building overwrote tracked, hand-patched dist/index.js; leave it / do not commit without Marco"},
+{"event": "code-s058-e019", "needed": [], "why": "typecheck clean, nothing needed"},
+{"event": "code-s063-e026", "needed": [], "why": "summarize analyzer output; nothing in memory needed"},
+{"event": "code-s060-e028", "needed": [], "why": "tests passed; nothing to add"},
+{"event": "code-s100-e000", "needed": ["code-sleep-b00:m0023"], "why": "feature flags are managed in GrowthBook"},
+{"event": "code-s060-e021", "needed": ["code-sleep-b02:m0004", "code-sleep-b05:m0018", "code-sleep-b01:m0023"], "why": "nvm use Node 20.11 before install, use pnpm, env .env.local setup for seed"},
+{"event": "code-s086-e004", "needed": ["code-sleep-b06:m0021"], "why": "worker exposes Prometheus metrics on 9464 scraped via ServiceMonitor"},
+{"event": "code-s012-e000", "needed": ["code-sleep-b00:m0038", "code-sleep-b00:m0006"], "why": "lint is Biome (no eslint/prettier); API is Express 4 for CORS change"}
+]}
