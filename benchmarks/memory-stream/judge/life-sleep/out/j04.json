@@ -1,0 +1,160 @@
+{
+ "batch": "j04",
+ "judge": "opus (claude-code subagent)",
+ "cases": [
+  {
+   "event": "life-s101-e010",
+   "needed": [
+    "life-sleep-b09:m0034",
+    "life-sleep-b09:m0007"
+   ],
+   "why": "In-office Wednesday: Riya normally walks Biscuit at noon on WFH days, so noon walk needs cover; office commute details."
+  },
+  {
+   "event": "life-s012-e018",
+   "needed": [],
+   "why": "Simple group-chat draft; nothing in memory needed."
+  },
+  {
+   "event": "life-s115-e005",
+   "needed": [],
+   "why": "Routine background status message."
+  },
+  {
+   "event": "life-s077-e017",
+   "needed": [
+    "life-sleep-b06:m0023"
+   ],
+   "why": "Drop-off spots 'around here' need home area (Leslieville)."
+  },
+  {
+   "event": "life-s015-e000",
+   "needed": [],
+   "why": "General fix and reminder set-up; nothing stored needed."
+  },
+  {
+   "event": "life-s115-e028",
+   "needed": [],
+   "why": "General question about fado."
+  },
+  {
+   "event": "life-s026-e025",
+   "needed": [],
+   "why": "General question about zari."
+  },
+  {
+   "event": "life-s102-e013",
+   "needed": [],
+   "why": "Background shopping result; size already in message, nothing to act on."
+  },
+  {
+   "event": "life-s133-e000",
+   "needed": [
+    "life-sleep-b00:m0043",
+    "life-sleep-b11:m0019"
+   ],
+   "why": "Call about GA wording for Sales: never give Sales a date, say 'target'; current GA target and Wavecrest slip."
+  },
+  {
+   "event": "life-s025-e028",
+   "needed": [
+    "life-sleep-b00:m0007",
+    "life-sleep-b01:m0006"
+   ],
+   "why": "Gift for Priya: who she is (best friend from McGill) for the card; prefer local Canadian retailers."
+  },
+  {
+   "event": "life-s115-e000",
+   "needed": [
+    "life-sleep-b07:m0006"
+   ],
+   "why": "Shared family calendar name and that Sam gets notifications from it."
+  },
+  {
+   "event": "life-s120-e003",
+   "needed": [
+    "life-sleep-b00:m0031",
+    "life-sleep-b09:m0014"
+   ],
+   "why": "Data request to Wen needs #data-requests, 3 business days and metric definition; Payouts Health dashboard tracks failure reasons."
+  },
+  {
+   "event": "life-s118-e013",
+   "needed": [],
+   "why": "Chit-chat."
+  },
+  {
+   "event": "life-s002-e016",
+   "needed": [],
+   "why": "No memory rows available yet."
+  },
+  {
+   "event": "life-s148-e000",
+   "needed": [
+    "life-sleep-b13:m0003",
+    "life-sleep-b13:m0010"
+   ],
+   "why": "Offsite Nov 12 clashes with suggested move of GA retro to Thu Nov 12; Thursday after-school pickup at 5:45 vs offsite ending 6pm."
+  },
+  {
+   "event": "life-s063-e000",
+   "needed": [],
+   "why": "General advice for Marcus; nothing stored needed."
+  },
+  {
+   "event": "life-s102-e000",
+   "needed": [],
+   "why": "Routine class reminder."
+  },
+  {
+   "event": "life-s027-e031",
+   "needed": [],
+   "why": "No pet budget or conflicting info stored yet."
+  },
+  {
+   "event": "life-s017-e008",
+   "needed": [],
+   "why": "Route info is in prior assistant output, not memory."
+  },
+  {
+   "event": "life-s072-e000",
+   "needed": [
+    "life-sleep-b04:m0031",
+    "life-sleep-b05:m0008",
+    "life-sleep-b06:m0036"
+   ],
+   "why": "Weekday evening booking: private therapist Tue 17:30, Mon piano/Thu Spanish; Riverside clinic details on file."
+  },
+  {
+   "event": "life-s060-e000",
+   "needed": [
+    "life-sleep-b03:m0009"
+   ],
+   "why": "Riya venting: listen and reflect, no fixes unless asked."
+  },
+  {
+   "event": "life-s125-e004",
+   "needed": [],
+   "why": "Simple currency conversion."
+  },
+  {
+   "event": "life-s007-e013",
+   "needed": [],
+   "why": "No memory rows available yet."
+  },
+  {
+   "event": "life-s100-e017",
+   "needed": [
+    "life-sleep-b00:m0068",
+    "life-sleep-b04:m0011",
+    "life-sleep-b05:m0015"
+   ],
+   "why": "Mithai for mom: she is diabetic so sweets must be sugar-free; her Bandra West contact/address; ask before purchases over $150."
+  },
+  {
+   "event": "life-s116-e005",
+   "needed": [],
+   "why": "Routine bills digest; no action needed."
+  }
+ ]
+}

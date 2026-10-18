@@ -1,0 +1,172 @@
+{
+ "batch": "j05",
+ "judge": "opus (claude-code subagent)",
+ "cases": [
+  {
+   "event": "life-s003-e004",
+   "needed": [],
+   "why": "No memory rows available yet."
+  },
+  {
+   "event": "life-s141-e023",
+   "needed": [],
+   "why": "General towing question about Hannah's car."
+  },
+  {
+   "event": "life-s096-e028",
+   "needed": [],
+   "why": "Style feedback; nothing to retrieve."
+  },
+  {
+   "event": "life-s077-e044",
+   "needed": [],
+   "why": "Simple timer."
+  },
+  {
+   "event": "life-s002-e020",
+   "needed": [],
+   "why": "No memory rows available yet."
+  },
+  {
+   "event": "life-s085-e030",
+   "needed": [],
+   "why": "Chit-chat."
+  },
+  {
+   "event": "life-s057-e015",
+   "needed": [
+    "life-sleep-b04:m0029"
+   ],
+   "why": "Tom's favourite whisky is Lagavulin; over $100 so collect contributors."
+  },
+  {
+   "event": "life-s141-e000",
+   "needed": [
+    "life-sleep-b12:m0003",
+    "life-sleep-b11:m0025",
+    "life-sleep-b02:m0039"
+   ],
+   "why": "Current collection day and yard-waste schedule; last year's end-of-season and depot info."
+  },
+  {
+   "event": "life-s110-e009",
+   "needed": [
+    "life-sleep-b09:m0022"
+   ],
+   "why": "Saved kid-friendly explanation for Biscuit howling at sirens."
+  },
+  {
+   "event": "life-s092-e000",
+   "needed": [
+    "life-sleep-b06:m0021",
+    "life-sleep-b08:m0029",
+    "life-sleep-b07:m0006"
+   ],
+   "why": "Yard waste schedule/rules for her street; family calendar for entries."
+  },
+  {
+   "event": "life-s060-e019",
+   "needed": [],
+   "why": "General advice for Priya; nothing stored needed."
+  },
+  {
+   "event": "life-s025-e032",
+   "needed": [
+    "life-sleep-b00:m0084"
+   ],
+   "why": "Anjali's birthday was missing; Riya wants yearly family birthdays with a week-ahead reminder."
+  },
+  {
+   "event": "life-s141-e030",
+   "needed": [],
+   "why": "Routine background status message."
+  },
+  {
+   "event": "life-s118-e006",
+   "needed": [],
+   "why": "Status message; renovation clause already discussed in recent."
+  },
+  {
+   "event": "life-s051-e017",
+   "needed": [
+    "life-sleep-b00:m0076",
+    "life-sleep-b00:m0001"
+   ],
+   "why": "Restaurant booking rule (19:00, good vegetarian options); Sam is vegetarian."
+  },
+  {
+   "event": "life-s008-e000",
+   "needed": [],
+   "why": "No memory rows available yet."
+  },
+  {
+   "event": "life-s150-e004",
+   "needed": [
+    "life-sleep-b00:m0057",
+    "life-sleep-b02:m0021"
+   ],
+   "why": "Diego feedback as Figma comments framed as problem statements; Riya's copy rules (no em dashes, 'merchant')."
+  },
+  {
+   "event": "life-s051-e005",
+   "needed": [],
+   "why": "Non-human calendar status; already handled."
+  },
+  {
+   "event": "life-s097-e004",
+   "needed": [
+    "life-sleep-b00:m0010",
+    "life-sleep-b01:m0008",
+    "life-sleep-b00:m0079"
+   ],
+   "why": "Biscuit's approximate birth date and behaviour (food stealing, howling) and diet/chicken sensitivity."
+  },
+  {
+   "event": "life-s013-e020",
+   "needed": [],
+   "why": "Simple recurring calendar add; no conflicts stored."
+  },
+  {
+   "event": "life-s143-e009",
+   "needed": [
+    "life-sleep-b06:m0001",
+    "life-sleep-b08:m0034"
+   ],
+   "why": "Mar 18 is father's death anniversary (lighter schedule wanted); Mumbai trip planned late March 2027."
+  },
+  {
+   "event": "life-s066-e010",
+   "needed": [
+    "life-sleep-b02:m0021",
+    "life-sleep-b00:m0071"
+   ],
+   "why": "PRD writing rules: no em dashes, 'merchant', short paragraphs; avoid jargon."
+  },
+  {
+   "event": "life-s038-e017",
+   "needed": [
+    "life-sleep-b00:m0035",
+    "life-sleep-b00:m0047",
+    "life-sleep-b02:m0010",
+    "life-sleep-b02:m0028"
+   ],
+   "why": "Goals draft: DELE B2 May 2026, Spanish fluency goal, first half marathon done, Payouts v2 launch."
+  },
+  {
+   "event": "life-s017-e024",
+   "needed": [
+    "life-sleep-b00:m0021"
+   ],
+   "why": "House maintenance history (basement, furnace, eavestroughs) for pre-winter list."
+  },
+  {
+   "event": "life-s140-e048",
+   "needed": [
+    "life-sleep-b06:m0020",
+    "life-sleep-b08:m0033",
+    "life-sleep-b00:m0045"
+   ],
+   "why": "Payment over $150 needs Riya's OK; non-routine email needs her draft approval; household bills from TD joint chequing."
+  }
+ ]
+}
