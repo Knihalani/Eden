@@ -576,8 +576,8 @@ function strongEvidence(
  * Whether A7 §4's MEDIUM path admits a row without STRONG evidence: its BM25F sum reaches τ_repo on MEDIUM evidence
  * (WEAK never admits) and at least two words, from two different cue parts when it is an episode (`isEpisode`: one the
  * user did not type, or a prompt stored as an episode). One rare word never admits (A7 §4: "a rule admitting on one
- * rare word would fire on them"; R8's silence set fired on "TypeScript" alone). A continuation admits on STRONG evidence
- * only (A7 §2).
+ * rare word would fire on them"; R8's silence set fired on "TypeScript" alone). A continuation admits on STRONG
+ * evidence only (A7 §2).
  */
 function mediumAdmits(
   rec: MemoryRecord,
