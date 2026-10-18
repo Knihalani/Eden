@@ -1,0 +1,726 @@
+{
+ "batch": "code-sp-b02",
+ "generator": "haiku (claude-code subagent)",
+ "rows": {
+  "code-sleep-b01:m0027": {
+   "pos": [
+    "add a due date column to the invoices table and make it sortable",
+    "clients page opens sorted oldest first, flip it to newest first",
+    "the payments table only sorts the rows on screen, fix that",
+    "wire the number column header so clicking it reorders the list",
+    "add a total column to the invoice list that sorts by amount",
+    "reviewer left a note on the table component, take a look and handle it"
+   ],
+   "neg": [
+    "what does useSearchParams do in the next app router?",
+    "sort an array of numbers in typescript without mutating it",
+    "what's the default null ordering in postgres ORDER BY?",
+    "rename the dir variable in the csv parser to direction",
+    "why does Array.prototype.sort compare as strings by default",
+    "write a unit test for the formatCurrency helper"
+   ]
+  },
+  "code-sleep-b01:m0028": {
+   "pos": [
+    "my dev server wont start, connection refused on the database",
+    "the api tests cant reach postgres, is the container up?",
+    "spin up the local stack so i can click through the invoice flow",
+    "worker metrics endpoint returns nothing locally, why",
+    "redis connection refused when i run the worker, help",
+    "boot everything for me, i need to test webhook retries locally"
+   ],
+   "neg": [
+    "what port does postgres listen on by default?",
+    "change the port the vite preview server uses to 5173",
+    "explain what docker compose up -d does",
+    "how do i tail logs from a running docker container",
+    "what's turbo's cache dir in a pnpm monorepo",
+    "port 3000 is already in use on my mac, how do i find the process"
+   ]
+  },
+  "code-sleep-b01:m0029": {
+   "pos": [
+    "add a dead letter queue for the new email jobs queue",
+    "need a queue for the invoice sync, mirror what we do for webhooks",
+    "make sure failed messages go somewhere after retries, for the sync queue",
+    "bucket for the audit logs, private, with the usual tags",
+    "new alarm stack for the cluster, same tagging as the rest",
+    "the stack preview says the queue would be replaced, is that safe"
+   ],
+   "neg": [
+    "what is a dead letter queue in general?",
+    "what's the difference between SQS standard and FIFO queues",
+    "explain terraform state locking",
+    "why does the pulumi preview show a diff on every run",
+    "how do i convert a yaml file to json with jq",
+    "write a typescript interface for a queue message payload"
+   ]
+  },
+  "code-sleep-b01:m0030": {
+   "pos": [
+    "csv exports are going to need async processing, set up the infra",
+    "the export feature needs somewhere to put its jobs, can you add it",
+    "priya asked for the export infra, can you do it",
+    "add the exports piece to infra before i open the csv download pr",
+    "wire the csv export worker to a queue with failure handling",
+    "we ship csv export this sprint, anything missing on the infra side?"
+   ],
+   "neg": [
+    "explain the csv format rfc 4180 in a few lines",
+    "how do i stream a large csv response in express",
+    "why is my csv export missing the header row",
+    "add a sort toggle to the exports page header",
+    "rename the export button label to 'Download CSV'",
+    "what does the emails-bounce handler do in the worker"
+   ]
+  },
+  "code-sleep-b01:m0031": {
+   "pos": [
+    "new laptop, clone acme and install deps, what do i need first",
+    "ci is picking a different node than my laptop, make them match",
+    "onboarding the new hire tomorrow, make sure their machine is set up right",
+    "add a dev setup section to the root readme for new people",
+    "which node should i use for the new lambda handler",
+    "pnpm install complains about versions on a fresh clone, help"
+   ],
+   "neg": [
+    "what's the difference between nvm and fnm",
+    "how do i install node via homebrew on mac",
+    "bump the eslint version in the root package.json",
+    "what does the packageManager field do in package.json",
+    "why does pnpm install hang on a fresh clone of a big repo",
+    "update the license line in the root readme"
+   ]
+  },
+  "code-sleep-b01:m0032": {
+   "pos": [
+    "sign-in on staging just bounces forever, look at the middleware",
+    "middleware matcher is a mess, tidy it up so it's readable",
+    "tidy up the auth route pages, move them into one folder",
+    "staging login page redirects to itself after the route change, fix",
+    "ok fix the staging login loop, the logs are below",
+    "protected routes seem to catch the login page, why"
+   ],
+   "neg": [
+    "what usually causes ERR_TOO_MANY_REDIRECTS in general?",
+    "explain how next.js route groups work",
+    "add a logout button to the header component",
+    "what's the difference between a 302 and a 307 redirect",
+    "clerk vs auth0 for a small app, pros and cons",
+    "change the sign-in button color to match the design tokens"
+   ]
+  },
+  "code-sleep-b01:m0033": {
+   "pos": [
+    "invoice filter test is flaky late at night, fix it",
+    "the date tests pass in the day and fail after 8pm, why",
+    "add a test for the overdue filter on the invoices list",
+    "ci failed on the date test but it passes locally, what gives",
+    "write tests for the new due-in-N-days helper",
+    "the snapshot for the dashboard date widget broke, update it"
+   ],
+   "neg": [
+    "how do i convert a date to an iso string in javascript",
+    "what's the timezone offset for toronto in winter",
+    "explain fake timers in jest vs vitest",
+    "format a timestamp as 'Mon 3 Mar' in react",
+    "why does new Date('2026-03-01') give a different day in new york",
+    "add a sort dropdown to the clients page"
+   ]
+  },
+  "code-sleep-b01:m0034": {
+   "pos": [
+    "worker redis filled up again last night, what should alert us next time",
+    "oncall got no page when redis was full, look into the alarms",
+    "wire the new alarm into the pagerduty topic like the others",
+    "draft the alarm file for the worker, leave the metric todo if unsure",
+    "priya wants alerts on the job queue backing store, draft it",
+    "add a cloudwatch alarm for the worker's memory"
+   ],
+   "neg": [
+    "what's the difference between redis maxmemory policies",
+    "explain how cloudwatch alarm evaluation periods work",
+    "how do i check redis memory usage with redis-cli",
+    "add a loading spinner to the export button",
+    "which SNS topic type should i use for email alerts",
+    "list the alarm names defined in the prod stack"
+   ]
+  },
+  "code-sleep-b01:m0035": {
+   "pos": [
+    "the reminder email wording looks off for overdue invoices, fix it",
+    "customers complained the due-today reminder says the wrong thing",
+    "the reminder subject is wrong on the due-day email, check it",
+    "ok the reminder subjects need work for the one day case",
+    "add a test for the reminder subject helper",
+    "write the subject logic for the three day reminder email"
+   ],
+   "neg": [
+    "what does a good email subject line look like",
+    "how do i send an email with sendgrid from node",
+    "format a number as currency with 2 decimals in js",
+    "explain UTC vs local calendar days",
+    "write a helper to pluralize a word in typescript",
+    "fix the email footer link to the billing page"
+   ]
+  },
+  "code-sleep-b01:m0036": {
+   "pos": [
+    "ci says module not found on the card component, works on my mac",
+    "build fails on github actions but passes locally, import error",
+    "import the money helper into the invoice total component",
+    "linux build broke after my last merge, module not found in apps/web",
+    "rename the copy button file to kebab case and fix the imports",
+    "add the money formatter import to the line item row"
+   ],
+   "neg": [
+    "what's the difference between default and named exports",
+    "how do i rename a file in git and keep its history",
+    "set up a path alias in tsconfig for components",
+    "why is my css module class undefined",
+    "explain case sensitivity in windows file systems",
+    "add a copy-to-clipboard toast to the share link"
+   ]
+  },
+  "code-sleep-b01:m0037": {
+   "pos": [
+    "add a phone field to the client form with validation",
+    "new settings form for billing address, match what we already have",
+    "the client edit form needs a currency select, add it",
+    "build a form for creating a payment terms template",
+    "validate the org name on the settings page, make it required",
+    "the invoice form re-renders on every keystroke, fix it"
+   ],
+   "neg": [
+    "what's the difference between controlled and uncontrolled inputs",
+    "explain zod's refine method",
+    "how do i reset a form after submit in plain react",
+    "style the select dropdown to match the button height",
+    "write a zod schema for a uuid string",
+    "add a currency symbol to the invoice total label"
+   ]
+  },
+  "code-sleep-b02:m0001": {
+   "pos": [
+    "date picker change is done and unit tests are green, open the pr",
+    "ok ship the invoice date fix, tests pass",
+    "pr for the new filter dropdown, write the description",
+    "refactor the export button, unit tests pass now, push it",
+    "done with the clients table, open a pr to main",
+    "open the pr for the sort fix quick, i'm late for a meeting"
+   ],
+   "neg": [
+    "what's the difference between unit and integration tests",
+    "explain how playwright's codegen works",
+    "fix the failing unit test for the date formatter helper",
+    "how do i run a single jest test file",
+    "write a pr template for the frontend team",
+    "what does gh pr create --draft do"
+   ]
+  },
+  "code-sleep-b02:m0002": {
+   "pos": [
+    "the invoice due date shows the wrong day for some customers, fix",
+    "vancouver customers say invoices are due a day early in the list",
+    "the due date on the printable invoice is off, check the helper",
+    "add a due date column to the printable invoice view",
+    "server rendered invoice dates look different than the browser, why",
+    "the pdf shows a different due date than the web page, check"
+   ],
+   "neg": [
+    "how do i get the user's timezone in javascript",
+    "what's the Intl.DateTimeFormat constructor signature",
+    "explain why servers usually store times in UTC",
+    "format a file size as KB or MB on the upload page",
+    "change the invoice number prefix to INV-",
+    "write a migration to add an index on invoices.created_at"
+   ]
+  },
+  "code-sleep-b02:m0003": {
+   "pos": [
+    "invoice detail crashed with cannot read properties of undefined on map",
+    "invoice page works fresh but breaks when opened from the list",
+    "add line items to the invoice detail header section",
+    "write the query hook for a single invoice including its lines",
+    "the invoice detail view explodes from the cached list, look at it",
+    "trim the fields on the invoice detail query, it's slow"
+   ],
+   "neg": [
+    "what does expand mean in a graphql query",
+    "how do i handle possibly undefined arrays safely in typescript",
+    "explain how tanstack query caching works",
+    "add an expand toggle to the sidebar",
+    "what does the lineItems field look like in stripe's api docs",
+    "list the invoice endpoints in the api readme"
+   ]
+  },
+  "code-sleep-b02:m0004": {
+   "pos": [
+    "npm install failing on my laptop with an engine error, help",
+    "new laptop setup: what do i run before installing the monorepo",
+    "pnpm install blows up with a version complaint, fix my environment",
+    "i'm on the new mac, get acme-platform building for me",
+    "dependencies won't install and the error mentions engines",
+    "onboard the new contractor, the repo install keeps failing"
+   ],
+   "neg": [
+    "what is nvm and how do i install it",
+    "which node lts line is current in october 2026",
+    "add a node version badge to the readme",
+    "what does the engines field do in package.json",
+    "why is my express server slow on an old node version",
+    "upgrade the zod dependency in the web app"
+   ]
+  },
+  "code-sleep-b02:m0005": {
+   "pos": [
+    "add the pdf render benchmark to ci so we track regressions",
+    "make a github action that runs the pdf bench on every pr",
+    "add a bench job for the worker to the test workflow",
+    "run the render benchmark in ci tonight, want numbers",
+    "the pdf rendering feels slow, set up a perf job",
+    "wire bench-pdf into the workflow yaml"
+   ],
+   "neg": [
+    "what's the difference between a benchmark and a load test",
+    "how do i time a function in node with performance.now",
+    "explain the github actions matrix strategy",
+    "add a unit test for the pdf filename sanitizer",
+    "how do i run a typescript script directly with tsx",
+    "what is a good p95 latency target for a web app"
+   ]
+  },
+  "code-sleep-b02:m0006": {
+   "pos": [
+    "deploy the reminder fix, it's ready",
+    "ship the reminder job change to staging",
+    "the reminder duplicate sends are fixed, merge and release",
+    "write the prisma schema update for reminders",
+    "ok push the reminder idempotency work and open the pr",
+    "reminder emails double-sent last cycle, verify before release"
+   ],
+   "neg": [
+    "what's a prisma migration in general",
+    "explain idempotency keys in payment APIs",
+    "add a sent badge to the reminders list ui",
+    "how do i run prisma migrate dev locally",
+    "why does my unique constraint fail on insert",
+    "rename the reminder model in the seed script"
+   ]
+  },
+  "code-sleep-b02:m0007": {
+   "pos": [
+    "the month end reminder queue is huge, what should we do",
+    "the reminder backlog is awful, crank the workers so it clears before the 1st",
+    "queue depth is at 4000 for reminders, sort out the scaling",
+    "change the worker env for the reminder burst",
+    "autoscaling on the worker looks capped, raise the ceiling for the backlog",
+    "invoices are blocked by the reminder backlog, fix it tonight"
+   ],
+   "neg": [
+    "what is a concurrency limit in general",
+    "explain how sqs visibility timeout works",
+    "why do database connection pools run out",
+    "set the api request timeout to 30 seconds",
+    "add a retry button to the failed reminders table",
+    "what does an autoscaling cooldown period mean"
+   ]
+  },
+  "code-sleep-b02:m0008": {
+   "pos": [
+    "trailmix: submitting the hike form posts twice, fix it",
+    "side project, the new hike form saves two rows, help",
+    "in trailmix add a delete button to the hike list with htmx",
+    "trailmix: add an edit form for hikes using htmx",
+    "trailmix duplicates every hike entry when i click save",
+    "htmx partial for the trailmix comments section, wire it up"
+   ],
+   "neg": [
+    "what's the difference between hx-post and hx-get",
+    "explain django class based views briefly",
+    "add a dark mode toggle to acme's settings page",
+    "how do i prevent double submit on a button in react",
+    "write a django model for a trail with a name and length",
+    "explain csrf tokens in django forms"
+   ]
+  },
+  "code-sleep-b02:m0009": {
+   "pos": [
+    "the invoice csv export is going to finance tomorrow, anything else to change",
+    "update the csv export code so the amount column is right",
+    "write the changelog entry for the csv export update",
+    "add a test for the export header row",
+    "finance's import broke after the last export release, look",
+    "prep the release notes for this week's exports change"
+   ],
+   "neg": [
+    "what is snake_case vs camelCase",
+    "how do i parse a csv with headers in python",
+    "rename the amount column in the sql view for reports",
+    "why does excel show my csv dates as numbers",
+    "add a currency column to the client list table",
+    "write a regex to strip commas from numbers"
+   ]
+  },
+  "code-sleep-b02:m0010": {
+   "pos": [
+    "render pdf job keeps failing silently in prod, add error reporting",
+    "sentry is not catching worker errors, look into it",
+    "wire up the error tracker for the worker",
+    "the pdf job swallows errors, make failures visible",
+    "push the pdf crash fix branch so i can open the pr",
+    "add a crash report call to the invoice pdf generation"
+   ],
+   "neg": [
+    "what is an exception tracker like sentry used for",
+    "how do i catch an error in an async function in node",
+    "rethrow vs return in a catch block, which is better",
+    "fix the typo in the error message for invalid zip codes",
+    "log the request id on every api response",
+    "explain unhandled promise rejections in node"
+   ]
+  },
+  "code-sleep-b02:m0011": {
+   "pos": [
+    "add a changelog entry for the worker release, keep it short",
+    "write the commit message for the reminder fix",
+    "make the release notes more fun and punchy",
+    "write a readme section for the exports feature with a checklist",
+    "the pr description template needs a status section",
+    "ok commit and push, tidy the message"
+   ],
+   "neg": [
+    "what are emojis in unicode, in general?",
+    "how do i strip emoji from a string in js",
+    "write a unit test for the string truncate helper",
+    "is it okay to use emojis in slack messages in general",
+    "add a checkbox list to the onboarding doc",
+    "what does a good commit subject line look like"
+   ]
+  },
+  "code-sleep-b02:m0012": {
+   "pos": [
+    "add an endpoint to list projects for the dashboard",
+    "invoice totals endpoint returns strings, fix it",
+    "write the query for monthly revenue by client",
+    "new api route for archived clients, go",
+    "the invoice stats endpoint is returning weird numbers for totals",
+    "add a members endpoint that returns the list for an org"
+   ],
+   "neg": [
+    "what does SUM return in postgres for a numeric column",
+    "explain row level security in postgres",
+    "change the dashboard card color for paid invoices",
+    "what's the difference between snake_case and camelCase in json apis",
+    "write a sql join between invoices and clients",
+    "how do i index a foreign key in postgres"
+   ]
+  },
+  "code-sleep-b02:m0013": {
+   "pos": [
+    "make a bucket for the new report exports, private, short lived",
+    "terraform plan wants to change the tags, ok to apply?",
+    "apply the infra change to staging so i can test the uploads",
+    "add a lifecycle rule for the temp uploads bucket",
+    "new s3 bucket for the pdf renders, copy the invoice exports setup",
+    "run the infra apply locally for the new bucket"
+   ],
+   "neg": [
+    "what's the difference between s3 standard and glacier",
+    "explain terraform workspaces",
+    "how do i list s3 buckets with the aws cli",
+    "write a dockerfile for a node api",
+    "bump the aws provider version in my trailmix infra",
+    "what is an s3 presigned url"
+   ]
+  },
+  "code-sleep-b02:m0014": {
+   "pos": [
+    "partners say they're getting 429s on the api, look into it",
+    "add a higher limit for enterprise customers' api keys",
+    "the load balancer is throttling healthz, fix",
+    "the api is getting hammered from one ip, what can we do",
+    "add rate limiting to the new export endpoint",
+    "make the limit configurable per route on fastify"
+   ],
+   "neg": [
+    "what does http 429 mean",
+    "explain token bucket vs leaky bucket algorithms",
+    "add a health check endpoint for the worker",
+    "how do i set cors headers in fastify",
+    "add a retry with backoff to the mailer client",
+    "what's the default redis port"
+   ]
+  },
+  "code-sleep-b02:m0015": {
+   "pos": [
+    "open a pr for the exports branch, it's pretty much done",
+    "any open issues on the bucket rollout i should look at?",
+    "check the status of the bucket work and comment on it",
+    "close the stale pull requests from last month",
+    "list my open prs across acme",
+    "file a bug for the broken date picker"
+   ],
+   "neg": [
+    "how do i create a github repo from the terminal",
+    "what's the difference between git rebase and merge",
+    "explain github issue labels in general",
+    "how do i fetch a remote branch",
+    "write a bug report template for our team",
+    "what is a github actions secret"
+   ]
+  },
+  "code-sleep-b02:m0016": {
+   "pos": [
+    "customers say our webhook signature check fails, help them verify",
+    "write the verification snippet for the webhook docs in node",
+    "the webhook settings page text is wrong, fix it",
+    "add a signature verification example to the webhooks docs",
+    "partner asked how to validate our webhook payloads, draft a reply",
+    "update the webhook receiver sample for the new header format"
+   ],
+   "neg": [
+    "what is hmac and how does it differ from a plain hash",
+    "explain sha1 vs sha256 collisions",
+    "how do i verify a stripe webhook signature",
+    "add a copy button to the api key field",
+    "what's a replay attack with webhooks",
+    "write a jwt verify helper in node"
+   ]
+  },
+  "code-sleep-b02:m0017": {
+   "pos": [
+    "acme webhooks test says the secret is missing, what do i do",
+    "set up my laptop to test webhooks with the cli",
+    "the webhook test command errors out, fix the setup docs",
+    "let the acme cli read the webhook secret from an env var",
+    "add a new settings page to the dashboard, follow the existing pattern",
+    "where do i put a new page in apps/web"
+   ],
+   "neg": [
+    "what does a cli config file usually look like",
+    "how do i read json from a file in node",
+    "explain next.js pages vs app router briefly",
+    "change the cli help text for invoices list",
+    "what is the difference between env vars and config files for secrets",
+    "bump the django patch version in my trailmix app"
+   ]
+  },
+  "code-sleep-b02:m0018": {
+   "pos": [
+    "customer uploaded an iphone photo and the thumbnail step blew up",
+    "add a 2000px variant to the image job",
+    "the logo upload looks fine but thumbs are missing, check the worker",
+    "users are uploading huge photos, cap what we store",
+    "add webp support for the product gallery",
+    "phone photos come out sideways in the image job, check it"
+   ],
+   "neg": [
+    "what is webp compared to jpeg",
+    "how do i resize an image in the browser with canvas",
+    "what's exif data in a photo",
+    "add a file size limit message to the upload dropzone",
+    "explain image lazy loading in next",
+    "how do i convert a png to svg with inkscape"
+   ]
+  },
+  "code-sleep-b02:m0019": {
+   "pos": [
+    "run the invoice e2e tests before i push",
+    "the playwright suite is red on the download pdf test, fix it",
+    "add a new e2e test for creating an invoice",
+    "e2e for invoices failing in ci, look at it",
+    "seed data for the e2e run looks thin, improve it",
+    "playwright keeps timing out, check the dev server"
+   ],
+   "neg": [
+    "how do i write a page object in playwright",
+    "what's the difference between playwright and cypress",
+    "run the unit tests for the invoice formatter",
+    "explain why e2e tests are flaky",
+    "how do i record a playwright trace",
+    "fix the port in the marketing site's vite config"
+   ]
+  },
+  "code-sleep-b02:m0020": {
+   "pos": [
+    "add a logout redirect to the header, same as the others",
+    "clean up the dependencies in the web package, there's unused stuff",
+    "upgrade auth in the web app to the latest sdk",
+    "the session cookie is missing on the settings page, check auth setup",
+    "add a protected api route for org admins",
+    "why does the login callback 500 after deploy"
+   ],
+   "neg": [
+    "what's the difference between oauth and openid connect",
+    "how does next-auth's credentials provider work",
+    "explain jwt vs server session tokens",
+    "add a remember me checkbox to a generic login form",
+    "remove the unused lodash import from the dashboard",
+    "what is a pkce flow"
+   ]
+  },
+  "code-sleep-b02:m0021": {
+   "pos": [
+    "deps-bot's pr is failing, get it green",
+    "push the zod fixes and let ci run",
+    "update the zod version in the web app and fix the type errors",
+    "ok rebase the dependency pr and ship it",
+    "the dependency bump broke the form types, sort it out",
+    "what's left on the open dependency prs"
+   ],
+   "neg": [
+    "what changed in zod 3.24",
+    "how do i pin an exact npm version",
+    "explain semver ranges like ^ and ~",
+    "write a zod schema for an invoice line item",
+    "how do i squash commits before merging",
+    "update the build status badge in the readme"
+   ]
+  },
+  "code-sleep-b02:m0022": {
+   "pos": [
+    "the archive client button spins forever after an error, fix it",
+    "invite member form stays in loading state when validation fails",
+    "sweep the components for buttons that get stuck on submit",
+    "make the export button's loading fix reusable for other forms",
+    "the archive client spinner never stops after a 409",
+    "add a loading state to the new client archive flow"
+   ],
+   "neg": [
+    "what's the difference between try/catch and try/finally",
+    "how do i disable a button while a fetch runs in react",
+    "explain react state batching",
+    "add a spinner component from shadcn to the header",
+    "why does my useEffect run twice in dev",
+    "change the archive button label to 'Archive client'"
+   ]
+  },
+  "code-sleep-b02:m0023": {
+   "pos": [
+    "payment terms input needs to accept 'net 60' from the api",
+    "invalid payment terms return 500 from the endpoint, handle it",
+    "add 'due on receipt' support to the invoice create api",
+    "pipe the invoice list into jq, what flag do i use",
+    "validate the terms field on invoice create, return 400 on garbage",
+    "hook the payment terms parser up to the invoice create route"
+   ],
+   "neg": [
+    "what does net 30 mean in invoicing",
+    "parse a string like 'net 30' with a regex in python",
+    "how do i pretty print json in the terminal",
+    "what's the difference between 400 and 422 status codes",
+    "add a due date picker to the invoice form",
+    "write tests for the trailmix hike length parser"
+   ]
+  },
+  "code-sleep-b02:m0024": {
+   "pos": [
+    "invoice editor state is getting messy, want a cleaner setup",
+    "add a global store for the sidebar open state",
+    "lena wants redux for the editor, what do you think",
+    "add undo to the invoice editor, keep it simple",
+    "cache the fetched clients so pages share them without refetching",
+    "add a draft line items store for the new invoice page"
+   ],
+   "neg": [
+    "what is redux toolkit and when do you need it",
+    "compare zustand and jotai",
+    "how does tanstack query handle stale data",
+    "add a redux devtools extension to my trailmix project",
+    "fix the eslint warning about an unused state variable",
+    "explain react context vs state management libraries"
+   ]
+  },
+  "code-sleep-b02:m0025": {
+   "pos": [
+    "preview deploy for my pr is broken with a clerk error, fix it",
+    "add clerk to the preview workflow env",
+    "the preview build fails on a production check, look at the env",
+    "set the clerk key for previews so my pr can be reviewed",
+    "fix the github preview workflow env var names",
+    "ok merge the preview fix and push it"
+   ],
+   "neg": [
+    "what's a publishable key vs a secret key in clerk",
+    "how do i add a clerk sign-in button to a page",
+    "explain NODE_ENV production build behavior in next",
+    "why does github actions say secret not found",
+    "add a dev-only debug banner to the dashboard",
+    "change the github workflow name to 'ci'"
+   ]
+  },
+  "code-sleep-b02:m0026": {
+   "pos": [
+    "the icon buttons on the invoice row have no labels, fix it",
+    "add a delete icon button to the client row",
+    "use a new icon for the archive action, pick one from the set",
+    "add a settings gear button to the top bar",
+    "make the table action menu accessible",
+    "build a close button for the modal with an x icon"
+   ],
+   "neg": [
+    "what's the difference between aria-label and aria-labelledby",
+    "explain how screen readers treat images with alt text",
+    "add a hover tooltip to the export button text",
+    "how do i import a component from shadcn ui",
+    "write a snapshot test for the header",
+    "what is a focus trap in a modal"
+   ]
+  },
+  "code-sleep-b02:m0027": {
+   "pos": [
+    "the invoice editor store branch is ready, open the pr",
+    "add the duplicate line feature to the invoice editor, quick",
+    "line item row buttons are cramped on small screens, fix",
+    "finish the duplicate row work and get it reviewed",
+    "wrap up the editor store branch and make a pr",
+    "the line item grid needs another column, can you widen it"
+   ],
+   "neg": [
+    "how do i make a three column css grid layout",
+    "explain duplicate key warnings in react lists",
+    "what does a zustand selector do",
+    "rename the duplicate test file in the trailmix repo",
+    "add a clone button to the templates list",
+    "what's the difference between a row and a column in a grid"
+   ]
+  },
+  "code-sleep-b02:m0028": {
+   "pos": [
+    "fix the ugly relative import in the worker, it's four levels deep",
+    "import the shared validators into the api, use the proper path",
+    "the worker build can't find the shared package, look at it",
+    "add a helper to the shared package and use it in the api",
+    "import the money utils into the web app",
+    "the tsup build for the worker fails on shared, fix"
+   ],
+   "neg": [
+    "what does tsconfig paths do in general",
+    "how do i set up an npm workspace in a new repo",
+    "explain the difference between tsc and tsup",
+    "move the trailmix settings into a config file",
+    "what's a barrel file and are they bad",
+    "why doesn't my vite alias resolve in vitest"
+   ]
+  },
+  "code-sleep-b02:m0029": {
+   "pos": [
+    "acme cli prints a stack trace when i pass a bad flag, fix",
+    "add a new subcommand to acme for listing clients",
+    "the cli should say something nicer when args are wrong",
+    "make acme config set fail cleanly when the key is missing",
+    "add error handling to the acme invoices command",
+    "what exit code should acme use when the api is down"
+   ],
+   "neg": [
+    "what do unix exit codes mean in general",
+    "how do i check the last exit code in bash",
+    "explain commander.js option parsing basics",
+    "add a --verbose flag to the acme cli",
+    "exit a node process after the stream finishes",
+    "why does my python script exit with code 137"
+   ]
+  }
+ }
+}
