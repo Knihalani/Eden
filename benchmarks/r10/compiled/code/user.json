@@ -1,0 +1,2751 @@
+{
+ "entities": [
+  {
+   "name": "Acme monorepo",
+   "type": "project",
+   "aliases": [
+    "the repo",
+    "the monorepo",
+    "this repo",
+    "our repo",
+    "the codebase",
+    "the project",
+    "acme",
+    "Acme",
+    "the workspace",
+    "root",
+    "repo root",
+    "monorepo root"
+   ],
+   "about": "the TypeScript monorepo the agent works in"
+  },
+  {
+   "name": "apps/web",
+   "type": "project",
+   "aliases": [
+    "the web app",
+    "web",
+    "the frontend",
+    "the front end",
+    "front-end",
+    "the site",
+    "the website",
+    "the Next app",
+    "the Next.js app",
+    "nextjs app",
+    "apps/web",
+    "web app",
+    "the UI",
+    "the client",
+    "the dashboard app",
+    "FE"
+   ],
+   "about": "Next.js 15 App Router web app"
+  },
+  {
+   "name": "apps/api",
+   "type": "project",
+   "aliases": [
+    "the API",
+    "the api",
+    "api",
+    "the backend",
+    "the back end",
+    "back-end",
+    "the server",
+    "the Fastify app",
+    "the Fastify server",
+    "apps/api",
+    "the REST API",
+    "the endpoints",
+    "BE",
+    "the service"
+   ],
+   "about": "Fastify 5 API service"
+  },
+  {
+   "name": "services/worker",
+   "type": "project",
+   "aliases": [
+    "the worker",
+    "worker",
+    "the job worker",
+    "the queue worker",
+    "background worker",
+    "the background jobs",
+    "services/worker",
+    "the job runner",
+    "the consumer",
+    "the jobs service",
+    "the processor"
+   ],
+   "about": "BullMQ background job worker"
+  },
+  {
+   "name": "packages/cli",
+   "type": "project",
+   "aliases": [
+    "the CLI",
+    "cli",
+    "the command line tool",
+    "the command-line",
+    "packages/cli",
+    "@acme/cli",
+    "acme cli",
+    "the acme command",
+    "the acme binary",
+    "acme login",
+    "the tool",
+    "our CLI"
+   ],
+   "about": "@acme/cli command-line tool, binary acme"
+  },
+  {
+   "name": "infra",
+   "type": "project",
+   "aliases": [
+    "infra",
+    "infra/",
+    "the infra",
+    "infrastructure",
+    "the infra folder",
+    "infra/terraform",
+    "infra/helm",
+    "the IaC",
+    "the platform code",
+    "the terraform",
+    "the cluster config"
+   ],
+   "about": "Terraform, Helm and Grafana infrastructure code"
+  },
+  {
+   "name": "Postgres",
+   "type": "product",
+   "aliases": [
+    "the db",
+    "the DB",
+    "the database",
+    "database",
+    "db",
+    "postgres",
+    "Postgres",
+    "postgresql",
+    "PostgreSQL",
+    "pg",
+    "psql",
+    "the Postgres",
+    "RDS",
+    "the prod db",
+    "prod database",
+    "postgress",
+    "postgre"
+   ],
+   "about": "Postgres 16 database (RDS in prod)"
+  },
+  {
+   "name": "Redis",
+   "type": "product",
+   "aliases": [
+    "redis",
+    "Redis",
+    "the cache",
+    "the redis",
+    "ElastiCache",
+    "elasticache",
+    "the queue backend",
+    "redis-server",
+    "reddis"
+   ],
+   "about": "Redis 7, BullMQ backend and rate-limit store (ElastiCache in prod)"
+  },
+  {
+   "name": "Drizzle",
+   "type": "product",
+   "aliases": [
+    "drizzle",
+    "Drizzle ORM",
+    "the ORM",
+    "orm",
+    "drizzle-kit",
+    "schema.ts",
+    "the schema",
+    "the db schema",
+    "drizle"
+   ],
+   "about": "ORM used by the API; schema in apps/api/src/db/schema.ts"
+  },
+  {
+   "name": "Prisma",
+   "type": "product",
+   "aliases": [
+    "prisma",
+    "Prisma",
+    "the old ORM",
+    "prisma client"
+   ],
+   "about": "former ORM, replaced by Drizzle"
+  },
+  {
+   "name": "Next.js",
+   "type": "product",
+   "aliases": [
+    "next",
+    "nextjs",
+    "Next",
+    "Next 15",
+    "the App Router",
+    "app router",
+    "next.config.ts",
+    "next config",
+    "next.js"
+   ],
+   "about": "web framework, version 15 with App Router"
+  },
+  {
+   "name": "Fastify",
+   "type": "product",
+   "aliases": [
+    "fastify",
+    "Fastify 5",
+    "fastify plugin",
+    "the Fastify",
+    "fastify-raw-body"
+   ],
+   "about": "API framework, version 5"
+  },
+  {
+   "name": "Clerk",
+   "type": "product",
+   "aliases": [
+    "clerk",
+    "Clerk",
+    "the auth",
+    "auth",
+    "the auth provider",
+    "login",
+    "sign-in",
+    "signin",
+    "the login",
+    "@clerk/backend",
+    "clerk middleware",
+    "Clerk keys",
+    "pk_test",
+    "SignIn",
+    "session JWT",
+    "clrek"
+   ],
+   "about": "auth provider for web and API"
+  },
+  {
+   "name": "BullMQ",
+   "type": "product",
+   "aliases": [
+    "bullmq",
+    "BullMQ",
+    "bull",
+    "the queue",
+    "queues",
+    "the job queue",
+    "repeatable jobs",
+    "Bull Board",
+    "bull board",
+    "the queues"
+   ],
+   "about": "job queue library on Redis"
+  },
+  {
+   "name": "Stripe",
+   "type": "organisation",
+   "aliases": [
+    "stripe",
+    "Stripe",
+    "payments",
+    "billing",
+    "checkout",
+    "Stripe webhook",
+    "stripe invoices",
+    "the payment provider",
+    "card payments",
+    "strip"
+   ],
+   "about": "payments: Checkout redirect, webhooks, invoices"
+  },
+  {
+   "name": "pnpm",
+   "type": "product",
+   "aliases": [
+    "pnpm",
+    "pnpm 9",
+    "the package manager",
+    "package manager",
+    "pnpm-lock.yaml",
+    "the lockfile",
+    "lockfile",
+    "pnpm install",
+    "pnpm workspace",
+    "pnmp",
+    "npm"
+   ],
+   "about": "package manager, version 9"
+  },
+  {
+   "name": "Turborepo",
+   "type": "product",
+   "aliases": [
+    "turbo",
+    "turborepo",
+    "Turbo",
+    "turbo.json",
+    "the pipeline",
+    "the build pipeline",
+    "task runner"
+   ],
+   "about": "monorepo task orchestrator; turbo.json"
+  },
+  {
+   "name": "Biome",
+   "type": "product",
+   "aliases": [
+    "biome",
+    "Biome",
+    "the linter",
+    "linter",
+    "the formatter",
+    "formatter",
+    "lint",
+    "pnpm lint",
+    "biome.json"
+   ],
+   "about": "linter and formatter replacing ESLint and Prettier"
+  },
+  {
+   "name": "ESLint and Prettier",
+   "type": "product",
+   "aliases": [
+    "eslint",
+    "ESLint",
+    "prettier",
+    "Prettier",
+    "eslintrc",
+    ".prettierrc"
+   ],
+   "about": "former lint/format tools, dropped for Biome"
+  },
+  {
+   "name": "Vitest",
+   "type": "product",
+   "aliases": [
+    "vitest",
+    "Vitest",
+    "the test runner",
+    "unit tests",
+    "the unit tests",
+    "snapshot tests",
+    "vitest snapshots"
+   ],
+   "about": "unit test runner across all packages"
+  },
+  {
+   "name": "Playwright",
+   "type": "product",
+   "aliases": [
+    "playwright",
+    "Playwright",
+    "e2e",
+    "E2E",
+    "the e2e tests",
+    "end-to-end tests",
+    "browser tests",
+    "playwrite"
+   ],
+   "about": "end-to-end test framework"
+  },
+  {
+   "name": "GitHub Actions",
+   "type": "product",
+   "aliases": [
+    "CI",
+    "ci",
+    "the CI",
+    "GitHub Actions",
+    "GHA",
+    "actions",
+    "the pipeline",
+    "ci.yml",
+    "release.yml",
+    "workflows",
+    ".github/workflows",
+    "the build",
+    "checks",
+    "green CI",
+    "the runners"
+   ],
+   "about": "CI system; workflows in .github/workflows"
+  },
+  {
+   "name": "GitHub",
+   "type": "organisation",
+   "aliases": [
+    "github",
+    "GitHub",
+    "gh",
+    "gh CLI",
+    "the PR",
+    "pull request",
+    "PRs",
+    "the remote",
+    "origin",
+    "upstream"
+   ],
+   "about": "code hosting, PRs, gh CLI"
+  },
+  {
+   "name": "main branch",
+   "type": "thing",
+   "aliases": [
+    "main",
+    "the main branch",
+    "master",
+    "trunk",
+    "the default branch",
+    "protected branch"
+   ],
+   "about": "protected default branch; staging deploys from it"
+  },
+  {
+   "name": "Changesets",
+   "type": "product",
+   "aliases": [
+    "changesets",
+    "changeset",
+    "pnpm changeset",
+    "the version PR",
+    "Changesets version PR",
+    "release notes",
+    "the changelog",
+    "CHANGELOG"
+   ],
+   "about": "versioning and release tool"
+  },
+  {
+   "name": "Renovate",
+   "type": "product",
+   "aliases": [
+    "renovate",
+    "Renovate",
+    "renovate bot",
+    "the dependency bot",
+    "dep bot",
+    "dependency PRs",
+    "renovate PRs",
+    "dependabot"
+   ],
+   "about": "dependency update bot, Mondays"
+  },
+  {
+   "name": "lefthook",
+   "type": "product",
+   "aliases": [
+    "lefthook",
+    "Lefthook",
+    "git hooks",
+    "the pre-commit hook",
+    "pre-commit",
+    "precommit",
+    "husky",
+    "the hooks"
+   ],
+   "about": "git hooks manager, replaced husky"
+  },
+  {
+   "name": "1Password vault acme-dev",
+   "type": "thing",
+   "aliases": [
+    "1Password",
+    "1password",
+    "the vault",
+    "acme-dev",
+    "the acme-dev vault",
+    "op",
+    "1pass",
+    "team secrets"
+   ],
+   "about": "team secrets vault"
+  },
+  {
+   "name": "AWS Secrets Manager",
+   "type": "product",
+   "aliases": [
+    "Secrets Manager",
+    "secrets manager",
+    "AWS secrets",
+    "prod secrets",
+    "External Secrets",
+    "ESO",
+    "external-secrets"
+   ],
+   "about": "production secrets store, synced via External Secrets Operator"
+  },
+  {
+   "name": "AWS",
+   "type": "organisation",
+   "aliases": [
+    "aws",
+    "AWS",
+    "Amazon",
+    "the cloud",
+    "us-east-1",
+    "the AWS account",
+    "S3",
+    "s3",
+    "ECR",
+    "ACM"
+   ],
+   "about": "cloud provider, us-east-1"
+  },
+  {
+   "name": "EKS cluster acme-prod",
+   "type": "thing",
+   "aliases": [
+    "EKS",
+    "eks",
+    "the cluster",
+    "k8s",
+    "kubernetes",
+    "Kubernetes",
+    "kube",
+    "kubectl",
+    "acme-prod",
+    "the prod cluster",
+    "pods",
+    "the pods",
+    "nodes"
+   ],
+   "about": "Kubernetes cluster running API and worker"
+  },
+  {
+   "name": "Terraform",
+   "type": "product",
+   "aliases": [
+    "terraform",
+    "Terraform",
+    "tf",
+    "the tf",
+    "terraform plan",
+    "terraform apply",
+    "make plan",
+    "tfstate",
+    "the state",
+    "acme-tfstate",
+    "terrafrom"
+   ],
+   "about": "IaC, version 1.8, state in S3 acme-tfstate"
+  },
+  {
+   "name": "Helm",
+   "type": "product",
+   "aliases": [
+    "helm",
+    "Helm",
+    "helm charts",
+    "the chart",
+    "the charts",
+    "values.yaml"
+   ],
+   "about": "per-service charts in infra/helm"
+  },
+  {
+   "name": "Vercel",
+   "type": "organisation",
+   "aliases": [
+    "vercel",
+    "Vercel",
+    "preview deploy",
+    "preview deployment",
+    "the preview",
+    "preview URL",
+    "vercel deploy"
+   ],
+   "about": "hosts the web app with PR previews"
+  },
+  {
+   "name": "staging",
+   "type": "place",
+   "aliases": [
+    "staging",
+    "stage",
+    "the staging env",
+    "staging.acme.dev",
+    "stg",
+    "pre-prod",
+    "the staging environment"
+   ],
+   "about": "staging.acme.dev, auto-deployed from main"
+  },
+  {
+   "name": "production",
+   "type": "place",
+   "aliases": [
+    "prod",
+    "production",
+    "the prod env",
+    "live",
+    "prod env",
+    "production environment",
+    "acme.dev"
+   ],
+   "about": "prod, deployed from v* tags"
+  },
+  {
+   "name": "Sentry",
+   "type": "product",
+   "aliases": [
+    "sentry",
+    "Sentry",
+    "error tracking",
+    "error reporting",
+    "SENTRY_DSN",
+    "the DSN",
+    "crash reports"
+   ],
+   "about": "error reporting via SENTRY_DSN"
+  },
+  {
+   "name": "PostHog",
+   "type": "product",
+   "aliases": [
+    "posthog",
+    "PostHog",
+    "analytics",
+    "product analytics",
+    "tracking events",
+    "the analytics"
+   ],
+   "about": "product analytics"
+  },
+  {
+   "name": "GrowthBook",
+   "type": "product",
+   "aliases": [
+    "growthbook",
+    "GrowthBook",
+    "feature flags",
+    "flags",
+    "the flag",
+    "feature toggle",
+    "toggles"
+   ],
+   "about": "feature flag service"
+  },
+  {
+   "name": "pino",
+   "type": "product",
+   "aliases": [
+    "pino",
+    "Pino",
+    "the logger",
+    "logger",
+    "logging",
+    "logs",
+    "structured logs"
+   ],
+   "about": "structured logger"
+  },
+  {
+   "name": "zod",
+   "type": "product",
+   "aliases": [
+    "zod",
+    "Zod",
+    "validation",
+    "schemas",
+    "zod schema",
+    "the validator"
+   ],
+   "about": "runtime validation library"
+  },
+  {
+   "name": "Grafana Cloud",
+   "type": "product",
+   "aliases": [
+    "grafana",
+    "Grafana",
+    "dashboards",
+    "the dashboards",
+    "metrics",
+    "grafana cloud",
+    "observability"
+   ],
+   "about": "metrics, logs and dashboards"
+  },
+  {
+   "name": "Prometheus metrics",
+   "type": "thing",
+   "aliases": [
+    "prometheus",
+    "Prometheus",
+    "/metrics",
+    "the metrics endpoint",
+    "port 9464",
+    "worker metrics"
+   ],
+   "about": "worker /metrics on port 9464"
+  },
+  {
+   "name": "PagerDuty",
+   "type": "product",
+   "aliases": [
+    "pagerduty",
+    "PagerDuty",
+    "PD",
+    "on-call",
+    "the pager",
+    "oncall",
+    "paging"
+   ],
+   "about": "on-call paging"
+  },
+  {
+   "name": "Slack #alerts",
+   "type": "place",
+   "aliases": [
+    "#alerts",
+    "alerts channel",
+    "slack",
+    "Slack",
+    "the alerts channel"
+   ],
+   "about": "channel for dead-letter alerts"
+  },
+  {
+   "name": "Cloudflare",
+   "type": "organisation",
+   "aliases": [
+    "cloudflare",
+    "Cloudflare",
+    "CF",
+    "DNS",
+    "the DNS",
+    "dns records"
+   ],
+   "about": "DNS for zone acme.dev"
+  },
+  {
+   "name": "Tailscale",
+   "type": "product",
+   "aliases": [
+    "tailscale",
+    "Tailscale",
+    "the VPN",
+    "vpn",
+    "tailnet"
+   ],
+   "about": "VPN required for prod DB access"
+  },
+  {
+   "name": "OrbStack",
+   "type": "product",
+   "aliases": [
+    "orbstack",
+    "OrbStack",
+    "docker",
+    "Docker",
+    "Docker Desktop",
+    "docker compose",
+    "containers",
+    "compose",
+    "docker-compose"
+   ],
+   "about": "local container runtime instead of Docker Desktop"
+  },
+  {
+   "name": "PgBouncer",
+   "type": "product",
+   "aliases": [
+    "pgbouncer",
+    "PgBouncer",
+    "the pooler",
+    "connection pooler",
+    "pgbouncer transaction mode"
+   ],
+   "about": "connection pooler in transaction mode"
+  },
+  {
+   "name": "Testcontainers",
+   "type": "product",
+   "aliases": [
+    "testcontainers",
+    "Testcontainers",
+    "test containers"
+   ],
+   "about": "starts real Postgres for API tests"
+  },
+  {
+   "name": "KEDA",
+   "type": "product",
+   "aliases": [
+    "keda",
+    "KEDA",
+    "autoscaling",
+    "autoscaler",
+    "HPA",
+    "scaling"
+   ],
+   "about": "autoscales the worker on queue length"
+  },
+  {
+   "name": "AWS Load Balancer Controller",
+   "type": "product",
+   "aliases": [
+    "ingress",
+    "the ingress",
+    "load balancer",
+    "ALB",
+    "the LB",
+    "aws-load-balancer-controller",
+    "lb controller"
+   ],
+   "about": "ingress controller with ACM certs"
+  },
+  {
+   "name": "Linear",
+   "type": "product",
+   "aliases": [
+    "linear",
+    "Linear",
+    "the ticket",
+    "ticket",
+    "the issue",
+    "issues",
+    "acme-123",
+    "ACME-",
+    "the board",
+    "backlog"
+   ],
+   "about": "issue tracker, ACME team"
+  },
+  {
+   "name": "Resend",
+   "type": "product",
+   "aliases": [
+    "resend",
+    "Resend",
+    "email",
+    "emails",
+    "transactional email",
+    "React Email",
+    "apps/api/emails",
+    "email templates"
+   ],
+   "about": "transactional email with React Email templates"
+  },
+  {
+   "name": "Storybook",
+   "type": "product",
+   "aliases": [
+    "storybook",
+    "Storybook",
+    "stories",
+    "port 6006"
+   ],
+   "about": "web component workbench on port 6006"
+  },
+  {
+   "name": "Tailwind CSS",
+   "type": "product",
+   "aliases": [
+    "tailwind",
+    "Tailwind",
+    "tailwind v4",
+    "globals.css",
+    "css",
+    "styles",
+    "styling",
+    "tailwindcss"
+   ],
+   "about": "v4 CSS-first styling"
+  },
+  {
+   "name": "shadcn/ui",
+   "type": "product",
+   "aliases": [
+    "shadcn",
+    "shadcn/ui",
+    "shad",
+    "components/ui",
+    "ui components",
+    "the component library"
+   ],
+   "about": "UI component library in apps/web/components/ui"
+  },
+  {
+   "name": "TanStack Query",
+   "type": "product",
+   "aliases": [
+    "react-query",
+    "react query",
+    "tanstack query",
+    "TanStack",
+    "useQuery",
+    "query cache"
+   ],
+   "about": "server state in web"
+  },
+  {
+   "name": "zustand",
+   "type": "product",
+   "aliases": [
+    "zustand",
+    "the store",
+    "client state",
+    "state management",
+    "redux",
+    "Redux"
+   ],
+   "about": "client state in web"
+  },
+  {
+   "name": "react-hook-form",
+   "type": "product",
+   "aliases": [
+    "react-hook-form",
+    "RHF",
+    "forms",
+    "the form",
+    "useForm",
+    "form validation"
+   ],
+   "about": "form library with zod resolvers"
+  },
+  {
+   "name": "next-intl",
+   "type": "product",
+   "aliases": [
+    "next-intl",
+    "i18n",
+    "translations",
+    "messages json",
+    "locale",
+    "l10n"
+   ],
+   "about": "translations; messages in apps/web/messages"
+  },
+  {
+   "name": "next-themes",
+   "type": "product",
+   "aliases": [
+    "next-themes",
+    "dark mode",
+    "theme",
+    "theming",
+    "light mode"
+   ],
+   "about": "dark mode via class strategy"
+  },
+  {
+   "name": "lucide-react",
+   "type": "product",
+   "aliases": [
+    "lucide",
+    "lucide-react",
+    "icons",
+    "the icons"
+   ],
+   "about": "icon set"
+  },
+  {
+   "name": "commander",
+   "type": "product",
+   "aliases": [
+    "commander",
+    "commander.js",
+    "the command parser",
+    "argv parsing"
+   ],
+   "about": "CLI framework"
+  },
+  {
+   "name": "tsup",
+   "type": "product",
+   "aliases": [
+    "tsup",
+    "the bundler",
+    "bundle",
+    "dist/index.js",
+    "dist"
+   ],
+   "about": "CLI bundler"
+  },
+  {
+   "name": "npm registry",
+   "type": "organisation",
+   "aliases": [
+    "npm",
+    "npmjs",
+    "the registry",
+    "npm publish",
+    "npm package",
+    "npm link"
+   ],
+   "about": "publishes @acme/cli"
+  },
+  {
+   "name": "keytar",
+   "type": "product",
+   "aliases": [
+    "keytar",
+    "keychain",
+    "the keychain",
+    "OS keychain",
+    "credential store"
+   ],
+   "about": "OS keychain storage for CLI token"
+  },
+  {
+   "name": "picocolors",
+   "type": "product",
+   "aliases": [
+    "picocolors",
+    "colors",
+    "chalk",
+    "terminal colors"
+   ],
+   "about": "CLI terminal colors"
+  },
+  {
+   "name": "@clack/prompts",
+   "type": "product",
+   "aliases": [
+    "clack",
+    "@clack/prompts",
+    "prompts",
+    "interactive prompts",
+    "inquirer"
+   ],
+   "about": "CLI interactive prompts"
+  },
+  {
+   "name": "update-notifier",
+   "type": "product",
+   "aliases": [
+    "update-notifier",
+    "update check",
+    "new version notice"
+   ],
+   "about": "daily CLI update check"
+  },
+  {
+   "name": "Bull Board",
+   "type": "product",
+   "aliases": [
+    "Bull Board",
+    "bull board",
+    "/admin/queues",
+    "queue dashboard",
+    "the queue UI"
+   ],
+   "about": "queue UI at /admin/queues behind basic auth"
+  },
+  {
+   "name": "dead-letter queue",
+   "type": "thing",
+   "aliases": [
+    "dlq",
+    "DLQ",
+    "dead letter",
+    "dead-letter queue",
+    "failed jobs",
+    "the dead letter queue"
+   ],
+   "about": "dlq for jobs failing after last retry"
+  },
+  {
+   "name": "job queues",
+   "type": "thing",
+   "aliases": [
+    "email queue",
+    "images queue",
+    "billing-sync",
+    "billing sync",
+    "webhooks queue",
+    "the image jobs",
+    "image resizing",
+    "the queues"
+   ],
+   "about": "email, images, billing-sync, webhooks"
+  },
+  {
+   "name": "sharp",
+   "type": "product",
+   "aliases": [
+    "sharp",
+    "libvips",
+    "vips",
+    "image processing",
+    "canvas"
+   ],
+   "about": "image library; needs libvips, rebuild after Node switch"
+  },
+  {
+   "name": "Node.js",
+   "type": "product",
+   "aliases": [
+    "node",
+    "Node",
+    "nodejs",
+    "node 20",
+    "Node 18",
+    ".nvmrc",
+    "nvm",
+    "nvm use",
+    "the runtime"
+   ],
+   "about": "runtime pinned to 20.11 via .nvmrc; CLI supports 18+"
+  },
+  {
+   "name": "TypeScript",
+   "type": "product",
+   "aliases": [
+    "typescript",
+    "TS",
+    "ts",
+    "tsconfig",
+    "tsconfig.base.json",
+    "tsc",
+    "types",
+    "typecheck",
+    "strict mode"
+   ],
+   "about": "strict mode, noUncheckedIndexedAccess, @acme/* paths"
+  },
+  {
+   "name": "Python tools",
+   "type": "project",
+   "aliases": [
+    "tools/",
+    "python",
+    "Python",
+    "uv",
+    "the python scripts",
+    "python 3.12",
+    "pip"
+   ],
+   "about": "Python 3.12 scripts in tools/ managed by uv"
+  },
+  {
+   "name": "CODEOWNERS",
+   "type": "thing",
+   "aliases": [
+    "CODEOWNERS",
+    "codeowners",
+    "code owners",
+    "owners file",
+    "required reviewers"
+   ],
+   "about": "approval owners; platform team owns infra and .github"
+  },
+  {
+   "name": "platform team",
+   "type": "organisation",
+   "aliases": [
+    "the platform team",
+    "platform",
+    "platform folks",
+    "infra team",
+    "ops",
+    "devops",
+    "SRE"
+   ],
+   "about": "owns infra/ and .github/"
+  },
+  {
+   "name": "the developer",
+   "type": "person",
+   "aliases": [
+    "the user",
+    "me",
+    "I",
+    "my",
+    "the dev",
+    "you know who",
+    "the boss"
+   ],
+   "about": "the one developer the agent works with"
+  },
+  {
+   "name": "VS Code",
+   "type": "product",
+   "aliases": [
+    "vscode",
+    "VS Code",
+    "the editor",
+    "extensions",
+    ".vscode",
+    "code editor",
+    "IDE"
+   ],
+   "about": "editor; recommended extensions in .vscode"
+  },
+  {
+   "name": "S3 uploads",
+   "type": "thing",
+   "aliases": [
+    "uploads",
+    "file uploads",
+    "presigned URL",
+    "presigned",
+    "the bucket",
+    "s3 bucket",
+    "POST /v1/uploads"
+   ],
+   "about": "presigned URL uploads and WebP images"
+  },
+  {
+   "name": "OpenAPI spec",
+   "type": "thing",
+   "aliases": [
+    "openapi",
+    "OpenAPI",
+    "openapi.yaml",
+    "swagger",
+    "the spec",
+    "api docs"
+   ],
+   "about": "generated from zod into apps/api/openapi.yaml"
+  },
+  {
+   "name": "middleware.ts",
+   "type": "thing",
+   "aliases": [
+    "middleware",
+    "middleware.ts",
+    "publicRoutes",
+    "public routes",
+    "route protection"
+   ],
+   "about": "Clerk middleware with publicRoutes"
+  },
+  {
+   "name": "apps/web/lib/api.ts",
+   "type": "thing",
+   "aliases": [
+    "api.ts",
+    "the fetch wrapper",
+    "the api client",
+    "api client",
+    "lib/api.ts",
+    "fetch helper"
+   ],
+   "about": "fetch wrapper for browser API calls"
+  },
+  {
+   "name": "Apple Silicon Mac",
+   "type": "thing",
+   "aliases": [
+    "mac",
+    "M1",
+    "M2",
+    "M3",
+    "Apple Silicon",
+    "arm64",
+    "my laptop",
+    "the laptop",
+    "macbook",
+    "Rosetta"
+   ],
+   "about": "developer machine"
+  },
+  {
+   "name": "game day",
+   "type": "thing",
+   "aliases": [
+    "game day",
+    "gameday",
+    "failover drill",
+    "chaos test",
+    "DR drill",
+    "failover"
+   ],
+   "about": "failure drill; RDS failover 90s"
+  }
+ ],
+ "activities": [
+  {
+   "name": "add a dependency",
+   "words": [
+    "add",
+    "install",
+    "dependency",
+    "dep",
+    "package",
+    "pnpm add",
+    "npm install",
+    "yarn add",
+    "new library",
+    "lib",
+    "pull in",
+    "use a package",
+    "import a library",
+    "lockfile",
+    "pnpm-lock",
+    "bring in",
+    "add package",
+    "devDependency"
+   ]
+  },
+  {
+   "name": "upgrade a dependency",
+   "words": [
+    "upgrade",
+    "bump",
+    "update",
+    "major version",
+    "renovate",
+    "dependabot",
+    "version bump",
+    "outdated",
+    "latest version",
+    "semver",
+    "breaking change",
+    "migrate to v",
+    "patch update",
+    "minor update"
+   ]
+  },
+  {
+   "name": "install and set up the repo",
+   "words": [
+    "setup",
+    "set up",
+    "clone",
+    "onboard",
+    "first time",
+    "fresh machine",
+    "new laptop",
+    "install",
+    "bootstrap",
+    "getting started",
+    "pnpm install",
+    "nvm",
+    "node version",
+    "run locally",
+    "get it running"
+   ]
+  },
+  {
+   "name": "configure local environment variables",
+   "words": [
+    "env",
+    "env var",
+    ".env",
+    ".env.local",
+    "environment variable",
+    "secrets",
+    "api key",
+    "config",
+    "dotenv",
+    "1password",
+    "missing key",
+    "undefined env",
+    "process.env",
+    "set the key"
+   ]
+  },
+  {
+   "name": "run the dev servers",
+   "words": [
+    "dev server",
+    "pnpm dev",
+    "start",
+    "run locally",
+    "localhost",
+    "spin up",
+    "boot",
+    "start the app",
+    "port",
+    "hot reload",
+    "turbo dev",
+    "run everything",
+    "local dev"
+   ]
+  },
+  {
+   "name": "start local databases and services",
+   "words": [
+    "docker",
+    "compose",
+    "docker compose up",
+    "postgres locally",
+    "redis locally",
+    "container",
+    "orbstack",
+    "database not running",
+    "connection refused",
+    "ECONNREFUSED",
+    "5432",
+    "6379",
+    "local db"
+   ]
+  },
+  {
+   "name": "commit changes",
+   "words": [
+    "commit",
+    "git commit",
+    "commit message",
+    "conventional commit",
+    "feat:",
+    "fix:",
+    "chore:",
+    "message",
+    "stage",
+    "staged",
+    "amend",
+    "pre-commit",
+    "lefthook",
+    "wip"
+   ]
+  },
+  {
+   "name": "create a branch",
+   "words": [
+    "branch",
+    "new branch",
+    "checkout -b",
+    "feature branch",
+    "switch",
+    "git switch",
+    "branch name",
+    "acme-123",
+    "linear id",
+    "start work on",
+    "ticket"
+   ]
+  },
+  {
+   "name": "open a pull request",
+   "words": [
+    "PR",
+    "pull request",
+    "open a PR",
+    "gh pr create",
+    "draft PR",
+    "ready for review",
+    "submit",
+    "send for review",
+    "make a PR",
+    "create PR",
+    "raise a PR"
+   ]
+  },
+  {
+   "name": "merge a PR",
+   "words": [
+    "merge",
+    "merge the PR",
+    "squash",
+    "rebase merge",
+    "approve",
+    "approval",
+    "land",
+    "ship it",
+    "gh pr merge",
+    "codeowners",
+    "green CI",
+    "merge button",
+    "get it in"
+   ]
+  },
+  {
+   "name": "push to remote",
+   "words": [
+    "push",
+    "git push",
+    "force push",
+    "--force",
+    "upstream",
+    "origin",
+    "publish branch",
+    "push changes",
+    "sync",
+    "remote"
+   ]
+  },
+  {
+   "name": "rewrite git history",
+   "words": [
+    "rebase",
+    "squash commits",
+    "amend",
+    "reset",
+    "force push",
+    "rewrite history",
+    "fixup",
+    "interactive rebase",
+    "clean up commits",
+    "reorder commits",
+    "git stash",
+    "stash"
+   ]
+  },
+  {
+   "name": "delete files or branches",
+   "words": [
+    "delete",
+    "remove",
+    "rm",
+    "rm -rf",
+    "clean up",
+    "prune",
+    "drop branch",
+    "delete branch",
+    "unused files",
+    "dead code",
+    "git clean",
+    "get rid of"
+   ]
+  },
+  {
+   "name": "fix a CI failure",
+   "words": [
+    "CI",
+    "CI failing",
+    "red build",
+    "checks failed",
+    "pipeline broke",
+    "GitHub Actions",
+    "workflow",
+    "frozen-lockfile",
+    "ci.yml",
+    "build failed",
+    "flaky",
+    "the build is red",
+    "job failed",
+    "action failed"
+   ]
+  },
+  {
+   "name": "write unit tests",
+   "words": [
+    "test",
+    "unit test",
+    "vitest",
+    "spec",
+    "describe",
+    "it(",
+    "expect",
+    "mock",
+    "coverage",
+    "test file",
+    "colocated test",
+    "snapshot",
+    "add tests",
+    "write tests"
+   ]
+  },
+  {
+   "name": "debug a failing test",
+   "words": [
+    "failing test",
+    "test fails",
+    "flaky test",
+    "red test",
+    "assertion",
+    "expected",
+    "received",
+    "broken test",
+    "skip test",
+    "it.skip",
+    "test.only",
+    "timeout",
+    "snapshot mismatch",
+    "test error"
+   ]
+  },
+  {
+   "name": "run the test suite",
+   "words": [
+    "run tests",
+    "pnpm test",
+    "test suite",
+    "all tests",
+    "full suite",
+    "--filter",
+    "run the tests",
+    "test command",
+    "before pushing",
+    "vitest run",
+    "test all"
+   ]
+  },
+  {
+   "name": "write end-to-end tests",
+   "words": [
+    "e2e",
+    "end to end",
+    "end-to-end",
+    "playwright",
+    "browser test",
+    "integration test",
+    "click through",
+    "ui test",
+    "smoke test",
+    "test the flow",
+    "page.goto"
+   ]
+  },
+  {
+   "name": "check test coverage",
+   "words": [
+    "coverage",
+    "threshold",
+    "80%",
+    "lines covered",
+    "uncovered",
+    "coverage report",
+    "istanbul",
+    "c8",
+    "coverage drop",
+    "not enough tests",
+    "vitest --coverage"
+   ]
+  },
+  {
+   "name": "lint and format code",
+   "words": [
+    "lint",
+    "format",
+    "biome",
+    "eslint",
+    "prettier",
+    "formatter",
+    "linter",
+    "style",
+    "autofix",
+    "lint error",
+    "formatting",
+    "pnpm lint",
+    "code style",
+    "semicolons"
+   ]
+  },
+  {
+   "name": "fix a TypeScript type error",
+   "words": [
+    "type error",
+    "TS error",
+    "tsc",
+    "typecheck",
+    "strict",
+    "possibly undefined",
+    "noUncheckedIndexedAccess",
+    "any",
+    "types",
+    "type mismatch",
+    "TS2532",
+    "as unknown",
+    "red squiggle",
+    "implicit any"
+   ]
+  },
+  {
+   "name": "fix a module or import error",
+   "words": [
+    "import",
+    "require",
+    "ERR_REQUIRE_ESM",
+    "ESM",
+    "CommonJS",
+    "cjs",
+    "module not found",
+    "cannot find module",
+    ".js extension",
+    "default export",
+    "named export",
+    "type module",
+    "path alias",
+    "@acme/"
+   ]
+  },
+  {
+   "name": "write new code in a style the user likes",
+   "words": [
+    "refactor",
+    "write",
+    "implement",
+    "component",
+    "function",
+    "comment",
+    "code review",
+    "clean code",
+    "naming",
+    "small component",
+    "readable",
+    "style",
+    "code first"
+   ]
+  },
+  {
+   "name": "refactor code",
+   "words": [
+    "refactor",
+    "restructure",
+    "rewrite",
+    "clean up",
+    "extract",
+    "split",
+    "rename",
+    "reorganize",
+    "large change",
+    "big refactor",
+    "move files",
+    "simplify",
+    "decouple"
+   ]
+  },
+  {
+   "name": "build a web page or component",
+   "words": [
+    "page",
+    "component",
+    "react",
+    "tsx",
+    "UI",
+    "layout",
+    "button",
+    "modal",
+    "form",
+    "route",
+    "app router",
+    "server component",
+    "client component",
+    "shadcn",
+    "new screen"
+   ]
+  },
+  {
+   "name": "style the UI",
+   "words": [
+    "css",
+    "tailwind",
+    "style",
+    "class",
+    "className",
+    "dark mode",
+    "theme",
+    "color",
+    "spacing",
+    "responsive",
+    "globals.css",
+    "font",
+    "design"
+   ]
+  },
+  {
+   "name": "handle forms and validation",
+   "words": [
+    "form",
+    "input",
+    "validation",
+    "zod",
+    "react-hook-form",
+    "submit",
+    "server action",
+    "field error",
+    "schema",
+    "validate",
+    "parse"
+   ]
+  },
+  {
+   "name": "manage web app state and data fetching",
+   "words": [
+    "state",
+    "fetch",
+    "data fetching",
+    "useQuery",
+    "react query",
+    "zustand",
+    "redux",
+    "store",
+    "cache",
+    "refetch",
+    "api call",
+    "loading state",
+    "mutation"
+   ]
+  },
+  {
+   "name": "fix authentication or login problems",
+   "words": [
+    "login",
+    "sign in",
+    "sign-in",
+    "auth",
+    "logged out",
+    "redirect loop",
+    "401",
+    "unauthorized",
+    "session",
+    "JWT",
+    "token",
+    "clerk",
+    "middleware",
+    "can't log in",
+    "keeps redirecting"
+   ]
+  },
+  {
+   "name": "fix a hydration or Next.js build error",
+   "words": [
+    "hydration",
+    "mismatch",
+    "text content did not match",
+    "Can't resolve 'fs'",
+    "next build",
+    "build error",
+    "server-only",
+    "client component",
+    "useEffect",
+    "SSR",
+    "window is not defined"
+   ]
+  },
+  {
+   "name": "add images or assets",
+   "words": [
+    "image",
+    "next/image",
+    "remotePatterns",
+    "cdn",
+    "picture",
+    "img",
+    "avatar",
+    "logo",
+    "upload",
+    "webp",
+    "icon"
+   ]
+  },
+  {
+   "name": "add translations or copy",
+   "words": [
+    "translation",
+    "i18n",
+    "locale",
+    "language",
+    "copy",
+    "text",
+    "strings",
+    "messages",
+    "next-intl",
+    "translate",
+    "french",
+    "spanish"
+   ]
+  },
+  {
+   "name": "improve accessibility",
+   "words": [
+    "a11y",
+    "accessibility",
+    "aria",
+    "aria-label",
+    "screen reader",
+    "keyboard",
+    "focus",
+    "alt text",
+    "icon button",
+    "contrast",
+    "WCAG"
+   ]
+  },
+  {
+   "name": "analyze bundle size or performance",
+   "words": [
+    "bundle",
+    "bundle size",
+    "slow",
+    "performance",
+    "lighthouse",
+    "perf",
+    "analyze",
+    "heavy",
+    "tree shaking",
+    "load time",
+    "lcp",
+    "js size"
+   ]
+  },
+  {
+   "name": "add an API endpoint",
+   "words": [
+    "endpoint",
+    "route",
+    "handler",
+    "POST",
+    "GET",
+    "REST",
+    "fastify",
+    "/v1",
+    "new route",
+    "controller",
+    "api route",
+    "openapi",
+    "request",
+    "response"
+   ]
+  },
+  {
+   "name": "change the database schema",
+   "words": [
+    "schema",
+    "migration",
+    "table",
+    "column",
+    "add column",
+    "drizzle",
+    "schema.ts",
+    "migrate",
+    "db:migrate",
+    "drizzle-kit",
+    "index",
+    "foreign key",
+    "alter table",
+    "generate migration"
+   ]
+  },
+  {
+   "name": "query the database",
+   "words": [
+    "query",
+    "select",
+    "sql",
+    "join",
+    "where",
+    "drizzle",
+    "orm",
+    "n+1",
+    "slow query",
+    "pagination",
+    "cursor",
+    "offset",
+    "search",
+    "filter",
+    "org_id"
+   ]
+  },
+  {
+   "name": "run destructive database operations",
+   "words": [
+    "drop",
+    "truncate",
+    "reset",
+    "wipe",
+    "delete all",
+    "drop table",
+    "reset db",
+    "nuke",
+    "clear the database",
+    "db reset",
+    "fresh database",
+    "purge"
+   ]
+  },
+  {
+   "name": "seed or inspect local data",
+   "words": [
+    "seed",
+    "test data",
+    "fixtures",
+    "sample data",
+    "db:seed",
+    "psql",
+    "inspect",
+    "rows",
+    "dummy data",
+    "populate",
+    "local data"
+   ]
+  },
+  {
+   "name": "handle money or billing",
+   "words": [
+    "billing",
+    "stripe",
+    "payment",
+    "invoice",
+    "price",
+    "money",
+    "cents",
+    "amount",
+    "checkout",
+    "subscription",
+    "charge",
+    "refund",
+    "currency",
+    "billing-sync"
+   ]
+  },
+  {
+   "name": "handle webhooks",
+   "words": [
+    "webhook",
+    "stripe webhook",
+    "signature",
+    "hmac",
+    "raw body",
+    "signing secret",
+    "outgoing webhook",
+    "callback",
+    "event",
+    "X-Acme-Signature",
+    "verify signature"
+   ]
+  },
+  {
+   "name": "handle errors and logging",
+   "words": [
+    "error",
+    "log",
+    "logging",
+    "console.log",
+    "pino",
+    "logger",
+    "sentry",
+    "exception",
+    "stack trace",
+    "problem+json",
+    "error handling",
+    "log line",
+    "debug log"
+   ]
+  },
+  {
+   "name": "send email",
+   "words": [
+    "email",
+    "send mail",
+    "resend",
+    "template",
+    "react email",
+    "notification",
+    "welcome email",
+    "reset password email",
+    "transactional",
+    "mailer"
+   ]
+  },
+  {
+   "name": "handle file uploads",
+   "words": [
+    "upload",
+    "file",
+    "s3",
+    "presigned",
+    "attachment",
+    "multipart",
+    "image upload",
+    "bucket",
+    "resize",
+    "webp"
+   ]
+  },
+  {
+   "name": "handle dates and times",
+   "words": [
+    "date",
+    "time",
+    "timestamp",
+    "timezone",
+    "utc",
+    "moment",
+    "date-fns",
+    "format date",
+    "local time",
+    "dayjs",
+    "now()",
+    "created_at"
+   ]
+  },
+  {
+   "name": "add a feature flag or analytics event",
+   "words": [
+    "feature flag",
+    "flag",
+    "toggle",
+    "rollout",
+    "a/b test",
+    "experiment",
+    "growthbook",
+    "posthog",
+    "analytics",
+    "track event",
+    "capture",
+    "gradual rollout"
+   ]
+  },
+  {
+   "name": "add or debug a background job",
+   "words": [
+    "job",
+    "queue",
+    "worker",
+    "bullmq",
+    "background",
+    "async task",
+    "enqueue",
+    "cron",
+    "schedule",
+    "retry",
+    "repeatable",
+    "processor",
+    "consumer"
+   ]
+  },
+  {
+   "name": "debug stuck or failing jobs",
+   "words": [
+    "stuck jobs",
+    "failed jobs",
+    "dlq",
+    "dead letter",
+    "retries",
+    "job failed",
+    "queue backed up",
+    "redis memory",
+    "OOM",
+    "bull board",
+    "jobs piling up",
+    "backlog",
+    "not processing"
+   ]
+  },
+  {
+   "name": "process images",
+   "words": [
+    "image",
+    "sharp",
+    "resize",
+    "thumbnail",
+    "webp",
+    "libvips",
+    "alpine",
+    "image job",
+    "crop",
+    "compress"
+   ]
+  },
+  {
+   "name": "work on the CLI",
+   "words": [
+    "cli",
+    "command",
+    "acme",
+    "commander",
+    "flag",
+    "--json",
+    "subcommand",
+    "terminal",
+    "argv",
+    "stdout",
+    "prompt",
+    "exit code",
+    "help text"
+   ]
+  },
+  {
+   "name": "release or publish the CLI",
+   "words": [
+    "publish",
+    "npm publish",
+    "release",
+    "version",
+    "changeset",
+    "bump version",
+    "tag",
+    "provenance",
+    "new version",
+    "ship the CLI",
+    "npm link"
+   ]
+  },
+  {
+   "name": "support a CLI user issue",
+   "words": [
+    "user report",
+    "bug report",
+    "issue",
+    "windows",
+    "crash",
+    "ERR_REQUIRE_ESM",
+    "old node",
+    "doesn't work",
+    "config path",
+    "keychain",
+    "login fails",
+    "telemetry",
+    "opt out"
+   ]
+  },
+  {
+   "name": "deploy to staging",
+   "words": [
+    "staging",
+    "deploy",
+    "stage",
+    "preview",
+    "staging.acme.dev",
+    "test on staging",
+    "push to main",
+    "ship to staging",
+    "merge to main",
+    "staging env",
+    "QA",
+    "try it on staging"
+   ]
+  },
+  {
+   "name": "deploy to production",
+   "words": [
+    "deploy",
+    "prod",
+    "production",
+    "release",
+    "ship",
+    "go live",
+    "tag",
+    "v1.",
+    "release.yml",
+    "rollout",
+    "friday",
+    "hotfix",
+    "cut a release"
+   ]
+  },
+  {
+   "name": "change infrastructure with Terraform",
+   "words": [
+    "terraform",
+    "infra",
+    "plan",
+    "apply",
+    "tf",
+    "module",
+    "resource",
+    "state",
+    "make plan",
+    "aws resource",
+    "provision",
+    "IaC",
+    "tags"
+   ]
+  },
+  {
+   "name": "work with Kubernetes",
+   "words": [
+    "kubernetes",
+    "k8s",
+    "kubectl",
+    "pod",
+    "deployment",
+    "helm",
+    "chart",
+    "eks",
+    "cluster",
+    "namespace",
+    "kubeconfig",
+    "scale",
+    "replicas",
+    "ingress"
+   ]
+  },
+  {
+   "name": "manage secrets",
+   "words": [
+    "secret",
+    "password",
+    "token",
+    "api key",
+    "credentials",
+    "1password",
+    "secrets manager",
+    "rotate",
+    "leak",
+    "vault",
+    "external secrets",
+    "sensitive"
+   ]
+  },
+  {
+   "name": "debug a production incident",
+   "words": [
+    "incident",
+    "outage",
+    "down",
+    "prod is down",
+    "500s",
+    "errors spiking",
+    "alert",
+    "pagerduty",
+    "on-call",
+    "sentry",
+    "latency",
+    "timeout",
+    "failover",
+    "rollback"
+   ]
+  },
+  {
+   "name": "investigate metrics and dashboards",
+   "words": [
+    "metrics",
+    "dashboard",
+    "grafana",
+    "prometheus",
+    "/metrics",
+    "graph",
+    "chart",
+    "observability",
+    "latency",
+    "throughput",
+    "alerting"
+   ]
+  },
+  {
+   "name": "access the production database",
+   "words": [
+    "prod db",
+    "production database",
+    "connect to prod",
+    "psql prod",
+    "rds",
+    "tailscale",
+    "vpn",
+    "read replica",
+    "run a query in prod",
+    "bastion"
+   ]
+  },
+  {
+   "name": "configure DNS or domains",
+   "words": [
+    "dns",
+    "domain",
+    "subdomain",
+    "cname",
+    "record",
+    "cloudflare",
+    "certificate",
+    "ssl",
+    "tls",
+    "https",
+    "acme.dev"
+   ]
+  },
+  {
+   "name": "handle scaling and connection limits",
+   "words": [
+    "scale",
+    "autoscale",
+    "hpa",
+    "keda",
+    "connections",
+    "pool",
+    "too many connections",
+    "pgbouncer",
+    "prepared statement",
+    "load",
+    "traffic spike",
+    "cpu"
+   ]
+  },
+  {
+   "name": "do security or CORS work",
+   "words": [
+    "security",
+    "cors",
+    "csp",
+    "headers",
+    "origin",
+    "xss",
+    "vulnerability",
+    "audit",
+    "security review",
+    "rate limit",
+    "allowlist",
+    "blocked by CORS"
+   ]
+  },
+  {
+   "name": "make outbound HTTP calls",
+   "words": [
+    "fetch",
+    "http call",
+    "axios",
+    "external api",
+    "third-party api",
+    "timeout",
+    "request",
+    "call an api",
+    "outbound",
+    "integration",
+    "hang"
+   ]
+  },
+  {
+   "name": "write documentation",
+   "words": [
+    "docs",
+    "documentation",
+    "readme",
+    "docs/",
+    "update docs",
+    "explain",
+    "guide",
+    "public behavior",
+    "changelog",
+    "write up"
+   ]
+  },
+  {
+   "name": "research a technical question",
+   "words": [
+    "research",
+    "look into",
+    "investigate",
+    "compare",
+    "which is better",
+    "sources",
+    "benchmark",
+    "evaluate",
+    "deep dive",
+    "options"
+   ]
+  },
+  {
+   "name": "summarize or report finished work",
+   "words": [
+    "summary",
+    "done",
+    "finished",
+    "wrap up",
+    "recap",
+    "what did you do",
+    "report",
+    "status",
+    "complete",
+    "task done"
+   ]
+  },
+  {
+   "name": "plan a large change",
+   "words": [
+    "plan",
+    "design",
+    "architecture",
+    "proposal",
+    "big change",
+    "rewrite",
+    "migration plan",
+    "approach",
+    "roadmap",
+    "before you start"
+   ]
+  },
+  {
+   "name": "run benchmarks or load tests",
+   "words": [
+    "benchmark",
+    "bench",
+    "load test",
+    "perf test",
+    "stress test",
+    "k6",
+    "runner",
+    "profile",
+    "measure",
+    "long running"
+   ]
+  },
+  {
+   "name": "work with Python tooling",
+   "words": [
+    "python",
+    "script",
+    "tools/",
+    "uv",
+    "pip",
+    "venv",
+    "py",
+    "python 3",
+    "requirements",
+    "pyproject"
+   ]
+  },
+  {
+   "name": "write a new script",
+   "words": [
+    "script",
+    "automation",
+    "one-off script",
+    "helper script",
+    "bash script",
+    "node script",
+    "quick script",
+    "tooling",
+    "scripts/",
+    "js script",
+    "ts script"
+   ]
+  },
+  {
+   "name": "edit generated files",
+   "words": [
+    "generated",
+    "dist/",
+    "*.gen.ts",
+    "codegen",
+    "build output",
+    "compiled",
+    "openapi.yaml",
+    "auto-generated",
+    "regenerate",
+    "edit dist",
+    "patch the build"
+   ]
+  },
+  {
+   "name": "set up the editor",
+   "words": [
+    "vscode",
+    "editor",
+    "extension",
+    "settings.json",
+    "ide",
+    "plugins",
+    "intellisense",
+    "formatter on save",
+    "recommended extensions",
+    "workspace settings"
+   ]
+  },
+  {
+   "name": "track work in the issue tracker",
+   "words": [
+    "linear",
+    "ticket",
+    "issue",
+    "task",
+    "acme-",
+    "story",
+    "bug ticket",
+    "backlog",
+    "sprint",
+    "assign"
+   ]
+  }
+ ],
+ "background": [
+  "thanks, that works",
+  "nice, thank you",
+  "what's the difference between let and const in JavaScript?",
+  "explain big O notation in simple terms",
+  "what does the reduce function do?",
+  "how does a hash map work under the hood?",
+  "what's a closure?",
+  "what is the difference between TCP and UDP?",
+  "can you explain what a monad is?",
+  "what does idempotent mean?",
+  "how do promises differ from async/await?",
+  "what is the event loop in JavaScript?",
+  "explain the CAP theorem",
+  "what's the difference between a process and a thread?",
+  "what is a race condition?",
+  "how does HTTPS work?",
+  "what does REST stand for?",
+  "what's the difference between git merge and git rebase in general?",
+  "explain dependency injection",
+  "what is memoization?",
+  "write a function that reverses a string",
+  "write a regex that matches an email address",
+  "how do I sort an array of objects by a key in JavaScript?",
+  "convert this snake_case string to camelCase",
+  "write a debounce function",
+  "write a binary search in TypeScript",
+  "how do I deep clone an object?",
+  "what is the time complexity of quicksort?",
+  "write a fizzbuzz",
+  "how do I flatten a nested array?",
+  "generate a random UUID in the browser",
+  "how do I check if a string is a palindrome?",
+  "what is the difference between == and === ?",
+  "explain generics in TypeScript with an example",
+  "what's a discriminated union?",
+  "what does the never type mean?",
+  "how do mapped types work?",
+  "what is the satisfies operator for?",
+  "explain keyof and typeof together",
+  "what is a type guard?",
+  "how do I type a function that takes a callback?",
+  "what's the difference between interface and type?",
+  "what's the capital of Australia?",
+  "how many days until Christmas?",
+  "what time is it in Tokyo right now?",
+  "recommend a good podcast about software",
+  "what's a good book on distributed systems?",
+  "tell me a joke",
+  "I'm tired today",
+  "I'm going to grab a coffee, back in 10",
+  "brb lunch",
+  "what's the weather like usually in Lisbon in October?",
+  "how do you pronounce Nginx?",
+  "who invented the World Wide Web?",
+  "what year did JavaScript come out?",
+  "translate \"good morning\" to Japanese",
+  "convert 72 Fahrenheit to Celsius",
+  "what's a good name for a cat?",
+  "summarize the plot of Dune in two sentences",
+  "what is the Pythagorean theorem?",
+  "what's the speed of light?",
+  "how do I center a div?",
+  "what does flexbox justify-content do?",
+  "explain CSS grid vs flexbox",
+  "what is the box model?",
+  "what's the difference between em and rem?",
+  "what is a CSS specificity conflict?",
+  "what's the difference between SQL and NoSQL?",
+  "explain database normalization",
+  "what is an index in a database, conceptually?",
+  "what's the difference between INNER JOIN and LEFT JOIN?",
+  "what is ACID?",
+  "what is sharding?",
+  "explain eventual consistency",
+  "what's a message queue in general?",
+  "what is a load balancer?",
+  "explain what a CDN does",
+  "what is a reverse proxy?",
+  "what is Kubernetes, at a high level?",
+  "what does a container do compared to a VM?",
+  "explain blue-green deployments",
+  "what is a canary release?",
+  "what is infrastructure as code?",
+  "what is OAuth in plain words?",
+  "what's the difference between authentication and authorization?",
+  "explain how JWTs are structured",
+  "what is CSRF?",
+  "what's XSS?",
+  "what is a SQL injection?",
+  "how does bcrypt work?",
+  "what's the difference between hashing and encryption?",
+  "what is a vim command to delete a line?",
+  "how do I exit vim?",
+  "what does ls -la show?",
+  "how do I find a file by name in bash?",
+  "what does chmod 755 mean?",
+  "how do I count lines in a file?",
+  "what's the grep flag for case-insensitive?",
+  "how do I see which process uses a port on Linux?",
+  "what's a good keyboard shortcut to split the terminal?",
+  "how do I make my terminal prompt show the git branch?",
+  "rename this variable to something clearer: x",
+  "make this sentence sound more professional: we broke the thing",
+  "write a polite message declining a meeting",
+  "help me write a short bio for a conference talk",
+  "proofread this paragraph for typos",
+  "what are some good questions to ask in a job interview?",
+  "how do I write a good README in general?",
+  "what should a good code review comment look like?",
+  "what's the Pomodoro technique?",
+  "give me tips for staying focused while coding",
+  "what is rubber duck debugging?",
+  "what's the difference between a junior and senior engineer?",
+  "what is technical debt?",
+  "what is the strangler fig pattern?",
+  "explain SOLID principles",
+  "what's the observer pattern?",
+  "what is a singleton and why is it disliked?",
+  "what is functional programming?",
+  "what are pure functions?",
+  "explain immutability",
+  "what's tail call optimization?",
+  "what is WebAssembly?",
+  "what are web workers?",
+  "what is a service worker?",
+  "what is the shadow DOM?",
+  "explain the virtual DOM",
+  "what is React reconciliation?",
+  "what does useMemo do in general?",
+  "what's the difference between useEffect and useLayoutEffect?",
+  "what are React keys for?",
+  "what's prop drilling?",
+  "what is a higher-order component?",
+  "what's the difference between controlled and uncontrolled inputs?",
+  "explain what server-side rendering means",
+  "what is static site generation?",
+  "what is GraphQL?",
+  "compare REST and gRPC",
+  "what is a websocket?",
+  "what is long polling?",
+  "explain rate limiting algorithms like token bucket",
+  "what is a bloom filter?",
+  "what's a trie?",
+  "explain Dijkstra's algorithm",
+  "what is dynamic programming?",
+  "solve two-sum in TypeScript",
+  "how does garbage collection work in V8?",
+  "what is a memory leak in JavaScript?",
+  "what's the difference between null and undefined?",
+  "what does Object.freeze do?",
+  "how do I use Array.prototype.flatMap?",
+  "what's optional chaining?",
+  "what does the nullish coalescing operator do?",
+  "what are tagged template literals?",
+  "what are JavaScript Symbols?",
+  "what is a WeakMap?",
+  "explain iterators and generators",
+  "what's the difference between map and forEach?",
+  "how does structuredClone work?",
+  "what is a Unix timestamp?",
+  "what is ISO 8601?",
+  "how does floating point rounding error happen?",
+  "why is 0.1 + 0.2 not 0.3?",
+  "what's base64 encoding?",
+  "what's the difference between UTF-8 and UTF-16?",
+  "what is a deadlock?",
+  "what's semantic versioning in general?",
+  "what is a monorepo, conceptually, compared to polyrepo?",
+  "what is the twelve-factor app?",
+  "what is a microservice?",
+  "what is an API gateway?",
+  "what's the difference between a library and a framework?",
+  "what does open source license MIT allow, generally?",
+  "what's the difference between MIT and Apache 2.0?",
+  "how do I write a good commit message in general?",
+  "what is trunk-based development?",
+  "what is pair programming?",
+  "explain test-driven development",
+  "what's the difference between a mock and a stub?",
+  "what is property-based testing?",
+  "what is mutation testing?",
+  "what's a good way to learn Rust?",
+  "should I learn Go or Rust next?",
+  "what is Deno?",
+  "what is Bun?",
+  "what's new in ECMAScript 2024?",
+  "what is the Temporal API?",
+  "what are Web Components?",
+  "explain what LLM tokens are",
+  "what is a vector database?",
+  "how does a neural network learn, simply?",
+  "what's a good stretch to do at my desk?",
+  "write a haiku about debugging",
+  "I finally fixed it, feels good",
+  "lol that was a weird bug",
+  "let's call it a day",
+  "see you tomorrow",
+  "never mind, I figured it out",
+  "can you explain that again more simply?",
+  "that's all for now"
+ ]
+}
