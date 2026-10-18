@@ -261,3 +261,45 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - This replaces C2-E4's 0.3212 / 0.5208. bank ∧ lex re-run: precision 0.0393, silence 0.4643, tokens 89.68 (C2-E2 said 0.0395 / 0.4702 / 88.8).
 - **Text fix:** C2-E8's sample has 79 human need events plus 26 trigger need events, not "79 need events (human and trigger)".
 - **Process fixes:** LOOKS.md created (no test look has ever been made). Model-step prompts committed in `benchmarks/memory-stream/PROMPTS.md`.
+
+## C3-E2 · 2026-10-18 · F16 distilled need gate (cross-world)
+- **Setup:** `methods_gate.py`. Logistic regression on 9 cheap features: stripped length, ask, request, informing, trigger, index hits, session novelty, best bank score, best lexical score.
+  - Trained on one world's teacher decisions: pull call, or judge non-empty.
+  - Tested on the other world's dev human and trigger turns against plan labels.
+- **Kill criterion (pre-run):** AUC vs plan labels < 0.80.
+- **Numbers (AUC):**
+
+  | Train → test | Teacher | AUC | Positive / negative turns |
+  |---|---|---|---|
+  | life → code | pull | 0.659 | 55 / 336 |
+  | life → code | judge | 0.673 | 55 / 336 |
+  | code → life | pull | 0.639 | 105 / 514 |
+  | code → life | judge | 0.627 | 105 / 514 |
+
+- **Verdict: dead.**
+  - Cheap structural and lexical features cap the need decision at AUC ≈ 0.63–0.70, which is the same ceiling as the raw lexical max score (C1-E2).
+  - The model judges it well: the pull gate calls on 93% of code need turns.
+  - The need decision needs semantics. Either a model in the loop (pull, or a warm daemon: a D15 question) or semantic features cheap enough for the hook.
+
+## C3-E3 · 2026-10-18 · F19 static word vectors; Eden on length-calibrated prompts
+- **F19 setup:** spaCy en_core_web_md vectors (20k × 300, from GitHub releases; not committed). idf-weighted mean over self-play exemplars. The test is the AUC of the turn's max score, need vs no-need, on dev human and trigger turns (strict).
+- **Kill criterion (pre-run):** AUC < 0.75.
+- **F19 AUC by negative-exemplar penalty m:**
+
+  | World | m = 0 | m = 0.5 | m = 1 |
+  |---|---|---|---|
+  | code | 0.663 | 0.636 | 0.593 |
+  | life | 0.615 | 0.564 | 0.512 |
+
+- **Verdict: dead.**
+  - Five hook-side mechanisms now cap near AUC 0.66–0.70 for "does this turn need memory?": lexical, exemplar, situation, distilled gate (C3-E2) and static vectors.
+  - On these streams the need decision is not available from surface or static-semantic features.
+- **StreamBench v1.1 (code-short):** prompts rewritten by sonnet to p50 15 words (was 21); prompts ≤ 3 words are 9.5%, against R6's 24%. The calibration is partial.
+- **Eden on v1.1 (dev, write store):**
+
+  | Stream | Recall | Silence | Precision | Store rows | UPS p50 / p99 |
+  |---|---|---|---|---|---|
+  | code-short | 0.0727 [0.017, 0.154] | 0.1161 [0.079, 0.145] | 0.0049 | 2,784 | 148.4 / 602.7 ms (loaded machine) |
+  | code (v1) | 0.0909 | 0.1042 | — | — | — |
+
+- **Verdict:** shorter prompts barely change Eden's false-fire rate (89% → 88%), so prompt length does not explain the gap with the real 31% (C1-E4). Next suspect: the real 31% was measured with P4.3's evidence gate, which is in shadow by default. A replay with `EDEN_FLAG_GATE_TAU=on` is running.
