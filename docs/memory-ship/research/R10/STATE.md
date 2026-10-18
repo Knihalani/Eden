@@ -1,6 +1,6 @@
 # R10 — research state (re-read at the start of every cycle)
 
-**Last updated:** end of cycle 2 (2026-10-18). Draft PR: https://github.com/Knihalani/Eden/pull/149. Branch: `claude/r10-retrieval-benchmark-sf1jho` (from `claude/eden-retrieval-research-lna5mi` + `research/r10-retrieval`).
+**Last updated:** cycle 3 in progress (2026-10-18). Draft PR: https://github.com/Knihalani/Eden/pull/149. Branch: `claude/r10-retrieval-benchmark-sf1jho` (from `claude/eden-retrieval-research-lna5mi` + `research/r10-retrieval`).
 
 The user's brief is `BRIEF.md`. In short: retrieval "basically perfect"; not only coding; no mundane methods; no local optima; a benchmark that reflects real use. The loop never ends, and this file is its memory. LEDGER.md is the append-only experiment log. LOOKS.md logs every test or holdout look.
 
@@ -63,8 +63,9 @@ Families differ in mechanism. Every kill criterion was written before its run.
 | F12 | Habituation (a row's own score history) | weak (C1-E2): silence +0.05–0.13 at a recall cost | kept only as a feature for F4/F5 |
 | F4 | Self-play exemplar bank (haiku exemplars, near-miss margin) | **frontier** (C1-E6) | passed on code; must pass on life |
 | F13 | Agent-pull memory: the host model calls `recall()` against a one-line memory index; the hook never injects (critic D1) | **dead on code by its kill line** (C3-E1: 28.2% calls on no-need); passes on life (16.7%). Its call gate survives as a teacher (F16) |
-| F16 | Distil the call gate into a hook-side need model: a per-user student on strip length, ask form, session novelty, index-entity hits and event class; the teacher is the pull or judge decision (critic C2 D1) | new | dead if AUC vs plan labels < 0.80, or silence < 0.70 at recall ≥ 0.30 on code |
+| F16 | Distil the call gate into a hook-side need model: a per-user student on strip length, ask form, session novelty, index-entity hits and event class; the teacher is the pull or judge decision (critic C2 D1) | **dead** (C3-E2): AUC 0.63–0.67 cross-world | dead if AUC vs plan labels < 0.80, or silence < 0.70 at recall ≥ 0.30 on code |
 | F17 | Prospective-memory agenda: at sleep, compile intentions with conditions (time window, person, place, plan step); the trigger lane checks conditions and does no retrieval (critic C2 D2) | new | dead if life trigger recall < 0.50 or > 20% of trigger negatives get a packet |
+| F19 | Static word-vector semantics on the hot path (spaCy md vectors × self-play exemplars) | **dead** (C3-E3): need-detection AUC 0.66 code, 0.62 life | — |
 | F18 | Conflict-triggered injection: the host drafts without memory, Eden injects only rows the draft contradicts or omits on a tracked slot (critic C2 D3) | new | dead if recall < 0.30 on need turns or > 10% of no-need turns get a packet | dead if it calls on > 25% of no-need human turns, or recall < 0.38 on the judge sample |
 | F14 | Negative-history pruning: cues common in the user's own past (mostly no-need) turns are removed, with `unless` features (critic D2) | **dead** (C2-E1) | dead if silence does not rise ≥ 0.20 absolute at recall ≥ 0.30 |
 | F15 | Situation tracking: slots (path prefix, command verb, package, person, next event) from tool calls and triggers; fire on a slot *change* into a keyed value (critic D3) | dead standalone (C2-E3); kept as a vote | dead if proactive + action recall < 0.30 or human silence < 0.60 |
@@ -72,6 +73,7 @@ Families differ in mechanism. Every kill criterion was written before its run.
 ## Graveyard
 
 - **Lexical τ gating as the silence decision** (C1-E2). AUC 0.66–0.70 for need vs no-need on realistic streams, so no τ gives both silence and recall. Lexical evidence survives only as one input to an AND or a learned gate.
+- **Cheap hook-side need detection, any mechanism** (C2–C3: lexical, exemplar, situation, distilled gate, static vectors). AUC caps at 0.62–0.70 on both worlds. Revisit only with a new *kind* of signal: a model in the loop, or sleep-time anticipation of the situation.
 - **F14 negative-history pruning** (C2-E1). It only moves along the frontier: +0.09 silence at recall ≥ 0.30.
 - **F15 situation entry, standalone** (C2-E3). Proactive 0.08.
 - **Hand-built evidence combinations** (C2-E4). They plateau at about 0.30 recall and 0.5–0.6 silence.
@@ -86,6 +88,19 @@ Families differ in mechanism. Every kill criterion was written before its run.
    - per-session leak-free sleep, to remove the strict delay (life ceiling 0.67);
    - a life labeler run;
    - the downstream-effect check (§4.7) to settle label strictness.
+
+## Cycle 3 findings so far (LEDGER C3-E1…E5)
+
+- Corrections from critic C2:
+  - on the same events, pull is 2.5× precision and +0.18 silence (code);
+  - F13 fails its kill line on code (28.2% calls on no-need turns);
+  - its cost is about 146 tokens per turn with the index.
+- **Downstream effect (C3-E4):**
+  - memory changes the outcome on 80% of plan-need turns (+0.97 on 0–3);
+  - labeler-only needs are half real (+0.53);
+  - **a wrong packet costs −0.40 on no-need turns;**
+  - a hook-side packet keeps about 30% of the available benefit.
+- **Incumbent with P4.3's gate on (C3-E5):** silence 0.21. It still fires on 79% of no-need turns, against the real 31%.
 
 ## Open items against the realism contract
 
