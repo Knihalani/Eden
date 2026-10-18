@@ -1,0 +1,306 @@
+{
+ "batch": "p01",
+ "host": "sonnet (claude-code subagent)",
+ "cases": [
+  {
+   "event": "life-s118-e015",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s087-e025",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s070-e006",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s106-e005",
+   "call": true,
+   "query": "basement kitchen setup appliances"
+  },
+  {
+   "event": "life-s140-e033",
+   "call": true,
+   "query": "dinner preferences Sam Leo allergies hotplate"
+  },
+  {
+   "event": "life-s038-e024",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s091-e008",
+   "call": true,
+   "query": "beta merchants feedback triage tool Notion Linear"
+  },
+  {
+   "event": "life-s007-e008",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s012-e014",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s098-e013",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s123-e009",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s012-e004",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s140-e009",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s141-e017",
+   "call": true,
+   "query": "Spanish class Carlos focus areas weaknesses homework"
+  },
+  {
+   "event": "life-s023-e017",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s098-e004",
+   "call": true,
+   "query": "dehumidifier purchase receipt warranty"
+  },
+  {
+   "event": "life-s106-e007",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s088-e038",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s072-e010",
+   "call": true,
+   "query": "podcast episode developer platform pricing summary"
+  },
+  {
+   "event": "life-s107-e013",
+   "call": true,
+   "query": "Mom Anjali contact Zoom WhatsApp call"
+  },
+  {
+   "event": "life-s053-e003",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s137-e022",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s091-e000",
+   "call": true,
+   "query": "Instant Payouts beta status"
+  },
+  {
+   "event": "life-s102-e008",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s127-e005",
+   "call": true,
+   "query": "bio headshot FinTech Toronto panel"
+  },
+  {
+   "event": "life-s087-e029",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s156-e000",
+   "call": true,
+   "query": "Leo Halloween costume allergy EpiPen"
+  },
+  {
+   "event": "life-s102-e016",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s087-e004",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s046-e031",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s005-e000",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s083-e000",
+   "call": true,
+   "query": "Leo sleepover Hannah Jun allergy bedtime"
+  },
+  {
+   "event": "life-s051-e002",
+   "call": true,
+   "query": "upcoming plans commitments next week"
+  },
+  {
+   "event": "life-s047-e009",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s108-e000",
+   "call": true,
+   "query": "Spanish level DELE Carlos grammar book"
+  },
+  {
+   "event": "life-s025-e014",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s028-e010",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s056-e008",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s078-e006",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s050-e007",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s101-e010",
+   "call": true,
+   "query": "Leo school drop-off morning routine"
+  },
+  {
+   "event": "life-s012-e018",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s115-e005",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s077-e017",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s015-e000",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s115-e028",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s026-e025",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s102-e013",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s133-e000",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s025-e028",
+   "call": true,
+   "query": "Priya reading preferences books mysteries"
+  },
+  {
+   "event": "life-s115-e000",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s120-e003",
+   "call": true,
+   "query": "data requests process failed payouts receiving bank"
+  },
+  {
+   "event": "life-s118-e013",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s002-e016",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s148-e000",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s063-e000",
+   "call": true,
+   "query": "Marcus Bell physiotherapist commute"
+  },
+  {
+   "event": "life-s102-e000",
+   "call": true,
+   "query": "Spanish Carlos lesson homework topics"
+  },
+  {
+   "event": "life-s027-e031",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "life-s017-e008",
+   "call": true,
+   "query": "Ottawa drive route Friday 401 Big Apple"
+  },
+  {
+   "event": "life-s072-e000",
+   "call": false,
+   "query": ""
+  }
+ ]
+}
