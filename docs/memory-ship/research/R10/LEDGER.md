@@ -327,3 +327,18 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   3. **Wrong bullets hurt outcomes:** the vote packet is −0.40 on no-need turns. Precision and silence are outcome metrics, not only token costs.
   4. **A hook-side packet keeps only about 30% of the available benefit** on need turns: +0.30 of +0.97.
 - **Caveats:** one responder run per condition; n = 15 per small group; all models are Claude.
+
+## C3-E5 · 2026-10-18 · Eden with P4.3's evidence gate on (`EDEN_FLAG_GATE_TAU=on`), code world
+- **Replay:** 110 sessions, 0 non-zero exits, store 2,737 rows, 500 packets (default flags: 548). UPS p50 216.1 ms, p99 591.2 ms on a loaded machine: unverified.
+- **Numbers (dev, write store):**
+
+  | Flags | Recall | Proactive | Precision | Silence | Tokens |
+  |---|---|---|---|---|---|
+  | gate.tau = on | 0.0818 [0.015, 0.167] | 0.0 | 0.0089 | 0.2054 [0.162, 0.246] | 46.1 |
+  | default (shadow) | 0.0909 | 0.0769 | 0.0062 | 0.1042 | 61.7 |
+
+- **Verdict:**
+  - The gate doubles silence at equal recall. It still fires on 79% of no-need human turns, against the real-negative 31% (C1-E4).
+  - Length (C3-E3) and the gate together do not close the gap.
+  - Remaining suspect: the negative mix. Acks are 10% of our dev no-need turns, while real prompts are 24% tiny. Next is the plan's ack share.
+  - The P4.3 configuration is the fairer incumbent and is listed as such from now on.
