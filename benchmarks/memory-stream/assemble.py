@@ -161,7 +161,11 @@ def main():
                         cov2 = coverage(items[i]["text"], best["text_all"])
                         problems.append((e["id"], "state", f"{i} {ch} cov {cov:.2f} (any event {cov2:.2f})"))
                         if cov2 < STATE_MIN:
-                            continue
+                            # an episode ("Riya asked X; the agent gave Y") is stated by the turn as a whole
+                            whole = coverage(items[i]["text"], " ".join(x["text_all"] for x in span))
+                            if items[i].get("kind") != "episode" or whole < STATE_MIN:
+                                continue
+                            best = e
                     best["labels"]["states"].append(i)
             # --- need leak
             lab = e["labels"]
