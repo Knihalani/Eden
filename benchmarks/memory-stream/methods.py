@@ -214,7 +214,8 @@ class Lex(Base):
 class Bank(Lex):
     """F4: prompt-to-exemplar matching. Each row carries sleep-time self-play exemplars (selfplay.py): situations
     that need it (`pos`) and near misses (`neg`). A row fires when the turn's tf-idf cosine to its best `pos` is
-    ≥ tau and beats its best `neg` by `margin`. Rows without exemplars never fire."""
+    ≥ tau and beats its best `neg` by `margin`. Rows without exemplars never fire. With `ltau`, the row's lexical score
+    (with `when=1`, the compiled cues) must also reach `ltau`: two kinds of evidence must agree."""
 
     def __init__(self, rows, stream, items, cov, **kw):
         super().__init__(rows, stream, items, cov, **kw)
@@ -258,6 +259,10 @@ class Bank(Lex):
             sn = max((self._cos(q, x) for x in v[1]), default=0.0)
             if sp >= tau and sp - sn >= margin:
                 out[r["id"]] = sp
+        ltau = self.kw.get("ltau")
+        if ltau is not None and out:
+            lex = Lex.scores(self, e, now)
+            out = {i: v for i, v in out.items() if lex.get(i, 0.0) >= ltau}
         return out
 
     def packet(self, e, now):
