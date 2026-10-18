@@ -31,8 +31,9 @@ const IDENTIFIER_SHAPES = [
   /^[a-z]\w*_\w+$/i, // a symbol with an underscore: user_id
 ];
 /**
- * A name that starts with a capital and has an inner one: a class (`ClerkProvider`) as often as a product named in prose
- * ("TypeScript", "GitHub", "BullMQ"). Before P4.3's gate it is an identifier; the gate reads it as a word (`strict`).
+ * A name that starts with a capital and has an inner one: a class (`ClerkProvider`) as often as a product named in
+ * prose ("TypeScript", "GitHub", "BullMQ"). Before P4.3's gate it is an identifier; the gate reads it as a word
+ * (`strict`).
  */
 const CAPITALIZED_SYMBOL = /^[A-Z][a-z]+[A-Z]\w*$/;
 /** A product named like a script ("Next.js", "Node.js"), a word to the gate; a file is lowercase (`next.config.js`). */
