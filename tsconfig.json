@@ -14,6 +14,7 @@
     "apps/site/src",
     "benchmarks/memory-scale",
     "benchmarks/memory-long-horizon",
+    "benchmarks/memory-stream",
     "scripts",
     "src"
   ],
