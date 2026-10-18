@@ -172,6 +172,10 @@ def score(events, packets, cov, items, stream):
                 b["full"] += needs <= covered
                 b["need_bullets"] += len(pk)
                 b["need_needed_b"] += nb
+                nt = "nt:" + str(lab.get("need_type"))
+                b.setdefault(nt, [0, 0.0])
+                b[nt][0] += 1
+                b[nt][1] += r
                 if lab.get("need_type") in ("proactive", "event", "action"):
                     b["pro_n"] += 1
                     b["pro"] += r
@@ -190,6 +194,7 @@ def score(events, packets, cov, items, stream):
              "silence": d(b["neg_silent"], b["neg_n"]), "neg_events": b["neg_n"],
              "redundant": d(b["redundant_b"], b["bullets"]), "stale": d(b["stale_p"], b["packets"]),
              "tokens": d(b["tokens"], b["events"]), "bullets": b["bullets"]}
+        r["by_need_type"] = {k[3:]: [v[0], round(v[1] / v[0], 3)] for k, v in b.items() if k.startswith("nt:")}
         if name == "human" and b["need_n"] and b["neg_n"]:
             rates = {}
             for rate in (0.05, 0.08, 0.15):
