@@ -338,6 +338,8 @@ def main():
     ap.add_argument("--split", default="dev")
     ap.add_argument("--sleep-tag", default="out")
     ap.add_argument("--strict", action="store_true", help="leak-free sleep store: rows visible after their batch")
+    ap.add_argument("--sample", choices=["all", "judge"], default="all",
+                    help="judge: score only the judge sample's events (same events as judge and pull)")
     ap.add_argument("--ci", action="store_true", help="bootstrap 95%% intervals (human recall, silence, precision)")
     ap.add_argument("--labels", default="plan", choices=["plan", "union"],
                     help="plan: the needs the stream was written to; union: plus the independent labeler's")
@@ -360,6 +362,10 @@ def main():
     times = json.load(open(os.path.join(run, "times.json"))) if os.path.exists(os.path.join(run, "times.json")) else {}
     if times:
         events = [e for e in events if e["id"] in times]
+    if a.sample == "judge":
+        import judge
+        jp = judge.packets(a.world, "sleep")
+        events = [e for e in events if e["id"] in jp]
     results = {}
     import methods
     for name in a.systems.split():
@@ -398,7 +404,7 @@ def main():
                 if kw.get("mix"):
                     q = q + " " + e["text_all"]
                 sc = lex.scores(dict(e, text_all=q), clock(e))
-                ids = sorted(sc, key=lambda i: -sc[i])[: int(kw.get("k", 2))]
+                ids = sorted(sc, key=lambda i: (-sc[i], i))[: int(kw.get("k", 2))]
                 pk[e["id"]] = [(lex.by_id[i]["text"], lex.by_id[i]["covers"]) for i in ids]
             results[f"{name}@{a.store}"] = score(pev, pk, cov, items, stream)
             if a.ci:

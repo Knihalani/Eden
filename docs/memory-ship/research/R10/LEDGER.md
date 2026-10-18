@@ -236,3 +236,28 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - The life judge ceiling is lower than code's (0.57 vs 0.69 recall). Personal needs are harder even for a strong model with the whole store.
   - The pull's retrieval step (lexical on its query) is the weak half: recall about half the judge's.
   - Life has no independent labeler run yet, so union = plan.
+
+## C3-E1 · 2026-10-18 · Corrections from critic C2 (`R10/critic-c2.md`)
+- **Same-event comparison** (`score.py --sample judge`, code dev, strict, plan labels; 165 human events):
+
+  | Method | Recall | Precision | Silence | Precision at 8% base | False-packet rate |
+  |---|---|---|---|---|---|
+  | bank ∧ lex ltau=2 | 0.3273 | 0.0796 | 0.4909 | 0.0233 | 0.5091 |
+  | vote + strip | 0.3121 | 0.0816 | 0.5545 | 0.0245 | 0.4455 |
+  | pull k=2 | 0.4667 | 0.2025 | 0.7364 | 0.0738 | 0.2636 |
+  | judge | 0.6909 | 0.2552 | 0.6364 | 0.0886 | 0.3636 |
+
+  - C2-E5's "5× precision, +0.27 silence" compared a sample (1:2 need to no-need) with full dev (1:6). On the same events the gain is 2.5× precision and +0.18 silence (code). The critic measured life at 2.1× and +0.26.
+  - **At an 8% base rate, pull's bullets are still 93% unneeded.**
+- **F13's pre-registered kill line:**
+  - The host called on 31/110 = **28.2%** of no-need code turns. That is above the 25% bar, so **F13 is dead on code by its own criterion.** C2-E5's 26.4% was the false-packet rate: 2 calls returned no rows.
+  - Life: 18/108 = 16.7%, which passes.
+  - The call *gate* stays valuable. It calls on 93% of code need turns. Judge picks gated by the pull call reach recall 0.6545 at silence 0.8273 on code (critic's run). This becomes a teacher for D1, below.
+- **Cost recount:**
+  - The memory index (p50 97 tokens code, 111 life) sits in every turn's context, so pull's per-event context cost is about 146 tokens on code, against 89.7 for bank ∧ lex.
+  - Calls are extra model steps on about 33% of human turns at an 8% base rate.
+- **Determinism:** `Vote`, `Bank` and `Situation` ordered ties by set iteration. Fixed: ties are now broken by row id.
+  - Vote + strip, deterministic: recall 0.3121, precision 0.0394, silence 0.5208, identical under PYTHONHASHSEED 0/1/2.
+  - This replaces C2-E4's 0.3212 / 0.5208. bank ∧ lex re-run: precision 0.0393, silence 0.4643, tokens 89.68 (C2-E2 said 0.0395 / 0.4702 / 88.8).
+- **Text fix:** C2-E8's sample has 79 human need events plus 26 trigger need events, not "79 need events (human and trigger)".
+- **Process fixes:** LOOKS.md created (no test look has ever been made). Model-step prompts committed in `benchmarks/memory-stream/PROMPTS.md`.

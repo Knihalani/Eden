@@ -29,7 +29,7 @@ Human turns, plan labels, coverage v2, strict (leak-free) sleep visibility. 95% 
 | incumbent | eden (plugin today, write store) | 0.091 | 0.077 | 0.006 | 0.104 | 61.7 |
 | hook frontier | bank τ .2 ∧ lex+when ltau 2 | 0.327 | 0.154 | 0.040 | 0.470 | 88.8 |
 | hook frontier | vote (bank, lex, situation; strip) | 0.321 | 0.231 | 0.041 | 0.521 | 75.8 |
-| **pull frontier** | F13 agent-pull k=2 (sample) | **0.467** | 0.231 | **0.203** | **0.736** | 49.0 |
+| pull point (same events, C3-E1) | F13 agent-pull k=2 (sample); fails its 25% call line on code (28.2%) | 0.467 | 0.231 | 0.203 | 0.736 | ≈146 with the index |
 | ceiling | judge (sample) | 0.691 | 0.462 | 0.255 | 0.636 | 65.0 |
 | ceiling | oracle-need (strict sleep) | 0.824 | 0.615 | 1.0 | 1.0 | 9.3 |
 
@@ -62,7 +62,10 @@ Families differ in mechanism. Every kill criterion was written before its run.
 | F11 | LLM write path at sleep with `when` cues (SLEEP-SPEC) | **alive** (C1-E2, E6): proactive 0.08 → 0.31 strict | dead if, under strict visibility on both worlds, recall does not beat lex on the same store by ≥ 0.05 |
 | F12 | Habituation (a row's own score history) | weak (C1-E2): silence +0.05–0.13 at a recall cost | kept only as a feature for F4/F5 |
 | F4 | Self-play exemplar bank (haiku exemplars, near-miss margin) | **frontier** (C1-E6) | passed on code; must pass on life |
-| F13 | Agent-pull memory: the host model calls `recall()` against a one-line memory index; the hook never injects (critic D1) | **frontier on both worlds** (C2-E5, E8); borderline on its 25% call line on code | dead if it calls on > 25% of no-need human turns, or recall < 0.38 on the judge sample |
+| F13 | Agent-pull memory: the host model calls `recall()` against a one-line memory index; the hook never injects (critic D1) | **dead on code by its kill line** (C3-E1: 28.2% calls on no-need); passes on life (16.7%). Its call gate survives as a teacher (F16) |
+| F16 | Distil the call gate into a hook-side need model: a per-user student on strip length, ask form, session novelty, index-entity hits and event class; the teacher is the pull or judge decision (critic C2 D1) | new | dead if AUC vs plan labels < 0.80, or silence < 0.70 at recall ≥ 0.30 on code |
+| F17 | Prospective-memory agenda: at sleep, compile intentions with conditions (time window, person, place, plan step); the trigger lane checks conditions and does no retrieval (critic C2 D2) | new | dead if life trigger recall < 0.50 or > 20% of trigger negatives get a packet |
+| F18 | Conflict-triggered injection: the host drafts without memory, Eden injects only rows the draft contradicts or omits on a tracked slot (critic C2 D3) | new | dead if recall < 0.30 on need turns or > 10% of no-need turns get a packet | dead if it calls on > 25% of no-need human turns, or recall < 0.38 on the judge sample |
 | F14 | Negative-history pruning: cues common in the user's own past (mostly no-need) turns are removed, with `unless` features (critic D2) | **dead** (C2-E1) | dead if silence does not rise ≥ 0.20 absolute at recall ≥ 0.30 |
 | F15 | Situation tracking: slots (path prefix, command verb, package, person, next event) from tool calls and triggers; fire on a slot *change* into a keyed value (critic D3) | dead standalone (C2-E3); kept as a vote | dead if proactive + action recall < 0.30 or human silence < 0.60 |
 
