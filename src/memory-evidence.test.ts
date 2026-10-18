@@ -93,12 +93,25 @@ describe("P4.3 iteration (dev and R8's silence set): names in prose and one rare
     const mem = store();
     const rule = "Prefer Rustacean over Gopherish for new scripts.";
     mem.remember(rule, { kind: "fact" });
+    const before = process.env.EDEN_MEMORY_TAU;
     process.env.EDEN_MEMORY_TAU = "0.5";
     try {
       expect(mem.relevant("write a Rustacean function that flattens a nested array")).toEqual([]);
       expect(texts(mem.relevant("which language do we prefer for new scripts, Rustacean?"))).toEqual([rule]);
     } finally {
-      delete process.env.EDEN_MEMORY_TAU;
+      if (before === undefined) delete process.env.EDEN_MEMORY_TAU;
+      else process.env.EDEN_MEMORY_TAU = before;
+    }
+  });
+
+  test("two words that share letters are two words; a compound's parts are one (review round 5)", () => {
+    for (const [fact, cue] of [
+      ["Reporting listens on port 9443.", "reporting port?"],
+      ["The login log rotates daily.", "login log?"],
+    ]) {
+      const mem = store();
+      mem.remember(fact!, { kind: "fact" });
+      expect(texts(mem.relevant(cue!))).toEqual([fact]);
     }
   });
 

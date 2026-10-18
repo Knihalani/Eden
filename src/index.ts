@@ -523,16 +523,42 @@ function hayParts(text: string, cue: SituationCue | undefined, corpus: Corpus, s
 }
 
 /**
+ * The words a prompt's terms come from (`situatedScore`'s `words`): each term maps to one term of the whitespace token
+ * that gave it, so a compound's parts are one word with it ("TypeScript" gives typescript, type and script;
+ * `vitest.config.ts` its dotted names and parts), and two tokens that share a term are one word. Read as `hayParts`
+ * reads the prompt (`split`). A context part's term that no prompt token gave is a word of its own.
+ */
+function promptWords(text: string, split: boolean): Map<string, string> {
+  const parent = new Map<string, string>();
+  const find = (term: string): string => {
+    let root = term;
+    while (parent.get(root) !== root) root = parent.get(root)!;
+    return root;
+  };
+  for (const raw of String(text ?? "").split(/\s+/)) {
+    const terms = [...(split ? promptTerms(raw) : cueTerms(queryHay(raw)))];
+    for (const term of terms) if (!parent.has(term)) parent.set(term, term);
+    for (const term of terms.slice(1)) parent.set(find(term), find(terms[0]!));
+  }
+  return new Map([...parent.keys()].map((term) => [term, find(term)]));
+}
+
+/**
  * A row's scores against the parts (A7 §3, D17): each part's BM25F over the terms it shares with the row, the rarest up
  * to its mass. `score` weighs each part by the turn mode (the ranking, A7 §3); `sum` is the parts' scores unweighted,
  * which the gate reads against τ_repo (A7 §4: "the gate sees the per-part scores as well as the sum"). τ starts at R1's
  * strict point, measured on a cue of the prompt, the previous turn and the paths taken together (R1 M7). And the parts
  * that give the row MEDIUM evidence (A7 §4): a rare plain word of the prompt (df ≤ 50 among the rows the reader sees; a
  * commoner one is WEAK, which ranks only) or any word of a context part (`q_prev`'s are rare already). `words` counts
- * the distinct words matched, a compound's parts with it ("TypeScript" also gives "type" and "script"): the gate never
- * admits on one word (`mediumAdmits`).
+ * the distinct words matched (`promptWords`: a compound's parts are one word with it): the gate never admits on one
+ * word (`mediumAdmits`).
  */
-function situatedScore(fields: RowFields, parts: readonly HayPart[], corpus: Corpus) {
+function situatedScore(
+  fields: RowFields,
+  parts: readonly HayPart[],
+  corpus: Corpus,
+  wordOf: ReadonlyMap<string, string> = new Map(),
+) {
   const terms = rowTerms(fields);
   const medium = new Set<CuePart>();
   const hit = new Set<CuePart>();
@@ -552,8 +578,7 @@ function situatedScore(fields: RowFields, parts: readonly HayPart[], corpus: Cor
     score += part.weight * own;
     sum += own;
   }
-  const all = [...matched];
-  const words = all.filter((term) => !all.some((other) => other !== term && other.includes(term))).length;
+  const words = new Set([...matched].map((term) => wordOf.get(term) ?? term)).size;
   return { score, sum, medium, hit, words };
 }
 
@@ -2381,6 +2406,7 @@ export class AgentMemory {
     gate: boolean,
   ) {
     const parts = hayParts(text, cue, view, split);
+    const wordOf = gate ? promptWords(text, split) : new Map<string, string>();
     const hay = new Set(parts.flatMap((part) => [...part.hay]));
     const promptIds = identifierTokens(text);
     const promptStrict = gate ? identifierTokens(text, true) : promptIds;
@@ -2395,7 +2421,7 @@ export class AgentMemory {
         /\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text)
       )
         continue;
-      const { score, sum, medium, hit, words } = situatedScore(c.fields, parts, view);
+      const { score, sum, medium, hit, words } = situatedScore(c.fields, parts, view, wordOf);
       const strong = strongEvidence(c.rec, promptIds, cue);
       const strongGate = gate && strong && strongEvidence(c.rec, promptStrict, cue, true);
       if (strong || hit.size) rows.push({ rec: c.rec, score, sum, medium, strong, strongGate, words, hit });
