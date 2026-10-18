@@ -1,0 +1,726 @@
+{
+ "batch": "life-sp-b10",
+ "generator": "haiku (claude-code subagent)",
+ "rows": {
+  "life-sleep-b09:m0009": {
+   "pos": [
+    "Should I call Farah about the taxes this week?",
+    "[Message from Farah Khan] What's the status of our return?",
+    "When do we get our tax refund?",
+    "Is Sam's CRA balance still open?",
+    "Email the accountant about the childcare claim.",
+    "What's the status of our taxes this year?"
+   ],
+   "neg": [
+    "Best tax software for freelancers?",
+    "How do I claim a home office on taxes?",
+    "CRA My Account login help?",
+    "Average accountant rates in Toronto?",
+    "When is the RRSP deadline?",
+    "Draft a thank-you to the dentist."
+   ]
+  },
+  "life-sleep-b09:m0010": {
+   "pos": [
+    "What bills do I need to pay this week?",
+    "[Scheduled 09:00] Anything overdue to pay?",
+    "Is the accountant's invoice paid?",
+    "Send money for the tax balance.",
+    "What do we owe right now?",
+    "[Message from Sam] Did you pay my CRA bit?"
+   ],
+   "neg": [
+    "Pay the Hydro bill.",
+    "Typical bookkeeping fee for a household?",
+    "Send Priya an etransfer for dinner, $40.",
+    "What's the balance on the Visa?",
+    "Pay for Leo's school lunch account.",
+    "Is the phone bill due Friday?"
+   ]
+  },
+  "life-sleep-b09:m0011": {
+   "pos": [
+    "List what I need to do this week.",
+    "Give me the summary of the Vancouver trip.",
+    "Give me the options for a cottage weekend.",
+    "What should I do about the car's oil change?",
+    "Compare the two Lisbon flight options.",
+    "Give me a rundown of the kids' schedule."
+   ],
+   "neg": [
+    "Write me a full ten-day Lisbon itinerary with every detail.",
+    "Walk me through setting up a Nest thermostat, step by step.",
+    "Explain the full history of the Lumen Pay product in detail.",
+    "List every cafe in Leslieville with reviews.",
+    "Give me all the steps for a passport renewal in detail.",
+    "Write a full guide to sourdough baking for beginners."
+   ]
+  },
+  "life-sleep-b09:m0012": {
+   "pos": [
+    "Where do my receipts go?",
+    "Did the receipts get filed this week?",
+    "[Scheduled Monday 08:00] Receipts sweep",
+    "Find the Shoppers receipt from last Thursday.",
+    "How much did we spend on groceries this month?",
+    "Put this receipt in the household expenses."
+   ],
+   "neg": [
+    "Best receipt scanner app?",
+    "How do I return a Costco item without a receipt?",
+    "Do receipts count for a home-office tax deduction?",
+    "Who fixes receipt printers near Queen?",
+    "How do I organise my email inbox?",
+    "Print a receipt template for my lemonade stand."
+   ]
+  },
+  "life-sleep-b09:m0013": {
+   "pos": [
+    "[Message from Sam] Are we making pesto with almonds or cashews?",
+    "What snacks can I pack for Leo's camp?",
+    "Order a granola bar for Leo's lunch.",
+    "Check if this dessert is safe for Leo.",
+    "Recommend a snack for Leo's lunch box.",
+    "Any Thai dishes for the family I should avoid nuts in?"
+   ],
+   "neg": [
+    "Best almond milk brand?",
+    "Walnut bread recipe?",
+    "Is peanut butter safe for dogs?",
+    "What nuts go in trail mix for hikers?",
+    "Cashew cream sauce recipe for me?",
+    "How do EpiPens work for adults?"
+   ]
+  },
+  "life-sleep-b09:m0014": {
+   "pos": [
+    "[Calendar] Payouts Health check in 10 min",
+    "Send me the link to the payouts health dashboard.",
+    "Pull the failed payout reasons from last week.",
+    "What's the success rate this week?",
+    "[Scheduled Monday 09:25] Dashboard check",
+    "Did the median payout time improve?"
+   ],
+   "neg": [
+    "Best Looker tutorial for beginners?",
+    "What's the Google Analytics link for our site?",
+    "Ideas for a team-goals dashboard in Notion?",
+    "Is the payments API down on the status page?",
+    "How do I make a dashboard in Tableau?",
+    "What's the Monday standup time?"
+   ]
+  },
+  "life-sleep-b09:m0015": {
+   "pos": [
+    "How do I get downtown on the 501 this week?",
+    "[Scheduled 06:50] Transit update, is the streetcar running?",
+    "Is the Line 2 running Thursday night?",
+    "Should I take the shuttle to work?",
+    "What's the fastest way to Riverdale without the streetcar?",
+    "[Calendar] Commute to office, streetcar disrupted?"
+   ],
+   "neg": [
+    "Bloor subway schedule on Sunday?",
+    "Bike route from Leslieville to Queen West?",
+    "Uber estimate to Pearson airport?",
+    "Is the Dundas streetcar on time?",
+    "Toronto Zoo trip, which bus?",
+    "Best coffee on Queen East near a stop?"
+   ]
+  },
+  "life-sleep-b09:m0016": {
+   "pos": [
+    "Who's doing Leo's drop-off on Friday the 12th?",
+    "[Message from Sam] Can you do drop-off on Friday?",
+    "Is Sam free for the picnic on the 25th?",
+    "What's on Sam's school calendar this June?",
+    "[Calendar] Commencement night, dinner plan",
+    "Book a sitter for the evening of June 25."
+   ],
+   "neg": [
+    "Best Friday drop-off time for a school?",
+    "Book a dentist for Friday the 12th.",
+    "What does a school commencement ceremony usually cover?",
+    "What's the camp plan for Leo's PD day?",
+    "Does Riverdale CI have a sports league?",
+    "Best coffee near Riverdale Park?"
+   ]
+  },
+  "life-sleep-b09:m0017": {
+   "pos": [
+    "Can we make the class picnic on the 25th?",
+    "[Message from Ms. Alvarez] Picnic on Thursday, who's coming?",
+    "Should I RSVP for Leo's picnic?",
+    "Send a note to the class about the picnic.",
+    "What's on for Leo the evening of June 25?",
+    "Book a babysitter for the picnic night."
+   ],
+   "neg": [
+    "Best potluck dishes for a school picnic?",
+    "How long is a school picnic usually?",
+    "Picnic blankets on sale at Canadian Tire?",
+    "Weather on June 25 in Toronto?",
+    "Plan a Canada Day picnic at Riverdale Park.",
+    "Where to buy a cake for a graduation party?"
+   ]
+  },
+  "life-sleep-b09:m0018": {
+   "pos": [
+    "What's a quick way to summarize these notes?",
+    "Is it going to rain Friday?",
+    "Remind me to pay the Hydro bill.",
+    "Give me the times for the kids' swim lessons.",
+    "List the ingredients for pancakes.",
+    "Quick check: did Leo's form go in?"
+   ],
+   "neg": [
+    "What's the best time to visit the Distillery?",
+    "Help me brainstorm names for a puppy.",
+    "Explain how the subjunctive works in Spanish.",
+    "What questions should I ask a new landlord?",
+    "How do I start a sourdough starter?",
+    "Check my calendar and suggest a time for coffee."
+   ]
+  },
+  "life-sleep-b09:m0019": {
+   "pos": [
+    "Help me prep my performance review wins.",
+    "What did I accomplish on the launch?",
+    "Add this to my wins record.",
+    "[Message from Tom] What were your wins this half?",
+    "Draft a summary of the payouts launch for my review.",
+    "What were the big moments of May?"
+   ],
+   "neg": [
+    "What wins should a product manager list on LinkedIn?",
+    "Write a thank-you card for my team lead.",
+    "How do I write a good self-review generally?",
+    "How many bugs did we close last sprint?",
+    "Wins for a kids' soccer season summary?",
+    "What's a good award for a team of engineers?"
+   ]
+  },
+  "life-sleep-b09:m0020": {
+   "pos": [
+    "Is the next reno payment coming up?",
+    "[Message from Nate] Can we get the draw this week?",
+    "Is there enough in the joint account for the contractor?",
+    "Pay the progress draw before Wednesday.",
+    "What's the next kitchen payment?",
+    "[Scheduled Tuesday 09:00] Reno payment due tomorrow"
+   ],
+   "neg": [
+    "Typical contractor deposit for a kitchen?",
+    "How do I compare two contractor quotes?",
+    "Is Sam's paycheque in the joint account yet?",
+    "Pay the Telus bill.",
+    "How do I set up a joint bank account?",
+    "Budget for a dining room table?"
+   ]
+  },
+  "life-sleep-b09:m0021": {
+   "pos": [
+    "[Message from Priya] My landlord raised the rent, what do I do?",
+    "Help Priya write a letter about her rent.",
+    "Is a 7% rent hike allowed in Quebec?",
+    "How do I respond to my landlord's increase notice?",
+    "Draft a note refusing the rent increase for Priya.",
+    "What's the legal limit for rent hikes in Montreal?"
+   ],
+   "neg": [
+    "Best neighbourhoods to rent in Montreal?",
+    "Rent for a two-bedroom on the Plateau?",
+    "How to find a sublet in Montreal?",
+    "Draft a thank-you to Priya for dinner.",
+    "Priya's birthday gift ideas?",
+    "Montreal bagel shops ranked?"
+   ]
+  },
+  "life-sleep-b09:m0022": {
+   "pos": [
+    "[Message from Hannah] What should I do if Biscuit howls?",
+    "Biscuit's barking at the fire trucks, help.",
+    "Hannah offered to dog-sit, what do I tell her?",
+    "Explain to Leo why Biscuit howls.",
+    "[Scheduled 17:00] Hannah check-in about the dog",
+    "Ellie wants to know why Biscuit sings, what do I say?"
+   ],
+   "neg": [
+    "Why do dogs howl at the moon?",
+    "Best dog whistle for training?",
+    "Fire truck toy for a seven-year-old?",
+    "Hannah's kids' birthday party ideas?",
+    "How do I teach a dog to sit?",
+    "Is it normal for a kid to sleepwalk sometimes?"
+   ]
+  },
+  "life-sleep-b09:m0023": {
+   "pos": [
+    "Text Hannah about feeding Biscuit while we're away.",
+    "[Message from Hannah] Are you still needing a dog sitter?",
+    "Draft a message to Hannah about Biscuit in July.",
+    "Should I pay Hannah for dog-sitting?",
+    "Arrange the dog sitter for our trip.",
+    "What dates should I give Hannah for Biscuit?"
+   ],
+   "neg": [
+    "Good dog-sitter app in Toronto?",
+    "Text Priya about the July picnic.",
+    "How much does a dog sitter charge per day in Toronto?",
+    "What to pack for a dog sitter's house visit?",
+    "Is Biscuit allowed on the TTC?",
+    "Send Hannah a birthday text."
+   ]
+  },
+  "life-sleep-b09:m0024": {
+   "pos": [
+    "Fill in the vet intake form for Biscuit.",
+    "[Message from Riverside Vet] We need Biscuit's vaccine dates.",
+    "When is Biscuit's next rabies shot?",
+    "Send the old vet the transfer request.",
+    "What's Biscuit's birthday for the vet form?",
+    "Find Biscuit's vaccination PDF."
+   ],
+   "neg": [
+    "Biscuit's favourite toy brand?",
+    "Is Riverside Park dog-friendly?",
+    "What do I tell a new vet about my dog's diet?",
+    "Dog food brands for beagles?",
+    "Best dog insurance in Canada?",
+    "How often should I brush a beagle's teeth?"
+   ]
+  },
+  "life-sleep-b09:m0025": {
+   "pos": [
+    "Who's the principal for the school email?",
+    "[Message from the school portal] New notice for Leo",
+    "Pay the school fee on School Cash.",
+    "Where do I check Leo's school updates?",
+    "Draft a note to the principal about a bus change.",
+    "Edsby says a form is due, what do I do?"
+   ],
+   "neg": [
+    "Best Grade 2 lunch box for a seven-year-old?",
+    "How to talk to my kid's teacher about bullying?",
+    "Toronto school board holiday calendar?",
+    "Edsby app not loading, how to fix?",
+    "Alternatives to online school payment systems?",
+    "Good school bag for a second grader?"
+   ]
+  },
+  "life-sleep-b09:m0026": {
+   "pos": [
+    "Can I help as a volunteer for the zoo trip?",
+    "[Message from Ms. Alvarez] Who can chaperone the zoo visit?",
+    "Is the zoo permission form sorted?",
+    "Pay for Leo's zoo day.",
+    "What do I need to do for the Grade 2 zoo trip?",
+    "The zoo trip is coming up, any forms?"
+   ],
+   "neg": [
+    "Best time to visit the Toronto Zoo in summer?",
+    "How much are Toronto Zoo tickets for kids?",
+    "Zoo animal facts for a seven-year-old?",
+    "Ontario Science Centre admission price?",
+    "What's the Riverdale Farm petting zoo like?",
+    "How to get to the Metro Zoo by GO bus?"
+   ]
+  },
+  "life-sleep-b09:m0027": {
+   "pos": [
+    "Does Leo need to return his school library books?",
+    "[Message from the school] Lost and found is going away, what's left?",
+    "Leo's library book is missing, what now?",
+    "Do Leo's books need to go back this Friday?",
+    "Should I label Leo's water bottle for lost and found?",
+    "Pick up Leo's lost jacket before Monday."
+   ],
+   "neg": [
+    "Public library overdue fine rate in Toronto?",
+    "Where to buy a lost-and-found tag?",
+    "Pape branch library hours on Saturday?",
+    "Best summer reading list for Grade 2?",
+    "Label maker for kids' clothes?",
+    "Lost my phone, how do I find it?"
+   ]
+  },
+  "life-sleep-b09:m0028": {
+   "pos": [
+    "Do I need to volunteer for sports day?",
+    "When do report cards come out?",
+    "What's the last day of school for Leo?",
+    "Sign up for the summer reading club.",
+    "[Scheduled 08:00] School events this month",
+    "What's happening at school on the rain date?"
+   ],
+   "neg": [
+    "Best sports day games for a seven-year-old?",
+    "How to write a kind report card comment?",
+    "Summer reading list picks for a seven-year-old?",
+    "What's the weather for the June 17 weekend?",
+    "Grab sunscreen for a field trip?",
+    "Rain date policy for outdoor events?"
+   ]
+  },
+  "life-sleep-b09:m0029": {
+   "pos": [
+    "[Calendar] Payouts GA prep in 30 min",
+    "Who picks Leo up Friday the 26th at noon?",
+    "Can I leave work early Friday?",
+    "Move the GA prep so I can get Leo.",
+    "[Message from Sam] Early dismissal Friday, can you get him?",
+    "Plan Leo's pickup on the last day of school."
+   ],
+   "neg": [
+    "Best lunch spots near King Street West on Friday?",
+    "Is there a Friday night movie at Greenwood?",
+    "Friday meeting with Tom about the roadmap.",
+    "What's the GA checklist for the next release?",
+    "Sam's Friday schedule at the high school?",
+    "Sign Leo up for an afternoon swim on Friday."
+   ]
+  },
+  "life-sleep-b09:m0030": {
+   "pos": [
+    "Book lunch for the team next Thursday, eight people.",
+    "[Message from Aisha] Where are we going for the beta lunch?",
+    "Reserve a corner table for eight on Thursday.",
+    "What's a good spot near King West for eight?",
+    "Lunch for the payouts crew, can you book?",
+    "[Scheduled Tuesday 09:00] Team lunch reservation due"
+   ],
+   "neg": [
+    "Best South Indian restaurant in Toronto for a date?",
+    "Book a table for two in Liberty Village tonight.",
+    "Pai's delivery menu prices?",
+    "Best team lunch ideas in Toronto for 15 people?",
+    "What time does Planta open?",
+    "Thursday lunch with Priya at Bar Isabel?"
+   ]
+  },
+  "life-sleep-b09:m0031": {
+   "pos": [
+    "The basement dehumidifier stopped collecting water, what do I do?",
+    "[Calendar] Call Frigidaire at 12:15",
+    "Is the dehumidifier still under warranty?",
+    "Claim the dehumidifier before it expires.",
+    "Should I call Canadian Tire about the dehumidifier?",
+    "[Message from Hannah] Does your dehumidifier need a spare?"
+   ],
+   "neg": [
+    "Best dehumidifier for a finished basement?",
+    "How to clean a humidifier filter?",
+    "Canadian Tire return policy for electronics?",
+    "Warranty length for a new toaster oven?",
+    "How do I contact Frigidaire about a fridge?",
+    "What's the humidity sweet spot for a basement?"
+   ]
+  },
+  "life-sleep-b09:m0032": {
+   "pos": [
+    "[Scheduled 15:30 Friday] Weekly payouts update due",
+    "Post the Friday status for the launch.",
+    "What colour is GA docs this week?",
+    "[Message from Tom] Is the Friday update out?",
+    "Draft this week's payouts status.",
+    "What do I post in the launch channel today?"
+   ],
+   "neg": [
+    "What's a good Friday email subject line?",
+    "How to write a weekly status update for a school committee?",
+    "Post a photo to the family group chat.",
+    "What's a good colour palette for a status dashboard?",
+    "Friday team lunch ideas?",
+    "Weekly team newsletter template?"
+   ]
+  },
+  "life-sleep-b09:m0033": {
+   "pos": [
+    "Help me pick what to cut from onboarding for the June sprint.",
+    "[Message from Aisha] What's dropping from Onboarding v2.1?",
+    "We're over by 14 points, what do I drop?",
+    "Draft the cut note for the sprint with what's lost.",
+    "Prep the sprint planning cut list.",
+    "Which two items go before the June 15 planning?"
+   ],
+   "neg": [
+    "How to estimate story points for a new team?",
+    "What's onboarding best practice for SaaS?",
+    "Planning poker app for remote teams?",
+    "Draft a grocery list for the week.",
+    "Add a CSV import idea to my notes.",
+    "Sprint planning agenda for the marketing team?"
+   ]
+  },
+  "life-sleep-b09:m0034": {
+   "pos": [
+    "[Scheduled 11:45] Biscuit walk: is Jess coming today?",
+    "Is Biscuit walked at lunch on Wednesday?",
+    "Should I walk Biscuit at noon or can Jess?",
+    "Book Jess for Thursday's lunch walk.",
+    "Who takes Biscuit out on Friday at lunch?",
+    "[Message from Jess] Running five minutes late for the walk."
+   ],
+   "neg": [
+    "Greenwood Park dog-friendly hours?",
+    "Best dog walker app in Toronto?",
+    "Is noon a good time to feed a dog?",
+    "Book a 30-minute massage Thursday at noon.",
+    "Dog park rules near Kew Gardens?",
+    "Best leash for a beagle on walks?"
+   ]
+  },
+  "life-sleep-b10:m0001": {
+   "pos": [
+    "[Scheduled 06:00] Run with Marcus at 6:15",
+    "Can I get Marcus for a run Sunday morning?",
+    "Where do Marcus and I meet on Saturday?",
+    "Reschedule Wednesday's run with Marcus.",
+    "Book Saturday's run at the bay.",
+    "Should I drive or bike to the Wednesday run?"
+   ],
+   "neg": [
+    "Best running route at Ashbridges Bay?",
+    "What's Marcus's new job title?",
+    "Is Sunday 7:30 a good time for a trail run?",
+    "Best running shoes for a beginner?",
+    "I'm starting Couch to 5K, what's week one?",
+    "Run club in Riverdale on Thursdays?"
+   ]
+  },
+  "life-sleep-b10:m0002": {
+   "pos": [
+    "[Message from IT] Did you enrol your key?",
+    "My laptop login stopped working, why?",
+    "How do I enrol the security key?",
+    "[Scheduled Jul 25] Reminder to set up the login key",
+    "Can I still log in to work from home?",
+    "[Calendar] IT: key enrolment deadline"
+   ],
+   "neg": [
+    "How to set up a YubiKey for Gmail?",
+    "How do I reset my Apple ID password?",
+    "Best password manager for families?",
+    "Is two-factor on my bank account?",
+    "How to set up a VPN on my phone?",
+    "Log into my Notion account on the iPad."
+   ]
+  },
+  "life-sleep-b10:m0003": {
+   "pos": [
+    "Book a desk at the office for Tuesday.",
+    "How do I reserve a seat at the office next week?",
+    "[Message from Olivia] Which floor is the team on in September?",
+    "Where do I book a desk on Thursday?",
+    "Find me a spot for my Tuesday office day.",
+    "What's the desk booking process?"
+   ],
+   "neg": [
+    "Best coffee near King and Bay?",
+    "Book a conference room at the library for Thursday.",
+    "Lumen Pay careers page link?",
+    "How do I book a rental car at Pearson?",
+    "Best lunch on King West under $15?",
+    "The office coffee machine is broken, who do I tell?"
+   ]
+  },
+  "life-sleep-b10:m0004": {
+   "pos": [
+    "Can I leave at three on Friday?",
+    "[Calendar] Friday wrap-up at 2pm, is that needed?",
+    "Should I plan the Friday release review for July?",
+    "Book a 3pm Friday meeting in July.",
+    "Can we schedule the Friday retro in the afternoon?",
+    "What time do I leave on the last Friday of July?"
+   ],
+   "neg": [
+    "Toronto Zoo summer hours?",
+    "Book a haircut for Friday at three.",
+    "What time does the office close in December?",
+    "School closing time on a Friday in June?",
+    "Meeting length best practices for product reviews?",
+    "Costco hours on Victoria Day?"
+   ]
+  },
+  "life-sleep-b10:m0005": {
+   "pos": [
+    "Can I use my wellness account for physio?",
+    "How much wellness money do I have left?",
+    "[Message from Sam] Does your work plan cover massage?",
+    "Buy new glasses with my health benefit?",
+    "Should I book the physio now or after July?",
+    "Is the wellness reimbursement going up?"
+   ],
+   "neg": [
+    "What's Sam's dental coverage?",
+    "Best vision plan for a family of four?",
+    "How much does a massage cost in Leslieville?",
+    "Can I claim a gym membership on taxes?",
+    "Is a parking benefit taxable?",
+    "Physio exercises for a sore lower back?"
+   ]
+  },
+  "life-sleep-b10:m0006": {
+   "pos": [
+    "Where should I get lunch near the office?",
+    "What's a good gift for Sam's birthday?",
+    "Where should we go for a weekend in Montreal?",
+    "How should I answer Olivia's pricing question?",
+    "What's a good laptop bag for travel?",
+    "Best podcast for a commute?"
+   ],
+   "neg": [
+    "What's the difference between yoga and pilates?",
+    "List the top five cities to visit in Japan, with pros and cons.",
+    "Compare three kinds of rice cookers for a family.",
+    "Give me several options for a Halloween costume.",
+    "What are the main differences between RRSP and TFSA?",
+    "What are three good stretches for a sore neck?"
+   ]
+  },
+  "life-sleep-b10:m0007": {
+   "pos": [
+    "[Message from Sam] Are we eating at home tonight?",
+    "Add Leo's dentist to our family calendar.",
+    "Book a Saturday grooming slot for the dog.",
+    "Is it okay if Leo has a sleepover this weekend?",
+    "What does our family need for a cottage weekend?",
+    "Plan a family day trip for the dog and Leo."
+   ],
+   "neg": [
+    "Best dog groomer near Queen East?",
+    "What's a teacher's typical summer schedule?",
+    "Is a beagle good with kids?",
+    "Cheap family activities in Toronto in winter?",
+    "How to pick a kids' soccer team?",
+    "Sam's favourite band?"
+   ]
+  },
+  "life-sleep-b10:m0008": {
+   "pos": [
+    "[Message from Mum] What's the address for the sweets?",
+    "Send Mum's sweets order today.",
+    "Can I order sweets for Mum in Mumbai today?",
+    "Finish the order for Mum's sweets.",
+    "Mum sounds low, what can I send today?",
+    "[Calendar] Send Mum a parcel reminder"
+   ],
+   "neg": [
+    "Best mithai shop in Toronto for Diwali?",
+    "Recipe for ladoo at home?",
+    "How do I send a parcel to India?",
+    "Sugar content of a gulab jamun?",
+    "Order flowers for Priya's birthday.",
+    "Diwali party outfit ideas?"
+   ]
+  },
+  "life-sleep-b10:m0009": {
+   "pos": [
+    "Who should I ask to review the copy?",
+    "[Message from Tom] Can you check in with the payouts leads?",
+    "Tag the right person for the dashboard question.",
+    "Who's the PRD reviewer this sprint?",
+    "List the payouts team for the QBR.",
+    "What's the Linear ticket for the offsite follow-up?"
+   ],
+   "neg": [
+    "Who is the CEO of Shopify?",
+    "Who should I ask about visa paperwork?",
+    "Tag a friend on a birthday post.",
+    "List the team at Stripe Canada.",
+    "Who can babysit Leo on a Friday?",
+    "What's Olivia's favourite restaurant?"
+   ]
+  },
+  "life-sleep-b10:m0010": {
+   "pos": [
+    "[Message from Tom] Where's the offsite recap?",
+    "Send Tom the offsite notes.",
+    "What did we decide at the offsite?",
+    "Write the Payouts offsite recap for Tom.",
+    "Find the Muskoka offsite doc.",
+    "What's the link to the Payouts recap doc?"
+   ],
+   "neg": [
+    "Best resort in Muskoka for a family weekend?",
+    "How to pack for a cottage weekend?",
+    "Deerhurst Resort room prices?",
+    "Write an offsite agenda for the design team.",
+    "Weather in Muskoka in June?",
+    "What's a good team bonding activity for a retreat?"
+   ]
+  },
+  "life-sleep-b10:m0011": {
+   "pos": [
+    "Is the multi-currency wallet still on the roadmap this year?",
+    "[Message from Olivia] Can merchants have multi-currency wallets soon?",
+    "A prospect asked about multi-currency wallets, what do I say?",
+    "What's the timeline for wallets?",
+    "Move PAY-1388 to where it belongs.",
+    "What did we decide on wallets at the offsite?"
+   ],
+   "neg": [
+    "How do multi-currency accounts work at Wise?",
+    "Compare FINTRAC and FCA reporting rules.",
+    "Currency conversion fees on PayPal?",
+    "Explain what a digital wallet is.",
+    "How long does a bank wire take to Europe?",
+    "Draft a sales pitch for cross-border payments."
+   ]
+  },
+  "life-sleep-b10:m0012": {
+   "pos": [
+    "[Message from Hannah] Can you grab the kids Thursday?",
+    "What should I get Hannah for her birthday?",
+    "Send Hannah a thank-you for the pickup.",
+    "Hannah's birthday, anything I should do?",
+    "Leo wants a playdate with Jun, can you ask her?",
+    "[Scheduled 09:00 June 27] Hannah's birthday reminder"
+   ],
+   "neg": [
+    "Best cake bakery in Leslieville for a 40th?",
+    "Fun things for kids to do on a summer Thursday?",
+    "How do I make a playdate schedule for two kids?",
+    "Is a neighbour's fence my responsibility?",
+    "Ellie's school bus schedule?",
+    "Thank-you card wording for a babysitter?"
+   ]
+  },
+  "life-sleep-b10:m0013": {
+   "pos": [
+    "[Scheduled 19:00 Thursday] Spanish lesson in 30 min",
+    "What should I review before my Spanish lesson?",
+    "Carlos sent homework, what's due?",
+    "Help me practise the subjunctive tonight.",
+    "Can we do a quick Spanish drill now?",
+    "What vocab should I know for the trip in December?"
+   ],
+   "neg": [
+    "How do you say where is the bathroom in Spanish?",
+    "Best Spanish podcast for beginners?",
+    "What's the Spanish for pumpkin?",
+    "Translate this email from my landlord.",
+    "Mexico City restaurants to try?",
+    "Learn Portuguese basics for Lisbon?"
+   ]
+  },
+  "life-sleep-b10:m0014": {
+   "pos": [
+    "When do we find out Leo's Grade 3 class?",
+    "[Scheduled Aug 25] Check Edsby for class lists",
+    "Order Leo new runners in his size.",
+    "What size shoes should I order for Leo?",
+    "Is Leo's new teacher the same as last year?",
+    "Remind me to check the fall class list."
+   ],
+   "neg": [
+    "Best shoes for a seven-year-old's soccer?",
+    "Grade 3 math curriculum in Ontario?",
+    "What's a good first-day-of-school outfit?",
+    "Shoe size for Sam in Nike?",
+    "Ms. Alvarez's contact email for her class?",
+    "Back-to-school packing list for Grade 3?"
+   ]
+  }
+ }
+}

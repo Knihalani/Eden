@@ -1,0 +1,50 @@
+{
+ "batch": "life-sp-b15",
+ "generator": "haiku (claude-code subagent)",
+ "rows": {
+  "life-sleep-b15:m0027": {
+   "pos": ["Renew Leo's library card this weekend. Is there a branch near us?", "[Scheduled 09:00] Errands list check for Saturday", "Where did I put the errands list for the weekend?", "Add the library card renewal to my to-do list.", "[Message from Sam] are we returning the library books this weekend?", "Pull up my shopping list and my Notion to-dos for the week."],
+   "neg": ["What's the best library app for borrowing ebooks in Toronto?", "Find a bookstore that stocks Spanish novels near Danforth.", "Remind me to buy milk on the way home.", "Archive all my old emails from 2019.", "Create a new Notion page for the Lisbon packing list.", "Find the Toronto Public Library's Sunday hours in general."]
+  },
+  "life-sleep-b15:m0028": {
+   "pos": ["Priya's landlord is holding back her deposit. What can she do?", "[Message from Priya] any advice on getting my deposit back?", "Draft a note to Priya about the scuff mark issue with her old place.", "What's the process for getting a rental deposit back in Ontario?", "Did I ever send Priya my notes on her site copy?", "[Calendar] 'Priya - landlord call' starts in 60 min"],
+   "neg": ["What's the average cost of a scuff repair for drywall?", "Find a moving company that's reliable for a one-bedroom move.", "Remind me to bring my portfolio to the architecture meetup.", "Find a restaurant for lunch with Priya on Saturday.", "Write a thank-you email to the mover who helped Marcus.", "Set a reminder to pay the Visa on the 7th."]
+  },
+  "life-sleep-b15:m0029": {
+   "pos": ["Who owns the feature flag flips for the weekend launch?", "What's still open for me on the readiness review?", "[Message from Diego Fernández] I need your sign-off on the banner copy. Is that still pending?", "Who's handling the on-call runbook update for GA?", "[Calendar] 'Readiness review - legal terms' starts in 30 min", "Draft a note to Marco about the runbook update deadline."],
+   "neg": ["What's a good feature flag tool for a small startup in general?", "Summarize the Slack thread about the lunch order.", "Remind me to sign my contract renewal on Friday.", "Find a legal template for an NDA in general.", "Schedule a 30-minute check-in with Wen Li on Thursday.", "Remind me to review the CSV export for the finance team."]
+  },
+  "life-sleep-b15:m0030": {
+   "pos": ["Which slides in Olivia's QBR deck are mine?", "[Message from Olivia Grant] can you confirm your part of the QBR slides?", "Pull up the QBR skeleton and tell me what I still need to write.", "Start on the QBR slides for the payouts section.", "[Calendar] 'QBR prep' starts in 60 min", "Have I been assigned anything in the sales QBR deck?"],
+   "neg": ["Find a good chart type for showing quarterly revenue trends.", "Create a list of metrics for the sales team's dashboard.", "Remind me to reply to Diego's comment on the mockups.", "What's a good slide count for a 30-minute QBR in general?", "Schedule a meeting with the sales ops team next week.", "Summarize the sales channel updates from yesterday."]
+  },
+  "life-sleep-b15:m0031": {
+   "pos": ["Put my December time off into the team calendar before the 23rd.", "[Message from Tom Becker] please send your December OOO days by Friday.", "Mark me out from the 21st of December through New Year's.", "Do I have anything on Wednesday at 11:30?", "[Calendar] 'OOO planning' starts in 60 min", "What's my one-on-one schedule with Tom each week?"],
+   "neg": ["What's the company's policy on carrying over vacation days?", "Find a holiday parking deal at Pearson for a week in December.", "Set a reminder to submit the timesheet by Friday.", "Remind me to pick up the Christmas tree on Saturday.", "Move my Monday standup to 10:15 for the holiday week.", "Find a flight to Calgary for a New Year's weekend."]
+  },
+  "life-sleep-b15:m0032": {
+   "pos": ["Do we need to order hot lunch for Leo in November?", "[Message from school-portal] Hot lunch order deadline is this Friday.", "Bring Leo's picture order form to the retake day?", "[Calendar] 'Picture retakes' starts in 60 min", "When are November hot lunch orders due?", "Remind me to fill in Leo's lunch order before the weekend."],
+   "neg": ["What's a healthy lunch for a seven-year-old that's nut-free?", "Find the best lunchbox for a kid who's starting grade two.", "Remind me to pick up a birthday gift for a classmate.", "Order a pizza for the office team lunch on Friday.", "Find a cafe near King Street for a quick lunch meeting.", "Set a reminder to send Sam the grocery list before Saturday."]
+  },
+  "life-sleep-b15:m0033": {
+   "pos": ["How much is due on the Visa this month, and when?", "[Scheduled 09:00] Credit card statement due date", "How much have we spent on takeout this month?", "Is takeout spending up compared to last month?", "[Message from finance-agent] the Visa statement is ready. Want me to pay it?", "Put a reminder on for the card payment before the 7th."],
+   "neg": ["What's the best rewards credit card for dining out in Canada?", "Find cheap takeout options in Leslieville under $20.", "Remind me to cancel the streaming subscription on Friday.", "Compare two budgeting apps for a family of four.", "Set a reminder to pay the Toronto Hydro bill on the 20th.", "Find a gift card deal for a restaurant in Leslieville."]
+  },
+  "life-sleep-b15:m0034": {
+   "pos": ["What's on my schedule Thursday morning the 26th?", "[Calendar] 'Onboarding design review' starts in 30 min", "Prep the KYC retry screens for the design review with Aisha and Diego.", "Send Diego the agenda for our onboarding review.", "Can I join the onboarding design review on Zoom Thursday?", "[Message from Aisha Rahman] are we still meeting Thursday at 10?"],
+   "neg": ["Find a good Thursday lunch spot near King Street West.", "What are common KYC retry UX patterns in general?", "Remind me to bring my laptop charger to the office Wednesday.", "Book a meeting room in the Toronto office for Monday.", "Schedule a design critique for next Tuesday afternoon.", "Find a parking lot near King Street West for the day."]
+  },
+  "life-sleep-b15:m0035": {
+   "pos": ["Book Leo's birthday party at the robotics place for January.", "[Message from Wonder Workshop] confirm your party slot for Jan 23?", "What time should the party be on the 23rd, given Leo's skating lesson?", "[Calendar] 'Leo party planning' starts in 60 min", "Plan Leo's eighth birthday party for about twelve kids.", "How many kids can we have at the party venue on Queen East?"],
+   "neg": ["Find a birthday cake for a seven-year-old who loves dinosaurs.", "What's a good goodie bag idea for a kids' party in general?", "Remind me to buy Sam a birthday card for his January birthday.", "Find a good kids' magic show for a weekend party.", "Book a skating lesson for Leo on Sunday morning.", "Set a reminder to renew Leo's library card in February."]
+  },
+  "life-sleep-b15:m0036": {
+   "pos": ["Approve the delayed payouts email template. Support keeps pinging.", "[Message from Priyanka S.] can you review PAY-1224 today?", "What bugs are blocking the GA readiness risks section?", "Add the October incidents to the risks part of the readiness doc.", "[Scheduled 09:00] Pending reviews for Riya", "Who's assigned to the CSV export timezone bug?"],
+   "neg": ["Write a short email template for a shipping delay to a customer.", "What's the best way to triage high-priority bugs in general?", "Remind me to file my own expense for the conference hotel.", "Create a new Jira ticket for the login page typo.", "Find the status page for Stripe's API incidents this week.", "Summarize the security advisory from last Tuesday."]
+  },
+  "life-sleep-b15:m0037": {
+   "pos": ["What do I have early on Wednesday the 28th?", "[Calendar] 'Run with Marcus' starts in 60 min", "Make my early-morning commitments visible on Sam's calendar.", "Should I eat anything before my physical on Tuesday?", "[Message from Marcus] are we still running Wednesday at 6:15?", "Add my early commitments for next week as recurring events."],
+   "neg": ["Find a good running route through Ashbridges Bay in general.", "What's the best breakfast for a morning run in the cold?", "Remind me to set my alarm for 6 on Friday for the gym.", "Schedule a yoga class for Thursday evening.", "Book a physio for my shin splints next week.", "Remind me to buy coffee beans for the weekend."]
+  }
+ }
+}

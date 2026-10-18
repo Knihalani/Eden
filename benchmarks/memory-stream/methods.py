@@ -43,6 +43,30 @@ def params(spec):
     return name, kv
 
 
+ASK = re.compile(r"\?|\b(can|could|would|will) you\b|\b(please|pls)\b|^\s*(how|what|why|where|which|who|when|is|are|does|do|should)\b",
+                 re.I | re.M)
+
+
+def strip_paste(text):
+    """The user's own words: code fences, log-like lines (mostly non-letters) and quoted lines removed, and at most
+    the first 60 words kept (F5: a long paste is not a request)."""
+    text = re.sub(r"```.*?(```|$)", " ", text or "", flags=re.S)
+    keep = []
+    for line in text.splitlines():
+        letters = sum(c.isalpha() or c.isspace() for c in line) / max(1, len(line))
+        if line.strip().startswith(">") or (len(line) > 20 and letters < 0.7):
+            continue
+        keep.append(line)
+    return " ".join(" ".join(keep).split()[:60])
+
+
+def informing(text):
+    """F5: a turn that only informs (a declarative fact signal, no question, no request verb)."""
+    t = strip_paste(text)
+    return bool(FACT.search(t)) and not ASK.search(t) and not REQUEST.search(t) and not re.search(
+        r"\b(fix|add|make|write|check|run|update|remove|create|refactor|implement|draft|book|send|plan)\b", t, re.I)
+
+
 def sentences(text):
     text = re.sub(r"```.*?```", " ", text, flags=re.S)
     parts = re.split(r"(?<=[.!?;])\s+|\n+|\s+-\s+|\s+\d+\.\s+", text)
@@ -304,7 +328,95 @@ class Bank(Lex):
         return ranked[: self.k]
 
 
-REGISTRY = {"oracle-need": OracleNeed, "lex": Lex, "bm25": Lex, "bank": Bank}
+class Situation(Base):
+    """F15: situation tracking. Each row is keyed by its compiled entity and cue phrases (sleep `entities`,
+    `when.entities`, `when.activities`). The session's situation is the set of key phrases that have appeared in it so
+    far: prompts, replies, tool calls and outputs. A row fires only when a key phrase it holds *enters* the situation
+    at this event (it was absent from the session before). The weight of a phrase is log(rows / rows holding it),
+    and a row needs a weight of at least `tau`. So it is silent by construction on acks and restatements."""
+
+    def __init__(self, rows, stream, items, cov, **kw):
+        super().__init__(rows, stream, items, cov, **kw)
+        self.keys = {}
+        df = {}
+        for r in self.rows:
+            w = r.get("when") or {}
+            ks = {k.lower().strip() for k in (r.get("entities") or []) + (w.get("entities") or [])
+                  + (w.get("activities") or []) if k and len(k.strip()) >= 3}
+            self.keys[r["id"]] = ks
+            for k in ks:
+                df[k] = df.get(k, 0) + 1
+        n = max(1, len(self.rows))
+        self.kw_w = {k: math.log(n / d) for k, d in df.items()}
+        self.vocab = sorted(df, key=len, reverse=True)
+        self._pat = {k: re.compile(r"(?<![a-z0-9])" + re.escape(k) + r"(?![a-z0-9])") for k in self.vocab}
+        self._seen = {}
+        sess_of = {}
+        for s in stream["sessions"]:
+            prev = set()
+            if s["kind"] != "resume":
+                carry = set()
+            else:
+                carry = last
+            prev = set(carry)
+            for ev in s["events"]:
+                self._seen[ev["id"]] = prev
+                prev = prev | self.phrases(ev["text_all"])
+                if ev["t"] == "compact":
+                    prev = self.phrases(ev["text_all"])
+            last = prev
+
+    def phrases(self, text):
+        t = (text or "").lower()
+        return {k for k in self.vocab if k in t and self._pat[k].search(t)}
+
+    def packet(self, e, now):
+        if e["t"] in ("notification", "peer"):
+            return []
+        new = self.phrases(e["text_all"]) - self._seen.get(e["id"], set())
+        if not new:
+            return []
+        sc = {}
+        for r in self.visible(now):
+            hit = new & self.keys.get(r["id"], set())
+            if hit:
+                sc[r["id"]] = sum(self.kw_w[k] for k in hit)
+        tau = self.kw.get("tau", 3.0)
+        return [i for i in sorted(sc, key=lambda i: -sc[i]) if sc[i] >= tau][: self.k]
+
+
+class Vote(Base):
+    """Evidence vote: a row fires when at least `need` of three independent detectors fire for it: the self-play bank
+    (F4, tau=`bt`), lexical with compiled cues (F11, `lt`), and situation entry (F15, `st`). Ranked by the bank score,
+    then by votes."""
+
+    def __init__(self, rows, stream, items, cov, **kw):
+        super().__init__(rows, stream, items, cov, **kw)
+        self.bank = Bank(self.rows, stream, items, cov, tau=kw.get("bt", 0.2), when=1)
+        self.lex = Lex(self.rows, stream, items, cov, when=1)
+        self.situ = Situation(self.rows, stream, items, cov, tau=kw.get("st", 3.0), k=99)
+        self.need = int(kw.get("need", 2))
+
+    def packet(self, e, now):
+        if e["t"] in ("notification", "peer") or len(content(e["text_all"])) < 3:
+            return []
+        if self.kw.get("stmt") and e["t"] == "human" and informing(e["text_all"]):
+            return []
+        if self.kw.get("strip"):
+            e = dict(e, text_all=strip_paste(e["text_all"]))
+        b = self.bank.scores(e, now)
+        lt = self.kw.get("lt", 4.0)
+        l = {i for i, v in self.lex.scores(e, now).items() if v >= lt}
+        st = set(self.situ.packet(e, now))
+        votes = {}
+        for group in (set(b), l, st):
+            for i in group:
+                votes[i] = votes.get(i, 0) + 1
+        ok = [i for i, v in votes.items() if v >= self.need]
+        return sorted(ok, key=lambda i: (-votes[i], -b.get(i, 0.0)))[: self.k]
+
+
+REGISTRY = {"oracle-need": OracleNeed, "lex": Lex, "bm25": Lex, "bank": Bank, "situ": Situation, "vote": Vote}
 
 
 def make(spec, rows, stream, items, cov):

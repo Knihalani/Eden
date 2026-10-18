@@ -1,0 +1,281 @@
+{
+ "batch": "p02",
+ "host": "sonnet (claude-code subagent)",
+ "cases": [
+  {
+   "event": "code-s108-e036",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s082-e051",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s066-e038",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s066-e028",
+   "call": true,
+   "query": "worker helm chart servicemonitor infra conventions"
+  },
+  {
+   "event": "code-s018-e010",
+   "call": true,
+   "query": "node version nvmrc engines"
+  },
+  {
+   "event": "code-s035-e008",
+   "call": true,
+   "query": "trailmix django htmx csrf"
+  },
+  {
+   "event": "code-s058-e012",
+   "call": true,
+   "query": "api docs openapi invoices endpoint conventions"
+  },
+  {
+   "event": "code-s035-e044",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s033-e020",
+   "call": true,
+   "query": "migrations conventions invoice counters"
+  },
+  {
+   "event": "code-s015-e010",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s081-e017",
+   "call": true,
+   "query": "merge PR wrap up procedure release"
+  },
+  {
+   "event": "code-s010-e007",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s097-e005",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s095-e000",
+   "call": true,
+   "query": "trailmix htmx partial swap hike list"
+  },
+  {
+   "event": "code-s013-e029",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s068-e017",
+   "call": true,
+   "query": "web app new page route structure"
+  },
+  {
+   "event": "code-s038-e007",
+   "call": true,
+   "query": "CI turborepo cache affected github actions"
+  },
+  {
+   "event": "code-s035-e047",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s108-e025",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s057-e006",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s097-e017",
+   "call": true,
+   "query": "trailmix hike model migration"
+  },
+  {
+   "event": "code-s028-e010",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s080-e014",
+   "call": true,
+   "query": "commit PR conventions release tag"
+  },
+  {
+   "event": "code-s080-e024",
+   "call": true,
+   "query": "adding dependencies policy dev dependency"
+  },
+  {
+   "event": "code-s080-e046",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s047-e031",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s091-e000",
+   "call": true,
+   "query": "acme CLI update notifier version check"
+  },
+  {
+   "event": "code-s007-e036",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s047-e032",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s051-e006",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s038-e000",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s058-e000",
+   "call": true,
+   "query": "invoice money cents rounding totals"
+  },
+  {
+   "event": "code-s022-e008",
+   "call": true,
+   "query": "exception tracker error reporting logger"
+  },
+  {
+   "event": "code-s088-e000",
+   "call": true,
+   "query": "trailmix htmx infinite scroll pagination"
+  },
+  {
+   "event": "code-s068-e023",
+   "call": true,
+   "query": "dependency update policy deps-bot web"
+  },
+  {
+   "event": "code-s045-e007",
+   "call": true,
+   "query": "dns records infra domain"
+  },
+  {
+   "event": "code-s027-e007",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s027-e049",
+   "call": true,
+   "query": "cli --json flag convention acme invoices list"
+  },
+  {
+   "event": "code-s003-e000",
+   "call": true,
+   "query": "worker idempotency rabbitmq redelivery jobs"
+  },
+  {
+   "event": "code-s057-e028",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s097-e004",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s007-e000",
+   "call": true,
+   "query": "infra s3 bucket terraform tags region conventions"
+  },
+  {
+   "event": "code-s077-e005",
+   "call": true,
+   "query": "adding dependencies policy dev dependency"
+  },
+  {
+   "event": "code-s096-e000",
+   "call": true,
+   "query": "sql tools conventions invoices schema"
+  },
+  {
+   "event": "code-s076-e021",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s107-e006",
+   "call": true,
+   "query": "web public pages routes middleware layout"
+  },
+  {
+   "event": "code-s057-e030",
+   "call": true,
+   "query": "worker queue BullMQ conventions"
+  },
+  {
+   "event": "code-s105-e000",
+   "call": true,
+   "query": "web error boundary fallback conventions commit"
+  },
+  {
+   "event": "code-s055-e000",
+   "call": true,
+   "query": "api logger pino request logging"
+  },
+  {
+   "event": "code-s108-e047",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s076-e012",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s071-e014",
+   "call": true,
+   "query": "worker logger logging conventions reminder job"
+  },
+  {
+   "event": "code-s077-e015",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s015-e017",
+   "call": false,
+   "query": ""
+  },
+  {
+   "event": "code-s062-e000",
+   "call": false,
+   "query": ""
+  }
+ ]
+}

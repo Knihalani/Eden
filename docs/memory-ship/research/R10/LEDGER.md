@@ -131,3 +131,70 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - The frontier ordering survives the fix.
   - The extraction ceiling of the sleep store is 0.82, not 0.92: compiled rows paraphrase.
   - v2 is calibrated on code only. It must be re-checked on life.
+
+## C2-E3 · 2026-10-18 · F15 situation tracking (phrase entry into the session)
+- **Kill criterion (pre-run):** proactive + action recall < 0.30, or human silence < 0.60.
+- **Numbers (code dev, strict, coverage v2):**
+
+  | τ | Recall | Proactive | Silence | Action recall |
+  |---|---|---|---|---|
+  | 3 | 0.3121 | 0.0769 | 0.372 | 0.0 |
+  | 5 | 0.2121 | 0.0769 | 0.4821 | 0.0 |
+  | 6 | 0.1758 | 0.0769 | 0.7054 | 0.0 |
+
+- **Verdict: dead as a standalone** (proactive 0.08). It is kept as one vote, because its silence comes from session state, not from lexical match.
+
+## C2-E4 · 2026-10-18 · Three-detector vote (bank, lex+when, situation); paste stripping; informing-turn gate (F5)
+- **Numbers (code dev, strict, plan labels):**
+
+  | Method | Recall | Proactive | Silence | Precision |
+  |---|---|---|---|---|
+  | vote need=2, bt .25, lt 6, st 4 | 0.3121 | 0.2308 | 0.5089 | 0.0373 |
+  | + strip | 0.3212 | — | 0.5208 | — |
+  | + stmt | 0.2394 | — | 0.619 | — |
+  | + strip + stmt | 0.2485 | — | 0.631 | — |
+  | vote need=3 | 0.297 | — | 0.5833 | — |
+
+- **False fires of the vote, by negative category:** statement 68/108, task 55/94, other project 17/19, paste 13/15, ack 0/34, general 3/30.
+- **Eden's, for comparison:** statement 106/108, task 92/94, general 30/30, ack 6/34.
+- **Verdict:**
+  - Every heuristic combination sits on one curve: about 0.30 recall at 0.50–0.63 silence.
+  - Paste stripping is a free small gain and is kept.
+  - The statement gate only trades recall for silence.
+  - This is the local-optimum signature. The decision needs a better judge of need, not more lexical evidence.
+
+## C2-E5 · 2026-10-18 · F13 agent-pull: the host model calls `recall(query)` against a memory index
+- **Setup:**
+  - The judge sample (165 human, 30 non-human events).
+  - A sonnet host sees the turn, recent context and a 30-phrase memory index, then decides whether to call and with what query.
+  - A call runs lex+when on the strict sleep store and returns the top k rows.
+- **Kill criterion (pre-run):** calls on > 25% of no-need human turns, or recall < 0.38.
+- **Numbers (95% CI):**
+
+  | Labels | Method | Recall | Proactive | Precision | Silence | Non-human silence | Tokens |
+  |---|---|---|---|---|---|---|---|
+  | plan | pull k=2 | 0.4667 [0.344, 0.587] | 0.2308 | 0.2025 [0.147, 0.266] | 0.7364 [0.656, 0.816] | 1.0 | 49.0 |
+  | plan | pull k=4 | 0.5273 | — | 0.1338 | 0.7364 | — | — |
+  | plan | judge, same events | 0.6909 | 0.4615 | 0.2552 | 0.6364 | — | — |
+  | union | pull k=2 | 0.3367 | — | 0.3291 | 0.8171 | — | — |
+  | union | judge | 0.6574 | — | 0.5156 | 0.7805 | — | — |
+
+  Calls: 82 of 195 moments.
+- **Verdict: alive, borderline on its kill line** (fires on 26.4% of no-need human turns, against the 25% bar).
+  - Precision is 5× the best hook-side method, and silence is +0.27.
+  - Retrieval after the call is plain lexical, which loses recall: the judge picks from the same store with 0.69.
+  - **Cost:** the host model already reads every turn. The added cost is the index in context (about 150 tokens) and one tool round-trip on about 40% of moments. The hook stays model-free (D15 holds).
+  - This changes the architecture question from "what should the hook inject" to "what should the hook push, and what should the model pull".
+
+## C2-E6 · 2026-10-18 · Eden today on the life world (write path)
+- **Replay:** 160 sessions, 7,037 hook events, 6,392 invocations, 0 non-zero exits, 0 timeouts. Store 3,633 rows. UserPromptSubmit p50 159.8 ms, p99 425.4 ms (n 1,315), measured with concurrent subagent load: unverified on a quiet machine.
+- **Numbers (dev, plan labels, coverage v2):**
+
+  | Method | Recall | Proactive | Precision | Human silence | Trigger recall | Trigger silence | Non-human silence | Tokens |
+  |---|---|---|---|---|---|---|---|---|
+  | eden | 0.0443 [0.006, 0.092] | 0.0435 | 0.0033 | 0.0503 [0.032, 0.070] | 0.0 | 0.0 | 1.0 | 74.5 |
+  | lex τ=6 (write) | 0.1624 | — | — | 0.0382 | — | — | — | — |
+  | oracle-need (write) | 0.9937 | — | — | — | — | — | — | — |
+
+- **Eden's bullets:** user's own past prompts 58.7%, other items 18.8%, earlier triggers re-injected 8.4%, needed 0.3%.
+- **Verdict:** today's plugin is worse on the personal world than on code. It fires on 95% of no-need human turns and on every trigger, but surfaces none of the triggers' needs.
