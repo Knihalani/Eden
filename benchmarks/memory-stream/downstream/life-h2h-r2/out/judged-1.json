@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s036-e003", "scores": [2, 2, 3], "why": "Response 2 uses known Nov running total ($45,897, $2,103 headroom) and flags staleness; others only compute contingency."},
+{"event": "life-s037-e004", "scores": [2, 2, 2], "why": "Bobbette & Belle 8-inch vanilla cake is on record; all hedge and plan an email search instead."},
+{"event": "life-s037-e009", "scores": [3, 3, 3], "why": "All give a short warm thank-you draft and wait for approval."},
+{"event": "life-s046-e021", "scores": [2, 1, 1], "why": "None avoids Tuesday focus block/9:30 rule explicitly; responses 1 and 2 also drop the Hydro reminder she just approved."},
+{"event": "life-s046-e029", "scores": [2, 2, 1], "why": "None corrects 'Soy en la oficina' despite the inline-correction rule; response 2 reveals answers immediately."},
+{"event": "life-s047-e019", "scores": [3, 2, 2], "why": "Response 0 uses known Intact April renewal to time quotes; others give generic timing."},
+{"event": "life-s048-e000", "scores": [2, 2, 2], "why": "Ottawa 25 Jan lookup on record (-18°C, snow, wind chill -27); all defer instead of answering."},
+{"event": "life-s050-e016", "scores": [2, 2, 1], "why": "None applies hotel preferences (refundable, separate space for Leo); response 2 wrongly claims Leo's age is unknown."},
+{"event": "life-s051-e002", "scores": [2, 2, 2], "why": "All defer to pulling calendars; acceptable but give no known recurring items."},
+{"event": "life-s052-e008", "scores": [1, 1, 1], "why": "Recurring mistakes (ser/estar, por/para, cuando+subjunctive, noun gender) are on record; all claim not to know."},
+{"event": "life-s057-e000", "scores": [1, 2, 3], "why": "Response 2 applies Aisha sign-off and 'target' rule; response 1 checks sign-off; response 0 ignores the rule."},
+{"event": "life-s057-e015", "scores": [2, 1, 1], "why": "Lagavulin is on record; response 0 recalls it but cites stale $100 purchase threshold; others claim not to know."},
+{"event": "life-s058-e000", "scores": [3, 3, 3], "why": "Fitting chit-chat replies; response 2's passport-expiry reminder is timely."},
+{"event": "life-s058-e002", "scores": [3, 2, 2], "why": "Response 0 applies current Air Canada, aisle, no-basic, CAD preferences; others omit them."},
+{"event": "life-s058-e007", "scores": [3, 3, 3], "why": "All appropriately pull Tom's calendar; nothing on record to answer from."}
+]}
