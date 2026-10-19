@@ -1,0 +1,181 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s006-e011#1",
+   "response": "Short version for Jess: compare what she would net from selling now against what renting would bring in after all costs, and what each path does to her taxes. The key inputs are her mortgage balance and rate, rent versus carrying costs (mortgage, condo fees, property tax, insurance, vacancy), how the local market looks over the next couple of years, and the tax treatment of a sale versus rental income. She should also decide whether she wants to be a landlord and where she would live meanwhile, and a quick chat with an accountant before she commits is worth it.\nAction: Pass this list to you to send her, and offer to build a simple sell-vs-rent comparison sheet she can fill in."
+  },
+  {
+   "id": "life-s105-e000#1",
+   "response": "Sorry about the tap, a constantly dripping outside tap and a hose that will not shut off is worth getting fixed quickly. I do not have a plumber saved for you, so I will search for ones with same-day or Monday availability near your home. In the meantime, if there is an inside shut-off valve for that tap, closing it should stop the drip.\nAction: Search for local plumbers who can come today or Monday, then show you the options with availability, reviews and call-out prices."
+  },
+  {
+   "id": "life-s150-e000#1",
+   "response": "Morning. The last snapshot I have is from 2026-08-26: PAY-1182 (GA readiness checklist) and PAY-1190 (GA announcement email copy) both block the GA milestone, and PAY-1216 (support macro) needs your tone review but is not formally a blocker. That is old, so I will not rely on it for what is blocked today.\nAction: Pull your live Linear tickets with a blocked status or blocking relations and give you a fresh list before standup."
+  },
+  {
+   "id": "life-s052-e008#1",
+   "response": "I do not have a record of the exact things you keep getting wrong, so I would rather not guess and waste your warm-up. If you tell me two or three trouble spots I will build the 8-10 questions around them. Otherwise I can search our past chats and lesson notes for your recurring mistakes.\nAction: Search your notes and earlier conversations for your common Spanish errors and build the quiz from them, or ask you to name the weak spots if I find nothing."
+  },
+  {
+   "id": "life-s107-e009#1",
+   "response": "I know Nate is from Northline Renovations and is your kitchen contractor, but I do not have the comparison against the other two contractors in front of me, so I will not guess at the reasons. They should be in your reno notes or in the quotes from each contractor.\nAction: Search your notes, the reno sheet and email for the contractor comparison, then give you the reasons in a few bullets for Sam."
+  },
+  {
+   "id": "life-s131-e027#1",
+   "response": "I do not have your own words on how you learn Spanish best or the vocab you wanted, so I will not make them up. I will look for where you said it and set tonight's practice up around that.\nAction: Search your notes and past conversations for your learning preferences and vocab level, then propose tonight's practice plan."
+  },
+  {
+   "id": "life-s037-e020#1",
+   "response": "I do not have the Ottawa flight search or your podcast note in front of me, so I will pull both up rather than guess. For the flights I will find what we looked at before you decided to drive, with prices and times, so Sam can compare for his February PD day.\nAction: Find the Ottawa flight search from our earlier chats, open your podcast note, and send you both with new commute podcast suggestions based on the note."
+  },
+  {
+   "id": "life-s120-e003#1",
+   "response": "Happy to start it, but Wen Li handles data requests through the #data-requests channel and needs at least three business days of notice plus a written metric definition, otherwise the request gets bounced. For a Wednesday prep that is tight, so it is best to send it today with a clear definition.\nAction: Draft the #data-requests post (failed payout count and rate by receiving bank, last 30 days, with a written metric definition) for your review before posting, and check whether Looker already has a view you can use in the meantime."
+  },
+  {
+   "id": "life-s058-e014#1",
+   "response": "I will ask Olivia to move the Thursday Mar 5 'QBR prep' to 11:00 so it stops overlapping your Q1 roadmap check-in. For Ellie, I do not have a record of what snacks are in the house, so I cannot say which are dairy-free yet. Please check labels, since dairy hides in a lot of crackers and bars.\nAction: Send Olivia the request for 11:00, and check recent grocery orders and your notes for dairy-free snacks, then give you a list before Ellie arrives."
+  },
+  {
+   "id": "life-s025-e000#1",
+   "response": "I will pull every open payouts ticket and group them by workstream. For December launch risk, I will look at blocked tickets, missing owners, anything past due and anything tied to the launch milestone, and I will not guess until I see the data.\nAction: Pull the open payouts tickets from Linear, group them by workstream, and flag launch risks with the reason for each."
+  },
+  {
+   "id": "life-s070-e006#1",
+   "response": "You are welcome. The library renewals are still running in the background, and Tom's request for the beta merchant numbers link is still open for after dinner.\nAction: Send you a nudge after dinner about Tom's link, and tell you when the renewals are done."
+  },
+  {
+   "id": "life-s058-e000#1",
+   "response": "Morning. Snow in March really does feel like a bait and switch. Hope the commute is manageable.\nAction: None, unless you want me to check the forecast and your morning schedule."
+  },
+  {
+   "id": "life-s071-e002#1",
+   "response": "On it. I will reply to Mummy that starting this week the call moves to Saturdays at 8:30 am Toronto time, which is 6:00 pm for her, and that Sunday mornings are gone because of Leo's soccer. I will keep the tone warm and tell Kabir the new time as well.\nAction: Reply to Mummy with the new time, change your recurring call event to Saturdays 8:30 am (ending the Sunday series), and text Kabir the new time."
+  },
+  {
+   "id": "life-s068-e021#1",
+   "response": "I will try Apr 22 with Dr. Lin in the late morning and check it against your calendar first. I do not have the office's open slots yet, so I will look at what they have.\nAction: Check Dr. Lin's availability for Apr 22 late morning, book the best slot that fits your calendar, and confirm the time with you."
+  },
+  {
+   "id": "life-s085-e023#1",
+   "response": "Of course the AC is on arctic, the office is always like that. Good thing you have the coat. Hope the day warms up.\nAction: None, unless you want me to draft a note to facilities."
+  },
+  {
+   "id": "life-s148-e012#1",
+   "response": "Both are on the list: your comments on Tom's strategy memo are due Friday, and Leo's library books are waiting at the Pape branch on Saturday morning. The one-pager for Q1 bets is due Fri 6 Nov, so I will remind you about that too.\nAction: Set a Friday morning reminder for the memo comments (with the Q1 page note) and a Saturday morning reminder for the Pape library pickup."
+  },
+  {
+   "id": "life-s100-e017#1",
+   "response": "I can block Sunday 8:30 to 10 pm for the spy series, but my notes have your video call with your mom on Sundays at 9:00 pm Toronto time, so those overlap. For the mithai, she has diabetes, so it needs to be sugar-free, and she has been lonely lately, so a nice box with a card will mean a lot. I will find good Mumbai shops near her that deliver sugar-free sweets.\nAction: Find Mumbai shops that deliver sugar-free mithai and show you options before ordering, and ask whether you want to move the call or the show before I block the evening."
+  },
+  {
+   "id": "life-s118-e000#1",
+   "response": "I will compare this year's renewal with last year's policy so you can see what changed in price, coverage, deductible and any new exclusions. I need both documents in hand rather than guessing.\nAction: Find the renewal in your email and last year's policy in your files, then summarize the differences in a short list."
+  },
+  {
+   "id": "life-s136-e021#1",
+   "response": "TFSA: you contribute after-tax money and growth and withdrawals are tax-free, and it is flexible for any goal. RRSP: contributions are tax-deductible and grow tax-deferred, but withdrawals are taxed, which usually pays off if your tax rate now is higher than it will be in retirement. If Sam wants a personal answer, it depends on income and goals.\nAction: None, unless you want me to tailor it to your numbers."
+  },
+  {
+   "id": "life-s046-e029#1",
+   "response": "Claro, 10 minutos. Quiz rápido: el o la? 1) ___ problema 2) ___ mapa 3) ___ mano 4) ___ día 5) ___ foto 6) ___ idioma 7) ___ tema 8) ___ radio. Respóndeme todas y te corrijo.\nAction: Wait for your answers, correct them with a short note on each exception, and keep a list of the ones you miss for the next quiz."
+  },
+  {
+   "id": "life-s020-e016#1",
+   "response": "I will make a drill sheet with four sections: ser vs estar (emotions and locations), por vs para, and the subjunctive after cuando for future events. The cuando section will use your own example, so 'cuando llego a casa te llamo' becomes 'cuando llegue a casa te llamo'. Each section will have fill-in-the-blank items and an answer key at the end.\nAction: Build the drill sheet and send it to you in time for your next lesson."
+  },
+  {
+   "id": "life-s062-e000#1",
+   "response": "Got it: no new car in 2026, the money goes to the kitchen renovation, and EVs get another look in 2028. I will get you off the dealer's trade-in lists and keep any service reminders you still want for the CX-5.\nAction: Find the Mazda dealer's emails, unsubscribe from the offers, and save the decision (no replacement in 2026, revisit EV in 2028) to your notes."
+  },
+  {
+   "id": "life-s003-e000#1",
+   "response": "Here is a starter set for the doctor's visit, in the table format you want for Anki.\n\n| Spanish | English | Example sentence |\n|---|---|---|\n| el dolor | pain | Tengo dolor de cabeza. |\n| la fiebre | fever | Tengo fiebre desde ayer. |\n| la tos | cough | Tengo tos por la noche. |\n| la garganta | throat | Me duele la garganta. |\n| la receta | prescription | Necesito una receta. |\n| la alergia | allergy | ¿Tiene alguna alergia? |\n| el seguro | insurance | ¿Acepta mi seguro? |\n| el síntoma | symptom | ¿Cuándo empezaron los síntomas? |\n\nAction: Save the rule that Spanish vocab always goes in a three-column table, and offer more rows for your Tuesday role-play with Carlos."
+  },
+  {
+   "id": "life-s072-e000#1",
+   "response": "Got it, Dr. Moreau has retired and Biscuit's vet is now Dr. Kaur at Riverside Veterinary Clinic on Broadview Ave. I will update his contact and look for a weekday slot after 5:30 next week for his annual shots and rabies booster.\nAction: Update Biscuit's vet contact, check Riverside's availability for next week after 5:30 pm, book the earliest slot that fits your calendar, and confirm it with you."
+  },
+  {
+   "id": "life-s123-e011#1",
+   "response": "I will do that, and I want to use the actual scan date rather than the date the file was saved, so I will check each file's metadata and content. Before renaming anything I will show you the planned names so nothing gets overwritten.\nAction: List the Scan_*.pdf files in Downloads, show the proposed names in a date format (YYYY-MM-DD), and rename them once you approve."
+  },
+  {
+   "id": "life-s140-e044#1",
+   "response": "I would rather check than guess the puck drop time. Once I have it I can work out when it starts relative to Leo's bedtime.\nAction: Look up tonight's Leafs game start time and channel, and tell you."
+  },
+  {
+   "id": "life-s085-e017#1",
+   "response": "Posted the reminder in #payouts-launch. Here is the table, using the rate plus the fixed fee on each payment.\n\n| Plan | Rate | $100 payment | $1,000 payment |\n|---|---|---|---|\n| Starter | 2.9% + 30c | $3.20 | $29.30 |\n| Growth | 2.6% + 25c | $2.85 | $26.25 |\n| Scale | 2.2% + 20c | $2.40 | $22.20 |\n| Enterprise | custom | n/a | n/a |\n\nAction: Post the beta retro reminder to #payouts-launch."
+  },
+  {
+   "id": "life-s048-e000#1",
+   "response": "I do not want to guess at the weather, so I will check the actual record for Ottawa on the 25th, including the temperature, wind and any snow, and compare it to what Grace is describing.\nAction: Look up Ottawa's observed weather for the 25th (high, low, wind, snowfall) and tell you."
+  },
+  {
+   "id": "life-s085-e030#1",
+   "response": "Two is the correct number, and I will not judge a third. Portuguese custard tarts from a good bakery are dangerous when they show up in a box.\nAction: None."
+  },
+  {
+   "id": "life-s017-e008#1",
+   "response": "I do not have yesterday's route details in front of me, so I will not guess at the estimated time. I will pull up the route and compare it with how long the drive actually felt like it took. For the drive home Monday, the Big Apple is open 8:00 to 20:00, and stopping before noon or after 15:00 avoids the crowds.\nAction: Find yesterday's route and estimated drive time and send them to you."
+  },
+  {
+   "id": "life-s045-e000#1",
+   "response": "On it. Last time Old Navy needed a login to unsubscribe, so that one may need your help, and I will leave transactional and real-person senders alone. The Dyson one you never signed up for I will treat as junk and block rather than unsubscribe.\nAction: Unsubscribe from Wayfair, Uber Eats promos and Lululemon, block Dyson, archive their existing mail, and check your Notes / Inbox cleanup for the Old Navy steps."
+  },
+  {
+   "id": "life-s037-e004#1",
+   "response": "Happy to, but I do not have the details of the last cake here. Which bakery was it, and do you remember the size and flavour? If not, I can search your email for the receipt and set it up for Wed 31 Dec from there.\nAction: Search your email for the receipt for the previous cake from that bakery, then come back with the bakery, size and flavour to confirm before ordering."
+  },
+  {
+   "id": "life-s106-e007#1",
+   "response": "Okay. I am holding the charcoal bags until you have talked to Sam, and nothing is ordered.\nAction: Keep the order on hold, and plan easy dinners once you tell me what appliances are set up in the basement kitchen."
+  },
+  {
+   "id": "life-s140-e033#1",
+   "response": "I will read Sam's text about dinner first so we do not clash with whatever he has in mind. After that I will find options that do not need the hotplate. I do not know what else you have set up, so I will check that before I suggest anything.\nAction: Open Sam's text about dinner, then give you two or three no-hotplate options (such as takeout or delivery nearby) to choose from."
+  },
+  {
+   "id": "life-s090-e000#1",
+   "response": "I can put together a checklist for Leo's Riverdale Farm day camp, but my notes show him in camp Weeks 2 and 3 (Jul 13-24), not starting Mon 29 Jun. Can you confirm which dates are right? I will include the usual day camp items such as water bottle, sunscreen, hat, spare clothes, closed-toe shoes and lunch, with a note to label each one.\nAction: Draft the checklist and check the camp's own packing list and email to match it, then ask you to confirm the dates."
+  },
+  {
+   "id": "life-s013-e023#1",
+   "response": "Added to your to-do list: get passport photos for Leo.\nAction: Add 'get passport photos for Leo' to your to-do list with no due date."
+  },
+  {
+   "id": "life-s110-e007#1",
+   "response": "A heat warning means the forecast heat and humidity meet the local criteria, usually a stretch of hot days with warm nights. An extended heat warning means it is expected to last longer, so the health measures such as cooling centres and outreach are more active. The exact thresholds vary by region, so I would rather check them for your area than quote numbers.\nAction: Check the Environment Canada and City of Toronto definitions for your area and tell you which warning is in effect now."
+  },
+  {
+   "id": "life-s060-e019#1",
+   "response": "Scheduled for 9:00. For Priya, questions that cut through: is the transfer a step up or a sideways move, who would she work for in Toronto, what would she give up where she lives now, and what happens if she says no? A good extra one is whether she can try it first, like a short secondment, and where she sees herself in five years.\nAction: Schedule your Slack note to #payouts-team for 9:00 tomorrow."
+  },
+  {
+   "id": "life-s077-e012#1",
+   "response": "Here is a draft: 'Hi, thanks for organizing the street party. I can take the 2-4pm volunteer slot at the lemonade table, but I will not be able to help with setup. Thanks, Riya.'\nAction: Save it as a draft for you to review and do not send it until you approve."
+  },
+  {
+   "id": "life-s025-e036#1",
+   "response": "I do not have a reliable number, and regular international mail can vary a lot. I would expect a couple of weeks, but I want to check Canada Post's current estimate for India before telling you when to mail it.\nAction: Check Canada Post's current delivery time for letter mail to Mumbai and tell you the latest date to mail the card."
+  },
+  {
+   "id": "life-s057-e000#1",
+   "response": "Draft for Olivia:\n\n'Hi Olivia, quick note on the instant payouts GA. The current target is [date], pending sign-off from Aisha. Please hold off on a firm launch date in the deck until I confirm.'\n\nI used 'target' since a date should not go to sales before Aisha signs off.\nAction: Check Linear and Notion for the GA target and whether Aisha has signed off, fill in the date, and leave the draft unsent for your review."
+  },
+  {
+   "id": "life-s068-e008#1",
+   "response": "All I can see right now is that Leo built a fort out of every couch cushion and Biscuit took it over. I do not have a reliable list of what he is into or his food restrictions, and I would not want to guess at the food side.\nAction: Search your notes and earlier chats for Leo's current interests and any foods to avoid, then draft a reply to Grace for you to review."
+  },
+  {
+   "id": "life-s021-e000#1",
+   "response": "Congratulations on your first half marathon, 2:04:37 at the Toronto Waterfront 21K is a big deal, and good on Marcus for getting you through it. Fridays are covered: a 15:00 reminder to post the payouts status in #payouts-launch by 16:00, with a pre-drafted five-bullet red/amber/green update from Linear, and Friday evenings kept clear for pizza and movie night.\nAction: Set the recurring Friday 15:00 reminder and pre-draft, block Friday evenings on the calendar, and save your race result (2025-10-19, 2:04:37, trained with Marcus)."
+  },
+  {
+   "id": "life-s018-e017#1",
+   "response": "Pastel de nata comes from Portugal, specifically Belém in Lisbon, where monks at the Jerónimos Monastery made them. The recipe was later sold to a nearby bakery, which still makes them today. Kid version: 'Monks used the leftover egg yolks to make a custard tart, and it was so good it became famous.'\nAction: None."
+  }
+ ]
+}
