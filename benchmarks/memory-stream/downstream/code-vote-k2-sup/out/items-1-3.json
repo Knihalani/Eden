@@ -1,0 +1,45 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "code-s105-e008#1",
+   "response": "I'll keep the invoice list filters (status, client, date range) in the URL search params, so Back restores them and filtered views can be shared; I'd use `router.replace` so each filter change doesn't add a history entry. Dates need validating on read so a bad param doesn't break the page.\nAction: look at the invoice list and filter components, move the filter state to search params with a parser, and add tests for restoring after navigation and for invalid params."
+  },
+  {
+   "id": "code-s098-e019#1",
+   "response": "Yes, fine in modern Node (17+).\nAction: none; I'll check the web and cli test results when they finish."
+  },
+  {
+   "id": "code-s028-e017#1",
+   "response": "I'll add the duplicate button using the shadcn/ui Button from apps/web/components/ui and a lucide-react icon, next to the trash button. It's icon-only, so it gets an aria-label (like \"Duplicate line item <description>\") with the icon aria-hidden, matching what the trash button now has.\nAction: open the line item row, add the button and a duplicate handler that copies the line with a new id, and add a test."
+  },
+  {
+   "id": "code-s068-e017#1",
+   "response": "I'll leave Marco a comment on acme-215-clerk-verify asking to restore the `isActiveMember` check, since the failing auth test shows a valid token still works after someone leaves an org. For /reports I don't have a confirmed convention, so I'd check how apps/web routes are organized (route groups, auth layout) before choosing.\nAction: draft the review comment for Marco (and post it if I can), then inspect apps/web/app for existing route groups and propose where /reports should go."
+  },
+  {
+   "id": "code-s066-e013#1",
+   "response": "I'll make the CSV download filename `invoices-<org slug>.csv`. I need to check where the org slug comes from and sanitize it so it's safe in a Content-Disposition header.\nAction: find the filename code in the api export, use the org slug (falling back to `invoices.csv` if missing), and update the export test and add a case for the slug."
+  },
+  {
+   "id": "code-s001-e037#1",
+   "response": "I'll read docs/onboarding.md and the ops runbook and compare their commands, paths and tool names against the repo to flag what's stale. I don't know the runbook's location yet.\nAction: open docs/onboarding.md, find the ops runbook, check each step against the actual repo, and send you a list of stale items with evidence."
+  },
+  {
+   "id": "code-s007-e027#1",
+   "response": "I'll add a retry in the CLI's api client for 502, 503 and 504, 3 tries total with exponential backoff, and no retries for other statuses like 404. I'd limit it to safe or idempotent requests unless you say otherwise.\nAction: open the CLI api client, add the retry helper, and write vitest tests using fake timers so they don't wait on real backoff."
+  },
+  {
+   "id": "code-s072-e000#1",
+   "response": "Noted: git hooks run through lefthook now and husky is gone, so I'll remove any leftover .husky references. For the API not connecting to your local DB, I don't have the error yet, so I'll reproduce it before guessing.\nAction: grep the repo for husky (package.json scripts, docs, CI) and remove them, then start the api and read the connection error, checking env vars, the DB being up and migrations."
+  },
+  {
+   "id": "code-s105-e015#1",
+   "response": "I'll write a `slugify` that normalizes accents (NFKD, strip diacritics), lowercases, turns non-alphanumerics into dashes, collapses repeats, trims edge dashes, and caps at 64 chars without a trailing dash, so \"Caf\u00e9 M\u00fcller\" becomes \"cafe-muller\".\nAction: check lib/ for an existing slugify first, then add it with table tests including accents, repeated dashes, long input and all-symbol names."
+  },
+  {
+   "id": "code-s092-e000#1",
+   "response": "I'll change the clients page empty state copy to \"No clients yet\" with the button \"Add client\".\nAction: find the clients empty-state component, update the text, and check any tests or snapshots that reference the old copy."
+  }
+ ]
+}
