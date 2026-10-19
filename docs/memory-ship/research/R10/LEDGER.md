@@ -2022,3 +2022,12 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **Measure:** as C11-E9 (recall, turns with any pick need / no-need, picks per turn, latency of the extra call),
   next to one-pass p ≥ 0.7 top 8 (code 0.793 / 29; life 0.714 / 38).
 - **No verdict rule.**
+- **Result (2026-10-19, `python3 benchmarks/memory-stream/wide_check.py --world <w> --implied`):**
+  - code: recall 47/58 = 0.810 (one pass 46/58 = 0.793); turns with any pick need 54/55, no-need 37/55 (was 29);
+    picks per turn 4.65 (was 2.98); extra call p50 0.339 s, p90 0.444 s.
+  - life: recall 47/63 = 0.746 (was 45/63 = 0.714); need 72/79, no-need 40/79 (was 38); picks 2.76 (was 2.41);
+    p50 0.380 s, p90 0.437 s.
+- **What this says:** asking about implied steps finds one or two more needed rows per world and costs more firing
+  on turns that need nothing (code +8 turns, picks per turn up by half). The checker's recall over a wide pool
+  plateaus near 0.75–0.81 with these question designs; the remaining misses are rows Jev scores low (0.1–0.4) whose
+  link to the turn takes a step of reasoning (a YouTube embed → the CSP headers).
