@@ -1,0 +1,12 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "code-s060-e021", "scores": [2, 3, 2], "why": "Node 20.11 pin matters on a fresh laptop; third knows it but invents a destructive seed --reset; first ignores Node."},
+{"event": "code-s060-e026", "scores": [3, 3, 3], "why": "Small talk; all acknowledge briefly and accurately note the pending test run."},
+{"event": "code-s066-e013", "scores": [2, 3, 3], "why": "Current name is invoices.csv; first anchors on csv-filename.ts 'Export org date' builder, likely a different path."},
+{"event": "code-s066-e028", "scores": [3, 3, 3], "why": "All correctly plan a toggleable ServiceMonitor in infra/helm/worker with selector/port checks."},
+{"event": "code-s067-e006", "scores": [3, 3, 3], "why": "All accurately explain up -d versus start."},
+{"event": "code-s068-e000", "scores": [3, 3, 3], "why": "All split commits onto separate branches safely, respecting no-rewrite/no-merge rules."},
+{"event": "code-s068-e023", "scores": [0, 3, 1], "why": "Rules: no git stash, no major bumps without asking. First breaks both; third bumps majors; second follows both."},
+{"event": "code-s070-e000", "scores": [3, 3, 3], "why": "Small talk; all respond briefly and appropriately."},
+{"event": "code-s071-e014", "scores": [3, 3, 3], "why": "All add per-org structured decision logging via existing logger without leaking personal data."},
+{"event": "code-s072-e000", "scores": [2, 3, 3], "why": "MySQL-to-Postgres switch was weeks ago, so first's lead suspicion is likely stale; others investigate the pull properly."}
+]}
