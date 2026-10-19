@@ -121,7 +121,7 @@ def collect(a):
     d = os.path.join(HERE, "downstream", a.sub or a.world)
     src = json.load(open(os.path.join(d, "in", "responses-in.json")))["cases"]
     got, who = {}, ""
-    for p in glob.glob(os.path.join(d, "out", "items-*.json")):
+    for p in glob.glob(os.path.join(d, "out", "items-*-*.json")):  # per-turn-split files only (C4-R)
         j = json.load(open(p))
         who = j.get("responder", who)
         got.update({x["id"]: x["response"] for x in j["items"]})
