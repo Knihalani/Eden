@@ -1,0 +1,680 @@
+{
+ "system": "h2h eden-dated vs verify:cal,p=0.6 dated",
+ "key": {
+  "life-s003-e000": {
+   "group": "labeler-only",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s003-e021": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s005-e002": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s007-e013": {
+   "group": "plan",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s013-e020": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s013-e023": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s017-e008": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s018-e010": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s018-e017": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s022-e000": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s026-e000": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s027-e029": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s027-e031": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s028-e014": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s030-e000": {
+   "group": "labeler-only",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s036-e003": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s037-e004": {
+   "group": "plan",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s037-e009": {
+   "group": "labeler-only",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s046-e021": {
+   "group": "plan",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s046-e029": {
+   "group": "labeler-only",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s047-e019": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s048-e000": {
+   "group": "labeler-only",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s050-e016": {
+   "group": "plan",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s051-e002": {
+   "group": "plan",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s052-e008": {
+   "group": "plan",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s057-e000": {
+   "group": "plan",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s057-e015": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s058-e000": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s058-e002": {
+   "group": "labeler-only",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s058-e007": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s058-e014": {
+   "group": "labeler-only",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s062-e000": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s068-e008": {
+   "group": "plan",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s068-e021": {
+   "group": "plan",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s070-e002": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s073-e002": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s075-e000": {
+   "group": "plan",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s076-e007": {
+   "group": "plan",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s076-e012": {
+   "group": "plan",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s077-e028": {
+   "group": "plan",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s083-e000": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s085-e030": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s087-e031": {
+   "group": "plan",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s088-e038": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s090-e000": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s096-e026": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s100-e000": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s100-e017": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s102-e009": {
+   "group": "plan",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s103-e007": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s105-e000": {
+   "group": "labeler-only",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s105-e004": {
+   "group": "labeler-only",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s105-e028": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s105-e032": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s106-e005": {
+   "group": "plan",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s107-e005": {
+   "group": "labeler-only",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s107-e009": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s111-e007": {
+   "group": "plan",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s111-e027": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s113-e000": {
+   "group": "labeler-only",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s115-e008": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s118-e000": {
+   "group": "labeler-only",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s122-e004": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s123-e004": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s126-e000": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s126-e021": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s131-e027": {
+   "group": "plan",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s138-e007": {
+   "group": "labeler-only",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s140-e033": {
+   "group": "labeler-only",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s140-e044": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s140-e051": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s145-e020": {
+   "group": "labeler-only",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s148-e018": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s150-e000": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s150-e015": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  }
+ }
+}
