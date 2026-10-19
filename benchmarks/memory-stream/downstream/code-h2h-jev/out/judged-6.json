@@ -1,0 +1,156 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s023-e000",
+   "scores": [
+    3,
+    1,
+    1,
+    2
+   ],
+   "why": "R0 flags Express-vs-Fastify conflict and existing exports bucket branch; R3 knows bucket; R1/R2 miss both."
+  },
+  {
+   "event": "code-s025-e000",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "No recorded detail on image job; all correctly read the code before summarising."
+  },
+  {
+   "event": "code-s027-e000",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All give a reasonable hypothesis, flag it as unverified, and plan repro, finally-reset fix, and test."
+  },
+  {
+   "event": "code-s027-e008",
+   "scores": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "why": "History holds several days of work (bucket, SQS check, CLI, fixes); all only recap this session and defer to git log."
+  },
+  {
+   "event": "code-s027-e022",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "Simple acknowledgement; all accurate about the payment-terms util and test results."
+  },
+  {
+   "event": "code-s027-e058",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "Casual check-in; all accurately state zod commit unpushed and tests passing."
+  },
+  {
+   "event": "code-s030-e027",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All explain AsyncLocalStorage correctly and tie it to the request-id gap."
+  },
+  {
+   "event": "code-s035-e033",
+   "scores": [
+    3,
+    2,
+    3,
+    3
+   ],
+   "why": "R0/R2 use prior flake fix pattern (pin clock, Toronto/UTC); R1 omits timezone check; R3 fine."
+  },
+  {
+   "event": "code-s038-e028",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "General Kubernetes question; all correct."
+  },
+  {
+   "event": "code-s041-e005",
+   "scores": [
+    3,
+    2,
+    3,
+    3
+   ],
+   "why": "R0/R2/R3 flag Math.round half-toward-+inf asymmetry for negatives; R1 misses it."
+  },
+  {
+   "event": "code-s041-e009",
+   "scores": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "why": "History shows @acme/cli published to npm, bin acme (npm i -g @acme/cli); all hedge and defer to checking."
+  },
+  {
+   "event": "code-s041-e013",
+   "scores": [
+    3,
+    3,
+    3,
+    1
+   ],
+   "why": "Fix advice sound; R3 cites a nonexistent project note about hx-* on the form."
+  },
+  {
+   "event": "code-s041-e021",
+   "scores": [
+    2,
+    3,
+    3,
+    3
+   ],
+   "why": "Filter lines 28-29 are its own Props kind; R0 plans to rename them blindly, others check first."
+  },
+  {
+   "event": "code-s041-e038",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "Acknowledgement; all accurate about full suite and pushed branch."
+  },
+  {
+   "event": "code-s042-e005",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly separate blocking changes from opinions and follow-ups."
+  }
+ ]
+}
