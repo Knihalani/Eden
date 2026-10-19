@@ -1,0 +1,435 @@
+{
+ "tags": {
+  "life-sleep-b09:m0009": [
+   "finance",
+   "message"
+  ],
+  "life-sleep-b09:m0010": [
+   "finance",
+   "reminder"
+  ],
+  "life-sleep-b09:m0011": [
+   "message",
+   "work-task",
+   "docs"
+  ],
+  "life-sleep-b09:m0012": [
+   "finance",
+   "reminder"
+  ],
+  "life-sleep-b09:m0013": [
+   "health",
+   "food",
+   "booking"
+  ],
+  "life-sleep-b09:m0014": [
+   "schedule",
+   "reminder",
+   "work-task"
+  ],
+  "life-sleep-b09:m0015": [
+   "travel",
+   "schedule"
+  ],
+  "life-sleep-b09:m0016": [
+   "schedule",
+   "family",
+   "reminder"
+  ],
+  "life-sleep-b09:m0017": [
+   "schedule",
+   "family"
+  ],
+  "life-sleep-b09:m0018": [
+   "message",
+   "work-task",
+   "docs"
+  ],
+  "life-sleep-b09:m0019": [
+   "work-task",
+   "docs",
+   "message"
+  ],
+  "life-sleep-b09:m0020": [
+   "finance",
+   "home"
+  ],
+  "life-sleep-b09:m0021": [],
+  "life-sleep-b09:m0022": [
+   "pet",
+   "message"
+  ],
+  "life-sleep-b09:m0023": [
+   "pet",
+   "message",
+   "travel"
+  ],
+  "life-sleep-b09:m0024": [
+   "pet",
+   "health",
+   "reminder"
+  ],
+  "life-sleep-b09:m0025": [
+   "family",
+   "message"
+  ],
+  "life-sleep-b09:m0026": [
+   "family",
+   "finance",
+   "reminder"
+  ],
+  "life-sleep-b09:m0027": [
+   "family",
+   "reminder"
+  ],
+  "life-sleep-b09:m0028": [
+   "family",
+   "schedule",
+   "reminder"
+  ],
+  "life-sleep-b09:m0029": [
+   "schedule",
+   "family"
+  ],
+  "life-sleep-b09:m0030": [
+   "booking",
+   "schedule",
+   "food"
+  ],
+  "life-sleep-b09:m0031": [
+   "home",
+   "purchase",
+   "reminder"
+  ],
+  "life-sleep-b09:m0032": [
+   "work-task",
+   "reminder",
+   "message"
+  ],
+  "life-sleep-b09:m0033": [
+   "work-task"
+  ],
+  "life-sleep-b09:m0034": [
+   "pet",
+   "schedule",
+   "finance"
+  ],
+  "life-sleep-b10:m0001": [
+   "schedule",
+   "health"
+  ],
+  "life-sleep-b10:m0002": [
+   "work-task",
+   "reminder"
+  ],
+  "life-sleep-b10:m0003": [
+   "work-task",
+   "schedule"
+  ],
+  "life-sleep-b10:m0004": [
+   "schedule",
+   "work-task"
+  ],
+  "life-sleep-b10:m0005": [
+   "health",
+   "finance"
+  ],
+  "life-sleep-b10:m0006": [
+   "purchase",
+   "booking",
+   "travel"
+  ],
+  "life-sleep-b10:m0007": [
+   "family",
+   "pet"
+  ],
+  "life-sleep-b10:m0008": [
+   "message",
+   "purchase",
+   "family"
+  ],
+  "life-sleep-b10:m0009": [
+   "work-task",
+   "message"
+  ],
+  "life-sleep-b10:m0010": [
+   "work-task",
+   "docs"
+  ],
+  "life-sleep-b10:m0011": [
+   "work-task",
+   "docs"
+  ],
+  "life-sleep-b10:m0012": [
+   "family",
+   "message",
+   "home"
+  ],
+  "life-sleep-b10:m0013": [
+   "learning",
+   "schedule",
+   "reminder"
+  ],
+  "life-sleep-b10:m0014": [
+   "family",
+   "purchase"
+  ],
+  "life-sleep-b10:m0015": [
+   "work-task",
+   "reminder"
+  ],
+  "life-sleep-b10:m0016": [
+   "finance",
+   "reminder"
+  ],
+  "life-sleep-b10:m0017": [
+   "travel",
+   "booking",
+   "family"
+  ],
+  "life-sleep-b10:m0018": [
+   "health",
+   "reminder"
+  ],
+  "life-sleep-b10:m0019": [
+   "schedule",
+   "family"
+  ],
+  "life-sleep-b10:m0020": [
+   "health",
+   "schedule",
+   "reminder"
+  ],
+  "life-sleep-b10:m0021": [
+   "work-task",
+   "reminder",
+   "schedule"
+  ],
+  "life-sleep-b10:m0022": [
+   "schedule",
+   "work-task"
+  ],
+  "life-sleep-b10:m0023": [
+   "pet",
+   "finance"
+  ],
+  "life-sleep-b10:m0024": [
+   "finance"
+  ],
+  "life-sleep-b10:m0025": [
+   "health",
+   "schedule",
+   "booking"
+  ],
+  "life-sleep-b10:m0026": [
+   "home",
+   "finance"
+  ],
+  "life-sleep-b10:m0027": [
+   "finance",
+   "home",
+   "reminder"
+  ],
+  "life-sleep-b10:m0028": [
+   "pet",
+   "purchase"
+  ],
+  "life-sleep-b10:m0029": [
+   "schedule",
+   "family",
+   "message"
+  ],
+  "life-sleep-b10:m0030": [
+   "release",
+   "message",
+   "schedule"
+  ],
+  "life-sleep-b10:m0031": [
+   "learning",
+   "purchase"
+  ],
+  "life-sleep-b10:m0032": [
+   "schedule",
+   "message",
+   "reminder"
+  ],
+  "life-sleep-b10:m0033": [
+   "home",
+   "schedule",
+   "purchase"
+  ],
+  "life-sleep-b10:m0034": [
+   "family",
+   "travel",
+   "reminder"
+  ],
+  "life-sleep-b10:m0035": [
+   "travel",
+   "booking",
+   "family"
+  ],
+  "life-sleep-b10:m0036": [
+   "schedule",
+   "message",
+   "work-task"
+  ],
+  "life-sleep-b10:m0037": [
+   "home",
+   "reminder"
+  ],
+  "life-sleep-b11:m0001": [
+   "message",
+   "purchase"
+  ],
+  "life-sleep-b11:m0002": [
+   "family",
+   "pet"
+  ],
+  "life-sleep-b11:m0003": [
+   "message",
+   "family"
+  ],
+  "life-sleep-b11:m0004": [
+   "message"
+  ],
+  "life-sleep-b11:m0005": [
+   "finance",
+   "home"
+  ],
+  "life-sleep-b11:m0006": [
+   "family",
+   "message",
+   "travel"
+  ],
+  "life-sleep-b11:m0007": [
+   "travel",
+   "family"
+  ],
+  "life-sleep-b11:m0008": [
+   "travel",
+   "finance"
+  ],
+  "life-sleep-b11:m0009": [
+   "home",
+   "finance"
+  ],
+  "life-sleep-b11:m0010": [
+   "family",
+   "purchase"
+  ],
+  "life-sleep-b11:m0011": [
+   "booking",
+   "schedule",
+   "food"
+  ],
+  "life-sleep-b11:m0012": [
+   "family",
+   "reminder"
+  ],
+  "life-sleep-b11:m0013": [
+   "travel",
+   "booking",
+   "finance"
+  ],
+  "life-sleep-b11:m0014": [
+   "travel",
+   "family",
+   "reminder"
+  ],
+  "life-sleep-b11:m0015": [
+   "travel",
+   "purchase"
+  ],
+  "life-sleep-b11:m0016": [
+   "travel",
+   "booking",
+   "food"
+  ],
+  "life-sleep-b11:m0017": [
+   "message"
+  ],
+  "life-sleep-b11:m0018": [
+   "schedule",
+   "message"
+  ],
+  "life-sleep-b11:m0019": [
+   "work-task",
+   "message",
+   "schedule"
+  ],
+  "life-sleep-b11:m0020": [
+   "travel",
+   "booking"
+  ],
+  "life-sleep-b11:m0021": [
+   "pet",
+   "travel",
+   "booking"
+  ],
+  "life-sleep-b11:m0022": [
+   "travel",
+   "family"
+  ],
+  "life-sleep-b11:m0023": [
+   "finance",
+   "home"
+  ],
+  "life-sleep-b11:m0024": [
+   "home",
+   "reminder",
+   "finance"
+  ],
+  "life-sleep-b11:m0025": [
+   "home",
+   "reminder"
+  ],
+  "life-sleep-b11:m0026": [
+   "family",
+   "schedule",
+   "booking"
+  ],
+  "life-sleep-b11:m0027": [
+   "health",
+   "family",
+   "booking"
+  ],
+  "life-sleep-b11:m0028": [
+   "finance"
+  ],
+  "life-sleep-b12:m0001": [
+   "work-task",
+   "docs"
+  ],
+  "life-sleep-b12:m0002": [
+   "work-task",
+   "observability"
+  ],
+  "life-sleep-b12:m0003": [
+   "home",
+   "reminder"
+  ],
+  "life-sleep-b12:m0004": [
+   "home"
+  ],
+  "life-sleep-b12:m0005": [
+   "message"
+  ],
+  "life-sleep-b12:m0006": [
+   "family",
+   "schedule",
+   "reminder"
+  ],
+  "life-sleep-b12:m0007": [
+   "message"
+  ],
+  "life-sleep-b12:m0008": [
+   "finance",
+   "home"
+  ],
+  "life-sleep-b12:m0009": [
+   "travel",
+   "reminder",
+   "schedule"
+  ]
+ }
+}
