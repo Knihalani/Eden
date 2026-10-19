@@ -1,0 +1,141 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s046-e041",
+   "scores": [
+    1,
+    3,
+    2
+   ],
+   "why": "Tulip Festival was noted for May with Grace and Daniel; R1 recalls it, R2 hints tulips, R0 knows nothing."
+  },
+  {
+   "event": "life-s047-e006",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "Ontario bans damage deposits; R0/R1 state it clearly, R2 hedges more."
+  },
+  {
+   "event": "life-s047-e013",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "Light tired chat; R0's 'I'm sure T-Rex has parties' slightly off, others fine."
+  },
+  {
+   "event": "life-s047-e025",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All sensibly offer to check rink status and forecast without guessing."
+  },
+  {
+   "event": "life-s048-e006",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "R0/R1 name sensible ad-free options; R2 gives nothing concrete."
+  },
+  {
+   "event": "life-s050-e011",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Sunday 9am free (mom call moved to 9pm); all accept and add event."
+  },
+  {
+   "event": "life-s051-e000",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "R0 gives the specific history (2002, 17-game season); others vaguer and hedge."
+  },
+  {
+   "event": "life-s051-e006",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "Timing correct in all; R0 wrongly calls overnight marinade tight for tomorrow."
+  },
+  {
+   "event": "life-s060-e019",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All schedule the Slack post and give useful, tailored questions for Priya."
+  },
+  {
+   "event": "life-s060-e022",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All draft Priya note and plan to verify Disney+ charge stopped."
+  },
+  {
+   "event": "life-s062-e003",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R0's gym joke falls flat; R1 payouts pun and R2 jokes are clean."
+  },
+  {
+   "event": "life-s063-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give sound commute-versus-pay framing for Marcus."
+  },
+  {
+   "event": "life-s063-e007",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "Simple acknowledgement; R1 confuses the prep block reminder timing."
+  },
+  {
+   "event": "life-s066-e016",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R0 stalls waiting for URL; R1/R2 proceed to find it and scan."
+  },
+  {
+   "event": "life-s068-e014",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "History: winter market at Jimmie Simpson until Apr 26; only R0 uses it."
+  }
+ ]
+}
