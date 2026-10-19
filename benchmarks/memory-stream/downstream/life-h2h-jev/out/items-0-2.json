@@ -1,0 +1,185 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s107-e009#0",
+   "response": "I don't have the reasons for choosing Nate over the other two contractors in front of me, and I'd rather not guess what they were. I can dig through the reno notes and the quotes to rebuild the comparison so you can answer Sam properly.\nAction: Search your reno notes, email and the three contractors' quotes, then send you a short summary of why Nate won."
+  },
+  {
+   "id": "life-s047-e013#0",
+   "response": "Ha, that's a great question, and a very on-brand one given the T-Rex costume that's on its way. Sounds like a long day, so go easy on yourself tonight.\nAction: Nothing needed from you, the costume order is tracked and I'll flag it if the delivery slips."
+  },
+  {
+   "id": "life-s123-e004#0",
+   "response": "On it. I'll write Tanvi a short note: the 2026 guideline is 2.1% for units first occupied before 15 Nov 2018, anything above needs an LTB-approved increase, the landlord needs Form N1 with 90 days' notice and only once every 12 months, and if she gets a 9% N1 with no LTB application she can pay the guideline amount.\nAction: Create the note with the relevant links and give you a share link to forward to her."
+  },
+  {
+   "id": "life-s136-e034#0",
+   "response": "I don't have your visit dates or where your mom is in what I can see right now, so I don't want to guess about the timing, the rains or whether it's too late to call. I'll check your calendar and bookings for the trip, then her local time and the forecast for those dates.\nAction: Look up your trip dates, her location and current local time, and the forecast, then tell you whether you can call right now and what to tell her about the rains."
+  },
+  {
+   "id": "life-s058-e002#0",
+   "response": "That sounds lovely, a first summer visit as Ira's godmother. I don't have any fares yet, so I'll price Toronto to Vancouver for the August long weekend 2026 for one traveller and for you plus Leo, so you can see the difference.\nAction: Search flights for roughly Fri 31 Jul out and Mon 3 or Tue 4 Aug back, and send you rough price ranges for 1 and 2 travellers."
+  },
+  {
+   "id": "life-s013-e023#0",
+   "response": "Added 'Get passport photos for Leo' to your to-do list.\nAction: Add the item to your to-do list with no due date set."
+  },
+  {
+   "id": "life-s136-e017#0",
+   "response": "You're welcome.\nAction: Nothing further, the 7:50 car reminder is set."
+  },
+  {
+   "id": "life-s025-e036#0",
+   "response": "Regular international letter mail from Canada to India usually takes a couple of weeks and can run longer, so I'd leave a good buffer rather than trust a number from me. Let me check Canada Post's current estimate and the postage for a card to Mumbai.\nAction: Look up Canada Post's current Toronto to Mumbai letter mail delivery estimate and price and report back."
+  },
+  {
+   "id": "life-s003-e000#0",
+   "response": "Hola! I'll put the doctor's visit vocabulary in a table with three columns, Spanish, English and an example sentence, so it pastes straight into Anki, and I'll use that format for every Spanish vocab list from now on. I'll cover symptoms, body parts, describing pain, medications and common questions a doctor asks, so it fits your role-play with Carlos on Tuesday.\nAction: Build the table now and save the table format as your standing preference for Spanish vocab lists."
+  },
+  {
+   "id": "life-s103-e007#0",
+   "response": "Ugh, sorry, that's a frustrating start to the day. I can start the claim, but I don't have your insurer or policy number in front of me, so I'll find them in your documents first. Since you were already thinking about shopping around on premiums, I'd also check what your deductible is before filing, in case the repair costs less than that.\nAction: Find your current policy details, then send you the claim steps and what to gather (photos of the scratch and dent, the lot, date and time you parked) and wait for your go-ahead before filing."
+  },
+  {
+   "id": "life-s106-e000#0",
+   "response": "Drywall dust and old curry together is a rough combination. Because Sam gets migraines from strong fragrances, I'll stay away from scented candles, plug-ins and sprays, and look at unscented options that absorb or filter the smell instead, like activated charcoal bags, plus a HEPA air purifier for the drywall dust.\nAction: Find unscented odour absorbers and a purifier that can arrive or be picked up before the week starts, and confirm the pick with you before paying."
+  },
+  {
+   "id": "life-s096-e031#0",
+   "response": "Night, Riya. Congratulations again on the launch.\nAction: Nothing further tonight."
+  },
+  {
+   "id": "life-s016-e002#0",
+   "response": "ACH is the US network name; in Canada the same kind of batch bank-to-bank payment is usually just called an EFT (electronic funds transfer), run on Payments Canada's clearing system, so on your call people were likely describing the same thing. The practical distinction is that EFT is the broader Canadian term (direct deposits, pre-authorized debits), while ACH is mostly used for the US system and US-dollar flows.\nAction: Nothing further needed."
+  },
+  {
+   "id": "life-s107-e005#0",
+   "response": "Pickup in store works, I'll put Sam's name on it. Here's the Slack draft for #payouts-launch: 'Quick reminder: the release freeze runs Thu 12:00 to Mon 09:00 for the bank-partner cutover. Please get anything you need merged before Thursday noon, and ping Aisha if something urgent comes up. Thanks all.'\nAction: Set up the store pickup for Biscuit's food at Queen & Logan for Sam, and save the Slack draft without posting it."
+  },
+  {
+   "id": "life-s022-e000#0",
+   "response": "Hard to say without the numbers, and I don't have your Costco spend or the renewal fee handy. The fair test is whether what you actually bought there over the past year, plus any rewards, comes out ahead of the membership fee.\nAction: Pull the last 12 months of Costco charges from your card statements and the renewal fee, then give you a clear keep-or-drop recommendation."
+  },
+  {
+   "id": "life-s111-e000#0",
+   "response": "Welcome to Vancouver, glad you landed. What you booked was Air Canada QX7L2P for you, Sam and Leo, $1,947.66 CAD, but I only have fare notes from March for the original August dates (about $642 to $689 CAD return per person), not the specific search from before you booked, so I won't guess that comparison. I also don't have the Lafourcade piece for Mei in front of me.\nAction: Look through the saved searches and our history for the pre-booking fare search and the Lafourcade song item, then send both to you."
+  },
+  {
+   "id": "life-s100-e000#0",
+   "response": "No problem. I'll find this afternoon's all-hands email and boil it down to the four things that matter for you.\nAction: Open the all-hands email from this afternoon and send you four bullets, with any deadlines or asks of you first."
+  },
+  {
+   "id": "life-s022-e016#0",
+   "response": "Logged: Toronto Waterfront Half Marathon, 19 Oct 2025, 2:04:37, and congratulations on a solid result. I'll tag it as your official time and keep it for the yearly recap.\nAction: Add the race to your running stats and set a reminder in early December to put together your yearly recap."
+  },
+  {
+   "id": "life-s052-e008#0",
+   "response": "I don't have a record of the specific mistakes you keep making in my context, so I don't want to make up a quiz on guesses. I'll look through our past practice and your notes from Carlos to build 8 to 10 questions on the repeat errors.\nAction: Check past practice logs and notes for your recurring mistakes, then send the warm-up quiz before class tonight."
+  },
+  {
+   "id": "life-s110-e009#0",
+   "response": "Tell Leo: the siren sounds to your dog like another dog howling far away, and dogs have an old instinct to answer back and join the song. He isn't hurt or scared, he thinks he's singing along with a friend. It stops when the truck goes away.\nAction: Nothing needed, I hope the dog settles down soon."
+  },
+  {
+   "id": "life-s148-e018#0",
+   "response": "If tomorrow is Fri 9 Oct, you have 23 business days of runway before the offsite on Thu 12 Nov, counting tomorrow, skipping Thanksgiving Monday (12 Oct) and not counting the offsite day itself. I'm working from the dates in our conversation, so I'll confirm against your calendar.\nAction: Verify the count on your calendar with tomorrow's actual date and holidays, and correct it if it's different."
+  },
+  {
+   "id": "life-s136-e021#0",
+   "response": "RRSP: you get a tax deduction now and pay tax when you withdraw, so it tends to win if you expect a lower tax rate in retirement. TFSA: no deduction now, but growth and withdrawals are tax-free and flexible, so it tends to win for flexibility or if your rate will be the same or higher later.\nAction: Nothing further needed."
+  },
+  {
+   "id": "life-s123-e011#0",
+   "response": "I can do that. I'll use each file's scan or creation date as the name, in YYYY-MM-DD format, and add a number if two scans share a date.\nAction: List the Scan_*.pdf files in Downloads and show you the proposed new names first, then rename them once you confirm."
+  },
+  {
+   "id": "life-s122-e004#0",
+   "response": "Your most recent note (7 Aug) says green bin is every Thursday, 'Day 2', so this week it should be Thursday 13 Aug, which is also a garbage and yard waste week. A holiday only shifts pickup in the week it falls, so last week's one shouldn't move this week, but I'll confirm against the city calendar since older notes had a different day and a one-day delay.\nAction: Check the city's collection calendar for this week, then set a reminder for Wednesday evening to put the bins out."
+  },
+  {
+   "id": "life-s150-e000#0",
+   "response": "Morning. From my last snapshot (as of 26 Aug), PAY-1182 (GA readiness checklist, needs Legal and Support sign-off owners) and PAY-1190 (GA announcement email copy, your call) are what block the GA milestone, and PAY-1216 (support macro tone review) is wanted before GA but not a formal blocker. That's weeks old, so I'll pull live status before you rely on it.\nAction: Query Linear for your tickets that are currently blocked or blocking, and list each one with what it's waiting on."
+  },
+  {
+   "id": "life-s037-e004#0",
+   "response": "Good, I'll mark those 3 unmatched charges as yours. I don't have which bakery or which cake we got last time, so I'll find the order rather than guess.\nAction: Search your email and card history for last year's cake order, then order the same one for NYE pickup and confirm the details with you before paying."
+  },
+  {
+   "id": "life-s085-e027#0",
+   "response": "So far today: I drafted your out-of-office for Fri 22 May (back Mon 25, Aisha covering payouts), which is still a draft and not set. I also collected the beta retro numbers: 9 yes, Olivia tentative, Jonah hasn't replied, and 14 stickies on the Miro board with webhook retries the top theme.\nAction: Check your calendar for anything on the 22nd that needs moving."
+  },
+  {
+   "id": "life-s105-e000#0",
+   "response": "Sorry, that sounds like a repeat. The same outside tap was dripping back in Oct 2025, and the advice then was that a frost-free hose bib replacement beats a washer fix. Last time East End Plumbing Co. (4.8, Queen St E) and Riverside Drain & Plumbing (24/7 emergency) were the options, but I'd check who has current availability today or Monday.\nAction: Check availability and call-out prices for East End, Riverside and one or two others for today or Monday, and send you the best option to book."
+  },
+  {
+   "id": "life-s110-e007#0",
+   "response": "A heat warning means two or more days of very high heat; an extended heat warning means three or more days. In southern Ontario the trigger is roughly daytime highs of 31°C or more with overnight lows of 20°C or more, or a humidex of 40 or higher.\nAction: Nothing further needed."
+  },
+  {
+   "id": "life-s002-e023#0",
+   "response": "Saved in a private health note: allergic to penicillin (hives), plus seasonal allergies in May managed with Reactine.\nAction: Store that in a private health note and bring it up when you book medical or dental appointments."
+  },
+  {
+   "id": "life-s137-e018#0",
+   "response": "Friday at last, and it was a busy week, so you've earned the exhale. Today you got your two-line speaker bio done, the chore chart comparison, and Leo's swim receipt saved. One thing for next week is the meetup page needs your talk title and headshot by 18 Sep.\nAction: Nothing needed tonight."
+  },
+  {
+   "id": "life-s111-e027#0",
+   "response": "Sorry about the bag wait and the forgotten swim shirt and stuffie, that's a stressful way to start a trip. I don't have a packing preference saved yet, so tell me how you want to do it and I'll save it as a rule. In the meantime I'll draft Leo's checklist for the trip home with the swim shirt and his stuffie at the top.\nAction: Create the checklist for the trip home and ask you for the packing rule so I can save it for future trips."
+  },
+  {
+   "id": "life-s140-e029#0",
+   "response": "Short version: a screen in the hour before bed delays a child's sleep (about 19 minutes in a 2025 study of 1,200 kids aged 6 to 9), worst on handhelds close to the face and least on a shared TV. The causes are light, stimulating content like games, and screens crowding out the wind-down routine. The fix is a fixed screens-off time an hour before bed, devices charged outside the bedroom and reading instead, which normalised sleep within two weeks, and the point is when screens are used, not whether.\nAction: Nothing further needed."
+  },
+  {
+   "id": "life-s131-e020#0",
+   "response": "Here's a draft for Priya: 'Hi [name], thanks for the updated direction on the facade. Since the brief has changed twice since the design was approved, the revised drawings fall outside our original scope, so we'll need a change order covering the additional hours before we begin. Happy to send it over and talk it through on a call. Best, Priya'\nAction: Save this as a draft for Priya to adjust, and fill in the client's name and the estimated hours once she tells me."
+  },
+  {
+   "id": "life-s085-e023#0",
+   "response": "Ha, facilities strikes again. Keep the coat on, you'll warm up eventually.\nAction: Nothing needed."
+  },
+  {
+   "id": "life-s156-e004#0",
+   "response": "Got it, we'll come back to Halloween later. I'll book the onboarding design review for Thu 26 Nov, 10:00 to 10:25, with Aisha and Diego and your three agenda items.\nAction: Check all three calendars for a conflict at that time, then send the 25-minute invite with the agenda: KYC retry screens, empty states, open questions."
+  },
+  {
+   "id": "life-s050-e016#0",
+   "response": "A dinosaur trip to Drumheller is a great pick for Leo, who is obsessed with dinosaurs. A 3-night hotel will almost certainly be over $100 in total, and your rule is that I ask before any purchase over $100, so I'll shortlist and not book. I'll look for hotels for the week of 16 March and Tyrrell's admission price for Leo's age.\nAction: Search Drumheller hotels for 3 nights in the week of 16 March and the Tyrrell child ticket price, then send you a shortlist and wait for your OK before booking."
+  },
+  {
+   "id": "life-s105-e004#0",
+   "response": "Booking East End Plumbing for Monday 29 Jun. For Lattice, your mid-year self-review is due Fri 10 Jul, so I'll set the start reminder for Tue 30 Jun morning since Monday morning has the plumber, and a second one for the week of Mon 6 Jul.\nAction: Book East End Plumbing for Mon 29 Jun and add the two Lattice reminders."
+  },
+  {
+   "id": "life-s133-e000#0",
+   "response": "Booking the 25-minute call with Olivia and Aisha on the 9th at 3:30 pm, with your three agenda items in the invite. I'll keep the wording as 'target' for sales, and with Aisha on the call that works well.\nAction: Check all three calendars for 15:30 to 15:55 on the 9th and send the invite with the agenda: 1) where certification stands 2) what sales can and can't say 3) next checkpoint."
+  },
+  {
+   "id": "life-s096-e026#0",
+   "response": "That's a big one, and you should say it out loud. Leading it end to end as a senior PM and having it actually work is a real achievement, and it's all yours.\nAction: None, just congratulating you."
+  },
+  {
+   "id": "life-s060-e019#0",
+   "response": "Scheduled the heads-up to #payouts-team for 9:00 tomorrow. For Priya, I'd ask: is it a step up or a sideways move, who would she work for in Toronto, what does she give up in Montreal, can she trial it first with a secondment or a guaranteed way back, what does licensing as an architect in Ontario involve, and where does she see herself in five years.\nAction: Schedule the Slack message for 9:00 tomorrow and put the questions into a short note you can forward to Priya."
+  },
+  {
+   "id": "life-s051-e006#0",
+   "response": "For jammy yolks, lower the eggs into already boiling water for about 6.5 to 7 minutes, then straight into an ice bath for 5 minutes before peeling. For ramen eggs, marinate the peeled eggs in soy sauce, mirin and water for a few hours or overnight, so tonight is a good time to start.\nAction: Nothing needed, I can set a timer reminder if you want one."
+  },
+  {
+   "id": "life-s070-e002#0",
+   "response": "Checking your library holds and what's due this week now. Tom's message about the link to the beta merchant numbers is still waiting for you after dinner.\nAction: Check your Toronto Public Library account for holds that are ready and loans due this week, and send you the list."
+  },
+  {
+   "id": "life-s060-e022#0",
+   "response": "Yes, I'll turn the questions into a short note you can forward to Priya. For the subscriptions I'll record Netflix (standard), Spotify Family, Crave and The Globe and Mail digital, with Disney+ removed, and look for any Disney+ charge since you cancelled in March.\nAction: Write the forwardable note for Priya, then check your card statements and email for a Disney+ cancellation confirmation and any charge after it, and report back."
+  },
+  {
+   "id": "life-s111-e035#0",
+   "response": "Have a great dinner, Leo's pool excitement is the best part of the day. The Kitsilano pool is open tomorrow 7:00 to 20:45, and lanes are closed 7:00 to 9:00 for swim club, so after 9 is best. His swim shirt is on the checklist for the trip home.\nAction: Nothing needed."
+  }
+ ]
+}
