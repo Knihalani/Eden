@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s107-e022",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All produce a clean, correct rewrite of the requirement."
+  },
+  {
+   "event": "life-s110-e007",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly explain 2-day vs 3+ day heat warning criteria."
+  },
+  {
+   "event": "life-s110-e009",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give a simple kid-friendly howling explanation."
+  },
+  {
+   "event": "life-s111-e000",
+   "scores": [
+    3,
+    1,
+    2
+   ],
+   "why": "History has March search (AC $689, WestJet $642) for different dates and booked $1,947.66; 0 uses it correctly."
+  },
+  {
+   "event": "life-s111-e035",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give a light send-off with accurate pool details."
+  },
+  {
+   "event": "life-s120-e003",
+   "scores": [
+    3,
+    1,
+    1
+   ],
+   "why": "Data requests go to Wen via #data-requests with 3 business days and metric definition; only 0 follows."
+  },
+  {
+   "event": "life-s121-e000",
+   "scores": [
+    1,
+    1,
+    1
+   ],
+   "why": "Te Aro is a coffee shop; her usual oat-milk cortado (decaf after 14:00) is known; all ask instead, 0 treats as groceries."
+  },
+  {
+   "event": "life-s123-e011",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All propose sensible date-based renaming with collision handling."
+  },
+  {
+   "event": "life-s128-e000",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "No confirmation on record; 0 correctly notes Dr. Lin's move to Danforth Smiles, others generic search."
+  },
+  {
+   "event": "life-s131-e020",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give polite, firm change-order drafts for Priya."
+  }
+ ]
+}
