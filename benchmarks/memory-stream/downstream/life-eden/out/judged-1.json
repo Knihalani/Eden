@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s025-e028",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both Tana French with local check; R0 names a concrete title and card."
+  },
+  {
+   "event": "life-s025-e032",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both warm, save Nov 3 birthday and florist tradition, hold book decision."
+  },
+  {
+   "event": "life-s026-e017",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither cites Kanchi Silks Rs 14k-45k range or CAD conversion; R1 needlessly asks to paste saved link."
+  },
+  {
+   "event": "life-s027-e014",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "R0 sensibly reads email first; R1 cites stale 17:00 meeting rule (now 16:30), irrelevant to lessons."
+  },
+  {
+   "event": "life-s027-e020",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both accurate conversions; R0 uses preferred bullet format, R1 prose."
+  },
+  {
+   "event": "life-s028-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both do the task correctly."
+  },
+  {
+   "event": "life-s028-e010",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "R0 states grocery totals not yet available to it at this point; R1 correctly pulls statements."
+  },
+  {
+   "event": "life-s028-e022",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both accurate, kid-friendly answers."
+  },
+  {
+   "event": "life-s028-e028",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R0 drags in unrelated $18k late-invoice; R1 clean and relevant."
+  },
+  {
+   "event": "life-s035-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both warm, light responses."
+  }
+ ]
+}

@@ -829,3 +829,24 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - **Net-negative confirmed** if, on the 60-turn mix reweighted to the real need base rate (14%), the expected eden − none is < 0, that is 0.14 × (plan-need effect) + 0.86 × (no-need effect) < 0.
   - **Net-positive** if > +0.05.
   - In between: near zero.
+
+## C5-E3 · 2026-10-19 · The plugin as it ships today, downstream: result
+- **Numbers** (`downstream.py report --sub <world>-eden`; eden − none; distribution as {Δ: turns}):
+
+  | World | Group | n | Mean eden − none | Distribution |
+  |---|---|---|---|---|
+  | code | plan-need | 30 | +0.1 | −1: 5, 0: 19, +1: 4, +2: 2 |
+  | code | labeler-only | 15 | +0.133 | −1: 1, 0: 11, +1: 3 |
+  | code | no-need | 15 | −0.067 | −1: 3, 0: 10, +1: 2 |
+  | life | plan-need | 30 | **−0.2** | −2: 1, −1: 7, 0: 19, +1: 3 |
+  | life | labeler-only | 15 | −0.2 | −2: 2, −1: 2, 0: 9, +1: 1, +2: 1 |
+  | life | no-need | 15 | +0.067 | −1: 3, 0: 8, +1: 4 |
+
+  Reweighted to a 14% need rate (0.14 × plan + 0.86 × no-need): **code −0.0433 → net-negative by the rule; life +0.0293 → near zero.**
+- **Verdict:**
+  - The shipping plugin's packets do almost nothing to the agent's replies.
+  - On code they add +0.1 where memory is needed, against +1.233 for the right packet (C5-E1): about 8% of the available benefit.
+  - On life they *lower* replies on need turns (−0.2; 8 worse, 3 better). The packet (mostly the user's own past prompts) crowds out or misleads, and does not supply the needed fact.
+  - By the pre-registered rule, code is net-negative (by a small margin) and life is near zero.
+- **Correction to C5-E2:** its −0.22 per turn for eden assumed eden's wrong packets cost what the vote's did (−0.467). Measured directly, eden's no-need cost is about −0.07 on code and +0.07 on life, about the noise floor, because past prompts rarely mislead. Eden-today's true utility is near zero, not strongly negative. The C5-E2 rows for other systems keep their stated assumption.
+- **Note:** for life-s028-e010 the judge flagged a response stating grocery totals that appear only in later turns. Its eden packet (two past prompts about the TD account) does not contain them, so the responder invented them. Isolated; one case.
