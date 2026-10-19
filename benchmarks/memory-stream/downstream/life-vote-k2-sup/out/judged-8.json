@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s105-e028",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Light chit-chat; both respond warmly and appropriately."
+  },
+  {
+   "event": "life-s105-e032",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "Riya said baking on weekend mornings with Leo helps her unwind; R0 claims nothing saved."
+  },
+  {
+   "event": "life-s106-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Both avoid fragrances (Sam migraines); R0 adds an unneeded account hedge."
+  },
+  {
+   "event": "life-s106-e005",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "Basement kitchen setup is on file (microwave, induction hotplate, old fridge); R0 claims not."
+  },
+  {
+   "event": "life-s106-e007",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both hold the order and relay the plumbing confirmation correctly."
+  },
+  {
+   "event": "life-s107-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both draft a fine freeze note and handle the pickup."
+  },
+  {
+   "event": "life-s107-e009",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Contractor reasons not in available evidence yet; both decline to invent and offer to search."
+  },
+  {
+   "event": "life-s107-e022",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both rewrites are clean and accurate."
+  },
+  {
+   "event": "life-s110-e007",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly state 2+ vs 3+ days."
+  },
+  {
+   "event": "life-s110-e009",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give a correct kid-friendly explanation of howling at sirens."
+  },
+  {
+   "event": "life-s111-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither recalls the $486 AC113 search or the Lafourcade translation; R1 adds booking total."
+  },
+  {
+   "event": "life-s111-e007",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Family is in Vancouver Monday; neither mentions Hannah letting crew in; R1 does not name Nate."
+  },
+  {
+   "event": "life-s111-e027",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "No stated rule on file; R0 proposes a sensible concrete rule to confirm; R1 only asks."
+  },
+  {
+   "event": "life-s111-e035",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both fine sign-offs with correct pool info."
+  },
+  {
+   "event": "life-s113-e000",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "R0 does it directly; R1 cites stale/unsupported drafts and needlessly delays."
+  }
+ ]
+}

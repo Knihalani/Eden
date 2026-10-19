@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s027-e029",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both light, correct; Riverdale consent tie-in harmless."
+  },
+  {
+   "event": "life-s027-e031",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both capture walker, cost, calendar and budget; R0 usefully flags Monday cabinet delivery access."
+  },
+  {
+   "event": "life-s028-e014",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both accurately recap Felipe budget, Notion risk page, pending grocery pull."
+  },
+  {
+   "event": "life-s030-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give the full twister and acknowledge launch-week Sunday dread appropriately."
+  },
+  {
+   "event": "life-s035-e008",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 adds $10/day and waitlist and reasonably flags the earlier Calgary move; R0 solid but generic."
+  },
+  {
+   "event": "life-s036-e003",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Quote not yet visible; R1 uses the natural 'including' reading ($4,364); R0 hedges unnecessarily."
+  },
+  {
+   "event": "life-s037-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Simple warm Boxing Day replies; nothing needed."
+  },
+  {
+   "event": "life-s037-e004",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss the known Bobbette & Belle 8-inch vanilla cake ($68) and defer to searching."
+  },
+  {
+   "event": "life-s037-e009",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both fine personal thank-you texts with approval before sending."
+  },
+  {
+   "event": "life-s037-e011",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "R1 serves chicken and charcuterie though Sam is vegetarian; R0's Wellington fits Sam but Leo hates mushrooms."
+  },
+  {
+   "event": "life-s037-e017",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 keeps nut-free for Leo; R1 adds distracting spin note on NYE and omits nut allergy."
+  },
+  {
+   "event": "life-s037-e020",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Neither flight search nor podcast note is in evidence yet; both sensibly search."
+  },
+  {
+   "event": "life-s040-e009",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both set reminder and correctly handle Tom-owned series via accept/remove Thursday."
+  },
+  {
+   "event": "life-s040-e018",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither gives numbers; R0 notes yield mismatch and nut-free; R1 only says multiply by three."
+  },
+  {
+   "event": "life-s042-e008",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both swap spin for Tue/Thu YMCA strength and build playlist; R1 notes first session tomorrow."
+  }
+ ]
+}

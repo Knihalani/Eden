@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s136-e017",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both close politely and accurately note the pending street-cleaning lookup."
+  },
+  {
+   "event": "life-s136-e021",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give a correct two-line TFSA vs RRSP summary."
+  },
+  {
+   "event": "life-s136-e034",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Trip is late March 2027, dry season; neither uses it. R1 also claims not knowing mom is in Mumbai."
+  },
+  {
+   "event": "life-s137-e018",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both acknowledge the week but pivot to the talk-title deadline; R0 hedges oddly on the date."
+  },
+  {
+   "event": "life-s138-e007",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Notes hold Dec averages (15/9C, rainy) and NYE info; R0 defers entirely, R1 gives correct general packing advice."
+  },
+  {
+   "event": "life-s140-e029",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both summaries are accurate and concise."
+  },
+  {
+   "event": "life-s140-e033",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "R0 cites a $400 eating-out limit with no support; R1 is sound and respects the no-hotplate wish."
+  },
+  {
+   "event": "life-s140-e044",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both appropriately look up tonight's game time."
+  },
+  {
+   "event": "life-s140-e051",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both reflect the venting first, then plan a same-day Montreal trip as asked."
+  },
+  {
+   "event": "life-s141-e017",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "R1 uses the DELE B2 exam on 21 Nov; neither uses known recurring mistakes or Thursday lesson time."
+  },
+  {
+   "event": "life-s141-e032",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly start the Linear query."
+  },
+  {
+   "event": "life-s145-e020",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give empathetic, correct drywall-dust cleaning advice."
+  },
+  {
+   "event": "life-s148-e012",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Saturday 10 Oct is the Ottawa Thanksgiving trip; neither flags it, R1 cites soccer instead."
+  },
+  {
+   "event": "life-s148-e018",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither computes the count though the date is inferable; Thanksgiving Monday and Ottawa days matter."
+  },
+  {
+   "event": "life-s150-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 queries live; R1 leads with stale August GA-blocker data and conflates blocking with blocked."
+  }
+ ]
+}

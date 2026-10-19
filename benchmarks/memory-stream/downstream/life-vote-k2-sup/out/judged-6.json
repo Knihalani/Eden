@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s077-e028",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Friday evening is pizza-and-movie night; R1 nods to it (movie, Leo picks), R0 generic."
+  },
+  {
+   "event": "life-s077-e044",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Simple timer; both fine."
+  },
+  {
+   "event": "life-s083-e000",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Leo doesn't do sleepovers yet; neither flags it. R1 does what she asked; R0 stalls on calendar check instead."
+  },
+  {
+   "event": "life-s085-e010",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give sound, practical waitlist advice."
+  },
+  {
+   "event": "life-s085-e017",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Math correct in both; R1 gives prose instead of the requested table."
+  },
+  {
+   "event": "life-s085-e023",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Small talk; both fine."
+  },
+  {
+   "event": "life-s085-e027",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both omit earlier session items (deck comments, daycare, posted reminder, pricing table)."
+  },
+  {
+   "event": "life-s085-e030",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Small talk; both fine."
+  },
+  {
+   "event": "life-s087-e029",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both good casual drafts awaiting approval."
+  },
+  {
+   "event": "life-s087-e031",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither drafts the blurb; neither notes CAD-USD settlement dropped to v1.1 or 'target' wording."
+  },
+  {
+   "event": "life-s088-e015",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R0 packs afternoon contrary to one-activity/quiet-break preference; R1 lighter plan, sensible."
+  },
+  {
+   "event": "life-s088-e023",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither brings Wen Li's data, which Aisha needs for cuts; R1 respects async preference, R0 a meeting."
+  },
+  {
+   "event": "life-s088-e038",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both warm, brief drafts, held for her to post."
+  },
+  {
+   "event": "life-s090-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Reasonable checklists but neither flags Leo's tree-nut allergy for lunches/health form."
+  },
+  {
+   "event": "life-s090-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both flag incomplete camp forms correctly."
+  }
+ ]
+}

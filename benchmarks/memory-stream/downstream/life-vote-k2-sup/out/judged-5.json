@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s066-e016",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both sensibly plan to find the old URL or pricing links and list docs to fix without editing."
+  },
+  {
+   "event": "life-s068-e008",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Leo's tree-nut allergy is on file; R0 gets dinosaurs/Lego but denies any food restrictions, R1 knows neither."
+  },
+  {
+   "event": "life-s068-e014",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both look up the outdoor opening date; R1's winter-market context is supported by history."
+  },
+  {
+   "event": "life-s068-e021",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Dr. Lin moved to Danforth Smiles; R1 uses stale Queen East Dental, R0 looks the office up."
+  },
+  {
+   "event": "life-s070-e002",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 is clean; R0 adds an unsupported Leslieville branch."
+  },
+  {
+   "event": "life-s070-e006",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both close out and keep Tom's pending request on the radar for after dinner."
+  },
+  {
+   "event": "life-s071-e002",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both message mom and Kabir; R0 keeps both Toronto and IST in the invite as required, R1 only Toronto time."
+  },
+  {
+   "event": "life-s072-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both update the vet to Dr. Kaur and look for a weekday slot after 17:30."
+  },
+  {
+   "event": "life-s073-e002",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give the correct COUNTIF formula with sensible caveats."
+  },
+  {
+   "event": "life-s075-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 knows the provider is TekSavvy; R1 has to dig it out of billing emails."
+  },
+  {
+   "event": "life-s076-e007",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both claim not to know the destination; Sam's parents are in Alta Vista, Ottawa, about 4.5 h drive."
+  },
+  {
+   "event": "life-s076-e012",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Sam is vegetarian and Leo has a tree-nut allergy; R0 ignores restrictions, R1 at least checks before ordering."
+  },
+  {
+   "event": "life-s077-e000",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Zellige inspiration was saved in Jan; R0 searches saved notes, R1 wrongly says nothing was saved."
+  },
+  {
+   "event": "life-s077-e010",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Both miss the saved zellige ideas; R1 again asserts nothing was saved."
+  },
+  {
+   "event": "life-s077-e012",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both draft the reply correctly and hold it for review."
+  }
+ ]
+}
