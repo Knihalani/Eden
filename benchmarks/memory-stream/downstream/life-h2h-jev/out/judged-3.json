@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s096-e026", "scores": [3, 3, 3, 3], "why": "Warm acknowledgement fits; all appropriate."},
+{"event": "life-s100-e000", "scores": [3, 3, 3, 3], "why": "No prior record of the email; all correctly plan to read and summarize four points."},
+{"event": "life-s100-e017", "scores": [3, 3, 1, 1], "why": "Anjali has type 2 diabetes, so mithai must be sugar-free; responses 3 and 4 miss it."},
+{"event": "life-s102-e009", "scores": [3, 3, 2, 1], "why": "PC Express Saturday pickup, no-name staples. Response 4 cites stale all-tree-nut allergy (now cashews/pistachios only); 3 ignores usual store."},
+{"event": "life-s103-e007", "scores": [1, 2, 3, 3], "why": "Insurer is Belairdirect, policy BD-AU-7731904; 3 and 4 know it. Response 1 lacks it and adds stale shopping-around remark."},
+{"event": "life-s105-e000", "scores": [3, 2, 2, 3], "why": "History has prior outside-tap plumber options and frost-free bib advice; 1 and 4 use it, others start from scratch."},
+{"event": "life-s105-e004", "scores": [3, 3, 3, 3], "why": "All book Monday and set sensible start and deadline-week reminders."},
+{"event": "life-s105-e028", "scores": [3, 3, 3, 3], "why": "Light banter; all fit."},
+{"event": "life-s105-e032", "scores": [1, 1, 1, 1], "why": "Weekend baking with Leo is her favourite way to unwind; every response claims not to know."},
+{"event": "life-s106-e005", "scores": [1, 1, 1, 1], "why": "Basement kitchen has microwave, induction hotplate and old fridge; all claim no record."},
+{"event": "life-s107-e005", "scores": [2, 3, 3, 2], "why": "Aisha already scheduled a freeze message Thu 07:00; response 1 misses it, 4 uses an exclamation mark against her style."},
+{"event": "life-s107-e009", "scores": [3, 3, 3, 3], "why": "Reasons for choosing Nate not yet on record; searching reno notes is the right move for all."},
+{"event": "life-s111-e007", "scores": [2, 1, 1, 2], "why": "Family away until Mon evening; Hannah can let crew in, Nate prefers texts. None names Hannah; 2 and 3 don't know Nate."},
+{"event": "life-s111-e027", "scores": [2, 3, 2, 2], "why": "Response 2 infers carry-on plus advance Leo checklist and asks to confirm; others ask or build lists only."},
+{"event": "life-s113-e000", "scores": [3, 3, 3, 2], "why": "All reasonable on an ambiguous ask; response 4 adds an exclamation mark she avoids."}
+]}

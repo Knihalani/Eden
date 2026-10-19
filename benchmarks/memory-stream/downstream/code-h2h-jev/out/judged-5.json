@@ -1,0 +1,156 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s006-e007",
+   "scores": [
+    3,
+    3,
+    2,
+    3
+   ],
+   "why": "All commit the four files; R2 doesn't separate the unrelated debounce from the CLI export branch."
+  },
+  {
+   "event": "code-s007-e019",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All add an empty state and keep it off the unrelated bucket/pagination work; fine."
+  },
+  {
+   "event": "code-s007-e025",
+   "scores": [
+    1,
+    2,
+    2,
+    2
+   ],
+   "why": "Recap misses earlier work (lint commit, debounce, trailmix htmx fix); R0 also omits the bucket branch noted in recent context."
+  },
+  {
+   "event": "code-s007-e036",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly explain useLayoutEffect vs useEffect."
+  },
+  {
+   "event": "code-s010-e000",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All propose expires_in deadline, interval, cleaner output, fake-timer tests; correct."
+  },
+  {
+   "event": "code-s011-e000",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All respect new-migration and no-rewrite rules and plan the three tasks sensibly."
+  },
+  {
+   "event": "code-s012-e000",
+   "scores": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "why": "Biome is the known linter, so ESLint/Prettier configs are leftovers; all hedge on that. CORS plans are correct."
+  },
+  {
+   "event": "code-s013-e030",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "Straightforward rename; all grep, rename, typecheck and test."
+  },
+  {
+   "event": "code-s015-e017",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All explain edge default and Node runtime option with a version check; acceptable."
+  },
+  {
+   "event": "code-s018-e000",
+   "scores": [
+    2,
+    3,
+    2,
+    3
+   ],
+   "why": "Spinning up needs docker compose db/redis plus pnpm dev; R1/R3 check compose, R0/R2 only run pnpm dev."
+  },
+  {
+   "event": "code-s018-e004",
+   "scores": [
+    2,
+    2,
+    2,
+    3
+   ],
+   "why": "History shows Terraform infra, tagging rules and RabbitMQ exports queue; only R3 uses them and flags the SQS consumer mismatch."
+  },
+  {
+   "event": "code-s021-e006",
+   "scores": [
+    2,
+    2,
+    2,
+    1
+   ],
+   "why": "Root engines pins Node >=18.18 <19, likely cause; none says so. R0/R3 wrongly say nothing pinned; R3 contradicts yarn fact."
+  },
+  {
+   "event": "code-s021-e028",
+   "scores": [
+    3,
+    3,
+    1,
+    3
+   ],
+   "why": "All keep bench off CI; R2 claims a CI-refusing bench script already exists, unsupported at that point."
+  },
+  {
+   "event": "code-s021-e031",
+   "scores": [
+    2,
+    3,
+    2,
+    2
+   ],
+   "why": "hx-disabled-elt and hx-sync drop were already added to this form; only R1 recalls it and suspects regression."
+  },
+  {
+   "event": "code-s022-e032",
+   "scores": [
+    2,
+    3,
+    3,
+    3
+   ],
+   "why": "Converting sums is right; R0 attributes it to Postgres though the database is MySQL 8."
+  }
+ ]
+}
