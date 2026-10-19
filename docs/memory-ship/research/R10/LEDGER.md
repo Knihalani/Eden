@@ -1740,3 +1740,38 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   human turns and reply in the query); G2 + entity graph (rows sharing a rare entity with the top rows); G3 + time
   index (rows whose `when.times` matches the turn's date or a date the turn names); G4 all fused (reciprocal rank).
 - **No verdict rule:** this chooses what to build and test next; every number is reported.
+
+## C11-E1 · 2026-10-19 · Candidate generation at scale: result (exploratory)
+- **Fused model-free generators barely help** (`recall_funnel.py`; needed items on dev need turns, recall@k of the
+  needed item under each generator; code 69 items, 84% in store; life 103, 67% in store):
+
+  | Generator | code @3 / @15 / @50 | life @3 / @15 / @50 |
+  |---|---|---|
+  | G0 lexical + bank (today's shortlist) | 0.275 / 0.536 / 0.739 | 0.214 / 0.32 / 0.515 |
+  | G1 + session context | 0.261 / 0.478 / 0.725 | 0.194 / 0.33 / 0.505 |
+  | G2 + entity index and graph | 0.217 / 0.565 / 0.754 | 0.097 / 0.369 / 0.544 |
+  | G3 + time index (turn date) | 0.275 / 0.536 / 0.739 | 0.155 / 0.311 / 0.495 |
+  | G4 all fused (RRF) | 0.232 / 0.565 / 0.725 | 0.146 / 0.369 / 0.534 |
+
+  Only about a quarter of needed items rank in the top 3 under any single ranking: a ranked list over a growing store
+  will not find them.
+- **What the misses are** (life, 31 needed items with a covering row outside G4's top 15; 8 read): constraints and
+  conflicts set by the action, not by the turn's words. Scheduling a meeting needs the standing calendar rules;
+  "Sunday at 9" needs the Sunday 9 pm call; "while we're away in July" needs the trip dates; a weekend trip needs
+  the family travel preferences; a vet form needs Biscuit's birth date (an entity the turn names, outranked by other
+  Biscuit rows).
+- **Channels as sets, not one ranking** (needed items that have a covering row; pool = union size per turn):
+
+  | | code (58) | life (69) |
+  |---|---|---|
+  | G0 top 15 | 0.64 | 0.48 |
+  | entity channel (rows holding an entity named in the turn or its session) | 0.59 | 0.62 |
+  | time channel (rows whose times share a weekday or month the turn names) | 0.0 | 0.19 |
+  | union | **0.81** | **0.75** |
+  | union pool size, median / p90 | 32 / 66 | 69 / 151 |
+
+- **What this says:** the needed memory is usually reachable through a typed channel (an entity, a time, an action)
+  even when no ranking puts it on top; a fast checker can then judge a bounded union (Jev answers all questions of a
+  request in parallel). The remaining fifth to quarter are action constraints (scheduling, travel, tool setup), a
+  channel the dreaming step would have to build. Pools grow with the store (an entity like "Leo" gains rows for
+  years), so at scale each channel needs its own bound: entity facets, time windows, action registries.
