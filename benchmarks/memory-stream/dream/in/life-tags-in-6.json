@@ -1,0 +1,60 @@
+{
+ "rows": [
+  {
+   "id": "life-sleep-b15:m0027",
+   "kind": "fact",
+   "text": "Leo has a library card that Riya plans to renew at the Pape/Danforth branch (Sat hours 9:00-17:00, book drop open 24/7); it's on her Errands note. Riya keeps running notes in the Notes app: 'Errands' and 'Shopping list', and a Notion 'Riya to-do' page with an Archive."
+  },
+  {
+   "id": "life-sleep-b15:m0028",
+   "kind": "person",
+   "text": "Priya Nair is Riya's friend moving from a rental in Ontario; her old landlord withheld her last month's rent deposit citing scuff marks. Riya also owes Priya a review of her website copy."
+  },
+  {
+   "id": "life-sleep-b15:m0029",
+   "kind": "fact",
+   "text": "Instant Payouts readiness review: Aisha will own weekend feature-flag flips (flag name instant_payouts_ga); error budget is per day; PAY-1227 (on-call runbook update) is assigned to Marco Ruiz. Still on Riya: legal review of updated merchant terms (no update since Oct 9). Open items: macro for delayed payouts not approved (Support lead), banner copy v2 needs PM sign-off (Diego), PAY-1224 awaiting Riya's review."
+  },
+  {
+   "id": "life-sleep-b15:m0030",
+   "kind": "plan",
+   "text": "Olivia's QBR deck skeleton (in #sales-product) tags slides 6-9 to Riya; no deadline given."
+  },
+  {
+   "id": "life-sleep-b15:m0031",
+   "kind": "plan",
+   "text": "Tom Becker asked everyone for December out-of-office and early-leave days in the team calendar by Fri 2026-10-23. Riya's Lisbon trip: flight TAP TP260 YYZ to LIS on Sun 2026-12-20 at 22:10, so OOO Mon 21 Dec to Fri 1 Jan. Riya's 1:1 with Tom is Wednesdays 11:30-11:55."
+  },
+  {
+   "id": "life-sleep-b15:m0032",
+   "kind": "plan",
+   "text": "Morse Street PS notices: picture day retakes on 2026-11-04 in the gym (bring order form); November hot lunch orders close 2026-10-23."
+  },
+  {
+   "id": "life-sleep-b15:m0033",
+   "kind": "fact",
+   "text": "Visa statement of $2,036.55 is due Nov 7 2026 with autopay on; takeout spending was $612 in October so far, up 22% on September."
+  },
+  {
+   "id": "life-sleep-b15:m0034",
+   "kind": "plan",
+   "text": "Onboarding design review booked with Aisha Rahman and Diego Fernández on Thu 2026-11-26, 10:00-10:25 Toronto time at King St W office (room Fraser) plus Zoom; agenda: KYC retry screens, empty states, open questions. NOTE: this overlaps Riya's ROM class-trip volunteering that day (9:00-14:30)."
+  },
+  {
+   "id": "life-sleep-b15:m0035",
+   "kind": "plan",
+   "text": "Leo turns 8 on 2027-01-22; Riya is planning his party at Wonder Workshop (Queen St East, Leslieville) on Sat 2027-01-23 for twelve kids: Master Builder package $495 + HST (up to 14 kids, 2 hours, robotics/stop-motion), $100 refundable deposit (up to 30 days before), outside food allowed, nut-free facility, slots 11:00/13:30/16:00. Leo has a skating lesson 10:30-11:15 that day at Jimmie Simpson rink, so choose 13:30 or 16:00. Nothing booked yet."
+  },
+  {
+   "id": "life-sleep-b15:m0036",
+   "kind": "fact",
+   "text": "PAY-1224 (merchant email template for delayed payouts, assignee Priyanka S.) is In Review with Riya as reviewer, waiting on her approval as of 2026-10-22; Support keeps asking about it. Open High bugs: PAY-1241 (mobile payout status stuck, Aisha's team) and PAY-1244 (CSV export timezone off by one hour, unassigned; should be assigned before GA). Riya wants October incidents (INC-311, INC-318) and open bugs in the readiness doc's risks section."
+  },
+  {
+   "id": "life-sleep-b15:m0037",
+   "kind": "plan",
+   "text": "Riya's week of 2026-10-26: Tue 27 Oct fasting from midnight for 10:30 physical with Dr. Patel (bloodwork before); Wed 28 Oct run 6:15-7:15 with Marcus at Ashbridges Bay; Fri 30 Oct bake sale drop-off 8:30. Riya wants early-morning commitments laid out so she doesn't disrupt Sam's mornings; early commitments should be added as recurring events visible to Sam."
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/life/out/tags-6.json"
+}

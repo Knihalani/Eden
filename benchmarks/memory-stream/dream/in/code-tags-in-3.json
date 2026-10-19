@@ -1,0 +1,380 @@
+{
+ "rows": [
+  {
+   "id": "code-sleep-b08:m0020",
+   "kind": "rule",
+   "text": "The .github/ directory is platform-owned: edits to workflows need Priya's team on the review."
+  },
+  {
+   "id": "code-sleep-b08:m0021",
+   "kind": "fact",
+   "text": "Worker queue names are email, images, billing-sync and webhooks; services/worker/src/queues.ts has typed QUEUE_NAMES, Queues and isQueueName. Known bug: apps/api/src/jobs/enqueue.ts:31 enqueues to \"billing_sync\" (underscore), so those jobs are silently dropped; not yet fixed (reviewer suggested a follow-up issue)."
+  },
+  {
+   "id": "code-sleep-b08:m0022",
+   "kind": "rule",
+   "text": "Team rule: use date-fns for dates; moment is banned (apps/web/lib/format-date.ts now uses date-fns; moment is still listed in apps/web/package.json line 34 and may be removed)."
+  },
+  {
+   "id": "code-sleep-b08:m0023",
+   "kind": "fact",
+   "text": "The API's CORS is a fixed allowlist (@fastify/cors with config.allowedOrigins, credentials true) registered in apps/api/src/app.ts; Vercel preview URLs change per deploy so they are blocked (Lena's preview deploy was blocked). Source of allowedOrigins not yet traced."
+  },
+  {
+   "id": "code-sleep-b08:m0024",
+   "kind": "fact",
+   "text": "Invoice PDF rendering (services/worker/src/pdf/invoice-pdf.ts): a null invoice.body crashed the email queue and unended PDFDocuments leaked memory causing staging worker OOMKills; fixed with body?.lines guard and try/finally doc.end(). Always end PDFKit documents."
+  },
+  {
+   "id": "code-sleep-b08:m0025",
+   "kind": "fact",
+   "text": "trailmix requirements.txt (Django 5.1.2, django-htmx 1.21.0, psycopg 3.2.3, pillow 11.0.0) does not include gpxpy; the import_gpx management command needs it and waits for Jordan's go-ahead to add it."
+  },
+  {
+   "id": "code-sleep-b08:m0026",
+   "kind": "procedure",
+   "text": "acme-platform local setup: pnpm install (also installs lefthook hooks), copy .env.example to .env.local and fill secrets from the 1Password acme-dev vault, `docker compose up -d db redis`, then `pnpm dev`. The email queue only drains if the worker runs locally (`pnpm --filter worker dev`). Jordan got a new laptop on 2026-10-10."
+  },
+  {
+   "id": "code-sleep-b08:m0027",
+   "kind": "fact",
+   "text": "The prod API (api.acme.dev) is exposed through a Kubernetes Ingress using the AWS Load Balancer Controller (internet-facing ALB, HTTP->HTTPS redirect) with an ACM certificate; ACM certs renew automatically via DNS validation, so only the validation CNAME in the acme.dev zone must remain. Priya asked about cert renewal."
+  },
+  {
+   "id": "code-sleep-b08:m0028",
+   "kind": "fact",
+   "text": "Grafana dashboards are JSON files in infra/grafana/dashboards (api-overview, billing, worker-images). worker-images.json uses guessed metric names (worker_jobs_completed_total, worker_jobs_failed_total, worker_job_duration_seconds_bucket) that were not verified against what the worker exports."
+  },
+  {
+   "id": "code-sleep-b08:m0029",
+   "kind": "preference",
+   "text": "Preference for hydration mismatches in apps/web (Next.js): format dates on the client inside useEffect rather than using suppressHydrationWarning (server renders UTC, browser local time)."
+  },
+  {
+   "id": "code-sleep-b08:m0030",
+   "kind": "plan",
+   "text": "Plan: add a read replica for the prod db on branch acme-431-prod-read-replica, and check prod replication lag; unresolved as of 2026-10-12 (which IaC stack owns the prod db instance and how to reach prod for the lag query were not known)."
+  },
+  {
+   "id": "code-sleep-b08:m0031",
+   "kind": "rule",
+   "text": "apps/web dark mode is handled by next-themes with the class strategy: use Tailwind dark: variants or :global(.dark) selectors, never prefers-color-scheme media queries."
+  },
+  {
+   "id": "code-sleep-b08:m0032",
+   "kind": "episode",
+   "text": "After the paid_at column was added in schema.ts, local dev DB lacked it (GET /v1/invoices 500: column invoices.paid_at does not exist); the local migration procedure was not known and Jordan was asked how he normally applies SQL locally."
+  },
+  {
+   "id": "code-sleep-b08:m0033",
+   "kind": "fact",
+   "text": "trailmix is deployed on fly.io (app trailmix, region yyz); the suggested way to run Django migrations on every deploy is [deploy] release_command = \"python manage.py migrate --noinput\" in fly.toml, keeping migrations backwards compatible."
+  },
+  {
+   "id": "code-sleep-b08:m0034",
+   "kind": "fact",
+   "text": "Branch ts-verbatim-imports swaps isolatedModules for verbatimModuleSyntax in tsconfig.base.json, producing 61 TS1484 errors in 44 files (web 27, api 18, worker 9, cli 7); biome check --write with lint/style/useImportType fixes all 61. Full list in /tmp/ts1484-sites.txt."
+  },
+  {
+   "id": "code-sleep-b08:m0035",
+   "kind": "rule",
+   "text": "deps-bot policy: minor dependency bumps (e.g. typescript 5.7.2 PR #1199, drizzle-orm 0.36.1 PR #1198) wait for review; patch bumps automerge after CI."
+  },
+  {
+   "id": "code-sleep-b08:m0036",
+   "kind": "episode",
+   "text": "Customer Dana Whitcombe (Northwind Studio) asked, via Sam Ortiz's forwarded thread on 2026-10-12, for an invoice export for their external Xero bookkeeper: all invoices incl. voided, not just the 25 on screen; columns in order: invoice number, client name, client tax id, issue date, due date, subtotal, tax, total, currency, status, paid date; USD and CAD kept unconverted (currency column or separate files); nice to have: monthly scheduled email on the 1st. They may switch tools otherwise. Current CSV export is client-side from the loaded page (export-csv-button.tsx), no server endpoint; reviewer wants any export work in a separate PR from #1192. No ticket or reply yet."
+  },
+  {
+   "id": "code-sleep-b08:m0037",
+   "kind": "procedure",
+   "text": "After editing apps/api/src/db/schema.ts, generate a new migration with `pnpm --filter api drizzle-kit generate` (Drizzle migrations live in apps/api/drizzle; latest is 0042_quiet_hulk.sql, a plain CREATE INDEX invoices_org_id_idx)."
+  },
+  {
+   "id": "code-sleep-b08:m0038",
+   "kind": "fact",
+   "text": "Migration 0042 invoices_org_id_idx is a plain CREATE INDEX: staging invoices (1.9M rows, 1.2 GB) blocked writes for 6.8s in a dry run; prod is ~4x larger so expect ~25-30s of blocked writes. CREATE INDEX CONCURRENTLY would need a hand-written migration outside a transaction since drizzle wraps each file in one. Decision pending."
+  },
+  {
+   "id": "code-sleep-b09:m0001",
+   "kind": "rule",
+   "text": "In acme-platform web app, every browser call to the API must go through the shared wrapper apps/web/lib/api.ts (api() and apiBlob()), which sets credentials: include so the session cookie is sent; raw fetch calls omit the cookie and 401 in staging (reported by Lena)."
+  },
+  {
+   "id": "code-sleep-b09:m0002",
+   "kind": "fact",
+   "text": "API routes in acme-platform are versioned under /v1 (e.g. /v1/invoices/:id/void, /v1/invoices/export, /v1/invoices/:id/resend); paths without /v1 are wrong."
+  },
+  {
+   "id": "code-sleep-b09:m0003",
+   "kind": "fact",
+   "text": "The acme CLI (@acme/cli, packages/cli) checks for updates once a day via update-notifier and prints a one-line notice to stderr after the command; it skips the check in CI and NO_UPDATE_NOTIFIER=1 silences it. Latest published version was 2.7.1 on 2026-10-09 (next tag 2.8.0-rc.0)."
+  },
+  {
+   "id": "code-sleep-b09:m0004",
+   "kind": "procedure",
+   "text": "Metrics and logs go to Grafana Cloud (stack: acme) via the Grafana Agent in each cluster. Dashboards are JSON files in infra/grafana/dashboards; never edit them in the Grafana UI because the sync overwrites UI edits. Preview with `pnpm tsx infra/grafana/sync.ts --dry-run`; CI pushes on main. Alert rules live in infra/grafana/alerts."
+  },
+  {
+   "id": "code-sleep-b09:m0005",
+   "kind": "episode",
+   "text": "A 'billing-sync queue depth' panel (bullmq waiting + active for queue billing-sync) was added to infra/grafana/dashboards/queues.json; the dry-run sync was clean but nothing had been pushed yet."
+  },
+  {
+   "id": "code-sleep-b09:m0006",
+   "kind": "fact",
+   "text": "Decision: the clients table in acme web sorts newest first by default (created_at desc), set in both hooks/use-clients.ts and the clients-table SortHeader default."
+  },
+  {
+   "id": "code-sleep-b09:m0007",
+   "kind": "episode",
+   "text": "Open investigation: some customers are randomly bounced with Unauthorized from the API and it works on refresh. Sentry (7 days): 1,284 events, 61 users, 9 orgs, all three api pods, 87% within 2s of a browser getting a new session, retry always succeeds, flat across the last 3 deploys. Root cause not identified; no prior fix found in git history; the user said they would dig up the old ticket."
+  },
+  {
+   "id": "code-sleep-b09:m0008",
+   "kind": "fact",
+   "text": "In the acme web app, pages that only call redirect() (such as settings/page.tsx redirecting /settings to /settings/profile) are not unit-tested."
+  },
+  {
+   "id": "code-sleep-b09:m0009",
+   "kind": "fact",
+   "text": "Trailmix is a separate Django + htmx project at /Users/jordan/code/trailmix (hikes app). Pattern used: views check the HX-Request header and return partials (hikes/_list.html on success, hikes/_form.html with 422 on validation errors); non-htmx posts still redirect."
+  },
+  {
+   "id": "code-sleep-b09:m0010",
+   "kind": "fact",
+   "text": "The InvoiceRow component in acme web was renamed to InvoiceListItem (files apps/web/components/invoices/invoice-list-item.tsx and its test); no InvoiceRow references remain."
+  },
+  {
+   "id": "code-sleep-b09:m0011",
+   "kind": "plan",
+   "text": "Sam asked for a monthly revenue rollup per org for the finance export. tools/sql/monthly_revenue.sql was written (paid, non-deleted invoices, last 12 months, running total per org, amounts in cents) in plain standard SQL because the database engine/version is unknown; it has not been run against real data."
+  },
+  {
+   "id": "code-sleep-b09:m0012",
+   "kind": "fact",
+   "text": "The agent machine has no kubectl contexts configured, so prod pods cannot be inspected from it; how on-call alerts are routed and who is on the rotation is unknown to the assistant."
+  },
+  {
+   "id": "code-sleep-b09:m0013",
+   "kind": "episode",
+   "text": "Worker crashloop incident Sat 2026-10-17 08:52-09:41: caused by the new invoice-reminder repeatable job registered at startup (commit 4c1d9e2, in Friday's deployed tag); mitigated by disabling the invoice-reminder schedule via feature flag. Root cause suspected in the schedule registration; follow-up ticket filed, incident open for follow-up Monday."
+  },
+  {
+   "id": "code-sleep-b09:m0014",
+   "kind": "plan",
+   "text": "Plan: invoice preview has a 'Copy share link' button using apps/web/lib/share-link.ts, which signs invoiceId.expires with HMAC-SHA256 using env SHARE_LINK_SECRET (7-day expiry) and returns /share/invoices/:id?expires=&sig=. Still to do: add SHARE_LINK_SECRET to .env.example and build the server-side share page that verifies the signature."
+  },
+  {
+   "id": "code-sleep-b09:m0015",
+   "kind": "preference",
+   "text": "Loading skeletons in acme web should only appear if loading takes more than 200ms (to avoid a 50ms flash); use the Delayed component (apps/web/components/delayed.tsx, ms=200). The invoices list loading.tsx uses it."
+  },
+  {
+   "id": "code-sleep-b09:m0016",
+   "kind": "plan",
+   "text": "Trailmix Hike model has a nullable PositiveIntegerField elevation_gain (meters); migration hikes/migrations/0007_hike_elevation_gain.py was generated but the user still has to run `python manage.py migrate`."
+  },
+  {
+   "id": "code-sleep-b09:m0017",
+   "kind": "plan",
+   "text": "Pending task: add a global guard on the acme API org-scoped routes (clients, invoices, orgs, uploads; not health or webhooks) requiring an x-org-id header that matches an org the session belongs to, rejecting otherwise with 403 problem+json. The assistant is waiting for the user to say which HTTP framework and major version the API runs on. The web side already sends the header from apps/web/lib/org-context.ts."
+  },
+  {
+   "id": "code-sleep-b09:m0018",
+   "kind": "preference",
+   "text": "Product copy preference from reviewer: the resend invoice toast should say 'Invoice resent' rather than 'Invoice sent again'."
+  },
+  {
+   "id": "code-sleep-b09:m0019",
+   "kind": "preference",
+   "text": "For 2026-10-18 only, the user asked for much shorter replies."
+  },
+  {
+   "id": "code-sleep-b09:m0020",
+   "kind": "fact",
+   "text": "Decision: .github/workflows/ci.yml has a pdf-perf job (pnpm --filter @acme/pdf perf, about 25 min, 40 min timeout, uploads perf-results.json) running after check on every push and PR because the user wants perf numbers on every change. Caveat: workflow concurrency cancel-in-progress means a new push kills an in-flight run, so busy branches may rarely get numbers."
+  },
+  {
+   "id": "code-sleep-b09:m0021",
+   "kind": "fact",
+   "text": "InvoiceStatus in packages/api-client/src/types.ts now includes \"void\" (draft | open | paid | uncollectible | void) so the web status badge typechecks."
+  },
+  {
+   "id": "code-sleep-b09:m0022",
+   "kind": "fact",
+   "text": "Dependency audit findings (path-to-regexp via storybook, cookie via msw, cross-spawn 7.0.3 via lefthook) are dev-tooling only and not urgent. Monday's Renovate batch fixes path-to-regexp and cookie; cross-spawn is not covered because lefthook pins execa 5.x and needs a pnpm.overrides entry (cross-spawn >=7.0.5)."
+  },
+  {
+   "id": "code-sleep-b09:m0023",
+   "kind": "episode",
+   "text": "Unknown for acme's worker: how in-flight jobs are handled when k8s kills a worker pod mid-deploy (graceful shutdown handling and termination grace period in the Helm chart were not checked)."
+  },
+  {
+   "id": "code-sleep-b10:m0001",
+   "kind": "fact",
+   "text": "In acme-platform, apps/web/lib/flags.ts holds only local dev defaults (newInvoiceEditor=false, bulkReminders=true, expenseAttachments=false); real flag values come from an unnamed external 'flag service', and which vendor it is was never confirmed. The org field betaFlags is just a free-form admin-panel label, not used for gating."
+  },
+  {
+   "id": "code-sleep-b10:m0002",
+   "kind": "plan",
+   "text": "Jordan plans to put the invoice export feature behind a feature flag (invoiceExport) for beta orgs only; assistant asked which flag service to use and was awaiting the answer."
+  },
+  {
+   "id": "code-sleep-b10:m0003",
+   "kind": "preference",
+   "text": "Jordan's reviewer prefers structuredClone over JSON.parse(JSON.stringify(x)) for deep copies (JSON round trip loses Dates, Maps, undefined and throws on cycles)."
+  },
+  {
+   "id": "code-sleep-b10:m0004",
+   "kind": "fact",
+   "text": "Jordan has a side project 'trailmix' in ~/code/trailmix: a Django app with htmx for logging hikes (models Hike, views hikes/views.py, templates hikes/list.html and _row.html). The hike form targets #hike-rows (tbody) with hx-swap=afterbegin; whole-table outerHTML swap was the bug."
+  },
+  {
+   "id": "code-sleep-b10:m0005",
+   "kind": "plan",
+   "text": "Receipt PDF attachments on expenses (acme-platform): no attachment/multipart handling exists in the expense form or apps/api expenses route. Jordan said they would ask Marco about the storage side; the fallback proposal is a multipart POST via @fastify/multipart (new dependency, not to be added without Jordan's OK, sends all bytes through API pods) storing an attachment row with org_id. Blocked until Marco answers."
+  },
+  {
+   "id": "code-sleep-b10:m0006",
+   "kind": "person",
+   "text": "Marco is the person Jordan consults about storage decisions (file storage for acme-platform)."
+  },
+  {
+   "id": "code-sleep-b10:m0007",
+   "kind": "fact",
+   "text": "acme-platform stack: pnpm monorepo (apps/web Next.js + React + shadcn/ui + react-hook-form + zod + tanstack-query, apps/api Fastify + drizzle + zod, services/worker, packages/cli @acme/cli); tests use vitest (`pnpm --filter web test`); CI is ci.yml on PRs with Vercel previews and staging at staging.acme.dev."
+  },
+  {
+   "id": "code-sleep-b10:m0008",
+   "kind": "fact",
+   "text": "Utility maskIban(iban) lives in apps/web/lib/format.ts (keeps last 4 visible, groups in 4s, uppercases, strips spaces); tests in apps/web/lib/format.test.ts. formatCents and initials are also in format.ts."
+  },
+  {
+   "id": "code-sleep-b10:m0009",
+   "kind": "fact",
+   "text": "trailmix Hike model has elevation_gain_m (PositiveIntegerField, null/blank) added in migration hikes/migrations/0007_hike_elevation_gain_m.py (applied to local SQLite; 41 tests pass)."
+  },
+  {
+   "id": "code-sleep-b10:m0010",
+   "kind": "episode",
+   "text": "OrgSwitcher in acme web (apps/web/components/nav/OrgSwitcher.tsx) now uses the shadcn Popover component (closes on outside click and Escape); PR #1484 (acme-431-org-switcher-close) approved, reviewer nit: add a test that Escape closes it (non-blocking)."
+  },
+  {
+   "id": "code-sleep-b10:m0011",
+   "kind": "fact",
+   "text": "ClientSearch debounces its query 300ms via useDebouncedValue in apps/web/hooks/use-debounced-value.ts (placeholderData keeps previous results). Reuse this hook for other search boxes."
+  },
+  {
+   "id": "code-sleep-b10:m0012",
+   "kind": "fact",
+   "text": "Zod schema expenseCategoryBody (name trimmed 1-60, color #rrggbb hex, optional parentId uuid) is in apps/api/src/schemas/expenses.ts next to createExpenseBody."
+  },
+  {
+   "id": "code-sleep-b10:m0013",
+   "kind": "episode",
+   "text": "Production build of the release branch on Vercel fails: 'Missing or invalid publishable key for production. Development keys cannot be used in production builds' on /invoices prerender. The env var NEXT_PUBLIC_AUTH_PUBLISHABLE_KEY in Production scope was changed ~3 days before 2026-10-20; suspected a dev-instance key pasted into Production. Jordan was to verify in the auth provider dashboard. Unresolved as of 2026-10-20."
+  },
+  {
+   "id": "code-sleep-b10:m0014",
+   "kind": "fact",
+   "text": "Hydration mismatch gotcha: InvoiceDueDate (apps/web/components/invoices/InvoiceDueDate.tsx) used toLocaleString('en-US') in render, so server (UTC) and browser (Jordan is in Toronto, America/Toronto timezone) differ. Jordan had not decided between user-local time and a fixed timezone."
+  },
+  {
+   "id": "code-sleep-b10:m0015",
+   "kind": "fact",
+   "text": "GET /v1/clients excludes archived clients unless ?includeArchived=true. The flag is parsed as the literal enum 'true'/'false' (not z.coerce.boolean(), which would turn \"false\" into true). Sort is case-insensitive via lower(name), id tie-break."
+  },
+  {
+   "id": "code-sleep-b10:m0016",
+   "kind": "plan",
+   "text": "Known bug: GET /v1/clients cursor pagination uses `id > cursor` while ordering by lower(name), id, so pages can skip or repeat rows. Proposed fix: (lower(name), id) keyset cursor, left as a follow-up pending Jordan's go-ahead."
+  },
+  {
+   "id": "code-sleep-b10:m0017",
+   "kind": "preference",
+   "text": "Jordan's branch naming for acme-platform: acme-<ticket number>-<slug> (e.g. acme-447-render-fallback, acme-431-org-switcher-close, acme-452-clients-page-size); PRs are tracked by those tickets."
+  },
+  {
+   "id": "code-sleep-b10:m0018",
+   "kind": "episode",
+   "text": "apps/web/app/error.tsx is the root error boundary fallback ('Something went wrong', digest reference, Try again calls reset()); it hides error messages so internal details don't leak. Committed 9b3e1d7 on acme-447-render-fallback, not pushed as of 2026-10-21."
+  },
+  {
+   "id": "code-sleep-b10:m0019",
+   "kind": "fact",
+   "text": "Invoice list filters (status, clientId, from, to) now live in URL search params via useSearchParams and router.replace in InvoiceFilters.tsx, so Back restores them (parseInvoiceFilters in lib/types/invoice.ts); merged in main as 7d20c4e 'url-backed invoice filters'."
+  },
+  {
+   "id": "code-sleep-b10:m0020",
+   "kind": "fact",
+   "text": "slugify(input, maxLength=64) is in apps/web/lib/slugify.ts: NFKD accent stripping plus a lookup table for letters without decomposition (ß, ø, æ, œ, đ, ł, þ); collapses dashes and trims trailing dash after truncation."
+  },
+  {
+   "id": "code-sleep-b10:m0021",
+   "kind": "fact",
+   "text": "Preference: Jordan wants the Django admin trailmix distance shown as '<n.n> km' via an @admin.display method `distance` with ordering='distance_km' in hikes/admin.py."
+  },
+  {
+   "id": "code-sleep-b10:m0022",
+   "kind": "episode",
+   "text": "On 2026-10-21 a customer reported the 'Continue with Google' sign-in button vanished since 2026-10-20. No code change explains it (only Lena Fischer's a81f2c3 login layout tweak). Suspects: Google social connection disabled for the production instance in the auth provider dashboard, or Google OAuth client secret expired/rotated. Jordan was checking the dashboard; the auth provider's identity was not stated."
+  },
+  {
+   "id": "code-sleep-b10:m0023",
+   "kind": "person",
+   "text": "Lena Fischer is a teammate on acme-platform who works on the web login/layout (commit a81f2c3 'tighten sign-in card layout on small screens', 2026-10-19)."
+  },
+  {
+   "id": "code-sleep-b10:m0024",
+   "kind": "fact",
+   "text": "The getting-started page (apps/web/app/(dashboard)/getting-started/page.tsx) embeds the onboarding video via OnboardingVideo component using youtube-nocookie.com, video id aB3xK9qLm2Q, aspect-video 16:9."
+  },
+  {
+   "id": "code-sleep-b10:m0025",
+   "kind": "fact",
+   "text": "getPrimaryCurrency(invoice, orgCurrency) in apps/web/lib/invoice-currency.ts returns the first line item's currency, else the org currency. Supported CurrencyCode: USD, CAD, EUR, GBP, AUD."
+  },
+  {
+   "id": "code-sleep-b10:m0026",
+   "kind": "episode",
+   "text": "Added public /pricing page (plans from apps/web/content/plans.ts: Starter $19, Growth $49, Agency $129 per month) and /settings/team page listing org members via getOrgMembers; both placed directly under apps/web/app and the layout/route group was not confirmed with Jordan; team page relies on upstream signed-in check, no own redirect."
+  },
+  {
+   "id": "code-sleep-b10:m0027",
+   "kind": "plan",
+   "text": "Pending: Jordan wanted a real-browser e2e test of create-invoice-and-send against the local dev server; assistant asked which browser test runner/folder to use and whether to sign in via UI or a saved session; Jordan said they'd find out. Selectors: Client label, 'Line N description/quantity/unit price' aria-labels, buttons 'Save draft' and 'Send invoice' (only shown for drafts)."
+  },
+  {
+   "id": "code-sleep-b10:m0028",
+   "kind": "rule",
+   "text": "Deliberate decision: the misspelling 'recieved' in apps/api/src/routes/v1/payments.ts is an API response value (status: 'recieved') and is intentionally left as-is by Jordan (clients may match it; payments.test.ts expects it); only worker comment/log typos were fixed. Possible later API cleanup."
+  },
+  {
+   "id": "code-sleep-b10:m0029",
+   "kind": "fact",
+   "text": "ClientPicker prop is now onClientSelect (renamed from onSelect, which shadows the DOM event); call sites NewInvoiceForm, InvoiceFilters, ExpenseFilters. ClientsTable PAGE_SIZES is [10,20,50,100]; API clients limit caps at 100."
+  },
+  {
+   "id": "code-sleep-b10:m0030",
+   "kind": "fact",
+   "text": "toCsv in apps/web/lib/csv.ts already writes the header row and escapes cells; don't prepend your own header (ExportCsvButton had duplicated it, fixed)."
+  },
+  {
+   "id": "code-sleep-b10:m0031",
+   "kind": "fact",
+   "text": "scripts/count-todos.ts counts TODO/FIXME per package (run `pnpm tsx scripts/count-todos.ts`). As of 2026-10-23: web 30, api 24, worker 10, cli 4; 9 of 54 markers reference a Linear id."
+  },
+  {
+   "id": "code-sleep-b10:m0032",
+   "kind": "fact",
+   "text": "acme CLI (`acme invoices list`, packages/cli): client column truncated to 24 chars with an ellipsis (truncate() exported from render.ts; reviewer suggests moving it to src/lib/text.ts if reused); --json returns the full name."
+  },
+  {
+   "id": "code-sleep-b10:m0033",
+   "kind": "plan",
+   "text": "Unfinished: `acme invoices list --since <YYYY-MM-DD>` (issue date filter, validated by parseSince, UsageError exit code 2, passed as issuedFrom). Still to do: register the flag in packages/cli/src/index.ts, add issuedFrom to api/client.ts invoices.list types, confirm the API supports an issued-from filter, add tests for parseSince. The CLI README already documents --since, so it is ahead of the code."
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/code/out/tags-3.json"
+}
