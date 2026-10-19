@@ -110,6 +110,13 @@ Families differ in mechanism. Every kill criterion was written before its run.
 2. **Model-free selection good enough to stand alone** (C6-E3 says the vote is not): learn from the verifier's picks at sleep (distil to cues), or ask the user to allow the in-turn call (R10-5). Also: **latency and cost of the off-hook verifier:** one haiku call per turn with ≤ 15 candidates, measured; and real PreToolUse delivery in a headless Claude Code run.
 3. **Episodic state rows:** expire or date-gate in-flight state at sleep, so "where did we leave things" gets the latest state.
 
+## Cycle 7 findings (LEDGER C7-E1…)
+
+- **A tightened model-free vote (k ≤ 2, superseded store, dated) is positive but not firm** (C7-E1): code +0.013
+  [−0.095, +0.117], life +0.063 [−0.028, +0.153]. Supersession helps life's wrong fires; code is unchanged. Row
+  choice, not delivery, holds the vote back.
+- **Next:** distil the verifier's scores into a model-free scorer (C7-E2, pre-registered).
+
 ## Cycle 6 findings (LEDGER C6-E1…E3)
 
 - **The head-to-head is firm by the pre-registered rules** (C6-E1, C6-E2): dated off-hook verifier vs today's plugin, code +0.101 [+0.0085, +0.199] (two-run average only), life +0.135 [+0.035, +0.233] (one run).

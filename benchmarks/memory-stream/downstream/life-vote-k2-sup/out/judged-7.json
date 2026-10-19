@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s091-e012",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Light commiseration; R1 tacks on an unrelated bike-booking pitch to a gripe."
+  },
+  {
+   "event": "life-s092-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "History has Thursday every-other-week schedule from 9 Apr; R1 uses it, R0 defers."
+  },
+  {
+   "event": "life-s096-e026",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both warm, appropriate congratulations."
+  },
+  {
+   "event": "life-s096-e031",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Simple goodnight; both fine and honour no-offer request."
+  },
+  {
+   "event": "life-s097-e013",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give non-cheesy card lines."
+  },
+  {
+   "event": "life-s097-e019",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both sensible supply lists; R1's damp-basement note is relevant."
+  },
+  {
+   "event": "life-s100-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Email not in context; both correctly go read it."
+  },
+  {
+   "event": "life-s100-e017",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "Anjali has type 2 diabetes (sugar-free sweets per history); only R1 catches it."
+  },
+  {
+   "event": "life-s100-e025",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both pick regular sweets despite mom's diabetes; R0 also skips CAD conversion."
+  },
+  {
+   "event": "life-s102-e002",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both say yes and give good rainy-day plans."
+  },
+  {
+   "event": "life-s102-e009",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 applies PC Express, no-name staples, Saturday pickup; R1 generic."
+  },
+  {
+   "event": "life-s103-e007",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither knows insurer is Belairdirect (switched April 2026); otherwise sensible steps."
+  },
+  {
+   "event": "life-s105-e000",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "R1 cites stale Oct 2025 plumber slots and unsupported 'planned to call'; R0 sound."
+  },
+  {
+   "event": "life-s105-e004",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both book Monday and set two sensible reminders."
+  },
+  {
+   "event": "life-s105-e019",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Reminders already set (Tue 30 Jun, Mon 6 Jul); neither confirms, both re-set."
+  }
+ ]
+}

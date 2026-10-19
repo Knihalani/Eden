@@ -1,0 +1,38 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s150-e015",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both miss Dr. Lin's known new address (Danforth Smiles, 822 Danforth), needed for travel time."
+  },
+  {
+   "event": "life-s150-e028",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both set the status and draft a fitting two-line note."
+  },
+  {
+   "event": "life-s156-e000",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both ask for costume and plan though known: astronaut, leaving Hannah's 5:45 with Ellie and Jun, Sam on candy."
+  },
+  {
+   "event": "life-s156-e004",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss that Riya volunteers on Leo's ROM trip Thu 26 Nov from 9:00, a direct clash."
+  }
+ ]
+}
