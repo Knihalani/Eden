@@ -1,0 +1,78 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s050-e016",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 applies fully-refundable hotel rule, purchase check, and Leo age 6 for ticket price; R0 generic."
+  },
+  {
+   "event": "life-s053-e003",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both congratulate and add Ira birthday as yearly event; fine."
+  },
+  {
+   "event": "life-s056-e000",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "R0 correct dates, quiet dinner, June 16, sitters, but misses known gift wish (Fellow Ode grinder, Penguin paperbacks); R1 claims no dates."
+  },
+  {
+   "event": "life-s058-e010",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "No saved results in records; both honestly say so and offer to rerun with drive comparison."
+  },
+  {
+   "event": "life-s060-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both listen and reflect without unsolicited fixes, matching her venting preference."
+  },
+  {
+   "event": "life-s060-e002",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both supportive and check before changes; R0 correctly names Wednesday standup and 11:30 Tom 1:1."
+  },
+  {
+   "event": "life-s063-e009",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both handle photos and newsletters sensibly without deleting anything."
+  },
+  {
+   "event": "life-s066-e010",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both summarise the four findings accurately; R0 notes her style rules."
+  },
+  {
+   "event": "life-s068-e021",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "Dr. Lin moved to Danforth Smiles in March 2026; R0 uses stale Queen East Dental address."
+  }
+ ]
+}

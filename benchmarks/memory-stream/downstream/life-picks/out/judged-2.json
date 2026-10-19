@@ -1,0 +1,78 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s068-e024",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 knows Ellie dairy allergy and Leo tree-nut allergy; R1 asks about allergies it should know."
+  },
+  {
+   "event": "life-s076-e007",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "R0 knows Ottawa drive and stop but misses known ~15:30 pickup; R1 wrongly says it lacks parents location."
+  },
+  {
+   "event": "life-s077-e007",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Opening day May 10 was already looked up; R0 answers correctly, R1 hedges and re-searches."
+  },
+  {
+   "event": "life-s077-e017",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both send the reply and sensibly look up local drop-off options."
+  },
+  {
+   "event": "life-s082-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both flag the Queen watermain/501 delays as key; R0 ties to her office commute."
+  },
+  {
+   "event": "life-s087-e016",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both sort inbox sensibly without sending; fine."
+  },
+  {
+   "event": "life-s087-e029",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both drafts fine; R0 names Ellie and Jun and notes dairy allergy."
+  },
+  {
+   "event": "life-s087-e031",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 applies no-date-without-Aisha rule, target wording, style and EFT; R0 generic."
+  },
+  {
+   "event": "life-s088-e038",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both warm, plain drafts that ask for specific names; fine."
+  }
+ ]
+}

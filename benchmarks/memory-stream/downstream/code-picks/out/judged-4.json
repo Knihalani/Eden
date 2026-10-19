@@ -1,0 +1,78 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s098-e007",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "API is Fastify 5 per history; second writes the plugin directly, first re-investigates a known fact."
+  },
+  {
+   "event": "code-s102-e006",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both accurate; user wants short bullet summaries, which only the first gives."
+  },
+  {
+   "event": "code-s103-e031",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "First knows pk_test_ gotcha but rejects the agreed useEffect date fix; second is correct but generic on both."
+  },
+  {
+   "event": "code-s105-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Second knows App Router/global-error but invents an Error id detail; first hedges on known Next.js setup."
+  },
+  {
+   "event": "code-s106-e004",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "First knows CSP in next.config.ts with frame-ancestors none and checks frame-src; second hedges."
+  },
+  {
+   "event": "code-s107-e006",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "First knows (marketing) group, publicRoutes and the existing placeholder pricing page; second hedges on known layout."
+  },
+  {
+   "event": "code-s108-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "First knows Playwright, port 3000, pnpm --filter web e2e and the retrying-assertion lesson; second hedges."
+  },
+  {
+   "event": "code-s108-e018",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "First is a sound plan; second adds distracting scope notes and an unsupported csvRow/csvCell claim."
+  },
+  {
+   "event": "code-s108-e040",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Both miss the existing uncommitted count-todos.ts; first adds style claims contradicted by that file."
+  }
+ ]
+}
