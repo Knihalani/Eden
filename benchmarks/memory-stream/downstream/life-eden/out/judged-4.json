@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s097-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both ask for dates though the Vancouver trip (Jul 9-13) is on record; otherwise sensible, equivalent drafts."
+  },
+  {
+   "event": "life-s097-e004",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss known facts: Biscuit born around April 2022, food-motivated, steals bread, howls at sirens."
+  },
+  {
+   "event": "life-s098-e000",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "R0 knows Wen is vegan and office on King; R1 claims no office or dietary info."
+  },
+  {
+   "event": "life-s100-e006",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss known half marathon (Toronto Waterfront, 2:04:37) and property tax by pre-authorized debit from TD joint."
+  },
+  {
+   "event": "life-s101-e004",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Neither flags Sat 8:30 call with Mom or Leo's one-activity rule; R0 at least suggests trimming, R1 builds full route."
+  },
+  {
+   "event": "life-s105-e030",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss recorded answers: Tom free 10:00-10:30 and 15:30-16:00; 14 events synced."
+  },
+  {
+   "event": "life-s107-e013",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Weekly call is Saturdays 8:30; R0 checks calendar, R1 cites a stale one-off Saturday 11am call."
+  },
+  {
+   "event": "life-s108-e000",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss that she already owns 'Gramatica de uso del espanol B1-B2' from Indigo."
+  },
+  {
+   "event": "life-s126-e005",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "R0 fine but misses plantar fasciitis history and Marcus being a physio; R1 invents Vancouver-walking history."
+  },
+  {
+   "event": "life-s130-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 uses Nate's text preference and follows up; R1 correct but passive."
+  }
+ ]
+}
