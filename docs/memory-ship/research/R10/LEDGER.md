@@ -1115,3 +1115,22 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - **Model-free push pays** if vote-dated utility is > +0.05 on both worlds, with its CI lower bound > 0.
   - **Positive but not firm** if > 0 on both worlds.
   - **Not enough** otherwise.
+
+## C6-E3 · 2026-10-19 · Dated delivery for the model-free hook vote: result
+- **Run:** all judged (code 145, life 169); `h2h.py --single <world> <world>-vote-dated`.
+
+  | World | Group | n | Vote (dated) − none | Better / worse |
+  |---|---|---|---|---|
+  | code | plan-need | 25 | +0.4 | 13 / 4 |
+  | code | labeler-only | 30 | −0.133 | 1 / 5 |
+  | code | no-need | 90 | −0.022 | 10 / 12 |
+  | life | plan-need | 49 | +0.286 | 15 / 7 |
+  | life | labeler-only | 30 | −0.133 | 3 / 5 |
+  | life | no-need | 90 | −0.022 | 11 / 11 |
+
+  Per-turn utility: **code +0.0183 [−0.0888, +0.1262]; life −0.0039 [−0.1039, +0.0928]**.
+- **Verdict, by the rule: not enough.** The model-free vote, even dated, is about zero per turn on both worlds.
+  - Dating does stop its wrong fires from costing much (no-need −0.022, against −0.467 undated in C5-E1).
+  - But its gain where memory is needed (+0.4 / +0.29) is smaller than the verifier's (+0.52 / +0.49). On the more frequent mildly-related turns it loses (−0.133).
+- **What this says:** the verifier's judgment, not dating alone, is what makes push pay. A model-free hook path needs better selection (precision on labeler-only and no-need turns) before it can stand alone.
+  - R10-5 part (a), the in-turn off-hook model call, stays the thing to decide; part (b), dating, is necessary but not sufficient.

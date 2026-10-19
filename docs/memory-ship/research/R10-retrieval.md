@@ -92,6 +92,8 @@ On realistic streams, lexical retrieval is far weaker than the pair fixtures sug
 12. **Dates on memories stop wrong memories from hurting** (C5-E6, C5-E7). Most damage from a wrong memory came from old state presented as current ("the branch is not pushed", "the repo uses yarn"). Showing each memory's date lets the agent treat it as history and check. That cut the cost of a wrong memory from −0.6 to −0.1 on a small sample (10 turns), and on fresh turns the dated checker beat today's plugin. Both passed their pre-set tests; neither is statistically firm yet.
 13. **A sleep-time bug:** the compiler could only mark a memory replaced within the same batch, so facts that changed later stayed live forever. A cross-batch pass fixes most of it on personal data, but on coding data it fell short of the bar I set (stale memories down 19–26%, bar 30%). It is worth doing as a bug fix, not as a measured win.
 
+14. **Dates alone are not enough without judgment** (C6-E3). Adding dates to the plain word matcher (no model) stops its wrong memories from hurting, but it still breaks even overall: it finds less of what is needed than the checker, and it adds mildly related memories that cost a little. Push pays when a small model checks the shortlist. That model call during the turn is outside the current rules, so it is a decision for you.
+
 ## 5. Open problems, ranked by size
 
 1. **Making the lead firm.** The dated checker beats today's plugin, but on about 70 turns per world; it needs more turns, a second responder run, and real latency and cost numbers. Coding labels still miss real needs (C5-E1), so outcome-checked labels remain the right yardstick.

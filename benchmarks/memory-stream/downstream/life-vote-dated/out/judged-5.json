@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s066-e016",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly ask for the old URL and plan a scan."
+  },
+  {
+   "event": "life-s068-e008",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss Leo's tree-nut allergy; R0 gets dinosaurs/Lego, R1 knows neither interests nor food rules."
+  },
+  {
+   "event": "life-s068-e014",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 fine; R1's 'until Apr 26' date is unsupported (history says late April)."
+  },
+  {
+   "event": "life-s068-e021",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Dr. Lin moved to Danforth Smiles; R1 uses stale Queen East address, R0 looks up current office."
+  },
+  {
+   "event": "life-s070-e002",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "R0 invents a claim the library card expired; R1 correctly just checks holds and due dates."
+  },
+  {
+   "event": "life-s070-e006",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both recap holds and Tom follow-up correctly."
+  },
+  {
+   "event": "life-s071-e002",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both reply nicely, update the event, message Kabir; times correct."
+  },
+  {
+   "event": "life-s072-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R0 invents an older Queen St E Riverside note; R1 cleanly updates and books."
+  },
+  {
+   "event": "life-s073-e002",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both give correct COUNTIF; R1 repeats the just-given library reminder."
+  },
+  {
+   "event": "life-s075-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Provider is TekSavvy; R0 knows it, R1 doesn't and must look it up."
+  },
+  {
+   "event": "life-s076-e007",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss that Sam's parents are in Ottawa (~4.5 h drive); R1 notes Hannah's Friday pickup."
+  },
+  {
+   "event": "life-s076-e012",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss Sam vegetarian (no fish), Leo tree-nut allergy, cilantro dislike; R1 at least asks about allergies first."
+  },
+  {
+   "event": "life-s077-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Zellige backsplash images were saved in notes in January; both search rather than recalling."
+  },
+  {
+   "event": "life-s077-e010",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both follow up on Nate's wall choice appropriately."
+  },
+  {
+   "event": "life-s077-e012",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both draft a correct, brief reply held for approval."
+  }
+ ]
+}

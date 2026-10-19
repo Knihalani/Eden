@@ -107,8 +107,13 @@ Families differ in mechanism. Every kill criterion was written before its run.
 ## Next three experiments
 
 1. **Done (C6-E1, C6-E2): the head-to-head is firm on both worlds.** Still open: a non-Claude responder or judge, if any is reachable.
-2. **Latency and cost of the off-hook verifier:** one haiku call per turn with ≤ 15 candidates, measured; and real PreToolUse delivery in a headless Claude Code run.
+2. **Model-free selection good enough to stand alone** (C6-E3 says the vote is not): learn from the verifier's picks at sleep (distil to cues), or ask the user to allow the in-turn call (R10-5). Also: **latency and cost of the off-hook verifier:** one haiku call per turn with ≤ 15 candidates, measured; and real PreToolUse delivery in a headless Claude Code run.
 3. **Episodic state rows:** expire or date-gate in-flight state at sleep, so "where did we leave things" gets the latest state.
+
+## Cycle 6 findings (LEDGER C6-E1…E3)
+
+- **The head-to-head is firm on both worlds** (C6-E1, C6-E2): dated off-hook verifier vs today's plugin, code +0.101 [+0.009, +0.199], life +0.135 [+0.035, +0.233] per turn.
+- **Dating alone does not rescue the model-free hook vote** (C6-E3): code +0.018, life −0.004. The verifier's judgment is what pays; R10-5's in-turn model call is the decision to make.
 
 ## Cycle 5 findings (LEDGER C5-E1…E7)
 
