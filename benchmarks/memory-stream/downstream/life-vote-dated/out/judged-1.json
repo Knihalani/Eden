@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s017-e008",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "No route record available at this point; both honestly offer to retrieve it rather than guess."
+  },
+  {
+   "event": "life-s017-e012",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly report nothing running and list pending decisions."
+  },
+  {
+   "event": "life-s018-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Light empathetic replies; both fine."
+  },
+  {
+   "event": "life-s018-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give a sound rule of thumb for flattening."
+  },
+  {
+   "event": "life-s018-e010",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both suggest fitting older-building, bike-friendly neighbourhoods and acknowledge mom worry."
+  },
+  {
+   "event": "life-s018-e017",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both accurate on Belem origin and kid-friendly explanation."
+  },
+  {
+   "event": "life-s020-e016",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both only promise the sheet instead of producing drills; R1 states rules briefly."
+  },
+  {
+   "event": "life-s021-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both congratulate, set Friday reminder, block pizza night, log race."
+  },
+  {
+   "event": "life-s022-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "No Costco data; both sensibly propose comparing spend with fee."
+  },
+  {
+   "event": "life-s022-e016",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both log the official result and plan the December recap."
+  },
+  {
+   "event": "life-s023-e017",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both find 30 min Mon-Wed with agenda; R1 links Aisha's edge-case doc."
+  },
+  {
+   "event": "life-s025-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 uses known Q4 workstreams and risks; R0 generic and lacks that context."
+  },
+  {
+   "event": "life-s025-e036",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 gives a reasonable estimate; R1 refuses to estimate a common-knowledge range."
+  },
+  {
+   "event": "life-s026-e000",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "R1 flags stale 16 Oct cabinet delivery as conflicting; outdated record misapplied. R0 handles text-only rule correctly."
+  },
+  {
+   "event": "life-s026-e012",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both book 30 min on the 13th afternoon with an agenda."
+  }
+ ]
+}
