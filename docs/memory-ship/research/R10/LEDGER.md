@@ -1304,3 +1304,24 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   printed or written.
 - Checked against a local mock endpoint: outputs parse, `score.py --systems verify:tag=<tag>,p=0.6` reads them, the
   latency summary prints, and a missing key exits with a message. Not run against NIM: no key in this environment.
+
+## C8-E2 · 2026-10-19 · Sleep lag in the harness store (diagnostic, post hoc)
+- **Seen in C8-E1's misses:** life-s156-e000 ("halloween is in 11 days…") needs the Halloween plan agreed with Hannah
+  (astronaut, leaving 5:45). The store has that row, but it becomes visible at t 2991.5, after the turn (t 2970): the
+  harness compiles 10 sessions per sleep batch, and `--strict` shows a batch's rows only after its last session.
+- **Store ceiling (oracle-need, dev, human turns; recall / full):**
+
+  | World | Batch end (`--strict`) | Session end |
+  |---|---|---|
+  | code | 0.8242 / 0.8 | 0.9212 / 0.9091 |
+  | life | 0.6667 / 0.6076 | 0.7532 / 0.7089 |
+
+  Session-end visibility is optimistic: the compiler read the whole batch, so a row's cues (and sometimes text) can
+  carry later sessions' content. The truth for a per-session sleep lies between the two columns.
+- **Head-to-head plan-need turns with a need coverable only after the lag:** code 3 of 25, life 6 of 49.
+- **What this says:** the product sleeps far more often than every 10 sessions (the idle sleeper runs after each
+  burst of activity, and the hook writes some rows at once, DECISIONS P-tier notes on `eden sleep --idle`). The
+  head-to-head gave eden its own packets from the real plugin replay, but gave the verifier the batch-lagged harness
+  store, so on store freshness the C6/C7 comparison is conservative for the verifier. A leak-free per-session
+  compile would measure it; it costs one compiler run per session (code 160+, life 160+ sessions) and is not
+  scheduled.
