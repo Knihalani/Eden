@@ -885,3 +885,16 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   3. Both.
 
   These are the next experiments. The downstream harness now measures them directly.
+
+## C5-E5 · 2026-10-19 · Cross-batch supersession at sleep (pre-registration)
+- **Finding that motivates it:**
+  - The sleep compiler's `supersede` op can only name a row in its own batch (`sleep.rows` prefixes ids with the current batch). So facts that change across batches leave the old row live: only 3 of 375 code rows and 37 of 611 life rows ever get `invalid_at`.
+  - C5-E4's code losses on no-need turns came from stale rows: "where did we leave things" got 08-30 state; a CI question got "the repo pins yarn" after the pnpm migration. Live rows such as "The acme-platform API is Express 4" sit next to "migrated from Express 4 to Fastify 5".
+- **Setup:** `supersede.py`.
+  - After each batch b ≥ 1, a model (sonnet; the sleep step's family) sees b's new rows and every older live row. It lists `{old, new}` pairs where the new row replaces the old (a corrected fact, a changed state, a finished task, a moved date).
+  - `sleep.rows(..., supersede=True)` ends the old row at the new row's time; `score.py --supersede` applies it. It is causal: a row ends only when its replacement exists.
+- **Measures, set before running:**
+  1. **Stale share of delivered bullets** (`stale` in score.py) for F22 seq and cal p 0.6, judge sample dev, with vs without `--supersede`.
+  2. **Recall** on the same.
+- **Kill:** dead if the stale share does not fall by ≥ 30% relative on both worlds, or recall drops > 0.03 on either.
+- **Pass:** the C5-E4 downstream turns whose verify packet changes get re-run (none / verify-with-supersession).
