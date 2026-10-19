@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "code-s007-e006", "scores": [3, 3, 3, 2], "why": "All give hx-disabled-elt plus hx-sync drop with server backstop; last asks user to share template instead of finding it."},
+{"event": "code-s007-e027", "scores": [2, 3, 2, 3], "why": "Current branch holds unrelated uncommitted work; responses noting a separate branch fit better."},
+{"event": "code-s007-e039", "scores": [3, 3, 3, 3], "why": "All correctly read the trace, avoid overclaiming, and plan to trace the missing line items data."},
+{"event": "code-s008-e009", "scores": [3, 3, 3, 3], "why": "All add from/to route tests, check 80% coverage, and promise bullet summary."},
+{"event": "code-s013-e000", "scores": [3, 3, 3, 2], "why": "All correct; last hedges about Node version and points to .nvmrc despite known Node 18."},
+{"event": "code-s018-e010", "scores": [3, 3, 2, 3], "why": "Team is on Node 18 LTS; third refuses to use that known fact and only greps."},
+{"event": "code-s018-e021", "scores": [3, 3, 3, 3], "why": "All leave auth issue to Lena and plan an accessible copy button."},
+{"event": "code-s020-e014", "scores": [3, 3, 3, 3], "why": "All correctly take 'do it' as the latest font suggestion and keep lineItems fix open."},
+{"event": "code-s020-e019", "scores": [3, 3, 3, 2], "why": "Session changes are untested in browser; last defers entirely to next PR."},
+{"event": "code-s020-e034", "scores": [3, 3, 3, 3], "why": "All accurately say suite and typecheck are still running."},
+{"event": "code-s021-e035", "scores": [2, 2, 2, 2], "why": "Infra is now Pulumi TS with team/env tags; none states Pulumi, third remembers tags but plans stale terraform plan."},
+{"event": "code-s022-e017", "scores": [3, 3, 3, 3], "why": "All add rethrow test and remove the CHANGELOG emoji; none mentions Sentry but not required here."},
+{"event": "code-s027-e049", "scores": [1, 2, 1, 1], "why": "--json on invoices list already exists (Aug 24, yargs); only second checks before re-adding it."},
+{"event": "code-s028-e017", "scores": [3, 3, 3, 3], "why": "All use shadcn Button, lucide icon, and aria-label per the rule."},
+{"event": "code-s033-e016", "scores": [3, 3, 3, 3], "why": "All park bucket, keep short, and plan to inspect and fix race in invoice-number.ts."}
+]}
