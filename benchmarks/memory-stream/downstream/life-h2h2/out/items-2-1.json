@@ -1,0 +1,185 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s090-e005#2",
+   "response": "You're welcome. One thing before camp starts: none of the required forms are marked complete yet (camper health form, authorized pickup list, optional photo consent), and they go through the City's camp portal before day 1 on Mon 29 Jun. Drop-off is at the Winchester St gate, 8:45-9:15, and the name-label search is still running.\nAction: Add a to-do to finish the health form and pickup list before Mon 29 Jun, and send you the label options when they're in."
+  },
+  {
+   "id": "life-s048-e006#2",
+   "response": "Two worth looking at are ChessKid, which is built for children, and Lichess, which is free with no ads but isn't kid-specific. I'd confirm current ad and in-app-purchase policies in the app stores before you install either, since those change.\nAction: Check the app store listings for ads and purchases on both and any other kid-focused chess apps, then send you a short list."
+  },
+  {
+   "id": "life-s131-e020#2",
+   "response": "Here's a draft: 'Hi [client name], thanks for the updated direction on the facade. Since the brief has changed twice since the design was approved, the revised drawings fall outside our original scope, so we'll send a change order covering the additional hours. Once it's signed we can start on the revision and share a timeline.' It's polite, names the reason and offers a clear path forward.\nAction: Send you the draft to forward to Priya; if she has contract terms or an hourly rate to cite, I'll tighten it."
+  },
+  {
+   "id": "life-s140-e029#2",
+   "response": "Screens in the hour before bed matter more than total daily screen time: in a 2025 study of 1,200 kids aged 6-9, those on a screen in the last hour fell asleep about 19 minutes later. The causes are screen light, stimulating games, and screens crowding out the wind-down routine. The fix is a fixed screens-off time an hour before bed, including weekends, with devices charged in the kitchen and the last half hour spent reading.\nAction: None unless you want a one-line reply for the group chat."
+  },
+  {
+   "id": "life-s097-e019#2",
+   "response": "For tomorrow's fort you'll want packing or duct tape, scissors or a box cutter for you to handle, markers, blankets or sheets, and clothespins or binder clips to hold fabric to the boxes, plus a flashlight or string lights to make it a real hideout. Last time he built one with a door and a 'no grownups' sign, so asking him for one new feature keeps it fresh. Storms are forecast all day, so it's a good indoor plan.\nAction: Check which of those you already have at home and add anything missing to the shopping list."
+  },
+  {
+   "id": "life-s077-e044#2",
+   "response": "A 25 minute timer for the garden beds, starting now.\nAction: Start a 25-minute timer and ping you when it's up."
+  },
+  {
+   "id": "life-s111-e000#2",
+   "response": "Welcome to Vancouver! I don't have the earlier flight search or the Lafourcade song thing in front of me, so I'd rather find them than guess. I do have that in March you were looking at flights for the August long weekend, so that's likely the search.\nAction: Search my history and notes for that flight search and the Lafourcade song thing, and send you both for Kabir and Mei."
+  },
+  {
+   "id": "life-s046-e013#2",
+   "response": "I'm checking last night's Raptors score now.\nAction: Look up last night's Raptors game result and send you the score for Sam."
+  },
+  {
+   "id": "life-s047-e006#2",
+   "response": "Not allowed: in Ontario a landlord can only collect a last month's rent deposit, not a damage deposit. If Diego paid one, he can ask for it back, and the landlord can't just deduct for scuffs; damage beyond normal wear and tear has to go through the Landlord and Tenant Board, and scuffed walls are usually wear and tear. If the landlord refuses, he can apply to the LTB (form T1) within a year of moving out.\nAction: Draft a short message you can forward to Diego with those points, and suggest he keep move-out photos."
+  },
+  {
+   "id": "life-s037-e020#2",
+   "response": "I don't have the Ottawa flight comparison saved here, so I'll look for it in our history and notes, and if it's gone I'll re-run it for Sam's February PD day (I'll need the date). I'll also open your podcast note first and base the new commute picks on what's in it.\nAction: Search for the earlier Ottawa flights, open your podcast note, and send you a few new podcast suggestions that match it."
+  },
+  {
+   "id": "life-s106-e000#2",
+   "response": "Drywall dust and old curry are two different problems: the dust is fine particles on every surface, and the curry smell sits in fabrics and air. I'd pair a HEPA air purifier (and a fresh furnace filter) with charcoal odour absorbers, plus a damp wipe of hard surfaces. I'll look for what's in stock for pickup this weekend so it's done before Monday.\nAction: Check local stores for in-stock HEPA purifiers and charcoal odour bags with weekend pickup, and send you one recommendation with price before I order."
+  },
+  {
+   "id": "life-s136-e034#2",
+   "response": "I don't have the dates of your visit saved, so I can't tell her yet; I'll look at your calendar and bookings. For the time, I need to confirm which city she's in before saying whether it's too late to call.\nAction: Find your trip dates, check the forecast for those dates where she lives, and confirm her local time before you call."
+  },
+  {
+   "id": "life-s037-e017#2",
+   "response": "Glad the Wellington works. For Leo I'd go with one-bowl chocolate chip muffins: he gets to measure and stir, and they bake in about 20 minutes, so there's not much waiting. While they bake he can make a 'Happy New Year' paper topper for the table.\nAction: Save the muffin recipe to your notes, and put together a list of weekend-morning baking projects for January that get gradually harder."
+  },
+  {
+   "id": "life-s002-e023#2",
+   "response": "Saved: penicillin allergy (hives) and seasonal allergies in May, managed with Reactine. I've put it in a private health note rather than mixing it in with general notes.\nAction: Save the medical note and only bring it up when it's relevant to a medical or booking task."
+  },
+  {
+   "id": "life-s106-e007#2",
+   "response": "OK, the charcoal bag order stays on hold until you've talked to Sam. Also, East End Plumbing confirmed technician Raj for Mon 29 Jun, 09:00-12:00, and asked that the inside shut-off valve be accessible.\nAction: No order placed; I'll remind you about the shut-off valve the evening before the plumber comes."
+  },
+  {
+   "id": "life-s131-e022#2",
+   "response": "Here's a draft: 'To Neha and [partner's name]: they say the best relationships start with someone who laughs at your jokes, and Neha, you finally found someone who does it on purpose. May your life together be full of great food, long conversations, and arguments only about who gets the last slice of cake. Cheers!'\nAction: Fill in the partner's name and add a personal detail if you give me one, then finalize it before Saturday."
+  },
+  {
+   "id": "life-s060-e019#2",
+   "response": "Scheduled for 9:00 tomorrow. For Priya the questions that cut through are: is Toronto a real step up (bigger architecture projects, a path to partner) or a sideways move; who would she work for there compared with now; what does she give up in Montreal (friends, a lease, French in daily life); could she trial it first with a guaranteed way back; and which city does she picture herself in five years out.\nAction: Schedule the Slack message for 9:00 tomorrow in #payouts-team, and turn the questions into a short message you can forward to Priya."
+  },
+  {
+   "id": "life-s035-e008#2",
+   "response": "Good tour questions: the staff-to-child ratio and how long the staff have been there (turnover is the red flag), what a typical day looks like including naps and outdoor time, and how they handle separation and illness. Also ask about daily communication with parents, how meals and allergies are handled, the fees, and when a spot would actually start.\nAction: Put those into a one-page checklist you can text to Marcus for his sister."
+  },
+  {
+   "id": "life-s132-e000#2",
+   "response": "Adding Grace's birthday to the calendar for Thu 19 Nov, turning 68, repeating every year. I'll set the reminder for two weeks ahead, Thu 5 Nov, to sort the gift, since her real day falls after the Ottawa weekend.\nAction: Create a yearly Grace birthday event on 19 Nov and a reminder on Thu 5 Nov to sort her gift."
+  },
+  {
+   "id": "life-s045-e000#2",
+   "response": "I'll unsubscribe from Old Navy, Wayfair, Uber Eats promos, Lululemon and the Dyson emails, and archive what's already in the inbox from them. The Dyson one you never signed up for I'll treat carefully: if the unsubscribe link looks sketchy I'll mark it as spam instead of clicking it.\nAction: Unsubscribe from all five, archive their existing mail, and tell you the counts and anything that didn't go through."
+  },
+  {
+   "id": "life-s037-e000#2",
+   "response": "Merry belated Christmas! Pyjamas at 11, a Lego truck built three times and Sam asleep on the couch with Biscuit sounds like peak Boxing Day.\nAction: None, enjoy the quiet."
+  },
+  {
+   "id": "life-s072-e000#2",
+   "response": "Got it. I'll update Biscuit's vet to Dr. Kaur at Riverside Veterinary Clinic on Broadview Ave, replacing Dr. Moreau who retired in April, and look for an annual shots plus rabies booster appointment next week on a weekday after 5:30.\nAction: Update the vet contact, book the earliest weekday slot after 17:30 next week that fits your calendar, and send you the confirmation."
+  },
+  {
+   "id": "life-s022-e016#2",
+   "response": "Added: Toronto Waterfront Half Marathon, 19 Oct 2025, chip time 2:04:37, which works out to about 5:54 per km, and it's your first half marathon. I'll keep it flagged for a proper yearly recap in December.\nAction: Add the race to your running stats and set a December task to compile the yearly recap."
+  },
+  {
+   "id": "life-s008-e000#2",
+   "response": "Will do: Purina Pro Plan Sensitive Skin & Stomach, salmon, and nothing chicken-based since that gave Biscuit itchy skin. I'll check the listing name and ingredients before ordering so it isn't another flavour.\nAction: Find the exact salmon listing, confirm the flavour and ingredients, match the bag size to your last order if I can find it, and place the order only if it checks out."
+  },
+  {
+   "id": "life-s026-e012#2",
+   "response": "I'll book a half hour with Diego and Aisha on the 13th in the afternoon and include an agenda: 1) walk through the new onboarding flows, 2) engineering questions and feasibility, 3) open decisions and next steps. The 13th falls on a Thursday, and your 1:1 with Tom is Thursdays at 14:00, so I'll steer clear of that slot.\nAction: Find an afternoon slot on the 13th that works for all three of you and avoids 14:00, send the invite with the agenda, and tell you the time."
+  },
+  {
+   "id": "life-s025-e036#2",
+   "response": "I don't have a reliable current figure, so I'd check Canada Post's estimate for a letter to India rather than quote you one. In general international mail can take a couple of weeks or more, so for something tied to a date I'd allow plenty of margin or use a tracked option.\nAction: Look up Canada Post's current delivery estimate and tracked options for a card to Mumbai, then tell you what to allow, including for your mom's birthday on 3 Nov."
+  },
+  {
+   "id": "life-s085-e027#2",
+   "response": "Today so far: I drafted your out-of-office for Fri 22 May (back Mon 25 May, Aisha covering payouts), which is not sent yet. I also pulled the beta retro numbers: 9 accepted, Olivia tentative, Jonah no reply, and 14 stickies with webhook retries as the top theme. The calendar check for the 22nd is the last thing in progress.\nAction: Nothing is waiting on you except sending the OOO."
+  },
+  {
+   "id": "life-s105-e019#2",
+   "response": "Noted: the mid-year self-review in Lattice is due 2026-07-10. I'll put the due date on your calendar with a reminder ahead of it so it's not a last-minute scramble.\nAction: Add the Lattice self-review due date, 10 Jul, to your calendar, plus a drafting block and a reminder a couple of days before."
+  },
+  {
+   "id": "life-s051-e006#2",
+   "response": "For jammy ramen eggs, lower fridge-cold eggs into boiling water and cook for 6.5 to 7 minutes, then move them straight into ice water for 5 minutes. Peel them and, for that ramen shop look, marinate overnight in soy sauce, mirin and water so they're ready tomorrow.\nAction: Set a 7-minute timer for you when you start boiling."
+  },
+  {
+   "id": "life-s012-e018#2",
+   "response": "Here's a draft: 'Street yard sale! Sat Oct 4, 9am to 1pm (rain date Sun Oct 5). Set up tables on your own driveway, and no early birds before 9, please. See you there!'\nAction: Hold for your OK, then post it to the street group chat."
+  },
+  {
+   "id": "life-s063-e007#2",
+   "response": "Enjoy it, sun on the porch with a coffee is the right way to meet spring. The career day talk can wait until you want it; it's Tue 31 Mar at 9:15 in Room 104 per Ms. Alvarez.\nAction: None for now."
+  },
+  {
+   "id": "life-s077-e010#2",
+   "response": "Nate's kitchen wall choice is still the open item for Monday, and he needs it to order given the 3-week lead time. I'll pull together some fresh options this afternoon so you can pick one and send him a link.\nAction: Gather a handful of backsplash options for behind the range and sink, and send you the link list this afternoon."
+  },
+  {
+   "id": "life-s107-e022#2",
+   "response": "Here's a tighter version: 'If a payout fails because of a bank-side error, the system shall automatically retry it without merchant action.' It drops the nested clauses and keeps the requirement testable.\nAction: None, paste it in."
+  },
+  {
+   "id": "life-s092-e000#2",
+   "response": "I don't have the pickup schedule for your street yet, so I'll look it up from the City's waste calendar for your address rather than guess dates. Once I have it, I'll add the next two yard waste pickups to the calendar.\nAction: Look up the next two yard waste pickup dates for your address and add them to the calendar, and tell you when they are."
+  },
+  {
+   "id": "life-s088-e015#2",
+   "response": "Here's a simple Saturday with Leo: skate the Rideau Canal Skateway in the morning (rent skates and a sled chair for him), BeaverTails as the snack, lunch back at Grace's, then ice sculptures and a snow slide or playground in the afternoon. Winterlude usually runs over the first few weekends of February, so I'll confirm the dates and the skateway conditions once they're announced.\nAction: Save this as a note and add a placeholder for Winterlude weekend until the dates are confirmed."
+  },
+  {
+   "id": "life-s040-e009#2",
+   "response": "Reminder is set for 17:15 for the Shoppers pickup. I'll accept Tom's new Wednesday 11:30 series for the 1:1 and remove your old Thursday copy, since you can't edit his event. I'll check which Wednesday the series starts from his invite.\nAction: Set the 17:15 reminder, accept the new Wednesday 11:30 series, delete the Thursday copy, and check the rest of the quarter for clashes."
+  },
+  {
+   "id": "life-s060-e022#2",
+   "response": "Yes, I'll turn the Priya questions into a short message you can forward. Your active subscriptions are Netflix (standard), Spotify Family, Crave and The Globe and Mail digital. For Disney+, I'll check for any charge after your March 2026 cancellation and confirm the account shows it ending.\nAction: Check your card statements and the Disney+ account for charges after the cancellation, and save the four active subscriptions to a note."
+  },
+  {
+   "id": "life-s002-e000#2",
+   "response": "Done: I'll block Sundays at 9:00 for the call with your mother Anjali as a recurring event and mark it busy so nothing gets booked there. One note: that's 6:30 pm in Mumbai now, but when Toronto's clocks go back it becomes 7:30 pm. For Spanish, I'd suggest 10 to 15 minutes a day of a short chat with me in Spanish where I correct your mistakes, plus a weekly mini-quiz on whatever Carlos covered; tell me your lesson days and I'll shape it around them.\nAction: Create the recurring Sunday 9:00 call block and start a short Spanish practice routine once you tell me your lesson days."
+  },
+  {
+   "id": "life-s121-e000#2",
+   "response": "Happy to, but I don't have what you want or where from, and with a 15-minute window I'd rather not guess. What should I order, and from which shop?\nAction: Place the pickup order as soon as you tell me the shop and items."
+  },
+  {
+   "id": "life-s006-e015#2",
+   "response": "Sounds good, enjoy the snoring Biscuit. Tomorrow's errand order is dry cleaner first, then Home Depot, then the library, leaving at 10:00 to be home well before 1. The mug decision is waiting for Sam's vote.\nAction: None tonight."
+  },
+  {
+   "id": "life-s016-e002#2",
+   "response": "In Canada, EFT is the general term for electronic funds transfers like direct deposits and pre-authorized debits, which clear in batches through the national clearing system. ACH is the US network name, and the closest Canadian equivalent is EFT, so people often use them as shorthand for the same kind of rail. Just keep in mind they're separate systems with different rules and cutoffs.\nAction: None."
+  },
+  {
+   "id": "life-s018-e005#2",
+   "response": "There's no universal rule, but a common one is that the curve has flattened when period-over-period change drops below about 1-2 percentage points (or a few percent relative) for several periods in a row. I'd also check that it holds across cohorts and that the sample is big enough to trust.\nAction: None, though I can apply this to a specific curve if you send the data."
+  },
+  {
+   "id": "life-s088-e023#2",
+   "response": "Glad Biscuit is okay. Here's a draft Slack to Aisha: 'Hi Aisha, I'd like to cut payout nicknames and the scheduled-payouts calendar view from the Mon 25th sprint. Can we agree on that by Thursday, and tell me if either is further along than I think?'\nAction: Hold the Slack draft for your OK, then send it to Aisha."
+  },
+  {
+   "id": "life-s077-e012#2",
+   "response": "Draft: 'Hi, thanks for organizing the street party. I can take the 2-4pm volunteer slot at the lemonade table, but I won't be able to help with setup. Looking forward to it! Riya'\nAction: Save as a draft for your review; I won't send it until you say."
+  },
+  {
+   "id": "life-s062-e003#2",
+   "response": "Here's a clean one: 'I asked the bank for a loan, and they said sure, as soon as I can prove I don't need it.' Or a shorter one: 'The only thing growing faster than our backlog is the number of tabs in the budget spreadsheet.'\nAction: None."
+  }
+ ]
+}

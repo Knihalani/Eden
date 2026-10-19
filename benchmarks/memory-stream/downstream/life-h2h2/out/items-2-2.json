@@ -1,0 +1,21 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s006-e011#2",
+   "response": "Jess should weigh four things: cash flow (whether rent covers mortgage, condo fees, property tax and insurance with a buffer for vacancies), taxes (renting can cost her the principal-residence exemption for those years and rental income is taxable), her market view (selling locks in today's price, holding is a bet on appreciation), and landlord effort plus whether she might move back.\nAction: None; a one-hour session with a fee-only planner or accountant is worth suggesting before she decides."
+  },
+  {
+   "id": "life-s085-e023#2",
+   "response": "Arctic AC is a classic; the coat at the desk says it all. If it keeps up, a facilities request usually gets it nudged a few degrees. The pricing-page check on the plan table is still running and I'll tell you only if something changed.\nAction: None unless you want me to file a facilities ticket."
+  },
+  {
+   "id": "life-s068-e014#2",
+   "response": "I don't have this year's opening date saved, so I'll check the market's own listing rather than guess. When I have it I'll tell you the date and hours.\nAction: Look up the Leslieville farmers market opening day and hours for this year, report back, and add it to the calendar if you want it there."
+  },
+  {
+   "id": "life-s133-e000#2",
+   "response": "Booking 25 minutes with Olivia and Aisha on the 9th at 3:30pm, 15:30-15:55, with your agenda: 1) where certification stands, 2) what sales can and can't say, 3) next checkpoint. I won't put a GA date in the invite, so nothing goes to sales ahead of that conversation.\nAction: Check Olivia's and Aisha's calendars for 15:30 on the next 9th, send the invite with the agenda, and tell you if anyone has a conflict."
+  }
+ ]
+}
