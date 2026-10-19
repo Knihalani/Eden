@@ -1,6 +1,6 @@
 # R10 — research state (re-read at the start of every cycle)
 
-**Last updated:** cycle 4 (2026-10-19). Draft PR: https://github.com/Knihalani/Eden/pull/149. Branch: `claude/r10-retrieval-benchmark-sf1jho` (from `claude/eden-retrieval-research-lna5mi` + `research/r10-retrieval`).
+**Last updated:** cycle 5 (2026-10-19). Draft PR: https://github.com/Knihalani/Eden/pull/149. Branch: `claude/r10-retrieval-benchmark-sf1jho` (from `claude/eden-retrieval-research-lna5mi` + `research/r10-retrieval`).
 
 The user's brief is `BRIEF.md`. In short: retrieval "basically perfect"; not only coding; no mundane methods; no local optima; a benchmark that reflects real use. The loop never ends, and this file is its memory. LEDGER.md is the append-only experiment log. LOOKS.md logs every test or holdout look.
 
@@ -17,6 +17,18 @@ The user's brief is `BRIEF.md`. In short: retrieval "basically perfect"; not onl
 Splits: dev is session index mod 5 ≠ 4, test is mod 5 = 4. Every split shares one continuous store. Holdout: a separately authored stream, not yet written.
 
 **Secondary arms** (pairs; never optimised on alone): R1 CueBench-code, R8 `test_nim`, LifeBench memories (its cue files were never committed: see the audit).
+
+## Outcome frontier (cycle 5; the primary measure now)
+
+Per-turn effect on the agent's replies (blind opus judge with history evidence, 0–3 scale), weighted by dev's real group shares. Fresh turns, head to head (C5-E7):
+
+| System | code | life |
+|---|---|---|
+| eden (plugin today, dated for fairness) | 0.0 | −0.004 |
+| **F22b verifier p 0.6, dated, deferred** | **+0.113** | **+0.125** |
+| right packet (oracle), on need turns only (C5-E1) | +1.23 per need turn | +1.1 per need turn |
+
+95% CIs of the difference include 0 (code [−0.07, +0.30], life [−0.04, +0.29]): confirmed by rule, not yet firm.
 
 ## Pareto frontier (StreamBench dev; per arm)
 
@@ -94,11 +106,15 @@ Families differ in mechanism. Every kill criterion was written before its run.
 
 ## Next three experiments
 
-1. **Downstream-validated labels (gold subset).** A turn needs a row when adding it raises the blind, history-aware judged outcome by ≥ 1 (C4-E13: on code, half of the judge's "false" fires help). Build a gold set of about 100 turns per world, then re-score the frontier against it. Silence against plan labels is not a safe tuning target until this exists.
-2. **Red-team round 2 plus transfer.** Thresholds tuned on dev do not transfer to the short red-team prompts (C4-E11). Calibrate on a mixed pool, or per prompt-length band.
-3. **Critic C direction:** a prospective agenda for triggers, with ≥ 40 routine trigger negatives, ideally from a non-Claude author.
+1. **Firm up C5-E7:** a second responder run and about 150 more no-need turns per world, to narrow the CI. Add a non-Claude responder or judge if any is reachable.
+2. **Latency and cost of the off-hook verifier:** one haiku call per turn with ≤ 15 candidates, measured; and real PreToolUse delivery in a headless Claude Code run.
+3. **Episodic state rows:** expire or date-gate in-flight state at sleep, so "where did we leave things" gets the latest state.
 
-## Cycle 5 findings (LEDGER C5-E1…)
+## Cycle 5 findings (LEDGER C5-E1…E7)
+
+- **Dated delivery is the unlock (C5-E6, C5-E7).** Wrong packets hurt mostly by passing off old state as current; prefixing each row with "[as of <date>]" cut the cost of a wrong fire from −0.6 to −0.1 and turned the verifier net-positive. On fresh turns it beats today's plugin on both worlds.
+- **The plugin today barely changes replies (C5-E3).**
+- **Cross-batch supersession (C5-E5)** fixes a real sleep bug (supersede only within a batch) but explains a minority of the harm; dead by its code kill line, strong on life.
 
 - **Clean downstream re-run (C5-E1):** the right packet lifts the outcome by +1.23 (code) and +1.1 (life) on 97% / 87% of plan-need turns. A wrong packet costs −0.47 on code no-need turns (noise floor −0.07), so wrong bullets do hurt and R10-3's evidence is restored. The hook vote keeps about half of the code benefit (+0.63).
 - **The plugin as it ships today barely changes replies** (C5-E3): +0.1 on code need turns (about 8% of the available +1.23), −0.2 on life need turns. Reweighted to real use, code −0.04 and life +0.03: near zero. Its bullets (mostly past prompts) rarely mislead, but rarely help.

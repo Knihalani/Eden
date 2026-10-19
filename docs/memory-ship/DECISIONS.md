@@ -161,6 +161,11 @@ Raised by the R10 research programme (`research/R10-retrieval.md`; evidence in `
 - **R10-3 · Bullet precision and silence are outcome metrics, not only token budgets.**
   - *Evidence:* re-measured with a clean protocol (C5-E1: one responder prompt per condition, a judge that sees the episodic history). On code no-need turns the hook vote's packet scored −0.467 against no memory (6 of 15 turns worse, 1 better), against an empty-packet noise floor of −0.067. On plan-need turns the right packet scored +1.23. A wrong packet costs about 40% of what a right one gains. (C4-E10's 0.0 came from a confounded protocol and is superseded.)
   - *Proposal:* every retrieval slice reports `stream-downstream`, and must not lower it on no-need turns.
+- **R10-5 · Push with an off-hook check, and date every delivered memory.**
+  - *Evidence (C5-E7, fresh turns):* the hook picks ≤ 15 candidates with no model; a small model checks them outside the hook; the packet arrives at the turn's first tool call; each row is prefixed "[as of <date>]". Per-turn effect on replies: code +0.113, life +0.125, against today's plugin 0.0 and −0.004. Where memory is needed: +0.56 and +0.6; where not: +0.07 and 0.0. 95% CIs of the difference include 0 (n ≈ 70 per world), so this is a strong lead, not yet a firm result.
+  - *Why dates matter (C5-E6):* without dates a wrong packet costs about −0.6 on a no-need turn; with dates about −0.1.
+  - *Proposal:* the push path keeps the hook model-free and adds (a) an off-hook verifier with a calibrated threshold and (b) dated rows in every packet. Eden still decides, unasked. Needs: latency and cost measurement, and a firmer sample, before a slice is pre-registered.
+  - *Also (C5-E5):* any batched sleep compiler needs a cross-batch supersession pass; its `supersede` op could only reach rows of the same batch.
 - **R10-4 · Sleep-time models may write retrieval cues and situations, not only extract facts** (D34, §6a).
   - *Evidence:* compiled `when` cues and self-play situations raised silence by +0.16–0.26 at equal recall on both worlds (C1-E6, C2-E7).
   - This needs an offline model for the sleep step (NIM today). The model must differ from any model that writes evaluation data.
