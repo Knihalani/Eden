@@ -43,6 +43,7 @@ def env():
             k, _, v = line.strip().removeprefix("export ").partition("=")
             if k.strip() in out and not out[k.strip()]:
                 out[k.strip()] = v.strip().strip('"').strip("'")
+    out = {k: v.strip().strip('"').strip("'") for k, v in out.items()}  # a key pasted with its quotes still works
     out["NVIDIA_BASE_URL"] = out["NVIDIA_BASE_URL"] or DEFAULT_URL
     return out
 
