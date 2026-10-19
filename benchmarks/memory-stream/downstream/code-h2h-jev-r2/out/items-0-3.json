@@ -1,0 +1,45 @@
+{
+  "responder": "sonnet (claude-code subagent)",
+  "items": [
+    {
+      "id": "code-s088-e008#0",
+      "response": "The common thread is that each of those imports pulls in something that is only a type (ClientRow, SortKey, Invoice, ColumnDef, FastifyPluginAsync and so on) with a plain `import { ... }`. With `verbatimModuleSyntax` on, TypeScript no longer drops unused-at-runtime imports for you, so every type must be marked `import type { X }` or inline `import { type X }`. It is mechanical, not a real type bug, and the fix is the same everywhere (the log cuts off partway, so I can only vouch for what is shown).\nAction: Run the typecheck on your branch to get the full list, then apply the type-only import fix across it (a bulk fixer like Biome's useImportType can do it) and re-run typecheck to confirm it's clean."
+    },
+    {
+      "id": "code-s045-e000#0",
+      "response": "I'll add a job in the worker that loads the org (scoped by orgId), skips if `callback_url` is empty, and POSTs a JSON `invoice.paid` event with a timeout, throwing on non-2xx so the queue retries. I'll keep the URL out of error messages. The enqueue call belongs in the payment-succeeded handler, so I'll point you to that spot rather than guess.\nAction: Look at how existing worker jobs are structured and registered, add the invoice-paid delivery job plus tests (success, empty callback_url, non-2xx), and run the worker tests."
+    },
+    {
+      "id": "code-s066-e028#0",
+      "response": "I'll add a ServiceMonitor to the worker helm chart targeting the metrics port 9464 and path /metrics. It needs a Service (or pod monitor) exposing that port, and a selector that matches how your Prometheus/Grafana stack discovers monitors, which I don't know yet.\nAction: Read the worker chart's templates and values, check whether the worker already has a Service with a named metrics port and what label Prometheus selects on, then add the ServiceMonitor and run helm template to verify it renders."
+    },
+    {
+      "id": "code-s108-e040#0",
+      "response": "Sure. I'll write it in `scripts/` as a small TypeScript script that walks each package, counts TODO and FIXME comments (skipping node_modules and build output), and prints a table with one row per package.\nAction: Check how the other scripts in scripts/ are run and what the workspace package list looks like, then write the script and run it to show you the output."
+    },
+    {
+      "id": "code-s093-e000#0",
+      "response": "I'll add a Resend button to the invoice detail page that POSTs to the resend endpoint, disables itself while pending, and shows a success or failure toast. I'll reuse the existing button, toast and API client patterns instead of inventing new ones, and check what the resend endpoint's path and error shape are.\nAction: Find the invoice detail page and the resend endpoint, add the button with success/error toasts, and add a test for both outcomes."
+    },
+    {
+      "id": "code-s070-e000#0",
+      "response": "Two hours of roadmap slides will do that. I'm here whenever you want to pick something up, and happy to start with something small while you warm back up.\nAction: Wait for what you want to tackle first."
+    },
+    {
+      "id": "code-s098-e007#0",
+      "response": "Still waiting on one thing before I write the org guard: which HTTP framework and major version the API is on, since registering it differs for each. Rather than make you answer, I can read it from the API package.\nAction: Read the API's package.json and server entry to identify the framework and version, then write the x-org-id guard in that style and register it on the org-scoped route prefixes only."
+    },
+    {
+      "id": "code-s080-e024#0",
+      "response": "I'll add msw as a dev dependency in packages/cli with pnpm so the lockfile gets updated too. CI installs with a frozen lockfile, so I'll commit pnpm-lock.yaml together with the package.json change, otherwise the install job fails.\nAction: Run `pnpm --filter @acme/cli add -D msw`, confirm the lockfile changed, then set up msw handlers in the invoices tests."
+    },
+    {
+      "id": "code-s003-e021#0",
+      "response": "Understood: I'll run the CLI locally through the dev script, with no build, and do the export against staging for 2026-08-01 to 2026-08-18. That command talks to a real environment, so I'll check which credentials and base URL it uses before it runs and keep it read-only.\nAction: Run `pnpm --filter @acme/cli dev -- invoices export --from 2026-08-01 --to 2026-08-18` against staging and report the output."
+    },
+    {
+      "id": "code-s108-e018#0",
+      "response": "That sounds like the header being written once by the export builder and once by the button's handler. I haven't looked at the code yet, so I won't guess which one is the culprit.\nAction: Find the expenses export csv button and the CSV builder, locate where the header row is added, remove the duplicate, and add a test asserting exactly one header row."
+    }
+  ]
+}
