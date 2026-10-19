@@ -1073,3 +1073,11 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - **Firm on life.** The dated verifier beats today's plugin, with the CI above 0.
   - **Code is not firm.** Its advantage comes entirely from plan-need turns, and all 55 dev plan-need turns are now used. Code no-need turns are a wash for both systems.
 - **Next for code:** the only way to firm it up on dev is a second responder and judge run on the same turns (to cut noise), or new need turns from the test split or a fresh code world. The test split stays unlooked-at, so this needs a decision in a later cycle.
+
+## C6-E2 · 2026-10-19 · Code head-to-head, second independent run (pre-registration)
+- **Setup:** a second, independent responder (sonnet) and blind-judge (opus, history evidence) run on the same 145 code turns and packets as C5-E7 and C6-E1 (`downstream/code-h2h-r2`, `code-h2h2-r2`: copies of the inputs and keys, new responses, new judgments).
+  - Each turn's condition − none is averaged over the two runs (`h2h.py code --pool h2h2 --runs r2`); shares and bootstrap are unchanged.
+- **Rule, set before running (the averaged result decides, whichever way it goes):**
+  - **Firm on code** if the averaged pooled 95% CI lower bound is > 0.
+  - **Lead stands** if the point estimate stays ≥ +0.05.
+  - **Weakened** if it falls below +0.05.
