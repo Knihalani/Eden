@@ -28,7 +28,7 @@ Per-turn effect on the agent's replies (blind opus judge with history evidence, 
 | **F22b verifier p 0.6, dated, deferred** | **+0.113** | **+0.125** |
 | right packet (oracle), on need turns only (C5-E1) | +1.23 per need turn | +1.1 per need turn |
 
-Pooled with C6-E1 (more fresh turns): code +0.098 [−0.016, +0.216] (not firm; all dev need turns used), **life +0.135 [+0.035, +0.233] (firm)**.
+Pooled with C6-E1 (more fresh turns) and, for code, averaged over a second independent run (C6-E2): **code +0.101 [+0.009, +0.199] (firm), life +0.135 [+0.035, +0.233] (firm)**.
 
 ## Pareto frontier (StreamBench dev; per arm)
 
@@ -106,7 +106,7 @@ Families differ in mechanism. Every kill criterion was written before its run.
 
 ## Next three experiments
 
-1. **Firm up C5-E7:** a second responder run and about 150 more no-need turns per world, to narrow the CI. Add a non-Claude responder or judge if any is reachable.
+1. **Done (C6-E1, C6-E2): the head-to-head is firm on both worlds.** Still open: a non-Claude responder or judge, if any is reachable.
 2. **Latency and cost of the off-hook verifier:** one haiku call per turn with ≤ 15 candidates, measured; and real PreToolUse delivery in a headless Claude Code run.
 3. **Episodic state rows:** expire or date-gate in-flight state at sleep, so "where did we leave things" gets the latest state.
 
