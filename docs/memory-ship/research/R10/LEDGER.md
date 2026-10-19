@@ -446,3 +446,35 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - The agent's commands add as much noise as signal for these matchers.
   - The gain on code lex (+0.07 recall at −0.015 silence) does not carry over to life.
   - An action check with structure (tool name and arguments against a memory's rule, as the guard does) is a separate question. The policy-guard work (P2.x, P8.4) covers it.
+
+## C4-E4 · 2026-10-19 · Red-team round 1 (fresh split; BRIEF §5 rule 5)
+- **Setup:** an independent red-team author per world (session default model, a new instance) wrote 12 sessions continuing each timeline.
+  - Mostly short, elliptic needs; proactive and multi needs; hard negatives.
+  - The author gave explicit labels.
+  - `redteam.py` builds `code-rt1` and `life-rt1`; scored with `--split fresh`, strict sleep store.
+- **Size:**
+
+  | World | Need / human (+trigger) events | Prompt words p50 | Triggers (with needs) |
+  |---|---|---|---|
+  | code-rt1 | 29 / 74 | 8 | — |
+  | life-rt1 | 23 / 57 human; 36 / 81 with triggers | 7 | 24 (13) |
+
+- **Numbers (fresh):**
+
+  | World | Method | Recall | Proactive | Precision | Silence | Trigger recall / silence |
+  |---|---|---|---|---|---|---|
+  | code | lex+when | 0.2552 | 0.5 | 0.0691 | 0.3111 | — |
+  | code | bank ∧ lex | 0.1897 | — | — | 0.4444 | — |
+  | code | vote | 0.2943 | 0.3333 | 0.1 | 0.4667 | — |
+  | code | vote + budget .7 | 0.2184 | — | 0.1075 | 0.7111 | — |
+  | code | oracle-need | 1.0 | — | — | — | — |
+  | life | lex+when | 0.1159 | — | — | 0.2353 | — |
+  | life | bank ∧ lex | 0.163 | — | — | 0.2941 | — |
+  | life | vote | 0.1775 | 0.25 | 0.0678 | 0.3235 | 0.2308 / 0.0909 |
+  | life | oracle-need | 0.9022 | — | — | — | trigger recall 0.9615 |
+
+- **Verdict:**
+  - Code: frozen-set results roughly hold on fresh, shorter prompts (frozen vote 0.38 / 0.42, fresh 0.29 / 0.47).
+  - Life: the matchers degrade on fresh cases (silence 0.24–0.32, against 0.29–0.52 frozen).
+  - The cases are fair: oracle-need reaches 0.90–1.0.
+  - Small n: 29 and 23 human need events.
