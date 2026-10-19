@@ -1,0 +1,85 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "cases": [
+  {
+   "event": "life-s028-e022",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Identical accurate poppy explanation with kid-friendly version."
+  },
+  {
+   "event": "life-s085-e015",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Identical short Slack draft, waits for approval."
+  },
+  {
+   "event": "life-s058-e010",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "No search result recorded; both honestly decline to guess and offer to re-run."
+  },
+  {
+   "event": "life-s001-e039",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Identical: confirms Bell Fibe $95, no invented charges or order status, honest history."
+  },
+  {
+   "event": "life-s077-e026",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Identical supportive reply, holds non-urgent items."
+  },
+  {
+   "event": "life-s088-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Identical correct checklist."
+  },
+  {
+   "event": "life-s025-e032",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Identical warm reply; saving Nov 3 birthday reminder matches facts."
+  },
+  {
+   "event": "life-s023-e024",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Identical empathetic reply, defers the meeting slot to morning."
+  },
+  {
+   "event": "life-s052-e019",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Identical light acknowledgement."
+  },
+  {
+   "event": "life-s010-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Identical short, warm, non-cheesy card line."
+  }
+ ]
+}

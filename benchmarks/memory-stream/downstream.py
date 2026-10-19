@@ -12,6 +12,8 @@ The downstream effect of memory on a turn is oracle − none. A turn *needs* mem
 validates the labels (plan vs labeler) and gives every system a downstream score: system − none.
 
     python3 benchmarks/memory-stream/downstream.py prep --world code [--n 60] [--system "vote:..."]
+    python3 benchmarks/memory-stream/downstream.py items --world code      # order-free responder input
+    python3 benchmarks/memory-stream/downstream.py collect --world code    # after the responders
     python3 benchmarks/memory-stream/downstream.py judge-prep --world code
     python3 benchmarks/memory-stream/downstream.py report --world code
 """
@@ -58,9 +60,42 @@ def prep(a):
     print(len(cases), "cases", {g: sum(1 for k in key.values() if k["group"] == g) for g in ("plan", "labeler-only", "no-need")})
 
 
+def items(a):
+    """Order-free responder input: one item per (turn, packet), shuffled, each with its own id (C4-E10: responders
+    that answer a list of packets swapped the order on 13 of 45 life and 4 of 45 code cases)."""
+    d = os.path.join(HERE, "downstream", a.world)
+    src = json.load(open(os.path.join(d, "in", "responses-in.json")))["cases"]
+    out = [{"id": f"{c['event']}#{j}", "text": c["text"], "recent": c["recent"], "packet": p}
+           for c in src for j, p in enumerate(c["packets"])]
+    random.Random(13).shuffle(out)
+    per = a.per
+    for b in range(0, len(out), per):
+        name = f"items-{b // per}"
+        json.dump({"items": out[b:b + per], "output": f"benchmarks/memory-stream/downstream/{a.world}/out/{name}.json"},
+                  open(os.path.join(d, "in", f"{name}.json"), "w"), indent=1, ensure_ascii=False)
+        print(name, len(out[b:b + per]))
+
+
+def collect(a):
+    d = os.path.join(HERE, "downstream", a.world)
+    src = json.load(open(os.path.join(d, "in", "responses-in.json")))["cases"]
+    got, who = {}, ""
+    for p in glob.glob(os.path.join(d, "out", "items-*.json")):
+        j = json.load(open(p))
+        who = j.get("responder", who)
+        got.update({x["id"]: x["response"] for x in j["items"]})
+    cases = [{"event": c["event"], "responses": [got[f"{c['event']}#{j}"] for j in range(len(c["packets"]))]}
+             for c in src]
+    json.dump({"responder": who, "protocol": "items", "cases": cases},
+              open(os.path.join(d, "out", "responses.json"), "w"), indent=1, ensure_ascii=False)
+    print(len(cases), "cases collected")
+
+
 def judge_prep(a):
     import score
+    from evidence import History
     stream, items = score.load_stream(a.world)
+    hist = History(stream)
     evs = {e["id"]: e for e in score.scored_events(stream)}
     d = os.path.join(HERE, "downstream", a.world)
     resp = json.load(open(os.path.join(d, "out", "responses.json")))["cases"]
@@ -70,8 +105,10 @@ def judge_prep(a):
         e = evs[c["event"]]
         facts = [items[i]["text"] for i, t in sorted(e["_stated"].items(), key=lambda kv: kv[1])
                  if not (items[i].get("superseded_by") in e["_stated"])]
-        cases.append({"event": c["event"], "text": src[c["event"]]["text"], "recent": src[c["event"]]["recent"],
-                      "reference_facts": facts, "responses": c["responses"]})
+        s = src[c["event"]]
+        base = s["text"] + " " + " ".join(x["text"] for x in s["recent"])
+        cases.append({"event": c["event"], "text": s["text"], "recent": s["recent"], "reference_facts": facts,
+                      "history_evidence": hist.evidence(c["event"], base, c["responses"]), "responses": c["responses"]})
     json.dump({"cases": cases, "output": f"benchmarks/memory-stream/downstream/{a.world}/out/judged.json"},
               open(os.path.join(d, "in", "judge-in.json"), "w"), indent=1, ensure_ascii=False)
     print(len(cases), "cases for the judge")
@@ -103,9 +140,10 @@ def report(a):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["prep", "judge-prep", "report"])
+    ap.add_argument("cmd", choices=["prep", "items", "collect", "judge-prep", "report"])
     ap.add_argument("--world", required=True)
     ap.add_argument("--n", type=int, default=60)
     ap.add_argument("--system", default="")
+    ap.add_argument("--per", type=int, default=45)
     a = ap.parse_args()
-    {"prep": prep, "judge-prep": judge_prep, "report": report}[a.cmd](a)
+    {"prep": prep, "items": items, "collect": collect, "judge-prep": judge_prep, "report": report}[a.cmd](a)
