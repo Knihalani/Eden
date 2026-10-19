@@ -1,0 +1,78 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s012-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "B knows Biome replaced ESLint/Prettier and acts; A hedges and checks history it should know. Both do CORS allowlist right."
+  },
+  {
+   "event": "code-s013-e004",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A follows CLI conventions: snapshot test, changeset, docs update. B generic, skips changeset and docs."
+  },
+  {
+   "event": "code-s015-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A covers pnpm dev, Docker/Testcontainers, Apple Silicon note from known docs; B generic but correct."
+  },
+  {
+   "event": "code-s021-e018",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A knows worker already scales via KEDA on queue length, checks cap; B generic, misses KEDA."
+  },
+  {
+   "event": "code-s022-e008",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "B knows Sentry via SENTRY_DSN and pino; A doesn't know tracker but would find it by grepping."
+  },
+  {
+   "event": "code-s023-e000",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Neither flags API is Express so @fastify/rate-limit mismatches. A knows infra stack and bucket details; B knows nothing."
+  },
+  {
+   "event": "code-s027-e035",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both identify all five errors on the right branch and plan to fix and recheck."
+  },
+  {
+   "event": "code-s027-e049",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "History shows --json already added to invoices list; B verifies first, A would re-add it."
+  },
+  {
+   "event": "code-s028-e012",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add aria-label, scan other icon-only buttons, test accessible name."
+  }
+ ]
+}

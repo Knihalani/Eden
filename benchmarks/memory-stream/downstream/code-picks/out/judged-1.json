@@ -1,0 +1,78 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s030-e013",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A knows logger is pino and uses redact plus re-check; B doesn't know which logger."
+  },
+  {
+   "event": "code-s033-e020",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both implement the agreed counter-table fix concisely; A adds Docker check and org_id."
+  },
+  {
+   "event": "code-s035-e033",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A reads first and pins clock; B asserts local-parse fix, conflicting with UTC-based dueLabel, before reading."
+  },
+  {
+   "event": "code-s035-e058",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A knows Tailwind v4 CSS-first theme tokens in globals.css; B generic about font setup."
+  },
+  {
+   "event": "code-s038-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A knows chart path infra/helm/api and values-prod.yaml, read-only; B generic but sound diagnosis."
+  },
+  {
+   "event": "code-s038-e019",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both accurately summarize CI analysis, stale-branches script and open NaN note."
+  },
+  {
+   "event": "code-s046-e016",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A notes changeset needed for user-facing CLI change and snapshots; B omits changeset."
+  },
+  {
+   "event": "code-s057-e010",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A recalls PgBouncer transaction mode needs prepare:false; B hedges on a known fact."
+  },
+  {
+   "event": "code-s057-e030",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "B applies removeOnComplete gotcha and idempotency from history; A misses the Redis retention gotcha."
+  }
+ ]
+}
