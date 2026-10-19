@@ -399,3 +399,30 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - A memory is needed once or twice in a stream, so history gives almost no positives.
   - Two turns that need the same memory rarely share words.
   - Learning from history does not escape the lexical wall. The understanding has to come from a model, not from comparing texts.
+
+## C4-E2 · 2026-10-19 · F21 anticipation: the next turn's packet prepared before the turn arrives
+- **Setup:** `anticipate.py`. On the judge-sample moments, a sonnet model sees only the turns *before* the moment and the store. It writes at most 4 predicted rows, each with trigger phrases (the `if` field) or an always-on flag.
+  - At hook time the cost is a phrase check, with no model.
+  - `mode=all` fires every prediction.
+  - Strict sleep store, dev.
+- **Process note:** no kill criterion was written before this run. That is an omission against BRIEF §5 rule 6, recorded here. The verdict below uses the F13/F16 lines after the fact.
+- **Numbers (same events as judge and pull):**
+
+  | World | Labels | Method | Recall | Proactive | Precision | Silence | Tokens | Precision at 8% |
+  |---|---|---|---|---|---|---|---|---|
+  | code | plan | antic (condition check) | 0.2152 | 0.0769 | 0.2429 | 0.8636 | 22.2 | **0.0974** |
+  | code | plan | antic, mode=all | 0.2152 | — | 0.1314 | 0.6909 | — | 0.0417 |
+  | code | plan | pull k=2 | 0.4667 | — | 0.2025 | 0.7364 | — | 0.0738 |
+  | code | plan | judge | 0.6909 | — | 0.2552 | 0.6364 | — | 0.0886 |
+  | code | plan | vote | 0.3848 | — | 0.0695 | 0.4182 | — | 0.0201 |
+  | code | union | antic | 0.1787 | — | 0.4286 | 0.8537 | — | 0.1147 |
+  | life | plan | antic | 0.0464 | 0.0 | 0.0833 | 0.8333 | — | 0.0227 |
+  | life | plan | antic, mode=all | 0.0464 | — | — | 0.6296 | — | — |
+  | life | plan | antic trigger recall | 0.0 | — | — | — | — | — |
+  | life | plan | pull k=2 | 0.2869 | — | — | 0.8426 | — | — |
+
+- **Verdict:**
+  - **Code: alive as a high-precision lane.** It has the best realistic-base-rate precision of any system, the judge included, with no model on the hook. Recall is low (0.22) and proactive recall lower (0.08).
+  - **Life: dead.** The next moment's needs are not predictable from what came before. Even firing every prediction reaches 0.05 recall, and trigger recall is 0.
+  - Coding work is continuous, so it is predictable. A personal assistant's moments are mostly new topics.
+- **Life labels (independent labeler):** 754 turns. Plan need turns 131, labeler need turns 296. Items: both 123, plan-only 36, labeler-only 455. Labeler recall of the plan 0.774. The same pattern as code: the plan is confirmed, and the labeler is about 2× more lenient.

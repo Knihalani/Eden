@@ -1,0 +1,546 @@
+{
+ "batch": "a04",
+ "model": "sonnet (claude-code subagent)",
+ "cases": [
+  {
+   "event": "code-s093-e000",
+   "predictions": []
+  },
+  {
+   "event": "code-s095-e000",
+   "predictions": [
+    {
+     "row": "code-sleep-b05:m0007",
+     "if": [
+      "trailmix",
+      "django",
+      "htmx",
+      "hike"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b03:m0019",
+     "if": [
+      "htmx",
+      "post",
+      "form",
+      "csrf"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s095-e011",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0052",
+     "if": [
+      "invoicerow",
+      "rename",
+      "invoicelistitem"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s096-e000",
+   "predictions": []
+  },
+  {
+   "event": "code-s097-e000",
+   "predictions": [
+    {
+     "row": "code-sleep-b06:m0017",
+     "if": [
+      "crashloop",
+      "pods",
+      "prod",
+      "kubectl"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b00:m0033",
+     "if": [
+      "cluster",
+      "logs",
+      "pods"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b00:m0037",
+     "if": [
+      "woken",
+      "on-call",
+      "oncall",
+      "paged"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b01:m0006",
+     "if": [
+      "worker pods",
+      "crashloop",
+      "redis"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s097-e004",
+   "predictions": []
+  },
+  {
+   "event": "code-s097-e005",
+   "predictions": [
+    {
+     "row": "code-sleep-b06:m0017",
+     "if": [
+      "cluster",
+      "credentials",
+      "kubectl",
+      "context"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b00:m0033",
+     "if": [
+      "cluster",
+      "acme-prod",
+      "logs"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b00:m0037",
+     "if": [
+      "on-call",
+      "woken",
+      "alert",
+      "page"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s097-e012",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0052",
+     "if": [
+      "skeleton",
+      "loading"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b00:m0035",
+     "if": [
+      "env.example",
+      "share_link_secret",
+      "secret"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s097-e017",
+   "predictions": [
+    {
+     "row": "code-sleep-b05:m0007",
+     "if": [
+      "trailmix",
+      "django",
+      "htmx"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b04:m0010",
+     "if": [
+      "trailmix",
+      "hike",
+      "migration"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s097-e021",
+   "predictions": []
+  },
+  {
+   "event": "code-s098-e000",
+   "predictions": [
+    {
+     "row": "code-sleep-b05:m0030",
+     "if": [
+      "problem+json",
+      "403",
+      "reject"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b03:m0004",
+     "if": [
+      "guard",
+      "plugin",
+      "hook",
+      "middleware"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b05:m0028",
+     "if": [
+      "guard",
+      "fastify",
+      "api"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b02:m0012",
+     "if": [
+      "org",
+      "x-org-id",
+      "membership"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s098-e007",
+   "predictions": []
+  },
+  {
+   "event": "code-s098-e009",
+   "predictions": [
+    {
+     "row": "code-sleep-b03:m0004",
+     "if": [
+      "fastify",
+      "framework",
+      "version"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b05:m0030",
+     "if": [
+      "problem+json",
+      "403"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s098-e017",
+   "predictions": []
+  },
+  {
+   "event": "code-s098-e032",
+   "predictions": []
+  },
+  {
+   "event": "code-s098-e035",
+   "predictions": []
+  },
+  {
+   "event": "code-s100-e000",
+   "predictions": [
+    {
+     "row": "code-sleep-b02:m0005",
+     "if": [
+      "perf",
+      "benchmark",
+      "ci job",
+      "pdf"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b08:m0020",
+     "if": [
+      "ci.yml",
+      "workflow",
+      "github actions",
+      ".github"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b07:m0007",
+     "if": [
+      "in-flight",
+      "graceful",
+      "sigterm",
+      "pods killed"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s101-e013",
+   "predictions": []
+  },
+  {
+   "event": "code-s102-e006",
+   "predictions": []
+  },
+  {
+   "event": "code-s103-e029",
+   "predictions": []
+  },
+  {
+   "event": "code-s103-e031",
+   "predictions": []
+  },
+  {
+   "event": "code-s105-e000",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0005",
+     "if": [
+      "branch",
+      "acme-447"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b06:m0019",
+     "if": [
+      "commit it",
+      "commit"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b00:m0050",
+     "if": [
+      "commit it",
+      "commit"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s105-e008",
+   "predictions": [
+    {
+     "row": "code-sleep-b04:m0009",
+     "if": [
+      "push",
+      "open a pr",
+      "pr"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b05:m0013",
+     "if": [
+      "merge"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b01:m0005",
+     "if": [
+      "amend",
+      "rebase",
+      "squash",
+      "force"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s106-e000",
+   "predictions": [
+    {
+     "row": "code-sleep-b05:m0016",
+     "if": [
+      "sign in",
+      "social login",
+      "google",
+      "auth provider"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b06:m0015",
+     "if": [
+      "sign in page",
+      "login page"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s106-e004",
+   "predictions": [
+    {
+     "row": "code-sleep-b05:m0016",
+     "if": [
+      "clerk",
+      "dashboard",
+      "auth provider",
+      "social"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b06:m0015",
+     "if": [
+      "login",
+      "sign in",
+      "social"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s107-e000",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0044",
+     "if": [
+      "lineitems",
+      "line item",
+      "invoice"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b02:m0003",
+     "if": [
+      "lineitems",
+      "expand",
+      "line item"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b01:m0013",
+     "if": [
+      "currency",
+      "money",
+      "format"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s107-e006",
+   "predictions": []
+  },
+  {
+   "event": "code-s108-e000",
+   "predictions": [
+    {
+     "row": "code-sleep-b02:m0019",
+     "if": [
+      "e2e",
+      "playwright",
+      "browser test"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b04:m0012",
+     "if": [
+      "playwright",
+      "e2e",
+      "spec"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b02:m0001",
+     "if": [
+      "e2e",
+      "browser",
+      "pr"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s108-e009",
+   "predictions": []
+  },
+  {
+   "event": "code-s108-e018",
+   "predictions": [
+    {
+     "row": "code-sleep-b05:m0035",
+     "if": [
+      "export csv",
+      "csv",
+      "header row"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b06:m0022",
+     "if": [
+      "csv",
+      "export"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s108-e025",
+   "predictions": [
+    {
+     "row": "code-sleep-b07:m0014",
+     "if": [
+      "recieved",
+      "typo",
+      "spelling",
+      "grep"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s108-e036",
+   "predictions": []
+  },
+  {
+   "event": "code-s108-e040",
+   "predictions": []
+  },
+  {
+   "event": "code-s108-e045",
+   "predictions": []
+  },
+  {
+   "event": "code-s108-e047",
+   "predictions": []
+  }
+ ]
+}
