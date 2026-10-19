@@ -510,3 +510,42 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
     - candidate recall (life ceiling 0.38);
     - deferral loss on life (many moments have no tool call: 0.34 → 0.26);
     - trigger silence 0.0: the verifier fires on routine triggers.
+
+## C4-E6 · 2026-10-19 · Critic C4 corrections (see critic-c4.md)
+- **C4-E4 config:** the lex rows of C4-E4 used `lex:tau=4,when=1,gate=1`, not `lex:when=1`. Re-run this session with that config, it reproduces the ledger exactly:
+  - code-rt1: 0.2552 / 0.5 / 0.0691 / 0.3111;
+  - life-rt1: 0.1159 / 0.05 / 0.0414 / 0.2353.
+  From now on every ledger row names its exact system string.
+- **F22 caveats the critic raised, all accepted:**
+  - The no-tool-call delivery rule gates silence. On life, 47 of 108 no-need turns have no tool call, against 18 of 79 need turns. Part of F22's silence comes from the delivery rule, not from the verifier.
+  - Verifier batches held 50 cases from across the stream, so the verifier could see later turns in the same batch. This is a possible future leak. A leak-free re-run (stream order, one case per call, prompt committed) is still owed.
+  - Precision at an 8% base rate equals pull's (0.0728 vs 0.0738).
+  - Trigger silence rests on n=2 negatives.
+  - Latency and PreToolUse injection semantics are unmeasured.
+  - F22 is not yet scored on the red-team worlds.
+  - Errors are correlated within one model family: when haiku fires on a no-need turn, the judge fires too 74% (code) and 58% (life) of the time.
+
+## C4-E7 · 2026-10-19 · Critic direction A: store-wide haiku verifier (no lexical candidate stage)
+- **Setup:** `judge:tag=haiku`. haiku sees the turn plus the whole strict sleep store visible at that moment. The cases are the same judge-sample events (code 165, life 187 human), on dev. `defer=1` applies F22's delivery rule (nothing on a turn with no tool call).
+  - **Deviation from the critic's design:** 15 cases per call, not one per call. Input tokens after caching were not measured.
+  - **System string:** `judge:tag=haiku judge:tag=haiku,defer=1 verify judge pull:k=4`, run as `score.py --store sleep --strict --split dev --sample judge --ci`.
+- **Kill (critic C4, set before this scoring):** dead if life recall < 0.42 at ideal delivery, or human silence < 0.60.
+- **Numbers (plan labels):**
+
+  | World | System | Recall | Proactive | Precision | Silence | Tokens |
+  |---|---|---|---|---|---|---|
+  | code | haiku whole-store (ideal) | 0.5515 | 0.3077 | 0.2176 | 0.6364 | 60.1 |
+  | code | haiku whole-store (deferred) | 0.497 | 0.3077 | 0.2061 | 0.6364 | 58.6 |
+  | code | F22 verify (deferred) | 0.4758 | 0.3077 | 0.2086 | 0.6636 | 55.2 |
+  | code | opus judge | 0.6909 | 0.4615 | 0.2552 | 0.6364 | 65.0 |
+  | code | pull k=4 | 0.5273 | 0.2308 | 0.1338 | 0.7364 | 100.5 |
+  | life | haiku whole-store (ideal) | 0.3586 | 0.1739 | 0.1878 | 0.5556 | 50.2 |
+  | life | haiku whole-store (deferred) | 0.2595 | 0.1304 | 0.2029 | 0.7037 | 34.5 |
+  | life | F22 verify (deferred) | 0.2553 | 0.1739 | 0.1689 | 0.7222 | 38.0 |
+  | life | opus judge | 0.5696 | 0.5217 | 0.2385 | 0.6481 | 66.9 |
+  | life | pull k=4 | 0.346 | 0.2174 | 0.1129 | 0.8426 | 78.6 |
+
+- **Verdict: dead by its kill line.** Life recall is 0.3586 (< 0.42) and life silence 0.5556 (< 0.60).
+  - Deferred, it ties F22 on both worlds: recall +0.02 / +0.004, silence −0.03 / −0.02.
+  - So the lexical shortlist barely limits F22. The small model's understanding is the limit: opus with the same view gets +0.14 / +0.21 recall.
+  - Next: a bigger verifier off the hook (cost and latency), or the draft check (direction B), which also fixes no-tool turns.
