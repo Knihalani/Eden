@@ -39,7 +39,7 @@ def prep(a):
             + rng.sample(none, min(len(none), n - n // 2 - n // 4)))
     rows = sleep.rows(stream, a.world, strict=True)
     sysm = methods.make(a.system, rows, stream, items, cov) if a.system else None
-    d = os.path.join(HERE, "downstream", a.world)
+    d = os.path.join(HERE, "downstream", a.sub or a.world)
     os.makedirs(os.path.join(d, "in"), exist_ok=True)
     os.makedirs(os.path.join(d, "out"), exist_ok=True)
     cases, key = [], {}
@@ -60,10 +60,43 @@ def prep(a):
     print(len(cases), "cases", {g: sum(1 for k in key.values() if k["group"] == g) for g in ("plan", "labeler-only", "no-need")})
 
 
+def prep_picks(a):
+    """C4-E13: do a judge's picks help on turns the plan labels call no-need? Conditions: none / picks, on the dev
+    judge-sample human turns where the plan says no need and the judge fired (plus as many where it fired on a need)."""
+    import score, sleep, judge
+    stream, items = score.load_stream(a.world)
+    evs = {e["id"]: e for e in score.scored_events(stream)}
+    rows = {r["id"]: r for r in sleep.rows(stream, a.world, strict=True)}
+    picks = judge.packets(a.world, "sleep", a.tag)
+    rng = random.Random(9)
+    visible = lambda i: [r for r in picks[i] if r in rows and rows[r]["t"] < evs[i]["_order"]]
+    fired = sorted(i for i in picks if visible(i) and evs[i]["t"] == "human" and evs[i]["_split"] == "dev")
+    noneed = [i for i in fired if not set(evs[i]["labels"]["needs"]) - set(evs[i]["labels"].get("in_context", []))]
+    need = [i for i in fired if i not in noneed]
+    pick = sorted(rng.sample(noneed, min(a.n, len(noneed))) + rng.sample(need, min(a.n // 2, len(need))))
+    d = os.path.join(HERE, "downstream", a.sub)
+    os.makedirs(os.path.join(d, "in"), exist_ok=True)
+    os.makedirs(os.path.join(d, "out"), exist_ok=True)
+    cases, key = [], {}
+    for eid in pick:
+        e = evs[eid]
+        vis = [rows[r]["text"] for r in picks[eid] if r in rows and rows[r]["t"] < e["_order"]]
+        conds = {"none": [], "picks": vis}
+        order = list(conds)
+        rng.shuffle(order)
+        key[eid] = {"group": "no-need" if eid in noneed else "plan", "order": order, "needs": []}
+        cases.append({"event": eid, "text": e["text_all"][:2500], "recent": judge.context(stream, eid),
+                      "packets": [conds[c] for c in order]})
+    json.dump({"cases": cases}, open(os.path.join(d, "in", "responses-in.json"), "w"), indent=1, ensure_ascii=False)
+    json.dump({"system": f"judge:{a.tag}", "key": key}, open(os.path.join(d, "key.json"), "w"), indent=1)
+    print(len(cases), "cases", {g: sum(1 for k in key.values() if k["group"] == g) for g in ("plan", "no-need")},
+          "of", len(noneed), "no-need fires and", len(need), "need fires")
+
+
 def items(a):
     """Order-free responder input: one item per (turn, packet), shuffled, each with its own id (C4-E10: responders
     that answer a list of packets swapped the order on 13 of 45 life and 4 of 45 code cases)."""
-    d = os.path.join(HERE, "downstream", a.world)
+    d = os.path.join(HERE, "downstream", a.sub or a.world)
     src = json.load(open(os.path.join(d, "in", "responses-in.json")))["cases"]
     out = [{"id": f"{c['event']}#{j}", "text": c["text"], "recent": c["recent"], "packet": p}
            for c in src for j, p in enumerate(c["packets"])]
@@ -77,7 +110,7 @@ def items(a):
 
 
 def collect(a):
-    d = os.path.join(HERE, "downstream", a.world)
+    d = os.path.join(HERE, "downstream", a.sub or a.world)
     src = json.load(open(os.path.join(d, "in", "responses-in.json")))["cases"]
     got, who = {}, ""
     for p in glob.glob(os.path.join(d, "out", "items-*.json")):
@@ -97,7 +130,7 @@ def judge_prep(a):
     stream, items = score.load_stream(a.world)
     hist = History(stream)
     evs = {e["id"]: e for e in score.scored_events(stream)}
-    d = os.path.join(HERE, "downstream", a.world)
+    d = os.path.join(HERE, "downstream", a.sub or a.world)
     resp = json.load(open(os.path.join(d, "out", "responses.json")))["cases"]
     src = {c["event"]: c for c in json.load(open(os.path.join(d, "in", "responses-in.json")))["cases"]}
     cases = []
@@ -115,7 +148,7 @@ def judge_prep(a):
 
 
 def report(a):
-    d = os.path.join(HERE, "downstream", a.world)
+    d = os.path.join(HERE, "downstream", a.sub or a.world)
     key = json.load(open(os.path.join(d, "key.json")))["key"]
     judged = {}
     for p in glob.glob(os.path.join(d, "out", "judged*.json")):
@@ -127,6 +160,8 @@ def report(a):
         s = dict(zip(k["order"], judged[eid]))
         g = by.setdefault(k["group"], {"n": 0, "effect": 0.0, "needs": 0, "sys": 0.0})
         g["n"] += 1
+        if "picks" in s:  # prep-picks runs: report picks − none in the effect columns
+            s = dict(s, oracle=s["picks"])
         eff = s["oracle"] - s["none"]
         g["effect"] += eff
         g["needs"] += eff >= 1
@@ -140,10 +175,12 @@ def report(a):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["prep", "items", "collect", "judge-prep", "report"])
+    ap.add_argument("cmd", choices=["prep", "prep-picks", "items", "collect", "judge-prep", "report"])
+    ap.add_argument("--sub", default="", help="subdirectory of downstream/ (default: the world)")
+    ap.add_argument("--tag", default="", help="prep-picks: the judge run whose picks are tested")
     ap.add_argument("--world", required=True)
     ap.add_argument("--n", type=int, default=60)
     ap.add_argument("--system", default="")
     ap.add_argument("--per", type=int, default=45)
     a = ap.parse_args()
-    {"prep": prep, "items": items, "collect": collect, "judge-prep": judge_prep, "report": report}[a.cmd](a)
+    {"prep": prep, "prep-picks": prep_picks, "items": items, "collect": collect, "judge-prep": judge_prep, "report": report}[a.cmd](a)

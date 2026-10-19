@@ -1,0 +1,365 @@
+{
+ "system": "judge:",
+ "key": {
+  "life-s011-e000": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s020-e016": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s022-e004": {
+   "group": "plan",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "life-s025-e032": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s028-e010": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "life-s038-e024": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "life-s046-e041": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s047-e019": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s050-e007": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s050-e016": {
+   "group": "plan",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "life-s053-e003": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s056-e000": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s058-e010": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s060-e000": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s060-e002": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s063-e009": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "life-s066-e010": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s068-e021": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s068-e024": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s076-e007": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s077-e007": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s077-e017": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "life-s082-e000": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s087-e016": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "life-s087-e029": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s087-e031": {
+   "group": "plan",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "life-s088-e038": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s092-e000": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s098-e004": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s105-e004": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s105-e032": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s106-e005": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s108-e000": {
+   "group": "plan",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "life-s113-e000": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s115-e000": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "life-s126-e005": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s131-e022": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s136-e000": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "life-s140-e033": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s141-e000": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s148-e000": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s150-e004": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "life-s152-e004": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s155-e013": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "life-s155-e022": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  }
+ }
+}

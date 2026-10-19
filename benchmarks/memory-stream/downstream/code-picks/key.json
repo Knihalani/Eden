@@ -1,0 +1,365 @@
+{
+ "system": "judge:",
+ "key": {
+  "code-s012-e000": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "code-s013-e004": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s015-e000": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s021-e018": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s022-e008": {
+   "group": "plan",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "code-s023-e000": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s027-e035": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "code-s027-e049": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "code-s028-e012": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s030-e013": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s033-e020": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s035-e033": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "code-s035-e058": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s038-e000": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s038-e019": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s046-e016": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s057-e010": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s057-e030": {
+   "group": "plan",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "code-s058-e012": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s060-e021": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s061-e000": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s063-e013": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s066-e019": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s066-e028": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "code-s068-e017": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s071-e000": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "code-s077-e005": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s080-e014": {
+   "group": "plan",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "code-s080-e020": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s082-e005": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s082-e017": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s083-e017": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s085-e014": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s087-e000": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s091-e007": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "code-s097-e005": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s098-e007": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "code-s102-e006": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s103-e031": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s105-e000": {
+   "group": "plan",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "code-s106-e004": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s107-e006": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s108-e000": {
+   "group": "plan",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  },
+  "code-s108-e018": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "picks"
+   ],
+   "needs": []
+  },
+  "code-s108-e040": {
+   "group": "no-need",
+   "order": [
+    "picks",
+    "none"
+   ],
+   "needs": []
+  }
+ }
+}

@@ -668,3 +668,12 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - The judge "ceiling" rows in STATE overstate silence.
   - Even opus, honestly fed, fires on about a third (code) to two thirds (life) of plan-no-need turns.
 - **Open question this raises:** are those fires wrong, or are the plan labels missing real needs? The C4-E8 draft check suggested some "no-need" turns do benefit from episodic memory. C4-E13 runs opus's no-need-turn picks through the fixed downstream harness to decide.
+
+## C4-E13 · 2026-10-19 · Do the judge's "false" fires help? (pre-registration)
+- **Setup:** `downstream.py prep-picks --tag "" --n 30` (batched opus judge picks, visible rows only, dev human turns).
+  - Per world: 30 turns where the plan says no need but the judge fired (of 40 code / 38 life such fires), and 15 turns where it fired on a plan need.
+  - Conditions: none / judge picks. Order-free responder (sonnet), then the blind opus judge with history evidence.
+- **Decision rule, set before running** (picks − none on the 30 no-need-fired turns):
+  - ≥ +0.3 mean, with ≥ 30% of turns at effect ≥ 1: the plan labels miss real needs, so "silence" overstates false fires. Re-label with a downstream-validated label before tuning any system for silence.
+  - ≤ +0.1: the models over-fire, and silence stands as the target.
+  - In between: mixed; report both.
