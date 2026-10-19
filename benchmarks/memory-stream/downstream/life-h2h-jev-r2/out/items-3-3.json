@@ -1,0 +1,141 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s120-e003#3",
+   "response": "Not writing up the retry review for now, noted. For the failed-payout breakdown by receiving bank, Wen Li handles data requests through #data-requests with at least three business days' notice and a written metric definition, so Wednesday could be tight and I'd file it today. The Payouts Health dashboard has failed-payout reasons, but I don't know that it splits by receiving bank.\nAction: Draft the #data-requests post with a written definition (failed payouts by receiving bank, last 30 days, count and rate) for your OK, and check the Payouts Health dashboard for anything usable in the meantime."
+  },
+  {
+   "id": "life-s121-e000#3",
+   "response": "I need two things before I place that: where it's from and what you want, since I don't want to guess an order. If it's a repeat, tell me which one.\nAction: Waiting on the shop and the order, then I'll place it right away for a 15-minute pickup."
+  },
+  {
+   "id": "life-s007-e013#3",
+   "response": "Booking Ascari Enoteca for Sat 16 Aug at 19:00, party of 5, and I'll confirm the vegetarian options on the booking. For Kabir's Thanksgiving, I'll look at flights to Vancouver for the three of you, leaving Oct 10 and returning Oct 13.\nAction: Book Ascari for 5, then pull Toronto to Vancouver round-trip options for Oct 10 to 13 for three and send them to you with times and fares, without booking anything."
+  },
+  {
+   "id": "life-s060-e022#3",
+   "response": "Scheduled for 9, and Disney+ is next. I'll check both cards and your email receipts for any Disney+ charge after your March 2026 cancellation, and make sure the other four (Netflix, Spotify Family, Crave, The Globe and Mail) are billing as expected. For Priya, a useful question set should be tied to what she wants out of the move, so I'll send it to you to forward.\nAction: Schedule the Slack post for 9:00, search your statements and email for Disney+ charges since cancellation, and report what I find."
+  },
+  {
+   "id": "life-s140-e033#3",
+   "response": "I'll check Sam's text first so we're not talking past each other. Then I'll find something that doesn't need the hotplate.\nAction: Read Sam's dinner message and tell you what it says, then suggest 2 or 3 no-hotplate options (takeout or no-cook) that work with it."
+  },
+  {
+   "id": "life-s136-e034#3",
+   "response": "I don't have your travel dates or her time zone in front of me, so I'd rather check than guess. Once I have her location and your dates, I can tell you what time it is there right now and what the rainy-season outlook looks like for your visit.\nAction: Check your calendar and trip notes for your travel dates, then tell you her local time and whether to worry about the rain, and draft a reply to her."
+  },
+  {
+   "id": "life-s050-e016#3",
+   "response": "Great plan for March break. I'll price 3 nights in Drumheller within the week of Mon 16 Mar (Mon to Thu unless you prefer other nights), and look up Royal Tyrrell Museum admission for Leo's age. I'll also check how you'd get there, since it's a drive from Calgary.\nAction: Search family-friendly hotels in Drumheller for 3 nights that week, check Tyrrell's child ticket price, and send you options before booking anything."
+  },
+  {
+   "id": "life-s077-e012#3",
+   "response": "Here's a draft: 'Hi, thanks for organizing the street party. I can take the 2 to 4 pm volunteer slot at the lemonade table. I won't be able to help with setup, but I'm glad to be part of the day. Thanks, Riya'.\nAction: Hold it for your approval; I won't send anything until you've seen it."
+  },
+  {
+   "id": "life-s003-e000#3",
+   "response": "Here's a doctor's visit vocab table for your role-play with Carlos on Tuesday, and I'll use this table format for every Spanish vocab list from now on.\n| Spanish | English | Example sentence |\n|---|---|---|\n| la cita | appointment | Tengo una cita con el médico el martes. |\n| el síntoma | symptom | Mi síntoma principal es dolor de cabeza. |\n| la fiebre | fever | Tengo fiebre desde ayer. |\n| el dolor | pain | Siento dolor en el pecho. |\n| la tos | cough | Tengo tos y dolor de garganta. |\n| la receta | prescription | El médico me dio una receta. |\n| la alergia | allergy | Tengo alergia a la penicilina. |\n| ¿Dónde le duele? | Where does it hurt? | ¿Dónde le duele exactamente? |\nAction: Save the table in the format for Anki, and offer to run the role-play with you before Tuesday."
+  },
+  {
+   "id": "life-s062-e000#3",
+   "response": "Got it: no replacement for the 2019 Mazda CX-5 in 2026, the money goes to the kitchen renovation, and an EV is back on the table in 2028. I'll get you off the dealer's lists.\nAction: Unsubscribe from the dealer emails and send an opt-out request for any other contact, note the decision in your notes, and offer a reminder to revisit the EV in 2028."
+  },
+  {
+   "id": "life-s026-e012#3",
+   "response": "I'll book 30 minutes with Diego and Aisha on the 13th in the afternoon, since you asked for half an hour, with an agenda so no one declines it. Agenda: 1) walk through the new onboarding flows, 2) open questions and decisions, 3) next steps and owners.\nAction: Find a 30-minute afternoon slot on the 13th when all three of you are free, book it with that agenda, and tell you the time."
+  },
+  {
+   "id": "life-s017-e012#3",
+   "response": "Let me check the actual task list rather than guess. From this thread, the Big Apple hours check is finished and reported.\nAction: List every background task and scheduled item currently running, and send only the ones still going."
+  },
+  {
+   "id": "life-s111-e035#3",
+   "response": "Have a great dinner! Pool is open tomorrow 7:00 to 20:45, with lanes closed until 9:00, and Leo's packing checklist is shared with Sam.\nAction: Nothing needed."
+  },
+  {
+   "id": "life-s113-e000#3",
+   "response": "My reading: end the auto-reply at the start of tomorrow so mornings are clear, and update the text now so anything arriving before then says you're back but catching up. New message: 'Hi, I'm back but still catching up, so replies may take a little longer than usual. Thanks for your patience, Riya'.\nAction: Update the auto-reply text and set it to turn off at midnight tonight, and tell me if you meant a different time."
+  },
+  {
+   "id": "life-s072-e000#3",
+   "response": "Easy. I'll update Biscuit's vet to Dr. Kaur at Riverside Veterinary Clinic on Broadview Ave and note that Dr. Moreau has retired. One flag: my older notes list Riverside Veterinary Clinic on Queen St E with weekend hours only, so I'll confirm the address and whether they have weekday evenings.\nAction: Update the contact, check Riverside's weekday slots after 5:30 next week for the shots and rabies booster, book the first one that works, and come back with the nearest options if not."
+  },
+  {
+   "id": "life-s073-e002#3",
+   "response": "=COUNTIF(D:D,\">10000\") does it, no need for anything fancier; use \">=10000\" if exactly $10,000 should count too. Your library holds at Pape/Danforth are ready, and the branch closes at 20:30 tonight.\nAction: Nothing needed."
+  },
+  {
+   "id": "life-s047-e013#3",
+   "response": "Honestly a fair question. Hope you can sit down with something warm soon.\nAction: Nothing needed."
+  },
+  {
+   "id": "life-s097-e019#3",
+   "response": "Cardboard fort is a great rainy-day pick. You'll want strong tape (packing or duct), safety scissors for Leo and a box cutter for you, markers, blankets or sheets for the roof, clothespins or clips to hold them, and a flashlight or string lights for inside. Cushions and a few snacks make it feel like a real hideout.\nAction: Nothing to order unless you find you're short on tape; I can add it to a shopping list."
+  },
+  {
+   "id": "life-s110-e009#3",
+   "response": "Here's the 7-year-old version: dogs come from wolves, and wolves howl to talk to each other across long distances. The fire truck siren sounds like another wolf calling, so he's just singing back, and it doesn't hurt him.\nAction: Nothing needed."
+  },
+  {
+   "id": "life-s027-e029#3",
+   "response": "Ha, that's a solid snore. Also, Leo's Riverdale Farm trip consent is still pending, due Wed 12 Nov, and Nate has confirmed the cabinets for Mon 10 Nov, 8 to 10 am.\nAction: Nothing needed."
+  },
+  {
+   "id": "life-s140-e029#3",
+   "response": "Screen timing matters more than total screen time. In a 2025 study of 1,200 kids aged 6 to 9, a screen in the hour before bed delayed sleep by about 19 minutes, worst with handheld devices. The causes are light delaying melatonin, games keeping kids wired, and screens crowding out wind-down routines. What worked was a fixed screens-off time an hour before bed (weekends too), devices charged outside bedrooms, and reading the last half hour, with sleep back to normal in two weeks.\nAction: Nothing needed."
+  },
+  {
+   "id": "life-s128-e000#3",
+   "response": "I don't have a confirmation in front of me, so I'll check instead of guessing. I'll search your email and texts for the dentist's replies and look for the November appointments on your calendar.\nAction: Find the dentist's confirmation for your appointment and Leo's, and tell you what I find; if there's none, offer to contact the dentist's office."
+  },
+  {
+   "id": "life-s060-e019#3",
+   "response": "Scheduled for 9:00. For Priya, questions that cut through: does the transfer come with the title and raise she's been chasing, or is it another 'next cycle' (last I knew her boss kept saying that)? Who would she report to in Toronto, what would she lose in Montreal, and would the firm's four-day-week discussions apply there?\nAction: Schedule the Slack message for 9:00 and send you the Priya list to forward."
+  },
+  {
+   "id": "life-s077-e044#3",
+   "response": "Timer set for 25 minutes, starting now. Enjoy the garden beds.\nAction: Start a 25-minute timer and ping you when it's up."
+  },
+  {
+   "id": "life-s057-e015#3",
+   "response": "Posting the error code list question to #payouts-launch now. I don't have Tom's favourite whisky in front of me, so I'll check your notes and past gift chats before suggesting anything.\nAction: Post the Slack message, search your notes and email for Tom's whisky, and if I can't find it, tell you and suggest asking someone close to him."
+  },
+  {
+   "id": "life-s057-e000#3",
+   "response": "I don't want to put a date in a deck note unless it's confirmed, so I'll look up the current GA date in the launch plan and Linear first. If it isn't locked, the note will say it's a target.\nAction: Find the GA date, draft a short note to Olivia with it (marked tentative if needed), and show you before sending."
+  },
+  {
+   "id": "life-s006-e000#3",
+   "response": "Three days late with a mug tradition is easy to fix. I'll look for the most ridiculous mugs that can reach Vancouver in the next few days, ranking by delivery speed as well as ridiculousness.\nAction: Search for novelty mugs with delivery to Vancouver in about 3 days, send you the top picks with price and arrival date, and order after you choose."
+  },
+  {
+   "id": "life-s136-e021#3",
+   "response": "TFSA: you contribute after-tax dollars, and growth and withdrawals are tax-free with room you get back when you withdraw. RRSP: contributions are tax-deductible and grow tax-deferred, but withdrawals are taxed as income, so it favours people who expect a lower tax rate in retirement.\nAction: Nothing needed."
+  },
+  {
+   "id": "life-s107-e009#3",
+   "response": "I don't have the reasons in front of me, so I'll pull up the reno notes and the contractor comparison instead of guessing. I'll summarize why Nate beat the other two for Sam.\nAction: Search your notes, email and the reno sheet for the contractor comparison, and send Sam-ready reasons; if nothing was written down, I'll tell you."
+  },
+  {
+   "id": "life-s076-e012#3",
+   "response": "Ordering from Pai on Duncan, family style for three, delivery at 6, under $100. I'll leave out cilantro, and because Leo is allergic to tree nuts, I'll avoid cashews and other tree nut dishes and note the allergy on the order.\nAction: Check the menu, build a surprise family-style order, confirm the total with fees and tip stays under $100, place it for 6:00, and tell you only the total and delivery time."
+  },
+  {
+   "id": "life-s126-e021#3",
+   "response": "Ha, classic Sam. Sleep well.\nAction: Nothing needed."
+  },
+  {
+   "id": "life-s058-e014#3",
+   "response": "Asking Olivia to move the QBR prep to 11:00 so it clears your Q1 roadmap check-in. For Ellie's dairy allergy, I don't have your pantry list in front of me, so I'll check what's actually in the house instead of guessing, and look at labels for hidden dairy.\nAction: Message Olivia asking for 11:00, check your pantry or recent grocery orders for dairy-free snacks (fruit, veggie sticks, rice cakes, popcorn, label permitting), and send you a short list before she arrives."
+  },
+  {
+   "id": "life-s027-e031#3",
+   "response": "Great. Jess from Rover will walk him at noon on Mondays, Wednesdays and Fridays at $25 a walk, starting Monday. That's $75 a week, about $325 a month. Worth noting Monday is also cabinet delivery day, so I'd double check how Jess gets in if people are in and out.\nAction: Add a recurring Mon/Wed/Fri noon walk to the calendar and add $75/week (about $325/month) to the pet budget."
+  },
+  {
+   "id": "life-s085-e030#3",
+   "response": "No regrets is the correct review of a pastel de nata.\nAction: Nothing needed."
+  }
+ ]
+}

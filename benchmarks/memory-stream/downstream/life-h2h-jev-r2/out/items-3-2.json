@@ -1,0 +1,185 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s026-e000#3",
+   "response": "I'll text Nate rather than call, asking whether the cabinets are still arriving Monday. On the invoices, the one I know of is #NR-2207 ($6,500, which was due Fri 3 Oct 2025), and I'll pull the rest from your inbox rather than guess at the list.\nAction: Text Nate now (no call), then search your email for all Northline Renovations invoices and add each to the reno sheet, flagging which are paid and which are still open."
+  },
+  {
+   "id": "life-s075-e000#3",
+   "response": "That sounds miserable, especially mid-call. Your home internet is TekSavvy Fibre (Bell Fibe was cancelled in January, so I'll ignore Bell), service address in Leslieville, on your own modem. I'll check TekSavvy's outage status for your area first, and if it's not a known outage I'll open a ticket noting the repeated drops this afternoon and that you need it stable before the weekend.\nAction: Check TekSavvy's outage/status page for Leslieville, then open the ticket and send you the ticket number and any troubleshooting steps they ask for."
+  },
+  {
+   "id": "life-s105-e004#3",
+   "response": "Booking East End Plumbing Co. for Monday morning, 29 Jun, and I'll send you the confirmed arrival window. For the Lattice self-review due Fri 10 Jul, I'll set a start reminder for Mon 29 Jun and a second one the week of the deadline, Mon 6 Jul, and link your 'Instant Payouts: wins record' note in both since it's the natural source for the review.\nAction: Book East End for Mon 29 Jun, create both reminders (29 Jun and 6 Jul) with the 10 Jul due date and the wins note attached, and confirm the plumber's window when they reply."
+  },
+  {
+   "id": "life-s085-e010#3",
+   "response": "Short version: get on every list now, even with long waits, and ask each place how often spots open up. Also worth trying licensed home daycare through an agency, which often has faster openings, and centres a bit outside Roncesvalles.\nAction: Nothing running yet; I can pull a short list of licensed centres and home-care agencies near Roncesvalles for you to pass on if you want."
+  },
+  {
+   "id": "life-s088-e038#3",
+   "response": "Here's a draft: 'Hi team, the beta passed 10,000 payouts this week, and that's thanks to all of you. Thank you for the care and effort you put into getting it here and for sweating the details along the way. I'm really proud of this team.'\nAction: Save it as a draft for you to post tomorrow; I won't send anything."
+  },
+  {
+   "id": "life-s132-e000#3",
+   "response": "Adding Grace's birthday, Thu 19 Nov 2026 (she turns 68), as a yearly event, with a reminder two weeks ahead on Thu 5 Nov to sort a gift. I'll use two weeks for Grace as you asked and keep the usual one-week reminder for the other family birthdays. That also fills one of the missing dates in my family list, so Anjali, Mei and Daniel Okafor are still outstanding.\nAction: Create the yearly 'Grace's birthday' event on 19 Nov with the 5 Nov gift reminder, and ask you for Anjali's, Mei's and Daniel's dates when it suits you."
+  },
+  {
+   "id": "life-s105-e000#3",
+   "response": "On it, and I'll skip the play-by-play and just bring back options. The places from last time were Riverside Drain & Plumbing (24/7), East End Plumbing Co. and Coxwell Plumbing & Heating, and a frost-free hose bib replacement beat a washer fix, but those notes are from 2025, so I'll check current availability and quotes rather than reuse them.\nAction: Check who can come today or Monday, then send you the options with price and arrival window."
+  },
+  {
+   "id": "life-s136-e017#3",
+   "response": "Anytime. Piano is set for Fridays at 4:15 with Mrs. Greene, and Sam has been told.\nAction: Nothing further needed."
+  },
+  {
+   "id": "life-s102-e009#3",
+   "response": "On it. I'll build the cart with all twelve items, and because Leo's tree-nut rule has no exceptions, I'll check the bread, yogurt tubes, cheddar and frozen dumplings for tree nuts or 'may contain' warnings. On PEC, the Sandbanks permit for Sat 27 Jun stays paused until you hear from Sam, and weekend permits usually sell out by Thursday evening, so it's worth asking tonight.\nAction: Build the grocery cart (milk, eggs, bread, rice, pasta, bananas, apples, yogurt tubes, cheddar, dish soap, paper towels, veggie dumplings), screen the packaged items for nuts, and send it to you to review before checkout."
+  },
+  {
+   "id": "life-s006-e011#3",
+   "response": "Jess should weigh a few things. Cash flow: whether rent covers mortgage, condo fees, property tax and insurance with a buffer for vacancy and repairs. Taxes: rental income is taxable and renting can affect the principal residence exemption, so a quick accountant chat is worth it. And her plans and temperament: how long she'd hold it, whether she's happy being a landlord, and whether she'd rather lock in today's price than bet on appreciation.\nAction: I can turn this into a one-page checklist or pros and cons table for you to send her."
+  },
+  {
+   "id": "life-s046-e029#3",
+   "response": "Vamos, quiz rápido. Elige el o la: 1) ___ problema, 2) ___ mapa, 3) ___ mano, 4) ___ día, 5) ___ foto, 6) ___ tema, 7) ___ idioma, 8) ___ radio. Contesta con tus respuestas y te corrijo (y por cierto, 'Estoy en la oficina', no 'Soy').\nAction: Wait for your answers, correct them with a one-line rule for each, and save the ones you miss as a repeat list."
+  },
+  {
+   "id": "life-s131-e022#3",
+   "response": "Here's a toast: 'Neha, [partner's name], finding someone who laughs at your jokes is lucky, and finding someone who still laughs the second time is basically a miracle. You two make the rest of us look like we're not trying. Here's to great food, better stories, and only the fun kind of arguments about the dishwasher. Cheers!'\nAction: Send me the partner's name and one real detail or in-joke and I'll swap it in so it sounds like you."
+  },
+  {
+   "id": "life-s140-e051#3",
+   "response": "That sounds really draining: Tuesday morning is the one you protect, and then the Montreal day trip lands on top, with a Friday heads-up, in the same week. I'll get you sorted for Thu the 8th (I'm reading that as 8 Oct), out in the morning and home for dinner.\nAction: Pull round-trip Toronto-Montreal options for Thu 8 Oct, morning out and an evening return, check Tom's invite for the bank meeting time so the arrival fits, and show you the options before booking anything."
+  },
+  {
+   "id": "life-s105-e028#3",
+   "response": "That's the stare of a creditor. Is it dinner o'clock?\nAction: Nothing needed; say the word if you want a feeding or walk reminder set."
+  },
+  {
+   "id": "life-s087-e029#3",
+   "response": "Here's a draft: 'Hey! We're heading to the playground and the market at Riverdale Park East tomorrow around 10:30. Want to come with the kids? No pressure if you've got plans.'\nAction: Hold it until you say send, then text Hannah."
+  },
+  {
+   "id": "life-s036-e003#3",
+   "response": "Will do, right after the review. The last full tally I have is from mid-November 2025: $36,047.00 invoiced plus approved change orders, $9,850.00 of contracted work remaining, so a projected $45,897.00 against the $48,000 budget, which left $2,103 (4.4%) of headroom with 3 change orders totalling $4,840 + HST. I haven't seen the revised quote yet, so I won't guess whether he's eating into the contingency until it's lined up.\nAction: After the review, find Nate's revised quote in your email, put it next to the budget (contracted, change orders, invoiced, remaining, projected vs $48,000 and the 10% contingency) and tell you how much headroom is left."
+  },
+  {
+   "id": "life-s037-e020#3",
+   "response": "On it. I don't have the Ottawa flight details in front of me, so I'll dig them out of our earlier search and email rather than guess at times or fares, and I'll read your podcast note first so the new picks match your taste.\nAction: Find the Ottawa flight options we compared with driving (times and fares) in a form Sam can use for his February PD day, then send you the flights and a short list of new commute podcasts based on your note."
+  },
+  {
+   "id": "life-s107-e005#3",
+   "response": "Done, in-store pickup it is for Biscuit's food, and Sam can grab it at Queen & Logan today. Here's the Slack draft: 'Quick reminder: release freeze runs from Thursday 12:00 to Monday 09:00. Please get anything you need merged before noon Thursday, and thanks for working around it!' Aisha already has a message about this freeze scheduled for Thursday 07:00 in #payouts-launch, so you may want to post yours first or skip it.\nAction: Switch the order to in-store pickup and let Sam know, and leave the Slack note as a draft for you to approve."
+  },
+  {
+   "id": "life-s002-e020#3",
+   "response": "Honest answer: I can't grade your Spanish fairly yet, because I don't have enough of your actual Spanish or Carlos's feedback to judge, and I'd rather not flatter you.\n- Calendar rule saved: no meetings before 9:30 or after 17:00, ever.\nAction: Apply the rule to every booking from now on, and if you want a real read on your Spanish, run a short 10-question diagnostic and report accuracy by area."
+  },
+  {
+   "id": "life-s045-e000#3",
+   "response": "On it. I'll unsubscribe from Old Navy, Wayfair, Uber Eats promos, Lululemon and Dyson, and archive what's already there from them, keeping Uber Eats order receipts. Since you never signed up for the Dyson emails, I'll check the sender before clicking any link and mark it as spam instead if it looks off.\nAction: Find the promos from those five senders, use their unsubscribe links, archive the existing messages, and send you a short list of what worked."
+  },
+  {
+   "id": "life-s018-e010#3",
+   "response": "Happy to distract. For a single architect who bikes everywhere and likes old buildings, I'd start with Cabbagetown (Victorian streets, close to downtown), Corktown and the Distillery area (old brick industrial buildings, easy riding downtown), Trinity-Bellwoods and Queen West, and the Annex or Harbord Village. Any word from your mom yet?\nAction: If you give me her office address, I'll check current rents and bike times for those areas and send you a short comparison."
+  },
+  {
+   "id": "life-s106-e005#3",
+   "response": "The odour order is on hold, nothing placed. I don't have the basement kitchen setup in front of me, so I'll pull it from your notes and the reno sheet rather than guess. Also worth remembering: East End Plumbing is coming Mon 29 Jun, 09:00 to 12:00, and wants the inside shut-off valve accessible.\nAction: Search your notes, the reno sheet and earlier messages for what the basement kitchen has, then send you the list plus 4 or 5 low-effort meals that fit it for this week."
+  },
+  {
+   "id": "life-s006-e015#3",
+   "response": "Anytime, enjoy the rest of your evening.\nAction: Nothing pending."
+  },
+  {
+   "id": "life-s048-e000#3",
+   "response": "Let me check rather than guess. I'll look up the observed conditions for Ottawa on Sunday the 25th and give them in Celsius and metric units only.\nAction: Pull Environment Canada's observed high, low, wind and wind chill, and snowfall for Ottawa on Sun the 25th, then tell you whether Grace's 'most brutal day' holds up."
+  },
+  {
+   "id": "life-s148-e018#3",
+   "response": "I don't have the offsite date in front of me, so I'll check your calendar instead of guessing. I'll count from tomorrow and skip weekends and stat holidays, and note Thanksgiving Monday 12 Oct falls in this stretch if the offsite is after it.\nAction: Find the offsite on your calendar, count the business days from tomorrow to it, and give you the number and how I counted."
+  },
+  {
+   "id": "life-s047-e019#3",
+   "response": "Sending the school council reply now. On insurance: your car is with Intact and renews each April, so I'd normally start quotes four to six weeks before renewal, but I'll check the date on the letter in case it's sooner. For cancelling, you generally need to give the insurer notice (often in writing) and have the new policy start first so you're never uninsured, but I'll confirm Intact's actual terms rather than guess.\nAction: Send the school email, read the renewal letter and your Intact policy for the renewal date and cancellation terms, and set a reminder for when to start getting quotes."
+  },
+  {
+   "id": "life-s035-e008#3",
+   "response": "Good tour questions: what are the infant staff-to-child ratios and how much staff turnover is there, and is the centre licensed. Ask about the daily routine (naps, feeding, diapering, outdoor time), the sick-child, allergy and emergency policies, and how they communicate with parents day to day. Then fees and what's included, hours and closures, how settling-in works, and where she'd be on the waitlist. And ask to watch the infant room in action.\nAction: Turn this into a one-page checklist Marcus can forward to his sister."
+  },
+  {
+   "id": "life-s046-e021#3",
+   "response": "Booking a 25-minute sync with Aisha and Diego next week in a morning slot, with your three agenda items in the invite (empty-state copy, loading skeleton, who owns the Looker link). I'll set the Hydro payment reminder a few days before each due date rather than on the day, since two past bills were paid close to the deadline.\nAction: Find the first morning next week when all three of you are free, book it with the agenda and a Meet link, and tell you the time."
+  },
+  {
+   "id": "life-s028-e014#3",
+   "response": "Here's what I can see from this stretch. Pet budget: dog walker Felipe (Paws on Pape) added at $50/week, about $217/month, which puts dog walking at $125/week and monthly pet spend at roughly $729, and you're talking to Sam about that. Notion: 'Payouts v2 launch risks (2025-11-12)' is created with 6 risks for tomorrow's standup. Groceries: the October total from the TD joint account and Visa, plus August and September, is still being pulled.\nAction: Check the grocery pull and send you October vs August and September when it lands."
+  },
+  {
+   "id": "life-s052-e008#3",
+   "response": "I don't have your list of trouble spots in front of me, so I'll build the quiz from your Spanish notes and past mistakes instead of guessing. If those are thin, I'll fall back on common trip-ups like ser/estar, por/para, preterite vs imperfect and noun gender.\nAction: Check your notes and past lesson logs for recurring errors, then send a 10-question warm-up before class tonight, answers hidden until you reply."
+  },
+  {
+   "id": "life-s037-e000#3",
+   "response": "Merry belated Christmas! That sounds like a perfect Boxing Day. Three Lego trucks is real commitment, and Sam and Biscuit napping on the couch is the right call.\nAction: Nothing needed, enjoy the slow morning."
+  },
+  {
+   "id": "life-s090-e000#3",
+   "response": "Quick flag first: my notes show Leo's Riverdale Farm day camp as Weeks 2 and 3 (Jul 13-24, 9:00 to 16:00), not a Mon 29 Jun start, so I want to check the confirmation before you label things for the wrong dates. A starter checklist: labelled water bottle, lunch bag with ice pack, sunscreen and hat, spare clothes, closed-toe shoes, rain jacket and a backpack. The balance for that camp was due 2026-06-01, so I'll confirm that's paid too.\nAction: Check the camp confirmation email for the start date and packing list, then send you a final label-everything checklist for the weekend."
+  },
+  {
+   "id": "life-s037-e011#3",
+   "response": "Since Sam is vegetarian (no fish or seafood either), I'd make the whole dinner vegetarian, which also keeps it shrimp-free and shellfish-free for Grace: whipped ricotta crostini to start, then a mushroom and lentil wellington with roasted potatoes and green beans. For Grace, a rosemary-cranberry sparkler (cranberry juice, lime, sparkling water, rosemary and frozen cranberries) in a flute so she can toast with everyone. Sending the thank-you text to Hannah now.\nAction: Send Hannah's text, then draft the shopping list and timing for 5, checking labels for hidden fish or shellfish (Worcestershire, fish sauce)."
+  },
+  {
+   "id": "life-s087-e031#3",
+   "response": "Sent to Hannah. For Olivia's blurb I'll pull what actually shipped in Instant Payouts v1 from the launch notes and Linear so the lines are accurate, rather than guess at features, and I'll leave the GA date out unless it's confirmed.\nAction: Send the text to Hannah, find the v1 scope, and draft 4 or 5 lines for Olivia's Monday deck for you to review before anything goes out."
+  },
+  {
+   "id": "life-s100-e000#3",
+   "response": "I haven't read it yet. I'll find this afternoon's all-hands email and pull out the four things that matter for you.\nAction: Open and read the email, then send four bullets with anything needing action or a deadline first."
+  },
+  {
+   "id": "life-s096-e026#3",
+   "response": "That's a big deal, and worth saying out loud. Leading a launch end to end for the first time as a senior PM, and having it actually work, is a real accomplishment. Congratulations, Riya.\nAction: Nothing needed, but I can start a note capturing the wins while they're fresh if you want it for your review."
+  },
+  {
+   "id": "life-s005-e002#3",
+   "response": "I don't want to guess your exact job title on a benefits form, so I'll check your HR profile or email signature for the official wording. For the responsibilities, I'll draft a one-line description of the areas you actually own that you can paste in.\nAction: Look up your official title, then send you the title and a short responsibilities line to paste."
+  },
+  {
+   "id": "life-s051-e000#3",
+   "response": "Yes, early Super Bowls were played in January. The game slid into February as the NFL lengthened its season with a longer schedule, bye weeks and extra playoff rounds, and it's always on a Sunday because that's the league's main game day and the biggest TV audience slot.\nAction: Nothing needed."
+  },
+  {
+   "id": "life-s048-e006#3",
+   "response": "A few worth checking: ChessKid, which is built for kids with lessons, puzzles and moderated play (full features usually need a subscription), and Lichess, which is free with no ads or purchases but isn't designed for young kids. I won't recommend anything until I've checked the current app store listings for ads and in-app purchases.\nAction: Check store listings for those and a couple of others for ads, in-app purchases and kid safety, then send a shortlist of 2 or 3."
+  },
+  {
+   "id": "life-s141-e032#3",
+   "response": "I'll pull these live from Linear so the statuses are current. My older notes (as of 26 Aug) had PAY-1182 GA readiness checklist, PAY-1190 GA announcement email copy and PAY-1216 support macro 'my payout is late', plus PAY-1203 and PAY-1211, but I don't have their current statuses.\nAction: Query Linear for your open tickets tagged payouts-ga and send titles and statuses only."
+  },
+  {
+   "id": "life-s022-e016#3",
+   "response": "Adding it: Toronto Waterfront Half Marathon, 19 Oct 2025, 21K, chip time 2:04:37. That's your first half marathon, so it's your PB by default. I'll also set a reminder for early December to build the yearly recap.\nAction: Add the entry to your running stats and set the December recap reminder for 1 Dec, which I can move if you prefer."
+  },
+  {
+   "id": "life-s122-e004#3",
+   "response": "My notes have the green bin going out Monday night for Tuesday collection, but last week's holiday can shift the schedule, so I'll confirm with the City rather than trust that.\nAction: Look up Toronto's collection schedule for your address this week, tell you the day, and make sure the reminder lands the night before."
+  },
+  {
+   "id": "life-s091-e012#3",
+   "response": "Ugh, standing the whole way with someone's backpack in your face is the worst. Hope the rest of the day is kinder. If you still want the kids' bike tune-up, I can try the 10:30 slot at Gears on Sat 23 May.\nAction: Nothing now."
+  },
+  {
+   "id": "life-s088-e023#3",
+   "response": "Glad he's okay. For the scope cuts, I'll set up time with Aisha before Thursday, and since she pushes back on cuts without numbers and you always bring Wen Li's data, I'll pull adoption numbers for both payout nicknames and the scheduled-payouts calendar view first.\nAction: Pull the adoption numbers for both features, then find a slot with Aisha before Thursday with an agenda covering the two cuts for sprint planning on the 25th."
+  },
+  {
+   "id": "life-s106-e000#3",
+   "response": "Drywall dust plus curry needs absorbing and cleaning, not just covering up, so I'd look at activated charcoal odour absorbers and an air purifier or damp-wipe of the dusty surfaces rather than plug-ins alone. I don't know your budget or store preference, so I'd like to show you options before spending anything.\nAction: Find 2 or 3 options that can arrive before the week starts (pickup or delivery) and send them with prices; I won't order until you pick."
+  }
+ ]
+}
