@@ -1,0 +1,65 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s028-e005#1",
+   "response": "Noted on the pet budget, and good to talk it over with Sam. I'll pull the open payouts launch risks from Linear into a single Notion doc for tomorrow's standup.\nAction: Query Linear for all open payouts launch risks, build one Notion doc with owner, status, mitigation and next step for each, and send you the link tonight."
+  },
+  {
+   "id": "life-s085-e015#1",
+   "response": "Draft for #payouts-launch: 'Reminder: the beta retro is Thursday at 2pm in room 4B. Please add your sticky notes to the Miro board before then. Thanks all.'\nAction: Save it as a draft in #payouts-launch and post once you say send."
+  },
+  {
+   "id": "life-s068-e024#1",
+   "response": "Sure, that's an easy one. I'll build a simple snack order for three kids and aim for a 3pm pickup tomorrow, but I need to check whether Jun or his sister have any allergies, and whether the slot is open at your usual store.\nAction: Put together an after-school snack cart on PC Express for 3pm pickup tomorrow, check the slot, and confirm with you about allergies before I place it."
+  },
+  {
+   "id": "life-s087-e000#1",
+   "response": "That sounds really hard, especially when you were finally off. A Saturday 6pm message isn't something that has to be answered until Monday unless it's truly urgent, and it's okay to keep your brain out of Looker tonight.\nAction: Draft a short holding reply to Tom ('Looking into Thursday first thing Monday and will send you what I find') for you to send or skip, and set a Monday morning reminder to look at the dip."
+  },
+  {
+   "id": "life-s023-e024#1",
+   "response": "Sunday scaries are rough, and the clock change doesn't fix them. Tomorrow is light: just pick a slot for the edge-case session with Aisha and Diego (Mon 3 Nov 13:30, Tue 4 Nov 14:00 or Wed 5 Nov 10:30), and Aisha wants PM eyes on her edge-case list before sizing.\nAction: Send the invite as soon as you tell me which slot you want, and leave everything else until morning."
+  },
+  {
+   "id": "life-s050-e000#1",
+   "response": "I'll pull the current status, but no date goes in this draft, because Aisha hasn't signed off on one, and for Olivia I'll say 'target' rather than 'launch date'. Draft: 'Hi Olivia, instant payouts is in beta today. I will share a target for wider availability once Aisha has signed off. Happy to jump on a quick call before Monday if useful.'\nAction: Check Notion and Linear for the latest instant payouts status and any sign-off from Aisha, then finalize the draft for you to review before it goes to Olivia."
+  },
+  {
+   "id": "life-s028-e022#1",
+   "response": "Here's a Leo-sized answer: poppies grew on the battlefields of World War I in Flanders, and a Canadian doctor, John McCrae, wrote the poem 'In Flanders Fields' about them in 1915. People started wearing a poppy to remember the soldiers who died, and we still wear one every November.\nAction: Save this short kid version to your notes for when Leo asks again."
+  },
+  {
+   "id": "life-s091-e008#1",
+   "response": "I'd start with one shared table that anyone on the team can add to, with columns: date, merchant, source (support, sales call, reply), summary, theme, severity, owner, status and linked Linear ticket. Add a weekly triage view filtered to 'new' and 'needs owner', plus a short intake note so people log in one place.\nAction: Create the feedback table in Notion with the triage view and a draft #payouts-launch announcement for you to approve."
+  },
+  {
+   "id": "life-s145-e000#1",
+   "response": "Great plan for the afternoon. I'll look for pumpkin patches within 45 minutes of home that are open today and have a calmer vibe, ideally with small crowds, so you can leave around 1:30.\nAction: Search for pumpkin patches within a 45-minute drive, check today's hours and crowd levels, and send you two or three picks."
+  },
+  {
+   "id": "life-s058-e010#1",
+   "response": "I don't have that VIA Rail result saved, so I can't tell you what we found without guessing. For comparison, driving from Leslieville to the Glebe is about 4 h 35 min (452 km) without traffic.\nAction: Look for my saved results from 2026-02-27, and if there aren't any, pull current Friday evening VIA Toronto to Ottawa times and fares for you to compare."
+  },
+  {
+   "id": "life-s043-e002#1",
+   "response": "Since you said to just book it, I will, within your budget of $250 a night for Fri 6 to Sun 8 Feb in or near the Plateau. I'll pick the best-reviewed option with free cancellation so there's no risk.\nAction: Search Plateau-area hotels under $250/night for those two nights, book the best one with free cancellation, and send you the confirmation."
+  },
+  {
+   "id": "life-s028-e010#1",
+   "response": "I don't want to quote a number from memory. I'll pull October's grocery total from the TD statement and compare it to August and September.\nAction: Pull October, August and September grocery spend from your TD joint chequing and Visa, and send you the three totals side by side."
+  },
+  {
+   "id": "life-s041-e003#1",
+   "response": "I'll tell Marcus you'll think about it. Draft note: 'Dear Grace and Daniel, thank you for having us for Christmas. We loved our days in Ottawa, and the leftovers you sent home with us were a lovely surprise. We're so grateful for your warmth and generosity. With love, Riya, Sam and Leo.'\nAction: Reply to Marcus that you'll think about it, and keep the note ready for you to edit before it goes in the card."
+  },
+  {
+   "id": "life-s077-e026#1",
+   "response": "A lazy Saturday with coffee on the steps sounds perfect. No meetings, no Slack, just that.\nAction: Hold all pings today; the drop-off options for the paint, printer and batteries are ready whenever you want them."
+  },
+  {
+   "id": "life-s025-e032#1",
+   "response": "That's lovely, a bit teary is the best review. I'll note your mom's birthday as November 3 and add it to the calendar yearly with a reminder a week before, plus a note that the Mumbai florist is your usual choice. I'm still missing the dates for Mei, Grace and Daniel whenever you have them.\nAction: Add Anjali's birthday on Nov 3 as a yearly event with a one-week reminder, and hold the book decision for tonight."
+  }
+ ]
+}
