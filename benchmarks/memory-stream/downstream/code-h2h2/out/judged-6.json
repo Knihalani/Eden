@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s082-e011",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly remove the two restating comments and keep the skew one; R3 adds ongoing rule."
+  },
+  {
+   "event": "code-s087-e000",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "Prior fix already added dark: pairs; none flags Tailwind v4 CSS-first dark variant config; R2 recalls overdue contrast; R1 assumes props."
+  },
+  {
+   "event": "code-s091-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "No knowledge of update check yet; all honestly propose checking the CLI source."
+  },
+  {
+   "event": "code-s091-e007",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "All reasonable; R1 pads with irrelevant docs and commit-message remarks."
+  },
+  {
+   "event": "code-s092-e010",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All acknowledge and track pending web test results."
+  },
+  {
+   "event": "code-s098-e009",
+   "scores": [
+    2,
+    2,
+    1
+   ],
+   "why": "API is Fastify 5 (known fact); R1/R2 offer to read package.json, R3 keeps blocking on the user."
+  },
+  {
+   "event": "code-s098-e015",
+   "scores": [
+    2,
+    2,
+    1
+   ],
+   "why": "Generic answer fine; repo uses 400 problem+json. R3 still waits on framework already known (Fastify 5)."
+  },
+  {
+   "event": "code-s098-e019",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "Short correct answers; R2 hedges on Node version though repo pins 20.11."
+  },
+  {
+   "event": "code-s101-e000",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "All correct; R2 adds needless Node version check."
+  },
+  {
+   "event": "code-s101-e003",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "Simple ack fits; R2 repeats explanation despite short-replies request."
+  }
+ ]
+}

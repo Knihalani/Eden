@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s070-e002",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give accurate, concise differences."
+  },
+  {
+   "event": "code-s070-e004",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Simple acknowledgment; all fine."
+  },
+  {
+   "event": "code-s070-e012",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "Reasonable plans but none recall earlier initials() single-name fix in user-avatar.tsx to reuse."
+  },
+  {
+   "event": "code-s071-e012",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "R0/R1 accurate wrap-up offering commit; R2 drags in Lena's unrelated PR nit."
+  },
+  {
+   "event": "code-s076-e005",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Light banter plus accurate rename status; all fine."
+  },
+  {
+   "event": "code-s076-e014",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Friendly sign-off; all fine."
+  },
+  {
+   "event": "code-s076-e025",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "All correct; R2 appends unrelated Lena note action."
+  },
+  {
+   "event": "code-s077-e013",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "Flag lockfile but hedge on install command; repo is pnpm 9 and CI needs pnpm-lock.yaml committed."
+  },
+  {
+   "event": "code-s080-e036",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "R0/R1 solid; R2 distracts with overdue shortcut speculation."
+  },
+  {
+   "event": "code-s080-e046",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All grep and fix both files; R2 sensibly flags translated files."
+  }
+ ]
+}
