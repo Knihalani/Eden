@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s007-e006",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "hx-disabled-elt=\"this\" on form/button does not disable the submit button; R2 uses find button, matching what worked."
+  },
+  {
+   "event": "code-s007-e027",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All plan correct 502/503/504 retry with backoff, idempotency caution, fake-timer tests."
+  },
+  {
+   "event": "code-s007-e039",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "All read the trace correctly; R1 usefully asks Lena for the failing invoice id."
+  },
+  {
+   "event": "code-s008-e009",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All cover from/to route tests, coverage threshold and bullet summary as asked."
+  },
+  {
+   "event": "code-s013-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All accurate on structuredClone vs JSON round trip."
+  },
+  {
+   "event": "code-s018-e010",
+   "scores": [
+    1,
+    2,
+    2
+   ],
+   "why": "Node 18 LTS is known; R0 ignores it. R1/R2 pin 18 but miss existing root engines >=18.18 <19."
+  },
+  {
+   "event": "code-s018-e021",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly drop the redirect issue and plan an accessible copy button."
+  },
+  {
+   "event": "code-s020-e014",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly read ok do it as the Safari font fix and keep lineItems open."
+  },
+  {
+   "event": "code-s020-e019",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "All accept the e2e rule; R0/R2 apply it to the pending font change, R1 only generically."
+  },
+  {
+   "event": "code-s020-e034",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly say background suite and typecheck are still running."
+  }
+ ]
+}
