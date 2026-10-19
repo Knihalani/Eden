@@ -1405,3 +1405,13 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   me turn off (two probes: about 500 thinking tokens with and without `MAX_THINKING_TOKENS=0`), so this times the
   call as the CLI makes it; a direct API call without thinking would be faster and is not measured.
 - **What it informs:** whether the measured checker fits C8-E4's ~3 s budget as is.
+
+## C8-E6 · 2026-10-19 · How fast is the small Claude model on the checker call? Result
+- **20 calls** (10 code, 10 life). API time: **p50 5645 ms, p90 8422 ms, max 8744 ms, min 3525 ms**. Output tokens
+  median 893, of which thinking median 599. The one call with no thinking (294 output tokens) took 3525 ms.
+- **Against C8-E4's budget:** at about 5.6 s the check misses the first tool call in most turns; delivering at any
+  later call of the turn, a 5 s check reached 5 of 12 turns and a 10 s check 3 of 12 (C8-E4, post hoc).
+- **What this says:** as the CLI runs it, the measured checker is about twice too slow for the turn. Output length is
+  the lever: about 900 tokens (thinking plus 15 scores) at roughly 6 ms a token. A direct API call with thinking off
+  and a reply that lists only the rows it keeps would be a few dozen output tokens; that variant's latency and
+  quality are not measured (its quality would need the C6-style downstream re-run, since it changes the prompt).
