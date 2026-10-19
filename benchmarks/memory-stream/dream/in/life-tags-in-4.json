@@ -1,0 +1,505 @@
+{
+ "rows": [
+  {
+   "id": "life-sleep-b09:m0009",
+   "kind": "fact",
+   "text": "Farah Khan (farah@khanaccounting.example.com) is Riya and Sam Okafor's accountant. 2025 T1 returns were e-filed 19 May 2026: Riya's refund is $1,284.60 by direct deposit (about 2 weeks); Sam owes a balance of $212.15, overdue since 30 Apr with interest accruing; childcare expenses are claimed on Sam's return as the lower-income spouse."
+  },
+  {
+   "id": "life-sleep-b09:m0010",
+   "kind": "plan",
+   "text": "Open money to pay: Sam owes CRA $212.15 for 2025 (overdue, pay promptly), and Farah Khan's prep invoice ($450 + HST = $508.50) was still unpaid on 30 May."
+  },
+  {
+   "id": "life-sleep-b09:m0011",
+   "kind": "preference",
+   "text": "Riya prefers short answers: three bullets maximum unless she asks for more."
+  },
+  {
+   "id": "life-sleep-b09:m0012",
+   "kind": "routine",
+   "text": "A weekly receipts sweep runs: new receipts from email are filed into the note 'Household expenses 2026'."
+  },
+  {
+   "id": "life-sleep-b09:m0013",
+   "kind": "fact",
+   "text": "Leo's allergy (confirmed by SickKids allergist, May 2026): allergic to cashews and pistachios only; other tree nuts such as almonds and walnuts are fine. He still carries his EpiPen Jr. in his backpack at all times. School (Edsby, Morse Street PS) and camp health forms were updated to this wording."
+  },
+  {
+   "id": "life-sleep-b09:m0014",
+   "kind": "routine",
+   "text": "Riya checks the 'Payouts Health' Looker dashboard (built by Wen Li; tracks success rate, median payout time, failed-payout reasons) every Monday at 9:30; link https://looker.example.com/dashboards/payouts-health. Weekly calendar reminder set from Mon 1 Jun 2026."
+  },
+  {
+   "id": "life-sleep-b09:m0015",
+   "kind": "fact",
+   "text": "501 Queen streetcar diversion Sat 30 May to Sun 14 Jun 2026: streetcars go via Gerrard between Broadview and Woodbine due to track work at Queen/Leslie; shuttle buses on Queen E every 6 minutes. Also Line 2 early closure Thu 4 Jun 23:00 between Broadview and Woodbine."
+  },
+  {
+   "id": "life-sleep-b09:m0016",
+   "kind": "person",
+   "text": "Sam Okafor (Riya's partner) works at Riverdale CI (high school), whose calendar is synced into the family calendar daily. June 2026: exam supervision Fri 12, Mon 15, Wed 17 and Fri 19 Jun; Commencement Thu 25 Jun 18:00-21:00; PD day Fri 26 Jun; staff last day Mon 29 Jun. Sam usually does Friday drop-off, but Fri 12 Jun he must arrive by 08:00, so someone else must do it."
+  },
+  {
+   "id": "life-sleep-b09:m0017",
+   "kind": "plan",
+   "text": "Conflict to solve: Thu 25 Jun 2026 Leo's Morse Street class picnic (17:30-19:00) overlaps Sam's Commencement (18:00-21:00), so Sam cannot attend the picnic."
+  },
+  {
+   "id": "life-sleep-b09:m0018",
+   "kind": "preference",
+   "text": "Riya prefers the assistant not end every message with an offer or a follow-up question; she finds it like angling for more work."
+  },
+  {
+   "id": "life-sleep-b09:m0019",
+   "kind": "fact",
+   "text": "Riya is a senior PM at Lumen Pay and led the Instant Payouts launch end to end in May 2026 (her first such project); she is proud of it. Wins are collected in the note 'Instant Payouts: wins record' (40 merchants live, 99.7% success, 18 min median; PAY-1199 stale bank destination bug fixed within 24 h; Northbay Coffee retained), for her next review."
+  },
+  {
+   "id": "life-sleep-b09:m0020",
+   "kind": "plan",
+   "text": "Northline Renovations progress draw #3 of $7,200 is due Wed 3 Jun 2026 from the joint account."
+  },
+  {
+   "id": "life-sleep-b09:m0021",
+   "kind": "episode",
+   "text": "Priya (Riya's friend in Montreal) was told by her landlord of a 7% rent increase for July (on about $1,650/month, $115.50). Under the TAL rules she can refuse in writing within one month of the notice and keep her lease; the TAL 2026 base is about 4.5% (about $74/month) for an unheated unit."
+  },
+  {
+   "id": "life-sleep-b09:m0022",
+   "kind": "person",
+   "text": "Hannah is a neighbour/friend on Logan whose kids include Ellie; Hannah offered to help look after Biscuit (Riya's dog). Biscuit howls at sirens (fire trucks); kid-friendly explanation: he thinks a far-away dog is calling and sings back to say 'I'm here'."
+  },
+  {
+   "id": "life-sleep-b09:m0023",
+   "kind": "plan",
+   "text": "Riya wants Hannah to feed and walk Biscuit while the family is away in July 2026 (Vancouver trip Thu 9 Jul to Mon 13 Jul), and they will pay her. The text has not been sent: the assistant needs the dates first."
+  },
+  {
+   "id": "life-sleep-b09:m0024",
+   "kind": "fact",
+   "text": "Biscuit (Riya's dog) is moving to Riverside Veterinary Clinic; the old clinic is Leslieville Animal Hospital (full chart not yet transferred). His birth date is not on file. Vaccines: Rabies and DHPP 2025-03-14 (next due 2028-03), Bordetella 2026-03-02 (next due 2027-03); PDF in notes as 'Biscuit: vaccinations'. The Riverside intake form link expires Fri 5 Jun 2026."
+  },
+  {
+   "id": "life-sleep-b09:m0025",
+   "kind": "fact",
+   "text": "Leo attends Morse Street Public School (Grade 2); school updates go through Edsby and School Cash Online. Principal is Ms. D. Fraser."
+  },
+  {
+   "id": "life-sleep-b09:m0026",
+   "kind": "plan",
+   "text": "Leo's Grade 2 Toronto Zoo trip is Thu 11 Jun 2026; the permission form and $18 fee are due Thu 4 Jun (Fri 5 Jun is a PA day) via School Cash Online. Volunteers are needed, 2 per class."
+  },
+  {
+   "id": "life-sleep-b09:m0027",
+   "kind": "plan",
+   "text": "Leo's school library books are due back to Morse Street PS by Fri 12 Jun 2026 (a notice goes out for missing books). Lost and found items are donated Mon 22 Jun, so label clothing and water bottles."
+  },
+  {
+   "id": "life-sleep-b09:m0028",
+   "kind": "plan",
+   "text": "Morse Street PS end of year 2026: Track and Field Day Wed 17 Jun (rain date Thu 18 Jun; volunteers needed), report cards via Edsby Tue 23 Jun, primary class picnic Thu 25 Jun 17:30, last day Fri 26 Jun with 12:00 early dismissal, TPL Summer Reading Club starts Sat 27 Jun."
+  },
+  {
+   "id": "life-sleep-b09:m0029",
+   "kind": "plan",
+   "text": "Conflict: Fri 26 Jun 2026 Leo's school dismisses early at 12:00, overlapping Riya's work-calendar block 'Payouts GA go/no-go prep' 11:30-12:00. Pickup needs planning."
+  },
+  {
+   "id": "life-sleep-b09:m0030",
+   "kind": "plan",
+   "text": "Riya is arranging a team lunch for 8 people near the Lumen Pay office (King St W) next Thursday (11 Jun 2026) to celebrate the beta wrapping up. Top candidate Saffron Lane (South Indian, 4.6, groups up to 12, private corner table); alternatives Planta Queen (set menu for 8+) and Pai (walk-in only). Time not yet chosen, availability not yet checked."
+  },
+  {
+   "id": "life-sleep-b09:m0031",
+   "kind": "plan",
+   "text": "Basement dehumidifier (Frigidaire 50-pint FFAP5033W1) stopped collecting water (fan runs). Bought 6 Jul 2025 at Canadian Tire Leaside, order #CT-5523-118, $319.21, no protection plan. 1-year parts and labour warranty until about 6 Jul 2026 (sealed system 5 years). Canadian Tire will not exchange (90-day returns), so claim direct with Frigidaire (1-800 line Mon-Fri 8:00-20:00 ET or online form; needs serial number from back label). Online claim form drafted but not submitted. Call reminder Mon 8 Jun 12:15. Basement humidity was 61%; Hannah Cho has a spare 30-pint to borrow."
+  },
+  {
+   "id": "life-sleep-b09:m0032",
+   "kind": "routine",
+   "text": "Riya posts a weekly payouts status update in #payouts-launch every Friday by 16:00 (workstreams colour-coded; GA docs was amber on 29 May)."
+  },
+  {
+   "id": "life-sleep-b09:m0033",
+   "kind": "plan",
+   "text": "Sprint planning is on 15 Jun 2026. Riya must cut two items from Onboarding v2.1 scope: draft is 44 pts versus 30 pts capacity (over by 14). Candidates: bulk CSV import (13, not started), partner referral codes (5), business-verification retry (8), progress-saving (8); keep accessibility fixes (in progress) and French onboarding emails. Each cut needs a line on what is lost and when it returns."
+  },
+  {
+   "id": "life-sleep-b09:m0034",
+   "kind": "routine",
+   "text": "Biscuit's lunchtime walks: Jess M. from Rover walks him Tuesdays and Thursdays at 12:00 (30 min, $27 per walk, from Tue 9 Jun 2026, about $54/week). On Riya's work-from-home days (Mon, Wed, Fri) she walks Biscuit herself at 12:00 around Greenwood Park."
+  },
+  {
+   "id": "life-sleep-b10:m0001",
+   "kind": "routine",
+   "text": "Riya's weekly runs with Marcus are Wednesdays 06:15-07:15 and Saturdays 07:30-08:45 at Ashbridges Bay (changed in June 2026 when Marcus started a new job). The old Sunday 07:30 Leslie St series was ended."
+  },
+  {
+   "id": "life-sleep-b10:m0002",
+   "kind": "rule",
+   "text": "Lumen Pay requires every employee to enrol a hardware security key by 2026-07-31; laptops without one lose SSO access."
+  },
+  {
+   "id": "life-sleep-b10:m0003",
+   "kind": "fact",
+   "text": "Lumen Pay desk booking moves to the Robin app from 2026-07-06; a second office floor at King West opens in September 2026."
+  },
+  {
+   "id": "life-sleep-b10:m0004",
+   "kind": "routine",
+   "text": "Lumen Pay summer hours: Fridays end at 15:00 in July and August for teams that are not on call."
+  },
+  {
+   "id": "life-sleep-b10:m0005",
+   "kind": "fact",
+   "text": "Lumen Pay wellness spending account rises to $750/year starting July 2026."
+  },
+  {
+   "id": "life-sleep-b10:m0006",
+   "kind": "preference",
+   "text": "Riya prefers a single recommendation rather than three options; give one pick with at most a single fallback only if it really matters."
+  },
+  {
+   "id": "life-sleep-b10:m0007",
+   "kind": "person",
+   "text": "Riya's household: partner Sam Okafor (a teacher), son Leo, and Biscuit, their beagle. They live in Leslieville, Toronto."
+  },
+  {
+   "id": "life-sleep-b10:m0008",
+   "kind": "plan",
+   "text": "Riya's mother lives in Mumbai. In June 2026 Riya wanted to send her a box of mithai because she sounded low; Brijwasi Sweets (about Rs 1,450 + Rs 120 delivery, same day if ordered before 14:00 IST, best freshness reviews) was recommended, and the order is on hold until Riya sends her mom's delivery address."
+  },
+  {
+   "id": "life-sleep-b10:m0009",
+   "kind": "person",
+   "text": "Riya Malhotra is a product lead for Payouts at Lumen Pay (Linear team PAY). Colleagues: Tom Becker (asks area leads for recaps, runs #product-leads), Aisha Rahman (works on payouts, PRD reviews), Diego (mocks and timelines), Wen Li (dashboard questions), Olivia Grant (sales)."
+  },
+  {
+   "id": "life-sleep-b10:m0010",
+   "kind": "episode",
+   "text": "The Lumen Pay product offsite was held 2026-06-09 to 2026-06-11 at Deerhurst Resort in Muskoka. Riya wrote the Payouts offsite recap in Notion doc d-7731 (Product/Offsite 2026), decisions first, one page, for Tom Becker."
+  },
+  {
+   "id": "life-sleep-b10:m0011",
+   "kind": "fact",
+   "text": "Decision at the June 2026 Lumen Pay offsite: multi-currency wallets are postponed to H1 2027 because the compliance review of FINTRAC reporting will not finish in 2026. Linear PAY-1388 moved to Backlog accordingly."
+  },
+  {
+   "id": "life-sleep-b10:m0012",
+   "kind": "person",
+   "text": "Hannah Cho is a close neighbour/friend of Riya; her kids are Jun and Ellie. Jun and Leo play together, and Hannah has covered Leo's school pickup and had him over (e.g. Thu 25 Jun 2026). Riya sent Hannah a thank-you and offered a return favour. Hannah turned 40 on 2026-06-27 and recommended contractor Nate."
+  },
+  {
+   "id": "life-sleep-b10:m0013",
+   "kind": "routine",
+   "text": "Riya takes Spanish lessons with Carlos Méndez on Zoom (observed Thursdays 19:30-20:30); Carlos emails homework. Currently working on the subjunctive and noun vocabulary. Riya's Dec 2026 Lisbon trip and a Mexico City interest motivate the Spanish practice."
+  },
+  {
+   "id": "life-sleep-b10:m0014",
+   "kind": "fact",
+   "text": "Leo is 7 and was in Grade 2 at Morse Street PS (teacher Ms. Alvarez) in 2025-26; Fall 2026 class lists are posted on Edsby in the last week of August. His last shoe order in mail was size 12."
+  },
+  {
+   "id": "life-sleep-b10:m0015",
+   "kind": "plan",
+   "text": "Riya's Lumen Pay hardware security key shipped (Canada Post 7023 5521 0098 CA, arriving Tue 23 Jun 2026); she still must enrol it by 2026-07-31."
+  },
+  {
+   "id": "life-sleep-b10:m0016",
+   "kind": "episode",
+   "text": "On the night of 2026-06-19 someone dinged Riya's car in the Loblaws lot (scratch and dent on the rear bumper, no note). Insurance claim not yet started: Riya needs to supply the policy number (on the pink slip in the glovebox). Advice: photos, ask store for lot camera footage (kept about a week), possible police collision report."
+  },
+  {
+   "id": "life-sleep-b10:m0017",
+   "kind": "fact",
+   "text": "Riya and Sam decided on 2026-05-30 to take the December 2026 holiday in Lisbon rather than Mexico City: Lisbon has direct YYZ-LIS flights (about 7 h overnight), mild 12-15 C weather and is walkable; Mexico City had no direct flight on their dates (3-5 h layovers via Houston/Dallas) and a longer travel day for Leo. Notes in 'Dec 2026 holiday - options' (n-3982)."
+  },
+  {
+   "id": "life-sleep-b10:m0018",
+   "kind": "fact",
+   "text": "Riya takes levothyroxine; after her June 2026 blood test Dr. Patel (Patel Family Medicine) raised the dose to 75 mcg once a day, each morning on an empty stomach, 30 minutes before coffee or food. Prescription at Shoppers Drug Mart, Queen & Carlaw."
+  },
+  {
+   "id": "life-sleep-b10:m0019",
+   "kind": "person",
+   "text": "Sam Okafor is a teacher: he marks exams in June and teaches until 15:10 on school days. Riya's family calendar and Sam's calendar are tracked separately."
+  },
+  {
+   "id": "life-sleep-b10:m0020",
+   "kind": "plan",
+   "text": "Riya needs a repeat TSH blood test 6-8 weeks after the June 2026 dose change (around mid-August 2026); Dr. Patel's requisition is needed first and LifeLabs Queen & Carlaw is where she goes."
+  },
+  {
+   "id": "life-sleep-b10:m0021",
+   "kind": "plan",
+   "text": "Riya's mid-year performance self-review in Lattice is due Fri 2026-07-10 (reminders set Tue 30 Jun 10:00 and Mon 6 Jul 09:30); H1 evidence is already gathered in Notion under Riya/Reviews. Manager reviews open 2026-07-13."
+  },
+  {
+   "id": "life-sleep-b10:m0022",
+   "kind": "routine",
+   "text": "Mondays are Riya's work-from-home days. Her daily standup is at 09:45 (09:45-10:00)."
+  },
+  {
+   "id": "life-sleep-b10:m0023",
+   "kind": "routine",
+   "text": "Biscuit is walked at noon by dog walker Jess, booked through Rover (about 2 walks a week, invoiced and auto-paid from Riya's Visa)."
+  },
+  {
+   "id": "life-sleep-b10:m0024",
+   "kind": "fact",
+   "text": "Riya's car insurance is Belairdirect; auto premium $118.40 is charged monthly on the 1st (e.g. 2026-07-01)."
+  },
+  {
+   "id": "life-sleep-b10:m0025",
+   "kind": "plan",
+   "text": "Dr. Patel's requisition for the repeat TSH blood test is on file at LifeLabs Queen & Carlaw (valid 6-8 weeks). A slot is held Wed 2026-08-05 08:15 (hold lasts 24 h) pending Riya's OK; alternates Tue 4 Aug 07:30 and Thu 6 Aug 07:00."
+  },
+  {
+   "id": "life-sleep-b10:m0026",
+   "kind": "fact",
+   "text": "Kitchen reno contractor decision (notes 2026-02-08): Riya and Sam hired Northline Renovations (Nate) at $68,500 over Brickhouse Kitchens ($79,000, start Jan 2027) and CityFix Contracting ($58,200, mixed reviews), because Nate could start September 2026 and Hannah gave strong reviews from her basement job."
+  },
+  {
+   "id": "life-sleep-b10:m0027",
+   "kind": "plan",
+   "text": "Kitchen reno finances: Barzotti balance invoice of $14,700 is due 2026-07-15; $31,240 paid to date on the kitchen as of 2026-07-01."
+  },
+  {
+   "id": "life-sleep-b10:m0028",
+   "kind": "preference",
+   "text": "Biscuit's supplies: monthly food is the 13.6 kg bag from the pet store at Queen & Logan (about $94.99 + tax; in-store pickup works, Sam can collect); poop bags are BioBag compostable (8 rolls, 120 bags) from Pet Valu, $16.99."
+  },
+  {
+   "id": "life-sleep-b10:m0029",
+   "kind": "preference",
+   "text": "Riya's mom has trouble with WhatsApp video (it freezes and flusters her); use Zoom instead, a saved recurring link with no waiting room and simple steps (tap link, tap Join, allow camera). The weekly call link is meeting 841 2005 7731, passcode 4410, but the day and time have not yet been given."
+  },
+  {
+   "id": "life-sleep-b10:m0030",
+   "kind": "plan",
+   "text": "Payouts release freeze runs Thu 2026-07-02 12:00 to Mon 2026-07-06 09:00 for the bank-partner cutover; a reminder draft for #payouts-launch is saved, not posted."
+  },
+  {
+   "id": "life-sleep-b10:m0031",
+   "kind": "plan",
+   "text": "Carlos told Riya to drill the subjunctive with a proper grammar book. Pick: 'Practice Makes Perfect: Spanish Subjunctive Up Close' ($24.95, Indigo, or in stock at Indigo Danforth); not ordered, awaiting Riya's go-ahead."
+  },
+  {
+   "id": "life-sleep-b10:m0032",
+   "kind": "plan",
+   "text": "Curzon St neighbourhood summer street party (organiser Carol Dempsey): date must be chosen between Sat 25 Jul and Sat 8 Aug 2026 (permit takes 6 weeks; apply this week of 2 Jul). Riya only needs to reply with her date and whether she will volunteer. Cost $25/household, potluck, petition needs 60% (14 of 31 signed; sign at #42); Mike prefers 8 Aug, Priti only 25 Jul, Hannah either."
+  },
+  {
+   "id": "life-sleep-b10:m0033",
+   "kind": "plan",
+   "text": "Kitchen reno: Nate (Northline) needs Riya's final countertop material, colour and edge profile confirmed with his fabricator by Tue 7 Jul 2026, for templating on Thu 9 Jul 08:00-10:00 (Hannah has a spare key if nobody is home). Riya was checking with Sam; choice not yet recorded."
+  },
+  {
+   "id": "life-sleep-b10:m0034",
+   "kind": "plan",
+   "text": "Riya and Sam will not go to Ottawa for Christmas 2026 because of the Lisbon trip. Grace and Daniel (told 2026-07-04) will visit Toronto in November 2026 instead; Riya has a reminder Tue 2026-09-08 09:30 to start planning their visit."
+  },
+  {
+   "id": "life-sleep-b10:m0035",
+   "kind": "plan",
+   "text": "Sam wants a week at a cottage Mon 14 to Fri 18 Sep 2026, with a dock, within 3 hours of home. Top pick is Loon Call Cottage, Lake Kashagawigamog (Haliburton): 3 bedrooms, private dock, kayaks, $1,450 for 4 nights, 2 h 50 min, free cancellation until 2026-08-31; alternative Birch Point on Stony Lake ($1,120, shared dock, 2 h 15 min). Not yet held."
+  },
+  {
+   "id": "life-sleep-b10:m0036",
+   "kind": "plan",
+   "text": "Olivia Grant's EA Jess Park asked to move the QBR prep from Tuesday to Wed 8 Jul 2026 at 10:00 (45 min, same room); the slot is free after standup. Reply was drafted, awaiting Riya's OK to send."
+  },
+  {
+   "id": "life-sleep-b10:m0037",
+   "kind": "routine",
+   "text": "Garbage and recycling: bins go out Sunday night (calendar nudge 'Garbage & recycling night' at 20:00); collection is Monday morning, alternating blue bin + garbage weeks."
+  },
+  {
+   "id": "life-sleep-b11:m0001",
+   "kind": "preference",
+   "text": "On 2026-07-07 Riya had 8 promo senders unsubscribed and archived (Crate & Barrel, Wayfair, HelloFresh, Old Navy, Uber marketing, Sephora, Cineplex, Best Buy); a filter keeps future mail from them out of the inbox. Kept Chapters, Duolingo, Lululemon and Notion because she opens them sometimes."
+  },
+  {
+   "id": "life-sleep-b11:m0002",
+   "kind": "person",
+   "text": "Riya's household: partner Sam Okafor (a teacher; she made chemistry-pun end-of-year cards with him for his students), son Leo (age 7, sleepwalks occasionally, loves dinosaurs), and beagle Biscuit. They live in Leslieville, Toronto."
+  },
+  {
+   "id": "life-sleep-b11:m0003",
+   "kind": "person",
+   "text": "Hannah Cho is a friend/neighbour of Riya (phone +1 416-555-0148) with a garden and a backyard pool, and a daughter Ellie; Leo plays with her kids."
+  },
+  {
+   "id": "life-sleep-b11:m0004",
+   "kind": "person",
+   "text": "Riya's cousin Neha lives in Calgary and was choosing between two job offers (one $15k more with a 50 min commute each way, one 10 min away and fully hybrid) in July 2026; Neha asked Riya for advice."
+  },
+  {
+   "id": "life-sleep-b11:m0005",
+   "kind": "routine",
+   "text": "Toronto Hydro bill is paid by auto-pay from the TD joint account (July bill $142.18 on Jul 21; August est. $150 on Aug 20). A/C use raises it."
+  },
+  {
+   "id": "life-sleep-b11:m0006",
+   "kind": "person",
+   "text": "Riya's family: Kabir (brother, lives in Vancouver) and his wife Mei have a newborn, Ira (Riya's niece; naming ceremony in July 2026, visited Jul 9-13). Riya's mother is Anjali (family chat 'Malhotra family'). Kabir is mailing Leo's forgotten sock."
+  },
+  {
+   "id": "life-sleep-b11:m0007",
+   "kind": "rule",
+   "text": "Riya's packing rule (set 2026-07-09): carry-on only for any trip under a week, and a shared packing checklist for Leo (shared with Sam) prepared three days before departure. Lesson from Vancouver: long baggage wait, Leo's swim shirt and stuffie (Rexy) were forgotten."
+  },
+  {
+   "id": "life-sleep-b11:m0008",
+   "kind": "rule",
+   "text": "Rental cars: Riya's TD Visa covers collision/loss damage for rentals (up to 48 days, MSRP up to $65,000) if the rental company's LDW is declined and the full rental is charged to the card, so decline LDW. Always refill the tank before returning (rental fuel charge was $9.49/L plus $25) and shake out sand."
+  },
+  {
+   "id": "life-sleep-b11:m0009",
+   "kind": "fact",
+   "text": "Kitchen reno budget is $56,000 (raised Jul 2026 after the electrical panel had to be upgraded to 200 A); contingency is used up. Sam relays reno updates from the kitchen crew; an electrician is part of the work."
+  },
+  {
+   "id": "life-sleep-b11:m0010",
+   "kind": "plan",
+   "text": "Leo's birthday is on July 17 (turning 8); his present, a LEGO Jurassic World T. rex set (Indigo order #IND-778120), delivers July 15, 2026."
+  },
+  {
+   "id": "life-sleep-b11:m0011",
+   "kind": "plan",
+   "text": "Date night with Sam on Sat 2026-07-18 still needs a restaurant reservation; Riya said she would give a neighbourhood/time on 2026-07-14."
+  },
+  {
+   "id": "life-sleep-b11:m0012",
+   "kind": "plan",
+   "text": "Leo's Toronto Public Library books (DK Dinosaur Encyclopedia, Dog Man, The Bad Guys #3) were renewed to due date 2026-08-04."
+  },
+  {
+   "id": "life-sleep-b11:m0013",
+   "kind": "plan",
+   "text": "Lisbon trip booked on TAP for 3 passengers (Riya, Sam, Leo): outbound TP 260 YYZ 21:40 Fri 2026-12-18 to LIS 09:35 Sat Dec 19; return TP 259 LIS 12:30 Wed 2026-12-30 to YYZ 15:05. Paid $3,442.80 on the TD Visa; on the family calendar. Seats not yet assigned (TAP $38/seat/leg for 3 together, rows 24-31; free at check-in). Lisbon is 5 hours ahead of Toronto."
+  },
+  {
+   "id": "life-sleep-b11:m0014",
+   "kind": "plan",
+   "text": "Leo's passport expires 2027-02-20, which is too soon for the Lisbon trip (Portugal needs 3 months validity past 30 Dec, i.e. to 2027-03-30). It must be renewed: child renewal takes about 20 business days by mail, start in August. Form PPTC 155 is in Drive/Family/Passports; needs both parents' signatures, 2 photos, fee $57 (5-year). Riya's passport expires 2030-05-14, Sam's 2028-11-02."
+  },
+  {
+   "id": "life-sleep-b11:m0015",
+   "kind": "fact",
+   "text": "TAP baggage for Lisbon: car seats/boosters check free (one per child) on top of the allowance; Leo is 7 and likely uses a backless booster (Lisbon rental booster is about EUR 8/day, capped at EUR 60; taxis/Bolt provide none). Power banks carry-on only. Carry-on 8 kg plus a personal item."
+  },
+  {
+   "id": "life-sleep-b11:m0016",
+   "kind": "plan",
+   "text": "The family will be in Lisbon on Christmas Eve (24 Dec, consoada); most Lisbon restaurants close early or have set menus then, and booking opens in October. Options: Taberna da Rua das Flores (Chiado, EUR 45 menu), Time Out Market (until 18:00), Baixa hotel restaurants; Cervejaria Ramiro is closed Dec 24-25. Not booked yet."
+  },
+  {
+   "id": "life-sleep-b11:m0017",
+   "kind": "person",
+   "text": "Riya's friend Tara from yoga is maid of honour at a wedding in October 2026 and is nervous about her speech."
+  },
+  {
+   "id": "life-sleep-b11:m0018",
+   "kind": "person",
+   "text": "Riya's best friend from McGill, Priya Nair, moved back to Toronto in July 2026 and lives in Roncesvalles; she is an architect at a new firm on Spadina."
+  },
+  {
+   "id": "life-sleep-b11:m0019",
+   "kind": "fact",
+   "text": "Work (Lumen Pay): Instant Payouts general availability moved to 2026-11-04 because Wavecrest Bank's partner certification slipped seven weeks. Tom knows. No public Wavecrest certification timeline exists; contact via their partner manager or Aisha, who owns follow-up tickets PAY-1241 and PAY-1242."
+  },
+  {
+   "id": "life-sleep-b11:m0020",
+   "kind": "plan",
+   "text": "Lisbon accommodation: two-bedroom Airbnb apartment in Alfama near the Miradouro de Santa Luzia, reserved 2026-07-26 for the whole December stay."
+  },
+  {
+   "id": "life-sleep-b11:m0021",
+   "kind": "plan",
+   "text": "Plan for dog Biscuit (beagle) during Lisbon: board him at Dogs Den Kennels in Scarborough. Quote of 2026-08-02: 13 nights (Dec 17-30), $598 plus tax, two walks a day and a private run; valid 30 days (to about Sep 1); bordetella and rabies certificates are required at drop-off. Dates not yet held."
+  },
+  {
+   "id": "life-sleep-b11:m0022",
+   "kind": "preference",
+   "text": "Leo wants to ride every tram in Lisbon (famous tram 28 runs through Alfama, near the Airbnb) and likes pastéis de nata."
+  },
+  {
+   "id": "life-sleep-b11:m0023",
+   "kind": "fact",
+   "text": "Home insurance renewal (policy HO-4471823) for 2026-09-01 to 2027-09-01: premium $1,812 (up from $1,640), dwelling limit $870,000, deductible $1,000; auto-renews Sep 1 unless changed. New condition: renovations over $25,000 must be reported to the insurer within 30 days, and damage by contractors without liability insurance is excluded. The $56,000 kitchen reno triggers this."
+  },
+  {
+   "id": "life-sleep-b11:m0024",
+   "kind": "plan",
+   "text": "To do: call the insurer about the renovation-over-$25,000 clause (Mon 2026-08-10 if closed Saturday); the weekend checklist 'Weekend Aug 8-9' also lists gate repair, dry cleaning, oil change, a gift for Sunday's kid birthday party."
+  },
+  {
+   "id": "life-sleep-b11:m0025",
+   "kind": "routine",
+   "text": "Leslieville garbage/recycling is Thursday 'Day 2': garbage and yard waste some Thursdays (Aug 13, Aug 27), recycling Aug 20, green bin every week. Yard waste in kraft paper bags or labelled bins only, no plastic, out by 7:00."
+  },
+  {
+   "id": "life-sleep-b11:m0026",
+   "kind": "plan",
+   "text": "Fall family picks to discuss with Sam (saved in notes 'Toronto events fall 2026'): Evergreen Brick Works Harvest Festival Sep 12-13 (free); Doors Open Sep 26-27 (free); Nuit Blanche family zone Oct 3 (free, nothing else scheduled after 15:00); Downey's Farm pumpkin patch Oct 10-12 ($15 pp); Boo at the Zoo Oct 24-25 and Oct 31 (tickets on sale Sep 15, members early Sep 8)."
+  },
+  {
+   "id": "life-sleep-b11:m0027",
+   "kind": "plan",
+   "text": "Riya must book Leo's eye exam (school sent a note); reminder set Mon 2026-08-10 10:00. The Eye See Eye Learn program gives free exams only for JK to grade 1, until Aug 31; grade 2 students are not eligible. Leo's school is Morse Street PS."
+  },
+  {
+   "id": "life-sleep-b11:m0028",
+   "kind": "routine",
+   "text": "TD Visa statement is paid automatically in full on the due date each month (balance $4,927.13 in August 2026 including the TAP flights)."
+  },
+  {
+   "id": "life-sleep-b12:m0001",
+   "kind": "plan",
+   "text": "Payouts retry UX review (Fri 7 Aug 2026, Riya, Aisha Rahman, Diego Fernández): decided v1 ships per-payout retry only; bulk retry goes on the v1.1 list with Diego's flows (parked in Figma). Diego is to add an empty-state hint pointing to the CSV export for big batches."
+  },
+  {
+   "id": "life-sleep-b12:m0002",
+   "kind": "fact",
+   "text": "Failed-payout reasons have been tagged in the ledger since PAY-412 merged on 2026-07-30 (Aisha Rahman), so failure breakdowns by reason can be pulled from the ledger."
+  },
+  {
+   "id": "life-sleep-b12:m0003",
+   "kind": "routine",
+   "text": "Riya's household green bin / garbage collection day is Wednesday (Leslieville, Toronto). Alternating weeks: week of 10 Aug 2026 green bin + garbage; week of 17 Aug green bin + recycling. Bins out by 7:00."
+  },
+  {
+   "id": "life-sleep-b12:m0004",
+   "kind": "fact",
+   "text": "Carrier furnace: model 59SC5B080E17, serial 2121A43817. 10-year parts limited warranty (registered) expires 2031-10-28; labour not covered; heat exchanger 20-year limited. Warranty PDF is Carrier_Warranty_59SC5_Registration.pdf in Drive/Home/Appliances."
+  },
+  {
+   "id": "life-sleep-b12:m0005",
+   "kind": "episode",
+   "text": "Riya has a list of 12 never-opened newsletter senders (e.g. Wayfair Canada, Old Navy, Medium Daily Digest, Product Hunt) that were candidates to unsubscribe; nothing unsubscribed yet, awaiting Riya's choice."
+  },
+  {
+   "id": "life-sleep-b12:m0006",
+   "kind": "plan",
+   "text": "Morse Street PS (Leo's school) 2026: first day of school is Tue 8 Sep 2026; class lists posted on Edsby Fri 4 Sep after 15:00; before-and-after-care registration closes Mon 24 Aug 2026."
+  },
+  {
+   "id": "life-sleep-b12:m0007",
+   "kind": "person",
+   "text": "Riya's friend Tanvi lives in a Liberty Village condo (built ~2010) and her landlord wants a 9% rent increase; Riya had a note made for her ('Tanvi - rent increase (Ontario)', share link notes.example.com/s/k2v9tanvi) on the 2.1% 2026 Ontario guideline and Form N1."
+  },
+  {
+   "id": "life-sleep-b12:m0008",
+   "kind": "routine",
+   "text": "Toronto Hydro bill is on auto-pay; no action needed when the monthly bill email arrives (August 2026 bill: $142.37, up 18% on last August, A/C)."
+  },
+  {
+   "id": "life-sleep-b12:m0009",
+   "kind": "plan",
+   "text": "Riya's passport renewal (ref P-2026-0729-77341, applied 2026-07-29 at Service Canada Scarborough Town Centre) was printed and in transit on 2026-08-14, expected by mail by 2026-08-21. Needed for a December 2026 trip."
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/life/out/tags-4.json"
+}

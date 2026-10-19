@@ -1775,3 +1775,14 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   request in parallel). The remaining fifth to quarter are action constraints (scheduling, travel, tool setup), a
   channel the dreaming step would have to build. Pools grow with the store (an entity like "Leo" gains rows for
   years), so at scale each channel needs its own bound: entity facets, time windows, action registries.
+
+## C11-E2 · 2026-10-19 · An action-constraint registry built while dreaming (pre-registration; exploratory)
+- **Idea:** the dreaming step tags each memory with the kinds of action it constrains or informs, from a fixed
+  taxonomy (`benchmarks/memory-stream/dream/actions.json`, 28 types across both worlds). At the hook, a fast
+  classifier names the action types the turn involves (Jev, one yes/no question per type, run by the session that
+  holds the key); the action channel is every visible row tagged with one of them. Bounded at scale by the
+  taxonomy, not by the store.
+- **Dream tagging:** sonnet subagents (the sleep compiler's role) tag every row of both stores with up to 3 types or
+  none, from the row text and kind alone (`dream/<world>/out/tags-*.json`).
+- **Measure:** the action channel's coverage of needed items, its union with C11-E1's channels, and pool sizes.
+  No verdict rule; it decides whether the registry goes into the build plan.
