@@ -1640,7 +1640,7 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **Question:** does Jev (list variant, p ≥ 0.7, from C10-E2's post-hoc look) carry the dated checker's gain over
   today's plugin into the agent's replies, and how does it compare with the haiku checker on the same turns?
 - **Setup:** `downstream.py prep-h2h-jev --world <w> --sub <w>-h2h-jev --turns <w>-h2h,<w>-h2h2 --jtag jev-list
-  --p 0.7`: the same 145 code and 169 life turns as C5-E7 / C6-E1, with four conditions in one new responder run:
+  --p 0.7` (since C10-R the head-to-head outputs are under `--jtag jev-list-h2h`, the new default): the same 145 code and 169 life turns as C5-E7 / C6-E1, with four conditions in one new responder run:
   none, eden (dated), verify (haiku, dated, the same packets as before) and jev (dated, deferred like verify). Jev's
   outputs come from `verify_jev.py --variant list` on these turns' shortlists. Protocol as C5-E1 (per-turn split,
   sonnet responder, blind opus judge with history evidence). Report: `h2h.py --four <w> <w>-h2h-jev`.
@@ -1657,7 +1657,8 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   reported scoring some cases on shortened text. All code judgments from judges that reported a collision (files 0–5)
   were set aside (`out/collided-judged-*.json`, kept for comparison) and re-judged by judges told to use private
   temp directories. The set-aside and re-judged score lists are identical on 9, 8, 12 and 10 of 15 cases in files
-  0, 1, 4, 5 (no baseline for two independent judges was measured). Some judges read the long, near-identical `reference_facts`
+  0, 1, 4, 5 (no baseline for two independent judges was measured). Some judges read the long, near-identical
+  `reference_facts`
   list as a diff between cases rather than verbatim (they said so); every other field was read in full.
 - **Per group (condition − none):**
 
@@ -1751,10 +1752,11 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   | G0 lexical + bank (today's shortlist) | 0.275 / 0.536 / 0.739 | 0.214 / 0.32 / 0.515 |
   | G1 + session context | 0.261 / 0.478 / 0.725 | 0.194 / 0.33 / 0.505 |
   | G2 + entity index and graph | 0.217 / 0.565 / 0.754 | 0.097 / 0.369 / 0.544 |
-  | G3 + time index (rows whose times name a date in the next 14 days, or the turn's weekday; dates the turn names are not parsed, narrower than the prereg) | 0.275 / 0.536 / 0.739 | 0.155 / 0.311 / 0.495 |
+  | G3 + time index (next 14 days or the turn's weekday; see note) | 0.275 / 0.536 / 0.739 | 0.155 / 0.311 / 0.495 |
   | G4 all fused (RRF) | 0.232 / 0.565 / 0.725 | 0.146 / 0.369 / 0.534 |
 
-  Only about a quarter of needed items rank in the top 3 under any single ranking: a ranked list over a growing store
+  G3 matches rows whose times name a date in the next 14 days or the turn's weekday; it does not parse dates the
+  turn names, so it is narrower than the prereg. Only about a quarter of needed items rank in the top 3 under any single ranking: a ranked list over a growing store
   will not find them.
 - **What the misses are** (life, 31 needed items with a covering row outside G4's top 15; 8 read): constraints and
   conflicts set by the action, not by the turn's words. Scheduling a meeting needs the standing calendar rules;

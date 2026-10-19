@@ -121,7 +121,8 @@ Families differ in mechanism. Every kill criterion was written before its run.
 - **D37 amended by the user:** the in-turn checker may run on TypeSafe Jev or a fast NIM model, chosen by measurement.
 - **Jev is about ten times inside the 3 s budget** (C10-E1/E2): p50 0.21–0.27 s end to end, 0 unanswered questions.
 - **Its quality depends on how the question is posed** (C10-E2): with precise criteria and the candidate list in
-  view (`list`, threshold 0.7; chosen after the results) it is within 0.03 of the calibrated haiku checker on both dev worlds, ahead on life-rt1,
+  view (`list`, threshold 0.7; chosen after the results) it is within 0.03 of the calibrated haiku checker on both
+  dev worlds, ahead on life-rt1,
   and short by 0.0517 recall on code-rt1 (post hoc; the pre-registered pick, decomp 0.7, failed). Base Jev was
   weaker (C10-E1).
 - **On the outcome measure Jev matches the haiku checker** (C10-E3, one run): jev − verify −0.0117 (code), −0.0262

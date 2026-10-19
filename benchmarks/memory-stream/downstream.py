@@ -430,7 +430,7 @@ if __name__ == "__main__":
     ap.add_argument("--vtag", default="cal-ds3", help="prep-h2h: verify tag for missing verifier outputs")
     ap.add_argument("--supersede", action="store_true", help="prep-system: sleep store with the supersession pass")
     ap.add_argument("--turns", default="", help="prep-system: comma-separated downstream subs whose turns to use")
-    ap.add_argument("--jtag", default="jev-list", help="prep-h2h-jev: the Jev verify tag")
+    ap.add_argument("--jtag", default="jev-list-h2h", help="prep-h2h-jev: the Jev verify tag (C10-R)")
     ap.add_argument("--fired-only", action="store_true", help="prep-verify: keep only turns where verify fires")
     a = ap.parse_args()
     cmds = {"prep": prep, "prep-picks": prep_picks, "prep-eden": prep_eden, "prep-verify": prep_verify,
