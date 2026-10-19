@@ -1,0 +1,6 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s148-e012", "scores": [3, 3, 3], "why": "All set both reminders correctly; nothing outcome-changing missed."},
+{"event": "life-s150-e028", "scores": [2, 3, 3], "why": "R0 note is effectively one line, not two; R1 and R2 give proper two-line notes and hold for approval."},
+{"event": "life-s156-e000", "scores": [1, 2, 1], "why": "All miss Hannah's plan (astronaut costume, 5:45 pm from Hannah's, Sam on candy); R1 at least handles cashew/pistachio allergy."},
+{"event": "life-s156-e004", "scores": [1, 1, 1], "why": "None flag that Riya volunteers on the ROM trip Thu 26 Nov 9:00-2:30, so 10:00 clashes; Diego's 10:30 crit also unmentioned."}
+]}
