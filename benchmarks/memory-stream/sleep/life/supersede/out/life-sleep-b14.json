@@ -1,0 +1,86 @@
+{
+ "batch": "life-sleep-b14",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "life-sleep-b00:m0010",
+   "new": "life-sleep-b14:m0001",
+   "why": "Leo is 7, not 6"
+  },
+  {
+   "old": "life-sleep-b06:m0023",
+   "new": "life-sleep-b14:m0001",
+   "why": "Leo is 7, not 6"
+  },
+  {
+   "old": "life-sleep-b00:m0001",
+   "new": "life-sleep-b14:m0003",
+   "why": "Sam now pescatarian, eats fish and seafood"
+  },
+  {
+   "old": "life-sleep-b12:m0003",
+   "new": "life-sleep-b14:m0007",
+   "why": "Collection day is Tuesday"
+  },
+  {
+   "old": "life-sleep-b11:m0025",
+   "new": "life-sleep-b14:m0007",
+   "why": "Collection day is Tuesday"
+  },
+  {
+   "old": "life-sleep-b10:m0037",
+   "new": "life-sleep-b14:m0007",
+   "why": "Collection day is Tuesday"
+  },
+  {
+   "old": "life-sleep-b08:m0029",
+   "new": "life-sleep-b14:m0007",
+   "why": "Collection day is Tuesday"
+  },
+  {
+   "old": "life-sleep-b06:m0021",
+   "new": "life-sleep-b14:m0007",
+   "why": "Yard waste is Tuesdays, not Thursdays"
+  },
+  {
+   "old": "life-sleep-b08:m0034",
+   "new": "life-sleep-b14:m0010",
+   "why": "Mumbai trip moved to Feb 2027"
+  },
+  {
+   "old": "life-sleep-b08:m0035",
+   "new": "life-sleep-b14:m0010",
+   "why": "Mumbai trip dates moved; fares outdated"
+  },
+  {
+   "old": "life-sleep-b13:m0002",
+   "new": "life-sleep-b14:m0032",
+   "why": "Ottawa Nov 13-15 trip cancelled"
+  },
+  {
+   "old": "life-sleep-b13:m0014",
+   "new": "life-sleep-b14:m0032",
+   "why": "Ottawa trip cancelled, no piano clash"
+  },
+  {
+   "old": "life-sleep-b13:m0003",
+   "new": "life-sleep-b14:m0032",
+   "why": "Ottawa trip cancelled, no retro clash"
+  },
+  {
+   "old": "life-sleep-b13:m0015",
+   "new": "life-sleep-b14:m0019",
+   "why": "Picture Day is Oct 15, not Sep 24"
+  },
+  {
+   "old": "life-sleep-b13:m0022",
+   "new": "life-sleep-b14:m0023",
+   "why": "Dinner moved to Nov 8 at Bar Raval"
+  },
+  {
+   "old": "life-sleep-b11:m0021",
+   "new": "life-sleep-b14:m0026",
+   "why": "Biscuit stays with Hannah; kennel cancelled"
+  }
+ ]
+}
