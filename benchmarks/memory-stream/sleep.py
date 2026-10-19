@@ -33,7 +33,7 @@ def prep(world, batch):
         print(name, len(sessions))
 
 
-def rows(stream, world, tag="out", strict=False):
+def rows(stream, world, tag="out", strict=False, supersede=False):
     """Store rows from the compiled ops: {id, text, kind, when, t, invalid_at} with t in event order.
 
     strict=True (leak-free): a batch's rows become visible only after the batch's last session. The compiler read the
@@ -68,6 +68,12 @@ def rows(stream, world, tag="out", strict=False):
                     rid = f"{d['batch']}:{op.get('id')}"
                     if rid in out:
                         out[rid]["invalid_at"] = t + 0.5
+    if supersede:  # cross-batch supersession pass (supersede.py, C5-E5): the old row ends when its replacement appears
+        import supersede as sp
+        for old, new in sp.pairs(world).items():
+            if old in out and new in out and out[new]["t"] > out[old]["t"]:
+                end = out[old]["invalid_at"]
+                out[old]["invalid_at"] = out[new]["t"] if end is None else min(end, out[new]["t"])
     return list(out.values())
 
 
