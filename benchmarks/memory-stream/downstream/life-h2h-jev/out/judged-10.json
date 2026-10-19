@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s120-e003", "scores": [1, 3, 1, 3], "why": "Wen Li needs #data-requests, written definition, 3 business days; responses 1 and 3 honour it, 0 and 2 bypass the process."},
+{"event": "life-s121-e000", "scores": [2, 2, 1, 2], "why": "Nothing on file about Te Aro orders; asking is right. Response 2 invents a grocery 14:00 rule and a past Te Aro order."},
+{"event": "life-s123-e011", "scores": [3, 3, 3, 3], "why": "All propose sensible date-based renames with preview or undo log, matching earlier photo-rename practice."},
+{"event": "life-s128-e000", "scores": [2, 2, 3, 2], "why": "Dr. Lin moved to Danforth Smiles; response 2 uses that to search the right sender and has the number. Others generic."},
+{"event": "life-s131-e020", "scores": [3, 3, 3, 3], "why": "All give a polite, firm change-order draft citing two brief changes; nothing wrong."},
+{"event": "life-s131-e022", "scores": [2, 3, 2, 3], "why": "Nothing known about Neha; 1 and 3 stay light and safe, 0 and 2 invent personality traits that may not fit."},
+{"event": "life-s132-e000", "scores": [3, 3, 3, 2], "why": "Thu 19 Nov, reminder Thu 5 Nov correct; response 1 usefully notes gift before Ottawa trip; 3 invents a usual one-week reminder."},
+{"event": "life-s133-e000", "scores": [3, 3, 2, 3], "why": "25 min with agenda as asked; response 0 rightly keeps 'target' wording. Response 2 hedges on whether the 9th is Friday."},
+{"event": "life-s136-e017", "scores": [2, 3, 3, 3], "why": "Street-cleaning lookup still pending; response 0 says nothing further and drops it."},
+{"event": "life-s136-e021", "scores": [3, 2, 3, 3], "why": "All accurate; response 1 runs past the requested two lines."},
+{"event": "life-s136-e034", "scores": [1, 1, 1, 1], "why": "All claim not to know mom's city or trip; facts give Mumbai, late March 2027 (dry season), IST offset."},
+{"event": "life-s137-e018", "scores": [3, 3, 3, 3], "why": "All acknowledge the week and flag the meetup title/headshot due 18 Sep without pushing fixes."},
+{"event": "life-s140-e029", "scores": [3, 3, 3, 2], "why": "All accurate summaries; response 3 is long for someone without ten minutes."},
+{"event": "life-s141-e017", "scores": [1, 3, 1, 3], "why": "Thursday lesson, subjunctive and gender exceptions, DELE 21 Nov are known; 0 and 2 claim ignorance of class time."},
+{"event": "life-s141-e032", "scores": [3, 3, 3, 2], "why": "Live Linear query is right; response 3 dumps stale 26 Aug details beyond the titles and status asked."}
+]}

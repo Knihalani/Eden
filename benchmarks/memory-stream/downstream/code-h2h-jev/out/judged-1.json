@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "code-s035-e008", "scores": [3, 3, 3, 3], "why": "All correctly diagnose missing CSRF token in htmx partial and give the hx-headers / csrf_token fix or checks."},
+{"event": "code-s036-e010", "scores": [2, 3, 2, 2], "why": "Export has required --from/--to and docs/cli.md rule; only second covers both interaction and docs."},
+{"event": "code-s043-e000", "scores": [2, 2, 3, 2], "why": "PostHog with invoice_sent is known; third uses it accurately. Fourth adds unsupported 'pageviews off' claim; others ignore known analytics."},
+{"event": "code-s045-e000", "scores": [2, 2, 2, 2], "why": "Outgoing webhooks are already HMAC-signed via X-Acme-Signature; all treat signing as unknown or omit it."},
+{"event": "code-s045-e012", "scores": [2, 2, 2, 2], "why": "Recaps accurate, but end-of-task summaries should be a short bullet list; all are paragraphs."},
+{"event": "code-s046-e008", "scores": [3, 3, 3, 2], "why": "All respect UTC rule; fourth asserts stale org-timezone formatDate pattern and field name without checking."},
+{"event": "code-s048-e005", "scores": [3, 1, 2, 3], "why": "CLI is ESM-only @acme/cli on Node 18; second invents an earlier engines error; third claims package name unknown."},
+{"event": "code-s050-e000", "scores": [3, 3, 3, 3], "why": "All implement telemetry on/off and BullMQ/Bull Board section correctly without hard-coding hosts."},
+{"event": "code-s055-e005", "scores": [3, 2, 2, 2], "why": "On main, so cut a branch first; only first does. Second asserts cause without verifying."},
+{"event": "code-s056-e000", "scores": [1, 3, 3, 3], "why": "All attach error.digest as Sentry tag; first invents an unapproved 'request-id idea from earlier'."},
+{"event": "code-s057-e030", "scores": [3, 3, 2, 2], "why": "First two apply open-only rule, date/timezone care and existing reminder idempotency; others miss status filter."},
+{"event": "code-s058-e000", "scores": [2, 3, 3, 3], "why": "All identify per-line rounding; first states the cause confidently without verifying, contrary to the say-when-uncertain rule."},
+{"event": "code-s058-e007", "scores": [2, 3, 3, 2], "why": "Forms use react-hook-form with zodResolver; first and fourth do not follow that known pattern."},
+{"event": "code-s058-e012", "scores": [2, 3, 3, 2], "why": "OpenAPI is generated from zod and docs/ must update; first and fourth don't know how docs are generated."},
+{"event": "code-s060-e000", "scores": [3, 3, 2, 3], "why": "Only open invoices can be overdue; third handles paid but misses drafts and the established rule."}
+]}

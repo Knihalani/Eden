@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "code-s060-e021", "scores": [2, 2, 2, 2], "why": "Node 20.11 pin and nvm use are right; first two misattribute Jordan's Node 18 to user's new laptop; none names pnpm."},
+{"event": "code-s060-e026", "scores": [3, 3, 3, 3], "why": "Small talk; all accurately recap deps installed, tests running, Postgres/DATABASE_URL still needed."},
+{"event": "code-s066-e013", "scores": [3, 3, 2, 3], "why": "Good ones reuse existing slugify and know csv-filename.ts; third is generic."},
+{"event": "code-s066-e028", "scores": [2, 3, 2, 3], "why": "Chart lives in infra/helm/worker with values-prod.yaml; first and third don't know location."},
+{"event": "code-s067-e006", "scores": [3, 3, 3, 3], "why": "All correctly explain up -d versus start."},
+{"event": "code-s068-e000", "scores": [3, 3, 3, 3], "why": "All split per concern via cherry-pick and respect pushed-history rule; user said commits are local."},
+{"event": "code-s068-e023", "scores": [1, 3, 1, 3], "why": "User banned git stash and major bumps without asking; first and third violate both."},
+{"event": "code-s070-e000", "scores": [3, 3, 3, 3], "why": "Small talk; all fine."},
+{"event": "code-s071-e014", "scores": [3, 3, 3, 3], "why": "All plan structured per-org pino logging with reasons; reasonable."},
+{"event": "code-s072-e000", "scores": [3, 2, 2, 3], "why": "Diagnose actual error first; MySQL-to-Postgres guess is stale (weeks old) speculation for a fresh pull."},
+{"event": "code-s073-e000", "scores": [2, 2, 2, 2], "why": "All miss required org_id column; UUID v7 and generator handled; first best on paths and v7 detail."},
+{"event": "code-s075-e000", "scores": [3, 2, 3, 2], "why": "Repo formatter is Biome; second and fourth don't know it."},
+{"event": "code-s076-e000", "scores": [2, 3, 3, 3], "why": "Simple rename; first wrongly treats it as large refactor needing plan approval."},
+{"event": "code-s076-e017", "scores": [3, 3, 3, 3], "why": "All fix and grep variants sensibly."},
+{"event": "code-s077-e005", "scores": [2, 2, 2, 3], "why": "History shows tsx already a devDependency of packages/cli; only last notices and checks."}
+]}

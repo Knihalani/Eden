@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "code-s007-e006", "scores": [3, 2, 3, 3], "why": "All give correct hx-disabled-elt + hx-sync:drop fix with server backstop; one defers asking for the template location."},
+{"event": "code-s007-e027", "scores": [2, 2, 2, 3], "why": "All plan correct retry; only the last notices current branch holds unrelated uncommitted work and cuts a fresh branch."},
+{"event": "code-s007-e039", "scores": [2, 2, 2, 2], "why": "Reasonable triage; none uses Sentry or notes the trace is from a development build; all generic and roughly equivalent."},
+{"event": "code-s008-e009", "scores": [3, 3, 3, 3], "why": "All add from/to route tests, run coverage against 80%, and promise bullet summary."},
+{"event": "code-s013-e000", "scores": [2, 3, 3, 3], "why": "All accurate; first references an unspecified PR not in context."},
+{"event": "code-s018-e010", "scores": [3, 3, 1, 3], "why": "Team is on Node 18 LTS; third asks for the version it should know. Others pin 18 and check CI/Docker."},
+{"event": "code-s018-e021", "scores": [3, 3, 3, 3], "why": "All leave redirect to Lena and plan an accessible copy button correctly."},
+{"event": "code-s020-e014", "scores": [3, 1, 3, 3], "why": "'Do it' refers to the latest font suggestion; second also starts the unrequested expand=lineItems change first."},
+{"event": "code-s020-e019", "scores": [3, 3, 2, 3], "why": "All accept the rule; third is generic and ignores the open changes that need browser verification."},
+{"event": "code-s020-e034", "scores": [3, 3, 3, 3], "why": "All correctly acknowledge and note background runs pending."},
+{"event": "code-s021-e035", "scores": [2, 2, 1, 2], "why": "Infra is Pulumi now; team=payments known. Third asks for known team tag and uses terraform plan; others generic but safe."},
+{"event": "code-s022-e017", "scores": [3, 3, 3, 3], "why": "All add the rethrow test and remove the CHANGELOG emoji, adopting the no-emoji rule."},
+{"event": "code-s027-e049", "scores": [1, 3, 1, 1], "why": "invoices list already has --json per history; only the second checks before adding a duplicate flag."},
+{"event": "code-s028-e017", "scores": [3, 3, 3, 2], "why": "All use shadcn Button, lucide icon, aria-label; fourth schedules the sweep the user deferred."},
+{"event": "code-s033-e016", "scores": [3, 3, 3, 3], "why": "All park bucket, read the file, reproduce, and fix concisely without overclaiming."}
+]}

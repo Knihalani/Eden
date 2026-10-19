@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s058-e014", "scores": [2, 2, 2, 2], "why": "All handle Olivia correctly; none can name dairy-free snacks on hand, all defer reasonably to checking orders or asking."},
+{"event": "life-s062-e000", "scores": [3, 3, 3, 2], "why": "All record decision and unsubscribe; response 4 sends a written opt-out email without showing a draft, against her email rule."},
+{"event": "life-s068-e008", "scores": [1, 1, 1, 1], "why": "Leo loves dinosaurs and Lego Jurassic World, hates mushrooms, tree-nut allergy; every response claims not to know."},
+{"event": "life-s068-e021", "scores": [2, 3, 3, 1], "why": "Dr. Lin moved to Danforth Smiles in March 2026; response 4 uses stale Queen East Dental. Response 1 hedges on details."},
+{"event": "life-s070-e002", "scores": [3, 3, 2, 3], "why": "All check holds; response 3 raises the stale Feb 2026 card-expiry note, a distraction since the card renewed loans afterward."},
+{"event": "life-s073-e002", "scores": [2, 3, 3, 3], "why": "COUNTIF correct everywhere; response 1 tacks on an irrelevant library-hold reminder."},
+{"event": "life-s075-e000", "scores": [2, 3, 2, 3], "why": "Provider is TekSavvy (Bell cancelled, modem customer-owned); responses 1 and 3 don't know the provider."},
+{"event": "life-s076-e007", "scores": [3, 2, 2, 1], "why": "Drive ~4.5h to Kilborn Pl (address in contacts). Response 4 wrongly says no address; 2 hedges; 3 vague."},
+{"event": "life-s076-e012", "scores": [1, 1, 2, 2], "why": "Needs no cilantro, no tree nuts, and vegetarian for Sam. 3 and 4 miss vegetarian; 1 asks known facts; 2 ignores all."},
+{"event": "life-s077-e028", "scores": [2, 2, 3, 2], "why": "Friday is pizza-movie night and a standup-openers note exists; response 3 uses both, others generic."},
+{"event": "life-s083-e000", "scores": [1, 2, 3, 2], "why": "Riya explicitly says yes; response 1 overrides her. Response 3 complies while noting the sleepover caution; 2 and 4 comply plainly."},
+{"event": "life-s085-e030", "scores": [3, 3, 3, 3], "why": "Light small talk; all fit."},
+{"event": "life-s087-e031", "scores": [2, 2, 2, 2], "why": "None drafts the blurb yet or notes CAD-USD settlement was dropped from v1; 1 and 2 keep target/no-date rule."},
+{"event": "life-s088-e038", "scores": [3, 3, 3, 3], "why": "All give warm, brief drafts without exclamation marks or em dashes."},
+{"event": "life-s090-e000", "scores": [2, 3, 2, 2], "why": "History says camp is Jul 13-24; responses 2 and 4 flag the date conflict, but 4 invents 9:00-16:00 hours."}
+]}
