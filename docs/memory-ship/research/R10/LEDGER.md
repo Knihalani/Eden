@@ -1520,3 +1520,10 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   `doctor.test.ts` ("a hung wrap fetch") and `benchmarks/memory-long-horizon/harness/replay.test.ts` (a hook timed
   out) failed under load and pass alone (40 and 6 tests, 0 fail; the reviewer re-ran both too). No code changed in
   this cycle.
+
+## C9-E3 · 2026-10-19 · Gain kept at each checker latency (estimate, post hoc)
+- From C8-E4's 10 sessions with a tool call (last tool call times as in its table) and the two-run gains over today's
+  plugin (code +0.1011, life +0.1342): reachable turns at latency L × gain. L ≤ 2 s: 10 of 10 (+0.1011 / +0.1342);
+  3 s: 8 (+0.0809 / +0.1074); 5 s: 5 (+0.0505 / +0.0671); 10 s: 3 (+0.0303 / +0.0403); 20 s: 1 (+0.0101 / +0.0134).
+- Assumes an even spread of the gain over turns and delivery at any later tool call; n = 10. Added to the build
+  sketch as an estimate.
