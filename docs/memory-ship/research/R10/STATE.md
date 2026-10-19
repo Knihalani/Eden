@@ -74,8 +74,9 @@ Families differ in mechanism. Every kill criterion was written before its run.
 | F14 | Negative-history pruning: cues common in the user's own past (mostly no-need) turns are removed, with `unless` features (critic D2) | **dead** (C2-E1) | dead if silence does not rise ≥ 0.20 absolute at recall ≥ 0.30 |
 | F20 | Per-user need model from the user's own history (labeler labels, causal) | **dead** (C4-E1): AUC 0.647 | dead if AUC < 0.75 |
 | F21 | Anticipation: a model prepares the next turn's packet with trigger phrases while the user types | code: high-precision lane; life: dead (C4-E3) | — |
-| F22 | Deferred in-turn verification: hook picks ≤ 15 candidates (no model); haiku checks them off the hook; delivered at the first tool call | **alive, weakened** (C4-E5, retracted by C4-E9): leak-free code 0.52 recall at 0.43 silence; life 0.30 / 0.62 | calibration (F22b, C4-E11) running |
+| F22 | Deferred in-turn verification: hook picks ≤ 15 candidates (no model); haiku checks them off the hook; delivered at the first tool call | **alive, weakened** (C4-E5, retracted by C4-E9): leak-free code 0.52 recall at 0.43 silence; life 0.30 / 0.62 | F22b calibration (C4-E11) dead on code-rt1 transfer |
 | F23 | Store-wide haiku verifier (critic C4 A) | **dead** (C4-E7): life recall 0.36 < 0.42 | — |
+| F22b | F22 + causal contrast (user's earlier turns) + per-row probability, dev-chosen threshold | **dead** (C4-E11): code dev 0.48 / 0.76 silence / 0.31 precision, but code-rt1 recall 0.24 (−0.18) | — |
 | F24 | Draft check at Stop (critic C4 B) | **dead** (C4-E8): fires on 4/15 no-need turns; +0.1 outcome on need turns | — |
 | F15 | Situation tracking: slots (path prefix, command verb, package, person, next event) from tool calls and triggers; fire on a slot *change* into a keyed value (critic D3) | dead standalone (C2-E3); kept as a vote | dead if proactive + action recall < 0.30 or human silence < 0.60 |
 
@@ -93,14 +94,17 @@ Families differ in mechanism. Every kill criterion was written before its run.
 
 ## Next three experiments
 
-1. **F22b calibration (C4-E11, running):** causal contrast (the user's own earlier turns) plus per-row probabilities and a dev-chosen threshold, checked on the red-team cases.
-2. **Re-run the judge ceiling and pull one case per call** to see how much of their silence was batch contrast; the ceiling sets every gap.
-3. **Critic C direction:** a prospective agenda for triggers, with ≥ 40 routine trigger negatives (ideally from a non-Claude author), because trigger silence is 0.0–0.36 for every system.
+1. **Downstream-validated labels (gold subset).** A turn needs a row when adding it raises the blind, history-aware judged outcome by ≥ 1 (C4-E13: on code, half of the judge's "false" fires help). Build a gold set of about 100 turns per world, then re-score the frontier against it. Silence against plan labels is not a safe tuning target until this exists.
+2. **Red-team round 2 plus transfer.** Thresholds tuned on dev do not transfer to the short red-team prompts (C4-E11). Calibrate on a mixed pool, or per prompt-length band.
+3. **Critic C direction:** a prospective agenda for triggers, with ≥ 40 routine trigger negatives, ideally from a non-Claude author.
 
-## Cycle 4 findings (LEDGER C4-E1…E11)
+## Cycle 4 findings (LEDGER C4-E1…E13)
 
 - Batching flatters model verifiers: one-case-per-call F22 loses 0.24 silence on code (C4-E9). Every model-in-the-loop number must be one case per call.
 - The downstream harness had two bugs: responder order swaps, and a judge blind to episodic history. With both fixed (C4-E10), memory improves the outcome on 77% of plan-need turns in both worlds (+0.8 code, +0.9 life). Wrong packets showed no measured harm (vote − none = 0.0 on no-need), so C3-E4's harm claim is withdrawn.
+- Even opus fed one case at a time loses 0.14–0.21 silence (C4-E12). The "judge ceiling" rows overstate silence.
+- **The plan labels miss real needs on code** (C4-E13). Where the judge fired on plan-no-need turns, its picks raised the outcome by +0.4 (47% helped, 7% hurt). On life the result is mixed (+0.13; 27% helped, 13% hurt).
+- A calibrated verifier (causal contrast plus probabilities) is tunable on dev but its threshold does not transfer to fresh short prompts (C4-E11).
 - Agent-pull (F13) is secondary by the user's direction: Eden stays in charge of surfacing what the agent does not know to ask.
 
 ## Cycle 3 findings so far (LEDGER C3-E1…E5)
