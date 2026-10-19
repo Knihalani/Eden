@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s082-e025",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 knows /healthz checks Postgres+Redis and cautions on liveness; R1 generic, doesn't use known endpoint."
+  },
+  {
+   "event": "code-s082-e049",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both close politely and correctly note the leftover version.ts default export."
+  },
+  {
+   "event": "code-s083-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both revert the uncommitted whoami change correctly."
+  },
+  {
+   "event": "code-s083-e008",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both scope fastify-raw-body to the Stripe route and add tests; user approved the dependency."
+  },
+  {
+   "event": "code-s085-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 uses known Node 20.11/nvm, env copy, 1Password, compose, migrate; R1 generic discovery."
+  },
+  {
+   "event": "code-s085-e010",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 knows Bull Board at /admin/queues; R0 misses it and proposes RedisInsight."
+  },
+  {
+   "event": "code-s085-e014",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both hedge and plan to inspect infra; history hinted AWS LB Controller ingress but neither uses it."
+  },
+  {
+   "event": "code-s086-e004",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 uses known port 9464 metrics and ServiceMonitor; R1 fine but uninformed."
+  },
+  {
+   "event": "code-s087-e012",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 knows db:migrate and the DTO/zod mapping gap seen with po_number; R0 generic."
+  },
+  {
+   "event": "code-s088-e023",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correct slugify plans; R1 usefully mirrors existing api slugify behaviour."
+  }
+ ]
+}
