@@ -19,7 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 
-def prep(world, n, per, tag=""):
+def prep(world, n, per, tag="", fresh=False):
     import score, sleep, methods, judge
     stream, items = score.load_stream(world)
     cov = score.Coverage(items)
@@ -30,6 +30,8 @@ def prep(world, n, per, tag=""):
     ids = []
     for p in sorted(glob.glob(os.path.join(HERE, "judge", f"{world}-sleep", "in", "*.json"))):
         ids += [c["event"] for c in json.load(open(p))["cases"]]
+    if fresh:  # red-team worlds: every fresh human and trigger event
+        ids = [i for i, e in evs.items() if e["_split"] == "fresh" and e["t"] in ("human", "trigger")]
     sub = f"{world}-{tag}" if tag else world
     d = os.path.join(HERE, "verify", sub)
     os.makedirs(os.path.join(d, "in"), exist_ok=True)
@@ -76,6 +78,7 @@ if __name__ == "__main__":
     ap.add_argument("--world", required=True)
     ap.add_argument("--n", type=int, default=15)
     ap.add_argument("--per", type=int, default=50)
+    ap.add_argument("--fresh", action="store_true", help="red-team worlds: all fresh-split human and trigger events")
     ap.add_argument("--tag", default="", help="writes verify/<world>-<tag>/ (e.g. seq: one case per file, stream order)")
     a = ap.parse_args()
-    prep(a.world, a.n, a.per, a.tag)
+    prep(a.world, a.n, a.per, a.tag, a.fresh)
