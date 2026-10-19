@@ -1,0 +1,45 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "code-s046-e008#3",
+   "response": "I'll add a \"Paid at\" column that shows `paidAt` in the org's time zone using `formatDate(iso, org.timeZone)`, with the api returning the raw UTC timestamp and no timezone math there.\nAction: check that the list endpoint returns paid_at, add the column to the invoices table, and add a test for a Vancouver-zone org."
+  },
+  {
+   "id": "code-s035-e008#3",
+   "response": "htmx doesn't add the CSRF token on its own; Django needs it as a header or hidden input. Likely causes after moving to a partial: the token was supplied by an attribute that no longer applies (like `hx-headers` on `<body>`), or the partial is rendered without the request so `csrf_token` is empty.\nAction: show me the base template, the partial and the view, and check in the network tab whether the request carries `X-CSRFToken` or a `csrfmiddlewaretoken` field."
+  },
+  {
+   "id": "code-s071-e012#3",
+   "response": "Glad it works.\nAction: nothing else pending; I can commit the CSV fix and tests if you want."
+  },
+  {
+   "id": "code-s045-e007#3",
+   "response": "I don't know where DNS is managed here and won't guess. I'll look in the repo for infra config and CODEOWNERS, and there will also need to be a target for `hooks-test` once the receiver exists.\nAction: search the repo for DNS or zone config and the infra docs, then tell you where records go and who approves."
+  },
+  {
+   "id": "code-s041-e005#3",
+   "response": "I'll add tests for 2.005 and for negatives. One suspicion: `Math.round` rounds halves toward positive infinity, so -2.005 would round to -2.00 while 2.005 gives 2.01, which would be wrong for credit notes.\nAction: write the tests, run them, and if the negative case fails, round the magnitude and reapply the sign."
+  },
+  {
+   "id": "code-s056-e020#3",
+   "response": "Parking the lock change. `DELETE /v1/customers/:id` will set `deleted_at` (no hard delete), return 204, and use problem+json for errors like 404 for unknown or already-deleted ids.\nAction: read the existing customer routes and the problem+json helper, implement it, make sure the read queries exclude deleted rows, and add tests."
+  },
+  {
+   "id": "code-s018-e021#3",
+   "response": "Leaving the redirect issue to Lena. I'll add a copy button beside the invoice number that copies the number and gives brief feedback.\nAction: find the invoice header component, add the button with an aria-label using an existing UI component, and add a test."
+  },
+  {
+   "id": "code-s007-e019#3",
+   "response": "I'll render a proper empty state when there are no exports: short explanation and a link to where exports come from, matching the existing empty states.\nAction: find the exports page, add the empty state, and add a test for the empty and non-empty cases."
+  },
+  {
+   "id": "code-s046-e000#3",
+   "response": "I'll make the filename slug-like: lowercase, accents stripped, spaces and slashes collapsed to dashes, length capped, with a fallback when the name is empty. The same bug may exist for other downloads like CSVs.\nAction: find where the pdf filename is built, add a slugify helper with tests, and check other download names."
+  },
+  {
+   "id": "code-s070-e012#3",
+   "response": "Leaving yarn.lock alone; it's untracked so it won't be committed. For avatars, the initials helper probably needs first and last name and falls back to \"U\" otherwise.\nAction: find the initials helper, make single-name contacts use the first letter, and add tests for single name, empty and extra whitespace."
+  }
+ ]
+}
