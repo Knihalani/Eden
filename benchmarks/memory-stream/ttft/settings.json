@@ -1,0 +1,5 @@
+{"hooks": {
+ "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "echo \"submit $(date +%s.%N)\" >> $TTFT_LOG"}]}],
+ "PreToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": "echo \"tool $(date +%s.%N)\" >> $TTFT_LOG"}]}],
+ "Stop": [{"hooks": [{"type": "command", "command": "echo \"stop $(date +%s.%N)\" >> $TTFT_LOG"}]}]
+}}

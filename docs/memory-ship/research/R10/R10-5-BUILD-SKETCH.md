@@ -29,7 +29,10 @@ slice spec. If R10-5 is approved, a slice turns this into one under the normal l
   - Output is about 15 short scores.
 - **Latency budget:** the call must finish before the turn's first tool call, or that turn gets nothing.
   - Nothing ever waits for the call; the turn goes on without it (fail-open).
-  - The harness cannot measure the time from Submit to the first tool call. A headless Claude Code run can.
+  - **Measured in real headless Claude Code sessions (C8-E4, n = 12):** the first tool call comes about 3 s after
+    Submit at the median (p50 2.92 s; p90 14.13 s). Even delivering at any later tool call of the turn, a checker
+    that takes 10 s reaches 3 of 12 turns, and one that takes 40 s reaches none. **The check needs to answer in about
+    3 seconds.**
 - **Turns with no tool call get nothing.** On personal-assistant turns that need memory this is 11 of 49 (questions
   like "remind me what I said…"). Fixing it would add at most about +0.015 per turn (C8-E1).
 
@@ -41,12 +44,12 @@ slice spec. If R10-5 is approved, a slice turns this into one under the normal l
 2. **Which provider.**
    - **A small Claude model (haiku):** what was measured. It is not a D37 provider.
    - **An NVIDIA NIM model:** the D37 provider, not yet measured here.
-     - D37 records hosted p95 latency of 40–70 s, which would miss most first tool calls.
+     - D37 records hosted p95 latency of 40–70 s. Against C8-E4's timings that reaches no turn in the turn itself.
      - `verify_nim.py` runs the re-measure in one command once `NVIDIA_API_KEY` is in the environment (C8-T1). It
        prints the quality numbers and p50/p95 latency.
 
 ## Not measured yet
 
-- Latency from Submit to the first tool call in real sessions, and the checker's own latency on either provider.
+- The checker's own latency on either provider (C8-E4 measured only the budget, on 12 sessions).
 - Any non-Claude responder or judge.
 - Real user transcripts. Every number above comes from synthetic worlds.
