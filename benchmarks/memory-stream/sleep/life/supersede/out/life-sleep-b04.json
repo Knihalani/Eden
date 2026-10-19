@@ -1,0 +1,56 @@
+{
+ "batch": "life-sleep-b04",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "life-sleep-b00:m0037",
+   "new": "life-sleep-b04:m0001",
+   "why": "Internet moved from Bell Fibe to TekSavvy"
+  },
+  {
+   "old": "life-sleep-b00:m0030",
+   "new": "life-sleep-b04:m0003",
+   "why": "1:1 moved from Thursday 14:00 to Wednesday 11:30"
+  },
+  {
+   "old": "life-sleep-b00:m0058",
+   "new": "life-sleep-b04:m0009",
+   "why": "Spin class dropped; strength training Tue/Thu instead"
+  },
+  {
+   "old": "life-sleep-b02:m0027",
+   "new": "life-sleep-b04:m0009",
+   "why": "Wednesday spin class dropped"
+  },
+  {
+   "old": "life-sleep-b00:m0003",
+   "new": "life-sleep-b04:m0009",
+   "why": "Tue/Thu 6:30 slot now strength training at YMCA"
+  },
+  {
+   "old": "life-sleep-b02:m0019",
+   "new": "life-sleep-b04:m0006",
+   "why": "Household budget now $6,000/month, not $4,600"
+  },
+  {
+   "old": "life-sleep-b01:m0017",
+   "new": "life-sleep-b04:m0007",
+   "why": "Swim moved to Saturdays at Pape Recreation Centre"
+  },
+  {
+   "old": "life-sleep-b02:m0007",
+   "new": "life-sleep-b04:m0016",
+   "why": "Hydro is not autopay; paid manually"
+  },
+  {
+   "old": "life-sleep-b00:m0015",
+   "new": "life-sleep-b04:m0032",
+   "why": "Airline preference now Air Canada, not WestJet"
+  },
+  {
+   "old": "life-sleep-b00:m0035",
+   "new": "life-sleep-b04:m0034",
+   "why": "DELE B2 exam postponed from May to 21 Nov 2026"
+  }
+ ]
+}

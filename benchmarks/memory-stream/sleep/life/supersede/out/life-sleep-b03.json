@@ -1,0 +1,26 @@
+{
+ "batch": "life-sleep-b03",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "life-sleep-b00:m0064",
+   "new": "life-sleep-b03:m0013",
+   "why": "Celsius only now, no Fahrenheit"
+  },
+  {
+   "old": "life-sleep-b01:m0005",
+   "new": "life-sleep-b03:m0005",
+   "why": "Spanish lesson now Thursday 19:30-20:30, not 20:00"
+  },
+  {
+   "old": "life-sleep-b00:m0009",
+   "new": "life-sleep-b03:m0005",
+   "why": "Spanish lesson is Thursday, not Tuesday 19:00"
+  },
+  {
+   "old": "life-sleep-b02:m0053",
+   "new": "life-sleep-b03:m0026",
+   "why": "Reno quote v3 and 12 Jan start replace earlier projection"
+  }
+ ]
+}
