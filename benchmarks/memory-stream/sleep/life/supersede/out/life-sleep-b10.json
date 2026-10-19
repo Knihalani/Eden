@@ -1,0 +1,51 @@
+{
+ "batch": "life-sleep-b10",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "life-sleep-b06:m0029",
+   "new": "life-sleep-b10:m0001",
+   "why": "Sunday run series ended; now Wed and Sat"
+  },
+  {
+   "old": "life-sleep-b00:m0034",
+   "new": "life-sleep-b10:m0001",
+   "why": "Saturday run now 07:30 at Ashbridges Bay"
+  },
+  {
+   "old": "life-sleep-b04:m0005",
+   "new": "life-sleep-b10:m0001",
+   "why": "Marcus runs now Wed 06:15 and Sat 07:30"
+  },
+  {
+   "old": "life-sleep-b05:m0008",
+   "new": "life-sleep-b10:m0001",
+   "why": "Saturday Marcus run time and place changed"
+  },
+  {
+   "old": "life-sleep-b00:m0018",
+   "new": "life-sleep-b10:m0018",
+   "why": "Levothyroxine dose raised from 50 to 75 mcg"
+  },
+  {
+   "old": "life-sleep-b09:m0008",
+   "new": "life-sleep-b10:m0037",
+   "why": "Bins now Sunday night for Monday collection"
+  },
+  {
+   "old": "life-sleep-b08:m0029",
+   "new": "life-sleep-b10:m0037",
+   "why": "Collection now Monday, not Thursday"
+  },
+  {
+   "old": "life-sleep-b02:m0024",
+   "new": "life-sleep-b10:m0037",
+   "why": "Collection now Monday, not Tuesday"
+  },
+  {
+   "old": "life-sleep-b00:m0083",
+   "new": "life-sleep-b10:m0037",
+   "why": "Collection now Monday, not Wednesday"
+  }
+ ]
+}

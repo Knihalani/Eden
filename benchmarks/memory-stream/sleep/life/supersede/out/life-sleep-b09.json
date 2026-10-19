@@ -1,0 +1,56 @@
+{
+ "batch": "life-sleep-b09",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "life-sleep-b06:m0017",
+   "new": "life-sleep-b09:m0001",
+   "why": "Day camp now starts 29 Jun, not Jul 13-24 weeks"
+  },
+  {
+   "old": "life-sleep-b08:m0029",
+   "new": "life-sleep-b09:m0008",
+   "why": "Collection day now Tuesday, not Thursday"
+  },
+  {
+   "old": "life-sleep-b06:m0021",
+   "new": "life-sleep-b09:m0008",
+   "why": "Garbage/yard waste day now Tuesday, not Thursday"
+  },
+  {
+   "old": "life-sleep-b00:m0083",
+   "new": "life-sleep-b09:m0008",
+   "why": "Collection day now Tuesday, not Wednesday"
+  },
+  {
+   "old": "life-sleep-b00:m0065",
+   "new": "life-sleep-b09:m0013",
+   "why": "Allergy narrowed to cashews and pistachios only"
+  },
+  {
+   "old": "life-sleep-b08:m0023",
+   "new": "life-sleep-b09:m0020",
+   "why": "Progress draw #3 now $7,200 due 3 Jun"
+  },
+  {
+   "old": "life-sleep-b08:m0024",
+   "new": "life-sleep-b09:m0034",
+   "why": "Jess now walks Tue/Thu at $27, not Fridays"
+  },
+  {
+   "old": "life-sleep-b02:m0042",
+   "new": "life-sleep-b09:m0034",
+   "why": "Jess now Tue/Thu $27, not Mon/Wed/Fri"
+  },
+  {
+   "old": "life-sleep-b02:m0045",
+   "new": "life-sleep-b09:m0034",
+   "why": "Felipe replaced; Jess walks Tue/Thu"
+  },
+  {
+   "old": "life-sleep-b02:m0046",
+   "new": "life-sleep-b09:m0034",
+   "why": "Dog walking schedule and cost changed"
+  }
+ ]
+}

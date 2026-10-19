@@ -1,0 +1,76 @@
+{
+ "batch": "life-sleep-b06",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "life-sleep-b01:m0003",
+   "new": "life-sleep-b06:m0003",
+   "why": "Wednesday pickup time moved 15:20 to 15:30"
+  },
+  {
+   "old": "life-sleep-b00:m0030",
+   "new": "life-sleep-b06:m0004",
+   "why": "Tom 1:1 now Wednesdays 11:30, not Thursdays 14:00"
+  },
+  {
+   "old": "life-sleep-b00:m0024",
+   "new": "life-sleep-b06:m0006",
+   "why": "Dr. Lin moved to Danforth Smiles"
+  },
+  {
+   "old": "life-sleep-b00:m0044",
+   "new": "life-sleep-b06:m0012",
+   "why": "Spanish corrections now top three at end, not every mistake"
+  },
+  {
+   "old": "life-sleep-b00:m0013",
+   "new": "life-sleep-b06:m0020",
+   "why": "Purchase approval threshold raised from $100 to $150"
+  },
+  {
+   "old": "life-sleep-b00:m0010",
+   "new": "life-sleep-b06:m0023",
+   "why": "Leo turns 7 in July, not fall"
+  },
+  {
+   "old": "life-sleep-b00:m0056",
+   "new": "life-sleep-b06:m0024",
+   "why": "Coffee order now oat milk cortado, not latte"
+  },
+  {
+   "old": "life-sleep-b00:m0034",
+   "new": "life-sleep-b06:m0029",
+   "why": "Marcus run moved from Saturdays to Sundays 07:30"
+  },
+  {
+   "old": "life-sleep-b04:m0005",
+   "new": "life-sleep-b06:m0029",
+   "why": "Saturday run with Marcus moved to Sundays"
+  },
+  {
+   "old": "life-sleep-b05:m0008",
+   "new": "life-sleep-b06:m0029",
+   "why": "Saturday Marcus run now Sunday 07:30"
+  },
+  {
+   "old": "life-sleep-b00:m0008",
+   "new": "life-sleep-b06:m0031",
+   "why": "Car insurer changed from Intact to Belairdirect"
+  },
+  {
+   "old": "life-sleep-b04:m0025",
+   "new": "life-sleep-b06:m0031",
+   "why": "Insurance shopped; moved to Belairdirect"
+  },
+  {
+   "old": "life-sleep-b00:m0017",
+   "new": "life-sleep-b06:m0018",
+   "why": "Hannah's phone number changed"
+  },
+  {
+   "old": "life-sleep-b02:m0034",
+   "new": "life-sleep-b06:m0022",
+   "why": "Nate's phone number changed"
+  }
+ ]
+}

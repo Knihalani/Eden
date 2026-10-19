@@ -1,0 +1,21 @@
+{
+ "batch": "code-sleep-b09",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "code-sleep-b04:m0008",
+   "new": "code-sleep-b09:m0003",
+   "why": "Latest CLI version now 2.7.1, not 0.9.3"
+  },
+  {
+   "old": "code-sleep-b05:m0021",
+   "new": "code-sleep-b09:m0006",
+   "why": "Clients table default sort now created_at desc"
+  },
+  {
+   "old": "code-sleep-b02:m0005",
+   "new": "code-sleep-b09:m0020",
+   "why": "pdf-perf benchmark now runs as CI job"
+  }
+ ]
+}

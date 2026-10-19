@@ -1,0 +1,76 @@
+{
+ "batch": "life-sleep-b13",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "life-sleep-b05:m0032",
+   "new": "life-sleep-b13:m0001",
+   "why": "Reno finish pushed to 2026-11-20"
+  },
+  {
+   "old": "life-sleep-b10:m0034",
+   "new": "life-sleep-b13:m0002",
+   "why": "Visit is now Ottawa trip Nov 13-15"
+  },
+  {
+   "old": "life-sleep-b11:m0013",
+   "new": "life-sleep-b13:m0007",
+   "why": "Lisbon flights rebooked to Dec 20 - Jan 2"
+  },
+  {
+   "old": "life-sleep-b11:m0021",
+   "new": "life-sleep-b13:m0007",
+   "why": "Kennel dates Dec 17-30 no longer match trip"
+  },
+  {
+   "old": "life-sleep-b11:m0014",
+   "new": "life-sleep-b13:m0008",
+   "why": "Leo's passport expiry is 2027-03-04"
+  },
+  {
+   "old": "life-sleep-b12:m0006",
+   "new": "life-sleep-b13:m0009",
+   "why": "School started Sep 2, not Sep 8"
+  },
+  {
+   "old": "life-sleep-b01:m0003",
+   "new": "life-sleep-b13:m0010",
+   "why": "Riya does Fri pickup now, not Hannah"
+  },
+  {
+   "old": "life-sleep-b01:m0024",
+   "new": "life-sleep-b13:m0013",
+   "why": "Piano moved from Mondays to Fridays"
+  },
+  {
+   "old": "life-sleep-b01:m0017",
+   "new": "life-sleep-b13:m0019",
+   "why": "Swim now Wednesdays 17:00 Level 4"
+  },
+  {
+   "old": "life-sleep-b04:m0007",
+   "new": "life-sleep-b13:m0019",
+   "why": "Swim now Wednesdays at Pam McConnell"
+  },
+  {
+   "old": "life-sleep-b12:m0023",
+   "new": "life-sleep-b13:m0024",
+   "why": "Riya's cleaning done Sep 9; next March"
+  },
+  {
+   "old": "life-sleep-b11:m0020",
+   "new": "life-sleep-b13:m0025",
+   "why": "Alfama Airbnb cancelled; hotel booked"
+  },
+  {
+   "old": "life-sleep-b12:m0010",
+   "new": "life-sleep-b13:m0025",
+   "why": "Alfama apartment cancelled, deposit moot"
+  },
+  {
+   "old": "life-sleep-b03:m0004",
+   "new": "life-sleep-b13:m0025",
+   "why": "Lisbon hotel chosen and booked"
+  }
+ ]
+}
