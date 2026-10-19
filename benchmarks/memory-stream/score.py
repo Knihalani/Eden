@@ -357,6 +357,7 @@ def main():
     ap.add_argument("--split", default="dev", help="dev | test | fresh (red-team sessions) | all")
     ap.add_argument("--sleep-tag", default="out")
     ap.add_argument("--strict", action="store_true", help="leak-free sleep store: rows visible after their batch")
+    ap.add_argument("--supersede", action="store_true", help="apply the cross-batch supersession pass (supersede.py)")
     ap.add_argument("--only", default="", help="judge tag: score only the events that tag's judge run covers")
     ap.add_argument("--sample", choices=["all", "judge"], default="all",
                     help="judge: score only the judge sample's events (same events as judge and pull)")
@@ -405,7 +406,7 @@ def main():
             clock = lambda e: times.get(e["id"], 0)
         elif a.store == "sleep":
             import sleep
-            rows = sleep.rows(stream, a.world, a.sleep_tag, strict=a.strict)
+            rows = sleep.rows(stream, a.world, a.sleep_tag, strict=a.strict, supersede=a.supersede)
             clock = lambda e: e["_order"]
         else:
             rows = oracle_store(stream, items, events)
