@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s002-e013",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both acknowledge Sentry/SENTRY_DSN, GrowthBook flag, Vitest snapshot, no stash, and leave dist file pending Marco."
+  },
+  {
+   "event": "code-s003-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both plan to read the job, add an atomic dedupe claim, and test double delivery; nothing known yet about existing store."
+  },
+  {
+   "event": "code-s003-e026",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add opt-in csv-only BOM with tests; B names snapshot convention, A verifies against staging."
+  },
+  {
+   "event": "code-s013-e004",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add --json, mirror existing command patterns, add a test; equivalent."
+  },
+  {
+   "event": "code-s013-e040",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both fail to recall known fact: CLI tests are Vitest snapshot tests of stdout; they hedge and go look."
+  },
+  {
+   "event": "code-s015-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both honor billing review rule, 1Password acme-dev, .env.local, and verify steps from repo."
+  },
+  {
+   "event": "code-s018-e016",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A recalls the known gotcha (/login in publicRoutes, afterSignInUrl /dashboard); B diagnoses generically."
+  },
+  {
+   "event": "code-s021-e018",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "B knows worker autoscales with KEDA on queue length and checks max replicas; A misses that."
+  },
+  {
+   "event": "code-s022-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both miss the known answer: Clerk JWTs verified with @clerk/backend in src/plugins/auth.ts; they search instead."
+  },
+  {
+   "event": "code-s022-e008",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "B knows Sentry via SENTRY_DSN and pino; A hedges on the exception tracker it should know."
+  }
+ ]
+}

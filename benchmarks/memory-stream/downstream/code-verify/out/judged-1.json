@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s027-e025",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "No known reason at this point; both investigate imports and git history sensibly."
+  },
+  {
+   "event": "code-s028-e006",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither notes branch already pushed or uses gh CLI to open PR; A adds a tangential Clerk note."
+  },
+  {
+   "event": "code-s030-e000",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "B gives stale state (render-pdf, 08-30); latest was editor-store branch pushed. A checks repo honestly."
+  },
+  {
+   "event": "code-s030-e013",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A uses pino redact as known; B hedges on the logger despite pino being a known fact."
+  },
+  {
+   "event": "code-s035-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add cdn.acme.dev to remotePatterns and verify; equivalent."
+  },
+  {
+   "event": "code-s035-e006",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly explain /_next/image proxying with per-size caching, citing the build check."
+  },
+  {
+   "event": "code-s035-e058",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A does what was asked and offers tabular-nums; B substitutes tabular-nums instead of the requested font."
+  },
+  {
+   "event": "code-s037-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both adopt no-major rule and classify PRs; A flags unpushed zod fix with staleness check, B uses gh."
+  },
+  {
+   "event": "code-s038-e007",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither recalls Turborepo/turbo.json or GitHub Actions ci.yml, the obvious levers for affected runs and caching."
+  },
+  {
+   "event": "code-s040-e008",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both swap logs, check publishable NEXT_PUBLIC_ key, start worker; B correctly notes redis already running."
+  }
+ ]
+}
