@@ -1,0 +1,321 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "protocol": "items",
+ "cases": [
+  {
+   "event": "life-s011-e000",
+   "responses": [
+    "Got all of that, thank you, and I won't bring up the second-child topic unless you do. Biscuit's siren solo is a proud beagle tradition.\nAction: Update what I have on file: Leo's birthday is July 17, 2019 (I had Oct 21, so I'll fix that and the yearly calendar entry), grade 2 at Morse Street PS with Ms. Alvarez, contact her through Edsby not email; you get Leo and Jun on Wednesdays and Hannah does Fridays; no meetings before 9:30 or after 16:30 and nothing after 15:00 on Fridays (replacing the 17:00 limit); Spanish with Carlos Méndez moves to Thursdays, homework review at 19:30 and the lesson at 8:00 pm on Zoom for 60 minutes (replacing the Tuesday 19:00 slot); and prefer Canadian retailers (MEC, Indigo, Simons) over Amazon when they ship within a week.",
+    "Thanks for the updates, noted all of it. Meetings now go between 9:30 and 16:30, with nothing after 15:00 on Fridays. You get Leo and Jun on Wednesdays and Hannah has Fridays. Spanish with Carlos is Thursdays at 8:00 pm on Zoom for 60 minutes, with your homework review at 19:30, and I'll favour MEC, Indigo and Simons over Amazon. Ms. Alvarez gets contacted through Edsby. Action: update your scheduling rules and calendar with the new meeting hours, Wednesday pickup and Thursday Spanish, and I'll keep to everything else going forward."
+   ]
+  },
+  {
+   "event": "life-s020-e016",
+   "responses": [
+    "I'll cover ser vs estar with emotions and locations, por vs para, and the subjunctive after cuando for future actions (cuando llegue a casa te llamo, not llego). I'll set the exercises up as short role-plays (ordering food, a work meeting, a doctor's visit) with Mexican vocabulary like carro and computadora, since that's how you learn best, and put an answer key at the end.\nAction: Draft the sheet and save it to your notes before your next Thursday 8:00 pm lesson with Carlos.",
+    "Yes, I'll build you a one-page drill sheet with three sections: ser vs estar (emotions and locations), por vs para, and the subjunctive after cuando for future events. The last one starts with your own example, corrected: 'Cuando llegue a casa, te llamo.' Each section will have a short rule and about eight fill-in-the-blank sentences, with an answer key on the back. Action: create the sheet in your notes and send it to you before your next lesson."
+   ]
+  },
+  {
+   "event": "life-s022-e004",
+   "responses": [
+    "I don't have Sam's usual coffee order or any food restrictions on hand, and I'd rather not guess for a long evening of interviews. Tell me what he likes and I'll set up a delivery to Riverdale, room 214, for around 3:30, after checking the school office accepts deliveries.\nAction: Find cafes near Riverdale that can deliver by 3:30 while I wait for his order.",
+    "I'll send Sam an oat-milk flat white, with nothing hazelnut-flavoured, and a vegetarian snack with no fish or seafood to room 214 at Riverdale for around 3:30. He has interviews until 8 with no real break, so something filling is better than something sweet. I'll also check that the school office accepts deliveries.\nAction: Find a cafe near Riverdale that can deliver by 3:30, and confirm the order with you before I place it."
+   ]
+  },
+  {
+   "event": "life-s025-e032",
+   "responses": [
+    "That's lovely, I'm glad the flowers from the Mumbai florist landed and that the call with her went so well. I'll note Mom's birthday as Nov 3.\nAction: Add Mom's birthday, Nov 3, as a yearly calendar entry with a reminder a week before, note the Mumbai florist as your usual, and hold the book order for Priya until you decide tonight.",
+    "That sounds like a lovely birthday for your mom, and the flowers clearly landed. I'll hold the Priya book decision until tonight. Action: add your mom's birthday (November 3) to the calendar as a yearly event with a reminder a week before, and note the Mumbai florist so it's easy to repeat next year."
+   ]
+  },
+  {
+   "event": "life-s028-e010",
+   "responses": [
+    "I'll pull the grocery spending from your TD statements for October, August and September and compare the three months. I don't have the figures in front of me, so I won't estimate them.\nAction: Open the TD statements for Aug, Sep and Oct, total the grocery transactions for each month, and send you the three numbers with the differences and which stores I counted.",
+    "I'll pull this from the TD joint chequing statements, since that's the household bills account, and check your TD Visa too in case some groceries went on it. I won't touch your EQ Bank savings. Action: read the October, September and August TD statements, total the grocery spending for each month, and send you the three numbers with the comparison."
+   ]
+  },
+  {
+   "event": "life-s038-e024",
+   "responses": [
+    "Partly. Written Portuguese is quite readable if you know Spanish, but spoken Portuguese sounds very different (nasal vowels, softened consonants), so you'll understand more on signs and menus than in conversation. In Lisbon, slow Spanish plus a few key Portuguese phrases usually gets you by, and many people will switch to English. Action: add a short Portuguese cheat sheet (greetings, thanks, ordering, directions) to your Lisbon note.",
+    "Partly. Written Portuguese is quite readable if you know Spanish, so signs and menus will mostly make sense, but spoken Portuguese sounds very different and you'll often miss it. Many people in Lisbon will also switch to English, so I'd learn a handful of Portuguese phrases and not lean on Spanish alone.\nAction: Put together a short Lisbon cheat sheet and a role-play or two (ordering food, asking directions), since role-play is how you learn best."
+   ]
+  },
+  {
+   "event": "life-s046-e041",
+   "responses": [
+    "The thing I have noted is the Canadian Tulip Festival in Ottawa in May 2026, which you'd floated for Sam's parents, with a note to check dates in April; I haven't confirmed this year's dates against the long weekend yet. If Grace and Daniel are in Ottawa, you'd likely want to drive the Mazda and leave early Friday with the Big Apple stop in Colborne, which Leo treats as a rule.\nAction: Check the festival dates for May 2026 against the long weekend and send you what's on, plus the drive plan.",
+    "Adding both to Thursday's to-do list, Nate's backsplash decision and the Morse Street forms, both due Fri 30 Jan. I don't have a note of what you looked into last spring, and I don't know where Grace and Daniel live, so I can't say what's on up there in May yet.\nAction: Search your notes and past chats for last spring's research, and once I know the town, look up events around the May long weekend."
+   ]
+  },
+  {
+   "event": "life-s047-e019",
+   "responses": [
+    "Sending the school council reply now. Your Mazda CX-5 is with Intact and renews each April, so I'd start getting quotes about one to two months before renewal, around February or early March, so you have time to compare and can still cancel cleanly. I can't tell you the notice terms for sure without the policy, so I'd check Intact's cancellation terms and your renewal letter instead of guessing. Action: send the reply, pull up the Intact policy documents to confirm notice and cancellation terms, and set a reminder to start quotes.",
+    "For quotes, I'd start about 4 to 6 weeks before the renewal date, which should be on the letter, so there's time to compare and line up the new policy before the old one lapses. Notice to cancel depends on your insurer and province, so I won't guess; the safe order is usually to get the new policy in place first, then cancel the old one in writing.\nAction: Send the school council reply now, then find the renewal date in the letter or your email and set a reminder to start quotes 6 weeks ahead."
+   ]
+  },
+  {
+   "event": "life-s050-e007",
+   "responses": [
+    "I'll check your Toronto Public Library account for ready holds, starting with the Leslieville branch and then Pape/Danforth. Your library card expires 2026-02-14, so it's also worth renewing it soon so holds don't lapse. Action: look up your holds, tell you which are ready and where, and set a reminder to renew your card before it expires.",
+    "I can check, but I don't have your library account details in front of me right now. Action: look up your Toronto Public Library account for holds that are ready for pickup and tell you the title and branch for each, plus how long each is held."
+   ]
+  },
+  {
+   "event": "life-s050-e016",
+   "responses": [
+    "A dinosaur trip with Leo sounds great. I'll search for 3-night hotels in Drumheller for March break week (the week of the 16th) and check Royal Tyrrell Museum admission for Leo's age. I need to confirm the exact nights, and whether you're flying into Calgary and renting a car, which affects where to stay. Action: search Drumheller hotels for a 3-night stay in that week, pull Tyrrell child pricing, and ask you to confirm dates and travel before I book anything.",
+    "Got it, March break week of the 16th, just you and Leo. Per your hotel rule I'll only consider fully refundable rates, ideally walkable to transit (I'll tell you if Drumheller doesn't really offer that). Leo was born July 17, 2019, so he'll be 6 then and I'll use that for the Tyrrell child ticket price, and because 3 nights will be over $100 I'll check with you before booking anything.\nAction: Find fully refundable hotel options for 3 nights, check Tyrrell's price for a 6-year-old, and send both for your OK. Which 3 nights do you want?"
+   ]
+  },
+  {
+   "event": "life-s053-e003",
+   "responses": [
+    "Congratulations, Riya the godmother, that's wonderful! Ira born February 14, 2026 in Vancouver, a Valentine's baby. Action: add Ira's birthday (February 14) to the calendar as a yearly event with a reminder a week before, like your other family birthdays, and when you have a moment I can also ask you for Mei's birthday since I don't have it yet.",
+    "Congratulations to you, Kabir and Mei. Ira born on Valentine's Day, February 14, 2026, in Vancouver, and you're her godmother, that's a big one.\nAction: Save Ira's birthday and your godmother role to your notes, add Feb 14 as a yearly calendar entry with a reminder a week before (tell me if you'd rather not), and get back to your Spanish worksheet whenever you're ready."
+   ]
+  },
+  {
+   "event": "life-s056-e000",
+   "responses": [
+    "Sam's birthday is March 22 and he'd rather have a quiet dinner at home than a party, so I'd plan a cosy vegetarian dinner (no fish or seafood) with a gift that isn't scented, since strong fragrances give him migraines, so no candles, soap or perfume. For the anniversary on June 16 (dinner for two on Tue 2026-06-16), restaurant reservations open in April, and your shortlist is Edulis, Ascari Enoteca and Planta Queen, which has vegetarian options. You'll also need a sitter for Leo: Maya R. ($20/h), Josie T. ($22/h) or Ana P. ($17/h). Action: put a reminder in April to book the anniversary dinner and ask a sitter, and ask you what Sam's been into lately so I can suggest a few gift ideas.",
+    "Happy to help, but I don't have Sam's birthday or your anniversary date in front of me, and I don't want to guess either. If you tell me the dates and a few things he's been into lately, I can suggest gift ideas and a celebration plan, and work backwards from the anniversary so you're not planning in the last week. Action: ask you for the two dates and his recent interests, then draft a gift shortlist and a timeline with reminders."
+   ]
+  },
+  {
+   "event": "life-s058-e010",
+   "responses": [
+    "I don't have the results of that 27 Feb search saved, so I can't say what we found. Since you normally prefer driving the Mazda to Ottawa (about 452 km, 4 h 35 min without traffic, leaving early Friday), that search was probably just a comparison.\nAction: Rerun the VIA Rail Friday evening times from Toronto to Ottawa and put them next to the drive, so you can compare.",
+    "I don't have the results from that 27 Feb VIA Rail search saved, so I can't tell you what we found, and I won't guess at times. Rerunning it is quick.\nAction: Look up VIA Rail Friday evening departures from Toronto to Ottawa (times, duration, fares) for the next Friday unless you tell me a different date, and put the drive time next to it for the comparison."
+   ]
+  },
+  {
+   "event": "life-s060-e000",
+   "responses": [
+    "That sounds draining, standing the whole way both directions with the bag digging into your shoulder. A packed streetcar twice in one day would wear anyone out.\nAction: Just listen, so go ahead and tell me more if you want to get it out.",
+    "That sounds exhausting, a packed streetcar both ways with a bag cutting into your shoulder is a lot. Nothing needs doing from my side tonight. Action: I'll hold anything non-urgent until tomorrow so you can put your feet up."
+   ]
+  },
+  {
+   "event": "life-s060-e002",
+   "responses": [
+    "I'm sorry, Riya, thinking of you and your dad tomorrow, and a lighter day sounds right. Tomorrow is Wednesday the 18th, and from your usual schedule the likely things to thin are the Payouts standup at 09:45 and your 11:30 weekly 1:1 with Tom, but I'll look at the actual calendar before suggesting anything. I'll keep the evening completely clear for your diya. Action: pull up tomorrow's calendar, list what could be moved, declined or made async, and wait for your OK before changing anything.",
+    "I'm so sorry, Riya. I'll look at tomorrow and clear space so it isn't a sprint, and keep the evening free for your diya. Since you like a lighter schedule around the date each year, I can also set a yearly reminder to protect around March 18. Action: pull up tomorrow's calendar, suggest what to move, decline or shorten, and check with you before changing anything."
+   ]
+  },
+  {
+   "event": "life-s063-e009",
+   "responses": [
+    "On it. I'll sort the March break photos by date, rename them with the date first, and move the blurry ones into a separate folder for you to review rather than deleting anything. Then I'll go through the unopened newsletters from this week and give you a line or two on each.\nAction: Find the March break folder in Drive and start with the rename, keeping a list of old and new names so it can be undone, then summarize the roughly 12 unread newsletters.",
+    "Yes, I can do both. For the photos I'll rename them by date and move the blurry ones into a separate folder rather than deleting anything. For the newsletters, I'll summarize the unopened ones and leave out promos from the senders you unsubscribed from in January (Old Navy, Wayfair, Uber Eats, Lululemon, Dyson). Action: start on the March break photos in Drive, then send you a short digest of this week's unopened newsletters."
+   ]
+  },
+  {
+   "event": "life-s066-e010",
+   "responses": [
+    "Here's the shape I'd use for the appendix, in your style with short paragraphs, no em dashes and 'merchant' throughout. Fees: Stripe 1.5% (min $0.50), Square 1.75%, Shopify Payments 1.5%, Helcim has no instant product; all flat percentages with no cap. Fee display: net received is the most prominent number in all three. Complaints: 148 posts, with delayed 'sent' payouts (41) and fees on failed payouts (23) the top themes. Real-Time Rail: limited phased launch targeted for 2026, so card-based instant payouts stay the practical rail. Action: write it up as a half-page appendix with a short paragraph for each of the four, using 'use' not 'leverage', and put it in the PRD draft for you to review.",
+    "Here's the shape for a half-page appendix. Fees: Stripe 1.5% (min $0.50), Square 1.75%, Shopify Payments 1.5%, Helcim has no instant product, all flat percentages with no cap. Fee display: Stripe, Square and Shopify all make the net-received amount the most prominent number. Complaints: of 148 posts, top themes are payouts marked 'sent' but not received (41) and fees charged on failed instant payouts (23); Real-Time Rail is phased for 2026, so card-based instant payouts stay the practical rail. Action: write it up as four short blocks with those numbers and add it to the PRD draft for you to review."
+   ]
+  },
+  {
+   "event": "life-s068-e021",
+   "responses": [
+    "Booking Dr. Lin at Queen East Dental for Apr 22, late morning. Apr 22 is a Wednesday and your 1:1 with Tom Becker is 11:30-12:00, so I'd aim for a slot that ends well before 11:30, like 10:00 or 10:30; if nothing fits I'll offer the nearest other days.\nAction: Request Dr. Lin at Queen East Dental (1046 Queen St E) for Apr 22 around 10:00-10:30 and confirm the time with you.",
+    "I'll look at Dr. Lin's availability for Wed 22 April, aiming for late morning. I'll also check your calendar for conflicts at that time before holding anything. Action: check Dr. Lin's openings on April 22 (late morning first), confirm there's no clash on your calendar, then book it and confirm the time with you."
+   ]
+  },
+  {
+   "event": "life-s068-e024",
+   "responses": [
+    "Happy to. Since Jun's big sister is Ellie, I'll keep everything dairy-free, so no cheese, cheddar snacks or milk chocolate, and nut-free because of Leo's tree nut allergy, checking labels for 'may contain'. I'd think fruit, cut veggies, crackers, popcorn and juice boxes would be enough for three kids. Action: build a PC Express cart with those, look for a 3:00 pickup slot tomorrow (your usual Saturday slot at Loblaws Lakeshore won't apply), and show you the cart before I check out.",
+    "Sure. Before I order, do any of the three kids have allergies or foods to avoid? I'd rather ask than guess. I'm thinking fruit, crackers, veggies with dip and juice boxes. Action: build a PC Express cart with simple snacks for three kids, check for a 3:00 pickup slot tomorrow, and show you the cart plus the allergy question before I check out."
+   ]
+  },
+  {
+   "event": "life-s076-e007",
+   "responses": [
+    "I don't have your pickup time for next Friday, so I can't give you an exact arrival yet. Ottawa from Leslieville is about 4 h 35 min without traffic (452 km), but leaving after pickup means you'd hit Friday traffic on the 401, so add a buffer on top, plus the Big Apple stop in Colborne that Leo counts as a rule. Action: ask what time pickup ends, then work out a realistic arrival at Grace and Daniel's with traffic and the stop, and give you that.",
+    "I don't have where Sam's parents live or what time school pickup is, so I can't give you an honest arrival time yet. I'll check your contacts and calendar for both.\nAction: Look up Sam's parents' address and Friday pickup time, then estimate the drive for a Friday departure right after pickup; if I can't find them, I'll ask you for the town and pickup time."
+   ]
+  },
+  {
+   "event": "life-s077-e007",
+   "responses": [
+    "The Leslieville Farmers' Market opens Sun 10 May (Mother's Day) and runs Sundays 9:00 to 14:00 at Jonathan Ashbridge Park, 1515 Queen St E, through 25 October. Action: offer to add opening day to your calendar.",
+    "I don't have the start date for this year's Leslieville Farmers' Market saved, so I don't want to guess. Action: look up the market's 2026 season dates and hours and report back, then offer to add opening day to the calendar."
+   ]
+  },
+  {
+   "event": "life-s077-e017",
+   "responses": [
+    "Sending the reply to Jenna now. For drop-offs, I don't have your nearest locations saved and the rules differ by item, so I'd rather check than guess: paint cans and old printers are usually household hazardous waste or e-waste, and batteries often have separate retail drop-off points. Action: send the Jenna email, then look up City of Toronto drop-off options near Leslieville for paint, electronics and batteries and send you the closest ones with hours.",
+    "Sending the reply to Jenna. For paint cans, a dead printer and batteries, those are three different drop-off types (paint is hazardous waste, the printer is e-waste, batteries often have retail drop boxes), so I'd rather check what's actually near you in Leslieville than guess.\nAction: Send the street party reply, then look up the City of Toronto's drop-off options for paint, electronics and batteries closest to you and send addresses and hours."
+   ]
+  },
+  {
+   "event": "life-s082-e000",
+   "responses": [
+    "The one that probably matters is the Queen St E watermain work between Leslie and Jones from May 19, about 9 weeks of lane restrictions and 501 streetcar delays; if that's your streetcar to King St West on your Tuesday and Thursday office days, allow extra time. Otherwise, the Leslieville Flea is Sun May 24 at Ashbridge Estate, Hearth Bakehouse opens May 15, the movie night poll closes May 31, and the Green P lot at Coxwell & Queen closes June 1-14, next month.\nAction: If your commute does use the 501, I'll put a heads-up on your calendar for May 19, and I can add the Flea on May 24 too.",
+    "Short version: not much is urgent. The one to know about is watermain work on Queen St E between Leslie and Jones starting May 19, with eastbound lane restrictions on weekdays 7am-7pm for about 9 weeks, so expect 501 streetcar delays. The rest is optional: the Leslieville Flea is May 24 at Ashbridge Estate, the movie night poll closes May 31, and Hearth Bakehouse opens May 15. Action: offer to add the May 19 watermain start and the May 24 flea to your calendar, and a reminder for the May 31 poll."
+   ]
+  },
+  {
+   "event": "life-s087-e016",
+   "responses": [
+    "On it. I'll go through this week's inbox and sort it into needs a reply, just FYI, and safe to ignore, and I won't send anything.\nAction: Scan this week's email and give you a short list with who wrote, what they want, and any deadline, with the ones that actually need you at the top.",
+    "On it. I'll go through this week's inbox and sort it into needs a reply, just FYI, and safe to ignore, skipping promos entirely (including from the senders you unsubscribed from in January). I won't send anything.\nAction: Scan this week's email and give you a short list with who wrote, what they want, and any deadline."
+   ]
+  },
+  {
+   "event": "life-s087-e029",
+   "responses": [
+    "Here's a draft: 'Hey Hannah! Leo and I are heading to Riverdale Park East tomorrow around 10:30 for the playground and the market. Want to come with Ellie and Jun? No pressure if the day's already full.' If we end up grabbing market snacks, I'll keep Ellie's dairy allergy in mind. Action: send it to Hannah at +1 416-555-0163 once you say go.",
+    "Here's a draft: 'Hey! Leo and I are heading to Riverdale Park East tomorrow around 10:30 for the playground and the market. Want to come with the kids? No pressure if the week wiped you out.'\nAction: Hold it for your OK, then send it to Hannah as is or with your edits."
+   ]
+  },
+  {
+   "event": "life-s087-e031",
+   "responses": [
+    "Sending the Hannah text now. I don't have the final Instant Payouts v1 scope in front of me, so I'll pull what's actually in v1 from the project docs rather than guess at features, and keep the blurb to 4 or 5 lines for her sales deck.\nAction: Send the text to Hannah, then read the v1 scope and draft the blurb for you to review before it goes to Olivia.",
+    "Sending the Hannah text now. For Olivia, I'll keep the Instant Payouts v1 blurb to what merchants get and leave out any date, since Aisha hasn't signed off on one; if a timeline is needed it says 'target' only. I'll write it in your style, short, no em dashes, 'merchant' not 'customer', and say EFT where payouts are mentioned, not wire. Action: send the Hannah text, pull the v1 scope from the rollout doc, and put a 4-5 line draft for Olivia in your drafts, unsent, for you to review."
+   ]
+  },
+  {
+   "event": "life-s088-e038",
+   "responses": [
+    "Here's a draft: 'Hi team, the beta passed 10,000 payouts this week. That is 10,000 times a merchant got their money faster, and it comes from the steady work each of you put in. Thank you, in particular [name] for [specific thing] and [name] for [specific thing].' It's calm and concrete, with no exclamation marks or em dashes.\nAction: Send me one or two names and what they did and I'll fill the brackets, then save the final version for you to post tomorrow.",
+    "Here's a draft: 'Hi team, the beta passed 10,000 payouts this week. That's 10,000 times the product did its job, and it comes from the steady work each of you put in. Thank you.' It's warm and plain, with no hype.\nAction: Tell me one or two people and what they did and I'll add a specific thank-you, then save it for you to post tomorrow."
+   ]
+  },
+  {
+   "event": "life-s092-e000",
+   "responses": [
+    "Your Thursday yard waste pickup resumes Thu 2026-04-09 and then runs every other Thursday, so the next two are April 9 and April 23. Use paper yard waste bags or labelled rigid containers, no plastic, and bundle branches under 7.5 cm, max 1.2 m long and 20 kg. Paper bags are cheapest at Home Depot on Leslie St, a 10-pack for $11.98. Action: add April 9 and April 23 to the shared family calendar (Sam will get the update), unless you'd rather keep them on your own.",
+    "I don't have your yard waste pickup schedule saved, and I don't want to guess a date. Action: look up the City of Toronto collection calendar for your address, then add the next two yard waste pickup dates to your calendar and send you the bag and bundling rules."
+   ]
+  },
+  {
+   "event": "life-s098-e004",
+   "responses": [
+    "Sorry about the dehumidifier. Your receipts get auto-labelled 'Receipts' now, but that filter is newer than a summer purchase, so I'll search your whole inbox as well as that label. Once I find the receipt I'll check the purchase date against the warranty terms.\nAction: Search the Receipts label and your inbox for the dehumidifier receipt, then check the warranty on it and tell you whether you're still covered.",
+    "Sorry about the dehumidifier. I'll search for the receipt and then check the warranty, since I don't know the brand or exact purchase date yet and many warranties are around a year, which could make last summer borderline. Action: search your email and Drive for a dehumidifier receipt from last summer, then look up the manufacturer's warranty terms and report back whether it's still covered."
+   ]
+  },
+  {
+   "event": "life-s105-e004",
+   "responses": [
+    "Booking East End Plumbing for Monday morning, 29 Jun. For the Lattice self-review due Fri 10 Jul, I'll remind you to start on Tue 30 Jun, since Monday is the plumber, and again on Mon 6 Jul, the week it's due.\nAction: Book East End for Mon 29 Jun morning at 41 Curzon St, then set the two reminders for the Lattice self-review.",
+    "Booking East End Plumbing for Monday morning, 29 Jun. For the Lattice self-review due Fri 10 Jul, I'll remind you to start on Tue 30 Jun, since Monday is the plumber, and again on Mon 6 Jul, the week it's due.\nAction: Book East End for Mon 29 Jun morning, then set the two reminders for the Lattice self-review."
+   ]
+  },
+  {
+   "event": "life-s105-e032",
+   "responses": [
+    "From what I have, baking on weekend mornings with Leo is one of your favourite ways to unwind (he's good at stirring, bad at waiting). The basement kitchen only has a microwave, an induction hotplate and the old fridge, so I'd keep tomorrow no-oven and simple, something stovetop in the cast iron (the old aluminium pot won't work on the hotplate), and leave the rest of the day open.\nAction: Pick one easy recipe Leo can help stir and keep tomorrow afternoon clear, and I'll set it up if you say yes.",
+    "I don't have a record of what you said helps you unwind on weekends, and I'd rather not make it up when you're fried. I can search your notes and past chats for it, and meanwhile keep tomorrow low-effort: a slow morning, one easy thing, and nothing else scheduled.\nAction: Search your notes for what helps you unwind and come back with a simple plan for tomorrow."
+   ]
+  },
+  {
+   "event": "life-s106-e005",
+   "responses": [
+    "Holding the order. The basement kitchen has a microwave, an induction hotplate and the old fridge, and the hotplate needs flat-bottom induction pans: the cast iron works, the old aluminium pot doesn't. When you ask Sam, note that he gets migraines from strong fragrances, so the Febreze plug-in and Glade candles are out and the unscented charcoal bags are the safe option.\nAction: Keep the order on hold, and for the week's cooking I can suggest simple one-pan meals that suit cast iron and the microwave, vegetarian for Sam with no fish, and nothing with cashews or pistachios for Leo.",
+    "I don't have your basement kitchen setup saved, and I'd rather not guess when you're planning a week of cooking. I'll check your notes for it first, and keep the order on hold.\nAction: Search your notes for the basement kitchen, and if nothing turns up, ask you to list what's down there (appliances, sink, fridge) so I can suggest realistic meals."
+   ]
+  },
+  {
+   "event": "life-s108-e000",
+   "responses": [
+    "On it. I'll look for an upper-intermediate Spanish grammar book that focuses on the subjunctive, with lots of exercises and a full answer key, and compare a few on content, reviews and price. I don't know your budget or whether you want Latin American Spanish specifically, so I'll flag that for each one.\nAction: Send you a shortlist of 2-3 books with prices and what each covers, then order the one you pick.",
+    "Since you prefer Canadian retailers and skip Amazon when a local option ships within a week, I'll start with Indigo. I'll look for a B2-level Spanish grammar book with a strong subjunctive section, plenty of exercises and an answer key, and check that its examples aren't all Castilian, since you want Mexican vocabulary.\nAction: Search Indigo for 2-3 candidates, check shipping time, and send you the shortlist with prices, then order your pick (falling back to another Canadian retailer only if Indigo can't ship within a week)."
+   ]
+  },
+  {
+   "event": "life-s113-e000",
+   "responses": [
+    "Done on both counts. I'll switch the out-of-office off for tomorrow morning and change the message to something like: 'Hi, I'm back in the office but still catching up on email, so replies may take a little longer. If it's urgent, please let me know. Best, Riya'. Action: turn the auto-reply off for tomorrow morning, update the message with that wording, and show you the final text to confirm.",
+    "On it. I'll turn the out-of-office off for tomorrow morning and swap the message to: 'Hi, I'm back but still catching up, so replies may be a little slower than usual. If it's urgent, please let me know. Best, Riya'. Action: switch off the auto-reply for tomorrow morning, update the message with that text, and show you the final wording to approve."
+   ]
+  },
+  {
+   "event": "life-s115-e000",
+   "responses": [
+    "Yay, Lisbon is booked! I'll put the trip on the family calendar so Sam sees it: depart Toronto Pearson on TAP on 2026-12-18 and return 2026-12-30. I don't have the flight numbers, times or booking reference yet. Action: add the trip to the family calendar for those dates, and ask you for the flight times and confirmation code to add to the event.",
+    "Lisbon flights on TAP from Toronto Pearson, leaving Fri 18 Dec 2026 and back Wed 30 Dec 2026, going on the family calendar now. I don't have flight times, so I'll add it as a multi-day entry and fill in times if you send me the confirmation.\nAction: Add 'Lisbon (TAP from Pearson), 18 Dec to 30 Dec 2026' to the 'Malhotra-Okafor family' calendar so Sam sees it."
+   ]
+  },
+  {
+   "event": "life-s126-e005",
+   "responses": [
+    "Sorry about the heel. It may be worth mentioning the plantar fasciitis from earlier this year to the physio, even though Marcus's calf stretches helped then. I'll look for next week after 5:30 pm on a weekday, which you prefer for appointments like this, or Saturday after your 7:30 run with Marcus, and your Lumen Pay wellness account may cover part of it.\nAction: Find physio openings next week (weekdays after 5:30 pm or Saturday late morning onward), book the earliest one that works, and tell you the time and cost.",
+    "Sorry about the heel, morning soreness after a long run is worth getting looked at, so booking is a good call. I'll look for physio openings next week after work and on Saturday, and I'll mention the first-thing-in-the-morning pain when I book. Action: check your calendar and find physio slots next week (evenings) or Saturday, hold the best one, and confirm it with you before booking."
+   ]
+  },
+  {
+   "event": "life-s131-e022",
+   "responses": [
+    "Here's a draft: 'Neha, [partner's name], here's to a lifetime of one of you saying I'm fine with whatever, and the other knowing that's a trap. May you always agree on the thermostat, and when you don't, may the right one win gracefully. Congratulations, cheers.' I don't have the partner's name, so there's a placeholder.\nAction: Fill in the name once you send it, and adjust the jokes if you want something more specific to the two of them.",
+    "Here's a draft: 'Neha, [partner's name], here's to a lifetime of one of you saying I'm fine with whatever, and the other knowing that's a trap. May you always agree on the thermostat, and when you don't, may the right one win gracefully. Congratulations, cheers.' I don't have the partner's name, so there's a placeholder.\nAction: Fill in the name once you send it, and adjust the jokes if you want something more specific to the two of them."
+   ]
+  },
+  {
+   "event": "life-s136-e000",
+   "responses": [
+    "Got it, I'll move Leo's piano with Mrs. Greene to Fridays at 4:15 pm starting September 2026, since Mondays now clash with your 'Roadmap review - Riya' block. I'll keep the lesson length the same as the current Monday one. Action: update the family calendar with the new Friday series from September, end the Monday series at the end of August, and tell you the first Friday date so Sam sees the change.",
+    "Moving Leo's piano with Mrs. Greene from Mondays 4:30-5:15 to Fridays at 4:15 pm starting September 2026, which clears the clash with your Roadmap review block. I'll keep it at her place on Pape Avenue and the same 45-minute length unless you tell me otherwise, and Sam gets notifications from the shared calendar so he'll see the change.\nAction: Open the shared family calendar (my notes have it under two similar names, 'Malhotra-Okafor family' and 'Okafor-Malhotra family', so I'll confirm the right one first), end the Monday series before September, add a weekly Friday 4:15 pm series from September, and check Fridays for conflicts."
+   ]
+  },
+  {
+   "event": "life-s140-e033",
+   "responses": [
+    "I'll read Sam's text first, since it may already settle dinner. For tonight with no hotplate, that means takeout or something microwave-friendly, and whatever we pick needs to be vegetarian with no fish or seafood for Sam, free of cashews and pistachios for Leo, and with no cilantro for you.\nAction: Read Sam's message, then suggest 2-3 options that fit and place the order once you pick.",
+    "I can't see Sam's text from here, so I'll pull it up first and see what he said before suggesting anything. Once I know that, I'll find a hotplate-free dinner you can get tonight, like takeout or delivery. Action: read Sam's text about dinner, then give you two or three options that fit and ask which to order."
+   ]
+  },
+  {
+   "event": "life-s141-e000",
+   "responses": [
+    "I don't have your collection area or this year's yard waste schedule saved, so I can't give you an end date without guessing. Six bags is a fair amount, so it's worth getting the last pickup date right.\nAction: Look up this year's yard waste schedule for your address on your city's collection calendar and tell you the last pickup date; if I can't find your address, I'll ask you for the postal code.",
+    "I don't have a confirmed 2026 end date for you. My notes only have last season's pickups (the last was Tue 9 Dec 2025, paper bags only, no plastic), and the notes on your collection day don't agree with each other, so I won't guess.\nAction: Look up this fall's yard waste schedule on the City of Toronto's collection calendar for your address and tell you the last pickup date; keep the leaves in paper bags meanwhile."
+   ]
+  },
+  {
+   "event": "life-s148-e000",
+   "responses": [
+    "Adding the Lumen Pay quarterly planning offsite on 2026-11-12 (Thursday) at the Gladstone House, 9:00 am to 6:00 pm. Two things to flag: Thursdays Leo is in the after-school program until 5:45 pm and the offsite runs to 6:00, so someone else may need to pick him up. Also, the idea of asking Aisha to move the Fri 13 Nov GA retro to Thursday now clashes with the offsite, so that's still unresolved. Action: add the event, then ask you whether Sam can cover Leo's pickup and whether to propose another time for the retro.",
+    "Got it, congrats on it being confirmed. I'll add the Lumen Pay quarterly planning offsite on 2026-11-12 at the Gladstone House, 9:00 am to 6:00 pm. Action: create the calendar event and check whether anything else that day clashes, then tell you if it does."
+   ]
+  },
+  {
+   "event": "life-s150-e004",
+   "responses": [
+    "Here's a checklist for DES-341, the two schedule picker copy variants: 1) does each say clearly what happens and when, 2) is the tone consistent with the rest of the product copy, 3) does it fit the UI without truncating, 4) are any timing or fee claims accurate, and 5) can you pick one and say why in a sentence. Once you pick, replying on DES-341 should unblock PAY-1182.\nAction: Save the checklist to a note linked to DES-341 and nudge you after lunch.",
+    "Here's a quick checklist for DES-341: does each variant say what the merchant needs to do in plain words, is the tone consistent with the rest of the flow, is the length right for the space, and are the terms accurate. When you give Diego feedback, put it as a Figma comment, not a DM, and frame it as the problem you see, not a rewrite. Action: put this checklist in a note, with comment-ready problem statements for each variant, and remind you after lunch."
+   ]
+  },
+  {
+   "event": "life-s152-e004",
+   "responses": [
+    "I don't want to guess at what you wrote when you're about to commit to something on Monday, so I'll read your actual sent mail instead of going from memory. That way you'll have the exact wording and dates you gave Tom.\nAction: Search your sent mail for messages to Tom Becker about roadmap timing and quote the exact lines back to you.",
+    "Good idea to check before Monday rather than rely on memory. I'll go through your sent mail to Tom for anything about roadmap timing and give you his exact wording and dates, so you can see what you actually committed to. Action: search sent mail to Tom for roadmap and timing emails, and send you a short summary with direct quotes."
+   ]
+  },
+  {
+   "event": "life-s155-e013",
+   "responses": [
+    "Here's a short draft for Aisha, not sent: 'Hi Aisha, catching up on the readiness doc. Rollback: I'll add the flag name, but who should own weekend flips? Error budget: I'd suggest per day, any objection? Also PAY-1227, the on-call runbook update, has no owner. Can someone on your side take it?' Action: show you the draft and send it to Aisha on Slack once you say go.",
+    "Here's a short draft for Aisha, not sent: 'Hi Aisha, catching up on the readiness doc. Rollback: I'll add the flag name, but who should own weekend flips? Error budget: I'd suggest per day, any objection? Also PAY-1227, the on-call runbook update, has no owner. Can someone on your side take it?' It uses commas and full stops, no em dashes, and keeps each point to one or two sentences. Action: show you the draft and send it on Slack once you approve."
+   ]
+  },
+  {
+   "event": "life-s155-e022",
+   "responses": [
+    "For Tom's team calendar, I'd block: early leave at 5:00 pm on Thu 10 Dec (Leo's winter concert, which you've already told Tom about), and out of office from Mon 21 Dec through Fri 1 Jan, since you fly out Sun 20 Dec at 22:10 and land back in Toronto Sat 2 Jan. Leo's last school day is Fri 18 Dec, so tell me if you want that afternoon off too. For 'that thing', your snow day list has floor is lava, sock skating relay, blanket fort and more, and Leo wants floor is lava again, but I can't be sure that's the one. Action: add those entries to the team calendar draft for your OK, and ask Leo which game he means.",
+    "For Tom's calendar, I don't have your December plans in front of me, so I'd check before telling you what to block, and I need to confirm any days off you've already planned. For Leo's 'that thing' from last winter's school closure, I don't have a record of it, so I'd rather search your notes and messages than guess. Action: scan your December calendar for travel and school events, list the OOO and early-leave days you'd likely need to block, and also search your notes for the school-closure day last winter."
+   ]
+  }
+ ]
+}
