@@ -1,0 +1,590 @@
+{
+ "batch": "a03",
+ "model": "sonnet (claude-code subagent)",
+ "cases": [
+  {
+   "event": "code-s075-e023",
+   "predictions": []
+  },
+  {
+   "event": "code-s075-e032",
+   "predictions": []
+  },
+  {
+   "event": "code-s076-e012",
+   "predictions": []
+  },
+  {
+   "event": "code-s076-e021",
+   "predictions": []
+  },
+  {
+   "event": "code-s077-e005",
+   "predictions": [
+    {
+     "row": "code-sleep-b06:m0018",
+     "if": [
+      "dev dependency",
+      "add tsx",
+      "add a package",
+      "install"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b06:m0005",
+     "if": [
+      "dependency",
+      "lockfile",
+      "install"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s077-e015",
+   "predictions": []
+  },
+  {
+   "event": "code-s077-e018",
+   "predictions": []
+  },
+  {
+   "event": "code-s077-e019",
+   "predictions": []
+  },
+  {
+   "event": "code-s078-e023",
+   "predictions": []
+  },
+  {
+   "event": "code-s080-e014",
+   "predictions": [
+    {
+     "row": "code-sleep-b06:m0008",
+     "if": [
+      "tag the release",
+      "tag",
+      "release",
+      "9th"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b06:m0018",
+     "if": [
+      "cli-table3",
+      "pulled in",
+      "dependency"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b03:m0016",
+     "if": [
+      "open the pr",
+      "commit it",
+      "pr"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b06:m0019",
+     "if": [
+      "commit it",
+      "commit"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s080-e020",
+   "predictions": [
+    {
+     "row": "code-sleep-b06:m0020",
+     "if": [
+      "pool max",
+      "too many clients",
+      "pool",
+      "connections"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b00:m0032",
+     "if": [
+      "pg",
+      "pool",
+      "pgbouncer"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s080-e024",
+   "predictions": [
+    {
+     "row": "code-sleep-b06:m0018",
+     "if": [
+      "msw",
+      "dev dependency",
+      "add it"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b06:m0005",
+     "if": [
+      "dev dependency",
+      "install",
+      "lockfile"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s080-e028",
+   "predictions": [
+    {
+     "row": "code-sleep-b06:m0005",
+     "if": [
+      "install",
+      "lockfile",
+      "run it"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b07:m0001",
+     "if": [
+      "install",
+      "yarn",
+      "npm"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s080-e046",
+   "predictions": []
+  },
+  {
+   "event": "code-s081-e000",
+   "predictions": [
+    {
+     "row": "code-sleep-b08:m0001",
+     "if": [
+      "invoices list",
+      "acme "
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s081-e007",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0013",
+     "if": [
+      "tests",
+      "timeout",
+      "beforeall",
+      "docker"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b04:m0032",
+     "if": [
+      "orbstack",
+      "docker",
+      "container"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s081-e017",
+   "predictions": [
+    {
+     "row": "code-sleep-b06:m0007",
+     "if": [
+      "terraform plan",
+      "make plan",
+      "plan output",
+      "infra"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b01:m0016",
+     "if": [
+      "terraform",
+      "apply",
+      "plan"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s082-e005",
+   "predictions": []
+  },
+  {
+   "event": "code-s082-e017",
+   "predictions": [
+    {
+     "row": "code-sleep-b03:m0007",
+     "if": [
+      "webhooks job",
+      "idempotent",
+      "double-deliver",
+      "worker"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s082-e025",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0015",
+     "if": [
+      "probe",
+      "readiness",
+      "liveness",
+      "health"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b06:m0007",
+     "if": [
+      "helm chart",
+      "infra",
+      "probes"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b01:m0008",
+     "if": [
+      "helm chart",
+      "helm"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s082-e032",
+   "predictions": []
+  },
+  {
+   "event": "code-s082-e035",
+   "predictions": []
+  },
+  {
+   "event": "code-s082-e051",
+   "predictions": []
+  },
+  {
+   "event": "code-s082-e052",
+   "predictions": []
+  },
+  {
+   "event": "code-s083-e005",
+   "predictions": []
+  },
+  {
+   "event": "code-s083-e017",
+   "predictions": [
+    {
+     "row": "code-sleep-b01:m0022",
+     "if": [
+      "commit",
+      "push",
+      "open a pr",
+      "pr"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b06:m0005",
+     "if": [
+      "commit",
+      "push",
+      "lockfile"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s085-e000",
+   "predictions": [
+    {
+     "row": "code-sleep-b06:m0023",
+     "if": [
+      "new laptop",
+      "set up",
+      "setup",
+      "get started"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b01:m0023",
+     "if": [
+      "env",
+      "env.example",
+      ".env.local",
+      "set up"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b02:m0004",
+     "if": [
+      "node",
+      "nvm",
+      "install"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b07:m0001",
+     "if": [
+      "pnpm",
+      "install"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s085-e010",
+   "predictions": [
+    {
+     "row": "code-sleep-b05:m0002",
+     "if": [
+      "email queue",
+      "jobs",
+      "queue",
+      "ui"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b04:m0004",
+     "if": [
+      "worker",
+      "queue",
+      "redis"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s085-e014",
+   "predictions": [
+    {
+     "row": "code-sleep-b05:m0002",
+     "if": [
+      "dashboard",
+      "bull board",
+      "redisinsight",
+      "worker code"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b04:m0004",
+     "if": [
+      "worker",
+      "start",
+      "dev"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s086-e000",
+   "predictions": [
+    {
+     "row": "code-sleep-b02:m0013",
+     "if": [
+      "read replica",
+      "replica",
+      "terraform",
+      "prod db"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b04:m0033",
+     "if": [
+      "replication lag",
+      "prod db",
+      "prod",
+      "replica"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b06:m0007",
+     "if": [
+      "read replica",
+      "infra",
+      "replica"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b01:m0016",
+     "if": [
+      "apply",
+      "terraform"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s086-e004",
+   "predictions": [
+    {
+     "row": "code-sleep-b04:m0033",
+     "if": [
+      "reach prod",
+      "tailscale",
+      "connect",
+      "prod db",
+      "credentials"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b02:m0013",
+     "if": [
+      "terraform",
+      "stack",
+      "infra/terraform",
+      "iac"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s087-e000",
+   "predictions": [
+    {
+     "row": "code-sleep-b04:m0011",
+     "if": [
+      "status badge",
+      "badge"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b00:m0036",
+     "if": [
+      "dark mode",
+      "tailwind",
+      "css"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s087-e006",
+   "predictions": [
+    {
+     "row": "code-sleep-b04:m0011",
+     "if": [
+      "other badges",
+      "badge"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s087-e012",
+   "predictions": []
+  },
+  {
+   "event": "code-s088-e000",
+   "predictions": [
+    {
+     "row": "code-sleep-b08:m0005",
+     "if": [
+      "trailmix",
+      "fly.io",
+      "django"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s088-e013",
+   "predictions": []
+  },
+  {
+   "event": "code-s088-e021",
+   "predictions": [
+    {
+     "row": "code-sleep-b05:m0035",
+     "if": [
+      "export",
+      "csv"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b06:m0022",
+     "if": [
+      "export",
+      "csv"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b06:m0024",
+     "if": [
+      "pr",
+      "branch",
+      "separate"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s091-e000",
+   "predictions": []
+  },
+  {
+   "event": "code-s091-e007",
+   "predictions": []
+  },
+  {
+   "event": "code-s092-e010",
+   "predictions": []
+  }
+ ]
+}
