@@ -1551,3 +1551,39 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   `--tag jev`). Same two steps and the same rule as above (smoke on the first 30 code-rt1 inputs, then the four
   quality tests at p ≥ 0.6; viable if p50 ≤ 3 s end to end and the C9-E1 quality rule holds). Jev's latency is
   measured from this container, network included. Checked against a mock endpoint; no TypeSafe key is set yet.
+
+## C10-E1 · 2026-10-19 · Fast checkers: result for TypeSafe Jev (NIM still running)
+- **Run:** a child session in the same environment (this session cannot see secrets added after it started) ran
+  `verify_jev.py` on all four tests' inputs (rebuilt from `verify.py prep`; they match the originals exactly) and
+  pushed the outputs (`claude/r10-c10-runs`, merged here). Model `jev-1.13.0`; 0 unanswered questions; no retries.
+- **Latency, end to end from the container** (`verify_jev.py --latency`): code-rt1 p50 0.207 s, p95 0.271 s (74
+  calls); life-rt1 0.229 / 0.336 (81); code 0.262 / 0.461, max 5.11 (181); life 0.234 / 0.34 (228).
+- **Quality at p ≥ 0.6** (human turns, recall / precision):
+
+  | Test | cal p0.6 | Jev p0.6 | Δ recall | Δ precision | Pass? |
+  |---|---|---|---|---|---|
+  | code dev | 0.5121 / 0.2308 | 0.4636 / 0.2366 | −0.0485 | +0.0058 | no |
+  | life dev | 0.2785 / 0.2171 | 0.1962 / 0.2174 | −0.0823 | +0.0003 | no |
+  | code-rt1 | 0.3414 / 0.3673 | 0.2253 / 0.2979 | −0.1161 | −0.0694 | no |
+  | life-rt1 | 0.0688 / 0.1667 | 0.1159 / 0.24 | +0.0471 | +0.0733 | yes |
+
+- **Verdict, by the rule: fast but weaker** (latency far inside 3 s; quality passes 1 of 4).
+- **Post hoc, lower thresholds do not rescue it:** at p 0.5 / 0.4 / 0.3 / 0.2 recall barely rises (code-rt1 0.2425 /
+  0.277 / 0.277 / 0.2943, never reaching cal's 0.3414) while precision falls (0.2055 / 0.1868 / 0.1429 / 0.125).
+- **NIM so far (child session, smokes still running):** both Gemma models returned HTTP 404; Nemotron 3.5 Lightning
+  ran at p50 ≈ 14.5 s (over the bar). Recorded fully when the child finishes.
+
+## C10-E2 · 2026-10-19 · Does Jev do better with a better-posed question? (pre-registration)
+- **Why (the user's question):** Jev reads questions literally and judges each question in isolation (TypeSafe's
+  jaggedness notes). C10-E1 gave it short criteria, each row alone, and the earlier-turns calibration block that
+  was written for haiku.
+- **Variants** (`verify_jev.py --variant`), all on the same inputs:
+  - `rich`: precise criteria with boundary cases; state = turn + recent (no earlier turns).
+  - `list`: as `rich`, plus every candidate row in the state, so each row is judged with its alternatives visible.
+  - `decomp`: as `rich`, three atomic Nouls per row (needed, already stated in turn/recent, about something the turn
+    involves); p = needed × (1 − stated) × related, combined in code.
+- **Selection on dev only:** each variant × threshold in {0.3, 0.4, 0.5, 0.6, 0.7} on code dev and life dev; the
+  pick maximises the mean over the two of (recall − cal recall) + (precision − cal precision).
+- **Test once on the red-team worlds** with the pick: **viable** if on both code-rt1 and life-rt1 recall ≥ cal − 0.03
+  and precision ≥ cal − 0.03, with p50 latency ≤ 3 s; otherwise **still weaker**. C10-E1's base Jev stays recorded
+  as it is.
