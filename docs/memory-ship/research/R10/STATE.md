@@ -113,7 +113,7 @@ Families differ in mechanism. Every kill criterion was written before its run.
 ## Cycle 9 findings (LEDGER C9-…)
 
 - **A short-reply checker keeps its picking quality** (C9-E1, retrieval level): listing only the kept rows instead
-  of scoring all 15 passes on 3 of 4 tests (fails code-rt1 precision by 0.056). Its reply is about 1–2 rows. Its
+  of scoring all 15 passes on 3 of 4 tests (code-rt1 precision drops 0.056, limit 0.03; silence is lower on all four). Its reply is about 1–2 rows. Its
   downstream effect is not measured yet. Through the CLI it still takes p50 4994 ms (C9-E2): thinking is almost all
   of its output, and only turning thinking off (not possible here) could bring it near the ~3 s budget.
 
