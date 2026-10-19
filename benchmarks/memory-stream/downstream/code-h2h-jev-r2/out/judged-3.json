@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "code-s077-e011", "scores": [2, 3, 3, 2], "why": "All explain tsx vs ts-node correctly; A and D ask which install command to use though pnpm 9 is known."},
+{"event": "code-s080-e000", "scores": [2, 2, 2, 3], "why": "History shows invoices/index.ts already registers list; only D checks before scaffolding a new one."},
+{"event": "code-s080-e024", "scores": [3, 3, 2, 3], "why": "pnpm filter add and commit lockfile; C omits committing the lockfile; D sensibly confirms the PR branch."},
+{"event": "code-s081-e007", "scores": [2, 2, 2, 2], "why": "All sound but generic; none recalls API tests use Testcontainers (on OrbStack), the likely beforeAll timeout cause."},
+{"event": "code-s082-e000", "scores": [2, 2, 3, 3], "why": "C raises clock skew and JWKS; D knows Fastify and auth.ts path; A and B generic."},
+{"event": "code-s082-e052", "scores": [2, 2, 2, 1], "why": "All list only the last tasks, likely missing earlier session work like the clock-skew fix; D ignores bullet-list summary preference."},
+{"event": "code-s083-e017", "scores": [2, 3, 3, 3], "why": "Billing code must stay uncommitted for review; A doesn't state that for this refactor."},
+{"event": "code-s086-e000", "scores": [2, 2, 2, 3], "why": "Prod already has an RDS reader replica (cluster-ro); D catches it and asks purpose; others miss or misreason."},
+{"event": "code-s088-e000", "scores": [3, 3, 3, 3], "why": "All give the correct revealed/afterend htmx pattern."},
+{"event": "code-s088-e008", "scores": [3, 3, 2, 2], "why": "Correct diagnosis throughout; A names Biome useImportType; C and D hedge on which linter the repo uses."},
+{"event": "code-s088-e021", "scores": [3, 3, 3, 3], "why": "Acknowledgment; all recap export findings, separate PR from #1192, and wait."},
+{"event": "code-s092-e000", "scores": [3, 2, 2, 2], "why": "Lena owns messages files mid-refactor; A asks first; C hard-codes copy bypassing i18n; B and D unaware."},
+{"event": "code-s093-e000", "scores": [2, 3, 2, 3], "why": "B and D apply next-intl keys in en/fr/es (B also server action); A and C generic."},
+{"event": "code-s097-e000", "scores": [2, 1, 3, 2], "why": "C uses acme-prod kubeconfig and PagerDuty; B makes unsupported claims; D doesn't know PagerDuty; A generic."},
+{"event": "code-s098-e007", "scores": [2, 2, 2, 2], "why": "All still don't know the API is Fastify 5, a recorded fact; reading package.json is fine but needless."}
+]}
