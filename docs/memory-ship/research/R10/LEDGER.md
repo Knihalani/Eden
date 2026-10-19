@@ -1587,3 +1587,31 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **Test once on the red-team worlds** with the pick: **viable** if on both code-rt1 and life-rt1 recall ≥ cal − 0.03
   and precision ≥ cal − 0.03, with p50 latency ≤ 3 s; otherwise **still weaker**. C10-E1's base Jev stays recorded
   as it is.
+
+## C10-E1 · 2026-10-19 · NIM smokes (child session, code-rt1, first 30 inputs)
+- `google/gemma-3-4b-it`, `google/gemma-3-12b-it`, `nv-mistralai/mistral-nemo-12b-instruct`: HTTP 404, 0 calls.
+- `nvidia/nemotron-3.5-lightning-30b-a3b`: 30 calls, p50 14.344 s, p95 69.474 s, max 98.773 s; 30 of 30 replies did
+  not parse.
+- `z-ai/glm-5.3-flash`: failed after retries with no HTTP status (network or timeout), 0 calls.
+- **Verdict for NIM: no candidate met the smoke bar** (p50 ≤ 3 s and ≥ 95% parsed), so no full NIM runs.
+
+## C10-E2 · 2026-10-19 · Better-posed Jev questions: dev selection
+- **Dev runs** (child session, `verify_jev.py` at 0e95f386; 0 unanswered questions; p50 latency 0.231–0.249 s,
+  p95 0.303–0.368 s, max 0.663 s in every variant × world).
+- **Selection score** (mean over code and life dev of Δrecall + Δprecision against cal p0.6), top five:
+
+  | Variant, threshold | Score | code recall / precision | life recall / precision |
+  |---|---|---|---|
+  | decomp 0.7 | −0.0058 | 0.2152 / 0.4 | 0.0823 / 0.5294 |
+  | rich 0.7 | −0.0208 | 0.497 / 0.2194 | 0.2532 / 0.2273 |
+  | list 0.7 | −0.0248 | 0.4879 / 0.2378 | 0.2532 / 0.2101 |
+  | decomp 0.5 | −0.0297 | 0.4697 / 0.2689 | 0.1835 / 0.2571 |
+  | list 0.6 | −0.0393 | 0.5061 / 0.1832 | 0.2848 / 0.1859 |
+
+  (cal p0.6: code 0.5121 / 0.2308, life 0.2785 / 0.2171.)
+- **The pre-registered pick is decomp at 0.7.** It is a lopsided point: much higher precision, much lower recall.
+  The selection score adds Δrecall and Δprecision, so it can reward giving up recall for precision; the test rule
+  (both within −0.03) will not. That is a flaw in the pre-registered selection, recorded here before the test.
+- **Not pre-registered, noted before the test:** rich 0.7 and list 0.7 are within −0.03 of cal on both recall and
+  precision on both dev worlds (largest gap −0.0253), while C10-E1's base Jev at p0.6 was not (recall −0.0485,
+  −0.0823). They will be run on the red-team worlds too and reported as post hoc; only decomp 0.7 decides C10-E2.
