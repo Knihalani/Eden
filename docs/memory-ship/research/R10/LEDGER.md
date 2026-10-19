@@ -1148,7 +1148,7 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - "no-need −0.022 vs −0.467 undated (C5-E1)" compares different turn sets (90 vs 15), and the 90 include non-fired turns, where both conditions got an empty packet, so their difference is noise.
   - Fired-only vote − none: code plan-need +0.333 (n 24), labeler-only −0.214 (14), no-need +0.053 (38); life +0.333 (42), −0.167 (24), −0.077 (39).
   - The verifier comparison (+0.52 / +0.49) is between runs, and code's +0.52 is a two-run average.
-  - The verdict ("not enough") stands: the vote is about 0 on all three measures.
+  - The verdict ("not enough") stands: the vote is about 0 per turn on both worlds (code +0.0183, life −0.0039), and fired-only no-need is about 0 (+0.053 / −0.077).
 - **Harness:**
   - `prep_h2h` takes `--vtag` (default `cal-ds3`) for missing verifier outputs.
   - `h2h.py` shares its loading and bootstrap helpers, uses argparse (argument order no longer matters), and asserts when a repeat run lacks a turn.
