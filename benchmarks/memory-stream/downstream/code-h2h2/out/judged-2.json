@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s023-e000",
+   "scores": [
+    2,
+    1,
+    1
+   ],
+   "why": "API is Express 4; R0 flags @fastify mismatch and existing exports bucket (minor unsupported plan detail). R1/R2 blindly write Fastify plugin."
+  },
+  {
+   "event": "code-s025-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Nothing known about image job at this point; reading the code first is correct for all."
+  },
+  {
+   "event": "code-s027-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "No specific fact applies; all give a reasonable hypothesis and plan."
+  },
+  {
+   "event": "code-s027-e008",
+   "scores": [
+    1,
+    2,
+    2
+   ],
+   "why": "History holds days of work; all claim only this session. R0 invents a trailmix GPX question. R2 uses preferred bullets."
+  },
+  {
+   "event": "code-s027-e022",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R0 says nothing pending, ignoring failing zod PR #1312; R1/R2 surface it."
+  },
+  {
+   "event": "code-s027-e058",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All accurately report zod commit not pushed and --json done; R0 correctly notes lint pending."
+  },
+  {
+   "event": "code-s030-e027",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "All explain ALS correctly; R0 offers to check Node version (known 20.11) and drops pending request-id question."
+  },
+  {
+   "event": "code-s035-e033",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All diagnose clock/timezone dependency and plan fake timers; R1 echoes earlier TZ fix approach."
+  },
+  {
+   "event": "code-s038-e028",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "General k8s question; all correct and concise."
+  },
+  {
+   "event": "code-s041-e005",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All plan correct tests and correctly flag negative half rounding with Math.round."
+  }
+ ]
+}

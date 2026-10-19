@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s041-e009",
+   "scores": [
+    1,
+    2,
+    1
+   ],
+   "why": "History/facts show @acme/cli with bin acme; all refuse to answer. R1 at least gives bin and local run command."
+  },
+  {
+   "event": "code-s041-e013",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give the tbody target/hx-select fix with idiomorph fallback; correct."
+  },
+  {
+   "event": "code-s041-e021",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly attribute errors to incomplete kind->status rename and plan fixes."
+  },
+  {
+   "event": "code-s041-e038",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Simple ack; all accurate about push, full suite and no PR."
+  },
+  {
+   "event": "code-s042-e005",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R0 misstates which items she is most insistent on (first/third); R1/R2 classify the review correctly."
+  },
+  {
+   "event": "code-s045-e007",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "DNS location not yet known; searching infra/docs first is correct."
+  },
+  {
+   "event": "code-s046-e000",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "pdfFilename slug exists from earlier work; R2 spots it (path unverified), R0 follows its format; R1 invents a different format."
+  },
+  {
+   "event": "code-s047-e026",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All plan typo fix and responsive illustration; R2 notes locale files per next-intl."
+  },
+  {
+   "event": "code-s047-e032",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "After lgtm, committing or asking about split is fine; R2 is overly passive."
+  },
+  {
+   "event": "code-s048-e011",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly diagnose stale socket/context and check docker context and DOCKER_HOST."
+  }
+ ]
+}
