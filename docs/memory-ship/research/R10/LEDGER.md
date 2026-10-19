@@ -677,3 +677,25 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - ≥ +0.3 mean, with ≥ 30% of turns at effect ≥ 1: the plan labels miss real needs, so "silence" overstates false fires. Re-label with a downstream-validated label before tuning any system for silence.
   - ≤ +0.1: the models over-fire, and silence stands as the target.
   - In between: mixed; report both.
+
+## C4-E13 · 2026-10-19 · Do the judge's "false" fires help? Result
+- **Numbers** (`downstream.py report --sub <world>-picks`; picks − none; effect counts as {Δ: turns}):
+
+  | World | Group | n | Mean picks − none | Share ≥ 1 | Effect distribution |
+  |---|---|---|---|---|---|
+  | code | plan-no-need, judge fired | 30 | +0.4 | 0.467 | −1: 2, 0: 14, +1: 14 |
+  | code | plan need, judge fired | 15 | +0.8 | 0.667 | 0: 5, +1: 8, +2: 2 |
+  | life | plan-no-need, judge fired | 30 | +0.133 | 0.267 | −1: 4, 0: 18, +1: 8 |
+  | life | plan need, judge fired | 15 | +0.867 | 0.8 | −2: 1, 0: 2, +1: 9, +2: 3 |
+
+- **Verdict, by the pre-registered rule:**
+  - **Code: the plan labels miss real needs** (+0.4, 47% helped, 7% hurt). About half of the strong judge's "false" fires on code improve the answer. Mostly these are episodic state (in-flight branches, unpushed work, open PRs) and rules the plan did not tag for that turn.
+  - **Life: mixed** (+0.133, 27% helped, 13% hurt).
+- **Consequences:**
+  - On code, "silence" against plan labels overstates false fires: a system that fires where the judge fires is partly right. Silence-driven tuning on code (C4-E11's threshold rule among them) is biased toward missing real needs.
+  - Before tuning for silence again: build **downstream-validated labels**. A turn needs a row when adding it raises the blind-judged outcome by ≥ 1. Use them on a fixed subset, as the gold standard that the plan labels are checked against.
+- **Caveats:**
+  - One responder run.
+  - n = 30 per group.
+  - The judge picks are the batched judge's (the same family as the downstream judge: correlated errors are possible).
+  - The responder can use a picked row in a way the judge likes even when the user would not have wanted it raised. The judge's "don't reward irrelevant facts" instruction only partly guards against this.

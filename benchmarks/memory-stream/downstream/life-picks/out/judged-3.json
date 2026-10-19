@@ -1,0 +1,78 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s092-e000",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "R0 gives April 9/23 dates already past by now; R1 looks up schedule, though Thursday/biweekly pattern was known."
+  },
+  {
+   "event": "life-s098-e004",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R0 wrongly says receipt filter postdates summer purchase (all 2025 receipts were labelled); R1 sound plan."
+  },
+  {
+   "event": "life-s105-e004",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both book Monday 29 Jun and set sensible reminders (Tue 30 Jun, Mon 6 Jul); R0 adds correct address."
+  },
+  {
+   "event": "life-s105-e032",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "R0 recalls weekend baking with Leo and basement-kitchen limits; R1 misses the recorded fact."
+  },
+  {
+   "event": "life-s106-e005",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "R0 states basement kitchen correctly and flags Sam's fragrance migraines; R1 claims no record."
+  },
+  {
+   "event": "life-s108-e000",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Both miss she already owns Gram\u00e1tica de uso B1-B2; R1 uses Indigo/Mexican-Spanish preferences, R0 hedges on known prefs."
+  },
+  {
+   "event": "life-s113-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both turn off OOO and propose a fitting message for confirmation."
+  },
+  {
+   "event": "life-s115-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add the Lisbon trip to the family calendar correctly and ask for flight details."
+  },
+  {
+   "event": "life-s126-e005",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "R0 recalls plantar fasciitis and Saturday run but invents appointment preference and wellness account; R1 generic, misses history."
+  }
+ ]
+}
