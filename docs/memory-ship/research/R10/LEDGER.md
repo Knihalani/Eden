@@ -1230,3 +1230,16 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   recency, row kind) explain about a third of the verifier's judgment (corr ≈ 0.57), and the learned mix of them is
   no better a picker than the hand-set vote. The verifier's edge is understanding the turn, which these features do
   not carry. F16 (C3-E2) found the same at the turn level; this closes the row level.
+
+## C7-E3 · 2026-10-19 · Life head-to-head, second independent run (pre-registration)
+- **Why:** the head-to-head's life result (C6-E1, +0.1346 [+0.0352, +0.2332]) rests on one responder and judge run;
+  code needed a second run to be firm (C6-E2). The same second look for life, set up exactly as C6-E2.
+- **Setup:** a new sonnet responder and a new blind opus judge (history evidence) on the same 169 life turns and
+  packets as C5-E7 and C6-E1 (`downstream/life-h2h-r2`, `life-h2h2-r2`: copies of the inputs and keys).
+  - Each turn's condition − none is averaged over the two runs (`h2h.py life --pool h2h2 --runs r2`); shares and
+    bootstrap unchanged.
+- **Rule, set before running (the averaged result decides, whichever way it goes):**
+  - **Firm on life (two runs)** if the averaged pooled 95% CI lower bound is > 0.
+  - **Lead stands** if the point estimate stays ≥ +0.05.
+  - **Weakened** if it falls below +0.05.
+  - Run 2 alone is reported too.
