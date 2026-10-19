@@ -94,17 +94,21 @@ Families differ in mechanism. Every kill criterion was written before its run.
 
 ## Next three experiments
 
-0. **Re-run C4-E10 and C4-E13 with the fixed responder split** (C4-R), then:
 1. **Downstream-validated labels (gold subset).** A turn needs a row when adding it raises the blind, history-aware judged outcome by ≥ 1 (C4-E13: on code, half of the judge's "false" fires help). Build a gold set of about 100 turns per world, then re-score the frontier against it. Silence against plan labels is not a safe tuning target until this exists.
 2. **Red-team round 2 plus transfer.** Thresholds tuned on dev do not transfer to the short red-team prompts (C4-E11). Calibrate on a mixed pool, or per prompt-length band.
 3. **Critic C direction:** a prospective agenda for triggers, with ≥ 40 routine trigger negatives, ideally from a non-Claude author.
+
+## Cycle 5 findings (LEDGER C5-E1…)
+
+- **Clean downstream re-run (C5-E1):** the right packet lifts the outcome by +1.23 (code) and +1.1 (life) on 97% / 87% of plan-need turns. A wrong packet costs −0.47 on code no-need turns (noise floor −0.07), so wrong bullets do hurt and R10-3's evidence is restored. The hook vote keeps about half of the code benefit (+0.63).
+- So a packet is worth sending when P(needed) > about 0.3 (+1.2 gain vs −0.47 cost): a value-of-information firing rule (F6) is now measurable.
 
 ## Cycle 4 findings (LEDGER C4-E1…E13)
 
 - Batching flatters model verifiers: one-case-per-call F22 loses 0.24 silence on code (C4-E9). Every model-in-the-loop number must be one case per call.
 - The downstream harness had two bugs: responder order swaps, and a judge blind to episodic history. With both fixed (C4-E10), memory improves the outcome on 77% of plan-need turns in both worlds (+0.8 code, +0.9 life). Wrong packets showed no measured harm (vote − none = 0.0 on no-need), so C3-E4's harm claim is withdrawn.
 - Even opus fed one case at a time loses 0.14–0.21 silence (C4-E12). The "judge ceiling" rows overstate silence.
-- **The plan labels miss real needs on code** (C4-E13; provisional: the responder confound found in review, C4-R, may bias it). Where the judge fired on plan-no-need turns, its picks raised the outcome by +0.4 (47% helped, 7% hurt). On life the result is mixed (+0.13; 27% helped, 13% hurt).
+- **The plan labels miss real needs on code, not on life** (C4-E13, confirmed by the clean re-run C5-E1: code +0.467, 60% helped; life −0.033, the judge over-fires). Where the judge fired on plan-no-need turns, its picks raised the outcome by +0.4 (47% helped, 7% hurt). On life the result is mixed (+0.13; 27% helped, 13% hurt).
 - A calibrated verifier (causal contrast plus probabilities) is tunable on dev but its threshold does not transfer to fresh short prompts (C4-E11).
 - Agent-pull (F13) is secondary by the user's direction: Eden stays in charge of surfacing what the agent does not know to ask.
 
