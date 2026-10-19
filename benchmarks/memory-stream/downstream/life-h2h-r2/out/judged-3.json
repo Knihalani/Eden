@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s096-e026", "scores": [3, 3, 3], "why": "Warm acknowledgement; all fitting, offers to record the win are reasonable."},
+{"event": "life-s100-e000", "scores": [3, 3, 3], "why": "All will read the all-hands email and summarize; nothing to recall."},
+{"event": "life-s100-e017", "scores": [3, 1, 1], "why": "Anjali has type 2 diabetes and lives in Bandra; only R1 knows, and flags real Saturday call/run overlap."},
+{"event": "life-s102-e009", "scores": [2, 2, 3], "why": "R3 uses PC Express, Saturday pickup, no-name staples. R2 cites stale all-tree-nut allergy (now cashew/pistachio only)."},
+{"event": "life-s103-e007", "scores": [3, 2, 2], "why": "Insurer is Belairdirect since April 2026; only R1 knows the policy, others search first."},
+{"event": "life-s105-e000", "scores": [2, 2, 3], "why": "R3 recalls the earlier outside-tap episode, frost-free hose bib advice and plumbers; others generic but fine."},
+{"event": "life-s105-e004", "scores": [3, 3, 3], "why": "All book Monday and set correct Lattice reminders; R1 usefully links wins note."},
+{"event": "life-s105-e028", "scores": [3, 3, 3], "why": "Light chit-chat, all fitting."},
+{"event": "life-s105-e032", "scores": [1, 1, 1], "why": "All miss the known fact: baking on weekend mornings with Leo is her favourite way to unwind."},
+{"event": "life-s106-e005", "scores": [1, 1, 1], "why": "All miss known basement kitchen setup: microwave, induction hotplate, old fridge."},
+{"event": "life-s107-e005", "scores": [3, 3, 3], "why": "All handle pickup and a short freeze note; R1 also notes Aisha's scheduled message."},
+{"event": "life-s107-e009", "scores": [3, 3, 3], "why": "Reasons for choosing Nate not yet in facts or history; checking notes is correct."},
+{"event": "life-s111-e007", "scores": [2, 2, 2], "why": "Kitchen crew is Nate at Northline, prefers texts, starts 7:30; none names him, all would look it up."},
+{"event": "life-s111-e027", "scores": [3, 2, 3], "why": "Packing preference not yet on record; asking is right. R2 invents an unsupported 13:15 departure time."},
+{"event": "life-s113-e000", "scores": [3, 3, 3], "why": "All update the message and end the out-of-office sensibly."}
+]}
