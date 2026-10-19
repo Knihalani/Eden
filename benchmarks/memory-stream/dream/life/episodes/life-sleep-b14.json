@@ -1,0 +1,395 @@
+{
+ "batch": "life-sleep-b14",
+ "sessions": [
+  {
+   "id": "life-s140",
+   "episodes": [
+    {
+     "text": "2026-09-20 Riya bought Blue Cross family travel insurance for Lisbon, $212 CAD paid on their site (Visa ending 4471), chosen over credit card coverage because the card excludes trip interruption for kids. Policy BCT-7731-0924-F (Family Multi-Trip Plan; insured Riya Malhotra, Sam Okafor, Leo Okafor-Malhotra; covers medical, cancellation, interruption incl. dependent children, baggage); 24/7 assistance +1-506-555-0142 collect; claims.bluecross.example.com. Filed in note 'Lisbon Dec 2026' under Insurance with Policy_Wording.pdf and Wallet_Card.pdf, both saved offline on iPhone (Files > Offline > Lisbon); contact 'Blue Cross Travel Assist' added. Sam texted at 17:02; Riya had the line 'Insurance: Blue Cross family plan ($212), not the credit card coverage...' put at the very top of the Lisbon note. Lisbon trip spend to date $4,986.00.",
+     "entities": [
+      "Riya Malhotra",
+      "Sam Okafor",
+      "Leo",
+      "Blue Cross Travel",
+      "BCT-7731-0924-F",
+      "Lisbon Dec 2026",
+      "Visa ending 4471"
+     ]
+    },
+    {
+     "text": "2026-09-20 Riya asked if friend Diego's landlord can raise rent 6% in January (1990s Annex building): 2027 Ontario guideline is 2.5%; above-guideline needs LTB approval via form L5 (max 3% over guideline per year, up to 3 years); 90 days' notice on form N1; if no L5 filed, Diego pays 2.5%. Summary prepared for Diego.",
+     "entities": [
+      "Diego",
+      "Landlord and Tenant Board",
+      "Annex",
+      "form L5",
+      "form N1"
+     ]
+    },
+    {
+     "text": "2026-09-20 Lisbon tram 28 and fares researched: tram 28 Martim Moniz to Campo de Ourique, single on board EUR 3.10; Viva Viagem card EUR 0.50, single trip EUR 1.85, 24h Carris+Metro pass EUR 7.00 (EUR 11.00 incl. CP trains), no child price on 24h passes (under 4 free, 4-12 reduced singles); Lisboa Card 24h EUR 27/48h 44/72h 54, child 24h EUR 17, worth it for one Belém day (Jerónimos EUR 18 + Belém Tower EUR 8). Added 'Getting around' section to Lisbon note.",
+     "entities": [
+      "Lisbon",
+      "Viva Viagem",
+      "Lisboa Card",
+      "tram 28",
+      "Jerónimos Monastery"
+     ]
+    },
+    {
+     "text": "2026-09-20 Sam texted that Dr. Patel found his iron and B12 low and he is now pescatarian (fish and seafood, no meat or poultry) since September 2026; asked for sushi. Riya ordered from Ichiban Sushi House (Queen St E), order #ICH-55120, $110.21 incl. 15% tip, Visa ending 4471, includes kids bento for Leo; delivered 18:04 to Sam at the front door. Leafs vs Ottawa Senators preseason 19:00 on Sportsnet Ontario/TSN5.",
+     "entities": [
+      "Sam Okafor",
+      "Dr. Patel",
+      "Ichiban Sushi House",
+      "#ICH-55120",
+      "Leo"
+     ]
+    },
+    {
+     "text": "2026-09-20 Sam relayed Nate's (Northline Renovations) invoice NR-2026-118, $3,200.00 electrical panel upgrade, due Fri 2026-09-25 by Interac e-Transfer to accounts@northline.example.com; Sam will move his half. Assistant prepared transfer but did not send; open: which account to pay from.",
+     "entities": [
+      "Sam",
+      "Nate",
+      "Northline Renovations",
+      "NR-2026-118"
+     ]
+    },
+    {
+     "text": "2026-09-20 Riya vented that her boss Tom moved the Wavecrest partner review to Tuesday morning (her protected morning) and needs her in Montreal in person Thu 2026-10-08 for the bank meeting. Day-trip options: Porter PD 441 YTZ 07:00-YUL 08:15, return PD 468 18:30-19:45, $289; Air Canada AC 401 YYZ 07:00-08:12, return AC 424 18:00-19:20, $268 Basic/$312 Standard; VIA Rail train 51 06:40-11:49 too slow. Not booked; assistant offered to book Porter and draft a note to Tom proposing another slot (open). Other: Terry Fox Run at Morse Street PS Thu 24 Sep 10:15; Aisha wants comments on Wavecrest cert test plan v3 by Tue EOD; Olivia asked for a 15 min sync Monday.",
+     "entities": [
+      "Riya",
+      "Tom",
+      "Wavecrest",
+      "Montreal",
+      "Porter",
+      "Air Canada",
+      "Aisha",
+      "Olivia"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s141",
+   "episodes": [
+    {
+     "text": "2026-09-20 Toronto yard waste pickup (Riya's area, Tuesday Week 2): remaining dates Sep 29, Oct 13, Oct 27, Nov 10, Nov 24, Dec 1 (final); paper bags or open containers, max 20 kg. Added 6 Family calendar events 'Yard waste out tonight' at 19:30 the night before: Sep 28, Oct 12, Oct 26, Nov 9, Nov 23, Nov 30.",
+     "entities": [
+      "Riya",
+      "yard waste",
+      "Family calendar"
+     ]
+    },
+    {
+     "text": "2026-09-20 Gardiner Expressway: weekend full closures between DVP and Jarvis through 2026-11-22; weekdays two lanes each way Jarvis to Cherry; overnight eastbound closure Spadina to DVP Sep 22-24; Mon 21 Sep no daytime closures (Sam drives to Riverdale).",
+     "entities": [
+      "Gardiner Expressway",
+      "Sam",
+      "Riverdale"
+     ]
+    },
+    {
+     "text": "2026-09-20 Spanish prep: no Spanish class on this week's calendar, so no study block placed (assistant asked day/time; open). Spanish homework note: read chapter 4 of 'Como agua para chocolate' with 10 new words, write 150 words describing neighbourhood, review imperfect vs preterite; built drill 'Pretérito vs imperfecto' (10 sentences, B1+, Mexican vocab) in notes.",
+     "entities": [
+      "Riya",
+      "Como agua para chocolate",
+      "Spanish"
+     ]
+    },
+    {
+     "text": "2026-09-20 Hannah's car was towed Sat 19 Sep from Logan Ave (street sweeping 07:00-12:00 flagged, signs required 24 h ahead, no 311 sign complaints). Retrieval: lookup by plate or Toronto Police Parking Enforcement 416-555-0199; tow up to $250, storage $75/day after first 24 h; dispute via screening review within 15 days needs photo of missing sign. Riya sending info to Hannah.",
+     "entities": [
+      "Hannah",
+      "Logan Ave",
+      "Parking Enforcement"
+     ]
+    },
+    {
+     "text": "2026-09-20 Riya's open Linear tickets tagged payouts-ga: PAY-1588 GA announcement copy (In Progress); PAY-1591 pricing page update (Todo); PAY-1596 support macros payout delays (In Review); PAY-1602 GA go/no-go checklist (Todo); PAY-1607 Sales one-pager (Blocked, waiting on legal). Also summarized an article on Canadian open banking (FCAC oversight, accreditation, FDX standard, phase one read access only, payment initiation phase two).",
+     "entities": [
+      "Riya",
+      "PAY-1588",
+      "PAY-1591",
+      "PAY-1596",
+      "PAY-1602",
+      "PAY-1607",
+      "FCAC"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s142",
+   "episodes": [
+    {
+     "text": "2026-09-24 Mumbai trip note (updated 2026-09-21): Riya flies alone 2027-02-05 to 2027-02-16 for her mother Anjali's 65th birthday on 2027-02-09; Sam and Leo not coming due to school. Fare recheck YYZ-BOM: Air India AI 188 nonstop 21:50 $1,585 (was $1,540), Air Canada via Delhi $1,690 unchanged, Emirates via Dubai $1,512 (20 h 40 m). Fare watch set on AI 188/187 with alert below $1,550 or above $1,700. To-do: ask Mummy what she wants, check visa (OCI), gifts for Masi and cousins.",
+     "entities": [
+      "Riya",
+      "Anjali",
+      "Mumbai",
+      "Air India",
+      "Air Canada",
+      "Emirates",
+      "fare watch"
+     ]
+    },
+    {
+     "text": "2026-09-24 Portuguese phrases for Riya: 'obrigada' (thank you, feminine; Sam says 'obrigado') and 'a conta, por favor' (the bill, please).",
+     "entities": [
+      "Riya",
+      "Sam",
+      "Portuguese"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s143",
+   "episodes": [
+    {
+     "text": "2026-09-24 PAY-1602 GA go/no-go checklist: In Progress, 7 of 12 subtasks done; Wavecrest cert sign-off blocked; open: load test at 3x beta volume (Aisha runs it 20:00 tonight, results morning), legal review of merchant terms addendum, Sales one-pager, GA-week on-call rota. Wavecrest partner team confirmed cert window Oct 19-23.",
+     "entities": [
+      "PAY-1602",
+      "Aisha",
+      "Wavecrest",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2026-09-24 Escalated support ticket #48213, merchant Northbound Coffee Co. (acct 77120): three instant payouts Sep 17 $2,140.55, Sep 18 $1,876.20, Sep 21 $3,302.10 (total $7,318.85, fees $4.50) went to prepaid Visa debit card ending 0912 added Sep 16 at instant payouts opt-in, not bank account ending 4410; push-to-card cannot be recalled; merchant has payroll Friday for 6 people. Root issue: opt-in screen shows card last 4 but not 'instead of your bank account'. Suggested refunding $4.50 fees, switching to standard payouts, and a UX bug; assistant offered to draft Linear ticket (open).",
+     "entities": [
+      "Northbound Coffee Co.",
+      "ticket #48213",
+      "card 0912",
+      "instant payouts",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2026-09-24 Tom wants Q1 2027 roadmap offsite mid-March. Riya's tentative holds: 'Roadmap deck due' Fri 2027-03-12 (evt_9c11a0), 'Offsite prep' Mon 15 - Tue 16 Mar (evt_9c11a4), 'Q1 2027 roadmap offsite' Wed 17 - Thu 18 Mar (evt_9c11a9); Tom Becker has hold 17-18 Mar. Riya asked for shorter replies today.",
+     "entities": [
+      "Riya",
+      "Tom Becker",
+      "Q1 2027 roadmap offsite"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s144",
+   "episodes": [
+    {
+     "text": "2026-10-02 Family calendar: 'Thanksgiving in Ottawa (Grace & Daniel)' Sat 2026-10-10 to Tue 2026-10-13 (evt_a0213c), Sam invited. Reno note: next progress payment to Northline Renovations $7,500, due when countertops are installed.",
+     "entities": [
+      "Riya",
+      "Sam",
+      "Grace",
+      "Daniel",
+      "Northline Renovations",
+      "Ottawa"
+     ]
+    },
+    {
+     "text": "2026-10-02 Added: parent-teacher interview with Ms. Alvarez Thu 2026-11-12 16:00-16:15, Room 104, Morse Street PS; Leo's Learn-to-Skate (ages 6-8) Saturdays 10:30-11:15 at Jimmie Simpson rink, 870 Queen St E, 2027-01-09 to 2027-03-13, 10 sessions, $96 paid, receipt #EF-2290417, CSA hockey helmet mandatory; Riya's annual physical with Dr. Patel Thu 2026-11-12 08:40 at Carlaw Health Centre (later moved).",
+     "entities": [
+      "Leo",
+      "Ms. Alvarez",
+      "Morse Street PS",
+      "Jimmie Simpson rink",
+      "Dr. Patel",
+      "Carlaw Health Centre"
+     ]
+    },
+    {
+     "text": "2026-10-02 Riya registered 2026-10-01 for the Chilly Half Marathon in Burlington on Sun 2027-03-07 with Marcus Bell, $95 (Visa ending 4471). Assistant built 22-week plan in note 'Chilly Half plan' (Wed and Sat runs as anchors, extra easy Monday run, easy-only during Lisbon).",
+     "entities": [
+      "Riya",
+      "Marcus Bell",
+      "Chilly Half Marathon",
+      "Burlington"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s145",
+   "episodes": [
+    {
+     "text": "2026-10-04 Pumpkin patch for Leo: chose Forsythe Family Farms, Unionville (10720 McCowan Rd), 33 min drive leaving 13:30, weekend admission $16, walk-up entry on Sundays, gate wait under 10 min, wagon rides to 16:30; weather 14C dropping to 11C, muddy so boots. Downey's Caledon sold out.",
+     "entities": [
+      "Leo",
+      "Forsythe Family Farms",
+      "Unionville"
+     ]
+    },
+    {
+     "text": "2026-10-04 Notices: Morse Street PS Picture Day Thu 2026-10-15, retakes Nov 19, no school Mon Oct 12 (Thanksgiving). Autopays: Toronto Hydro $88.43 Thu Oct 15, Enbridge Gas $61.20 Mon Oct 19. Ontario cellphone policy for 2026-27: K-6 devices including messaging smartwatches off and out of sight all day, so applies to Leo.",
+     "entities": [
+      "Morse Street PS",
+      "Toronto Hydro",
+      "Enbridge Gas",
+      "Leo"
+     ]
+    },
+    {
+     "text": "2026-10-04 Riya's mother Anjali confirmed she will visit Toronto from 2027-05-10 to 2027-06-21, staying in the guest room once the renovation is done; added to Family calendar 'Mom (Anjali) visiting from Mumbai' (evt_a1001f, shown as free). Riya said living without a working kitchen since September is wearing (takeout, dust). Drywall dust on hardwood: HEPA vacuum with soft brush, then damp microfibre mop, no sweeping or vinegar.",
+     "entities": [
+      "Riya",
+      "Anjali Malhotra",
+      "Leo",
+      "Sam"
+     ]
+    },
+    {
+     "text": "2026-10-04 Reminder 'Plan something with Priya this month': free weekend windows Sat 17 Oct 13:00-18:00, Sun 18 Oct, Sat 24 Oct 12:00-18:00, Sun 25 Oct after 14:00 (Leo soccer wrap-up party 11:00-13:00), Sat 31 Oct. Assistant offered to text Priya options (open).",
+     "entities": [
+      "Priya",
+      "Riya",
+      "Leo"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s146",
+   "episodes": [
+    {
+     "text": "2026-10-05 Calendar: DUE 'Q4 2026 payouts planning doc to Tom' Fri 2026-10-30 (evt_b1007a) and writing block Tue 2026-10-20 09:30-11:30 (evt_b1007e).",
+     "entities": [
+      "Riya",
+      "Tom Becker",
+      "Q4 2026 planning doc"
+     ]
+    },
+    {
+     "text": "2026-10-05 Payouts Health week of 2026-09-28: 18,442 payouts attempted, success rate 99.31%, median 34 min, p95 2 h 11 min, 127 failed (bank account closed 41, name mismatch 33, Wavecrest timeout 29, other 24), instant share 22.8%.",
+     "entities": [
+      "Payouts Health",
+      "Wavecrest"
+     ]
+    },
+    {
+     "text": "2026-10-05 Priya's 37th birthday dinner moved: Alo had no table for eight, now Sunday 2026-11-08 7:00 pm at Bar Raval, booked under Riya for eight (conf. BR-1108-R); guests Priya, Arjun, Riya, Sam, Marcus, Tasha, Neil, Jo; Riya promised Priya's sister a cake from Bobbette & Belle (not yet ordered). Dr. Patel's physical moved by Carlaw Health Centre to Tue 2026-10-27 10:30 am, fasting bloodwork first (LifeLabs requisition); calendar moved, Riya to reply C. Nate: Barzotti cabinets ship this week, cabinet install 2026-11-14 to 11-17 crew 7:30, countertop templating a week later (overlaps Ottawa trip).",
+     "entities": [
+      "Priya",
+      "Bar Raval",
+      "Alo",
+      "Bobbette & Belle",
+      "Carlaw Health Centre",
+      "Dr. Patel",
+      "Nate",
+      "Barzotti",
+      "Caesarstone"
+     ]
+    },
+    {
+     "text": "2026-10-05 Biscuit (dog) will stay with Hannah at her house Sun 2026-12-20 to Sat 2027-01-02 during Lisbon; Dogs Den booking cancelled (deposit $100 refunded to Visa ending 4471); Riya promised Hannah a box of pastéis de nata and pays Biscuit's food. Lisbon Dec 2026 note updated.",
+     "entities": [
+      "Biscuit",
+      "Hannah",
+      "Dogs Den Kennels",
+      "Riya"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s147",
+   "episodes": [
+    {
+     "text": "2026-10-07 Riya worried about Leo's reading (Ms. Alvarez said in September slightly below grade level but improving). Reading log Sep 28 - Oct 6 shows nightly entries (Frog and Toad, Mercy Watson, Elephant & Piggie), teacher comment Oct 2 'Lovely progress on decoding'. Commitments note: read with Leo 20 min nightly at 7:30 pm from 2026-09-14 (log in school reading log); review Priya's architecture firm website copy before 2026-11-15 (Google Doc not yet received); soccer snack duty Sat 17 Oct (orange slices + water); return Hannah's cooler. Library suggestions one level up at Pape/Danforth: Princess in Black, Owl Diaries, Zoey and Sassafras, Bad Guys (waitlist 3), Kit and Kaboodle.",
+     "entities": [
+      "Riya",
+      "Leo",
+      "Ms. Alvarez",
+      "Priya",
+      "Hannah",
+      "Toronto Public Library"
+     ]
+    },
+    {
+     "text": "2026-10-07 Leo's winter gear: MEC cart preview Kids' Toasty Winter Boots size 1 $79.95 + Kids' Slush Snow Pants size 8 $89.95, total $191.99, delivery Oct 9-12; Kamik Snowbuster 3 cheaper at $64.99 at Simons. Not ordered; assistant asked to confirm sizes (open).",
+     "entities": [
+      "Leo",
+      "MEC",
+      "Kamik",
+      "Simons"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s148",
+   "episodes": [
+    {
+     "text": "2026-10-07 Lumen Pay quarterly planning offsite Thu 2026-11-12 09:00-18:00 at The Gladstone House, 1214 Queen St W (evt_c2210f, Work calendar). Clashes with Leo's parent-teacher interview 16:00. Ms. Alvarez open slots: Wed 11 Nov 15:45 or 16:15, Thu 12 Nov 08:15 or 18:30; changes until Mon 9 Nov 17:00; open whether to switch. Venue: no on-site parking, Green P at 1169 Queen St W ~$18/day, 501 Queen streetcar, dedicated event Wi-Fi 500 Mbps, dietary requests due 5 business days before.",
+     "entities": [
+      "Riya",
+      "Lumen Pay",
+      "The Gladstone House",
+      "Ms. Alvarez",
+      "Leo",
+      "Sam"
+     ]
+    },
+    {
+     "text": "2026-10-07 Tom Becker's pre-read request: comments on strategy memo by Fri 2026-10-09, one page per area on Q1 bets by Fri 2026-11-06 (Riya tagged for payouts and onboarding). Reminders: rem_5531 Fri Oct 9 11:00 send Tom memo comments; rem_5532 Fri Oct 9 15:00 pick up Leo's library books at Pape branch (before Ottawa Thanksgiving trip). Inputs bundled in Notion 'Memo review inputs (Riya)'.",
+     "entities": [
+      "Tom Becker",
+      "Riya",
+      "rem_5531",
+      "rem_5532",
+      "PAY-1550",
+      "ONB-310"
+     ]
+    },
+    {
+     "text": "2026-10-07 Slack DM to Diego Fernández 15:02 asking for A3 printouts of the merchant journey map for the 12 Nov offsite; Diego replied he will bring 4 A3 copies and asked whether Riya wants the drop-off-annotated or clean version (open).",
+     "entities": [
+      "Diego Fernández",
+      "Riya"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s149",
+   "episodes": [
+    {
+     "text": "2026-10-07 Booked car service for grey 2019 Mazda CX-5: 80,000 km maintenance at Downtown Mazda Mon 2026-10-19 07:30 drop-off, shuttle requested, ~3 h, est. $489 + tax, conf. DM-30418; winter tire changeover (stored tires, ticket ST-55821) at Canadian Tire #0127 Leslie St Sat 2026-11-07 08:30, $79.99, conf. CT-882107. Calendar entries and reminder Sun 18 Oct 20:00 'Car keys + empty the trunk'.",
+     "entities": [
+      "Mazda CX-5",
+      "Downtown Mazda",
+      "Canadian Tire Leslie St",
+      "DM-30418",
+      "CT-882107",
+      "ST-55821"
+     ]
+    },
+    {
+     "text": "2026-10-07 Assistant posted on LinkedIn as Riya Malhotra (post li_7381120, public, 18:41) congratulating the Lumen Pay payouts team on winning the internal Ship It award for the merchant status banner. Offered to share it in #payouts-launch.",
+     "entities": [
+      "Riya Malhotra",
+      "Lumen Pay",
+      "Ship It award",
+      "LinkedIn"
+     ]
+    },
+    {
+     "text": "2026-10-07 Grace Okafor emailed Riya and Sam: November Ottawa trip cancelled because Nate's crew installs cabinets that weekend; Grace and Daniel will instead come to Toronto by VIA Rail 2026-11-20 to 2026-11-23, with Riya hosting Grace's birthday dinner Sat 2026-11-21. Calendar updated: Ottawa weekend deleted; added visit (evt_d0115a), dinner 18:00-21:00 (evt_d0115f), Leo's winter concert Thu 2026-12-10 18:30 in gym at Morse Street PS (Riya emailed Tom on 2026-10-06 she'd leave work at 5:00). Search for Sam's favourite recipe found nothing; open: Riya to name the dish and the anniversary date for a reminder; video call with Grace and Daniel with Leo's school photos.",
+     "entities": [
+      "Grace Okafor",
+      "Daniel",
+      "Riya",
+      "Sam",
+      "Nate",
+      "Tom",
+      "Leo",
+      "Morse Street PS"
+     ]
+    }
+   ]
+  }
+ ]
+}

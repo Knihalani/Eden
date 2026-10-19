@@ -1,0 +1,349 @@
+{
+ "batch": "life-sleep-b04",
+ "sessions": [
+  {
+   "id": "life-s040",
+   "episodes": [
+    {
+     "text": "2026-01-08 Riya Malhotra asked whether the Bell cancellation went through and whether the new internet bill is right, to avoid paying both. Bell Canada confirmed Bell Fibe Internet (account ending 4471) cancelled effective 2026-01-02; one final prorated bill of $31.67 (2025-12-20 to 2026-01-02); Home Hub modem must be returned within 30 days with prepaid label or a $150 non-return fee applies.",
+     "entities": [
+      "Riya Malhotra",
+      "Bell Canada",
+      "Bell Fibe"
+     ]
+    },
+    {
+     "text": "2026-01-08 TekSavvy (Fibre 1 Gbps, unlimited, Leslieville Toronto) invoice #TS-2026-0119384: $70.00 monthly + $9.10 HST = $79.10, modem rental $0 (customer-owned), pre-authorized debit 2026-01-15. Assistant started background task t_0311 to watch for Bell's final bill and modem return label.",
+     "entities": [
+      "TekSavvy",
+      "Riya Malhotra",
+      "Bell Canada"
+     ]
+    },
+    {
+     "text": "2026-01-08 Shoppers Drug Mart texted that Riya's prescription Rx 0048817 is ready at Queen & Carlaw (open till 22:00); assistant added calendar reminder evt_9a1c2 for 17:15 on 2026-01-08.",
+     "entities": [
+      "Shoppers Drug Mart",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-01-08 Riya's weekly 1:1 with Tom Becker moved from Thursdays 14:00 to Wednesdays 11:30-12:00 starting 2026-01-14 (Tom's exec staff meeting clashed). Assistant accepted Tom's new series and deleted the old Thursday series from 2026-01-15. Background scan found clashes: Diego's design crit Wed 2026-02-04 and Tom's roadmap dry run Wed 2026-03-11; assistant offered to ask Diego to shift the crit 30 min (Riya said not now). Bell final bill $31.67 autopays from joint account; modem label drop at Canada Post by Sun 2026-02-01.",
+     "entities": [
+      "Riya Malhotra",
+      "Tom Becker",
+      "Diego",
+      "Canada Post"
+     ]
+    },
+    {
+     "text": "2026-01-08 Riya asked to rescale the classic back-of-bag chocolate-chip cookie recipe (12 cookies) to 3 dozen for her son Leo: 420 g flour, 1.5 tsp baking soda, 0.75 tsp salt, 345 g butter, 150 g white sugar, 225 g brown sugar, 3 eggs, 1 tbsp vanilla, 510 g chocolate chips; bake 190 C 9-11 min, about four batches.",
+     "entities": [
+      "Riya Malhotra",
+      "Leo"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s041",
+   "episodes": [
+    {
+     "text": "2026-01-10 Marcus Bell (+1 416-555-0142) asked if Riya Malhotra still does the early Wednesday workout; the Y has a new 6:15 class next week. Riya said she is reconsidering her routine; assistant texted Marcus she will let him know by Monday (2026-01-12).",
+     "entities": [
+      "Marcus Bell",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-01-10 Riya asked for a thank-you card note to Grace and Daniel Okafor (Grace is Sam's mother) for Christmas 2025 in Ottawa, 2025-12-24 to 2025-12-28, signed Riya, Sam and Leo, no emoji. Assistant drafted it; Grace Okafor lives at 1419 Kilborn Pl, Ottawa ON K1H 6L6 (Alta Vista), mobile +1 613-555-0187. Open: whether to order a card mailed there or Riya writes by hand.",
+     "entities": [
+      "Grace Okafor",
+      "Daniel Okafor",
+      "Riya Malhotra",
+      "Sam",
+      "Leo"
+     ]
+    },
+    {
+     "text": "2026-01-10 Finance agent December 2025 household wrap-up (TD joint chequing): spent $6,412 vs $6,000 budget (+$412); over on gifts (+$268) and groceries (+$190), under on dining out (-$85); gas $142; no late payments; January budget unchanged.",
+     "entities": [
+      "finance-agent",
+      "TD joint chequing"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s042",
+   "episodes": [
+    {
+     "text": "2026-01-12 Leo passed into Swimmer 3; winter swim lessons are Saturdays 10:00-10:45 at Pape Recreation Centre, 953 Gerrard St E. Assistant created family-calendar series evt_sw3_01 from 2026-01-17 to 2026-03-21 (10 sessions) with 45-min reminder.",
+     "entities": [
+      "Leo",
+      "Pape Recreation Centre",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-01-12 Evening wrap-up for Tue 2026-01-13: office day, lunch & learn on SMB fraud trends at 12:00, check-in with Wen at 16:00; weather high -4C/low -11C with flurries.",
+     "entities": [
+      "Wen",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-01-12 Riya dropped spin class and now does strength training at the Leslieville YMCA Tuesdays and Thursdays 06:15-07:05, must be home by 7:15 so Sam can leave for school. Assistant deleted the Wednesday spin series from 2026-01-14 and created evt_ymca_01 starting 2026-01-13. Also built a ~3-hour focus playlist 'Deep Work, Tue' (41 tracks) of Khruangbin and A. R. Rahman instrumentals.",
+     "entities": [
+      "Riya Malhotra",
+      "Leslieville YMCA",
+      "Khruangbin",
+      "A. R. Rahman",
+      "Sam"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s043",
+   "episodes": [
+    {
+     "text": "2026-01-13 Library books due today at Pape/Danforth branch (closes 20:30): 3 items on Leo's card, 1 on Riya's; Sam to drop them off.",
+     "entities": [
+      "Riya Malhotra",
+      "Sam",
+      "Leo",
+      "Pape/Danforth library"
+     ]
+    },
+    {
+     "text": "2026-01-13 Riya asked the assistant to book, without checking, a Montreal hotel near the Plateau for Fri 2026-02-06 to Sun 2026-02-08 under $250/night to visit Priya. Booked Hotel Le Petit Plateau (Rue Rachel E), queen courtyard room, confirmation HPP-55120, $189/night, non-refundable advance purchase, $433.94 CAD charged to Visa ending 2291; check-in 15:00, check-out 11:00. Alternatives: Auberge de la Montagne $214 (free cancel till 2026-02-05), Le Saint-Denis Suites $229, Maison Laurier B&B $242.",
+     "entities": [
+      "Riya Malhotra",
+      "Priya",
+      "Hotel Le Petit Plateau",
+      "Montreal"
+     ]
+    },
+    {
+     "text": "2026-01-13 Calendar peer added the Montreal hotel to Riya's calendar; no conflicts. Sam is solo with Leo that weekend including swim Sat 2026-02-07 10:00; Riya may want to tell Sam.",
+     "entities": [
+      "Sam",
+      "Leo",
+      "Riya Malhotra"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s044",
+   "episodes": [
+    {
+     "text": "2026-01-16 Riya asked for a one-hour Zoom family call with her mother Anjali Malhotra (Mumbai) and brother Kabir Malhotra (Vancouver) on Sat 2026-01-24 11:00 her time to plan Anjali's April trip to Vancouver to meet Ira. Created evt_fam_0124 (zoom.example.com/j/84410277); Kabir accepted, Anjali no response yet.",
+     "entities": [
+      "Riya Malhotra",
+      "Anjali Malhotra",
+      "Kabir Malhotra",
+      "Ira"
+     ]
+    },
+    {
+     "text": "2026-01-16 Flight search BOM to YVR for Anjali, 2026-04-10 to 2026-04-20, economy, max 1 stop, one-way prices: Air India via Delhi ~22h40 $1,412; Cathay via Hong Kong ~24h $1,586; Air Canada via London ~25h $1,690. Returns to be priced once dates agreed.",
+     "entities": [
+      "Anjali Malhotra",
+      "Air India",
+      "Cathay",
+      "Air Canada"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s045",
+   "episodes": [
+    {
+     "text": "2026-01-18 Riya asked to unsubscribe from Old Navy, Wayfair, Uber Eats promos, Lululemon and Dyson and archive their mail. 1,094 promo emails (Old Navy 412, Wayfair 298, Uber Eats 187, Lululemon 156, Dyson 41); all five unsubscribed (Dyson marked spam), 1,094 archived, Uber Eats receipts kept; unread went 1,587 to 493; senders may still send up to 10 days.",
+     "entities": [
+      "Riya Malhotra",
+      "Old Navy",
+      "Wayfair",
+      "Uber Eats",
+      "Lululemon",
+      "Dyson"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s046",
+   "episodes": [
+    {
+     "text": "2026-01-22 Riya asked for a Linear ticket draft: payout CSV export drops the currency column for merchants with multiple payout accounts (examples mid_7Q2KX9 Maple & Oak Ceramics, mid_3HF0LA), since the 2026-01-14 release, Zendesk #48812 and #48655. Draft PAY-1207 (medium, bug+payouts) not yet submitted; no duplicate found; likely related to PAY-1164 serializer refactor.",
+     "entities": [
+      "Riya Malhotra",
+      "PAY-1207",
+      "PAY-1164",
+      "Zendesk",
+      "Linear"
+     ]
+    },
+    {
+     "text": "2026-01-22 Toronto Hydro bill (account 6620 1187 33): 2025-12-11 to 2026-01-12, 812 kWh, $164.28 due 2026-02-03, not on pre-authorized payment; about 9% above last January. Riya chose a reminder: calendar event evt_hydro_0130 on Fri 2026-01-30 12:00.",
+     "entities": [
+      "Toronto Hydro",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-01-22 Raptors beat Bucks 118-111 on 2026-01-21 (Scottie Barnes 31 pts), now 25-19. Assistant explained EFT vs wire for Canadian merchant payouts (EFT batched next-day, wire via Lynx $15-50+).",
+     "entities": [
+      "Toronto Raptors",
+      "Sam"
+     ]
+    },
+    {
+     "text": "2026-01-22 Work digest: Olivia wants Instant Payouts beta merchant count by Fri 2026-01-30; Diego left 3 comments on payouts dashboard empty-states spec. Riya booked 25-min sync 'Payouts dashboard: empty states' Tue 2026-01-27 10:00 with Aisha Rahman and Diego Fernandez (evt_pd_0127, Meet link); agenda empty-state copy, loading skeleton, Looker link owner. Aisha accepted; Diego tentative, suggested async in Figma; Riya kept the meeting for now.",
+     "entities": [
+      "Riya Malhotra",
+      "Aisha Rahman",
+      "Diego Fernandez",
+      "Olivia"
+     ]
+    },
+    {
+     "text": "2026-01-22 Riya practised Spanish (corrected 'Soy en la oficina' to 'Estoy'), wants noun-gender quiz on exceptions like el problema, el mapa, la mano; quiz given, answers pending. Assistant drafted a Slack congratulation to Wen on promotion to Senior Analyst for #product-team; not yet posted.",
+     "entities": [
+      "Riya Malhotra",
+      "Wen"
+     ]
+    },
+    {
+     "text": "2026-01-22 Backsplash: Riya (asked 2026-01-17 for zellige photos) got 6 more photos (3 white, 3 sage) saved to note 'kitchen reno / backsplash ideas 2'. Northline Renovations (Nate) quotes: zellige install $3,860, ceramic lookalike $1,420; decision due Fri 2026-01-30. Morse Street PS: February pizza lunch forms and Leo's Riverdale Farm trip form (trip 2026-02-12) due 2026-01-30. Both added to todo for Thu 2026-01-29.",
+     "entities": [
+      "Nate",
+      "Northline Renovations",
+      "Morse Street PS",
+      "Leo",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-01-22 Riya considering taking Leo to Ottawa to see Grace and Daniel over Victoria Day weekend (Sat 2026-05-16 to Mon 2026-05-18); no saved notes on prior ideas. Open: search for Leo-friendly events that weekend.",
+     "entities": [
+      "Riya Malhotra",
+      "Leo",
+      "Grace Okafor",
+      "Daniel Okafor"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s047",
+   "episodes": [
+    {
+     "text": "2026-01-22 Muted the 'Parking garage access changes' all-staff thread (47 replies) and archived 304 of 312 LinkedIn notification emails, keeping 8 from real people. Offered weekly LinkedIn job alerts (not decided).",
+     "entities": [
+      "Riya Malhotra",
+      "LinkedIn"
+     ]
+    },
+    {
+     "text": "2026-01-22 Diego's landlord wants to keep part of his damage deposit; assistant said damage deposits are not allowed in Ontario (only last month's rent deposit), tenant can file T1 with the LTB within a year; Riya will forward.",
+     "entities": [
+      "Diego",
+      "Landlord and Tenant Board"
+     ]
+    },
+    {
+     "text": "2026-01-22 Ordered T-Rex Hooded Costume Kids M (7-8) from Mastermind Toys for Leo's animal day Fri 2026-01-30: order #MT-7781204, $45.19 total, Visa ending 2291, arriving Tue 2026-01-27.",
+     "entities": [
+      "Leo",
+      "Mastermind Toys",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-01-22 Drafted and sent (d_4410) reply to Morse Street School Council declining bake sale (2026-02-13) but offering to help at spring fair. Car insurance premium rose; advice to get quotes 30-45 days before term end; search of email/notes found no policy details; Riya to photograph the letter tomorrow.",
+     "entities": [
+      "Morse Street School Council",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-01-22 Withrow Park rink for Sat 2026-01-24 after Leo's swim: weather sunny -6C; rink open with good ice; leisure skate 12:00-14:00 and 15:00-18:00. Also explained to Leo how outdoor rinks stay frozen; City diagram saved to note 'Leo questions'.",
+     "entities": [
+      "Withrow Park",
+      "Leo",
+      "Riya Malhotra"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s048",
+   "episodes": [
+    {
+     "text": "2026-02-01 Ottawa weather on Sun 2026-01-25: -18C (low -24C), 9 cm snow, NW gusts 45 km/h, wind chill -27; Toronto about -12C. Grace Okafor called it the winter's worst day.",
+     "entities": [
+      "Grace Okafor",
+      "Ottawa"
+     ]
+    },
+    {
+     "text": "2026-02-01 Loblaws Leslie St grocery order PCX-2210487 ready for pickup Sun 2026-02-01 14:00-14:30: 34 items, substitutions (yogurt 650 g, organic spinach 284 g), frozen blueberries out of stock, total $187.42.",
+     "entities": [
+      "Loblaws Leslie St",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-02-01 Leo is into chess from school club; assistant recommended Dinosaur Chess ($6.99 one-time, no ads, 70 lessons ages 5-8); ChessKid free tier with $69.99/yr upgrade; Lichess adult-oriented. Open: whether to buy Dinosaur Chess on the iPad.",
+     "entities": [
+      "Leo",
+      "Dinosaur Chess",
+      "ChessKid",
+      "Lichess"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s049",
+   "episodes": [
+    {
+     "text": "2026-02-04 Riya's updates: Daniel Okafor had knee replacement in January 2026, went fine, avoids long stairs and long drives (consider for visits). Tom Becker's farewell-to-old-office card: he likes single-malt Scotch, esp. Lagavulin; Lagavulin 16 ~ $150 at LCBO, over $100 so assistant needs contributors list before buying.",
+     "entities": [
+      "Daniel Okafor",
+      "Tom Becker",
+      "Riya Malhotra",
+      "Lagavulin"
+     ]
+    },
+    {
+     "text": "2026-02-04 Riya postponed the DELE B2 exam from Sat 2026-05-23 to 2026-11-21 (Toronto test centre) because Instant Payouts beta left no study time; calendar event evt_dele_b2 moved. Open: assistant offered a backwards study plan.",
+     "entities": [
+      "Riya Malhotra",
+      "DELE B2"
+     ]
+    },
+    {
+     "text": "2026-02-04 'For the assistant' note (updated 2026-02-03): therapy sessions are private and only on Riya's personal calendar, never shared family calendar; prefer Air Canada for flights (Aeroplan 25K), aisle seats, never basic economy; remind about bills 3 days before due.",
+     "entities": [
+      "Riya Malhotra",
+      "Air Canada",
+      "Aeroplan"
+     ]
+    },
+    {
+     "text": "2026-02-04 Summary of pod.example.com/ep/218 (pricing B2B APIs, 41 min): hybrid platform fee plus usage tiers, price on transactions not calls, 6-12 months grandfathering, publish pricing through mid-market. Resent snow-day indoor games list from 2026-01-27 (floor is lava, sock skating relay, blanket fort, painter's tape hopscotch, scavenger hunt, balloon keep-up) for Leo on Saturday.",
+     "entities": [
+      "Leo",
+      "Riya Malhotra",
+      "Morse Street"
+     ]
+    }
+   ]
+  }
+ ]
+}

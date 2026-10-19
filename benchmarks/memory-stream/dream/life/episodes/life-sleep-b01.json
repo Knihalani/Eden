@@ -1,0 +1,295 @@
+{
+ "batch": "life-sleep-b01",
+ "sessions": [
+  {
+   "id": "life-s010",
+   "episodes": [
+    {
+     "text": "2025-08-29 Riya needed a one-line warm, not cheesy birthday message for the team card for manager Tom Becker (card goes to him Monday, nothing about age); assistant offered three options and recommended 'Happy birthday, Tom — thanks for always making room for the hard questions.' Riya's choice not stated.",
+     "entities": [
+      "Riya",
+      "Tom Becker"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s011",
+   "episodes": [
+    {
+     "text": "2025-09-15 School-year updates from Riya: son Leo (born 2019-07-17) is in grade 2 at Morse Street Public School, teacher Ms. Alvarez, who prefers contact through the school's Edsby app, not email. Riya and Hannah Cho swap pickups: Riya gets Leo and Jun on Wednesdays (calendar evt_8a04d2, Wed 15:20-15:50 from 2025-09-17), Hannah does Fridays.",
+     "entities": [
+      "Leo",
+      "Ms. Alvarez",
+      "Morse Street Public School",
+      "Hannah Cho",
+      "Jun",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2025-09-15 New rules: no meetings before 9:30 or after 16:30 (was 17:00) and nothing after 15:00 on Fridays; prefer Canadian retailers (MEC, Indigo, Simons) over Amazon when local ships within a week. Spanish with Carlos Mendez moved from Tuesdays to Thursdays: 19:30 homework review, lesson 20:00-21:00 on Zoom, from Thu 2025-09-18 (evt_7f21c9). Rules saved in note 'Assistant rules'.",
+     "entities": [
+      "Riya",
+      "Carlos Mendez",
+      "MEC",
+      "Indigo",
+      "Simons"
+     ]
+    },
+    {
+     "text": "2025-09-15 Sensitive: Riya said she and Sam Okafor had a really difficult time trying for a second child in 2024; do not bring up unless she does. Biscuit howled at sirens again (beagle howling article summarized 2025-08-15).",
+     "entities": [
+      "Riya",
+      "Sam Okafor",
+      "Biscuit"
+     ]
+    },
+    {
+     "text": "2025-09-15 Aisha Rahman messaged she finished a first pass on the payouts v2 spec (edge cases: partial refunds and currency rounding) and asked for a 30-minute call tomorrow (Tue 2025-09-16) at 10:00 to write tickets. Open thread: assistant asked whether to accept, offer another time, or move async to Slack; Riya had not answered.",
+     "entities": [
+      "Aisha Rahman",
+      "Riya",
+      "Payouts v2"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s012",
+   "episodes": [
+    {
+     "text": "2025-09-26 Bank of Canada: cut to 2.50% on 2025-09-17; next decision Wed 2025-10-29 with about 60% market odds of another 25 bp cut (core inflation near 3%). 2025 decisions: Jan 29 cut to 3.00%, Mar 12 cut to 2.75%, hold Apr 16, Jun 4, Jul 30, Sep 17 cut to 2.50%. Asked because of a payouts float discussion at work.",
+     "entities": [
+      "Bank of Canada",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2025-09-26 Home Depot order #W512339870 confirmed (email 09:14): pack of 4 16x25x1 MERV 11 furnace filters, $62.12 total, pickup at Leslie St store (1 Leslie St) ready by Sat 2025-09-27 12:00, bring order number and photo ID. Riya also wants return of library books Sat 2025-09-27 10:00 (due Monday); calendar event evt_9b11f0 created.",
+     "entities": [
+      "Home Depot",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2025-09-26 Planning dinner for Kabir and Mei's visit the second weekend of November (Saturday dinner): Mei is lactose intolerant and loves Riya's chana masala. Menu saved in note 'Nov dinner - Kabir & Mei' (n_44b2): chana masala, jeera rice, oil-based naan, aloo gobi, kachumber, coconut raita; dessert coconut milk kheer made a day ahead.",
+     "entities": [
+      "Kabir",
+      "Mei",
+      "Riya",
+      "chana masala"
+     ]
+    },
+    {
+     "text": "2025-09-26 Street yard sale drafted for Sat 2025-10-04 9:00-13:00 (rain date Sun 10-05), tables on own driveways, no early birds; City of Toronto sign by-law: no signs on poles (fines from $90), sandwich board on boulevard allowed. Priya Nair wanted raise-negotiation tips (5 years at firm, led a library project, boss says 'next cycle'). Morse Street PS Picture Day Thu 2025-10-09 has no calendar entry yet. Finance: Rogers mobile bill $112.40 auto-pays Oct 3; September groceries $1,084 so far (about 6% over).",
+     "entities": [
+      "Priya Nair",
+      "Morse Street PS",
+      "Rogers",
+      "Riya"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s013",
+   "episodes": [
+    {
+     "text": "2025-09-29 Riya worried about her mother Anjali (68) living alone in Mumbai since her father died (flat has stairs); practical plan categories offered: nearby neighbour or relative in Bandra with spare key, daily check-in signal, medical info and alert pendant, stair safety. Riya will ask her mother about a neighbour at the weekend. Riya says talking through practical plans calms her; she asked for shorter answers (reading in bed).",
+     "entities": [
+      "Riya",
+      "Anjali",
+      "Mumbai"
+     ]
+    },
+    {
+     "text": "2025-09-29 Priya Nair deciding between two Montreal condos (she bikes, no car): Plateau 3.8 km / 14 min to Place Ville Marie, median 2-bed $629,000, fees $320-450/month, older buildings with special assessments (ask for reserve fund study); Verdun 6.1 km / 22 min via Lachine Canal, median $519,000, fees $280-380/month, quieter and newer. Draft message for Priya saved, not sent.",
+     "entities": [
+      "Priya Nair",
+      "Plateau",
+      "Verdun",
+      "Montreal"
+     ]
+    },
+    {
+     "text": "2025-09-29 Q4 payouts planning outline saved in notes 'Q4 payouts plan - outline' from 'payouts scratch': instant payouts adoption flat at about 11% since July, fee survey says 1.5% feels high, reconciliation export is top support driver, about 2.5 engineers (Aisha), risk bank partner API migration in November; Q4 bets: reconciliation CSV export v2, payout status webhooks, instant payout fee experiment. Peer notes: Northline Renovations invoice #NR-2207 ($6,500) due Fri 2025-10-03; Nate asked to confirm cabinet delivery window; Diego has 3 Figma comments on Onboarding 2.0 error copy.",
+     "entities": [
+      "Riya",
+      "Aisha Rahman",
+      "Northline Renovations",
+      "Nate",
+      "Diego Fernandez"
+     ]
+    },
+    {
+     "text": "2025-09-29 Added Leo's swim lessons: Tuesdays 17:30-18:15 at Pam McConnell Aquatic Centre (640 Dundas St E, Regent Park), weekly from Tue 2025-09-30 (evt_a3c771). Added 'Get passport photos for Leo' to the To-do note (7 open items).",
+     "entities": [
+      "Leo",
+      "Pam McConnell Aquatic Centre"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s014",
+   "episodes": [
+    {
+     "text": "2025-10-02 Sam Okafor messaged he has no energy to cook and suggested takeout; Riya said yes, she would pick later (order not yet placed). Leo started piano with Mrs. Greene, Mondays 16:30-17:15 at her home on Pape Avenue, weekly from Mon 2025-10-06 (evt_b7e214).",
+     "entities": [
+      "Sam Okafor",
+      "Riya",
+      "Leo",
+      "Mrs. Greene"
+     ]
+    },
+    {
+     "text": "2025-10-02 Rules saved to 'Assistant rules': for Tom Becker write one recommendation plus one alternative, not an open list; if a Spanish lesson clashes with work, message Carlos at least 24 hours ahead (later cancellations are charged). Riya mentioned that on 2025-09-21 Anjali's street in Mumbai flooded in monsoon.",
+     "entities": [
+      "Tom Becker",
+      "Carlos",
+      "Anjali",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2025-10-02 Indigo order #IND-58130442: 'Gramatica de uso del espanol B1-B2' $42.99 CAD, shipped Canada Post, tracking 7023 4410 8876 1095, delivered 2025-10-03 16:52 at the front door.",
+     "entities": [
+      "Indigo",
+      "Canada Post",
+      "Riya"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s015",
+   "episodes": [
+    {
+     "text": "2025-10-03 Furnace filter (16x25x1) replacement set as recurring every 3 months starting Sat 2026-01-04 10:00 (evt_c0d58e); spare filters on laundry room shelf (Home Depot 4-pack); Riya to swap one in this weekend. Tips given for sticking upstairs bathroom door (tighten hinge screws, soap or wax, plane, dehumidifier).",
+     "entities": [
+      "Riya",
+      "Home Depot"
+     ]
+    },
+    {
+     "text": "2025-10-03 Environment Canada rainfall warning Toronto: 50-70 mm Saturday night into Sunday. Forecast Sat 2025-10-04 cloudy, rain after 20:00, high 17C (63F); Sun 10-05 heavy rain, 55 mm, gusts 50 km/h, high 14C (57F). Yard sale Sat Oct 4 fine; assistant offered to remind Sam and the street group chat to pack up by 18:00.",
+     "entities": [
+      "Toronto",
+      "Sam",
+      "Riya"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s016",
+   "episodes": [
+    {
+     "text": "2025-10-08 Math for Riya's slide: new merchant activations Jul 1,240, Aug 1,385, Sep 1,512; month-over-month +11.7% (Aug), +9.2% (Sep), average 10.4%; Jul to Sep +21.9%. Also explained that EFT is the Canadian term for ACH (Payments Canada ACSS, PADs under Rule H1).",
+     "entities": [
+      "Riya"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s017",
+   "episodes": [
+    {
+     "text": "2025-10-11 Calendar: 'Q4 roadmap preview for prospects' Tue 2025-10-14 11:00-11:30 on Zoom, organizer Partnerships, no prep doc attached; assistant offered a one-page roadmap summary Monday evening; Riya said later. Riya is in Ottawa for Thanksgiving: preference saved in 'Travel preferences' for Ottawa family trips: drive the Mazda over the train, leave early Friday to beat 401 traffic, stop at the Big Apple in Colborne (open 8:00-20:00 on Mon 2025-10-13).",
+     "entities": [
+      "Riya",
+      "Mazda",
+      "Big Apple",
+      "Colborne",
+      "Partnerships"
+     ]
+    },
+    {
+     "text": "2025-10-11 Outbound route 2025-10-10: Leslieville to Glebe, Ottawa (Airbnb, 2nd Ave) via 401 E, 416 N, 417; 452 km, about 4 h 35 min without traffic. Return Monday 2025-10-13: leave Ottawa by 9:30 to clear Kingston before peak; Port Hope lane reduction km 461-464; about 5 h. Thanksgiving Monday is a stat holiday (Lumen Pay closed); Leo's piano with Mrs. Greene 16:30 still on calendar, cancel or keep unanswered. Grace made four pies.",
+     "entities": [
+      "Leslieville",
+      "Glebe",
+      "Leo",
+      "Mrs. Greene",
+      "Grace Okafor"
+     ]
+    },
+    {
+     "text": "2025-10-11 Sam Okafor had a migraine from Grace's vanilla candles; strong fragrances trigger Sam (no scented candles or air fresheners at home); Riya will not say anything. Gift ideas for Grace and Daniel, unscented, in the Glebe on Sunday: Lansdowne farmers' market (Sun 8:00-15:00, honey or maple syrup), pottery bowl from Glebe Emporium (724 Bank St), book for Daniel from Octopus Books (116 Third Ave).",
+     "entities": [
+      "Sam Okafor",
+      "Grace Okafor",
+      "Daniel Okafor",
+      "Riya",
+      "Glebe Emporium",
+      "Octopus Books"
+     ]
+    },
+    {
+     "text": "2025-10-11 Home tasks note 'House - week of 13 Oct' (n_51c9): Northline Renovations cabinet delivery Thu 2025-10-16 8:00-10:00 (someone must be home), outdoor tap, detectors, patio furniture, weatherstripping, gutters, snow tire swap. Tire options (none booked): Kal Tire Eastern Ave Sat 10-25 9:00 or 11:30 $79.95; Canadian Tire Leslie St Wed 10-22 18:00 $89.99; Leslieville Auto Service Fri 10-24 8:30 $70. Other facts: Grade 2 Toronto Zoo trip Wed 2025-10-22, permission form and $18 due Fri 10-17 via School Cash Online; Ottawa museums open Monday (Nature, Ingenium); unread Slack: Aisha asked if currency rounding is in v2 scope, answer needed by Wed.",
+     "entities": [
+      "Northline Renovations",
+      "Kal Tire",
+      "Canadian Tire",
+      "Leslieville Auto Service",
+      "Aisha Rahman",
+      "Riya"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s018",
+   "episodes": [
+    {
+     "text": "2025-10-14 Riya back from Ottawa. Open worry: she did not call her mother Anjali over the weekend, and Anjali had not answered calls or texts since; Riya will try her cousin. Inbox left for Riya: Nate (cabinet delivery Thu), School Cash Online ($18 field trip), Wen (Looker dashboard), Olivia (Q4 roadmap preview agenda). New Linear tickets for Riya: PAY-233 rounding rules for multi-currency payouts, PAY-236 payout status webhook spec; Diego wants decision on business verification error copy by Thu.",
+     "entities": [
+      "Riya",
+      "Anjali",
+      "Nate",
+      "Wen Li",
+      "Olivia Grant",
+      "Diego Fernandez"
+     ]
+    },
+    {
+     "text": "2025-10-14 Answers given: VLOOKUP needs FALSE for exact match (or XLOOKUP); cohort retention is flat when drops stay under 1-2 points for 3+ periods; clocks go back Sun 2025-11-02 at 2:00; neighbourhoods for Priya Nair if moved to Toronto: Little Portugal, Trinity Bellwoods, Annex, Cabbagetown. Jun Cho home sick; Riya had assistant text Hannah Cho (sent 08:47) that Leo made Jun a get-well card to drop off after school.",
+     "entities": [
+      "Priya Nair",
+      "Hannah Cho",
+      "Jun Cho",
+      "Leo",
+      "Riya"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s019",
+   "episodes": [
+    {
+     "text": "2025-10-14 Onboarding 2.0 LinkedIn post for Lumen Pay rewritten in calmer tone; Looker 'Onboarding funnel' for merchants started Oct 6-13: median sign-up to first payment 6.4 hours (was 2.9 days), 71% reach first payment within 24 hours, sample 1,104 merchants. Riya will post it. Olivia asked in #sales-enablement for a one-pager on the new flow by Friday.",
+     "entities": [
+      "Riya",
+      "Onboarding 2.0",
+      "Lumen Pay",
+      "Olivia Grant",
+      "Looker"
+     ]
+    },
+    {
+     "text": "2025-10-14 Ordered class snack for Leo's turn on Friday 2025-10-17 (22 students, label with ingredients per Ms. Alvarez): PC Express order PCX-77310452 at Real Canadian Superstore, 17 Leslie St, pickup Thu 2025-10-16 17:30-18:00, total $40.47 (Goldfish crackers 30-pack, PC mini banana chocolate chip muffins 24, 2 bags clementines). Open: Riya picks up Thursday after work.",
+     "entities": [
+      "Leo",
+      "Ms. Alvarez",
+      "Real Canadian Superstore",
+      "PC Express",
+      "Riya"
+     ]
+    }
+   ]
+  }
+ ]
+}
