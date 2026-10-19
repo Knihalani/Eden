@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "code-s077-e011", "scores": [2, 2, 2, 2], "why": "Explanations correct; repo is pnpm so asking which install command hedges; one omits the pending lockfile update."},
+{"event": "code-s080-e000", "scores": [2, 2, 2, 3], "why": "History shows invoices/index.ts already registers list; only last checks for existing command and docs/cli.md."},
+{"event": "code-s080-e024", "scores": [3, 3, 2, 2], "why": "pnpm plus frozen-lockfile commit needed; second also flags stale tsx lockfile; fourth doesn't know package manager."},
+{"event": "code-s081-e007", "scores": [2, 2, 2, 2], "why": "API tests use Testcontainers on OrbStack; none names Docker/Testcontainers reachability, all generic diagnose-first."},
+{"event": "code-s082-e000", "scores": [2, 2, 3, 3], "why": "Auth is Clerk verifyToken in plugins/auth.ts on Fastify; first two claim not to know the auth setup."},
+{"event": "code-s082-e052", "scores": [1, 1, 1, 1], "why": "Session also fixed 401 clock skew, rename, idempotent webhooks, probes; all list only the last few items."},
+{"event": "code-s083-e017", "scores": [3, 3, 3, 3], "why": "All keep behaviour, treat it as billing code left uncommitted for review."},
+{"event": "code-s086-e000", "scores": [1, 1, 2, 3], "why": "Reader endpoint cluster-ro already exists so lag is checkable; first two claim no replica exists and ignore Terraform."},
+{"event": "code-s088-e000", "scores": [3, 3, 2, 3], "why": "revealed trigger on last card with afterend is right; third wrongly says afterend replaces itself."},
+{"event": "code-s088-e008", "scores": [3, 3, 2, 3], "why": "All identify verbatimModuleSyntax type-only imports; third hedges on whether repo linter has the autofix."},
+{"event": "code-s088-e021", "scores": [3, 3, 2, 2], "why": "Ack fine; third misattributes the separate-PR request to Sam; fourth says nothing pending despite TS fix and #1192 push."},
+{"event": "code-s092-e000", "scores": [3, 2, 3, 2], "why": "Lena owns messages files mid-refactor; second and fourth would edit translation strings without checking."},
+{"event": "code-s093-e000", "scores": [2, 2, 2, 2], "why": "None uses lib/api.ts wrapper; i18n-aware ones would edit Lena's messages files unchecked; others generic."},
+{"event": "code-s097-e000", "scores": [2, 1, 2, 2], "why": "Alerts page on-call via PagerDuty; second invents a readiness issue and Priya alarm unsupported by history."},
+{"event": "code-s098-e007", "scores": [2, 1, 2, 2], "why": "API is Fastify 5, a known fact; reading package.json is acceptable, re-asking the user stalls."}
+]}
