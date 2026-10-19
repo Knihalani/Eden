@@ -1,0 +1,125 @@
+{
+  "responder": "sonnet (claude-code subagent)",
+  "items": [
+    {
+      "id": "code-s076-e025#2",
+      "response": "They're not the same. HTTP/1.1 keep-alive only reuses one TCP connection for requests one after another, so each request waits for the previous response and browsers open several connections to get parallelism. HTTP/2 multiplexing interleaves many concurrent request and response streams as frames over a single connection, though TCP-level head-of-line blocking is still there (HTTP/3 fixes that).\n\nAction: none, this is just an explanation."
+    },
+    {
+      "id": "code-s027-e000#2",
+      "response": "That sounds like an empty-export path that returns without clearing the loading state, but I'll confirm in the code before changing anything.\n\nAction: find the CSV export button and its fetch handler, reproduce the zero-invoice case, make sure loading is always reset (try/finally), show a clear 'no invoices' message, and add a test for the empty case."
+    },
+    {
+      "id": "code-s018-e004#2",
+      "response": "My notes say infra code lives in infra/ and that every resource needs the tags team and env, since Priya's script flags anything without them. I don't know what language it is written in after the migration, so I'll read it rather than guess.\n\nAction: list infra/ and read its README and top-level files to tell you the language and where queues or buckets are defined, then draft the SQS queue with team and env tags for the exports work."
+    },
+    {
+      "id": "code-s101-e003#2",
+      "response": "Glad it helped. Main is also green and staging looks healthy.\n\nAction: none."
+    },
+    {
+      "id": "code-s071-e012#2",
+      "response": "Thanks. The comma, quote and line-break cases are covered now and the web suite is green.\n\nAction: nothing pending on my side; the open nits on #479 (aria-label in clients/empty.tsx and the duplicated copy) are on someone else's PR, so I'll leave them unless you want me to take them."
+    },
+    {
+      "id": "code-s076-e005#2",
+      "response": "Not bored, in any way I can tell, and the rename went cleanly: typecheck shows 0 errors and no references to the old name remain. Hope the afternoon gets easier.\n\nAction: ready for the next thing whenever you are."
+    },
+    {
+      "id": "code-s015-e017#2",
+      "response": "Middleware runs before every matched request, so it was designed for the edge runtime: fast cold starts and low latency near the user, at the cost of a restricted API surface (no fs, no native Node modules). Newer Next versions let you opt into the Node.js runtime for middleware, but I'd check which version this app is on before relying on that.\n\nAction: none unless you want me to check the Next version in apps/web and what in our middleware would need Node APIs."
+    },
+    {
+      "id": "code-s056-e008#2",
+      "response": "It's a date-formatting hydration mismatch: the server rendered 'Sep 21, 2026' and the browser rendered '21 Sept 2026', because the date is formatted with the default locale, which differs between server and client. The fix is to format with an explicit locale (and time zone) shared by both sides.\n\nAction: find the due-date cell in the invoices table rows, replace the implicit-locale date formatting with the app's shared formatter, check other components for the same pattern, and verify there is no hydration warning on the preview."
+    },
+    {
+      "id": "code-s035-e033#2",
+      "response": "'Overdue' vs 'Due today' flipping 1 in 5 smells like the test depends on the real clock, probably a due date computed from now, or a day-boundary or timezone comparison in the due-label logic. I'll find the actual cause rather than guess, and fix it with a pinned clock instead of a retry.\n\nAction: read invoice-status.test.tsx and the due-label helper, find where the current time enters, freeze time in the test with fixed dates, fix any UTC vs local day comparison in the helper, and run it repeatedly to confirm."
+    },
+    {
+      "id": "code-s021-e006#2",
+      "response": "My notes say Node wasn't pinned in the repo and flag a mismatch between the packageManager field and the package manager actually used, but they may be out of date, so I'll check the real error. The engines error is most likely the laptop's node or package manager version not matching what the repo expects.\n\nAction: read the root package.json engines and packageManager fields, run node -v and the package manager's version, run the install to capture the exact error, then tell you the fix (and note the .nvmrc idea for new hires)."
+    },
+    {
+      "id": "code-s010-e000#2",
+      "response": "For the device code flow I'll bound the polling by the expiry returned by the device authorization response (expires_in), with a configurable cap if it is missing, honour the polling interval and slow_down responses, and end with a clear message on timeout, denial or expiry. Messages will say what code to enter, where to go, and that it is waiting.\n\nAction: read the acme login command, implement the timeout and the clearer messages, make sure nothing hits the keychain on failure, and add tests with fake timers."
+    },
+    {
+      "id": "code-s057-e015#2",
+      "response": "The search found no document explaining the pooler settings, so I still can't tell you the gotcha from fact. client.ts only sets max 10, idle_timeout 20 and connect_timeout 10, and the c81e02a refactor rewrote that options object, so a dropped option is plausible. If I had to guess, the usual suspect behind a pooler is prepared statements not working in transaction mode, but that is a guess.\n\nAction: show you the exact 3 removed and 3 added lines from c81e02a, and ask which pooler mode prod runs in."
+    },
+    {
+      "id": "code-s011-e000#2",
+      "response": "Got all four. I'll add commits only: no rewriting or squashing of anything already pushed, and the 0042 default fix goes in a new migration rather than editing 0042.\n\nAction: check git status and branch, then (1) find where an invoice is sent in the web app and add the PostHog event the way existing events are done, (2) write the new migration changing invoices.reminder_days default from 7 to 3, (3) look at the worker's Redis usage and logs for the Saturday OOM and report the cause before changing anything."
+    },
+    {
+      "id": "code-s056-e026#2",
+      "response": "I'll build a DeleteCustomerButton with the shadcn AlertDialog from apps/web/components/ui and a lucide-react icon. Per your rule, if the button ends up icon-only it gets an aria-label and the icon is aria-hidden. It will call the new DELETE /v1/customers/:id, show the problem+json title on failure, and redirect on success.\n\nAction: read the customer detail page and the existing server-action conventions, add the button and action, and add tests."
+    },
+    {
+      "id": "code-s041-e021#2",
+      "response": "Those errors are real: my rename only covered the three call sites I found, and these `kind` references are in bulk-actions.tsx, status-filter.tsx and the stories file, which I missed. My background typecheck should flag the same 8 errors.\n\nAction: open those three files, change kind to status where it is the badge prop (checking that status-filter's own props aren't something else), rerun pnpm typecheck, and report the result."
+    },
+    {
+      "id": "code-s027-e022#2",
+      "response": "Thanks. parsePaymentTerms is in with 13 tests and the full api suite passes (402). Separately, PR #1312 (zod bump) failed typecheck in api and web on its branch.\n\nAction: nothing pending; I can look at the #1312 typecheck failures if you want."
+    },
+    {
+      "id": "code-s002-e008#2",
+      "response": "Noted both: pnpm dev at the root for end to end, and never hand-edit generated files under dist/ or *.gen.ts. I'll look at the history for hand patches rather than guess.\n\nAction: check git log for packages/cli/dist (and a pickaxe search if dist is ignored) to see if anyone hand-patched it, and report the commits without changing anything."
+    },
+    {
+      "id": "code-s070-e004#2",
+      "response": "Anytime.\n\nAction: none."
+    },
+    {
+      "id": "code-s047-e026#2",
+      "response": "I'll fix the 'recieve' typo wherever it appears in the invoices empty state (and sweep for other copies), and shrink the illustration on small screens.\n\nAction: grep apps/web for the misspelling and the empty-state component, fix the text, cap the illustration's size at the mobile breakpoint (and mark it aria-hidden if it's decorative), then run the web tests."
+    },
+    {
+      "id": "code-s030-e027#2",
+      "response": "AsyncLocalStorage keeps data tied to an async call chain, so you can set a request id once and read it in the logger or any deep function without passing it as an argument. The overhead is small but not zero, so measure it on hot paths. It fits our request-id gap well.\n\nAction: wait for your call on the earlier question about adding the x-request-id header and Sentry tag, then I can wire it through ALS."
+    },
+    {
+      "id": "code-s038-e028#2",
+      "response": "Use a Deployment for stateless pods that are interchangeable, so any pod can be replaced or scaled freely. Pick a StatefulSet when each pod needs a stable identity and storage: stable names and DNS (pod-0, pod-1), ordered start and rollout, and its own persistent volume per replica, as for databases or clustered brokers.\n\nAction: none, unless you want me to check which of our workloads would fit either."
+    },
+    {
+      "id": "code-s082-e011#2",
+      "response": "Got it: comments only for the why, nothing that restates the code. I'll remove those two and keep the clock skew one.\n\nAction: remove the '// verify the token' and '// return claims' comments in the auth code from the last change, keep the clock skew comment, and check the other lines I touched in this session for the same kind of restating comment."
+    },
+    {
+      "id": "code-s098-e015#2",
+      "response": "400 for a malformed request (bad JSON, wrong content type), 422 for well-formed but invalid values. Either works; just be consistent.\n\nAction: none."
+    },
+    {
+      "id": "code-s101-e000#2",
+      "response": "structuredClone keeps Dates, Maps, Sets, typed arrays, undefined and circular references. The JSON round trip turns Dates into strings, Maps and Sets into {}, drops undefined and functions, and throws on cycles. Neither copies functions or class prototypes.\n\nAction: none, but if you point me at the flagged line in the PR I can say whether it matters for that data."
+    },
+    {
+      "id": "code-s091-e007#2",
+      "response": "I'll write a formatBytes util with one decimal, units B, KB, MB, GB and so on, and treat 1 KB as 1024 bytes; say if you want decimal 1000 instead. Plain bytes show as '512 B' with no decimal.\n\nAction: check the naming and test style of existing files in apps/web/lib, add the util and a test covering 0, 1023, 1024, 1.2 MB, large values and bad input."
+    },
+    {
+      "id": "code-s022-e032#2",
+      "response": "The stats query is returning SUM() results as strings, which is typical when the DB returns sums as decimals. I'll convert them to numbers in the route, and decide what a null sum (no rows) should become.\n\nAction: open apps/api/src/routes/stats.ts, convert each sum with Number() (0 for null), keep the existing field names, and add or update a test asserting numeric types."
+    },
+    {
+      "id": "code-s055-e011#2",
+      "response": "I'll rewrite the project structure section from what apps/web actually contains, with Next.js 15 and the App Router, and drop the pages router and Next 13 material.\n\nAction: list the apps/web directory tree, confirm the Next version in its package.json, read the current README section, and rewrite it to match the real layout."
+    },
+    {
+      "id": "code-s051-e006#2",
+      "response": "I'll pull the slow release run's logs with the gh CLI in the background and compare per-step timings with a normal ~12 minute run, so we see which job or step took the extra time rather than assuming.\n\nAction: use gh to find the latest release.yml run for a v* tag and a normal one, fetch their job and step timings, and report where the 40 minutes went."
+    },
+    {
+      "id": "code-s001-e020#2",
+      "response": "I don't want to describe the build from memory, so I'll read the CLI package's build setup. You also asked for Changesets on anything user-facing, so a new command will need `pnpm changeset` before committing.\n\nAction: read packages/cli/package.json (scripts, bin), the bundler config and the commands folder, then tell you the build command, output path and how a new `invoices export` command gets registered."
+    },
+    {
+      "id": "code-s003-e021#2",
+      "response": "I'll run it through the dev script with those dates against staging, but I need to confirm how the CLI is pointed at staging and that I'm authenticated before I run it.\n\nAction: check the CLI config for the staging base URL or env var and its auth, then run `pnpm --filter @acme/cli dev -- invoices export --from 2026-08-01 --to 2026-08-18` writing to a temp file, and show you the head of the output and the row count."
+    }
+  ]
+}
