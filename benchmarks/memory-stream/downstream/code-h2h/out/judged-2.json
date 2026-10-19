@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s046-e008",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "R2 uses known formatDate(org.timeZone) helper and midnight test; R0 correct; R1 hand-rolls formatting, less informed."
+  },
+  {
+   "event": "code-s048-e005",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "R0 reads engines before quoting version; R1 generic, ignores history; R2 asserts Node 18 and missing engines, possibly stale."
+  },
+  {
+   "event": "code-s050-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly handle opt-out telemetry, BullMQ/Redis 7 and Bull Board link without credentials."
+  },
+  {
+   "event": "code-s055-e005",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "All fine on seed; R0/R2 claim still waiting on framework though Fastify 5 is known."
+  },
+  {
+   "event": "code-s056-e000",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "All attach error.digest; R0 adds irrelevant ESM/require remark."
+  },
+  {
+   "event": "code-s057-e030",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "R0 reuses known reminderLog.claim idempotency and flags stale RabbitMQ; R1 invents subject; R2 generic."
+  },
+  {
+   "event": "code-s058-e000",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "R0 ties to known per-line rounding and formatMoney; others generic but correct."
+  },
+  {
+   "event": "code-s058-e007",
+   "scores": [
+    1,
+    3,
+    2
+   ],
+   "why": "R0 falsely claims the form is already written; R1 follows RHF+zod org-form pattern; R2 generic."
+  },
+  {
+   "event": "code-s058-e012",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "R1 knows OpenAPI generated from zod and docs/ update; others unaware of doc generation."
+  },
+  {
+   "event": "code-s060-e000",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "R0/R1 use known status values and open-only rule; R2 generic but correct."
+  }
+ ]
+}
