@@ -10,16 +10,21 @@ SHARES = {"code": {"plan": 0.141, "labeler-only": 0.171, "no-need": 0.688},
           "life": {"plan": 0.137, "labeler-only": 0.215, "no-need": 0.648}}
 
 
-def deltas(subs):
-    """{group: [(verify − none, eden − none) per turn]}, pooled over the given downstream subs."""
+def deltas(subs, runs=()):
+    """{group: [(verify − none, eden − none) per turn]}, pooled over the given downstream subs. With `runs`, each
+    turn's deltas are averaged over the sub and its repeat runs (`<sub>-<run>`, same turns and conditions)."""
     out = {}
     for sub in subs:
-        for g, xs in _deltas(sub).items():
-            out.setdefault(g, []).extend(xs)
+        base = _deltas(sub)
+        reps = [_deltas(f"{sub}-{r}") for r in runs]
+        for eid, (g, v, e) in base.items():
+            vals = [(v, e)] + [(x[eid][1], x[eid][2]) for x in reps if eid in x]
+            out.setdefault(g, []).append((sum(a for a, _ in vals) / len(vals), sum(b for _, b in vals) / len(vals)))
     return out
 
 
 def _deltas(sub):
+    """{event: (group, verify − none, eden − none)} for one downstream sub."""
     d = os.path.join(HERE, "downstream", sub)
     key = json.load(open(os.path.join(d, "key.json")))["key"]
     judged = {}
@@ -29,12 +34,12 @@ def _deltas(sub):
     for eid, k in key.items():
         if eid in judged:
             s = dict(zip(k["order"], judged[eid]))
-            out.setdefault(k["group"], []).append((s["verify"] - s["none"], s["eden"] - s["none"]))
+            out[eid] = (k["group"], s["verify"] - s["none"], s["eden"] - s["none"])
     return out
 
 
-def report(world, subs):
-    by = deltas(subs)
+def report(world, subs, runs=()):
+    by = deltas(subs, runs)
     util = {}
     for j, c in enumerate(("verify", "eden")):
         util[c] = round(sum(SHARES[world][g] * sum(x[j] for x in xs) / len(xs) for g, xs in by.items()), 4)
@@ -60,8 +65,11 @@ def report(world, subs):
 if __name__ == "__main__":
     # h2h.py code life                 → C5-E7 alone
     # h2h.py code life --pool h2h2     → C5-E7 pooled with downstream/<world>-h2h2 (C6-E1)
+    # h2h.py code --pool h2h2 --runs r2 → each turn averaged over its first run and the repeat run (C6-E2)
     args = sys.argv[1:]
+    runs = args[args.index("--runs") + 1:] if "--runs" in args else []
+    args = args[:args.index("--runs")] if "--runs" in args else args
     extra = args[args.index("--pool") + 1:] if "--pool" in args else []
     worlds = args[:args.index("--pool")] if "--pool" in args else args
     for w in worlds:
-        report(w, [f"{w}-h2h"] + [f"{w}-{x}" for x in extra])
+        report(w, [f"{w}-h2h"] + [f"{w}-{x}" for x in extra], runs)
