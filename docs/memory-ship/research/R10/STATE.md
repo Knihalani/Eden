@@ -116,6 +116,17 @@ Families differ in mechanism. Every kill criterion was written before its run.
 - Done or dead: model-free selection (C6-E3, C7-E1, C7-E2: not enough); next-turn delivery (C8-E5: dead); episodic
   state rows are partly covered by supersession (C5-E5) and dating (C5-E6).
 
+## Cycle 10 findings (LEDGER C10-…)
+
+- **D37 amended by the user:** the in-turn checker may run on TypeSafe Jev or a fast NIM model, chosen by measurement.
+- **Jev is about ten times inside the 3 s budget** (C10-E1/E2): p50 0.21–0.27 s end to end, 0 unanswered questions.
+- **Its quality depends on how the question is posed** (C10-E2): with precise criteria and the candidate list in
+  view (`list`, threshold 0.7) it is within 0.03 of the calibrated haiku checker on both dev worlds and on life-rt1,
+  and short by 0.0517 recall on code-rt1 (post hoc; the pre-registered pick, decomp 0.7, failed). Base Jev was
+  weaker (C10-E1). Next: a downstream head-to-head of Jev list 0.7.
+- **No NIM model was usable** (C10-E1): three 404, one connection failure, Nemotron Lightning p50 14.3 s with
+  unparseable replies.
+
 ## Cycle 9 findings (LEDGER C9-…)
 
 - **A short-reply checker keeps its picking quality** (C9-E1, retrieval level): listing only the kept rows instead
