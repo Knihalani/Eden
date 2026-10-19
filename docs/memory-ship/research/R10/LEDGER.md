@@ -1489,3 +1489,9 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **Caveats:** retrieval-level only, against plan labels; a downstream run would be needed before it replaces the
   calibrated checker in an outcome claim. Latency is not measured here (the CLI keeps thinking on; C8-E6), so whether
   it fits the ~3 s budget is still open; C8-E6's fit puts ≈ 2.4 s fixed under each CLI call.
+
+## C9-E2 · 2026-10-19 · Latency of the short-reply checker through the CLI (pre-registration)
+- **Setup:** as C8-E6 (same 20 inputs, `claude -p --model haiku --tools ""`, stdin closed), with the short-reply
+  system prompt (C9-E1's output rule). Read `duration_api_ms` and token usage.
+- **Measure:** p50 / p90 / max API time and output tokens, beside C8-E6's (p50 5645 ms). Thinking stays on (the CLI
+  does not let it be turned off), so this times the short reply plus thinking.
