@@ -726,3 +726,4 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - Causal contrast plus a probability makes the verifier calibratable on dev. Code p 0.7 reaches 0.48 recall at 0.76 silence and 0.31 precision, better than even the batched run.
   - But the threshold does not transfer to the shorter, harder red-team prompts: their probabilities sit lower.
   - C4-E13 also found that, on code, silence measured against plan labels penalises real needs. Tuning for it is the wrong target until there are downstream-validated labels.
+- **Correction (same day):** the 2 missing life-cal files landed after scoring. Re-scored with all 245: p 0.4 recall 0.2975 / precision 0.1316 / silence 0.6481; p 0.5 0.2975 / 0.1613 / 0.6667; p 0.6 0.2785 / 0.2171 / 0.7407. The rule still picks p 0.5, and the verdict is unchanged.
