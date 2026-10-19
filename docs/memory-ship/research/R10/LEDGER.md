@@ -1294,7 +1294,8 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **If no-tool turns were delivered too** (for example, by a pickup call the hook asks for): packets would be added on
   code 2 plan / 1 labeler-only / 2 no-need turns and life 11 / 3 / 8. Rough ceiling: plan share × the share of plan
   turns that would gain a packet × the two-run gain on plan turns that did get one (C7-E3 data; life +0.726, n 31;
-  code +0.625, n 20): life 0.137 × 11/49 × 0.726 ≈ +0.022 per turn, code 0.141 × 2/25 × 0.625 ≈ +0.007. It assumes
+  code +0.625, n 20): life 0.137 × 11/49 × 0.726 ≈ +0.022 per turn, code 0.141 × 2/25 × 0.625 ≈ +0.007.
+  It assumes
   the added packets help as much as the delivered ones and ignores the 8 / 2 added no-need packets. An effect of
   that size is well inside the ±0.1 per-turn CIs, so no downstream run is pre-registered. (Corrected in C8-R; it first
   read "at most +0.015", using the all-plan-turn mean +0.469 from C7-E3, which includes the 18 empty-packet turns.)
@@ -1341,10 +1342,10 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   | life-h2h | 75 | 0.59 / 0.76 | 0.294 / 0.653 |
   | life-h2h2 | 94 | 0.459 / 0.691 | 0.266 / 0.691 |
 
-- **What this says:** a single turn's verdict is mostly noise (r 0.05–0.59; a quarter to a third of signs differ between
-  runs), so only aggregates over about 150 turns carry information, and a second run is worth what it cost. The
-  verifier's effect replicates better than eden's (higher r on three of four), which fits a real effect against a
-  near-zero one. Per-turn examples in this ledger illustrate; they never decide.
+- **What this says:** a single turn's verdict is mostly noise (r 0.05–0.59; a quarter to a third of signs
+  differ between runs), so only aggregates over about 150 turns carry information, and a second run is worth
+  what it cost. The verifier's effect replicates better than eden's (higher r on three of four), which fits a real
+  effect against a near-zero one. Per-turn examples in this ledger illustrate; they never decide.
 
 ## C8-E4 · 2026-10-19 · Time from Submit to the first tool call in real Claude Code sessions (pre-registration)
 - **Why:** R10-5's checker must finish before the turn's first tool call (R10-5-BUILD-SKETCH.md). The harness has no
