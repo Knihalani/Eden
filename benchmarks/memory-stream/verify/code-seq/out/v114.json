@@ -1,0 +1,1 @@
+{"batch": "v114", "verifier": "haiku", "cases": [{"event": "code-s071-e006", "needed": ["code-sleep-b02:m0001", "code-sleep-b04:m0009"]}]}
