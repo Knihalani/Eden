@@ -88,23 +88,37 @@ def single(world, sub, cond="system"):
           f"({len([e for e in key if e in judged])} of {len(key)} judged)")
 
 
-def four(world, sub):
-    """C10-E3: none / eden / verify / jev on one sub: each condition − none per group and per turn (dev shares), and
-    bootstrap 95% CIs of jev − eden and jev − verify."""
+def _four_deltas(sub):
+    """{event: (group, {cond: cond − none})} for a four-way sub (C10-E3)."""
     d = os.path.join(HERE, "downstream", sub)
     key = json.load(open(os.path.join(d, "key.json")))["key"]
     judged = _judged(d)
-    by = {}
+    out = {}
     for eid, k in key.items():
         if eid in judged:
             sc = dict(zip(k["order"], judged[eid]))
-            by.setdefault(k["group"], []).append({c: sc[c] - sc["none"] for c in ("eden", "verify", "jev")})
+            out[eid] = (k["group"], {c: sc[c] - sc["none"] for c in ("eden", "verify", "jev")})
+    return out
+
+
+def four(world, sub, runs=()):
+    """C10-E3: none / eden / verify / jev on one sub: each condition − none per group and per turn (dev shares), and
+    bootstrap 95% CIs of jev − eden and jev − verify. With `runs` (C10-E4), each turn is averaged over the sub and
+    its repeat runs `<sub>-<run>`."""
+    base = _four_deltas(sub)
+    reps = [_four_deltas(f"{sub}-{r}") for r in runs]
+    by = {}
+    for eid, (g, x) in base.items():
+        missing = [r for r, rep in zip(runs, reps) if eid not in rep]
+        assert not missing, f"{eid} missing from repeat run(s) {missing} of {sub}"
+        xs = [x] + [rep[eid][1] for rep in reps]
+        by.setdefault(g, []).append({c: sum(v[c] for v in xs) / len(xs) for c in ("eden", "verify", "jev")})
     for g, xs in by.items():
         print(world, g, {"n": len(xs), **{c: round(sum(x[c] for x in xs) / len(xs), 3) for c in ("eden", "verify",
                                                                                                     "jev")}})
     util = {c: round(sum(SHARES[world][g] * sum(x[c] for x in xs) / len(xs) for g, xs in by.items()), 4)
             for c in ("eden", "verify", "jev")}
-    print(world, "utility per turn:", util, f"({sum(len(x) for x in by.values())} of {len(key)} judged)")
+    print(world, "utility per turn:", util, f"({sum(len(x) for x in by.values())} turns judged)")
     for other in ("eden", "verify"):
         print(world, f"jev − {other}:", round(util["jev"] - util[other], 4), "95% CI:",
               _ci(by, world, lambda x, o=other: x["jev"] - x[o]))
@@ -115,6 +129,7 @@ if __name__ == "__main__":
     # h2h.py code life --pool h2h2     → C5-E7 pooled with downstream/<world>-h2h2 (C6-E1)
     # h2h.py code --pool h2h2 --runs r2 → each turn averaged over its first run and the repeat run (C6-E2)
     # h2h.py --single code code-vote-dated → one condition vs none (C6-E3)
+    # h2h.py --four code code-h2h-jev [--runs r2] → none / eden / verify / jev (C10-E3, C10-E4)
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("worlds", nargs="*")
@@ -126,6 +141,6 @@ if __name__ == "__main__":
     if a.single:
         single(*a.single)
     if a.four:
-        four(*a.four)
+        four(*a.four, runs=a.runs)
     for w in a.worlds:
         report(w, [f"{w}-h2h"] + [f"{w}-{x}" for x in a.pool], a.runs)

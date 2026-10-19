@@ -106,22 +106,22 @@ Families differ in mechanism. Every kill criterion was written before its run.
 
 ## Next three experiments
 
-1. **Checker latency with thinking off** (blocked here): the short-reply checker (F22c) by a direct API call with
-   thinking disabled, and on NIM (`verify_nim.py`). It needs an API key or `NVIDIA_API_KEY` in the environment. It
-   decides whether the in-turn checker fits the ~3 s budget (C8-E4, C9-E2).
-2. **The user's R10-5 decision** (a fast hosted small model in the turn, or no checker); the build sketch states it.
-   If approved, a slice builds it: off-hook check, delivery at the first tool call after it finishes, dated rows.
-3. **Non-Claude responder or judge** for the outcome measure (needs NIM), and a per-session sleep store to measure
-   the head-to-head without the harness's batch lag (C8-E2).
-- Done or dead: model-free selection (C6-E3, C7-E1, C7-E2: not enough); next-turn delivery (C8-E5: dead); episodic
-  state rows are partly covered by supersession (C5-E5) and dating (C5-E6).
+1. **Recall at scale (cycle 11, under way):** typed candidate channels built while dreaming (entities, times, action
+   registry), each capped so the hook's candidate set stays bounded as the store grows; then the checker on the
+   union. C11-E1 (channels), C11-E2 (action registry), next: per-channel caps.
+2. **Dreaming:** an episodic layer (what happened, what tools returned), dated and rolled up (C11-E3), and a
+   per-session dream cycle.
+3. **Jev's selection criterion:** Jev fails D37's named retrieval rule and passes on the outcome measure; the user
+   decides whether D37 names the outcome measure. Before shipping: an A6 security review (prompt injection).
+- Done: checker latency (C8-E4/E6, C9-E2, C10), the R10-5 decision (D37 amended), model-free selection (dead),
+  next-turn delivery (dead).
 
 ## Cycle 10 findings (LEDGER C10-…)
 
 - **D37 amended by the user:** the in-turn checker may run on TypeSafe Jev or a fast NIM model, chosen by measurement.
 - **Jev is about ten times inside the 3 s budget** (C10-E1/E2): p50 0.21–0.27 s end to end, 0 unanswered questions.
 - **Its quality depends on how the question is posed** (C10-E2): with precise criteria and the candidate list in
-  view (`list`, threshold 0.7) it is within 0.03 of the calibrated haiku checker on both dev worlds and on life-rt1,
+  view (`list`, threshold 0.7; chosen after the results) it is within 0.03 of the calibrated haiku checker on both dev worlds, ahead on life-rt1,
   and short by 0.0517 recall on code-rt1 (post hoc; the pre-registered pick, decomp 0.7, failed). Base Jev was
   weaker (C10-E1).
 - **On the outcome measure Jev matches the haiku checker** (C10-E3, one run): jev − verify −0.0117 (code), −0.0262
