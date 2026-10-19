@@ -61,23 +61,29 @@ On realistic streams, lexical retrieval is far weaker than the pair fixtures sug
    - a gate distilled from a strong model's decisions;
    - static word vectors.
    An independent blank-slate design converged on the same wall (about 0.3 recall@4) and on the same remedies (sleep-time situations and clean statements). Its one new mechanism, budgeted firing calibrated per user, is adopted. It adds about +0.1 silence on code.
-7. **The labels are valid, and wrong bullets cost real quality** (downstream check, BRIEF §4.7). Memory changes the outcome on 80% of plan-labelled need turns (+0.97 on a 0–3 scale). Half of the independent labeler's extra needs are real but mild. A hook-side packet keeps only about 30% of the available benefit, and a packet on turns that need nothing scored −0.40 against none, but the noise floor is −0.27, so the measured harm (about −0.13) is suggestive and needs a larger n.
+7. **The labels are valid; wrong bullets cost tokens, not measured quality** (downstream check, BRIEF §4.7; re-measured in C4-E10 after two harness fixes).
+   - Memory changes the outcome on 77% of plan-labelled need turns in both worlds (+0.8 code, +0.9 life, on a 0–3 scale).
+   - Half of the independent labeler's extra needs are real but mild.
+   - The cheap hook-side vote keeps about 21% of the available benefit on code.
+   - A packet on turns that need nothing scored the same as no packet (0.0). The earlier "−0.40 harm" came from a responder that swapped reply order and a judge that called true history "fabricated"; it is withdrawn.
 8. **Benchmark realism, after fixes.**
    - The coverage rule is calibrated against a judge (κ 0.86).
    - Prompts were shortened toward R6's lengths (p50 15 words; R6's is 12).
    - A leak-free sleep mode was added.
    - The incumbent now also runs with P4.3's evidence gate on: silence 0.21, which is still a 79% fire rate against the real 31%.
 
+9. **A model checking candidates off the hook helps, but less than first measured** (cycle 4).
+   - The hook picks up to 15 candidates with no model. A small model (haiku) checks them while the agent works, and the result arrives at the agent's first tool call. Eden stays in charge; the agent never has to ask.
+   - Checked one turn at a time (as it would really run), it reaches code recall 0.52 at silence 0.43, and life 0.30 at 0.62. On fresh red-team cases it beats the word matcher clearly (silence +0.38 code, +0.53 life).
+   - The first measurement checked 50 turns per call and looked much quieter (silence 0.66). The model was comparing turns with each other, which a real hook never can. That number is retracted. Calibration is the open problem (C4-E11 is testing a fix).
+   - Two of the critic's alternatives are dead: showing the small model the whole store instead of a shortlist (no better), and checking the agent's draft reply before the user sees it (it flags as often when nothing is needed as when something is).
+
 ## 5. Open problems, ranked by size
 
-1. **Triggers and proactive needs in the personal world.** Every method is at or below 0.15 trigger recall and below 0.09 life proactive recall.
-2. **Silence on statement and task turns.** These are the two largest false-fire classes.
-3. **Benchmark realism.**
-   - Prompts are about 2× R6's length.
-   - The false-fire rate is inflated.
-   - Sleep batches must be compiled per session to remove the leak and the strict-mode delay.
-   - No sealed holdout yet.
-   - LongMemEval is blocked by the environment's network policy.
+1. **Calibrating the off-hook checker.** One turn at a time, it fires on more than half of the coding turns that need nothing.
+2. **Triggers in the personal world** (calendar, location, messages). No system is quiet on routine triggers; trigger silence is 0.0–0.36 everywhere, on few negatives.
+3. **The gap to a strong model.** opus with the same view finds +0.14 (code) and +0.21 (life) more of what is needed than haiku. Its ceiling numbers were also batched, so they need a one-at-a-time re-run.
+4. **Benchmark realism.** There is no sealed holdout yet and no non-Claude author; LongMemEval is blocked by the network policy.
 
 ## 6. What this changed in the plan (consolidation, cycle 3)
 
