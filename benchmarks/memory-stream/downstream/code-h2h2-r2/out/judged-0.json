@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s001-e020",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All read the CLI build config instead of guessing; changeset mentions are correct but optional."
+  },
+  {
+   "event": "code-s001-e037",
+   "scores": [
+    3,
+    3,
+    1
+   ],
+   "why": "R2 says it will send the list to Jordan; user named Sam, unsupported recipient. Others fine."
+  },
+  {
+   "event": "code-s002-e008",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All note the rule and check git log plus whether dist is tracked."
+  },
+  {
+   "event": "code-s003-e015",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correct on differences and Node 18 availability."
+  },
+  {
+   "event": "code-s003-e021",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "None notes the cli-invoices-export GrowthBook flag gate may block the run; R1 guesses an env var."
+  },
+  {
+   "event": "code-s006-e007",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All commit the four files then debounce, raising branch separation."
+  },
+  {
+   "event": "code-s007-e019",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All add a proper empty state with test; reasonable scoping."
+  },
+  {
+   "event": "code-s007-e025",
+   "scores": [
+    2,
+    1,
+    2
+   ],
+   "why": "Recaps miss infra exports bucket details; R1 omits the uncommitted bucket work entirely."
+  },
+  {
+   "event": "code-s007-e036",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly explain useLayoutEffect vs useEffect."
+  },
+  {
+   "event": "code-s010-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All bound polling by expires_in, clearer messages, tests; none needed extra facts now."
+  }
+ ]
+}

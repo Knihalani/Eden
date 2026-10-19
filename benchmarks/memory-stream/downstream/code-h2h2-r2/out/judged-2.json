@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s023-e000",
+   "scores": [
+    2,
+    1,
+    1
+   ],
+   "why": "API is Express 4 per facts/history; only R0 flags @fastify mismatch and knows the existing bucket branch; R0 needlessly hedges on explicit gh request."
+  },
+  {
+   "event": "code-s025-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Image job behaviour not yet known; all correctly propose reading the code before summarizing for support."
+  },
+  {
+   "event": "code-s027-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give a plausible hypothesis, confirm first, try/finally fix, empty message and test."
+  },
+  {
+   "event": "code-s027-e008",
+   "scores": [
+    1,
+    2,
+    2
+   ],
+   "why": "History holds several days of work none recap; R0 also misattributes the SQS queue check to Priya."
+  },
+  {
+   "event": "code-s027-e022",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All acknowledge correctly, summarize util and suite, note the zod PR failure."
+  },
+  {
+   "event": "code-s027-e058",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give accurate status: zod commit unpushed, --json done, tests and build green."
+  },
+  {
+   "event": "code-s030-e027",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All explain AsyncLocalStorage correctly and tie it to the pending request-id question."
+  },
+  {
+   "event": "code-s035-e033",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R1 uses Toronto TZ flake history and tests both zones; R2 targets due-label helper; R0 generic."
+  },
+  {
+   "event": "code-s038-e028",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly explain Deployment vs StatefulSet concisely."
+  },
+  {
+   "event": "code-s041-e005",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All plan correct tests; R0 and R2 correctly spot negative half rounding asymmetry."
+  }
+ ]
+}
