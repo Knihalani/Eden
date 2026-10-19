@@ -1081,3 +1081,25 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - **Firm on code** if the averaged pooled 95% CI lower bound is > 0.
   - **Lead stands** if the point estimate stays ≥ +0.05.
   - **Weakened** if it falls below +0.05.
+
+## C6-E2 · 2026-10-19 · Code head-to-head, second independent run: result
+- **Run:** the same 145 code turns and packets. A new sonnet responder and a new blind opus judge (history evidence); all 145 turns judged.
+  - One responder call came back with 31 of 45 items; the 14 missing items were answered in a separate call (`items-2-2`).
+- **Run 2 alone:** verify +0.1363, eden +0.0324, difference +0.1039, 95% CI [−0.0046, +0.2137]. It replicates run 1 (+0.0981).
+- **Decision measure (each turn averaged over both runs; `h2h.py code --pool h2h2 --runs r2`):**
+
+  | Group | n | Eden (dated) | Verify (dated) |
+  |---|---|---|---|
+  | plan-need | 25 | +0.04 (5 / 5) | **+0.52 (14 / 1)** |
+  | labeler-only | 30 | −0.033 (3 / 5) | +0.05 (9 / 7) |
+  | no-need | 90 | 0.0 (16 / 14) | +0.028 (16 / 16) |
+
+  Per-turn utility: verify +0.101, eden −0.0001, **difference +0.1011, 95% CI [+0.0085, +0.1988]**.
+- **Verdict, by the rule: firm on code** (CI lower bound > 0).
+- **With C6-E1 (life firm: +0.1346 [+0.0352, +0.2332]), the head-to-head is now firm on both worlds:** the dated off-hook verifier beats today's plugin, by its effect on replies.
+- **Caveats:**
+  - All models are Claude: responder sonnet, judge opus, verifier haiku, sleep compiler sonnet.
+  - Life rests on one responder run per turn.
+  - The turns are dev turns.
+  - Latency and cost are not measured.
+  - Delivery at the first tool call is simulated.
