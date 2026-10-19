@@ -19,7 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 
-def prep(world, n, per, tag="", fresh=False, contrast=0):
+def prep(world, n, per, tag="", fresh=False, contrast=0, events=""):
     import score, sleep, methods, judge
     stream, items = score.load_stream(world)
     cov = score.Coverage(items)
@@ -30,6 +30,11 @@ def prep(world, n, per, tag="", fresh=False, contrast=0):
     ids = []
     for p in sorted(glob.glob(os.path.join(HERE, "judge", f"{world}-sleep", "in", "*.json"))):
         ids += [c["event"] for c in json.load(open(p))["cases"]]
+    if events:  # an explicit event list: the keys of a JSON file (e.g. a downstream key), minus those already done
+        want = json.load(open(events))
+        want = want.get("key", want)
+        done = set(picks(world, tag.split("-")[0])) if tag else set()
+        ids = [i for i in want if i in evs and i not in done]
     if fresh:  # red-team worlds: every fresh human and trigger event
         ids = [i for i, e in evs.items() if e["_split"] == "fresh" and e["t"] in ("human", "trigger")]
     sub = f"{world}-{tag}" if tag else world
@@ -91,8 +96,9 @@ if __name__ == "__main__":
     ap.add_argument("--n", type=int, default=15)
     ap.add_argument("--per", type=int, default=50)
     ap.add_argument("--fresh", action="store_true", help="red-team worlds: all fresh-split human and trigger events")
+    ap.add_argument("--events", default="", help="JSON file whose keys (or its `key` object's keys) are the events")
     ap.add_argument("--contrast", type=int, default=0, help="add the user's last N human turns from earlier sessions")
     ap.add_argument("--tag", default="",
                     help="writes verify/<world>-<tag>/ (e.g. seq: one case per file, stream order)")
     a = ap.parse_args()
-    prep(a.world, a.n, a.per, a.tag, a.fresh, a.contrast)
+    prep(a.world, a.n, a.per, a.tag, a.fresh, a.contrast, a.events)
