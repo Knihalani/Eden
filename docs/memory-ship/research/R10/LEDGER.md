@@ -1325,3 +1325,19 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   store, so on store freshness the C6/C7 comparison is conservative for the verifier. A leak-free per-session
   compile would measure it; it costs one compiler run per session (code 110, life 160 sessions) and is not
   scheduled.
+
+## C8-E3 · 2026-10-19 · How well do two independent runs agree turn by turn? (diagnostic)
+- **Data:** the head-to-head turns judged in both runs (code 145, life 169); per turn, condition − none in run 1 vs
+  run 2 (same packets, new responder, new judge).
+
+  | Sub | n | verify − none: r / sign agreement | eden − none: r / sign agreement |
+  |---|---|---|---|
+  | code-h2h | 70 | 0.366 / 0.671 | 0.132 / 0.686 |
+  | code-h2h2 | 75 | 0.048 / 0.68 | 0.18 / 0.693 |
+  | life-h2h | 75 | 0.59 / 0.76 | 0.294 / 0.653 |
+  | life-h2h2 | 94 | 0.459 / 0.691 | 0.266 / 0.691 |
+
+- **What this says:** a single turn's verdict is mostly noise (r 0.05–0.59; about a third of signs flip between
+  runs), so only aggregates over about 150 turns carry information, and a second run is worth what it cost. The
+  verifier's effect replicates better than eden's (higher r on three of four), which fits a real effect against a
+  near-zero one. Per-turn examples in this ledger illustrate; they never decide.
