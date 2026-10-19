@@ -2008,3 +2008,17 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
     no-need 38.)
 - **What this says:** a narrow second pass changes nothing: Jev gives the same verdicts on a row whether it sees it
   among 150 candidates or 15. The wide pool does not confuse it; the misses are rows it judges unneeded either way.
+
+## C11-E10 · 2026-10-19 · A question for implied steps (pre-registration; exploratory)
+- **Observation (C11-E8 misses, `python3 benchmarks/memory-stream/wide_misses.py code`):** 12 code misses at
+  p ≥ 0.7 top 8. Most are rules or setup facts for a step the user did not name: "check it in" → Conventional
+  Commits (p 0.6); "put it on a proper branch" → Linear branch names (0.57); "read replica" → Terraform 1.8 (0.59);
+  "YouTube embed" → CSP headers (0.09); "make filters stick" → no Redux (0.16–0.32). One is a cap loss (the
+  no-Friday-deploys rule at p 0.79 fell outside the top 8).
+- **Idea:** a second question per row, in its own parallel request: "Does `row` state a rule, convention, setup
+  fact or past fix that applies to a step the assistant would likely take to carry out `turn`, including steps the
+  user did not name (committing, branching, testing, deploying, editing a file it governs)?"
+- **Picks:** a row is picked if needed p ≥ 0.7 or implied-step p ≥ 0.7; top 8 by the larger of the two.
+- **Measure:** as C11-E9 (recall, turns with any pick need / no-need, picks per turn, latency of the extra call),
+  next to one-pass p ≥ 0.7 top 8 (code 0.793 / 29; life 0.714 / 38).
+- **No verdict rule.**
