@@ -1384,8 +1384,7 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   | 12 | 17 × 23 | — | 0 | — | 7.9 |
 
 - **First tool call** (10 turns with a call; index method int(f·n), not pre-specified; the conventional median is
-  2.77 s): p50 2.92 s, p90 14.13 s, max
-  14.13 s, min 2.17 s. 2 of 12 turns make no call.
+  2.77 s): p50 2.92 s, p90 14.13 s, max 14.13 s, min 2.17 s. 2 of 12 turns make no call.
 - **If delivery could use any later tool call in the turn** (post hoc): a checker answering in 3 s still finds a call
   to come in 8 of 12 turns; 5 s: 5; 10 s: 3; 20 s: 1; 40 s and 70 s: 0.
 - **What this says:** the checker has about 3 seconds. For hosted NIM the repo records p50 1–20 s and p95 40–70 s
@@ -1395,8 +1394,10 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   more than half of the turns" does not follow; missing more than half needs the checker's *median* above the gap's
   median. The prereg text above stands as written.
 - **Model and setup:** the sessions ran on the CLI's default model (sonnet), with haiku for the CLI's auxiliary
-  calls. The committed `ttft/settings.json` is the hooks that ran, with the scratch log path replaced by `$TTFT_LOG`. Caveats: one machine, one model, n = 12, and writes were denied, which
-  ends edit turns early (more calls would follow in a real edit turn, so the later-call counts are a floor).
+  calls. The committed `ttft/settings.json` is the hooks that ran, with the scratch log path replaced by
+  `$TTFT_LOG`.
+- **Caveats:** one machine, one model, n = 12, and writes were denied, which ends edit turns early (more calls would
+  follow in a real edit turn, so the later-call counts are a floor).
 
 ## C8-E5 · 2026-10-19 · Could the check run late and deliver at the next turn? (post hoc label check)
 - **Idea:** with no time pressure, a slow D37 model checks turn t in the background, and its packet is delivered at
