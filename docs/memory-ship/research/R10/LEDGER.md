@@ -1456,3 +1456,18 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **Local CI on 4feb48ce** (outside the repo): format, typecheck, build pass; test:parallel 5320 pass, 32 skip,
   2 fail (`switches.test.ts`, `memory-purge.test.ts`, the root-on-Linux failures that also fail on origin/main), and
   the serial latency-gated files pass alone. Only Python and Markdown changed after it.
+
+## C9-E1 · 2026-10-19 · A short-reply checker: does listing only the kept rows keep its quality? (pre-registration)
+- **Why:** C8-E6 found the checker's latency is mostly output length (≈ 900 output tokens; ≈ 3.9 ms per token plus
+  ≈ 2.4 s fixed). A reply that lists only the rows it keeps is a few dozen tokens. Before timing it anywhere, check
+  that it picks as well.
+- **Setup:** the calibrated prompt (PROMPTS.md F22b) with one change to the output: list only candidates with
+  p ≥ 0.5 (`{"scores": {id: p}}` for those, `{}` if none). Same model (haiku), same inputs: `verify/<world>-cal/in`
+  (dev) and `verify/<world>-rt1-cal/in` (red team), one case per file in stream order, written to
+  `verify/<world>-short/out`. Read by `score.py --systems "verify:tag=short,p=0.6"`.
+- **Compare** (human turns, `--strict`): recall and precision against `verify:tag=cal,p=0.6` on four tests: code dev
+  and life dev (`--split dev --sample judge`), code-rt1 and life-rt1 (`--split fresh`).
+- **Rule, set before running:**
+  - **Keeps quality** if recall ≥ cal − 0.03 and precision ≥ cal − 0.03 on at least 3 of the 4.
+  - **Loses quality** otherwise.
+  - Latency is not measured here.
