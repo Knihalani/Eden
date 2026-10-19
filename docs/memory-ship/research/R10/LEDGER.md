@@ -898,3 +898,27 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   2. **Recall** on the same.
 - **Kill:** dead if the stale share does not fall by ≥ 30% relative on both worlds, or recall drops > 0.03 on either.
 - **Pass:** the C5-E4 downstream turns whose verify packet changes get re-run (none / verify-with-supersession).
+
+## C5-E5 · 2026-10-19 · Cross-batch supersession: result
+- **Pass output:** 26 (code) and 112 (life) superseded rows from sonnet over 10 and 15 batches. Examples:
+  - "The acme-platform API is Express 4" → ended by "migrated from Express 4 to Fastify 5";
+  - Node 18 → 20.11;
+  - yargs → commander;
+  - many life schedule and contact changes.
+
+  The model reported that some source rows contradict each other in the stream itself (bin day, Leo's age, yargs vs commander), and on those it made judgement calls.
+- **Numbers** (`score.py --store sleep --strict [--supersede] --split dev --sample judge`):
+
+  | World | System | Stale share without → with | Relative change | Recall without → with |
+  |---|---|---|---|---|
+  | code | verify seq | 0.0901 → 0.0727 | −19% | 0.5182 → 0.5182 |
+  | code | cal p 0.6 | 0.0833 → 0.0617 | −26% | 0.5121 → 0.5121 |
+  | life | verify seq | 0.1327 → 0.0825 | −38% | 0.3038 → 0.2911 |
+  | life | cal p 0.6 | 0.1053 → 0.0541 | −49% | 0.2785 → 0.2658 |
+
+- **Verdict: dead by the kill line** (code stale share falls 19–26%, under the 30% line). Life passes strongly, with recall down 0.013. By the rule, the downstream re-run does not happen.
+- **Diagnostic (post hoc):**
+  - Of the C5-E4 turns where the verifier's packet hurt the reply, supersession changes the packet on 1 of 6 (code) and 2 of 4 (life).
+  - So stale *facts* explain a minority of the harm. Most of the rest is stale *episodic state* ("where did we leave things" answered with 08-30 work; old in-flight branches) and plainly off-target rows.
+  - Episodic state is not an item, so the stale metric does not see it. It needs its own handling: state rows that expire unless re-confirmed, or that are always shown with their date.
+- **Engineering note:** the cross-batch blind spot itself is a real bug in the sleep design. Any production sleep compiler that runs per batch needs this pass, whatever this kill line says. Logged for the plan.

@@ -1,0 +1,76 @@
+{
+ "batch": "life-sleep-b15",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "life-sleep-b12:m0023",
+   "new": "life-sleep-b15:m0005",
+   "why": "Danforth Smiles phone number differs"
+  },
+  {
+   "old": "life-sleep-b06:m0006",
+   "new": "life-sleep-b15:m0005",
+   "why": "Dentist phone number changed"
+  },
+  {
+   "old": "life-sleep-b14:m0015",
+   "new": "life-sleep-b15:m0019",
+   "why": "Interview rebooked to Fri Nov 13 5:15 pm"
+  },
+  {
+   "old": "life-sleep-b14:m0030",
+   "new": "life-sleep-b15:m0019",
+   "why": "Interview clash resolved by rebooking"
+  },
+  {
+   "old": "life-sleep-b14:m0031",
+   "new": "life-sleep-b15:m0011",
+   "why": "Tire swap now Sun Nov 8 9:00 at Canadian Tire"
+  },
+  {
+   "old": "life-sleep-b11:m0016",
+   "new": "life-sleep-b15:m0014",
+   "why": "Christmas Eve dinner now booked at Prado"
+  },
+  {
+   "old": "life-sleep-b12:m0003",
+   "new": "life-sleep-b15:m0024",
+   "why": "Bins go out Sunday night, not Wednesday"
+  },
+  {
+   "old": "life-sleep-b11:m0025",
+   "new": "life-sleep-b15:m0024",
+   "why": "Bins go out Sunday night, not Thursday"
+  },
+  {
+   "old": "life-sleep-b09:m0008",
+   "new": "life-sleep-b15:m0024",
+   "why": "Bins go out Sunday night, not Tuesday"
+  },
+  {
+   "old": "life-sleep-b08:m0029",
+   "new": "life-sleep-b15:m0024",
+   "why": "Bins go out Sunday night, not Thursday"
+  },
+  {
+   "old": "life-sleep-b11:m0010",
+   "new": "life-sleep-b15:m0035",
+   "why": "Leo's birthday is Jan 22, not July 17"
+  },
+  {
+   "old": "life-sleep-b14:m0013",
+   "new": "life-sleep-b15:m0022",
+   "why": "Thanksgiving hosted at home, not Ottawa"
+  },
+  {
+   "old": "life-sleep-b11:m0018",
+   "new": "life-sleep-b15:m0013",
+   "why": "Priya is moving to the Junction"
+  },
+  {
+   "old": "life-sleep-b14:m0019",
+   "new": "life-sleep-b15:m0032",
+   "why": "Picture day retakes now Nov 4"
+  }
+ ]
+}
