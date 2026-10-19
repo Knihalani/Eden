@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s080-e024",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 uses pnpm add -D correctly; R0 hedges on package manager though its PR-branch question is reasonable."
+  },
+  {
+   "event": "code-s080-e036",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add --status with choices and query param; R0 notes msw not installed, R1 notes usage error."
+  },
+  {
+   "event": "code-s080-e046",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 focused on CLI fix; R0 brings up Lena messages files, irrelevant to CLI help text."
+  },
+  {
+   "event": "code-s081-e007",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both generic; neither uses known cause: Testcontainers finds no container runtime (OrbStack/docker context)."
+  },
+  {
+   "event": "code-s082-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both investigate before guessing; R0 suggests clock skew, R1 points at Fastify auth plugin."
+  },
+  {
+   "event": "code-s082-e011",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly remove restating comments, keep clock skew one, adopt rule."
+  },
+  {
+   "event": "code-s082-e052",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both list only last items, omitting the session main work: clock-skew 401 fix, rename, comment cleanup."
+  },
+  {
+   "event": "code-s083-e017",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both refactor to handler map, keep billing uncommitted for review, re-run tests and replay."
+  },
+  {
+   "event": "code-s086-e000",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "R1 recalls existing RDS reader endpoint and Tailscale access; R0 misses that a replica already exists."
+  },
+  {
+   "event": "code-s087-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both reasonable dark: variant plans; R0 misnames prop (kind) and v3 darkMode config; neither notes Tailwind v4 custom-variant."
+  },
+  {
+   "event": "code-s088-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give correct revealed/afterend htmx infinite scroll pattern."
+  },
+  {
+   "event": "code-s088-e008",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly identify TS1484 verbatimModuleSyntax type-only imports; R1 suggests linter autofix."
+  },
+  {
+   "event": "code-s088-e021",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both appropriate acknowledgements; R0 recaps state, R1 honors separate-PR note."
+  },
+  {
+   "event": "code-s091-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both hedge; known fact says CLI checks daily via update-notifier."
+  },
+  {
+   "event": "code-s091-e007",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both sensible formatBytes plans with tests and unit convention check."
+  }
+ ]
+}

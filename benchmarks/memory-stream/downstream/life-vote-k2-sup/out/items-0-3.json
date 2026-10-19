@@ -1,0 +1,141 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s077-e010#0",
+   "response": "Sun 10 May it is. Want me to put opening day on the calendar? Nate still needs the wall choice by Monday, so tell me the style you liked and I'll gather options this afternoon.\nAction: nothing changed yet; I'll wait for your answer on the calendar and the style."
+  },
+  {
+   "id": "life-s027-e029#0",
+   "response": "Ha, a beagle with a power tool voice. At least Diego now knows the drilling wasn't the reno.\nAction: nothing needed; I can remind you later about Leo's Riverdale Farm consent form, due Wed 12 Nov."
+  },
+  {
+   "id": "life-s070-e006#0",
+   "response": "You're welcome. The two holds are waiting at Pape/Danforth until Sat 25 Apr, and I'm renewing the three books that are due. Tom's request for the beta merchant numbers link is still open.\nAction: set a reminder for after dinner to deal with Tom's message, unless you'd rather I didn't."
+  },
+  {
+   "id": "life-s140-e029#0",
+   "response": "Short version: screens in the hour before bed delay sleep (about 19 minutes later in a 2025 study of 1,200 kids aged 6 to 9), worst on handheld devices and least on a shared living-room TV, because of light, stimulating content and lost wind-down time. The fix is a fixed screens-off time an hour before bed, devices charging in the kitchen and reading instead, which got sleep back to normal in about two weeks. Timing matters more than total hours once it stays under two hours a day, and weekends count too.\nAction: nothing further; I can draft a one-line reply for Hannah's chat if you want."
+  },
+  {
+   "id": "life-s085-e010#0",
+   "response": "Ideas: join every waitlist now (there's no cost to being on several), try licensed home-based child care agencies, which often move faster than centres, and ask each centre about a cancellation list. The City of Toronto's licensed child care directory is the place to start.\nAction: compile a short list of links to forward to Diego."
+  },
+  {
+   "id": "life-s097-e013#0",
+   "response": "Two options: 'Thirty-one years of making the rest of us look organized. The department won't be the same, and it shouldn't be.' Or: 'You set the standard here. Now go set a new one for retirement.' One real detail about her (a habit or a saying) would make it sound like Sam instead of a card.\nAction: wait for a detail from Sam, then tighten it into a final line."
+  },
+  {
+   "id": "life-s123-e004#0",
+   "response": "Putting it together now: a short note Tanvi can use. The key points: a 2010 condo is covered by rent control, the 2026 cap is 2.1%, anything above needs Landlord and Tenant Board approval, the landlord must give 90 days' written notice on Form N1 once every 12 months, and if she gets an N1 for 9% with no LTB application she can pay the guideline amount.\nAction: create the note with this summary plus the official Ontario links, and send you the link."
+  },
+  {
+   "id": "life-s106-e007#0",
+   "response": "Holding the charcoal bags until you've talked to Sam. When you know what's set up in the basement kitchen, tell me and I'll build five easy dinners around it. Also, East End Plumbing's Raj is confirmed for Mon 29 Jun, 09:00-12:00, and needs the inside shut-off valve accessible.\nAction: hold the order and wait for Sam's input."
+  },
+  {
+   "id": "life-s150-e015#0",
+   "response": "Poor Leo, front teeth are a worry. I'll check Dr. Lin's online booking for after-school slots this week, though injuries are often better handled by phone and I'll flag it if the portal says so. I'll also get the clinic address so I can give you the travel time from home.\nAction: check Dr. Lin's availability for after school, pull the address, and send you slots plus the drive time from home."
+  },
+  {
+   "id": "life-s077-e044#0",
+   "response": "Timer set for 25 minutes. Enjoy the garden beds.\nAction: start the 25-minute timer and ping you when it's up."
+  },
+  {
+   "id": "life-s058-e000#0",
+   "response": "Ugh, March really is a liar. Hope the coffee is strong.\nAction: nothing needed."
+  },
+  {
+   "id": "life-s036-e003#0",
+   "response": "Will do. The $48,000 includes a 10% contingency: that's about $4,364 if it's 10% on top of the base (48,000/1.1), or $4,800 if it's 10% of the full amount, so I'll check which one your budget used. I'll lay Nate's revised quote next to those numbers and show how much of the contingency it eats.\nAction: pull Nate's revised quote from email, build a line-by-line comparison against the budget, and have it ready after your review."
+  },
+  {
+   "id": "life-s100-e000#0",
+   "response": "On it. I'll read this afternoon's all-hands email and pull out the four things that actually matter, with anything that touches payouts or needs action from you first.\nAction: find and read the all-hands email, then send four short bullets."
+  },
+  {
+   "id": "life-s102-e009#0",
+   "response": "On it: I'll build the PC Express cart from your list, going no-name on the staples, and book Saturday morning pickup at Loblaws Lakeshore, 9:00-10:00. I'll need to pick the veggie dumplings Sam likes, so I'll flag which ones I choose. Sandbanks stays paused until you've asked Sam; Sat 27 Jun permits tend to sell out by Thursday evening.\nAction: build the cart, hold the pickup slot, and send you the total for approval before checking out."
+  },
+  {
+   "id": "life-s058-e007#0",
+   "response": "I'll pull Tom's calendar for the 24th and list when he was actually free. What I can see depends on what he shares with you, so it may be busy/free windows without detail.\nAction: pull Tom's calendar for the 24th plus the pricing review's invite history, and write up his free windows for your note."
+  },
+  {
+   "id": "life-s020-e016#0",
+   "response": "Here's the plan for the sheet: three sections with about 8 items each: ser vs estar (emotions and locations), por vs para, and cuando with the subjunctive for the future. Your example becomes 'Cuando llegue a casa, te llamo', and I'll include an answer key at the back.\nAction: build the drill sheet and send it to you in time for your next lesson."
+  },
+  {
+   "id": "life-s150-e000#0",
+   "response": "On it. I'll pull your blocked tickets, meaning anything in a Blocked status or with an open blocking relation, and note what is blocking each one so you can see which are easiest to clear before standup.\nAction: query Linear for your blocked tickets and send a list with the blocker and who owns it."
+  },
+  {
+   "id": "life-s060-e022#0",
+   "response": "I'll turn those questions into a short message you can forward to Priya. On Disney+, I'll check your cards and email for the cancellation confirmation and any charge after it. I'll also list your four remaining subscriptions so you can see the monthly total.\nAction: format the Priya message, then search statements and email for Disney+ charges since your cancellation and report whether it stopped."
+  },
+  {
+   "id": "life-s003-e000#0",
+   "response": "Understood: from now on, Spanish vocabulary lists come as a table with Spanish, English and an example sentence. Here's a start for the doctor's visit:\n\n| Spanish | English | Example sentence |\n|---|---|---|\n| el dolor | pain | Tengo un dolor fuerte en el pecho. |\n| la fiebre | fever | He tenido fiebre desde ayer. |\n| la receta | prescription | ¿Me puede dar una receta? |\n| el síntoma | symptom | ¿Cuáles son sus síntomas? |\n| la cita | appointment | Tengo una cita con el doctor. |\n| la alergia | allergy | Tengo alergia a la penicilina. |\n\nAction: save the table format as your default for Spanish lists and send the full 20-row doctor's-visit table for Tuesday's role-play."
+  },
+  {
+   "id": "life-s028-e014#0",
+   "response": "So far this morning: I added Felipe, the dog walker, to the pet budget (monthly pet spend is now estimated at $729 against a $350 budget, which you're taking to Sam). I also built the Notion page 'Payouts v2 launch risks (2025-11-12)' with six rows, where PAY-360 and PAY-366 need an estimate by 2025-11-14. The October grocery total, with August and September for comparison, is still being pulled.\nAction: check on the grocery pull and report the numbers as soon as they come back."
+  },
+  {
+   "id": "life-s097-e019#0",
+   "response": "A cardboard fort is a good pick. Beyond the boxes you'll want strong tape (packing or duct), scissors or a box cutter for you to do the cutting, markers or paint, and blankets plus clips for a roof; a flashlight makes it feel like a real fort. Check that the boxes are dry.\nAction: ask you what you already have, then add whatever's missing to the shopping list."
+  },
+  {
+   "id": "life-s006-e011#0",
+   "response": "Jess should weigh: monthly cash flow if she rents (rent minus mortgage, condo fees, property tax, insurance and some vacancy), the tax effect of renting versus selling (including what it does to the principal residence exemption, so an accountant is worth a call), what she'd do with the sale proceeds, and whether she actually wants to be a landlord. Mortgage renewal timing and any penalty for breaking it matter too.\nAction: put it into a one-page comparison she can fill in, if you want."
+  },
+  {
+   "id": "life-s066-e016#0",
+   "response": "I'll search for links to the old pricing page, but I need the old URL to be sure, so I'll look for marketing's announcement of the move first. Then I'll list which docs still link to it, with the beta materials first.\nAction: find the old and new URLs, search your Docs and Drive for the old one, and send you the list; I won't edit anything until you say so."
+  },
+  {
+   "id": "life-s047-e025#0",
+   "response": "I don't have the rink's current status or the forecast, so I'll check both rather than guess.\nAction: check Withrow Park rink conditions and Saturday afternoon's forecast and tell you if skating after swim looks ok."
+  },
+  {
+   "id": "life-s118-e000#0",
+   "response": "I'll compare this year's renewal to last year's: premium, deductibles, coverage limits and any added or dropped endorsements. I don't have either document in front of me yet, so I'll find them first.\nAction: find the renewal and last year's policy in email and Drive, and send you a short list of what changed."
+  },
+  {
+   "id": "life-s018-e005#0",
+   "response": "A common rule of thumb: the curve has flattened when the drop from one period to the next is down to about 1 to 2 percentage points (or under roughly 5% relative) and stays there for several periods in a row. Check it on a mature cohort with enough users, since small cohorts are noisy. It's a convention, not a standard, so state your threshold when you report it.\nAction: nothing further; if you share the cohort sheet I can apply the rule to it."
+  },
+  {
+   "id": "life-s030-e000#0",
+   "response": "The full version: 'Tres tristes tigres tragaban trigo en un trigal, en tres tristes trastos, tragaban trigo tres tristes tigres.' Say it slowly first, then speed up; the 'tr' cluster is what trips people. Launch-week nerves are normal, and I can help front-load prep so Sunday night is lighter.\nAction: send you the twister now and, if you want, draft a short launch-week checklist so Sunday night has nothing left to figure out."
+  },
+  {
+   "id": "life-s150-e028#0",
+   "response": "Here's a two-line note for #payouts-team: 'Heads down until 3 for focus time. Ping me here for anything urgent, otherwise I'll catch up after.'\nAction: set your Slack status to 'Heads down until 3' and leave the note as a draft for you to approve before I post."
+  },
+  {
+   "id": "life-s050-e011#0",
+   "response": "Sounds fun. I'll text Hannah a yes for pancakes Sunday at 9 and add it to the family calendar with Sam and Leo, after checking for conflicts.\nAction: check Sunday morning on the family calendar, text Hannah yes, and add 'Pancakes at Hannah's' starting 09:00 (I'll use a 2-hour block unless you say otherwise)."
+  },
+  {
+   "id": "life-s037-e004#0",
+   "response": "I don't have the bakery or the cake from last time in front of me, so I'll find it rather than guess. I'll also check the bakery's New Year's Eve ordering cutoff, since that day fills up.\nAction: search order history and email receipts for last time's order, then confirm the cake, pickup time and price with you before ordering."
+  },
+  {
+   "id": "life-s051-e000#0",
+   "response": "It's a Sunday because the NFL plays its big games on Sundays, and it slid from January into February because the season and playoffs got longer over the decades. The earliest games were in January; with more regular-season games and extra playoff rounds, the final now lands in early to mid February.\nAction: nothing further."
+  },
+  {
+   "id": "life-s046-e016#0",
+   "response": "Short version: an EFT is a batch bank-to-bank transfer through the Canadian clearing system; it's cheap, typically takes 1 to 3 business days, and can be returned. A wire is a real-time, same-day transfer that's final once sent, and costs more. Sales is probably mixing them up because both just show up as money arriving in the bank.\nAction: write a two-line definition you can paste into the deck, if you want it."
+  },
+  {
+   "id": "life-s063-e007#0",
+   "response": "Enjoy that coffee, spring has been a long time coming. I'll leave the career day talk draft for later.\nAction: nothing now; the prep block stays on your calendar unless you want it moved."
+  },
+  {
+   "id": "life-s058-e002#0",
+   "response": "Lovely plan, a first visit with the new baby. I'll look at rough return fares to Vancouver around the August long weekend, priced for just you and for you plus Leo. I'll assume you're flying out of Toronto unless you say otherwise.\nAction: pull rough return fares for one and for two travellers and send the ranges, with no price watch unless you ask."
+  }
+ ]
+}
