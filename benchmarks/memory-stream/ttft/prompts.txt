@@ -1,0 +1,12 @@
+why does the memory hook exit 0 on errors? point me to where that's enforced
+what does scripts/test-parallel.sh do differently from scripts/test.sh
+add a unit test for the shortlist helper in benchmarks/memory-stream/methods.py
+rename the variable ok in Vote.packet in benchmarks/memory-stream/methods.py to fired
+how is EDEN_MEMORY_DIR used in the tests? give me two examples
+fix the long line at benchmarks/memory-stream/downstream.py:60
+summarize what docs/memory-ship/PROGRESS.md says is next
+is there a CLI command to purge memory? how do I run it
+explain what benchmarks/memory-stream/h2h.py computes, one paragraph
+what changed in the last 3 commits on this branch
+thanks, that's all for now
+what's 17 * 23
