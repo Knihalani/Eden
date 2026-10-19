@@ -860,3 +860,28 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **Rule, set before running:** the 14%-reweighted verify − none (0.14 × plan-need + 0.86 × no-need effect).
   - **Better than the plugin** if it beats C5-E3's eden on both worlds (code −0.0433, life +0.0293) by ≥ +0.05.
   - **Worth building** if it is > +0.05 on both worlds.
+
+## C5-E4 · 2026-10-19 · The calibrated verifier (p 0.6), downstream: result
+- **Numbers** (verify − none; packets on code 37/60 turns, life 27/60):
+
+  | World | Group | n | Fired | Mean verify − none | Distribution |
+  |---|---|---|---|---|---|
+  | code | plan-need | 30 | 24 | **+0.733** | −1: 2, 0: 8, +1: 17, +2: 2, +3: 1 |
+  | code | labeler-only | 15 | 6 | +0.133 | −1: 1, 0: 11, +1: 3 |
+  | code | no-need | 15 | 7 | **−0.267** | −1: 4, 0: 11 |
+  | life | plan-need | 30 | 17 | **+0.367** | −1: 3, 0: 15, +1: 10, +2: 2 |
+  | life | labeler-only | 15 | 7 | −0.133 | −2: 2, −1: 1, 0: 10, +1: 1, +2: 1 |
+  | life | no-need | 15 | 3 | −0.067 | −2: 1, 0: 13, +1: 1 |
+
+  - **Pre-registered (14% two-way) reweight:** code −0.127 (eden −0.0433), life −0.0062 (eden +0.0293).
+  - **Post hoc, three-way reweight with dev's real group shares** (code plan 0.141 / labeler-only 0.171 / no-need 0.688; life 0.137 / 0.215 / 0.648): code verify −0.0575 vs eden −0.009; life verify −0.0216 vs eden −0.0273.
+- **Verdict: neither "better than the plugin" nor "worth building" by the rule.** Both are about zero per turn, through different routes:
+  - Where memory is needed, the verifier is far better: code +0.733 vs eden +0.1; life +0.367 vs −0.2. It delivers about 60% (code) and 33% (life) of the right packet's gain.
+  - Where nothing is needed, it pays it back: when it fires, a no-need turn loses about 0.6 (code −4 over 7 fires; life −2 over 3) and a need turn gains about 0.8 (code +21 over 24; life +12 over 17).
+  - **Break-even precision is about 43%**, but at the real base rate only about 20–25% of its fires land on need turns.
+- **What would make push pay:**
+  1. Fewer no-need fires at the same hit rate (precision ≥ 0.45).
+  2. A lower cost per wrong fire, for example a delivery format the agent can safely ignore.
+  3. Both.
+
+  These are the next experiments. The downstream harness now measures them directly.
