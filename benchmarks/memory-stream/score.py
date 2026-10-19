@@ -431,7 +431,10 @@ def main():
                 pick = vp[e["id"]]
                 if pick and isinstance(pick[0], (list, tuple)):  # calibrated: (id, p) pairs, keep p ≥ threshold
                     pick = [i for i, p in pick if p >= kw.get("p", 0.5)]
-                pk[e["id"]] = [(byid[i]["text"], byid[i]["covers"]) for i in pick[: int(kw.get("k", 4))] if i in byid]
+                # only rows visible at the moment count (a verifier can name a row it should not have seen)
+                pick = [i for i in pick if i in byid and byid[i]["t"] < e["_order"]
+                        and (byid[i].get("invalid_at") is None or byid[i]["invalid_at"] > e["_order"])]
+                pk[e["id"]] = [(byid[i]["text"], byid[i]["covers"]) for i in pick[: int(kw.get("k", 4))]]
             results[f"{name}@{a.store}"] = score(vev, pk, cov, items, stream)
             if a.ci:
                 results[f"{name}@{a.store}"]["ci95"] = bootstrap(vev, pk, cov, items, stream)

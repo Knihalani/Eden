@@ -55,7 +55,8 @@ def prep(world, n, per, tag="", fresh=False, contrast=0):
         cases.append(case)
     for b in range(0, len(cases), per):
         name = f"v{b // per:03d}" if per < 10 else f"v{b // per:02d}"
-        json.dump({"batch": name, "cases": cases[b:b + per], "output": f"benchmarks/memory-stream/verify/{sub}/out/{name}.json"},
+        out = f"benchmarks/memory-stream/verify/{sub}/out/{name}.json"
+        json.dump({"batch": name, "cases": cases[b:b + per], "output": out},
                   open(os.path.join(d, "in", f"{name}.json"), "w"), indent=1, ensure_ascii=False)
         print(name, len(cases[b:b + per]))
     hit = 0
@@ -65,7 +66,9 @@ def prep(world, n, per, tag="", fresh=False, contrast=0):
         need = set(e["labels"]["needs"]) - set(e["labels"].get("in_context", []))
         if need:
             tot += 1
-            covered = set().union(*[lex.by_id[x["id"]]["covers"] for x in c["candidates"]]) if c["candidates"] else set()
+            covered = set()
+            for x in c["candidates"]:
+                covered |= lex.by_id[x["id"]]["covers"]
             hit += len(need & covered) / len(need)
     print("candidate recall ceiling (plan labels):", round(hit / max(1, tot), 4), "over", tot, "need events")
 
@@ -89,6 +92,7 @@ if __name__ == "__main__":
     ap.add_argument("--per", type=int, default=50)
     ap.add_argument("--fresh", action="store_true", help="red-team worlds: all fresh-split human and trigger events")
     ap.add_argument("--contrast", type=int, default=0, help="add the user's last N human turns from earlier sessions")
-    ap.add_argument("--tag", default="", help="writes verify/<world>-<tag>/ (e.g. seq: one case per file, stream order)")
+    ap.add_argument("--tag", default="",
+                    help="writes verify/<world>-<tag>/ (e.g. seq: one case per file, stream order)")
     a = ap.parse_args()
     prep(a.world, a.n, a.per, a.tag, a.fresh, a.contrast)
