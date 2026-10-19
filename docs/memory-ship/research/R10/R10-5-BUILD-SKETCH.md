@@ -39,6 +39,8 @@ slice spec. If R10-5 is approved, a slice turns this into one under the normal l
   p90 8.4 s, mostly ~600 tokens of thinking the CLI keeps on. Turning thinking off and asking only for the kept rows
   would help, but a fit of the 20 calls shows about 2.4 s fixed per call (the one no-thinking call took 3.5 s), so it
   may still miss through this route; a direct API call is unmeasured, and a new prompt needs its quality re-measured.
+- **A short reply picks as well** (C9-E1, retrieval level): asking only for the kept rows passes 3 of 4 quality
+  tests against the full-score checker, with a reply of about 1–2 rows. Its latency is still unmeasured.
 - **Turns with no tool call get nothing.** On personal-assistant turns that need memory this is 11 of 49 (questions
   like "remind me what I said…"). A rough ceiling for fixing it is about +0.022 per turn (C8-E1).
 
