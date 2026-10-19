@@ -1,0 +1,96 @@
+{"batch": "a02", "model": "sonnet (claude-code subagent)", "cases": [
+{"event": "life-s051-e012", "predictions": [
+ {"row": "life-sleep-b00:m0023", "if": ["draft", "send", "email"], "always": false}]},
+{"event": "life-s051-e017", "predictions": []},
+{"event": "life-s052-e008", "predictions": [
+ {"row": "life-sleep-b01:m0027", "if": ["gift", "present", "get sam", "scented"], "always": false},
+ {"row": "life-sleep-b00:m0002", "if": ["birthday", "gift", "sam"], "always": false},
+ {"row": "life-sleep-b00:m0041", "if": ["grace", "daniel", "parents"], "always": false},
+ {"row": "life-sleep-b01:m0006", "if": ["buy", "order", "shop", "price"], "always": false}]},
+{"event": "life-s053-e003", "predictions": [
+ {"row": "life-sleep-b00:m0044", "if": ["espero", "creo", "haya", "hayan", "que"], "always": false},
+ {"row": "life-sleep-b04:m0019", "if": ["espero", "creo", "haya", "hayan", "que"], "always": false}]},
+{"event": "life-s056-e000", "predictions": [
+ {"row": "life-sleep-b00:m0002", "if": ["birthday", "bday", "gift", "sam"], "always": false},
+ {"row": "life-sleep-b00:m0069", "if": ["anniversary", "dinner", "sitter"], "always": false},
+ {"row": "life-sleep-b01:m0027", "if": ["gift", "present", "birthday"], "always": false},
+ {"row": "life-sleep-b00:m0020", "if": ["date", "plan", "celebrate", "dinner"], "always": false}]},
+{"event": "life-s056-e008", "predictions": []},
+{"event": "life-s057-e000", "predictions": [
+ {"row": "life-sleep-b00:m0043", "if": ["olivia", "date", "ga", "launch", "rollout"], "always": false},
+ {"row": "life-sleep-b00:m0063", "if": ["draft", "note", "email", "reply"], "always": false}]},
+{"event": "life-s057-e007", "predictions": []},
+{"event": "life-s057-e015", "predictions": []},
+{"event": "life-s058-e007", "predictions": [
+ {"row": "life-sleep-b04:m0003", "if": ["tom", "1:1", "calendar", "free"], "always": false},
+ {"row": "life-sleep-b01:m0022", "if": ["tom", "write", "recommend", "pricing review"], "always": false}]},
+{"event": "life-s058-e010", "predictions": [
+ {"row": "life-sleep-b01:m0026", "if": ["ottawa", "via", "train", "drive", "friday"], "always": false},
+ {"row": "life-sleep-b04:m0028", "if": ["ottawa", "drive", "train", "visit"], "always": false},
+ {"row": "life-sleep-b00:m0041", "if": ["ottawa", "sam's parents", "grace", "daniel"], "always": false}]},
+{"event": "life-s058-e013", "predictions": []},
+{"event": "life-s060-e000", "predictions": []},
+{"event": "life-s060-e002", "predictions": []},
+{"event": "life-s060-e019", "predictions": []},
+{"event": "life-s063-e000", "predictions": [
+ {"row": "life-sleep-b00:m0048", "if": ["marcus", "physio", "clinic", "job"], "always": false},
+ {"row": "life-sleep-b05:m0014", "if": ["marcus", "run", "marathon", "training"], "always": false}]},
+{"event": "life-s063-e004", "predictions": [
+ {"row": "life-sleep-b00:m0055", "if": ["career day", "talk", "job", "leo"], "always": false},
+ {"row": "life-sleep-b01:m0002", "if": ["alvarez", "career day", "teacher", "grade 2"], "always": false}]},
+{"event": "life-s063-e009", "predictions": []},
+{"event": "life-s065-e003", "predictions": []},
+{"event": "life-s066-e010", "predictions": [
+ {"row": "life-sleep-b02:m0021", "if": ["draft", "write", "nudge", "message", "legal"], "always": false},
+ {"row": "life-sleep-b00:m0023", "if": ["draft", "email", "send", "nudge"], "always": false},
+ {"row": "life-sleep-b00:m0063", "if": ["draft", "email", "nudge", "legal"], "always": false},
+ {"row": "life-sleep-b04:m0014", "if": ["instant payouts", "legal", "pay-1421", "aisha"], "always": false}]},
+{"event": "life-s068-e008", "predictions": [
+ {"row": "life-sleep-b00:m0008", "if": ["insurance", "intact", "belairdirect", "car"], "always": false},
+ {"row": "life-sleep-b04:m0025", "if": ["insurance", "premium", "quote", "policy"], "always": false}]},
+{"event": "life-s068-e021", "predictions": [
+ {"row": "life-sleep-b03:m0016", "if": ["farmers market", "market", "leslieville"], "always": false}]},
+{"event": "life-s068-e024", "predictions": [
+ {"row": "life-sleep-b00:m0054", "if": ["dentist", "dr. lin", "cleaning", "appointment", "11:00"], "always": false},
+ {"row": "life-sleep-b00:m0024", "if": ["dentist", "dr. lin", "cleaning", "address"], "always": false}]},
+{"event": "life-s070-e000", "predictions": [
+ {"row": "life-sleep-b00:m0004", "if": ["tom", "beta", "merchant", "numbers", "exec"], "always": false},
+ {"row": "life-sleep-b06:m0038", "if": ["beta", "merchant", "numbers"], "always": false},
+ {"row": "life-sleep-b06:m0004", "if": ["tom", "instant payouts", "beta"], "always": false}]},
+{"event": "life-s070-e006", "predictions": []},
+{"event": "life-s071-e000", "predictions": []},
+{"event": "life-s072-e000", "predictions": [
+ {"row": "life-sleep-b00:m0049", "if": ["biscuit", "vet", "shots", "rabies", "moreau"], "always": false}]},
+{"event": "life-s072-e005", "predictions": [
+ {"row": "life-sleep-b00:m0012", "if": ["office", "king", "spadina", "charger"], "always": false},
+ {"row": "life-sleep-b05:m0015", "if": ["buy", "order", "reserve", "purchase"], "always": false},
+ {"row": "life-sleep-b01:m0006", "if": ["buy", "store", "shop", "charger"], "always": false}]},
+{"event": "life-s072-e010", "predictions": [
+ {"row": "life-sleep-b05:m0015", "if": ["reserve", "order", "buy", "insignia", "pickup"], "always": false}]},
+{"event": "life-s075-e000", "predictions": [
+ {"row": "life-sleep-b02:m0024", "if": ["recycling", "bin", "green bin", "remind"], "always": false},
+ {"row": "life-sleep-b00:m0083", "if": ["recycling", "bin", "green bin", "remind"], "always": false},
+ {"row": "life-sleep-b06:m0021", "if": ["recycling", "bin", "yard waste", "garbage"], "always": false}]},
+{"event": "life-s076-e005", "predictions": [
+ {"row": "life-sleep-b00:m0017", "if": ["hannah", "brunch"], "always": false},
+ {"row": "life-sleep-b06:m0018", "if": ["hannah", "brunch", "text"], "always": false}]},
+{"event": "life-s076-e007", "predictions": [
+ {"row": "life-sleep-b01:m0026", "if": ["sam's parents", "ottawa", "roll in", "drive", "friday"], "always": false},
+ {"row": "life-sleep-b04:m0004", "if": ["sam's parents", "ottawa", "grace", "daniel"], "always": false},
+ {"row": "life-sleep-b04:m0028", "if": ["sam's parents", "drive", "ottawa", "daniel"], "always": false}]},
+{"event": "life-s076-e012", "predictions": [
+ {"row": "life-sleep-b01:m0026", "if": ["drive", "driving", "train", "traffic", "ottawa"], "always": false},
+ {"row": "life-sleep-b04:m0028", "if": ["drive", "driving", "train", "traffic", "ottawa"], "always": false}]},
+{"event": "life-s077-e000", "predictions": [
+ {"row": "life-sleep-b02:m0034", "if": ["nate", "text", "reply", "message"], "always": false},
+ {"row": "life-sleep-b04:m0020", "if": ["backsplash", "wall", "stove", "tile", "inspiration"], "always": false},
+ {"row": "life-sleep-b05:m0023", "if": ["kitchen", "reno", "stove", "sink", "nate"], "always": false},
+ {"row": "life-sleep-b06:m0022", "if": ["nate", "kitchen", "wall", "order"], "always": false}]},
+{"event": "life-s077-e007", "predictions": [
+ {"row": "life-sleep-b06:m0032", "if": ["farmers market", "market", "leslieville"], "always": false}]},
+{"event": "life-s077-e017", "predictions": []},
+{"event": "life-s077-e028", "predictions": []},
+{"event": "life-s077-e044", "predictions": []},
+{"event": "life-s078-e006", "predictions": []},
+{"event": "life-s078-e009", "predictions": []}
+]}
