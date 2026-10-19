@@ -1,0 +1,185 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s132-e000#0",
+   "response": "Got it, Grace turns 68 on Thursday 19 Nov 2026, so the Ottawa weekend lands just before her real day. I'll put her birthday on the calendar and set the gift reminder for two weeks ahead, which is Thursday 5 Nov.\nAction: add 'Grace's 68th birthday' on Thu 19 Nov 2026 and a reminder on Thu 5 Nov 2026 to sort her gift."
+  },
+  {
+   "id": "life-s046-e029#0",
+   "response": "Vale, we'll keep the meeting with Diego as it is. Quiz rápido de género, elige el o la: 1) ___ problema, 2) ___ mapa, 3) ___ mano, 4) ___ día, 5) ___ foto, 6) ___ tema. Respóndeme con los seis y te corrijo.\nAction: wait for your six answers, then correct them and explain the pattern behind the exceptions (Greek-origin -ma words are masculine; mano and foto are feminine)."
+  },
+  {
+   "id": "life-s002-e020#0",
+   "response": "I can't give you an honest read on your Spanish yet: I haven't got lesson notes, a teacher's feedback or any of your practice in front of me, and I won't invent a verdict. Rule saved: no meetings for you before 9:30 or after 17:00, ever, and your Monday 10:20 vet appointment is already inside that. Answer-first from here on, as you asked.\nAction: add the 9:30 to 17:00 limit to your scheduling preferences, and offer a 5 minute Spanish chat so I can assess you honestly."
+  },
+  {
+   "id": "life-s037-e020#0",
+   "response": "I don't have the Ottawa flight results from before you decided to drive, and I don't know the date of Sam's February PD day, so I'd rather re-run the search than quote old numbers. I'll also open your podcast note and base the commute suggestions on what you like.\nAction: search our history and email for the earlier Ottawa flight search, re-run it for Sam's PD day once I have the date, and pull your podcast note to suggest a few new commute podcasts."
+  },
+  {
+   "id": "life-s070-e006#0",
+   "response": "You're welcome. Tom's link request is still waiting, so I'll leave it until you've had dinner.\nAction: remind you about Tom's beta merchant numbers link after dinner."
+  },
+  {
+   "id": "life-s156-e000#0",
+   "response": "Costume first: pick the cardboard idea this weekend and get tape, paint and something reflective so there's time to build it. For the night itself, his EpiPen Jr has to come with him, so it needs to go in a small bag with the costume since the backpack won't be along. All candy gets checked for cashews and pistachios before he eats any (almonds and walnuts are fine per his allergist), and you'll want a warm layer under the box, a flashlight, a plan for who goes with him, and candy for your own door.\nAction: build a Halloween checklist in Notes counting down the 11 days, starting with the costume plan this weekend."
+  },
+  {
+   "id": "life-s118-e000#0",
+   "response": "I have last year's premium as $1,640 a year, but I haven't opened the new renewal yet, so I can't tell you what changed. I'll compare it line by line against the current policy.\nAction: find the renewal in your email, compare premium, deductibles, coverage limits and any add-ons with this year's, and send you a short list of what changed."
+  },
+  {
+   "id": "life-s126-e000#0",
+   "response": "I'll pull up everything you created or edited this month so you can see the whole mess in one place. I won't delete or move anything until you've approved it.\nAction: list your personal notes from this month grouped by theme with duplicates flagged, and propose a tidy-up plan for you to approve."
+  },
+  {
+   "id": "life-s018-e005#0",
+   "response": "A common rule of thumb is that a curve has flattened when the drop between periods falls below about 1 to 2 percentage points for three or more periods in a row. Check that the cohort is big enough that the wobble isn't just noise, and compare cohorts, since a flat curve at a higher level is the real win. It's a guideline, not a standard, so state the threshold you use.\nAction: apply that rule to your cohort data if you share the curve."
+  },
+  {
+   "id": "life-s107-e022#0",
+   "response": "Try: 'If a payout fails because of a bank-side error, the system shall automatically reinitiate it without merchant intervention.' It keeps the meaning and drops the stacked clauses.\nAction: swap it into the PRD draft if you like it, or give you a second version with 'retry' instead of 'reinitiate'."
+  },
+  {
+   "id": "life-s005-e002#0",
+   "response": "I don't have your exact job title in front of me, and for a benefits form it should match the official HR record, so I won't guess it. Your offer letter, HR portal profile or email signature should have it, and I can draft the areas-of-responsibility part from your work notes.\nAction: search your email for the offer letter or HR profile to find the exact title, then draft a short list of your areas of responsibility for you to approve."
+  },
+  {
+   "id": "life-s017-e012#0",
+   "response": "Nothing is running in the background right now. The Big Apple hours check finished: open 8:00 to 20:00 on Thanksgiving Monday, with the bakery pie counter closing at 19:00. Two things are waiting on you rather than running: whether to cancel or keep Leo's 16:30 piano with Mrs. Greene, and the offer to pull together a roadmap summary for the Tue 14 Oct preview.\nAction: wait for your call on the piano lesson and the roadmap summary."
+  },
+  {
+   "id": "life-s088-e015#0",
+   "response": "A simple Winterlude Saturday with Leo: skate the Rideau Canal Skateway in the morning when it's quieter, with a BeaverTails break after, then a warm lunch. In the afternoon, something gentle like the ice sculptures or a snow playground, then an early dinner so Leo is in bed on time. I don't have next February's Winterlude dates yet, so I'd confirm those before locking anything in.\nAction: save the sketch to your notes as 'Winterlude Saturday', and check the official Winterlude dates once they're published so I can put a placeholder on the calendar."
+  },
+  {
+   "id": "life-s085-e010#0",
+   "response": "Get on every list now: the City's child care wait list plus individual centres. Also try licensed home daycare agencies, which often have openings sooner, and ask each place if it's in the $10-a-day program. Calling directors every couple of months helps.\nAction: look up licensed home daycare agencies near Roncesvalles and send you a short list to pass on."
+  },
+  {
+   "id": "life-s066-e016#0",
+   "response": "I'll need the old pricing page address to search for, and ideally the new one so I can say where each link should point. If marketing posted an announcement, it should have both.\nAction: find the old and new pricing page URLs from marketing's message, search your docs and beta materials for the old link, and list each file that still points to it with a proposed replacement."
+  },
+  {
+   "id": "life-s076-e012#0",
+   "response": "On it. I'll put together a family-style spread for three from Pai on Duncan, including at least one mild dish, delivered at 6, kept under $100 with tax, fees and tip, and I'll leave the dishes a surprise. You'll get the total, order number and delivery time.\nAction: place the order with Pai for 6:00 delivery and send you the confirmation, total and ETA."
+  },
+  {
+   "id": "life-s085-e030#0",
+   "response": "Two is the correct number, and no regrets is the only reasonable policy with pastel de nata.\nAction: nothing needed."
+  },
+  {
+   "id": "life-s085-e017#0",
+   "response": "On a $100 payment: Starter $3.20, Growth $2.85, Scale $2.40. On a $1,000 payment: Starter $29.30, Growth $26.25, Scale $22.20. Enterprise is custom, so it shows as custom pricing in both columns.\nAction: post the retro reminder to #payouts-launch and format those numbers as a table you can drop in a doc or Slack."
+  },
+  {
+   "id": "life-s018-e017#0",
+   "response": "Pastel de nata comes from Lisbon, Portugal, from the area of Belém and the Jerónimos Monastery, where monks first made the custard tarts. Kid version: the monks used up leftover egg yolks, and the recipe turned into a bakery treat that people still queue for. Leo might like that it's a few hundred years old.\nAction: find a short kid-friendly video or a simple recipe so Leo can make some with you."
+  },
+  {
+   "id": "life-s090-e005#0",
+   "response": "You're welcome. Two things to remember for camp: the camper health form and the authorized pickup list both need to be done before day 1, and neither is marked complete yet. Drop-off is at the Winchester St gate 8:45 to 9:15 and pickup 15:45 to 16:15, and the first-day orientation email arrives the Friday before.\nAction: add the two forms and the name labels to your to-do list for this weekend."
+  },
+  {
+   "id": "life-s035-e008#0",
+   "response": "For the tours she should ask about: staff-to-child ratios and group size, how long staff have been there and how often they leave, and how they handle sleep, feeding and diapering for a one-year-old. Also fees and whether the centre is in the $10-a-day program, their sick and closure policies, how they communicate with parents, and the daily schedule including outdoor time. Visiting at drop-off time shows how staff greet kids.\nAction: turn that into a one-page checklist Marcus can send his sister."
+  },
+  {
+   "id": "life-s030-e000#0",
+   "response": "Hola! The full version of the classic: 'Tres tristes tigres tragaban trigo en un trigal, en tres tristes trastos, tragaban trigo tres tristes tigres.' For a second one to try on Carlos: 'Pablito clavó un clavito en la calva de un calvito. En la calva de un calvito, un clavito clavó Pablito.' Sunday-night dread before a launch week is really common, and I can help you set Monday up so it feels lighter.\nAction: save the tongue twisters in your notes for tonight's lesson, and offer to block a short prep slot before launch week so Sunday night is lighter."
+  },
+  {
+   "id": "life-s120-e003#0",
+   "response": "On it. I'll get the data side for Wednesday: failed payouts from the last 30 days grouped by receiving bank, with counts, share of total and the top failure reasons. I'll confirm which dashboard or table holds payout failures before pulling anything.\nAction: find the right data source, pull the 30-day failed payout breakdown by receiving bank into a table, and send it to you before Wednesday."
+  },
+  {
+   "id": "life-s047-e025#0",
+   "response": "I don't know yet, so I'll check rather than guess. I'll look at the City's rink status for Withrow and the Saturday afternoon forecast, and line it up with when swim ends.\nAction: check Withrow rink's current status and the Saturday afternoon forecast, and tell you whether skating after swim looks good."
+  },
+  {
+   "id": "life-s121-e000#0",
+   "response": "I don't have an order for Te Aro saved, so what would you like? Give me the items and I'll place it for pickup in 15 minutes.\nAction: wait for your order, then place the pickup for 15 minutes from now; if you say 'the usual', I'll check your past orders."
+  },
+  {
+   "id": "life-s051-e002#0",
+   "response": "Short version: I haven't pulled next week's calendar yet, but two things are standing. Saturday is your 7:00 am 10 km run with Marcus from Woodbine Beach along the Martin Goodman Trail. If next week is the week of Mon 12 Jan, the Northline kitchen reno starts that Monday and the $13,767 payment is due from the TD joint account.\nAction: pull next week's calendar and send you a day-by-day rundown with the answer first, then bullets."
+  },
+  {
+   "id": "life-s088-e038#0",
+   "response": "Draft: 'Team, the beta passed 10,000 payouts this week. That is a lot of merchants paid faster, and it happened because of careful work from everyone on this team. Thank you, genuinely.' It's warm and plain, with no exclamation marks.\nAction: save it as a draft and remind you tomorrow to post it; add names if you want to call anyone out."
+  },
+  {
+   "id": "life-s105-e019#0",
+   "response": "Noted: the mid-year self-review in Lattice is due Fri 10 Jul 2026. I'd block about an hour early next week so it isn't a scramble, avoiding Monday morning when the plumber is booked 9:00 to 12:00.\nAction: add a Lattice self-review due date for Fri 10 Jul 2026, find a 60 minute drafting slot next week, and set a reminder two days before it's due."
+  },
+  {
+   "id": "life-s013-e020#0",
+   "response": "Done: Leo's swim lessons, Tuesdays at 5:30 pm, Pam McConnell Aquatic Centre in Regent Park, weekly starting tomorrow.\nAction: add it to the calendar as a recurring event with a reminder and check the end date and length on the registration."
+  },
+  {
+   "id": "life-s037-e000#0",
+   "response": "Merry belated Christmas! Three Lego trucks, pyjamas at 11 and Sam asleep on the couch with Biscuit sounds like a perfect Boxing Day.\nAction: nothing needed, enjoy the slow day."
+  },
+  {
+   "id": "life-s058-e000#0",
+   "response": "It really is. Hot coffee and a slow start.\nAction: nothing needed, I can look at the day ahead whenever you want."
+  },
+  {
+   "id": "life-s037-e017#0",
+   "response": "Make one-bowl fudgy brownies with sprinkles on top: he gets to measure and stir, and they bake in about 35 minutes, so the waiting is short. Leave out any liquor-based flavouring since Grace doesn't drink, and put the sprinkles on once they've cooled so he has a job while he waits. Wednesday morning works well, they're good at room temperature that evening. For January I can put together a list of weekend-morning baking projects.\nAction: save the brownie recipe to your notes and draft the January baking list for the two of you."
+  },
+  {
+   "id": "life-s102-e002#0",
+   "response": "Told Hannah yes for Saturday 1 to 4. Indoor plan for Jun and Leo: 1:00 Lego build-off (each makes a creature, then they swap and name them), 1:45 cushion obstacle course with a timer, 2:30 snack and a scavenger hunt around the house, 3:15 a movie to wind down before pickup.\nAction: text Hannah the yes, add the plan to your Saturday notes, and offer to print the scavenger hunt clues."
+  },
+  {
+   "id": "life-s068-e014#0",
+   "response": "I don't have this year's outdoor opening date. What I have is that the winter market runs Sundays 10:00 to 14:00 indoors at Jimmie Simpson Rec Centre (870 Queen St E) until Apr 26 2026, and there's no Saturday winter market.\nAction: check the market's website for the outdoor season start date, tell you, and offer to add it to the calendar."
+  },
+  {
+   "id": "life-s037-e009#0",
+   "response": "Draft: 'Hannah, thank you so much for the shortbread! Leo ate four before I could hide the tin, so it was a big hit. Happy holidays to you all.'\nAction: hold it until you say send, then text it to Hannah."
+  },
+  {
+   "id": "life-s077-e012#0",
+   "response": "Draft, not sent: 'Hi, thanks for organizing the street party. I can take the 2 to 4 pm volunteer slot at the lemonade table, but I won't be able to help with setup. Thanks again, Riya.'\nAction: save it as a draft and send it to the neighbourhood association once you say so."
+  },
+  {
+   "id": "life-s072-e000#0",
+   "response": "Noted: Dr. Moreau retired at the start of April 2026, and Biscuit's vet is now Dr. Kaur at Riverside Veterinary Clinic on Broadview Ave. I'll update the contact, then find a weekday slot after 5:30 pm next week for his annual shots and rabies booster.\nAction: update Biscuit's vet contact, check Riverside's availability for weekdays after 5:30 pm next week against your calendar, book the best fit, and send you the confirmation."
+  },
+  {
+   "id": "life-s042-e008#0",
+   "response": "Playlist coming up: Khruangbin and A. R. Rahman instrumentals for focus. For the calendar, I'll remove the spin classes and add strength training at the Leslieville YMCA on Tuesdays and Thursdays at 6:15 am, with a note to be home by 7:15 so Sam can leave for school. I'll block 6:15 to 7:00 for the workout and travel, so tell me if the trip back takes longer.\nAction: build the focus playlist, delete the recurring spin events, and add the Tue/Thu 6:15 am YMCA events with the 7:15 home-by reminder."
+  },
+  {
+   "id": "life-s057-e000#0",
+   "response": "I can't put a date in yet: I don't know of an Aisha sign-off on the GA timing, and I don't send sales feature dates before she approves. Holding draft: 'Hi Olivia, I'm confirming the target GA timing with Aisha and will send it as soon as she signs off, in time for your deck.'\nAction: ask Aisha on Slack to sign off on a GA target I can share, and hold the draft to Olivia until she answers."
+  },
+  {
+   "id": "life-s090-e000#0",
+   "response": "Here's a starter list: hat and sunscreen, refillable water bottle, closed-toe shoes, a rain jacket, a full change of clothes with spare socks in a zip bag, a backpack, and lunch and snacks in labelled containers. I'll check the camp's official packing list to make sure nothing is missing, and add name labels for everything you can label this weekend.\nAction: save the checklist to your notes, check Riverdale Farm's camp page for the official list, drop-off and forms, and find a quick source of iron-on name labels."
+  },
+  {
+   "id": "life-s091-e012#0",
+   "response": "That sounds miserable, standing the whole way with a backpack in your face is a rough start to an office day.\nAction: if you want, I can check whether leaving a bit earlier or a different route avoids the crush."
+  },
+  {
+   "id": "life-s105-e028#0",
+   "response": "He's either counting down to lunch or he heard a crinkle somewhere. Beagles are very good at debt collection.\nAction: nothing needed."
+  },
+  {
+   "id": "life-s047-e019#0",
+   "response": "Sent the school council reply. On the car insurance: start getting quotes about 30 to 45 days before your term ends, since quotes expire. In Ontario you can cancel any time, but switching at the end of the term avoids a short-rate fee, and once the new policy is active you give your old insurer the cancellation date in writing.\nAction: send the school council email, find the renewal date on the letter, and set a reminder for when to start getting quotes."
+  },
+  {
+   "id": "life-s077-e000#0",
+   "response": "I'll gather what you saved for the wall behind the stove and sink so you can decide before Nate's Monday deadline. I don't know yet where you kept it, so I'll check your notes, photos and saved links.\nAction: search your notes, photos and saved links for kitchen backsplash inspiration, gather it into one note, and send you the highlights."
+  },
+  {
+   "id": "life-s008-e000#0",
+   "response": "Reordering the Purina Pro Plan Sensitive Skin & Stomach salmon formula, and I'll check that the listing says salmon and not chicken or another flavour. I've noted that Biscuit gets no chicken-based food because it made his skin itchy.\nAction: find your last order for the bag size and retailer, add the matching salmon listing to the cart, and confirm the flavour before placing the order."
+  }
+ ]
+}
