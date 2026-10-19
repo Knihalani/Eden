@@ -10,6 +10,21 @@ SHARES = {"code": {"plan": 0.141, "labeler-only": 0.171, "no-need": 0.688},
           "life": {"plan": 0.137, "labeler-only": 0.215, "no-need": 0.648}}
 
 
+def _judged(d):
+    judged = {}
+    for p in glob.glob(os.path.join(d, "out", "judged-*.json")):
+        judged.update({c["event"]: c["scores"] for c in json.load(open(p))["cases"]})
+    return judged
+
+
+def _ci(by, world, value):
+    """Stratified bootstrap 95% CI of Σ share × mean(value(x)) (4000 draws, seed 1)."""
+    rng = random.Random(1)
+    draws = sorted(sum(SHARES[world][g] * sum(value(rng.choice(xs)) for _ in xs) / len(xs) for g, xs in by.items())
+                   for _ in range(4000))
+    return round(draws[100], 4), round(draws[3899], 4)
+
+
 def deltas(subs, runs=()):
     """{group: [(verify − none, eden − none) per turn]}, pooled over the given downstream subs. With `runs`, each
     turn's deltas are averaged over the sub and its repeat runs (`<sub>-<run>`, same turns and conditions)."""
@@ -18,7 +33,9 @@ def deltas(subs, runs=()):
         base = _deltas(sub)
         reps = [_deltas(f"{sub}-{r}") for r in runs]
         for eid, (g, v, e) in base.items():
-            vals = [(v, e)] + [(x[eid][1], x[eid][2]) for x in reps if eid in x]
+            missing = [r for r, x in zip(runs, reps) if eid not in x]
+            assert not missing, f"{eid} missing from repeat run(s) {missing} of {sub}"
+            vals = [(v, e)] + [(x[eid][1], x[eid][2]) for x in reps]
             out.setdefault(g, []).append((sum(a for a, _ in vals) / len(vals), sum(b for _, b in vals) / len(vals)))
     return out
 
@@ -27,9 +44,7 @@ def _deltas(sub):
     """{event: (group, verify − none, eden − none)} for one downstream sub."""
     d = os.path.join(HERE, "downstream", sub)
     key = json.load(open(os.path.join(d, "key.json")))["key"]
-    judged = {}
-    for p in glob.glob(os.path.join(d, "out", "judged-*.json")):
-        judged.update({c["event"]: c["scores"] for c in json.load(open(p))["cases"]})
+    judged = _judged(d)
     out = {}
     for eid, k in key.items():
         if eid in judged:
@@ -49,26 +64,16 @@ def report(world, subs, runs=()):
             row[c] = round(sum(x[j] for x in xs) / len(xs), 3)
             row[c + " better/worse"] = (sum(x[j] > 0 for x in xs), sum(x[j] < 0 for x in xs))
         print(world, g, row)
-    rng = random.Random(1)
-    draws = []
-    for _ in range(4000):
-        u = 0.0
-        for g, xs in by.items():
-            sample = [rng.choice(xs) for _ in xs]
-            u += SHARES[world][g] * sum(a - b for a, b in sample) / len(sample)
-        draws.append(u)
-    draws.sort()
+    ci = _ci(by, world, lambda x: x[0] - x[1])
     print(world, "utility per turn:", util, "verify − eden:", round(util["verify"] - util["eden"], 4),
-          "95% CI:", (round(draws[100], 4), round(draws[3899], 4)))
+          "95% CI:", ci)
 
 
 def single(world, sub, cond="system"):
     """One condition vs none (e.g. C6-E3's dated hook vote): per-group means, per-turn utility, bootstrap 95% CI."""
     d = os.path.join(HERE, "downstream", sub)
     key = json.load(open(os.path.join(d, "key.json")))["key"]
-    judged = {}
-    for p in glob.glob(os.path.join(d, "out", "judged-*.json")):
-        judged.update({c["event"]: c["scores"] for c in json.load(open(p))["cases"]})
+    judged = _judged(d)
     by = {}
     for eid, k in key.items():
         if eid in judged:
@@ -78,10 +83,7 @@ def single(world, sub, cond="system"):
         print(world, g, {"n": len(xs), cond: round(sum(xs) / len(xs), 3),
                          "better/worse": (sum(x > 0 for x in xs), sum(x < 0 for x in xs))})
     util = sum(SHARES[world][g] * sum(xs) / len(xs) for g, xs in by.items())
-    rng = random.Random(1)
-    draws = sorted(sum(SHARES[world][g] * sum(rng.choice(xs) for _ in xs) / len(xs) for g, xs in by.items())
-                   for _ in range(4000))
-    ci = (round(draws[100], 4), round(draws[3899], 4))
+    ci = _ci(by, world, lambda x: x)
     print(world, f"{cond} − none utility per turn:", round(util, 4), "95% CI:", ci,
           f"({len([e for e in key if e in judged])} of {len(key)} judged)")
 
@@ -91,13 +93,14 @@ if __name__ == "__main__":
     # h2h.py code life --pool h2h2     → C5-E7 pooled with downstream/<world>-h2h2 (C6-E1)
     # h2h.py code --pool h2h2 --runs r2 → each turn averaged over its first run and the repeat run (C6-E2)
     # h2h.py --single code code-vote-dated → one condition vs none (C6-E3)
-    if sys.argv[1:2] == ["--single"]:
-        single(sys.argv[2], sys.argv[3])
-        sys.exit()
-    args = sys.argv[1:]
-    runs = args[args.index("--runs") + 1:] if "--runs" in args else []
-    args = args[:args.index("--runs")] if "--runs" in args else args
-    extra = args[args.index("--pool") + 1:] if "--pool" in args else []
-    worlds = args[:args.index("--pool")] if "--pool" in args else args
-    for w in worlds:
-        report(w, [f"{w}-h2h"] + [f"{w}-{x}" for x in extra], runs)
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("worlds", nargs="*")
+    ap.add_argument("--pool", nargs="*", default=[], help="extra downstream subs per world, e.g. h2h2")
+    ap.add_argument("--runs", nargs="*", default=[], help="repeat runs to average per turn, e.g. r2")
+    ap.add_argument("--single", nargs=2, metavar=("WORLD", "SUB"), help="one condition vs none")
+    a = ap.parse_args()
+    if a.single:
+        single(*a.single)
+    for w in a.worlds:
+        report(w, [f"{w}-h2h"] + [f"{w}-{x}" for x in a.pool], a.runs)
