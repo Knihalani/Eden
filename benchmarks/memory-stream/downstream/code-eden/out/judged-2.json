@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s041-e000",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "formatMoney already takes integer cents since the Sept fix; neither notes it. R1 raises the already-fixed $1,204.30000002 bug as if open."
+  },
+  {
+   "event": "code-s041-e016",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give a sound rename plan with typecheck and tests."
+  },
+  {
+   "event": "code-s042-e008",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly do items 1 and 3 and extract the component; equivalent."
+  },
+  {
+   "event": "code-s046-e022",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both scope commit to paid-at files, ask ticket id for branch; R1 avoids stash per preference."
+  },
+  {
+   "event": "code-s055-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both hedge on framework/logger; known Fastify 5 + pino. R1 adds requestId, consistent with facts."
+  },
+  {
+   "event": "code-s056-e038",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Simple copy change; both fine."
+  },
+  {
+   "event": "code-s057-e006",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both acknowledge concise style briefly."
+  },
+  {
+   "event": "code-s057-e010",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Known gotcha: PgBouncer transaction mode needs prepare: false. Both claim no record; R0 at least guesses it and checks driver.ts."
+  },
+  {
+   "event": "code-s061-e012",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both investigate the install failure; R1 rightly suspects lockfile and holds refactor."
+  },
+  {
+   "event": "code-s061-e020",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "Terraform apply only via CI, never from laptop; R0 implies applying locally after confirmation. R1 routes through normal review."
+  }
+ ]
+}

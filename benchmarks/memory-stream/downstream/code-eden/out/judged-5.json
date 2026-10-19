@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s092-e012",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both miss known path: Prometheus on 9464, ServiceMonitor scraped into Grafana; plans to trace are reasonable."
+  },
+  {
+   "event": "code-s096-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both hedge on dialect despite known Postgres 16; R1 sensibly groups by currency."
+  },
+  {
+   "event": "code-s097-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both keep HMAC secret server-side with constant-time verify and expiry."
+  },
+  {
+   "event": "code-s098-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 uses preHandler and existing problem helper; R1 hedges on framework though Fastify 5 is known."
+  },
+  {
+   "event": "code-s101-e013",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss the known presigned S3 upload flow via POST /v1/uploads and propose asking."
+  },
+  {
+   "event": "code-s103-e007",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both reasonable; R1 hedges on component library though shadcn/ui is known."
+  },
+  {
+   "event": "code-s103-e031",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Key diagnosis ok but miss Clerk pk_test_; explicit timeZone contradicts local-in-UI rule and chosen useEffect fix."
+  },
+  {
+   "event": "code-s105-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both hedge on router though Next.js App Router is known; miss error.tsx/Sentry reporting."
+  },
+  {
+   "event": "code-s106-e000",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both claim not to know the provider; Clerk is a known fact, so the answer is its dashboard."
+  },
+  {
+   "event": "code-s107-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both write the helper correctly with tests after checking types."
+  }
+ ]
+}
