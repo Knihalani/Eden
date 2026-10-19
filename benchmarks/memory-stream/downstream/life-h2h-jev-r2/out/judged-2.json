@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s058-e014", "scores": [3, 2, 3, 3], "why": "No pantry record exists; all ask Olivia and check orders. R1 saves allergy, R3 flags hidden dairy, R4 gives safe ideas; R2 thinnest."},
+{"event": "life-s062-e000", "scores": [3, 3, 3, 3], "why": "All record the car decision and unsubscribe from dealer lists appropriately."},
+{"event": "life-s068-e008", "scores": [1, 1, 1, 1], "why": "All miss known facts: Leo loves dinosaurs/Lego Jurassic World, hates mushrooms, tree-nut allergy. None answers."},
+{"event": "life-s068-e021", "scores": [2, 3, 3, 1], "why": "Dr. Lin moved to Danforth Smiles; R4 uses stale Queen East address. R1 books without calendar check (Wed 11:30 Tom 1:1)."},
+{"event": "life-s070-e002", "scores": [3, 3, 3, 3], "why": "All check TPL holds and due dates; R2/R3 use known branches/card; fine."},
+{"event": "life-s073-e002", "scores": [3, 3, 3, 3], "why": "All give correct COUNTIF; library reminders are relevant but repeated; R3 adds text-number tip."},
+{"event": "life-s075-e000", "scores": [2, 3, 2, 3], "why": "Provider is TekSavvy since Jan 2026; R1 and R3 don't know it and must look it up."},
+{"event": "life-s076-e007", "scores": [3, 1, 3, 1], "why": "Known: ~4h35 drive, Grace's Kilborn Pl address. R2/R4 claim no address and give no estimate."},
+{"event": "life-s076-e012", "scores": [1, 1, 2, 2], "why": "Sam vegetarian (no fish sauce), Leo tree nuts, no cilantro. R3/R4 cover nuts and cilantro but miss vegetarian; R1/R2 miss most."},
+{"event": "life-s077-e028", "scores": [2, 2, 3, 2], "why": "End of week is Friday: finance-joke standup openers note and pizza-movie night. Only R3 uses both."},
+{"event": "life-s083-e000", "scores": [3, 1, 3, 1], "why": "Leo doesn't do well with sleepovers; say no politely. R1/R3 flag and hold; R2/R4 send yes."},
+{"event": "life-s085-e030", "scores": [3, 3, 3, 3], "why": "Light chit-chat; all respond appropriately and briefly."},
+{"event": "life-s087-e031", "scores": [2, 2, 2, 2], "why": "None drafts or notes CAD-USD settlement dropped from v1; R1/R2 apply 'target' date rule, all defer drafting."},
+{"event": "life-s088-e038", "scores": [3, 3, 3, 3], "why": "All give warm, plain drafts without exclamation marks or em dashes."},
+{"event": "life-s090-e000", "scores": [2, 1, 2, 1], "why": "R2/R4 assert unsupported Jul 13-24 dates (R4 also a balance date). None notes Leo's nut-free lunch need."}
+]}

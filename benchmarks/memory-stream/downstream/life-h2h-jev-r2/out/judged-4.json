@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s115-e008", "scores": [2, 1, 1, 1], "why": "No passport expiry dates in evidence; R2-R4 assert unsupported Jan/Mar 2026 expiries. R1 honest with Schengen rule, misses July child-renewal form clue."},
+{"event": "life-s118-e000", "scores": [3, 2, 2, 2], "why": "Only R1 recalls last year's premium $1,640 from the August bills review; others start from nothing."},
+{"event": "life-s122-e004", "scores": [1, 2, 2, 3], "why": "City lookup shows Tuesday collection, green bin weekly. R1 says Thursday (wrong); R3 cites unsupported Thursday note; R2 knows nothing."},
+{"event": "life-s123-e004", "scores": [3, 3, 3, 3], "why": "All correctly follow up with the Tanvi rent-control note matching the prior summary."},
+{"event": "life-s126-e000", "scores": [3, 3, 3, 3], "why": "Simple fetch request; all reasonable plans to list this month's notes without deleting anything."},
+{"event": "life-s126-e021", "scores": [2, 3, 3, 3], "why": "She asked for shorter answers and is going to bed; R1 adds an unrequested Audible to-do."},
+{"event": "life-s131-e027", "scores": [1, 1, 1, 1], "why": "All miss the known preference: role-play of real situations and Mexican vocabulary to match Carlos."},
+{"event": "life-s138-e007", "scores": [2, 2, 2, 1], "why": "Weather note (15/9 C, ~10 rainy days) exists; none confirm flights moved so NYE is in Lisbon. R4 gives nothing."},
+{"event": "life-s140-e033", "scores": [3, 3, 3, 3], "why": "Text unseen; all sensibly read it first and propose no-hotplate options; R1 knows the basement setup."},
+{"event": "life-s140-e044", "scores": [3, 3, 3, 3], "why": "Game time not in memory; all look it up; R1's sushi aside is harmless."},
+{"event": "life-s140-e051", "scores": [3, 3, 3, 3], "why": "All reflect first then plan the 8 Oct day trip without booking; none cite Air Canada preference but no booking yet."},
+{"event": "life-s145-e020", "scores": [2, 3, 3, 3], "why": "Floor advice correct in all; R1 pushes unrequested fixes for her venting despite ask-before-advice preference."},
+{"event": "life-s148-e018", "scores": [2, 1, 2, 1], "why": "Today is Wed 7 Oct, so 24 business days; R1/R2 assume tomorrow Fri and say 23. R4 forgets known offsite date."},
+{"event": "life-s150-e000", "scores": [3, 2, 3, 3], "why": "Live pull is right; R2 dumps a stale August snapshot and conflates GA-blocking with blocked tickets."},
+{"event": "life-s150-e015", "scores": [3, 2, 3, 2], "why": "Dr. Lin is at Danforth Smiles, 822 Danforth (known). R2 and R4 claim not to know the clinic address."}
+]}
