@@ -1471,3 +1471,21 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - **Keeps quality** if recall ≥ cal − 0.03 and precision ≥ cal − 0.03 on at least 3 of the 4.
   - **Loses quality** otherwise.
   - Latency is not measured here.
+
+## C9-E1 · 2026-10-19 · A short-reply checker: result
+- **Run:** all inputs answered (code 195, life 245, code-rt1 74, life-rt1 81 files). Human turns, recall / precision:
+
+  | Test | cal p0.6 | short p0.6 | Δ recall | Δ precision | Pass? |
+  |---|---|---|---|---|---|
+  | code dev | 0.5121 / 0.2308 | 0.5121 / 0.2093 | 0.0 | −0.0215 | yes |
+  | life dev | 0.2785 / 0.2171 | 0.2848 / 0.2393 | +0.0063 | +0.0222 | yes |
+  | code-rt1 | 0.3414 / 0.3673 | 0.3701 / 0.3115 | +0.0287 | −0.0558 | no |
+  | life-rt1 | 0.0688 / 0.1667 | 0.1159 / 0.2857 | +0.0471 | +0.119 | yes |
+
+- **Verdict, by the rule: keeps quality** (3 of 4 within −0.03 on both).
+- **Reply size:** the short checker keeps on average 1.59 (code), 1.23 (life), 1.65 (code-rt1), 1.0 (life-rt1) rows
+  per case, and nothing on 67 / 87 / 23 / 30 cases. The reply is a few dozen tokens instead of 15 scores (thinking
+  aside).
+- **Caveats:** retrieval-level only, against plan labels; a downstream run would be needed before it replaces the
+  calibrated checker in an outcome claim. Latency is not measured here (the CLI keeps thinking on; C8-E6), so whether
+  it fits the ~3 s budget is still open; C8-E6's fit puts ≈ 2.4 s fixed under each CLI call.

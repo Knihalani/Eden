@@ -110,6 +110,12 @@ Families differ in mechanism. Every kill criterion was written before its run.
 2. **Model-free selection good enough to stand alone** (C6-E3 says the vote is not): learn from the verifier's picks at sleep (distil to cues), or ask the user to allow the in-turn call (R10-5). Also: **latency and cost of the off-hook verifier:** one haiku call per turn with ≤ 15 candidates, measured; and real PreToolUse delivery in a headless Claude Code run.
 3. **Episodic state rows:** expire or date-gate in-flight state at sleep, so "where did we leave things" gets the latest state.
 
+## Cycle 9 findings (LEDGER C9-…)
+
+- **A short-reply checker keeps its picking quality** (C9-E1, retrieval level): listing only the kept rows instead
+  of scoring all 15 passes on 3 of 4 tests (fails code-rt1 precision by 0.056). Its reply is about 1–2 rows. Its
+  latency and its downstream effect are not measured yet.
+
 ## Cycle 8 findings (LEDGER C8-…)
 
 - **Deferred delivery misses turns with no tool call** (C8-E1): 11 of 49 life plan-need turns ("remind me what I
