@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s003-e000", "scores": [2, 1, 2], "why": "Tables fine; none adds the penicillin allergy line promised for doctor contexts. Response 1's markdown table lacks separator row, breaking the requested format."},
+{"event": "life-s003-e021", "scores": [2, 2, 2], "why": "Nut-free lunches fine, but all fail to recall she asked why beagles howl at sirens, which is on record."},
+{"event": "life-s005-e002", "scores": [1, 1, 1], "why": "Title (Senior Product Manager; merchant payouts and onboarding) is on record; all claim not to know, failing the actual ask."},
+{"event": "life-s007-e013", "scores": [2, 2, 2], "why": "Booking correct; flight search omits known preferences (WestJet, direct, aisle, no basic economy)."},
+{"event": "life-s013-e020", "scores": [3, 3, 3], "why": "All add the recurring swim lesson correctly and briefly."},
+{"event": "life-s013-e023", "scores": [3, 3, 3], "why": "Simple to-do add, all correct."},
+{"event": "life-s017-e008", "scores": [2, 2, 2], "why": "Directions on record (about 4 h 35 min, 452 km); all say they don't have it."},
+{"event": "life-s018-e010", "scores": [3, 3, 3], "why": "Good neighbourhood shortlist, acknowledges mom worry appropriately."},
+{"event": "life-s018-e017", "scores": [3, 3, 3], "why": "All accurate on Belém/Jerónimos origin with kid-friendly line."},
+{"event": "life-s022-e000", "scores": [2, 2, 2], "why": "Reasonable plan to check spend, but no answer-first framing or break-even rule of thumb."},
+{"event": "life-s026-e000", "scores": [1, 3, 3], "why": "Response 0 raises stale Thu 16 Oct delivery and old invoice as current conflict; others text Nate correctly."},
+{"event": "life-s027-e029", "scores": [3, 3, 3], "why": "Light, fitting replies to chit-chat."},
+{"event": "life-s027-e031", "scores": [3, 2, 3], "why": "All add walk and budget correctly; response 1 wrongly implies someone must be home Monday though Nate receives."},
+{"event": "life-s028-e014", "scores": [3, 3, 3], "why": "All accurately recap the morning's three tasks."},
+{"event": "life-s030-e000", "scores": [3, 3, 2], "why": "Tongue twister correct; response 2 leans on reassurance though she prefers practical plans; response 1 adds relevant drill offer."}
+]}

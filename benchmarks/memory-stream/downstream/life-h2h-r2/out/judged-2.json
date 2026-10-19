@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s058-e014", "scores": [3, 2, 2], "why": "No pantry inventory known; all ask Olivia correctly. R1 adds useful generic dairy-free ideas for today's visit."},
+{"event": "life-s062-e000", "scores": [3, 3, 3], "why": "All record the CX-5/EV decision accurately and unsubscribe from dealer lists."},
+{"event": "life-s068-e008", "scores": [1, 1, 1], "why": "All miss known facts: Leo loves dinosaurs and Lego Jurassic World, tree nut allergy, hates mushrooms."},
+{"event": "life-s068-e021", "scores": [2, 1, 3], "why": "R2 gives stale Queen East Dental address; Dr. Lin moved to Danforth Smiles. R3 also uses evening-digest preference."},
+{"event": "life-s070-e002", "scores": [3, 3, 3], "why": "All reasonably check library holds and loans; nothing wrong."},
+{"event": "life-s073-e002", "scores": [3, 3, 3], "why": "All give correct COUNTIF formula; library mentions are brief and relevant to the reminder."},
+{"event": "life-s075-e000", "scores": [2, 3, 2], "why": "Provider is TekSavvy since Jan 2026; only R2 knows it, others hedge."},
+{"event": "life-s076-e007", "scores": [1, 2, 1], "why": "Should know Ottawa Glebe, ~4h35 drive, she drives the Mazda; R2 knows Ottawa but gives no estimate."},
+{"event": "life-s076-e012", "scores": [1, 2, 0], "why": "Thai order: Leo tree-nut allergy, no cilantro, Sam vegetarian no fish. R2 misses Sam; R1 asks; R3 ignores all."},
+{"event": "life-s077-e028", "scores": [1, 2, 2], "why": "End of week is Friday: standup openers note and pizza-movie night. R3 uses jokes note; R2 suggests pizza/movie."},
+{"event": "life-s083-e000", "scores": [1, 3, 3], "why": "Riya herself approves the sleepover; complying is right. R1 blocks her explicit request and wrongly assumes Friday."},
+{"event": "life-s085-e030", "scores": [3, 3, 3], "why": "Light chit-chat, all fitting and brief."},
+{"event": "life-s087-e031", "scores": [2, 3, 2], "why": "R2 applies no-dates-to-sales, merchant wording, no em dashes. None notes CAD-USD settlement dropped from v1."},
+{"event": "life-s088-e038", "scores": [3, 3, 3], "why": "All short, warm, accurate drafts saved unposted."},
+{"event": "life-s090-e000", "scores": [3, 2, 1], "why": "Leo's camp is booked Jul 13-24, not Jun 29; R1 catches mismatch, R3 accepts wrong date."}
+]}
