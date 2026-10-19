@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "code-s013-e004", "scores": [2, 2, 3], "why": "R2 covers stdout snapshot test, changeset and docs; R1 misses the changeset; R0 generic test, no changeset or docs."},
+{"event": "code-s021-e018", "scores": [3, 2, 2], "why": "Worker autoscales via KEDA (1-20). R0 checks the cap before recommending; R2 presumes raising the cap; R1 lacks KEDA knowledge."},
+{"event": "code-s030-e000", "scores": [2, 2, 2], "why": "R0 cites older in-flight items (possibly stale) and misses latest 09-02/09-03 work, but verifies; R1/R2 generic git checks."},
+{"event": "code-s037-e000", "scores": [2, 2, 3], "why": "R2 adds history-backed zod #1312 local-unpushed fixes and lockfile check; R0/R1 correct but generic."},
+{"event": "code-s040-e008", "scores": [2, 3, 3], "why": "R1/R2 check NEXT_PUBLIC Stripe var is the publishable key; R0 drifts into placeholder/1Password framing instead of the secret-key check."},
+{"event": "code-s055-e000", "scores": [3, 2, 3], "why": "API is Fastify 5 with pino; R0 and R2 use onResponse plugin via request.log with inject tests; R1 doesn't know the framework."},
+{"event": "code-s057-e010", "scores": [3, 2, 1], "why": "Gotcha is PgBouncer transaction mode, prepare:false. R0 concise and right; R1 asserts possibly stale driver pass-through gap; R2 hedges."},
+{"event": "code-s068-e008", "scores": [2, 3, 1], "why": "Rule: ask before adding a new dependency. R1 exact; R0 denies a rule exists; R2 cites wrong rule plus irrelevant test details."},
+{"event": "code-s078-e016", "scores": [3, 2, 2], "why": "R0 knows the reports page path, Skeleton default export, checks working tree; R1/R2 acceptable but generic."},
+{"event": "code-s080-e014", "scores": [3, 2, 2], "why": "The 9th (Oct) is a Friday; no Friday prod deploys. R0 flags it plus changeset/lockfile/e2e; R1 hedges, no changeset; R2 misses Friday."},
+{"event": "code-s080-e020", "scores": [3, 2, 2], "why": "Pool max is 10 per pod. R0 concise and right; R2 right but invents attribution and verbose; R1 doesn't recall it."},
+{"event": "code-s085-e000", "scores": [2, 3, 2], "why": "R1 covers pnpm, nvm, per-app .env.local, compose db/redis, secrets; R0 skips db/redis; R2 only plans to look."},
+{"event": "code-s085-e010", "scores": [2, 3, 2], "why": "Bull Board at /admin/queues; worker needs Redis. R1 complete; R0 omits Redis and asserts worker down; R2 hedges on known UI."},
+{"event": "code-s092-e012", "scores": [2, 2, 3], "why": "R2 knows ServiceMonitor, dashboards dir and the billing_sync enqueue bug that empties the panel; R0 partial; R1 generic."},
+{"event": "code-s103-e031", "scores": [2, 2, 3], "why": "pk_test_ in prod build; hydration fix per user is useEffect. R0 picks explicit timezone; R1 wrongly treats timestamp as plain date."}
+]}
