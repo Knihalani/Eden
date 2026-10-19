@@ -1,0 +1,1 @@
+{"batch": "v039", "verifier": "haiku-short", "cases": [{"event": "life-s023-e017", "scores": {"life-sleep-b00:m0081": 0.8, "life-sleep-b00:m0005": 0.6, "life-sleep-b01:m0003": 0.6}}]}

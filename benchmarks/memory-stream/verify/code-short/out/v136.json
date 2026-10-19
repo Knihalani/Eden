@@ -1,0 +1,1 @@
+{"batch": "v136", "verifier": "haiku-short", "cases": [{"event": "code-s081-e017", "scores": {"code-sleep-b05:m0013": 0.9, "code-sleep-b00:m0031": 0.6, "code-sleep-b00:m0048": 0.5}}]}
