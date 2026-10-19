@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s007-e006",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "All give hx-disabled-elt + hx-sync and server backstop; R0 asks user to share template instead of acting."
+  },
+  {
+   "event": "code-s007-e027",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "All correct retry plans; R0 also keeps it off the branch holding uncommitted bucket/empty-state work."
+  },
+  {
+   "event": "code-s007-e039",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly read the trace and plan to inspect the data source; no decisive difference."
+  },
+  {
+   "event": "code-s008-e009",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All acknowledge 80% threshold and bullet summary, with sensible from/to test cases."
+  },
+  {
+   "event": "code-s013-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All accurate on structuredClone vs JSON round trip."
+  },
+  {
+   "event": "code-s018-e010",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "Node 18 LTS is known; R0 claims not to know and defers, R1/R2 pin 18 correctly."
+  },
+  {
+   "event": "code-s018-e021",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All handle copy button sensibly with accessible label and test."
+  },
+  {
+   "event": "code-s020-e014",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All do the font change and correctly flag the expand=lineItems fix as still open."
+  },
+  {
+   "event": "code-s020-e019",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All acknowledge the end-to-end testing rule appropriately."
+  },
+  {
+   "event": "code-s020-e034",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly say suite and typecheck still running."
+  }
+ ]
+}
