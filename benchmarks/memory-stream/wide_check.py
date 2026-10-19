@@ -4,6 +4,7 @@ hold the row, then lexical score, cut at 150; one Jev request per turn with the 
 
     python3 benchmarks/memory-stream/wide_check.py --world code          (runs the calls; resumes)
     python3 benchmarks/memory-stream/wide_check.py --world code --report
+    python3 benchmarks/memory-stream/wide_check.py --world code --second [--report]   (C11-E9: narrow second pass)
 → dream/<world>/wide/out.json: {event: {"need": [...], "pool": [...], "scores": {row: p}, "latency_s": s}}
 """
 import argparse, glob, json, os, random, sys
@@ -126,9 +127,66 @@ def report(world):
           "; picks per turn mean", round(sum(picks_n) / len(picks_n), 2))
 
 
+def second(world, keep=15, thr1=0.5, rep=False):
+    """C11-E9: re-ask the `list` question over the wide pass's top `keep` at p ≥ thr1; picks at p ≥ 0.7, top 8."""
+    import judge
+    g = Generators(world)
+    d = os.path.join(HERE, "dream", world, "wide")
+    wide = json.load(open(os.path.join(d, "out.json")))
+    path = os.path.join(d, "second.json")
+    out = json.load(open(path)) if os.path.exists(path) else {}
+    if not rep:
+        cfg = env()
+        if not cfg["TYPESAFE_API_KEY"]:
+            sys.exit("TYPESAFE_API_KEY must be set (environment or .env)")
+        ev = {e["id"]: e for s in g.stream["sessions"] for e in s["events"]}
+        for eid, r in wide.items():
+            if eid in out:
+                continue
+            sc = {i: p for i, p in r["scores"].items() if p is not None}
+            ids = sorted((i for i in sc if sc[i] >= thr1), key=lambda i: (-sc[i], i))[:keep]
+            rec = {"pool": ids, "scores": {}, "latency_s": None}
+            if ids:
+                case = {"text": M.strip_paste(ev[eid]["text_all"])[:3000], "recent": judge.context(g.stream, eid, 4),
+                        "candidates": [{"id": i, "text": g.by_id[i]["text"]} for i in ids]}
+                state, qs = request(case, "list")
+                reply, secs, attempts = call(cfg, state, qs)
+                ans = reply.get("answers", {})
+                rec["scores"] = {i: combine(ans, n, "list") for n, i in enumerate(ids)}
+                rec.update(latency_s=round(secs, 3), attempts=attempts)
+            out[eid] = rec
+            json.dump(out, open(path, "w"), indent=1)
+    tot = hit = fired_no = 0
+    fired = {"need": [0, 0], "no-need": [0, 0]}
+    npk, lat = [], []
+    for eid, r in wide.items():
+        sc = {i: p for i, p in out[eid]["scores"].items() if p is not None}
+        picks = sorted((i for i in sc if sc[i] >= THR), key=lambda i: (-sc[i], i))[:8]
+        npk.append(len(picks))
+        if out[eid]["latency_s"] is not None:
+            lat.append(out[eid]["latency_s"])
+        k = "need" if r["need"] else "no-need"
+        fired[k][0] += 1
+        fired[k][1] += bool(picks)
+        for item in r["need"]:
+            cover = [i for i in r["pool"] if item in g.by_id[i]["covers"]]
+            if cover:
+                tot += 1
+                hit += any(i in picks for i in cover)
+    lat.sort()
+    print(world, len(out), "turns; second pass recall", f"{hit}/{tot} = {hit / tot:.3f};",
+          "turns with any pick", {k: f"{v[1]}/{v[0]}" for k, v in fired.items()},
+          "; picks per turn mean", round(sum(npk) / len(npk), 2),
+          f"; second call p50 {lat[len(lat) // 2]:.3f} s, p90 {lat[int(0.9 * len(lat))]:.3f} s")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--world", required=True)
     ap.add_argument("--report", action="store_true")
+    ap.add_argument("--second", action="store_true", help="C11-E9 narrow second pass")
     a = ap.parse_args()
-    report(a.world) if a.report else run(a.world)
+    if a.second:
+        second(a.world, rep=a.report)
+    else:
+        report(a.world) if a.report else run(a.world)

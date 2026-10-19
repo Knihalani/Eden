@@ -1,0 +1,2967 @@
+{
+ "life-s002-e016": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s002-e020": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s002-e033": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s003-e000": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s003-e028": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s005-e000": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s005-e002": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s006-e000": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s007-e000": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s007-e008": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s007-e013": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s007-e021": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s008-e000": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s012-e005": {
+  "pool": [
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0059"
+  ],
+  "scores": {
+   "life-sleep-b00:m0051": 0.36,
+   "life-sleep-b00:m0059": 0.35
+  },
+  "latency_s": 0.259,
+  "attempts": 1
+ },
+ "life-s012-e018": {
+  "pool": [
+   "life-sleep-b00:m0027",
+   "life-sleep-b00:m0059",
+   "life-sleep-b00:m0051"
+  ],
+  "scores": {
+   "life-sleep-b00:m0027": 0.82,
+   "life-sleep-b00:m0059": 0.71,
+   "life-sleep-b00:m0051": 0.78
+  },
+  "latency_s": 0.33,
+  "attempts": 1
+ },
+ "life-s013-e020": {
+  "pool": [
+   "life-sleep-b00:m0009",
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0059"
+  ],
+  "scores": {
+   "life-sleep-b00:m0009": 0.55,
+   "life-sleep-b00:m0075": 0.71,
+   "life-sleep-b00:m0059": 0.67
+  },
+  "latency_s": 0.221,
+  "attempts": 1
+ },
+ "life-s015-e000": {
+  "pool": [
+   "life-sleep-b00:m0022"
+  ],
+  "scores": {
+   "life-sleep-b00:m0022": 0.36
+  },
+  "latency_s": 0.21,
+  "attempts": 1
+ },
+ "life-s017-e024": {
+  "pool": [
+   "life-sleep-b00:m0021",
+   "life-sleep-b00:m0022",
+   "life-sleep-b00:m0083",
+   "life-sleep-b00:m0003",
+   "life-sleep-b00:m0009",
+   "life-sleep-b00:m0058"
+  ],
+  "scores": {
+   "life-sleep-b00:m0021": 0.68,
+   "life-sleep-b00:m0022": 0.54,
+   "life-sleep-b00:m0083": 0.61,
+   "life-sleep-b00:m0003": 0.55,
+   "life-sleep-b00:m0009": 0.52,
+   "life-sleep-b00:m0058": 0.5
+  },
+  "latency_s": 0.208,
+  "attempts": 1
+ },
+ "life-s018-e003": {
+  "pool": [
+   "life-sleep-b00:m0051"
+  ],
+  "scores": {
+   "life-sleep-b00:m0051": 0.81
+  },
+  "latency_s": 0.3,
+  "attempts": 1
+ },
+ "life-s018-e007": {
+  "pool": [
+   "life-sleep-b00:m0073"
+  ],
+  "scores": {
+   "life-sleep-b00:m0073": 0.63
+  },
+  "latency_s": 0.235,
+  "attempts": 1
+ },
+ "life-s022-e000": {
+  "pool": [
+   "life-sleep-b01:m0015",
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0016"
+  ],
+  "scores": {
+   "life-sleep-b01:m0015": 0.7,
+   "life-sleep-b00:m0075": 0.76,
+   "life-sleep-b00:m0016": 0.71
+  },
+  "latency_s": 0.216,
+  "attempts": 1
+ },
+ "life-s022-e004": {
+  "pool": [
+   "life-sleep-b00:m0070",
+   "life-sleep-b00:m0001",
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0050"
+  ],
+  "scores": {
+   "life-sleep-b00:m0070": 0.81,
+   "life-sleep-b00:m0001": 0.72,
+   "life-sleep-b00:m0075": 0.49,
+   "life-sleep-b00:m0050": 0.38
+  },
+  "latency_s": 0.208,
+  "attempts": 1
+ },
+ "life-s023-e017": {
+  "pool": [
+   "life-sleep-b00:m0081",
+   "life-sleep-b01:m0004",
+   "life-sleep-b00:m0006",
+   "life-sleep-b00:m0052",
+   "life-sleep-b00:m0005",
+   "life-sleep-b01:m0003",
+   "life-sleep-b00:m0058",
+   "life-sleep-b01:m0024",
+   "life-sleep-b00:m0051",
+   "life-sleep-b01:m0017",
+   "life-sleep-b00:m0027",
+   "life-sleep-b00:m0030",
+   "life-sleep-b00:m0009",
+   "life-sleep-b00:m0012",
+   "life-sleep-b01:m0034"
+  ],
+  "scores": {
+   "life-sleep-b00:m0081": 0.9,
+   "life-sleep-b01:m0004": 0.91,
+   "life-sleep-b00:m0006": 0.89,
+   "life-sleep-b00:m0052": 0.79,
+   "life-sleep-b00:m0005": 0.83,
+   "life-sleep-b01:m0003": 0.86,
+   "life-sleep-b00:m0058": 0.76,
+   "life-sleep-b01:m0024": 0.8,
+   "life-sleep-b00:m0051": 0.45,
+   "life-sleep-b01:m0017": 0.7,
+   "life-sleep-b00:m0027": 0.52,
+   "life-sleep-b00:m0030": 0.55,
+   "life-sleep-b00:m0009": 0.83,
+   "life-sleep-b00:m0012": 0.39,
+   "life-sleep-b01:m0034": 0.4
+  },
+  "latency_s": 0.239,
+  "attempts": 1
+ },
+ "life-s025-e014": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s025-e028": {
+  "pool": [
+   "life-sleep-b00:m0075",
+   "life-sleep-b01:m0006",
+   "life-sleep-b01:m0034",
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0013",
+   "life-sleep-b01:m0016"
+  ],
+  "scores": {
+   "life-sleep-b00:m0075": 0.61,
+   "life-sleep-b01:m0006": 0.7,
+   "life-sleep-b01:m0034": 0.76,
+   "life-sleep-b00:m0051": 0.72,
+   "life-sleep-b00:m0013": 0.46,
+   "life-sleep-b01:m0016": 0.53
+  },
+  "latency_s": 0.204,
+  "attempts": 1
+ },
+ "life-s025-e032": {
+  "pool": [
+   "life-sleep-b00:m0084",
+   "life-sleep-b00:m0073"
+  ],
+  "scores": {
+   "life-sleep-b00:m0084": 0.62,
+   "life-sleep-b00:m0073": 0.51
+  },
+  "latency_s": 0.212,
+  "attempts": 1
+ },
+ "life-s026-e008": {
+  "pool": [
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0059",
+   "life-sleep-b01:m0034"
+  ],
+  "scores": {
+   "life-sleep-b00:m0051": 0.88,
+   "life-sleep-b00:m0059": 0.82,
+   "life-sleep-b01:m0034": 0.8
+  },
+  "latency_s": 0.237,
+  "attempts": 1
+ },
+ "life-s026-e012": {
+  "pool": [
+   "life-sleep-b01:m0004",
+   "life-sleep-b00:m0081",
+   "life-sleep-b00:m0052",
+   "life-sleep-b00:m0005",
+   "life-sleep-b00:m0027",
+   "life-sleep-b00:m0006",
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0059",
+   "life-sleep-b01:m0034",
+   "life-sleep-b00:m0030"
+  ],
+  "scores": {
+   "life-sleep-b01:m0004": 0.85,
+   "life-sleep-b00:m0081": 0.88,
+   "life-sleep-b00:m0052": 0.67,
+   "life-sleep-b00:m0005": 0.72,
+   "life-sleep-b00:m0027": 0.6,
+   "life-sleep-b00:m0006": 0.63,
+   "life-sleep-b00:m0051": 0.49,
+   "life-sleep-b00:m0059": 0.62,
+   "life-sleep-b01:m0034": 0.53,
+   "life-sleep-b00:m0030": 0.56
+  },
+  "latency_s": 0.269,
+  "attempts": 1
+ },
+ "life-s026-e017": {
+  "pool": [
+   "life-sleep-b00:m0016",
+   "life-sleep-b00:m0013",
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0068"
+  ],
+  "scores": {
+   "life-sleep-b00:m0016": 0.73,
+   "life-sleep-b00:m0013": 0.67,
+   "life-sleep-b00:m0075": 0.66,
+   "life-sleep-b00:m0068": 0.39
+  },
+  "latency_s": 0.217,
+  "attempts": 1
+ },
+ "life-s026-e025": {
+  "pool": [
+   "life-sleep-b01:m0034",
+   "life-sleep-b00:m0059"
+  ],
+  "scores": {
+   "life-sleep-b01:m0034": 0.73,
+   "life-sleep-b00:m0059": 0.8
+  },
+  "latency_s": 0.221,
+  "attempts": 1
+ },
+ "life-s027-e014": {
+  "pool": [
+   "life-sleep-b00:m0051",
+   "life-sleep-b01:m0005",
+   "life-sleep-b01:m0034",
+   "life-sleep-b00:m0059",
+   "life-sleep-b00:m0061",
+   "life-sleep-b01:m0016",
+   "life-sleep-b00:m0047"
+  ],
+  "scores": {
+   "life-sleep-b00:m0051": 0.85,
+   "life-sleep-b01:m0005": 0.46,
+   "life-sleep-b01:m0034": 0.76,
+   "life-sleep-b00:m0059": 0.69,
+   "life-sleep-b00:m0061": 0.45,
+   "life-sleep-b01:m0016": 0.59,
+   "life-sleep-b00:m0047": 0.43
+  },
+  "latency_s": 0.279,
+  "attempts": 1
+ },
+ "life-s027-e031": {
+  "pool": [
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0053",
+   "life-sleep-b00:m0045",
+   "life-sleep-b01:m0004"
+  ],
+  "scores": {
+   "life-sleep-b00:m0075": 0.72,
+   "life-sleep-b00:m0053": 0.63,
+   "life-sleep-b00:m0045": 0.68,
+   "life-sleep-b01:m0004": 0.56
+  },
+  "latency_s": 0.238,
+  "attempts": 1
+ },
+ "life-s027-e038": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s028-e010": {
+  "pool": [
+   "life-sleep-b00:m0016",
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0045"
+  ],
+  "scores": {
+   "life-sleep-b00:m0016": 0.77,
+   "life-sleep-b00:m0075": 0.74,
+   "life-sleep-b00:m0045": 0.7
+  },
+  "latency_s": 0.229,
+  "attempts": 1
+ },
+ "life-s037-e004": {
+  "pool": [
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0013",
+   "life-sleep-b00:m0059",
+   "life-sleep-b00:m0014",
+   "life-sleep-b01:m0034",
+   "life-sleep-b02:m0021",
+   "life-sleep-b00:m0065"
+  ],
+  "scores": {
+   "life-sleep-b00:m0051": 0.64,
+   "life-sleep-b00:m0075": 0.69,
+   "life-sleep-b00:m0013": 0.6,
+   "life-sleep-b00:m0059": 0.6,
+   "life-sleep-b00:m0014": 0.46,
+   "life-sleep-b01:m0034": 0.5,
+   "life-sleep-b02:m0021": 0.42,
+   "life-sleep-b00:m0065": 0.51
+  },
+  "latency_s": 0.282,
+  "attempts": 1
+ },
+ "life-s037-e006": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s038-e000": {
+  "pool": [
+   "life-sleep-b01:m0025",
+   "life-sleep-b01:m0013"
+  ],
+  "scores": {
+   "life-sleep-b01:m0025": 0.75,
+   "life-sleep-b01:m0013": 0.32
+  },
+  "latency_s": 0.336,
+  "attempts": 1
+ },
+ "life-s038-e006": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s038-e009": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s040-e000": {
+  "pool": [
+   "life-sleep-b00:m0045",
+   "life-sleep-b00:m0037"
+  ],
+  "scores": {
+   "life-sleep-b00:m0045": 0.47,
+   "life-sleep-b00:m0037": 0.54
+  },
+  "latency_s": 0.204,
+  "attempts": 1
+ },
+ "life-s043-e002": {
+  "pool": [
+   "life-sleep-b00:m0066",
+   "life-sleep-b00:m0075",
+   "life-sleep-b03:m0007",
+   "life-sleep-b00:m0013",
+   "life-sleep-b00:m0016",
+   "life-sleep-b01:m0004",
+   "life-sleep-b01:m0016"
+  ],
+  "scores": {
+   "life-sleep-b00:m0066": 0.91,
+   "life-sleep-b00:m0075": 0.82,
+   "life-sleep-b03:m0007": 0.44,
+   "life-sleep-b00:m0013": 0.78,
+   "life-sleep-b00:m0016": 0.86,
+   "life-sleep-b01:m0004": 0.7,
+   "life-sleep-b01:m0016": 0.57
+  },
+  "latency_s": 0.257,
+  "attempts": 1
+ },
+ "life-s046-e021": {
+  "pool": [
+   "life-sleep-b01:m0004",
+   "life-sleep-b00:m0052",
+   "life-sleep-b02:m0027",
+   "life-sleep-b03:m0007",
+   "life-sleep-b00:m0006",
+   "life-sleep-b00:m0003",
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0005",
+   "life-sleep-b00:m0075",
+   "life-sleep-b02:m0003",
+   "life-sleep-b00:m0027",
+   "life-sleep-b00:m0081",
+   "life-sleep-b00:m0059",
+   "life-sleep-b03:m0034",
+   "life-sleep-b02:m0052"
+  ],
+  "scores": {
+   "life-sleep-b01:m0004": 0.86,
+   "life-sleep-b00:m0052": 0.76,
+   "life-sleep-b02:m0027": 0.82,
+   "life-sleep-b03:m0007": 0.82,
+   "life-sleep-b00:m0006": 0.86,
+   "life-sleep-b00:m0003": 0.75,
+   "life-sleep-b00:m0051": 0.58,
+   "life-sleep-b00:m0005": 0.71,
+   "life-sleep-b00:m0075": 0.67,
+   "life-sleep-b02:m0003": 0.57,
+   "life-sleep-b00:m0027": 0.5,
+   "life-sleep-b00:m0081": 0.52,
+   "life-sleep-b00:m0059": 0.65,
+   "life-sleep-b03:m0034": 0.61,
+   "life-sleep-b02:m0052": 0.43
+  },
+  "latency_s": 0.225,
+  "attempts": 1
+ },
+ "life-s046-e041": {
+  "pool": [
+   "life-sleep-b00:m0060",
+   "life-sleep-b00:m0041",
+   "life-sleep-b00:m0075",
+   "life-sleep-b03:m0033",
+   "life-sleep-b03:m0007",
+   "life-sleep-b01:m0026",
+   "life-sleep-b01:m0031"
+  ],
+  "scores": {
+   "life-sleep-b00:m0060": 0.84,
+   "life-sleep-b00:m0041": 0.68,
+   "life-sleep-b00:m0075": 0.61,
+   "life-sleep-b03:m0033": 0.63,
+   "life-sleep-b03:m0007": 0.49,
+   "life-sleep-b01:m0026": 0.39,
+   "life-sleep-b01:m0031": 0.49
+  },
+  "latency_s": 0.184,
+  "attempts": 1
+ },
+ "life-s047-e009": {
+  "pool": [
+   "life-sleep-b01:m0006",
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0016",
+   "life-sleep-b03:m0010",
+   "life-sleep-b00:m0065"
+  ],
+  "scores": {
+   "life-sleep-b01:m0006": 0.86,
+   "life-sleep-b00:m0075": 0.75,
+   "life-sleep-b00:m0016": 0.72,
+   "life-sleep-b03:m0010": 0.68,
+   "life-sleep-b00:m0065": 0.34
+  },
+  "latency_s": 0.218,
+  "attempts": 1
+ },
+ "life-s047-e019": {
+  "pool": [
+   "life-sleep-b00:m0075",
+   "life-sleep-b01:m0015",
+   "life-sleep-b00:m0008",
+   "life-sleep-b01:m0016"
+  ],
+  "scores": {
+   "life-sleep-b00:m0075": 0.77,
+   "life-sleep-b01:m0015": 0.73,
+   "life-sleep-b00:m0008": 0.78,
+   "life-sleep-b01:m0016": 0.67
+  },
+  "latency_s": 0.222,
+  "attempts": 1
+ },
+ "life-s047-e025": {
+  "pool": [
+   "life-sleep-b00:m0075",
+   "life-sleep-b03:m0007",
+   "life-sleep-b00:m0034",
+   "life-sleep-b01:m0017"
+  ],
+  "scores": {
+   "life-sleep-b00:m0075": 0.56,
+   "life-sleep-b03:m0007": 0.53,
+   "life-sleep-b00:m0034": 0.42,
+   "life-sleep-b01:m0017": 0.26
+  },
+  "latency_s": 0.209,
+  "attempts": 1
+ },
+ "life-s050-e000": {
+  "pool": [
+   "life-sleep-b00:m0043",
+   "life-sleep-b02:m0021",
+   "life-sleep-b01:m0034",
+   "life-sleep-b00:m0059",
+   "life-sleep-b00:m0071",
+   "life-sleep-b00:m0063",
+   "life-sleep-b04:m0017",
+   "life-sleep-b00:m0023",
+   "life-sleep-b00:m0027",
+   "life-sleep-b04:m0014",
+   "life-sleep-b00:m0051",
+   "life-sleep-b02:m0003"
+  ],
+  "scores": {
+   "life-sleep-b00:m0043": 0.95,
+   "life-sleep-b02:m0021": 0.91,
+   "life-sleep-b01:m0034": 0.87,
+   "life-sleep-b00:m0059": 0.82,
+   "life-sleep-b00:m0071": 0.79,
+   "life-sleep-b00:m0063": 0.8,
+   "life-sleep-b04:m0017": 0.74,
+   "life-sleep-b00:m0023": 0.86,
+   "life-sleep-b00:m0027": 0.57,
+   "life-sleep-b04:m0014": 0.64,
+   "life-sleep-b00:m0051": 0.48,
+   "life-sleep-b02:m0003": 0.5
+  },
+  "latency_s": 0.224,
+  "attempts": 1
+ },
+ "life-s050-e011": {
+  "pool": [
+   "life-sleep-b03:m0007",
+   "life-sleep-b00:m0075",
+   "life-sleep-b04:m0007",
+   "life-sleep-b00:m0073",
+   "life-sleep-b01:m0004",
+   "life-sleep-b00:m0059",
+   "life-sleep-b00:m0017",
+   "life-sleep-b03:m0011",
+   "life-sleep-b00:m0027",
+   "life-sleep-b00:m0051"
+  ],
+  "scores": {
+   "life-sleep-b03:m0007": 0.89,
+   "life-sleep-b00:m0075": 0.78,
+   "life-sleep-b04:m0007": 0.29,
+   "life-sleep-b00:m0073": 0.55,
+   "life-sleep-b01:m0004": 0.69,
+   "life-sleep-b00:m0059": 0.62,
+   "life-sleep-b00:m0017": 0.47,
+   "life-sleep-b03:m0011": 0.38,
+   "life-sleep-b00:m0027": 0.5,
+   "life-sleep-b00:m0051": 0.53
+  },
+  "latency_s": 0.224,
+  "attempts": 1
+ },
+ "life-s050-e016": {
+  "pool": [
+   "life-sleep-b00:m0066",
+   "life-sleep-b00:m0013",
+   "life-sleep-b00:m0016",
+   "life-sleep-b00:m0075",
+   "life-sleep-b04:m0007",
+   "life-sleep-b03:m0033",
+   "life-sleep-b03:m0013",
+   "life-sleep-b00:m0045",
+   "life-sleep-b04:m0030",
+   "life-sleep-b03:m0007"
+  ],
+  "scores": {
+   "life-sleep-b00:m0066": 0.92,
+   "life-sleep-b00:m0013": 0.89,
+   "life-sleep-b00:m0016": 0.88,
+   "life-sleep-b00:m0075": 0.84,
+   "life-sleep-b04:m0007": 0.64,
+   "life-sleep-b03:m0033": 0.78,
+   "life-sleep-b03:m0013": 0.62,
+   "life-sleep-b00:m0045": 0.51,
+   "life-sleep-b04:m0030": 0.53,
+   "life-sleep-b03:m0007": 0.62
+  },
+  "latency_s": 0.263,
+  "attempts": 1
+ },
+ "life-s051-e000": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s051-e002": {
+  "pool": [
+   "life-sleep-b04:m0003",
+   "life-sleep-b04:m0007",
+   "life-sleep-b00:m0051",
+   "life-sleep-b01:m0024",
+   "life-sleep-b02:m0006",
+   "life-sleep-b02:m0009",
+   "life-sleep-b03:m0007",
+   "life-sleep-b00:m0034",
+   "life-sleep-b00:m0073",
+   "life-sleep-b04:m0010",
+   "life-sleep-b01:m0003",
+   "life-sleep-b01:m0005",
+   "life-sleep-b01:m0017",
+   "life-sleep-b00:m0006",
+   "life-sleep-b02:m0027"
+  ],
+  "scores": {
+   "life-sleep-b04:m0003": 0.91,
+   "life-sleep-b04:m0007": 0.89,
+   "life-sleep-b00:m0051": 0.81,
+   "life-sleep-b01:m0024": 0.87,
+   "life-sleep-b02:m0006": 0.81,
+   "life-sleep-b02:m0009": 0.88,
+   "life-sleep-b03:m0007": 0.58,
+   "life-sleep-b00:m0034": 0.87,
+   "life-sleep-b00:m0073": 0.9,
+   "life-sleep-b04:m0010": 0.9,
+   "life-sleep-b01:m0003": 0.87,
+   "life-sleep-b01:m0005": 0.79,
+   "life-sleep-b01:m0017": 0.87,
+   "life-sleep-b00:m0006": 0.87,
+   "life-sleep-b02:m0027": 0.89
+  },
+  "latency_s": 1.225,
+  "attempts": 1
+ },
+ "life-s051-e012": {
+  "pool": [
+   "life-sleep-b01:m0034",
+   "life-sleep-b00:m0059",
+   "life-sleep-b02:m0021",
+   "life-sleep-b00:m0051",
+   "life-sleep-b01:m0016"
+  ],
+  "scores": {
+   "life-sleep-b01:m0034": 0.84,
+   "life-sleep-b00:m0059": 0.76,
+   "life-sleep-b02:m0021": 0.8,
+   "life-sleep-b00:m0051": 0.48,
+   "life-sleep-b01:m0016": 0.54
+  },
+  "latency_s": 0.221,
+  "attempts": 1
+ },
+ "life-s051-e017": {
+  "pool": [
+   "life-sleep-b00:m0076",
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0001",
+   "life-sleep-b00:m0059",
+   "life-sleep-b03:m0007",
+   "life-sleep-b00:m0025",
+   "life-sleep-b00:m0017",
+   "life-sleep-b00:m0050",
+   "life-sleep-b04:m0007",
+   "life-sleep-b01:m0016",
+   "life-sleep-b01:m0004",
+   "life-sleep-b03:m0011"
+  ],
+  "scores": {
+   "life-sleep-b00:m0076": 0.92,
+   "life-sleep-b00:m0075": 0.74,
+   "life-sleep-b00:m0051": 0.81,
+   "life-sleep-b00:m0001": 0.83,
+   "life-sleep-b00:m0059": 0.61,
+   "life-sleep-b03:m0007": 0.65,
+   "life-sleep-b00:m0025": 0.61,
+   "life-sleep-b00:m0017": 0.47,
+   "life-sleep-b00:m0050": 0.7,
+   "life-sleep-b04:m0007": 0.54,
+   "life-sleep-b01:m0016": 0.52,
+   "life-sleep-b01:m0004": 0.52,
+   "life-sleep-b03:m0011": 0.37
+  },
+  "latency_s": 0.236,
+  "attempts": 1
+ },
+ "life-s052-e008": {
+  "pool": [
+   "life-sleep-b02:m0006",
+   "life-sleep-b00:m0047",
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0059",
+   "life-sleep-b04:m0019",
+   "life-sleep-b01:m0005",
+   "life-sleep-b00:m0062",
+   "life-sleep-b03:m0005"
+  ],
+  "scores": {
+   "life-sleep-b02:m0006": 0.94,
+   "life-sleep-b00:m0047": 0.88,
+   "life-sleep-b00:m0051": 0.84,
+   "life-sleep-b00:m0075": 0.73,
+   "life-sleep-b00:m0059": 0.72,
+   "life-sleep-b04:m0019": 0.87,
+   "life-sleep-b01:m0005": 0.44,
+   "life-sleep-b00:m0062": 0.32,
+   "life-sleep-b03:m0005": 0.51
+  },
+  "latency_s": 0.219,
+  "attempts": 1
+ },
+ "life-s053-e003": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s056-e000": {
+  "pool": [
+   "life-sleep-b00:m0002",
+   "life-sleep-b01:m0027",
+   "life-sleep-b00:m0069",
+   "life-sleep-b00:m0001",
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0076",
+   "life-sleep-b00:m0013",
+   "life-sleep-b00:m0020",
+   "life-sleep-b00:m0084",
+   "life-sleep-b00:m0025",
+   "life-sleep-b03:m0010",
+   "life-sleep-b00:m0016",
+   "life-sleep-b03:m0032",
+   "life-sleep-b01:m0006",
+   "life-sleep-b01:m0007"
+  ],
+  "scores": {
+   "life-sleep-b00:m0002": 0.94,
+   "life-sleep-b01:m0027": 0.9,
+   "life-sleep-b00:m0069": 0.93,
+   "life-sleep-b00:m0001": 0.9,
+   "life-sleep-b00:m0075": 0.86,
+   "life-sleep-b00:m0076": 0.79,
+   "life-sleep-b00:m0013": 0.69,
+   "life-sleep-b00:m0020": 0.7,
+   "life-sleep-b00:m0084": 0.68,
+   "life-sleep-b00:m0025": 0.58,
+   "life-sleep-b03:m0010": 0.18,
+   "life-sleep-b00:m0016": 0.58,
+   "life-sleep-b03:m0032": 0.5,
+   "life-sleep-b01:m0006": 0.57,
+   "life-sleep-b01:m0007": 0.62
+  },
+  "latency_s": 0.244,
+  "attempts": 1
+ },
+ "life-s057-e000": {
+  "pool": [
+   "life-sleep-b00:m0043",
+   "life-sleep-b02:m0021",
+   "life-sleep-b01:m0034",
+   "life-sleep-b00:m0059",
+   "life-sleep-b00:m0063",
+   "life-sleep-b00:m0023",
+   "life-sleep-b00:m0027",
+   "life-sleep-b00:m0071",
+   "life-sleep-b04:m0017",
+   "life-sleep-b01:m0016",
+   "life-sleep-b00:m0051"
+  ],
+  "scores": {
+   "life-sleep-b00:m0043": 0.94,
+   "life-sleep-b02:m0021": 0.91,
+   "life-sleep-b01:m0034": 0.84,
+   "life-sleep-b00:m0059": 0.74,
+   "life-sleep-b00:m0063": 0.75,
+   "life-sleep-b00:m0023": 0.59,
+   "life-sleep-b00:m0027": 0.81,
+   "life-sleep-b00:m0071": 0.75,
+   "life-sleep-b04:m0017": 0.69,
+   "life-sleep-b01:m0016": 0.52,
+   "life-sleep-b00:m0051": 0.41
+  },
+  "latency_s": 0.235,
+  "attempts": 1
+ },
+ "life-s057-e015": {
+  "pool": [
+   "life-sleep-b04:m0029",
+   "life-sleep-b00:m0013",
+   "life-sleep-b00:m0075"
+  ],
+  "scores": {
+   "life-sleep-b04:m0029": 0.85,
+   "life-sleep-b00:m0013": 0.84,
+   "life-sleep-b00:m0075": 0.74
+  },
+  "latency_s": 0.27,
+  "attempts": 1
+ },
+ "life-s058-e010": {
+  "pool": [
+   "life-sleep-b00:m0075"
+  ],
+  "scores": {
+   "life-sleep-b00:m0075": 0.69
+  },
+  "latency_s": 0.194,
+  "attempts": 1
+ },
+ "life-s060-e000": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s060-e002": {
+  "pool": [
+   "life-sleep-b05:m0008",
+   "life-sleep-b01:m0004",
+   "life-sleep-b02:m0027",
+   "life-sleep-b03:m0007",
+   "life-sleep-b00:m0052",
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0006",
+   "life-sleep-b04:m0007",
+   "life-sleep-b00:m0059",
+   "life-sleep-b00:m0030",
+   "life-sleep-b00:m0034",
+   "life-sleep-b04:m0003",
+   "life-sleep-b00:m0029",
+   "life-sleep-b00:m0027",
+   "life-sleep-b00:m0012"
+  ],
+  "scores": {
+   "life-sleep-b05:m0008": 0.85,
+   "life-sleep-b01:m0004": 0.81,
+   "life-sleep-b02:m0027": 0.84,
+   "life-sleep-b03:m0007": 0.81,
+   "life-sleep-b00:m0052": 0.64,
+   "life-sleep-b00:m0051": 0.67,
+   "life-sleep-b00:m0006": 0.73,
+   "life-sleep-b04:m0007": 0.35,
+   "life-sleep-b00:m0059": 0.61,
+   "life-sleep-b00:m0030": 0.34,
+   "life-sleep-b00:m0034": 0.36,
+   "life-sleep-b04:m0003": 0.51,
+   "life-sleep-b00:m0029": 0.63,
+   "life-sleep-b00:m0027": 0.45,
+   "life-sleep-b00:m0012": 0.42
+  },
+  "latency_s": 0.238,
+  "attempts": 1
+ },
+ "life-s060-e019": {
+  "pool": [
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0059",
+   "life-sleep-b01:m0034",
+   "life-sleep-b02:m0021"
+  ],
+  "scores": {
+   "life-sleep-b00:m0051": 0.69,
+   "life-sleep-b00:m0059": 0.47,
+   "life-sleep-b01:m0034": 0.64,
+   "life-sleep-b02:m0021": 0.4
+  },
+  "latency_s": 0.196,
+  "attempts": 1
+ },
+ "life-s063-e000": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s063-e009": {
+  "pool": [
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0059",
+   "life-sleep-b01:m0034"
+  ],
+  "scores": {
+   "life-sleep-b00:m0051": 0.83,
+   "life-sleep-b00:m0059": 0.85,
+   "life-sleep-b01:m0034": 0.71
+  },
+  "latency_s": 0.207,
+  "attempts": 1
+ },
+ "life-s066-e010": {
+  "pool": [
+   "life-sleep-b02:m0021",
+   "life-sleep-b00:m0059",
+   "life-sleep-b00:m0071",
+   "life-sleep-b01:m0034",
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0038",
+   "life-sleep-b00:m0027"
+  ],
+  "scores": {
+   "life-sleep-b02:m0021": 0.93,
+   "life-sleep-b00:m0059": 0.87,
+   "life-sleep-b00:m0071": 0.85,
+   "life-sleep-b01:m0034": 0.87,
+   "life-sleep-b00:m0051": 0.87,
+   "life-sleep-b00:m0038": 0.61,
+   "life-sleep-b00:m0027": 0.65
+  },
+  "latency_s": 0.212,
+  "attempts": 1
+ },
+ "life-s068-e008": {
+  "pool": [
+   "life-sleep-b03:m0010",
+   "life-sleep-b00:m0065",
+   "life-sleep-b04:m0027",
+   "life-sleep-b05:m0013",
+   "life-sleep-b00:m0075"
+  ],
+  "scores": {
+   "life-sleep-b03:m0010": 0.94,
+   "life-sleep-b00:m0065": 0.89,
+   "life-sleep-b04:m0027": 0.78,
+   "life-sleep-b05:m0013": 0.89,
+   "life-sleep-b00:m0075": 0.42
+  },
+  "latency_s": 0.236,
+  "attempts": 1
+ },
+ "life-s068-e021": {
+  "pool": [
+   "life-sleep-b00:m0054",
+   "life-sleep-b01:m0004",
+   "life-sleep-b03:m0007",
+   "life-sleep-b00:m0024",
+   "life-sleep-b00:m0052",
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0027"
+  ],
+  "scores": {
+   "life-sleep-b00:m0054": 0.9,
+   "life-sleep-b01:m0004": 0.85,
+   "life-sleep-b03:m0007": 0.87,
+   "life-sleep-b00:m0024": 0.71,
+   "life-sleep-b00:m0052": 0.56,
+   "life-sleep-b00:m0075": 0.81,
+   "life-sleep-b00:m0027": 0.6
+  },
+  "latency_s": 0.244,
+  "attempts": 1
+ },
+ "life-s068-e024": {
+  "pool": [
+   "life-sleep-b05:m0037",
+   "life-sleep-b00:m0065",
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0050",
+   "life-sleep-b03:m0007",
+   "life-sleep-b01:m0016"
+  ],
+  "scores": {
+   "life-sleep-b05:m0037": 0.5,
+   "life-sleep-b00:m0065": 0.71,
+   "life-sleep-b00:m0075": 0.66,
+   "life-sleep-b00:m0050": 0.47,
+   "life-sleep-b03:m0007": 0.35,
+   "life-sleep-b01:m0016": 0.38
+  },
+  "latency_s": 0.222,
+  "attempts": 1
+ },
+ "life-s070-e006": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s072-e005": {
+  "pool": [
+   "life-sleep-b00:m0075",
+   "life-sleep-b01:m0006"
+  ],
+  "scores": {
+   "life-sleep-b00:m0075": 0.71,
+   "life-sleep-b01:m0006": 0.45
+  },
+  "latency_s": 0.24,
+  "attempts": 1
+ },
+ "life-s072-e010": {
+  "pool": [
+   "life-sleep-b00:m0051"
+  ],
+  "scores": {
+   "life-sleep-b00:m0051": 0.75
+  },
+  "latency_s": 0.238,
+  "attempts": 1
+ },
+ "life-s075-e000": {
+  "pool": [
+   "life-sleep-b04:m0001",
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0059",
+   "life-sleep-b02:m0021",
+   "life-sleep-b01:m0034"
+  ],
+  "scores": {
+   "life-sleep-b04:m0001": 0.9,
+   "life-sleep-b00:m0051": 0.83,
+   "life-sleep-b00:m0059": 0.85,
+   "life-sleep-b02:m0021": 0.56,
+   "life-sleep-b01:m0034": 0.67
+  },
+  "latency_s": 0.188,
+  "attempts": 1
+ },
+ "life-s076-e007": {
+  "pool": [
+   "life-sleep-b01:m0026",
+   "life-sleep-b02:m0009",
+   "life-sleep-b04:m0028",
+   "life-sleep-b04:m0004",
+   "life-sleep-b05:m0008",
+   "life-sleep-b06:m0015",
+   "life-sleep-b01:m0003",
+   "life-sleep-b01:m0004",
+   "life-sleep-b00:m0075",
+   "life-sleep-b03:m0007",
+   "life-sleep-b00:m0014",
+   "life-sleep-b05:m0029"
+  ],
+  "scores": {
+   "life-sleep-b01:m0026": 0.56,
+   "life-sleep-b02:m0009": 0.69,
+   "life-sleep-b04:m0028": 0.69,
+   "life-sleep-b04:m0004": 0.67,
+   "life-sleep-b05:m0008": 0.72,
+   "life-sleep-b06:m0015": 0.53,
+   "life-sleep-b01:m0003": 0.67,
+   "life-sleep-b01:m0004": 0.7,
+   "life-sleep-b00:m0075": 0.52,
+   "life-sleep-b03:m0007": 0.44,
+   "life-sleep-b00:m0014": 0.27,
+   "life-sleep-b05:m0029": 0.65
+  },
+  "latency_s": 0.208,
+  "attempts": 1
+ },
+ "life-s076-e012": {
+  "pool": [
+   "life-sleep-b00:m0050",
+   "life-sleep-b00:m0001",
+   "life-sleep-b00:m0065",
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0051",
+   "life-sleep-b03:m0010",
+   "life-sleep-b00:m0016"
+  ],
+  "scores": {
+   "life-sleep-b00:m0050": 0.93,
+   "life-sleep-b00:m0001": 0.92,
+   "life-sleep-b00:m0065": 0.79,
+   "life-sleep-b00:m0075": 0.82,
+   "life-sleep-b00:m0051": 0.81,
+   "life-sleep-b03:m0010": 0.82,
+   "life-sleep-b00:m0016": 0.79
+  },
+  "latency_s": 0.191,
+  "attempts": 1
+ },
+ "life-s077-e000": {
+  "pool": [
+   "life-sleep-b04:m0020",
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0059",
+   "life-sleep-b05:m0023"
+  ],
+  "scores": {
+   "life-sleep-b04:m0020": 0.91,
+   "life-sleep-b00:m0075": 0.68,
+   "life-sleep-b00:m0051": 0.79,
+   "life-sleep-b00:m0059": 0.77,
+   "life-sleep-b05:m0023": 0.46
+  },
+  "latency_s": 0.245,
+  "attempts": 1
+ },
+ "life-s077-e007": {
+  "pool": [
+   "life-sleep-b06:m0032",
+   "life-sleep-b03:m0016"
+  ],
+  "scores": {
+   "life-sleep-b06:m0032": 0.96,
+   "life-sleep-b03:m0016": 0.79
+  },
+  "latency_s": 0.22,
+  "attempts": 1
+ },
+ "life-s077-e017": {
+  "pool": [
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0023",
+   "life-sleep-b02:m0004",
+   "life-sleep-b00:m0059"
+  ],
+  "scores": {
+   "life-sleep-b00:m0051": 0.75,
+   "life-sleep-b00:m0023": 0.63,
+   "life-sleep-b02:m0004": 0.73,
+   "life-sleep-b00:m0059": 0.59
+  },
+  "latency_s": 0.234,
+  "attempts": 1
+ },
+ "life-s077-e028": {
+  "pool": [
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0059",
+   "life-sleep-b02:m0009",
+   "life-sleep-b01:m0004",
+   "life-sleep-b06:m0030",
+   "life-sleep-b01:m0005",
+   "life-sleep-b02:m0027",
+   "life-sleep-b00:m0006",
+   "life-sleep-b01:m0034",
+   "life-sleep-b02:m0006",
+   "life-sleep-b06:m0003",
+   "life-sleep-b00:m0034",
+   "life-sleep-b00:m0073",
+   "life-sleep-b03:m0005",
+   "life-sleep-b03:m0007"
+  ],
+  "scores": {
+   "life-sleep-b00:m0051": 0.78,
+   "life-sleep-b00:m0059": 0.71,
+   "life-sleep-b02:m0009": 0.66,
+   "life-sleep-b01:m0004": 0.72,
+   "life-sleep-b06:m0030": 0.61,
+   "life-sleep-b01:m0005": 0.58,
+   "life-sleep-b02:m0027": 0.53,
+   "life-sleep-b00:m0006": 0.57,
+   "life-sleep-b01:m0034": 0.72,
+   "life-sleep-b02:m0006": 0.51,
+   "life-sleep-b06:m0003": 0.3,
+   "life-sleep-b00:m0034": 0.58,
+   "life-sleep-b00:m0073": 0.44,
+   "life-sleep-b03:m0005": 0.47,
+   "life-sleep-b03:m0007": 0.5
+  },
+  "latency_s": 0.202,
+  "attempts": 1
+ },
+ "life-s077-e044": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s078-e006": {
+  "pool": [
+   "life-sleep-b01:m0006",
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0051",
+   "life-sleep-b05:m0015",
+   "life-sleep-b00:m0059",
+   "life-sleep-b00:m0013"
+  ],
+  "scores": {
+   "life-sleep-b01:m0006": 0.55,
+   "life-sleep-b00:m0075": 0.53,
+   "life-sleep-b00:m0051": 0.46,
+   "life-sleep-b05:m0015": 0.33,
+   "life-sleep-b00:m0059": 0.54,
+   "life-sleep-b00:m0013": 0.26
+  },
+  "latency_s": 0.3,
+  "attempts": 1
+ },
+ "life-s080-e000": {
+  "pool": [
+   "life-sleep-b00:m0081",
+   "life-sleep-b01:m0004",
+   "life-sleep-b00:m0005",
+   "life-sleep-b00:m0031",
+   "life-sleep-b00:m0052",
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0059",
+   "life-sleep-b05:m0008",
+   "life-sleep-b02:m0021",
+   "life-sleep-b00:m0006",
+   "life-sleep-b03:m0007",
+   "life-sleep-b02:m0003",
+   "life-sleep-b00:m0027",
+   "life-sleep-b02:m0027",
+   "life-sleep-b04:m0014"
+  ],
+  "scores": {
+   "life-sleep-b00:m0081": 0.91,
+   "life-sleep-b01:m0004": 0.88,
+   "life-sleep-b00:m0005": 0.89,
+   "life-sleep-b00:m0031": 0.88,
+   "life-sleep-b00:m0052": 0.74,
+   "life-sleep-b00:m0051": 0.8,
+   "life-sleep-b00:m0059": 0.75,
+   "life-sleep-b05:m0008": 0.75,
+   "life-sleep-b02:m0021": 0.61,
+   "life-sleep-b00:m0006": 0.71,
+   "life-sleep-b03:m0007": 0.72,
+   "life-sleep-b02:m0003": 0.54,
+   "life-sleep-b00:m0027": 0.54,
+   "life-sleep-b02:m0027": 0.7,
+   "life-sleep-b04:m0014": 0.46
+  },
+  "latency_s": 0.259,
+  "attempts": 1
+ },
+ "life-s082-e000": {
+  "pool": [
+   "life-sleep-b06:m0032",
+   "life-sleep-b07:m0025"
+  ],
+  "scores": {
+   "life-sleep-b06:m0032": 0.65,
+   "life-sleep-b07:m0025": 0.6
+  },
+  "latency_s": 0.267,
+  "attempts": 1
+ },
+ "life-s083-e000": {
+  "pool": [
+   "life-sleep-b00:m0029",
+   "life-sleep-b03:m0007",
+   "life-sleep-b02:m0009",
+   "life-sleep-b07:m0006",
+   "life-sleep-b00:m0017",
+   "life-sleep-b05:m0008"
+  ],
+  "scores": {
+   "life-sleep-b00:m0029": 0.92,
+   "life-sleep-b03:m0007": 0.86,
+   "life-sleep-b02:m0009": 0.78,
+   "life-sleep-b07:m0006": 0.78,
+   "life-sleep-b00:m0017": 0.66,
+   "life-sleep-b05:m0008": 0.63
+  },
+  "latency_s": 0.252,
+  "attempts": 1
+ },
+ "life-s085-e010": {
+  "pool": [
+   "life-sleep-b00:m0075"
+  ],
+  "scores": {
+   "life-sleep-b00:m0075": 0.38
+  },
+  "latency_s": 0.243,
+  "attempts": 1
+ },
+ "life-s085-e017": {
+  "pool": [
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0059",
+   "life-sleep-b02:m0021",
+   "life-sleep-b00:m0016",
+   "life-sleep-b01:m0034",
+   "life-sleep-b01:m0016"
+  ],
+  "scores": {
+   "life-sleep-b00:m0051": 0.77,
+   "life-sleep-b00:m0075": 0.66,
+   "life-sleep-b00:m0059": 0.52,
+   "life-sleep-b02:m0021": 0.75,
+   "life-sleep-b00:m0016": 0.67,
+   "life-sleep-b01:m0034": 0.52,
+   "life-sleep-b01:m0016": 0.64
+  },
+  "latency_s": 0.224,
+  "attempts": 1
+ },
+ "life-s085-e027": {
+  "pool": [
+   "life-sleep-b00:m0051"
+  ],
+  "scores": {
+   "life-sleep-b00:m0051": 0.78
+  },
+  "latency_s": 0.23,
+  "attempts": 1
+ },
+ "life-s085-e030": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s087-e000": {
+  "pool": [
+   "life-sleep-b03:m0009",
+   "life-sleep-b01:m0007",
+   "life-sleep-b06:m0038"
+  ],
+  "scores": {
+   "life-sleep-b03:m0009": 0.84,
+   "life-sleep-b01:m0007": 0.28,
+   "life-sleep-b06:m0038": 0.4
+  },
+  "latency_s": 0.286,
+  "attempts": 1
+ },
+ "life-s087-e014": {
+  "pool": [
+   "life-sleep-b02:m0013"
+  ],
+  "scores": {
+   "life-sleep-b02:m0013": 0.27
+  },
+  "latency_s": 0.223,
+  "attempts": 1
+ },
+ "life-s087-e016": {
+  "pool": [
+   "life-sleep-b00:m0023",
+   "life-sleep-b00:m0051",
+   "life-sleep-b05:m0006",
+   "life-sleep-b03:m0024",
+   "life-sleep-b02:m0041",
+   "life-sleep-b00:m0059",
+   "life-sleep-b05:m0017",
+   "life-sleep-b05:m0031",
+   "life-sleep-b01:m0034",
+   "life-sleep-b00:m0043",
+   "life-sleep-b04:m0021",
+   "life-sleep-b02:m0023",
+   "life-sleep-b02:m0008",
+   "life-sleep-b02:m0052"
+  ],
+  "scores": {
+   "life-sleep-b00:m0023": 0.71,
+   "life-sleep-b00:m0051": 0.79,
+   "life-sleep-b05:m0006": 0.72,
+   "life-sleep-b03:m0024": 0.76,
+   "life-sleep-b02:m0041": 0.73,
+   "life-sleep-b00:m0059": 0.56,
+   "life-sleep-b05:m0017": 0.57,
+   "life-sleep-b05:m0031": 0.7,
+   "life-sleep-b01:m0034": 0.59,
+   "life-sleep-b00:m0043": 0.61,
+   "life-sleep-b04:m0021": 0.52,
+   "life-sleep-b02:m0023": 0.69,
+   "life-sleep-b02:m0008": 0.51,
+   "life-sleep-b02:m0052": 0.61
+  },
+  "latency_s": 0.276,
+  "attempts": 1
+ },
+ "life-s087-e029": {
+  "pool": [
+   "life-sleep-b00:m0017",
+   "life-sleep-b01:m0034",
+   "life-sleep-b00:m0059",
+   "life-sleep-b00:m0075",
+   "life-sleep-b01:m0016",
+   "life-sleep-b00:m0051",
+   "life-sleep-b03:m0011",
+   "life-sleep-b05:m0037",
+   "life-sleep-b06:m0032",
+   "life-sleep-b00:m0027",
+   "life-sleep-b06:m0018"
+  ],
+  "scores": {
+   "life-sleep-b00:m0017": 0.68,
+   "life-sleep-b01:m0034": 0.77,
+   "life-sleep-b00:m0059": 0.76,
+   "life-sleep-b00:m0075": 0.56,
+   "life-sleep-b01:m0016": 0.72,
+   "life-sleep-b00:m0051": 0.52,
+   "life-sleep-b03:m0011": 0.52,
+   "life-sleep-b05:m0037": 0.33,
+   "life-sleep-b06:m0032": 0.4,
+   "life-sleep-b00:m0027": 0.64,
+   "life-sleep-b06:m0018": 0.29
+  },
+  "latency_s": 0.22,
+  "attempts": 1
+ },
+ "life-s087-e031": {
+  "pool": [
+   "life-sleep-b00:m0043",
+   "life-sleep-b02:m0021",
+   "life-sleep-b04:m0017",
+   "life-sleep-b01:m0034",
+   "life-sleep-b00:m0071",
+   "life-sleep-b00:m0023",
+   "life-sleep-b00:m0059",
+   "life-sleep-b00:m0051",
+   "life-sleep-b06:m0026",
+   "life-sleep-b05:m0030",
+   "life-sleep-b06:m0038",
+   "life-sleep-b00:m0063",
+   "life-sleep-b02:m0003",
+   "life-sleep-b05:m0031",
+   "life-sleep-b05:m0001"
+  ],
+  "scores": {
+   "life-sleep-b00:m0043": 0.9,
+   "life-sleep-b02:m0021": 0.89,
+   "life-sleep-b04:m0017": 0.88,
+   "life-sleep-b01:m0034": 0.89,
+   "life-sleep-b00:m0071": 0.82,
+   "life-sleep-b00:m0023": 0.68,
+   "life-sleep-b00:m0059": 0.7,
+   "life-sleep-b00:m0051": 0.74,
+   "life-sleep-b06:m0026": 0.69,
+   "life-sleep-b05:m0030": 0.74,
+   "life-sleep-b06:m0038": 0.69,
+   "life-sleep-b00:m0063": 0.59,
+   "life-sleep-b02:m0003": 0.46,
+   "life-sleep-b05:m0031": 0.65,
+   "life-sleep-b05:m0001": 0.5
+  },
+  "latency_s": 0.221,
+  "attempts": 1
+ },
+ "life-s087-e038": {
+  "pool": [
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0016",
+   "life-sleep-b00:m0013"
+  ],
+  "scores": {
+   "life-sleep-b00:m0075": 0.63,
+   "life-sleep-b00:m0016": 0.62,
+   "life-sleep-b00:m0013": 0.46
+  },
+  "latency_s": 0.227,
+  "attempts": 1
+ },
+ "life-s088-e015": {
+  "pool": [
+   "life-sleep-b03:m0033",
+   "life-sleep-b04:m0028",
+   "life-sleep-b00:m0075",
+   "life-sleep-b01:m0026",
+   "life-sleep-b03:m0007",
+   "life-sleep-b05:m0008",
+   "life-sleep-b00:m0064",
+   "life-sleep-b00:m0014",
+   "life-sleep-b00:m0065",
+   "life-sleep-b04:m0022"
+  ],
+  "scores": {
+   "life-sleep-b03:m0033": 0.82,
+   "life-sleep-b04:m0028": 0.78,
+   "life-sleep-b00:m0075": 0.71,
+   "life-sleep-b01:m0026": 0.61,
+   "life-sleep-b03:m0007": 0.69,
+   "life-sleep-b05:m0008": 0.56,
+   "life-sleep-b00:m0064": 0.42,
+   "life-sleep-b00:m0014": 0.59,
+   "life-sleep-b00:m0065": 0.58,
+   "life-sleep-b04:m0022": 0.37
+  },
+  "latency_s": 0.254,
+  "attempts": 1
+ },
+ "life-s088-e023": {
+  "pool": [
+   "life-sleep-b00:m0005",
+   "life-sleep-b00:m0081",
+   "life-sleep-b02:m0003",
+   "life-sleep-b01:m0004",
+   "life-sleep-b00:m0052",
+   "life-sleep-b00:m0027",
+   "life-sleep-b06:m0004",
+   "life-sleep-b04:m0014",
+   "life-sleep-b03:m0025",
+   "life-sleep-b05:m0008",
+   "life-sleep-b02:m0021",
+   "life-sleep-b07:m0010",
+   "life-sleep-b02:m0027",
+   "life-sleep-b01:m0020"
+  ],
+  "scores": {
+   "life-sleep-b00:m0005": 0.86,
+   "life-sleep-b00:m0081": 0.71,
+   "life-sleep-b02:m0003": 0.76,
+   "life-sleep-b01:m0004": 0.71,
+   "life-sleep-b00:m0052": 0.59,
+   "life-sleep-b00:m0027": 0.52,
+   "life-sleep-b06:m0004": 0.72,
+   "life-sleep-b04:m0014": 0.7,
+   "life-sleep-b03:m0025": 0.67,
+   "life-sleep-b05:m0008": 0.66,
+   "life-sleep-b02:m0021": 0.59,
+   "life-sleep-b07:m0010": 0.45,
+   "life-sleep-b02:m0027": 0.56,
+   "life-sleep-b01:m0020": 0.5
+  },
+  "latency_s": 0.225,
+  "attempts": 1
+ },
+ "life-s088-e038": {
+  "pool": [
+   "life-sleep-b02:m0021",
+   "life-sleep-b01:m0034",
+   "life-sleep-b00:m0071",
+   "life-sleep-b00:m0059",
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0063",
+   "life-sleep-b00:m0023",
+   "life-sleep-b04:m0014"
+  ],
+  "scores": {
+   "life-sleep-b02:m0021": 0.9,
+   "life-sleep-b01:m0034": 0.86,
+   "life-sleep-b00:m0071": 0.79,
+   "life-sleep-b00:m0059": 0.76,
+   "life-sleep-b00:m0051": 0.64,
+   "life-sleep-b00:m0063": 0.85,
+   "life-sleep-b00:m0023": 0.61,
+   "life-sleep-b04:m0014": 0.68
+  },
+  "latency_s": 0.254,
+  "attempts": 1
+ },
+ "life-s090-e000": {
+  "pool": [
+   "life-sleep-b00:m0065",
+   "life-sleep-b00:m0059",
+   "life-sleep-b00:m0051",
+   "life-sleep-b06:m0017",
+   "life-sleep-b01:m0015",
+   "life-sleep-b01:m0016",
+   "life-sleep-b00:m0027",
+   "life-sleep-b05:m0008",
+   "life-sleep-b03:m0007",
+   "life-sleep-b00:m0029",
+   "life-sleep-b06:m0019"
+  ],
+  "scores": {
+   "life-sleep-b00:m0065": 0.93,
+   "life-sleep-b00:m0059": 0.85,
+   "life-sleep-b00:m0051": 0.88,
+   "life-sleep-b06:m0017": 0.73,
+   "life-sleep-b01:m0015": 0.71,
+   "life-sleep-b01:m0016": 0.44,
+   "life-sleep-b00:m0027": 0.59,
+   "life-sleep-b05:m0008": 0.43,
+   "life-sleep-b03:m0007": 0.35,
+   "life-sleep-b00:m0029": 0.33,
+   "life-sleep-b06:m0019": 0.42
+  },
+  "latency_s": 0.226,
+  "attempts": 1
+ },
+ "life-s091-e008": {
+  "pool": [
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0036",
+   "life-sleep-b00:m0059",
+   "life-sleep-b02:m0021",
+   "life-sleep-b08:m0014",
+   "life-sleep-b00:m0071",
+   "life-sleep-b01:m0034",
+   "life-sleep-b04:m0014"
+  ],
+  "scores": {
+   "life-sleep-b00:m0051": 0.79,
+   "life-sleep-b00:m0075": 0.77,
+   "life-sleep-b00:m0036": 0.86,
+   "life-sleep-b00:m0059": 0.77,
+   "life-sleep-b02:m0021": 0.77,
+   "life-sleep-b08:m0014": 0.78,
+   "life-sleep-b00:m0071": 0.61,
+   "life-sleep-b01:m0034": 0.61,
+   "life-sleep-b04:m0014": 0.71
+  },
+  "latency_s": 0.214,
+  "attempts": 1
+ },
+ "life-s092-e000": {
+  "pool": [
+   "life-sleep-b06:m0021",
+   "life-sleep-b02:m0039",
+   "life-sleep-b03:m0007",
+   "life-sleep-b07:m0006"
+  ],
+  "scores": {
+   "life-sleep-b06:m0021": 0.87,
+   "life-sleep-b02:m0039": 0.85,
+   "life-sleep-b03:m0007": 0.86,
+   "life-sleep-b07:m0006": 0.77
+  },
+  "latency_s": 0.201,
+  "attempts": 1
+ },
+ "life-s096-e007": {
+  "pool": [
+   "life-sleep-b01:m0008"
+  ],
+  "scores": {
+   "life-sleep-b01:m0008": 0.82
+  },
+  "latency_s": 0.23,
+  "attempts": 1
+ },
+ "life-s096-e009": {
+  "pool": [
+   "life-sleep-b08:m0016",
+   "life-sleep-b01:m0015"
+  ],
+  "scores": {
+   "life-sleep-b08:m0016": 0.75,
+   "life-sleep-b01:m0015": 0.79
+  },
+  "latency_s": 0.22,
+  "attempts": 1
+ },
+ "life-s096-e028": {
+  "pool": [
+   "life-sleep-b08:m0016",
+   "life-sleep-b03:m0009"
+  ],
+  "scores": {
+   "life-sleep-b08:m0016": 0.57,
+   "life-sleep-b03:m0009": 0.49
+  },
+  "latency_s": 0.22,
+  "attempts": 1
+ },
+ "life-s097-e000": {
+  "pool": [
+   "life-sleep-b00:m0017",
+   "life-sleep-b03:m0011",
+   "life-sleep-b08:m0004",
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0059",
+   "life-sleep-b00:m0079",
+   "life-sleep-b06:m0018",
+   "life-sleep-b08:m0024",
+   "life-sleep-b06:m0020",
+   "life-sleep-b02:m0042",
+   "life-sleep-b02:m0045"
+  ],
+  "scores": {
+   "life-sleep-b00:m0017": 0.88,
+   "life-sleep-b03:m0011": 0.59,
+   "life-sleep-b08:m0004": 0.64,
+   "life-sleep-b00:m0051": 0.78,
+   "life-sleep-b00:m0059": 0.73,
+   "life-sleep-b00:m0079": 0.77,
+   "life-sleep-b06:m0018": 0.45,
+   "life-sleep-b08:m0024": 0.62,
+   "life-sleep-b06:m0020": 0.65,
+   "life-sleep-b02:m0042": 0.49,
+   "life-sleep-b02:m0045": 0.45
+  },
+  "latency_s": 0.237,
+  "attempts": 1
+ },
+ "life-s097-e004": {
+  "pool": [
+   "life-sleep-b00:m0010",
+   "life-sleep-b03:m0035",
+   "life-sleep-b01:m0008",
+   "life-sleep-b08:m0024"
+  ],
+  "scores": {
+   "life-sleep-b00:m0010": 0.92,
+   "life-sleep-b03:m0035": 0.85,
+   "life-sleep-b01:m0008": 0.75,
+   "life-sleep-b08:m0024": 0.59
+  },
+  "latency_s": 0.196,
+  "attempts": 1
+ },
+ "life-s097-e013": {
+  "pool": [
+   "life-sleep-b00:m0059",
+   "life-sleep-b00:m0051",
+   "life-sleep-b01:m0034",
+   "life-sleep-b02:m0021"
+  ],
+  "scores": {
+   "life-sleep-b00:m0059": 0.21,
+   "life-sleep-b00:m0051": 0.33,
+   "life-sleep-b01:m0034": 0.49,
+   "life-sleep-b02:m0021": 0.27
+  },
+  "latency_s": 0.197,
+  "attempts": 1
+ },
+ "life-s098-e004": {
+  "pool": [
+   "life-sleep-b08:m0016",
+   "life-sleep-b00:m0075",
+   "life-sleep-b02:m0020"
+  ],
+  "scores": {
+   "life-sleep-b08:m0016": 0.75,
+   "life-sleep-b00:m0075": 0.77,
+   "life-sleep-b02:m0020": 0.78
+  },
+  "latency_s": 0.215,
+  "attempts": 1
+ },
+ "life-s098-e013": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s100-e006": {
+  "pool": [
+   "life-sleep-b00:m0082",
+   "life-sleep-b02:m0010",
+   "life-sleep-b02:m0014"
+  ],
+  "scores": {
+   "life-sleep-b00:m0082": 0.93,
+   "life-sleep-b02:m0010": 0.94,
+   "life-sleep-b02:m0014": 0.55
+  },
+  "latency_s": 0.236,
+  "attempts": 1
+ },
+ "life-s100-e017": {
+  "pool": [
+   "life-sleep-b00:m0068",
+   "life-sleep-b00:m0073",
+   "life-sleep-b03:m0007",
+   "life-sleep-b08:m0016",
+   "life-sleep-b02:m0025",
+   "life-sleep-b06:m0020",
+   "life-sleep-b01:m0016",
+   "life-sleep-b07:m0006",
+   "life-sleep-b00:m0020",
+   "life-sleep-b02:m0026",
+   "life-sleep-b04:m0011",
+   "life-sleep-b01:m0004",
+   "life-sleep-b01:m0014",
+   "life-sleep-b02:m0029",
+   "life-sleep-b05:m0008"
+  ],
+  "scores": {
+   "life-sleep-b00:m0068": 0.91,
+   "life-sleep-b00:m0073": 0.85,
+   "life-sleep-b03:m0007": 0.8,
+   "life-sleep-b08:m0016": 0.7,
+   "life-sleep-b02:m0025": 0.72,
+   "life-sleep-b06:m0020": 0.64,
+   "life-sleep-b01:m0016": 0.51,
+   "life-sleep-b07:m0006": 0.64,
+   "life-sleep-b00:m0020": 0.5,
+   "life-sleep-b02:m0026": 0.41,
+   "life-sleep-b04:m0011": 0.58,
+   "life-sleep-b01:m0004": 0.45,
+   "life-sleep-b01:m0014": 0.48,
+   "life-sleep-b02:m0029": 0.38,
+   "life-sleep-b05:m0008": 0.51
+  },
+  "latency_s": 0.221,
+  "attempts": 1
+ },
+ "life-s100-e035": {
+  "pool": [
+   "life-sleep-b00:m0051",
+   "life-sleep-b09:m0011",
+   "life-sleep-b09:m0018",
+   "life-sleep-b03:m0013",
+   "life-sleep-b02:m0021",
+   "life-sleep-b00:m0059",
+   "life-sleep-b01:m0034",
+   "life-sleep-b00:m0071"
+  ],
+  "scores": {
+   "life-sleep-b00:m0051": 0.85,
+   "life-sleep-b09:m0011": 0.73,
+   "life-sleep-b09:m0018": 0.78,
+   "life-sleep-b03:m0013": 0.84,
+   "life-sleep-b02:m0021": 0.76,
+   "life-sleep-b00:m0059": 0.77,
+   "life-sleep-b01:m0034": 0.73,
+   "life-sleep-b00:m0071": 0.65
+  },
+  "latency_s": 0.233,
+  "attempts": 1
+ },
+ "life-s101-e004": {
+  "pool": [
+   "life-sleep-b03:m0007",
+   "life-sleep-b07:m0004",
+   "life-sleep-b05:m0008",
+   "life-sleep-b06:m0030",
+   "life-sleep-b00:m0034",
+   "life-sleep-b07:m0006",
+   "life-sleep-b00:m0001",
+   "life-sleep-b00:m0073"
+  ],
+  "scores": {
+   "life-sleep-b03:m0007": 0.79,
+   "life-sleep-b07:m0004": 0.83,
+   "life-sleep-b05:m0008": 0.86,
+   "life-sleep-b06:m0030": 0.84,
+   "life-sleep-b00:m0034": 0.84,
+   "life-sleep-b07:m0006": 0.73,
+   "life-sleep-b00:m0001": 0.72,
+   "life-sleep-b00:m0073": 0.41
+  },
+  "latency_s": 0.209,
+  "attempts": 1
+ },
+ "life-s102-e002": {
+  "pool": [
+   "life-sleep-b04:m0035",
+   "life-sleep-b00:m0051",
+   "life-sleep-b08:m0016",
+   "life-sleep-b03:m0010",
+   "life-sleep-b00:m0017",
+   "life-sleep-b01:m0016",
+   "life-sleep-b03:m0007",
+   "life-sleep-b05:m0008",
+   "life-sleep-b00:m0065",
+   "life-sleep-b03:m0011",
+   "life-sleep-b08:m0012"
+  ],
+  "scores": {
+   "life-sleep-b04:m0035": 0.91,
+   "life-sleep-b00:m0051": 0.87,
+   "life-sleep-b08:m0016": 0.83,
+   "life-sleep-b03:m0010": 0.81,
+   "life-sleep-b00:m0017": 0.71,
+   "life-sleep-b01:m0016": 0.47,
+   "life-sleep-b03:m0007": 0.7,
+   "life-sleep-b05:m0008": 0.6,
+   "life-sleep-b00:m0065": 0.34,
+   "life-sleep-b03:m0011": 0.6,
+   "life-sleep-b08:m0012": 0.42
+  },
+  "latency_s": 0.213,
+  "attempts": 1
+ },
+ "life-s102-e009": {
+  "pool": [
+   "life-sleep-b05:m0024",
+   "life-sleep-b05:m0015",
+   "life-sleep-b01:m0027",
+   "life-sleep-b06:m0020",
+   "life-sleep-b00:m0010",
+   "life-sleep-b00:m0001",
+   "life-sleep-b00:m0065",
+   "life-sleep-b01:m0006",
+   "life-sleep-b05:m0037",
+   "life-sleep-b09:m0013",
+   "life-sleep-b00:m0013"
+  ],
+  "scores": {
+   "life-sleep-b05:m0024": 0.84,
+   "life-sleep-b05:m0015": 0.72,
+   "life-sleep-b01:m0027": 0.77,
+   "life-sleep-b06:m0020": 0.56,
+   "life-sleep-b00:m0010": 0.81,
+   "life-sleep-b00:m0001": 0.58,
+   "life-sleep-b00:m0065": 0.59,
+   "life-sleep-b01:m0006": 0.53,
+   "life-sleep-b05:m0037": 0.44,
+   "life-sleep-b09:m0013": 0.49,
+   "life-sleep-b00:m0013": 0.53
+  },
+  "latency_s": 0.272,
+  "attempts": 1
+ },
+ "life-s103-e007": {
+  "pool": [
+   "life-sleep-b06:m0031",
+   "life-sleep-b01:m0016",
+   "life-sleep-b04:m0025",
+   "life-sleep-b06:m0020"
+  ],
+  "scores": {
+   "life-sleep-b06:m0031": 0.88,
+   "life-sleep-b01:m0016": 0.46,
+   "life-sleep-b04:m0025": 0.38,
+   "life-sleep-b06:m0020": 0.46
+  },
+  "latency_s": 0.271,
+  "attempts": 1
+ },
+ "life-s105-e000": {
+  "pool": [
+   "life-sleep-b00:m0075",
+   "life-sleep-b02:m0005",
+   "life-sleep-b01:m0004",
+   "life-sleep-b05:m0008",
+   "life-sleep-b03:m0007",
+   "life-sleep-b01:m0024"
+  ],
+  "scores": {
+   "life-sleep-b00:m0075": 0.86,
+   "life-sleep-b02:m0005": 0.78,
+   "life-sleep-b01:m0004": 0.74,
+   "life-sleep-b05:m0008": 0.71,
+   "life-sleep-b03:m0007": 0.53,
+   "life-sleep-b01:m0024": 0.66
+  },
+  "latency_s": 0.262,
+  "attempts": 1
+ },
+ "life-s105-e004": {
+  "pool": [
+   "life-sleep-b01:m0004",
+   "life-sleep-b09:m0001",
+   "life-sleep-b00:m0052",
+   "life-sleep-b01:m0024",
+   "life-sleep-b05:m0008"
+  ],
+  "scores": {
+   "life-sleep-b01:m0004": 0.61,
+   "life-sleep-b09:m0001": 0.75,
+   "life-sleep-b00:m0052": 0.48,
+   "life-sleep-b01:m0024": 0.53,
+   "life-sleep-b05:m0008": 0.58
+  },
+  "latency_s": 0.24,
+  "attempts": 1
+ },
+ "life-s105-e030": {
+  "pool": [
+   "life-sleep-b04:m0003",
+   "life-sleep-b09:m0018",
+   "life-sleep-b05:m0017",
+   "life-sleep-b08:m0026",
+   "life-sleep-b00:m0030"
+  ],
+  "scores": {
+   "life-sleep-b04:m0003": 0.84,
+   "life-sleep-b09:m0018": 0.66,
+   "life-sleep-b05:m0017": 0.61,
+   "life-sleep-b08:m0026": 0.69,
+   "life-sleep-b00:m0030": 0.37
+  },
+  "latency_s": 0.812,
+  "attempts": 1
+ },
+ "life-s105-e032": {
+  "pool": [
+   "life-sleep-b03:m0001",
+   "life-sleep-b03:m0029",
+   "life-sleep-b03:m0009",
+   "life-sleep-b05:m0008"
+  ],
+  "scores": {
+   "life-sleep-b03:m0001": 0.82,
+   "life-sleep-b03:m0029": 0.8,
+   "life-sleep-b03:m0009": 0.55,
+   "life-sleep-b05:m0008": 0.59
+  },
+  "latency_s": 0.255,
+  "attempts": 1
+ },
+ "life-s106-e000": {
+  "pool": [
+   "life-sleep-b01:m0027",
+   "life-sleep-b00:m0075",
+   "life-sleep-b05:m0015",
+   "life-sleep-b06:m0020",
+   "life-sleep-b09:m0003",
+   "life-sleep-b01:m0006",
+   "life-sleep-b00:m0013",
+   "life-sleep-b00:m0016",
+   "life-sleep-b06:m0022",
+   "life-sleep-b04:m0030"
+  ],
+  "scores": {
+   "life-sleep-b01:m0027": 0.87,
+   "life-sleep-b00:m0075": 0.77,
+   "life-sleep-b05:m0015": 0.77,
+   "life-sleep-b06:m0020": 0.65,
+   "life-sleep-b09:m0003": 0.4,
+   "life-sleep-b01:m0006": 0.73,
+   "life-sleep-b00:m0013": 0.6,
+   "life-sleep-b00:m0016": 0.6,
+   "life-sleep-b06:m0022": 0.55,
+   "life-sleep-b04:m0030": 0.45
+  },
+  "latency_s": 0.227,
+  "attempts": 1
+ },
+ "life-s106-e005": {
+  "pool": [
+   "life-sleep-b08:m0006"
+  ],
+  "scores": {
+   "life-sleep-b08:m0006": 0.94
+  },
+  "latency_s": 0.246,
+  "attempts": 1
+ },
+ "life-s106-e007": {
+  "pool": [
+   "life-sleep-b08:m0006",
+   "life-sleep-b01:m0027",
+   "life-sleep-b08:m0016"
+  ],
+  "scores": {
+   "life-sleep-b08:m0006": 0.8,
+   "life-sleep-b01:m0027": 0.49,
+   "life-sleep-b08:m0016": 0.46
+  },
+  "latency_s": 0.283,
+  "attempts": 1
+ },
+ "life-s107-e013": {
+  "pool": [
+   "life-sleep-b00:m0028",
+   "life-sleep-b04:m0011",
+   "life-sleep-b07:m0004",
+   "life-sleep-b08:m0016",
+   "life-sleep-b05:m0040",
+   "life-sleep-b09:m0018",
+   "life-sleep-b00:m0073",
+   "life-sleep-b01:m0004",
+   "life-sleep-b08:m0033"
+  ],
+  "scores": {
+   "life-sleep-b00:m0028": 0.81,
+   "life-sleep-b04:m0011": 0.91,
+   "life-sleep-b07:m0004": 0.86,
+   "life-sleep-b08:m0016": 0.77,
+   "life-sleep-b05:m0040": 0.63,
+   "life-sleep-b09:m0018": 0.76,
+   "life-sleep-b00:m0073": 0.58,
+   "life-sleep-b01:m0004": 0.59,
+   "life-sleep-b08:m0033": 0.41
+  },
+  "latency_s": 0.222,
+  "attempts": 1
+ },
+ "life-s107-e024": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s108-e000": {
+  "pool": [
+   "life-sleep-b01:m0006",
+   "life-sleep-b00:m0051",
+   "life-sleep-b09:m0011",
+   "life-sleep-b05:m0015",
+   "life-sleep-b00:m0075",
+   "life-sleep-b06:m0020",
+   "life-sleep-b00:m0016",
+   "life-sleep-b00:m0059",
+   "life-sleep-b09:m0018",
+   "life-sleep-b00:m0013",
+   "life-sleep-b09:m0003",
+   "life-sleep-b01:m0034",
+   "life-sleep-b00:m0047",
+   "life-sleep-b04:m0030",
+   "life-sleep-b02:m0006"
+  ],
+  "scores": {
+   "life-sleep-b01:m0006": 0.89,
+   "life-sleep-b00:m0051": 0.83,
+   "life-sleep-b09:m0011": 0.78,
+   "life-sleep-b05:m0015": 0.67,
+   "life-sleep-b00:m0075": 0.83,
+   "life-sleep-b06:m0020": 0.45,
+   "life-sleep-b00:m0016": 0.83,
+   "life-sleep-b00:m0059": 0.77,
+   "life-sleep-b09:m0018": 0.78,
+   "life-sleep-b00:m0013": 0.57,
+   "life-sleep-b09:m0003": 0.35,
+   "life-sleep-b01:m0034": 0.74,
+   "life-sleep-b00:m0047": 0.78,
+   "life-sleep-b04:m0030": 0.55,
+   "life-sleep-b02:m0006": 0.75
+  },
+  "latency_s": 0.29,
+  "attempts": 1
+ },
+ "life-s110-e009": {
+  "pool": [
+   "life-sleep-b08:m0016",
+   "life-sleep-b00:m0051"
+  ],
+  "scores": {
+   "life-sleep-b08:m0016": 0.74,
+   "life-sleep-b00:m0051": 0.78
+  },
+  "latency_s": 0.203,
+  "attempts": 1
+ },
+ "life-s110-e025": {
+  "pool": [
+   "life-sleep-b01:m0016",
+   "life-sleep-b01:m0015"
+  ],
+  "scores": {
+   "life-sleep-b01:m0016": 0.62,
+   "life-sleep-b01:m0015": 0.51
+  },
+  "latency_s": 0.207,
+  "attempts": 1
+ },
+ "life-s111-e007": {
+  "pool": [
+   "life-sleep-b00:m0051",
+   "life-sleep-b08:m0016",
+   "life-sleep-b09:m0018",
+   "life-sleep-b00:m0075",
+   "life-sleep-b08:m0033",
+   "life-sleep-b01:m0004",
+   "life-sleep-b10:m0022",
+   "life-sleep-b00:m0052"
+  ],
+  "scores": {
+   "life-sleep-b00:m0051": 0.62,
+   "life-sleep-b08:m0016": 0.7,
+   "life-sleep-b09:m0018": 0.66,
+   "life-sleep-b00:m0075": 0.67,
+   "life-sleep-b08:m0033": 0.81,
+   "life-sleep-b01:m0004": 0.49,
+   "life-sleep-b10:m0022": 0.55,
+   "life-sleep-b00:m0052": 0.43
+  },
+  "latency_s": 0.212,
+  "attempts": 1
+ },
+ "life-s113-e000": {
+  "pool": [
+   "life-sleep-b00:m0023",
+   "life-sleep-b00:m0051",
+   "life-sleep-b08:m0016",
+   "life-sleep-b08:m0033",
+   "life-sleep-b02:m0021",
+   "life-sleep-b09:m0011",
+   "life-sleep-b09:m0018",
+   "life-sleep-b00:m0063",
+   "life-sleep-b01:m0034",
+   "life-sleep-b00:m0059",
+   "life-sleep-b08:m0014",
+   "life-sleep-b08:m0017",
+   "life-sleep-b03:m0034",
+   "life-sleep-b00:m0071",
+   "life-sleep-b01:m0016"
+  ],
+  "scores": {
+   "life-sleep-b00:m0023": 0.78,
+   "life-sleep-b00:m0051": 0.76,
+   "life-sleep-b08:m0016": 0.75,
+   "life-sleep-b08:m0033": 0.78,
+   "life-sleep-b02:m0021": 0.75,
+   "life-sleep-b09:m0011": 0.65,
+   "life-sleep-b09:m0018": 0.7,
+   "life-sleep-b00:m0063": 0.75,
+   "life-sleep-b01:m0034": 0.55,
+   "life-sleep-b00:m0059": 0.55,
+   "life-sleep-b08:m0014": 0.43,
+   "life-sleep-b08:m0017": 0.54,
+   "life-sleep-b03:m0034": 0.41,
+   "life-sleep-b00:m0071": 0.47,
+   "life-sleep-b01:m0016": 0.54
+  },
+  "latency_s": 0.278,
+  "attempts": 1
+ },
+ "life-s118-e007": {
+  "pool": [
+   "life-sleep-b00:m0040"
+  ],
+  "scores": {
+   "life-sleep-b00:m0040": 0.43
+  },
+  "latency_s": 0.222,
+  "attempts": 1
+ },
+ "life-s120-e003": {
+  "pool": [
+   "life-sleep-b00:m0031",
+   "life-sleep-b00:m0051",
+   "life-sleep-b08:m0016",
+   "life-sleep-b02:m0003",
+   "life-sleep-b03:m0025",
+   "life-sleep-b00:m0059",
+   "life-sleep-b08:m0014",
+   "life-sleep-b09:m0014",
+   "life-sleep-b02:m0021",
+   "life-sleep-b05:m0033",
+   "life-sleep-b04:m0014",
+   "life-sleep-b01:m0034",
+   "life-sleep-b00:m0071",
+   "life-sleep-b10:m0009"
+  ],
+  "scores": {
+   "life-sleep-b00:m0031": 0.9,
+   "life-sleep-b00:m0051": 0.82,
+   "life-sleep-b08:m0016": 0.79,
+   "life-sleep-b02:m0003": 0.83,
+   "life-sleep-b03:m0025": 0.72,
+   "life-sleep-b00:m0059": 0.66,
+   "life-sleep-b08:m0014": 0.72,
+   "life-sleep-b09:m0014": 0.62,
+   "life-sleep-b02:m0021": 0.61,
+   "life-sleep-b05:m0033": 0.33,
+   "life-sleep-b04:m0014": 0.59,
+   "life-sleep-b01:m0034": 0.49,
+   "life-sleep-b00:m0071": 0.46,
+   "life-sleep-b10:m0009": 0.6
+  },
+  "latency_s": 0.305,
+  "attempts": 1
+ },
+ "life-s121-e000": {
+  "pool": [
+   "life-sleep-b00:m0075",
+   "life-sleep-b00:m0050",
+   "life-sleep-b00:m0013",
+   "life-sleep-b05:m0015",
+   "life-sleep-b00:m0065",
+   "life-sleep-b00:m0076",
+   "life-sleep-b00:m0016",
+   "life-sleep-b06:m0020",
+   "life-sleep-b06:m0024",
+   "life-sleep-b09:m0003",
+   "life-sleep-b00:m0025",
+   "life-sleep-b09:m0013",
+   "life-sleep-b00:m0001"
+  ],
+  "scores": {
+   "life-sleep-b00:m0075": 0.76,
+   "life-sleep-b00:m0050": 0.66,
+   "life-sleep-b00:m0013": 0.46,
+   "life-sleep-b05:m0015": 0.39,
+   "life-sleep-b00:m0065": 0.19,
+   "life-sleep-b00:m0076": 0.16,
+   "life-sleep-b00:m0016": 0.6,
+   "life-sleep-b06:m0020": 0.4,
+   "life-sleep-b06:m0024": 0.41,
+   "life-sleep-b09:m0003": 0.26,
+   "life-sleep-b00:m0025": 0.39,
+   "life-sleep-b09:m0013": 0.18,
+   "life-sleep-b00:m0001": 0.3
+  },
+  "latency_s": 0.24,
+  "attempts": 1
+ },
+ "life-s123-e009": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s126-e005": {
+  "pool": [
+   "life-sleep-b01:m0004",
+   "life-sleep-b00:m0075",
+   "life-sleep-b05:m0008",
+   "life-sleep-b07:m0009",
+   "life-sleep-b00:m0052",
+   "life-sleep-b08:m0033",
+   "life-sleep-b00:m0012"
+  ],
+  "scores": {
+   "life-sleep-b01:m0004": 0.75,
+   "life-sleep-b00:m0075": 0.75,
+   "life-sleep-b05:m0008": 0.85,
+   "life-sleep-b07:m0009": 0.41,
+   "life-sleep-b00:m0052": 0.51,
+   "life-sleep-b08:m0033": 0.47,
+   "life-sleep-b00:m0012": 0.43
+  },
+  "latency_s": 0.198,
+  "attempts": 1
+ },
+ "life-s131-e012": {
+  "pool": [
+   "life-sleep-b00:m0069",
+   "life-sleep-b01:m0027",
+   "life-sleep-b02:m0009",
+   "life-sleep-b03:m0010",
+   "life-sleep-b05:m0026",
+   "life-sleep-b00:m0001",
+   "life-sleep-b00:m0029",
+   "life-sleep-b00:m0020",
+   "life-sleep-b02:m0012",
+   "life-sleep-b01:m0007",
+   "life-sleep-b05:m0003",
+   "life-sleep-b05:m0008",
+   "life-sleep-b06:m0023",
+   "life-sleep-b11:m0002",
+   "life-sleep-b03:m0032"
+  ],
+  "scores": {
+   "life-sleep-b00:m0069": 0.57,
+   "life-sleep-b01:m0027": 0.79,
+   "life-sleep-b02:m0009": 0.66,
+   "life-sleep-b03:m0010": 0.49,
+   "life-sleep-b05:m0026": 0.42,
+   "life-sleep-b00:m0001": 0.6,
+   "life-sleep-b00:m0029": 0.6,
+   "life-sleep-b00:m0020": 0.49,
+   "life-sleep-b02:m0012": 0.53,
+   "life-sleep-b01:m0007": 0.39,
+   "life-sleep-b05:m0003": 0.52,
+   "life-sleep-b05:m0008": 0.58,
+   "life-sleep-b06:m0023": 0.55,
+   "life-sleep-b11:m0002": 0.71,
+   "life-sleep-b03:m0032": 0.44
+  },
+  "latency_s": 0.285,
+  "attempts": 1
+ },
+ "life-s131-e015": {
+  "pool": [
+   "life-sleep-b05:m0015",
+   "life-sleep-b05:m0016",
+   "life-sleep-b01:m0006",
+   "life-sleep-b00:m0013",
+   "life-sleep-b04:m0013",
+   "life-sleep-b00:m0075",
+   "life-sleep-b10:m0006",
+   "life-sleep-b00:m0016",
+   "life-sleep-b05:m0024",
+   "life-sleep-b04:m0030"
+  ],
+  "scores": {
+   "life-sleep-b05:m0015": 0.85,
+   "life-sleep-b05:m0016": 0.85,
+   "life-sleep-b01:m0006": 0.81,
+   "life-sleep-b00:m0013": 0.54,
+   "life-sleep-b04:m0013": 0.79,
+   "life-sleep-b00:m0075": 0.74,
+   "life-sleep-b10:m0006": 0.67,
+   "life-sleep-b00:m0016": 0.73,
+   "life-sleep-b05:m0024": 0.47,
+   "life-sleep-b04:m0030": 0.4
+  },
+  "latency_s": 0.215,
+  "attempts": 1
+ },
+ "life-s131-e022": {
+  "pool": [
+   "life-sleep-b08:m0016",
+   "life-sleep-b12:m0016",
+   "life-sleep-b09:m0018",
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0059",
+   "life-sleep-b01:m0034",
+   "life-sleep-b09:m0011",
+   "life-sleep-b01:m0016"
+  ],
+  "scores": {
+   "life-sleep-b08:m0016": 0.59,
+   "life-sleep-b12:m0016": 0.65,
+   "life-sleep-b09:m0018": 0.74,
+   "life-sleep-b00:m0051": 0.71,
+   "life-sleep-b00:m0059": 0.5,
+   "life-sleep-b01:m0034": 0.67,
+   "life-sleep-b09:m0011": 0.3,
+   "life-sleep-b01:m0016": 0.42
+  },
+  "latency_s": 0.263,
+  "attempts": 1
+ },
+ "life-s131-e027": {
+  "pool": [
+   "life-sleep-b00:m0047",
+   "life-sleep-b02:m0006",
+   "life-sleep-b12:m0016",
+   "life-sleep-b00:m0062",
+   "life-sleep-b10:m0013",
+   "life-sleep-b05:m0018",
+   "life-sleep-b08:m0016",
+   "life-sleep-b04:m0019",
+   "life-sleep-b06:m0012",
+   "life-sleep-b05:m0008",
+   "life-sleep-b01:m0005",
+   "life-sleep-b03:m0005",
+   "life-sleep-b00:m0044"
+  ],
+  "scores": {
+   "life-sleep-b00:m0047": 0.94,
+   "life-sleep-b02:m0006": 0.86,
+   "life-sleep-b12:m0016": 0.68,
+   "life-sleep-b00:m0062": 0.79,
+   "life-sleep-b10:m0013": 0.72,
+   "life-sleep-b05:m0018": 0.68,
+   "life-sleep-b08:m0016": 0.62,
+   "life-sleep-b04:m0019": 0.65,
+   "life-sleep-b06:m0012": 0.77,
+   "life-sleep-b05:m0008": 0.47,
+   "life-sleep-b01:m0005": 0.42,
+   "life-sleep-b03:m0005": 0.47,
+   "life-sleep-b00:m0044": 0.58
+  },
+  "latency_s": 0.239,
+  "attempts": 1
+ },
+ "life-s133-e000": {
+  "pool": [
+   "life-sleep-b01:m0004",
+   "life-sleep-b08:m0033",
+   "life-sleep-b00:m0043",
+   "life-sleep-b02:m0021"
+  ],
+  "scores": {
+   "life-sleep-b01:m0004": 0.75,
+   "life-sleep-b08:m0033": 0.71,
+   "life-sleep-b00:m0043": 0.62,
+   "life-sleep-b02:m0021": 0.38
+  },
+  "latency_s": 0.226,
+  "attempts": 1
+ },
+ "life-s136-e000": {
+  "pool": [
+   "life-sleep-b01:m0004",
+   "life-sleep-b02:m0009",
+   "life-sleep-b03:m0007",
+   "life-sleep-b08:m0016",
+   "life-sleep-b05:m0008",
+   "life-sleep-b01:m0024",
+   "life-sleep-b07:m0006",
+   "life-sleep-b08:m0033",
+   "life-sleep-b05:m0029",
+   "life-sleep-b01:m0003",
+   "life-sleep-b10:m0035",
+   "life-sleep-b00:m0006",
+   "life-sleep-b10:m0022"
+  ],
+  "scores": {
+   "life-sleep-b01:m0004": 0.89,
+   "life-sleep-b02:m0009": 0.62,
+   "life-sleep-b03:m0007": 0.74,
+   "life-sleep-b08:m0016": 0.77,
+   "life-sleep-b05:m0008": 0.81,
+   "life-sleep-b01:m0024": 0.68,
+   "life-sleep-b07:m0006": 0.59,
+   "life-sleep-b08:m0033": 0.53,
+   "life-sleep-b05:m0029": 0.69,
+   "life-sleep-b01:m0003": 0.45,
+   "life-sleep-b10:m0035": 0.4,
+   "life-sleep-b00:m0006": 0.43,
+   "life-sleep-b10:m0022": 0.34
+  },
+  "latency_s": 0.256,
+  "attempts": 1
+ },
+ "life-s136-e034": {
+  "pool": [
+   "life-sleep-b05:m0040",
+   "life-sleep-b08:m0016",
+   "life-sleep-b12:m0016",
+   "life-sleep-b00:m0051",
+   "life-sleep-b09:m0011",
+   "life-sleep-b07:m0004",
+   "life-sleep-b09:m0018",
+   "life-sleep-b01:m0015",
+   "life-sleep-b04:m0011",
+   "life-sleep-b01:m0016",
+   "life-sleep-b00:m0073",
+   "life-sleep-b10:m0029",
+   "life-sleep-b01:m0014",
+   "life-sleep-b00:m0059"
+  ],
+  "scores": {
+   "life-sleep-b05:m0040": 0.82,
+   "life-sleep-b08:m0016": 0.78,
+   "life-sleep-b12:m0016": 0.81,
+   "life-sleep-b00:m0051": 0.8,
+   "life-sleep-b09:m0011": 0.75,
+   "life-sleep-b07:m0004": 0.81,
+   "life-sleep-b09:m0018": 0.76,
+   "life-sleep-b01:m0015": 0.67,
+   "life-sleep-b04:m0011": 0.59,
+   "life-sleep-b01:m0016": 0.52,
+   "life-sleep-b00:m0073": 0.47,
+   "life-sleep-b10:m0029": 0.42,
+   "life-sleep-b01:m0014": 0.48,
+   "life-sleep-b00:m0059": 0.58
+  },
+  "latency_s": 0.239,
+  "attempts": 1
+ },
+ "life-s140-e009": {
+  "pool": [
+   "life-sleep-b01:m0034"
+  ],
+  "scores": {
+   "life-sleep-b01:m0034": 0.49
+  },
+  "latency_s": 0.252,
+  "attempts": 1
+ },
+ "life-s140-e033": {
+  "pool": [
+   "life-sleep-b00:m0001",
+   "life-sleep-b00:m0076",
+   "life-sleep-b00:m0050",
+   "life-sleep-b08:m0006",
+   "life-sleep-b00:m0025",
+   "life-sleep-b02:m0009"
+  ],
+  "scores": {
+   "life-sleep-b00:m0001": 0.82,
+   "life-sleep-b00:m0076": 0.7,
+   "life-sleep-b00:m0050": 0.7,
+   "life-sleep-b08:m0006": 0.55,
+   "life-sleep-b00:m0025": 0.49,
+   "life-sleep-b02:m0009": 0.54
+  },
+  "latency_s": 0.199,
+  "attempts": 1
+ },
+ "life-s140-e039": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "life-s140-e051": {
+  "pool": [
+   "life-sleep-b03:m0009",
+   "life-sleep-b01:m0015",
+   "life-sleep-b00:m0006",
+   "life-sleep-b01:m0004"
+  ],
+  "scores": {
+   "life-sleep-b03:m0009": 0.93,
+   "life-sleep-b01:m0015": 0.7,
+   "life-sleep-b00:m0006": 0.69,
+   "life-sleep-b01:m0004": 0.43
+  },
+  "latency_s": 0.242,
+  "attempts": 1
+ },
+ "life-s141-e000": {
+  "pool": [
+   "life-sleep-b02:m0039",
+   "life-sleep-b11:m0025"
+  ],
+  "scores": {
+   "life-sleep-b02:m0039": 0.9,
+   "life-sleep-b11:m0025": 0.5
+  },
+  "latency_s": 0.236,
+  "attempts": 1
+ },
+ "life-s141-e017": {
+  "pool": [
+   "life-sleep-b05:m0018",
+   "life-sleep-b02:m0006",
+   "life-sleep-b00:m0047",
+   "life-sleep-b05:m0008",
+   "life-sleep-b10:m0013",
+   "life-sleep-b01:m0004",
+   "life-sleep-b03:m0005",
+   "life-sleep-b01:m0005",
+   "life-sleep-b04:m0019",
+   "life-sleep-b00:m0052",
+   "life-sleep-b00:m0006",
+   "life-sleep-b00:m0003",
+   "life-sleep-b04:m0034",
+   "life-sleep-b00:m0080",
+   "life-sleep-b13:m0010"
+  ],
+  "scores": {
+   "life-sleep-b05:m0018": 0.9,
+   "life-sleep-b02:m0006": 0.93,
+   "life-sleep-b00:m0047": 0.92,
+   "life-sleep-b05:m0008": 0.9,
+   "life-sleep-b10:m0013": 0.86,
+   "life-sleep-b01:m0004": 0.89,
+   "life-sleep-b03:m0005": 0.85,
+   "life-sleep-b01:m0005": 0.86,
+   "life-sleep-b04:m0019": 0.83,
+   "life-sleep-b00:m0052": 0.77,
+   "life-sleep-b00:m0006": 0.7,
+   "life-sleep-b00:m0003": 0.77,
+   "life-sleep-b04:m0034": 0.46,
+   "life-sleep-b00:m0080": 0.76,
+   "life-sleep-b13:m0010": 0.71
+  },
+  "latency_s": 0.256,
+  "attempts": 1
+ },
+ "life-s141-e023": {
+  "pool": [
+   "life-sleep-b12:m0016",
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0016"
+  ],
+  "scores": {
+   "life-sleep-b12:m0016": 0.78,
+   "life-sleep-b00:m0051": 0.67,
+   "life-sleep-b00:m0016": 0.72
+  },
+  "latency_s": 0.236,
+  "attempts": 1
+ },
+ "life-s143-e000": {
+  "pool": [
+   "life-sleep-b00:m0051",
+   "life-sleep-b09:m0011",
+   "life-sleep-b00:m0059",
+   "life-sleep-b00:m0036",
+   "life-sleep-b02:m0028",
+   "life-sleep-b06:m0025"
+  ],
+  "scores": {
+   "life-sleep-b00:m0051": 0.79,
+   "life-sleep-b09:m0011": 0.74,
+   "life-sleep-b00:m0059": 0.71,
+   "life-sleep-b00:m0036": 0.41,
+   "life-sleep-b02:m0028": 0.17,
+   "life-sleep-b06:m0025": 0.09
+  },
+  "latency_s": 0.204,
+  "attempts": 1
+ },
+ "life-s143-e009": {
+  "pool": [
+   "life-sleep-b06:m0001",
+   "life-sleep-b01:m0004",
+   "life-sleep-b00:m0006",
+   "life-sleep-b02:m0027",
+   "life-sleep-b04:m0003",
+   "life-sleep-b08:m0034",
+   "life-sleep-b05:m0017",
+   "life-sleep-b02:m0006",
+   "life-sleep-b00:m0058",
+   "life-sleep-b01:m0005",
+   "life-sleep-b10:m0022",
+   "life-sleep-b06:m0003",
+   "life-sleep-b02:m0051",
+   "life-sleep-b00:m0027",
+   "life-sleep-b05:m0035"
+  ],
+  "scores": {
+   "life-sleep-b06:m0001": 0.83,
+   "life-sleep-b01:m0004": 0.76,
+   "life-sleep-b00:m0006": 0.76,
+   "life-sleep-b02:m0027": 0.75,
+   "life-sleep-b04:m0003": 0.71,
+   "life-sleep-b08:m0034": 0.53,
+   "life-sleep-b05:m0017": 0.44,
+   "life-sleep-b02:m0006": 0.6,
+   "life-sleep-b00:m0058": 0.52,
+   "life-sleep-b01:m0005": 0.6,
+   "life-sleep-b10:m0022": 0.48,
+   "life-sleep-b06:m0003": 0.76,
+   "life-sleep-b02:m0051": 0.62,
+   "life-sleep-b00:m0027": 0.51,
+   "life-sleep-b05:m0035": 0.51
+  },
+  "latency_s": 0.246,
+  "attempts": 1
+ },
+ "life-s145-e020": {
+  "pool": [
+   "life-sleep-b01:m0015"
+  ],
+  "scores": {
+   "life-sleep-b01:m0015": 0.76
+  },
+  "latency_s": 0.21,
+  "attempts": 1
+ },
+ "life-s148-e000": {
+  "pool": [
+   "life-sleep-b01:m0004",
+   "life-sleep-b13:m0002",
+   "life-sleep-b00:m0081",
+   "life-sleep-b00:m0052",
+   "life-sleep-b03:m0007",
+   "life-sleep-b13:m0003",
+   "life-sleep-b02:m0027",
+   "life-sleep-b00:m0059",
+   "life-sleep-b00:m0006",
+   "life-sleep-b00:m0030",
+   "life-sleep-b00:m0027",
+   "life-sleep-b00:m0051",
+   "life-sleep-b07:m0006",
+   "life-sleep-b00:m0028",
+   "life-sleep-b02:m0009"
+  ],
+  "scores": {
+   "life-sleep-b01:m0004": 0.92,
+   "life-sleep-b13:m0002": 0.57,
+   "life-sleep-b00:m0081": 0.85,
+   "life-sleep-b00:m0052": 0.9,
+   "life-sleep-b03:m0007": 0.84,
+   "life-sleep-b13:m0003": 0.64,
+   "life-sleep-b02:m0027": 0.77,
+   "life-sleep-b00:m0059": 0.62,
+   "life-sleep-b00:m0006": 0.7,
+   "life-sleep-b00:m0030": 0.45,
+   "life-sleep-b00:m0027": 0.54,
+   "life-sleep-b00:m0051": 0.6,
+   "life-sleep-b07:m0006": 0.65,
+   "life-sleep-b00:m0028": 0.54,
+   "life-sleep-b02:m0009": 0.63
+  },
+  "latency_s": 0.253,
+  "attempts": 1
+ },
+ "life-s148-e012": {
+  "pool": [
+   "life-sleep-b06:m0030",
+   "life-sleep-b08:m0016",
+   "life-sleep-b05:m0008",
+   "life-sleep-b00:m0023",
+   "life-sleep-b03:m0007",
+   "life-sleep-b07:m0004",
+   "life-sleep-b00:m0034",
+   "life-sleep-b04:m0007"
+  ],
+  "scores": {
+   "life-sleep-b06:m0030": 0.67,
+   "life-sleep-b08:m0016": 0.7,
+   "life-sleep-b05:m0008": 0.78,
+   "life-sleep-b00:m0023": 0.53,
+   "life-sleep-b03:m0007": 0.54,
+   "life-sleep-b07:m0004": 0.7,
+   "life-sleep-b00:m0034": 0.71,
+   "life-sleep-b04:m0007": 0.72
+  },
+  "latency_s": 0.253,
+  "attempts": 1
+ },
+ "life-s150-e004": {
+  "pool": [
+   "life-sleep-b00:m0051",
+   "life-sleep-b00:m0059",
+   "life-sleep-b02:m0021",
+   "life-sleep-b00:m0057",
+   "life-sleep-b00:m0071",
+   "life-sleep-b01:m0034"
+  ],
+  "scores": {
+   "life-sleep-b00:m0051": 0.82,
+   "life-sleep-b00:m0059": 0.67,
+   "life-sleep-b02:m0021": 0.73,
+   "life-sleep-b00:m0057": 0.41,
+   "life-sleep-b00:m0071": 0.48,
+   "life-sleep-b01:m0034": 0.6
+  },
+  "latency_s": 0.237,
+  "attempts": 1
+ },
+ "life-s150-e015": {
+  "pool": [
+   "life-sleep-b06:m0006",
+   "life-sleep-b07:m0011",
+   "life-sleep-b12:m0023",
+   "life-sleep-b01:m0004",
+   "life-sleep-b13:m0010",
+   "life-sleep-b13:m0024",
+   "life-sleep-b01:m0017",
+   "life-sleep-b03:m0007",
+   "life-sleep-b02:m0004",
+   "life-sleep-b07:m0009",
+   "life-sleep-b13:m0013",
+   "life-sleep-b13:m0019",
+   "life-sleep-b05:m0003"
+  ],
+  "scores": {
+   "life-sleep-b06:m0006": 0.9,
+   "life-sleep-b07:m0011": 0.74,
+   "life-sleep-b12:m0023": 0.85,
+   "life-sleep-b01:m0004": 0.8,
+   "life-sleep-b13:m0010": 0.84,
+   "life-sleep-b13:m0024": 0.47,
+   "life-sleep-b01:m0017": 0.67,
+   "life-sleep-b03:m0007": 0.69,
+   "life-sleep-b02:m0004": 0.47,
+   "life-sleep-b07:m0009": 0.37,
+   "life-sleep-b13:m0013": 0.42,
+   "life-sleep-b13:m0019": 0.51,
+   "life-sleep-b05:m0003": 0.44
+  },
+  "latency_s": 0.26,
+  "attempts": 1
+ },
+ "life-s152-e000": {
+  "pool": [
+   "life-sleep-b12:m0016",
+   "life-sleep-b09:m0011",
+   "life-sleep-b09:m0018",
+   "life-sleep-b00:m0059",
+   "life-sleep-b04:m0017",
+   "life-sleep-b02:m0021",
+   "life-sleep-b01:m0015"
+  ],
+  "scores": {
+   "life-sleep-b12:m0016": 0.85,
+   "life-sleep-b09:m0011": 0.83,
+   "life-sleep-b09:m0018": 0.81,
+   "life-sleep-b00:m0059": 0.77,
+   "life-sleep-b04:m0017": 0.48,
+   "life-sleep-b02:m0021": 0.44,
+   "life-sleep-b01:m0015": 0.35
+  },
+  "latency_s": 0.217,
+  "attempts": 1
+ },
+ "life-s155-e022": {
+  "pool": [
+   "life-sleep-b12:m0016",
+   "life-sleep-b08:m0016",
+   "life-sleep-b13:m0007",
+   "life-sleep-b09:m0018",
+   "life-sleep-b14:m0033",
+   "life-sleep-b13:m0013",
+   "life-sleep-b03:m0007",
+   "life-sleep-b01:m0004",
+   "life-sleep-b03:m0034",
+   "life-sleep-b00:m0004",
+   "life-sleep-b00:m0052",
+   "life-sleep-b02:m0009",
+   "life-sleep-b01:m0022",
+   "life-sleep-b02:m0027",
+   "life-sleep-b13:m0010"
+  ],
+  "scores": {
+   "life-sleep-b12:m0016": 0.74,
+   "life-sleep-b08:m0016": 0.74,
+   "life-sleep-b13:m0007": 0.64,
+   "life-sleep-b09:m0018": 0.7,
+   "life-sleep-b14:m0033": 0.76,
+   "life-sleep-b13:m0013": 0.69,
+   "life-sleep-b03:m0007": 0.66,
+   "life-sleep-b01:m0004": 0.69,
+   "life-sleep-b03:m0034": 0.71,
+   "life-sleep-b00:m0004": 0.7,
+   "life-sleep-b00:m0052": 0.58,
+   "life-sleep-b02:m0009": 0.65,
+   "life-sleep-b01:m0022": 0.75,
+   "life-sleep-b02:m0027": 0.57,
+   "life-sleep-b13:m0010": 0.64
+  },
+  "latency_s": 0.241,
+  "attempts": 1
+ },
+ "life-s156-e000": {
+  "pool": [
+   "life-sleep-b03:m0010",
+   "life-sleep-b01:m0016",
+   "life-sleep-b00:m0065",
+   "life-sleep-b09:m0013",
+   "life-sleep-b03:m0007"
+  ],
+  "scores": {
+   "life-sleep-b03:m0010": 0.73,
+   "life-sleep-b01:m0016": 0.54,
+   "life-sleep-b00:m0065": 0.32,
+   "life-sleep-b09:m0013": 0.44,
+   "life-sleep-b03:m0007": 0.36
+  },
+  "latency_s": 0.205,
+  "attempts": 1
+ },
+ "life-s156-e004": {
+  "pool": [
+   "life-sleep-b00:m0052",
+   "life-sleep-b00:m0005",
+   "life-sleep-b01:m0004",
+   "life-sleep-b03:m0007",
+   "life-sleep-b04:m0014",
+   "life-sleep-b02:m0003",
+   "life-sleep-b02:m0027",
+   "life-sleep-b08:m0014",
+   "life-sleep-b10:m0009"
+  ],
+  "scores": {
+   "life-sleep-b00:m0052": 0.41,
+   "life-sleep-b00:m0005": 0.74,
+   "life-sleep-b01:m0004": 0.56,
+   "life-sleep-b03:m0007": 0.69,
+   "life-sleep-b04:m0014": 0.65,
+   "life-sleep-b02:m0003": 0.56,
+   "life-sleep-b02:m0027": 0.68,
+   "life-sleep-b08:m0014": 0.52,
+   "life-sleep-b10:m0009": 0.39
+  },
+  "latency_s": 0.23,
+  "attempts": 1
+ }
+}

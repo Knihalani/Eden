@@ -1,0 +1,1789 @@
+{
+ "batch": "life-sleep-b10",
+ "cards": {
+  "schedule": [
+   {
+    "line": "Work meetings default to 25 min and must have an agenda in the invite (she declines those without).",
+    "rows": [
+     "life-sleep-b00:m0081"
+    ]
+   },
+   {
+    "line": "Invites state Toronto time, plus IST if her mother in Mumbai is invited.",
+    "rows": [
+     "life-sleep-b00:m0028"
+    ]
+   },
+   {
+    "line": "Leo's bedtime is 7:45 pm on school nights: nothing after dinner on weeknights; Leo declines sleepovers.",
+    "rows": [
+     "life-sleep-b00:m0029"
+    ]
+   },
+   {
+    "line": "Plan dates with Sam on Saturdays, not Sundays (he marks lab reports).",
+    "rows": [
+     "life-sleep-b00:m0020"
+    ]
+   },
+   {
+    "line": "Never book meetings for Riya before 9:30 or after 16:30 (was 17:00); nothing after 15:00 on Fridays (school pickup).",
+    "rows": [
+     "life-sleep-b01:m0004",
+     "life-sleep-b00:m0052"
+    ]
+   },
+   {
+    "line": "Spanish with Carlos on Zoom Thursdays 19:30-20:30 ($45/lesson); moving with under 24h notice is charged.",
+    "rows": [
+     "life-sleep-b03:m0005",
+     "life-sleep-b02:m0006",
+     "life-sleep-b02:m0054"
+    ]
+   },
+   {
+    "line": "Therapist (Joanne) every other Tue 17:30 by video: personal calendar only, never the shared family calendar, never mention to Sam or others.",
+    "rows": [
+     "life-sleep-b04:m0031"
+    ]
+   },
+   {
+    "line": "Around Mar 18 each year (father Vikram died 2022-03-18): lighter schedule, thin out meetings, nothing sprint-like; she lights a diya in the evening.",
+    "rows": [
+     "life-sleep-b06:m0001"
+    ]
+   },
+   {
+    "line": "Check shared calendar 'Malhotra-Okafor family' for conflicts before adding events (Sam gets update notifications).",
+    "rows": [
+     "life-sleep-b07:m0006",
+     "life-sleep-b03:m0007"
+    ]
+   },
+   {
+    "line": "Tue 09:00-12:00 no-meeting focus block; standup Mon/Wed/Fri 09:45-10:00; 1:1 with Tom Wednesdays 11:30-12:00.",
+    "rows": [
+     "life-sleep-b00:m0006",
+     "life-sleep-b05:m0008",
+     "life-sleep-b04:m0003"
+    ]
+   },
+   {
+    "line": "Leo: piano Mon 16:30; Wed pickup 15:30 (Hannah backup); Sam usually does Friday drop-off but Fri 06-12 must be at work by 08:00 so someone else must.",
+    "rows": [
+     "life-sleep-b01:m0024",
+     "life-sleep-b06:m0003",
+     "life-sleep-b08:m0012",
+     "life-sleep-b09:m0016"
+    ]
+   },
+   {
+    "line": "Camp: Riverdale Farm Summer Day Camp starts Mon 06-29 9:00-16:00 (extended 8:00-17:30; Winchester St gate, drop 8:45-9:15, pickup 15:45-16:15); earlier note had Jul 13-24, verify. Vancouver Thu 07-09 to Mon 07-13.",
+    "rows": [
+     "life-sleep-b09:m0001",
+     "life-sleep-b06:m0017",
+     "life-sleep-b08:m0004"
+    ]
+   },
+   {
+    "line": "Workout: YMCA strength Tue/Thu 06:15-07:15; runs with Marcus now Wed 06:15-07:15 and Sat 07:30-08:45 at Ashbridges Bay (Sunday series ended, June 2026).",
+    "rows": [
+     "life-sleep-b10:m0001",
+     "life-sleep-b05:m0008"
+    ]
+   },
+   {
+    "line": "Fridays: Lumen Pay summer hours end 15:00 in July/Aug (teams not on call), so post the #payouts-launch status early (normally by 16:00).",
+    "rows": [
+     "life-sleep-b10:m0004",
+     "life-sleep-b02:m0008"
+    ]
+   },
+   {
+    "line": "Office Tue/Thu via 504 King streetcar; desk booking in Robin app from 2026-07-06; second King West floor opens Sept; Mondays WFH; daily standup 09:45.",
+    "rows": [
+     "life-sleep-b09:m0007",
+     "life-sleep-b10:m0003",
+     "life-sleep-b10:m0022"
+    ]
+   },
+   {
+    "line": "Weekly call with mother Anjali Saturdays 08:30-09:15 Toronto on Zoom (recurring link, no waiting room; WhatsApp video freezes and flusters her).",
+    "rows": [
+     "life-sleep-b07:m0004",
+     "life-sleep-b10:m0029"
+    ]
+   },
+   {
+    "line": "July: Thu 07-09 08:00-10:00 countertop templating at home (Hannah has key) vs Vancouver flight AC117 08:00 same day; QBR prep moved to Wed 07-08 10:00 (45 min, Olivia's EA Jess Park); Lattice self-review due Fri 07-10.",
+    "rows": [
+     "life-sleep-b10:m0033",
+     "life-sleep-b08:m0004",
+     "life-sleep-b10:m0036",
+     "life-sleep-b10:m0021"
+    ]
+   },
+   {
+    "line": "Aug/Sept: TSH blood test Wed 08-05 08:15 (hold 24 h; alternates Tue 08-04 07:30, Thu 08-06 07:00); Curzon street party Sat 07-25 or 08-08 (reply to organiser); cottage Mon 09-14 to Fri 09-18.",
+    "rows": [
+     "life-sleep-b10:m0025",
+     "life-sleep-b10:m0032",
+     "life-sleep-b10:m0035"
+    ]
+   },
+   {
+    "line": "Sam teaches until 15:10 on school days; his calendar is tracked separately from the family calendar.",
+    "rows": [
+     "life-sleep-b10:m0019"
+    ]
+   },
+   {
+    "line": "Camp/summer: Riverdale Farm day camp from Mon 06-29 (verify weeks); curbside bins Sunday night (20:00 nudge).",
+    "rows": [
+     "life-sleep-b09:m0001",
+     "life-sleep-b10:m0037"
+    ]
+   }
+  ],
+  "travel": [
+   {
+    "line": "Hotels: only fully refundable rates, near transit.",
+    "rows": [
+     "life-sleep-b00:m0066"
+    ]
+   },
+   {
+    "line": "Show prices in CAD with original in brackets, e.g. CA$137 (US$100).",
+    "rows": [
+     "life-sleep-b00:m0016"
+    ]
+   },
+   {
+    "line": "Temperatures in Celsius only, all measurements metric, no Fahrenheit or imperial.",
+    "rows": [
+     "life-sleep-b03:m0013"
+    ]
+   },
+   {
+    "line": "Family trips: one main activity a day and a 14:00-16:00 rest block (Leo melts down if overfull); 5-day Lisbon sketch in 'Lisbon' note.",
+    "rows": [
+     "life-sleep-b03:m0033"
+    ]
+   },
+   {
+    "line": "Flights: Air Canada by preference (Aeroplan 25K), aisle, never basic economy; prefer direct even up to $300 more; avoid red-eyes unless morning arrival.",
+    "rows": [
+     "life-sleep-b04:m0032",
+     "life-sleep-b00:m0032",
+     "life-sleep-b00:m0015"
+    ]
+   },
+   {
+    "line": "Riya's 'For the assistant' note (updated 2026-02-03) is her authoritative standing-instructions list; re-read when she says it changed.",
+    "rows": [
+     "life-sleep-b04:m0030"
+    ]
+   },
+   {
+    "line": "Passports: confirm renewal status (Riya's expired March 2026, Leo's Jan 2026); photos at Shoppers, 1014 Queen St E ($16.99, no appointment).",
+    "rows": [
+     "life-sleep-b03:m0022",
+     "life-sleep-b02:m0018"
+    ]
+   },
+   {
+    "line": "Kabir, Mei and Ira might fly in for a week in early Sept 2026: stay with Riya (house may be a construction zone) or furnished rental.",
+    "rows": [
+     "life-sleep-b06:m0022"
+    ]
+   },
+   {
+    "line": "Ottawa (Glebe per latest; earlier Alta Vista) by car in the Mazda: ~4h40 leaving 06:00, ~6h25 leaving 15:00 on holiday Fridays: leave before 07:00; stop at Big Apple, Colborne. Daniel's knee: avoid long stairs/walks.",
+    "rows": [
+     "life-sleep-b08:m0013",
+     "life-sleep-b01:m0026",
+     "life-sleep-b04:m0028"
+    ]
+   },
+   {
+    "line": "Mumbai late March 2027 (~19-29 Mar), Riya alone ~10 days, Sam and Leo stay; bring Darjeeling tins and photos of Leo; be there for Mom's medical check-up if possible; watch fares from Oct 2026, book by Dec 2026.",
+    "rows": [
+     "life-sleep-b08:m0034"
+    ]
+   },
+   {
+    "line": "Mumbai baseline fares (2026-05-19): Air India via Delhi $1,412 (19h40), Emirates via Dubai $1,598, Air Canada via London $1,684; AC nonstop not on sale (~330 days out); +/-15%; fare alert, re-check in October.",
+    "rows": [
+     "life-sleep-b08:m0035"
+    ]
+   },
+   {
+    "line": "Winterlude Ottawa Feb 2027: Grace invited Riya, Sam and Leo; Saturday idea in notes 'Winterlude Saturday idea'; add placeholder once dates out.",
+    "rows": [
+     "life-sleep-b08:m0028"
+    ]
+   },
+   {
+    "line": "Vancouver Thu 2026-07-09 to Mon 07-13 (Ira's naming ceremony Sat 07-11, Kitsilano): flights booked, Air Canada QX7L2P, $1,947.66, seats 23C/D/E. Lodging not booked as of 05-20 (Leo may sleep on pull-out in Ira's room): refundable options Kitsilano Inn $289/night (cancel until 07-07), Granville Island Hotel $412 (until 07-02), Days Inn Broadway $199 (until 07-08); waiting for Riya to pick.",
+    "rows": [
+     "life-sleep-b08:m0004",
+     "life-sleep-b08:m0005",
+     "life-sleep-b09:m0002"
+    ]
+   },
+   {
+    "line": "Never book or buy over Riya's limit (e.g. a four-night hotel) until she explicitly picks the option.",
+    "rows": [
+     "life-sleep-b09:m0003"
+    ]
+   },
+   {
+    "line": "Riya wants ONE recommendation, with at most one fallback only if it matters; no step narration.",
+    "rows": [
+     "life-sleep-b10:m0006",
+     "life-sleep-b00:m0075"
+    ]
+   },
+   {
+    "line": "Dec 2026 holiday is Lisbon (decided 2026-05-30; not Mexico City): direct YYZ-LIS ~7 h overnight, 12-15 C, walkable; hotel needs elevator, separate sleeping space for Leo, no all-inclusive (Casa do Principe EUR160, Lisbon Family Suites EUR185, Hotel Avenida Lofts EUR210); notes 'Dec 2026 holiday - options'. No Ottawa for Christmas.",
+    "rows": [
+     "life-sleep-b10:m0017",
+     "life-sleep-b03:m0004",
+     "life-sleep-b10:m0034"
+    ]
+   },
+   {
+    "line": "Cottage Mon 2026-09-14 to Fri 09-18 within 3 h with dock (Sam's wish): pick Loon Call Cottage, Lake Kashagawigamog, 3 bed, private dock, kayaks, $1,450/4 nights, 2h50, free cancel until 08-31; fallback Birch Point $1,120 (shared dock, 2h15). Not held.",
+    "rows": [
+     "life-sleep-b10:m0035"
+    ]
+   }
+  ],
+  "booking": [
+   {
+    "line": "Restaurants: book for 19:00 and check good vegetarian options every time.",
+    "rows": [
+     "life-sleep-b00:m0076"
+    ]
+   },
+   {
+    "line": "Sam is vegetarian, no fish/seafood; Riya dislikes cilantro.",
+    "rows": [
+     "life-sleep-b00:m0001",
+     "life-sleep-b00:m0050"
+    ]
+   },
+   {
+    "line": "Riya loves South Indian food; favourite Saffron Lane, Queen St E.",
+    "rows": [
+     "life-sleep-b00:m0025"
+    ]
+   },
+   {
+    "line": "Never plan Sam a big event (birthday Mar 22): quiet dinner at home.",
+    "rows": [
+     "life-sleep-b00:m0002"
+    ]
+   },
+   {
+    "line": "Mention penicillin allergy at medical bookings.",
+    "rows": [
+     "life-sleep-b00:m0054"
+    ]
+   },
+   {
+    "line": "Electrical panel upgrade (Brightline, ESA #7104-2289): inspection not yet booked; ask electrician about Toronto Hydro disconnect/reconnect.",
+    "rows": [
+     "life-sleep-b02:m0036"
+    ]
+   },
+   {
+    "line": "Lisbon hotel (Dec 2026): elevator, separate space for Leo, walkable, no all-inclusive; shortlist in travel.",
+    "rows": [
+     "life-sleep-b03:m0004"
+    ]
+   },
+   {
+    "line": "Dietary for bookings: Priya celiac (gluten-free) and loves Sichuan; Grace Okafor shellfish allergy, no alcohol (real mocktails); Wen vegan (real vegan main).",
+    "rows": [
+     "life-sleep-b03:m0012",
+     "life-sleep-b03:m0027",
+     "life-sleep-b03:m0014"
+    ]
+   },
+   {
+    "line": "Flights: Air Canada preferred (Aeroplan 25K), aisle, never basic economy.",
+    "rows": [
+     "life-sleep-b04:m0032"
+    ]
+   },
+   {
+    "line": "Sam gift/anniversary directions: molecular gastronomy class, theatre tickets, pottery class for two; Riya leaves anniversary to last week, reminders three weeks out.",
+    "rows": [
+     "life-sleep-b05:m0026"
+    ]
+   },
+   {
+    "line": "Dentist Dr. Lin moved to Danforth Smiles, 822 Danforth Ave near Pape station, 416-555-0144, danforthsmiles.example.com (old Queen East Dental address outdated); cleanings every 6 months.",
+    "rows": [
+     "life-sleep-b06:m0006"
+    ]
+   },
+   {
+    "line": "Biscuit's vet now Dr. Harpreet Kaur, Riverside Veterinary Clinic, Broadview Ave, (416) 555-0193 (Mon-Thu 8-20, Fri 8-18, Sat 9-14, online booking); Dr. Moreau retired Apr 2026. Prefer weekdays after 5:30 pm.",
+    "rows": [
+     "life-sleep-b07:m0007",
+     "life-sleep-b07:m0009"
+    ]
+   },
+   {
+    "line": "Pai Northern Thai Kitchen (Duncan St) delivery is a family favourite; avoid peanut dishes.",
+    "rows": [
+     "life-sleep-b07:m0022"
+    ]
+   },
+   {
+    "line": "Riverdale Farm day camp: starts Mon 06-29 (earlier note Jul 13-24, verify), $100 deposits per week paid, balance due 06-01; camper health form, authorized pickup list (photo ID for others) and photo consent in City camp portal before day 1 (pickup list and consent incomplete as of 05-27). No overnight camp.",
+    "rows": [
+     "life-sleep-b09:m0001",
+     "life-sleep-b06:m0017"
+    ]
+   },
+   {
+    "line": "Vancouver Jul 9-13: flights booked (QX7L2P); hotel not booked, refundable shortlist Kitsilano Inn $289, Granville Island Hotel $412, Days Inn Broadway $199; Riya must pick. Never book over her limit without her explicit pick.",
+    "rows": [
+     "life-sleep-b09:m0002",
+     "life-sleep-b09:m0003",
+     "life-sleep-b08:m0004"
+    ]
+   },
+   {
+    "line": "Dr. Patel (Patel Family Medicine); LifeLabs Queen & Carlaw TSH test: requisition on file (valid 6-8 weeks), slot Wed 08-05 08:15 held 24 h pending Riya's OK; alternates Tue 08-04 07:30, Thu 08-06 07:00. Shoppers Queen & Carlaw 416-555-0172.",
+    "rows": [
+     "life-sleep-b10:m0018",
+     "life-sleep-b10:m0020",
+     "life-sleep-b10:m0025",
+     "life-sleep-b05:m0021"
+    ]
+   },
+   {
+    "line": "Cottage Sep 14-18: Loon Call (Haliburton) $1,450, free cancel until 08-31, not held; Riya prefers one pick.",
+    "rows": [
+     "life-sleep-b10:m0035",
+     "life-sleep-b10:m0006"
+    ]
+   },
+   {
+    "line": "Riya wants a single recommendation (one pick plus at most one fallback), not three options.",
+    "rows": [
+     "life-sleep-b10:m0006"
+    ]
+   }
+  ],
+  "purchase": [
+   {
+    "line": "Prices in CAD, original currency in brackets.",
+    "rows": [
+     "life-sleep-b00:m0016"
+    ]
+   },
+   {
+    "line": "Banking: use TD joint chequing for household bills; never touch her EQ Bank savings; TD Visa exists.",
+    "rows": [
+     "life-sleep-b00:m0045"
+    ]
+   },
+   {
+    "line": "Kabir (birthday Aug 5): no real gifts, swap silly novelty mugs.",
+    "rows": [
+     "life-sleep-b00:m0074"
+    ]
+   },
+   {
+    "line": "Prefers Canadian retailers (MEC, Indigo, Simons); skip Amazon if a local option ships within a week.",
+    "rows": [
+     "life-sleep-b01:m0006"
+    ]
+   },
+   {
+    "line": "No scented gifts, candles, soaps or perfume for the household: Sam gets migraines from fragrance.",
+    "rows": [
+     "life-sleep-b01:m0027"
+    ]
+   },
+   {
+    "line": "Mother Anjali: never a gift card; loves Kanjeevaram silk sarees and Darjeeling tea; sugar-free sweets (diabetes); Nov 2025 gift options in Notes / Mom gift (Kanchi Silks saree Rs. 24,500; Glenburn tea Rs. 2,450); nothing bought.",
+    "rows": [
+     "life-sleep-b02:m0025",
+     "life-sleep-b02:m0026",
+     "life-sleep-b00:m0068"
+    ]
+   },
+   {
+    "line": "Leo loves dinosaurs, Lego and chess: Dinosaur Chess ($6.99, no ads or in-app purchases, ages 5-8) now, ChessKid free tier later; no ads or loot boxes; iPad purchase not confirmed.",
+    "rows": [
+     "life-sleep-b03:m0010",
+     "life-sleep-b04:m0027"
+    ]
+   },
+   {
+    "line": "Promo emails unsubscribed (Old Navy, Wayfair, Uber Eats marketing, Lululemon, Dyson): don't re-subscribe or surface their promotions.",
+    "rows": [
+     "life-sleep-b04:m0013"
+    ]
+   },
+   {
+    "line": "Gift ideas Sam: vintage orange Penguin paperbacks (pre-1970, has ~40), Fellow Ode Gen 2 grinder $449 (needs yes), lab apron; Leo: Lego Jurassic World Pyroraptor, reading headlamp.",
+    "rows": [
+     "life-sleep-b05:m0013"
+    ]
+   },
+   {
+    "line": "Reorders: Finish Quantum 82 pods from Canadian Tire on TD Visa; groceries via PC Express Saturday 9:00-10:00 pickup at Loblaws Lakeshore, no-name staples.",
+    "rows": [
+     "life-sleep-b05:m0016",
+     "life-sleep-b05:m0024"
+    ]
+   },
+   {
+    "line": "Brooks Ghost shoes replaced every 600 km: Ghost 15 was at 571 km on 03-22; reorder Ghost 17 women's 8.5 (~$180-190, Running Room Queen & Broadview) needs Riya's yes.",
+    "rows": [
+     "life-sleep-b06:m0011",
+     "life-sleep-b05:m0014"
+    ]
+   },
+   {
+    "line": "Not replacing the 2019 Mazda CX-5 in 2026 (money to reno; revisit EV in 2028); trade-in offers unwanted.",
+    "rows": [
+     "life-sleep-b06:m0009"
+    ]
+   },
+   {
+    "line": "Temporary basement kitchen needs flat-bottom induction pans (cast iron works, old aluminium pot does not).",
+    "rows": [
+     "life-sleep-b08:m0006"
+    ]
+   },
+   {
+    "line": "Leo is allergic to cashews and pistachios only (SickKids allergist, May 2026); almonds, walnuts fine; EpiPen Jr in backpack. Riya no cilantro.",
+    "rows": [
+     "life-sleep-b09:m0013",
+     "life-sleep-b00:m0050"
+    ]
+   },
+   {
+    "line": "Grace wants to send Leo a just-because parcel: avoid cashews/pistachios; Riya will ask what he is into (dinosaurs, Lego, chess).",
+    "rows": [
+     "life-sleep-b06:m0034",
+     "life-sleep-b09:m0013"
+    ]
+   },
+   {
+    "line": "Ask Riya before any payment over $150 CAD and never buy or book above it until she explicitly picks the option; staple reorders need no asking; ask which account (family vs personal) or check e-transfer 'From' digits.",
+    "rows": [
+     "life-sleep-b05:m0015",
+     "life-sleep-b06:m0020",
+     "life-sleep-b09:m0003"
+    ]
+   },
+   {
+    "line": "One recommendation only (one pick, at most one fallback), not three options.",
+    "rows": [
+     "life-sleep-b10:m0006"
+    ]
+   },
+   {
+    "line": "Spanish subjunctive book 'Practice Makes Perfect: Spanish Subjunctive Up Close' $24.95 at Indigo / Indigo Danforth; not ordered, awaiting Riya's go-ahead.",
+    "rows": [
+     "life-sleep-b10:m0031"
+    ]
+   },
+   {
+    "line": "Biscuit supplies: monthly 13.6 kg food bag from pet store at Queen & Logan (~$94.99 + tax; Sam can pick up), BioBag compostable poop bags (8 rolls, 120) Pet Valu $16.99.",
+    "rows": [
+     "life-sleep-b10:m0028"
+    ]
+   },
+   {
+    "line": "Mithai box for mother Anjali (Brijwasi Sweets, ~Rs 1,450 + Rs 120 delivery, same day before 14:00 IST) on hold for her address; she is diabetic, so sugar-free only.",
+    "rows": [
+     "life-sleep-b10:m0008",
+     "life-sleep-b00:m0068"
+    ]
+   }
+  ],
+  "message": [
+   {
+    "line": "Do not text Sam's parents (Grace, Daniel Okafor) for Riya.",
+    "rows": [
+     "life-sleep-b00:m0014"
+    ]
+   },
+   {
+    "line": "Work email: warm but brief, no exclamation marks, sign 'Best, Riya'.",
+    "rows": [
+     "life-sleep-b00:m0063"
+    ]
+   },
+   {
+    "line": "Dates: chat 'Mon 19 Oct'; work docs ISO 2026-10-19.",
+    "rows": [
+     "life-sleep-b00:m0027"
+    ]
+   },
+   {
+    "line": "Contact Leo's teacher Ms. Alvarez via the Edsby app, not email.",
+    "rows": [
+     "life-sleep-b01:m0002"
+    ]
+   },
+   {
+    "line": "Don't raise Riya and Sam's difficult 2024 try for a second child unless she does.",
+    "rows": [
+     "life-sleep-b01:m0007"
+    ]
+   },
+   {
+    "line": "Style: Canadian spelling; calm, concrete, no hype or exclamation marks; no em dashes (commas or full stops); avoid jargon; 'merchant' not customer/user in payouts docs; paragraphs max 3 sentences; one specific change, credit names.",
+    "rows": [
+     "life-sleep-b00:m0059",
+     "life-sleep-b00:m0071",
+     "life-sleep-b01:m0034",
+     "life-sleep-b02:m0021"
+    ]
+   },
+   {
+    "line": "Venting: listen and reflect, no fixes or tips unless she asks, ask before advice. Anxious about a plan: concrete practical steps, not reassurance.",
+    "rows": [
+     "life-sleep-b03:m0002",
+     "life-sleep-b03:m0009",
+     "life-sleep-b01:m0015"
+    ]
+   },
+   {
+    "line": "Aisha: async Slack threads, specs 2 weeks before sprint. Diego: async Figma comments, problem statements.",
+    "rows": [
+     "life-sleep-b00:m0005",
+     "life-sleep-b00:m0057",
+     "life-sleep-b04:m0014"
+    ]
+   },
+   {
+    "line": "Cards: no emoji; thank-you cards signed 'Riya, Sam and Leo'.",
+    "rows": [
+     "life-sleep-b04:m0004"
+    ]
+   },
+   {
+    "line": "PRIVATE: therapist Joanne, never mention where Sam or others can see.",
+    "rows": [
+     "life-sleep-b04:m0031"
+    ]
+   },
+   {
+    "line": "Olivia Grant (Head of Sales since Feb 2026, runs QBR): no feature date until Aisha signs off, say 'target'; held draft d-7902 with Instant Payouts GA 2026-09-15: do not send ('not yet on Olivia').",
+    "rows": [
+     "life-sleep-b00:m0043",
+     "life-sleep-b05:m0019",
+     "life-sleep-b05:m0031",
+     "life-sleep-b05:m0030"
+    ]
+   },
+   {
+    "line": "Nate Kowalczyk (Northline): text only, never call; starts 7:30; +1 647-555-0119. Needs wall-behind-range/sink choice by Mon 04-27 (3-week lead); accepts a picture or product link.",
+    "rows": [
+     "life-sleep-b06:m0022",
+     "life-sleep-b07:m0023"
+    ]
+   },
+   {
+    "line": "Show Riya drafts before sending any email, except routine scheduling replies (accept, propose, confirm times), which may be sent directly (from 2026-05-19, notes 'Email rules').",
+    "rows": [
+     "life-sleep-b00:m0023",
+     "life-sleep-b08:m0033"
+    ]
+   },
+   {
+    "line": "Notifications: work as push; personal in one 20:30 digest. Don't raise non-urgent work on weekends or evenings (Tom's Sat 05-16 Slack derailed her evening): handle Monday unless urgent.",
+    "rows": [
+     "life-sleep-b06:m0007",
+     "life-sleep-b08:m0022"
+    ]
+   },
+   {
+    "line": "Hannah Cho (neighbour on Logan): text before calling, mobile +1 416-555-0163 (earlier 0193); spare key; offered to help with Biscuit.",
+    "rows": [
+     "life-sleep-b06:m0018",
+     "life-sleep-b00:m0017",
+     "life-sleep-b05:m0039",
+     "life-sleep-b09:m0022"
+    ]
+   },
+   {
+    "line": "Tom: under 5 sentences, ask first, one recommendation plus one alternative; collects Instant Payouts status for exec updates (05-20: 40 merchants live, 99.7% success, median 18 min).",
+    "rows": [
+     "life-sleep-b00:m0004",
+     "life-sleep-b01:m0022",
+     "life-sleep-b09:m0004"
+    ]
+   },
+   {
+    "line": "Short answers: answer first; one recommendation (at most one fallback); three bullets max unless asked; no preamble; no closing offer or follow-up question.",
+    "rows": [
+     "life-sleep-b00:m0051",
+     "life-sleep-b09:m0011",
+     "life-sleep-b09:m0018",
+     "life-sleep-b10:m0006"
+    ]
+   },
+   {
+    "line": "Pending drafts: Olivia GA date d-7902 held; Fernwood reply dr_772 unsent; Hannah text to feed Biscuit Jul 9-13 unsent; Jess Park QBR-prep move to Wed 07-08 10:00 reply drafted (routine scheduling, may send); Curzon street party date/volunteer reply; #payouts-launch freeze reminder draft not posted.",
+    "rows": [
+     "life-sleep-b05:m0031",
+     "life-sleep-b08:m0027",
+     "life-sleep-b09:m0023",
+     "life-sleep-b10:m0036",
+     "life-sleep-b10:m0032",
+     "life-sleep-b10:m0030"
+    ]
+   },
+   {
+    "line": "Anjali: anjali.malhotra@example.com, WhatsApp +91 98200 55117 (calls on Zoom, not WhatsApp video; Zoom 841 2005 7731, passcode 4410); Kabir kabir.m@example.com; Marcus +1 416-555-0142.",
+    "rows": [
+     "life-sleep-b04:m0011",
+     "life-sleep-b10:m0029",
+     "life-sleep-b04:m0005"
+    ]
+   },
+   {
+    "line": "Recaps for Tom (runs #product-leads): decisions first, one page; Payouts offsite recap in Notion d-7731.",
+    "rows": [
+     "life-sleep-b10:m0010",
+     "life-sleep-b10:m0009"
+    ]
+   }
+  ],
+  "finance": [
+   {
+    "line": "Prices in CAD with original in brackets.",
+    "rows": [
+     "life-sleep-b00:m0016"
+    ]
+   },
+   {
+    "line": "Household bills from TD joint chequing with Sam; her EQ Bank savings must not be touched.",
+    "rows": [
+     "life-sleep-b00:m0045"
+    ]
+   },
+   {
+    "line": "Carlos $45/lesson ($180 for 4) by e-transfer.",
+    "rows": [
+     "life-sleep-b02:m0006"
+    ]
+   },
+   {
+    "line": "Toronto Hydro paid manually (avg $128.40, winter ~30% higher); bill reminders 3 days before due.",
+    "rows": [
+     "life-sleep-b04:m0016",
+     "life-sleep-b04:m0033"
+    ]
+   },
+   {
+    "line": "Recurring: TD mortgage biweekly; Leo's RESP $208/month; Netflix standard, Spotify Family, Crave, Globe and Mail digital (Disney+ cancelled March 2026); TekSavvy $79.10 PAD on the 15th.",
+    "rows": [
+     "life-sleep-b06:m0002",
+     "life-sleep-b04:m0001",
+     "life-sleep-b00:m0040"
+    ]
+   },
+   {
+    "line": "Ask Riya before any payment over $150 CAD; staple reorders need no asking; ask which account (family vs personal) or check e-transfer 'From' last four digits.",
+    "rows": [
+     "life-sleep-b05:m0015",
+     "life-sleep-b06:m0020"
+    ]
+   },
+   {
+    "line": "Dog walking is not tax deductible; receipts in /Household/Biscuit not /Taxes/2025/Deductions.",
+    "rows": [
+     "life-sleep-b06:m0028"
+    ]
+   },
+   {
+    "line": "Household envelope $4,100/month; 'Eating out' limit $400/month (April at $318 on 04-26, other categories under budget).",
+    "rows": [
+     "life-sleep-b05:m0010",
+     "life-sleep-b07:m0035"
+    ]
+   },
+   {
+    "line": "Spotify Family up $2/month from June 2026 bill.",
+    "rows": [
+     "life-sleep-b07:m0037"
+    ]
+   },
+   {
+    "line": "Vancouver Air Canada flights $1,947.66 CAD booked for 3 (Jul 9-13).",
+    "rows": [
+     "life-sleep-b08:m0004"
+    ]
+   },
+   {
+    "line": "Accountant Farah Khan: 2025 returns e-filed 05-19; Riya's refund $1,284.60 by direct deposit; Sam owes CRA $212.15 (overdue since 04-30, interest accruing, pay promptly); Farah's invoice $508.50 unpaid 05-30; childcare claimed on Sam's return.",
+    "rows": [
+     "life-sleep-b09:m0009",
+     "life-sleep-b09:m0010"
+    ]
+   },
+   {
+    "line": "Weekly receipts sweep files new email receipts into note 'Household expenses 2026'.",
+    "rows": [
+     "life-sleep-b09:m0012"
+    ]
+   },
+   {
+    "line": "Dog walking Jess M. (Rover) Tue/Thu from 06-09, $27/walk (~$54/week); pet budget $350/month.",
+    "rows": [
+     "life-sleep-b09:m0034",
+     "life-sleep-b02:m0043"
+    ]
+   },
+   {
+    "line": "Kitchen reno: contract $68,500 (Northline chosen over Brickhouse $79,000 and CityFix $58,200; earlier notes say $48,000 budget / $45,890 quote, verify); $31,240 paid as of 07-01; Barzotti balance $14,700 due 2026-07-15.",
+    "rows": [
+     "life-sleep-b10:m0026",
+     "life-sleep-b10:m0027",
+     "life-sleep-b03:m0026"
+    ]
+   },
+   {
+    "line": "Car insurance Belairdirect (BD-AU-7731904): $118.40 charged monthly on the 1st; claim for 06-19 Loblaws-lot ding not started (photos, lot camera footage ~1 week, police report optional).",
+    "rows": [
+     "life-sleep-b06:m0031",
+     "life-sleep-b10:m0024",
+     "life-sleep-b10:m0016"
+    ]
+   },
+   {
+    "line": "Lumen Pay wellness spending account $750/year from July 2026.",
+    "rows": [
+     "life-sleep-b10:m0005"
+    ]
+   }
+  ],
+  "health": [
+   {
+    "line": "Riya allergic to penicillin (hives); seasonal allergies in May (Reactine). Mention penicillin whenever doctor/pharmacy comes up; private.",
+    "rows": [
+     "life-sleep-b00:m0054"
+    ]
+   },
+   {
+    "line": "Sam vegetarian, no fish/seafood.",
+    "rows": [
+     "life-sleep-b00:m0001"
+    ]
+   },
+   {
+    "line": "Mother Anjali has type 2 diabetes: sugar-free.",
+    "rows": [
+     "life-sleep-b00:m0068"
+    ]
+   },
+   {
+    "line": "Mei (Kabir's partner) is lactose intolerant: dairy-free.",
+    "rows": [
+     "life-sleep-b01:m0009"
+    ]
+   },
+   {
+    "line": "Mother Anjali (68) lives alone in Mumbai with stairs; ideas: nearby neighbour/relative with spare key, daily 'good morning' WhatsApp, written medical info, stair rails/lighting.",
+    "rows": [
+     "life-sleep-b01:m0014"
+    ]
+   },
+   {
+    "line": "First half marathon (Toronto Waterfront) 2025-10-19, chip time 2:04:37; logged in Notes / Running log.",
+    "rows": [
+     "life-sleep-b02:m0010"
+    ]
+   },
+   {
+    "line": "Anxious Sunday evenings before big launch weeks: write three items for Monday, short walk with Biscuit.",
+    "rows": [
+     "life-sleep-b03:m0001"
+    ]
+   },
+   {
+    "line": "Vent: listen and reflect first, no fixes unless asked. Stress spikes before roadmap reviews and reno cost creep.",
+    "rows": [
+     "life-sleep-b03:m0009",
+     "life-sleep-b03:m0002",
+     "life-sleep-b02:m0051"
+    ]
+   },
+   {
+    "line": "2026: run 3x a week, maybe a spring 10K.",
+    "rows": [
+     "life-sleep-b03:m0032"
+    ]
+   },
+   {
+    "line": "PRIVATE: therapist Joanne, every other Tue 17:30 video; personal calendar only, never mention to Sam or others.",
+    "rows": [
+     "life-sleep-b04:m0031"
+    ]
+   },
+   {
+    "line": "Daniel Okafor had knee replacement in Jan 2026: avoids long stairs and long drives.",
+    "rows": [
+     "life-sleep-b04:m0028"
+    ]
+   },
+   {
+    "line": "Ellie Cho (Hannah's daughter) is allergic to dairy: no cheese, milk chocolate.",
+    "rows": [
+     "life-sleep-b05:m0037"
+    ]
+   },
+   {
+    "line": "Running shoes replaced every 600 km (Ghost 15 at 571 km 03-22): flag past 560 km, ask before reorder.",
+    "rows": [
+     "life-sleep-b06:m0011"
+    ]
+   },
+   {
+    "line": "Coffee: oat milk cortado, decaf after 14:00 (caffeine hurts sleep).",
+    "rows": [
+     "life-sleep-b06:m0024"
+    ]
+   },
+   {
+    "line": "Leo: allergic to cashews and pistachios only (SickKids, May 2026); almonds, walnuts fine; EpiPen Jr always in backpack.",
+    "rows": [
+     "life-sleep-b09:m0013"
+    ]
+   },
+   {
+    "line": "Levothyroxine now 75 mcg once daily (raised June 2026 by Dr. Patel, Patel Family Medicine), empty stomach, 30 min before coffee/food; Rx at Shoppers Queen & Carlaw (416-555-0172).",
+    "rows": [
+     "life-sleep-b10:m0018",
+     "life-sleep-b05:m0021"
+    ]
+   },
+   {
+    "line": "YMCA strength Tue/Thu; runs with Marcus Wed 06:15 and Sat 07:30 at Ashbridges Bay.",
+    "rows": [
+     "life-sleep-b10:m0001"
+    ]
+   },
+   {
+    "line": "Repeat TSH test 6-8 weeks after dose change (mid-Aug): LifeLabs Queen & Carlaw, requisition on file; slot Wed 08-05 08:15 held pending OK.",
+    "rows": [
+     "life-sleep-b10:m0020",
+     "life-sleep-b10:m0025"
+    ]
+   },
+   {
+    "line": "Lumen Pay wellness account $750/year from July 2026.",
+    "rows": [
+     "life-sleep-b10:m0005"
+    ]
+   }
+  ],
+  "family": [
+   {
+    "line": "Sam: quiet dinner at home for birthday Mar 22, never big events; vegetarian; teaches chemistry, plan dates Saturdays.",
+    "rows": [
+     "life-sleep-b00:m0002",
+     "life-sleep-b00:m0001",
+     "life-sleep-b00:m0020"
+    ]
+   },
+   {
+    "line": "Anniversary June 16 (married 2018, met 2015), dinner without Leo, sitter needed.",
+    "rows": [
+     "life-sleep-b00:m0069",
+     "life-sleep-b00:m0019"
+    ]
+   },
+   {
+    "line": "Family birthdays in calendar with reminder a week before: Sam Mar 22, Leo Jul 17, Kabir Aug 5; ask for Anjali, Mei, Grace, Daniel.",
+    "rows": [
+     "life-sleep-b00:m0084",
+     "life-sleep-b01:m0001"
+    ]
+   },
+   {
+    "line": "Don't raise the difficult 2024 second-child attempt unless Riya does.",
+    "rows": [
+     "life-sleep-b01:m0007"
+    ]
+   },
+   {
+    "line": "Leo loves dinosaurs and Lego, hates mushrooms; Jun Cho is his best friend.",
+    "rows": [
+     "life-sleep-b03:m0010",
+     "life-sleep-b01:m0033"
+    ]
+   },
+   {
+    "line": "2026: weekend baking with Leo, Sunday calls with Mom, monthly date night with Sam.",
+    "rows": [
+     "life-sleep-b03:m0029",
+     "life-sleep-b03:m0032"
+    ]
+   },
+   {
+    "line": "Decision: Leo stays at Morse Street PS, no French immersion; ignore immersion info nights.",
+    "rows": [
+     "life-sleep-b05:m0025"
+    ]
+   },
+   {
+    "line": "Father Vikram Malhotra died 2022-03-18: lighter schedule around then, diya in the evening.",
+    "rows": [
+     "life-sleep-b06:m0001"
+    ]
+   },
+   {
+    "line": "Mother Anjali (Bandra West, diabetic, lonely lately): call Saturdays 08:30-09:15 Toronto from 04-25; birthday Nov 3; no gift cards; check Mumbai time.",
+    "rows": [
+     "life-sleep-b07:m0004",
+     "life-sleep-b02:m0032",
+     "life-sleep-b02:m0025",
+     "life-sleep-b05:m0040"
+    ]
+   },
+   {
+    "line": "Household at 41 Curzon St (Leslieville): Sam, Leo Okafor-Malhotra (6, born 2019-07-17, Grade 2), Biscuit; shared calendar 'Malhotra-Okafor family'.",
+    "rows": [
+     "life-sleep-b07:m0011",
+     "life-sleep-b07:m0006",
+     "life-sleep-b06:m0023"
+    ]
+   },
+   {
+    "line": "Kabir, Mei and baby Ira (Kitsilano): Ira's naming ceremony Sat 07-11, family flies Jul 9-13; Kabir plans barbecue; Mei is trip contact.",
+    "rows": [
+     "life-sleep-b08:m0004",
+     "life-sleep-b08:m0005",
+     "life-sleep-b05:m0020"
+    ]
+   },
+   {
+    "line": "Mumbai trip late March 2027 alone to see Anjali; Hannah backs up Wed pickup.",
+    "rows": [
+     "life-sleep-b08:m0034"
+    ]
+   },
+   {
+    "line": "Leo: bed 7:45 pm school nights; allergic to cashews and pistachios only (EpiPen Jr in backpack); piano Mon, Wed pickup 15:30; sleepovers with Jun.",
+    "rows": [
+     "life-sleep-b00:m0029",
+     "life-sleep-b09:m0013",
+     "life-sleep-b01:m0024",
+     "life-sleep-b06:m0003",
+     "life-sleep-b08:m0012"
+    ]
+   },
+   {
+    "line": "Leo summer: Riverdale Farm Summer Day Camp from Mon 06-29 (earlier note Jul 13-24, verify); portal tasks (pickup list, photo consent) incomplete as of 05-27; checklist 'Day camp checklist'; no overnight camp.",
+    "rows": [
+     "life-sleep-b09:m0001",
+     "life-sleep-b06:m0017"
+    ]
+   },
+   {
+    "line": "Do not text Sam's parents Grace and Daniel Okafor (Glebe per latest) for Riya; no Ottawa Christmas 2026 (Lisbon); they visit Toronto in Nov 2026 (plan reminder Tue 09-08 09:30).",
+    "rows": [
+     "life-sleep-b00:m0014",
+     "life-sleep-b08:m0013",
+     "life-sleep-b10:m0034"
+    ]
+   },
+   {
+    "line": "Hannah Cho (close friend on Logan; Jun, Ellie with dairy allergy; turned 40 on 06-27): covered Leo's pickup and had him over 06-25; Riya offered a return favour; spare key; recommended Nate; to feed/walk Biscuit Jul 9-13.",
+    "rows": [
+     "life-sleep-b10:m0012",
+     "life-sleep-b09:m0022",
+     "life-sleep-b09:m0023"
+    ]
+   },
+   {
+    "line": "Sam: teacher, teaches until 15:10; wants a cottage week Sep 14-18; Leo Grade 3 class lists on Edsby last week of August (Grade 2 teacher Ms. Alvarez, principal Ms. D. Fraser).",
+    "rows": [
+     "life-sleep-b10:m0019",
+     "life-sleep-b10:m0035",
+     "life-sleep-b10:m0014",
+     "life-sleep-b09:m0025"
+    ]
+   },
+   {
+    "line": "Dec 2026 Lisbon family holiday decided 2026-05-30; Sam and Riya not going to Ottawa.",
+    "rows": [
+     "life-sleep-b10:m0017",
+     "life-sleep-b10:m0034"
+    ]
+   }
+  ],
+  "pet": [
+   {
+    "line": "Biscuit: beagle born ~April 2022, food-motivated, steals bread; don't leave bread out.",
+    "rows": [
+     "life-sleep-b00:m0010"
+    ]
+   },
+   {
+    "line": "Food only Purina Pro Plan Sensitive Skin & Stomach Salmon & Rice (Pet Valu); no chicken.",
+    "rows": [
+     "life-sleep-b00:m0079"
+    ]
+   },
+   {
+    "line": "Walks: Riya 6:30 am (weekends Leslie Street Spit loop), Sam 9:00 pm.",
+    "rows": [
+     "life-sleep-b00:m0053"
+    ]
+   },
+   {
+    "line": "Biscuit howls ('siren solo').",
+    "rows": [
+     "life-sleep-b01:m0008"
+    ]
+   },
+   {
+    "line": "Vet now Dr. Harpreet Kaur, Riverside Veterinary Clinic, Broadview Ave, (416) 555-0193 (Mon-Thu 8-20, Fri 8-18, Sat 9-14; online booking); Dr. Moreau retired April 2026.",
+    "rows": [
+     "life-sleep-b07:m0007"
+    ]
+   },
+   {
+    "line": "Biscuit ate chicken skin off Hannah's grill tray 2026-05-18 and recovered; chicken gave him itchy skin before.",
+    "rows": [
+     "life-sleep-b08:m0024",
+     "life-sleep-b00:m0079"
+    ]
+   },
+   {
+    "line": "24/7 emergency vet: Toronto Animal Emergency Hospital, Danforth & Victoria Park (regular vets closed holidays). Jess (Rover) walks him Fridays ~12:00 $25; Hannah helps in a pinch.",
+    "rows": [
+     "life-sleep-b08:m0024"
+    ]
+   },
+   {
+    "line": "Dog walking: Jess M. (Rover) Tue/Thu 12:00, 30 min, $27/walk from 06-09; Riya walks him herself at noon Mon/Wed/Fri around Greenwood Park.",
+    "rows": [
+     "life-sleep-b09:m0034"
+    ]
+   },
+   {
+    "line": "Hannah to feed and walk Biscuit while family is in Vancouver Jul 9-13 (they pay her); text unsent.",
+    "rows": [
+     "life-sleep-b09:m0023"
+    ]
+   },
+   {
+    "line": "Biscuit howls at sirens: he thinks a far-away dog is calling and sings back 'I'm here'.",
+    "rows": [
+     "life-sleep-b09:m0022"
+    ]
+   },
+   {
+    "line": "Vaccines: Rabies+DHPP 2025-03-14 (next 2028-03), Bordetella 2026-03-02 (next 2027-03); PDF in notes 'Biscuit: vaccinations'; old clinic Leslieville Animal Hospital chart not fully transferred.",
+    "rows": [
+     "life-sleep-b09:m0024"
+    ]
+   },
+   {
+    "line": "Supplies: 13.6 kg food bag monthly from pet store at Queen & Logan (~$94.99 + tax, Sam can collect); BioBag poop bags Pet Valu $16.99.",
+    "rows": [
+     "life-sleep-b10:m0028"
+    ]
+   },
+   {
+    "line": "Jess (Rover) walks him ~2x/week at noon, auto-paid from Riya's Visa.",
+    "rows": [
+     "life-sleep-b10:m0023"
+    ]
+   }
+  ],
+  "home": [
+   {
+    "line": "Basement floods slightly near back wall in heavy spring rain; sump pump replaced May 2024 (Zoeller M53).",
+    "rows": [
+     "life-sleep-b00:m0021"
+    ]
+   },
+   {
+    "line": "Furnace serviced 2023-09; eavestroughs cleaned 2024-10.",
+    "rows": [
+     "life-sleep-b00:m0021"
+    ]
+   },
+   {
+    "line": "Don't leave bread out (Biscuit).",
+    "rows": [
+     "life-sleep-b00:m0010"
+    ]
+   },
+   {
+    "line": "Furnace filter 16x25x1 MERV 11 every 3 months: Sat 2026-01-04, 04-04, 07-04; spares on laundry room shelf.",
+    "rows": [
+     "life-sleep-b01:m0025",
+     "life-sleep-b01:m0013"
+    ]
+   },
+   {
+    "line": "No scented candles or air fresheners (Sam gets migraines).",
+    "rows": [
+     "life-sleep-b01:m0027"
+    ]
+   },
+   {
+    "line": "Electrical panel to 200 A (Brightline, ESA #7104-2289): inspection not booked.",
+    "rows": [
+     "life-sleep-b02:m0036"
+    ]
+   },
+   {
+    "line": "Hannah Cho has a spare key and lets Nate's crew in when nobody is home.",
+    "rows": [
+     "life-sleep-b05:m0039"
+    ]
+   },
+   {
+    "line": "Groceries PC Express Saturday pickup, Loblaws Lakeshore 9-10; staples no-name; Finish Quantum 82 dishwasher pods from Canadian Tire; staples reorders need no asking.",
+    "rows": [
+     "life-sleep-b05:m0024",
+     "life-sleep-b05:m0016",
+     "life-sleep-b05:m0015"
+    ]
+   },
+   {
+    "line": "Mazda stays: keep Downtown Mazda service reminders (60,000 km service).",
+    "rows": [
+     "life-sleep-b06:m0009"
+    ]
+   },
+   {
+    "line": "Internet: TekSavvy Fibre ($79.10/month, PAD 15th); unstable since 04-24 (drops, ~6% loss, ONT 'optical signal low'): provider line fault; no ticket opened, evidence in Notes 'internet drops 2026-04-24'.",
+    "rows": [
+     "life-sleep-b04:m0001",
+     "life-sleep-b07:m0018"
+    ]
+   },
+   {
+    "line": "Leslieville Farmers' Market opens Sun 2026-05-10, Sundays 9-14 at Jonathan Ashbridge Park, 1490 Queen St E, to late Oct; Riya does not want it on the calendar.",
+    "rows": [
+     "life-sleep-b07:m0025",
+     "life-sleep-b06:m0032"
+    ]
+   },
+   {
+    "line": "Address 41 Curzon St, Toronto M4M 3B5 (semi-detached, basement).",
+    "rows": [
+     "life-sleep-b07:m0011"
+    ]
+   },
+   {
+    "line": "Watermain replacement Curzon St (Queen to Dundas), Bertmount, Erie Terrace ~05-11 to 09-04 (Bramco Civil): weekdays 7-19, up to 8 h water shut-offs, hoses (48 h notice), parking restricted, driveway briefly blocked; label bins with house number; inspector M. Ostrowski 416-555-0177, hotline 416-338-2525; lead-pipe program may cover private side.",
+    "rows": [
+     "life-sleep-b07:m0012"
+    ]
+   },
+   {
+    "line": "Mirror (~15 kg) on plaster-and-lath: two #10 x 3 in screws into a stud, or snap toggles / 60 cm French cleat; tape spot first.",
+    "rows": [
+     "life-sleep-b07:m0019"
+    ]
+   },
+   {
+    "line": "Nest thermostat (Google Home app > Settings > Schedules): Sam's adjustments taught Auto-Schedule a 4 am heating setpoint; delete 4:00 setpoints, turn off Auto-Schedule.",
+    "rows": [
+     "life-sleep-b08:m0025"
+    ]
+   },
+   {
+    "line": "Basement dehumidifier (Frigidaire 50-pint FFAP5033W1) stopped collecting water: claim direct with Frigidaire (1-800 Mon-Fri 8-20 ET or online form; serial on back label; warranty to ~2026-07-06); form drafted not submitted; call reminder Mon 06-08 12:15; basement humidity 61%, Hannah has spare 30-pint.",
+    "rows": [
+     "life-sleep-b09:m0031"
+    ]
+   },
+   {
+    "line": "Garbage/recycling bins out Sunday night (20:00 nudge) for Monday collection, alternating blue bin + garbage weeks (latest; earlier notes had Tuesday/Thursday: verify).",
+    "rows": [
+     "life-sleep-b10:m0037",
+     "life-sleep-b09:m0008"
+    ]
+   },
+   {
+    "line": "Kitchen reno (Northline, Nate texts only): Hannah recommended him; Barzotti balance $14,700 due 07-15. Countertops: Caesarstone Frosty Carrina chosen earlier, but Nate needs final material, colour and edge profile by Tue 07-07 for templating Thu 07-09 08:00-10:00 (Hannah has key); Riya checking with Sam.",
+    "rows": [
+     "life-sleep-b10:m0012",
+     "life-sleep-b10:m0027",
+     "life-sleep-b10:m0033",
+     "life-sleep-b06:m0033",
+     "life-sleep-b06:m0022"
+    ]
+   }
+  ],
+  "food": [
+   {
+    "line": "Sam vegetarian, no fish/seafood.",
+    "rows": [
+     "life-sleep-b00:m0001"
+    ]
+   },
+   {
+    "line": "Riya dislikes cilantro, always leave out.",
+    "rows": [
+     "life-sleep-b00:m0050"
+    ]
+   },
+   {
+    "line": "Loves South Indian, masala dosa; Saffron Lane.",
+    "rows": [
+     "life-sleep-b00:m0025"
+    ]
+   },
+   {
+    "line": "Restaurants: 19:00, good vegetarian options.",
+    "rows": [
+     "life-sleep-b00:m0076"
+    ]
+   },
+   {
+    "line": "Mother Anjali: sugar-free.",
+    "rows": [
+     "life-sleep-b00:m0068"
+    ]
+   },
+   {
+    "line": "Mei is lactose intolerant: dairy-free (no ghee, yogurt, cream; coconut raita, oil naan).",
+    "rows": [
+     "life-sleep-b01:m0009"
+    ]
+   },
+   {
+    "line": "Friday pizza night: Sam makes the dough.",
+    "rows": [
+     "life-sleep-b02:m0009"
+    ]
+   },
+   {
+    "line": "Leo hates mushrooms. Wen (team) is vegan; Priya celiac, loves Sichuan; Grace: no shellfish/alcohol.",
+    "rows": [
+     "life-sleep-b03:m0010",
+     "life-sleep-b03:m0014",
+     "life-sleep-b03:m0012",
+     "life-sleep-b03:m0027"
+    ]
+   },
+   {
+    "line": "Weekend baking with Leo (simple recipes; he stirs); Sunday market.",
+    "rows": [
+     "life-sleep-b03:m0029",
+     "life-sleep-b03:m0016"
+    ]
+   },
+   {
+    "line": "Metric units, Celsius only.",
+    "rows": [
+     "life-sleep-b03:m0013"
+    ]
+   },
+   {
+    "line": "Coffee: Riya oat milk cortado (decaf after 14:00), Sam oat flat white, no hazelnut.",
+    "rows": [
+     "life-sleep-b06:m0024",
+     "life-sleep-b00:m0070"
+    ]
+   },
+   {
+    "line": "Farmers' market Sundays 9-14 from 05-10 at 1490 Queen St E (not on her calendar).",
+    "rows": [
+     "life-sleep-b07:m0025"
+    ]
+   },
+   {
+    "line": "Pai Northern Thai Kitchen delivery 04-25: family-style for three under $100 (order #PAI-58213 $85.12); agent avoided peanut dishes.",
+    "rows": [
+     "life-sleep-b07:m0022"
+    ]
+   },
+   {
+    "line": "'Eating out' limit $400/month, April at $318 on 04-26.",
+    "rows": [
+     "life-sleep-b07:m0035"
+    ]
+   },
+   {
+    "line": "Temporary basement kitchen since 05-08: microwave, induction hotplate (flat-bottom pans; cast iron works), old fridge.",
+    "rows": [
+     "life-sleep-b08:m0006"
+    ]
+   },
+   {
+    "line": "Leo: cashews and pistachios are the allergens (almonds, walnuts fine); camp and school forms updated.",
+    "rows": [
+     "life-sleep-b09:m0013"
+    ]
+   },
+   {
+    "line": "Curzon summer street party (date Sat 07-25 or 08-08 TBD): potluck, $25/household.",
+    "rows": [
+     "life-sleep-b10:m0032"
+    ]
+   },
+   {
+    "line": "Mom's mithai: sugar-free only (diabetic).",
+    "rows": [
+     "life-sleep-b10:m0008",
+     "life-sleep-b00:m0068"
+    ]
+   }
+  ],
+  "work-task": [
+   {
+    "line": "Riya: Senior PM at Lumen Pay, owns Merchant payouts and onboarding; manager Tom Becker.",
+    "rows": [
+     "life-sleep-b00:m0055"
+    ]
+   },
+   {
+    "line": "Tom: under 5 sentences, ask first. Aisha (eng lead): async Slack, specs 2 weeks before sprint.",
+    "rows": [
+     "life-sleep-b00:m0004",
+     "life-sleep-b00:m0005"
+    ]
+   },
+   {
+    "line": "PRD from PRD-v3 template plus Non-goals and Open questions table (owner, due date); ISO dates.",
+    "rows": [
+     "life-sleep-b00:m0038"
+    ]
+   },
+   {
+    "line": "Decisions into the Notion decision log within 24 hours; disagree and commit.",
+    "rows": [
+     "life-sleep-b00:m0072"
+    ]
+   },
+   {
+    "line": "Wen Li: #data-requests, 3 business days, written metric definition.",
+    "rows": [
+     "life-sleep-b00:m0031"
+    ]
+   },
+   {
+    "line": "Diego: Figma comments, problem statements.",
+    "rows": [
+     "life-sleep-b00:m0057"
+    ]
+   },
+   {
+    "line": "Summaries: Decisions, Action items, Open questions.",
+    "rows": [
+     "life-sleep-b00:m0026"
+    ]
+   },
+   {
+    "line": "Writing: no em dashes, say 'merchant', paragraphs max 3 sentences, short, Canadian spelling, no jargon.",
+    "rows": [
+     "life-sleep-b02:m0021",
+     "life-sleep-b00:m0059",
+     "life-sleep-b00:m0071"
+    ]
+   },
+   {
+    "line": "Sales gets no feature date until Aisha signs off ('target', not launch date); GA date 2026-09-15 NOT yet to Olivia (held draft d-7902).",
+    "rows": [
+     "life-sleep-b00:m0043",
+     "life-sleep-b05:m0031"
+    ]
+   },
+   {
+    "line": "Decision log: Notion 'Instant Payouts PRD' table row (Date, Decision, Why, Owner) with decision date; Aisha watches; offer heads-up in #payouts-launch.",
+    "rows": [
+     "life-sleep-b08:m0021"
+    ]
+   },
+   {
+    "line": "Every Friday by 16:00 post payouts status in #payouts-launch (colour-coded; GA docs amber on 05-29).",
+    "rows": [
+     "life-sleep-b02:m0008",
+     "life-sleep-b09:m0032"
+    ]
+   },
+   {
+    "line": "Check Looker 'Payouts Health' (Wen) Mondays 9:30: success rate, median payout time, failed-payout reasons.",
+    "rows": [
+     "life-sleep-b09:m0014"
+    ]
+   },
+   {
+    "line": "Beta feedback log (notes 'Beta feedback log: structure'): date, merchant, source, summary, theme, severity, owner, status, link; Monday triage 20 min by severity then count; home still open.",
+    "rows": [
+     "life-sleep-b09:m0006"
+    ]
+   },
+   {
+    "line": "Riya led the Instant Payouts launch end to end (first such project); wins in note 'Instant Payouts: wins record' (PAY-1199 fixed in 24 h, Northbay Coffee retained) for her review.",
+    "rows": [
+     "life-sleep-b09:m0019"
+    ]
+   },
+   {
+    "line": "Instant Payouts: 40 merchants live, 99.7% success, median 18 min (05-20); GA 2026-09-15; CAD-USD same-day settlement in v1.1. Payouts release freeze Thu 07-02 12:00 to Mon 07-06 09:00 (bank-partner cutover).",
+    "rows": [
+     "life-sleep-b09:m0004",
+     "life-sleep-b08:m0019",
+     "life-sleep-b05:m0030",
+     "life-sleep-b10:m0030"
+    ]
+   },
+   {
+    "line": "Team: Tom (runs #product-leads, asks leads for recaps), Aisha (covers incidents, PRD reviews), Diego (mocks, timelines), Wen (dashboards), Olivia (sales, QBR), Jonah Park. Riya is product lead for Payouts (Linear team PAY).",
+    "rows": [
+     "life-sleep-b10:m0009",
+     "life-sleep-b08:m0014"
+    ]
+   },
+   {
+    "line": "Hardware security key (arrived 06-23) must be enrolled by 2026-07-31 or laptop loses SSO; desk booking moves to Robin app 07-06; summer Fridays end 15:00.",
+    "rows": [
+     "life-sleep-b10:m0002",
+     "life-sleep-b10:m0015",
+     "life-sleep-b10:m0003",
+     "life-sleep-b10:m0004"
+    ]
+   },
+   {
+    "line": "June offsite decision: multi-currency wallets postponed to H1 2027 (FINTRAC review won't finish in 2026); PAY-1388 to Backlog. Recap doc d-7731.",
+    "rows": [
+     "life-sleep-b10:m0011",
+     "life-sleep-b10:m0010"
+    ]
+   },
+   {
+    "line": "Mid-year self-review in Lattice due Fri 2026-07-10 (H1 evidence in Notion Riya/Reviews); manager reviews open 07-13.",
+    "rows": [
+     "life-sleep-b10:m0021"
+    ]
+   }
+  ],
+  "learning": [
+   {
+    "line": "Learns via role-play of real situations; Mexican vocabulary; weak: ser/estar, preterite vs imperfect, -ma noun gender, subjunctive after 'cuando'.",
+    "rows": [
+     "life-sleep-b00:m0047"
+    ]
+   },
+   {
+    "line": "Vocab lists as table: Spanish, English, example sentence (Anki).",
+    "rows": [
+     "life-sleep-b00:m0062"
+    ]
+   },
+   {
+    "line": "Anki 15 min every weekday morning.",
+    "rows": [
+     "life-sleep-b00:m0080"
+    ]
+   },
+   {
+    "line": "Carlos Méndez: Thursdays 19:30, $45/lesson ($180/4); under 24h move is charged. Recurring errors: ser/estar, por/para, subjunctive after 'cuando' (cuando llegue); quiz her; saved in Notes / Spanish.",
+    "rows": [
+     "life-sleep-b02:m0006",
+     "life-sleep-b02:m0054"
+    ]
+   },
+   {
+    "line": "Commute podcasts under 45 min: product/fintech (Lenny's short episodes, Fintech Business Weekly, This Week in Fintech); skip over an hour.",
+    "rows": [
+     "life-sleep-b03:m0030"
+    ]
+   },
+   {
+    "line": "2026: Spanish B2 prep and a full hour with Carlos without English.",
+    "rows": [
+     "life-sleep-b03:m0032"
+    ]
+   },
+   {
+    "line": "DELE B2 postponed to Sat 2026-11-21 09:00-14:00 (Toronto) because the Instant Payouts beta left no study time; can draft a study plan backwards from it.",
+    "rows": [
+     "life-sleep-b04:m0034"
+    ]
+   },
+   {
+    "line": "Frequent noun-gender slips: el problema, el mapa, el tema, la mano.",
+    "rows": [
+     "life-sleep-b04:m0019"
+    ]
+   },
+   {
+    "line": "Spanish homework notes in 'Spanish homework'; wants quizzes aimed at weak areas.",
+    "rows": [
+     "life-sleep-b05:m0018"
+    ]
+   },
+   {
+    "line": "When Riya writes in Spanish, reply in Spanish and list only the three most important corrections in bold at the end; add them to Anki deck 'Español B2 - errores'.",
+    "rows": [
+     "life-sleep-b06:m0012"
+    ]
+   },
+   {
+    "line": "Carlos: Thursdays 19:30-20:30, emails homework; now on subjunctive and noun vocabulary; drill subjunctive with grammar book (see purchase). Motivated by Lisbon Dec 2026 and Mexico City interest.",
+    "rows": [
+     "life-sleep-b10:m0013",
+     "life-sleep-b10:m0031"
+    ]
+   }
+  ],
+  "reminder": [
+   {
+    "line": "Rakhi box early August (7 days to Mumbai).",
+    "rows": [
+     "life-sleep-b00:m0068"
+    ]
+   },
+   {
+    "line": "Family birthdays yearly with a week's notice: Sam Mar 22, Leo Jul 17, Kabir Aug 5; Anjali, Mei, Grace, Daniel dates missing.",
+    "rows": [
+     "life-sleep-b00:m0084",
+     "life-sleep-b01:m0001"
+    ]
+   },
+   {
+    "line": "Yearly Oct 31 09:00: order flowers for Anjali's Nov 3 birthday.",
+    "rows": [
+     "life-sleep-b02:m0032"
+    ]
+   },
+   {
+    "line": "Priya's birthday Dec 1 (yearly).",
+    "rows": [
+     "life-sleep-b03:m0012"
+    ]
+   },
+   {
+    "line": "Every Mar 18 (father's death 2022): lighter schedule, diya in the evening.",
+    "rows": [
+     "life-sleep-b06:m0001"
+    ]
+   },
+   {
+    "line": "Running log passes 560 km on Brooks pair: prompt reorder (ask first, over $150).",
+    "rows": [
+     "life-sleep-b06:m0011"
+    ]
+   },
+   {
+    "line": "Notifications: work as push; personal items in a single digest at 20:30.",
+    "rows": [
+     "life-sleep-b06:m0007"
+    ]
+   },
+   {
+    "line": "Mazda 60,000 km service reminders from Downtown Mazda; car insurance now Belairdirect renews April.",
+    "rows": [
+     "life-sleep-b06:m0009",
+     "life-sleep-b06:m0031"
+    ]
+   },
+   {
+    "line": "Mumbai 2027: fare alert; re-check in October 2026; book by December 2026.",
+    "rows": [
+     "life-sleep-b08:m0035",
+     "life-sleep-b08:m0034"
+    ]
+   },
+   {
+    "line": "Mondays 9:30 Payouts Health dashboard check; Fridays by 16:00 status post.",
+    "rows": [
+     "life-sleep-b09:m0014",
+     "life-sleep-b09:m0032"
+    ]
+   },
+   {
+    "line": "Levothyroxine 75 mcg daily 06:45, 30 min before coffee.",
+    "rows": [
+     "life-sleep-b10:m0018",
+     "life-sleep-b00:m0018"
+    ]
+   },
+   {
+    "line": "Enrol hardware security key by 2026-07-31; Lattice self-review due Fri 07-10 (reminders Jun 30 10:00, Jul 6 09:30).",
+    "rows": [
+     "life-sleep-b10:m0002",
+     "life-sleep-b10:m0021"
+    ]
+   },
+   {
+    "line": "Countertop final choice to Nate by Tue 07-07 (templating Thu 07-09); Barzotti $14,700 due 07-15.",
+    "rows": [
+     "life-sleep-b10:m0033",
+     "life-sleep-b10:m0027"
+    ]
+   },
+   {
+    "line": "TSH blood test Wed 08-05 08:15 (confirm hold within 24 h).",
+    "rows": [
+     "life-sleep-b10:m0025"
+    ]
+   },
+   {
+    "line": "Tue 09-08 09:30 start planning Grace and Daniel's November visit; reply to Curzon street party organiser; cottage free-cancel until 08-31; DELE B2 Sat 11-21.",
+    "rows": [
+     "life-sleep-b10:m0034",
+     "life-sleep-b10:m0032",
+     "life-sleep-b10:m0035",
+     "life-sleep-b04:m0034"
+    ]
+   },
+   {
+    "line": "Bins out Sunday night 20:00 (Monday collection); label bins with house number during Curzon watermain work (to 09-04).",
+    "rows": [
+     "life-sleep-b10:m0037",
+     "life-sleep-b07:m0012"
+    ]
+   }
+  ],
+  "docs": [
+   {
+    "line": "PRD in Notion from PRD-v3 template with Non-goals and Open questions table; ISO dates.",
+    "rows": [
+     "life-sleep-b00:m0038"
+    ]
+   },
+   {
+    "line": "Work docs: ISO dates, Canadian spelling, no jargon, no em dashes, 'merchant' not customer/user, paragraphs max 3 sentences.",
+    "rows": [
+     "life-sleep-b00:m0027",
+     "life-sleep-b00:m0059",
+     "life-sleep-b00:m0071",
+     "life-sleep-b02:m0021"
+    ]
+   },
+   {
+    "line": "Use EFT (batched, next business day) vs wire (individual, same day) correctly in payouts docs.",
+    "rows": [
+     "life-sleep-b04:m0017"
+    ]
+   },
+   {
+    "line": "Payouts API error codes list is docs/errors.md in payouts-api (generated from OpenAPI); Notion copy is stale.",
+    "rows": [
+     "life-sleep-b05:m0033"
+    ]
+   },
+   {
+    "line": "Instant Payouts PRD: Appendix C market scan; fix 5 pricing links (Overview, Appendix B) to lumenpay.example.com/pricing.",
+    "rows": [
+     "life-sleep-b06:m0026",
+     "life-sleep-b06:m0027"
+    ]
+   },
+   {
+    "line": "Decisions: row in Notion 'Instant Payouts PRD' Decision log (Date, Decision, Why, Owner), decision date; within 24h; heads-up in #payouts-launch.",
+    "rows": [
+     "life-sleep-b00:m0072",
+     "life-sleep-b08:m0021"
+    ]
+   },
+   {
+    "line": "LumenPay pricing: Starter 2.9%+30c, Growth 2.6%+25c, Scale 2.2%+20c; ACH/EFT vs wire distinction.",
+    "rows": [
+     "life-sleep-b08:m0018",
+     "life-sleep-b04:m0017"
+    ]
+   },
+   {
+    "line": "Answers: three bullets max unless she asks; don't end with offers or follow-up questions.",
+    "rows": [
+     "life-sleep-b09:m0011",
+     "life-sleep-b09:m0018"
+    ]
+   },
+   {
+    "line": "Beta feedback log structure in notes 'Beta feedback log: structure'; Monday triage; team location open.",
+    "rows": [
+     "life-sleep-b09:m0006"
+    ]
+   },
+   {
+    "line": "Wins for her review in note 'Instant Payouts: wins record'.",
+    "rows": [
+     "life-sleep-b09:m0019"
+    ]
+   },
+   {
+    "line": "Recaps: decisions first, one page (Notion Product/Offsite 2026, d-7731).",
+    "rows": [
+     "life-sleep-b10:m0010"
+    ]
+   }
+  ],
+  "debugging": [
+   {
+    "line": "PAY-1207 draft (not submitted): payout CSV export drops currency column for merchants with 2+ payout accounts (e.g. mid_7Q2KX9) since 2026-01-14 release; likely PAY-1164 serializer refactor (Aisha Rahman); Zendesk #48812, #48655.",
+    "rows": [
+     "life-sleep-b04:m0015"
+    ]
+   },
+   {
+    "line": "Home internet unstable since 2026-04-24: WAN drops, ~6% packet loss, ONT 'optical signal low' and loss-of-signal: provider line fault, not router. Provider is TekSavvy Fibre (not linked to agent); no ticket opened; evidence in Notes 'internet drops 2026-04-24'.",
+    "rows": [
+     "life-sleep-b07:m0018",
+     "life-sleep-b04:m0001"
+    ]
+   },
+   {
+    "line": "Nest thermostat 4 am heating: delete 4:00 setpoints in Google Home app and turn off Auto-Schedule.",
+    "rows": [
+     "life-sleep-b08:m0025"
+    ]
+   }
+  ],
+  "api": [
+   {
+    "line": "Payouts API error codes: generated from OpenAPI spec in payouts-api repo at docs/errors.md (21 codes, 7 INSTANT_*); Notion page stale since 2025-09-30.",
+    "rows": [
+     "life-sleep-b05:m0033"
+    ]
+   },
+   {
+    "line": "Webhook retries: exponential backoff over 72 h window (Aisha's proposal; decision logged 04-09 per latest, 04-19 per earlier note), owner Riya.",
+    "rows": [
+     "life-sleep-b08:m0020",
+     "life-sleep-b06:m0037"
+    ]
+   }
+  ],
+  "observability": [
+   {
+    "line": "Instant Payouts beta success bar: payout success >=99.5% and median payout time <30 min for 2 consecutive weeks; GA exit also needs no Sev-1 in final 2 weeks.",
+    "rows": [
+     "life-sleep-b06:m0038"
+    ]
+   },
+   {
+    "line": "Looker 'Instant Payouts Beta' dashboard excludes 2 test merchants (since 05-12): success-rate baseline changed.",
+    "rows": [
+     "life-sleep-b08:m0015"
+    ]
+   },
+   {
+    "line": "Looker 'Payouts Health' dashboard (Wen): success rate, median payout time, failed-payout reasons; Riya checks Mondays 9:30. Beta 05-20: 99.7% success, 18 min median.",
+    "rows": [
+     "life-sleep-b09:m0014",
+     "life-sleep-b09:m0004"
+    ]
+   }
+  ]
+ }
+}
