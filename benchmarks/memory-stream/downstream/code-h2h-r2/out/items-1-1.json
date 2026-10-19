@@ -1,0 +1,105 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "code-s082-e000#1",
+   "response": "Roughly 1 in 200 with no pattern by user or route points at something intermittent rather than a logic bug in one route, such as one bad replica, token verification timing or a cache. I'd rather look at the data than guess.\nAction: pull a sample of the 401 request ids from the logs, group them by pod, time and auth path, and read the auth middleware to see which code path returns a 401."
+  },
+  {
+   "id": "code-s058-e000#1",
+   "response": "A cent off on multi-line invoices is typically a rounding mismatch: rounding the total once versus rounding each line and summing. I'd like to reproduce it with the actual Northwind numbers before choosing the rule, since the displayed lines and the total need to agree.\nAction: read the totals code, reproduce with a failing test using line amounts like theirs (I'll ask for the Northwind invoice's line values), fix the rounding, and check whether already issued totals need a correction."
+  },
+  {
+   "id": "code-s100-e000#1",
+   "response": "Feature flags are managed in GrowthBook. The invoices export command is behind a flag named `cli-invoices-export`, which still needs creating in GrowthBook; if this export is a different surface, it may need its own flag. Limiting it to beta orgs would be a targeting rule in GrowthBook, which I can't set up from here.\nAction: look at how GrowthBook is already used in the code and add the flag check, then give you the flag name and targeting rule to create in GrowthBook."
+  },
+  {
+   "id": "code-s021-e035#1",
+   "response": "I'll set up a private bucket with a 90 day expiry on objects. Every resource needs the `team` and `env` cost tags or Priya's script flags it, and I'll confirm the team tag value with you rather than guess. The existing exports bucket from earlier is 30 day expiry, so this is a separate bucket.\nAction: look at the existing bucket setup in infra, add the new bucket with public access blocked, the 90 day lifecycle rule and the tags, and show you a plan without applying it."
+  },
+  {
+   "id": "code-s108-e018#1",
+   "response": "The header is probably written twice: once by the CSV helper and once by the button's own code. I'll check the expenses export code before guessing.\nAction: read the expenses export button and the CSV builder, remove the duplicate header write, add a regression test that asserts exactly one header line, and run the expenses tests."
+  },
+  {
+   "id": "code-s073-e000#1",
+   "response": "I'll add `payment_reminders` to the drizzle schema with a UUID v7 primary key, as you said for anything new, plus invoice id (foreign key), `sent_at`, `channel` limited to email or sms, and `status`. I'll check how existing tables generate UUIDs so v7 is produced the same way, and I need to know the allowed status values.\nAction: read the existing schema conventions, add the table, run drizzle's migration generation, and ask you for the status values."
+  },
+  {
+   "id": "code-s058-e012#1",
+   "response": "I'll add an optional `memo` (max 500 chars) to the zod schema for POST /v1/invoices with an OpenAPI description. The OpenAPI yaml is generated from the zod schemas, so I won't hand-edit it; I'll regenerate it with `pnpm turbo run openapi --filter api`. Public behavior is changing, so I'll update the matching docs page as well.\nAction: add the field to the schema and the db/service layer as needed, regenerate the spec, update docs/, add validation tests, and run the api tests."
+  },
+  {
+   "id": "code-s077-e005#1",
+   "response": "I'll add `tsx` as a devDependency of packages/cli through the package manager so the lockfile updates, and point the scripts at the TypeScript sources. I'll check the lockfile to confirm which package manager the repo uses.\nAction: install tsx as a dev dependency in packages/cli, update the scripts in package.json to use tsx, run one of them to verify, and commit the lockfile with package.json."
+  },
+  {
+   "id": "code-s083-e017#1",
+   "response": "I'll replace the switch with a typed map from event type to handler, keeping behavior identical, including the default case for unhandled events. This is billing code, so I'll keep the diff focused on the refactor and leave the raw-body wiring alone. The payments architecture doc is worth reading before I change anything.\nAction: read docs/architecture/payments.md and the handler, refactor into a handler map, run the stripe tests and the api suite, and leave it uncommitted for your review."
+  },
+  {
+   "id": "code-s060-e026#1",
+   "response": "Laptop setup is always slow, hang in there. The dependencies are installed in `~/code/acme-platform` and I kicked off the full test suite on the new clone earlier, but I haven't seen its result yet.\nAction: check the test run on the new clone and tell you whether the laptop is in a good state."
+  },
+  {
+   "id": "code-s108-e000#1",
+   "response": "I'll write a Playwright e2e that goes through new invoice, pick client, add a line, save and send in a real browser against the local dev server on port 3000. It needs the dev server up first (`pnpm --filter web dev`) plus the api, Postgres and Redis. There is a known unrelated failure in `invoices/detail.spec.ts` ('downloads pdf' 404s because the seed invoice has no pdfKey), so I won't count that against this test.\nAction: start the local services and dev server, write the spec under the e2e invoices folder, run it with `pnpm --filter web e2e`, and check what the send step does in dev so it doesn't email real customers."
+  },
+  {
+   "id": "code-s033-e016#1",
+   "response": "Parking the bucket. Collisions under parallel runs usually mean the number is computed by read-then-write instead of atomically.\nAction: read `invoice-number.ts`, reproduce under parallel runs, and fix it with an atomic approach plus a test."
+  },
+  {
+   "id": "code-s007-e039#1",
+   "response": "The trace says `InvoiceLineItems` called `.map` on something undefined at line 24, so `lineItems` was missing when it rendered. I can't tell from the trace alone why: it might be a payload that didn't include line items, or data not loaded yet.\nAction: read InvoiceLineItems.tsx and how InvoiceDetail gets its data, check what the api returns for the failing case, and add a guard plus a fix for the real source."
+  },
+  {
+   "id": "code-s107-e006#1",
+   "response": "Both pages need a check of what already exists. `/pricing` was already built in the marketing group with placeholder prices that marketing must confirm, and any public page must be in the `publicRoutes` matcher in `apps/web/middleware.ts`. `/settings/team` is for signed-in users, so it goes under `apps/web/app/(dashboard)/`, which gets the sidebar layout.\nAction: check the existing pricing page and the middleware entry, then build `/settings/team` under the dashboard group listing org members, after confirming how members are fetched."
+  },
+  {
+   "id": "code-s058-e007#1",
+   "response": "Forms in apps/web use react-hook-form with zodResolver, so I'll follow that pattern, as in `settings/org-form.tsx`. The zod schema will require company name and sender email (valid email format) and leave tax id optional.\nAction: read org-form.tsx, create the company profile form and schema, add the settings page, wire the submit to the existing api endpoint, and add tests."
+  },
+  {
+   "id": "code-s108-e027#1",
+   "response": "I'll grep apps/api and services/worker for `recieved` and fix the spelling in comments, logs and messages. If a hit is a response value or other wire format that clients might match on, that's an API change, so I'll flag it instead of changing it.\nAction: grep both directories, fix the safe cases, list the risky ones for you, and run the worker and api tests."
+  },
+  {
+   "id": "code-s007-e006#1",
+   "response": "Noted that `team=payments` is right for the exports bucket tags. For the trailmix double submit, disable the submit button while the request is in flight with `hx-disabled-elt=\"find button\"` on the form and add `hx-sync=\"this:drop\"` so a second click is dropped. For real protection also make the server idempotent, for example with a unique constraint, since a client-side fix can be bypassed.\nAction: find the add hike form template in trailmix, add those attributes, and check whether the view needs a duplicate guard."
+  },
+  {
+   "id": "code-s108-e032#1",
+   "response": "Leaving the `status: 'recieved'` value in apps/api/src/routes/v1/payments.ts as it is, and I'll note it as a possible API cleanup later. The worker fixes are in and the worker tests passed.\nAction: wait for the api test results and flag anything that fails."
+  },
+  {
+   "id": "code-s098-e007#1",
+   "response": "Before I write the guard I need to know the HTTP framework and major version, and rather than make you answer, I can read it from the api's package.json. The api tests (287) and the repo-wide typecheck both came back clean in the background.\nAction: check apps/api/package.json for the framework and version, then write the x-org-id guard in that framework's style, with problem+json 403s, registered on the org-scoped prefixes only."
+  },
+  {
+   "id": "code-s088-e021#1",
+   "response": "Glad that matched. The findings from the export search: there is only a client-side CSV button limited to the loaded page, no server-side export endpoint and no scheduled job, and the paid date depends on a paid_at column that hasn't shipped yet. Per the heads up, any export work stays out of #1192, in a separate PR.\nAction: if you want, I'll draft a short plan for a server-side export (all invoices for a period, voided included, fixed columns) on its own branch; say go and I'll start."
+  },
+  {
+   "id": "code-s020-e034#1",
+   "response": "You're welcome. The web unit suite and the web typecheck are both still running in the background, so I don't have results to report yet.\nAction: check for the results and post them as soon as they're in."
+  },
+  {
+   "id": "code-s036-e010#1",
+   "response": "I'll add `--since <date>` to `acme invoices export`, validate that it's `YYYY-MM-DD` so a typo fails fast with a clear message, and pass it as the `since` query param on each paginated request.\nAction: find the export command in packages/cli, add the option and validation, update the help text, add tests for valid and invalid dates, and run the CLI tests."
+  },
+  {
+   "id": "code-s080-e000#1",
+   "response": "I'll scaffold `acme invoices list` next to the clients command: it calls GET /v1/invoices, prints a table by default, and supports `--json` from the start per your rule, with plain objects and fixed keys, no colors and no table in that path.\nAction: read the clients command, add the invoices list command with table and --json output, register it, add tests for both modes, and run the CLI tests."
+  },
+  {
+   "id": "code-s056-e000#1",
+   "response": "Next.js passes the error to `global-error.tsx` with a `digest`, but a plain `Sentry.captureException(error)` doesn't automatically make it searchable, so I'll attach it as a tag. The request-id tagging idea (web sending x-request-id and tagging Sentry) was proposed earlier but not approved, so I won't add that without your OK.\nAction: read app/global-error.tsx, add the digest as a Sentry tag, add a test if the file has one, and ask whether you want the request-id change too."
+  },
+  {
+   "id": "code-s060-e021#1",
+   "response": "I'll install deps in `~/code/acme-platform` with the repo's package manager, using the lockfile as is, after checking the pinned Node version so the laptop runs the right one. If the seed hits ERR_REQUIRE_ESM there, the same fix applies: `\"type\": \"module\"` and `.js` extensions on imports, no `require()`.\nAction: check the lockfile and Node version, run the install in ~/code/acme-platform, and verify the seed package builds."
+  }
+ ]
+}
