@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s046-e041", "scores": [1, 1, 1, 3], "why": "'Yes please' answered the Thursday to-do question; R1-R3 wrongly post Wen's message. R4 adds to-dos and recalls Tulip Festival idea."},
+{"event": "life-s047-e006", "scores": [3, 3, 3, 3], "why": "All correctly state Ontario bans damage deposits; scuffs are wear and tear; LTB route."},
+{"event": "life-s047-e013", "scores": [3, 3, 3, 3], "why": "Light, warm replies fitting a tired user; all fine."},
+{"event": "life-s047-e025", "scores": [3, 3, 3, 3], "why": "All honestly check rink status and forecast rather than guess."},
+{"event": "life-s048-e006", "scores": [3, 3, 3, 3], "why": "ChessKid and Lichess are sensible ad-free picks; all verify listings."},
+{"event": "life-s050-e011", "scores": [2, 2, 2, 2], "why": "None flags the recurring Sunday 9:00 call with Anjali clashing with 9:00 pancakes; only generic conflict checks."},
+{"event": "life-s051-e000", "scores": [3, 2, 3, 2], "why": "R1/R3 give the 9/11 2002 shift and 17-game season; R2/R4 vaguer on cause."},
+{"event": "life-s051-e006", "scores": [3, 3, 3, 3], "why": "6.5-7 minutes, ice bath, overnight marinade; all correct."},
+{"event": "life-s060-e019", "scores": [3, 3, 2, 3], "why": "R3 skips confirming the 9:00 Slack scheduling; R4 usefully draws on Priya history, R1 notes Ontario licensing."},
+{"event": "life-s060-e022", "scores": [3, 2, 3, 3], "why": "All plan Priya note and Disney+ check; R2 contradicts itself on bank access and claims a cut-off message."},
+{"event": "life-s062-e003", "scores": [3, 3, 3, 3], "why": "Clean, non-crypto finance jokes in all."},
+{"event": "life-s063-e000", "scores": [3, 3, 3, 3], "why": "All weigh after-tax pay against ~70 min daily commute sensibly."},
+{"event": "life-s063-e007", "scores": [3, 3, 3, 3], "why": "Brief warm replies, deferring career day talk; all fine."},
+{"event": "life-s066-e016", "scores": [3, 2, 3, 3], "why": "R2 blocks on both URLs; others proceed or find the old URL themselves."},
+{"event": "life-s068-e014", "scores": [3, 3, 2, 2], "why": "R1/R2 recall winter market runs Sundays to Apr 26 at Jimmie Simpson; R3/R4 know nothing."}
+]}
