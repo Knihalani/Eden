@@ -1,5 +1,7 @@
 # R10 — Retrieval research: report (living document)
 
+**Headline (cycle 5):** a design that beats today's plugin, measured by its effect on the agent's replies. The hook picks up to 15 candidate memories with no model. A small model checks them off the hook. Each delivered memory carries its date ("as of Aug 30"). On fresh turns it improves replies by +0.11 (coding) and +0.13 (personal assistant) per turn on a 0–3 scale; today's plugin scores about 0. Where memory is needed it lifts replies by about +0.6, and where it isn't it does no measurable harm. The sample is still small: the 95% ranges include zero.
+
 **Status:** end of cycle 3 of an open-ended programme (`research/R10/BRIEF.md`). Every number below comes from `research/R10/LEDGER.md`, which says where it came from. The current state, the hypothesis portfolio and the graveyard are in `research/R10/STATE.md`.
 
 ## 1. The question
@@ -86,6 +88,9 @@ On realistic streams, lexical retrieval is far weaker than the pair fixtures sug
    - What it found was mostly recent project state (open branches, unpushed work, open PRs) that the planned labels never tagged.
    - So "stays quiet when nothing is needed" has been partly punishing correct behaviour on coding. The next step is labels checked by outcome: a memory counts as needed if adding it actually makes the reply better.
 11. **Even the strong model over-flags when it sees one turn at a time** (C4-E12), and a confidence cutoff tuned on the main set does not carry over to fresh, shorter prompts (C4-E11).
+
+12. **Dates on memories stop wrong memories from hurting** (C5-E6, C5-E7). Most damage from a wrong memory came from old state presented as current ("the branch is not pushed", "the repo uses yarn"). Showing each memory's date lets the agent treat it as history and check. That cut the cost of a wrong memory from −0.6 to −0.1 and made the off-hook checker clearly worth it.
+13. **A sleep-time bug:** the compiler could only mark a memory replaced within the same batch, so facts that changed later stayed live forever. A cross-batch pass fixes it (strongly on personal data; partly on coding data).
 
 ## 5. Open problems, ranked by size
 
