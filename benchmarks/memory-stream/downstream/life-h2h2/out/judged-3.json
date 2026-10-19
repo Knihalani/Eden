@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s046-e041",
+   "scores": [
+    2,
+    3,
+    1
+   ],
+   "why": "Record shows 2025-05-12 Tulip Festival query, 'maybe next year with Sam's parents'. R1 recalls it; R0 guesses it while hedging; R2 misses it."
+  },
+  {
+   "event": "life-s047-e006",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly state Ontario bars damage deposits, wear-and-tear rule, and LTB T1 route."
+  },
+  {
+   "event": "life-s047-e013",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Light, warm replies to a tired parent; none overreach."
+  },
+  {
+   "event": "life-s047-e025",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "No rink status known; all check city status and Saturday forecast after Leo's swim."
+  },
+  {
+   "event": "life-s048-e006",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "ChessKid/Lichess are sensible picks; R1 hedges without making a recommendation."
+  },
+  {
+   "event": "life-s050-e011",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All accept and add to family calendar; nothing on record conflicts with Sunday 9:00."
+  },
+  {
+   "event": "life-s051-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All accurately explain the 2002 shift and the 17-game season locking in February."
+  },
+  {
+   "event": "life-s051-e006",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Correct jammy-egg timing and overnight marinade advice from all three."
+  },
+  {
+   "event": "life-s060-e019",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "Priya is single per history; R0 and R1 list losing a partner. R2's questions fit her without stale details."
+  },
+  {
+   "event": "life-s060-e022",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R0 ignores 'yes pls, I'll forward it' for the Priya note; R1 and R2 handle both requests."
+  }
+ ]
+}
