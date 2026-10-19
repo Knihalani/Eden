@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s083-e008",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "R0 flags billing-code review and pnpm-lock for frozen install; others correct but miss those rules."
+  },
+  {
+   "event": "code-s085-e014",
+   "scores": [
+    2,
+    1,
+    1
+   ],
+   "why": "History shows ALB via AWS Load Balancer Controller; R0 uses it (ACM hedged); R1/R2 claim ignorance."
+  },
+  {
+   "event": "code-s021-e018",
+   "scores": [
+    1,
+    3,
+    3
+   ],
+   "why": "Worker already autoscales with KEDA on queue length; R1/R2 use it, R0 unaware."
+  },
+  {
+   "event": "code-s103-e007",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All reasonable; R0 ties to shadcn components."
+  },
+  {
+   "event": "code-s083-e005",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "All revert without stash; R2 asserts uncommitted state without evidence."
+  },
+  {
+   "event": "code-s035-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correct remotePatterns plans."
+  },
+  {
+   "event": "code-s035-e006",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "Build check already confirmed /_next/image proxying; R1 hedges needlessly."
+  },
+  {
+   "event": "code-s061-e012",
+   "scores": [
+    3,
+    1,
+    3
+   ],
+   "why": "Repo uses yarn 1 per facts; R1 wrongly targets pnpm-lock.yaml."
+  },
+  {
+   "event": "code-s066-e035",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All fine wrap-ups noting infra review."
+  },
+  {
+   "event": "code-s041-e000",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "formatMoney takes cents; R1 uses that to trace upstream rounding, others generic."
+  }
+ ]
+}
