@@ -123,7 +123,10 @@ Families differ in mechanism. Every kill criterion was written before its run.
 - **Its quality depends on how the question is posed** (C10-E2): with precise criteria and the candidate list in
   view (`list`, threshold 0.7) it is within 0.03 of the calibrated haiku checker on both dev worlds and on life-rt1,
   and short by 0.0517 recall on code-rt1 (post hoc; the pre-registered pick, decomp 0.7, failed). Base Jev was
-  weaker (C10-E1). Next: a downstream head-to-head of Jev list 0.7.
+  weaker (C10-E1).
+- **On the outcome measure Jev matches the haiku checker** (C10-E3, one run): jev − verify −0.0117 (code), −0.0262
+  (life); jev − eden +0.1017 [−0.0009, +0.2] and +0.0873 [−0.0073, +0.1872], just short of the rule's CI bar.
+  Next: a second independent run.
 - **No NIM model was usable** (C10-E1): three 404, one connection failure, Nemotron Lightning p50 14.3 s with
   unparseable replies.
 

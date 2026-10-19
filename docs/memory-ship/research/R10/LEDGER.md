@@ -1649,3 +1649,36 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
     least one, and > +0.05 on both.
   - **Jev matches the haiku checker** if jev − verify ≥ −0.03 on both worlds (point estimates; one run).
   - Otherwise report both differences as measured. One run; the C6/C7 two-run standard is not met by this alone.
+
+## C10-E3 · 2026-10-19 · Jev on the outcome measure: result
+- **Run:** 145 code and 169 life turns, four conditions each, one new responder run (sonnet, per-turn split) and blind
+  opus judges with history evidence; all judged. Jev's packet fired on 56 code and 59 life turns.
+- **Judging incident:** several code judges shared a scratchpad and overwrote each other's helper scripts; one
+  reported scoring some cases on shortened text. All code judgments from judges that reported a collision (files 0–5)
+  were set aside (`out/collided-judged-*.json`, kept for comparison) and re-judged by judges told to use private
+  temp directories. The set-aside and re-judged score lists are identical on 9, 8, 12 and 10 of 15 cases in files
+  0, 1, 4, 5, about what two independent judges give. Some judges read the long, near-identical `reference_facts`
+  list as a diff between cases rather than verbatim (they said so); every other field was read in full.
+- **Per group (condition − none):**
+
+  | World | Group | n | Eden | Verify (haiku) | Jev |
+  |---|---|---|---|---|---|
+  | code | plan-need | 25 | −0.04 | +0.48 | +0.56 |
+  | code | labeler-only | 30 | −0.1 | 0.0 | 0.0 |
+  | code | no-need | 90 | −0.033 | 0.0 | −0.033 |
+  | life | plan-need | 49 | −0.041 | +0.367 | +0.388 |
+  | life | labeler-only | 30 | +0.033 | +0.067 | +0.2 |
+  | life | no-need | 90 | +0.078 | +0.156 | +0.067 |
+
+- **Per-turn utility:** code eden −0.0457, verify +0.0677, jev +0.056; life eden +0.052, verify +0.1655,
+  jev +0.1393.
+  - **jev − eden:** code +0.1017 [−0.0009, +0.2]; life +0.0873 [−0.0073, +0.1872].
+  - **jev − verify:** code −0.0117 [−0.1125, +0.0877]; life −0.0262 [−0.1096, +0.0604].
+- **Verdict, by the rule:**
+  - **Jev matches the haiku checker** (jev − verify ≥ −0.03 on both worlds: −0.0117, −0.0262).
+  - **"Jev beats today's plugin" is not met as written:** both differences are above +0.05, but neither CI lower bound
+    is above 0 (−0.0009, −0.0073). One run; the C6/C7 standard (two runs) is not met by this alone.
+- **In this same run, haiku verify − eden** is code +0.1134 and life +0.1135, close to its C6/C7 values, so this run
+  is not an unusually weak one for the checker.
+- **What this says:** Jev, posed well, gives the agent's replies about the same lift as the haiku checker, at about a
+  tenth of the time budget. A second independent run (as C6-E2, C7-E3) is the way to firm "beats today's plugin".

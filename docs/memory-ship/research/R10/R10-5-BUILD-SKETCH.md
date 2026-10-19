@@ -76,7 +76,8 @@ model, chosen by measurement (LEDGER C10-E1). The decision points as they were p
      security review before shipping. **Measured (C10-E1/E2):** p50 0.21–0.27 s end to end from the container,
      about ten times inside the budget. With precise criteria and the candidate list in the state (threshold 0.7)
      its picks are close to the calibrated haiku checker (short by about 0.05 recall on code-rt1, ahead on
-     life-rt1; post hoc). Its effect on replies is not measured yet.
+     life-rt1; post hoc). **On replies (C10-E3, one run):** it matches the haiku checker (−0.0117 code,
+     −0.0262 life per turn) and beats today's plugin by +0.1017 / +0.0873, with CIs just touching 0.
    - **An NVIDIA NIM model:** none usable (C10-E1): three of the five candidates return 404, one failed to connect,
      and Nemotron 3.5 Lightning ran at p50 14.3 s with unparseable replies.
      - The repo records hosted p50 1–20 s and p95 40–70 s (EXECUTION.md). Against C8-E4's timings that would reach
