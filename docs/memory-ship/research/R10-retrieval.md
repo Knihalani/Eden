@@ -78,9 +78,15 @@ On realistic streams, lexical retrieval is far weaker than the pair fixtures sug
    - The first measurement checked 50 turns per call and looked much quieter (silence 0.66). The model was comparing turns with each other, which a real hook never can. That number is retracted. Calibration is the open problem (C4-E11 is testing a fix).
    - Two of the critic's alternatives are dead: showing the small model the whole store instead of a shortlist (no better), and checking the agent's draft reply before the user sees it (it flags as often when nothing is needed as when something is).
 
+10. **The test's labels undercount what coding users need** (cycle 4, C4-E13).
+   - On turns labelled "no memory needed" where the strong model still picked memories, those picks improved the reply about half the time on coding (47% helped, 7% hurt) and about a quarter of the time on the personal assistant (27% helped, 13% hurt).
+   - What it found was mostly recent project state (open branches, unpushed work, open PRs) that the planned labels never tagged.
+   - So "stays quiet when nothing is needed" has been partly punishing correct behaviour on coding. The next step is labels checked by outcome: a memory counts as needed if adding it actually makes the reply better.
+11. **Even the strong model over-flags when it sees one turn at a time** (C4-E12), and a confidence cutoff tuned on the main set does not carry over to fresh, shorter prompts (C4-E11).
+
 ## 5. Open problems, ranked by size
 
-1. **Calibrating the off-hook checker.** One turn at a time, it fires on more than half of the coding turns that need nothing.
+1. **Knowing what counts as needed.** The labels miss real needs on coding (C4-E13), so tuning for quietness is unsafe until there are outcome-checked labels. Calibrating the off-hook checker comes after that.
 2. **Triggers in the personal world** (calendar, location, messages). No system is quiet on routine triggers; trigger silence is 0.0–0.36 everywhere, on few negatives.
 3. **The gap to a strong model.** opus with the same view finds +0.14 (code) and +0.21 (life) more of what is needed than haiku. Its ceiling numbers were also batched, so they need a one-at-a-time re-run.
 4. **Benchmark realism.** There is no sealed holdout yet and no non-Claude author; LongMemEval is blocked by the network policy.
