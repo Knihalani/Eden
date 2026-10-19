@@ -1,0 +1,114 @@
+{
+ "batch": "a06",
+ "model": "sonnet (claude-code subagent)",
+ "cases": [
+  {
+   "event": "life-s152-e004",
+   "predictions": [
+    {
+     "row": "life-sleep-b12:m0016",
+     "if": [
+      "explain",
+      "how does",
+      "why",
+      "what's the difference",
+      "random q"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s155-e013",
+   "predictions": [
+    {
+     "row": "life-sleep-b00:m0005",
+     "if": [
+      "aisha",
+      "rollback",
+      "ask",
+      "slack",
+      "message"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0057",
+     "if": [
+      "diego",
+      "banner",
+      "figma",
+      "copy"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s155-e022",
+   "predictions": [
+    {
+     "row": "life-sleep-b00:m0043",
+     "if": [
+      "olivia",
+      "qbr",
+      "deck",
+      "slides",
+      "sales"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b11:m0019",
+     "if": [
+      "ga",
+      "launch date",
+      "date",
+      "target"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s156-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s156-e004",
+   "predictions": [
+    {
+     "row": "life-sleep-b03:m0010",
+     "if": [
+      "costume",
+      "going as",
+      "dinosaur",
+      "lego"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b09:m0013",
+     "if": [
+      "candy",
+      "trick",
+      "treat",
+      "allerg",
+      "nut"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0017",
+     "if": [
+      "hannah",
+      "walking with",
+      "jun",
+      "ellie"
+     ],
+     "always": false
+    }
+   ]
+  }
+ ]
+}
