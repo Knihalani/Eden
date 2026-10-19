@@ -8,6 +8,7 @@ with no tool call gets no packet (the delivery point never comes); score.py's `v
     python3 benchmarks/memory-stream/verify.py prep --world code [--n 15]
     score.py --world code --store sleep --strict --sample judge --systems "verify"            (deferred, honest)
     score.py --world code --store sleep --strict --sample judge --systems "verify:ideal=1"    (as if at Submit)
+    verify.py prep --world code --per 1 --tag seq; score.py ... --systems "verify:tag=seq"    (leak-free re-run)
 
 The verifier is haiku, a different model family from the authors (opus/default) and the labeler (sonnet). It sees
 the turn, the recent context and the candidates only, never the labels.
@@ -18,7 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 
-def prep(world, n, per):
+def prep(world, n, per, tag=""):
     import score, sleep, methods, judge
     stream, items = score.load_stream(world)
     cov = score.Coverage(items)
@@ -29,10 +30,12 @@ def prep(world, n, per):
     ids = []
     for p in sorted(glob.glob(os.path.join(HERE, "judge", f"{world}-sleep", "in", "*.json"))):
         ids += [c["event"] for c in json.load(open(p))["cases"]]
-    d = os.path.join(HERE, "verify", world)
+    sub = f"{world}-{tag}" if tag else world
+    d = os.path.join(HERE, "verify", sub)
     os.makedirs(os.path.join(d, "in"), exist_ok=True)
     os.makedirs(os.path.join(d, "out"), exist_ok=True)
     cases = []
+    ids.sort(key=lambda i: evs[i]["_order"])
     for eid in ids:
         e = evs[eid]
         q = dict(e, text_all=methods.strip_paste(e["text_all"]))
@@ -43,8 +46,8 @@ def prep(world, n, per):
         cases.append({"event": eid, "type": e["t"], "text": e["text_all"][:2000], "recent": judge.context(stream, eid, 4),
                       "candidates": [{"id": i, "text": lex.by_id[i]["text"]} for i in cand]})
     for b in range(0, len(cases), per):
-        name = f"v{b // per:02d}"
-        json.dump({"batch": name, "cases": cases[b:b + per], "output": f"benchmarks/memory-stream/verify/{world}/out/{name}.json"},
+        name = f"v{b // per:03d}" if per < 10 else f"v{b // per:02d}"
+        json.dump({"batch": name, "cases": cases[b:b + per], "output": f"benchmarks/memory-stream/verify/{sub}/out/{name}.json"},
                   open(os.path.join(d, "in", f"{name}.json"), "w"), indent=1, ensure_ascii=False)
         print(name, len(cases[b:b + per]))
     hit = 0
@@ -59,9 +62,9 @@ def prep(world, n, per):
     print("candidate recall ceiling (plan labels):", round(hit / max(1, tot), 4), "over", tot, "need events")
 
 
-def picks(world):
+def picks(world, tag=""):
     out = {}
-    for p in glob.glob(os.path.join(HERE, "verify", world, "out", "*.json")):
+    for p in glob.glob(os.path.join(HERE, "verify", f"{world}-{tag}" if tag else world, "out", "*.json")):
         for c in json.load(open(p))["cases"]:
             out[c["event"]] = c.get("needed", [])
     return out
@@ -73,5 +76,6 @@ if __name__ == "__main__":
     ap.add_argument("--world", required=True)
     ap.add_argument("--n", type=int, default=15)
     ap.add_argument("--per", type=int, default=50)
+    ap.add_argument("--tag", default="", help="writes verify/<world>-<tag>/ (e.g. seq: one case per file, stream order)")
     a = ap.parse_args()
-    prep(a.world, a.n, a.per)
+    prep(a.world, a.n, a.per, a.tag)

@@ -410,8 +410,8 @@ def main():
                 r["covers"] = {r["item"]}
         if name.startswith("verify"):
             import verify, methods as M
-            vp = verify.picks(a.world)
             _, kw = M.params(name)
+            vp = verify.picks(a.world, kw.get("tag", ""))
             byid = {r["id"]: r for r in rows}
             for r in rows:
                 r.setdefault("covers", cov.covers(r["text"]))
