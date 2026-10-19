@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s073-e000",
+   "scores": [
+    2,
+    1,
+    1
+   ],
+   "why": "All miss the every-table org_id rule; R0 at least knows schema.ts path and the db:generate script; others generic."
+  },
+  {
+   "event": "code-s075-e000",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "R1 knows Biome but invents \"Marco branches off your branches\" rationale; R0/R2 correct but generic about formatter."
+  },
+  {
+   "event": "code-s076-e000",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R1 adds relevant case-sensitive import gotcha from history; R2 covers mocks/tests; R0 fine but thinner."
+  },
+  {
+   "event": "code-s076-e017",
+   "scores": [
+    1,
+    3,
+    3
+   ],
+   "why": "R0 fabricates earlier invoices recieve typo note; R1 and R2 correct and safe."
+  },
+  {
+   "event": "code-s077-e005",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R2 and R1 handle lockfile with pnpm; R0 drags in irrelevant ERR_REQUIRE_ESM and dev script talk."
+  },
+  {
+   "event": "code-s077-e011",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "All explain correctly; R0 hedges on install command (should know pnpm) when tacking on lockfile reminder."
+  },
+  {
+   "event": "code-s080-e000",
+   "scores": [
+    2,
+    1,
+    1
+   ],
+   "why": "History shows invoices list with --json already exists; none notice; R0 at least knows commander layout and docs rule."
+  },
+  {
+   "event": "code-s080-e024",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "R1 handles frozen lockfile and cli-table3; R0 sensible on open PR; R2 generic, no commit plan."
+  },
+  {
+   "event": "code-s081-e007",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "All generic; none recall Testcontainers plus OrbStack socket switch as likely beforeAll timeout cause."
+  },
+  {
+   "event": "code-s082-e000",
+   "scores": [
+    1,
+    3,
+    2
+   ],
+   "why": "R0 states stale Express 4 (API is Fastify 5 now); R1 solid cross-cutting plan; R2 hedges it has not seen auth setup."
+  }
+ ]
+}
