@@ -148,12 +148,13 @@ Each item enters the build only when its trigger condition is met on logged data
 
 Raised by the R10 research programme (`research/R10-retrieval.md`; evidence in `research/R10/LEDGER.md`). Each is a proposal with measured grounds. None changes behaviour until the user accepts it and a slice ships it.
 
-- **R10-1 · A pull channel next to push (A4 §5).**
-  - *Evidence:* on StreamBench, no hook-side signal separates need turns from no-need turns above AUC ≈ 0.70. Five mechanisms were tried (C2–C3).
-  - The host model decides well when to look: it calls on 93% of code need turns. On the same events, it has 2.5× the precision (code) and 2.1× (life), with +0.18 and +0.26 silence (C3-E1).
-  - *Proposal:* hosts that support tools get a memory index and a `recall` tool. The hook keeps pushing only high-precision items (rules on actions, corrections, trigger agendas).
-  - *Cost:* an index of about 100 tokens in every turn, plus one tool step on about a third of human turns.
-  - D15 (no model on the hook) is unchanged. A4's "Eden decides what the model sees" becomes "Eden decides what is pushed; the model decides what to pull".
+- **R10-1 · Push stays the core; an optional pull channel is a secondary extra (A4 §5).** Revised 2026-10-19 after the user's review: Eden's edge is surfacing what the agent does not know to ask.
+  - *Evidence:* when the agent decides when to look (agent-pull), its proactive recall is only 0.22–0.23, and its trigger recall 0.19. A strong model with the whole store gets 0.46–0.52 and 0.50 (C2-E5, E8, C3-E1). The agent asks only about what it already suspects exists.
+  - On explicit needs it is precise: 2–2.5× the hook's precision on the same events.
+  - *Proposal:*
+    - Eden keeps deciding, unasked, what the agent sees: proactive needs, triggers, rules on actions, corrections.
+    - The hard thinking moves into sleep time (P8.8, and R10's anticipation and per-user need models), so the hook stays fast and model-free (D15).
+    - Hosts that support tools may also get a memory index and a `recall` tool, for explicit "what was that again?" needs.
 - **R10-2 · StreamBench is the primary retrieval benchmark.**
   - R1, R8 and LifeBench pairs are secondary arms. No slice may claim a retrieval gain on them alone.
   - *Evidence:* pair fixtures overstated lexical recall (0.47–0.56 on pairs vs 0.21 on streams at a realistic silence; C1-E2).
