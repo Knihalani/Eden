@@ -106,7 +106,7 @@ Families differ in mechanism. Every kill criterion was written before its run.
 ## Cycle 4 findings (LEDGER C4-E1…E13)
 
 - Batching flatters model verifiers: one-case-per-call F22 loses 0.24 silence on code (C4-E9). Every model-in-the-loop number must be one case per call.
-- The downstream harness had two bugs: responder order swaps, and a judge blind to episodic history. With both fixed (C4-E10), memory improves the outcome on 77% of plan-need turns in both worlds (+0.8 code, +0.9 life). Wrong packets showed no measured harm (vote − none = 0.0 on no-need), so C3-E4's harm claim is withdrawn.
+- The downstream harness had two bugs: responder order swaps, and a judge blind to episodic history. A third (two conditions of one turn in one responder prompt) was found in review; the clean numbers are in C5-E1 and supersede C4-E10.
 - Even opus fed one case at a time loses 0.14–0.21 silence (C4-E12). The "judge ceiling" rows overstate silence.
 - **The plan labels miss real needs on code, not on life** (C4-E13, confirmed by the clean re-run C5-E1: code +0.467, 60% helped; life −0.033, the judge over-fires). Where the judge fired on plan-no-need turns, its picks raised the outcome by +0.4 (47% helped, 7% hurt). On life the result is mixed (+0.13; 27% helped, 13% hurt).
 - A calibrated verifier (causal contrast plus probabilities) is tunable on dev but its threshold does not transfer to fresh short prompts (C4-E11).
