@@ -10,3 +10,4 @@ agentpull/*/in/
 rewrite/*/in/
 downstream/*/in/
 __pycache__/
+anticipate/*/in/

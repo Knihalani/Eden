@@ -32,6 +32,8 @@ def prep(world, per):
 
 
 def exemplars(world):
+    import re
+    world = re.sub(r"-(short|rt\d+)$", "", world)
     out = {}
     for p in glob.glob(os.path.join(HERE, "selfplay", world, "out", "*.json")):
         out.update(json.load(open(p)).get("rows", {}))

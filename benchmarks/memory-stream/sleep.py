@@ -11,7 +11,7 @@ or dropped row is invalid from the end of the session that superseded or dropped
 Batches are compiled in parallel, each with no view of the others. Duplicates across batches stay in the store,
 as a write path without global dedup would leave them. A supersede can only name a row of its own batch.
 """
-import argparse, glob, json, os
+import argparse, glob, json, os, re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 KEEP = ("t", "k", "text", "name", "input", "output", "task", "report", "from", "summary")
@@ -46,6 +46,7 @@ def rows(stream, world, tag="out", strict=False):
             e.setdefault("_order", order)
         end[s["id"]] = max((e["_order"] for e in s["events"]), default=order)
     out = {}
+    world = re.sub(r"-(short|rt\d+)$", "", world)
     for p in sorted(glob.glob(os.path.join(HERE, "sleep", world, tag, "*.json"))):
         d = json.load(open(p))
         last = max((end.get(s["id"], 0) for s in d["sessions"]), default=0)

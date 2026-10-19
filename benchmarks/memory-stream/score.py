@@ -119,7 +119,7 @@ def scored_events(stream):
             lab = e["labels"]
             order += 1
             e["_order"] = order
-            e["_split"] = split_of(si)
+            e["_split"] = "fresh" if "-rt" in s["id"] else split_of(si)
             if e["t"] == "compact":
                 window = set(lab["states"])
                 continue
@@ -335,7 +335,7 @@ def main():
     ap.add_argument("--run")
     ap.add_argument("--systems", default="eden lex oracle-need")
     ap.add_argument("--store", default="write")
-    ap.add_argument("--split", default="dev")
+    ap.add_argument("--split", default="dev", help="dev | test | fresh (red-team sessions) | all")
     ap.add_argument("--sleep-tag", default="out")
     ap.add_argument("--strict", action="store_true", help="leak-free sleep store: rows visible after their batch")
     ap.add_argument("--sample", choices=["all", "judge"], default="all",
@@ -389,6 +389,32 @@ def main():
         for r in rows:
             if "item" in r:
                 r["covers"] = {r["item"]}
+        if name.startswith("antic"):
+            import anticipate, methods as M
+            preds = anticipate.predictions(a.world)
+            _, kw = M.params(name)
+            byid = {r["id"]: r for r in rows}
+            for r in rows:
+                r.setdefault("covers", cov.covers(r["text"]))
+            vis = lambda r, e: r["t"] < clock(e) and (r.get("invalid_at") is None or r["invalid_at"] > clock(e))
+            aev = [e for e in events if e["id"] in preds]
+            pk = {}
+            for e in aev:
+                if e["t"] in ("notification", "peer") and not kw.get("nh"):
+                    pk[e["id"]] = []
+                    continue
+                keep = []
+                for p in preds[e["id"]]:
+                    r = byid.get(p.get("row"))
+                    if not r or not vis(r, e) or r["id"] in keep:
+                        continue
+                    if kw.get("mode") == "all" or p.get("always") or anticipate.matches(e["text_all"], p.get("if")):
+                        keep.append(r["id"])
+                pk[e["id"]] = [(byid[i]["text"], byid[i]["covers"]) for i in keep[: int(kw.get("k", 4))]]
+            results[f"{name}@{a.store}"] = score(aev, pk, cov, items, stream)
+            if a.ci:
+                results[f"{name}@{a.store}"]["ci95"] = bootstrap(aev, pk, cov, items, stream)
+            continue
         if name.startswith("pull"):
             import agentpull, methods as M
             qs = agentpull.calls(a.world)
