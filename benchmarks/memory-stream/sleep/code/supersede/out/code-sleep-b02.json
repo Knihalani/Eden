@@ -1,0 +1,36 @@
+{
+ "batch": "code-sleep-b02",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "code-sleep-b00:m0010",
+   "new": "code-sleep-b02:m0002",
+   "why": "Dates now shown in browser timezone, not org timezone"
+  },
+  {
+   "old": "code-sleep-b00:m0044",
+   "new": "code-sleep-b02:m0003",
+   "why": "lineItems depend on expand param, not draft status"
+  },
+  {
+   "old": "code-sleep-b00:m0026",
+   "new": "code-sleep-b02:m0004",
+   "why": "Node moved from 18 to 20.11"
+  },
+  {
+   "old": "code-sleep-b01:m0031",
+   "new": "code-sleep-b02:m0004",
+   "why": "Node version now pinned in .nvmrc and engines"
+  },
+  {
+   "old": "code-sleep-b01:m0029",
+   "new": "code-sleep-b02:m0013",
+   "why": "Pulumi removed; infra back to Terraform"
+  },
+  {
+   "old": "code-sleep-b00:m0041",
+   "new": "code-sleep-b02:m0013",
+   "why": "Exports bucket now in terraform file, 90-day expiry"
+  }
+ ]
+}

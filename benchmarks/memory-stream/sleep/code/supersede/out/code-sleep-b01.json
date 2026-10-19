@@ -1,0 +1,11 @@
+{
+ "batch": "code-sleep-b01",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "code-sleep-b00:m0031",
+   "new": "code-sleep-b01:m0020",
+   "why": "CODEOWNERS now has packages/cli owned by backend"
+  }
+ ]
+}

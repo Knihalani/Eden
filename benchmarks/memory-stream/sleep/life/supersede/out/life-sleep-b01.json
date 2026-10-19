@@ -1,0 +1,41 @@
+{
+ "batch": "life-sleep-b01",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "life-sleep-b00:m0052",
+   "new": "life-sleep-b01:m0004",
+   "why": "Booking cutoff moved from 17:00 to 16:30"
+  },
+  {
+   "old": "life-sleep-b00:m0009",
+   "new": "life-sleep-b01:m0005",
+   "why": "Spanish lesson moved from Tuesday 19:00 to Thursday"
+  },
+  {
+   "old": "life-sleep-b00:m0084",
+   "new": "life-sleep-b01:m0001",
+   "why": "Leo birthday is July 17, not October 21"
+  },
+  {
+   "old": "life-sleep-b00:m0010",
+   "new": "life-sleep-b01:m0001",
+   "why": "Leo born July 2019, not turning 7 this fall"
+  },
+  {
+   "old": "life-sleep-b00:m0022",
+   "new": "life-sleep-b01:m0030",
+   "why": "Cabinet install date moved to delivery Thu 16 Oct"
+  },
+  {
+   "old": "life-sleep-b00:m0033",
+   "new": "life-sleep-b01:m0031",
+   "why": "Thanksgiving spent in Ottawa, Vancouver trip not happening"
+  },
+  {
+   "old": "life-sleep-b00:m0078",
+   "new": "life-sleep-b01:m0031",
+   "why": "Thanksgiving in Ottawa; Vancouver fare watch moot"
+  }
+ ]
+}

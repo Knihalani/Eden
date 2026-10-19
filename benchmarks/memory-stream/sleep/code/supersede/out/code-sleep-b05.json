@@ -1,0 +1,36 @@
+{
+ "batch": "code-sleep-b05",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "code-sleep-b00:m0018",
+   "new": "code-sleep-b05:m0002",
+   "why": "Worker moved from RabbitMQ to BullMQ on Redis"
+  },
+  {
+   "old": "code-sleep-b02:m0020",
+   "new": "code-sleep-b05:m0016",
+   "why": "Auth moved from Auth0 to Clerk"
+  },
+  {
+   "old": "code-sleep-b00:m0034",
+   "new": "code-sleep-b05:m0018",
+   "why": "Repo uses pnpm, not yarn"
+  },
+  {
+   "old": "code-sleep-b02:m0017",
+   "new": "code-sleep-b05:m0025",
+   "why": "Web app is Next.js 15 App Router, not pages"
+  },
+  {
+   "old": "code-sleep-b00:m0006",
+   "new": "code-sleep-b05:m0028",
+   "why": "API is Fastify, not Express 4"
+  },
+  {
+   "old": "code-sleep-b03:m0013",
+   "new": "code-sleep-b05:m0020",
+   "why": "Invoice number format changed to INV-000123"
+  }
+ ]
+}
