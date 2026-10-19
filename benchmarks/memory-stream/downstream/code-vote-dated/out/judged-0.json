@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s001-e020",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both read the build config rather than guess; build details not yet known."
+  },
+  {
+   "event": "code-s001-e037",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both reasonable plans to compare docs against repo."
+  },
+  {
+   "event": "code-s002-e008",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both acknowledge rule and Turborepo dev, plan git log check."
+  },
+  {
+   "event": "code-s003-e015",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correct on structuredClone vs JSON and Node 18 availability."
+  },
+  {
+   "event": "code-s003-e021",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither recalls the cli-invoices-export GrowthBook flag gate that would block the run."
+  },
+  {
+   "event": "code-s006-e007",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both commit the four files and debounce on a separate branch."
+  },
+  {
+   "event": "code-s007-e006",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give correct htmx fix with server-side backstop."
+  },
+  {
+   "event": "code-s007-e019",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both reasonable empty-state plans."
+  },
+  {
+   "event": "code-s007-e025",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "R0 covers bucket, pagination, empty state; R1 omits uncommitted bucket work and adds irrelevant PR. Both miss earlier lint commit/debounce."
+  },
+  {
+   "event": "code-s007-e027",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correct retry plan for apiGet."
+  },
+  {
+   "event": "code-s007-e036",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correct useLayoutEffect explanations."
+  },
+  {
+   "event": "code-s007-e039",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly diagnose undefined list and plan to trace source."
+  },
+  {
+   "event": "code-s008-e009",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both plan from/to tests, coverage check, bullet summary."
+  },
+  {
+   "event": "code-s010-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both sound plans: expires_in deadline, interval, better messages, keytar untouched."
+  },
+  {
+   "event": "code-s011-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both respect migration/history rules; neither links OOM to recent Redis rate-limiter change. R1 miscounts items."
+  }
+ ]
+}
