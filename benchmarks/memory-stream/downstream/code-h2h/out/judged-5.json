@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s082-e052",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All accurately summarize the session work and the leftover version.ts default export."
+  },
+  {
+   "event": "code-s083-e017",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All refactor safely, keep billing change uncommitted for review and separate from raw-body change."
+  },
+  {
+   "event": "code-s086-e000",
+   "scores": [
+    3,
+    1,
+    1
+   ],
+   "why": "R0 knows the existing RDS reader endpoint and Tailscale access path; R1/R2 miss both and hedge on provisioning."
+  },
+  {
+   "event": "code-s088-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give correct revealed/afterend htmx pattern; R2 ties to existing HX-Request partial pattern."
+  },
+  {
+   "event": "code-s088-e008",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R1 flags tsconfig setting change as real cause; R2 names Biome useImportType; R0 vague about lint tool."
+  },
+  {
+   "event": "code-s088-e021",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All acknowledge appropriately and respect keep-out-of-#1192 request."
+  },
+  {
+   "event": "code-s092-e000",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "R0 respects Lena owning messages files and reuses InvoicesEmptyState; R1/R2 would edit strings blindly."
+  },
+  {
+   "event": "code-s093-e000",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "R2 routes new strings through next-intl in en/fr/es per history; R0/R1 correct but generic."
+  },
+  {
+   "event": "code-s097-e000",
+   "scores": [
+    3,
+    2,
+    1
+   ],
+   "why": "R0 knows kubeconfig command and PagerDuty routing gap; R1 vague on who is paged; R2 misapplies API probe note to worker."
+  },
+  {
+   "event": "code-s098-e007",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "All plan to look up framework though API is known Fastify 5; acceptable but should know."
+  }
+ ]
+}
