@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s136-e017",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both close the loop correctly; reminder stands, schedule lookup pending."
+  },
+  {
+   "event": "life-s136-e021",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give accurate two-line TFSA vs RRSP summaries."
+  },
+  {
+   "event": "life-s136-e034",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss known Mumbai trip dates (late March, dry season); defer instead of answering; afternoon in Mumbai, call fine."
+  },
+  {
+   "event": "life-s137-e018",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both fine; first reflects and keeps it quiet, second jumps to next week's deadline."
+  },
+  {
+   "event": "life-s138-e007",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "First ignores known December weather averages; second gives weather but adds Fahrenheit against Celsius-only preference."
+  },
+  {
+   "event": "life-s140-e029",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Both accurate; first is long and asks Leo's bedtime, which is known (7:45)."
+  },
+  {
+   "event": "life-s140-e033",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Both reasonable; first drags in stale April budget figure, distracting."
+  },
+  {
+   "event": "life-s140-e044",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly look up tonight's game time."
+  },
+  {
+   "event": "life-s140-e051",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Both acknowledge venting and plan day trip; first adds unrelated invoice nag mid-vent."
+  },
+  {
+   "event": "life-s141-e017",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Second uses DELE date but claims not to know Thursday class; first knows nothing, misses DELE and recurring mistakes."
+  },
+  {
+   "event": "life-s141-e032",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly query Linear for titles and status."
+  },
+  {
+   "event": "life-s145-e020",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both give correct floor advice; second adds an unrequested shopping-list task while she wants to talk."
+  },
+  {
+   "event": "life-s148-e012",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss the Thanksgiving Ottawa drive Saturday morning; second also cites stale 7:00 run."
+  },
+  {
+   "event": "life-s148-e018",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "First counts correctly (23 business days, Thanksgiving excluded); second defers without computing."
+  },
+  {
+   "event": "life-s150-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "First queries live; second leads with stale August data and conflates GA blockers with blocked tickets."
+  }
+ ]
+}
