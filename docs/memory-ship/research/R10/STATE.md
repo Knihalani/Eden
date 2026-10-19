@@ -113,13 +113,13 @@ Families differ in mechanism. Every kill criterion was written before its run.
 ## Cycle 8 findings (LEDGER C8-…)
 
 - **Deferred delivery misses turns with no tool call** (C8-E1): 11 of 49 life plan-need turns ("remind me what I
-  said…") get no packet for that reason alone; the ceiling of fixing it is about +0.015 per turn on life.
+  said…") get no packet for that reason alone; a rough ceiling for fixing it is about +0.022 per turn on life.
 - **The NIM re-measure is one command away** (C8-T1, `verify_nim.py`); it waits on an `NVIDIA_API_KEY`.
 - **The in-turn checker has about 3 seconds** (C8-E4, 12 real headless sessions): first tool call at p50 2.92 s;
-  a 40 s checker would reach no turn, even at the turn's last tool call. A hosted NIM model at D37's recorded
-  40–70 s p95 cannot serve in the turn.
+  a 40 s checker would reach no turn, even at the turn's last tool call. Hosted NIM (recorded p50 1–20 s, p95
+  40–70 s) would reach some turns at best; its real latency waits on the re-measure.
 - **The measured small-model checker takes 5.6 s at p50 through the CLI** (C8-E6), mostly thinking tokens: about
-  twice the budget. A short-reply, no-thinking variant is the next thing to measure (latency and quality).
+  twice the budget; a fit of the 20 calls puts a fixed ~2.4 s under every call, so even a short reply may not fit.
 
 ## Cycle 7 findings (LEDGER C7-E1…)
 
