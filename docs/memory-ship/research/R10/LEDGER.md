@@ -560,3 +560,9 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   1. Fires on > 12% of no-need turns (more than 1 of 15).
   2. Mean revised − none over the 30 plan turns < 0.48 (half of C3-E4's oracle gain, +0.967).
   3. Life direct recall < 0.45. This needs a life downstream sample, so it is not run yet.
+
+## C4-E9 · 2026-10-19 · F22 re-run leak-free (pre-registration)
+- **Setup:** `verify.py prep --per 1 --tag seq`. It uses the same candidates as C4-E5 (same ceilings: code 0.597, life 0.3778), with one case per file in stream order. The haiku verifier reads each file only when it processes it. Also run on `code-rt1` and `life-rt1` with `--fresh` (all fresh human and trigger events; ceilings 0.5437 and 0.3519).
+- **Rule, set before scoring:**
+  - If seq recall or silence is more than 0.05 worse than C4-E5's batched run on either world, the batched F22 numbers are retracted as leak-inflated, and seq replaces them on the frontier.
+  - Otherwise seq becomes the reference run and C4-E5 stands.
