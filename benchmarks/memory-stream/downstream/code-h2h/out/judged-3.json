@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s060-e021",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "R2 applies known nvm use for Node 20.11 before install; R1 raises uncommitted seed fixes but misses Node; R0 generic."
+  },
+  {
+   "event": "code-s060-e026",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Small talk; all acknowledge and note the running test suite."
+  },
+  {
+   "event": "code-s066-e013",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "None uses known orgs.slug column; R0 cites csv-filename format that conflicts with user's current invoices.csv."
+  },
+  {
+   "event": "code-s066-e028",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All propose a gated ServiceMonitor in the worker chart, checking named port and selector labels."
+  },
+  {
+   "event": "code-s067-e006",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly explain up -d versus start."
+  },
+  {
+   "event": "code-s068-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All split commits onto separate branches after confirming unpushed; R1 respects no self-merge, R0 full suite."
+  },
+  {
+   "event": "code-s068-e023",
+   "scores": [
+    1,
+    3,
+    1
+   ],
+   "why": "User's rule: no major bumps without asking; R0 and R2 bump majors anyway. R1 commits WIP (no stash) and asks on majors."
+  },
+  {
+   "event": "code-s070-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Small talk; all respond briefly and stand by."
+  },
+  {
+   "event": "code-s071-e014",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All add per-org structured decision logs with reasons; R1 also keeps csv changes separate."
+  },
+  {
+   "event": "code-s072-e000",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R0 blames the old MySQL-to-Postgres switch, likely stale; R1/R2 investigate the actual error and pulled changes."
+  }
+ ]
+}
