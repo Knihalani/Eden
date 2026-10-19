@@ -94,6 +94,38 @@ def prep_picks(a):
           "of", len(noneed), "no-need fires and", len(need), "need fires")
 
 
+def prep_eden(a):
+    """C5-E3: the plugin as it ships today. The same turns and groups as `downstream/<world>` (C5-E1), with
+    conditions none / eden: the bullets the real plugin injected at that turn's UserPromptSubmit."""
+    import score
+    stream, _ = score.load_stream(a.world)
+    src = {c["event"]: c for c in json.load(open(os.path.join(HERE, "downstream", a.world, "in", "responses-in.json")))
+           ["cases"]}
+    base = json.load(open(os.path.join(HERE, "downstream", a.world, "key.json")))["key"]
+    eden = {}
+    for line in open(os.path.join(HERE, "runs", f"{a.world}-eden", "packets.jsonl")):
+        if line.strip():
+            p = json.loads(line)
+            if p["hook"] == "UserPromptSubmit":
+                eden.setdefault(p["event"], []).extend(score.parse_packet(p["content"]))
+    rng = random.Random(17)
+    d = os.path.join(HERE, "downstream", a.sub)
+    os.makedirs(os.path.join(d, "in"), exist_ok=True)
+    os.makedirs(os.path.join(d, "out"), exist_ok=True)
+    cases, key = [], {}
+    for eid in sorted(base):
+        conds = {"none": [], "eden": eden.get(eid, [])}
+        order = list(conds)
+        rng.shuffle(order)
+        key[eid] = {"group": base[eid]["group"], "order": order, "needs": base[eid]["needs"]}
+        cases.append({"event": eid, "text": src[eid]["text"], "recent": src[eid]["recent"],
+                      "packets": [conds[c] for c in order]})
+    json.dump({"cases": cases}, open(os.path.join(d, "in", "responses-in.json"), "w"), indent=1, ensure_ascii=False)
+    json.dump({"system": "eden (plugin today)", "key": key}, open(os.path.join(d, "key.json"), "w"), indent=1)
+    fired = sum(1 for e in key if eden.get(e))
+    print(len(cases), "cases;", fired, "with an eden packet")
+
+
 def items(a):
     """Order-free responder input: one item per (turn, packet), each with its own id (C4-E10: responders that answer
     a list of packets swapped the order). A turn's items never share a file: item j of every turn goes to group j,
@@ -168,8 +200,8 @@ def report(a):
         s = dict(zip(k["order"], judged[eid]))
         g = by.setdefault(k["group"], {"n": 0, "effect": 0.0, "needs": 0, "sys": 0.0})
         g["n"] += 1
-        if "picks" in s:  # prep-picks runs: report picks − none in the effect columns
-            s = dict(s, oracle=s["picks"])
+        if "picks" in s or "eden" in s:  # prep-picks / prep-eden runs: report that condition − none
+            s = dict(s, oracle=s.get("picks", s.get("eden")))
         eff = s["oracle"] - s["none"]
         g["effect"] += eff
         g["needs"] += eff >= 1
@@ -183,7 +215,7 @@ def report(a):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["prep", "prep-picks", "items", "collect", "judge-prep", "report"])
+    ap.add_argument("cmd", choices=["prep", "prep-picks", "prep-eden", "items", "collect", "judge-prep", "report"])
     ap.add_argument("--sub", default="", help="subdirectory of downstream/ (default: the world)")
     ap.add_argument("--tag", default="", help="prep-picks: the judge run whose picks are tested")
     ap.add_argument("--world", required=True)
@@ -191,6 +223,6 @@ if __name__ == "__main__":
     ap.add_argument("--system", default="")
     ap.add_argument("--per", type=int, default=45)
     a = ap.parse_args()
-    cmds = {"prep": prep, "prep-picks": prep_picks, "items": items, "collect": collect, "judge-prep": judge_prep,
-            "report": report}
+    cmds = {"prep": prep, "prep-picks": prep_picks, "prep-eden": prep_eden, "items": items, "collect": collect,
+            "judge-prep": judge_prep, "report": report}
     cmds[a.cmd](a)
