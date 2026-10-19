@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s092-e012",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 knows Prometheus 9464/ServiceMonitor, dashboards dir and billing_sync enqueue bug; R0 hedges on known facts."
+  },
+  {
+   "event": "code-s096-e000",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "DB is Postgres 16 since ADR 0014; R1 stalely assumes MySQL 8. R0 checks dialect instead of knowing."
+  },
+  {
+   "event": "code-s097-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both keep HMAC secret server-side with timing-safe verify; R0 reuses webhook signing pattern."
+  },
+  {
+   "event": "code-s098-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 knows Fastify plugins, problem() helper, app.inject; R1 generic."
+  },
+  {
+   "event": "code-s101-e013",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 knows presigned S3 upload flow and UUID v7 conventions; R1 doesn't know existing pattern."
+  },
+  {
+   "event": "code-s103-e007",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both reasonable plans to fix outside-click dismissal."
+  },
+  {
+   "event": "code-s103-e031",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Clerk part right in both; R0 ignores user's useEffect fix, wrongly treats datetime as plain date; R1 vague on hydration fix."
+  },
+  {
+   "event": "code-s105-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 reuses global-error Sentry/digest pattern, route-group boundary, commits only its file; R0 generic."
+  },
+  {
+   "event": "code-s106-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 knows Clerk SignIn and points to social connection settings; R0 doesn't know provider."
+  },
+  {
+   "event": "code-s107-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "R1 guards undefined lineItems (right) but wrong reason (drafts vs expand); R0 misses undefined case."
+  }
+ ]
+}
