@@ -6,6 +6,7 @@ item under each generator; recall@k and the share at rank ≤ 3 (a scale proxy).
     python3 benchmarks/memory-stream/recall_funnel.py [--worlds code life]             (C11-E1 generator table)
     python3 benchmarks/memory-stream/recall_funnel.py --channels                      (C11-E1 channel table)
     python3 benchmarks/memory-stream/recall_funnel.py --missing                       (C11-E3: what dreaming left out)
+    python3 benchmarks/memory-stream/recall_funnel.py --actions                       (C11-E2: action registry, caps)
 """
 import argparse, datetime, glob, json, math, os, re, sys
 
@@ -178,6 +179,58 @@ def channels(world):
           "union pool median", pools[len(pools) // 2], "p90", pools[int(0.9 * len(pools))])
 
 
+def actions(world, thr=0.5, caps=(15, 20, 10, 20)):
+    """C11-E2: the action channel (rows the dreaming step tagged with an action type Jev says the turn involves,
+    p ≥ thr), its union with C11-E1's channels, and the same union with each channel capped (G0, entity, time, action;
+    entity and action ranked by lexical score with cues, then recency; time by recency) so the candidate set stays
+    bounded however large the store grows."""
+    g = Generators(world)
+    tags = {}
+    for p in sorted(glob.glob(os.path.join(HERE, "dream", world, "out", "tags-*.json"))):
+        tags.update(json.load(open(p))["tags"])
+    turn_act = json.load(open(os.path.join(HERE, "dream", world, "turn-actions.json")))
+    names = ("G0@15", "entity", "time", "action", "union", "capped union")
+    hits = dict.fromkeys(names, 0)
+    tot, pools, capped = 0, [], []
+    for e, need in need_turns(g, world):
+        now = e["_order"]
+        vis = {r["id"] for r in g.lex.visible(now)}
+        text, ctx = M.strip_paste(e["text_all"]), g.ctx.get(e["id"], "")
+        gens, _ = g.score_all(e)
+        g0r = sorted(gens["G0"], key=lambda i: (-gens["G0"][i], i))
+        g0 = set(g0r[:caps[0]])
+        lex = g.lex.scores(dict(e, text_all=text), now)
+        key = lambda i: (-lex.get(i, 0.0), -g.by_id[i]["t"], i)
+        ment = g.mentioned(text + " " + ctx)
+        ent = {i for i in vis if g.ents[i] & ment}
+        days, months = turn_times(text, g.day[e["id"]])
+        tm = set()
+        for i in vis:
+            s = " ".join((g.by_id[i].get("when") or {}).get("times") or []).lower()
+            if any(x in s or x[:3] + "s" in s for x in days) or any(m in s for m in months):
+                tm.add(i)
+        want = {k for k, v in (turn_act.get(e["id"]) or {}).items() if v is not None and v >= thr}
+        act = {i for i in vis if want & set(tags.get(i, []))}
+        pool = g0 | ent | tm | act
+        cap = (g0 | set(sorted(ent, key=key)[:caps[1]]) | set(sorted(tm, key=lambda i: -g.by_id[i]["t"])[:caps[2]])
+               | set(sorted(act, key=key)[:caps[3]]))
+        pools.append(len(pool))
+        capped.append(len(cap))
+        for item in need:
+            cover = [i for i in vis if item in g.by_id[i]["covers"]]
+            if not cover:
+                continue
+            tot += 1
+            for name, S in zip(names, (g0, ent, tm, act, pool, cap)):
+                hits[name] += any(i in S for i in cover)
+    pools.sort()
+    capped.sort()
+    print(world, f"thr {thr}, caps {caps}; needed items with a covering row", tot,
+          {k: round(v / tot, 2) for k, v in hits.items()})
+    print("   union pool median / p90", pools[len(pools) // 2], pools[int(0.9 * len(pools))],
+          "| capped median / max", capped[len(capped) // 2], capped[-1])
+
+
 def missing(world):
     """C11-E3: needed items no visible row covers even in the session-end store (rows visible after their own
     session, `strict=False`), by item kind; and the share of every world item the compiler ever stored."""
@@ -235,6 +288,11 @@ if __name__ == "__main__":
     ap.add_argument("--worlds", nargs="*", default=["code", "life"])
     ap.add_argument("--channels", action="store_true", help="C11-E1 channel table")
     ap.add_argument("--missing", action="store_true", help="C11-E3 dreaming omissions")
+    ap.add_argument("--actions", action="store_true", help="C11-E2 action registry and per-channel caps")
+    ap.add_argument("--thr", type=float, default=0.5, help="--actions: Jev threshold for a turn's action types")
     a = ap.parse_args()
     for w in a.worlds:
-        (channels if a.channels else missing if a.missing else run)(w)
+        if a.actions:
+            actions(w, a.thr)
+        else:
+            (channels if a.channels else missing if a.missing else run)(w)

@@ -1843,3 +1843,37 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **Local CI (6400cf08, outside the repo):** format, typecheck, build pass; test:parallel 5319 pass, 32 skip, 3 fail
   (`switches`, `memory-purge`: root-on-Linux, also fail on main; `doctor` hung-wrap: under load, passes alone).
   Since then only .py, .json and .md changed.
+
+## C11-E2 · 2026-10-19 · Action-constraint registry: result (exploratory)
+- **Turn classification** (Jev, one yes/no per action type, child session; `dream/<w>/turn-actions.json`): 165 code
+  and 187 life turns; latency p50 0.236 / 0.234 s, p95 0.335 / 0.306 s.
+- **Coverage of needed items that have a covering row** (`recall_funnel.py --actions --thr 0.5`):
+
+  | | code (58) | life (69) |
+  |---|---|---|
+  | action channel (rows tagged with a type Jev says the turn involves) | **0.97** | **0.88** |
+  | union with G0@15, entity, time | **1.0** | **0.97** |
+  | union pool, median / p90 | 108 / 190 | 152 / 327 |
+  | capped union (G0 15, entity 20, time 10, action 20; lexical order inside) | 0.83 | 0.71 |
+  | capped pool, median / max | 36 / 46 | 36 / 54 |
+
+  At threshold 0.3: action 0.98 / 0.91, union 1.0 / 0.97, capped 0.81 / 0.70.
+- **Ordering inside the caps (post hoc, same data):** ranking by how many other channels a row appears in, then by
+  durable kind, then lexical, does not help (code 0.79, life 0.68); action ∩ other channels plus 20: 0.84 / 0.71;
+  action cap 40: 0.86 / 0.75 (pool median 47 / 45).
+- **What this says:** the typed channels together reach almost every needed item that exists in the store, but
+  the action channel is a quarter of the store and grows with it, and no cheap order inside it keeps the needed
+  rows in a fixed-size cap. Bounding it needs either understanding at read time (a checker over the whole channel)
+  or compression at write time: the dreaming step keeps a fixed-size card per action type.
+
+## C11-E4 · 2026-10-19 · Dream-maintained action cards (pre-registration; exploratory)
+- **Idea:** dreaming keeps, for each action type, a card of at most 20 lines: the standing rules, preferences,
+  routines, commitments and upcoming plans that would change how the assistant does that action. Each line cites
+  the row ids it comes from. Cards are updated incrementally, batch by batch: after each sleep batch the dreamer
+  sees the previous cards plus the batch's new rows (and their action tags) and rewrites the cards. A card's size
+  does not grow with the store.
+- **Leak-free use:** a turn sees the cards as they stood after the last batch visible to it (`--strict` timing).
+- **Measure:** the needed item is covered if a line of a card for one of the turn's action types (Jev p ≥ 0.5)
+  cites a row covering it; reported alone and in a bounded union with G0@15, entity (cap 20) and time (cap 10);
+  pool = rows plus card lines. Compared with C11-E2's capped union (0.83 / 0.71 at a pool of 36).
+- **No verdict rule:** it decides whether action cards are the bounded channel the build plan relies on.
