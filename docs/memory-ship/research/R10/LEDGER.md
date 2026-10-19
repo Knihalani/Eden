@@ -1039,3 +1039,14 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - C5-E6 and C5-E7 are "confirmed by rule, not yet firm" (n = 10 fired no-need turns; CIs include 0).
   - Eden-today on code is net-negative by the C5-E3 rule (−0.0433), not "near zero".
   - The supersession pass is dead by its code kill line, and is recommended only as a bug fix.
+
+## C6-E1 · 2026-10-19 · Firming up C5-E7: more fresh turns (pre-registration)
+- **Setup:** `downstream.py prep-h2h --seed 31 --exclude <world>-h2h`, the same conditions and protocol as C5-E7. New dev turns, in neither `downstream/<world>` nor `<world>-h2h`:
+  - code: 0 plan-need (none remain), 15 labeler-only, 60 no-need = 75;
+  - life: 19 plan-need (all that remain), 15 labeler-only, 60 no-need = 94.
+  - Missing verifier outputs come from the same prompt, one case per file (`verify/<world>-cal-ds3`).
+- **Analysis:** `h2h.py code life --pool h2h2` pools C5-E7 and C6-E1 per group, with the same shares and the same bootstrap (4000 draws, seed 1).
+- **Rule, set before running:**
+  - **Firm** if the pooled 95% CI lower bound of verify − eden is > 0 on both worlds.
+  - **Lead stands** if the point estimate stays ≥ +0.05 on both but a CI includes 0.
+  - **Weakened** if the point estimate falls below +0.05 on either world.
