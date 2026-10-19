@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s051-e002",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly plan to pull calendars rather than guess."
+  },
+  {
+   "event": "life-s051-e006",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give correct jammy-egg timing and ramen marinade advice."
+  },
+  {
+   "event": "life-s052-e008",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Known weak spots: ser/estar, por/para, cuando-subjunctive, gender. R0 covers only gender; R1 falsely claims no record but covers most."
+  },
+  {
+   "event": "life-s057-e000",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "Rule: no date to Olivia until Aisha signs off, say 'target'. R1 applies it; R0 would draft with a date."
+  },
+  {
+   "event": "life-s057-e015",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Lagavulin correct in R0, though cites stale $100 limit (now $150). R1 wrongly says no record."
+  },
+  {
+   "event": "life-s058-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Small talk; both appropriate."
+  },
+  {
+   "event": "life-s058-e002",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both reasonably scope rough fare lookup for one and two travellers."
+  },
+  {
+   "event": "life-s058-e007",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both appropriately pull Tom's free/busy for the 24th."
+  },
+  {
+   "event": "life-s058-e014",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both handle Olivia request and check dairy-free snacks sensibly."
+  },
+  {
+   "event": "life-s060-e019",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give useful decision questions and schedule the message."
+  },
+  {
+   "event": "life-s060-e022",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly plan Disney+ charge check and Priya message."
+  },
+  {
+   "event": "life-s062-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both record decision and unsubscribe; R1 sensibly keeps service reminders."
+  },
+  {
+   "event": "life-s062-e003",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give clean finance jokes."
+  },
+  {
+   "event": "life-s063-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give sound commute-vs-pay framing with correct math."
+  },
+  {
+   "event": "life-s063-e007",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both acknowledge the moment and defer the talk prep."
+  }
+ ]
+}
