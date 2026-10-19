@@ -168,6 +168,70 @@ def prep_verify(a):
     print(len(cases), "cases;", fired, "with a packet;", sum(1 for e in base if e in vp), "had verifier output")
 
 
+def prep_h2h(a):
+    """C5-E7: head to head on fresh turns (none of downstream/<world>'s): none / eden (dated) / verify (dated, p ≥
+    a.p, deferred). Stratified like C5-E1 but with more no-need turns: 30 plan-need, 15 labeler-only, 30 no-need.
+    Eden's bullets are dated by the first earlier event containing them (they are mostly the user's past prompts)."""
+    import score, sleep, verify, judge
+    stream, items = score.load_stream(a.world)
+    evs = [e for e in score.scored_events(stream) if e["_split"] == "dev" and e["t"] == "human"]
+    byid = {e["id"]: e for e in score.scored_events(stream)}
+    used = set(json.load(open(os.path.join(HERE, "downstream", a.world, "key.json")))["key"])
+    extra = json.load(open(os.path.join(HERE, "worlds", a.world, "labels.json")))
+    rng = random.Random(23)
+    pool = [e for e in evs if e["id"] not in used]
+    plan = [e for e in pool if set(e["labels"]["needs"]) - set(e["labels"].get("in_context", []))]
+    lab_only = [e for e in pool if e not in plan and set(extra.get(e["id"], [])) - e["_window"]]
+    none = [e for e in pool if e not in plan and e not in lab_only]
+    pick = (rng.sample(plan, min(30, len(plan))) + rng.sample(lab_only, min(15, len(lab_only)))
+            + rng.sample(none, min(30, len(none))))
+    day, flat = {}, []
+    for sess in stream["sessions"]:
+        for ev in sess["events"]:
+            day[ev["_order"]] = sess["ts"][:10]
+            flat.append(ev)
+    eden = {}
+    for line in open(os.path.join(HERE, "runs", f"{a.world}-eden", "packets.jsonl")):
+        if line.strip():
+            p = json.loads(line)
+            if p["hook"] == "UserPromptSubmit":
+                eden.setdefault(p["event"], []).extend(score.parse_packet(p["content"]))
+
+    def eden_dated(e, b):
+        src = next((ev for ev in flat if ev["_order"] < e["_order"] and b[:60] in ev.get("text_all", "")), None)
+        return f"[as of {day[src['_order']]}] {b}" if src else b
+
+    rows = {r["id"]: r for r in sleep.rows(stream, a.world, strict=True)}
+    acts = score.action_text(stream)
+    vp = verify.picks(a.world, "cal")
+    for t in ("cal-ds", "cal-ds2"):
+        vp.update(verify.picks(a.world, t))
+    vis = lambda r, e: r["t"] < e["_order"] and (r.get("invalid_at") is None or r["invalid_at"] > e["_order"])
+    d = os.path.join(HERE, "downstream", a.sub)
+    os.makedirs(os.path.join(d, "in"), exist_ok=True)
+    os.makedirs(os.path.join(d, "out"), exist_ok=True)
+    cases, key, missing = [], {}, []
+    for e in sorted(pick, key=lambda e: e["id"]):
+        eid = e["id"]
+        if eid not in vp:
+            missing.append(eid)
+        sel = [i for i, p in vp.get(eid, []) if p >= a.p and i in rows and vis(rows[i], e)][:4]
+        vpk = [f"[as of {day.get(int(rows[i]['t']), '?')}] {rows[i]['text']}" for i in sel] if acts.get(eid) else []
+        conds = {"none": [], "eden": [eden_dated(e, b) for b in eden.get(eid, [])], "verify": vpk}
+        order = list(conds)
+        rng.shuffle(order)
+        group = "plan" if e in plan else "labeler-only" if e in lab_only else "no-need"
+        key[eid] = {"group": group, "order": order, "needs": []}
+        cases.append({"event": eid, "text": e["text_all"][:2500], "recent": judge.context(stream, eid),
+                      "packets": [conds[c] for c in order]})
+    json.dump({"cases": cases}, open(os.path.join(d, "in", "responses-in.json"), "w"), indent=1, ensure_ascii=False)
+    json.dump({"system": f"h2h eden-dated vs verify:cal,p={a.p} dated", "key": key},
+              open(os.path.join(d, "key.json"), "w"), indent=1)
+    json.dump({"key": {i: 1 for i in missing}}, open(os.path.join(d, "missing.json"), "w"))
+    print(len(cases), "cases;", len(missing), "need verifier outputs:",
+          f"verify.py --events {os.path.join(d, 'missing.json')} --tag cal-ds2")
+
+
 def items(a):
     """Order-free responder input: one item per (turn, packet), each with its own id (C4-E10: responders that answer
     a list of packets swapped the order). A turn's items never share a file: item j of every turn goes to group j,
@@ -258,8 +322,8 @@ def report(a):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["prep", "prep-picks", "prep-eden", "prep-verify", "items", "collect", "judge-prep",
-                                    "report"])
+    ap.add_argument("cmd", choices=["prep", "prep-picks", "prep-eden", "prep-verify", "prep-h2h", "items", "collect",
+                                    "judge-prep", "report"])
     ap.add_argument("--sub", default="", help="subdirectory of downstream/ (default: the world)")
     ap.add_argument("--tag", default="", help="prep-picks: the judge run whose picks are tested")
     ap.add_argument("--world", required=True)
@@ -269,6 +333,6 @@ if __name__ == "__main__":
     ap.add_argument("--p", type=float, default=0.6, help="prep-verify: verifier threshold")
     ap.add_argument("--dated", action="store_true", help="prep-verify: prefix each row with the date it was written")
     a = ap.parse_args()
-    cmds = {"prep": prep, "prep-picks": prep_picks, "prep-eden": prep_eden, "prep-verify": prep_verify, "items": items,
-            "collect": collect, "judge-prep": judge_prep, "report": report}
+    cmds = {"prep": prep, "prep-picks": prep_picks, "prep-eden": prep_eden, "prep-verify": prep_verify,
+            "prep-h2h": prep_h2h, "items": items, "collect": collect, "judge-prep": judge_prep, "report": report}
     cmds[a.cmd](a)

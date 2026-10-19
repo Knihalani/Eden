@@ -961,3 +961,18 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - **The first positive per-turn outcome for any push method on both worlds.** Dated verify beats today's plugin by +0.044 (code) and +0.111 (life).
 - **Why it works (from the judge's notes on C5-E4 losses):** wrong packets hurt mostly by presenting old state as current. A date lets the agent treat a row as history ("as of 08-30 the branch was …; let me check now") instead of fact.
 - **Next:** confirm head to head on fresh turns (C5-E7, pre-registered), with dating applied to eden too, for a fair comparison.
+
+## C5-E7 · 2026-10-19 · Head to head on fresh turns: plugin vs dated verifier (pre-registration)
+- **Setup:** `downstream.py prep-h2h`. Fresh dev human turns, none in `downstream/<world>` (seed 23).
+  - code: 25 plan-need (all that remain), 15 labeler-only, 30 no-need = 70 turns. life: 30 / 15 / 30 = 75 turns.
+  - Three conditions per turn:
+    - **none**;
+    - **eden**, the real plugin's injected bullets, each dated by the first earlier event that contains it (dating applied to eden too, for fairness);
+    - **verify**, the calibrated verifier, p ≥ 0.6, at most 4 rows, dated, deferred.
+  - Missing verifier outputs come from the same prompt, one case per file (`verify/<world>-cal-ds2`).
+  - Protocol as in C5-E1: per-turn split, sonnet responder, blind opus judge with history evidence.
+- **Primary measure:** per-turn utility = Σ over groups (real dev share × mean condition − none). The shares are C5-E4's: code 0.141 / 0.171 / 0.688; life 0.137 / 0.215 / 0.648.
+- **Rules, set before running:**
+  - **Confirmed:** verify − eden ≥ +0.05 on both worlds, and verify > 0 on both.
+  - **Not confirmed:** verify − eden < 0 on either world.
+  - In between: partial.
