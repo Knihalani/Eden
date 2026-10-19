@@ -1103,3 +1103,15 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - The turns are dev turns.
   - Latency and cost are not measured.
   - Delivery at the first tool call is simulated.
+
+## C6-E3 · 2026-10-19 · Dated delivery for the model-free hook matcher (pre-registration)
+- **Question:** R10-5's verifier calls a model in-turn, which the current rules do not allow. Does dated delivery alone make the model-free hook vote worth it?
+- **Setup:** `downstream.py prep-system --system "vote:need=2,bt=0.25,lt=6,st=4,strip=1" --dated --turns <world>-h2h,<world>-h2h2`.
+  - The same turns as C5-E7 and C6-E1 (code 145, life 169). Conditions: none / vote; the vote packet on the strict sleep store, delivered at Submit, each row dated. The vote fires on code 76/145 and life 105/169 turns.
+  - Protocol as in C5-E1: one responder run.
+  - It is compared with eden (dated) on the same turns, from those runs. That is a different responder call, so the comparison is between runs.
+- **Measure:** per-turn utility of vote − none, with the same shares and bootstrap.
+- **Rule, set before running:**
+  - **Model-free push pays** if vote-dated utility is > +0.05 on both worlds, with its CI lower bound > 0.
+  - **Positive but not firm** if > 0 on both worlds.
+  - **Not enough** otherwise.
