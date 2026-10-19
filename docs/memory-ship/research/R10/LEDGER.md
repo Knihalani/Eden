@@ -1901,3 +1901,15 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   recovers most of them (episode 4 → 11 of 15, tool 1 → 7 of 8). It does not replace rows (it misses preferences
   and routines rows hold). Entity lookup reaches most episode-only items, so episodes belong in the entity and time
   channels. Synthetic, one world, one dreamer run, no outcome test.
+
+## C11-E6 · 2026-10-19 · How each channel grows with the store (pre-registration; exploratory)
+- **Question:** the build plan must hold at millions of memories, and the worlds hold hundreds. The stores do grow
+  over each stream, so the growth rate of each channel can be measured and projected.
+- **Setup:** dev need turns of the judge sample (as C11-E1/E2). For each turn: N = rows visible (`--strict`); the
+  set size of the entity, time and action (Jev p ≥ 0.5) channels as C11-E2 builds them; whether G0's top 15 holds
+  a covering row for each needed item that has one.
+- **Measure:** per world and channel, the least-squares slope b of log(set size) on log(N) over turns with N ≥ 20
+  and a non-empty set, and the share of turns with an empty set; G0@15 recall for turns below and above the median
+  N. The plan projects set sizes to N = 10^4, 10^5 and 10^6 from b (an extrapolation over 2–4 orders of magnitude,
+  stated as such).
+- **No verdict rule.**
