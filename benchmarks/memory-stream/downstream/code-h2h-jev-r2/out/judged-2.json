@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "code-s060-e021", "scores": [3, 1, 2, 2], "why": "Node 20.11 pin and nvm use is key; B wrongly claims the new laptop has Node 18.20.4 (that was the old laptop)."},
+{"event": "code-s060-e026", "scores": [3, 3, 3, 3], "why": "Chit-chat; all correctly recall the background test run and pending seed prerequisites."},
+{"event": "code-s066-e013", "scores": [3, 2, 2, 3], "why": "A and D use history on csv-filename.ts and shared slugify; B and C generic but sound."},
+{"event": "code-s066-e028", "scores": [2, 3, 2, 3], "why": "B and D know chart is infra/helm/worker with values-prod.yaml; A and C generic but correct."},
+{"event": "code-s067-e006", "scores": [3, 3, 3, 3], "why": "All give the correct up -d vs start distinction concisely."},
+{"event": "code-s068-e000", "scores": [3, 3, 3, 3], "why": "All split to separate branches, check unpushed before rewriting; D also respects no self-merge."},
+{"event": "code-s068-e023", "scores": [1, 3, 2, 3], "why": "Rules: no git stash, commit WIP; ask before major bumps. A stashes; C sidesteps via worktree, vague on majors."},
+{"event": "code-s070-e000", "scores": [3, 3, 3, 3], "why": "Chit-chat; all brief and appropriate."},
+{"event": "code-s071-e014", "scores": [3, 3, 3, 1], "why": "Per-org structured pino logging; D invents an unsupported 'business rule' about open invoices."},
+{"event": "code-s072-e000", "scores": [3, 2, 2, 3], "why": "MySQL-to-Postgres move is weeks old; B and C push a stale cause, C asserts a specific URL; A and D investigate."},
+{"event": "code-s073-e000", "scores": [2, 2, 2, 2], "why": "All miss the required org_id column; A strongest otherwise (schema.ts, db:generate, uuidv7 in app code)."},
+{"event": "code-s075-e000", "scores": [3, 2, 2, 2], "why": "A uses biome format only and verifies; C uses check --write (lint fixes) and is self-contradictory; B, D generic."},
+{"event": "code-s076-e000", "scores": [2, 3, 3, 3], "why": "Mechanical rename isn't a large refactor; A's plan-and-wait is unnecessary friction."},
+{"event": "code-s076-e017", "scores": [2, 3, 2, 2], "why": "Copy likely lives in next-intl messages files; A, C, D would skip fixing those, possibly the target itself."},
+{"event": "code-s077-e005", "scores": [2, 2, 2, 3], "why": "tsx is already a CLI devDependency (dev script uses it); only D anticipates that."}
+]}
