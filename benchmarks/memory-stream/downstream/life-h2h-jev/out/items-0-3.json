@@ -1,0 +1,141 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s021-e000#0",
+   "response": "Congratulations on your first half marathon! That's a big one, and I'll record Toronto Waterfront 21K, 2025-10-19, chip time 2:04:37 in your running stats. I'll also set a repeating Friday 15:00 reminder for the payouts status update with a pre-draft from Linear (five bullets, red/amber/green per workstream), and keep Friday evenings clear for pizza and movie night.\nAction: Create the Friday 15:00 reminder, the recurring Friday evening block, and log the race result."
+  },
+  {
+   "id": "life-s058-e014#0",
+   "response": "I'll message Olivia asking to move QBR prep to 11:00 on Thu 5 March so it doesn't overlap the Q1 roadmap check-in. I've noted Ellie's dairy allergy, but I don't have a pantry list, so I won't guess which snacks are safe.\nAction: Send Olivia the 11:00 request, save Ellie Cho's dairy allergy, and check the recent grocery orders and pantry notes for dairy-free snacks, flagging anything that contains milk."
+  },
+  {
+   "id": "life-s006-e015#0",
+   "response": "You're welcome. Enjoy the evening with Biscuit on your feet, and tomorrow's route is dry cleaner, then Home Depot, then the library.\nAction: Nothing further tonight."
+  },
+  {
+   "id": "life-s131-e022#0",
+   "response": "Here's a draft: 'To Neha and [name]: Neha has spent years telling us nobody could keep up with her. [Name], we've watched you try, and we're thrilled and a little concerned that you're still standing. Here's to a lifetime of happy arguments over the thermostat. To Neha and [name]!'\nAction: Fill in the partner's name once you tell me, and tweak the tone if it's too roasty."
+  },
+  {
+   "id": "life-s026-e012#0",
+   "response": "I'll book a 30-minute walkthrough of the new onboarding flows with Diego and Aisha on the 13th in the afternoon. Going by the November timeline in our thread, I'll treat that as Thu 13 Nov and check that with you if it's not.\nAction: Check all three calendars for an afternoon slot on the 13th and send the invite with this agenda: 1) walk through the new onboarding flows 2) open design and engineering questions 3) next steps and owners."
+  },
+  {
+   "id": "life-s048-e006#0",
+   "response": "My top pick would be ChessKid, which is built for children and designed to be safe for a 6 to 7 year old, with Lichess as the free, ad-free fallback. I haven't checked current pricing or in-app purchases, so I want to verify both before you install anything.\nAction: Check the current store listings for ads and in-app purchases in both apps and confirm the recommendation."
+  },
+  {
+   "id": "life-s100-e025#0",
+   "response": "You're welcome. With the quotes in, my single recommendation is Brijwasi Sweets: Rs 1,450 plus Rs 120 delivery, same day if ordered before 14:00 IST, with the best freshness reviews (4.6 from 2,300 ratings). I'll still need her delivery address before I order.\nAction: Hold the order until you confirm and send me the address."
+  },
+  {
+   "id": "life-s077-e010#0",
+   "response": "Sounds good, it's a nice start to the season. Nate still needs the kitchen wall choice by Monday, so just say the word when you want me to gather options.\nAction: Nothing needed on the market, I'll leave your Saturday as it is."
+  },
+  {
+   "id": "life-s148-e012#0",
+   "response": "Both are set: your strategy memo comments to Tom on Friday, and Leo's library books at the Pape branch on Saturday morning. I'll check Saturday's branch hours and that nothing clashes on your calendar.\nAction: Set a Friday morning reminder for the memo comments to Tom and a Saturday morning reminder for the Pape library pickup, then check the branch hours."
+  },
+  {
+   "id": "life-s025-e000#0",
+   "response": "I'll pull every open payouts ticket from Linear, group them by workstream, and flag what looks at risk for the December launch, such as blocked, unowned or unestimated tickets. I'll show the data first and keep my risk calls separate so you can disagree with them.\nAction: Query Linear for all open payouts tickets, group by workstream, and send you the list with an at-risk section."
+  },
+  {
+   "id": "life-s126-e021#0",
+   "response": "Ha, classic Sam. Night!\nAction: None, plumber call is on your list for Monday."
+  },
+  {
+   "id": "life-s073-e002#0",
+   "response": "COUNTIF is enough: =COUNTIF(D:D,\">10000\"). Use \">=10000\" if exactly $10,000 should count, and note it only counts real numbers, so text amounts won't be included. Your library holds at Pape/Danforth are waiting, but the branch closes at 20:30 tonight and tomorrow works too.\nAction: Nothing further needed."
+  },
+  {
+   "id": "life-s051-e000#0",
+   "response": "Yes, it used to be late January, and it drifted into February as the NFL season got longer. The 9/11 postponement pushed the 2002 game into February, and later schedule changes, including the extra regular-season week from 2021, kept it there. It's always a Sunday because that's when the biggest TV audience is available.\nAction: Nothing further needed."
+  },
+  {
+   "id": "life-s062-e003#0",
+   "response": "Here's a clean one: my savings account and I have something in common, neither of us shows much interest. Backup if the room's tough: I told my budget I needed some space, so it gave me a line item called miscellaneous.\nAction: Nothing further needed."
+  },
+  {
+   "id": "life-s138-e007#0",
+   "response": "From your December decision note, Lisbon is mild at about 12 to 15°C and walkable, so layers and a light waterproof jacket are a safe base. I don't see anything on New Year's Eve itself in what I have, so I'll check the Lisbon notes (n-3982) instead of guessing.\nAction: Open the Dec 2026 holiday note, pull anything about NYE and the weather, and build a short packing list including Leo."
+  },
+  {
+   "id": "life-s048-e000#0",
+   "response": "I'll look up what Ottawa actually had on Sunday the 25th, and I'll report it in Celsius and metric only (cm of snow, km/h winds). I don't have the figures in front of me, so I won't estimate them.\nAction: Look up Ottawa's observed weather for Sunday the 25th and send you the temperature, snowfall and wind in metric units."
+  },
+  {
+   "id": "life-s141-e032#0",
+   "response": "Pulling them now, titles and status only. \nAction: Query Linear for your open tickets with the payouts-ga label and list each as title plus status."
+  },
+  {
+   "id": "life-s140-e051#0",
+   "response": "That's a lot of bending in one week, and your frustration makes sense: the Tuesday morning you protect got taken, and now a day trip in person on short notice. For Thursday 8 Oct I'll look for the earliest morning departures to Montreal and an evening return that gets you home for dinner, and I'll put the best one in front of you rather than booking blindly. Nate's $3,200 e-transfer is also still waiting on which account to pay from.\nAction: Search morning departures from Toronto and evening returns on Thu 8 Oct, check your calendar, and send you one recommendation to approve."
+  },
+  {
+   "id": "life-s007-e013#0",
+   "response": "Booking Ascari Enoteca for Sat 16 Aug at 19:00, party of 5, which also has a kids' butter pasta for Leo and is quieter for the grandparents. For Thanksgiving, I'll price Toronto to Vancouver for the three of you, Oct 10 to 13, but I don't have fares yet.\nAction: Book the Ascari table and search flights for 3 travellers for Oct 10 to 13, then send you the options without booking them."
+  },
+  {
+   "id": "life-s068-e008#0",
+   "response": "Today I only have the cushion fort that Biscuit has claimed, which won't help Grace pick a gift, and I don't want to guess his interests or food limits since that's the part that matters. I'll check your notes for what Leo has been into lately and any food allergies or dislikes.\nAction: Check your notes and recent chats for Leo's current interests and food restrictions, then send you a short list to pass on to Grace."
+  },
+  {
+   "id": "life-s050-e011#0",
+   "response": "Yes to pancakes, and I'll text Hannah rather than call, since she works some night shifts. I'll put it on the 'Okafor-Malhotra family' calendar for Sunday 8 Feb at 9:00 with Sam and Leo and check for conflicts first.\nAction: Text Hannah a yes and add 'Pancakes at Hannah's' to the family calendar for Sun 8 Feb at 9:00."
+  },
+  {
+   "id": "life-s018-e010#0",
+   "response": "Happy to distract you, and I hope her cousin picks up soon. For an architect who bikes everywhere and likes old buildings, I'd start with Corktown or the Distillery District, Trinity Bellwoods and Queen West, and the Annex, with Leslieville and Riverside as a quieter option near bike trails.\nAction: Stay on standby, and if you still can't reach your mom after the cousin, I'll have the texts drafted for you to send."
+  },
+  {
+   "id": "life-s002-e000#0",
+   "response": "Morning. I'll block your call with Anjali every Sunday at 9:00 am Toronto time (6:30 pm in Mumbai) as a recurring slot with no end date. For Spanish, I'd suggest short daily sessions of 10 to 15 minutes between lessons with Carlos on Tuesday at 19:00, mixing conversation with a quick review of what tripped you up in the last lesson.\nAction: Create the recurring Sunday 9:00 block and ask you what time of day suits the Spanish practice."
+  },
+  {
+   "id": "life-s106-e005#0",
+   "response": "Holding the order for now, nothing has been purchased. I don't have a saved inventory of the basement kitchen setup in front of me, so I'd rather look than guess.\nAction: Search your reno notes and Northline emails for the basement kitchen setup and send you a short list of what you can realistically cook with this week."
+  },
+  {
+   "id": "life-s092-e000#0",
+   "response": "I'll look up yard waste pickup dates for your street, since I don't have the dates saved. A big cleanup after all this rain is a good idea, so I'll add the next two to your calendar.\nAction: Check the city's collection calendar for your address and add the next two yard waste pickup dates to the calendar."
+  },
+  {
+   "id": "life-s046-e021#0",
+   "response": "Reminder it is, I'll set a payment reminder a few days before the Hydro due date. I'll also book the 25-minute sync with Aisha and Diego next week in a morning that works for all three, with your agenda.\nAction: Set the Hydro payment reminder, find the first common morning slot next week, and send the invite with the agenda: 1) empty-state copy 2) loading skeleton 3) who owns the Looker link."
+  },
+  {
+   "id": "life-s068-e021#0",
+   "response": "On it. I don't have Dr. Lin's booking details in front of me, so I'll pull them from your contacts or past appointment emails and request late morning on Wed 22 Apr.\nAction: Find the dental office's booking contact and request a late-morning cleaning on Apr 22, then confirm the time with you."
+  },
+  {
+   "id": "life-s150-e028#0",
+   "response": "Done on both. Here's the note for #payouts-team: 'Heads down on focus time until 3:00 pm. I'll catch up on messages after that.'\nAction: Set your Slack status to heads down until 3:00 pm and keep the note as a draft, not posted, until you approve it."
+  },
+  {
+   "id": "life-s111-e007#0",
+   "response": "Heads up before I message the crew: your return flight leaves Vancouver Monday 13 Jul at 13:15, so nobody will be home to let the electrician in that morning. We could ask the crew whether they can still get in some other way, or move it to Tuesday after you're back.\nAction: Hold off on telling the crew until you pick, then I'll text them the chosen time and ask what works for them."
+  },
+  {
+   "id": "life-s076-e007#0",
+   "response": "Ottawa is roughly a 4.5 hour drive without stops, so if you leave around 4:00 after school pickup, a stop for food and the Friday traffic would likely put you at Grace and Daniel's place on Kilborn Pl around 9:00 pm. I don't have your pickup time, so that's rough.\nAction: Check your actual pickup time and live route time from home to 1419 Kilborn Pl for next Friday and send you a firmer ETA."
+  },
+  {
+   "id": "life-s113-e000#0",
+   "response": "Will do: I'll end your out-of-office tomorrow morning and change the message to 'I'm back but catching up, so replies may be a little slow.' You didn't say what time it should switch off, so I'll use the start of your day unless you tell me otherwise.\nAction: Update the auto-reply text and schedule the out-of-office to end tomorrow at 8:00 am."
+  },
+  {
+   "id": "life-s100-e017#0",
+   "response": "Blocking Sunday 21 Jun, 8:30 to 10:00 pm for the spy series with Sam. For the mithai, your mom has type 2 diabetes and needs sugar-free sweets, so I'll look only at Mumbai shops that deliver proper sugar-free boxes, and pick one rather than give you a list. Sunday mornings are no longer your call slot, so there's no clash.\nAction: Block the Sunday evening and find the best sugar-free mithai delivery in Mumbai, then send you one recommendation."
+  },
+  {
+   "id": "life-s150-e015#0",
+   "response": "Sorry about Leo's tooth. Danforth Smiles (Dr. Lin, 416-555-0182) is the right office, and the online portal says injuries should be handled by phone, though it shows after-school openings on Wed 14 Oct at 16:10 and Thu 15 Oct at 15:50. The portal needs his date of birth and health card number, so I'll call and ask for the earliest slot rather than entering those myself.\nAction: Call Danforth Smiles to flag the chipped front tooth and ask for the earliest after-school slot, and get the travel time from home to 822 Danforth Ave."
+  },
+  {
+   "id": "life-s131-e027#0",
+   "response": "I don't have a saved note about how you said you learn Spanish best or about your vocab level, so I won't guess. I'll search our earlier chats and notes for it before building tonight's practice.\nAction: Look for your stated learning style and vocab level, then set up tonight's practice, and if I can't find them I'll ask you two quick questions."
+  }
+ ]
+}
