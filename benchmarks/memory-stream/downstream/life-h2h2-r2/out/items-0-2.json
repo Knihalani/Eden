@@ -1,0 +1,9 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {"id": "life-s150-e028#0", "response": "Done, setting you to heads down until 3. Draft for #payouts-team:\n\n'Heads down on focus time until 3:00 pm. I'll catch up on messages after; ping me if something is urgent.'\n\nAction: Set your Slack status to heads down until 3:00 pm and post the note to #payouts-team once you okay it."},
+  {"id": "life-s140-e029#0", "response": "Short version: a screen in the hour before bed delays sleep (about 19 minutes later in a 2025 study of 1,200 kids aged 6 to 9), mostly because of light, stimulating games and lost wind-down time. What helped was a fixed screens-off time an hour before bed every night including weekends, devices charged outside the bedroom, and reading in the last half hour, with sleep back to normal in about two weeks. Timing mattered more than total screen time as long as it stayed under two hours.\nAction: Want me to draft a simple screens-off plan for Leo's bedtime?"},
+  {"id": "life-s051-e006#0", "response": "For jammy ramen eggs, lower them into boiling water for about 6.5 to 7 minutes (6 for runnier), then straight into an ice bath for a few minutes before peeling. If you marinate them in soy and mirin overnight they'll be even better, though that's tight for tomorrow.\nAction: Set a timer reminder for tomorrow's egg boil, and say if you want a marinade recipe."},
+  {"id": "life-s047-e025#0", "response": "I don't have the Withrow rink status for Saturday, so I won't guess. I'll check the City of Toronto's rink conditions and hours for Saturday afternoon, plus the forecast, since mild weather can close outdoor rinks.\nAction: Look up Withrow rink's status and Saturday forecast and tell you, and remind you tomorrow to snap a photo of the insurance letter."}
+ ]
+}
