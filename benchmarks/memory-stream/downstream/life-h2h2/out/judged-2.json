@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s037-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Casual Boxing Day check-in; all three respond warmly and briefly with no action needed."
+  },
+  {
+   "event": "life-s037-e011",
+   "scores": [
+    1,
+    2,
+    2
+   ],
+   "why": "All use mushroom Wellington though Leo hates mushrooms; R0 also ignores 'send it' for Hannah's text. R2 explicitly vegetarian for Sam."
+  },
+  {
+   "event": "life-s037-e017",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "Leo is terrible at waiting: R0's 50-minute loaf meant to rest hours fits poorly; R1 nut-free brownies and R2 quick muffins fit."
+  },
+  {
+   "event": "life-s037-e020",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Flight search and podcast note not in available facts or history; all honestly offer to search rather than invent."
+  },
+  {
+   "event": "life-s040-e009",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All set the reminder and accept Tom's new Wednesday 11:30 series, removing the Thursday copy."
+  },
+  {
+   "event": "life-s040-e018",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "The 2025-12-13 quantities are not on record; all decline to guess and offer tripling. R1 adds a relevant nut check."
+  },
+  {
+   "event": "life-s042-e008",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "New 6:15 Tue/Thu YMCA clashes with the recorded Tue/Thu 6:30 Marcus run; only R2 flags it. R0/R1 otherwise correct."
+  },
+  {
+   "event": "life-s045-e000",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "History: Old Navy needed a login to unsubscribe last time; only R0 uses that. Others are generic but acceptable."
+  },
+  {
+   "event": "life-s046-e013",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "No score known; all look it up without guessing."
+  },
+  {
+   "event": "life-s046-e016",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly distinguish batch EFT from same-day final wire for Canadian payouts and offer deck wording."
+  }
+ ]
+}
