@@ -1,0 +1,1 @@
+{"event": "code-s037-e000", "block": true, "rows": ["code-sleep-b02:m0021", "code-sleep-b00:m0034"], "note": "Zod PR #1312 (3.23.8 to 3.24.1) has its type-error fixes committed locally as a8c4f31 but not pushed, so its CI does not cover them; do not call it safe on CI alone. Also check that each bump commits its yarn.lock, since CI runs yarn install --frozen-lockfile."}

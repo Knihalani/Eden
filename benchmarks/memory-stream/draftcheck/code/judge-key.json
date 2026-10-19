@@ -1,0 +1,77 @@
+{
+ "code-s013-e004": [
+  "none",
+  "revised",
+  "oracle"
+ ],
+ "code-s021-e018": [
+  "revised",
+  "none",
+  "oracle"
+ ],
+ "code-s030-e000": [
+  "revised",
+  "oracle",
+  "none"
+ ],
+ "code-s037-e000": [
+  "oracle",
+  "none",
+  "revised"
+ ],
+ "code-s040-e008": [
+  "revised",
+  "oracle",
+  "none"
+ ],
+ "code-s055-e000": [
+  "revised",
+  "none",
+  "oracle"
+ ],
+ "code-s057-e010": [
+  "oracle",
+  "revised",
+  "none"
+ ],
+ "code-s068-e008": [
+  "none",
+  "oracle",
+  "revised"
+ ],
+ "code-s078-e016": [
+  "revised",
+  "none",
+  "oracle"
+ ],
+ "code-s080-e014": [
+  "oracle",
+  "none",
+  "revised"
+ ],
+ "code-s080-e020": [
+  "oracle",
+  "none",
+  "revised"
+ ],
+ "code-s085-e000": [
+  "oracle",
+  "revised",
+  "none"
+ ],
+ "code-s085-e010": [
+  "oracle",
+  "revised",
+  "none"
+ ],
+ "code-s092-e012": [
+  "oracle",
+  "none",
+  "revised"
+ ],
+ "code-s103-e031": [
+  "none",
+  "revised",
+  "oracle"
+ ]
+}

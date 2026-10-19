@@ -1,0 +1,1 @@
+{"event": "code-s021-e018", "block": true, "rows": ["code-sleep-b00:m0039"], "note": "The worker already scales with KEDA on queue length (1 to 20 replicas, one per 50 messages), so do not recommend adding replicas by hand before checking whether that cap is the limit."}

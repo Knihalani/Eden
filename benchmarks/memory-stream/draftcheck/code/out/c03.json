@@ -1,0 +1,1 @@
+{"event": "code-s013-e004", "block": true, "rows": ["code-sleep-b00:m0051", "code-sleep-b00:m0024"], "note": "Public CLI behaviour changes need docs/cli.md updated, and CLI tests here are Vitest snapshot tests of stdout, so snapshot the --json output."}

@@ -1,0 +1,215 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "cases": [
+  {
+   "event": "life-s098-e000",
+   "responses": [
+    "Congrats on the beta wrapping up, that deserves a proper lunch. I'll look for places near the office that can seat 8 next Thursday and check whether they take group bookings. I don't have a time or budget from you yet, so I'll ask. Action: search nearby restaurants for a table for 8 next Thursday at lunch and send you three options with availability.",
+    "Congrats on the beta wrapping up! Since Wen Li is vegan, I'll make sure whatever we pick has a real vegan option, and I'll check whether Saffron Lane on Queen Street East is close enough to the office and can seat 8, since it's your favourite. This is a lunch, so I'll confirm the time with you rather than defaulting to dinner hours. Action: check Saffron Lane plus two other nearby spots for a table for 8 next Thursday at lunch, with their vegan and vegetarian options, and send you the shortlist."
+   ]
+  },
+  {
+   "event": "life-s060-e002",
+   "responses": [
+    "I'm so sorry, Riya. Four years is still a lot, and I'm glad you have your diya tradition tonight to look forward to. I'll go through tomorrow and thin it out so it isn't a sprint, and keep the evening completely clear. Action: pull up tomorrow's calendar, propose which meetings to decline, shorten or move, and wait for your OK before sending anything.",
+    "I'm so sorry, Riya. Four years is still a lot, and I'll make sure tomorrow evening stays clear for your diya. Tomorrow, 18 March, should be a Wednesday, which usually means standup at 9:45, your 1:1 with Tom Becker at 11:30 and school pickup for Leo and Jun, so I'll check the calendar to confirm and see what can move. I won't change any pickup arrangement with Hannah or message Tom without your say-so. Action: review tomorrow's calendar, then send you a proposal for what to skip or shift (standup, the Tom 1:1, pickup) and wait for your OK."
+   ]
+  },
+  {
+   "event": "life-s017-e020",
+   "responses": [
+    "Sorry Sam's head is bad, and understood on not saying anything to Grace. I'll keep the gift completely unscented, so no candles, soaps or diffusers. I don't know Grace and Daniel's tastes, and tomorrow is a holiday Monday so shop hours may be limited, so I'll check what is open. Action: search for unscented gift options in Ottawa (food, plants or something for the house) that are open tomorrow and send you three options with hours.",
+    "Sorry Sam's head is bad, and understood on not saying anything to Grace. I'll keep the gift completely unscented. Grace teaches piano and Daniel is a retired civil engineer, so something like a nice music book or sheet-music collection for her, or a good book on bridges or building design for him, could work, but I'll check what's actually available and open tomorrow since it's a holiday Monday. Action: search Ottawa shops open tomorrow for a non-scented gift along those lines and send you three options with hours and prices."
+   ]
+  },
+  {
+   "event": "life-s001-e000",
+   "responses": [
+    "Welcome back, and a board-game do-over for ten years since that game night is a lovely idea. Saturday it is, so Sam isn't marking. Action: look for board-game cafes or a tabletop restaurant with a good game library, check Saturday availability, and send you a few options with booking details. I'll ask what time of day and budget you want first.",
+    "Welcome back, and a board-game do-over for ten years since that game night is a lovely idea. I'll only look at Saturdays, and since Sam is vegetarian and doesn't eat fish or seafood, I'll make sure any food option has proper vegetarian dishes and isn't seafood-focused. Action: search for board-game cafes or restaurants with a game library, check Saturday availability and menus, and send you a shortlist."
+   ]
+  },
+  {
+   "event": "life-s145-e000",
+   "responses": [
+    "Pumpkin patch sounds perfect for Leo. I'll look for farms within about 45 minutes that are open this afternoon and aren't mobbed. Action: search for pumpkin patches within a 45-minute drive, check hours and how busy they usually get, and send you two or three with drive times so you can leave around 1:30.",
+    "Pumpkin patch sounds perfect for Leo. Since you like one main activity and a quiet break afterwards, I'll pick a place that works as the whole outing without extra stops, and avoid the big busy ones. Action: search for pumpkin patches within a 45-minute drive, check hours and crowds, and send you two or three options with drive times for a 1:30 departure."
+   ]
+  },
+  {
+   "event": "life-s028-e010",
+   "responses": [
+    "I'll pull October grocery spending from your TD joint chequing statement and compare it with August and September. I'll also check whether any grocery purchases went through a card instead, so the three months are comparable. Action: pull grocery transactions for August, September and October from the TD accounts and send you the monthly totals with a short comparison.",
+    "I'll pull October grocery spending from the TD statement and put it next to August and September. I'll make sure the same stores and accounts are counted in all three months so the comparison is fair. Action: pull grocery transactions for August, September and October from TD and send you the three totals with a short comparison."
+   ]
+  },
+  {
+   "event": "life-s130-e000",
+   "responses": [
+    "Morning. I can't see anything from Nate in what I have in front of me, so I'm not going to guess at what he said. Action: check your texts and email for any message from Nate since his Barzotti call and tell you what, if anything, he sent about the schedule.",
+    "Morning. I'll check for anything from Nate since his Barzotti call. His last schedule had the kitchen renovation finishing by August 28, 2026, so if a new date comes in I'll compare it to that and flag any slip, including on the white-oak cabinets. Action: check your texts and email for Nate's message and summarize any schedule changes against the August 28 finish date."
+   ]
+  },
+  {
+   "event": "life-s028-e028",
+   "responses": [
+    "Here's a short version you can send. Pros: better wellbeing and retention, and firms often see similar output in fewer days. Cons: longer days to fit the hours, coverage gaps for clients, and open questions on pay and workload. Action: put that into a short message to Priya and show it to you before you send it.",
+    "Here's a short version you can send. Pros: better wellbeing and retention, and firms often see similar output in fewer days. Cons: longer days to fit the hours, coverage gaps for clients, and open questions on pay and workload. Since Priya is an architect, project deadlines and site visits are worth raising too. Action: draft that as a short message to Priya for you to review before sending."
+   ]
+  },
+  {
+   "event": "life-s155-e007",
+   "responses": [
+    "I'll open the instant payouts readiness doc and list everything still unresolved: open comments, linked tickets and anything left from the last review. Your launch readiness review doc for Tom is due 2026-10-28, a week before GA, so I'll flag what could hold that up. Action: read the Notion doc, pull open comments and linked ticket statuses, and send you a short list of unresolved items.",
+    "I'll open the instant payouts readiness doc and list everything still unresolved: open comments, linked tickets and anything left from the last review. Your notes show the readiness review doc as one of your open items. Action: read the Notion doc, pull open comments and linked ticket statuses, and send you a short list of what's unresolved."
+   ]
+  },
+  {
+   "event": "life-s023-e028",
+   "responses": [
+    "Good call doing this early with a January expiry. A child's passport renewal usually needs a completed application, passport photos, the old passport, proof of citizenship if needed, a parent's ID, and a fee, but I'll check the official requirements before giving you a final list. Action: look up the current child passport renewal requirements and the nearest Service Canada options, then send you a checklist and appointment availability.",
+    "Good call doing this early with a January expiry. Leo is under 16, so it's a child application, which usually needs the form, photos, his old passport, proof of citizenship, parent ID and possibly a guarantor or the other parent's consent. I'll verify the official requirements, including whether Sam needs to sign. Action: look up the current child passport renewal checklist and the nearest Service Canada appointment options, then send you both, with Leo's birth date of July 17, 2019 filled into the draft details."
+   ]
+  },
+  {
+   "event": "life-s038-e024",
+   "responses": [
+    "Partly. Written Portuguese is quite readable if you know Spanish, but spoken Portuguese sounds very different, so you'll understand signs and menus far better than people talking at speed. Action: I'll put together a short list of key Portuguese phrases and pronunciation tips for your Lisbon trip.",
+    "Partly. With your B1 Spanish, written Portuguese will be quite readable, but spoken Portuguese sounds very different, so understanding people at speed will be harder. It's worth learning some basics for Lisbon rather than relying on Spanish. Action: put together a short list of key Portuguese phrases and pronunciation tips for your Lisbon trip and save it to your notes."
+   ]
+  },
+  {
+   "event": "life-s041-e003",
+   "responses": [
+    "I'll reply to Marcus that you'll think about it and are reconsidering your routine. Here's a draft for the card: \"Dear Grace and Daniel, thank you so much for having us for Christmas in Ottawa. Your home was warm and welcoming, and we're still enjoying the 4 kg of leftovers you sent us home with. With love, from all three of us.\" Action: send Marcus the reply, and please confirm how you'd like the card signed, with all three names.",
+    "I'll let Marcus know you'll think about it and are reconsidering your routine. Here's a draft for the card: \"Dear Grace and Daniel, thank you so much for having us for Christmas in Ottawa from December 24 to 28. Your home was warm and welcoming, and we're still working through the 4 kg of leftovers you sent us home with. With love, from all three of us.\" Action: send Marcus the reply, and confirm how you'd like the card signed."
+   ]
+  },
+  {
+   "event": "life-s157-e000",
+   "responses": [
+    "Eight already, wow. I'll check Wonder Workshop on Queen East for whether they host parties for twelve kids on Saturday 2027-01-23 and what the packages cost. I'll also ask about food and allergy policies. Action: look up their party options and pricing and, if it isn't posted, draft an enquiry to them for you to send.",
+    "Eight already, wow. I'll check Wonder Workshop on Queen East for parties of twelve kids on Saturday 2027-01-23 and pricing. Two things to confirm: Leo's skating lessons run Saturday mornings at 10:30 am through 2027-03-13, so the party should start after those, and I'll ask about their food policy since Leo is allergic to cashews and pistachios. Action: look up their party packages, prices, available times that afternoon and allergy policy, and send you a summary."
+   ]
+  },
+  {
+   "event": "life-s028-e005",
+   "responses": [
+    "On it. I'll pull the open payouts launch risks from Linear into a new Notion doc for tomorrow's standup, with owner, due date, status, mitigation and next step for each. I'll flag any that are blocked or unestimated. Action: query Linear for open risk issues, create the Notion page, and send you the link.",
+    "On it. I'll pull the open payouts launch risks from Linear into a new Notion doc for tomorrow's standup, with owner, due date, status, mitigation and next step for each, and flag anything blocked or unestimated. Since it's a work doc, dates will be in ISO format, and I'll title it with tomorrow's date, 2025-11-12. Action: query Linear for open risk issues, create the Notion page 'Payouts launch risks (2025-11-12)', and send you the link."
+   ]
+  },
+  {
+   "event": "life-s077-e034",
+   "responses": [
+    "Sure. I'll keep the checklist to 15 items, use unscented cleaning products since Sam gets migraines from strong fragrances, and include a basement check at the back wall after the spring rain, a sump pump test, and a furnace filter swap. Action: save the 15-item checklist to Notes and look up junk removal services and any city bulk pickup for the old couch, then send you the options.",
+    "Sure. I'll keep the checklist to 15 items and save it to Notes. For the couch, I'll look for junk haulers and any city bulk pickup that takes sofas. Action: write the 15-item spring cleaning checklist into Notes and send you the couch removal options with prices and earliest dates."
+   ]
+  },
+  {
+   "event": "life-s141-e023",
+   "responses": [
+    "Sorry to hear about Hannah's car. Generally she needs to find out where it was taken, usually through the city's or police towed-vehicle line or the tow company, then go with ID and proof of ownership and pay the tow and storage fees plus the parking ticket. Storage often accrues per day, so she should go soon, and I'd confirm the current amounts rather than quote them. Action: look up the current process and fees for Logan Ave tows and send you a short set of steps for Hannah.",
+    "Sorry to hear about Hannah's car. Generally she needs to find out where it was taken, usually through the city's or police towed-vehicle line or the tow company, then go with ID and proof of ownership and pay the tow and storage fees plus the ticket. Storage often accrues daily, so sooner is better, and I'd confirm current amounts rather than guess. Action: look up the current process and fees for a tow from Logan Ave and send you steps to pass to Hannah."
+   ]
+  },
+  {
+   "event": "life-s131-e029",
+   "responses": [
+    "Got it, shorter replies today. Action: keep replies brief and phone-friendly until you say otherwise.",
+    "Got it, shorter replies today. Action: keep replies brief and phone-friendly until you say otherwise."
+   ]
+  },
+  {
+   "event": "life-s035-e000",
+   "responses": [
+    "Obviously. Fossil digs in the morning, pizza by lunch, that's a solid plan. Sam's question and Leo's answer are great. Action: nothing needed, unless you'd like me to save that quote to your notes.",
+    "Obviously. Fossil digs in the morning, pizza by lunch, that's a solid plan. Sam's question and Leo's answer are great. Action: nothing needed, unless you'd like me to save that quote to your notes."
+   ]
+  },
+  {
+   "event": "life-s027-e020",
+   "responses": [
+    "Here's your lemon loaf in grams, using standard approximations: flour 190 g, sugar 200 g, butter 113 g, plain yogurt 120 g, lemon juice 30 g (30 ml), baking powder 4 g. Flour varies the most by how it's scooped, so weigh by the grams here. Action: nothing else needed, or I can save this to your recipes.",
+    "Here's your lemon loaf in grams, using standard approximations: flour 190 g, sugar 200 g, butter 113 g, plain yogurt 120 g, lemon juice 30 g (30 ml), baking powder 4 g. Flour varies the most by how it's scooped, so weigh by the grams here. Action: nothing else needed, or I can save this to your recipes."
+   ]
+  },
+  {
+   "event": "life-s143-e013",
+   "responses": [
+    "Got it, short replies. I'll keep anything non-urgent for after 5. Action: send only what needs you before then, in one or two lines.",
+    "Got it, short replies. I'll keep anything non-urgent for after 5. Action: send only what needs you before then, in one or two lines."
+   ]
+  },
+  {
+   "event": "life-s028-e022",
+   "responses": [
+    "Poppies grew on the battlefields of Flanders in World War I, and a Canadian doctor, John McCrae, wrote the poem 'In Flanders Fields' in 1915 about them. The poem spread and the poppy became the symbol of remembrance in Canada and other Commonwealth countries. Simple version for Leo: red poppies bloomed where soldiers were buried, and we wear them to remember those who died. Action: nothing else needed, or I can write a kid-friendly version for you.",
+    "Poppies grew on the battlefields of Flanders in World War I, and a Canadian doctor, John McCrae, wrote the poem 'In Flanders Fields' in 1915 about them. The poem spread and the poppy became the symbol of remembrance in Canada and other Commonwealth countries. Simple version for Leo: red poppies bloomed where soldiers were buried, and we wear them to remember those who died. Action: nothing else needed, or I can write a kid-friendly version for you."
+   ]
+  },
+  {
+   "event": "life-s085-e015",
+   "responses": [
+    "Here's a draft: \"Reminder for #payouts-launch: the beta retro is Thursday at 2pm in room 4B. Please add your sticky notes to the Miro board before then. Thanks!\" Action: post it to #payouts-launch once you say go.",
+    "Here's a draft: \"Reminder for #payouts-launch: the beta retro is Thursday at 2pm in room 4B. Please add your sticky notes to the Miro board before then. Thanks!\" Action: post it to #payouts-launch once you say go."
+   ]
+  },
+  {
+   "event": "life-s058-e010",
+   "responses": [
+    "I don't have a record of the VIA Rail search from 2026-02-27 in front of me, and I don't want to guess at times or prices. Action: check my history and notes for that date, and if nothing turns up, re-run a fresh lookup of Friday evening Toronto to Ottawa VIA options and compare them with driving.",
+    "I don't have a record of the VIA Rail search from 2026-02-27 in front of me, and I don't want to guess at times or prices. Action: check my history and notes for that date, and if nothing turns up, re-run a fresh lookup of Friday evening Toronto to Ottawa VIA options and compare them with driving."
+   ]
+  },
+  {
+   "event": "life-s001-e039",
+   "responses": [
+    "I only have part of this in front of me. For automatic charges, the one I can confirm is the Bell Fibe internet at $95 a month, and I'll check your statements for the rest rather than guess. I'll also check the Amazon batteries order status, and from this conversation so far I've helped with the Wen data request draft, your weekly plate, the Saturday run, the internet check, the PRD skeleton and your Vancouver flight preferences. Action: pull recurring charges from your statements, check the Amazon order, and send you a full history list.",
+    "I only have part of this in front of me. For automatic charges, the one I can confirm is the Bell Fibe internet at $95 a month, and I'll check your statements for the rest rather than guess. I'll also check the Amazon batteries order status, and from this conversation so far I've helped with the Wen data request draft, your weekly plate, the Saturday run, the internet check, the PRD skeleton and your Vancouver flight preferences. Action: pull recurring charges from your statements, check the Amazon order, and send you a full history list."
+   ]
+  },
+  {
+   "event": "life-s077-e026",
+   "responses": [
+    "That sounds like exactly the right kind of Saturday. Nothing here needs you, so I'll leave everything non-urgent alone. Action: hold any non-urgent messages until Monday and stay quiet unless something is genuinely urgent.",
+    "That sounds like exactly the right kind of Saturday. Nothing here needs you, so I'll leave everything non-urgent alone. Action: hold any non-urgent messages until Monday and stay quiet unless something is genuinely urgent."
+   ]
+  },
+  {
+   "event": "life-s088-e000",
+   "responses": [
+    "Happy long weekend! Here's your checklist: [ ] find the good extension cord, [ ] hang the hallway mirror, [ ] fix Leo's bike chain, [ ] sort the garage recycling, [ ] plant the tomato seedlings. I put the cord first since it may help with the other jobs. Action: save this as a checklist in your notes.",
+    "Happy long weekend! Here's your checklist: [ ] find the good extension cord, [ ] hang the hallway mirror, [ ] fix Leo's bike chain, [ ] sort the garage recycling, [ ] plant the tomato seedlings. I put the cord first since it may help with the other jobs. Action: save this as a checklist in your notes."
+   ]
+  },
+  {
+   "event": "life-s025-e032",
+   "responses": [
+    "That's lovely, I'm glad the flowers landed and that she got a bit teary. Noted, we'll pick the decision back up tonight. Action: save your mom's birthday, November 3, and the Mumbai florist as a yearly reminder a week ahead, and check back with you tonight on the open decision.",
+    "That's lovely, I'm glad the flowers landed and that she got a bit teary. Noted, we'll pick the decision back up tonight. Action: save your mom's birthday, November 3, and the Mumbai florist as a yearly reminder a week ahead, and check back with you tonight on the open decision."
+   ]
+  },
+  {
+   "event": "life-s023-e024",
+   "responses": [
+    "Sunday scaries are the worst, and the extra hour never helps. Nothing needs doing tonight. The only open item is picking a slot for the edge-case meeting with Aisha and Diego, and that can wait until morning. Action: leave it alone tonight and remind you in the morning to choose a slot.",
+    "Sunday scaries are the worst, and the extra hour never helps. Nothing needs doing tonight. The only open item is picking a slot for the edge-case meeting with Aisha and Diego, and that can wait until morning. Action: leave it alone tonight and remind you in the morning to choose a slot."
+   ]
+  },
+  {
+   "event": "life-s052-e019",
+   "responses": [
+    "Glad that landed, Riya the poet has a nice ring to it. Action: nothing needed, but I can do a Friday one if the channel demands it.",
+    "Glad that landed, Riya the poet has a nice ring to it. Action: nothing needed, but I can do a Friday one if the channel demands it."
+   ]
+  },
+  {
+   "event": "life-s010-e000",
+   "responses": [
+    "Here's a line: \"Happy birthday, Tom! Thanks for everything this year, hope it's a great one.\" Action: add it to the card under your name, nothing else needed.",
+    "Here's a line: \"Happy birthday, Tom! Thanks for everything this year, hope it's a great one.\" Action: add it to the card under your name, nothing else needed."
+   ]
+  }
+ ]
+}
