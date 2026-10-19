@@ -1,0 +1,303 @@
+{
+ "batch": "life-sleep-b06",
+ "sessions": [
+  {
+   "id": "life-s060",
+   "episodes": [
+    {
+     "text": "2026-03-17 Riya Malhotra's father Vikram Malhotra died 2022-03-18; around that date every year she prefers a lighter schedule and lights a diya at home in the evening. For Wed 2026-03-18 the assistant kept standup, 1:1 with Tom Becker and Leo/Jun pickup; sent reschedule notes (d-8839, d-8840, d-8841): Q2 payouts roadmap sync moved to Thu 2026-03-19 10:00, senior PM hiring sync to Fri 2026-03-20 11:00, Plaid identity vendor demo to Tue 2026-03-24 pending AE confirmation, design crit with Diego handled async in Figma. Scheduled Slack message sm-2207 in #payouts-team at 09:00 saying she is mostly offline that afternoon.",
+     "entities": [
+      "Riya Malhotra",
+      "Vikram Malhotra",
+      "Tom Becker",
+      "Diego Fernandez",
+      "Aisha Rahman",
+      "Olivia Grant"
+     ]
+    },
+    {
+     "text": "2026-03-17 Background tasks started: find plumber in Leslieville for dripping basement laundry tap (a week), export February payout failure numbers from Looker for Thursday deck, check shop for cotton wicks and ghee for the diya. Results not reported in session.",
+     "entities": [
+      "Riya Malhotra",
+      "Looker"
+     ]
+    },
+    {
+     "text": "2026-03-17 Priya's firm wants her to transfer from Montreal to Toronto office and she is torn; assistant gave questions (step up vs sideways, who she'd report to, what she loses in Montreal, cost of saying no, trial stint, five-year view) and a text for Riya to forward.",
+     "entities": [
+      "Priya",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-03-17 Subscriptions after decluttering: Netflix standard, Spotify Family, Crave, The Globe and Mail digital. Disney+ Premium cancelled (confirmation 2026-03-04, access ended 2026-03-11, no receipt since).",
+     "entities": [
+      "Riya Malhotra",
+      "Disney+",
+      "Netflix",
+      "Spotify",
+      "Crave",
+      "The Globe and Mail"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s061",
+   "episodes": [
+    {
+     "text": "2026-03-24 Dr. Lin (dentist for Riya and Leo, cleanings every 6 months) moved in March 2026 from Queen East Dental to Danforth Smiles, 822 Danforth Ave near Pape station, phone 416-555-0144, online booking danforthsmiles.example.com; records transferred; contact updated. Open: book Leo's cleaning.",
+     "entities": [
+      "Dr. Lin",
+      "Danforth Smiles",
+      "Leo",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-03-24 Riya's plantar fasciitis info from 2026-03-06 re-read: inflammation of the band along the sole, worst with first morning steps, most cases settle in 6-12 months. Preference set: work items by push notification, personal items as one evening digest at 20:30.",
+     "entities": [
+      "Riya Malhotra"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s062",
+   "episodes": [
+    {
+     "text": "2026-03-28 Riya and Sam decided not to replace the 2019 Mazda CX-5 in 2026; money goes to kitchen renovation; revisit an EV in 2028. Assistant started unsubscribing from Downtown Mazda offers and Mazda Canada newsletter but kept service reminders (60,000 km service notice 2026-02-27).",
+     "entities": [
+      "Riya Malhotra",
+      "Sam",
+      "Downtown Mazda",
+      "Mazda Canada"
+     ]
+    },
+    {
+     "text": "2026-03-28 Riya's plantar fasciitis in early 2026 was mild and improved with calf stretches suggested by Marcus Bell. New rule: replace Brooks Ghost every 600 km. Running log: Brooks Ghost 15 pair at 571 km as of 2026-03-22 (first run 2025-08-03); assistant flags past 560 km and is checking Ghost prices.",
+     "entities": [
+      "Riya Malhotra",
+      "Marcus Bell",
+      "Brooks Ghost"
+     ]
+    },
+    {
+     "text": "2026-03-28 Spanish practice preference changed: reply in Spanish and list only the three most important corrections in bold at the end. First test corrections: 'fui a el mercado' to 'fui al mercado', 'estaba muy feliz' to 'estuvo muy feliz', 'todo el d\u00eda' vs 'toda la tarde'; corrections being added to Anki deck.",
+     "entities": [
+      "Riya Malhotra",
+      "Leo"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s063",
+   "episodes": [
+    {
+     "text": "2026-03-29 Marcus Bell is choosing between two physio clinic job offers: one pays ~10% more, the other is a 10-minute bike ride vs 45 min subway. Assistant leaned toward the close one and suggested negotiating pay. Also: Canadian passport renewal by mail ~20 business days plus mailing (5-6 weeks); in person 10 business days.",
+     "entities": [
+      "Marcus Bell",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-03-29 Leo's grade 2 Career Day talk: Tue 2026-03-31 9:15 in Room 104, ~5 minutes plus questions, hands-on with props (Ms. Alvarez via Edsby). Open: Riya to choose an angle for the talk.",
+     "entities": [
+      "Leo",
+      "Ms. Alvarez",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-03-29 Background tasks: rename 214 files in Drive '/Photos/2026 March Break' by date and move blurry/duplicates to 'maybe delete' (no deletions); summarize 12 unread newsletters. Riya asked for shorter replies on phone today. Triage: Northline Renovations sent updated electrical quote; Spring Photo Day Thu 2026-04-09, retakes May 14; PA Day Fri 2026-04-10.",
+     "entities": [
+      "Riya Malhotra",
+      "Northline Renovations",
+      "Morse Street PS"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s064",
+   "episodes": [
+    {
+     "text": "2026-03-30 Riya and Sam decided against the $1,900 two-week overnight camp (Camp Wanakita) for Leo in summer 2026 and chose Riverdale Farm day camp (ages 6-9, Mon-Fri 9:00-16:00, $245/week, extended care +$45, $100 non-refundable deposit per week, balance due 2026-06-01). Availability: Wk1 Jul 6-10 full; Wk2 Jul 13-17 4 spots; Wk3 Jul 20-24 7; Wk4 Jul 27-31 2; Wk5 Aug 4-7 11; Wk6 Aug 10-14 9. Decline email d-9020 sent to registrar@campwanakita.example.com; registration started for Weeks 2-3 (Jul 13-24), stopping before payment.",
+     "entities": [
+      "Leo",
+      "Sam",
+      "Riya Malhotra",
+      "Riverdale Farm",
+      "Camp Wanakita"
+     ]
+    },
+    {
+     "text": "2026-03-30 Camp form wants $200 deposit by e-transfer before Friday; assistant does not know which account is family vs personal and will ask before the transfer (over Riya's $150 limit). Texted Hannah Cho (+1 416-555-0163) asking if Jun wants Jul 13-24 too to split drop-offs. Tentative Vancouver trip Jul 31 - Aug 4 overlaps camp weeks 4-5.",
+     "entities": [
+      "Hannah Cho",
+      "Jun",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-03-30 Yard waste pickup starts Thu 2026-04-09, every other Thursday; branches under 1.2 m long, 7.5 cm thick. Paper yard waste bags cheapest at Home Depot on Leslie, $11.98 for 10. Finance peer: Toronto Hydro $142.18 due 2026-04-06; TekSavvy $70 autopay 2026-04-02.",
+     "entities": [
+      "Home Depot",
+      "Toronto Hydro",
+      "TekSavvy",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-03-30 Kabir and Mei might fly in with Ira for a week in early September; Riya unsure if the house will still be a construction zone. Texted Nate (Northline Renovations, +1 647-555-0119) asking for expected kitchen completion date; answer pending, to go into evening digest. Work: Aisha posted beta merchant shortlist for Riya's review due Wed; PAY-1412 done; Tom asked whether Thursday's deck can include the February reliability chart.",
+     "entities": [
+      "Kabir Malhotra",
+      "Mei",
+      "Ira",
+      "Nate",
+      "Riya Malhotra",
+      "Aisha Rahman",
+      "Tom Becker"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s065",
+   "episodes": [
+    {
+     "text": "2026-04-04 Riya's coffee order is now an oat milk cortado, decaf after 14:00 (saved in 'coffee order' note). Reminder: Vancouver visitors arrive for lunch at home Sun 2026-04-05 12:30; groceries needed by 14:00 today for pickup; Leo's Easter egg hunt at Jimmie Simpson Park 17:00. Open: menu and PC Express order.",
+     "entities": [
+      "Riya Malhotra",
+      "Leo",
+      "Jimmie Simpson Park"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s066",
+   "episodes": [
+    {
+     "text": "2026-04-08 Instant Payouts open Linear tickets: PAY-1398 ledger idempotency keys (Aisha, in progress); PAY-1403 per-merchant daily cap (Tariq Osei, blocked by PAY-1421); PAY-1409 status page failed copy (Diego, in review); PAY-1417 payout.failed retry policy (Mina Park, blocked, decision needed from Riya); PAY-1419 beta opt-in (Todo); PAY-1421 AML threshold sign-off (blocked on legal review); PAY-1425 fee display (Todo).",
+     "entities": [
+      "Riya Malhotra",
+      "Aisha Rahman",
+      "Tariq Osei",
+      "Diego Fernandez",
+      "Mina Park",
+      "Instant Payouts"
+     ]
+    },
+    {
+     "text": "2026-04-08 Market scan added as Appendix C of the Instant Payouts PRD: Stripe and Shopify Payments charge 1.5% (Stripe min $0.50), Square 1.75%, Helcim has no instant product; net amount shown prominently; 148 public posts, top complaints sent-not-received (41), fees on failed payouts (23), ineligibility (19), access removed (15); Real-Time Rail in final testing with phased 2026 launch. Background tasks: Looker Q1 merchant churn chart for appendix; scan Notion/Docs for links to old pricing page.",
+     "entities": [
+      "Riya Malhotra",
+      "Instant Payouts PRD",
+      "Stripe",
+      "Square",
+      "Shopify Payments",
+      "Helcim"
+     ]
+    },
+    {
+     "text": "2026-04-08 Diego's sister moving from Madrid on a work permit asked how to get a SIN: apply at Service Canada with work permit and passport; same-day in person. Assistant pulling official page and downtown office hours for Diego.",
+     "entities": [
+      "Diego",
+      "Service Canada"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s067",
+   "episodes": [
+    {
+     "text": "2026-04-16 Calendar: 10:00 Instant Payouts beta readiness (Aisha Rahman, Mina Park), 12:00 lunch with Olivia Grant, 14:30 legal AML sign-off (PAY-1421). Weather 4C rising to 12C.",
+     "entities": [
+      "Riya Malhotra",
+      "Aisha Rahman",
+      "Mina Park",
+      "Olivia Grant"
+     ]
+    },
+    {
+     "text": "2026-04-16 Riya moved dog-walking receipts (14 files) out of Taxes/2025/Deductions to Household/Biscuit (not deductible; Biscuit is the dog). Run with Marcus Bell moved from Saturdays 07:00 to Sundays 07:30 from foot of Leslie St (Tommy Thompson Park out-and-back) from 2026-04-19. Leo's Leslieville house league soccer: Saturdays 09:00-10:00 at Jimmie Simpson Park, Apr-Jun and Sep-Oct, on family calendar from 2026-04-18.",
+     "entities": [
+      "Riya Malhotra",
+      "Marcus Bell",
+      "Leo",
+      "Biscuit",
+      "Jimmie Simpson Park"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s068",
+   "episodes": [
+    {
+     "text": "2026-04-19 Mazda CX-5 insurance switched from Intact to belairdirect in April 2026: policy BD-AU-7731904, active 2026-04-15 to 2027-04-15, $118.42/month, ~$410/yr cheaper, renews each April. Background tasks: confirm Intact cancellation, chase prorated refund ($61.27), file policy and pink slip in Household > Car, update budget sheet. Texted Sam Okafor that Intact mail is only cancellation/refund.",
+     "entities": [
+      "Riya Malhotra",
+      "Sam Okafor",
+      "Intact",
+      "belairdirect"
+     ]
+    },
+    {
+     "text": "2026-04-19 Kitchen: Riya and Sam chose Caesarstone Frosty Carrina quartz over marble; texted Nate (Northline Renovations) to proceed with fabricator and give template date. Leslieville Farmers' Market opens Sun 2026-05-10 (Sundays 9:00-14:00, Jonathan Ashbridge Park, to Oct 25).",
+     "entities": [
+      "Riya Malhotra",
+      "Sam Okafor",
+      "Nate",
+      "Caesarstone",
+      "Leslieville Farmers' Market"
+     ]
+    },
+    {
+     "text": "2026-04-19 Grace Okafor wants to send Leo a parcel from Ottawa; assistant had no note on Leo's current interests; advice: avoid nuts and homemade food. Riya will ask Leo. Dental cleaning with Dr. Lin Wed 2026-04-22 at Danforth Smiles: slots 08:20, 11:00, 11:40, 15:20; Riya said hold, not booked.",
+     "entities": [
+      "Grace Okafor",
+      "Leo",
+      "Dr. Lin",
+      "Danforth Smiles",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-04-19 PC Express order PCX-88412093 for pickup Mon 2026-04-20 15:00-15:30 at Leslie St: apples, clementines, Goldfish cheddar, cheese strings, juice boxes, Annie's bunny grahams, $31.53, for Jun and his big sister (mom on day shift) after school with Leo.",
+     "entities": [
+      "PC Express",
+      "Jun",
+      "Leo",
+      "Riya Malhotra"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s069",
+   "episodes": [
+    {
+     "text": "2026-04-19 Weekend vets list (saved 2026-04-15) for Biscuit since Dr. Moreau is weekdays only: Riverside Veterinary Clinic 690 Queen St E (Sat 9-17, Sun 10-16); Queen East Pet Hospital 1286 Queen St E (Sat 8-14, Sun closed); Danforth Animal Clinic 1050 Danforth Ave (Sat-Sun 9-15). Background task checking weekend hours and walk-ins.",
+     "entities": [
+      "Biscuit",
+      "Dr. Moreau",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-04-19 Instant Payouts PRD decision log entry: payout webhook retries use exponential backoff with 72-hour window (Aisha Rahman's proposal) over fixed 24-hour; owner Riya; PAY-1417. Beta plan: 40 merchants, 6 weeks; success bar payout success >= 99.5% and median payout time < 30 min for two consecutive weeks; GA exit also needs no Sev-1 in final 2 weeks. Open: copy bar next to the decision entry.",
+     "entities": [
+      "Riya Malhotra",
+      "Aisha Rahman",
+      "Instant Payouts PRD",
+      "PAY-1417"
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,352 @@
+{
+ "batch": "life-sleep-b13",
+ "sessions": [
+  {
+   "id": "life-s130",
+   "episodes": [
+    {
+     "text": "2026-08-26 Nate (Northline Renovations) texted Riya on 2026-08-25 after his call with Barzotti: kitchen finish moves from Aug 28 to around November 20, 2026, a seven-week delay caused only by Barzotti's late custom cabinets; plumbing rough-in, panel and drywall on track; crew in Thursday 7:30 for drywall patch; revised schedule PDF promised for 26 Aug. Assistant updated the 'kitchen reno' note finish_estimate.",
+     "entities": [
+      "Riya",
+      "Nate",
+      "Northline Renovations",
+      "Barzotti",
+      "kitchen reno"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s131",
+   "episodes": [
+    {
+     "text": "2026-08-26 Riya put on the Family calendar 'Ottawa: Riya, Sam, Leo @ Grace & Daniel's' Fri 2026-11-13 to Sun 2026-11-15 (evt_8f21c3), driving to stay with Grace and Daniel Okafor for Grace's birthday weekend; Sam invited (sam.okafor@example.com).",
+     "entities": [
+      "Riya",
+      "Sam",
+      "Leo",
+      "Grace Okafor",
+      "Daniel Okafor",
+      "Ottawa",
+      "evt_8f21c3"
+     ]
+    },
+    {
+     "text": "2026-08-26 Ottawa trip checks: Ontario 511 for Fri 2026-11-13: Hwy 401 EB at Kingston (Hwy 15) right lane closed 09:00-15:00 (10-15 min), Hwy 401 EB Port Hope-Cobourg overnight only, Hwy 416 NB none; recheck the Wednesday before. Ottawa options: Canadian Museum of Nature fossil-dig workshop Sat 2026-11-14 10:30 ($18/child, booking required), Science and Technology Museum, Lansdowne Park market Sat 9-13. Work conflict: 'Instant Payouts GA retro' Fri 2026-11-13 13:00-13:25 (organizer Aisha Rahman); assistant suggested asking Aisha to move it to Thu 12 Nov; Riya said 'later on the retro' (open).",
+     "entities": [
+      "Aisha Rahman",
+      "Instant Payouts GA retro",
+      "Canadian Museum of Nature",
+      "Hwy 401",
+      "Ottawa"
+     ]
+    },
+    {
+     "text": "2026-08-26 Riya's open Payouts Linear tickets: PAY-1182 (P1, In Progress) GA readiness checklist, sign-off owners; PAY-1190 (P2, In Review) GA announcement email copy; PAY-1203 (P2, Todo) failed-payout reason taxonomy cleanup; PAY-1211 (P3, Todo) pricing page FAQ; PAY-1216 (P2, In Progress) support macro 'my payout is late'. Latest comments: Aisha (Aug 25) Eng sign-off is her, Legal and Support owners still need naming (PAY-1182); Diego (Aug 26) header updated in Figma, copy is Riya's call (PAY-1190); Kofi (Support, Aug 24) macro draft needs PM review for tone (PAY-1216). GA blockers: PAY-1182 and PAY-1190 (launch-day); Support wants PAY-1216 before GA but it is not linked as blocker.",
+     "entities": [
+      "Riya",
+      "PAY-1182",
+      "PAY-1190",
+      "PAY-1203",
+      "PAY-1211",
+      "PAY-1216",
+      "Aisha",
+      "Diego",
+      "Kofi"
+     ]
+    },
+    {
+     "text": "2026-08-26 Riya wants to do something sweet with Sam this fall as a callback to how they first met, at home after Leo is asleep; assistant gave ideas and asked how they met (no story saved). Open. Also asked how she learns Spanish best and what vocab to use for tonight's practice; assistant had nothing saved, asked her. Riya asked for shorter replies today (on phone).",
+     "entities": [
+      "Riya",
+      "Sam",
+      "Leo",
+      "Spanish"
+     ]
+    },
+    {
+     "text": "2026-08-26 Ordered at Canadian Tire Leslie St, order CT-48820713: Finish Quantum Ultimate dishwasher pods 62ct $24.99 and Bounty Select-A-Size 12 double rolls $21.49, total $52.52 paid by Visa ending 4412, pickup Thu 27 Aug after 14:00. Dyson options for a cordless like Hannah's: V8 Origin $429.99 (in stock Leslie St), V8 Origin open box $344.99 (Leaside), V12 Detect Slim $749.99, V15 Detect $949.99; asked which model Hannah has (open).",
+     "entities": [
+      "Canadian Tire",
+      "Hannah",
+      "Dyson",
+      "CT-48820713",
+      "Visa ending 4412"
+     ]
+    },
+    {
+     "text": "2026-08-26 Drafted for Priya a polite-but-firm email to client Mark asking for a change order (about 18 hours of drafting) for redoing facade drawings after two brief changes. Wrote a 3-4 line funny toast for cousin Neha and Arjun's engagement party on Saturday (check Arjun is the real name). Peer notes: August 5 days left groceries $812 of $900, dining $214 of $250; TekSavvy $70 due 2026-09-01, Spotify Family $19.99 2026-09-03; Slack: Wen Li asked Monday dashboard review start 5 min late; Diego wants Riya's take on GA email header by Fri.",
+     "entities": [
+      "Priya",
+      "Mark",
+      "Neha",
+      "Arjun",
+      "Wen Li",
+      "Diego",
+      "TekSavvy",
+      "Spotify"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s132",
+   "episodes": [
+    {
+     "text": "2026-08-27 Grace Okafor actually turns 68 on Thu 2026-11-19 (Ottawa weekend 2026-11-13 is before). Added 'Grace Okafor's 68th birthday' yearly on Family calendar (evt_9a0412) and reminder rem_3317 for Thu 2026-11-05 09:00 to sort a gift. Gift ideas for Grace, a piano teacher: leather music folio engraved $64.99 (Long & McQuade); NAC Orchestra 'Chopin and Brahms' matinee Sun 2026-11-15 14:00 $58 each; Henle Schubert Impromptus $39.95 (Indigo); framed vintage concert poster ~$120. Assistant highlighted the NAC matinee. Nothing bought.",
+     "entities": [
+      "Grace Okafor",
+      "Riya",
+      "rem_3317",
+      "NAC Orchestra",
+      "Long & McQuade",
+      "Ottawa"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s133",
+   "episodes": [
+    {
+     "text": "2026-08-31 Booked 'GA target wording for Sales' Wed 2026-09-09 15:30-15:55 Toronto time (evt_3c9a77) with Olivia Grant and Aisha Rahman. Agenda: Wavecrest certification status, what Sales can and can't say about the target, next checkpoint.",
+     "entities": [
+      "Riya",
+      "Olivia Grant",
+      "Aisha Rahman",
+      "Wavecrest",
+      "evt_3c9a77"
+     ]
+    },
+    {
+     "text": "2026-08-31 Dr. Patel annual physical Tue 2026-09-01 09:40 (Riverside Family Practice); pre-visit questionnaire was due 2026-08-31 09:40 and was not submitted. Assistant filled section 1 (contact/OHIP) as a draft; sections on medications, allergies, lifestyle, family history, PHQ-2 mood remain for Riya (about 10 min). Offered a 20:30 reminder; open.",
+     "entities": [
+      "Riya",
+      "Dr. Patel",
+      "Riverside Family Practice"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s134",
+   "episodes": [
+    {
+     "text": "2026-09-05 Created note 'Fall 2026 logistics' merging Riya's notes. TAP Air Portugal booking change confirmed 2026-08-29, ref 4XK9TR: TP260 YYZ 2026-12-20 22:10 to LIS 2026-12-21 10:25; return TP259 LIS 2027-01-02 12:15 to YYZ 15:40; passengers Riya Malhotra, Sam Okafor, Leo Okafor; Economy Classic, change fee waived. Moved to Dec 20 because Leo's last school day is 2026-12-18 and Sam has exams to mark.",
+     "entities": [
+      "Riya Malhotra",
+      "Sam Okafor",
+      "Leo",
+      "TAP Air Portugal",
+      "4XK9TR",
+      "TP260",
+      "TP259"
+     ]
+    },
+    {
+     "text": "2026-09-05 Leo's Canadian passport expires 2027-03-04; renewal must be submitted at Service Canada by 2026-11-06 (about 20 business days; needs current passport, 2 photos, guarantor form, Sam's signature). School routine: Leo started grade 2 in Ms. Alvarez's class at Morse Street PS on 2026-09-02; Sam drops off 8:35 am; Riya picks up 3:30 pm Mon/Wed/Fri; after-school program until 5:45 pm Tue/Thu.",
+     "entities": [
+      "Leo",
+      "Sam",
+      "Riya",
+      "Service Canada",
+      "Morse Street PS",
+      "Ms. Alvarez"
+     ]
+    },
+    {
+     "text": "2026-09-05 Aisha Rahman asked for a 20 min sync next Wed 2026-09-09 around 11:45 on the webhook retry rollout before GA; assistant asked Riya whether to accept (open).",
+     "entities": [
+      "Aisha Rahman",
+      "webhook retry rollout"
+     ]
+    },
+    {
+     "text": "2026-09-05 Summarized for Priya an article on sourdough starters (flour, water, 24-26 C; hooch means hungry; ready when it doubles in 4-8 hours, 7-14 days). Pam McConnell Aquatic Centre fall 2026 swim registration opened Wed 2026-09-02 07:00 on City of Toronto efun; Riya thought she missed it; assistant offered to check availability for Leo's level (open).",
+     "entities": [
+      "Priya",
+      "Pam McConnell Aquatic Centre",
+      "efun",
+      "Riya",
+      "Leo"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s135",
+   "episodes": [
+    {
+     "text": "2026-09-07 Saved to note 'Q3 review deck': 2026-08-26 Wavecrest Bank outage delayed 1,140 beta payouts about three hours; postmortem fix was the merchant dashboard status banner. Draft slide 7 'Beta reliability' added to Q3 review deck; still needs Q3 payout success rate from Payouts Health dashboard.",
+     "entities": [
+      "Wavecrest Bank",
+      "Q3 review deck",
+      "Riya",
+      "Payouts Health dashboard"
+     ]
+    },
+    {
+     "text": "2026-09-07 Saved to note 'Riya - Lisbon': Riya paid extra $180 to choose seats together on the Lisbon flights; Leo gets a window seat between Riya and Sam.",
+     "entities": [
+      "Riya",
+      "Leo",
+      "Sam",
+      "Lisbon"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s136",
+   "episodes": [
+    {
+     "text": "2026-09-09 Leo's piano with Mrs. Greene moved from Mondays 16:30 to Fridays 16:15-16:45 starting Fri 2026-09-11 (series evt_p001, 15 lessons to 2026-12-18) because Monday clashes with Riya's weekly 'Roadmap review - Riya' at Lumen Pay. Sam texted at 07:24 and has the calendar change. Clash: Fri 2026-11-13 lesson overlaps the Ottawa trip; Mrs. Greene needs one week's notice; assistant to remind Riya on 6 Nov to cancel (open).",
+     "entities": [
+      "Leo",
+      "Mrs. Greene",
+      "Riya",
+      "Sam",
+      "Lumen Pay",
+      "evt_p001"
+     ]
+    },
+    {
+     "text": "2026-09-09 Reminder rem_3402 at 07:50 to move the car for street cleaning. Toronto sweeping on Riya's block: north side 2nd Wednesday monthly 07:00-11:00 Apr-Nov (next Wed 2026-10-14), south side 2nd Thursday (next Thu 2026-10-08), ticket $50; offered recurring reminders (open). Morse Street PS picture day Thu 2026-09-24, online orders close 2026-09-22.",
+     "entities": [
+      "Riya",
+      "rem_3402",
+      "Morse Street PS"
+     ]
+    },
+    {
+     "text": "2026-09-09 Support escalation from Kofi Asante: merchant Dana Whitfield (Maple & Main Bakery, Guelph, merchant m_77310c) cannot finish ID verification on iPhone 15, iOS 18.6, Safari: HEIC photo rejected with DOC-415, 7 attempts 2026-09-03 to 09-08; needs card payments for a farmers' market this weekend. Linear ONB-412 (closed 2026-08-28 as cannot reproduce) reopened by Kofi; fix PR #2291 (client HEIC to JPEG conversion) approved, Aisha Rahman says merges today and ships Thursday's release. Workaround: Settings > Camera > Formats > Most Compatible. Assistant drafted reply for Dana (not sent, Kofi can send); no help-centre article on HEIC (only article 2210).",
+     "entities": [
+      "Kofi Asante",
+      "Dana Whitfield",
+      "Maple & Main Bakery",
+      "ONB-412",
+      "PR #2291",
+      "DOC-415",
+      "Aisha Rahman"
+     ]
+    },
+    {
+     "text": "2026-09-09 Riya's mom messaged asking when Riya is visiting and about the rains; assistant had no trip dates or location saved, asked (open). Morning triage: Olivia Grant 'QBR prep: GA slide by Thu?'; Northline Renovations invoice NR-2214 progress draw #3 due 2026-09-18; Edsby picture day forms; also Wen Li on 'payout latency' definition. Unsubscribed Riya from Air Miles, Hudson's Bay Bay Days, Uber Eats, Eventbrite promos; standup moved to 10:00. Shopping list: added eggs, bananas, tortillas (now 11 items).",
+     "entities": [
+      "Riya",
+      "Olivia Grant",
+      "Northline Renovations",
+      "NR-2214",
+      "Wen Li",
+      "Air Miles"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s137",
+   "episodes": [
+    {
+     "text": "2026-09-11 Leo got into swim: Learn to Swim Level 4 (instructor Kayla), Wednesdays 17:00-17:45 at Pam McConnell Aquatic Centre, 640 Dundas St E, 10 sessions 2026-09-16 to 2026-11-18; Sam usually takes him. Old Tuesday series evt_s014 deleted; new series evt_s022 on Family calendar. efun receipt 2026-09-10 21:14: fee $118.40, Visa ending 4412, saved in Drive > Family > Leo > Swim.",
+     "entities": [
+      "Leo",
+      "Sam",
+      "Kayla",
+      "Pam McConnell Aquatic Centre",
+      "evt_s022",
+      "efun"
+     ]
+    },
+    {
+     "text": "2026-09-11 Toronto Fintech Meetup 'Moving Money for Small Business', Thu 2026-10-01 18:30, MaRS Discovery District Auditorium; speaker page needs bio up to 50 words, 400x400 headshot, talk title by 2026-09-18; organizer Farah Siddiqui; Riya listed TBC. Assistant wrote a two-line bio and saved resized headshot-400.jpg in Drive > Work > Speaking. Talk title still needed (open).",
+     "entities": [
+      "Riya Malhotra",
+      "Toronto Fintech Meetup",
+      "Farah Siddiqui",
+      "MaRS Discovery District"
+     ]
+    },
+    {
+     "text": "2026-09-11 Chore chart for Leo (age 7): options Simple Weekly Chore Chart (Ages 6-9), Kids Responsibility Chart Modern (editable), Points and Rewards, Lego-themed; comparison PDF chore-charts-comparison.pdf in Drive > Family > Leo. Laminator price check at Canadian Tire Leslie St: Scotch 9-inch laminator $39.99 plus letter pouches 50-pack $16.99 = $56.98 before tax; not ordered.",
+     "entities": [
+      "Leo",
+      "Canadian Tire",
+      "Scotch"
+     ]
+    },
+    {
+     "text": "2026-09-11 Olivia Grant moved the Q3 QBR with Sales from Mon 2026-09-14 to Fri 2026-09-11 11:00-12:00; it ended and Olivia posted a recap with 3 follow-ups tagged to Riya; Aisha confirmed PR #2291 (HEIC fix) in today's release. Morse Street PS Terry Fox Run Fri 2026-09-25 10:00, parent volunteers sign up in Edsby. Dinner suggestion: chickpea spinach coconut curry.",
+     "entities": [
+      "Olivia Grant",
+      "Aisha",
+      "PR #2291",
+      "Terry Fox Run",
+      "Morse Street PS"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s138",
+   "episodes": [
+    {
+     "text": "2026-09-17 Riya is organizing Priya Nair's 37th birthday dinner Sat 2026-11-07 at Alo, table for eight under Riya Malhotra. Alo releases Tock tables 30 days ahead at 10:00 (Nov 7 opens Thu 2026-10-08); reminder rem_3519 set 2026-10-08 09:55. Parties of 7+ use group form (accepts dates up to 60 days out): tasting menu only $225/person before tax and tip, $50/person deposit refundable up to 7 days before (8 x $50 = $400), dietary needs 72 hours' notice. Form not submitted; assistant needs name/phone/dietary notes from Riya (open).",
+     "entities": [
+      "Riya Malhotra",
+      "Priya Nair",
+      "Alo",
+      "Tock",
+      "rem_3519"
+     ]
+    },
+    {
+     "text": "2026-09-17 Lisbon 2026 note: flights TP260 2026-12-20, return TP259 2027-01-02 (seats paid); New Year's Eve plan: short fireworks at Praça do Comércio then back to hotel since Leo gets overtired; late December averages 15C highs, 8C lows, ~10 rainy days. NYE options: main stage concert 22:00, fireworks midnight, no early show; Time Out Market family dinner open until 23:00; Ribeira das Naus steps 5 min west; metro/trams until 02:00.",
+     "entities": [
+      "Leo",
+      "Riya",
+      "Lisbon",
+      "Praça do Comércio",
+      "Time Out Market",
+      "Ribeira das Naus"
+     ]
+    },
+    {
+     "text": "2026-09-17 Dental: Riya's cleaning with Dr. Lin on 2026-09-09, next due March 2027 (logged in 'Health - dental'). Danforth Smiles receipt $182.00 was submitted to Sun Life under the misspelled name 'Rhea Malhotra'; assistant offered to email for a corrected receipt (open). Danforth Smiles online booking shows only 90 days ahead; March 2027 slots open around 2026-12-01 (reminder to book); hygienist days Tue/Thu mornings.",
+     "entities": [
+      "Riya",
+      "Dr. Lin",
+      "Danforth Smiles",
+      "Sun Life",
+      "Rhea Malhotra"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s139",
+   "episodes": [
+    {
+     "text": "2026-09-17 Memmo Príncipe Real (Lisbon) confirmed reservation MPR-48213: Family Suite, check-in 2026-12-21 from 15:00 (early check-in requested), check-out 2027-01-02 by 12:00, 2 adults + 1 child (7), flexible rate free cancel until 48 hours before, pay at hotel, 6 min walk from Rato metro. Airbnb cancelled the Alfama flat (host Inês, Dec 21 - Jan 2): too many stairs, no elevator; full refund $2,318.44 (EUR 1,561.00) to Visa ending 4412 in 5-7 business days. 'Lisbon 2026' note updated.",
+     "entities": [
+      "Riya Malhotra",
+      "Memmo Príncipe Real",
+      "MPR-48213",
+      "Airbnb",
+      "Inês",
+      "Alfama",
+      "Visa ending 4412"
+     ]
+    },
+    {
+     "text": "2026-09-17 Leslieville Residents' Association email: Tree Planting Day Sat 2026-10-03 9:00-13:00 at Jonathan Ashbridge Park (optional); street tree survey due 2026-10-15 (only action for Riya if a City tree is on her boulevard, or to request a free spring 2027 tree); pruning on Curzon, Leslie, Logan, Carlaw 2026-10-19 to 10-30 (watch no-parking signs). Assistant offered a survey reminder next week (open). Also wrote a limerick for Mr. Dube's retirement card (30 years teaching physics, Sam's colleague).",
+     "entities": [
+      "Leslieville Residents' Association",
+      "Mr. Dube",
+      "Sam",
+      "Riya"
+     ]
+    }
+   ]
+  }
+ ]
+}

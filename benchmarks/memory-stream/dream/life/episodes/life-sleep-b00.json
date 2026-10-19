@@ -1,0 +1,444 @@
+{
+ "batch": "life-sleep-b00",
+ "sessions": [
+  {
+   "id": "life-s000",
+   "episodes": [
+    {
+     "text": "2025-05-29 Riya set up the assistant and gave profile facts: partner Sam Okafor (contact updated: relation partner, birthday March 22, vegetarian with no fish or seafood, prefers a quiet dinner at home over a restaurant party for his birthday, never plan a big event).",
+     "entities": [
+      "Riya",
+      "Sam Okafor"
+     ]
+    },
+    {
+     "text": "2025-05-29 Riya's routine and work facts: runs with Marcus Bell Tuesdays and Thursdays 6:30 am on the Martin Goodman Trail (calendar event evt_7Hq2); Tuesday 09:00-12:00 is a no-meeting focus block (evt_7Hq3); standup Mon/Wed/Fri 9:45; manager Tom Becker is VP Product at Lumen Pay, reads on his phone and hates long threads (keep emails under 5 sentences, ask in first line); Aisha Rahman is engineering lead, prefers async Slack threads and wants specs two weeks before sprint planning.",
+     "entities": [
+      "Riya",
+      "Marcus Bell",
+      "Tom Becker",
+      "Aisha Rahman",
+      "Lumen Pay",
+      "Martin Goodman Trail"
+     ]
+    },
+    {
+     "text": "2025-05-29 Riya declined the recurring biweekly Tuesday 10:00 'Payments guild sync' series (it clashed with the focus block; notes go to #payments-guild). Added Spanish lesson with Carlos on Tuesdays at 19:00 (evt_7Hq9). Facts shared: best friend Priya Nair (McGill, architect in Montreal); Mazda CX-5 insured with Intact Insurance, renews each April (assistant to remind in March).",
+     "entities": [
+      "Riya",
+      "Payments guild sync",
+      "Carlos",
+      "Priya Nair",
+      "Mazda CX-5",
+      "Intact Insurance"
+     ]
+    },
+    {
+     "text": "2025-05-29 Riya had the assistant read her note 'for the assistant' (written 2025-04-12): household is Sam, son Leo (6, turning 7 in the fall), beagle Biscuit (born about April 2022, steals bread, do not leave bread out); younger brother Kabir Malhotra, software engineer at a game studio in Vancouver, married to Mei; she works at Lumen Pay's King Street West office Tuesdays and Thursdays, from home otherwise. Rules: ask Riya before any purchase over $100, no exceptions; do not text Sam's parents on her behalf. Added flight rules: WestJet, aisle seats, never basic economy; show prices in CAD with original foreign currency in brackets.",
+     "entities": [
+      "Riya",
+      "Sam",
+      "Leo",
+      "Biscuit",
+      "Kabir Malhotra",
+      "Mei",
+      "Lumen Pay",
+      "WestJet"
+     ]
+    },
+    {
+     "text": "2025-05-29 Hannah Cho looked up: neighbour two doors down, nurse at Michael Garron Hospital (some night shifts), kids Ellie (10) and Jun (7), added by Sam 2025-03-30. Riya takes levothyroxine 50 mcg daily for hypothyroidism, 30 minutes before coffee; daily 06:45 reminder rem_0031 created. Inbox triage noted: Morse Street PS Leo grade 1 year-end assembly June 19 (RSVP by June 6); Northline Renovations sent revised kitchen quote.",
+     "entities": [
+      "Hannah Cho",
+      "Ellie",
+      "Jun",
+      "Riya",
+      "Michael Garron Hospital",
+      "Morse Street PS",
+      "Northline Renovations"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s001",
+   "episodes": [
+    {
+     "text": "2025-07-15 Riya wants a do-over anniversary date with Sam (they missed June 8 because of Leo's recital; 10 years since meeting in 2015 at a friend's board-game night, so board-game theme). Must be a Saturday (Sundays Sam marks lab reports; he teaches grade 11-12 chemistry at Riverdale Collegiate Institute). Calendar: Sat 2025-07-19 free after 10:00, Sat 2025-07-26 Leo at Ellie Cho's birthday party 14:00-17:00, Sat 2025-08-02 open. Cafe options found: Snakes & Lattes (College St, table for 2 Sat 2025-08-02 18:30, $10/person), Tabletop Social (Danforth, walk-ins after 18:00), Meeple House (Queen St E, reservations Sat 2025-08-02 19:30, 6 min from home, short vegetarian menu). Riya said 'hold that thought'; nothing booked.",
+     "entities": [
+      "Riya",
+      "Sam Okafor",
+      "Snakes & Lattes",
+      "Tabletop Social",
+      "Meeple House",
+      "Riverdale Collegiate Institute",
+      "Leo",
+      "Ellie Cho"
+     ]
+    },
+    {
+     "text": "2025-07-15 Nate of Northline Renovations asked about basement water before the subfloor plan: maintenance log says basement floods slightly along the back wall strip in heavy spring rain (2024-04), sump pump replaced 2024-05 (Zoeller M53, $640 installed). Riya set the rule: never send an email on her behalf without showing the draft first. Draft d_2207 to Nate was sent after changing Thursday to Friday at 8; Northline subfloor check moved to Fri 2025-07-18 08:00 at home (tile delivery moved).",
+     "entities": [
+      "Nate",
+      "Northline Renovations",
+      "Riya",
+      "Zoeller M53"
+     ]
+    },
+    {
+     "text": "2025-07-15 Riya stated preferences: dentist Dr. Lin at Queen East Dental, 1046 Queen St E; loves South Indian food, masala dosa, favourite local spot Saffron Lane on Queen Street East; meeting summaries as Decisions / Action items (owner and date) / Open questions; dates in chat like 'Fri 18 Jul', ISO in work documents; invites in Toronto time plus IST when her mother in Mumbai is invited. Leo's bedtime 7:45 pm on school nights (nothing after dinner on weeknights once school is back), no sleepovers (decline politely); 1:1 with Tom Becker weekly Thursday 14:00.",
+     "entities": [
+      "Riya",
+      "Dr. Lin",
+      "Queen East Dental",
+      "Saffron Lane",
+      "Leo",
+      "Tom Becker"
+     ]
+    },
+    {
+     "text": "2025-07-15 Data requests: Wen Li (data analyst) needs requests via #data-requests with at least 3 business days notice and a written metric definition. Draft for payouts failure rate by merchant tier (Starter, Growth, Scale; June 1 to July 20; needed by Fri 2025-07-25; for the July payouts review Wed 2025-07-30 15:00) was queued as a scheduled Slack post for Wed 2025-07-16 09:00 in #data-requests.",
+     "entities": [
+      "Wen Li",
+      "Riya",
+      "#data-requests"
+     ]
+    },
+    {
+     "text": "2025-07-15 Marcus Bell texted that Saturday 7:00 am 10 km loop from Woodbine Beach along the Martin Goodman Trail is now a standing run; calendar event evt_9Kd1 added (Sat 07:00-08:15 from 2025-07-19); Marcus also asked if Tue/Thu is still on. Mail found: Cervantes says Riya plans DELE B2 in May 2026, registration opens February 2026; IT email lists Lumen Pay tools (Linear, Slack, Notion, Figma, Looker, Google Workspace). Vancouver fall flight preferences: direct even up to $300 more, aisle seat, avoid red-eyes unless arrival is in the morning.",
+     "entities": [
+      "Marcus Bell",
+      "Riya",
+      "DELE B2",
+      "Cervantes",
+      "Kabir"
+     ]
+    },
+    {
+     "text": "2025-07-15 Home internet is Bell Fibe at $95/month (same on June and July bills). Created Notion page 'Payouts v2 PRD' from template PRD-v3 in space Lumen Pay / Product (https://notion.example.com/lumenpay/Payouts-v2-PRD-4f1c). Aisha said payouts v2 for the Sep 8 sprint needs spec by Aug 25. Finance: mortgage TD biweekly, RESP for Leo $208/month at TD (CESG), Spotify family, Netflix, monthly e-transfer to Carlos; Northline deposit #2 ($8,500) due 2025-07-25. Amazon order #113-4820917-6631408 (HDMI cable, AA batteries) arrived in early May. Riya declined a monthly money check.",
+     "entities": [
+      "Bell Fibe",
+      "Payouts v2 PRD",
+      "Aisha Rahman",
+      "Northline Renovations",
+      "Amazon.ca",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2025-07-15 Plans: Sam's parents Grace and Daniel Okafor (Ottawa, Alta Vista; Daniel retired civil engineer, Grace teaches piano) to visit; Riya picked 16-17 Aug (9 Aug soccer, 23 Aug cabinet install, 30-31 Aug long weekend). Olivia Grant (Director of Sales Enablement) keeps asking for feature dates; Riya will deal Monday. Ordered Leo a Giro Scamp MIPS youth helmet size S, order #CA-55102, $79.09 with tax, arriving Fri 2025-07-18. Rules saved: never order over $200 without confirmation; reply in Spanish (and correct every mistake inline) when Riya writes in Spanish.",
+     "entities": [
+      "Grace Okafor",
+      "Daniel Okafor",
+      "Olivia Grant",
+      "Leo",
+      "Giro Scamp MIPS helmet",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2025-07-15 Open thread: scheduled payment pmt_3310, $8,500 from TD Joint Chequing ****4471 to Northline Renovations on 2025-07-24 (Deposit #2, kitchen reno), status awaiting Riya's confirmation ('say go'). Riya's own savings are at EQ Bank (do not touch). TD Visa ****1180.",
+     "entities": [
+      "Northline Renovations",
+      "TD Joint Chequing",
+      "EQ Bank",
+      "Riya"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s002",
+   "episodes": [
+    {
+     "text": "2025-07-19 Riya's Sunday call with mother Anjali is recurring Sundays 09:00 Toronto (18:30 IST), event evt_A0c2 from 2025-07-20. Spanish practice agreed: short role-plays in Mexican vocabulary (carro, computadora), weak spots ser/estar, preterite vs imperfect, -ma noun gender; built 3 role-plays saved in notes 'spanish - role-plays' (taqueria, planning meeting, doctor's office).",
+     "entities": [
+      "Riya",
+      "Anjali",
+      "Carlos",
+      "Spanish role-plays"
+     ]
+    },
+    {
+     "text": "2025-07-19 Marcus Bell (physiotherapist, running-club friend, training for Chicago Marathon) ran 16 km with Riya instead of 10; weather Toronto 21C at 07:00 to 27C at 10:00, no rain, air quality 3.",
+     "entities": [
+      "Marcus Bell",
+      "Riya",
+      "Chicago Marathon"
+     ]
+    },
+    {
+     "text": "2025-07-19 Biscuit scratching his ear; vet is Dr. Moreau at Leslieville Animal Hospital on Queen Street East. Sat fully booked; Riya booked Mon 2025-07-21 10:20 (evt_A1f0). Lunch ordered from Khao San Road, order KSR-20931, $47.85 incl. tip, ETA 12:40, no cilantro on Riya's pad see ew. Rule: Riya dislikes cilantro, leave out of recipes and orders always. Biscuit walks: Riya 6:30 am every morning (Leslie Street Spit loop weekends, block weekdays), Sam 9:00 pm.",
+     "entities": [
+      "Biscuit",
+      "Dr. Moreau",
+      "Leslieville Animal Hospital",
+      "Khao San Road",
+      "Riya",
+      "Sam"
+     ]
+    },
+    {
+     "text": "2025-07-19 Style and calendar rules from Riya: answer first then bullets, no preamble; never book meetings before 9:30 or after 17:00. Spanish level B1 (Carlos's assessment 2025-06), working toward B2, goal hour-long conversation by 2027 Mexico City trip; weak: subjunctive after 'cuando'. Medical: penicillin allergy (hives), seasonal allergies in May managed with Reactine, saved in private note 'health (private)'.",
+     "entities": [
+      "Riya",
+      "Carlos",
+      "Mexico City"
+     ]
+    },
+    {
+     "text": "2025-07-19 Riya's profile: Riya Malhotra, Senior Product Manager at Lumen Pay (owns merchant payouts and merchant onboarding; started 2024-02-05). Draft 247-character bio for Fintech Product Summit speaker page (max 280 chars, deadline 2025-08-01), approved. Preferences: oat milk latte; Diego Fernandez (designer) wants Figma comments not DMs and a problem statement instead of a proposed solution; never give Olivia Grant or sales a feature date until Aisha Rahman signs off, use 'target' not 'launch date'; Wednesday 6:00 am spin at Spin Society, Queen St E (evt_A2b7, from 2025-07-23); Canadian spelling always.",
+     "entities": [
+      "Riya Malhotra",
+      "Lumen Pay",
+      "Diego Fernandez",
+      "Olivia Grant",
+      "Aisha Rahman",
+      "Spin Society",
+      "Fintech Product Summit"
+     ]
+    },
+    {
+     "text": "2025-07-19 Riya paid tutor Carlos Mendez (Guadalajara, Zoom lessons) $180 CAD for August (4 lessons) by Interac e-transfer, ref CA9Q2R7. Riya mentioned that on 2025-05-12 she asked about Canadian Tulip Festival dates in Ottawa; they did not go, maybe next May with Sam's parents (assistant to check dates in April).",
+     "entities": [
+      "Carlos Mendez",
+      "Riya",
+      "Canadian Tulip Festival",
+      "Grace Okafor",
+      "Daniel Okafor"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s003",
+   "episodes": [
+    {
+     "text": "2025-07-25 Riya wants Spanish vocabulary lists always as a table (Spanish, English, example sentence) for Anki; doctor's-visit vocab table provided for role-play with Carlos on Tuesday.",
+     "entities": [
+      "Riya",
+      "Carlos",
+      "Anki"
+     ]
+    },
+    {
+     "text": "2025-07-25 Email d_2290 to Aisha Rahman (sent 09:58): payouts v2 spec will be in Notion by 2025-08-18, a week before planning (Sep 8 sprint, planning starts Aug 25); open questions on ledger reconciliation flagged at top. Linear PAY-412..PAY-430 open questions: PAY-415 reconcile on payout-initiated vs bank-settled timestamp; PAY-418 mismatches over $50 owner (Wen Li); PAY-421 retention 7 vs 10 years; PAY-426 partial reversals; PAY-429 Looker tile vs emailed CSV.",
+     "entities": [
+      "Aisha Rahman",
+      "Riya",
+      "Wen Li",
+      "Payouts v2 PRD"
+     ]
+    },
+    {
+     "text": "2025-07-25 Ottawa forecast for visiting Sam's parents: Sat 2025-08-16 high 27C (81F)/low 16C, 30% showers; Sun 08-17 high 25C/low 14C sunny. Riya wants temperatures in both Celsius and Fahrenheit (Daniel thinks in Fahrenheit). VIA Rail 3 travellers: out Fri 08-15 17:00, return Sun 08-17 15:00, total $610, not booked; Riya decided to drive (about 4.5 h each way, ~$95 fuel).",
+     "entities": [
+      "Ottawa",
+      "Daniel Okafor",
+      "VIA Rail",
+      "Mazda CX-5",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2025-07-25 First-pass Payouts v2 PRD drafted in Notion from 'payouts v2 - raw notes': problem merchants wait 3 business days; idea instant payouts for Growth and Scale at 1% fee; metrics failure rate under 0.5%, p50 time-to-funds under 1 hour; not doing international payouts or crypto. Added Non-goals and Open questions (Question/Owner/Due date) sections; Riya always wants those in PRD drafts.",
+     "entities": [
+      "Payouts v2 PRD",
+      "Riya",
+      "Notion"
+     ]
+    },
+    {
+     "text": "2025-07-25 Leo is allergic to tree nuts; family keeps all nuts out of his lunches, no exceptions even if camp says nut-aware (camp is nut-aware, Water Week next week). Five nut-free lunch ideas given. History: on 2025-07-22 Riya asked why beagles howl at sirens after Biscuit howled at an ambulance.",
+     "entities": [
+      "Leo",
+      "Biscuit",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2025-07-25 Booked Hotel Monville, Montreal, Fri 2025-09-12 to Sun 09-14, 1 king room, $548.70 incl. tax, fully refundable until 09-10, confirmation MV-88213 (Riya visiting Priya Nair). Hotel rule: fully refundable and walking distance to transit. Alternatives were Le Germain $289/night and Gault $312/night. Reminder rem_0058 for Fri 2025-08-01 09:00 to send mother Anjali Malhotra her rakhi box (sugar-free sweets; ships about 7 days to Mumbai). Anjali: Bandra, Mumbai, retired school principal, type 2 diabetes.",
+     "entities": [
+      "Hotel Monville",
+      "Priya Nair",
+      "Riya",
+      "Anjali Malhotra",
+      "Montreal"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s004",
+   "episodes": [
+    {
+     "text": "2025-07-30 Correction: Riya and Sam's anniversary is 2018-06-16 (met 2015-06-16, kept the date when married); the yearly calendar event was moved from June 8 to June 16 (next Tue 2026-06-16). They usually go to dinner without Leo so a sitter is needed. Sitter candidates: Maya R. (19, $20/h, CPR), Josie T. (22, $22/h, Leslieville), Ana P. (17, $17/h, Ellie Cho's former sitter). Dinner shortlist: Edulis (Niagara St), Ascari Enoteca (Queen St E), Planta Queen; June 2026 reservations open April 2026. Riya said 'later'.",
+     "entities": [
+      "Riya",
+      "Sam",
+      "Leo",
+      "Maya R.",
+      "Josie T.",
+      "Ana P.",
+      "Edulis",
+      "Ascari Enoteca",
+      "Planta Queen"
+     ]
+    },
+    {
+     "text": "2025-07-30 Coffee preferences: Sam drinks oat-milk flat whites and dislikes hazelnut. In Payouts v2 PRD, replaced 'leverage' with 'use' (6 places), plus 'utilize' to 'use' and 'north star' to 'main goal' (Tom Becker dislikes the jargon); spell check en-CA fixed centre and labelled. Decision logged 2025-07-29: defer partial reversals to v2.1 (Riya, Aisha decided; Diego disagreed and committed). Team rule: disagree and commit, every product decision in Notion decision log within 24 hours.",
+     "entities": [
+      "Payouts v2 PRD",
+      "Tom Becker",
+      "Riya",
+      "Aisha Rahman",
+      "Diego Fernandez",
+      "Sam"
+     ]
+    },
+    {
+     "text": "2025-07-30 Mother Anjali Malhotra texted 2025-07-29 that the Sunday video call should be 9:00 pm Toronto time (6:30 am Monday Mumbai), not morning (she is at the temple). This conflicts with the recurring Sunday 09:00 event; assistant asked whether to move it to 21:00. Riya had not answered.",
+     "entities": [
+      "Anjali Malhotra",
+      "Riya"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s005",
+   "episodes": [
+    {
+     "text": "2025-07-30 Drafted short thank-you card for Leo's swim camp coach Dani (Leo went from terrified of the deep end to jumping off the side in two weeks).",
+     "entities": [
+      "Dani",
+      "Leo",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2025-07-30 Riya needed exact job title and responsibility areas for a benefits enrolment form; no offer letter or job description found in email or docs; assistant suggested the Workday profile (Profile > Job). Open thread (the Workday profile earlier showed Senior Product Manager, merchant payouts and onboarding).",
+     "entities": [
+      "Riya",
+      "Workday"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s006",
+   "episodes": [
+    {
+     "text": "2025-08-08 Riya forgot brother Kabir's birthday (August 5); they swap silly mugs instead of gifts. Mug options: 'World's Okayest Brother' $24, camera lens $29, raccoon-in-trench-coat $27, frog $32; options 1 and 3 reach Vancouver in 2 days (ships from Richmond BC), others 4-7 days. Riya will decide tomorrow with Sam. Riya prefers results only, no play-by-play narration.",
+     "entities": [
+      "Kabir",
+      "Riya",
+      "Sam",
+      "Vancouver"
+     ]
+    },
+    {
+     "text": "2025-08-09 Errands route for Sunday: Queen St E dry cleaner (opens 9), Home Depot Gerrard Square for paint chips, Pape/Danforth library (24/7 drop box); depart 10:00, back about 11:28, needed home by 1. Gave advice to coworker Jess on sell vs rent her condo (cash flow, taxes, market, effort, plans).",
+     "entities": [
+      "Riya",
+      "Jess",
+      "Home Depot Gerrard Square"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s007",
+   "episodes": [
+    {
+     "text": "2025-08-09 Cottage day trip to Kawartha Sun 2025-08-10 leaving 05:00 (cottage owners do not allow dogs): route DVP, 401 E, Hwy 115, Hwy 35/28, 2 h 05 min, Hwy 115 construction near Peterborough 06:00-18:00, return 17:00 about 2 h 40 min. Hannah Cho to look after Biscuit; draft text to Hannah (key in lockbox, leash and bags on hook, 1 cup of food after return, keep bread away) not sent, needs time and route from Riya.",
+     "entities": [
+      "Hannah Cho",
+      "Biscuit",
+      "Riya",
+      "Kawartha"
+     ]
+    },
+    {
+     "text": "2025-08-09 Booked Ascari Enoteca for Sat 2025-08-16 19:00, party of 5 (Sam's parents visiting), ref ASC-4471, under Malhotra; Lahore Tikka House was the alternative. Rule: restaurants at 19:00 with good vegetarian options. Morse Street PS: first day 2025-09-02, class list Aug 28, before/after care registration closes Fri 2025-08-15 (Riya set aside).",
+     "entities": [
+      "Ascari Enoteca",
+      "Riya",
+      "Sam",
+      "Morse Street PS"
+     ]
+    },
+    {
+     "text": "2025-08-09 Vancouver for Thanksgiving (Fri 2025-10-10 to Mon 10-13, 2 adults + 1 child, Kabir invited): Flair $1,128 via Calgary, WestJet nonstop $1,402 (return 23:55), Air Canada $1,596, WestJet midday $1,689. Fare watch active (6-hourly, report drops over $100); nothing held. Riya asked for a TL;DR of incident #inc-2025-0809-ledger: Sat 2025-08-09 14:02-14:13 ledger writer latency for 11 min because migration 0412 dropped an index (merchant_id, created_at); 0 failed payouts, 214 delayed up to 9 min; index restored (Kenji); postmortem Mon 11:00; follow-ups CI check and runtime alert (Kenji), query-log gap (Aisha Rahman).",
+     "entities": [
+      "Kabir",
+      "Flair",
+      "WestJet",
+      "Air Canada",
+      "Aisha Rahman",
+      "Kenji",
+      "Wen Li",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2025-08-09 Reminder rem_0071 set for Mon 2025-08-11 08:30 to renew Leo's library books online (due Tuesday). Calendar for Sun 2025-08-10 shows cottage trip and 21:00 Call Mom (video).",
+     "entities": [
+      "Leo",
+      "Riya"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s008",
+   "episodes": [
+    {
+     "text": "2025-08-14 Reordered Biscuit's food: Purina Pro Plan Sensitive Skin & Stomach, Salmon & Rice, 13.6 kg from Pet Valu, order PV-118204, $96.99 + tax = $109.60, delivery Sat 2025-08-16, charged to TD Visa ****1180. Biscuit eats only salmon, no chicken (itchy skin). Finance-agent flagged that the post-tax total exceeded the $100 threshold. Riya does 15 minutes of Spanish Anki each weekday morning.",
+     "entities": [
+      "Biscuit",
+      "Purina Pro Plan",
+      "Pet Valu",
+      "TD Visa",
+      "Riya"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s009",
+   "episodes": [
+    {
+     "text": "2025-08-27 Rule from Riya: when the agent schedules a work meeting for her, default to 25 minutes and always include an agenda. Booked Payouts v2 spec review Thu 2025-09-04 10:30-10:55 in room 'Maple' at King St W with Aisha Rahman and Diego Fernandez (evt_C9a1, agenda attached).",
+     "entities": [
+      "Riya",
+      "Aisha Rahman",
+      "Diego Fernandez",
+      "Payouts v2 spec review"
+     ]
+    },
+    {
+     "text": "2025-08-27 Property tax paid in instalments by pre-authorized debit from TD joint account ****4471: $612.40 on 2025-09-02, 2025-10-01 and 2025-11-03. Projected balance 2025-09-01 about $6,940. Reminder: green bin and recycling out Wednesdays 19:00; Leo's bedtime routine 19:45.",
+     "entities": [
+      "TD Joint Chequing",
+      "City of Toronto",
+      "Leo"
+     ]
+    },
+    {
+     "text": "2025-08-27 Riya asked to put family birthdays (mother, Kabir, Mei, Sam's parents) in the calendar yearly with a reminder a week before; Sam's (2026-03-22) and Leo's (2025-10-21) already exist; no birthdays found for Anjali, Kabir, Mei, Grace or Daniel Okafor in contacts or email. Open thread: need those dates from Riya.",
+     "entities": [
+      "Riya",
+      "Anjali Malhotra",
+      "Kabir Malhotra",
+      "Mei Malhotra",
+      "Grace Okafor",
+      "Daniel Okafor",
+      "Sam",
+      "Leo"
+     ]
+    }
+   ]
+  }
+ ]
+}
