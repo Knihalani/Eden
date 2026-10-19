@@ -1,0 +1,78 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s058-e012",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 knows OpenAPI is generated from zod; R1 hedges on that."
+  },
+  {
+   "event": "code-s060-e021",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "R0 knows Node 20.11 pin but contradicts current yarn fact; R1 hedges, forgets 1Password vault."
+  },
+  {
+   "event": "code-s061-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly fix copy and check translation files plus test."
+  },
+  {
+   "event": "code-s063-e013",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both record rule, confirm Thursday, draft changelog without tagging."
+  },
+  {
+   "event": "code-s066-e019",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both set max 10 and note pods-times-pool limit."
+  },
+  {
+   "event": "code-s066-e028",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both place ServiceMonitor in infra/helm/worker and validate."
+  },
+  {
+   "event": "code-s068-e017",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 knows (dashboard) route group; R1 hedges on known layout."
+  },
+  {
+   "event": "code-s071-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 knows shared csvRow/csvCell helper exists; R0 reimplements."
+  },
+  {
+   "event": "code-s077-e005",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 knows frozen-lockfile CI gotcha; R1 only guesses it."
+  }
+ ]
+}
