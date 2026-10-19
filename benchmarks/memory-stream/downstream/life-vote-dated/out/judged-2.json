@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s027-e029",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Light banter; both fit, no action needed."
+  },
+  {
+   "event": "life-s027-e031",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both capture walker details, cost math and calendar/budget actions correctly."
+  },
+  {
+   "event": "life-s028-e014",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both recap pet budget, risks doc and pending grocery pull accurately."
+  },
+  {
+   "event": "life-s030-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Correct full tongue twister; R1 correctly notes 20:00 lesson with 19:30 review."
+  },
+  {
+   "event": "life-s035-e008",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give sound tour questions; R1's Calgary check is reasonable, not distracting."
+  },
+  {
+   "event": "life-s036-e003",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Both compute contingency split; R0 adds irrelevant overstated 'never a call' note for Nate."
+  },
+  {
+   "event": "life-s037-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Warm, brief Boxing Day replies; both fine."
+  },
+  {
+   "event": "life-s037-e004",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both miss the known Bobbette & Belle 8-inch vanilla cake order; plan to search instead."
+  },
+  {
+   "event": "life-s037-e009",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both drafts fine; no-exclamation rule applies only to work emails."
+  },
+  {
+   "event": "life-s037-e011",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Sam is vegetarian: R1's roast chicken main excludes him; R0 hedges with chicken-or-mushroom."
+  },
+  {
+   "event": "life-s037-e017",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both nut-free, kid-friendly bakes; R0 uses correct store hours."
+  },
+  {
+   "event": "life-s037-e020",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Flight and podcast details not yet known; both plan to search appropriately."
+  },
+  {
+   "event": "life-s040-e009",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both set reminder and correctly handle Tom-owned series by accepting new Wednesday 11:30."
+  },
+  {
+   "event": "life-s040-e018",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Neither has the numbers; R0 adds relevant tree-nut allergy caution for Leo."
+  },
+  {
+   "event": "life-s042-e008",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both swap spin correctly but miss Tue/Thu 6:30 runs with Marcus clashing with YMCA."
+  }
+ ]
+}

@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s091-e012",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Empathetic replies; R1's pending bike booking reminder is relevant."
+  },
+  {
+   "event": "life-s092-e000",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Schedule known (every other Thursday); R0 claims none. R1 lists only past dates, not next pickups."
+  },
+  {
+   "event": "life-s096-e026",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R0 nitpicks the GA date during a pride moment; R1 simply affirms."
+  },
+  {
+   "event": "life-s096-e031",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both close cleanly without offers, honouring her request."
+  },
+  {
+   "event": "life-s097-e013",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both offer non-cheesy card lines suitable for Sam."
+  },
+  {
+   "event": "life-s097-e019",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give good supply lists; R1 usefully flags damp basement boxes."
+  },
+  {
+   "event": "life-s100-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both reasonably commit to reading the email and returning four bullets."
+  },
+  {
+   "event": "life-s100-e017",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Mom call moved to Saturday mornings; R1's Sunday conflict is stale. R0 misses diabetes (sugar-free mithai)."
+  },
+  {
+   "event": "life-s100-e025",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both recommend one shop correctly but show rupees only, not CAD with original in brackets."
+  },
+  {
+   "event": "life-s102-e002",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both say yes to Hannah and give solid indoor plans."
+  },
+  {
+   "event": "life-s102-e009",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 applies PC Express Saturday pickup, no-name staples, approval; R1 generic with speculative weekend worry."
+  },
+  {
+   "event": "life-s103-e007",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "Car now insured with Belairdirect, policy known; R1 claims no insurer info."
+  },
+  {
+   "event": "life-s105-e000",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "R0 needlessly asks address; R1 offers known plumbers, flags stale slots, advises frost-free bib."
+  },
+  {
+   "event": "life-s105-e004",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both book Monday and set two reminders correctly before 2026-07-10."
+  },
+  {
+   "event": "life-s105-e019",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Reminders were already set this session; both propose new ones instead of confirming existing."
+  }
+ ]
+}

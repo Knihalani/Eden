@@ -1,0 +1,38 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s150-e015",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Second uses stale Queen East Dental address; Dr. Lin moved to Danforth Smiles. First generic, not wrong."
+  },
+  {
+   "event": "life-s150-e028",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both draft note and status; second claims done while still awaiting review, slightly inconsistent."
+  },
+  {
+   "event": "life-s156-e000",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss known plan: astronaut costume, 5:45 from Hannah's with Ellie and Jun, Sam on candy; second asks known allergies."
+  },
+  {
+   "event": "life-s156-e004",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss that Riya volunteers on the ROM trip that whole morning, clashing with 10:00."
+  }
+ ]
+}

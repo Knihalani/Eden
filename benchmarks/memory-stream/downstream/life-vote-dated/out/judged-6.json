@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s077-e028",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Friday evening is standing pizza-and-movie night; neither suggests it. Icebreakers fine."
+  },
+  {
+   "event": "life-s077-e044",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Simple timer request handled correctly by both."
+  },
+  {
+   "event": "life-s083-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Riya explicitly approves; R0 handles cleanly. R1 needlessly asks return time already given."
+  },
+  {
+   "event": "life-s085-e010",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give sound daycare waitlist advice; R1 cites City wait list from history."
+  },
+  {
+   "event": "life-s085-e017",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Math correct in both; R0 skips the requested table, R1 delivers it."
+  },
+  {
+   "event": "life-s085-e023",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Light banter fits; R1 notes pending calendar check appropriately."
+  },
+  {
+   "event": "life-s085-e027",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both list only recent items, omitting posted reminder, pricing table, daycare; R0 admits limit."
+  },
+  {
+   "event": "life-s085-e030",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Casual chit-chat answered appropriately by both."
+  },
+  {
+   "event": "life-s087-e029",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both drafts fit; kids Ellie and Jun correct."
+  },
+  {
+   "event": "life-s087-e031",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Neither drafts nor notes CAD-USD settlement dropped from v1; R1 applies no-date/target rule for Olivia."
+  },
+  {
+   "event": "life-s088-e015",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 keeps it light with a break and respects not texting Sam's parents; R0 packs afternoon."
+  },
+  {
+   "event": "life-s088-e023",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither brings Wen's data, which Aisha needs for cuts; both otherwise reasonable."
+  },
+  {
+   "event": "life-s088-e038",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both warm, brief, no exclamation marks."
+  },
+  {
+   "event": "life-s090-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 gives a usable starter list; R1 only promises one later."
+  },
+  {
+   "event": "life-s090-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both relay forms and drop-off details correctly."
+  }
+ ]
+}
