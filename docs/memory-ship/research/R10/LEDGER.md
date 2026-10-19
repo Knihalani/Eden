@@ -566,3 +566,29 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **Rule, set before scoring:**
   - If seq recall or silence is more than 0.05 worse than C4-E5's batched run on either world, the batched F22 numbers are retracted as leak-inflated, and seq replaces them on the frontier.
   - Otherwise seq becomes the reference run and C4-E5 stands.
+
+## C4-E9 · 2026-10-19 · F22 re-run leak-free: result
+- **Run:** `score.py --store sleep --strict --split dev --sample judge --ci --systems "verify:tag=seq verify:tag=seq,ideal=1 verify verify:ideal=1"`. Red team: `--split fresh --systems "verify:tag=seq verify:tag=seq,ideal=1 lex:tau=4,when=1,gate=1"`.
+- **Numbers (human turns, plan labels):**
+
+  | World | Run | Recall [95% CI] | Proactive | Precision | Silence | Tokens |
+  |---|---|---|---|---|---|---|
+  | code dev | seq (deferred) | 0.5182 [0.398, 0.639] | 0.3077 | 0.128 | 0.4273 | 100.1 |
+  | code dev | seq ideal | 0.5545 | 0.3077 | 0.1279 | 0.3727 | 103.9 |
+  | code dev | batched (C4-E5) | 0.4758 | 0.3077 | 0.2086 | 0.6636 | 55.2 |
+  | life dev | seq (deferred) | 0.3038 [0.210, 0.410] | 0.2174 | 0.1531 | 0.6204 | 50.6 |
+  | life dev | seq ideal | 0.3882 | 0.2609 | 0.1472 | 0.4444 | 68.8 |
+  | life dev | batched (C4-E5) | 0.2553 | 0.1739 | 0.1689 | 0.7222 | 38.0 |
+  | code-rt1 fresh | seq (deferred) | 0.4218 [0.256, 0.570] | 0.6667 | 0.2212 | 0.6889 | 80.5 |
+  | code-rt1 fresh | lex tau=4,when=1,gate=1 | 0.2552 | 0.5 | 0.0691 | 0.3111 | 147.3 |
+  | life-rt1 fresh | seq (deferred) | 0.1594 [0.060, 0.272] | 0.15 | 0.2308 | 0.7647 | 39.7 |
+  | life-rt1 fresh | lex tau=4,when=1,gate=1 | 0.1159 | 0.05 | 0.0414 | 0.2353 | 167.0 |
+
+  life-rt1 triggers (seq): recall 0.3077, silence 0.3636 (24 events). life dev triggers: recall 0.1923, silence 0.0.
+- **Verdict, by the pre-registered rule: the batched C4-E5 numbers are retracted. Silence is 0.24 worse on code and 0.10 worse on life.**
+  - Seen one case at a time, haiku fires far more often. Much of F22's silence came from contrast within a 50-case batch, which a deployed hook never has.
+  - **F22 (seq) is now:**
+    - code: recall 0.52 at silence 0.43. That beats the hook vote's recall (0.38) at about the same silence (0.42): a recall gain only.
+    - life: 0.30 recall at 0.62 silence.
+  - On the red-team cases it still clearly beats lex on both worlds: silence +0.38 / +0.53, precision 3–5×.
+  - The verifier's *calibration* is the open problem. A causal fix must give it the contrast it had in the batch, for example few-shot examples of the user's own past no-need turns, or a probability with a threshold tuned on dev.
