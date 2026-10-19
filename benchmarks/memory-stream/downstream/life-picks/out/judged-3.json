@@ -1,0 +1,78 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s092-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "R0 knows biweekly Thursday schedule but proposes already-past dates; R1 sensibly checks city calendar but ignores known schedule."
+  },
+  {
+   "event": "life-s098-e004",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "Brand unknown at this point; R0 asserts an unsupported auto-labelled 'Receipts' feature; R1 searches appropriately."
+  },
+  {
+   "event": "life-s105-e004",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both book plumber Monday and set Lattice reminders next week and week of Jul 6."
+  },
+  {
+   "event": "life-s105-e032",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "Fact: weekend baking with Leo unwinds her; R0 uses it with no-oven basement kitchen; R1 claims no record."
+  },
+  {
+   "event": "life-s106-e005",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "R0 correctly recalls microwave, induction hotplate, old fridge and pan note; R1 claims no inventory."
+  },
+  {
+   "event": "life-s108-e000",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Neither notes she already owns Gramatica de uso B1-B2; R1 at least applies Canadian retailer and Mexican Spanish preferences."
+  },
+  {
+   "event": "life-s113-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both turn off OOO and supply a fitting back-but-catching-up message."
+  },
+  {
+   "event": "life-s115-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add Lisbon Dec 18-30 to family calendar and fetch TAP details."
+  },
+  {
+   "event": "life-s126-e005",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "R0 invents a weekday-after-5:30 preference and cites stale $750 wellness figure; R1 generic, misses plantar fasciitis history."
+  }
+ ]
+}
