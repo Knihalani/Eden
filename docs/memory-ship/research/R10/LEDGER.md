@@ -699,3 +699,30 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - n = 30 per group.
   - The judge picks are the batched judge's (the same family as the downstream judge: correlated errors are possible).
   - The responder can use a picked row in a way the judge likes even when the user would not have wanted it raised. The judge's "don't reward irrelevant facts" instruction only partly guards against this.
+
+## C4-E11 · 2026-10-19 · F22b calibrated verifier: result
+- **Runs:** `score.py --store sleep --strict --split dev --sample judge` and `--split fresh` on rt1, systems `verify:tag=cal,p=0.3 … p=0.9 verify:tag=seq`. life-cal has 243 of 245 outputs (2 files missing; those events get no packet).
+- **Dev sweep (human; plan labels):**
+
+  | p | code recall | code precision | code silence | life recall | life precision | life silence |
+  |---|---|---|---|---|---|---|
+  | 0.3 | 0.5303 | 0.1076 | 0.4182 | 0.3013 | 0.1068 | 0.6075 |
+  | 0.5 | 0.5121 | 0.1636 | 0.5455 | **0.2949** | 0.1593 | **0.6636** |
+  | 0.6 | 0.5121 | 0.2308 | 0.6364 | 0.2756 | 0.216 | 0.7383 |
+  | **0.7** | **0.4788** | 0.3143 | **0.7636** | 0.25 | 0.2941 | 0.8037 |
+  | 0.8 | 0.4606 | 0.4103 | 0.8182 | 0.2115 | 0.3077 | 0.8411 |
+  | 0.9 | 0.3455 | 0.5349 | 0.9 | 0.141 | 0.4 | 0.9252 |
+  | seq (no p) | 0.5182 | 0.128 | 0.4273 | 0.3038 | 0.1531 | 0.6204 |
+
+  The rule picks p = 0.7 on code and p = 0.5 on life.
+- **Fresh (rt1) at the dev-chosen p:**
+  - code-rt1, p 0.7: recall 0.2379, precision 0.3548, silence 0.8444 (seq: 0.4218 / 0.2212 / 0.6889);
+  - life-rt1, p 0.5: recall 0.1377, precision 0.2258, silence 0.7941 (seq: 0.1594 / 0.2308 / 0.7647).
+  - life-rt1 triggers at p 0.5: recall 0.2692, silence 0.4545 (11 negatives).
+- **Verdict: dead by kill line 3 on code.**
+  - code-rt1 recall falls 0.18 below F22 seq (the allowance was 0.05).
+  - Life passes all lines; code passes lines 1–2.
+- **What it shows:**
+  - Causal contrast plus a probability makes the verifier calibratable on dev. Code p 0.7 reaches 0.48 recall at 0.76 silence and 0.31 precision, better than even the batched run.
+  - But the threshold does not transfer to the shorter, harder red-team prompts: their probabilities sit lower.
+  - C4-E13 also found that, on code, silence measured against plan labels penalises real needs. Tuning for it is the wrong target until there are downstream-validated labels.
