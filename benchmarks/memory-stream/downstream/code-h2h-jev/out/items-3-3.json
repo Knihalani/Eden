@@ -1,0 +1,45 @@
+{
+  "responder": "sonnet (claude-code subagent)",
+  "items": [
+    {
+      "id": "code-s046-e008#3",
+      "response": "Adding a 'Paid at' column. The api returns paid_at as stored in UTC with no timezone math, and the web table formats it with `formatDate(iso, org.timeZone)` like the other dates, showing a dash for unpaid invoices.\nAction: Find the invoices table, check the list response already includes paid at (add the field untouched if not), add the column and a test."
+    },
+    {
+      "id": "code-s035-e008#3",
+      "response": "htmx doesn't add the CSRF token on its own, so moving the form probably left the token out of the request. Common causes: the form no longer contains `{% csrf_token %}`, the base template sends it via `hx-headers` on an element that isn't an ancestor of the swapped partial, or the partial is rendered without the request context so the token is empty. Easiest check: look at the failing request in the Network tab for `csrfmiddlewaretoken` or `X-CSRFToken`.\nAction: Send me the partial and how the base template sets the token, and I'll tell you which it is."
+    },
+    {
+      "id": "code-s071-e012#3",
+      "response": "Thanks. The csv fix and its three new cases are done and the tests pass.\nAction: Nothing else pending on this; say the word if you want it committed."
+    },
+    {
+      "id": "code-s045-e007#3",
+      "response": "I don't know where DNS is managed from here, and I'd rather not guess at a provider or the domain. I'll look in the repo for DNS or infra config and docs. Also, the test receiver needs somewhere for the record to point at, which doesn't exist yet.\nAction: Search the repo for DNS and infra config, report what I find, and if nothing turns up, ask who owns DNS."
+    },
+    {
+      "id": "code-s041-e005#3",
+      "response": "I'll write the formatMoney tests, including 2.005, which should give 2.01, and credit notes. Negatives may expose a bug: `Math.round` rounds halves toward positive infinity, so -2.005 could come out as -2.00 while 2.005 gives 2.01. I'd want half-away-from-zero so both are symmetric, but tell me if you want something different.\nAction: Check the current output format, write the vitest cases, run them, and report whether the negative case fails before changing anything."
+    },
+    {
+      "id": "code-s056-e020#3",
+      "response": "Parking the lock thing: the image-resize lockDuration (5000 ms against 7.5-9s jobs) stays as is for now. For `DELETE /v1/customers/:id` I'll soft-delete by setting `deleted_at`, return 204 on success, and return RFC 7807 problem+json for errors such as not found or already deleted, scoped to the caller's org like the other routes. I'll also check whether other customer reads need to exclude deleted rows and whether the column exists.\nAction: Look at the existing customers routes and the problem+json helper, then write the handler with tests."
+    },
+    {
+      "id": "code-s018-e021#3",
+      "response": "Okay, leaving the redirect loop with Lena. For the copy button I'll add a small client component that copies the invoice number with `navigator.clipboard.writeText`, with an aria-label and brief 'Copied' feedback, reusing an existing icon button if there is one.\nAction: Open the invoice header component, add the copy button next to the number, and add a test."
+    },
+    {
+      "id": "code-s007-e019#3",
+      "response": "I'll add an empty state to the exports page that shows a short explanation instead of a blank table, following however other pages in web do empty states. The pagination fix is already committed on its branch, so I'll put this on its own branch.\nAction: Open the exports page, check for an existing empty-state pattern, add the component, and test the zero-exports case."
+    },
+    {
+      "id": "code-s046-e000#3",
+      "response": "I'll add a small slug helper (lowercase, strip accents, turn spaces, slashes and other symbols into single dashes) and build the filename from the invoice number and client name, e.g. `inv-1042_bright-pixel-studio.pdf`, falling back to `invoice.pdf` if nothing is left. Slashes are what break downloads, so the client name will be slugged.\nAction: Find where the PDF download filename is built, add the helper with tests, and run the api tests."
+    },
+    {
+      "id": "code-s070-e012#3",
+      "response": "Leaving the yarn.lock for now; it's untracked so it won't get committed by accident. For the avatars, the initials logic likely takes first and last name parts and falls back to 'U' when there's no second part. I'll make a single name use its first letter, uppercase, and keep two-part names as they are.\nAction: Find the initials helper, add a test for single-name contacts, fix it, and run the web tests."
+    }
+  ]
+}
