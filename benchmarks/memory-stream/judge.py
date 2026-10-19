@@ -53,9 +53,10 @@ def prep(a):
         print(name, len(cases), "cases", len(store), "rows")
 
 
-def packets(world, store):
+def packets(world, store, tag=""):
     out = {}
-    for p in glob.glob(os.path.join(HERE, "judge", f"{world}-{store}", "out", "*.json")):
+    sub = f"{world}-{store}" + (f"-{tag}" if tag else "")
+    for p in glob.glob(os.path.join(HERE, "judge", sub, "out", "*.json")):
         for c in json.load(open(p))["cases"]:
             out[c["event"]] = c.get("needed", [])
     return out
