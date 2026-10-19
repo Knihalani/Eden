@@ -1,0 +1,185 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s042-e008#1",
+   "response": "Both done. Tomorrow is Tue 13 Jan, so your first YMCA morning is coming up at 6:15 am, and the focus playlist will be ready for the day with Khruangbin and A. R. Rahman instrumentals. Spin comes off the calendar, and I'll set the new strength training block to leave you time to be home by 7:15 so Sam can leave for school.\nAction: Remove the spin events, add a recurring Tue/Thu 6:15 am strength training block at the Leslieville YMCA with a leave-by reminder for 7:15 home, and build the playlist."
+  },
+  {
+   "id": "life-s012-e018#1",
+   "response": "Here you go: \"Hi neighbours! We're doing a street yard sale on Sat Oct 4 from 9 to 1, with Sun Oct 5 as the rain date. Please set up tables on your own driveways, and no early birds before 9, we mean it :) Happy selling!\"\nAction: Send it to the group chat once you approve it."
+  },
+  {
+   "id": "life-s035-e008#1",
+   "response": "The questions I'd bring on the tours: what's the staff-to-child ratio for infants and how long have the staff been there, what does a typical day look like (naps, feeds, outdoor time), what's the sick policy and the plan for emergencies, how do they communicate with parents day to day, and what are the fees and are they in the $10-a-day program. I'd also ask whether she can drop in unannounced or sit in for a visit, since how the staff greet the kids tells you a lot.\nAction: Put this into a one-page tour checklist you can forward to Marcus."
+  },
+  {
+   "id": "life-s097-e019#1",
+   "response": "Great pick for a rainy afternoon. For a fort you'll want tape (packing or duct), safety scissors for Leo and a box cutter for you, markers to decorate, some blankets and clothespins for a roof, and a flashlight or string lights for the inside. The boxes you already have in the basement cover the main part.\nAction: Check what you have and add anything missing, like tape and markers, to your shopping list before tomorrow."
+  },
+  {
+   "id": "life-s002-e000#1",
+   "response": "Your call with Anjali is Sunday 9:00 am Toronto time (6:30 pm Mumbai), and I'll keep it clear for good. For Spanish between lessons with Carlos, I'd do 10 to 15 minutes on weekdays: a short role-play chat in Spanish where I correct you gently, 5 words or phrases from the last lesson, and one small writing prompt. Carlos's homework gets priority.\nAction: Create a recurring Sunday 9:00 am hold labelled as your call with your mom, and set up a daily Spanish practice routine to start with once you tell me your level and what Carlos has you working on."
+  },
+  {
+   "id": "life-s047-e025#1",
+   "response": "I don't know yet: I don't have the Withrow rink's current status or Saturday's forecast. Outdoor rinks depend on the temperature and ice conditions, and they can close the same day.\nAction: Check the City of Toronto page for Withrow Park rink status and hours plus the Saturday afternoon forecast, then suggest a time after Leo's swim."
+  },
+  {
+   "id": "life-s128-e000#1",
+   "response": "I don't see a dentist confirmation for November in front of me, so I can't say yes yet.\nAction: Search your email and calendar for the dentist's November confirmations for you and Leo; if nothing is there, I'll tell you and give you the number to call."
+  },
+  {
+   "id": "life-s096-e031#1",
+   "response": "Night, Riya. Proud of you for Instant Payouts.\nAction: None tonight; the launch wins record is saved in your notes."
+  },
+  {
+   "id": "life-s100-e025#1",
+   "response": "You're welcome. My pick for the mithai is Brijwasi Sweets: Rs 1,450 plus Rs 120 delivery, same day if it's ordered before 14:00 IST, and the best freshness reviews at 4.6. I need your mom's delivery address to order.\nAction: Hold the order until you send her address, then place it and send you the confirmation."
+  },
+  {
+   "id": "life-s148-e012#1",
+   "response": "Both are set. Tom's comments on the strategy memo are due Friday, and Leo's library books are at the Pape branch, where you can pick them up Saturday morning with your library card.\nAction: Add a Thursday afternoon reminder and a Friday morning reminder for the memo comments to Tom, and a Saturday morning reminder for the Pape/Danforth library pickup."
+  },
+  {
+   "id": "life-s136-e021#1",
+   "response": "TFSA: contribute after-tax money and the growth and withdrawals are tax-free, so it's flexible and good for shorter goals or a lower tax bracket. RRSP: contributions are deductible now and you pay tax on withdrawal, which usually wins when your current tax rate is higher than it will be in retirement.\nAction: None needed."
+  },
+  {
+   "id": "life-s002-e023#1",
+   "response": "Saved. Penicillin allergy (hives) and seasonal allergies in May managed with Reactine go in a private health note, not shared with anyone.\nAction: Create the private health note with those two items and a date-of-entry, and check that it isn't synced to any shared folder."
+  },
+  {
+   "id": "life-s141-e017#1",
+   "response": "I don't have this week's class time or what Carlos covered last lesson in front of me, so I can't say yet what to focus on. I'd check your calendar and any lesson notes, then put two study blocks before the class.\nAction: Look up your Spanish class time and your last lesson notes, then block two 30-minute study sessions before the class and send you a short list of focus areas."
+  },
+  {
+   "id": "life-s048-e006#1",
+   "response": "I don't want to recommend one before I check the details, because ads and in-app purchases change often. Lichess is free and ad-free but not built for a 6-year-old, and ChessKid is made for kids but I'd need to check what's free and what's upsold.\nAction: Look at the current app store listings for kid-friendly chess apps, check each for ads and in-app purchases, and send you one pick."
+  },
+  {
+   "id": "life-s077-e044#1",
+   "response": "Timer set for 25 minutes. Have fun with the garden beds.\nAction: Start the 25-minute timer now and ping you when it's done."
+  },
+  {
+   "id": "life-s050-e011#1",
+   "response": "Yes to pancakes at Hannah's on Sunday at 9, kids included.\nAction: Text Hannah yes and add pancakes at Hannah's to the family calendar for Sun 8 Feb at 9:00."
+  },
+  {
+   "id": "life-s060-e019#1",
+   "response": "Scheduled for 9:00. For Priya, questions that cut through: is the Toronto move a step up or a sideways shuffle, who would she work for and does she rate them more than her current lead, what does she lose by leaving (friends, a partner's job, a lease), is there a cost to saying no, and could she try it first with a secondment or a guaranteed way back. A good closer: five years out, which city does she picture herself in?\nAction: Schedule the Slack message for 9:00 tomorrow and tidy these into a short note you can send Priya."
+  },
+  {
+   "id": "life-s063-e000#1",
+   "response": "The commute gap is bigger than the pay gap looks: 35 minutes each way is about 6 hours a week. I'd tell Marcus to turn the 10% into after-tax dollars per month and compare it to the hours he'd get back, then weigh caseload, mentorship and room to grow at each clinic. If all that is equal, I'd lean toward the 10-minute bike ride.\nAction: Draft a short message to Marcus with those points for you to send."
+  },
+  {
+   "id": "life-s085-e023#1",
+   "response": "Arctic AC again. Keep the coat on, you're not wrong.\nAction: Nothing needed; the OOO draft for Fri 22 May is still waiting on your OK."
+  },
+  {
+   "id": "life-s016-e002#1",
+   "response": "There's no strict difference in how it's used in Canada: EFT is the broader Canadian term for electronic bank-to-bank transfers, and ACH is the U.S. name for the same kind of batch network. Some people use ACH loosely for Canadian EFTs, so your colleague was probably just mixing the terms.\nAction: None needed."
+  },
+  {
+   "id": "life-s106-e000#1",
+   "response": "Activated charcoal bags are the best pick: they absorb the odour rather than covering it, and drywall dust won't go away by itself. A fast-acting extra would be wiping surfaces down and using a HEPA vacuum for the dust.\nAction: Find charcoal bags that can arrive or be picked up before the week starts, and show you one pick with price and timing for your OK before I order."
+  },
+  {
+   "id": "life-s046-e013#1",
+   "response": "I don't have last night's Raptors score yet.\nAction: Look up the final score and text it to Sam."
+  },
+  {
+   "id": "life-s022-e016#1",
+   "response": "Adding it: Toronto Waterfront Half Marathon, October 19, 2025, 2:04:37, which works out to about 5:54 per km over 21.1 km. I'll set a reminder to put together your yearly recap in December.\nAction: Add the race to your running stats and set a reminder in early December to build the yearly recap."
+  },
+  {
+   "id": "life-s037-e011#1",
+   "response": "Sent to Hannah. For NYE for 5, no shellfish anywhere: baked brie and crudites to start, a wild mushroom and spinach Wellington with roast potatoes and maple-glazed carrots, and a dessert you and Leo bake that morning. For Grace, a Pomegranate Rosemary Fizz: pomegranate juice, lime, rosemary syrup and non-alcoholic sparkling wine, so she has a real toast drink. I'd also ask Daniel about any dietary needs.\nAction: Send the thank-you to Hannah, save the menu to your notes and make the shopping list."
+  },
+  {
+   "id": "life-s040-e009#1",
+   "response": "Reminder set for 17:15. Tom owns the 1:1 series, so I'll accept his updated invite for Wednesdays at 11:30 starting in January 2026 and remove the old Thursday copy.\nAction: Set the 17:15 reminder, update your copy of the Tom 1:1 to Wednesdays 11:30 (accept his new invite or make my own if it hasn't arrived), and remove the Thursday event."
+  },
+  {
+   "id": "life-s051-e006#1",
+   "response": "Boil the water first, then lower the eggs straight from the fridge and cook for 6 to 7 minutes for jammy yolks, then straight into ice water for about 5 minutes. For ramen eggs, peel them and marinate in a soy and mirin mix overnight, so tonight's the time.\nAction: Set a reminder for this evening to boil and marinate the eggs so they're ready tomorrow."
+  },
+  {
+   "id": "life-s037-e020#1",
+   "response": "I don't have a saved Ottawa flight search or your podcast note in front of me, so I'd rather find them than guess at fares or your tastes. I'd also need the date of Sam's February PD day to compare.\nAction: Search your notes and email for the Ottawa flight search and for the podcast note, then send Sam the fares for his PD day and give you a short list of new podcasts."
+  },
+  {
+   "id": "life-s066-e016#1",
+   "response": "I can do that, but I need the old pricing page URL to search for it. If marketing announced the move, that message should have both the old and new links.\nAction: Find the old and new URLs from marketing's announcement, scan the beta materials and your other docs for the old link, and send you a list of the docs and locations to fix without editing anything."
+  },
+  {
+   "id": "life-s110-e009#1",
+   "response": "You can tell him the siren sounds like another dog howling, so your dog is just answering back, like saying \"I hear you!\" Dogs' wolf ancestors howled to talk to each other across long distances, so it's a very old habit, and it doesn't hurt his ears or mean he's sad.\nAction: None needed."
+  },
+  {
+   "id": "life-s070-e006#1",
+   "response": "You're welcome. The two holds at Pape/Danforth are for pickup by Sat 25 Apr, and I've started renewing the three books due Wed 22 and Thu 23 Apr. Tom's link request is still waiting for after dinner.\nAction: Check back with you after dinner on what to send Tom."
+  },
+  {
+   "id": "life-s006-e011#1",
+   "response": "The main things for Jess: whether rent would cover the mortgage, condo fees, property tax and insurance with a buffer for vacancies; the tax side, since renting can mean losing the principal-residence exemption for those years and rental income is taxable; her market view, because selling locks in today's price; how much landlord effort she wants; and whether she might move back. A one-hour session with a fee-only planner or accountant would settle the numbers.\nAction: Write this up as a short note you can pass to Jess."
+  },
+  {
+   "id": "life-s120-e003#1",
+   "response": "On it. I'll pull the last 30 days of failed payouts grouped by receiving bank, with failure counts and rates, and flag any bank that's above the overall rate.\nAction: Pull the failed payout data by receiving bank for the last 30 days and send you a table before Wednesday's roadmap prep."
+  },
+  {
+   "id": "life-s111-e035#1",
+   "response": "Have a great dinner. Kitsilano pool is open tomorrow from 7:00 to 20:45, with lanes closed 7:00 to 9:00 for swim club, so go after 9. Leo's packing checklist for Monday is already shared with Sam.\nAction: Nothing needed tonight."
+  },
+  {
+   "id": "life-s006-e015#1",
+   "response": "Anytime. Enjoy the evening, and don't disturb Biscuit.\nAction: None."
+  },
+  {
+   "id": "life-s045-e000#1",
+   "response": "On it. I'll unsubscribe you from Old Navy, Wayfair, Uber Eats promos, Lululemon and the Dyson mailings and archive what's already there from them. I'll leave order confirmations and receipts alone so nothing important gets buried.\nAction: Unsubscribe from all five (using their preferences page where there's no unsubscribe link), archive their promo emails, add a filter to skip the inbox for future mail, and send you a short summary."
+  },
+  {
+   "id": "life-s097-e013#1",
+   "response": "Two lines for Sam to choose from: \"Thirty-one years of making the rest of us look organized. The department won't be the same, and it shouldn't be.\" Or: \"Thank you for every timetable you untangled and every new teacher you quietly rescued. Enjoy the time that's finally yours.\"\nAction: Send these to Sam so he can pick one."
+  },
+  {
+   "id": "life-s046-e041#1",
+   "response": "Yes, I have a note about that: the Canadian Tulip Festival in Ottawa in May with Sam's parents, Grace and Daniel, which you wanted to check dates on in April. The two Thursday items go on the list: Nate's backsplash decision, zellige install at $3,860 or ceramic lookalike at $1,420, due Fri 30 Jan, and the February pizza lunch order and Leo's Riverdale Farm trip form.\nAction: Add both to Thursday's to-do list and look up this year's Tulip Festival dates against the May long weekend."
+  },
+  {
+   "id": "life-s123-e011#1",
+   "response": "Yes. I'll rename each Scan_*.pdf in Downloads using the file's scan date (its creation date) in the form YYYY-MM-DD, adding a number if two have the same date.\nAction: Make a preview list of the old and new names first, and only apply the renames once you say go."
+  },
+  {
+   "id": "life-s025-e036#1",
+   "response": "I don't want to guess a number, since international letter mail times vary a lot and I don't have Canada Post's current estimate.\nAction: Look up Canada Post's current delivery estimate for a letter to Mumbai and tell you whether a tracked option is worth it for a card."
+  },
+  {
+   "id": "life-s102-e002#1",
+   "response": "I'll tell Hannah yes, Jun can come Saturday from 1 to 4. A plan so you're not refereeing: snack first, then a blanket and pillow fort, a building-toys hour, a short movie break with popcorn, and a scavenger hunt around the house to finish.\nAction: Text Hannah yes and save the three-hour plan to your notes for Saturday."
+  },
+  {
+   "id": "life-s072-e000#1",
+   "response": "Noted: Dr. Moreau retired in April 2026, and Biscuit's vet is now Dr. Kaur at Riverside Veterinary Clinic on Broadview Ave. I also have a Riverside Veterinary Clinic on file at 690 Queen St E, so I'll confirm that's the same clinic before I save the address.\nAction: Update Biscuit's vet contact, then find weekday appointments next week after 5:30 for annual shots and the rabies booster, book the earliest one, and tell you the time."
+  },
+  {
+   "id": "life-s131-e022#1",
+   "response": "Here's a toast: \"To Neha and [partner]: Neha has finally found someone who will let her pick the restaurant, the playlist and the thermostat. [Partner], you're brave, and we're all very impressed. Here's to love, to laughter, and to Neha being right about almost everything. Cheers!\"\nAction: Fill in the partner's name, and tell me a detail about the two of them if you want it more personal."
+  },
+  {
+   "id": "life-s040-e018#1",
+   "response": "Scaling from one dozen to three dozen means multiplying every ingredient by 3, and the baking temperature and time stay the same, just bake in batches. I don't have the quantities from that earlier conversation, so I won't guess at them. I'll give them in metric and Celsius, and I'd check the chocolate chips for tree nut warnings because of Leo.\nAction: Look for the 2025-12-13 conversation or your recipe notes and triple the quantities; if I can't find it, I'll ask you for the dozen-size quantities."
+  },
+  {
+   "id": "life-s068-e014#1",
+   "response": "I don't have this year's opening date for the Leslieville farmers market, so I'll check rather than guess.\nAction: Look up the market's season page and tell you the start date and hours."
+  },
+  {
+   "id": "life-s156-e000#1",
+   "response": "Here's what's left for Halloween: Leo's costume (tell me what he's going as and I'll make a parts list), who's walking with him and when you're heading out, reflective tape or a glow stick plus a flashlight and a bucket, and an allergy plan. His allergy is cashews and pistachios only, so a trade pile for those and his EpiPen Jr. on him.\nAction: Wait for the costume idea, then make a parts list and shopping plan you can finish this weekend."
+  }
+ ]
+}
