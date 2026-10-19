@@ -1,0 +1,26 @@
+{
+ "batch": "code-sleep-b03",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "code-sleep-b00:m0006",
+   "new": "code-sleep-b03:m0004",
+   "why": "API migrated from Express 4 to Fastify 5"
+  },
+  {
+   "old": "code-sleep-b00:m0014",
+   "new": "code-sleep-b03:m0007",
+   "why": "Retry policy now 3 retries, not 5 attempts"
+  },
+  {
+   "old": "code-sleep-b01:m0011",
+   "new": "code-sleep-b03:m0014",
+   "why": "CLI now built with commander, replacing yargs"
+  },
+  {
+   "old": "code-sleep-b01:m0029",
+   "new": "code-sleep-b03:m0010",
+   "why": "Infra is Terraform single provider, not Pulumi"
+  }
+ ]
+}

@@ -1,0 +1,21 @@
+{
+ "batch": "code-sleep-b04",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "code-sleep-b00:m0017",
+   "new": "code-sleep-b04:m0001",
+   "why": "Database migrated from MySQL 8 to Postgres 16"
+  },
+  {
+   "old": "code-sleep-b01:m0021",
+   "new": "code-sleep-b04:m0008",
+   "why": "CLI package.json now declares engines node >=18"
+  },
+  {
+   "old": "code-sleep-b01:m0019",
+   "new": "code-sleep-b04:m0023",
+   "why": "PDF filename format changed to slug style"
+  }
+ ]
+}
