@@ -408,6 +408,27 @@ def main():
         for r in rows:
             if "item" in r:
                 r["covers"] = {r["item"]}
+        if name.startswith("verify"):
+            import verify, methods as M
+            vp = verify.picks(a.world)
+            _, kw = M.params(name)
+            byid = {r["id"]: r for r in rows}
+            for r in rows:
+                r.setdefault("covers", cov.covers(r["text"]))
+            acts = action_text(stream)
+            vev = [e for e in events if e["id"] in vp]
+            pk = {}
+            for e in vev:
+                deliverable = kw.get("ideal") or bool(acts.get(e["id"])) or e["t"] == "trigger"
+                if e["t"] in ("notification", "peer") or not deliverable:
+                    pk[e["id"]] = []
+                    continue
+                pk[e["id"]] = [(byid[i]["text"], byid[i]["covers"]) for i in vp[e["id"]][: int(kw.get("k", 4))]
+                               if i in byid]
+            results[f"{name}@{a.store}"] = score(vev, pk, cov, items, stream)
+            if a.ci:
+                results[f"{name}@{a.store}"]["ci95"] = bootstrap(vev, pk, cov, items, stream)
+            continue
         if name.startswith("antic"):
             import anticipate, methods as M
             preds = anticipate.predictions(a.world)
