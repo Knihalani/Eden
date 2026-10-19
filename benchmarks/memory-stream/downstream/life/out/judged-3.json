@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s098-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 remembers Wen is vegan and needs a group-friendly place; R0 generic about diets."
+  },
+  {
+   "event": "life-s060-e002",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Wed 18 Mar: R1 correctly names standup, Wed 11:30 Tom 1:1 and pickup; R0 generic."
+  },
+  {
+   "event": "life-s017-e020",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 tailors unscented gifts to Grace (piano) and Daniel (engineer); R0 generic, though notes holiday hours."
+  },
+  {
+   "event": "life-s001-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 accounts for Sam being vegetarian and Leo childcare; R0 fine but misses diet."
+  },
+  {
+   "event": "life-s145-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both reasonable plans; no stored fact changes the outcome."
+  },
+  {
+   "event": "life-s028-e010",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "R1 states exact monthly totals not yet computed or on record at this point; R0 correctly plans the lookup."
+  },
+  {
+   "event": "life-s130-e000",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "Aug 28 finish is stale (passed; reno ongoing, delayed); R1 presents it as current baseline."
+  },
+  {
+   "event": "life-s028-e028",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Priya is an architect; R1 notes billable hours for her firm, R0 says it does not know firm type."
+  },
+  {
+   "event": "life-s155-e007",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correct; R0 usefully ties in the 28 Oct promise to Tom."
+  },
+  {
+   "event": "life-s023-e028",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 uses Leo's DOB and child-applicant status; R0 generic checklist with guarantor hedge."
+  }
+ ]
+}

@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s027-e014",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither reads the email yet; R1 adds relevant goal context but cites stale 8:00 pm lesson time (moved to 19:30)."
+  },
+  {
+   "event": "life-s105-e030",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "Records show Tom free 10:00-10:30 and 15:30-16:00 on 24 Feb, and 14 events synced 28 May; R0 fails to recall."
+  },
+  {
+   "event": "life-s100-e006",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "PB 2:04:37 Toronto Waterfront and PAD from TD joint account are on record; R1 claims no record."
+  },
+  {
+   "event": "life-s051-e017",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 uses Valentine's, 19:00 default, vegetarian Sam and asks Chos needs; R1 asks time and misses veg requirement."
+  },
+  {
+   "event": "life-s026-e017",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Neither recalls earlier price range; R1 applies CAD-with-original-in-brackets rule and dated rate."
+  },
+  {
+   "event": "life-s131-e012",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "They met at a board-game night; R0 uses it and the fragrance-migraine fact; R1 claims not to know."
+  },
+  {
+   "event": "life-s101-e004",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 applies one-activity-a-day rule and flags Saturday 8:30 call with Anjali; R1 sensible but generic."
+  },
+  {
+   "event": "life-s018-e007",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Practical plans calm her more than reassurance; R0 gives concrete plan with Bandra contact, R1 mostly reassures."
+  },
+  {
+   "event": "life-s025-e028",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Near-identical; R0 searches Indigo, matching her Canadian-retailer preference."
+  },
+  {
+   "event": "life-s087-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Venting: listen first, no fixes unless asked; R1 offers a drafted reply to Tom unprompted."
+  }
+ ]
+}

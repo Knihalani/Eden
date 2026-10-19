@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s083-e008",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All register fastify-raw-body scoped to the Stripe route and commit the lockfile; R0 adds billing-review caution, R1 uses Fastify plugin/inject conventions."
+  },
+  {
+   "event": "code-s085-e014",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "History shows ALB ingress via AWS LB Controller on EKS and Cloudflare DNS; R0 uses it but asserts ACM unsupported; R1/R2 claim no knowledge."
+  },
+  {
+   "event": "code-s021-e018",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "Worker already scales via KEDA on queue length (1-20 replicas); R1/R2 use it, R0 claims not to know deployment scaling."
+  },
+  {
+   "event": "code-s103-e007",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All reasonable plans to find the switcher and fix outside-click dismissal with a test."
+  },
+  {
+   "event": "code-s083-e005",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "Simple revert is right; R0 adds an unrequested WIP commit plus revert to the branch, overapplying the no-stash rule."
+  },
+  {
+   "event": "code-s035-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All add cdn.acme.dev to images.remotePatterns over https and verify; correct."
+  },
+  {
+   "event": "code-s035-e006",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly explain /_next/image optimizer proxying and caching, citing the build check."
+  },
+  {
+   "event": "code-s061-e012",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All hold the refactor and investigate the install-step failure log; no lockfile gotcha known yet."
+  },
+  {
+   "event": "code-s066-e035",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Brief wrap-ups noting the infra review/plan requirement for the ServiceMonitor; all fine."
+  },
+  {
+   "event": "code-s041-e000",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "formatMoney already takes integer cents; R1 knows this and fixes upstream rounding; R2 cents-based fix; R0 generic, hasn't recalled formatMoney shape."
+  }
+ ]
+}

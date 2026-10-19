@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s072-e010",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Episode link pod.example.com/ep/218 was in history; neither gives it. Response 2 at least recalls the B2B API pricing summary."
+  },
+  {
+   "event": "life-s091-e008",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both propose a sensible Notion intake database with weekly triage; fits team tools."
+  },
+  {
+   "event": "life-s131-e015",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both reorder staples under the rule and ask before the Dyson purchase over $150."
+  },
+  {
+   "event": "life-s017-e024",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both list cabinet delivery; filter not due until January. B notes Thursday office conflict but adds stale filter/door items."
+  },
+  {
+   "event": "life-s107-e013",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A correctly uses Saturday 8:30 Toronto / 6:00 pm Mumbai; B hedges on known call time."
+  },
+  {
+   "event": "life-s068-e024",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss Ellie's dairy allergy; suggest cheese/yogurt, though both ask about allergies before ordering."
+  },
+  {
+   "event": "life-s022-e004",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "B knows Sam's oat-milk flat white, no hazelnut, vegetarian; A asks for known preferences."
+  },
+  {
+   "event": "life-s050-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "B applies the no-date-until-Aisha-signs-off rule with 'target' wording; A is cautious but generic."
+  },
+  {
+   "event": "life-s043-e002",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "A honours the waiver but only leans to refundable; B enforces refundable rule but ignores explicit no-check instruction."
+  },
+  {
+   "event": "life-s097-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "B knows July 9-13 Vancouver dates and Biscuit's salmon-only food; A hedges on known dates."
+  }
+ ]
+}
