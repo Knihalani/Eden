@@ -126,6 +126,43 @@ def prep_eden(a):
     print(len(cases), "cases;", fired, "with an eden packet")
 
 
+def prep_verify(a):
+    """C5-E4: the best push method so far (F22b, calibrated off-hook verifier), on the same turns as `downstream/
+    <world>`. Conditions none / verify: rows with p ≥ a.p (≤ 4), visible at the turn, delivered only on a turn with
+    a tool call (the deferred delivery point), else empty."""
+    import score, sleep, verify
+    stream, _ = score.load_stream(a.world)
+    evs = {e["id"]: e for e in score.scored_events(stream)}
+    rows = {r["id"]: r for r in sleep.rows(stream, a.world, strict=True)}
+    acts = score.action_text(stream)
+    vp = verify.picks(a.world, "cal")
+    vp.update(verify.picks(a.world, "cal-ds"))
+    src = {c["event"]: c for c in json.load(open(os.path.join(HERE, "downstream", a.world, "in", "responses-in.json")))
+           ["cases"]}
+    base = json.load(open(os.path.join(HERE, "downstream", a.world, "key.json")))["key"]
+    vis = lambda r, e: r["t"] < e["_order"] and (r.get("invalid_at") is None or r["invalid_at"] > e["_order"])
+    rng = random.Random(19)
+    d = os.path.join(HERE, "downstream", a.sub)
+    os.makedirs(os.path.join(d, "in"), exist_ok=True)
+    os.makedirs(os.path.join(d, "out"), exist_ok=True)
+    cases, key, fired = [], {}, 0
+    for eid in sorted(base):
+        e = evs[eid]
+        pick = [i for i, p in vp.get(eid, []) if p >= a.p and i in rows and vis(rows[i], e)][:4]
+        packet = [rows[i]["text"] for i in pick] if acts.get(eid) else []
+        fired += bool(packet)
+        conds = {"none": [], "verify": packet}
+        order = list(conds)
+        rng.shuffle(order)
+        key[eid] = {"group": base[eid]["group"], "order": order, "needs": base[eid]["needs"]}
+        cases.append({"event": eid, "text": src[eid]["text"], "recent": src[eid]["recent"],
+                      "packets": [conds[c] for c in order]})
+    json.dump({"cases": cases}, open(os.path.join(d, "in", "responses-in.json"), "w"), indent=1, ensure_ascii=False)
+    json.dump({"system": f"verify:cal,p={a.p} (deferred)", "key": key}, open(os.path.join(d, "key.json"), "w"),
+              indent=1)
+    print(len(cases), "cases;", fired, "with a packet;", sum(1 for e in base if e in vp), "had verifier output")
+
+
 def items(a):
     """Order-free responder input: one item per (turn, packet), each with its own id (C4-E10: responders that answer
     a list of packets swapped the order). A turn's items never share a file: item j of every turn goes to group j,
@@ -200,8 +237,9 @@ def report(a):
         s = dict(zip(k["order"], judged[eid]))
         g = by.setdefault(k["group"], {"n": 0, "effect": 0.0, "needs": 0, "sys": 0.0})
         g["n"] += 1
-        if "picks" in s or "eden" in s:  # prep-picks / prep-eden runs: report that condition − none
-            s = dict(s, oracle=s.get("picks", s.get("eden")))
+        alt = next((c for c in ("picks", "eden", "verify") if c in s), None)
+        if alt:  # prep-picks / prep-eden / prep-verify runs: report that condition − none
+            s = dict(s, oracle=s[alt])
         eff = s["oracle"] - s["none"]
         g["effect"] += eff
         g["needs"] += eff >= 1
@@ -215,14 +253,16 @@ def report(a):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["prep", "prep-picks", "prep-eden", "items", "collect", "judge-prep", "report"])
+    ap.add_argument("cmd", choices=["prep", "prep-picks", "prep-eden", "prep-verify", "items", "collect", "judge-prep",
+                                    "report"])
     ap.add_argument("--sub", default="", help="subdirectory of downstream/ (default: the world)")
     ap.add_argument("--tag", default="", help="prep-picks: the judge run whose picks are tested")
     ap.add_argument("--world", required=True)
     ap.add_argument("--n", type=int, default=60)
     ap.add_argument("--system", default="")
     ap.add_argument("--per", type=int, default=45)
+    ap.add_argument("--p", type=float, default=0.6, help="prep-verify: verifier threshold")
     a = ap.parse_args()
-    cmds = {"prep": prep, "prep-picks": prep_picks, "prep-eden": prep_eden, "items": items, "collect": collect,
-            "judge-prep": judge_prep, "report": report}
+    cmds = {"prep": prep, "prep-picks": prep_picks, "prep-eden": prep_eden, "prep-verify": prep_verify, "items": items,
+            "collect": collect, "judge-prep": judge_prep, "report": report}
     cmds[a.cmd](a)
