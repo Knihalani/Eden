@@ -1,0 +1,125 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s105-e028#0",
+   "response": "Beagles run a tight collections department. If it's anywhere near his dinner time, you may genuinely owe him.\nAction: Nothing needed."
+  },
+  {
+   "id": "life-s118-e000#0",
+   "response": "I'll pull the renewal and last year's policy and put them side by side. I'll focus on premium, coverage limits, deductibles and any added or removed endorsements, so the changes are easy to see.\nAction: Find the renewal document and last year's declarations page in email or Drive, then send a short summary of what changed."
+  },
+  {
+   "id": "life-s122-e004#0",
+   "response": "Green bin is Tuesday, every week, so it goes out Monday evening (by 7:00 am Tuesday). Last week's holiday would only have shifted last week's pickup, so this week should be back to normal, but I'll check the City calendar to be sure.\nAction: Verify this week's date on the City collection calendar and set a 20:00 reminder for Monday night."
+  },
+  {
+   "id": "life-s100-e017#0",
+   "response": "Booking Sunday 20:30-22:00 for the spy series with Sam once Leo's down. For your mom's mithai, I'll look for a well-reviewed Mumbai shop that delivers to Bandra, and since she has type 2 diabetes I'll stick to sugar-free assortments and show you options before ordering. Heads up: her Saturday call is 8:30-9:15 and the new Saturday run goes until 8:45, so those overlap now, which matters if she's feeling low.\nAction: Block Sunday 20:30-22:00, research sugar-free mithai with delivery to Bandra and send you a shortlist; the Saturday call overlap needs your call."
+  },
+  {
+   "id": "life-s140-e044#0",
+   "response": "Checking tonight's Leafs puck drop and channel now so Sam can plan around Leo's bedtime.\nAction: Look up tonight's Leafs game time and broadcast and tell you."
+  },
+  {
+   "id": "life-s138-e007#0",
+   "response": "From your Lisbon notes: December in Lisbon is mild, around 12-15 C, and the city is walkable. So pack layers, comfortable walking shoes, and I'd add a light rain jacket just in case. I don't see anything specific about New Year's Eve itself in what I have, so I'll open the 'Dec 2026 holiday - options' note to check.\nAction: Open note n-3982 and send you any NYE or packing details, then draft a packing list for you and Leo."
+  },
+  {
+   "id": "life-s105-e004#0",
+   "response": "Booking East End Plumbing for Monday morning, 29 Jun. For Lattice, I'll set the first reminder to start your self-review next week and a second for the week of Mon 6 Jul, ahead of the Fri 10 Jul due date. Your 'Instant Payouts: wins record' note is the natural starting point, so I'll link it in both reminders.\nAction: Book the plumber and create the two Lattice reminders with the wins note linked."
+  },
+  {
+   "id": "life-s105-e000#0",
+   "response": "On it. I'll look for well-reviewed local plumbers who can come today or Monday and compare call-out fees. In the meantime, closing the inside shut-off valve for that outdoor tap should stop the drip until someone comes.\nAction: Search nearby plumbers with today or Monday availability and send you a shortlist with fees and arrival windows before booking anyone."
+  },
+  {
+   "id": "life-s013-e023#0",
+   "response": "Added 'get passport photos for Leo' to your to-do list. Want a due date on it?\nAction: Add the to-do item with no date unless you give me one."
+  },
+  {
+   "id": "life-s131-e027#0",
+   "response": "I don't have a record of how you said you learn Spanish best, and I'd rather not guess, so I'll look back through our earlier Spanish chats and notes for it and for the vocab level you've been using.\nAction: Search past Spanish practice notes, then set up tonight's session around what you said works."
+  },
+  {
+   "id": "life-s115-e008#0",
+   "response": "I don't have your passport expiry dates stored, so I'll check the scans or notes for all three. For Portugal on a Dec 18 to Dec 30 trip, the usual rule is that each passport must be valid for at least three months after you leave, so roughly until the end of March 2027, and I'll flag anything that falls short.\nAction: Find expiry dates for you, Sam and Leo and tell you which ones, if any, need renewing, starting with Leo's."
+  },
+  {
+   "id": "life-s037-e009#0",
+   "response": "Draft: 'Thank you so much for the shortbread, Hannah! Leo ate four, so I'd say it was a hit. You're the best.' Want any tweaks, or should I send it as is?\nAction: Send it to Hannah once you say go."
+  },
+  {
+   "id": "life-s003-e000#0",
+   "response": "Here's a doctor's-visit set for your role-play, in table format for Anki (Spanish | English | Example), and I'll use this format for every Spanish vocab list from now on.\n| Spanish | English | Example |\n|---|---|---|\n| la cita | appointment | Tengo una cita con el médico el martes. |\n| el dolor | pain | Tengo dolor de cabeza desde ayer. |\n| la fiebre | fever | Tengo fiebre desde anoche. |\n| la tos | cough | Tengo tos y dolor de garganta. |\n| los síntomas | symptoms | ¿Cuándo empezaron los síntomas? |\n| la receta | prescription | ¿Me puede dar una receta? |\n| la alergia | allergy | ¿Tiene alguna alergia a medicamentos? |\n| el seguro médico | health insurance | ¿Aceptan mi seguro médico? |\n| tomar el medicamento | to take the medicine | Tome el medicamento dos veces al día. |\nAction: Save the table format as your default for Spanish vocab, and offer a CSV export for Anki if you want it."
+  },
+  {
+   "id": "life-s076-e012#0",
+   "response": "Happy to surprise you. I'll build a family-style spread from Pai for the three of you, delivered at 6:00 and under $100, and show you the cart before I place it. Any allergies or spice limits I should know about?\nAction: Draft the order from Pai's menu under $100 with 6:00 delivery and send it for your go-ahead."
+  },
+  {
+   "id": "life-s088-e038#0",
+   "response": "Here's a draft: 'Team, the beta crossed 10,000 payouts this week, and that is entirely thanks to you. Every one of those is a merchant who got paid faster because of work you did, much of it careful and unglamorous. Thank you. I'm proud to be building this with you.'\nAction: Save it as an unposted draft in #payouts-launch and remind you tomorrow to post it."
+  },
+  {
+   "id": "life-s105-e032#0",
+   "response": "I don't have what you said about weekend unwinding in what I can see, so I won't guess. I'll search our earlier chats and notes for it, then build a low-effort plan for tomorrow around it. If nothing turns up, tell me one thing that usually works and I'll turn it into a plan.\nAction: Search notes and past chats for what helps you unwind and send a no-pressure plan for tomorrow."
+  },
+  {
+   "id": "life-s018-e017#0",
+   "response": "Pastel de nata comes from Lisbon, from the Belém neighbourhood. Monks at Jerónimos Monastery made them, using up the egg yolks left over after using the whites to starch clothes, and in the 1830s, when the monastery closed, the recipe went to a nearby shop, Pastéis de Belém, open since 1837 and still using the secret recipe. For Leo: 'Long ago, monks in Portugal had lots of egg yolks left over, so they invented a custard tart.'\nAction: Nothing needed."
+  },
+  {
+   "id": "life-s126-e021#0",
+   "response": "Twenty minutes in, classic Sam. Sleep well.\nAction: None."
+  },
+  {
+   "id": "life-s007-e013#0",
+   "response": "Booking Ascari Enoteca for Sat 16 Aug at 19:00, party of 5, and I'll confirm there are good vegetarian options, as per your rule. For Vancouver, I'll look at flights for the three of you, Oct 10 to 13, and send options with prices rather than booking.\nAction: Book Ascari for 19:00, then search Toronto-Vancouver flights for 3, Oct 10-13, and send you the options."
+  },
+  {
+   "id": "life-s150-e000#0",
+   "response": "I'll pull the Linear tickets assigned to you that are in a blocked state or have blocking links, across all projects, not just payouts. For each I'll show who or what is blocking it and the unblock step, so you can chase the quick ones before standup.\nAction: Query Linear for your blocked tickets, group by blocker, and send you the list ranked by easiest to clear."
+  },
+  {
+   "id": "life-s058-e000#0",
+   "response": "March does love a bluff. Hot coffee and the boots by the door.\nAction: None."
+  },
+  {
+   "id": "life-s022-e000#0",
+   "response": "Good one to check with numbers. I'll pull the last 12 months of Costco charges from your card statements and compare the total with the membership fee on your renewal notice, to see if it pays for itself at your actual spending.\nAction: Find Costco spend over the past year plus the renewal fee, and give you a verdict."
+  },
+  {
+   "id": "life-s037-e004#0",
+   "response": "I don't have the bakery or cake details from last time, so I'll search your email for the receipt and order confirmation before ordering anything. Noted that the 3 unmatched charges are all yours. With Sam's parents driving down it'll be five of you, so I'll size the cake for that unless you tell me otherwise.\nAction: Search email for last year's bakery cake order; if I can't find it, ask you for the bakery name."
+  },
+  {
+   "id": "life-s148-e018#0",
+   "response": "Assuming tomorrow is Fri 9 Oct (that's what your Friday reminders point to), there are 23 working days from tomorrow up to, but not including, the Thu 12 Nov offsite, or 24 if you count the offsite day itself. That already leaves out Thanksgiving Monday, Oct 12. If tomorrow is actually a different day, tell me and I'll recount.\nAction: Hold the number until you confirm tomorrow's date, and I can map the pre-read deadlines onto it."
+  },
+  {
+   "id": "life-s058-e002#0",
+   "response": "For the August long weekend 2026 I'll start with about Fri 31 Jul to Mon 3 Aug (tell me if you want different dates) and price Toronto to Vancouver for one traveller and for you plus Leo. I'll start with Air Canada, regular economy only, never basic, aisle seats, and show everything in CAD.\nAction: Search fares and send a comparison for 1 versus 2 travellers."
+  },
+  {
+   "id": "life-s046-e021#0",
+   "response": "Booking the 25-minute 'Payouts dashboard: empty states' sync with Aisha and Diego next week, in a morning slot where all three of you are free, with your agenda (empty-state copy, loading skeleton, who owns the Looker link) in the invite. I'll also set the Hydro payment reminder for a couple of days before the due date.\nAction: Check the three calendars next week, book the earliest shared morning slot with a Meet link, and set the Hydro reminder."
+  },
+  {
+   "id": "life-s058-e007#0",
+   "response": "Pulling Tom's calendar for the 24th now. I'll list his free windows and note that private blocks may show only as busy, which should help explain why the pricing review slipped.\nAction: Pull Tom's calendar for the 24th and send you the free and busy windows."
+  },
+  {
+   "id": "life-s051-e002#0",
+   "response": "I'll pull next week from your calendar, the shared family calendar and school notices and give you a day-by-day rundown. I'll flag overlaps and anything that needs prep or a decision from you.\nAction: Read both calendars and recent school and work emails, then send the rundown."
+  },
+  {
+   "id": "life-s076-e007#0",
+   "response": "To work out the arrival time I need two things I don't have in front of me: when school pickup actually ends next Friday, and how long the drive to Sam's parents' place takes. I'll check your calendar for pickup, then add a packing buffer and a Friday-traffic cushion. Are you driving or taking the train?\nAction: Look up pickup time and travel time, then give you a rough arrival window."
+  },
+  {
+   "id": "life-s068-e021#0",
+   "response": "Booking Dr. Lin's cleaning for Apr 22 in the late morning, if the schedule allows. I'll look up the clinic's contact in your records, check your calendar first, and ask for something around 10:30 to noon.\nAction: Check Apr 22 on your calendar, request the late-morning cleaning with Dr. Lin, and confirm once it's booked."
+  }
+ ]
+}
