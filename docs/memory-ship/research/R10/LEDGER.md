@@ -1323,5 +1323,5 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   burst of activity, and the hook writes some rows at once, DECISIONS P-tier notes on `eden sleep --idle`). The
   head-to-head gave eden its own packets from the real plugin replay, but gave the verifier the batch-lagged harness
   store, so on store freshness the C6/C7 comparison is conservative for the verifier. A leak-free per-session
-  compile would measure it; it costs one compiler run per session (code 160+, life 160+ sessions) and is not
+  compile would measure it; it costs one compiler run per session (code 110, life 160 sessions) and is not
   scheduled.
