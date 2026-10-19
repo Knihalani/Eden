@@ -1,0 +1,6 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s148-e012", "scores": [3, 3, 3, 3], "why": "All set Friday memo and Saturday library reminders; response 1 also notes the 6 Nov Q1 page."},
+{"event": "life-s150-e028", "scores": [3, 3, 3, 2], "why": "Status plus two-line draft is right; response 3 posts the note without being asked to."},
+{"event": "life-s156-e000", "scores": [2, 1, 1, 1], "why": "Plan is settled: astronaut, leaves Hannah's 5:45, Sam on candy. All miss it; 0 at least has correct allergy and EpiPen."},
+{"event": "life-s156-e004", "scores": [1, 1, 1, 1], "why": "Riya volunteers on Leo's ROM field trip Thu 26 Nov from 9:15; all book 10:00 without flagging the clash."}
+]}

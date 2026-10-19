@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s002-e000", "scores": [3,3,2,3], "why": "All block the Sunday slot; third's 'correct at the end' contradicts stored inline-correction rule; fourth adds correct DST note."},
+{"event": "life-s002-e020", "scores": [2,2,2,2], "why": "All save rule but claim no Spanish info, though Carlos's notes and role-play targets (ser/estar, preterite) exist."},
+{"event": "life-s002-e023", "scores": [3,3,3,3], "why": "All correctly save penicillin and May allergy details privately."},
+{"event": "life-s006-e000", "scores": [3,3,3,3], "why": "All plan a fast-shipping silly mug search without ordering blindly."},
+{"event": "life-s006-e011", "scores": [3,3,3,3], "why": "All give sound sell-vs-rent factors including tax and cash flow."},
+{"event": "life-s006-e015", "scores": [3,3,3,3], "why": "All close the conversation warmly and briefly."},
+{"event": "life-s008-e000", "scores": [3,3,3,3], "why": "All verify salmon formula, no chicken, before reordering."},
+{"event": "life-s012-e018", "scores": [3,3,3,3], "why": "All drafts accurate: Sat 4 Oct, 9 to 1, rain date 5th, own driveways, no early birds."},
+{"event": "life-s016-e002", "scores": [3,3,3,3], "why": "All correctly explain EFT is Canadian term, ACH the US network."},
+{"event": "life-s017-e012", "scores": [2,2,2,1], "why": "None recalls the still-active YYZ-YVR fare watch; fourth confidently says nothing is running."},
+{"event": "life-s018-e000", "scores": [3,3,3,3], "why": "All empathetic and appropriately light."},
+{"event": "life-s018-e005", "scores": [3,3,3,3], "why": "All give the standard 1-2 point drop over three periods rule with sensible caveats."},
+{"event": "life-s020-e016", "scores": [2,2,3,3], "why": "Last two use known role-play and Mexican-vocab preferences; second miscounts sections; first ignores preferences."},
+{"event": "life-s021-e000", "scores": [3,3,3,3], "why": "All congratulate and set the Friday reminder and evening block correctly."},
+{"event": "life-s022-e016", "scores": [3,3,3,3], "why": "All log the race correctly and plan the December recap; pace figure 5:54/km is accurate."}
+]}
