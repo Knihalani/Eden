@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s012-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both hedge on ESLint/Prettier though Biome replaced them in March; CORS allowlist plans are correct."
+  },
+  {
+   "event": "code-s013-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly explain structuredClone vs JSON round trip."
+  },
+  {
+   "event": "code-s013-e030",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both do a straightforward rename with grep, typecheck and tests."
+  },
+  {
+   "event": "code-s015-e017",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both accurately explain edge runtime defaults and the Node runtime opt-in."
+  },
+  {
+   "event": "code-s018-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both read config and report actual listening ports."
+  },
+  {
+   "event": "code-s018-e004",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both check the repo rather than guess; first's RabbitMQ exports point is supported by facts."
+  },
+  {
+   "event": "code-s018-e010",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Facts say Node 18 LTS; second pins it directly, first hedges via CI/Dockerfiles (node:20-slim could mislead)."
+  },
+  {
+   "event": "code-s018-e021",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both leave redirect issue to Lena and plan an accessible copy button."
+  },
+  {
+   "event": "code-s020-e014",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both apply the font change; second flags the ambiguous open expand fix."
+  },
+  {
+   "event": "code-s020-e019",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both acknowledge the end-to-end testing rule."
+  },
+  {
+   "event": "code-s020-e034",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both note suite and typecheck still running."
+  },
+  {
+   "event": "code-s021-e006",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "Second claims no Node pin exists (stale) and that repo uses pnpm despite yarn 1 being the package manager."
+  },
+  {
+   "event": "code-s021-e028",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both acknowledge keeping benchmarks off shared CI runners."
+  },
+  {
+   "event": "code-s021-e031",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both identify duplicate hx-post on form and button as the Enter double-post cause."
+  },
+  {
+   "event": "code-s021-e035",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Second applies required team/env cost tags; first omits tags and hedges on infra tool."
+  }
+ ]
+}

@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s048-e005",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both defer to package.json despite known facts: @acme/cli, Node 18 minimum (ESM), picocolors. Reasonable but misses known info."
+  },
+  {
+   "event": "code-s048-e011",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both correct diagnosis; both re-run docker context ls though history shows desktop-linux active, orbstack context exists."
+  },
+  {
+   "event": "code-s050-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both follow the user's update to BullMQ/Bull Board and opt-out telemetry correctly."
+  },
+  {
+   "event": "code-s051-e006",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both use gh to pull release.yml logs and compare timings; no guessing."
+  },
+  {
+   "event": "code-s051-e011",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R0 drags in irrelevant placeholder-price note; R1 clean and leaves cache ref to user."
+  },
+  {
+   "event": "code-s055-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both make seeded emails unique by construction and verify by reseeding."
+  },
+  {
+   "event": "code-s055-e011",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both base the rewrite on the actual app/ tree; R0 correctly treats Next 13 notes as stale."
+  },
+  {
+   "event": "code-s056-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add error.digest to Sentry capture as tag/extra; R1 also checks nothing sensitive leaks."
+  },
+  {
+   "event": "code-s056-e008",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly diagnose locale date mismatch and propose a shared explicit-locale formatter."
+  },
+  {
+   "event": "code-s056-e020",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both implement soft delete with problem+json, 404 handling, existing scoping and tests."
+  },
+  {
+   "event": "code-s056-e026",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 follows the server-actions convention; R0 omits it, though usefully notes the route isn't registered."
+  },
+  {
+   "event": "code-s056-e032",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add the 409 through the problem() helper before soft delete, with a test."
+  },
+  {
+   "event": "code-s057-e015",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Known gotcha: PgBouncer transaction mode needs prepare: false. R0 just waits; R1's git show would likely surface the dropped option."
+  },
+  {
+   "event": "code-s057-e030",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "R0 states stale RabbitMQ fact (worker now BullMQ on Redis 7); R1 is sound and checks time zones and idempotency."
+  },
+  {
+   "event": "code-s058-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R0 asserts cause and API location and an unsupported stored-totals claim; R1 reproduces first then fixes in integer cents."
+  }
+ ]
+}

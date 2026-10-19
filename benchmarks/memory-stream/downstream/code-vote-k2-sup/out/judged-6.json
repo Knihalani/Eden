@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s070-e012",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both plausible plans; neither recalls the earlier initials() fix in user-avatar.tsx that already handles single names."
+  },
+  {
+   "event": "code-s071-e012",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both accurately state fix and tests done, uncommitted; R1 adds correct test counts."
+  },
+  {
+   "event": "code-s071-e014",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "R0 asserts reminderLog.claim and job internals not supported by evidence; R1 reads job first, structured logs, keeps data out."
+  },
+  {
+   "event": "code-s072-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both acknowledge lefthook, remove husky refs, and investigate the db error before guessing."
+  },
+  {
+   "event": "code-s073-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both handle UUID v7 and migration but omit the required org_id column (and deleted_at) convention."
+  },
+  {
+   "event": "code-s075-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both formatting-only plans but hedge on which formatter; repo uses Biome."
+  },
+  {
+   "event": "code-s076-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correct rename plans with git mv, references, typecheck and tests."
+  },
+  {
+   "event": "code-s076-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both light, accurate banter noting clean typecheck."
+  },
+  {
+   "event": "code-s076-e014",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both friendly; R0 says nothing pending while e2e still running, R1 implies test runs fine unverified."
+  },
+  {
+   "event": "code-s076-e017",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 fixes all typos and flags risky hits; R0 defers fixing other hits beyond asking, under-delivering."
+  },
+  {
+   "event": "code-s076-e025",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly distinguish keep-alive from multiplexing."
+  },
+  {
+   "event": "code-s077-e005",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 knows pnpm and gives the right add command; R0 hedges on package manager."
+  },
+  {
+   "event": "code-s077-e011",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both accurate tsx vs ts-node explanations and note pending lockfile install."
+  },
+  {
+   "event": "code-s077-e013",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Both flag lockfile; R0 hedges which lockfile (pnpm known), R1 offers install appropriately."
+  },
+  {
+   "event": "code-s080-e000",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss that acme invoices list with --json already exists from earlier work; would scaffold a duplicate."
+  }
+ ]
+}
