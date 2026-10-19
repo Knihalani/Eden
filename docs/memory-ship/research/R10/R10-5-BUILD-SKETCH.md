@@ -60,13 +60,20 @@ that delivery can use any later tool call of the turn.
 | 10 s | 3 of 10 | +0.030 | +0.040 |
 | 20 s | 1 of 10 | +0.010 | +0.013 |
 
-## What the user decides
+## What the user decided (2026-10-19)
+
+The user amended D37: the in-turn, off-hook checker is allowed, opt-in per repo, on TypeSafe Jev or a fast NIM
+model, chosen by measurement (LEDGER C10-E1). The decision points as they were put:
 
 1. **Allow an in-turn model call off the hook.**
    - D37 today allows models only offline (sleep, evals), opt-in, on sanitized rows, never on a hook path.
    - This call is off the hook, but it runs during the turn and sees the turn's text.
 2. **Which provider.**
    - **A small Claude model (haiku):** what was measured. It is not a D37 provider.
+   - **TypeSafe Jev** (a non-generative decision model; added 2026-10-19): one request answers a yes/no question
+     per candidate with a calibrated probability; the vendor reports 70–500 ms, and an independent test saw about
+     140 ms on the server plus 0.7–0.9 s of network. Published attacks can flip its verdicts, so it needs an A6
+     security review before shipping. `verify_jev.py` measures it once `TYPESAFE_API_KEY` is set.
    - **An NVIDIA NIM model:** the D37 provider, not yet measured here.
      - The repo records hosted p50 1–20 s and p95 40–70 s (EXECUTION.md). Against C8-E4's timings that would reach
        some turns at best and miss at least 5% of calls entirely; the re-measure gives the real numbers.
