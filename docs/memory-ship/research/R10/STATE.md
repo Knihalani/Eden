@@ -126,7 +126,9 @@ Families differ in mechanism. Every kill criterion was written before its run.
   weaker (C10-E1).
 - **On the outcome measure Jev matches the haiku checker** (C10-E3, one run): jev − verify −0.0117 (code), −0.0262
   (life); jev − eden +0.1017 [−0.0009, +0.2] and +0.0873 [−0.0073, +0.1872], just short of the rule's CI bar.
-  Next: a second independent run.
+  Second run (C10-E4, two-run average): **Jev matches the haiku checker** (jev − verify +0.0015 code, +0.0122
+  life); **beats today's plugin firmly on code** (+0.122 [+0.0392, +0.2039]) **but not on life** (+0.0632
+  [−0.0186, +0.1499]). In these runs haiku's own lead over the plugin on life was also smaller (+0.051).
 - **No NIM model was usable** (C10-E1): three 404, one connection failure, Nemotron Lightning p50 14.3 s with
   unparseable replies.
 

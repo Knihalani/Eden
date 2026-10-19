@@ -1691,3 +1691,37 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - **Jev beats today's plugin (two runs)** if jev − eden has a CI lower bound > 0 on both worlds.
   - **Jev matches the haiku checker (two runs)** if jev − verify ≥ −0.03 on both worlds.
   - Run 2 alone is reported too.
+
+## C10-E4 · 2026-10-19 · Jev four-way, second independent run: result
+- **Run 2** (new sonnet responders, new blind opus judges in private temp directories; no judge reported a
+  collision; several read the long repeated `reference_facts` list as a case-to-case diff, as in C10-E3). All judged.
+  - **Code run 2 alone:** utility eden −0.0477, verify +0.0798, jev +0.0945; jev − eden +0.1422 [+0.051, +0.2355];
+    jev − verify +0.0147 [−0.0749, +0.1092].
+  - **Life run 2 alone:** eden +0.0298, verify +0.0183, jev +0.0689; jev − eden +0.0391 [−0.058, +0.1394]; jev −
+    verify +0.0506 [−0.0287, +0.1324].
+- **Decision measure (each turn averaged over both runs):**
+
+  | World | Group | n | Eden | Verify (haiku) | Jev |
+  |---|---|---|---|---|---|
+  | code | plan-need | 25 | −0.02 | +0.32 | +0.52 |
+  | code | labeler-only | 30 | −0.1 | +0.033 | −0.033 |
+  | code | no-need | 90 | −0.039 | +0.033 | +0.011 |
+  | life | plan-need | 49 | +0.01 | +0.408 | +0.367 |
+  | life | labeler-only | 30 | +0.1 | +0.05 | +0.2 |
+  | life | no-need | 90 | +0.028 | +0.039 | +0.017 |
+
+  - **Code:** utility eden −0.0467, verify +0.0738, jev +0.0753; **jev − eden +0.122 [+0.0392, +0.2039]**;
+    jev − verify +0.0015 [−0.0777, +0.0834].
+  - **Life:** eden +0.0409, verify +0.0919, jev +0.1041; **jev − eden +0.0632 [−0.0186, +0.1499]**; jev − verify
+    +0.0122 [−0.0532, +0.0799].
+- **Verdict, by the rule:**
+  - **Jev matches the haiku checker (two runs):** jev − verify +0.0015 (code), +0.0122 (life), both ≥ −0.03.
+  - **Jev beats today's plugin (two runs): on code yes** (CI lower bound +0.0392); **on life no** (CI includes 0;
+    point estimate +0.0632).
+- **Context:** in these four-way runs the haiku checker's own lead over eden on life is +0.051 (two-run average),
+  smaller than in the three-way C6/C7 runs (+0.1342). Eden scores higher on life here (+0.0409 against +0.0091 in
+  C7-E3), on different responder and judge runs. Jev tracks the haiku checker closely in both worlds; what moved is
+  the life baseline, not Jev relative to haiku.
+- **What this says:** Jev is a drop-in for the haiku checker on replies (two runs, both worlds), about ten times
+  inside the latency budget, and on D37's amended provider list. The claim "the checker beats today's plugin on
+  life" now rests on the C6/C7 three-way runs, and these four-way runs do not reproduce it firmly.
