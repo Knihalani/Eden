@@ -44,12 +44,55 @@ def env():
     return out
 
 
-def request(case):
-    """The SystemOne request for one verifier case: one Noul per candidate, keyed q0, q1, … (ids stay local)."""
-    state = {"turn": case["text"], "recent": case.get("recent", []), "earlier_turns": case.get("earlier_turns", [])}
-    qs = {f"q{n}": {"type": "noul", "instructions": {"row": c["text"], "question": QUESTION}, "criteria": CRITERIA}
-          for n, c in enumerate(case["candidates"])}
+# C10-E2 variants: precise criteria with boundary cases (TypeSafe: Jev reads questions literally)
+RICH_Q = ("`turn` is the user's newest message to their assistant; `recent` is the conversation just before it. "
+          "`row` is one note from the assistant's long-term memory about this user. Question: if the assistant "
+          "had `row` in front of it while replying to `turn`, would its reply or next action be better than "
+          "without it?")
+RICH_C = {
+    "true": "Yes when `row` holds something the reply depends on and that is not already in `turn` or `recent`: a "
+            "fact or value the user would expect the assistant to know (a name, version, place, date, account); "
+            "a standing rule or preference that applies to what the assistant is about to do; a plan, booking or "
+            "deadline that this request could clash with or should mention; a gotcha that applies to this exact "
+            "task.",
+    "false": "No when `row` is only about the same general topic but would not change the reply; when what it says "
+             "is already in `turn` or `recent`; when it is about a different task, person or project; when the "
+             "turn is small talk, an acknowledgement or a thank-you; or when it is old state that the turn shows "
+             "has changed.",
+}
+STATED_Q = "Is the information in `row` already stated in `turn` or `recent`?"
+RELATED_Q = ("Is `row` about a task, project, tool, person, place or plan that `turn` involves, directly or as "
+             "something the request would affect?")
+
+
+def request(case, variant="base"):
+    """The SystemOne request for one verifier case. Questions are keyed q<n> (and q<n>s, q<n>r for `decomp`);
+    candidate ids stay local."""
+    if variant == "base":  # C10-E1
+        state = {"turn": case["text"], "recent": case.get("recent", []),
+                 "earlier_turns": case.get("earlier_turns", [])}
+        qs = {f"q{n}": {"type": "noul", "instructions": {"row": c["text"], "question": QUESTION},
+                        "criteria": CRITERIA} for n, c in enumerate(case["candidates"])}
+        return state, qs
+    state = {"turn": case["text"], "recent": case.get("recent", [])}
+    if variant == "list":
+        state["memory_candidates"] = [c["text"] for c in case["candidates"]]
+    qs = {}
+    for n, c in enumerate(case["candidates"]):
+        qs[f"q{n}"] = {"type": "noul", "instructions": {"row": c["text"], "question": RICH_Q}, "criteria": RICH_C}
+        if variant == "decomp":
+            qs[f"q{n}s"] = {"type": "noul", "instructions": {"row": c["text"], "question": STATED_Q}}
+            qs[f"q{n}r"] = {"type": "noul", "instructions": {"row": c["text"], "question": RELATED_Q}}
     return state, qs
+
+
+def combine(answers, n, variant):
+    """A row's p from its answers (None if unanswered). `decomp`: needed × (1 − stated) × related."""
+    p = noul(answers.get(f"q{n}"))
+    if variant != "decomp" or p is None:
+        return p
+    st, rel = noul(answers.get(f"q{n}s")), noul(answers.get(f"q{n}r"))
+    return None if st is None or rel is None else p * (1 - st) * rel
 
 
 def call(cfg, state, questions, timeout=60, retries=4):
@@ -78,7 +121,7 @@ def noul(answer):
         return None
 
 
-def run(world, src, tag, limit=0):
+def run(world, src, tag, limit=0, variant="base"):
     cfg = env()
     if not cfg["TYPESAFE_API_KEY"]:
         sys.exit("TYPESAFE_API_KEY must be set (environment or .env)")
@@ -97,12 +140,12 @@ def run(world, src, tag, limit=0):
             if not c["candidates"]:
                 cases.append({"event": c["event"], "scores": {}})
                 continue
-            state, qs = request(c)
+            state, qs = request(c, variant)
             reply, secs, attempts = call(cfg, state, qs)
             answers = reply.get("answers", {})
             scores, bad = {}, 0
             for n, cand in enumerate(c["candidates"]):
-                v = noul(answers.get(f"q{n}"))
+                v = combine(answers, n, variant)
                 bad += v is None
                 scores[cand["id"]] = 0.0 if v is None else v
             failed += bad > 0
@@ -111,8 +154,9 @@ def run(world, src, tag, limit=0):
                                   "latency_s": round(secs, 3), "attempts": attempts, "unanswered": bad,
                                   "usage": reply.get("usage", {}), "candidates": len(c["candidates"])}) + "\n")
             log.flush()
-        json.dump({"batch": inp.get("batch", os.path.basename(p)[:-5]), "verifier": f"typesafe:{cfg['TYPESAFE_MODEL']}",
-                   "cases": cases}, open(dest, "w"), indent=1)
+        json.dump({"batch": inp.get("batch", os.path.basename(p)[:-5]),
+                   "verifier": f"typesafe:{cfg['TYPESAFE_MODEL']}:{variant}", "cases": cases},
+                  open(dest, "w"), indent=1)
         done += 1
     print(world, tag, done, "files written;", len(files), "inputs;", failed, "calls with unanswered questions")
 
@@ -124,5 +168,6 @@ if __name__ == "__main__":
     ap.add_argument("--tag", default="jev")
     ap.add_argument("--limit", type=int, default=0, help="first N input files only (a smoke run)")
     ap.add_argument("--latency", action="store_true", help="print latency percentiles of the logged calls")
+    ap.add_argument("--variant", default="base", choices=["base", "rich", "list", "decomp"], help="C10-E2")
     a = ap.parse_args()
-    latency(a.world, a.tag) if a.latency else run(a.world, a.src, a.tag, a.limit)
+    latency(a.world, a.tag) if a.latency else run(a.world, a.src, a.tag, a.limit, a.variant)
