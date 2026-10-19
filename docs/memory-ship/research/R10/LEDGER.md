@@ -1396,3 +1396,12 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   need turns are the first human turn of their session, with no earlier turn to check.
 - **Verdict: dead on this benchmark.** Each need in StreamBench is its own moment. This may understate continuity in
   real work (the worlds were authored that way), but nothing here supports building it.
+
+## C8-E6 · 2026-10-19 · How fast is the small Claude model on the checker call? (pre-registration)
+- **Setup:** `claude -p --model haiku --system-prompt <the calibrated verifier prompt> --tools ""` on 20 verifier
+  inputs (the first 10 cases with candidates in `verify/code-cal/in` and in `verify/life-cal/in`), one call each,
+  stdin closed. Read `duration_api_ms` and token usage from the JSON output.
+- **Measure:** p50 / p90 / max API time; output and thinking tokens. The CLI keeps a thinking budget it does not let
+  me turn off (two probes: about 500 thinking tokens with and without `MAX_THINKING_TOKENS=0`), so this times the
+  call as the CLI makes it; a direct API call without thinking would be faster and is not measured.
+- **What it informs:** whether the measured checker fits C8-E4's ~3 s budget as is.
