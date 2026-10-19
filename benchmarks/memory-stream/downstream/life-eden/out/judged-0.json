@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s001-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both keep Saturday and board-game theme; reasonable next steps."
+  },
+  {
+   "event": "life-s001-e039",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Both check rather than guess; R1 actually answers the history part from this session."
+  },
+  {
+   "event": "life-s007-e000",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "R0 recalls siren-howling explanation but asks for walk routine it should know; R1 wrongly claims no record."
+  },
+  {
+   "event": "life-s010-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both short, warm, no age jokes."
+  },
+  {
+   "event": "life-s017-e020",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Both unscented ideas; R1 also accounts for holiday-weekend hours and avoids saying anything to Grace."
+  },
+  {
+   "event": "life-s017-e024",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "R0 relevant (cabinet delivery, winterizing) though filter was just replaced; R1 cites stale August library reminder."
+  },
+  {
+   "event": "life-s018-e007",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither proposes practical check via Bandra neighbour/cousin; R1 leans on reassurance, R0 on checking messages."
+  },
+  {
+   "event": "life-s022-e004",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both claim not to know Sam's order; he drinks oat-milk flat whites, vegetarian."
+  },
+  {
+   "event": "life-s023-e024",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 gentle and light; R1 dumps work items on a venting Sunday night."
+  },
+  {
+   "event": "life-s023-e028",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "R0 solid checklist; R1 claims an unsupported passport-photos to-do item."
+  }
+ ]
+}

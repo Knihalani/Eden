@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s060-e002",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both respond with care, propose a lighter day for approval and keep the evening clear for the diya."
+  },
+  {
+   "event": "life-s068-e024",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both propose cheese and claim not to know allergies, missing Ellie's dairy allergy (and Leo's nut allergy)."
+  },
+  {
+   "event": "life-s072-e010",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "History has Ep. 218 'Pricing B2B APIs without leaving money on the table'; both claim not to know it."
+  },
+  {
+   "event": "life-s077-e026",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both simply affirm the lazy Saturday and hold non-urgent items."
+  },
+  {
+   "event": "life-s077-e034",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both save a 15-item checklist and find couch removal options appropriately."
+  },
+  {
+   "event": "life-s085-e015",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both draft a concise, correct Slack reminder and wait for approval."
+  },
+  {
+   "event": "life-s087-e000",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "She is venting; R0 reflects and asks but still drafts a fix; R1 jumps straight to reply and reminder."
+  },
+  {
+   "event": "life-s088-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 gives a clear ordered checklist; R1 crams it into one line."
+  },
+  {
+   "event": "life-s091-e008",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both propose a sensible central Notion database with triage view and Linear links."
+  },
+  {
+   "event": "life-s096-e007",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Both give kid-friendly explanations; R0 asks Ellie's age, which is known (10)."
+  }
+ ]
+}

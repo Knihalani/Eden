@@ -101,6 +101,7 @@ Families differ in mechanism. Every kill criterion was written before its run.
 ## Cycle 5 findings (LEDGER C5-E1…)
 
 - **Clean downstream re-run (C5-E1):** the right packet lifts the outcome by +1.23 (code) and +1.1 (life) on 97% / 87% of plan-need turns. A wrong packet costs −0.47 on code no-need turns (noise floor −0.07), so wrong bullets do hurt and R10-3's evidence is restored. The hook vote keeps about half of the code benefit (+0.63).
+- **The plugin as it ships today barely changes replies** (C5-E3): +0.1 on code need turns (about 8% of the available +1.23), −0.2 on life need turns. Reweighted to real use, code −0.04 and life +0.03: near zero. Its bullets (mostly past prompts) rarely mislead, but rarely help.
 - So a packet is worth sending when P(needed) > about 0.3 (+1.2 gain vs −0.47 cost): a value-of-information firing rule (F6) is now measurable.
 
 ## Cycle 4 findings (LEDGER C4-E1…E13)

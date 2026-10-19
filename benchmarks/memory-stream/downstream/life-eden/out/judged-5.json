@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s131-e012",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss that they met in 2015 at a friend's board-game night, the obvious callback."
+  },
+  {
+   "event": "life-s131-e015",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both apply the staples-vs-$150 purchase rule correctly."
+  },
+  {
+   "event": "life-s131-e029",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Simple acknowledgement; both fine."
+  },
+  {
+   "event": "life-s141-e023",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "R0 correct general steps, hedges on fees on record; R1 invents an earlier Carlaw tow note."
+  },
+  {
+   "event": "life-s143-e009",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both fine but miss that March 18 is her father's death anniversary, when she prefers a lighter schedule."
+  },
+  {
+   "event": "life-s143-e013",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 just agrees to keep replies short; R0 also holds back non-urgent items, which she didn't ask for."
+  },
+  {
+   "event": "life-s145-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Nothing relevant on record; both sensible."
+  },
+  {
+   "event": "life-s155-e007",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both plan to check but neither mentions the known open item, Riya's legal review of merchant terms."
+  },
+  {
+   "event": "life-s155-e022",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss the Lisbon OOO (Dec 20-Jan 2) and Dec 10 concert early leave; R1 also invents an OOO on Fri 22."
+  },
+  {
+   "event": "life-s157-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both fine but don't flag Leo's July 17 birthday or the Saturday 10:30 skating lesson."
+  }
+ ]
+}

@@ -29,6 +29,9 @@ On realistic streams, lexical retrieval is far weaker than the pair fixtures sug
 
 ## 3. Where Eden is today (the plugin on `main`)
 
+**Measured by outcome (C5-E3):** the plugin's memories barely change the agent's replies. Where memory is needed, coding replies improve by +0.1 on a 0–3 scale (the right memories would give +1.2) and personal-assistant replies get slightly worse (−0.2). Where nothing is needed, they do no measurable harm. Overall the effect is near zero.
+
+
 | World | Recall | Proactive | Bullet precision | Silence on no-need human turns | Non-human silence | Trigger recall |
 |---|---|---|---|---|---|---|
 | code | 0.091 | 0.077 | 0.006 | 0.104 | 1.0 | — |

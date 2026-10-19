@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s038-e000",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "History shows she bought the 16x25x1 4-pack in Oct; R1 uses it (misses date/next change), R0 claims no record."
+  },
+  {
+   "event": "life-s038-e024",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give an accurate, useful answer about Portuguese for the Lisbon trip."
+  },
+  {
+   "event": "life-s041-e003",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both write a warm, short, emoji-free card from all three and reply to Marcus as asked."
+  },
+  {
+   "event": "life-s043-e002",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 applies the standing fully-refundable, near-transit hotel rule; R0 only says free cancellation if possible."
+  },
+  {
+   "event": "life-s047-e009",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both order fine under the limit but ignore her preference for Canadian retailers over Amazon."
+  },
+  {
+   "event": "life-s050-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both avoid an unconfirmed date and show the draft; neither mentions Aisha sign-off or 'target' wording; R0 pulls off-target tickets."
+  },
+  {
+   "event": "life-s051-e017",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both ask time/dietary needs instead of using 19:00 default and Sam's vegetarianism; R1 notes Valentine's Day."
+  },
+  {
+   "event": "life-s052-e019",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 fits the light moment; R1 adds an unprompted shoe-purchase reminder."
+  },
+  {
+   "event": "life-s056-e000",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both claim not to know Sam's birthday, anniversary or interests (Penguin paperbacks, Fellow Ode grinder, quiet dinner); R1 invents a note."
+  },
+  {
+   "event": "life-s058-e010",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "No record of the VIA results exists; both honestly decline to guess and search or re-run."
+  }
+ ]
+}
