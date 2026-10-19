@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s021-e035",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "R1 applies known team/env cost tags and flags overlap with existing 30-day exports bucket; R0/R2 treat known tags/stack as unknown."
+  },
+  {
+   "event": "code-s022-e017",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "All add rethrow test and strip emoji; R2 says plain commit message, ignoring Conventional Commits convention."
+  },
+  {
+   "event": "code-s027-e049",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R2 adds snapshot test and docs/cli.md; R1 separates branch; R0 unclear about branching and misses docs."
+  },
+  {
+   "event": "code-s028-e017",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All use shadcn Button, lucide icon and an aria-label for the icon-only duplicate button."
+  },
+  {
+   "event": "code-s033-e016",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All briefly park bucket and plan to read invoice-number.ts and reproduce, matching short-answer preference."
+  },
+  {
+   "event": "code-s035-e008",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly diagnose CSRF token not reaching the htmx request with standard fixes."
+  },
+  {
+   "event": "code-s036-e010",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "R0 updates docs/cli.md per the docs rule; R1 omits docs, R2 hedges on whether CLI is documented."
+  },
+  {
+   "event": "code-s043-e000",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "R1 uses known PostHog setup and invoice_sent event; others ignore known analytics tool."
+  },
+  {
+   "event": "code-s045-e000",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "All miss that outgoing webhooks must be HMAC SHA-256 signed in X-Acme-Signature."
+  },
+  {
+   "event": "code-s045-e012",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "Accurate recaps, but all ignore the preference for short bullet-list end-of-task summaries."
+  }
+ ]
+}
