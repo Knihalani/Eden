@@ -1415,3 +1415,5 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   the lever: about 900 tokens (thinking plus 15 scores) at roughly 6 ms a token. A direct API call with thinking off
   and a reply that lists only the rows it keeps would be a few dozen output tokens; that variant's latency and
   quality are not measured (its quality would need the C6-style downstream re-run, since it changes the prompt).
+- **Probe (one call):** `--effort low` does not turn thinking off either (454 thinking tokens, 5230 ms). The
+  no-thinking variant cannot be timed from this environment.
