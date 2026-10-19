@@ -1,0 +1,195 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "protocol": "items",
+ "cases": [
+  {
+   "event": "life-s017-e020",
+   "responses": [
+    "Sorry about Sam's migraine. Since scent is the problem, I'd stay with food and objects: tomorrow at the Lansdowne farmers' market you could get local honey or maple syrup for Grace, and for Daniel a book from a local bookshop, say local history or something on bridges given his engineering. Skip candles, soaps and anything perfumed. Action: I'll check the market hours and which nearby shop has a good book or a handmade pottery piece, and send you two or three specific options to pick up tomorrow.",
+    "Good call on not saying anything to Grace, and sorry Sam's had a rough afternoon. For Grace and Daniel, keep it unscented and local: something edible like a nice jar of maple syrup or honey, a book for Daniel (he's a retired civil engineer, so local history or bridges would suit), and for Grace, who still teaches piano, a piano-themed book or sheet music collection. I'd skip flowers too, since lilies and the like can be strong. Action: I'll look up a few open-tomorrow shops near Alta Vista, check their hours before sending you a shortlist, and hold off buying anything until you pick."
+   ]
+  },
+  {
+   "event": "life-s017-e024",
+   "responses": [
+    "Here's a draft list for the week back home. The one fixed item is the Northline cabinet delivery on Thu 16 Oct, 8:00-10:00, since someone has to be home to let the crew in. Other things to get ahead of the cold: check furnace/heating and filters, bring in or cover outdoor furniture, clear the gutters and eavestroughs, seal drafts around doors and windows, and sort winter coats and boots for Leo. Given Sam's reaction to strong scents, I'd keep anything for the house unscented. Action: I'll turn this into a dated checklist with Thursday's delivery blocked on your calendar, and you can tell me what to cut or add.",
+    "Here's a start for the week at home. Thursday morning is fixed: the cabinet delivery from Northline is Thu 16 Oct 8:00-10:00 and someone has to be home. Beyond that, the house things on file are the furnace (last serviced 2023-09, so it's overdue), the eavestroughs (last cleaned 2024-10, so worth doing before leaves and frost), and a quick test of the sump pump (replaced May 2024) before winter. Action: I'll turn that into a day-by-day list around the Thursday delivery, and can look for furnace and eavestrough openings if you want me to book them."
+   ]
+  },
+  {
+   "event": "life-s022-e004",
+   "responses": [
+    "That's a kind idea. I'll get a coffee and a snack to Sam at Riverdale, room 214, for around 3:30. I don't have his usual order saved, and schools sometimes restrict deliveries, so I'd like to check both. Action: I'll look at his past orders for his usual coffee and snack, confirm the school accepts deliveries to room 214, and then place the order for 3:30. I'll ask you first if I find a problem.",
+    "That's a kind thing to do for Sam. I'll order him an oat-milk flat white, since he doesn't like anything hazelnut-flavoured, plus a snack with no hazelnut in it, and send it to Riverdale Collegiate for 3:30 for room 214. I don't know the school's delivery rules, so I'll check whether they need to drop it at the front office. Action: find a cafe near the school that can deliver by 3:30, place the order with a note for room 214, and send you the total and a confirmation."
+   ]
+  },
+  {
+   "event": "life-s023-e028",
+   "responses": [
+    "Here's the checklist for renewing Leo's passport: his current passport, the completed child application form, two passport photos that meet the specs, proof of citizenship if it's needed, parent or guardian ID, the fee, and a guarantor and/or both parents' consent depending on his age. I'll confirm the exact current requirements and fees rather than rely on memory. Action: I'll check the official government page for the current child renewal rules, find the nearest locations with appointments before January, and send you the checklist with a few options.",
+    "Happy to. Leo was born July 17, 2019, so he's a child applicant under 16, and the checklist is roughly: the child passport application form, two passport photos (your open to-do from October is still to get these for Leo), proof of citizenship such as his birth certificate, his current passport, a parent or guardian's ID, and the fee. I'll confirm the exact current requirements, fees and processing times on the official site instead of quoting from memory, since his passport expires in January and timing matters. Action: I'll build the checklist from the government site, find the nearest Service Canada or passport office with appointment availability, and send you the options."
+   ]
+  },
+  {
+   "event": "life-s025-e028",
+   "responses": [
+    "Since Priya is on a mystery kick, a hardcover Tana French would be a safe bet, as she's your favourite. 'The Hunter' is her recent one and works as a follow-up to 'The Searcher', but I want to check what's in stock and the price before you commit. Here's a short card draft: \"Priya, a good mystery for a good weekend. So glad you're coming. Love, Riya.\" Action: I'll check availability and price at a couple of bookstores, send you the options, and order once you pick one.",
+    "Since Priya is a Tana French fan and on a mystery kick, a hardcover Tana French is the natural pick, such as 'The Hunter', as long as she hasn't read it already. Draft card: 'Priya, a slow-burn mystery for your mystery kick. So glad you're coming to visit. Love, Riya.' I haven't checked stock or price yet, so I won't make claims about those. Action: check which local bookstores have a hardcover and what it costs, then send you the option and card and wait for your go before ordering."
+   ]
+  },
+  {
+   "event": "life-s025-e032",
+   "responses": [
+    "That's lovely, I'm glad the flowers made her teary in the good way. I'll make a note that her birthday is November 3, that you send flowers through the Mumbai florist and call her that morning, so I can remind you ahead of time next year. Take your time deciding tonight on the book for Priya. Action: I'll save the birthday and the florist routine, and set a reminder a week before next November 3.",
+    "That's lovely, it sounds like the flowers meant a lot to her, and I'm glad the call went well. Thanks for telling me, since I had no date for her birthday. Action: I'll add Anjali's birthday, Nov 3, to the calendar as a yearly event with a reminder a week before, and note that you use the Mumbai florist so we can plan the order ahead next time; I'm still missing birthdays for Mei, Grace and Daniel, so ask me for those whenever suits."
+   ]
+  },
+  {
+   "event": "life-s026-e017",
+   "responses": [
+    "I can't see the Kanchi Silks link from here, so I don't have the saree's price and can't tell you whether it's fair yet. Action: I'll open the saved link, pull the price, then compare it with similar sarees of the same weave and zari work from other sellers, and tell you whether it looks fair or high, including shipping and any duties to Mumbai.",
+    "I can't see the price from here yet, so I won't guess. When I open the Kanchi Silks House link I'll show it in CAD with the original rupee price in brackets, like CA$137 (US$100) style. Whether it's tourist pricing depends on the weave, the amount of zari and whether it's certified silk, so I'll compare it against a few comparable listings. Action: open your saved link, convert the price, compare it to similar sarees, and report back, and I won't buy anything without asking you first."
+   ]
+  },
+  {
+   "event": "life-s027-e014",
+   "responses": [
+    "I haven't read Carlos's email yet, so I can't say whether the winter intensive is worth it. What I can say is that you pay him $180 a month for four lessons, and you're aiming at the DELE B2 in May 2026, so the answer depends on the price, the schedule and how it fits that exam. Action: I'll open his email, summarize the offer, compare its cost and time commitment to your current lessons, and tell you whether it looks worth it or overkill.",
+    "Sure, I'll read Carlos's email and give you a straight verdict. To judge whether it's overkill I'll weigh the cost, the hours per week and the dates against your calendar. I don't have notes on your goals for this, so if the email doesn't make that clear I'll ask you. Action: find Carlos's email about the winter intensive, summarise it in a few lines, and tell you whether I'd do it, skip it or do a lighter version."
+   ]
+  },
+  {
+   "event": "life-s028-e005",
+   "responses": [
+    "That pet number is a fair thing to talk to Sam about. For the standup doc, I'll collect every open risk for the payouts launch from Linear into one Notion page. Action: I'll pull the open risks and blocked or at-risk tickets from Linear, group them by owner and severity with their status and what's blocking each, create the Notion doc, and send you the link before tomorrow's standup.",
+    "Understood, we can come back to the pet budget with Sam. For the standup, I'll pull every open risk on the payouts launch from Linear (the bank partner API migration risk in November is one I'd expect to see) and put them into a Notion doc. Action: query Linear for open issues in the payouts launch project that are flagged as risks or blocked, group them by owner and severity, create the Notion doc, and send you the link before tomorrow's standup."
+   ]
+  },
+  {
+   "event": "life-s043-e002",
+   "responses": [
+    "Understood, I'll go ahead and book without checking back. I'll stick to your hotel rule though: only a fully refundable rate, ideally within walking distance of transit, in or near the Plateau, under $250 a night, Fri 6 to Sun 8 Feb. If the best option isn't refundable I won't book it. Action: I'll search for refundable rates that fit, book the best one that qualifies, and send you the confirmation with the cancellation terms.",
+    "Sounds good, I'll take it from here and book without checking in. I'll search for places in or near the Plateau under $250 a night for Fri 6 to Sun 8 Feb (two nights), and I'll pick a highly rated one with free cancellation so it's low risk. I don't have a card or loyalty account on file for hotels, so if there's no default payment method I'll have to ask you for that one thing. Action: search, book the best refundable option under $250, and send you the confirmation with the address and cancellation terms."
+   ]
+  },
+  {
+   "event": "life-s050-e000",
+   "responses": [
+    "I don't have a confirmed date for instant payouts opening beyond the beta merchants, and I don't want to put a date or commitment in front of Olivia's prospect that isn't confirmed. Action: I'll pull the current rollout status from Linear and the readiness doc, then draft a reply that says what's firm, what's still in progress and what she can safely tell the restaurant group, and show it to you before anything goes to Olivia.",
+    "I'll pull what we have on instant payouts beta status and the rollout plan. One rule I'm following: I can't give Olivia a date until Aisha has signed off, so the draft will say 'target' and avoid a launch date. Draft: 'Hi Olivia, instant payouts is still in beta with a limited group of merchants. We don't have a confirmed date to share yet. I'll check with Aisha on a target and get back to you before your call on Monday.' Action: I'll pull the latest status from Linear and Notion, check whether Aisha has given any target, and update the draft, which I'll leave unsent for you to approve."
+   ]
+  },
+  {
+   "event": "life-s056-e000",
+   "responses": [
+    "Happy to help with both. I don't have Sam's birthday date, your anniversary date, or notes on what he's into lately, so I don't want to throw out generic ideas as if they were personal. Action: I'll check the calendar for both dates and look through our past conversations and your gift ideas note for hints, then send a few gift options plus a plan for each occasion. A quick line on what Sam's been into or wanting would help.",
+    "Happy to help you get ahead of both. One thing I'm holding onto: Sam gets migraines from strong fragrances, so nothing scented, no candles, soaps or perfume. I don't have his birthday or your anniversary dates in front of me, or notes about what he's into lately, so I won't guess. Action: I'll check your calendar for both dates, ask you two or three quick questions about what Sam's been into and your budget, and then come back with unscented gift ideas, a couple of ways to celebrate, and an early reminder for the anniversary."
+   ]
+  },
+  {
+   "event": "life-s058-e010",
+   "responses": [
+    "I don't have anything saved from that 2026-02-27 request, and nothing in what I can see about the VIA Rail Toronto to Ottawa Friday evening times or fares, so I won't guess at them. Action: I'll search our past conversations and your notes for that date, and if nothing turns up I'll pull current Friday evening VIA times and fares and set them next to the drive so you can compare.",
+    "I don't have a record of what we found on 2026-02-27, and I don't want to reconstruct it from memory and give you made-up times. What I do have is your usual preference: driving the Mazda to Ottawa, leaving early Friday to beat 401 traffic, about 4 h 35 min without traffic from Leslieville to the Glebe. Action: I'll search our past chats, notes and email for that day, and if I can't find the original I'll re-pull current VIA Friday evening times and tell you clearly they're fresh numbers, not the ones from February."
+   ]
+  },
+  {
+   "event": "life-s060-e002",
+   "responses": [
+    "I'm sorry, Riya. Of course, let's keep tomorrow gentle, and I'll make sure the evening is clear for the diya. I haven't looked at tomorrow's calendar yet, so I don't know what's on it. Action: I'll go through everything scheduled for the 18th and propose what to move, shorten or decline. I won't cancel or reschedule anything until you've approved the list.",
+    "I'm thinking of you and your dad, and yes, let's make tomorrow gentle. I'll look at everything on your calendar for the 18th and sort it into what to keep, what to move and what to decline, and keep the evening completely clear for your diya. Action: I'll pull tomorrow's calendar and send you a keep/move/decline list for approval, and I won't message anyone or change a meeting until you say so."
+   ]
+  },
+  {
+   "event": "life-s068-e024",
+   "responses": [
+    "Happy to. I'll put together a simple snack order for three kids, such as fruit, cheese and crackers, popcorn or granola bars, and juice boxes, for pickup tomorrow at 3. I don't know whether Jun or his sister have any allergies or things they won't eat, so I'd like to check that with you before placing it. Action: I'll build the PC Express cart for 3:00 pickup tomorrow and show it to you, and I'll place it as soon as you confirm the allergy question and the cart.",
+    "Happy to. Your usual PC Express pickup is the Saturday morning slot at Loblaws Lakeshore, so I'll check that store has a 3:00 pm slot tomorrow rather than assume it does. I'll keep it simple for three kids, with fruit, crackers and a few easy snacks, and I'll skip anything I'm unsure about. Action: before I order, do Jun or his sister have any allergies or things they don't eat? Once you confirm, I'll build the basket, book the 3:00 pm pickup and send you the total."
+   ]
+  },
+  {
+   "event": "life-s088-e000",
+   "responses": [
+    "Happy long weekend! Here's your checklist for today:\n- [ ] Fix Leo's bike chain\n- [ ] Hang the hallway mirror\n- [ ] Sort the garage recycling\n- [ ] Plant the tomato seedlings\n- [ ] Find the good extension cord (worth doing first, since the mirror or the garage may need it)\nAction: I can put these on your task list and set a reminder this afternoon if you'd like.",
+    "Happy long weekend! Here's the order I'd do it in: 1) find the good extension cord first, since it helps with the rest; 2) sort the garage recycling; 3) fix Leo's bike chain; 4) hang the hallway mirror (about 15 kg on plaster and lath, so use two #10 x 3 in screws into a stud, or two 1/4 in snap toggles or a 60 cm French cleat, and tape the spot first); 5) plant the tomato seedlings last, in the cooler part of the day. For the mirror, the hardware list was snap toggles ($9.49), a French cleat kit ($24.99) and painter's tape ($6.99) from Home Hardware on Queen St E, so check you have those before starting. Action: I'll save this as a checklist, and I'll check whether Home Hardware is open today if you need anything."
+   ]
+  },
+  {
+   "event": "life-s098-e000",
+   "responses": [
+    "Happy to. Since you're in the King Street West office on Tuesdays and Thursdays, next Thursday works well for a lunch within walking distance. For eight people I'd look for a place that takes group bookings, and it needs a proper vegan main for Wen, not just a side salad. Action: I'll shortlist a few places near the office that can seat eight on Thursday and have a real vegan main, check availability, and send you the options. I'll need a time and a rough per-person budget from you before I book.",
+    "Morning! Happy to, and congrats to the team on wrapping the beta. I don't have the office address or any team preferences in front of me, so I'll check those rather than guess. Action: I'll pull the office address from your calendar, look for places within a short walk with space for 8 next Thursday, and send you a shortlist with menus, though it would help to know any dietary needs and a rough budget per head."
+   ]
+  },
+  {
+   "event": "life-s100-e006",
+   "responses": [
+    "I don't have either of those. I have no half marathon PB or race on file, and nothing about how property tax is handled on your mortgage, and I'd rather not put guesses on a signup or a bank form. Action: I'll search your email, notes and race confirmations for your half marathon result, and check your mortgage documents and bank statements for whether property tax is paid by you directly or through the lender. Then I'll fill in both and show you the answers before you submit.",
+    "Based on what I have saved, your half marathon PB is 2:04:37 at the Toronto Waterfront Half Marathon (21K) on 2025-10-19, and property tax is paid by pre-authorized debit from the TD joint account (ending 4471), so 'pre-authorized debit' is the answer for the mortgage box. That note is from last November, so if you've raced a half since, the PB could be out of date, and I won't put the full account number on a form. Action: I'll check your Notes running log for any newer half marathon, then fill in both fields as drafts for you to review before anything is submitted."
+   ]
+  },
+  {
+   "event": "life-s101-e004",
+   "responses": [
+    "Happy to plan it, and I've added the item to the recap with you as owner. One thing to flag: leaving at 8 on Saturday collides with your weekly call with your mom, which my notes have at 8:30-9:15 Toronto time, and Sandbanks, two wineries, the cheese shop, Lake on the Mountain and the lavender farm is a lot for one day. Since Sam is driving, you could take the call from the car, or we could move it to the evening. Action: I'll check opening hours and drive times for each stop, draft a Saturday order with the winery slots earlier and the cheese shop and lavender farm later, and ask whether you want the call moved before I touch the calendar.",
+    "Added to the recap as an action item with you as owner. On the Prince Edward County weekend, that Saturday is very packed: Sandbanks, two wineries, the cheese shop, Lake on the Mountain and the lavender farm after a drive out, and Sam is driving, so tastings will be tricky for him. I don't know opening hours or what the lavender farm is doing on that date, so I'll check those instead of guessing. Action: I'll check the hours and the drive time from home, draft a realistic Saturday plan, and tell you which stops I'd cut or move to Sunday."
+   ]
+  },
+  {
+   "event": "life-s107-e013",
+   "responses": [
+    "Good idea, a Zoom link should be easier for her than WhatsApp video. Action: I'll create a Zoom meeting for this week's call and text the link to your mom with a short note on how to join. I don't have this week's time in front of me, so I'll check the calendar series and put that time in the text, and show you the message before it goes out.",
+    "Yes, I can do that. Your usual call with your mom is Sunday at 9:00 pm Toronto time, which is 6:30 am Monday in Mumbai, so I'll set the Zoom for that slot and put both times in the invite. I'll send her the link on WhatsApp with a short, simple message since that's the number I have for her. Action: create the Zoom meeting for this Sunday 9:00 pm, send her the link, and confirm to you once it's sent."
+   ]
+  },
+  {
+   "event": "life-s108-e000",
+   "responses": [
+    "Good call. I'll look for an upper-intermediate (B1 to B2) Spanish grammar book with plenty of exercises and an answer key, with a strong subjunctive section including the 'cuando' + future use that trips you up, and ideally Latin American usage since you want Mexican vocabulary. I don't want to name a title and price from memory. Action: I'll compare a few candidates on reviews, exercise count and answer key, send you my top pick with the price and delivery time, and place the order once you give me the go-ahead.",
+    "Happy to help find one. I don't have notes on which language you're studying or your level beyond what you said, so I won't guess the language. Action: tell me the language, and I'll shortlist two or three upper-intermediate grammar books that have exercises and an answer key, with prices, and check with you before ordering anything."
+   ]
+  },
+  {
+   "event": "life-s126-e005",
+   "responses": [
+    "Sorry about the heel, that sounds worth getting looked at. I don't know which physio you went to before, so I'd like to check your past appointments rather than guess. Action: I'll look at your calendar for next week's after-work slots and Saturday, find your usual physio if you've seen one, and send you the open times. I'll book once you pick one.",
+    "Sorry about the heel, especially after the long run with Marcus. I have a note that you had mild plantar fasciitis early this year that had mostly cleared up by April, so it's worth telling the physio it may be a flare-up, though I don't know which foot this is. Action: I'll check your calendar for next week after work and Saturday, look for sports or foot physio openings that fit, and book the best slot, or send you two options if there's anything tight."
+   ]
+  },
+  {
+   "event": "life-s130-e000",
+   "responses": [
+    "Morning! I haven't seen anything from Nate yet in what I have in front of me. Action: I'll check your texts and email for a message from Nate about the schedule and tell you what he says, or tell you plainly that nothing has come in since his Barzotti call.",
+    "Morning! I don't have a new message from Nate in front of me, so I'll check your texts and email rather than guess. Last I had on file (from 5 July), he needed your final countertop material, colour and edge profile confirmed with the fabricator by Tue 7 Jul, with templating on Thu 9 Jul 8:00-10:00, so that may be what he's following up on. Action: check your texts and email for his schedule, and if nothing has come, I can text him (he prefers texts, never calls) once you say so."
+   ]
+  },
+  {
+   "event": "life-s131-e015",
+   "responses": [
+    "Sure. For dishwasher pods and paper towels I'll reorder what you usually get, and check past orders so I use the right brand and quantity. On the Dyson, I don't know which model Hannah has, so I won't guess. Action: I'll build the cart for the pods and paper towels and show it to you before checking out, and I'll shortlist a couple of current cordless Dyson models with prices, noting which one is closest to Hannah's if you can tell me or I can find it.",
+    "On it. Dishwasher pods are a standing reorder, so I'll get the Finish Quantum 82 count from Canadian Tire on the TD Visa on file (last time $31.63), and paper towels also fall under household staples that I can reorder without asking. The Dyson is a different story because it will likely be over $150, so I'll bring you options first and won't buy it. Action: place the pods order, check your order history for your usual paper towels and reorder those, then find a couple of cordless Dyson models (let me know if Hannah's model name is handy) with prices for you to choose from."
+   ]
+  },
+  {
+   "event": "life-s143-e009",
+   "responses": [
+    "I'll hold those, but one thing to check first: Wed-Thu is the 17th-18th, and I have it that March 18 is the anniversary of your dad's death, when you like a lighter schedule and an evening for the diya. Do you want the offsite to still cover the 18th, or should I flag it to Tom? Action: I'll create tentative blocks for Mon 15 and Tue 16 (prep), Wed 17 and Thu 18 (offsite), and 'roadmap deck due' on Fri 12 March, then wait for your answer on the 18th before keeping or adjusting that day.",
+    "Got it. In 2027 those dates line up: Mon 15 to Thu 18 March, with Fri 12 March for the deck. I'll add tentative holds for prep on Mon 15 and Tue 16, the offsite on Wed 17 and Thu 18, and a 'roadmap deck due' on Fri 12 March. Action: check those days for conflicts first and flag any, then create the tentative events and tell you when they're in."
+   ]
+  },
+  {
+   "event": "life-s155-e007",
+   "responses": [
+    "On it. I haven't opened the instant payouts readiness doc yet, so I don't want to guess what's still open. Action: I'll go through the Notion doc's comment threads and linked tickets, list every unresolved comment and open ticket with who owns it, and note anything left over from the last review.",
+    "I'll open the instant payouts readiness doc and go through the comments, linked tickets and anything left over from the last review. One thing to check against it: on 2026-05-14 you decided to drop same-day CAD-USD settlement from v1 and move it to v1.1, and PAY-1390 (Jonah) was still in Sprint 21 scope back then, so I'll check whether the doc and Linear reflect that instead of assuming. Action: read the doc, list the unresolved comments and open linked tickets, check PAY-1390 in Linear, and send you the results grouped by owner."
+   ]
+  },
+  {
+   "event": "life-s155-e022",
+   "responses": [
+    "I don't have your December plans yet, so I can't say what to block. For Tom's calendar I'll need your OOO days and any early-leave days, and I'll check your leave requests and the school calendar for the holiday break. As for the winter when school was shut and Leo wants to do 'that thing' again, I don't have it saved. Action: I'll search our past conversations, photos and notes from last winter for a school closure, and I'll ask you for the December dates so I can add them to the team calendar before Friday.",
+    "For Tom's calendar, the things I can see are: Thu 10 Dec early leave at 5:00 pm for Leo's winter concert (you already told Tom, so it just needs to be on the calendar), and your Lisbon trip, where you fly Sun 20 Dec at 22:10 and return Sat 2 Jan, so you'd be out Mon 21 Dec through Fri 1 Jan, plus possibly an early leave on the 20th to get to Pearson. I'm not sure about Fri 18 Dec (Leo's last school day) or any company holidays, so I'll ask rather than guess. I don't have a record of the school-closure thing from last winter, so I'd rather not guess; any detail you remember (snow day? what Leo was doing?) helps, and I can search photos and messages from that week. Action: I'll draft the calendar entries for 10 Dec and 21 Dec to 1 Jan as tentative, ask you about the 18th and the 20th, and search your photos and chats from last winter for the school-closure day."
+   ]
+  }
+ ]
+}
