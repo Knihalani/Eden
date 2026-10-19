@@ -1,0 +1,78 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s131-e022",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both deliver short, light toasts with placeholders for the partner's name."
+  },
+  {
+   "event": "life-s136-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 correct; R1 adds unsupported second calendar name and 45-minute length."
+  },
+  {
+   "event": "life-s140-e033",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 applies current constraints (Sam vegetarian per facts, no cilantro, Leo cashew/pistachio); R1 generic."
+  },
+  {
+   "event": "life-s141-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 recalls last year's Dec 9 end and depot, notes conflicting collection day, checks 2026; R1 generic lookup."
+  },
+  {
+   "event": "life-s148-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both miss the Nov 12 parent-teacher interview clash; R0 raises relevant retro and pickup issues, R1 only generic conflict check."
+  },
+  {
+   "event": "life-s150-e004",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 applies Diego's preference for problem statements as Figma comments; R0 generic checklist."
+  },
+  {
+   "event": "life-s152-e004",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Both search sent mail; R0 adds an unsupported specific writing-block time."
+  },
+  {
+   "event": "life-s155-e013",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 answers Aisha's comments as owner and flags PAY-1227; R1 bounces her own questions back to her."
+  },
+  {
+   "event": "life-s155-e022",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "R0 gets Dec 10 early leave and Lisbon OOO right, snow-day correct but games specifics unsupported; R1 recalls nothing."
+  }
+ ]
+}
