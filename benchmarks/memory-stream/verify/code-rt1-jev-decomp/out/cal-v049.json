@@ -1,0 +1,26 @@
+{
+ "batch": "v049",
+ "verifier": "typesafe:jev-latest:decomp",
+ "cases": [
+  {
+   "event": "code-rt1-s07-e018",
+   "scores": {
+    "code-sleep-b10:m0009": 0.024735000000000004,
+    "code-sleep-b05:m0007": 0.3591,
+    "code-sleep-b09:m0016": 0.00582,
+    "code-sleep-b04:m0010": 0.292032,
+    "code-sleep-b08:m0033": 0.050925,
+    "code-sleep-b04:m0018": 0.032592,
+    "code-sleep-b02:m0008": 0.13205999999999998,
+    "code-sleep-b10:m0014": 0.007056,
+    "code-sleep-b09:m0001": 0.010475999999999997,
+    "code-sleep-b00:m0006": 0.009702,
+    "code-sleep-b04:m0017": 0.004074,
+    "code-sleep-b04:m0024": 0.007938,
+    "code-sleep-b03:m0020": 0.005432000000000001,
+    "code-sleep-b08:m0015": 0.005292,
+    "code-sleep-b10:m0005": 0.004704
+   }
+  }
+ ]
+}
