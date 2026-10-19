@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s041-e016",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All plan a scoped rename of the prop with typecheck; correct."
+  },
+  {
+   "event": "code-s037-e000",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "R0/R1 handle rule and triage well; R2 recalls the zod PR but proposes pushing unasked on possibly stale state."
+  },
+  {
+   "event": "code-s040-e008",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "Redis was already started earlier; R0/R1 correct. R2 repeats setup steps (compose up) ignoring current state, minor distraction."
+  },
+  {
+   "event": "code-s078-e016",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All add skeletons sized to cards; R1's default-export Skeleton claim is supported by history."
+  },
+  {
+   "event": "code-s063-e009",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All draft the PR with a plan-output slot and platform-review note, reading the diff first."
+  },
+  {
+   "event": "code-s002-e013",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All acknowledge Sentry, GrowthBook flag, snapshot test, and no-stash rule without destroying the existing stash."
+  },
+  {
+   "event": "code-s077-e000",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "None mention Lena's existing sticky-header PR #482 (and its z-header token note); generic sticky plans otherwise fine."
+  },
+  {
+   "event": "code-s082-e049",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "Simple acknowledgment fits; R1 misstates the export rule as format.ts-only; R2 waits on a typecheck already finished."
+  },
+  {
+   "event": "code-s030-e000",
+   "scores": [
+    1,
+    1,
+    1
+   ],
+   "why": "History records the prior sessions' state (pushed acme-412 branch, PR not opened, etc.); all claim no record."
+  },
+  {
+   "event": "code-s057-e006",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All acknowledge the concision preference briefly."
+  }
+ ]
+}

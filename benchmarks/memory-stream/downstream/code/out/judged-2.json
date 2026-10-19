@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s082-e025",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "B and C know /healthz and chart location, separate liveness; A hedges on known health route."
+  },
+  {
+   "event": "code-s022-e008",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "C knows Sentry and pino; A and B hedge on known tracker and logger."
+  },
+  {
+   "event": "code-s085-e010",
+   "scores": [
+    2,
+    3,
+    1
+   ],
+   "why": "B knows Bull Board at /admin/queues; A misses it; C asserts worker not running unsupported and proposes new route."
+  },
+  {
+   "event": "code-s003-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All plan atomic dedupe and a double-delivery test; RabbitMQ era correctly handled."
+  },
+  {
+   "event": "code-s086-e004",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "None knows dashboards live in infra/grafana; all correctly refuse to invent metric names."
+  },
+  {
+   "event": "code-s101-e013",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "B states presigned flow correctly; A injects stale Lena progress-bar request; C ignores known upload flow."
+  },
+  {
+   "event": "code-s046-e022",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "B and C know Linear-id branch naming and ask for id; A hedges on convention."
+  },
+  {
+   "event": "code-s035-e058",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "B uses known next/font Inter setup and Tailwind v4 theme; A and C generic."
+  },
+  {
+   "event": "code-s022-e000",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "C knows @clerk/backend in src/plugins/auth.ts; A and B hedge on a known fact."
+  },
+  {
+   "event": "code-s085-e000",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "C covers Node 20.11, pnpm 9, .env.local and 1Password; B adds irrelevant seed-demo detail; A generic."
+  }
+ ]
+}

@@ -614,3 +614,13 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - The checker for c00–c19 grepped other checkers' output files at the end (after writing its own), so it saw no inputs ahead of time.
   - 4 of the 45 C3-E4 code cases had the responder's order swapped (C4-E10), so a few drafts may not be true no-memory drafts.
   - One responder run per condition.
+
+## C4-E11 · 2026-10-19 · F22b: calibrated verifier with causal contrast (pre-registration)
+- **Setup:** `verify.py prep --per 1 --tag cal --contrast 8` (`--fresh` for rt1). The candidates are the same as F22's.
+  - Each case adds `earlier_turns`: the user's last 8 human turns from earlier sessions (past only). They give the contrast that batches gave, without a leak.
+  - haiku, one case per file in stream order, gives a probability per candidate. `verify:tag=cal,p=<thr>` keeps rows with p ≥ thr, at most 4.
+- **Threshold rule:** one p per world, from {0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9}, chosen on dev (judge sample): the largest deferred recall with human silence ≥ 0.65. That same p is then applied to the rt1 fresh split.
+- **Kill:** dead if any of these holds:
+  - no p on code dev gives silence ≥ 0.65 at recall ≥ 0.45;
+  - the dev-chosen p gives silence < 0.55 on either rt1 world;
+  - rt1 recall falls below F22 seq's (code 0.42, life 0.16) by more than 0.05.

@@ -19,7 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 
-def prep(world, n, per, tag="", fresh=False):
+def prep(world, n, per, tag="", fresh=False, contrast=0):
     import score, sleep, methods, judge
     stream, items = score.load_stream(world)
     cov = score.Coverage(items)
@@ -38,6 +38,7 @@ def prep(world, n, per, tag="", fresh=False):
     os.makedirs(os.path.join(d, "out"), exist_ok=True)
     cases = []
     ids.sort(key=lambda i: evs[i]["_order"])
+    human = sorted((x for x in score.scored_events(stream) if x["t"] == "human"), key=lambda x: x["_order"])
     for eid in ids:
         e = evs[eid]
         q = dict(e, text_all=methods.strip_paste(e["text_all"]))
@@ -45,8 +46,13 @@ def prep(world, n, per, tag="", fresh=False):
         b = bank.scores(q, e["_order"])
         top = sorted(a, key=lambda i: (-a[i], i))[: n // 2] + sorted(b, key=lambda i: (-b[i], i))[:n]
         cand = list(dict.fromkeys(top))[:n]
-        cases.append({"event": eid, "type": e["t"], "text": e["text_all"][:2000], "recent": judge.context(stream, eid, 4),
-                      "candidates": [{"id": i, "text": lex.by_id[i]["text"]} for i in cand]})
+        case = {"event": eid, "type": e["t"], "text": e["text_all"][:2000], "recent": judge.context(stream, eid, 4),
+                "candidates": [{"id": i, "text": lex.by_id[i]["text"]} for i in cand]}
+        if contrast:  # causal calibration: the user's own human turns from earlier sessions (C4-E11)
+            sess = e["session"]
+            past = [x for x in human if x["_order"] < e["_order"] and x["session"] != sess]
+            case["earlier_turns"] = [methods.strip_paste(x["text_all"])[:300] for x in past[-contrast:]]
+        cases.append(case)
     for b in range(0, len(cases), per):
         name = f"v{b // per:03d}" if per < 10 else f"v{b // per:02d}"
         json.dump({"batch": name, "cases": cases[b:b + per], "output": f"benchmarks/memory-stream/verify/{sub}/out/{name}.json"},
@@ -68,7 +74,10 @@ def picks(world, tag=""):
     out = {}
     for p in glob.glob(os.path.join(HERE, "verify", f"{world}-{tag}" if tag else world, "out", "*.json")):
         for c in json.load(open(p))["cases"]:
-            out[c["event"]] = c.get("needed", [])
+            if "scores" in c:  # calibrated output: {row id: p}; filtered by threshold in score.py
+                out[c["event"]] = sorted(c["scores"].items(), key=lambda kv: (-kv[1], kv[0]))
+            else:
+                out[c["event"]] = c.get("needed", [])
     return out
 
 
@@ -79,6 +88,7 @@ if __name__ == "__main__":
     ap.add_argument("--n", type=int, default=15)
     ap.add_argument("--per", type=int, default=50)
     ap.add_argument("--fresh", action="store_true", help="red-team worlds: all fresh-split human and trigger events")
+    ap.add_argument("--contrast", type=int, default=0, help="add the user's last N human turns from earlier sessions")
     ap.add_argument("--tag", default="", help="writes verify/<world>-<tag>/ (e.g. seq: one case per file, stream order)")
     a = ap.parse_args()
-    prep(a.world, a.n, a.per, a.tag, a.fresh)
+    prep(a.world, a.n, a.per, a.tag, a.fresh, a.contrast)
