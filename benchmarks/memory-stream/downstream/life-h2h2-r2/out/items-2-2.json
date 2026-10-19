@@ -1,0 +1,9 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {"id": "life-s006-e011#2", "response": "Jess should weigh: whether rent covers mortgage, condo fees, tax and insurance with a vacancy buffer; the tax effects (rental income is taxable, and renting can affect the principal-residence exemption); her view on the market; the effort of being a landlord; and whether she might move back. A one-hour session with a fee-only planner or accountant would pay for itself.\nAction: Turn this into a short note you can send Jess."},
+  {"id": "life-s085-e023#2", "response": "Arctic AC is a classic. Keep the coat on, and a warm drink will probably help more than facilities will.\nAction: Nothing needed unless you want me to draft a note to facilities; the OOO draft is still waiting for your go-ahead."},
+  {"id": "life-s068-e014#2", "response": "I don't have the opening date in front of me, so I'll check rather than guess for this year's season.\nAction: Look up the Leslieville farmers market 2026 opening day, hours and location, and add it to the calendar once you confirm."},
+  {"id": "life-s133-e000#2", "response": "Setting that up as a 25-minute meeting with Olivia and Aisha at 3:30pm on the 9th, with your three-point agenda in the invite.\nAction: Check all three calendars for 15:30-15:55 on the 9th, then send the invite with the agenda: 1) where certification stands, 2) what sales can and can't say, 3) next checkpoint."}
+ ]
+}

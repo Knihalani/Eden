@@ -1,0 +1,851 @@
+{
+ "system": "h2h eden-dated vs verify:cal,p=0.6 dated",
+ "key": {
+  "life-s002-e000": {
+   "group": "labeler-only",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s002-e020": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s002-e023": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s006-e000": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s006-e011": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s006-e015": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s008-e000": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s012-e018": {
+   "group": "labeler-only",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s016-e002": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s017-e012": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s018-e000": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s018-e005": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s020-e016": {
+   "group": "labeler-only",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s021-e000": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s022-e016": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s023-e017": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s025-e000": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s025-e036": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s026-e012": {
+   "group": "plan",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s035-e008": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s037-e000": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s037-e011": {
+   "group": "labeler-only",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s037-e017": {
+   "group": "labeler-only",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s037-e020": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s040-e009": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s040-e018": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s042-e008": {
+   "group": "labeler-only",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s045-e000": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s046-e013": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s046-e016": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s046-e041": {
+   "group": "plan",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s047-e006": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s047-e013": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s047-e025": {
+   "group": "plan",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s048-e006": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s050-e011": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s051-e000": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s051-e006": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s060-e019": {
+   "group": "labeler-only",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s060-e022": {
+   "group": "labeler-only",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s062-e003": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s063-e000": {
+   "group": "labeler-only",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s063-e007": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s066-e016": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s068-e014": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s070-e006": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s071-e002": {
+   "group": "labeler-only",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s072-e000": {
+   "group": "labeler-only",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s077-e000": {
+   "group": "plan",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s077-e010": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s077-e012": {
+   "group": "labeler-only",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s077-e044": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s085-e010": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s085-e017": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s085-e023": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s085-e027": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s087-e029": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s088-e015": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s088-e023": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s090-e005": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s091-e012": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s092-e000": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s096-e031": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s097-e013": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s097-e019": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s100-e025": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s102-e002": {
+   "group": "plan",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s105-e019": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s106-e000": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s106-e007": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s107-e022": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s110-e007": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s110-e009": {
+   "group": "plan",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s111-e000": {
+   "group": "labeler-only",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s111-e035": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s120-e003": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s121-e000": {
+   "group": "plan",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s123-e011": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s128-e000": {
+   "group": "labeler-only",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s131-e020": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s131-e022": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s132-e000": {
+   "group": "labeler-only",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s133-e000": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s136-e017": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s136-e021": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s136-e034": {
+   "group": "plan",
+   "order": [
+    "verify",
+    "eden",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s137-e018": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s140-e029": {
+   "group": "no-need",
+   "order": [
+    "verify",
+    "none",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s141-e017": {
+   "group": "plan",
+   "order": [
+    "none",
+    "eden",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s141-e032": {
+   "group": "no-need",
+   "order": [
+    "eden",
+    "none",
+    "verify"
+   ],
+   "needs": []
+  },
+  "life-s148-e012": {
+   "group": "plan",
+   "order": [
+    "eden",
+    "verify",
+    "none"
+   ],
+   "needs": []
+  },
+  "life-s150-e028": {
+   "group": "no-need",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s156-e000": {
+   "group": "plan",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  },
+  "life-s156-e004": {
+   "group": "plan",
+   "order": [
+    "none",
+    "verify",
+    "eden"
+   ],
+   "needs": []
+  }
+ }
+}
