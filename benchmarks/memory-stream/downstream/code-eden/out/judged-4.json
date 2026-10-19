@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s082-e025",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both miss known GET /healthz endpoint; reasonable plan otherwise. R1 notes shallow liveness."
+  },
+  {
+   "event": "code-s082-e049",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 usefully offers fixing remaining version.ts default export per new convention; R1 fine but misses it."
+  },
+  {
+   "event": "code-s083-e005",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 verifies commit state before reverting; R1 asserts nothing committed without checking."
+  },
+  {
+   "event": "code-s083-e008",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both correct plan; neither asks before adding dependency. R0 drifts to unrelated items, R1 mentions irrelevant whoami."
+  },
+  {
+   "event": "code-s085-e000",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "R0 generic but sound, ignores known setup facts; R1 invents an 'engines error from before'."
+  },
+  {
+   "event": "code-s085-e010",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Both miss Bull Board at /admin/queues; R0 asserts worker not running without evidence."
+  },
+  {
+   "event": "code-s085-e014",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both honest; history shows ALB via AWS Load Balancer Controller, neither uses it. R1 adds irrelevant HPA/KEDA."
+  },
+  {
+   "event": "code-s086-e004",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly verify actual metric names before writing dashboard JSON."
+  },
+  {
+   "event": "code-s087-e012",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both apply the migration before starting the api; R1 also curls to confirm."
+  },
+  {
+   "event": "code-s088-e023",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly hold off on reply and write slugify with tests."
+  }
+ ]
+}
