@@ -88,6 +88,28 @@ def single(world, sub, cond="system"):
           f"({len([e for e in key if e in judged])} of {len(key)} judged)")
 
 
+def four(world, sub):
+    """C10-E3: none / eden / verify / jev on one sub: each condition − none per group and per turn (dev shares), and
+    bootstrap 95% CIs of jev − eden and jev − verify."""
+    d = os.path.join(HERE, "downstream", sub)
+    key = json.load(open(os.path.join(d, "key.json")))["key"]
+    judged = _judged(d)
+    by = {}
+    for eid, k in key.items():
+        if eid in judged:
+            sc = dict(zip(k["order"], judged[eid]))
+            by.setdefault(k["group"], []).append({c: sc[c] - sc["none"] for c in ("eden", "verify", "jev")})
+    for g, xs in by.items():
+        print(world, g, {"n": len(xs), **{c: round(sum(x[c] for x in xs) / len(xs), 3) for c in ("eden", "verify",
+                                                                                                    "jev")}})
+    util = {c: round(sum(SHARES[world][g] * sum(x[c] for x in xs) / len(xs) for g, xs in by.items()), 4)
+            for c in ("eden", "verify", "jev")}
+    print(world, "utility per turn:", util, f"({sum(len(x) for x in by.values())} of {len(key)} judged)")
+    for other in ("eden", "verify"):
+        print(world, f"jev − {other}:", round(util["jev"] - util[other], 4), "95% CI:",
+              _ci(by, world, lambda x, o=other: x["jev"] - x[o]))
+
+
 if __name__ == "__main__":
     # h2h.py code life                 → C5-E7 alone
     # h2h.py code life --pool h2h2     → C5-E7 pooled with downstream/<world>-h2h2 (C6-E1)
@@ -99,8 +121,11 @@ if __name__ == "__main__":
     ap.add_argument("--pool", nargs="*", default=[], help="extra downstream subs per world, e.g. h2h2")
     ap.add_argument("--runs", nargs="*", default=[], help="repeat runs to average per turn, e.g. r2")
     ap.add_argument("--single", nargs=2, metavar=("WORLD", "SUB"), help="one condition vs none")
+    ap.add_argument("--four", nargs=2, metavar=("WORLD", "SUB"), help="C10-E3: none / eden / verify / jev")
     a = ap.parse_args()
     if a.single:
         single(*a.single)
+    if a.four:
+        four(*a.four)
     for w in a.worlds:
         report(w, [f"{w}-h2h"] + [f"{w}-{x}" for x in a.pool], a.runs)
