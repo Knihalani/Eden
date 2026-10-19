@@ -1,0 +1,85 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "cases": [
+  {
+   "event": "life-s027-e014",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 weighs B1-to-B2 goal, May exam, lesson cost; minor lesson-time slip. R0 generic."
+  },
+  {
+   "event": "life-s105-e030",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "R1 recalls Tom's Feb 24 slots and 14 synced events correctly; R0 fails a pure recall question."
+  },
+  {
+   "event": "life-s100-e006",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "R1 gives 2:04:37 Toronto Waterfront and PAD from TD joint; R0 knows neither."
+  },
+  {
+   "event": "life-s051-e017",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 uses Sam vegetarian, 19:00 default, Saffron Lane nearby; R0 claims not knowing dietary needs."
+  },
+  {
+   "event": "life-s026-e017",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both open link, show CAD with original in brackets, judge fairness; R1's stale rate noted for refresh."
+  },
+  {
+   "event": "life-s131-e012",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "R1 knows board-game-night origin and avoids scented candles for Sam; R0 asks for the story."
+  },
+  {
+   "event": "life-s101-e004",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 flags overpacked day per Leo preference and Saturday conflicts (Anjali call, Leo's activities); R0 generic."
+  },
+  {
+   "event": "life-s018-e007",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 offers practical plan using Anjali living alone, diabetes, morning timing; R0 sound but generic."
+  },
+  {
+   "event": "life-s025-e028",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 uses Indigo/Canadian retailer, Canadian spelling, no em dashes; both draft card for approval."
+  },
+  {
+   "event": "life-s087-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both listen and reflect without fixing, per venting preference; R0 asks before offering help."
+  }
+ ]
+}

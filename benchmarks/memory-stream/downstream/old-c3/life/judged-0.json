@@ -1,0 +1,85 @@
+{
+  "judge": "opus (claude-code subagent)",
+  "cases": [
+    {
+      "event": "life-s072-e010",
+      "scores": [
+        2,
+        3
+      ],
+      "why": "B recalls the B2B API pricing podcast summary; A fails to recall it but plans a sensible search."
+    },
+    {
+      "event": "life-s091-e008",
+      "scores": [
+        2,
+        3
+      ],
+      "why": "B uses the team's known Notion/Slack/Linear stack; A asks which tool despite it being known."
+    },
+    {
+      "event": "life-s131-e015",
+      "scores": [
+        3,
+        2
+      ],
+      "why": "A applies staples auto-reorder, $150 check and Canadian-retailer preference; B is generic."
+    },
+    {
+      "event": "life-s017-e024",
+      "scores": [
+        2,
+        3
+      ],
+      "why": "B flags Thursday office-day conflict for delivery and known furnace filter size; A generic list."
+    },
+    {
+      "event": "life-s107-e013",
+      "scores": [
+        2,
+        3
+      ],
+      "why": "B knows current Saturday 8:30 Toronto / 6pm IST call; A doesn't know the call time."
+    },
+    {
+      "event": "life-s068-e024",
+      "scores": [
+        1,
+        1
+      ],
+      "why": "Jun's sister is Ellie (dairy allergy). A plans cheese/yogurt and 'nut-light'; B wrongly says Ellie isn't coming."
+    },
+    {
+      "event": "life-s022-e004",
+      "scores": [
+        2,
+        3
+      ],
+      "why": "B knows oat-milk flat white, no hazelnut, vegetarian; A asks for preferences it should know."
+    },
+    {
+      "event": "life-s050-e000",
+      "scores": [
+        1,
+        3
+      ],
+      "why": "B applies rule: 'target' not date until Aisha signs off; A claims no guidance and risks giving a date."
+    },
+    {
+      "event": "life-s043-e002",
+      "scores": [
+        2,
+        3
+      ],
+      "why": "B requires fully refundable, transit-walkable rate per standing rule; A only 'prefers' cancellable."
+    },
+    {
+      "event": "life-s097-e000",
+      "scores": [
+        2,
+        3
+      ],
+      "why": "B knows Vancouver trip dates 9-13 July and drafts text; A asks for dates it should know."
+    }
+  ]
+}

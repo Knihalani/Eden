@@ -1,0 +1,85 @@
+{
+  "judge": "opus (claude-code subagent)",
+  "cases": [
+    {
+      "event": "life-s108-e000",
+      "scores": [
+        2,
+        3
+      ],
+      "why": "B knows she owns the B1-B2 book, Mexican Spanish and Indigo preference; A asks instead."
+    },
+    {
+      "event": "life-s143-e009",
+      "scores": [
+        2,
+        3
+      ],
+      "why": "Both block correctly; B gently flags 18 March father's anniversary, a relevant sensitivity."
+    },
+    {
+      "event": "life-s097-e004",
+      "scores": [
+        2,
+        3
+      ],
+      "why": "B gives known birth month and behaviour notes (food-motivated, bread theft, siren howling); A knows nothing."
+    },
+    {
+      "event": "life-s038-e000",
+      "scores": [
+        2,
+        3
+      ],
+      "why": "B finds the Home Depot filter order and correctly notes no pickup confirmation; A only searches."
+    },
+    {
+      "event": "life-s155-e022",
+      "scores": [
+        1,
+        3
+      ],
+      "why": "B lists concert early leave 10 Dec and Lisbon OOO correctly; A knows neither, honest on snow day."
+    },
+    {
+      "event": "life-s007-e000",
+      "scores": [
+        2,
+        3
+      ],
+      "why": "B includes walk routine, bread-stealing and siren explanation from memory; A leaves routine blank."
+    },
+    {
+      "event": "life-s096-e007",
+      "scores": [
+        3,
+        3
+      ],
+      "why": "Both give accurate kid-friendly hound-howling explanations; B's article reference is correct."
+    },
+    {
+      "event": "life-s126-e005",
+      "scores": [
+        2,
+        3
+      ],
+      "why": "B recalls prior plantar fasciitis, shoe mileage and Saturday swim constraint; A generic."
+    },
+    {
+      "event": "life-s056-e000",
+      "scores": [
+        1,
+        3
+      ],
+      "why": "B knows 22 March, quiet dinner, Penguin/Fellow Ode, flags conflicting anniversary dates; A knows nothing."
+    },
+    {
+      "event": "life-s047-e009",
+      "scores": [
+        2,
+        3
+      ],
+      "why": "B applies Canadian-retailer preference; A otherwise fine."
+    }
+  ]
+}
