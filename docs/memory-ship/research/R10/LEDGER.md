@@ -1889,3 +1889,15 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   rows), by item kind; the store ceiling with episodes added; and whether entity / lexical lookup over episode
   records finds them (rank of the covering record under lexical score; entity match).
 - **No verdict rule.**
+- **Result (2026-10-19, `python3 benchmarks/memory-stream/recall_funnel.py --worlds life --episodes`):** 485
+  episode records over the 160 life sessions (16 batches; each output's session ids match its input exactly; after
+  writing, the b00–b03 agent edited one record of b02 to name the child correctly, before scoring).
+  - Needed items on dev need turns (103): in visible rows 69, in visible episodes 70, in either 83. Store ceiling
+    0.67 → 0.806.
+  - By kind (total / rows / episodes / either): episode 15 / 4 / 10 / 11; tool 8 / 1 / 7 / 7; fact 18 / 15 / 14 /
+    15; preference 16 / 13 / 9 / 13; routine 11 / 8 / 7 / 8; plan 7 / 5 / 3 / 5; others unchanged.
+  - Items only episodes cover: 14. A lookup finds 11 of them (lexical top 10: 4; entity match: 8).
+- **What this says:** episodes and tool results are what the semantic rows drop, and a per-session episode layer
+  recovers most of them (episode 4 → 11 of 15, tool 1 → 7 of 8). It does not replace rows (it misses preferences
+  and routines rows hold). Entity lookup reaches most episode-only items, so episodes belong in the entity and time
+  channels. Synthetic, one world, one dreamer run, no outcome test.
