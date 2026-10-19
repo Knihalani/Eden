@@ -1,0 +1,122 @@
+[
+ {
+  "case": "case-01.json",
+  "api_ms": 4766,
+  "output_tokens": 591,
+  "thinking_tokens": 563
+ },
+ {
+  "case": "case-02.json",
+  "api_ms": 6084,
+  "output_tokens": 963,
+  "thinking_tokens": 916
+ },
+ {
+  "case": "case-03.json",
+  "api_ms": 4994,
+  "output_tokens": 680,
+  "thinking_tokens": 652
+ },
+ {
+  "case": "case-04.json",
+  "api_ms": 4267,
+  "output_tokens": 579,
+  "thinking_tokens": 513
+ },
+ {
+  "case": "case-05.json",
+  "api_ms": 4201,
+  "output_tokens": 525,
+  "thinking_tokens": 515
+ },
+ {
+  "case": "case-06.json",
+  "api_ms": 6444,
+  "output_tokens": 829,
+  "thinking_tokens": 801
+ },
+ {
+  "case": "case-07.json",
+  "api_ms": 2491,
+  "output_tokens": 135,
+  "thinking_tokens": 125
+ },
+ {
+  "case": "case-08.json",
+  "api_ms": 3410,
+  "output_tokens": 394,
+  "thinking_tokens": 347
+ },
+ {
+  "case": "case-09.json",
+  "api_ms": 4138,
+  "output_tokens": 538,
+  "thinking_tokens": 434
+ },
+ {
+  "case": "case-10.json",
+  "api_ms": 5581,
+  "output_tokens": 771,
+  "thinking_tokens": 724
+ },
+ {
+  "case": "case-11.json",
+  "api_ms": 10045,
+  "output_tokens": 1386,
+  "thinking_tokens": 1320
+ },
+ {
+  "case": "case-12.json",
+  "api_ms": 5545,
+  "output_tokens": 927,
+  "thinking_tokens": 861
+ },
+ {
+  "case": "case-13.json",
+  "api_ms": 5056,
+  "output_tokens": 465,
+  "thinking_tokens": 418
+ },
+ {
+  "case": "case-14.json",
+  "api_ms": 3649,
+  "output_tokens": 208,
+  "thinking_tokens": 198
+ },
+ {
+  "case": "case-15.json",
+  "api_ms": 3490,
+  "output_tokens": 105,
+  "thinking_tokens": 95
+ },
+ {
+  "case": "case-16.json",
+  "api_ms": 5769,
+  "output_tokens": 600,
+  "thinking_tokens": 572
+ },
+ {
+  "case": "case-17.json",
+  "api_ms": 6776,
+  "output_tokens": 766,
+  "thinking_tokens": 756
+ },
+ {
+  "case": "case-18.json",
+  "api_ms": 2607,
+  "output_tokens": 179,
+  "thinking_tokens": 169
+ },
+ {
+  "case": "case-19.json",
+  "api_ms": 7727,
+  "output_tokens": 1098,
+  "thinking_tokens": 1088
+ },
+ {
+  "case": "case-20.json",
+  "api_ms": 2763,
+  "output_tokens": 167,
+  "thinking_tokens": 157
+ }
+]
