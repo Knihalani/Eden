@@ -1,0 +1,156 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s100-e000",
+   "scores": [
+    1,
+    3,
+    3,
+    3
+   ],
+   "why": "R0 ignores known GrowthBook fact; others correct, R1/R3 recall cli-invoices-export flag."
+  },
+  {
+   "event": "code-s105-e008",
+   "scores": [
+    3,
+    1,
+    3,
+    3
+   ],
+   "why": "URL search params fix is right; R1 invents a renamed useInvoiceQueryState nuqs hook not in evidence."
+  },
+  {
+   "event": "code-s105-e015",
+   "scores": [
+    2,
+    2,
+    2,
+    1
+   ],
+   "why": "Existing slugify in packages/cli/src/util/slug.ts missed by all; R3 writes a new one without checking for duplicates."
+  },
+  {
+   "event": "code-s106-e004",
+   "scores": [
+    2,
+    3,
+    3,
+    2
+   ],
+   "why": "Known CSP in next.config.ts headers() may block YouTube frames; R1/R2 flag it, others omit."
+  },
+  {
+   "event": "code-s107-e006",
+   "scores": [
+    2,
+    2,
+    3,
+    2
+   ],
+   "why": "/pricing already built under (marketing) with publicRoutes; R2 knows it; R3 adds unsupported theme-token claim; R0/R1 miss it."
+  },
+  {
+   "event": "code-s108-e000",
+   "scores": [
+    2,
+    2,
+    3,
+    3
+   ],
+   "why": "Playwright, port 3000, pnpm --filter web e2e known; R2/R3 use them, R0/R1 generic."
+  },
+  {
+   "event": "code-s108-e018",
+   "scores": [
+    3,
+    3,
+    3,
+    2
+   ],
+   "why": "All reasonable; R3 raises comma-escaping bug already fixed (escapeCell), a stale distraction."
+  },
+  {
+   "event": "code-s108-e027",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All grep, fix safe hits, flag response-value contracts, run tests."
+  },
+  {
+   "event": "code-s108-e032",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly leave the api value and acknowledge test state."
+  },
+  {
+   "event": "code-s108-e036",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All correct closing acknowledgments with accurate test counts."
+  },
+  {
+   "event": "code-s001-e020",
+   "scores": [
+    3,
+    3,
+    2,
+    3
+   ],
+   "why": "Build details not yet known; reading is right; R2 adds irrelevant destructive-DB reminder."
+  },
+  {
+   "event": "code-s001-e037",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All propose verifying docs against repo; appropriate."
+  },
+  {
+   "event": "code-s002-e008",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All acknowledge rules and check git log for dist; fine."
+  },
+  {
+   "event": "code-s003-e015",
+   "scores": [
+    3,
+    3,
+    2,
+    3
+   ],
+   "why": "All accurate; R2 hedges on worker runtime despite user saying Node 18 everywhere."
+  },
+  {
+   "event": "code-s003-e021",
+   "scores": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "why": "None notes the command is gated by GrowthBook flag cli-invoices-export, still uncreated, so it would exit 'not enabled'."
+  }
+ ]
+}

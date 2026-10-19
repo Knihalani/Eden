@@ -1,0 +1,156 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s006-e007",
+   "scores": [
+    3,
+    3,
+    2,
+    3
+   ],
+   "why": "Commit then debounce; R2 skips separating debounce from the CLI export branch."
+  },
+  {
+   "event": "code-s007-e019",
+   "scores": [
+    3,
+    2,
+    3,
+    3
+   ],
+   "why": "All fine; R1 confuses current branch (table-page-reset) with the bucket branch."
+  },
+  {
+   "event": "code-s007-e025",
+   "scores": [
+    1,
+    1,
+    2,
+    2
+   ],
+   "why": "Recap misses morning lint commit 19ab6d3 and search debounce; R0 also drops bucket work; R1 presents incomplete list as complete."
+  },
+  {
+   "event": "code-s007-e036",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All correct explanations of useLayoutEffect vs useEffect."
+  },
+  {
+   "event": "code-s010-e000",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All sound plans for device-flow timeout and cleaner messages."
+  },
+  {
+   "event": "code-s011-e000",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All handle the three tasks respecting migration and no-rewrite rules."
+  },
+  {
+   "event": "code-s012-e000",
+   "scores": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "why": "All hedge on whether ESLint/Prettier were removed though Biome is a known fact; CORS plans fine."
+  },
+  {
+   "event": "code-s013-e030",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All correct rename plans with grep, typecheck and tests."
+  },
+  {
+   "event": "code-s015-e017",
+   "scores": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "why": "Correct edge rationale, but all hedge on Next version though Next.js 15 is known."
+  },
+  {
+   "event": "code-s018-e000",
+   "scores": [
+    2,
+    3,
+    2,
+    3
+   ],
+   "why": "pnpm dev omits db/redis; R1/R3 check compose for Postgres/Redis ports."
+  },
+  {
+   "event": "code-s018-e004",
+   "scores": [
+    2,
+    2,
+    2,
+    3
+   ],
+   "why": "R3 uses Terraform history and flags RabbitMQ exports queue conflict; others just look."
+  },
+  {
+   "event": "code-s021-e006",
+   "scores": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "why": "None cites root engines >=18.18 <19 / Node 18 pin; all reasonably investigate."
+  },
+  {
+   "event": "code-s021-e028",
+   "scores": [
+    3,
+    3,
+    1,
+    3
+   ],
+   "why": "R2 claims it already added a CI-refusing bench script, unsupported at this point."
+  },
+  {
+   "event": "code-s021-e031",
+   "scores": [
+    2,
+    3,
+    1,
+    2
+   ],
+   "why": "Add-hike form already got hx-disabled-elt/hx-sync; R1 recalls it; R2 re-proposes same fix as new."
+  },
+  {
+   "event": "code-s022-e032",
+   "scores": [
+    2,
+    3,
+    3,
+    3
+   ],
+   "why": "R0 asserts Postgres driver while facts say MySQL 8; others correct."
+  }
+ ]
+}

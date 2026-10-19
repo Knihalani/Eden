@@ -1,0 +1,156 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s045-e007",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "No DNS location known at this point; all correctly search the repo rather than guess."
+  },
+  {
+   "event": "code-s046-e000",
+   "scores": [
+    3,
+    3,
+    2,
+    1
+   ],
+   "why": "pdfFilename slug convention already exists; R0/R1 reuse it, R2 generic, R3 invents a conflicting format and fallback."
+  },
+  {
+   "event": "code-s047-e026",
+   "scores": [
+    3,
+    2,
+    3,
+    3
+   ],
+   "why": "Copy lives in next-intl message files; R0/R2 check them, R3 knows empty-state.tsx, R1 generic."
+  },
+  {
+   "event": "code-s047-e032",
+   "scores": [
+    3,
+    2,
+    3,
+    3
+   ],
+   "why": "R1 claims the void prompt is tested (no test covers it) and commits unasked; others accurate."
+  },
+  {
+   "event": "code-s048-e011",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly diagnose the stale Docker context/DOCKER_HOST after the OrbStack switch."
+  },
+  {
+   "event": "code-s051-e006",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All plan to pull release.yml logs via gh and compare step timings; fine."
+  },
+  {
+   "event": "code-s051-e011",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All fix pricing to 60, leave the cache ref, and scan other marketing routes."
+  },
+  {
+   "event": "code-s055-e011",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All rewrite from the actual app tree; R3 correctly treats the 13.5.6 note as stale."
+  },
+  {
+   "event": "code-s056-e008",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly identify a locale mismatch in the date cell and propose consistent formatting."
+  },
+  {
+   "event": "code-s056-e020",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All implement org-scoped soft delete with problem+json errors per stated conventions."
+  },
+  {
+   "event": "code-s056-e026",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All build the confirm dialog with shadcn and handle problem+json; R1-R3 register the pending route."
+  },
+  {
+   "event": "code-s056-e032",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All route the 409 through problem() with an org-scoped open-invoice check and test."
+  },
+  {
+   "event": "code-s057-e015",
+   "scores": [
+    1,
+    1,
+    1,
+    2
+   ],
+   "why": "Known gotcha: PgBouncer transaction mode needs prepare: false. Only R3 hints at prepared statements, hedged."
+  },
+  {
+   "event": "code-s061-e007",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All acknowledge plan-first rule and plan a read-only analysis before proposing a split."
+  },
+  {
+   "event": "code-s068-e017",
+   "scores": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "why": "README shows app/(dashboard)/ holds signed-in pages; none says /reports belongs there, all defer to inspecting."
+  }
+ ]
+}
