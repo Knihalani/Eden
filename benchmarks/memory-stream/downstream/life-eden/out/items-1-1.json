@@ -1,0 +1,65 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s028-e005#1",
+   "response": "Yikes indeed on the pet budget, good call talking to Sam. I'll pull the open payouts launch risks from Linear into one Notion doc for tomorrow's standup.\nAction: Collect every open risk from Linear, build a Notion page with owner, due date, status, mitigation and next step for each, and send you the link."
+  },
+  {
+   "id": "life-s085-e015#1",
+   "response": "Draft for #payouts-launch: 'Reminder: the beta retro is Thursday at 2pm in room 4B. Please add your sticky notes to the Miro board before then. Thanks all!'\nAction: Hold it as a draft, and post it in #payouts-launch as soon as you say go."
+  },
+  {
+   "id": "life-s068-e024#1",
+   "response": "Happy to. I'll keep it simple: fruit, crackers and cheese, and something sweet. I don't know if Jun or his sister have any allergies, so can you check?\nAction: Build the PC Express cart for three kids, and place the order for pickup tomorrow at 3 once you confirm no allergies."
+  },
+  {
+   "id": "life-s087-e000#1",
+   "response": "That's a rough way to lose a good day, and a Saturday 6pm message about a metric can hijack your brain. Tom's question is a normal one that can wait until Monday, and nothing here needs you tonight.\nAction: Draft a short holding reply to Tom saying you'll look into Thursday's dip and come back Monday morning, and set a reminder to check the Looker dashboard first thing Monday."
+  },
+  {
+   "id": "life-s023-e024#1",
+   "response": "Sunday scaries are the worst, and the clock change doesn't help. Nothing here is on fire: you've got two new Linear issues (PAY-341, PAY-344), Aisha's edge-case list wants PM eyes, and Wen's E14 lift is now +4.3 pts. The main thing is picking a slot for the half hour with Aisha and Diego.\nAction: Send the invite as soon as you choose a slot (Mon 3 Nov 13:30, Tue 4 Nov 14:00 or Wed 5 Nov 10:30), and then close the laptop for tonight."
+  },
+  {
+   "id": "life-s050-e000#1",
+   "response": "I'll pull what we have on opening Instant Payouts beyond the beta merchants. I won't put a date in the reply unless it's confirmed.\nAction: Check the roadmap, Linear milestone and readiness doc for GA timing and criteria, then draft a reply to Olivia for your review before sending anything."
+  },
+  {
+   "id": "life-s028-e022#1",
+   "response": "Poppies grew on the WWI battlefields in Flanders, and a Canadian doctor, John McCrae, wrote the poem 'In Flanders Fields' about them in 1915. Kid version for Leo: 'Poppies bloomed where soldiers had fought, and now we wear one to remember them.'\nAction: Save that kid-friendly line to your notes in case Leo asks again."
+  },
+  {
+   "id": "life-s091-e008#1",
+   "response": "Good idea. A shared Notion database works well, with one row per piece of feedback: date, merchant, source (support, sales call, reply), summary, category, severity, owner, status and linked Linear ticket. Add a Weekly triage view filtered to new items.\nAction: Create the database with those fields and a triage view, and send you the link to share with the team."
+  },
+  {
+   "id": "life-s145-e000#1",
+   "response": "Let's find something small and calm. I'll look for pumpkin patches within 45 minutes of home that are open today, favouring smaller farms over the big crowds.\nAction: Search for pumpkin patches, check hours and drive times for a 1:30 departure, and send you two or three options."
+  },
+  {
+   "id": "life-s058-e010#1",
+   "response": "I don't have that comparison in front of me, so I can't tell you without guessing. I'll check what I saved from 27 Feb.\nAction: Search our history and your notes for the VIA Rail Toronto to Ottawa Friday-evening results, and if I can't find them, re-run the search and compare it with driving."
+  },
+  {
+   "id": "life-s043-e002#1",
+   "response": "Understood on Sam doing the drop. Even though you said not to check, I'll follow your standing hotel rule: fully refundable rates, ideally walking distance to transit. I'll book the best match in or near the Plateau under $250 a night for Fri 6 to Sun 8 Feb.\nAction: Book the best fully refundable option and send you the confirmation, and ask only if nothing fits the rate and rules."
+  },
+  {
+   "id": "life-s028-e010#1",
+   "response": "I'll pull the October total from the TD statements, then do August and September for the comparison.\nAction: Check the TD joint chequing and Visa transactions for the three months and send you the totals side by side."
+  },
+  {
+   "id": "life-s041-e003#1",
+   "response": "Draft note: 'Dear Grace and Daniel, thank you for having us for Christmas in Ottawa. From the 24th to the 28th, we felt so welcome and so well fed, and we're still enjoying the leftovers you sent us home with. We loved every minute. With love from the three of us.' It has no emoji, and you can add names. I'll also tell Marcus you're thinking about it.\nAction: Send Marcus a reply that you'll think about it, and keep the note ready for your edits."
+  },
+  {
+   "id": "life-s077-e026#1",
+   "response": "That sounds like a perfect Saturday, and you've earned it. Nothing needs you right now.\nAction: Hold everything non-urgent until Monday; I'll only interrupt you for something that can't wait."
+  },
+  {
+   "id": "life-s025-e032#1",
+   "response": "That's lovely, Riya. Happy belated birthday to your mom, and it's nice that the flowers made her teary in a good way.\nAction: Save her birthday (Nov 3) and the Mumbai florist plus morning call tradition to your notes, set a reminder ahead of next year's date, and wait for your decision tonight on the book for Priya."
+  }
+ ]
+}
