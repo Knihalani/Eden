@@ -2,7 +2,7 @@
 
 **Headline (cycle 5):** a design that beats today's plugin, measured by its effect on the agent's replies. The hook picks up to 15 candidate memories with no model. A small model checks them off the hook. Each delivered memory carries its date ("as of Aug 30"). On fresh turns it improves replies by +0.11 (coding) and +0.13 (personal assistant) per turn on a 0–3 scale; today's plugin scores about 0. Where memory is needed it lifts replies by about +0.6, and where it isn't it does no measurable harm. This passed the test I set in advance, but the sample is still small: the 95% ranges include zero, so treat it as a strong lead, not a settled result.
 
-**Status:** cycle 5 (2026-10-19).
+**Status:** cycle 5 (2026-10-19) of an open-ended programme (`research/R10/BRIEF.md`). Every number below comes from `research/R10/LEDGER.md`, which says where it came from. The current state, the hypothesis portfolio and the graveyard are in `research/R10/STATE.md`.
 
 ## 1. The question
 
