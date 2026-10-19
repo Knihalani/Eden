@@ -1285,12 +1285,11 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 ## C8-E1 · 2026-10-19 · Where the dated verifier still gives nothing (diagnostic, post hoc)
 - **Data:** run 1 of the head-to-head (`<world>-h2h`, `<world>-h2h2`; code 145, life 169 turns). Packets from
   `in/responses-in.json`; verify − none from the judged files.
-- **Plan-need turns with an empty verify packet:** code 5 of 25, life 17 of 49. Causes (`score.action_text` and the
+- **Plan-need turns with an empty verify packet:** code 5 of 25, life 18 of 49. Causes (`score.action_text` and the
   calibrated scores):
   - no tool call in the turn, so the deferred delivery point never comes: code 2, life 11 (for example "remind me what
     I said actually helps me unwind on weekends", "remind me how I said I learn spanish best");
-  - verifier below 0.6 on every candidate: code 3, life 7 (counted when the turn had a tool call).
-  - (The life counts sum to 18 with the empty-on-tool-turn case counted under both; the no-tool count is exact.)
+  - the turn had a tool call but the verifier gave every candidate < 0.6: code 3, life 7.
 - **If no-tool turns were delivered too** (for example, by a pickup call the hook asks for): packets would be added on
   code 2 plan / 1 labeler-only / 2 no-need turns and life 11 / 3 / 8. At C6's need-turn gain (≈ +0.47 on life
   plan-need) that is at most about +0.015 per turn on life (0.137 × 11/49 × 0.47) and less on code: too few turns for
