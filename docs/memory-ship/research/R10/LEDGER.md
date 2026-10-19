@@ -1355,3 +1355,7 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **What it informs (set before running):** a checker whose p95 latency is above the p50 of this gap misses more
   than half of the turns it would serve. D37's recorded NIM p95 (40–70 s) is the case in question. It is a timing
   measurement on one machine and one model, not an outcome measure.
+- **C8-E4 run 1 void (harness bug):** the loop fed prompts on stdin, and `claude -p` also reads stdin, so the first
+  session received every remaining prompt appended and later sessions got the leftovers (sessions answered "your
+  message also had a list of earlier requests"). Its timings are discarded unread and are not reported. Re-run with
+  stdin closed (`< /dev/null`), one prompt per session.
