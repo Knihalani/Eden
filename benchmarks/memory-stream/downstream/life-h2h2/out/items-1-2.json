@@ -1,0 +1,21 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s085-e010#1",
+   "response": "Ideas for Diego's partner: join several waitlists at once, including licensed home-daycare agencies, which often have openings sooner than centres. Ask each place whether they're in the $10-a-day program, and call to ask about cancellations.\nAction: Look up licensed home-daycare agencies that serve Roncesvalles and send you a short list to pass on."
+  },
+  {
+   "id": "life-s037-e000#1",
+   "response": "Merry belated Christmas! Pyjamas at 11, a Lego truck built three times and Sam and Biscuit asleep on the couch sounds like a perfect Boxing Day.\nAction: Nothing on the list today; I'll leave you in peace."
+  },
+  {
+   "id": "life-s047-e013#1",
+   "response": "Ha, I'd say the answer is yes, with cake shaped like a meteor. Hope the T-rex costume arriving Tue 27 Jan is a hit.\nAction: Nothing needed tonight, get some rest."
+  },
+  {
+   "id": "life-s132-e000#1",
+   "response": "Got it: Grace turns 68 on Thursday 2026-11-19, a bit after the Ottawa weekend.\nAction: Add Grace's birthday to your calendar as a yearly event on Nov 19, and set a reminder for Thu 5 Nov to sort out a gift."
+  }
+ ]
+}

@@ -1,0 +1,9 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {"id": "life-s150-e028#0", "response": "Status set to heads down until 3:00 pm. Note for #payouts-team: 'Heads down on focus time until 3:00 pm. I'll catch up on messages after that; ping me directly if it's truly urgent.'\nAction: Set your Slack status with a 15:00 expiry, and post the note to #payouts-team once you OK it."},
+  {"id": "life-s140-e029#0", "response": "The hour before bed matters more than total screen time: in a 2025 study of 1,200 kids aged 6 to 9, those using screens in the last 60 minutes fell asleep about 19 minutes later. Three causes: light delays melatonin, games and short video keep kids alert, and screens crowd out wind-down routines. What helped: a fixed screens-off time an hour before bed (weekends too), devices charged outside bedrooms, TV in a shared room, and reading for the last half hour, which fixed sleep onset within two weeks. Bottom line: it's about when, not whether.\nAction: None."},
+  {"id": "life-s051-e006#0", "response": "For jammy yolks, lower eggs straight from the fridge into gently boiling water for 6.5 to 7 minutes, then straight into an ice bath for at least 5 minutes before peeling. For ramen eggs, marinate the peeled eggs in a soy, mirin and water mixture for at least 6 hours or overnight, so they need to be made tonight to be ready tomorrow.\nAction: Set an evening reminder to boil and marinate the eggs."},
+  {"id": "life-s047-e025#0", "response": "I don't have a live rink status or Saturday's forecast in front of me, so I won't promise it. Outdoor rinks often close when it's mild or raining, so I'll check the city's page for Withrow and the forecast for Saturday afternoon.\nAction: Look up the Withrow rink status, hours and Saturday afternoon forecast, and tell you if skating after swim is a go."}
+ ]
+}
