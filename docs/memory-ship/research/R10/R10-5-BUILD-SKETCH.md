@@ -75,7 +75,8 @@ model, chosen by measurement (LEDGER C10-E1). The decision points as they were p
      140 ms on the server plus 0.7–0.9 s of network. Published attacks can flip its verdicts, so it needs an A6
      security review before shipping. **Measured (C10-E1/E2):** p50 0.21–0.27 s end to end from the container,
      about ten times inside the budget. With precise criteria and the candidate list in the state (threshold 0.7)
-     its picks (that variant was chosen after the results) are close to the calibrated haiku checker (short by about 0.05 recall on code-rt1, ahead on
+     its picks (that variant was chosen after the results) are close to the calibrated haiku
+     checker (short by about 0.05 recall on code-rt1, ahead on
      life-rt1; post hoc). **On replies (C10-E3, one run):** it matches the haiku checker (−0.0117 code,
      −0.0262 life per turn) and beats today's plugin by +0.1017 / +0.0873; the pre-registered bar (a CI lower bound
      above 0) was not met (−0.0009, −0.0073).
