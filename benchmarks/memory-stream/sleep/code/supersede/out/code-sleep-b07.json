@@ -1,0 +1,26 @@
+{
+ "batch": "code-sleep-b07",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "code-sleep-b00:m0034",
+   "new": "code-sleep-b07:m0001",
+   "why": "Migrated off yarn 1 to pnpm 9"
+  },
+  {
+   "old": "code-sleep-b01:m0031",
+   "new": "code-sleep-b07:m0001",
+   "why": "packageManager now pinned pnpm@9.12.0, not yarn"
+  },
+  {
+   "old": "code-sleep-b01:m0019",
+   "new": "code-sleep-b07:m0008",
+   "why": "PDF filename format changed to invoice-<number>-<slug>.pdf"
+  },
+  {
+   "old": "code-sleep-b04:m0023",
+   "new": "code-sleep-b07:m0008",
+   "why": "PDF filename format changed again, new slugify location"
+  }
+ ]
+}

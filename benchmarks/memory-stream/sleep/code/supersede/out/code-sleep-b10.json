@@ -1,0 +1,16 @@
+{
+ "batch": "code-sleep-b10",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "code-sleep-b09:m0016",
+   "new": "code-sleep-b10:m0009",
+   "why": "Field renamed elevation_gain_m; migration now applied"
+  },
+  {
+   "old": "code-sleep-b01:m0025",
+   "new": "code-sleep-b10:m0026",
+   "why": "Pricing plans and prices changed"
+  }
+ ]
+}

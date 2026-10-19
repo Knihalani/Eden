@@ -1,0 +1,36 @@
+{
+ "batch": "life-sleep-b07",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "life-sleep-b00:m0073",
+   "new": "life-sleep-b07:m0004",
+   "why": "Mom call moved from Sunday evening to Saturday morning"
+  },
+  {
+   "old": "life-sleep-b00:m0049",
+   "new": "life-sleep-b07:m0007",
+   "why": "Biscuit's vet now Dr. Kaur; Dr. Moreau retired"
+  },
+  {
+   "old": "life-sleep-b06:m0036",
+   "new": "life-sleep-b07:m0007",
+   "why": "Dr. Moreau no longer Biscuit's regular vet"
+  },
+  {
+   "old": "life-sleep-b04:m0022",
+   "new": "life-sleep-b07:m0016",
+   "why": "Victoria Day weekend: in-laws visit Toronto instead of Ottawa trip"
+  },
+  {
+   "old": "life-sleep-b06:m0015",
+   "new": "life-sleep-b07:m0021",
+   "why": "Spring photo day moved to 2026-04-29, retakes 05-21"
+  },
+  {
+   "old": "life-sleep-b06:m0032",
+   "new": "life-sleep-b07:m0025",
+   "why": "Farmers' market address corrected to 1490 Queen St E"
+  }
+ ]
+}

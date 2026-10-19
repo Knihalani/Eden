@@ -1,0 +1,11 @@
+{
+ "batch": "code-sleep-b08",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "code-sleep-b06:m0020",
+   "new": "code-sleep-b08:m0004",
+   "why": "Pool size is now PG_POOL_MAX env var, not fixed 10"
+  }
+ ]
+}
