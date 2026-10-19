@@ -1,0 +1,51 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s103-e000",
+   "scores": [
+    3,
+    3,
+    1
+   ],
+   "why": "Latest models.py lacks the field; R2 claims it exists and invents a Sum annotation clash; R0/R1 correct."
+  },
+  {
+   "event": "code-s105-e019",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give the correct @admin.display method with ordering; distance_km is non-null so guards are harmless."
+  },
+  {
+   "event": "code-s108-e040",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "scripts/count-todos.ts was already written yesterday; only R2 checks for it before writing a duplicate."
+  },
+  {
+   "event": "code-s108-e045",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly distinguish as const and satisfies, including combination."
+  },
+  {
+   "event": "code-s108-e047",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "All explain using/Symbol.dispose correctly but hedge on Node version already known (20.11 pinned)."
+  }
+ ]
+}
