@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s091-e012", "scores": [3, 3, 3, 3], "why": "Commute grumble; all empathise briefly and ask before offering anything; pending bike slot mentions are accurate."},
+{"event": "life-s092-e000", "scores": [1, 1, 3, 2], "why": "History has every-other-Thursday yard waste from 9 Apr. R1/R2 claim no info; R4 computes dates conflicting with blue-bin week."},
+{"event": "life-s096-e031", "scores": [3, 3, 3, 3], "why": "All brief goodnights honouring the no-trailing-offers request."},
+{"event": "life-s097-e013", "scores": [3, 3, 3, 3], "why": "All give non-cheesy, usable card lines."},
+{"event": "life-s097-e019", "scores": [3, 3, 3, 3], "why": "All give sensible fort supply lists; R3's earlier-fort reference is supported by history."},
+{"event": "life-s100-e025", "scores": [2, 2, 3, 2], "why": "Single Brijwasi pick is right; only R3 gives a CAD figure as required. None flag Anjali's diabetes."},
+{"event": "life-s102-e002", "scores": [3, 3, 3, 3], "why": "All say yes to Hannah and give a reasonable indoor plan."},
+{"event": "life-s105-e019", "scores": [2, 3, 2, 2], "why": "Reminders for Tue 30 Jun and Mon 6 Jul already set on 26 Jun; only R2 recalls them, others re-create."},
+{"event": "life-s106-e000", "scores": [3, 3, 2, 1], "why": "Sam's fragrance migraines rule out scented fixes; R1/R2 cite it; R3 omits it; R4 leaves plug-ins open and won't order."},
+{"event": "life-s106-e007", "scores": [1, 2, 2, 2], "why": "Basement kitchen is known (microwave, induction hotplate, fridge); R1/R2/R4 still ask for it; none correct the earlier miss."},
+{"event": "life-s107-e022", "scores": [3, 3, 3, 3], "why": "All rewrites are clear and preserve meaning."},
+{"event": "life-s110-e007", "scores": [3, 3, 2, 3], "why": "R3 is vague, omitting the 2-day vs 3-day and threshold details others give correctly."},
+{"event": "life-s110-e009", "scores": [3, 3, 3, 3], "why": "All give an apt kid-level siren-howling explanation."},
+{"event": "life-s111-e000", "scores": [3, 2, 3, 3], "why": "Search not on file; R1 transparently flags March fares as different dates; R2 wrongly points to the abandoned August-long-weekend search."},
+{"event": "life-s111-e035", "scores": [3, 3, 3, 3], "why": "All give correct pool info; R1 usefully flags forgotten swim shirt."}
+]}

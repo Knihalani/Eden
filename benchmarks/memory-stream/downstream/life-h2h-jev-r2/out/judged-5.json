@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s002-e000", "scores": [3, 3, 2, 3], "why": "All set the Sunday block correctly; R3 proposes end-of-chat corrections, contradicting the saved rule to correct every Spanish mistake inline."},
+{"event": "life-s002-e020", "scores": [2, 2, 2, 2], "why": "Carlos's notes (B1, weak on ser/estar, cuando subjunctive) exist in memory; all claim no basis to assess. Rule saved correctly."},
+{"event": "life-s002-e023", "scores": [3, 3, 3, 3], "why": "All correctly save penicillin allergy and May seasonal allergies privately."},
+{"event": "life-s006-e000", "scores": [3, 3, 3, 3], "why": "All search fast-shipping silly mugs and wait for her pick before ordering; fits the tradition and purchase rule."},
+{"event": "life-s006-e011", "scores": [3, 3, 3, 3], "why": "General advice question; all give sound cash-flow, tax and landlord considerations."},
+{"event": "life-s006-e015", "scores": [3, 3, 2, 3], "why": "Simple sign-off after she asked for no play-by-play; R3 repeats the full errand details unnecessarily."},
+{"event": "life-s008-e000", "scores": [3, 3, 3, 3], "why": "All verify salmon listing, avoid chicken, match last order; purchases stay within rules."},
+{"event": "life-s012-e018", "scores": [3, 3, 3, 3], "why": "All drafts carry the correct date, times, rain date and driveway/no-early-birds asks, and wait for approval before posting."},
+{"event": "life-s016-e002", "scores": [3, 3, 2, 3], "why": "EFT is the Canadian term and ACH the US network; R3 calls the difference mostly vocabulary, downplaying that they are separate systems."},
+{"event": "life-s017-e012", "scores": [1, 1, 2, 2], "why": "Fare-watch task bg_26 was started and never reported finished; R1/R2 flatly say nothing is running. R3/R4 hedge and check."},
+{"event": "life-s018-e000", "scores": [2, 2, 2, 2], "why": "Empathetic replies, but none flag today's 11:00 Q4 roadmap preview that still has no prep doc."},
+{"event": "life-s018-e005", "scores": [3, 3, 3, 3], "why": "General analytics question; all give a reasonable flattening rule of thumb with noise caveats."},
+{"event": "life-s020-e016", "scores": [3, 2, 3, 3], "why": "R1 gives correct sample items; R3/R4 use her role-play and Mexican-vocabulary preferences; R2 only outlines the plan."},
+{"event": "life-s021-e000", "scores": [3, 3, 3, 3], "why": "All congratulate, set the Friday 15:00 reminder with Linear pre-draft, and block Friday evenings."},
+{"event": "life-s022-e016", "scores": [3, 3, 3, 3], "why": "All log the race correctly for the December recap; R3's 5:54/km pace is accurate."}
+]}

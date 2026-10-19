@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s046-e041", "scores": [3, 2, 2, 3], "why": "History noted Tulip Festival for May with Grace and Daniel; #1 and #4 recall it. #2 misses; #3 skips to-dos and doesn't recall."},
+{"event": "life-s047-e006", "scores": [3, 3, 3, 3], "why": "All correctly state Ontario bans damage deposits, scuffs are normal wear, landlord must apply to LTB."},
+{"event": "life-s047-e013", "scores": [3, 3, 3, 3], "why": "Light, warm acknowledgement of a tired parent; all appropriate."},
+{"event": "life-s047-e025", "scores": [3, 3, 3, 3], "why": "All sensibly check rink status and forecast; #2 also handles the insurance photo reminder."},
+{"event": "life-s048-e006", "scores": [3, 2, 3, 3], "why": "ChessKid and Lichess are sound picks; #2 gives little substance beyond hedging."},
+{"event": "life-s050-e011", "scores": [3, 3, 3, 3], "why": "All reply yes and add to family calendar after a conflict check; Sunday mom call is evening."},
+{"event": "life-s051-e000", "scores": [3, 3, 3, 3], "why": "All accurately explain longer season, 9/11 shift, 17-game season and Sunday TV slot."},
+{"event": "life-s051-e006", "scores": [3, 3, 3, 3], "why": "All give correct 6.5-7 minute timing, ice bath and overnight marinade."},
+{"event": "life-s060-e019", "scores": [3, 3, 3, 2], "why": "#4 leans on loosely linked history (raise, four-day week) and drops core questions like way back and five-year view."},
+{"event": "life-s060-e022", "scores": [3, 3, 2, 2], "why": "Riya asked for the Priya note to forward; #3 says 'send it along' without making it, #4 vague and re-schedules Slack."},
+{"event": "life-s062-e003", "scores": [3, 3, 3, 3], "why": "All supply clean, crypto-free finance jokes as asked."},
+{"event": "life-s063-e000", "scores": [3, 3, 3, 3], "why": "All weigh commute time vs after-tax pay sensibly; #4 notes bike as exercise for marathon training."},
+{"event": "life-s063-e007", "scores": [3, 3, 2, 3], "why": "#3 wrongly says the prep block is on Tue 31 Mar; that is the talk, prep is now."},
+{"event": "life-s066-e016", "scores": [3, 3, 3, 3], "why": "All reasonably plan the link scan, asking for old URL; #2 adds redirect check."},
+{"event": "life-s068-e014", "scores": [3, 3, 2, 2], "why": "History shows indoor winter market Sundays until late April; #1 and #2 use it, #3 and #4 ignore it."}
+]}
