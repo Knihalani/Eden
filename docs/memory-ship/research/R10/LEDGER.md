@@ -1281,3 +1281,27 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   and `memory-purge.test.ts` fail identically on origin/main in this environment (root on Linux; chmod 000 does not
   stop root), and `doctor.test.ts` "a hung wrap fetch" failed under load and passes alone on main and this branch.
   No TypeScript changed in this cycle.
+
+## C8-E1 · 2026-10-19 · Where the dated verifier still gives nothing (diagnostic, post hoc)
+- **Data:** run 1 of the head-to-head (`<world>-h2h`, `<world>-h2h2`; code 145, life 169 turns). Packets from
+  `in/responses-in.json`; verify − none from the judged files.
+- **Plan-need turns with an empty verify packet:** code 5 of 25, life 17 of 49. Causes (`score.action_text` and the
+  calibrated scores):
+  - no tool call in the turn, so the deferred delivery point never comes: code 2, life 11 (for example "remind me what
+    I said actually helps me unwind on weekends", "remind me how I said I learn spanish best");
+  - verifier below 0.6 on every candidate: code 3, life 7 (counted when the turn had a tool call).
+  - (The life counts sum to 18 with the empty-on-tool-turn case counted under both; the no-tool count is exact.)
+- **If no-tool turns were delivered too** (for example, by a pickup call the hook asks for): packets would be added on
+  code 2 plan / 1 labeler-only / 2 no-need turns and life 11 / 3 / 8. At C6's need-turn gain (≈ +0.47 on life
+  plan-need) that is at most about +0.015 per turn on life (0.137 × 11/49 × 0.47) and less on code: too few turns for
+  a downstream run to resolve, so none is pre-registered.
+- **Empty-packet turns are an A/A check:** where verify's packet is empty, both conditions are "no memory", so their
+  differences are pure responder + judge noise: code no-need 4 better / 10 worse / 54 equal, life 6 / 3 / 66.
+
+## C8-T1 · 2026-10-19 · NIM verifier runner, ready for the R10-5 re-measure
+- `verify_nim.py` runs the calibrated verifier prompt (PROMPTS.md F22b) on an NVIDIA NIM model over the inputs of the
+  existing calibrated runs, writes outputs in the same format to `verify/<world>-<tag>/out/` and logs each call's
+  latency and usage. `--latency` prints p50 / p95 / max. The key is read from the environment or `.env`, never
+  printed or written.
+- Checked against a local mock endpoint: outputs parse, `score.py --systems verify:tag=<tag>,p=0.6` reads them, the
+  latency summary prints, and a missing key exits with a message. Not run against NIM: no key in this environment.
