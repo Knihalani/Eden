@@ -1,0 +1,205 @@
+{
+ "batch": "code-sleep-b07",
+ "rows": [
+  {
+   "id": "code-sleep-b07:m0001",
+   "kind": "rule",
+   "text": "acme-platform uses pnpm 9 (pinned pnpm@9.12.0) since the September 2026 migration off yarn 1; npm and yarn must not be used. They write their own lockfiles (package-lock.json / yarn.lock) and CI rejects the PR. The only-allow pnpm preinstall guard does not catch `yarn add`.",
+   "actions": [
+    "dependency",
+    "build-ci",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0002",
+   "kind": "episode",
+   "text": "An untracked yarn.lock keeps reappearing in acme-platform (written locally 2026-09-29); something runs `yarn` in the repo, probably a VS Code extension or shell alias. Jordan said he would check his VS Code extensions; do not commit it. yarn.lock was deleted in 3c81d0e.",
+   "actions": [
+    "build-ci",
+    "git",
+    "dependency"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0003",
+   "kind": "procedure",
+   "text": "acme-platform contributing conventions: run `nvm use` (reads .nvmrc); copy .env.example to .env.local and fill secrets from 1Password; branch names start with the Linear id, e.g. acme-412-retry-webhooks.",
+   "actions": [
+    "build-ci",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0004",
+   "kind": "rule",
+   "text": "Git hooks in acme-platform run through lefthook (lefthook.yml at repo root); husky was removed on 2026-09-29. Jordan wants any leftover .husky references removed.",
+   "actions": [
+    "git",
+    "build-ci",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0005",
+   "kind": "fact",
+   "text": "The acme-platform API reads its database connection only from DATABASE_URL (commit 9e04b7a dropped the PG* fallbacks) and fails fast at boot if it is missing. apps/api/.env.local needs a DATABASE_URL line copied from .env.example; Jordan's local db connection broke on 2026-09-30 because his .env.local lacked it.",
+   "actions": [
+    "database",
+    "build-ci",
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0006",
+   "kind": "rule",
+   "text": "Primary keys for any new table in acme-platform must be UUID v7, generated app-side with uuidv7() via $defaultFn in drizzle; not serial and not UUID v4. New tables also follow the convention of org_id, created_at and deleted_at columns and an index on org_id. Migrations are generated with `pnpm --filter api db:generate` into apps/api/drizzle/ (latest: 0031_brisk_payment_reminders).",
+   "actions": [
+    "database",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0007",
+   "kind": "fact",
+   "text": "Worker shutdown in acme-platform: on SIGTERM the worker stops taking jobs and drains in-flight ones with a 30s grace period (GRACE_PERIOD_MS in services/worker/src/shutdown.ts), matched by terminationGracePeriodSeconds: 30 in infra/helm/worker/values.yaml. Pods get killed mid-job during deploys: image-resize jobs can exceed 30s and w.close() can still pick up one more job. Priya says it is on our side; proposed fix (not yet made): pause workers before close and raise both values together (e.g. 90s app, 100s Helm).",
+   "actions": [
+    "jobs",
+    "deploy",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0008",
+   "kind": "fact",
+   "text": "Invoice PDF downloads are named invoice-<number>-<client-slug>.pdf (e.g. invoice-0042-smith-jones.pdf) using slugify in apps/api/src/lib/slug.ts; the clients list search (GET /v1/clients?q=) is debounced 300ms on the web side.",
+   "actions": [
+    "api",
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0009",
+   "kind": "plan",
+   "text": "Jordan asked for a notification-preferences settings page shell (heading + empty form) in the dashboard but deferred it ('later'); the assistant was unsure of the web app's routing setup and should inspect apps/web and match existing settings screens.",
+   "actions": [
+    "frontend",
+    "reminder"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0010",
+   "kind": "fact",
+   "text": "Terraform state for acme-platform lives in S3 bucket acme-tfstate (key platform/prod.tfstate, us-east-1, encrypted) with DynamoDB lock table acme-tfstate-lock, configured in infra/terraform/backend.tf. A committed backend_override.tf (b27f9aa) forced a local backend and made CI plans show 47 resources to add; removed on branch acme-438-remove-tf-local-backend (commit 5e0a1c4), not pushed and no PR yet. Anyone who ran terraform init with the override must run `terraform init -reconfigure`.",
+   "actions": [
+    "deploy",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0011",
+   "kind": "rule",
+   "text": "infra/ and .github/ in acme-platform are platform-owned: infra changes need a platform-team reviewer (Priya) and the plan output pasted in the PR description (for the Terraform backend fix, a plan showing 0 to add).",
+   "actions": [
+    "deploy",
+    "git",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0012",
+   "kind": "fact",
+   "text": "Jordan's side project is trailmix, a Django app with HTMX partials and Hike/Photo models; he sometimes asks Django ORM questions in work sessions.",
+   "actions": [
+    "learning",
+    "database"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0013",
+   "kind": "preference",
+   "text": "Code style in acme-platform TypeScript: 2-space indentation, single quotes, semicolons, imports with external packages first then local.",
+   "actions": [
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0014",
+   "kind": "rule",
+   "text": "Lena owns the apps/web/messages files (e.g. en.json) and is mid-refactor on them as of 2026-10-02; do not edit them. Jordan reverted a 'recieve' typo fix in en.json (paymentPending string) for this reason and may mention the typo to Lena.",
+   "actions": [
+    "frontend",
+    "docs",
+    "message"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0015",
+   "kind": "procedure",
+   "text": "`pnpm --filter api db:seed` seeds local data: orgs Northwind Studio (120 clients, 640 invoices) and Bluebird Agency (45 clients, 210 invoices). API tests use their own Testcontainers database, so seeding does not affect them.",
+   "actions": [
+    "database",
+    "build-ci",
+    "tests"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0016",
+   "kind": "episode",
+   "text": "Jordan planned a long-weekend hike near Tobermory (Bruce Peninsula) right after 2026-10-02.",
+   "actions": [
+    "travel",
+    "schedule"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0017",
+   "kind": "preference",
+   "text": "Jordan prefers shorter, tighter replies from the assistant (asked on 2026-10-05: 'you're being kinda long-winded, tighten it up').",
+   "actions": [
+    "docs",
+    "work-task"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0018",
+   "kind": "episode",
+   "text": "tsx ^4.20.3 was added to packages/cli devDependencies so scripts (gen:completions, check:size) run directly from .ts without building; package.json was edited by hand and the pnpm lockfile was not yet updated (no install run), so run pnpm install before committing.",
+   "actions": [
+    "dependency",
+    "build-ci",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0019",
+   "kind": "plan",
+   "text": "deps-bot's @types/node 20.14.10 -> 20.16.5 bump (#493) breaks the packages/cli typecheck with 7 errors, because src/http.ts imports Response from 'undici' while globals come from @types/node and the DOM lib. Proposed fix, not yet applied (Jordan said 'later'): drop the undici type import, use global types and remove \"DOM\" from the CLI tsconfig lib.",
+   "actions": [
+    "dependency",
+    "tests",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0020",
+   "kind": "fact",
+   "text": "Cron jobs in the acme-platform worker are BullMQ repeatable jobs defined in services/worker/src/schedules.ts via upsertJobScheduler (no system cron or k8s CronJob). nightly-digest runs at 07:00 America/Toronto (moved from 06:00 on 2026-10-05); billing-sync every 15 min; purge-soft-deleted Sundays 03:30 UTC.",
+   "actions": [
+    "jobs",
+    "schedule"
+   ]
+  },
+  {
+   "id": "code-sleep-b07:m0021",
+   "kind": "plan",
+   "text": "Jordan wants to add the k6 load test suite (about 40 min, hits staging) as a GitHub Actions CI job. The existing ci.yml has a single `check` job with timeout-minutes: 20 on every PR/push, so k6 would need its own job with a longer timeout, ideally workflow_dispatch or scheduled. No known team rule; .github/ is platform-owned, so check with Priya first.",
+   "actions": [
+    "build-ci",
+    "tests",
+    "deploy"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/code/cards/code-sleep-b07.json"
+}

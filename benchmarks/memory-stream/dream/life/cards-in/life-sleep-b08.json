@@ -1,0 +1,334 @@
+{
+ "batch": "life-sleep-b08",
+ "rows": [
+  {
+   "id": "life-sleep-b08:m0001",
+   "kind": "routine",
+   "text": "Riya always pairs with Aisha Rahman on scope cuts before sprint planning and brings Wen Li's adoption data; Aisha pushes back on any cut that lacks numbers, so pull adoption numbers for both items before proposing cuts.",
+   "actions": [
+    "work-task",
+    "schedule",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0002",
+   "kind": "plan",
+   "text": "Sprint planning is 2026-05-11; Riya wants to cut the bulk-payout CSV export and the payout nickname feature. Scope-cuts meeting with Aisha booked Fri 2026-05-01 12:00-12:25.",
+   "actions": [
+    "work-task",
+    "schedule",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0003",
+   "kind": "fact",
+   "text": "Wen Li's 90-day Payouts adoption pull (2026-04-28, Looker): bulk payout CSV export used by 31 of 2,140 active merchants (1.4%, 70% from 3 accounts); payout nicknames set by 212 merchants (9.9%) but only 18 edited after setup; scheduled payouts used by 1,064 merchants (49.7%).",
+   "actions": [
+    "work-task",
+    "docs"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0004",
+   "kind": "plan",
+   "text": "Vancouver family trip: Thu 2026-07-09 to Mon 2026-07-13 (moved from the August long weekend) for Ira's naming ceremony on Sat 2026-07-11 at Mei and Kabir's place in Kitsilano. Air Canada ref QX7L2P, passengers Riya, Sam Okafor and Leo, AC117 YYZ-YVR 08:00 out on 9 Jul, AC120 YVR-YYZ 13:15 back on 13 Jul, seats 23C/23D/23E, $1,947.66 CAD. On the family calendar.",
+   "actions": [
+    "travel",
+    "family",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0005",
+   "kind": "person",
+   "text": "Mei and Kabir Malhotra are Riya's family in Kitsilano, Vancouver (Mei is Riya's contact for the trip, Kabir is planning the barbecue); their baby is Ira. Leo will sleep on the pull-out in Ira's room during the July visit.",
+   "actions": [
+    "travel",
+    "family",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0006",
+   "kind": "fact",
+   "text": "Home renovation: from 2026-05-08 (demo crew started) the family uses a temporary kitchen in the basement with only a microwave, an induction hotplate and the old fridge. The hotplate needs flat-bottom induction pans: the cast iron works, the old aluminium pot does not.",
+   "actions": [
+    "food",
+    "home",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0007",
+   "kind": "person",
+   "text": "Riya's household: partner Sam Okafor and son Leo (Grade 2), living in Leslieville, Toronto.",
+   "actions": [
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0008",
+   "kind": "fact",
+   "text": "City of Toronto watermain replacement on Queen St E between Leslie St and Jones Ave runs from 2026-05-19 for about 9 weeks, with eastbound lane restrictions weekdays 7am-7pm; 501 streetcar delays and relocated stops, so Riya should leave earlier on office days.",
+   "actions": [
+    "schedule",
+    "travel"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0009",
+   "kind": "fact",
+   "text": "Green P parking lot at Coxwell & Queen is closed for resurfacing 2026-06-01 to 2026-06-14; Riya's street parking permit is unaffected.",
+   "actions": [
+    "travel",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0010",
+   "kind": "plan",
+   "text": "Leslieville local events: Leslieville Flea at Ashbridge Estate on Sundays 2026-05-24, 2026-06-28 and 2026-07-26, 10am-4pm; Greenwood Park movie nights on the last Friday of June, July and August at dusk. Northbound Cycle (1311 Queen E) is a nearby bike repair shop with walk-in chain fixes.",
+   "actions": [
+    "schedule",
+    "family",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0011",
+   "kind": "episode",
+   "text": "Riya asked Diego Fernandez to make a custom Slack emoji for the payouts team (money bag with speed lines) and has picked the name :zoom-money:.",
+   "actions": [
+    "message",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0012",
+   "kind": "person",
+   "text": "Hannah Cho is Riya's close friend; her son Jun is Leo's close friend (sleepovers, playdates, walking to school together) and her other child is Ellie. Hannah is Riya's backup for Wednesday pickup.",
+   "actions": [
+    "family",
+    "schedule",
+    "pet"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0013",
+   "kind": "person",
+   "text": "Grace and Daniel live in the Glebe, Ottawa (Riya's family contacts there). Leslieville to the Glebe by car is about 4h40 leaving at 06:00 and about 6h25 leaving at 15:00 on holiday Fridays, so leave before 07:00. Grace invited Riya, Sam and Leo to Ottawa for Winterlude in February 2027.",
+   "actions": [
+    "travel",
+    "family",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0014",
+   "kind": "person",
+   "text": "Riya's work team on Instant Payouts (LumenPay): Aisha Rahman (engineering, covers incidents, retries, owns the GA checklist and OOO cover), Diego Fernandez (design/copy, ticket and emoji work), Wen Li (data/analytics, Looker dashboards), Jonah Park (engineer on tickets like PAY-1424, PAY-1442), Olivia Grant (sales, QBR deck), Tom Becker (owns the Q2 roadmap review deck, reviews beta health). Channel #payouts-launch; tickets in Linear (PAY-), docs in Notion.",
+   "actions": [
+    "work-task",
+    "message",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0015",
+   "kind": "fact",
+   "text": "On 2026-05-12 Wen Li updated the Looker 'Instant Payouts Beta' dashboard to exclude 2 test merchants from the success-rate calculation, which changes the baseline; this likely explains the apparent success-rate dip Tom asked about on Thursday 14 May.",
+   "actions": [
+    "work-task",
+    "observability",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0016",
+   "kind": "preference",
+   "text": "Riya often reads on her phone between things and asked for shorter replies ('shorter pls'); keep replies short, especially when she is out of the house or at the office.",
+   "actions": [
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0017",
+   "kind": "plan",
+   "text": "Riya is out of office Fri 2026-05-22 and back Mon 2026-05-25; Aisha Rahman covers payouts questions. OOO email drafted but not yet turned on; the Fri 22 May standup and lunch & learn need declining and the Fernwood Coffee check-in was moved off that day.",
+   "actions": [
+    "message",
+    "schedule",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0018",
+   "kind": "fact",
+   "text": "LumenPay public pricing: Starter 2.9% + 30c, Growth 2.6% + 25c, Scale 2.2% + 20c (volume discounts from $250k/month), Enterprise custom via contact sales. On a $100 payment that is $3.20 / $2.85 / $2.40 and on $1,000 it is $29.30 / $26.25 / $22.20. Sales sometimes mix up ACH and wires.",
+   "actions": [
+    "work-task",
+    "docs",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0019",
+   "kind": "fact",
+   "text": "Decision 2026-05-14 (owner Riya): same-day CAD-USD settlement is dropped from Instant Payouts v1 and moved to v1.1 to protect the launch date, because FX partner certification will not land in time and the 40 beta merchants mostly settle CAD only. Recorded in the Notion 'Instant Payouts PRD' decision log; Linear PAY-1390 (Jonah) was still in Sprint 21 scope and may need moving to the v1.1 backlog.",
+   "actions": [
+    "work-task",
+    "docs",
+    "release"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0020",
+   "kind": "fact",
+   "text": "Earlier Instant Payouts decisions: 2026-04-09 retry payout webhooks with exponential backoff over a 72 h window (Aisha's proposal, fewer missed events than fixed 24 h); 2026-04-22 beta capped at 40 merchants for support load (Riya).",
+   "actions": [
+    "work-task",
+    "api",
+    "docs"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0021",
+   "kind": "routine",
+   "text": "Riya records product decisions in the Decision log of the Notion 'Instant Payouts PRD' as a table row (Date, Decision, Why, Owner) with the date of the decision, and Aisha watches that page; after logging a decision, offer a heads-up in #payouts-launch.",
+   "actions": [
+    "docs",
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0022",
+   "kind": "preference",
+   "text": "Work messages on weekends stress Riya: Tom Becker's Saturday 2026-05-16 18:04 Slack asking about the beta success-rate dip (marked 'not urgent') derailed her evening with Leo. Prefer handling non-urgent work questions Monday and not raising them on weekends or evenings unless urgent.",
+   "actions": [
+    "message",
+    "work-task",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0023",
+   "kind": "plan",
+   "text": "Northline Renovations invoice #NR-2219 for $6,400.00 (progress payment 3) is due Fri 2026-05-22; the TD joint chequing account covers it.",
+   "actions": [
+    "finance",
+    "home",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0024",
+   "kind": "fact",
+   "text": "Biscuit is the family dog; walked by Jess via Rover around 12:00 on Fridays ($25 a walk), and Hannah Cho looks after him in a pinch. Biscuit ate chicken skin off Hannah's grill tray on 2026-05-18 and recovered. Nearest 24/7 emergency vet: Toronto Animal Emergency Hospital at Danforth & Victoria Park (regular vets closed on holidays).",
+   "actions": [
+    "pet",
+    "schedule",
+    "health"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0025",
+   "kind": "fact",
+   "text": "The Nest thermostat is edited in the Google Home app (thermostat > Settings > Schedules). Sam's manual adjustments taught Auto-Schedule a 4 am heating setpoint; fix is to delete the 4:00 setpoints and turn off Auto-Schedule.",
+   "actions": [
+    "home",
+    "debugging"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0026",
+   "kind": "fact",
+   "text": "Leo is in Grade 2 at Morse Street PS; school sends a weekly newsletter and permission forms (e.g. ROM trip form needing a signature in May 2026). School photo day was 2026-05-15.",
+   "actions": [
+    "family",
+    "reminder",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0027",
+   "kind": "person",
+   "text": "Fernwood Coffee is an Instant Payouts beta merchant; contact Ana Ruiz, who also offered an intro to a friend who runs a bakery and wants to join the beta (draft reply dr_772 asks for business name and monthly payout volume, unsent). Riya's Fernwood check-in is held at 14:00 on Tue 2026-05-19 to avoid Aisha's GA readiness sync at 13:00.",
+   "actions": [
+    "message",
+    "schedule",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0028",
+   "kind": "plan",
+   "text": "Winterlude 2027 Ottawa trip: Grace invited Riya, Sam and Leo up for Winterlude in February 2027. A Saturday plan with Leo (skate the Rideau Canal Skateway from the Fifth Avenue access in the Glebe, BeaverTails, ice sculptures, Jacques-Cartier Park) is saved in notes as 'Winterlude Saturday idea'. Winterlude usually runs the first three weekends of February; offered to put a calendar placeholder once 2027 dates are out.",
+   "actions": [
+    "travel",
+    "schedule",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0029",
+   "kind": "routine",
+   "text": "Leslieville curbside collection is on Collection Calendar Thursday Week 2; holiday weeks delay pickup by a day (Victoria Day week moved it from Thu 2026-05-21 to Fri 2026-05-22, blue bin + green bin). Flatten cardboard and bundle no bigger than 75 x 75 x 20 cm.",
+   "actions": [
+    "home",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0031",
+   "kind": "plan",
+   "text": "Sprint planning is Mon 2026-05-25 (Cycle 22): Riya wants to cut PAY-1440 (payout nicknames bulk edit, 3 pts) and PAY-1442 (scheduled payouts calendar view, 8 pts, carried over twice, date-picker upgrade risk), freeing 11 points, and wants to agree this with Aisha by Thu 2026-05-21; shared free slots Wed 20 May 10:30 and Thu 21 May 09:30, no invite sent yet. One-pager in Notion 'Cycle 22 cut candidates'; neither ticket has customer commitments.",
+   "actions": [
+    "work-task",
+    "schedule",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0032",
+   "kind": "episode",
+   "text": "The Instant Payouts beta passed 10,000 payouts in the week of 2026-05-18; Riya drafted a warm thank-you note to the payouts team to post the next day.",
+   "actions": [
+    "message",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0033",
+   "kind": "rule",
+   "text": "Standing rule from 2026-05-19: the assistant may send routine scheduling replies directly (accepting, proposing or confirming times) without showing Riya first. Any other email still needs Riya to approve the draft before sending. Saved in notes as 'Email rules'.",
+   "actions": [
+    "message",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0034",
+   "kind": "plan",
+   "text": "Mumbai trip plan (notes 'Mumbai trip 2027'): Riya flies alone for about ten days in late March 2027 to see her mother Anjali; Sam and Leo stay home for school, with Hannah as backup for Wednesday pickup. Wants to be there for her mom's medical check-up if it lines up; bring Darjeeling tins and photos of Leo for the album. Plan: watch fares from October 2026, book by December 2026.",
+   "actions": [
+    "travel",
+    "schedule",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b08:m0035",
+   "kind": "fact",
+   "text": "Baseline fares checked 2026-05-19 for Toronto to Mumbai, ~19 Mar to 29 Mar 2027, economy: Air India via Delhi $1,412 CAD (19h40), Emirates via Dubai $1,598, Air Canada via London $1,684. Air Canada nonstop YYZ-BOM is not on sale yet (schedule loads ~330 days out); fares move about +/-15%. Riya was offered a fare alert and a re-check in October.",
+   "actions": [
+    "travel",
+    "purchase",
+    "reminder"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/life/cards/life-sleep-b08.json"
+}

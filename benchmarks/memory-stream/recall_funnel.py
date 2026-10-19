@@ -7,6 +7,7 @@ item under each generator; recall@k and the share at rank ≤ 3 (a scale proxy).
     python3 benchmarks/memory-stream/recall_funnel.py --channels                      (C11-E1 channel table)
     python3 benchmarks/memory-stream/recall_funnel.py --missing                       (C11-E3: what dreaming left out)
     python3 benchmarks/memory-stream/recall_funnel.py --actions                       (C11-E2: action registry, caps)
+    python3 benchmarks/memory-stream/recall_funnel.py --cards                         (C11-E4: dream action cards)
 """
 import argparse, datetime, glob, json, math, os, re, sys
 
@@ -231,6 +232,62 @@ def actions(world, thr=0.5, caps=(15, 20, 10, 20)):
           "| capped median / max", capped[len(capped) // 2], capped[-1])
 
 
+def cards(world, thr=0.5):
+    """C11-E4: action cards as the bounded action channel. A turn sees the cards written after the last batch whose
+    rows are visible to it; a needed item is covered when a line of a card for one of the turn's action types (Jev
+    p ≥ thr) cites a row covering it. Union with G0@15, entity (cap 20, lexical order) and time (cap 10, recency)."""
+    g = Generators(world)
+    turn_act = json.load(open(os.path.join(HERE, "dream", world, "turn-actions.json")))
+    snaps = []
+    for p in sorted(glob.glob(os.path.join(HERE, "dream", world, "cards", "*.json"))):
+        c = json.load(open(p))
+        ts = [g.by_id[i]["t"] for i in g.by_id if i.startswith(c["batch"] + ":")]
+        snaps.append((max(ts), c["cards"]))
+    names = ("cards", "G0+entity+time capped", "union with cards")
+    hits = dict.fromkeys(names, 0)
+    tot, pools, lines = 0, [], []
+    for e, need in need_turns(g, world):
+        now = e["_order"]
+        vis = {r["id"] for r in g.lex.visible(now)}
+        text, ctx = M.strip_paste(e["text_all"]), g.ctx.get(e["id"], "")
+        gens, _ = g.score_all(e)
+        g0 = set(sorted(gens["G0"], key=lambda i: (-gens["G0"][i], i))[:15])
+        lex = g.lex.scores(dict(e, text_all=text), now)
+        ment = g.mentioned(text + " " + ctx)
+        ent = sorted((i for i in vis if g.ents[i] & ment), key=lambda i: (-lex.get(i, 0.0), -g.by_id[i]["t"], i))[:20]
+        days, months = turn_times(text, g.day[e["id"]])
+        tm = []
+        for i in vis:
+            s = " ".join((g.by_id[i].get("when") or {}).get("times") or []).lower()
+            if any(x in s or x[:3] + "s" in s for x in days) or any(m in s for m in months):
+                tm.append(i)
+        tm = sorted(tm, key=lambda i: -g.by_id[i]["t"])[:10]
+        base = g0 | set(ent) | set(tm)
+        cur = None
+        for t, c in snaps:
+            if t < now:
+                cur = c
+        want = {k for k, v in (turn_act.get(e["id"]) or {}).items() if v is not None and v >= thr}
+        card_lines = [ln for k in want for ln in (cur or {}).get(k, [])]
+        cited = {i for ln in card_lines for i in ln.get("rows", []) if i in g.by_id}
+        pools.append(len(base) + len(card_lines))
+        lines.append(len(card_lines))
+        for item in need:
+            cover = {i for i in vis if item in g.by_id[i]["covers"]}
+            if not cover:
+                continue
+            tot += 1
+            in_cards = bool(cover & cited) or any(item in g.by_id[i]["covers"] for i in cited)
+            hits["cards"] += in_cards
+            hits["G0+entity+time capped"] += bool(cover & base)
+            hits["union with cards"] += in_cards or bool(cover & base)
+    pools.sort()
+    lines.sort()
+    print(world, "needed items with a covering row", tot, {k: round(v / tot, 2) for k, v in hits.items()})
+    print("   card lines per turn median / max", lines[len(lines) // 2], lines[-1],
+          "| pool (rows + card lines) median / max", pools[len(pools) // 2], pools[-1])
+
+
 def missing(world):
     """C11-E3: needed items no visible row covers even in the session-end store (rows visible after their own
     session, `strict=False`), by item kind; and the share of every world item the compiler ever stored."""
@@ -289,10 +346,13 @@ if __name__ == "__main__":
     ap.add_argument("--channels", action="store_true", help="C11-E1 channel table")
     ap.add_argument("--missing", action="store_true", help="C11-E3 dreaming omissions")
     ap.add_argument("--actions", action="store_true", help="C11-E2 action registry and per-channel caps")
+    ap.add_argument("--cards", action="store_true", help="C11-E4 dream action cards")
     ap.add_argument("--thr", type=float, default=0.5, help="--actions: Jev threshold for a turn's action types")
     a = ap.parse_args()
     for w in a.worlds:
         if a.actions:
             actions(w, a.thr)
+        elif a.cards:
+            cards(w, a.thr)
         else:
             (channels if a.channels else missing if a.missing else run)(w)

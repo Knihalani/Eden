@@ -1,0 +1,326 @@
+{
+ "batch": "life-sleep-b09",
+ "rows": [
+  {
+   "id": "life-sleep-b09:m0001",
+   "kind": "plan",
+   "text": "Leo (Riya's young son) starts Riverdale Farm Summer Day Camp on Mon 29 Jun 2026: 9:00-16:00 (extended care 8:00-17:30). Drop-off at the Winchester St gate 8:45-9:15, pickup 15:45-16:15 at the same gate. Camper health form, authorized pickup list (photo ID checked for anyone not on it) and optional photo consent must be done in the City camp portal before day 1; the pickup list and photo consent were not complete as of 27 May. Orientation email arrives the Friday before camp. Everything must be labelled; checklist saved in notes 'Day camp checklist'.",
+   "actions": [
+    "family",
+    "reminder",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0002",
+   "kind": "plan",
+   "text": "Riya and family have flights booked for a Vancouver trip Thu 9 Jul to Mon 13 Jul 2026 (3 guests, 4 nights). Accommodation was not yet booked as of 20 May; refundable shortlist near Kitsilano: Kitsilano Inn CAD 289/night (free cancel until 7 Jul), Granville Island Hotel CAD 412/night (until 2 Jul), Days Inn Broadway CAD 199/night (until 8 Jul). Arbutus House B&B excluded as non-refundable. Waiting for Riya to pick one.",
+   "actions": [
+    "travel",
+    "booking",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0003",
+   "kind": "rule",
+   "text": "Standing rule: the assistant must not book or buy anything over Riya's purchase limit (e.g. a four-night hotel stay) without Riya explicitly picking the option first.",
+   "actions": [
+    "purchase",
+    "booking",
+    "travel"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0004",
+   "kind": "person",
+   "text": "Tom Becker is a Lumen Pay colleague (senior to Riya) who collects Instant Payouts status for exec updates; Riya sends him short summaries. Beta status as of 20 May: all 40 merchants live, payout success 99.7% (bar 99.5%), median payout time 18 min (bar under 30 min).",
+   "actions": [
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0005",
+   "kind": "plan",
+   "text": "GA readiness review for Instant Payouts is Wed 10 Jun 2026, 10:00-10:25 (set by Aisha Rahman); GA readiness checklist ticket is PAY-1185.",
+   "actions": [
+    "schedule",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0006",
+   "kind": "procedure",
+   "text": "Instant Payouts beta feedback log: saved in notes as 'Beta feedback log: structure'. Columns: date, merchant, source, quote/summary, theme (speed, notifications, cutoff times, webhooks, copy, other), severity (blocker/annoying/nice-to-have), owner, status, link. Weekly triage on Mondays, 20 minutes, sorted by severity then count per theme. Where the team wants it to live is still open.",
+   "actions": [
+    "work-task",
+    "docs"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0007",
+   "kind": "routine",
+   "text": "Riya commutes to the Lumen Pay office on Tuesdays and Thursdays via the 504 King streetcar (crowded in the morning; the ride home thins out after 18:00). She works from home Mondays, Wednesdays and Fridays.",
+   "actions": [
+    "schedule",
+    "work-task",
+    "travel"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0008",
+   "kind": "routine",
+   "text": "Home waste collection day is Tuesday (set out by 7:00 am, so put bins out the evening before). Garbage and Yard Waste every second week (26 May, 9 Jun, then alternating), Recycling on the other weeks (2 Jun, 16 Jun), Green Bin every week. Yard waste in paper bags or open bins only, bundles under 1.2 m and 20 kg. Calendar reminders set at 20:00 the night before for 25 May and 8 Jun.",
+   "actions": [
+    "home",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0009",
+   "kind": "fact",
+   "text": "Farah Khan (farah@khanaccounting.example.com) is Riya and Sam Okafor's accountant. 2025 T1 returns were e-filed 19 May 2026: Riya's refund is $1,284.60 by direct deposit (about 2 weeks); Sam owes a balance of $212.15, overdue since 30 Apr with interest accruing; childcare expenses are claimed on Sam's return as the lower-income spouse.",
+   "actions": [
+    "finance",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0010",
+   "kind": "plan",
+   "text": "Open money to pay: Sam owes CRA $212.15 for 2025 (overdue, pay promptly), and Farah Khan's prep invoice ($450 + HST = $508.50) was still unpaid on 30 May.",
+   "actions": [
+    "finance",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0011",
+   "kind": "preference",
+   "text": "Riya prefers short answers: three bullets maximum unless she asks for more.",
+   "actions": [
+    "message",
+    "work-task",
+    "docs"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0012",
+   "kind": "routine",
+   "text": "A weekly receipts sweep runs: new receipts from email are filed into the note 'Household expenses 2026'.",
+   "actions": [
+    "finance",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0013",
+   "kind": "fact",
+   "text": "Leo's allergy (confirmed by SickKids allergist, May 2026): allergic to cashews and pistachios only; other tree nuts such as almonds and walnuts are fine. He still carries his EpiPen Jr. in his backpack at all times. School (Edsby, Morse Street PS) and camp health forms were updated to this wording.",
+   "actions": [
+    "health",
+    "food",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0014",
+   "kind": "routine",
+   "text": "Riya checks the 'Payouts Health' Looker dashboard (built by Wen Li; tracks success rate, median payout time, failed-payout reasons) every Monday at 9:30; link https://looker.example.com/dashboards/payouts-health. Weekly calendar reminder set from Mon 1 Jun 2026.",
+   "actions": [
+    "schedule",
+    "reminder",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0015",
+   "kind": "fact",
+   "text": "501 Queen streetcar diversion Sat 30 May to Sun 14 Jun 2026: streetcars go via Gerrard between Broadview and Woodbine due to track work at Queen/Leslie; shuttle buses on Queen E every 6 minutes. Also Line 2 early closure Thu 4 Jun 23:00 between Broadview and Woodbine.",
+   "actions": [
+    "travel",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0016",
+   "kind": "person",
+   "text": "Sam Okafor (Riya's partner) works at Riverdale CI (high school), whose calendar is synced into the family calendar daily. June 2026: exam supervision Fri 12, Mon 15, Wed 17 and Fri 19 Jun; Commencement Thu 25 Jun 18:00-21:00; PD day Fri 26 Jun; staff last day Mon 29 Jun. Sam usually does Friday drop-off, but Fri 12 Jun he must arrive by 08:00, so someone else must do it.",
+   "actions": [
+    "schedule",
+    "family",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0017",
+   "kind": "plan",
+   "text": "Conflict to solve: Thu 25 Jun 2026 Leo's Morse Street class picnic (17:30-19:00) overlaps Sam's Commencement (18:00-21:00), so Sam cannot attend the picnic.",
+   "actions": [
+    "schedule",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0018",
+   "kind": "preference",
+   "text": "Riya prefers the assistant not end every message with an offer or a follow-up question; she finds it like angling for more work.",
+   "actions": [
+    "message",
+    "work-task",
+    "docs"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0019",
+   "kind": "fact",
+   "text": "Riya is a senior PM at Lumen Pay and led the Instant Payouts launch end to end in May 2026 (her first such project); she is proud of it. Wins are collected in the note 'Instant Payouts: wins record' (40 merchants live, 99.7% success, 18 min median; PAY-1199 stale bank destination bug fixed within 24 h; Northbay Coffee retained), for her next review.",
+   "actions": [
+    "work-task",
+    "docs",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0020",
+   "kind": "plan",
+   "text": "Northline Renovations progress draw #3 of $7,200 is due Wed 3 Jun 2026 from the joint account.",
+   "actions": [
+    "finance",
+    "home"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0021",
+   "kind": "episode",
+   "text": "Priya (Riya's friend in Montreal) was told by her landlord of a 7% rent increase for July (on about $1,650/month, $115.50). Under the TAL rules she can refuse in writing within one month of the notice and keep her lease; the TAL 2026 base is about 4.5% (about $74/month) for an unheated unit.",
+   "actions": []
+  },
+  {
+   "id": "life-sleep-b09:m0022",
+   "kind": "person",
+   "text": "Hannah is a neighbour/friend on Logan whose kids include Ellie; Hannah offered to help look after Biscuit (Riya's dog). Biscuit howls at sirens (fire trucks); kid-friendly explanation: he thinks a far-away dog is calling and sings back to say 'I'm here'.",
+   "actions": [
+    "pet",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0023",
+   "kind": "plan",
+   "text": "Riya wants Hannah to feed and walk Biscuit while the family is away in July 2026 (Vancouver trip Thu 9 Jul to Mon 13 Jul), and they will pay her. The text has not been sent: the assistant needs the dates first.",
+   "actions": [
+    "pet",
+    "message",
+    "travel"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0024",
+   "kind": "fact",
+   "text": "Biscuit (Riya's dog) is moving to Riverside Veterinary Clinic; the old clinic is Leslieville Animal Hospital (full chart not yet transferred). His birth date is not on file. Vaccines: Rabies and DHPP 2025-03-14 (next due 2028-03), Bordetella 2026-03-02 (next due 2027-03); PDF in notes as 'Biscuit: vaccinations'. The Riverside intake form link expires Fri 5 Jun 2026.",
+   "actions": [
+    "pet",
+    "health",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0025",
+   "kind": "fact",
+   "text": "Leo attends Morse Street Public School (Grade 2); school updates go through Edsby and School Cash Online. Principal is Ms. D. Fraser.",
+   "actions": [
+    "family",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0026",
+   "kind": "plan",
+   "text": "Leo's Grade 2 Toronto Zoo trip is Thu 11 Jun 2026; the permission form and $18 fee are due Thu 4 Jun (Fri 5 Jun is a PA day) via School Cash Online. Volunteers are needed, 2 per class.",
+   "actions": [
+    "family",
+    "finance",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0027",
+   "kind": "plan",
+   "text": "Leo's school library books are due back to Morse Street PS by Fri 12 Jun 2026 (a notice goes out for missing books). Lost and found items are donated Mon 22 Jun, so label clothing and water bottles.",
+   "actions": [
+    "family",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0028",
+   "kind": "plan",
+   "text": "Morse Street PS end of year 2026: Track and Field Day Wed 17 Jun (rain date Thu 18 Jun; volunteers needed), report cards via Edsby Tue 23 Jun, primary class picnic Thu 25 Jun 17:30, last day Fri 26 Jun with 12:00 early dismissal, TPL Summer Reading Club starts Sat 27 Jun.",
+   "actions": [
+    "family",
+    "schedule",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0029",
+   "kind": "plan",
+   "text": "Conflict: Fri 26 Jun 2026 Leo's school dismisses early at 12:00, overlapping Riya's work-calendar block 'Payouts GA go/no-go prep' 11:30-12:00. Pickup needs planning.",
+   "actions": [
+    "schedule",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0030",
+   "kind": "plan",
+   "text": "Riya is arranging a team lunch for 8 people near the Lumen Pay office (King St W) next Thursday (11 Jun 2026) to celebrate the beta wrapping up. Top candidate Saffron Lane (South Indian, 4.6, groups up to 12, private corner table); alternatives Planta Queen (set menu for 8+) and Pai (walk-in only). Time not yet chosen, availability not yet checked.",
+   "actions": [
+    "booking",
+    "schedule",
+    "food"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0031",
+   "kind": "plan",
+   "text": "Basement dehumidifier (Frigidaire 50-pint FFAP5033W1) stopped collecting water (fan runs). Bought 6 Jul 2025 at Canadian Tire Leaside, order #CT-5523-118, $319.21, no protection plan. 1-year parts and labour warranty until about 6 Jul 2026 (sealed system 5 years). Canadian Tire will not exchange (90-day returns), so claim direct with Frigidaire (1-800 line Mon-Fri 8:00-20:00 ET or online form; needs serial number from back label). Online claim form drafted but not submitted. Call reminder Mon 8 Jun 12:15. Basement humidity was 61%; Hannah Cho has a spare 30-pint to borrow.",
+   "actions": [
+    "home",
+    "purchase",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0032",
+   "kind": "routine",
+   "text": "Riya posts a weekly payouts status update in #payouts-launch every Friday by 16:00 (workstreams colour-coded; GA docs was amber on 29 May).",
+   "actions": [
+    "work-task",
+    "reminder",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0033",
+   "kind": "plan",
+   "text": "Sprint planning is on 15 Jun 2026. Riya must cut two items from Onboarding v2.1 scope: draft is 44 pts versus 30 pts capacity (over by 14). Candidates: bulk CSV import (13, not started), partner referral codes (5), business-verification retry (8), progress-saving (8); keep accessibility fixes (in progress) and French onboarding emails. Each cut needs a line on what is lost and when it returns.",
+   "actions": [
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b09:m0034",
+   "kind": "routine",
+   "text": "Biscuit's lunchtime walks: Jess M. from Rover walks him Tuesdays and Thursdays at 12:00 (30 min, $27 per walk, from Tue 9 Jun 2026, about $54/week). On Riya's work-from-home days (Mon, Wed, Fri) she walks Biscuit herself at 12:00 around Greenwood Park.",
+   "actions": [
+    "pet",
+    "schedule",
+    "finance"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/life/cards/life-sleep-b09.json"
+}

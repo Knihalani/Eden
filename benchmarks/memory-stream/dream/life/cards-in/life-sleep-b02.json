@@ -1,0 +1,505 @@
+{
+ "batch": "life-sleep-b02",
+ "rows": [
+  {
+   "id": "life-sleep-b02:m0001",
+   "kind": "fact",
+   "text": "Riya Malhotra's Q4 2025 onboarding goal at Lumen Pay: lift signup -> first payout conversion from 41% to 48% by end of Q4. Biggest drop-offs: KYC document upload (22% drop, mostly mobile, 'proof of address'), bank verification micro-deposit wait of 1-2 business days, and merchant confusion at the 'payout schedule' step. Experiments: E14 instant bank verification (50% of new signups, started 2025-10-06) and E15 reordered steps, business details before personal ID (started 2025-10-13). Compliance says no to skipping KYC for merchants under $1k/month.",
+   "actions": [
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0002",
+   "kind": "fact",
+   "text": "Early E14 (instant bank verification) read on 2025-10-19: 47.1% conversion vs control 41.9%, but inflated by an Android kyc_submitted double-fire (~6% duplicates since 2025-10-08, ticket ONB-212, owner Aisha). Do not quote the E14 lift until the fix is applied. E15 reorder arm: 44.0% vs 43.7% control after 1 week, not significant.",
+   "actions": [
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0003",
+   "kind": "person",
+   "text": "Riya's onboarding and payouts colleagues at Lumen Pay: Aisha Rahman (engineering, Bank rails tickets such as ONB-212, PAY-352, PAY-355), Diego Fernandez (design and copy, Figma, Merchant UI, payout schedule copy), Wen Li (data and Looker analysis, E14 metrics), Tom Becker (senior stakeholder, optional attendee at reviews, roadmap pre-reads and dry runs), Mo (owns PAY-344 negative-balance recovery), Olivia Grant (sales, asks about instant payouts timing for prospects).",
+   "actions": [
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0004",
+   "kind": "fact",
+   "text": "Riya lives in Leslieville, Toronto (postal area M4M) with her partner Sam Okafor and their six-year-old son Leo (Grade 2 at Morse Street PS, Ms. Alvarez's class). The household has a beagle named Biscuit.",
+   "actions": [
+    "family",
+    "home"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0005",
+   "kind": "plan",
+   "text": "Outside tap at the back of Riya's house is dripping and could freeze. On 2025-10-19 she planned to call Riverside Drain & Plumbing (4.7, Broadview Ave, 24/7 emergency) on 2025-10-20. Alternatives found: East End Plumbing Co. (4.8, Queen St E, service call $129, frost-free hose bib replacement from $285 installed, openings Tue 21 Oct 8-10 and Wed 22 Oct 13-15) and Coxwell Plumbing & Heating (4.6). A frost-free replacement is better than a washer fix. A plumber was later fixing it (Nov 2025).",
+   "actions": [
+    "home",
+    "booking",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0006",
+   "kind": "routine",
+   "text": "Riya takes Spanish lessons with her tutor Carlos Mendez every Thursday at 19:30, $45 per lesson ($180 for 4 lessons). Her recurring mistakes, saved in Notes / Spanish: ser vs estar (emotions, locations), por vs para, and the subjunctive after 'cuando' for future events (cuando llegue, not cuando llego). Wants to be quizzed on these.",
+   "actions": [
+    "learning",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0007",
+   "kind": "fact",
+   "text": "Toronto Hydro is paid by autopay from the TD joint account (bill $142.18 for 2025-09-12 to 2025-10-11, due 2025-10-30). No action needed on the hydro bill.",
+   "actions": [
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0008",
+   "kind": "routine",
+   "text": "Every Friday by 16:00 Riya posts the payouts status update in #payouts-launch: five bullets with red/amber/green for each workstream. A recurring reminder is set Fridays 15:00-15:30 (starts 2025-10-24). Pre-draft the update from Linear for her to edit.",
+   "actions": [
+    "work-task",
+    "reminder",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0009",
+   "kind": "routine",
+   "text": "Friday evening is pizza and movie night at home, 18:00-21:00: Leo picks the movie and Sam makes the pizza dough. Keep Friday evenings clear (calendar event marked busy, starts 2025-10-24).",
+   "actions": [
+    "schedule",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0010",
+   "kind": "episode",
+   "text": "Riya finished her first half marathon, the Toronto Waterfront Half Marathon (21K), on 2025-10-19 with an official chip time of 2:04:37. Her friend Marcus trained with her every week. Saved in Notes / Health 'Running log'.",
+   "actions": [
+    "health"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0011",
+   "kind": "plan",
+   "text": "Riya's Costco Executive membership ($130/yr) renews 2025-11-18. She made only 5 trips in the last year ($1,141.20 total), earned $22.82 in the 2% reward, and Gold Star is $65/yr. Recommendation given: downgrade to Gold Star before 18 Nov rather than cancel. Riya has not decided yet.",
+   "actions": [
+    "finance",
+    "purchase",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0012",
+   "kind": "person",
+   "text": "Sam Okafor is Riya's partner and Leo's other parent. He teaches at Riverdale Collegiate Institute (Gerrard St E), room 214, makes the pizza dough on Fridays, and has edit access to the family photo albums.",
+   "actions": [
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0013",
+   "kind": "person",
+   "text": "Marcus Bell is Riya's friend and running partner who trained with her weekly for the half marathon. His sister is moving to Calgary in January 2026 with her husband and a toddler; she wants a walkable, not-crazy-expensive neighbourhood (suggested Bridgeland-Riverside, Killarney-Glengarry, Mount Pleasant, Tuscany).",
+   "actions": [
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0014",
+   "kind": "plan",
+   "text": "Riya wants a proper yearly running recap in December: calendar reminder Sun 2025-12-28 10:00 to build the 2025 running recap from Notes / Running log (entries so far: Toronto Waterfront Half Marathon 2025-10-19, 2:04:37).",
+   "actions": [
+    "reminder",
+    "health"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0015",
+   "kind": "person",
+   "text": "Riya's mother Anjali lives in Bandra (Bandra West), Mumbai. Her household helper is Sunita; Riya sent her a festival bonus of about 15,000 INR in Nov 2025 (about $236.59 CAD at 1 CAD = 63.4 INR on 2025-11-01).",
+   "actions": [
+    "finance",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0016",
+   "kind": "person",
+   "text": "Kabir is a family member (in the family chat) whose daughter Ira took her first steps on 2025-11-02.",
+   "actions": [
+    "family",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0017",
+   "kind": "fact",
+   "text": "E14 (instant bank verification) lift after the ONB-212 Android double-fire fix: +4.3 pts (was +5.2 before the fix), per Wen on 2025-11-02. Use the corrected number when reporting.",
+   "actions": [
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0018",
+   "kind": "plan",
+   "text": "Leo's passport expires in January 2026 and Riya wants to renew it. Simplified child renewal: form PPTC 482, two identical photos (one signed by a guarantor), current passport, $57 for 5 years; one parent can sign; 10 business days in person, 20 by mail; child need not attend. Appointment options found: Service Canada 25 St. Clair Ave E (Thu 13 Nov 10:20, Mon 17 Nov 11:40), Scarborough Town Centre (Wed 12 Nov 9:50, Sat 15 Nov 10:10); photo studios: Queen East Photo & Print ($17.99), Shoppers Queen & Carlaw ($15.99), Gerrard Photo Studio ($22). Booking link in Notes / Leo passport. Nothing booked yet.",
+   "actions": [
+    "family",
+    "travel",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0019",
+   "kind": "fact",
+   "text": "Household finances: monthly household budget is $4,600 (October 2025 came in at $4,812, mostly groceries and a $189 Halloween/party run). The kitchen renovation has a $48,000 budget tracked in its own account. Bills on autopay include Toronto Hydro and Rogers mobile ($118.40, around the 6th); Visa ending 4417.",
+   "actions": [
+    "finance",
+    "home"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0020",
+   "kind": "procedure",
+   "text": "Riya's personal inbox: promo emails were mass-unsubscribed on 2025-11-02 (31 of 38 senders); three senders needing a login (Old Navy, Cineplex, Air Miles) are saved in Notes / Inbox cleanup. A filter now auto-labels receipts as 'Receipts'. Skip transactional senders and real people when cleaning up (Toronto Hydro, Presto, Service Ontario, TD Alerts).",
+   "actions": [
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0021",
+   "kind": "rule",
+   "text": "Riya's writing style rules (Notes / Work): no em dashes in her drafts, use commas or full stops instead, every time; say 'merchant', not 'customer' or 'user', in payouts docs; short paragraphs, no more than 3 sentences.",
+   "actions": [
+    "work-task",
+    "message",
+    "docs"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0022",
+   "kind": "fact",
+   "text": "October 2025 onboarding funnel: 9,574 signups, 7,402 KYC complete, 5,233 bank verified, 4,218 first payout (44.1% conversion); weekly conversion rose from 41.2% (wk of Sep 29) to 45.6% (partial wk of Oct 27). Numbers use the corrected Android event (ONB-212 fix applied retroactively). Goal is 48% by end of Q4.",
+   "actions": [
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0023",
+   "kind": "plan",
+   "text": "Northbridge Bank (contact Katalin Varga) proposed moving the same-day settlement cutoff for Lumen Pay payouts from 16:00 ET to 14:00 ET effective 2026-01-12, with an optional 18:00 ET second batch window at $0.04 per transfer. Riya does not like it. 38.6% of daily payout files (44.1% of volume) are submitted 14:00-16:00 ET, peak 15:00-15:45. MSA (signed 2024-03-18) s7.2 guarantees a cutoff no earlier than 16:00 ET through the initial term ending 2026-03-31, and s14.1 requires 120 days' written notice and mutual agreement for material service-level changes. After the 2025-11-03 call, Katalin said Northbridge would revisit the timeline and return by 2025-11-14 with options including the 18:00 window at no extra cost through Q1. PAY-355 (cutoff config) depends on this decision.",
+   "actions": [
+    "work-task",
+    "message",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0024",
+   "kind": "routine",
+   "text": "Bin day: green bin and blue bin go to the curb Monday night for Tuesday collection (green bin day is Tuesday). A scheduled 08:30 reminder fires, and Riya wants a nudge at 20:00 if they are not out.",
+   "actions": [
+    "home",
+    "reminder",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0025",
+   "kind": "preference",
+   "text": "Riya's mother Anjali loves Kanjeevaram silk sarees and Darjeeling tea, and finds gift cards impersonal: never give her a gift card, she would be quietly hurt. She has been a bit lonely lately. Saved in Notes / Mom (Anjali).",
+   "actions": [
+    "purchase",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0026",
+   "kind": "plan",
+   "text": "Riya is shopping for a gift for mom in Nov 2025 (delivery to Bandra West). Options saved in Notes / Mom gift: Kanchi Silks House (Dadar) pure Kanjeevaram temple-border saree in peacock blue, Rs. 24,500 incl. GST, in line with market, free Mumbai delivery, 7-day exchange, video-call viewing by appointment; silkweave.example.com (free returns 10 days); Saree Mandir (Bandra, same-day delivery); tea boxes: Glenburn gift box Rs. 2,450 (free handwritten note card), Makaibari Muscatel Rs. 1,980, Teabox Discovery Set Rs. 1,650. A saree plus a tin of tea was suggested. No purchase confirmed yet.",
+   "actions": [
+    "purchase",
+    "family",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0027",
+   "kind": "routine",
+   "text": "Riya's standing work calendar at Lumen Pay: daily standup (payouts + onboarding) 09:45-10:00 on weekdays; Spin Society (spin class) Wednesdays 06:00-07:00; onboarding funnel weekly Wednesdays 11:00. She works as the PM for payouts and onboarding.",
+   "actions": [
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0028",
+   "kind": "plan",
+   "text": "Payouts v2 launch is 2025-12-08, with code freeze 2025-12-01. Workstreams: Ledger, Bank rails, Merchant UI, Risk & holds, Comms (47 open issues as of 2025-11-06). At risk: Bank rails (PAY-352 blocked on Northbridge sandbox credentials, promised Mon 2025-11-10 by 12:00 ET; PAY-355 cutoff config blocked on Northbridge's decision due 2025-11-14) and Risk & holds (PAY-344 negative-balance recovery due 2025-12-01, may slip to 2025-12-03). Merchant UI has unestimated PAY-360, PAY-361, PAY-366. Owners: Aisha (Bank rails), Diego (Merchant UI), Mo (PAY-344). Riya posts the at-risk summary in the #payouts-launch thread.",
+   "actions": [
+    "work-task",
+    "reminder",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0029",
+   "kind": "preference",
+   "text": "Riya loves literary mysteries (Tana French is her absolute favourite) and spy dramas (she loved Slow Horses). She has already seen The Night Manager. Do not recommend things she has seen.",
+   "actions": [
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0030",
+   "kind": "fact",
+   "text": "Riya's Toronto Public Library card expires 2026-02-14. Her nearest branch is Leslieville (also uses Pape/Danforth).",
+   "actions": [
+    "reminder",
+    "learning"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0031",
+   "kind": "plan",
+   "text": "Marcus Bell's party is Saturday 2025-11-08, starting at 2pm (bring nothing but yourselves, and the cake Riya promised). Cake: Bobbette & Belle order #BB-20951, 8-inch vanilla, inscription 'Chicago done. Legend.', pickup Sat 2025-11-08 11:00-13:00 at the Queen St E shop, $68 already paid. The shop texts when ready.",
+   "actions": [
+    "schedule",
+    "purchase",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0032",
+   "kind": "person",
+   "text": "Riya's mother Anjali's birthday is November 3. Riya sends flowers through the Mumbai florist every year and calls her in the morning, Mumbai time. A yearly calendar reminder is set for 31 Oct (09:00) to order in time. In 2025 mom said the flowers were the nicest yet.",
+   "actions": [
+    "reminder",
+    "purchase",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0033",
+   "kind": "plan",
+   "text": "Priya (Riya's close friend, currently on a mystery kick) visits the weekend of about 2025-11-15. Riya wants a nice hardcover plus a short card: suggestion Tana French's 'The Hunter' (Book City Danforth $36, ships 2-3 days; Type Books Queen St W $36 with gift wrapping, pickup same day). Riya will decide and has not ordered yet. Priya's firm is debating a four-day week; she has an $18k late-paying client she is reluctant to chase.",
+   "actions": [
+    "purchase",
+    "message",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0034",
+   "kind": "person",
+   "text": "Nate Kowalczyk of Northline Renovations is Riya's kitchen renovation contractor. He prefers texts over calls, so never call him; he starts work at 7:30 am. Mobile +1 416-555-0187, nate@northlinereno.example.com.",
+   "actions": [
+    "message",
+    "home"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0035",
+   "kind": "fact",
+   "text": "Kitchen reno budget is $48,000 (Northline Renovations; tracked in the 'Kitchen reno budget' sheet and the finance account). As of 2025-11-06: 5 invoices (NR-1041 to NR-1115) totalling $29,750 + HST, $33,617.50 invoiced incl. HST; 2 change orders ($2,690 + HST); NR-1115 (change order #2, pot lights, $1,320 + HST = $1,491.60) unpaid, due 2025-11-19. Cabinets were to arrive Mon 2025-11-10 (delivery 8-10 am, Nate there from 7:30).",
+   "actions": [
+    "home",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0036",
+   "kind": "plan",
+   "text": "Electrical panel upgrade at Riya's house (100 A to 200 A): Brightline Electric filed ESA notification #7104-2289 on 2025-11-03; the electrician comes the week of 2025-11-10. Inspection not yet booked and no Toronto Hydro disconnect/reconnect request found, so ask the electrician. Riya has a question list (permit, amperage, power-off duration, spare capacity for EV charger or heat pump, dedicated kitchen breakers, AFCI/GFCI, drywall patching, warranty).",
+   "actions": [
+    "home",
+    "booking",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0037",
+   "kind": "plan",
+   "text": "Onboarding flows walkthrough with Diego and Aisha on 2025-11-13 15:00-15:30 (agenda: new KYC step order, instant bank verification flow, payout schedule step copy v2, open questions and owners). Notion agenda page 'Onboarding flows walkthrough (2025-11-13)' linked in the invite; Figma 'Onboarding v3 flows'.",
+   "actions": [
+    "work-task",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0038",
+   "kind": "preference",
+   "text": "Leo needs new winter boots before the snow (his old ones' soles are peeling; Sam asked on 2025-11-06). Size: kids' 13. He wants ones he can put on himself (velcro or wide pull-on). Plan: insulated, waterproof, rated to about -30 C; bring Riya 2-3 options with prices and delivery dates before ordering anything. Budget not yet given.",
+   "actions": [
+    "purchase",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0039",
+   "kind": "fact",
+   "text": "Toronto yard waste is collected every other week on Riya's green bin day (Tuesday). Remaining 2025 pickups: Tue 2025-11-11, Tue 2025-11-25, Tue 2025-12-09 (last of the season). Paper bags only (under 20 kg each), no plastic. After 9 Dec leaves can go to the Commissioners St drop-off depot. Riya has about 12 bags of leaves.",
+   "actions": [
+    "home",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0040",
+   "kind": "fact",
+   "text": "Moving the kitchen sink to the island (new drain and vent, loop vent or air admittance valve) requires a plumbing permit in Toronto (about $250-400, review about 10 business days, rough-in and final inspections; the contractor or a licensed plumber applies). Replacing a sink in the same spot does not. This was included in Northline change order #3.",
+   "actions": [
+    "home",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0041",
+   "kind": "plan",
+   "text": "Carlos Mendez offered Riya a Spanish winter intensive for January to April 2026: two lessons a week (new Tuesday 19:30 plus the usual Thursday 19:30), 8 lessons a month for $340 instead of $360 ($42.50 a lesson vs $45; about $640 more over the four months). Only 3 spots; Riya must reply by 2025-11-21. No soft conflicts found except 17 Feb 2026 (Parent council meeting 19:00-20:00) and 10 Mar 2026 (Priya in town, tentative). Riya has not decided.",
+   "actions": [
+    "learning",
+    "finance",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0042",
+   "kind": "routine",
+   "text": "Biscuit's dog walker Jess (Rover) walks him at noon on Mondays, Wednesdays and Fridays starting 2025-11-10, $25 per walk plus a $2.75 Rover fee, paid by Visa ending 4417 after each walk (calendar events are shown as free). Jess asked for the lockbox code and whether Biscuit pulls on the leash.",
+   "actions": [
+    "pet",
+    "finance",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0043",
+   "kind": "fact",
+   "text": "Biscuit is the family's beagle. Pet budget is $350/month; with dog walking it was estimated at $512/month on 2025-11-07.",
+   "actions": [
+    "pet",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0044",
+   "kind": "plan",
+   "text": "Leo's Grade 2 Riverdale Farm trip consent form is due Wed 2025-11-12 ($8, pay on School Cash Online); it was still not submitted as of 2025-11-07.",
+   "actions": [
+    "family",
+    "finance",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0045",
+   "kind": "routine",
+   "text": "Biscuit's dog walker Felipe (Paws on Pape) walks him at noon on Tuesdays and Thursdays, starting 2025-11-11, $25 per walk, invoiced monthly by e-transfer (first invoice expected 2025-12-01). With Jess (Mon/Wed/Fri) Biscuit is covered every weekday.",
+   "actions": [
+    "pet",
+    "schedule",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0046",
+   "kind": "fact",
+   "text": "Dog walking costs $125/week (about $542/month: Jess $75/week, Felipe $50/week). Monthly pet spend is about $729 against a $350 pet budget, which Riya will discuss with Sam.",
+   "actions": [
+    "pet",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0047",
+   "kind": "plan",
+   "text": "Payouts v2 launch-blocking issues (Linear flags, confirmed 2025-11-11): PAY-344, PAY-352, PAY-355, PAY-360, PAY-371, PAY-379, PAY-384, PAY-385, PAY-389, PAY-391. PAY-360 is the only unestimated blocker. PAY-366 (migration copy) is not flagged but is needed for the existing-merchant email. Non-blocking items (nav rename, dark mode chips, illustrations, sales one-pager, pricing page, translations, API docs) can land in launch week or after. Notion doc 'Payouts v2 launch risks (2025-11-12)' lists the six open risks.",
+   "actions": [
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0048",
+   "kind": "person",
+   "text": "Ira is Kabir's daughter, 11 months old as of 2025-11-11, waking about 3 times a night. Kabir asked Riya about sleep training; resources (Caring for Kids, Precious Little Sleep, Raising Children Network) are saved in Notes / For Kabir.",
+   "actions": [
+    "family",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0049",
+   "kind": "plan",
+   "text": "Riya needs winter tires on the 2019 Mazda CX-5 before the snow. The winter tires are stored at Downtown Mazda. Slots found 2025-11-11: Downtown Mazda Sat 15 Nov 8:30, Mon 17 Nov 10:00, Wed 19 Nov 13:00 (changeover plus storage swap $129.95, about 60 min); Mr. Lube Queen & Carlaw Thu 13 Nov 11:00 ($89.99, but tires would need to be collected first). Nothing booked yet.",
+   "actions": [
+    "booking",
+    "home",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0050",
+   "kind": "fact",
+   "text": "Household grocery spend (TD joint chequing + Visa): August 2025 $1,108.42, September 2025 $1,346.29 (includes Costco $312.44 on 2025-09-27), October 2025 $972.55 (Farm Boy, Loblaws, No Frills). Three-month average $1,142.42. Last Costco trip was 2025-09-27.",
+   "actions": [
+    "finance",
+    "home",
+    "food"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0051",
+   "kind": "fact",
+   "text": "Riya's stress spikes before quarterly roadmap reviews with the exec team and when renovation costs creep; she also sleeps badly the night before big presentations. Helpful: front-load prep, freeze the deck the evening before, light evening, screens off by 21:30, printed notes, avoid raising reno questions with Nate until after the review unless urgent. Saved in Notes / Wellbeing.",
+   "actions": [
+    "work-task",
+    "schedule",
+    "health"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0052",
+   "kind": "plan",
+   "text": "Q4 Quarterly Roadmap Review with the exec team is Thu 2025-11-20 10:30-12:00. Prep: roadmap deck review with Aisha Tue 2025-11-18 13:00; roadmap dry run with Tom Wed 2025-11-19 14:00, then deck freeze with no edits after 17:00; read the three opening lines once at breakfast Thursday.",
+   "actions": [
+    "schedule",
+    "work-task",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0053",
+   "kind": "fact",
+   "text": "Kitchen reno cost status as of 2025-11-17: Northline change order #3 (move sink to island, incl. loop vent and plumbing permit) is $2,150 + HST ($2,429.50). Invoiced plus approved change orders $36,047.00 incl. HST; remaining contracted work (cabinet install, counters, backsplash, finishing) $9,850.00 incl. HST; projected total $45,897.00 against the $48,000 budget, $2,103 headroom (4.4%). Change orders so far: 3, totalling $4,840 + HST. NR-1115 ($1,491.60) due 2025-11-19.",
+   "actions": [
+    "home",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b02:m0054",
+   "kind": "rule",
+   "text": "Carlos Mendez charges for Spanish lessons cancelled or moved with under 24 hours' notice. The week of 2025-11-17 the Thursday lesson was moved to Tuesday 18 Nov 19:30.",
+   "actions": [
+    "schedule",
+    "learning",
+    "finance"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/life/cards/life-sleep-b02.json"
+}

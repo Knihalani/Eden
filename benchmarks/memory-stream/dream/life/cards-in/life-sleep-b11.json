@@ -1,0 +1,265 @@
+{
+ "batch": "life-sleep-b11",
+ "rows": [
+  {
+   "id": "life-sleep-b11:m0001",
+   "kind": "preference",
+   "text": "On 2026-07-07 Riya had 8 promo senders unsubscribed and archived (Crate & Barrel, Wayfair, HelloFresh, Old Navy, Uber marketing, Sephora, Cineplex, Best Buy); a filter keeps future mail from them out of the inbox. Kept Chapters, Duolingo, Lululemon and Notion because she opens them sometimes.",
+   "actions": [
+    "message",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0002",
+   "kind": "person",
+   "text": "Riya's household: partner Sam Okafor (a teacher; she made chemistry-pun end-of-year cards with him for his students), son Leo (age 7, sleepwalks occasionally, loves dinosaurs), and beagle Biscuit. They live in Leslieville, Toronto.",
+   "actions": [
+    "family",
+    "pet"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0003",
+   "kind": "person",
+   "text": "Hannah Cho is a friend/neighbour of Riya (phone +1 416-555-0148) with a garden and a backyard pool, and a daughter Ellie; Leo plays with her kids.",
+   "actions": [
+    "message",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0004",
+   "kind": "person",
+   "text": "Riya's cousin Neha lives in Calgary and was choosing between two job offers (one $15k more with a 50 min commute each way, one 10 min away and fully hybrid) in July 2026; Neha asked Riya for advice.",
+   "actions": [
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0005",
+   "kind": "routine",
+   "text": "Toronto Hydro bill is paid by auto-pay from the TD joint account (July bill $142.18 on Jul 21; August est. $150 on Aug 20). A/C use raises it.",
+   "actions": [
+    "finance",
+    "home"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0006",
+   "kind": "person",
+   "text": "Riya's family: Kabir (brother, lives in Vancouver) and his wife Mei have a newborn, Ira (Riya's niece; naming ceremony in July 2026, visited Jul 9-13). Riya's mother is Anjali (family chat 'Malhotra family'). Kabir is mailing Leo's forgotten sock.",
+   "actions": [
+    "family",
+    "message",
+    "travel"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0007",
+   "kind": "rule",
+   "text": "Riya's packing rule (set 2026-07-09): carry-on only for any trip under a week, and a shared packing checklist for Leo (shared with Sam) prepared three days before departure. Lesson from Vancouver: long baggage wait, Leo's swim shirt and stuffie (Rexy) were forgotten.",
+   "actions": [
+    "travel",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0008",
+   "kind": "rule",
+   "text": "Rental cars: Riya's TD Visa covers collision/loss damage for rentals (up to 48 days, MSRP up to $65,000) if the rental company's LDW is declined and the full rental is charged to the card, so decline LDW. Always refill the tank before returning (rental fuel charge was $9.49/L plus $25) and shake out sand.",
+   "actions": [
+    "travel",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0009",
+   "kind": "fact",
+   "text": "Kitchen reno budget is $56,000 (raised Jul 2026 after the electrical panel had to be upgraded to 200 A); contingency is used up. Sam relays reno updates from the kitchen crew; an electrician is part of the work.",
+   "actions": [
+    "home",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0010",
+   "kind": "plan",
+   "text": "Leo's birthday is on July 17 (turning 8); his present, a LEGO Jurassic World T. rex set (Indigo order #IND-778120), delivers July 15, 2026.",
+   "actions": [
+    "family",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0011",
+   "kind": "plan",
+   "text": "Date night with Sam on Sat 2026-07-18 still needs a restaurant reservation; Riya said she would give a neighbourhood/time on 2026-07-14.",
+   "actions": [
+    "booking",
+    "schedule",
+    "food"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0012",
+   "kind": "plan",
+   "text": "Leo's Toronto Public Library books (DK Dinosaur Encyclopedia, Dog Man, The Bad Guys #3) were renewed to due date 2026-08-04.",
+   "actions": [
+    "family",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0013",
+   "kind": "plan",
+   "text": "Lisbon trip booked on TAP for 3 passengers (Riya, Sam, Leo): outbound TP 260 YYZ 21:40 Fri 2026-12-18 to LIS 09:35 Sat Dec 19; return TP 259 LIS 12:30 Wed 2026-12-30 to YYZ 15:05. Paid $3,442.80 on the TD Visa; on the family calendar. Seats not yet assigned (TAP $38/seat/leg for 3 together, rows 24-31; free at check-in). Lisbon is 5 hours ahead of Toronto.",
+   "actions": [
+    "travel",
+    "booking",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0014",
+   "kind": "plan",
+   "text": "Leo's passport expires 2027-02-20, which is too soon for the Lisbon trip (Portugal needs 3 months validity past 30 Dec, i.e. to 2027-03-30). It must be renewed: child renewal takes about 20 business days by mail, start in August. Form PPTC 155 is in Drive/Family/Passports; needs both parents' signatures, 2 photos, fee $57 (5-year). Riya's passport expires 2030-05-14, Sam's 2028-11-02.",
+   "actions": [
+    "travel",
+    "family",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0015",
+   "kind": "fact",
+   "text": "TAP baggage for Lisbon: car seats/boosters check free (one per child) on top of the allowance; Leo is 7 and likely uses a backless booster (Lisbon rental booster is about EUR 8/day, capped at EUR 60; taxis/Bolt provide none). Power banks carry-on only. Carry-on 8 kg plus a personal item.",
+   "actions": [
+    "travel",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0016",
+   "kind": "plan",
+   "text": "The family will be in Lisbon on Christmas Eve (24 Dec, consoada); most Lisbon restaurants close early or have set menus then, and booking opens in October. Options: Taberna da Rua das Flores (Chiado, EUR 45 menu), Time Out Market (until 18:00), Baixa hotel restaurants; Cervejaria Ramiro is closed Dec 24-25. Not booked yet.",
+   "actions": [
+    "travel",
+    "booking",
+    "food"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0017",
+   "kind": "person",
+   "text": "Riya's friend Tara from yoga is maid of honour at a wedding in October 2026 and is nervous about her speech.",
+   "actions": [
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0018",
+   "kind": "person",
+   "text": "Riya's best friend from McGill, Priya Nair, moved back to Toronto in July 2026 and lives in Roncesvalles; she is an architect at a new firm on Spadina.",
+   "actions": [
+    "schedule",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0019",
+   "kind": "fact",
+   "text": "Work (Lumen Pay): Instant Payouts general availability moved to 2026-11-04 because Wavecrest Bank's partner certification slipped seven weeks. Tom knows. No public Wavecrest certification timeline exists; contact via their partner manager or Aisha, who owns follow-up tickets PAY-1241 and PAY-1242.",
+   "actions": [
+    "work-task",
+    "message",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0020",
+   "kind": "plan",
+   "text": "Lisbon accommodation: two-bedroom Airbnb apartment in Alfama near the Miradouro de Santa Luzia, reserved 2026-07-26 for the whole December stay.",
+   "actions": [
+    "travel",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0021",
+   "kind": "plan",
+   "text": "Plan for dog Biscuit (beagle) during Lisbon: board him at Dogs Den Kennels in Scarborough. Quote of 2026-08-02: 13 nights (Dec 17-30), $598 plus tax, two walks a day and a private run; valid 30 days (to about Sep 1); bordetella and rabies certificates are required at drop-off. Dates not yet held.",
+   "actions": [
+    "pet",
+    "travel",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0022",
+   "kind": "preference",
+   "text": "Leo wants to ride every tram in Lisbon (famous tram 28 runs through Alfama, near the Airbnb) and likes pastéis de nata.",
+   "actions": [
+    "travel",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0023",
+   "kind": "fact",
+   "text": "Home insurance renewal (policy HO-4471823) for 2026-09-01 to 2027-09-01: premium $1,812 (up from $1,640), dwelling limit $870,000, deductible $1,000; auto-renews Sep 1 unless changed. New condition: renovations over $25,000 must be reported to the insurer within 30 days, and damage by contractors without liability insurance is excluded. The $56,000 kitchen reno triggers this.",
+   "actions": [
+    "finance",
+    "home"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0024",
+   "kind": "plan",
+   "text": "To do: call the insurer about the renovation-over-$25,000 clause (Mon 2026-08-10 if closed Saturday); the weekend checklist 'Weekend Aug 8-9' also lists gate repair, dry cleaning, oil change, a gift for Sunday's kid birthday party.",
+   "actions": [
+    "home",
+    "reminder",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0025",
+   "kind": "routine",
+   "text": "Leslieville garbage/recycling is Thursday 'Day 2': garbage and yard waste some Thursdays (Aug 13, Aug 27), recycling Aug 20, green bin every week. Yard waste in kraft paper bags or labelled bins only, no plastic, out by 7:00.",
+   "actions": [
+    "home",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0026",
+   "kind": "plan",
+   "text": "Fall family picks to discuss with Sam (saved in notes 'Toronto events fall 2026'): Evergreen Brick Works Harvest Festival Sep 12-13 (free); Doors Open Sep 26-27 (free); Nuit Blanche family zone Oct 3 (free, nothing else scheduled after 15:00); Downey's Farm pumpkin patch Oct 10-12 ($15 pp); Boo at the Zoo Oct 24-25 and Oct 31 (tickets on sale Sep 15, members early Sep 8).",
+   "actions": [
+    "family",
+    "schedule",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0027",
+   "kind": "plan",
+   "text": "Riya must book Leo's eye exam (school sent a note); reminder set Mon 2026-08-10 10:00. The Eye See Eye Learn program gives free exams only for JK to grade 1, until Aug 31; grade 2 students are not eligible. Leo's school is Morse Street PS.",
+   "actions": [
+    "health",
+    "family",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b11:m0028",
+   "kind": "routine",
+   "text": "TD Visa statement is paid automatically in full on the due date each month (balance $4,927.13 in August 2026 including the TAP flights).",
+   "actions": [
+    "finance"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/life/cards/life-sleep-b11.json"
+}

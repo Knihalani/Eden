@@ -1,0 +1,321 @@
+{
+ "batch": "life-sleep-b01",
+ "rows": [
+  {
+   "id": "life-sleep-b01:m0001",
+   "kind": "fact",
+   "text": "Riya's son Leo was born July 17, 2019 (use for forms). In fall 2025 he is in grade 2 at Morse Street Public School; his teacher is Ms. Alvarez (Room 104).",
+   "actions": [
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0002",
+   "kind": "rule",
+   "text": "Contact Ms. Alvarez (Leo's grade 2 teacher at Morse Street PS) through the school's Edsby app, not by email.",
+   "actions": [
+    "message",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0003",
+   "kind": "routine",
+   "text": "School pickup swap (from Sept 2025): Riya picks up Leo and Jun (Hannah Cho's son) on Wednesdays at about 15:20; Hannah does Fridays.",
+   "actions": [
+    "schedule",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0004",
+   "kind": "rule",
+   "text": "Meeting rule for Riya: do not book anything before 9:30 or after 16:30 (it used to be 17:00), and nothing after 15:00 on Fridays because of school pickup.",
+   "actions": [
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0005",
+   "kind": "routine",
+   "text": "Spanish with Carlos Méndez: since Sept 2025 the lesson is every Thursday 20:00 (8:00 pm) on Zoom, 60 minutes, with a homework review at 19:30 (calendar series moved from Tuesdays, starting 18 Sep 2025).",
+   "actions": [
+    "schedule",
+    "learning"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0006",
+   "kind": "preference",
+   "text": "Shopping preference: Riya prefers Canadian retailers (MEC, Indigo, Simons) and skips Amazon whenever a local option ships within a week.",
+   "actions": [
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0007",
+   "kind": "rule",
+   "text": "Sensitive topic: Riya and Sam had a very difficult time trying for a second child in 2024. Do not bring it up unless Riya does.",
+   "actions": [
+    "family",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0008",
+   "kind": "fact",
+   "text": "Riya has a beagle named Biscuit who howls (his 'siren solo').",
+   "actions": [
+    "pet"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0009",
+   "kind": "person",
+   "text": "Mei (Kabir's partner and a houseguest) is lactose intolerant and a big fan of Riya's chana masala. Cook dairy-free for her (no ghee, yogurt, cream; coconut raita, oil naan).",
+   "actions": [
+    "food",
+    "health"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0010",
+   "kind": "plan",
+   "text": "Plan: Kabir and Mei stay with Riya the second weekend of November 2025 (Nov 8-9); Riya will host a proper dinner on Saturday Nov 8 built around chana masala. Menu in note 'Nov dinner - Kabir & Mei': jeera rice, oil naan, aloo gobi, kachumber, coconut raita, coconut milk kheer made a day ahead.",
+   "actions": [
+    "food",
+    "family",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0011",
+   "kind": "plan",
+   "text": "Morse Street PS Picture Day is Thursday 9 October 2025 (online ordering opens Mon 6 Oct); it had no calendar entry yet.",
+   "actions": [
+    "family",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0012",
+   "kind": "plan",
+   "text": "Plan: street yard sale on Sat 4 Oct 2025, 9:00-13:00 (rain date Sun 5 Oct); tables on own driveways, no early birds before 9. The City bans yard-sale signs on poles; use a sandwich board on the boulevard.",
+   "actions": [
+    "home",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0013",
+   "kind": "fact",
+   "text": "Riya's furnace uses 16x25x1 MERV 11 filters, bought as a 4-pack from Home Depot (Leslie St store).",
+   "actions": [
+    "home",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0014",
+   "kind": "person",
+   "text": "Riya's mother Anjali (68) lives alone in Mumbai (Bandra area) since Riya's father died; her flat has stairs. Riya worries about her; ideas discussed: a neighbour or relative nearby with a spare key, a daily 'good morning' WhatsApp signal, medical info written down, stair rails and lighting.",
+   "actions": [
+    "family",
+    "health",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0015",
+   "kind": "preference",
+   "text": "When Riya is anxious or worried, she is calmed by talking through concrete practical plans, not by reassurance like 'it'll be fine'.",
+   "actions": [
+    "health",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0016",
+   "kind": "preference",
+   "text": "Riya asked for shorter answers when she reads late at night in bed (she found replies too wordy).",
+   "actions": [
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0017",
+   "kind": "routine",
+   "text": "Leo has swim lessons every Tuesday at 17:30-18:15 at the Pam McConnell Aquatic Centre (640 Dundas St E, Regent Park), starting 30 Sep 2025.",
+   "actions": [
+    "schedule",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0018",
+   "kind": "plan",
+   "text": "Open to-do for Riya: get passport photos for Leo.",
+   "actions": [
+    "family",
+    "reminder",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0019",
+   "kind": "fact",
+   "text": "Northline Renovations (contact: Nate) is doing renovation work at Riya's home (cabinets). Progress invoice #NR-2207 ($6,500) was due Fri 3 Oct 2025.",
+   "actions": [
+    "home",
+    "finance",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0020",
+   "kind": "fact",
+   "text": "Riya works at Lumen Pay on payouts (planning Q4 2025: reconciliation CSV export v2, payout status webhooks, instant payout fee experiment; ~2.5 engineers; bank partner API migration risk in November). Colleagues include Aisha Rahman, Diego, Wen, Olivia and manager-level contact Tom.",
+   "actions": [
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0021",
+   "kind": "person",
+   "text": "Sam (Sam Okafor) is Riya's partner; they live together with Leo.",
+   "actions": [
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0022",
+   "kind": "rule",
+   "text": "When writing to or for Tom, give one recommendation plus one alternative, not an open-ended list of options (Tom responds much better).",
+   "actions": [
+    "message",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0023",
+   "kind": "rule",
+   "text": "Spanish rule: if a lesson with Carlos clashes with work, message Carlos at least 24 hours ahead to move it; he charges for later cancellations.",
+   "actions": [
+    "schedule",
+    "learning"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0024",
+   "kind": "routine",
+   "text": "Leo takes piano with Mrs. Greene every Monday 16:30-17:15 at her home on Pape Avenue (from Mon 6 Oct 2025).",
+   "actions": [
+    "schedule",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0025",
+   "kind": "routine",
+   "text": "Recurring reminder: replace the 16x25x1 furnace filter every 3 months (first on Sat 4 Jan 2026, then 4 Apr, 4 Jul 2026). Spare filters are on the laundry room shelf.",
+   "actions": [
+    "home",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0026",
+   "kind": "preference",
+   "text": "Travel preference: for family trips to Ottawa Riya always prefers driving the Mazda over the train, leaving early Friday to beat 401 traffic, with a stop at the Big Apple in Colborne (Leo treats it as a rule). Use for Christmas planning. Toronto (Leslieville) to Ottawa Glebe is about 452 km, 4 h 35 min without traffic.",
+   "actions": [
+    "travel",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0027",
+   "kind": "fact",
+   "text": "Sam gets migraines from strong fragrances, so Riya's home has no scented candles or air fresheners; avoid scented gifts (candles, soaps, perfume) for the household.",
+   "actions": [
+    "purchase",
+    "home"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0028",
+   "kind": "plan",
+   "text": "To do before the cold: book the snow tire swap for the Mazda (options found: Leslieville Auto Service Fri 24 Oct 8:30 $70; Kal Tire Eastern Ave Sat 25 Oct 9:00 or 11:30 $79.95; Canadian Tire Leslie St Wed 22 Oct 18:00 $89.99); none booked yet as of 11 Oct 2025. Appointments fill up in late October.",
+   "actions": [
+    "booking",
+    "reminder",
+    "home"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0029",
+   "kind": "plan",
+   "text": "Leo's grade 2 class goes on a Toronto Zoo field trip Wed 22 Oct 2025; permission form and $18 due Fri 17 Oct via School Cash Online. Volunteers needed (2 parents per class).",
+   "actions": [
+    "family",
+    "reminder",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0030",
+   "kind": "plan",
+   "text": "Plan: Northline Renovations cabinet delivery Thu 16 Oct 2025, 8:00-10:00; someone must be home to let the crew in.",
+   "actions": [
+    "home",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0031",
+   "kind": "person",
+   "text": "Grace and Daniel hosted Riya's family for Thanksgiving 2025 in Ottawa (Glebe area); Grace bakes (four pies), Daniel is a civil engineer.",
+   "actions": [
+    "family",
+    "food"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0032",
+   "kind": "episode",
+   "text": "As of Tue 14 Oct 2025 Riya had not reached her mother Anjali since the weekend (no answer to calls or texts) and was worried; she planned to try Anjali's cousin. Anjali's phone often dies.",
+   "actions": [
+    "family",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0033",
+   "kind": "person",
+   "text": "Jun Cho is Leo's best friend and Hannah Cho's son; Leo and Jun walk to Morse Street PS together most mornings.",
+   "actions": [
+    "family",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0034",
+   "kind": "preference",
+   "text": "Writing style: Riya dislikes salesy, press-release hype (exclamation marks, 'game-changing', DM pitches). Prefers calm, concrete wording with one specific change and real names credited.",
+   "actions": [
+    "message",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b01:m0035",
+   "kind": "plan",
+   "text": "Class snack: it is Leo's turn to bring the class snack to Ms. Alvarez's grade 2 class on Fri 17 Oct 2025 (22 students; label everything with ingredients). Ordered PC Express order PCX-77310452 at Real Canadian Superstore, 17 Leslie St, pickup Thu 16 Oct 17:30-18:00, $40.47.",
+   "actions": [
+    "family",
+    "food",
+    "purchase"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/life/cards/life-sleep-b01.json"
+}

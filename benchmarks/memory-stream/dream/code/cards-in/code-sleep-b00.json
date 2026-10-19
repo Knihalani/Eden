@@ -1,0 +1,499 @@
+{
+ "batch": "code-sleep-b00",
+ "rows": [
+  {
+   "id": "code-sleep-b00:m0001",
+   "kind": "fact",
+   "text": "Known gotcha in acme-platform web app: the sign-in redirect loop happens when /login is missing from publicRoutes in apps/web/middleware.ts, and afterSignInUrl must be /dashboard (login page and NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL) or it bounces.",
+   "actions": [
+    "frontend",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0002",
+   "kind": "rule",
+   "text": "State management in the acme-platform web app: server state is TanStack Query, client state is zustand, and the two must not be mixed.",
+   "actions": [
+    "frontend",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0003",
+   "kind": "procedure",
+   "text": "Worker tests run with `pnpm --filter worker test` and use an in-memory Redis mock (ioredis-mock), so no real Redis is needed.",
+   "actions": [
+    "tests",
+    "build-ci",
+    "jobs"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0004",
+   "kind": "rule",
+   "text": "Logging convention in acme-platform: use pino with structured logs; no console.log.",
+   "actions": [
+    "code-style",
+    "observability"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0005",
+   "kind": "rule",
+   "text": "Issues are tracked in Linear under the ACME team; branch names start with the lowercase Linear id, e.g. acme-123-short-slug.",
+   "actions": [
+    "git",
+    "work-task"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0006",
+   "kind": "fact",
+   "text": "The acme-platform API is Express 4; it verifies Clerk session JWTs with @clerk/backend in apps/api/src/plugins/auth.ts (requireAuth), and returns 401 with token_expired / invalid_token on failure.",
+   "actions": [
+    "api",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0007",
+   "kind": "rule",
+   "text": "Versioning in acme-platform uses Changesets: run `pnpm changeset` for anything user-facing (e.g. the invoice timezone change counted).",
+   "actions": [
+    "release",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0008",
+   "kind": "rule",
+   "text": "Standing rule from Jordan: never run destructive database commands (drop, truncate, reset) without asking first, even on the local database.",
+   "actions": [
+    "database",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0009",
+   "kind": "fact",
+   "text": "In the last game day an RDS failover took 90 seconds; the API rides it out by retrying DB connections for 2 minutes (connectRetryWindowMs 120_000 in apps/api/src/db/pool.ts), so that window must stay >= 2 minutes.",
+   "actions": [
+    "database",
+    "deploy",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0010",
+   "kind": "fact",
+   "text": "Invoice dates in the web app are shown in the org's time zone (org.timeZone, via formatDate(iso, timeZone)), not UTC; Vancouver agencies had seen the wrong day.",
+   "actions": [
+    "frontend",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0011",
+   "kind": "fact",
+   "text": "The acme CLI (packages/cli) is bundled with tsup into dist/index.js (single ESM file, node18 target, shebang banner, bin `acme`); commands are commander Commands in src/commands/ registered in src/index.ts.",
+   "actions": [
+    "build-ci",
+    "release"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0012",
+   "kind": "fact",
+   "text": "Onboarding gotcha: on Apple Silicon, sharp and canvas need Rosetta-free builds (do not run the terminal under Rosetta); after switching Node versions run `pnpm rebuild sharp` or image uploads in the dashboard crash on startup.",
+   "actions": [
+    "build-ci",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0013",
+   "kind": "fact",
+   "text": "API tests in acme-platform run against a real database started by Testcontainers, so Docker must be running; if Docker is stopped the suite hangs rather than failing (check `docker info`).",
+   "actions": [
+    "tests",
+    "build-ci",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0014",
+   "kind": "fact",
+   "text": "Ops runbook facts: background jobs retry with exponential backoff (5 attempts), then go to dead-letter queue `dlq` and alert in Slack #alerts; production Postgres is RDS Multi-AZ with 14-day backups and restores go to a new instance, never over the live one; deploy rollback docs are still a TODO.",
+   "actions": [
+    "jobs",
+    "database",
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0015",
+   "kind": "fact",
+   "text": "API health endpoint is GET /healthz (localhost:4000); it checks Postgres and Redis and returns 200 only when both are up.",
+   "actions": [
+    "api",
+    "observability",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0016",
+   "kind": "fact",
+   "text": "Licensing: the acme-platform repo is proprietary (root LICENSE, all rights reserved, Acme Inc.), while packages/cli is MIT licensed (packages/cli/LICENSE).",
+   "actions": [
+    "docs",
+    "release"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0017",
+   "kind": "fact",
+   "text": "Jordan states the acme-platform database is MySQL 8 (docs/architecture.md Data section now says so; the API owns the schema and migrations live in apps/api/migrations). Some docs/comments elsewhere still say Postgres.",
+   "actions": [
+    "database",
+    "docs"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0018",
+   "kind": "fact",
+   "text": "The worker consumes RabbitMQ queues (invoices.reminders, webhooks.outbound, exports), one consumer per queue.",
+   "actions": [
+    "jobs"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0019",
+   "kind": "fact",
+   "text": "Build error \"Module not found: Can't resolve 'fs'\" means a server-only module was imported into a client bundle; fix by adding `import \"server-only\"` to the module and keeping it out of client components (use a server component or route handler).",
+   "actions": [
+    "debugging",
+    "frontend",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0020",
+   "kind": "procedure",
+   "text": "`pnpm dev` at the repo root starts web, api and worker together via Turborepo.",
+   "actions": [
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0021",
+   "kind": "rule",
+   "text": "Rule: never hand-edit generated files under dist/ or *.gen.ts (regenerate instead).",
+   "actions": [
+    "code-style",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0022",
+   "kind": "fact",
+   "text": "packages/cli/dist/index.js is still tracked in git (force-added despite dist/ being gitignored) and was hand-patched by Marco Bianchi in a91c3e2 (2026-07-08); it is stale. Jordan said to ask Marco first and leave it for now.",
+   "actions": [
+    "git",
+    "release"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0023",
+   "kind": "fact",
+   "text": "Error reporting goes to Sentry (DSN from SENTRY_DSN env var), including CLI failures; feature flags are managed in GrowthBook (the invoices export command is behind flag cli-invoices-export, which still needs creating in GrowthBook).",
+   "actions": [
+    "observability",
+    "release"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0024",
+   "kind": "fact",
+   "text": "CLI tests (packages/cli) are Vitest snapshot tests of stdout.",
+   "actions": [
+    "tests"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0025",
+   "kind": "rule",
+   "text": "Standing rule from Jordan: never use git stash; commit work in progress to the branch instead.",
+   "actions": [
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0026",
+   "kind": "rule",
+   "text": "Node version is 18 LTS everywhere (worker included): do not use Node 20+ APIs such as toSorted, toReversed, Object.groupBy, Array.fromAsync, Promise.withResolvers. Known leftover: Object.groupBy in apps/web/lib/group.ts (swap for reduce, deferred).",
+   "actions": [
+    "code-style",
+    "build-ci",
+    "dependency"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0027",
+   "kind": "procedure",
+   "text": "Run the acme CLI locally from source with `pnpm --filter @acme/cli dev -- <args>` (tsx, no build needed); point at an API with ACME_API_URL (e.g. https://api.staging.example.com).",
+   "actions": [
+    "build-ci",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0028",
+   "kind": "fact",
+   "text": "invoice-reminder job (services/worker/src/jobs/invoice-reminder.ts) is idempotent via db.reminderLog.claim(invoiceId, kind, sentOn) on table reminder_log (unique invoice_id/kind/sent_on); RabbitMQ redeliveries had caused customers to get duplicate reminders.",
+   "actions": [
+    "jobs",
+    "database",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0029",
+   "kind": "fact",
+   "text": "The worker Docker image uses node:20-slim with libvips from apt (not alpine like the api) on purpose: sharp segfaults on the alpine musl image (Priya Shah, e22b9d0, April 2026). To shrink it, use a multi-stage build copying only production node_modules.",
+   "actions": [
+    "deploy",
+    "dependency",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0030",
+   "kind": "fact",
+   "text": "Excel garbles accented names in CSV exports (e.g. Cafe Lumiere); the CLI invoices export has a --bom flag (off by default, CSV only) that prefixes a UTF-8 BOM.",
+   "actions": [
+    "api",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0031",
+   "kind": "rule",
+   "text": "Merge rule: every PR needs one approval from CODEOWNERS and green CI. .github/CODEOWNERS has no line for packages/cli/ (falls back to @acme/eng-leads); worth adding an owner before the CLI export PR.",
+   "actions": [
+    "git",
+    "release"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0032",
+   "kind": "fact",
+   "text": "The API talks to the database through PgBouncer in transaction mode, so prepared statements must be disabled (prepare: false). Added to pool.ts and the options type in driver.ts, but the driver does not yet pass it to the raw pool.",
+   "actions": [
+    "database",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0033",
+   "kind": "fact",
+   "text": "The api and worker run on EKS; the cluster is named acme-prod (use for logs).",
+   "actions": [
+    "deploy",
+    "observability"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0034",
+   "kind": "fact",
+   "text": "The repo root pins yarn 1.22.22 (packageManager field, yarn.lock v1, no pnpm lockfile) and CI runs `yarn install --frozen-lockfile`; a branch that changes package.json must commit the updated yarn.lock or the CI install step fails.",
+   "actions": [
+    "dependency",
+    "build-ci",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0035",
+   "kind": "rule",
+   "text": "Secrets: team/dev secrets live in the 1Password vault acme-dev; production secrets live in AWS Secrets Manager. In .env.example put only a placeholder with a comment saying where to get the value (e.g. STRIPE_WEBHOOK_SECRET=whsec_replace_me).",
+   "actions": [
+    "deploy",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0036",
+   "kind": "rule",
+   "text": "Web styling is Tailwind CSS v4 with CSS-first config in apps/web/app/globals.css (@theme tokens like brand, warn, radius-card); there is no tailwind.config.js and none should be created.",
+   "actions": [
+    "frontend",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0037",
+   "kind": "fact",
+   "text": "Paging for Stripe webhook failures: the CloudWatch alarm api-stripe-webhook-5xx (more than 5 5xx in 5 min) notifies SNS topic pagerduty-oncall, so the PagerDuty on-call is woken at night.",
+   "actions": [
+    "observability",
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0038",
+   "kind": "procedure",
+   "text": "Linting and formatting use Biome: run `pnpm lint` at the repo root (biome check .); `pnpm biome check --write <path>` autofixes; max line width 120.",
+   "actions": [
+    "code-style",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0039",
+   "kind": "fact",
+   "text": "Autoscaling: the worker scales with KEDA on queue length (1 to 20 replicas, one per 50 messages); the api uses HPA on CPU at 70% (3 to 12 pods). Manifests in infra/k8s/.",
+   "actions": [
+    "deploy",
+    "jobs"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0040",
+   "kind": "rule",
+   "text": "Cost tagging rule: every taggable AWS/Terraform resource needs tags team and env (Priya's script flags anything without them). Jordan's team tag is team=payments. Only aws_s3_bucket is taggable among a bucket's sub-resources.",
+   "actions": [
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0041",
+   "kind": "plan",
+   "text": "Exports bucket (infra/s3-exports.tf on branch acme-424-exports-bucket): acme-<env>-exports, private, AES256, objects expire after 30 days; planned for the CLI export to write files to S3 later. Plan for staging was 4 to add, not applied.",
+   "actions": [
+    "deploy",
+    "release"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0042",
+   "kind": "fact",
+   "text": "Jordan has a personal hiking app called trailmix (Django + htmx, /Users/jordan/code/trailmix). Double-submit of the add-hike form is prevented with hx-disabled-elt and hx-sync=\"this:drop\"; GPX uploads are validated by hikes/validators.py validate_gpx (defusedxml, GPX 1.0/1.1 namespace, trkpt/rtept, 10 MB cap); htmx forms need hx-encoding=\"multipart/form-data\" for uploads.",
+   "actions": [
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0043",
+   "kind": "fact",
+   "text": "Staging API returns brief 502s (~40s) during deploys; the CLI api client (packages/cli/src/api.ts apiGet) retries 502/503/504 up to 3 attempts with 500ms/1s backoff plus jitter.",
+   "actions": [
+    "api",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0044",
+   "kind": "fact",
+   "text": "The API omits lineItems for draft invoices (routes/invoices.ts), so in the web app Invoice.lineItems is optional and must be guarded (crashed InvoiceLineItems/InvoiceTotals on draft detail pages in prod, Sentry WEB-1F3).",
+   "actions": [
+    "frontend",
+    "debugging",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0045",
+   "kind": "procedure",
+   "text": "The monorepo is orchestrated by Turborepo (task pipelines in turbo.json; build depends on ^build and openapi). The OpenAPI spec apps/api/openapi.yaml is generated from zod schemas (apps/api/src/schemas) with `pnpm turbo run openapi --filter api`; never hand-edit the YAML.",
+   "actions": [
+    "build-ci",
+    "api",
+    "docs"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0046",
+   "kind": "procedure",
+   "text": "Releasing the CLI: merge the Changesets version PR, then the publish job runs `npm publish --provenance`.",
+   "actions": [
+    "release",
+    "dependency"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0047",
+   "kind": "rule",
+   "text": "CI fails if line coverage drops below 80%; add tests for new route behavior.",
+   "actions": [
+    "tests",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0048",
+   "kind": "preference",
+   "text": "Preference: when finished with a task, Jordan wants a short bullet-list summary, not paragraphs.",
+   "actions": [
+    "work-task",
+    "git",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0049",
+   "kind": "rule",
+   "text": "Business rule: only invoices with status open can be overdue; drafts and voided invoices never count (dashboard OverdueBadge counts open invoices past due only).",
+   "actions": [
+    "frontend",
+    "api",
+    "database"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0050",
+   "kind": "rule",
+   "text": "Commit messages follow Conventional Commits (feat:, fix:, chore:, with optional scope like fix(web):).",
+   "actions": [
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0051",
+   "kind": "rule",
+   "text": "Update docs/ pages when public behavior changes (e.g. new CLI commands go in docs/cli.md).",
+   "actions": [
+    "docs"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0052",
+   "kind": "fact",
+   "text": "In the web app, Skeleton (components/ui/Skeleton) is a default export plus SkeletonText; InvoiceRow was renamed InvoiceListItem (and InvoiceRowProps to InvoiceListItemProps) in acme-431-overdue-badge-drafts, which will conflict with Lena's in-progress branch. OrgSummary type lacks timeZone (Org has it).",
+   "actions": [
+    "frontend",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0053",
+   "kind": "procedure",
+   "text": "Resetting the local acme DB to a clean seeded state: stop db, remove the docker volume acme-platform_dbdata, `docker compose up -d db redis`, then run apps/api/scripts/migrate.ts (47 migrations) and seed.ts (3 orgs, 9 users, 24 clients, 180 invoices). Destructive: needs Jordan's explicit ok first.",
+   "actions": [
+    "database",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b00:m0054",
+   "kind": "person",
+   "text": "Team ownership (CODEOWNERS): Lena Fischer owns apps/web with the frontend team; Marco Bianchi owns apps/api and services/worker with the backend team; Priya Shah owns infra/ and .github/ with the platform team; Sam asked Jordan to review new-hire onboarding docs.",
+   "actions": [
+    "work-task",
+    "docs",
+    "git"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/code/cards/code-sleep-b00.json"
+}

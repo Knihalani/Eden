@@ -1,0 +1,353 @@
+{
+ "batch": "code-sleep-b08",
+ "rows": [
+  {
+   "id": "code-sleep-b08:m0001",
+   "kind": "rule",
+   "text": "Rule in acme-platform: every acme CLI command (packages/cli) must support --json output for scripting; JSON mode emits plain objects with fixed, stable keys (no colors, no table), mapped explicitly rather than passing the API payload through.",
+   "actions": [
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0002",
+   "kind": "plan",
+   "text": "As of 2026-10-07 the acme CLI commands org list, org switch and clients list still lack --json (whoami and invoices list have it); they should get it per the --json rule. printJson in packages/cli/src/output.ts is reusable.",
+   "actions": [
+    "code-style",
+    "work-task"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0003",
+   "kind": "plan",
+   "text": "Jordan planned to tag the acme-platform release on 2026-10-09 (the 9th) to roll out PR #1192 (acme invoices list command).",
+   "actions": [
+    "release",
+    "git",
+    "reminder"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0004",
+   "kind": "fact",
+   "text": "The API's Postgres pool size is the env var PG_POOL_MAX (apps/api/src/env.ts, no default, not set in the api helm chart); the value comes from the synced secret and is unknown from the repo. Staging 'sorry, too many clients already' means pods x pool size exceeds the DB max_connections.",
+   "actions": [
+    "database",
+    "deploy",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0005",
+   "kind": "fact",
+   "text": "Jordan has a Django side project called trailmix (htmx-based trail list, deployed on fly.io); it lives at /Users/jordan/code/trailmix. Trail.difficulty was made nullable (null=True, blank=True).",
+   "actions": [
+    "database",
+    "learning"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0006",
+   "kind": "fact",
+   "text": "Gotcha: GET /v1/invoices returns the legacy key `items` instead of `data` when an org has no invoices; the CLI falls back to `items` then []. Remove the workaround once ACME-418 lands (API inconsistency, separate fix needed).",
+   "actions": [
+    "api",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0007",
+   "kind": "procedure",
+   "text": "Gotcha: acme-platform route tests (e.g. orders.test.ts) use containers via setup-db.ts and time out in beforeAll if the Docker daemon isn't running; on Jordan's Mac Docker is OrbStack, start it with `orb start`.",
+   "actions": [
+    "tests",
+    "build-ci",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0008",
+   "kind": "procedure",
+   "text": "To see a terraform plan locally for acme infra: run `make plan ENV=staging` from the infra/ directory. Priya reviews infra changes and wants the plan output attached to the PR.",
+   "actions": [
+    "deploy",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0009",
+   "kind": "fact",
+   "text": "Staging redis parameter group maxmemory-policy was changed from volatile-lru to noeviction in PR #1189 (branch acme-398-redis-param-group); with noeviction, writes fail with OOM errors once memory is full instead of evicting keys.",
+   "actions": [
+    "deploy",
+    "jobs"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0010",
+   "kind": "fact",
+   "text": "Random ~1 in 200 API 401s on staging were JWT clock skew (TokenNotActiveYet nbf / TokenExpired off by 1-2s) on two pods vs Clerk; fixed with clockSkewInMs: 5_000 on verifyToken in apps/api/src/plugins/auth.ts (branch acme-447-jwt-clock-skew). Checking chrony on those nodes was suggested.",
+   "actions": [
+    "api",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0011",
+   "kind": "rule",
+   "text": "Jordan's code rule: no comments that restate the code; comment only the why.",
+   "actions": [
+    "code-style",
+    "docs"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0012",
+   "kind": "rule",
+   "text": "Rule for the acme worker (services/worker): every job handler must be idempotent, using the job id as the idempotency key (webhooks handler uses redis key idem:webhooks:<job id> with SET NX, marked done after success, 24h expiry).",
+   "actions": [
+    "jobs",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0013",
+   "kind": "preference",
+   "text": "Jordan prefers concise answers; he asked for shorter replies after long explanations.",
+   "actions": [
+    "docs",
+    "work-task"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0014",
+   "kind": "rule",
+   "text": "Code convention: prefer named exports; no default exports except Next.js pages (packages/cli/src/version.ts still has one).",
+   "actions": [
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0015",
+   "kind": "rule",
+   "text": "Python scripts in tools/ use Python 3.12 managed by uv (inline script header, run with `uv run tools/<script>.py`).",
+   "actions": [
+    "code-style",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0016",
+   "kind": "fact",
+   "text": "The api helm chart has readiness and liveness probes on /health (path guessed, needs confirming against what the API serves). A staging 5xx spike on 2026-10-12 was caused by a deploy rolling pods before they passed readiness.",
+   "actions": [
+    "deploy",
+    "observability"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0017",
+   "kind": "fact",
+   "text": "Gotcha: the Stripe webhook route /v1/webhooks/stripe needs the raw request body (fastify-raw-body registered with global:false, route config rawBody:true) or signature verification fails; stripe.webhooks.constructEvent must get the raw Buffer, not JSON.stringify(req.body).",
+   "actions": [
+    "api",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0018",
+   "kind": "preference",
+   "text": "Billing/Stripe code (apps/api billing, stripe webhook route and event handlers) should be left uncommitted for Jordan's review before commit; the raw body change and the handlers-map refactor of stripe-events.ts were left waiting for review.",
+   "actions": [
+    "git",
+    "finance",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0019",
+   "kind": "fact",
+   "text": "release.yml builds api and worker images and pushes them to AWS ECR repositories acme/<service> (acme/api, acme/worker) in us-east-1 (account 111122223333), tagged with the git tag and sha-<commit>. Prod worker ran acme/worker:v2026.10.06 on 2026-10-09. Build job timeout raised from 15 to 25 minutes.",
+   "actions": [
+    "deploy",
+    "release",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0020",
+   "kind": "rule",
+   "text": "The .github/ directory is platform-owned: edits to workflows need Priya's team on the review.",
+   "actions": [
+    "git",
+    "deploy",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0021",
+   "kind": "fact",
+   "text": "Worker queue names are email, images, billing-sync and webhooks; services/worker/src/queues.ts has typed QUEUE_NAMES, Queues and isQueueName. Known bug: apps/api/src/jobs/enqueue.ts:31 enqueues to \"billing_sync\" (underscore), so those jobs are silently dropped; not yet fixed (reviewer suggested a follow-up issue).",
+   "actions": [
+    "jobs",
+    "debugging",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0022",
+   "kind": "rule",
+   "text": "Team rule: use date-fns for dates; moment is banned (apps/web/lib/format-date.ts now uses date-fns; moment is still listed in apps/web/package.json line 34 and may be removed).",
+   "actions": [
+    "code-style",
+    "dependency",
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0023",
+   "kind": "fact",
+   "text": "The API's CORS is a fixed allowlist (@fastify/cors with config.allowedOrigins, credentials true) registered in apps/api/src/app.ts; Vercel preview URLs change per deploy so they are blocked (Lena's preview deploy was blocked). Source of allowedOrigins not yet traced.",
+   "actions": [
+    "api",
+    "frontend",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0024",
+   "kind": "fact",
+   "text": "Invoice PDF rendering (services/worker/src/pdf/invoice-pdf.ts): a null invoice.body crashed the email queue and unended PDFDocuments leaked memory causing staging worker OOMKills; fixed with body?.lines guard and try/finally doc.end(). Always end PDFKit documents.",
+   "actions": [
+    "jobs",
+    "debugging",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0025",
+   "kind": "fact",
+   "text": "trailmix requirements.txt (Django 5.1.2, django-htmx 1.21.0, psycopg 3.2.3, pillow 11.0.0) does not include gpxpy; the import_gpx management command needs it and waits for Jordan's go-ahead to add it.",
+   "actions": [
+    "dependency",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0026",
+   "kind": "procedure",
+   "text": "acme-platform local setup: pnpm install (also installs lefthook hooks), copy .env.example to .env.local and fill secrets from the 1Password acme-dev vault, `docker compose up -d db redis`, then `pnpm dev`. The email queue only drains if the worker runs locally (`pnpm --filter worker dev`). Jordan got a new laptop on 2026-10-10.",
+   "actions": [
+    "build-ci",
+    "jobs"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0027",
+   "kind": "fact",
+   "text": "The prod API (api.acme.dev) is exposed through a Kubernetes Ingress using the AWS Load Balancer Controller (internet-facing ALB, HTTP->HTTPS redirect) with an ACM certificate; ACM certs renew automatically via DNS validation, so only the validation CNAME in the acme.dev zone must remain. Priya asked about cert renewal.",
+   "actions": [
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0028",
+   "kind": "fact",
+   "text": "Grafana dashboards are JSON files in infra/grafana/dashboards (api-overview, billing, worker-images). worker-images.json uses guessed metric names (worker_jobs_completed_total, worker_jobs_failed_total, worker_job_duration_seconds_bucket) that were not verified against what the worker exports.",
+   "actions": [
+    "observability"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0029",
+   "kind": "preference",
+   "text": "Preference for hydration mismatches in apps/web (Next.js): format dates on the client inside useEffect rather than using suppressHydrationWarning (server renders UTC, browser local time).",
+   "actions": [
+    "frontend",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0030",
+   "kind": "plan",
+   "text": "Plan: add a read replica for the prod db on branch acme-431-prod-read-replica, and check prod replication lag; unresolved as of 2026-10-12 (which IaC stack owns the prod db instance and how to reach prod for the lag query were not known).",
+   "actions": [
+    "database",
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0031",
+   "kind": "rule",
+   "text": "apps/web dark mode is handled by next-themes with the class strategy: use Tailwind dark: variants or :global(.dark) selectors, never prefers-color-scheme media queries.",
+   "actions": [
+    "frontend",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0032",
+   "kind": "episode",
+   "text": "After the paid_at column was added in schema.ts, local dev DB lacked it (GET /v1/invoices 500: column invoices.paid_at does not exist); the local migration procedure was not known and Jordan was asked how he normally applies SQL locally.",
+   "actions": [
+    "database",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0033",
+   "kind": "fact",
+   "text": "trailmix is deployed on fly.io (app trailmix, region yyz); the suggested way to run Django migrations on every deploy is [deploy] release_command = \"python manage.py migrate --noinput\" in fly.toml, keeping migrations backwards compatible.",
+   "actions": [
+    "deploy",
+    "database"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0034",
+   "kind": "fact",
+   "text": "Branch ts-verbatim-imports swaps isolatedModules for verbatimModuleSyntax in tsconfig.base.json, producing 61 TS1484 errors in 44 files (web 27, api 18, worker 9, cli 7); biome check --write with lint/style/useImportType fixes all 61. Full list in /tmp/ts1484-sites.txt.",
+   "actions": [
+    "build-ci",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0035",
+   "kind": "rule",
+   "text": "deps-bot policy: minor dependency bumps (e.g. typescript 5.7.2 PR #1199, drizzle-orm 0.36.1 PR #1198) wait for review; patch bumps automerge after CI.",
+   "actions": [
+    "dependency"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0036",
+   "kind": "episode",
+   "text": "Customer Dana Whitcombe (Northwind Studio) asked, via Sam Ortiz's forwarded thread on 2026-10-12, for an invoice export for their external Xero bookkeeper: all invoices incl. voided, not just the 25 on screen; columns in order: invoice number, client name, client tax id, issue date, due date, subtotal, tax, total, currency, status, paid date; USD and CAD kept unconverted (currency column or separate files); nice to have: monthly scheduled email on the 1st. They may switch tools otherwise. Current CSV export is client-side from the loaded page (export-csv-button.tsx), no server endpoint; reviewer wants any export work in a separate PR from #1192. No ticket or reply yet.",
+   "actions": [
+    "api",
+    "message",
+    "work-task"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0037",
+   "kind": "procedure",
+   "text": "After editing apps/api/src/db/schema.ts, generate a new migration with `pnpm --filter api drizzle-kit generate` (Drizzle migrations live in apps/api/drizzle; latest is 0042_quiet_hulk.sql, a plain CREATE INDEX invoices_org_id_idx).",
+   "actions": [
+    "database"
+   ]
+  },
+  {
+   "id": "code-sleep-b08:m0038",
+   "kind": "fact",
+   "text": "Migration 0042 invoices_org_id_idx is a plain CREATE INDEX: staging invoices (1.9M rows, 1.2 GB) blocked writes for 6.8s in a dry run; prod is ~4x larger so expect ~25-30s of blocked writes. CREATE INDEX CONCURRENTLY would need a hand-written migration outside a transaction since drizzle wraps each file in one. Decision pending.",
+   "actions": [
+    "database",
+    "deploy"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/code/cards/code-sleep-b08.json"
+}

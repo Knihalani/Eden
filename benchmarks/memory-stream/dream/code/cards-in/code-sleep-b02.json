@@ -1,0 +1,290 @@
+{
+ "batch": "code-sleep-b02",
+ "rows": [
+  {
+   "id": "code-sleep-b02:m0001",
+   "kind": "rule",
+   "text": "Jordan's standing rule: test changes end to end in the running app before opening a PR, not only unit tests, and say what was checked. Reason: a date picker change passed unit tests but was broken in the real browser.",
+   "actions": [
+    "tests",
+    "git",
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0002",
+   "kind": "decision",
+   "text": "Invoice due dates in the acme web app are shown in the viewer's browser timezone (Intl.DateTimeFormat, no explicit timeZone) via formatDueDate in apps/web/lib/dates.ts, because some users are in Vancouver and UTC showed the wrong day.",
+   "actions": [
+    "frontend",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0003",
+   "kind": "fact",
+   "text": "Gotcha: the acme API invoice endpoint only includes lineItems when the request passes expand=lineItems. The cached list row has no lineItems, so invoice detail can see invoice.lineItems undefined and crash on .map. A real fix (always request expand=lineItems in the detail query) was proposed but not confirmed.",
+   "actions": [
+    "api",
+    "frontend",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0004",
+   "kind": "fact",
+   "text": "acme-platform pins Node 20.11 in .nvmrc (moved off Node 18 on 2026-08-27, commit b71c0de); package.json engines is >=20.11 <21. Run `nvm install` once then `nvm use` before installing dependencies, otherwise install fails with an engines error (Jordan's new laptop had Node 18.20.4).",
+   "actions": [
+    "build-ci",
+    "dependency"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0005",
+   "kind": "rule",
+   "text": "Jordan's rule: never run long benchmarks on the shared CI runners (they slow everyone down); run benchmarks locally. Do not add the PDF render bench as a CI job. It is local-only: services/worker/scripts/bench-pdf.ts refuses to run when CI is set.",
+   "actions": [
+    "build-ci",
+    "tests"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0006",
+   "kind": "plan",
+   "text": "Plan, still open: the reminder job (services/worker/src/jobs/sendReminder.ts) was made idempotent (sentAt check, conditional claim on claimedAt, idempotencyKey to the mailer), but it needs a new Prisma migration adding a nullable reminder.claimedAt column. The migration is not written yet; Jordan said later.",
+   "actions": [
+    "jobs",
+    "database"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0007",
+   "kind": "decision",
+   "text": "Worker queue concurrency is 5 jobs per process (WORKER_CONCURRENCY env var, services/worker/src/queues.ts). For the end-of-month reminder backlog the recommendation was to raise the max replica count (the worker autoscales on queue length) rather than raise per-process concurrency, since higher concurrency means more DB connections and mail sockets per process.",
+   "actions": [
+    "jobs",
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0008",
+   "kind": "fact",
+   "text": "Jordan has a Django side project called trailmix (htmx forms, e.g. hikes app at /Users/jordan/code/trailmix). Fixed a double-post: a submit button had its own hx-post in addition to the form's, so only the form should carry hx-* attributes.",
+   "actions": [
+    "frontend",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0009",
+   "kind": "decision",
+   "text": "Invoice export CSV columns use snake_case headers; the amount column is now amount_cents (was amountCents), per finance. Anyone parsing the old header needs updating; worth a release note.",
+   "actions": [
+    "api",
+    "release",
+    "docs"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0010",
+   "kind": "fact",
+   "text": "Exception tracking in acme worker: reportException() in services/worker/src/report.ts is a stub that only logs; the real tracker client is not wired because it is unknown which tracker Jordan uses. The render-pdf job now logs, reports and rethrows crashes (branch acme-388-render-pdf-crash-reporting, 4f2a9c1, not pushed).",
+   "actions": [
+    "observability",
+    "jobs",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0011",
+   "kind": "rule",
+   "text": "Jordan's rule: no emojis in code, commit messages or docs (emojis were removed from services/worker/CHANGELOG.md).",
+   "actions": [
+    "code-style",
+    "git",
+    "docs"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0012",
+   "kind": "rule",
+   "text": "acme-platform API rule: every table has an org_id column and every query must filter by org_id (req.auth.orgId); all route queries do. Invoice stats query was fixed for this. API JSON uses camelCase field names (e.g. totalCents) and SUM() results must be converted from DECIMAL strings to numbers.",
+   "actions": [
+    "database",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0013",
+   "kind": "fact",
+   "text": "acme infra is Terraform 1.8 in infra/terraform (aws provider ~> 5.60); the Pulumi stack was removed on 2026-08-26 (e40a7b9). Changes go through the CI plan/apply workflow, not applied locally. Buckets follow the pattern in s3.tf (acme-${var.env}-..., public access block, local.tags). Invoice exports bucket is infra/terraform/s3_invoice_exports.tf: private, objects expire after 90 days.",
+   "actions": [
+    "deploy",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0014",
+   "kind": "fact",
+   "text": "Public API rate limiting: apps/api/src/plugins/rate-limit.ts uses @fastify/rate-limit, 100 requests per minute per client IP, counted in Redis so all replicas share it, with /healthz exempt.",
+   "actions": [
+    "api",
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0015",
+   "kind": "preference",
+   "text": "Jordan's preference: use the gh CLI for GitHub operations (issues, PRs). Issue #1318 tracks rollout of the invoice-exports S3 bucket.",
+   "actions": [
+    "git",
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0016",
+   "kind": "fact",
+   "text": "Outgoing acme webhooks are signed with HMAC SHA-256 in the X-Acme-Signature header, format t=<timestamp>,v1=<hex> over '<timestamp>.<raw body>' (apps/api/src/webhooks/sign.ts). The dashboard webhooks settings page (apps/web/pages/settings/webhooks.tsx) was corrected from the wrong X-Signature/SHA-1 text.",
+   "actions": [
+    "api",
+    "frontend",
+    "docs"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0017",
+   "kind": "fact",
+   "text": "The acme CLI reads its config (including webhookSecret) from ~/.acme/config.json, not from environment variables; `acme webhooks test` uses readConfig() and errors if webhookSecret is missing (set via `acme config set webhookSecret`). The web app is Next.js 13.5.6 with the pages router.",
+   "actions": [
+    "build-ci",
+    "frontend",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0018",
+   "kind": "fact",
+   "text": "The worker image job (services/worker/src/jobs/processImage.ts) resizes uploads to thumb 160px, medium 640px and large 1600px wide (no upscaling), auto-rotates by EXIF, and writes WebP (quality 82) next to the original at <key>/<size>.webp; the original is kept. HEIC uploads (iPhone photos) fail in sharp; suggested fix is converting on the client or rejecting at POST /v1/uploads.",
+   "actions": [
+    "jobs",
+    "api",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0019",
+   "kind": "procedure",
+   "text": "Running web e2e in acme-platform: start the dev server on port 3000 first (pnpm --filter web dev), then `pnpm --filter web e2e` (Playwright, optionally e2e/invoices). Known failure: invoices/detail.spec.ts 'downloads pdf' 404s because the seed invoice inv_e2e_1 has no pdfKey (fixture gap, also failing in nightly staging e2e); seeding a pdfKey was offered but not done.",
+   "actions": [
+    "tests",
+    "build-ci",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0020",
+   "kind": "fact",
+   "text": "Web auth provider in acme is Auth0 via @auth0/nextjs-auth0 (pages/api/auth/[auth0].ts, lib/session.ts, docs/architecture.md). next-auth in apps/web/package.json is an unused leftover from a Nov 2025 spike (0aa31f2); removing it was deferred ('later').",
+   "actions": [
+    "dependency",
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0021",
+   "kind": "plan",
+   "text": "Open zod bump: deps-bot PR #1312 (zod 3.23.8 to 3.24.1, branch deps/zod-3.24.1). Five type errors from stricter inference were fixed and committed locally as a8c4f31 but not pushed; deps-bot will rebase and re-request CI once pushed.",
+   "actions": [
+    "dependency",
+    "git",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0022",
+   "kind": "fact",
+   "text": "Bug pattern found in acme web: setLoading(true)/setSubmitting(true) followed by an early return without resetting state leaves buttons spinning (fixed in ExportButton using try/finally). Two more unfixed instances: components/clients/ArchiveClientButton.tsx:18 (409 response) and components/settings/InviteMemberForm.tsx:31 (validation failure).",
+   "actions": [
+    "frontend",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0023",
+   "kind": "fact",
+   "text": "Added utilities/flags: parsePaymentTerms() in apps/api/src/lib/payment-terms.ts (net N for 1-365, 'due on receipt' = 0, throws InvalidPaymentTermsError otherwise; reviewer suggested optionally accepting a trailing 'days'), and `acme invoices list --json` which prints the raw array as pretty JSON for piping to jq.",
+   "actions": [
+    "api",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0024",
+   "kind": "decision",
+   "text": "ADR 0009 (accepted 2026-03-18): the acme web app does not use Redux. Server state stays in TanStack Query; small client state uses zustand stores colocated with the feature (e.g. useInvoiceEditorStore). Lena wanted Redux for the invoice editor; zustand is the answer.",
+   "actions": [
+    "frontend",
+    "code-style",
+    "dependency"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0025",
+   "kind": "fact",
+   "text": "Gotcha (docs/gotchas.md): Clerk dev keys (pk_test_) fail production builds, and preview deploys build with NODE_ENV=production, so they need the live publishable key. .github/workflows/preview.yml:41 wrongly passes CLERK_PUBLISHABLE_KEY_DEV, causing 'Clerk: production build detected with development keys' on preview (seen on PR #4866 acme-412-invoice-editor-store). Fixing it needs platform team approval since it is under .github/.",
+   "actions": [
+    "deploy",
+    "build-ci",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0026",
+   "kind": "rule",
+   "text": "Jordan's rule: icon-only buttons must always have an aria-label (and icon aria-hidden). UI conventions in acme web: use shadcn/ui components from apps/web/components/ui and lucide-react icons, not the hand-rolled icons. Other icon-only buttons in components/ still lack labels (sweep offered, deferred).",
+   "actions": [
+    "frontend",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0027",
+   "kind": "plan",
+   "text": "Branch acme-412-invoice-editor-store (zustand invoice editor store, with duplicateLine action and shadcn buttons) is pushed but no PR is opened yet; duplicateLine has no test, and the LineItemRow grid's last column (2.5rem) is too narrow for two icon buttons.",
+   "actions": [
+    "frontend",
+    "git",
+    "tests"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0028",
+   "kind": "fact",
+   "text": "TypeScript path aliases in acme-platform: @acme/* maps to packages/*/src (tsconfig.base.json); use @acme/shared/... instead of deep relative imports like ../../../../packages/shared/src. The worker depends on @acme/shared as workspace:* so its tsup build resolves it.",
+   "actions": [
+    "code-style",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0029",
+   "kind": "rule",
+   "text": "acme CLI exit-code convention: exit 2 for usage errors (throw UsageError), exit 1 for runtime errors (EXIT_USAGE/EXIT_RUNTIME in packages/cli/src/lib/errors.ts, mapped in index.ts). Bad args should print a one-line message, not a stack trace.",
+   "actions": [
+    "code-style",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b02:m0030",
+   "kind": "rule",
+   "text": "Jordan's standing rules: keep components small (under 150 lines) with colocated tests (the 400-line invoice editor will be split later), and before saying something is done, re-check the work for bugs and security issues.",
+   "actions": [
+    "code-style",
+    "tests",
+    "frontend"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/code/cards/code-sleep-b02.json"
+}
