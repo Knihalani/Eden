@@ -701,17 +701,18 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - The responder can use a picked row in a way the judge likes even when the user would not have wanted it raised. The judge's "don't reward irrelevant facts" instruction only partly guards against this.
 
 ## C4-E11 · 2026-10-19 · F22b calibrated verifier: result
-- **Runs:** `score.py --store sleep --strict --split dev --sample judge` and `--split fresh` on rt1, systems `verify:tag=cal,p=0.3 … p=0.9 verify:tag=seq`. life-cal has 243 of 245 outputs (2 files missing; those events get no packet).
+- **Runs:** `score.py --store sleep --strict --split dev --sample judge` and `--split fresh` on rt1, systems `verify:tag=cal,p=0.3 … p=0.9 verify:tag=seq`. Life columns use all 245 life-cal outputs (fixed after review; the first scoring had 243).
 - **Dev sweep (human; plan labels):**
 
   | p | code recall | code precision | code silence | life recall | life precision | life silence |
   |---|---|---|---|---|---|---|
-  | 0.3 | 0.5303 | 0.1076 | 0.4182 | 0.3013 | 0.1068 | 0.6075 |
-  | 0.5 | 0.5121 | 0.1636 | 0.5455 | **0.2949** | 0.1593 | **0.6636** |
-  | 0.6 | 0.5121 | 0.2308 | 0.6364 | 0.2756 | 0.216 | 0.7383 |
-  | **0.7** | **0.4788** | 0.3143 | **0.7636** | 0.25 | 0.2941 | 0.8037 |
-  | 0.8 | 0.4606 | 0.4103 | 0.8182 | 0.2115 | 0.3077 | 0.8411 |
-  | 0.9 | 0.3455 | 0.5349 | 0.9 | 0.141 | 0.4 | 0.9252 |
+  | 0.3 | 0.5303 | 0.1076 | 0.4182 | 0.3038 | 0.1088 | 0.6111 |
+  | 0.4 | 0.5303 | 0.1289 | 0.4636 | 0.2975 | 0.1316 | 0.6481 |
+| 0.5 | 0.5121 | 0.1636 | 0.5455 | **0.2975** | 0.1613 | **0.6667** |
+  | 0.6 | 0.5121 | 0.2308 | 0.6364 | 0.2785 | 0.2171 | 0.7407 |
+  | **0.7** | **0.4788** | 0.3143 | **0.7636** | 0.2532 | 0.2989 | 0.8056 |
+  | 0.8 | 0.4606 | 0.4103 | 0.8182 | 0.2152 | 0.3182 | 0.8426 |
+  | 0.9 | 0.3455 | 0.5349 | 0.9 | 0.1456 | 0.4167 | 0.9259 |
   | seq (no p) | 0.5182 | 0.128 | 0.4273 | 0.3038 | 0.1531 | 0.6204 |
 
   The rule picks p = 0.7 on code and p = 0.5 on life.
@@ -727,3 +728,21 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - But the threshold does not transfer to the shorter, harder red-team prompts: their probabilities sit lower.
   - C4-E13 also found that, on code, silence measured against plan labels penalises real needs. Tuning for it is the wrong target until there are downstream-validated labels.
 - **Correction (same day):** the 2 missing life-cal files landed after scoring. Re-scored with all 245: p 0.4 recall 0.2975 / precision 0.1316 / silence 0.6481; p 0.5 0.2975 / 0.1613 / 0.6667; p 0.6 0.2785 / 0.2171 / 0.7407. The rule still picks p 0.5, and the verdict is unchanged.
+
+## C4-R · 2026-10-19 · Review of the cycle 4 consolidation (slice-reviewer, round 1: REQUEST_CHANGES)
+- **Confound in the order-free responder (affects C4-E10 and C4-E13).**
+  - `downstream.py items` shuffled all (turn, packet) items and cut them into files of 45, so a turn's no-memory and with-memory items sometimes shared one responder prompt: 13/60 code and 16/60 life turns (C4-E10); 22/45 code-picks and 22/45 life-picks (C4-E13).
+  - The reviewer measured that, in shared files, the no-memory reply repeats about twice the packet's new tokens (code 0.283 vs 0.145; life 0.131 vs 0.055). Oracle − none differs too (life 0.31 shared vs 0.64 apart; code 0.62 vs 0.49). These reviewer numbers were not re-derived in this session.
+  - On code no-need turns, vote − none is 0.0 either way, so the R10-3 withdrawal holds.
+  - **The C4-E10 and C4-E13 effect sizes (+0.8 / +0.9; +0.4 / +0.133) may be biased by this, in either direction per world.** Fixed: `items` now puts item j of every turn into group j, so no turn shares a file. Re-running both experiments with the fixed protocol is the first task of cycle 5; until then their verdicts are provisional.
+- **Verify scoring** now counts only rows visible at the moment.
+  - Some seq outputs named rows outside their own case's candidates (code-seq 3, life-seq 1, life-rt1-seq 1, all visible). So those verifiers saw some content outside their file, which weakens the "reads each file only when it processes it" claim.
+  - The batched C4-E5 life run named 2 future rows; its precision moves 0.1689 → 0.1712 (C4-E5 is already retracted). Every other published number is unchanged.
+- **Other fixes:**
+  - `prep_picks` visibility now honours `invalid_at` (no row was affected).
+  - The C4-E11 life sweep was updated to all 245 outputs.
+  - PROMPTS rows were added for verify `tag=seq`, `tag=cal` and judge `prep-seq`.
+  - Doc corrections were made in STATE and R10-retrieval.
+- **Noted:**
+  - C4-E7's kill line (in critic-c4.md) was committed in the same commit as its result, so git cannot show it predates scoring.
+  - C4-E8's drafts include the known swapped C3-E4 cases.

@@ -62,7 +62,7 @@ On realistic streams, lexical retrieval is far weaker than the pair fixtures sug
    - static word vectors.
    An independent blank-slate design converged on the same wall (about 0.3 recall@4) and on the same remedies (sleep-time situations and clean statements). Its one new mechanism, budgeted firing calibrated per user, is adopted. It adds about +0.1 silence on code.
 7. **The labels are valid; wrong bullets cost tokens, not measured quality** (downstream check, BRIEF §4.7; re-measured in C4-E10 after two harness fixes).
-   - Memory changes the outcome on 77% of plan-labelled need turns in both worlds (+0.8 code, +0.9 life, on a 0–3 scale).
+   - Memory changes the outcome on 77% of plan-labelled need turns in both worlds (+0.8 code, +0.9 life, on a 0–3 scale). These sizes are provisional: in some turns the no-memory reply was written in the same prompt as the memory reply (C4-R); a re-run is due.
    - Half of the independent labeler's extra needs are real but mild.
    - The cheap hook-side vote keeps about 21% of the available benefit on code.
    - A packet on turns that need nothing scored the same as no packet (0.0). The earlier "−0.40 harm" came from a responder that swapped reply order and a judge that called true history "fabricated"; it is withdrawn.
@@ -75,10 +75,10 @@ On realistic streams, lexical retrieval is far weaker than the pair fixtures sug
 9. **A model checking candidates off the hook helps, but less than first measured** (cycle 4).
    - The hook picks up to 15 candidates with no model. A small model (haiku) checks them while the agent works, and the result arrives at the agent's first tool call. Eden stays in charge; the agent never has to ask.
    - Checked one turn at a time (as it would really run), it reaches code recall 0.52 at silence 0.43, and life 0.30 at 0.62. On fresh red-team cases it beats the word matcher clearly (silence +0.38 code, +0.53 life).
-   - The first measurement checked 50 turns per call and looked much quieter (silence 0.66). The model was comparing turns with each other, which a real hook never can. That number is retracted. Calibration is the open problem (C4-E11 is testing a fix).
+   - The first measurement checked 50 turns per call and looked much quieter (silence 0.66). The model was comparing turns with each other, which a real hook never can. That number is retracted. A calibrated version (C4-E11) tuned well on the main set but its cutoff did not carry over to fresh cases.
    - Two of the critic's alternatives are dead: showing the small model the whole store instead of a shortlist (no better), and checking the agent's draft reply before the user sees it (it flags as often when nothing is needed as when something is).
 
-10. **The test's labels undercount what coding users need** (cycle 4, C4-E13).
+10. **The test's labels undercount what coding users need** (cycle 4, C4-E13; provisional until a re-run with a responder fix the reviewer asked for).
    - On turns labelled "no memory needed" where the strong model still picked memories, those picks improved the reply about half the time on coding (47% helped, 7% hurt) and about a quarter of the time on the personal assistant (27% helped, 13% hurt).
    - What it found was mostly recent project state (open branches, unpushed work, open PRs) that the planned labels never tagged.
    - So "stays quiet when nothing is needed" has been partly punishing correct behaviour on coding. The next step is labels checked by outcome: a memory counts as needed if adding it actually makes the reply better.
@@ -87,7 +87,7 @@ On realistic streams, lexical retrieval is far weaker than the pair fixtures sug
 ## 5. Open problems, ranked by size
 
 1. **Knowing what counts as needed.** The labels miss real needs on coding (C4-E13), so tuning for quietness is unsafe until there are outcome-checked labels. Calibrating the off-hook checker comes after that.
-2. **Triggers in the personal world** (calendar, location, messages). No system is quiet on routine triggers; trigger silence is 0.0–0.36 everywhere, on few negatives.
+2. **Triggers in the personal world** (calendar, location, messages). Uncalibrated systems are not quiet on routine triggers (trigger silence 0.0–0.36); the calibrated checker reaches 0.45 on fresh cases, on only 11 negatives.
 3. **The gap to a strong model.** opus with the same view finds +0.14 (code) and +0.21 (life) more of what is needed than haiku. Its ceiling numbers were also batched, so they need a one-at-a-time re-run.
 4. **Benchmark realism.** There is no sealed holdout yet and no non-Claude author; LongMemEval is blocked by the network policy.
 
