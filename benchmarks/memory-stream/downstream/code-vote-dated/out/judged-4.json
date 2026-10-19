@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s048-e005",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R0 claims repo is on Node 18 (pinned 20.11) and puts check atop entry; R1 handles parse-before-check with tiny entry file."
+  },
+  {
+   "event": "code-s048-e011",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly diagnose stale docker context/DOCKER_HOST and switch to OrbStack."
+  },
+  {
+   "event": "code-s050-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both implement telemetry line and BullMQ/Bull Board queue section correctly."
+  },
+  {
+   "event": "code-s051-e006",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both pull release.yml run timings via gh in background."
+  },
+  {
+   "event": "code-s051-e011",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 fine; R1 misreads 'background is fine' as about a background job."
+  },
+  {
+   "event": "code-s055-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both park timing and make seed emails unique by construction."
+  },
+  {
+   "event": "code-s055-e011",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both rewrite the section from actual app layout."
+  },
+  {
+   "event": "code-s056-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both attach error.digest to Sentry as tag/extra."
+  },
+  {
+   "event": "code-s056-e008",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly identify locale-dependent date formatting mismatch."
+  },
+  {
+   "event": "code-s056-e020",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both implement soft delete with problem+json errors; R1 more explicit on org scope."
+  },
+  {
+   "event": "code-s056-e026",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both build confirm dialog and note route not registered yet."
+  },
+  {
+   "event": "code-s056-e032",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both route 409 through problem() before soft delete; R1 also continues pending work."
+  },
+  {
+   "event": "code-s057-e015",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both fail to recall known gotcha: PgBouncer transaction mode requires prepare: false."
+  },
+  {
+   "event": "code-s057-e030",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 reuses known reminderLog.claim and org time zone date handling; R1 generic, misses known context."
+  },
+  {
+   "event": "code-s058-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both reproduce first and round per line; consistent with integer-cents convention."
+  }
+ ]
+}

@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s012-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both hedge on lint configs despite known Biome adoption; CORS allowlist plans correct."
+  },
+  {
+   "event": "code-s013-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correct on structuredClone vs JSON round trip."
+  },
+  {
+   "event": "code-s013-e030",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both sound rename plans with typecheck and tests."
+  },
+  {
+   "event": "code-s015-e017",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Correct edge rationale but both hedge on Next version, which is known (Next 15)."
+  },
+  {
+   "event": "code-s018-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both read config and start the stack; ports not yet known."
+  },
+  {
+   "event": "code-s018-e004",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both check repo for infra; R0 usefully flags existing RabbitMQ exports queue."
+  },
+  {
+   "event": "code-s018-e010",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 uses known Node 18 LTS; R0 hedges and re-derives a version it should know."
+  },
+  {
+   "event": "code-s018-e021",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add accessible copy button; fine."
+  },
+  {
+   "event": "code-s020-e014",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly interpret 'do it' as the font change."
+  },
+  {
+   "event": "code-s020-e019",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both acknowledge the end-to-end testing rule."
+  },
+  {
+   "event": "code-s020-e034",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both accurately say checks still running."
+  },
+  {
+   "event": "code-s021-e006",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both investigate exact engines error; R1 adds relevant yarn/no-pin context."
+  },
+  {
+   "event": "code-s021-e028",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both honor keeping benchmark off CI runners."
+  },
+  {
+   "event": "code-s021-e031",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 recalls hx-sync/hx-disabled-elt already present; R0 suggests adding them as new."
+  },
+  {
+   "event": "code-s021-e035",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "R0 ignores known Pulumi infra and cost tags; R1 has tags/no-apply but assumes stale Terraform."
+  }
+ ]
+}
