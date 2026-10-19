@@ -8,6 +8,7 @@ item under each generator; recall@k and the share at rank ≤ 3 (a scale proxy).
     python3 benchmarks/memory-stream/recall_funnel.py --missing                       (C11-E3: what dreaming left out)
     python3 benchmarks/memory-stream/recall_funnel.py --actions                       (C11-E2: action registry, caps)
     python3 benchmarks/memory-stream/recall_funnel.py --cards                         (C11-E4: dream action cards)
+    python3 benchmarks/memory-stream/recall_funnel.py --worlds life --episodes        (C11-E5: episodic layer)
 """
 import argparse, datetime, glob, json, math, os, re, sys
 
@@ -288,6 +289,65 @@ def cards(world, thr=0.5):
           "| pool (rows + card lines) median / max", pools[len(pools) // 2], pools[-1])
 
 
+def episodes(world):
+    """C11-E5: dream-written episode records as a second store. Each record is visible after its batch's last
+    session (as `--strict` rows). Reports needed items covered by visible rows, by episodes, by either (by item kind),
+    and for items only episodes cover, whether a lexical or entity lookup over the episodes finds them."""
+    g = Generators(world)
+    end = {}
+    order = 0
+    for s in g.stream["sessions"]:
+        for ev in s["events"]:
+            order += 1
+        end[s["id"]] = order
+    eps = []
+    for p in sorted(glob.glob(os.path.join(HERE, "dream", world, "episodes", "*.json"))):
+        d = json.load(open(p))
+        last = max(end.get(x["id"], 0) for x in d["sessions"])
+        for x in d["sessions"]:
+            for n, ep in enumerate(x.get("episodes", [])):
+                eps.append({"id": f"{x['id']}:e{n}", "text": ep["text"], "kind": "episode", "t": last + 0.5,
+                            "invalid_at": None, "entities": ep.get("entities") or [], "when": {}})
+    elex = M.make("lex", eps, g.stream, g.items, g.cov)
+    kind = {x["id"]: x["kind"] for x in g.items} if isinstance(g.items, list) else {k: v["kind"] for k, v in
+                                                                                    g.items.items()}
+    stat = {}
+    found = {"lexical top 10": 0, "entity": 0, "either": 0}
+    only = 0
+    for e, need in need_turns(g, world):
+        now = e["_order"]
+        rows_have = {i for r in g.lex.visible(now) for i in r["covers"]}
+        vis_eps = elex.visible(now)
+        text = M.strip_paste(e["text_all"])
+        sc = elex.scores(dict(e, text_all=text + " " + g.ctx.get(e["id"], "")), now)
+        top = set(sorted(sc, key=lambda i: (-sc[i], i))[:10])
+        ment = g.mentioned(text + " " + g.ctx.get(e["id"], ""))
+        for item in need:
+            k = kind[item]
+            st = stat.setdefault(k, [0, 0, 0, 0])
+            st[0] += 1
+            r_ok = item in rows_have
+            cover = [x["id"] for x in vis_eps if item in elex.by_id[x["id"]]["covers"]]
+            st[1] += r_ok
+            st[2] += bool(cover)
+            st[3] += r_ok or bool(cover)
+            if cover and not r_ok:
+                only += 1
+                lx = any(i in top for i in cover)
+                en = any({z.lower() for z in elex.by_id[i]["entities"]} & ment for i in cover)
+                found["lexical top 10"] += lx
+                found["entity"] += en
+                found["either"] += lx or en
+    print(world, len(eps), "episode records")
+    print("   needed items by kind: total / in rows / in episodes / in either")
+    for k, (n, a, b, c) in sorted(stat.items()):
+        print(f"     {k:12s} {n:3d} / {a:3d} / {b:3d} / {c:3d}")
+    tot = [sum(v[i] for v in stat.values()) for i in range(4)]
+    print("   all", tot, "store ceiling rows", round(tot[1] / tot[0], 3), "→ rows + episodes",
+          round(tot[3] / tot[0], 3))
+    print("   items only episodes cover:", only, {k: v for k, v in found.items()})
+
+
 def missing(world):
     """C11-E3: needed items no visible row covers even in the session-end store (rows visible after their own
     session, `strict=False`), by item kind; and the share of every world item the compiler ever stored."""
@@ -347,6 +407,7 @@ if __name__ == "__main__":
     ap.add_argument("--missing", action="store_true", help="C11-E3 dreaming omissions")
     ap.add_argument("--actions", action="store_true", help="C11-E2 action registry and per-channel caps")
     ap.add_argument("--cards", action="store_true", help="C11-E4 dream action cards")
+    ap.add_argument("--episodes", action="store_true", help="C11-E5 episodic layer")
     ap.add_argument("--thr", type=float, default=0.5, help="--actions: Jev threshold for a turn's action types")
     a = ap.parse_args()
     for w in a.worlds:
@@ -354,5 +415,7 @@ if __name__ == "__main__":
             actions(w, a.thr)
         elif a.cards:
             cards(w, a.thr)
+        elif a.episodes:
+            episodes(w)
         else:
             (channels if a.channels else missing if a.missing else run)(w)
