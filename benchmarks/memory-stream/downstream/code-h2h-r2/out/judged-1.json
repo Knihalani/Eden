@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s021-e035",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "None use Pulumi infra or confirmed team=payments tag; R1 cites tags but re-asks team, R0/R2 generic."
+  },
+  {
+   "event": "code-s022-e017",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "All add rethrow test and drop emoji, but none wire the known tracker (Sentry via SENTRY_DSN) left pending."
+  },
+  {
+   "event": "code-s027-e049",
+   "scores": [
+    1,
+    1,
+    1
+   ],
+   "why": "--json for invoices list already exists (PR #822, shared handler); all plan to build it anew."
+  },
+  {
+   "event": "code-s028-e017",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All use shadcn Button, lucide icon and aria-label per rules."
+  },
+  {
+   "event": "code-s033-e016",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All short, park bucket and plan to reproduce and fix the race."
+  },
+  {
+   "event": "code-s035-e008",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "R2 covers token-in-form and header-scope cause and acts; R0/R1 lean on asking user to paste the partial."
+  },
+  {
+   "event": "code-s036-e010",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "Docs/ must be updated for public CLI changes; only R0 commits to docs/cli.md, R2 hedges."
+  },
+  {
+   "event": "code-s043-e000",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "R1 uses known PostHog invoice_sent fact to answer Sam; others only promise to search."
+  },
+  {
+   "event": "code-s045-e000",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "Webhooks are signed (X-Acme-Signature); only R2 flags signing, SSRF, and asks before billing path."
+  },
+  {
+   "event": "code-s045-e012",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All accurate recaps, noting enqueue left to user and unverified tests."
+  }
+ ]
+}

@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s073-e000",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "None add required org_id column. R0 knows Postgres 16 lacks uuidv7 and the db:generate command; others generic but sound."
+  },
+  {
+   "event": "code-s075-e000",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "All format via tool; R1 names Biome but commits billing code unreviewed; R0/R2 don't name Biome. None flag billing review."
+  },
+  {
+   "event": "code-s076-e000",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "All correct; R1's case-sensitivity framing is irrelevant here since the rename is not case-only."
+  },
+  {
+   "event": "code-s076-e017",
+   "scores": [
+    1,
+    3,
+    3
+   ],
+   "why": "R0 claims notes show an invoices 'recieve' typo, unsupported by evidence. R1/R2 correct and careful."
+  },
+  {
+   "event": "code-s077-e005",
+   "scores": [
+    2,
+    1,
+    3
+   ],
+   "why": "tsx is already a cli devDependency (dev script uses it). R2 checks and notes frozen lockfile; R1 misses it and hedges on pnpm."
+  },
+  {
+   "event": "code-s077-e011",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All explain tsx vs ts-node correctly; R1/R2 add the pending lockfile reminder, R0 fine without it."
+  },
+  {
+   "event": "code-s080-e000",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "History shows an invoices list subcommand already registered; R0 checks for it and docs update. R1/R2 miss this."
+  },
+  {
+   "event": "code-s080-e024",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "R1 knows pnpm frozen-lockfile and PR branch. R0 asks branch, fine. R2 hedges on which lockfile/package manager."
+  },
+  {
+   "event": "code-s081-e007",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "All generic; none name Testcontainers needing OrbStack/docker running, the likely cause. Reasonable diagnostic plans."
+  },
+  {
+   "event": "code-s082-e000",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "R0 uses auth.ts history, flags staleness, suspects clock skew; R2 also suspects skew/JWKS. R1 generic."
+  }
+ ]
+}

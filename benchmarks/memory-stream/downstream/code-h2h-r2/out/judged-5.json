@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s082-e052",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All three accurately summarize the session in short bullets, including the version.ts default export."
+  },
+  {
+   "event": "code-s083-e017",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All keep behavior identical, treat as billing code left uncommitted for review."
+  },
+  {
+   "event": "code-s086-e000",
+   "scores": [
+    3,
+    1,
+    1
+   ],
+   "why": "Reader endpoint/replica already exists (cluster-ro); R0 knows and access path. R1/R2 wrongly say lag needs new replica first."
+  },
+  {
+   "event": "code-s088-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give correct htmx revealed/afterend pattern with next-page guard and partial response."
+  },
+  {
+   "event": "code-s088-e008",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "All identify TS1484/type-only imports; none name Biome useImportType; R2 hedges on which linter."
+  },
+  {
+   "event": "code-s088-e021",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "R1 relays unseen export-search findings and peer note. R0 reminds of TS fix; R2 minimal."
+  },
+  {
+   "event": "code-s092-e000",
+   "scores": [
+    3,
+    1,
+    2
+   ],
+   "why": "Lena owns messages files mid-refactor; R0 knows, reuses InvoicesEmptyState. R1 would edit messages files; R2 may."
+  },
+  {
+   "event": "code-s093-e000",
+   "scores": [
+    2,
+    2,
+    1
+   ],
+   "why": "R2 edits Lena-owned messages files without asking. R0/R1 reasonable but ignore i18n and lib/api.ts wrapper."
+  },
+  {
+   "event": "code-s097-e000",
+   "scores": [
+    3,
+    2,
+    1
+   ],
+   "why": "Alerts page on-call via PagerDuty; R0 knows plus kubectl context. R1 hedges; R2 adds unsupported readiness/traffic claim."
+  },
+  {
+   "event": "code-s098-e007",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "API is Fastify 5 (known fact); all still plan to look it up instead of proceeding. R1/R2 relay results."
+  }
+ ]
+}
