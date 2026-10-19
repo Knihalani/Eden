@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s083-e000",
+   "scores": [
+    3,
+    1,
+    1
+   ],
+   "why": "Leo does not do well with sleepovers yet; R0 flags it and holds, others send yes and calendar it unquestioned."
+  },
+  {
+   "event": "life-s085-e030",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "Light chitchat; all fine. R2 action line about retro numbers is odd filler."
+  },
+  {
+   "event": "life-s087-e031",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "None draft yet; R1 best honours no-date/target rule and style; none note CAD-USD settlement dropped from v1."
+  },
+  {
+   "event": "life-s088-e038",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "All drafts warm and fine; R1 asks which channel though #payouts-launch is known."
+  },
+  {
+   "event": "life-s090-e000",
+   "scores": [
+    3,
+    1,
+    1
+   ],
+   "why": "Leo registered for Weeks 2-3 (Jul 13-24); R0 catches the Jun 29 mismatch, others accept wrong date."
+  },
+  {
+   "event": "life-s096-e026",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Supportive, accurate acknowledgement; wins-note offer is reasonable in all."
+  },
+  {
+   "event": "life-s100-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Generic but correct: all will read the email and return four points."
+  },
+  {
+   "event": "life-s100-e017",
+   "scores": [
+    3,
+    1,
+    1
+   ],
+   "why": "Anjali has type 2 diabetes; only R0 goes sugar-free. R1 anniversary note is accurate but sweets issue missed."
+  },
+  {
+   "event": "life-s102-e009",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "R2 uses PC Express Saturday pickup and no-name staples; R1 applies stale all-tree-nut allergy; R0 generic."
+  },
+  {
+   "event": "life-s103-e007",
+   "scores": [
+    3,
+    1,
+    2
+   ],
+   "why": "Car now with Belairdirect BD-AU-7731904; R0 knows it, R1 stale (thinks still shopping around), R2 generic."
+  }
+ ]
+}

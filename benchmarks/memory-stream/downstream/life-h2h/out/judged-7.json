@@ -1,0 +1,51 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s140-e051",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "Venting rule: reflect, no unasked fixes. R1/R2 suggest addressing Tom; R1 also drags in Nate invoice."
+  },
+  {
+   "event": "life-s145-e020",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All empathize and give sound no-sweep, vacuum-then-damp-microfiber advice."
+  },
+  {
+   "event": "life-s148-e018",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "R0 gives correct count (23, excluding Thanksgiving) to Thu 12 Nov; others give no number."
+  },
+  {
+   "event": "life-s150-e000",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "R1 confuses tickets blocking GA with blocked tickets from stale August snapshot."
+  },
+  {
+   "event": "life-s150-e015",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "Dr. Lin is at Danforth Smiles, 822 Danforth; only R0 knows the address and existing Nov 3 checkup."
+  }
+ ]
+}
