@@ -426,3 +426,23 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - **Life: dead.** The next moment's needs are not predictable from what came before. Even firing every prediction reaches 0.05 recall, and trigger recall is 0.
   - Coding work is continuous, so it is predictable. A personal assistant's moments are mostly new topics.
 - **Life labels (independent labeler):** 754 turns. Plan need turns 131, labeler need turns 296. Items: both 123, plan-only 36, labeler-only 455. Labeler recall of the plan 0.774. The same pattern as code: the plan is confirmed, and the labeler is about 2× more lenient.
+
+## C4-E3 · 2026-10-19 · Action-time cue (F18-lite): the agent's planned tool calls join the cue at the first PreToolUse
+- **Leak check:** in no need turn (69 code, 98 life) do the agent's tool inputs already state a needed item at coverage ≥ 0.6.
+- **Kill criterion (pre-run):** dead if neither world gains ≥ 0.05 recall at equal silence.
+- **Numbers (dev, strict, plan labels; without → with act=1):**
+
+  | World | Method | Recall | Silence |
+  |---|---|---|---|
+  | code | vote | 0.3848 → 0.4152 | 0.3839 → 0.3363 |
+  | code | bank ∧ lex | 0.3273 → 0.2394 | 0.4702 → 0.5685 |
+  | code | lex+when | 0.2758 → 0.3485 | 0.2143 → 0.1994 |
+  | life | vote | 0.2257 → 0.2004 | 0.2938 → 0.2676 |
+  | life | bank ∧ lex | 0.1962 → 0.1709 | — |
+  | life | lex+when | 0.2321 → 0.2152 | — |
+
+  Proactive recall is unchanged everywhere.
+- **Verdict: dead in this lexical form.**
+  - The agent's commands add as much noise as signal for these matchers.
+  - The gain on code lex (+0.07 recall at −0.015 silence) does not carry over to life.
+  - An action check with structure (tool name and arguments against a memory's rule, as the guard does) is a separate question. The policy-guard work (P2.x, P8.4) covers it.
