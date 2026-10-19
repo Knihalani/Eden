@@ -624,3 +624,27 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - no p on code dev gives silence ≥ 0.65 at recall ≥ 0.45;
   - the dev-chosen p gives silence < 0.55 on either rt1 world;
   - rt1 recall falls below F22 seq's (code 0.42, life 0.16) by more than 0.05.
+
+## C4-E10 · 2026-10-19 · Downstream effect re-measured (both worlds), with two harness fixes
+- **Fix 1, responder order:** the C3-E4 responder answered a list of packets per turn and swapped the order on 4 of 45 code cases (13 of 45 on a first life run). This was detected by overlap between each response and the oracle packet's rare tokens.
+  - `downstream.py items` now gives one shuffled item per (turn, packet), each with its own id, and `collect` reassembles them.
+  - The C3-E4 outputs are kept in `downstream/old-c3/`.
+- **Fix 2, judge history:** the judge gets `history_evidence` (`evidence.py`; see C4-E8).
+- **Setup:** the same 60 turns per world as C3-E4 (life: new sample, seed 5). Responder: sonnet. Judge: opus, blind. Code conditions: none / oracle / vote (`vote:need=2,bt=0.25,lt=6,st=4,strip=1`); life: none / oracle.
+- **Numbers (`downstream.py report`):**
+
+  | World | Group | n | Mean none / oracle (/ vote) | Oracle − none | Share with effect ≥ 1 | Vote − none |
+  |---|---|---|---|---|---|---|
+  | code | plan | 30 | 2.07 / 2.87 / 2.23 | +0.8 | 0.767 | +0.167 |
+  | code | labeler-only | 15 | 2.4 / 2.8 / 2.53 | +0.4 | 0.467 | +0.133 |
+  | code | no-need | 15 | 2.67 / 2.73 / 2.67 | +0.067 | 0.067 | 0.0 |
+  | life | plan | 30 | 1.77 / 2.67 | +0.9 | 0.767 | — |
+  | life | labeler-only | 15 | 2.33 / 2.87 | +0.533 | 0.6 | — |
+  | life | no-need | 15 | 2.8 / 2.67 | −0.133 | 0.0 | — |
+
+- **Verdict:**
+  - The labels hold on both worlds: memory changes the outcome on 77% of plan-need turns, at about +0.8–0.9 on a 0–3 scale.
+  - Labeler-only needs are about half real (+0.4 / +0.53).
+  - C3-E4's "a wrong packet hurts" (vote −0.40 on no-need) does not reproduce with the fixes (vote − none = 0.0). That claim is withdrawn: wrong bullets cost tokens but showed no measured outcome harm at n = 15.
+  - The vote keeps about 21% of the available benefit on code plan turns (0.167 of 0.8).
+- **Caveats:** one responder run per condition; n = 15 in the small groups; all models are Claude; life has no system condition yet.

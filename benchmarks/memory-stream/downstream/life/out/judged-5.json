@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s028-e022",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give accurate, kid-friendly Flanders/McCrae explanations."
+  },
+  {
+   "event": "life-s085-e015",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Identical concise Slack drafts held for approval."
+  },
+  {
+   "event": "life-s058-e010",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Search result not in the record; both honestly decline to guess and offer to look or redo it."
+  },
+  {
+   "event": "life-s001-e039",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "No data on autopays or Amazon order; both recap only recent work, R0 more fully. Neither covers earlier sessions."
+  },
+  {
+   "event": "life-s077-e026",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 fits the lazy-Saturday mood; R1 claims nothing needs a reply before Monday, unsupported at this point."
+  },
+  {
+   "event": "life-s088-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both produce the checklist correctly; ordering choice is harmless."
+  },
+  {
+   "event": "life-s025-e032",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Identical warm replies; saving the Nov 3 birthday/florist habit is appropriate since it was new."
+  },
+  {
+   "event": "life-s023-e024",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R0 overclaims only one open item (misses Aisha doc, new tickets) and reassures; R1 shrinks tomorrow into short list."
+  },
+  {
+   "event": "life-s052-e019",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Identical light acknowledgement."
+  },
+  {
+   "event": "life-s010-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both warm, short, age-free one-liners for the card."
+  }
+ ]
+}
