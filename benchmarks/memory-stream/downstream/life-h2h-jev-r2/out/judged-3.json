@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s096-e026", "scores": [3, 3, 3, 3], "why": "Warm acknowledgement fits; offering to log the win for review (wins record exists) is reasonable."},
+{"event": "life-s100-e000", "scores": [3, 3, 3, 3], "why": "No email content in evidence; all correctly plan to read and summarize without guessing."},
+{"event": "life-s100-e017", "scores": [3, 2, 1, 1], "why": "Mom has type 2 diabetes; call now Saturdays. R1 right on both; R2 cites stale Sunday call; R3/R4 miss sugar-free."},
+{"event": "life-s102-e009", "scores": [3, 3, 2, 2], "why": "PC Express Saturday pickup with no-name staples is known. R3 ignores it; R4 also cites stale all-tree-nut rule."},
+{"event": "life-s103-e007", "scores": [2, 2, 3, 3], "why": "Insurer is Belairdirect BD-AU-7731904 since April; R1/R2 don't know and must search."},
+{"event": "life-s105-e000", "scores": [3, 2, 2, 3], "why": "Prior plumber options and frost-free hose bib advice for this tap exist; R1/R4 use them, R2/R3 generic."},
+{"event": "life-s105-e004", "scores": [3, 3, 3, 3], "why": "All book Mon 29 Jun and set sensible Lattice reminders for a Fri 10 Jul deadline."},
+{"event": "life-s105-e028", "scores": [3, 3, 2, 3], "why": "Light banter fits; R3's hedging about lacking feeding times adds nothing."},
+{"event": "life-s105-e032", "scores": [1, 1, 1, 1], "why": "Known: weekend-morning baking with Leo helps her unwind. All claim no record."},
+{"event": "life-s106-e005", "scores": [1, 1, 1, 1], "why": "Basement kitchen is known: microwave, induction hotplate, old fridge. All say they don't have it."},
+{"event": "life-s107-e005", "scores": [2, 3, 3, 2], "why": "R2/R3 note Aisha's scheduled freeze notice; R1 misses it; R4 adds exclamation mark and claims done prematurely."},
+{"event": "life-s107-e009", "scores": [3, 3, 3, 3], "why": "No recorded reasons for choosing Nate at this point; all correctly search rather than invent."},
+{"event": "life-s111-e007", "scores": [2, 2, 2, 2], "why": "Crew is Nate (prefers texts, 7:30 start); Hannah lets crew in when away. None uses these."},
+{"event": "life-s111-e027", "scores": [2, 3, 2, 2], "why": "R2 captures the rule (carry-on for short trips, Leo checklist days ahead) though asks known return date; others only ask."},
+{"event": "life-s113-e000", "scores": [3, 3, 3, 3], "why": "All update the OOO text and end it tomorrow morning appropriately."}
+]}
