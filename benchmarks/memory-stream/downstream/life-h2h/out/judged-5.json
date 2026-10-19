@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s105-e000",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R2 recalls prior outdoor-tap plumbers and frost-free advice; R1 recalls October history; R0 generic but fine."
+  },
+  {
+   "event": "life-s105-e004",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All book Monday 29 Jun and set sensible reminders before Fri 10 Jul; R0 wins-record link is relevant."
+  },
+  {
+   "event": "life-s105-e028",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "Chitchat; R0 needlessly disclaims, R2 adds irrelevant Aisha action."
+  },
+  {
+   "event": "life-s105-e032",
+   "scores": [
+    1,
+    1,
+    1
+   ],
+   "why": "Facts say weekend-morning baking with Leo is how she unwinds; all claim no record."
+  },
+  {
+   "event": "life-s106-e005",
+   "scores": [
+    1,
+    1,
+    1
+   ],
+   "why": "Basement kitchen has microwave, induction hotplate and old fridge; all claim no record."
+  },
+  {
+   "event": "life-s107-e005",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "All drafts accurate; R0/R1 use exclamation marks she avoids in work writing; R2 clean."
+  },
+  {
+   "event": "life-s107-e009",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "Reasons not in available facts; looking it up is right. R1 adds irrelevant Nate texting detail."
+  },
+  {
+   "event": "life-s111-e007",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "Scheduling messages may be sent directly; R1 does so. R0/R2 needlessly hold for approval and claim no crew contact."
+  },
+  {
+   "event": "life-s111-e027",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Packing preference not yet recorded; all ask and start a list with Leo items; R1 correctly cites AC120."
+  },
+  {
+   "event": "life-s113-e000",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "All handle it; R1 sign-off deviates from her Best, Riya style."
+  }
+ ]
+}

@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s115-e008",
+   "scores": [
+    2,
+    1,
+    1
+   ],
+   "why": "No current expiry facts; R1/R2 invent Riya's March 2026 expiry. R0 sound rule and check, but ignores Leo's Nov 2025 renewal."
+  },
+  {
+   "event": "life-s118-e000",
+   "scores": [
+    3,
+    3,
+    1
+   ],
+   "why": "No renewal data on file; R2 fabricates a $1,640 baseline premium unsupported by facts or history."
+  },
+  {
+   "event": "life-s122-e004",
+   "scores": [
+    3,
+    1,
+    3
+   ],
+   "why": "Tuesday collection, green bin weekly is known. R1 claims no schedule and adds irrelevant demo conflict."
+  },
+  {
+   "event": "life-s123-e004",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly follow up with the rent-control note for Tanvi."
+  },
+  {
+   "event": "life-s126-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All pull this month's notes and propose grouping without changing anything."
+  },
+  {
+   "event": "life-s126-e021",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Short, warm sign-offs consistent with request for brevity."
+  },
+  {
+   "event": "life-s131-e027",
+   "scores": [
+    1,
+    1,
+    1
+   ],
+   "why": "All miss the saved fact: role-play of real situations and Mexican (not Castilian) vocabulary."
+  },
+  {
+   "event": "life-s138-e007",
+   "scores": [
+    2,
+    1,
+    1
+   ],
+   "why": "R0 uses note's 12-15C, layers, rain; none mention NYE plan (short fireworks at Pra\u00e7a do Com\u00e9rcio). R2 invents note names."
+  },
+  {
+   "event": "life-s140-e033",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "Home with basement temp kitchen; R1 implies they're travelling ('where you're staying')."
+  },
+  {
+   "event": "life-s140-e044",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "All look up the game; R1 adds irrelevant sushi ETA."
+  }
+ ]
+}
