@@ -46,6 +46,20 @@ slice spec. If R10-5 is approved, a slice turns this into one under the normal l
 - **Turns with no tool call get nothing.** On personal-assistant turns that need memory this is 11 of 49 (questions
   like "remind me what I said…"). A rough ceiling for fixing it is about +0.022 per turn (C8-E1).
 
+## How much of the gain survives a slower check (estimate)
+
+Post hoc, from C8-E4's 10 sessions with a tool call: the share that still has a tool call at or after the check's
+latency, times the measured per-turn gain over today's plugin. It assumes the gain is spread evenly over turns and
+that delivery can use any later tool call of the turn.
+
+| Check latency | Turns still reachable | Coding gain kept | Personal-assistant gain kept |
+|---|---|---|---|
+| ≤ 2 s | 10 of 10 | +0.10 | +0.13 |
+| 3 s | 8 of 10 | +0.08 | +0.11 |
+| 5 s | 5 of 10 | +0.05 | +0.07 |
+| 10 s | 3 of 10 | +0.03 | +0.04 |
+| 20 s | 1 of 10 | +0.01 | +0.01 |
+
 ## What the user decides
 
 1. **Allow an in-turn model call off the hook.**
