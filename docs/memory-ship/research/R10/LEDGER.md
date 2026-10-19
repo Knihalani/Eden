@@ -1153,3 +1153,15 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - `prep_h2h` takes `--vtag` (default `cal-ds3`) for missing verifier outputs.
   - `h2h.py` shares its loading and bootstrap helpers, uses argparse (argument order no longer matters), and asserts when a repeat run lacks a turn.
   - All published numbers re-run unchanged.
+
+## C7-E1 · 2026-10-19 · A model-free hook path, tightened: vote k ≤ 2, superseded store, dated (pre-registration)
+- **Blocked first:** a NIM re-measure of the verifier (R10-5 under D37). This environment has no `NVIDIA_API_KEY`; the endpoint answers, but no key is set. That waits on the user adding one to the environment.
+- **Motivation (C6-E3 harm cases):** the vote's harmful packets on non-need turns carried stale rows ("the CLI uses yargs" after commander; org-timezone formatting), rules that do not apply, and extra rows beyond the first.
+- **Setup:** `prep-system --system "vote:need=2,bt=0.25,lt=6,st=4,strip=1,k=2" --dated --supersede`.
+  - Same turns as C6-E3: code 145, life 169. Packets change on 39 and 63 turns.
+  - At most 2 rows; the store has the C5-E5 cross-batch supersession pass applied (a sleep-time model, sonnet here; D37 would require NIM); each row dated; delivered at Submit; no model at hook time.
+  - Protocol as in C5-E1.
+- **Rule, set before running** (`h2h.py --single <world> <world>-vote-k2-sup`):
+  - **Model-free path pays** if per-turn utility is > +0.05 on both worlds, with CI lower bound > 0.
+  - **Positive, not firm** if > 0 on both.
+  - **Not enough** otherwise.
