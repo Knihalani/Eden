@@ -110,6 +110,12 @@ Families differ in mechanism. Every kill criterion was written before its run.
 2. **Model-free selection good enough to stand alone** (C6-E3 says the vote is not): learn from the verifier's picks at sleep (distil to cues), or ask the user to allow the in-turn call (R10-5). Also: **latency and cost of the off-hook verifier:** one haiku call per turn with ≤ 15 candidates, measured; and real PreToolUse delivery in a headless Claude Code run.
 3. **Episodic state rows:** expire or date-gate in-flight state at sleep, so "where did we leave things" gets the latest state.
 
+## Cycle 8 findings (LEDGER C8-…)
+
+- **Deferred delivery misses turns with no tool call** (C8-E1): 11 of 49 life plan-need turns ("remind me what I
+  said…") get no packet for that reason alone; the ceiling of fixing it is about +0.015 per turn on life.
+- **The NIM re-measure is one command away** (C8-T1, `verify_nim.py`); it waits on an `NVIDIA_API_KEY`.
+
 ## Cycle 7 findings (LEDGER C7-E1…)
 
 - **A tightened model-free vote (k ≤ 2, superseded store, dated) is positive but not firm** (C7-E1): code +0.013
