@@ -1,0 +1,12 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s098-e000", "scores": [1, 3], "why": "Office is King St West and Wen is vegan; R1 uses both, R0 claims not to know the office."},
+{"event": "life-s060-e002", "scores": [2, 3], "why": "R1 names known Wednesday items (standup, Tom 1:1 at 11:30, pickup) and proposes thinning pending approval; R0 is generic."},
+{"event": "life-s017-e020", "scores": [2, 3], "why": "Both give unscented ideas; R1 tailors to Grace's piano and Daniel's engineering and notes Thanksgiving Monday hours."},
+{"event": "life-s001-e000", "scores": [2, 3], "why": "Both plan a Saturday board-game date; R1 also applies Sam's vegetarian, no-fish diet."},
+{"event": "life-s145-e000", "scores": [3, 3], "why": "Both correctly plan a nearby, quieter patch search for a 1:30 departure; no known conflict missed."},
+{"event": "life-s028-e010", "scores": [3, 3], "why": "Both pull TD statements for the three months without inventing totals; appropriate."},
+{"event": "life-s130-e000", "scores": [2, 3], "why": "Both check for Nate's message; R1 anchors on last known schedule (Aug 28 finish) and cabinet timing."},
+{"event": "life-s028-e028", "scores": [2, 3], "why": "Both give sound pros and cons; R1 tailors to Priya's architecture firm (client deadlines, billing)."},
+{"event": "life-s155-e007", "scores": [3, 2], "why": "R0 ties unresolved items to the promised 2026-10-28 readiness doc for Tom; R1 is fine but misses that."},
+{"event": "life-s023-e028", "scores": [3, 3], "why": "Both give a reasonable child-renewal checklist and offer to verify officially and find appointments."}
+]}

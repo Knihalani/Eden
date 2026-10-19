@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s028-e022",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both accurate on Flanders poppies and McCrae with a good kid version."
+  },
+  {
+   "event": "life-s085-e015",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give correct Slack draft and wait for go-ahead."
+  },
+  {
+   "event": "life-s058-e010",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "No VIA results exist in records; both honestly decline to invent and offer a fresh lookup."
+  },
+  {
+   "event": "life-s001-e039",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both wrongly limit history to this chat despite earlier May/July uses; neither notes the Northline deposit."
+  },
+  {
+   "event": "life-s077-e026",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both respect a quiet Saturday appropriately."
+  },
+  {
+   "event": "life-s088-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both produce the checklist; R1 adds sensible order and checkboxes."
+  },
+  {
+   "event": "life-s025-e032",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both warm and save the birthday routine; R1 also acknowledges holding the book order."
+  },
+  {
+   "event": "life-s023-e024",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both empathetic and brief; reasonable handling of the pending meeting slot."
+  },
+  {
+   "event": "life-s052-e019",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both light, fitting replies."
+  },
+  {
+   "event": "life-s010-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give short, warm, age-free card lines."
+  }
+ ]
+}

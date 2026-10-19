@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s075-e011",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "R2 respects Linear branch id and commit conventions; R1 pushes/opens PR unasked; R0 skips branch convention."
+  },
+  {
+   "event": "code-s030-e013",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "API logs with pino; R2 hedges on which logging library."
+  },
+  {
+   "event": "code-s015-e000",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "R1 includes known pnpm dev step and billing rule; others defer all other steps."
+  },
+  {
+   "event": "code-s027-e025",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "Clerk is the live web auth (middleware.ts); only R2 notes it."
+  },
+  {
+   "event": "code-s056-e038",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "Copy lives in next-intl messages; R0 edits there; R2 adds irrelevant exclamation note and hardcodes."
+  },
+  {
+   "event": "code-s092-e012",
+   "scores": [
+    2,
+    2,
+    1
+   ],
+   "why": "ServiceMonitor scrapes 9464, dashboards in infra/grafana; R0 informed but doubts billing-sync queue exists (stale); R2 knows nothing."
+  },
+  {
+   "event": "code-s042-e008",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All do items 1 and 3 correctly and leave tests to user."
+  },
+  {
+   "event": "code-s013-e004",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "User-facing CLI change needs docs and changeset; only R1 includes them."
+  },
+  {
+   "event": "code-s088-e023",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R1 notes existing api slugify; R2 applies named-export and Vitest; R0 rechecks known runner."
+  },
+  {
+   "event": "code-s003-e026",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All add CSV-only --bom correctly with tests."
+  }
+ ]
+}

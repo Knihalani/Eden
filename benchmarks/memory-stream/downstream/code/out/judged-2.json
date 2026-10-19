@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s082-e025",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R1/R2 use known /healthz (Postgres+Redis) for readiness, avoid it for liveness; R0 ignores known endpoint."
+  },
+  {
+   "event": "code-s022-e008",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "Errors go to Sentry and pino; only R2 uses that, others hedge on tracker/logger."
+  },
+  {
+   "event": "code-s085-e010",
+   "scores": [
+    1,
+    3,
+    2
+   ],
+   "why": "Bull Board already mounted at /admin/queues; R1 uses it, R2 would set it up anew, R0 doesn't know BullMQ."
+  },
+  {
+   "event": "code-s003-e000",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "R2 uses ioredis-mock and pnpm --filter worker test; others generic but sound."
+  },
+  {
+   "event": "code-s086-e004",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "R0/R2 know metrics port 9464 and scrape; R1 ignores known setup and drifts to replica topic."
+  },
+  {
+   "event": "code-s101-e013",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "Presigned S3 via POST /v1/uploads known; R0 adds misapplied Lena progress-bar claim; R2 hedges on storage."
+  },
+  {
+   "event": "code-s046-e022",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "Branch needs Linear id; R1/R2 ask for it, R0 ignores convention."
+  },
+  {
+   "event": "code-s035-e058",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "User asked JetBrains Mono; R1 wires via next/font and Tailwind v4 theme; R2 substitutes tabular-nums; R0 hedges."
+  },
+  {
+   "event": "code-s022-e000",
+   "scores": [
+    1,
+    1,
+    3
+   ],
+   "why": "Fact: @clerk/backend in src/plugins/auth.ts; only R2 recalls it."
+  },
+  {
+   "event": "code-s085-e000",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "Node 20.11 via .nvmrc and pnpm 9 known; R1/R2 apply them, R0 rediscovers."
+  }
+ ]
+}
