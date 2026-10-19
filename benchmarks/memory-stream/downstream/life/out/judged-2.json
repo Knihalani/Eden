@@ -1,0 +1,12 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s027-e014", "scores": [2, 3], "why": "Both defer reading the email; R1 grounds the verdict in her B1-to-B2/DELE goal, current lessons and cost."},
+{"event": "life-s105-e030", "scores": [1, 3], "why": "History has Tom's 2026-02-24 slots (10:00-10:30, 15:30-16:00) and the 14-event May sync; R0 claims not to know."},
+{"event": "life-s100-e006", "scores": [1, 3], "why": "PB 2:04:37 at Toronto Waterfront Half and pre-authorized TD debit are known; R0 says it has neither."},
+{"event": "life-s051-e017", "scores": [3, 2], "why": "R0 uses known prefs (19:00, vegetarian for Sam, Saffron Lane, Valentine's); R1 claims not to know dietary needs or time."},
+{"event": "life-s026-e017", "scores": [2, 3], "why": "Neither has the price yet; R1 applies the CAD-with-INR-in-brackets rule and known rate."},
+{"event": "life-s131-e012", "scores": [3, 1], "why": "They met at a board-game night in 2015; R0 builds on it, R1 claims not to know the story."},
+{"event": "life-s101-e004", "scores": [3, 2], "why": "R0 flags the 8:30 Saturday call with mom and an overloaded day; R1 misses the call conflict."},
+{"event": "life-s018-e007", "scores": [3, 2], "why": "R0 gives a practical plan, which calms her more than reassurance; R1 leans on reassurance first."},
+{"event": "life-s025-e028", "scores": [3, 2], "why": "R0 commits to a Tana French hardcover with card and Canadian retailer check; R1 hedges more."},
+{"event": "life-s087-e000", "scores": [3, 1], "why": "She is venting; rule says listen, no fixes unless asked. R1 jumps to a holding reply."}
+]}

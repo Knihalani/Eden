@@ -1,0 +1,11 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s011-e000", "scores": [1, 3], "why": "R0 invents an 'Oct 21' birthday for Leo supported by nothing and asks to confirm; R1 captures all updates cleanly."},
+{"event": "life-s020-e016", "scores": [3, 2], "why": "R0 uses role-play, Mexican vocab and the correct Thursday 8 pm lesson; R1 fine but generic, ignores known learning preferences."},
+{"event": "life-s022-e004", "scores": [2, 3], "why": "R1 knows Sam's oat-milk flat white, no hazelnut, vegetarian; R0 asks for coffee and food preferences it should know."},
+{"event": "life-s025-e032", "scores": [3, 3], "why": "Both acknowledge warmly and record Nov 3 birthday and florist; R0 sets the yearly reminder previously promised, R1 offers it."},
+{"event": "life-s028-e010", "scores": [3, 3], "why": "Both plan to pull TD grocery totals for three months; R1 sensibly includes TD Visa too."},
+{"event": "life-s038-e024", "scores": [3, 3], "why": "Both give an accurate partial-yes for Lisbon with a useful phrase-list action."},
+{"event": "life-s046-e041", "scores": [2, 1], "why": "R0 recalls Ottawa Tulip Festival but misreads 'yes please' as posting Wen's note; R1 forgets Sam's parents are in Ottawa and the Tulip research."},
+{"event": "life-s047-e019", "scores": [3, 2], "why": "R0 knows Intact with April renewal and times quotes accordingly; R1 claims not to know renewal date or insurer."},
+{"event": "life-s050-e007", "scores": [3, 2], "why": "R0 flags the library card expiring 2026-02-14, relevant now; R1 just checks holds generically."}
+]}

@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s038-e024",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly say written Portuguese is readable, spoken European Portuguese hard; sensible Lisbon phrase-list action."
+  },
+  {
+   "event": "life-s041-e003",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both handle Marcus reply and a warm, short, emoji-free card; R1 signs generically but offers names."
+  },
+  {
+   "event": "life-s157-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 catches the Sat 10:30 skating clash on 23 Jan and cashew/pistachio allergy; R0 only generic lookup."
+  },
+  {
+   "event": "life-s028-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both acknowledge budget and plan the Linear-to-Notion risk doc; R1 adds ISO dates for work doc."
+  },
+  {
+   "event": "life-s077-e034",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 delivers a full 15-item list and haul options; R0 personalizes but never actually gives the checklist."
+  },
+  {
+   "event": "life-s141-e023",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both generic; neither uses earlier lookup (416-808-2222, tow up to $250, storage $55/day, Commissioners St)."
+  },
+  {
+   "event": "life-s131-e029",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Identical simple acknowledgement of shorter replies."
+  },
+  {
+   "event": "life-s035-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both warm, brief reactions with a light save offer."
+  },
+  {
+   "event": "life-s027-e020",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Same correct gram conversions; R0 slightly wordier."
+  },
+  {
+   "event": "life-s143-e013",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 fits the ask; R1 adds holding non-urgent items, which she did not request."
+  }
+ ]
+}
