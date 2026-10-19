@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s038-e028",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correct general Kubernetes explanations."
+  },
+  {
+   "event": "code-s041-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both plan correct tests and flag the negative half-cent asymmetry."
+  },
+  {
+   "event": "code-s041-e009",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "History shows @acme/cli, bin acme, npm i -g @acme/cli; R0 refuses entirely, R1 hedges but gives useful run command."
+  },
+  {
+   "event": "code-s041-e013",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both suggest swapping tbody only; valid htmx fixes."
+  },
+  {
+   "event": "code-s041-e021",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 notes status-filter's own kind prop should stay; R1 may rename it wrongly."
+  },
+  {
+   "event": "code-s041-e038",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both accurate: suite green, branch pushed."
+  },
+  {
+   "event": "code-s042-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly separate blocking from optional review items."
+  },
+  {
+   "event": "code-s043-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add stories and search for tracking instead of guessing."
+  },
+  {
+   "event": "code-s045-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither reuses existing HMAC SHA-256 X-Acme-Signature webhook signing; otherwise reasonable plans."
+  },
+  {
+   "event": "code-s045-e007",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "No DNS record in evidence; both search. R1 asks for domain though acme.dev is known."
+  },
+  {
+   "event": "code-s045-e012",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "History shows worker tests passed (88) with no tests for new handler; both say results not back."
+  },
+  {
+   "event": "code-s046-e000",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "pdfFilename slug helper already exists; R0 reuses it, R1 writes a new one."
+  },
+  {
+   "event": "code-s046-e008",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R1 uses org.timeZone formatDate, stale versus viewer-timezone UI formatting; R0 generic and correct."
+  },
+  {
+   "event": "code-s047-e026",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both fix typo and constrain illustration."
+  },
+  {
+   "event": "code-s047-e032",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both accurate wrap-ups."
+  }
+ ]
+}

@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s106-e004",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both embed correctly; R0 rightly checks CSP frame rules. R1 garbles context with 'extensions side'."
+  },
+  {
+   "event": "code-s107-e006",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 knows existing pricing page and route groups; minor distractions. R0 hedges on knowable routing/auth layout."
+  },
+  {
+   "event": "code-s108-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 uses known Playwright setup, correct commands, flags known fixture failure. R0 should know Playwright exists."
+  },
+  {
+   "event": "code-s108-e018",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Bug is in web ExportCsvButton; R0 points at api csv.ts with unsupported helper names. R1 correct generic plan."
+  },
+  {
+   "event": "code-s108-e027",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly scope the fix and flag API-visible response values."
+  },
+  {
+   "event": "code-s108-e032",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly leave payments.ts and report worker tests."
+  },
+  {
+   "event": "code-s108-e036",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both accurately summarize completed work and passing suites."
+  },
+  {
+   "event": "code-s108-e040",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "scripts/count-todos.ts already exists per history; both plan to write it anew without noticing."
+  },
+  {
+   "event": "code-s108-e045",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correct, concise explanations of as const vs satisfies."
+  },
+  {
+   "event": "code-s108-e047",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correct on using/Symbol.dispose; R1 adds reverse-order disposal detail."
+  }
+ ]
+}

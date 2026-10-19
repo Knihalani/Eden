@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s070-e012",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both plan a sensible initials fix; neither recalls the earlier initials() fix in user-avatar.tsx that should be reused."
+  },
+  {
+   "event": "code-s071-e012",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly acknowledge the csv tests and the uncommitted state."
+  },
+  {
+   "event": "code-s071-e014",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give sound per-org structured logging plans; R0 hedges appropriately on reasons."
+  },
+  {
+   "event": "code-s072-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Reasonable generic plans; neither considers OrbStack/docker context or Testcontainers-style local setup facts."
+  },
+  {
+   "event": "code-s073-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both workable; both miss the org_id-on-every-table convention. R1 better grounded on paths/commands."
+  },
+  {
+   "event": "code-s075-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R0 hedges on formatter (Biome known); R1 uses repo formatter and adds new commit without rewriting pushed history."
+  },
+  {
+   "event": "code-s076-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correct rename plans with git mv and typecheck."
+  },
+  {
+   "event": "code-s076-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both fine casual replies reflecting the clean rename."
+  },
+  {
+   "event": "code-s076-e014",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both friendly and track the pending e2e run."
+  },
+  {
+   "event": "code-s076-e017",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 good, cautious about strings others own; R1 brings in unrelated PR-specific copy rules as general rules."
+  },
+  {
+   "event": "code-s076-e025",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both accurate explanations of HTTP/2 multiplexing vs keep-alive."
+  },
+  {
+   "event": "code-s077-e005",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "tsx is already a devDependency per package.json history; neither notices. R0 also hedges on the package manager."
+  },
+  {
+   "event": "code-s077-e011",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Both explain correctly; R0 hedges on the install command though pnpm is known."
+  },
+  {
+   "event": "code-s077-e013",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both correctly flag the pending lockfile but hedge on the package manager, which is known to be pnpm."
+  },
+  {
+   "event": "code-s080-e000",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "R0 fine. R1 claims the clients command uses yargs; the CLI is built with commander (stale)."
+  }
+ ]
+}

@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s058-e007",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 uses known react-hook-form+zod pattern and org-form template; R1 generic."
+  },
+  {
+   "event": "code-s058-e012",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both miss that OpenAPI is generated from zod schemas; neither states docs come from schema."
+  },
+  {
+   "event": "code-s060-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both gate Overdue on unpaid; R1 adds known timezone testing practice."
+  },
+  {
+   "event": "code-s060-e021",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 knows Node 20.11 pin and engines failure on fresh laptops; R0 misses it."
+  },
+  {
+   "event": "code-s060-e026",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Install already succeeded; R0 needlessly proposes redoing it; R1 accurately summarizes status."
+  },
+  {
+   "event": "code-s061-e007",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both commit to plan-first, no edits until approval."
+  },
+  {
+   "event": "code-s066-e013",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 reuses known csv-filename.ts and slugify helper; R1 generic, misses existing slug logic."
+  },
+  {
+   "event": "code-s066-e028",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add ServiceMonitor with metrics port and label checks."
+  },
+  {
+   "event": "code-s067-e006",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both explain up -d vs start correctly."
+  },
+  {
+   "event": "code-s068-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both split commits onto separate branches after confirming unpushed."
+  },
+  {
+   "event": "code-s068-e017",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Neither uses known (dashboard) route group; R1 only drafts comment though user asked to leave it."
+  },
+  {
+   "event": "code-s068-e023",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "R1 uses git stash, violating the no-stash rule; R0 uses a separate worktree."
+  },
+  {
+   "event": "code-s070-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both appropriate small talk."
+  },
+  {
+   "event": "code-s070-e002",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Both correct; R0 invents a reviewer-flagged line that doesn't exist."
+  },
+  {
+   "event": "code-s070-e004",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both appropriate acknowledgements."
+  }
+ ]
+}
