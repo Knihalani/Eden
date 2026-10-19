@@ -478,3 +478,35 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - Life: the matchers degrade on fresh cases (silence 0.24–0.32, against 0.29–0.52 frozen).
   - The cases are fair: oracle-need reaches 0.90–1.0.
   - Small n: 29 and 23 human need events.
+
+## C4-E5 · 2026-10-19 · F22 deferred in-turn verification (push, with a model off the hook)
+- **Setup:** `verify.py`.
+  - At Submit the hook takes up to 15 candidates from lex+when and the bank (no model) and delivers nothing.
+  - haiku (a third model family) checks the candidates.
+  - The packet is delivered at the turn's first PreToolUse or PostToolBatch; a turn with no tool call gets nothing. `ideal=1` delivers at Submit as an upper bound.
+  - Same judge-sample events, strict sleep store, dev.
+- **Kill criterion (pre-run):** dead if, on both worlds, it does not beat the hook vote by ≥ +0.15 silence at equal or better recall.
+- **Candidate ceiling** (share of plan needs among the 15 candidates): code 0.597 (55 events), life 0.3778 (105 events).
+- **Numbers (plan labels; recall CI for code verify [0.348, 0.595]):**
+
+  | World | Method | Recall | Proactive | Precision | Silence | Tokens | Precision at 8% | Trigger recall / silence |
+  |---|---|---|---|---|---|---|---|---|
+  | code | verify (deferred) | 0.4758 | 0.3077 | 0.2086 | 0.6636 | 55.2 | 0.0728 | — |
+  | code | verify, ideal | 0.5121 | — | — | 0.6455 | — | — | — |
+  | code | vote | 0.3848 | 0.2308 | 0.0695 | 0.4182 | — | — | — |
+  | code | pull k=2 | 0.4667 | 0.2308 | 0.2025 | 0.7364 | — | — | — |
+  | code | judge | 0.6909 | 0.4615 | 0.2552 | 0.6364 | — | — | — |
+  | life | verify (deferred) | 0.2553 | 0.1739 | 0.1689 | 0.7222 | 38.0 | 0.0496 | 0.2308 / 0.0 |
+  | life | verify, ideal | 0.3397 | — | — | 0.6019 | — | — | — |
+  | life | vote | 0.2257 | — | 0.0494 | 0.3426 | — | — | — |
+  | life | pull k=2 | 0.2869 | — | — | 0.8426 | — | — | — |
+  | life | judge | 0.5696 | — | — | 0.6481 | — | — | — |
+
+  Union labels, code verify: recall 0.4169, precision 0.3865, silence 0.7317.
+- **Verdict: alive. It is the strongest push system, and it passes its kill line on both worlds.**
+  - Code: +0.09 recall and +0.25 silence over the vote, at 3× the precision. It matches pull's recall and beats it on proactive needs (0.31 vs 0.23), with no help from the agent and no model on the hook.
+  - Life: +0.38 silence and 3.4× precision over the vote.
+  - Gaps:
+    - candidate recall (life ceiling 0.38);
+    - deferral loss on life (many moments have no tool call: 0.34 → 0.26);
+    - trigger silence 0.0: the verifier fires on routine triggers.
