@@ -1,0 +1,78 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s098-e007",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "API is Fastify 5 (plugins dir, preHandler); R1 proceeds correctly; R0 still unsure but checks package.json."
+  },
+  {
+   "event": "code-s102-e006",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Today also included trailmix work; R0 presents an incomplete standup list; R1 flags possible missing work and checks git log."
+  },
+  {
+   "event": "code-s103-e031",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Clerk pk_test key correct in R0, but user's stored fix is client-side formatting; R1 diagnoses timezone gap, fix aligns."
+  },
+  {
+   "event": "code-s105-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Known App Router, global-error.tsx with Sentry; R1 uses error.tsx in dashboard group; R0 hedges on known routing."
+  },
+  {
+   "event": "code-s106-e004",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Known strict CSP (default-src self, no frame-src) in next.config.ts blocks iframe; R0 names it, R1 says 'if any'."
+  },
+  {
+   "event": "code-s107-e006",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "/pricing already exists; R0 catches it (but misses existing settings/team page, cites unverified PR #); R1 would duplicate."
+  },
+  {
+   "event": "code-s108-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "R0 knows Playwright and port 3000 but adds stale pdf failure and overbroad label claim; R1 hedges on known framework."
+  },
+  {
+   "event": "code-s108-e018",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Expenses export location unknown; R1 conflates it with the invoices export-csv-button; R0 investigates with failing test."
+  },
+  {
+   "event": "code-s108-e040",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "scripts/count-todos.ts already exists uncommitted (with known string-literal caveat); both responses would write it anew."
+  }
+ ]
+}
