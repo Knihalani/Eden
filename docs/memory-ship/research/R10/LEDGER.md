@@ -1877,3 +1877,15 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   cites a row covering it; reported alone and in a bounded union with G0@15, entity (cap 20) and time (cap 10);
   pool = rows plus card lines. Compared with C11-E2's capped union (0.83 / 0.71 at a pool of 36).
 - **No verdict rule:** it decides whether action cards are the bounded channel the build plan relies on.
+
+## C11-E5 · 2026-10-19 · An episodic layer in dreaming (pre-registration; exploratory)
+- **Idea (from C11-E3):** next to semantic rows, dreaming writes compact dated episode records per session: what the
+  user asked or decided, what was done, and what tools returned (orders, bookings, directions, lookups), each with
+  its date and entities. Rolled up over time at scale; here only the per-session layer is tested.
+- **Setup:** life only (code drops few episodes). Sonnet subagents read the same label-free batch inputs as the
+  sleep compiler (`sleep/life/in/*.json`) and write `dream/life/episodes/<batch>.json`. Visibility as `--strict`
+  (after the batch's last session).
+- **Measure:** for dev need turns, needed items covered by a visible episode record (via the same coverage check as
+  rows), by item kind; the store ceiling with episodes added; and whether entity / lexical lookup over episode
+  records finds them (rank of the covering record under lexical score; entity match).
+- **No verdict rule.**
