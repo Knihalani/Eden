@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s041-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 correct float/minor-unit fix; R0 blames unrounded lines, a fix already made 09-04, garbled cents/100 remark."
+  },
+  {
+   "event": "code-s041-e016",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both do a clean prop rename across call sites, leaving invoice.kind; R0 also covers stories/tests."
+  },
+  {
+   "event": "code-s042-e008",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly do error-over-empty and extraction into empty-state.tsx, leaving tests."
+  },
+  {
+   "event": "code-s046-e022",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 knows Linear-id branch convention and Conventional Commits; R1 hedges by checking branches for a known convention."
+  },
+  {
+   "event": "code-s055-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 uses Fastify 5 plugin, pino request.log, requestId; R1 generic, ignores known stack."
+  },
+  {
+   "event": "code-s056-e038",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly update dialog copy and leave function names; R1 adds soft-delete rationale, tests."
+  },
+  {
+   "event": "code-s057-e006",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both acknowledge the conciseness preference correctly."
+  },
+  {
+   "event": "code-s057-e010",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "R0 recalls PgBouncer transaction mode prepare:false gotcha and the unwired driver; R1 claims not to know a recorded fact."
+  },
+  {
+   "event": "code-s061-e012",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 holds refactor, reads install logs; R1 assumes yarn.lock (facts say yarn but CI actually pnpm), still checks log."
+  },
+  {
+   "event": "code-s061-e020",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "R1 knows CI-only terraform apply and platform review, prepares PR; R0 implies it would apply to prod itself."
+  }
+ ]
+}

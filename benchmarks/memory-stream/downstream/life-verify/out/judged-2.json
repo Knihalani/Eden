@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s038-e000",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both claim no record, missing the confirmed Home Depot filter order (#W512339870, Leslie St pickup); searching is fine but known fact omitted."
+  },
+  {
+   "event": "life-s038-e024",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly say written Portuguese is readable but spoken European Portuguese is hard; offer a Lisbon cheat sheet."
+  },
+  {
+   "event": "life-s041-e003",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both reply to Marcus and give a warm, short, emoji-free card note from all three; fine."
+  },
+  {
+   "event": "life-s043-e002",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Riya waived confirmation; first keeps the fully refundable and transit rules, second only free cancellation, omits transit."
+  },
+  {
+   "event": "life-s047-e009",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Under-$50 order needs no confirmation; both plan a size 7 dinosaur costume arriving before Fri 30 Jan."
+  },
+  {
+   "event": "life-s050-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Second applies the rule: no date until Aisha signs off, say 'target'. First is cautious but omits that rule."
+  },
+  {
+   "event": "life-s051-e017",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both miss the restaurant rule (19:00, vegetarian options for Sam) and ask about time and diet instead."
+  },
+  {
+   "event": "life-s052-e019",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Light acknowledgement of the haiku; both fit."
+  },
+  {
+   "event": "life-s056-e000",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both claim not to know Sam's birthday (Mar 22) or anniversary and miss his Penguin paperbacks, Fellow Ode grinder and quiet-dinner preference."
+  },
+  {
+   "event": "life-s058-e010",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "No VIA result on record; both say so honestly and offer to rerun; second adds relevant drive time."
+  }
+ ]
+}
