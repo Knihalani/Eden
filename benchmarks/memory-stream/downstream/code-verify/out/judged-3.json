@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s063-e009",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both draft PR description with platform review note and plan placeholder after reading diff."
+  },
+  {
+   "event": "code-s066-e035",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both close the day correctly, flagging infra review and plan output for the ServiceMonitor PR."
+  },
+  {
+   "event": "code-s067-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 gives concrete setup (Node 20.11, env, 1Password, docker compose) and changeset; R1 hedges on known Changesets process."
+  },
+  {
+   "event": "code-s068-e008",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both miss the recorded rule 'ask before adding a new dependency', though both default to asking."
+  },
+  {
+   "event": "code-s075-e011",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 deletes override on branch and opens PR with plan output per infra rule; R0 omits PR/plan step."
+  },
+  {
+   "event": "code-s077-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both generic; neither mentions Lena's earlier sticky-header PR #482 or the z-header token."
+  },
+  {
+   "event": "code-s078-e016",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 sound generic plan; R0 asserts an older default-export Skeleton path likely superseded by shadcn skeleton, though hedged."
+  },
+  {
+   "event": "code-s080-e014",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "R1 adds changeset, full suite, json gaps; R0 skips changeset. Neither flags the 9th being a Friday (no Friday deploys)."
+  },
+  {
+   "event": "code-s080-e020",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "R0 correctly gives pool max 10 per pod but invents a 'scale pods' rule; R1 claims not to know the fact."
+  },
+  {
+   "event": "code-s081-e017",
+   "scores": [
+    3,
+    0
+   ],
+   "why": "Rule: never merge PRs yourself. R0 hands merge back; R1 merges it, violating the rule."
+  }
+ ]
+}
