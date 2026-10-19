@@ -73,8 +73,12 @@ model, chosen by measurement (LEDGER C10-E1). The decision points as they were p
    - **TypeSafe Jev** (a non-generative decision model; added 2026-10-19): one request answers a yes/no question
      per candidate with a calibrated probability; the vendor reports 70–500 ms, and an independent test saw about
      140 ms on the server plus 0.7–0.9 s of network. Published attacks can flip its verdicts, so it needs an A6
-     security review before shipping. `verify_jev.py` measures it once `TYPESAFE_API_KEY` is set.
-   - **An NVIDIA NIM model:** the D37 provider, not yet measured here.
+     security review before shipping. **Measured (C10-E1/E2):** p50 0.21–0.27 s end to end from the container,
+     about ten times inside the budget. With precise criteria and the candidate list in the state (threshold 0.7)
+     its picks are close to the calibrated haiku checker (short by about 0.05 recall on code-rt1, ahead on
+     life-rt1; post hoc). Its effect on replies is not measured yet.
+   - **An NVIDIA NIM model:** none usable (C10-E1): three of the five candidates return 404, one failed to connect,
+     and Nemotron 3.5 Lightning ran at p50 14.3 s with unparseable replies.
      - The repo records hosted p50 1–20 s and p95 40–70 s (EXECUTION.md). Against C8-E4's timings that would reach
        some turns at best and miss at least 5% of calls entirely; the re-measure gives the real numbers.
      - `verify_nim.py` runs the re-measure in one command once `NVIDIA_API_KEY` is in the environment (C8-T1). It

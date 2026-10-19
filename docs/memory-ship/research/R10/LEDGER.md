@@ -1615,3 +1615,23 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **Not pre-registered, noted before the test:** rich 0.7 and list 0.7 are within −0.03 of cal on both recall and
   precision on both dev worlds (largest gap −0.0253), while C10-E1's base Jev at p0.6 was not (recall −0.0485,
   −0.0823). They will be run on the red-team worlds too and reported as post hoc; only decomp 0.7 decides C10-E2.
+
+## C10-E2 · 2026-10-19 · Better-posed Jev questions: red-team result
+- **Runs** (child session; 0 unanswered questions; p50 0.221–0.273 s, p95 0.288–0.342 s, max 0.688 s). Human turns,
+  recall / precision:
+
+  | Test | cal p0.6 | decomp 0.7 (the pick) | rich 0.7 (post hoc) | list 0.7 (post hoc) |
+  |---|---|---|---|---|
+  | code-rt1 | 0.3414 / 0.3673 | 0.0828 / 0.6 | 0.3011 / 0.2951 | 0.2897 / 0.3617 |
+  | life-rt1 | 0.0688 / 0.1667 | 0.0 / — (never fires) | 0.1159 / 0.2308 | 0.1159 / 0.2143 |
+
+- **Verdict, by the rule: still weaker.** The pick (decomp 0.7) loses most of its recall on both red-team worlds
+  (code −0.2586; life fires on no human turn).
+- **Post hoc (not deciding):** list 0.7 is the closest: code-rt1 recall −0.0517, precision −0.0056; life-rt1 recall
+  +0.0471, precision +0.0476. rich 0.7: code-rt1 −0.0403 / −0.0722; life-rt1 +0.0471 / +0.0641. Neither is within
+  −0.03 on code-rt1 recall. Against C10-E1's base Jev at p0.6 on code-rt1 (0.2253 / 0.2979), list 0.7 gains +0.0644
+  recall and +0.0638 precision: the better-posed question does most of the work the user expected.
+- **What this says:** Jev is about ten times inside the latency budget, and with precise criteria and the candidate
+  list in view it nearly matches the calibrated haiku checker at retrieval level (short by about 0.05 recall on
+  code-rt1, ahead on life-rt1). Whether that gap matters for replies is an outcome question: a C6-style downstream
+  head-to-head of Jev list 0.7 is the next test.
