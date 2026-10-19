@@ -1,0 +1,21 @@
+{
+ "batch": "code-sleep-b06",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "code-sleep-b00:m0034",
+   "new": "code-sleep-b06:m0005",
+   "why": "CI now uses pnpm frozen-lockfile, not yarn"
+  },
+  {
+   "old": "code-sleep-b04:m0023",
+   "new": "code-sleep-b06:m0022",
+   "why": "CSV download filename changed to invoices-<org slug>.csv"
+  },
+  {
+   "old": "code-sleep-b00:m0050",
+   "new": "code-sleep-b06:m0019",
+   "why": "Commit convention now imperative subject, not Conventional Commits"
+  }
+ ]
+}

@@ -1,0 +1,46 @@
+{
+ "batch": "life-sleep-b08",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "life-sleep-b05:m0036",
+   "new": "life-sleep-b08:m0004",
+   "why": "Vancouver trip moved to Jul 9-13, booked"
+  },
+  {
+   "old": "life-sleep-b06:m0019",
+   "new": "life-sleep-b08:m0004",
+   "why": "Vancouver trip moved from Jul 31-Aug 4 to Jul 9-13"
+  },
+  {
+   "old": "life-sleep-b07:m0033",
+   "new": "life-sleep-b08:m0004",
+   "why": "Vancouver visit date now settled and booked"
+  },
+  {
+   "old": "life-sleep-b05:m0030",
+   "new": "life-sleep-b08:m0020",
+   "why": "Beta capped at 40 merchants, not ~400"
+  },
+  {
+   "old": "life-sleep-b02:m0042",
+   "new": "life-sleep-b08:m0024",
+   "why": "Jess now walks Fridays only at $25"
+  },
+  {
+   "old": "life-sleep-b00:m0083",
+   "new": "life-sleep-b08:m0029",
+   "why": "Collection day now Thursday, not Wednesday"
+  },
+  {
+   "old": "life-sleep-b02:m0024",
+   "new": "life-sleep-b08:m0029",
+   "why": "Collection day now Thursday, not Tuesday"
+  },
+  {
+   "old": "life-sleep-b00:m0023",
+   "new": "life-sleep-b08:m0033",
+   "why": "Routine scheduling replies may now be sent without draft"
+  }
+ ]
+}
