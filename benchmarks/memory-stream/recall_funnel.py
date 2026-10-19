@@ -9,6 +9,7 @@ item under each generator; recall@k and the share at rank ≤ 3 (a scale proxy).
     python3 benchmarks/memory-stream/recall_funnel.py --actions                       (C11-E2: action registry, caps)
     python3 benchmarks/memory-stream/recall_funnel.py --cards                         (C11-E4: dream action cards)
     python3 benchmarks/memory-stream/recall_funnel.py --worlds life --episodes        (C11-E5: episodic layer)
+    python3 benchmarks/memory-stream/recall_funnel.py --growth                        (C11-E6: channel growth)
 """
 import argparse, datetime, glob, json, math, os, re, sys
 
@@ -400,6 +401,61 @@ def run(world):
         print(f"  {name}", row)
 
 
+def growth(world, thr=0.5):
+    """C11-E6: how each channel's set grows with the visible store N. Per channel, the least-squares slope of
+    log(set size) on log(N) over turns with N ≥ 20 and a non-empty set, and the share of empty sets; G0@15 recall
+    below and above the median N."""
+    g = Generators(world)
+    tags = {}
+    for p in sorted(glob.glob(os.path.join(HERE, "dream", world, "out", "tags-*.json"))):
+        tags.update(json.load(open(p))["tags"])
+    turn_act = json.load(open(os.path.join(HERE, "dream", world, "turn-actions.json")))
+    pts = {"entity": [], "time": [], "action": []}
+    turns, g0hits = 0, []
+    for e, need in need_turns(g, world):
+        vis = {r["id"] for r in g.lex.visible(e["_order"])}
+        n = len(vis)
+        text, ctx = M.strip_paste(e["text_all"]), g.ctx.get(e["id"], "")
+        gens, _ = g.score_all(e)
+        g0 = set(sorted(gens["G0"], key=lambda i: (-gens["G0"][i], i))[:15])
+        ment = g.mentioned(text + " " + ctx)
+        days, months = turn_times(text, g.day[e["id"]])
+        tm = set()
+        for i in vis:
+            s = " ".join((g.by_id[i].get("when") or {}).get("times") or []).lower()
+            if any(x in s or x[:3] + "s" in s for x in days) or any(m in s for m in months):
+                tm.add(i)
+        want = {k for k, v in (turn_act.get(e["id"]) or {}).items() if v is not None and v >= thr}
+        sets = {"entity": {i for i in vis if g.ents[i] & ment}, "time": tm,
+                "action": {i for i in vis if want & set(tags.get(i, []))}}
+        if n >= 20:
+            turns += 1
+            for k, S in sets.items():
+                pts[k].append((n, len(S)))
+        for item in need:
+            cover = [i for i in vis if item in g.by_id[i]["covers"]]
+            if cover:
+                g0hits.append((n, any(i in g0 for i in cover)))
+    print(world, turns, "turns with N >= 20")
+    for k, v in pts.items():
+        xy = [(math.log(n), math.log(m)) for n, m in v if m]
+        if len(xy) < 3:
+            print(f"   {k:7s} too few non-empty sets ({len(xy)} of {len(v)})")
+            continue
+        mx, my = sum(x for x, _ in xy) / len(xy), sum(y for _, y in xy) / len(xy)
+        b = sum((x - mx) * (y - my) for x, y in xy) / sum((x - mx) ** 2 for x, _ in xy)
+        a = my - b * mx
+        proj = {f"1e{p}": round(math.exp(a + b * p * math.log(10))) for p in (4, 5, 6)}
+        frac = sorted(m / n for n, m in v)
+        print(f"   {k:7s} slope b {b:.3f}  empty {sum(1 for _, m in v if not m)}/{len(v)}  share of N median "
+              f"{frac[len(frac) // 2]:.3f}  projected set size {proj}")
+    med = sorted(n for n, _ in g0hits)[len(g0hits) // 2]
+    lo = [h for n, h in g0hits if n < med]
+    hi = [h for n, h in g0hits if n >= med]
+    print(f"   G0@15 recall: N < {med}: {sum(lo)}/{len(lo)} = {sum(lo) / len(lo):.3f}; "
+          f"N >= {med}: {sum(hi)}/{len(hi)} = {sum(hi) / len(hi):.3f}")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--worlds", nargs="*", default=["code", "life"])
@@ -408,6 +464,7 @@ if __name__ == "__main__":
     ap.add_argument("--actions", action="store_true", help="C11-E2 action registry and per-channel caps")
     ap.add_argument("--cards", action="store_true", help="C11-E4 dream action cards")
     ap.add_argument("--episodes", action="store_true", help="C11-E5 episodic layer")
+    ap.add_argument("--growth", action="store_true", help="C11-E6 channel growth with store size")
     ap.add_argument("--thr", type=float, default=0.5, help="--actions: Jev threshold for a turn's action types")
     a = ap.parse_args()
     for w in a.worlds:
@@ -417,5 +474,7 @@ if __name__ == "__main__":
             cards(w, a.thr)
         elif a.episodes:
             episodes(w)
+        elif a.growth:
+            growth(w)
         else:
             (channels if a.channels else missing if a.missing else run)(w)
