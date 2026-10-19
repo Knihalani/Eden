@@ -1,0 +1,1 @@
+{"batch": "s012", "judge": "opus", "cases": [{"event": "code-s061-e020", "needed": ["code-sleep-b01:m0016", "code-sleep-b05:m0013", "code-sleep-b01:m0020", "code-sleep-b00:m0031"]}]}
