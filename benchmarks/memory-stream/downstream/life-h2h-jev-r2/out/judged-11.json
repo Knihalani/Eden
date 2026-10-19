@@ -1,0 +1,6 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s148-e012", "scores": [3, 3, 2, 3], "why": "All set both reminders; 3 claims a known weekday closing time that nothing supports."},
+{"event": "life-s150-e028", "scores": [3, 3, 3, 3], "why": "All set status and draft a fitting two-line note held for approval."},
+{"event": "life-s156-e000", "scores": [2, 1, 1, 1], "why": "Plan is set: astronaut, leaves Hannah's 5:45 pm, Sam on candy. None know it; 1 adds a correct allergy and EpiPen check."},
+{"event": "life-s156-e004", "scores": [2, 1, 1, 2], "why": "Riya volunteers on the ROM trip Thu 26 Nov from 9:15; none flag it. 1 and 4 at least check her calendar."}
+]}
