@@ -179,15 +179,18 @@ def prep_h2h(a):
     stream, items = score.load_stream(a.world)
     evs = [e for e in score.scored_events(stream) if e["_split"] == "dev" and e["t"] == "human"]
     byid = {e["id"]: e for e in score.scored_events(stream)}
-    used = set(json.load(open(os.path.join(HERE, "downstream", a.world, "key.json")))["key"])
+    used = set()
+    for sub in [a.world] + [x for x in a.exclude.split(",") if x]:  # turns already used by earlier runs
+        used |= set(json.load(open(os.path.join(HERE, "downstream", sub, "key.json")))["key"])
     extra = json.load(open(os.path.join(HERE, "worlds", a.world, "labels.json")))
-    rng = random.Random(23)
+    rng = random.Random(a.seed)
+    n_plan, n_lab, n_none = (int(x) for x in a.counts.split(","))
     pool = [e for e in evs if e["id"] not in used]
     plan = [e for e in pool if set(e["labels"]["needs"]) - set(e["labels"].get("in_context", []))]
     lab_only = [e for e in pool if e not in plan and set(extra.get(e["id"], [])) - e["_window"]]
     none = [e for e in pool if e not in plan and e not in lab_only]
-    pick = (rng.sample(plan, min(30, len(plan))) + rng.sample(lab_only, min(15, len(lab_only)))
-            + rng.sample(none, min(30, len(none))))
+    pick = (rng.sample(plan, min(n_plan, len(plan))) + rng.sample(lab_only, min(n_lab, len(lab_only)))
+            + rng.sample(none, min(n_none, len(none))))
     day, flat = {}, []
     for sess in stream["sessions"]:
         for ev in sess["events"]:
@@ -207,7 +210,7 @@ def prep_h2h(a):
     rows = {r["id"]: r for r in sleep.rows(stream, a.world, strict=True)}
     acts = score.action_text(stream)
     vp = verify.picks(a.world, "cal")
-    for t in ("cal-ds", "cal-ds2"):
+    for t in ("cal-ds", "cal-ds2", "cal-ds3"):
         vp.update(verify.picks(a.world, t))
     vis = lambda r, e: r["t"] < e["_order"] and (r.get("invalid_at") is None or r["invalid_at"] > e["_order"])
     d = os.path.join(HERE, "downstream", a.sub)
@@ -336,6 +339,9 @@ if __name__ == "__main__":
     ap.add_argument("--p", type=float, default=0.6, help="prep-verify: verifier threshold")
     ap.add_argument("--dated", action="store_true",
                     help="prep-verify: prefix each row with the date it became visible (its batch's last session)")
+    ap.add_argument("--counts", default="30,15,30", help="prep-h2h: plan-need, labeler-only, no-need turns")
+    ap.add_argument("--seed", type=int, default=23, help="prep-h2h: sampling seed")
+    ap.add_argument("--exclude", default="", help="prep-h2h: comma-separated downstream subs whose turns are used")
     ap.add_argument("--fired-only", action="store_true", help="prep-verify: keep only turns where verify fires")
     a = ap.parse_args()
     cmds = {"prep": prep, "prep-picks": prep_picks, "prep-eden": prep_eden, "prep-verify": prep_verify,
