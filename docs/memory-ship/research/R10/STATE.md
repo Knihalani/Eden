@@ -28,7 +28,7 @@ Per-turn effect on the agent's replies (blind opus judge with history evidence, 
 | **F22b verifier p 0.6, dated, deferred** | **+0.113** | **+0.125** |
 | right packet (oracle), on need turns only (C5-E1) | +1.23 per need turn | +1.1 per need turn |
 
-95% CIs of the difference include 0 (code [−0.07, +0.30], life [−0.04, +0.29]): confirmed by rule, not yet firm.
+Pooled with C6-E1 (more fresh turns): code +0.098 [−0.016, +0.216] (not firm; all dev need turns used), **life +0.135 [+0.035, +0.233] (firm)**.
 
 ## Pareto frontier (StreamBench dev; per arm)
 
