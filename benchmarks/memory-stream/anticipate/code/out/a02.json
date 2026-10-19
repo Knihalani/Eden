@@ -1,0 +1,363 @@
+{
+ "batch": "a02",
+ "model": "sonnet (claude-code subagent)",
+ "cases": [
+  {
+   "event": "code-s055-e011",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0050",
+     "if": [
+      "commit",
+      "push",
+      "open a pr"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s056-e026",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0050",
+     "if": [
+      "commit",
+      "push",
+      "open a pr"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s057-e006",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0050",
+     "if": [
+      "commit",
+      "push",
+      "open a pr"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s057-e010",
+   "predictions": [
+    {
+     "row": "code-sleep-b05:m0031",
+     "if": [
+      "409",
+      "type uri",
+      "docs.acme.dev",
+      "about:blank"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b05:m0030",
+     "if": [
+      "problem+json",
+      "problem("
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s057-e017",
+   "predictions": []
+  },
+  {
+   "event": "code-s057-e022",
+   "predictions": [
+    {
+     "row": "code-sleep-b05:m0021",
+     "if": [
+      "customers",
+      "search box",
+      "nuqs"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s057-e028",
+   "predictions": []
+  },
+  {
+   "event": "code-s057-e030",
+   "predictions": []
+  },
+  {
+   "event": "code-s058-e000",
+   "predictions": [
+    {
+     "row": "code-sleep-b05:m0032",
+     "if": [],
+     "always": true
+    }
+   ]
+  },
+  {
+   "event": "code-s058-e007",
+   "predictions": [
+    {
+     "row": "code-sleep-b05:m0017",
+     "if": [
+      "form",
+      "settings page",
+      "server action"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s058-e012",
+   "predictions": [
+    {
+     "row": "code-sleep-b01:m0026",
+     "if": [
+      "post /v1/invoices",
+      "memo",
+      "schema",
+      "field"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b00:m0051",
+     "if": [
+      "api docs",
+      "docs",
+      "integrations"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s058-e019",
+   "predictions": []
+  },
+  {
+   "event": "code-s060-e006",
+   "predictions": []
+  },
+  {
+   "event": "code-s060-e015",
+   "predictions": [
+    {
+     "row": "code-sleep-b03:m0001",
+     "if": [
+      "err_require_esm",
+      "require(",
+      "esm",
+      "type: module"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s060-e021",
+   "predictions": [
+    {
+     "row": "code-sleep-b03:m0001",
+     "if": [
+      "factories",
+      "require",
+      "module.exports",
+      "esm"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s060-e028",
+   "predictions": []
+  },
+  {
+   "event": "code-s061-e000",
+   "predictions": []
+  },
+  {
+   "event": "code-s061-e020",
+   "predictions": []
+  },
+  {
+   "event": "code-s062-e000",
+   "predictions": [
+    {
+     "row": "code-sleep-b06:m0004",
+     "if": [
+      "refactor",
+      "invoices.ts",
+      "split"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b06:m0003",
+     "if": [
+      "refactor",
+      "restructure",
+      "split up"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s063-e013",
+   "predictions": [
+    {
+     "row": "code-sleep-b06:m0006",
+     "if": [
+      "redis",
+      "security group",
+      "acme-212",
+      "push it",
+      "prod"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s063-e026",
+   "predictions": []
+  },
+  {
+   "event": "code-s066-e019",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0032",
+     "if": [
+      "pool",
+      "connections",
+      "pgbouncer",
+      "too many connections"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b05:m0033",
+     "if": [
+      "pooler",
+      "pool"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s066-e024",
+   "predictions": []
+  },
+  {
+   "event": "code-s066-e025",
+   "predictions": []
+  },
+  {
+   "event": "code-s066-e028",
+   "predictions": []
+  },
+  {
+   "event": "code-s066-e038",
+   "predictions": []
+  },
+  {
+   "event": "code-s067-e000",
+   "predictions": []
+  },
+  {
+   "event": "code-s068-e006",
+   "predictions": []
+  },
+  {
+   "event": "code-s068-e008",
+   "predictions": [
+    {
+     "row": "code-sleep-b06:m0018",
+     "if": [
+      "npm packages",
+      "dependency",
+      "dependencies",
+      "pulling in"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s068-e010",
+   "predictions": []
+  },
+  {
+   "event": "code-s068-e017",
+   "predictions": []
+  },
+  {
+   "event": "code-s068-e023",
+   "predictions": []
+  },
+  {
+   "event": "code-s070-e012",
+   "predictions": []
+  },
+  {
+   "event": "code-s071-e000",
+   "predictions": [
+    {
+     "row": "code-sleep-b05:m0035",
+     "if": [
+      "csv",
+      "comma",
+      "export"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b06:m0022",
+     "if": [
+      "csv",
+      "export",
+      "escaping"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s071-e006",
+   "predictions": []
+  },
+  {
+   "event": "code-s071-e012",
+   "predictions": []
+  },
+  {
+   "event": "code-s071-e014",
+   "predictions": []
+  },
+  {
+   "event": "code-s072-e000",
+   "predictions": []
+  },
+  {
+   "event": "code-s075-e000",
+   "predictions": []
+  },
+  {
+   "event": "code-s075-e015",
+   "predictions": []
+  }
+ ]
+}
