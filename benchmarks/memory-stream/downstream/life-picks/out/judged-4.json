@@ -1,0 +1,78 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s131-e022",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Identical, reasonable short toast with partner-name placeholder."
+  },
+  {
+   "event": "life-s136-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both move piano correctly; R1 asserts unsupported 4:30-5:15/45-minute length."
+  },
+  {
+   "event": "life-s140-e033",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 applies current constraints (no hotplate, Sam diet, Leo cashew/pistachio, cilantro); R1 generic."
+  },
+  {
+   "event": "life-s141-e000",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Both look up; R1 invents a 'Tue 9 Dec 2025' last pickup contradicting Thursday collection; R0 ignores known Toronto/Thursday."
+  },
+  {
+   "event": "life-s148-e000",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Offsite clashes with 4pm parent-teacher interview and physical; R0 misses it and invents a GA retro; R1 checks clashes."
+  },
+  {
+   "event": "life-s150-e004",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Both give sound checklists; R1 adds Diego's Figma-comment and problem-statement preferences."
+  },
+  {
+   "event": "life-s152-e004",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly plan to read sent mail to Tom and quote exact commitments."
+  },
+  {
+   "event": "life-s155-e013",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Identical correct short draft covering both comments and PAY-1227."
+  },
+  {
+   "event": "life-s155-e022",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "R0 gets Dec 10 early leave and Dec 21-Jan 1 OOO right but invents snow-day list details; R1 ignores known December plans."
+  }
+ ]
+}
