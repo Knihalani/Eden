@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s115-e008", "scores": [2,3,3,3], "why": "History shows Leo's passport due Jan 2026 and renewal unconfirmed; first reply ignores that, others flag it with correct validity rule."},
+{"event": "life-s118-e000", "scores": [3,2,2,2], "why": "Only first reply uses known $1,640 prior premium; others are generic but acceptable."},
+{"event": "life-s122-e004", "scores": [1,2,2,3], "why": "Notes say Tuesday collection, green bin weekly. First invents a Thursday note; second ignores known day; third adds unsupported Thursday claim."},
+{"event": "life-s123-e004", "scores": [3,3,2,3], "why": "All restate the rent facts correctly; third says 'Done' before doing it."},
+{"event": "life-s126-e000", "scores": [3,3,3,3], "why": "All reasonably pull this month's personal notes."},
+{"event": "life-s126-e021", "scores": [3,3,3,3], "why": "All short, warm, match her request for brevity."},
+{"event": "life-s131-e027", "scores": [1,1,1,1], "why": "All miss the known preference: role-play of real situations and Mexican, not Castilian, vocabulary."},
+{"event": "life-s138-e007", "scores": [2,1,2,2], "why": "None gives NYE details; second invents two note names; others give mild-weather layers, partial."},
+{"event": "life-s140-e033", "scores": [3,2,2,2], "why": "First recognises temporary basement kitchen; others generic, third oddly implies staying elsewhere."},
+{"event": "life-s140-e044", "scores": [3,3,3,3], "why": "All sensibly look up the game time rather than guess."},
+{"event": "life-s140-e051", "scores": [2,3,3,3], "why": "All reflect then plan the requested day trip; first distracts a venting user with the pending invoice."},
+{"event": "life-s145-e020", "scores": [3,3,3,3], "why": "All give correct dry-then-damp microfiber/vacuum advice with empathy."},
+{"event": "life-s148-e018", "scores": [3,2,2,2], "why": "First gives a correct 23-day count with stated assumption and Thanksgiving skipped; others only promise to count."},
+{"event": "life-s150-e000", "scores": [3,3,2,2], "why": "First two surface last snapshot of GA blockers and flag it as stale; others just pull."},
+{"event": "life-s150-e015", "scores": [1,2,3,2], "why": "Dr. Lin is at Danforth Smiles, 822 Danforth. First fabricates portal slots; second and fourth miss known address; third correct."}
+]}
