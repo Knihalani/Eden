@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s106-e004",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "CSP has default-src self with no frame-src, so YouTube iframe would be blocked; only R1 checks CSP."
+  },
+  {
+   "event": "code-s107-e006",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Pricing page (marketing) and settings/team page already exist; R1 notes pricing and route group but adds unsupported placeholder-price claim; R0 misses both."
+  },
+  {
+   "event": "code-s108-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Playwright, port 3000 and pnpm --filter web e2e are known; R1 uses them; R0 asks what runner exists."
+  },
+  {
+   "event": "code-s108-e018",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Web toCsv writes header; R1 helper-plus-button hypothesis fits; R0 points to API helpers, less likely; both reasonable plans."
+  },
+  {
+   "event": "code-s108-e027",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both grep and flag public API values; equivalent and correct."
+  },
+  {
+   "event": "code-s108-e032",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both correctly leave api value but claim api tests pass before api run finished."
+  },
+  {
+   "event": "code-s108-e036",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both accurate on tests; R1 says nothing pending though the browser-test question is still open."
+  },
+  {
+   "event": "code-s108-e040",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "scripts/count-todos.ts already exists uncommitted; both miss it; R1 would overwrite it and adds irrelevant comment-rule remark."
+  },
+  {
+   "event": "code-s108-e045",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correct explanations of as const vs satisfies."
+  },
+  {
+   "event": "code-s108-e047",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both correct; R1 hedges on Node version that is known (20.11)."
+  }
+ ]
+}

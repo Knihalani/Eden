@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s038-e028",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both explain Deployment vs StatefulSet correctly and concisely."
+  },
+  {
+   "event": "code-s041-e005",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 extends the existing formatMoney test file and flags negative half-cent rounding; R1 may create a duplicate file."
+  },
+  {
+   "event": "code-s041-e009",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "History shows package.json: @acme/cli, bin acme; both hedge instead of answering. R1 at least gives name and dev command."
+  },
+  {
+   "event": "code-s041-e013",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both swap only tbody with hx-select; sound, minimal fixes."
+  },
+  {
+   "event": "code-s041-e021",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "status-filter has its own unrelated kind prop; R0 flags that, R1 would rename all three blindly."
+  },
+  {
+   "event": "code-s041-e038",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both accurate acknowledgements; R0 offers missing size stories, R1 confirms push."
+  },
+  {
+   "event": "code-s042-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly separate blocking items, copy fixes, follow-ups and opinions."
+  },
+  {
+   "event": "code-s043-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both read code before answering tracking question and add size stories."
+  },
+  {
+   "event": "code-s045-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither signs payload with HMAC SHA-256 X-Acme-Signature per webhook convention. R0 adds SSRF guard; R1 respects billing rule."
+  },
+  {
+   "event": "code-s045-e007",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "DNS location unknown at that point; both search infra rather than guess."
+  },
+  {
+   "event": "code-s045-e012",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Both accurate; R1 gives the short bullet list the user prefers, R0 is prose."
+  },
+  {
+   "event": "code-s046-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "pdfFilename slug helper already exists in history; R0 reuses it, R1 would rebuild it."
+  },
+  {
+   "event": "code-s046-e008",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both keep UTC in API, format locally, verify paid-at field exists."
+  },
+  {
+   "event": "code-s047-e026",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Copy lives in next-intl messages JSON; R1 greps all of apps/web, R0 only the component."
+  },
+  {
+   "event": "code-s047-e032",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both accurate wrap-ups; awaiting commit instruction."
+  }
+ ]
+}
