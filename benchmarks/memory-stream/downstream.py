@@ -210,7 +210,7 @@ def prep_h2h(a):
     rows = {r["id"]: r for r in sleep.rows(stream, a.world, strict=True)}
     acts = score.action_text(stream)
     vp = verify.picks(a.world, "cal")
-    for t in ("cal-ds", "cal-ds2", "cal-ds3"):
+    for t in ("cal-ds", "cal-ds2", "cal-ds3", a.vtag):
         vp.update(verify.picks(a.world, t))
     vis = lambda r, e: r["t"] < e["_order"] and (r.get("invalid_at") is None or r["invalid_at"] > e["_order"])
     d = os.path.join(HERE, "downstream", a.sub)
@@ -235,7 +235,7 @@ def prep_h2h(a):
               open(os.path.join(d, "key.json"), "w"), indent=1)
     json.dump({"key": {i: 1 for i in missing}}, open(os.path.join(d, "missing.json"), "w"))
     print(len(cases), "cases;", len(missing), "need verifier outputs:",
-          f"verify.py --events {os.path.join(d, 'missing.json')} --tag cal-ds2")
+          f"verify.py --events {os.path.join(d, 'missing.json')} --tag {a.vtag}")
 
 
 def prep_system(a):
@@ -382,6 +382,7 @@ if __name__ == "__main__":
     ap.add_argument("--counts", default="30,15,30", help="prep-h2h: plan-need, labeler-only, no-need turns")
     ap.add_argument("--seed", type=int, default=23, help="prep-h2h: sampling seed")
     ap.add_argument("--exclude", default="", help="prep-h2h: comma-separated downstream subs whose turns are used")
+    ap.add_argument("--vtag", default="cal-ds3", help="prep-h2h: verify tag for missing verifier outputs")
     ap.add_argument("--turns", default="", help="prep-system: comma-separated downstream subs whose turns to use")
     ap.add_argument("--fired-only", action="store_true", help="prep-verify: keep only turns where verify fires")
     a = ap.parse_args()

@@ -1134,3 +1134,22 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - But its gain where memory is needed (+0.4 / +0.29) is smaller than the verifier's (+0.52 / +0.49). On the more frequent mildly-related turns it loses (−0.133).
 - **What this says:** the verifier's judgment, not dating alone, is what makes push pay. A model-free hook path needs better selection (precision on labeler-only and no-need turns) before it can stand alone.
   - R10-5 part (a), the in-turn off-hook model call, stays the thing to decide; part (b), dating, is necessary but not sufficient.
+
+## C6-R · 2026-10-19 · Review of the cycle 6 consolidation (round 1: REQUEST_CHANGES) and fixes
+- **"Firm on both worlds" corrected to "firm by the pre-registered rules", with its caveats:**
+  - Code is firm only on the two-run average (C6-E2), a second look pre-registered after C6-E1 found code not firm. Neither run alone excludes 0: run 1 +0.0981 [−0.0158, +0.2158]; run 2 +0.1039 [−0.0046, +0.2137].
+  - Life rests on one responder run.
+  - The code lower bound is +0.0085 (not "+0.01").
+  - Updated in STATE, R10-retrieval and DECISIONS R10-5. The C6-E2 result line above ("firm on both worlds") reads with these caveats.
+- **R10-5 now cites D37 as the governing rule.**
+  - The measured verifier is haiku, a Claude model that D37 does not allow. Adopting it needs the user to approve an in-turn call and a provider; a NIM model would need a re-measure.
+- **C6-E1 setup command:** add `--counts 30,15,60` (the default gives 45 and 64 cases). With it, the committed keys and inputs reproduce exactly.
+- **C6-E3 comparison caveats:**
+  - "no-need −0.022 vs −0.467 undated (C5-E1)" compares different turn sets (90 vs 15), and the 90 include non-fired turns, where both conditions got an empty packet, so their difference is noise.
+  - Fired-only vote − none: code plan-need +0.333 (n 24), labeler-only −0.214 (14), no-need +0.053 (38); life +0.333 (42), −0.167 (24), −0.077 (39).
+  - The verifier comparison (+0.52 / +0.49) is between runs, and code's +0.52 is a two-run average.
+  - The verdict ("not enough") stands: the vote is about 0 on all three measures.
+- **Harness:**
+  - `prep_h2h` takes `--vtag` (default `cal-ds3`) for missing verifier outputs.
+  - `h2h.py` shares its loading and bootstrap helpers, uses argparse (argument order no longer matters), and asserts when a repeat run lacks a turn.
+  - All published numbers re-run unchanged.
