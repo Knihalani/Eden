@@ -1,0 +1,10 @@
+{
+ "batch": "v008",
+ "verifier": "nim:nvidia/nemotron-3.5-lightning-30b-a3b",
+ "cases": [
+  {
+   "event": "code-rt1-s01-e008",
+   "scores": {}
+  }
+ ]
+}
