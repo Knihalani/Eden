@@ -1,0 +1,1897 @@
+{
+ "batch": "code-sleep-b10",
+ "cards": {
+  "frontend": [
+   {
+    "line": "Sign-in redirect loop: login page is app/login/page.tsx (Clerk SignIn, path routing /login, redirect /dashboard); /login and any new public page must be in publicRoutes in middleware.ts. Staging loop from PR #828 is Lena's.",
+    "rows": [
+     "code-sleep-b00:m0001",
+     "code-sleep-b01:m0024",
+     "code-sleep-b01:m0032",
+     "code-sleep-b06:m0015"
+    ]
+   },
+   {
+    "line": "State: server state TanStack Query, client state zustand stores colocated with the feature (e.g. useInvoiceEditorStore); never mix. No Redux (ADR 0009; Lena wanted it for the invoice editor).",
+    "rows": [
+     "code-sleep-b00:m0002",
+     "code-sleep-b02:m0024"
+    ]
+   },
+   {
+    "line": "Tailwind v4 CSS-first config in apps/web/app/globals.css (@theme tokens); never create tailwind.config.js; use theme tokens (ring-primary), not hard-coded colors.",
+    "rows": [
+     "code-sleep-b00:m0036",
+     "code-sleep-b01:m0025"
+    ]
+   },
+   {
+    "line": "Dates: timestamps UTC; format with next-intl useFormatter; date-fns only (moment banned); format on client in useEffect rather than suppressHydrationWarning; no toLocaleString/toLocaleDateString('en-US') in SSR render (InvoiceDueDate.tsx mismatches server UTC vs Jordan's America/Toronto browser; Jordan undecided between user-local and fixed timezone).",
+    "rows": [
+     "code-sleep-b04:m0024",
+     "code-sleep-b05:m0027",
+     "code-sleep-b08:m0022",
+     "code-sleep-b08:m0029",
+     "code-sleep-b10:m0014"
+    ]
+   },
+   {
+    "line": "Money: format via formatMoney (apps/web/lib/money.ts) which rounds on decimal string (Number(`${amount}e2`)) since Math.round(amount*100) gave 2.005 -> 2.00; most callers pass cents/100, proper fix is formatting from integer cents; round each line to whole cents before summing.",
+    "rows": [
+     "code-sleep-b04:m0007",
+     "code-sleep-b03:m0009"
+    ]
+   },
+   {
+    "line": "Web stack: Next.js 15.0.3 App Router; authenticated pages go in app/(dashboard)/ (sidebar/header, assumes signed-in), public in app/(marketing); group names not in URL; Lena wants /reports (app/(dashboard)/reports/page.tsx, Jordan has half-done edits). Clerk auth; Vercel preview per PR.",
+    "rows": [
+     "code-sleep-b05:m0016",
+     "code-sleep-b05:m0025",
+     "code-sleep-b06:m0025"
+    ]
+   },
+   {
+    "line": "Icon-only buttons need aria-label (icon aria-hidden); use shadcn/ui from apps/web/components/ui and lucide-react, not hand-rolled icons; sweep of other unlabelled buttons deferred.",
+    "rows": [
+     "code-sleep-b02:m0026"
+    ]
+   },
+   {
+    "line": "UI copy: no exclamation marks in empty states; button label 'New invoice' everywhere, never 'Create invoice'; resend toast says 'Invoice resent' (not 'Invoice sent again').",
+    "rows": [
+     "code-sleep-b04:m0013",
+     "code-sleep-b09:m0018"
+    ]
+   },
+   {
+    "line": "i18n next-intl: new strings need keys in all of messages/{en,fr,es}.json; es invoices.status written by Claude, needs Spanish speaker; gaps: es settings.billing.portalLink/portalHint, stale fr invoices.filters.archived.",
+    "rows": [
+     "code-sleep-b04:m0019"
+    ]
+   },
+   {
+    "line": "invoice.client may be null (imported invoices): type ClientSummary | null, show 'No client' (invoices.noClient); null-check always.",
+    "rows": [
+     "code-sleep-b04:m0027"
+    ]
+   },
+   {
+    "line": "Form posts use server actions (decision July); no new files under app/api/ (webhooks only).",
+    "rows": [
+     "code-sleep-b05:m0017"
+    ]
+   },
+   {
+    "line": "Dark mode: next-themes class strategy; use Tailwind dark: variants or :global(.dark), never prefers-color-scheme media queries.",
+    "rows": [
+     "code-sleep-b08:m0031"
+    ]
+   },
+   {
+    "line": "Every browser call to the API must use the wrapper apps/web/lib/api.ts (api(), apiBlob()), which sets credentials: include; raw fetch omits the session cookie and 401s in staging (Lena).",
+    "rows": [
+     "code-sleep-b09:m0001"
+    ]
+   },
+   {
+    "line": "Feature flags: apps/web/lib/flags.ts holds only local dev defaults (newInvoiceEditor=false, bulkReminders=true, expenseAttachments=false); real values from an external flag service whose vendor is unconfirmed; org betaFlags is just an admin label, not gating.",
+    "rows": [
+     "code-sleep-b10:m0001"
+    ]
+   },
+   {
+    "line": "Utilities: lib/format.ts maskIban/formatCents/initials; lib/slugify.ts slugify(input, 64) NFKD + table (\u00df \u00f8 \u00e6 \u0153 \u0111 \u0142 \u00fe); lib/invoice-currency.ts getPrimaryCurrency (first line item currency else org; USD CAD EUR GBP AUD); toCsv (lib/csv.ts) already writes header and escapes: don't prepend header; useDebouncedValue (300ms) for search boxes.",
+    "rows": [
+     "code-sleep-b10:m0008",
+     "code-sleep-b10:m0020",
+     "code-sleep-b10:m0025",
+     "code-sleep-b10:m0030",
+     "code-sleep-b10:m0011"
+    ]
+   },
+   {
+    "line": "Component APIs: ClientPicker prop is onClientSelect (not onSelect; used in NewInvoiceForm, InvoiceFilters, ExpenseFilters); ClientsTable PAGE_SIZES [10,20,50,100] (API caps 100); OrgSwitcher uses shadcn Popover (PR #1484 acme-431-org-switcher-close approved; nit: test Escape closes).",
+    "rows": [
+     "code-sleep-b10:m0029",
+     "code-sleep-b10:m0010"
+    ]
+   },
+   {
+    "line": "Invoice list filters (status, clientId, from, to) live in URL search params (useSearchParams + router.replace, parseInvoiceFilters), merged 7d20c4e.",
+    "rows": [
+     "code-sleep-b10:m0019"
+    ]
+   },
+   {
+    "line": "app/error.tsx is root error boundary ('Something went wrong', digest ref, reset()), hides messages; commit 9b3e1d7 on acme-447-render-fallback not pushed.",
+    "rows": [
+     "code-sleep-b10:m0018"
+    ]
+   },
+   {
+    "line": "/pricing (Starter $19, Growth $49, Agency $129, content/plans.ts) and /settings/team (getOrgMembers) were added directly under apps/web/app; route group not confirmed with Jordan (authed pages belong in (dashboard), public in (marketing)); team page relies on upstream signed-in check.",
+    "rows": [
+     "code-sleep-b10:m0026",
+     "code-sleep-b06:m0025"
+    ]
+   },
+   {
+    "line": "getting-started page embeds onboarding video (OnboardingVideo, youtube-nocookie, 16:9).",
+    "rows": [
+     "code-sleep-b10:m0024"
+    ]
+   }
+  ],
+  "debugging": [
+   {
+    "line": "Sign-in redirect loop: check publicRoutes in apps/web/middleware.ts and afterSignInUrl=/dashboard; staging loop from PR #828 is Lena's, don't touch.",
+    "rows": [
+     "code-sleep-b00:m0001",
+     "code-sleep-b01:m0024",
+     "code-sleep-b01:m0032"
+    ]
+   },
+   {
+    "line": "API auth 401 token_expired / invalid_token from requireAuth, now a Fastify plugin (apps/api/src/plugins/auth.ts).",
+    "rows": [
+     "code-sleep-b00:m0006",
+     "code-sleep-b03:m0004"
+    ]
+   },
+   {
+    "line": "If a fix is uncertain, say so plainly instead of guessing (Jordan lost an hour to a confident wrong guess).",
+    "rows": [
+     "code-sleep-b03:m0006"
+    ]
+   },
+   {
+    "line": "Postgres error burst after every prod deploy via pooler (port 6432): possibly option dropped from postgres-js client in c81e02a; undocumented, ask Jordan to confirm pooler mode.",
+    "rows": [
+     "code-sleep-b05:m0033"
+    ]
+   },
+   {
+    "line": "Staging 'sorry, too many clients already': pods x PG_POOL_MAX > DB max_connections; PG_POOL_MAX has no default, value in synced secret.",
+    "rows": [
+     "code-sleep-b08:m0004"
+    ]
+   },
+   {
+    "line": "Staging 401s ~1/200: JWT clock skew on two pods vs Clerk; clockSkewInMs 5_000; check chrony.",
+    "rows": [
+     "code-sleep-b08:m0010"
+    ]
+   },
+   {
+    "line": "Stripe signature verification fails without raw body (rawBody:true).",
+    "rows": [
+     "code-sleep-b08:m0017"
+    ]
+   },
+   {
+    "line": "Staging 401s in web: raw fetch lacks credentials: include; use lib/api.ts.",
+    "rows": [
+     "code-sleep-b09:m0001"
+    ]
+   },
+   {
+    "line": "Open: random Unauthorized from API fixed by refresh (1,284 Sentry events/7d, 61 users, 9 orgs, all 3 pods, 87% within 2s of new session, retry always works, flat across 3 deploys); root cause unknown, no prior fix in git; Jordan to find old ticket.",
+    "rows": [
+     "code-sleep-b09:m0007"
+    ]
+   },
+   {
+    "line": "Worker crashloop Sat 2026-10-17 08:52-09:41: new invoice-reminder repeatable job registered at startup (4c1d9e2, in Friday's tag); mitigated by disabling schedule via flag; follow-up ticket, review Monday.",
+    "rows": [
+     "code-sleep-b09:m0013"
+    ]
+   },
+   {
+    "line": "Vercel production build of release branch fails 'Missing or invalid publishable key for production' on /invoices prerender; NEXT_PUBLIC_AUTH_PUBLISHABLE_KEY (Production scope) changed ~3 days earlier, suspect dev-instance key pasted; Jordan verifying in auth provider dashboard; unresolved.",
+    "rows": [
+     "code-sleep-b10:m0013"
+    ]
+   },
+   {
+    "line": "'Continue with Google' sign-in button vanished since 2026-10-20 (reported 10-21); no code change explains it (only Lena's a81f2c3 layout tweak); suspect Google social connection disabled for prod instance or OAuth client secret expired/rotated; Jordan checking dashboard.",
+    "rows": [
+     "code-sleep-b10:m0022",
+     "code-sleep-b10:m0023"
+    ]
+   },
+   {
+    "line": "Hydration mismatch: InvoiceDueDate toLocaleString('en-US') differs server (UTC) vs browser (Toronto).",
+    "rows": [
+     "code-sleep-b10:m0014"
+    ]
+   },
+   {
+    "line": "GET /v1/clients cursor pagination bug: `id > cursor` with ORDER BY lower(name), id skips/repeats rows; keyset fix proposed, awaiting Jordan.",
+    "rows": [
+     "code-sleep-b10:m0016"
+    ]
+   }
+  ],
+  "code-style": [
+   {
+    "line": "Never mix TanStack Query (server) and zustand (client, colocated stores); no Redux (ADR 0009).",
+    "rows": [
+     "code-sleep-b00:m0002",
+     "code-sleep-b02:m0024"
+    ]
+   },
+   {
+    "line": "Logging: pino only (req.log / request.log in api, shared logger in worker); no console.log; never log whole request bodies; redact secrets/tokens.",
+    "rows": [
+     "code-sleep-b04:m0002",
+     "code-sleep-b03:m0002"
+    ]
+   },
+   {
+    "line": "Repo Node is 20.11 (engines >=20.11 <21), but the CLI (packages/cli, tsup target node18) must support Node 18+: no newer APIs without fallback (toSorted at src/commands/invoices-export.ts:27 needs one; avoid import.meta.dirname/filename).",
+    "rows": [
+     "code-sleep-b00:m0026",
+     "code-sleep-b02:m0004",
+     "code-sleep-b03:m0001",
+     "code-sleep-b06:m0016"
+    ]
+   },
+   {
+    "line": "Lint/format is Biome only (ESLint/Prettier dropped, PR #512): `pnpm lint`, `pnpm biome check --write <path>`, width 120; never add .eslintrc.json/.prettierrc (Lena's PR added them to apps/api; ask her to delete).",
+    "rows": [
+     "code-sleep-b00:m0038",
+     "code-sleep-b01:m0009"
+    ]
+   },
+   {
+    "line": "Validation is zod everywhere (no joi, no hand-rolled ifs); schemas in apps/api/src/schemas/; routes use safeParse, 400 invalid_body.",
+    "rows": [
+     "code-sleep-b01:m0026"
+    ]
+   },
+   {
+    "line": "No emojis in code, commit messages or docs.",
+    "rows": [
+     "code-sleep-b02:m0011"
+    ]
+   },
+   {
+    "line": "CLI errors: throw UsageError (exit 2) for bad flags, never process.exit in handlers; others print message and exit 1 (packages/cli/src/lib/errors.ts).",
+    "rows": [
+     "code-sleep-b02:m0029",
+     "code-sleep-b03:m0015"
+    ]
+   },
+   {
+    "line": "Components under 150 lines with colocated tests; re-check for bugs/security before done.",
+    "rows": [
+     "code-sleep-b02:m0030"
+    ]
+   },
+   {
+    "line": "API errors: RFC 7807 problem+json via problem() (apps/api/src/lib/problem.ts) incl. 400/404/409; soft delete with deleted_at, never hard delete.",
+    "rows": [
+     "code-sleep-b05:m0030"
+    ]
+   },
+   {
+    "line": "Money stored as integer cents (amount_cents bigint), never floats; list endpoints use cursor pagination, never offset.",
+    "rows": [
+     "code-sleep-b05:m0010",
+     "code-sleep-b05:m0009"
+    ]
+   },
+   {
+    "line": "Standing rule: for any large refactor, show a plan first and wait for explicit approval before touching code.",
+    "rows": [
+     "code-sleep-b06:m0003"
+    ]
+   },
+   {
+    "line": "TypeScript style: 2-space indent, single quotes, semicolons, external imports first then local.",
+    "rows": [
+     "code-sleep-b07:m0013"
+    ]
+   },
+   {
+    "line": "New tables: UUID v7 PKs via uuidv7() in drizzle $defaultFn (not serial, not v4); include org_id, created_at, deleted_at and an index on org_id.",
+    "rows": [
+     "code-sleep-b07:m0006"
+    ]
+   },
+   {
+    "line": "Every acme CLI command must support --json: plain objects with fixed stable keys, no colors/table, explicit mapping (printJson in packages/cli/src/output.ts); missing on org list, org switch, clients list.",
+    "rows": [
+     "code-sleep-b08:m0001",
+     "code-sleep-b08:m0002"
+    ]
+   },
+   {
+    "line": "Comment only the why; no comments that restate the code.",
+    "rows": [
+     "code-sleep-b08:m0011"
+    ]
+   },
+   {
+    "line": "Named exports; no default exports except Next.js pages (packages/cli/src/version.ts still has one).",
+    "rows": [
+     "code-sleep-b08:m0014"
+    ]
+   },
+   {
+    "line": "Python scripts in tools/: Python 3.12 via uv, inline script header, `uv run tools/<script>.py`.",
+    "rows": [
+     "code-sleep-b08:m0015"
+    ]
+   },
+   {
+    "line": "Prefer structuredClone over JSON.parse(JSON.stringify(x)) (loses Dates/Maps/undefined, throws on cycles).",
+    "rows": [
+     "code-sleep-b10:m0003"
+    ]
+   },
+   {
+    "line": "Don't name props onSelect (shadows DOM event): ClientPicker uses onClientSelect.",
+    "rows": [
+     "code-sleep-b10:m0029"
+    ]
+   },
+   {
+    "line": "API response value 'recieved' (payments.ts) deliberately kept; don't 'fix' it.",
+    "rows": [
+     "code-sleep-b10:m0028"
+    ]
+   }
+  ],
+  "tests": [
+   {
+    "line": "Worker tests: `pnpm --filter worker test`, ioredis-mock. Rate limiter Redis path has no test yet.",
+    "rows": [
+     "code-sleep-b00:m0003",
+     "code-sleep-b01:m0003"
+    ]
+   },
+   {
+    "line": "API/route tests (setup-db.ts, Testcontainers) time out in beforeAll if Docker isn't running; on Jordan's Mac Docker is OrbStack: `orb start`.",
+    "rows": [
+     "code-sleep-b00:m0013",
+     "code-sleep-b08:m0007"
+    ]
+   },
+   {
+    "line": "CLI tests are Vitest (stdout snapshots).",
+    "rows": [
+     "code-sleep-b00:m0024",
+     "code-sleep-b01:m0011"
+    ]
+   },
+   {
+    "line": "CI coverage must stay >= 80%; add route tests (routes/invoices.ts PDF and export.csv routes only 78.4% lines).",
+    "rows": [
+     "code-sleep-b00:m0047",
+     "code-sleep-b06:m0004"
+    ]
+   },
+   {
+    "line": "Date tests: pass fixed `now` prop or fake timers, run under UTC, America/Toronto, Asia/Tokyo (mixing toISOString UTC with local dates caused flaky invoice-status test).",
+    "rows": [
+     "code-sleep-b01:m0033",
+     "code-sleep-b03:m0020"
+    ]
+   },
+   {
+    "line": "Jordan's rule: verify end to end in the running app before opening a PR, not only unit tests; say what was checked.",
+    "rows": [
+     "code-sleep-b02:m0001"
+    ]
+   },
+   {
+    "line": "Web e2e: start `pnpm --filter web dev` (3000), then `pnpm --filter web e2e` (Playwright); never read rows once with allTextContents() after a click (flaky ~1 in 5), use retrying expect(locator).toHaveText([...]) and aria-sort; known fail invoices/detail.spec.ts 'downloads pdf' (seed lacks pdfKey).",
+    "rows": [
+     "code-sleep-b02:m0019",
+     "code-sleep-b04:m0012"
+    ]
+   },
+   {
+    "line": "API tests use Fastify app.inject(). Invoice numbers via nextInvoiceNumber(tx, orgId) in the same transaction (fixes collisions in parallel tests).",
+    "rows": [
+     "code-sleep-b03:m0004",
+     "code-sleep-b03:m0013"
+    ]
+   },
+   {
+    "line": "Always run the full suite (`pnpm test`, all 5 packages) before pushing.",
+    "rows": [
+     "code-sleep-b04:m0009"
+    ]
+   },
+   {
+    "line": "Unit tests Vitest (+ @testing-library/react in web), e2e Playwright; no jest/jest-dom; use toBeTruthy/toBeNull.",
+    "rows": [
+     "code-sleep-b04:m0028",
+     "code-sleep-b05:m0034"
+    ]
+   },
+   {
+    "line": "Missing tests: PR #479 empty/error/loading rendering; paid-at column (null paidAt, non-Toronto tz); CLI prompt path and non-TTY refusal; deliver-invoice-paid job (missing URL, non-2xx, timeout).",
+    "rows": [
+     "code-sleep-b04:m0014",
+     "code-sleep-b04:m0026",
+     "code-sleep-b04:m0029",
+     "code-sleep-b04:m0020"
+    ]
+   },
+   {
+    "line": "Redirect-only pages (e.g. settings/page.tsx) are not unit-tested.",
+    "rows": [
+     "code-sleep-b09:m0008"
+    ]
+   },
+   {
+    "line": "Pending e2e: create invoice and send against local dev server (Client label, 'Line N' aria-labels, 'Save draft', 'Send invoice'); runner/session approach unconfirmed.",
+    "rows": [
+     "code-sleep-b10:m0027"
+    ]
+   },
+   {
+    "line": "format.test.ts covers maskIban; OrgSwitcher needs Escape-closes test (non-blocking nit); parseSince needs tests.",
+    "rows": [
+     "code-sleep-b10:m0008",
+     "code-sleep-b10:m0010",
+     "code-sleep-b10:m0033"
+    ]
+   }
+  ],
+  "build-ci": [
+   {
+    "line": "Standing rule: never run destructive DB commands (drop, truncate, reset) without asking Jordan, even locally; local reset = remove volume acme-platform_dbdata, compose up db redis, migrate.ts then seed.ts.",
+    "rows": [
+     "code-sleep-b00:m0008",
+     "code-sleep-b00:m0053"
+    ]
+   },
+   {
+    "line": "Never run terraform/infra apply from a laptop; only CI plan/apply workflow (Priya). Local plan to paste in PR is fine.",
+    "rows": [
+     "code-sleep-b01:m0016"
+    ]
+   },
+   {
+    "line": "pnpm 9 only (pinned pnpm@9.12.0; migrated off yarn 1 Sept 2026): never npm or yarn, they write package-lock.json/yarn.lock and CI rejects the PR; only-allow guard doesn't catch `yarn add`. An untracked yarn.lock keeps reappearing (2026-09-29, deleted in 3c81d0e): don't commit it. Lint is Biome `pnpm lint`; web `pnpm --filter web dev|test|build`.",
+    "rows": [
+     "code-sleep-b07:m0001",
+     "code-sleep-b07:m0002",
+     "code-sleep-b05:m0018"
+    ]
+   },
+   {
+    "line": "Local setup: `nvm use`, `pnpm install` (also installs lefthook hooks), .env.local from .env.example with secrets from 1Password acme-dev, `docker compose up -d db redis`, `pnpm --filter api db:migrate`, `pnpm dev`; email queue only drains with worker running (`pnpm --filter worker dev`). Jordan's new laptop 2026-10-10.",
+    "rows": [
+     "code-sleep-b01:m0023",
+     "code-sleep-b06:m0023",
+     "code-sleep-b08:m0026"
+    ]
+   },
+   {
+    "line": "OpenAPI generated: `pnpm turbo run openapi --filter api`; never hand-edit YAML. turbo build depends on ^build and openapi.",
+    "rows": [
+     "code-sleep-b00:m0045"
+    ]
+   },
+   {
+    "line": "Node 20.11 (moved off 18 on 2026-08-27, b71c0de); new laptops on Node 18 fail install with engines error.",
+    "rows": [
+     "code-sleep-b02:m0004"
+    ]
+   },
+   {
+    "line": "CLI: commander, tsup bundle to dist/index.js; run from source `pnpm --filter @acme/cli dev -- <args>` with ACME_API_URL.",
+    "rows": [
+     "code-sleep-b00:m0011",
+     "code-sleep-b00:m0027",
+     "code-sleep-b03:m0014"
+    ]
+   },
+   {
+    "line": "New env secret for api: add to `secrets:` list in infra/helm/api/values-prod.yaml (and staging), ESO sync, restart pods; infra/ needs Priya's review.",
+    "rows": [
+     "code-sleep-b03:m0027"
+    ]
+   },
+   {
+    "line": "CI is GitHub Actions: .github/workflows/ci.yml; prod deploys from git tags v* via release.yml (~12 min).",
+    "rows": [
+     "code-sleep-b05:m0003"
+    ]
+   },
+   {
+    "line": "Migrations: `pnpm --filter api db:generate` then `db:migrate` (drizzle-kit). Seed: `pnpm --filter api db:seed` (Northwind Studio 120 clients/640 invoices, Bluebird Agency 45/210); API tests use own Testcontainers DB so seeding doesn't affect them.",
+    "rows": [
+     "code-sleep-b05:m0008",
+     "code-sleep-b07:m0015",
+     "code-sleep-b06:m0011"
+    ]
+   },
+   {
+    "line": "CI uses `pnpm install --frozen-lockfile`: commit pnpm-lock.yaml with any dependency change or ERR_PNPM_OUTDATED_LOCKFILE.",
+    "rows": [
+     "code-sleep-b06:m0005"
+    ]
+   },
+   {
+    "line": "Git hooks: lefthook (husky removed 2026-09-29). Local: `nvm use` (.nvmrc), .env.local from .env.example with secrets from 1Password.",
+    "rows": [
+     "code-sleep-b07:m0004",
+     "code-sleep-b07:m0003"
+    ]
+   },
+   {
+    "line": "API reads DB only from DATABASE_URL (9e04b7a dropped PG* fallbacks), fails fast at boot; apps/api/.env.local needs DATABASE_URL copied from .env.example (Jordan's local DB broke 2026-09-30).",
+    "rows": [
+     "code-sleep-b07:m0005"
+    ]
+   },
+   {
+    "line": "Plan: k6 load suite (~40 min, hits staging) as its own CI job (ci.yml 'check' job has 20 min timeout); prefer workflow_dispatch/scheduled; ask Priya first (.github/ platform-owned).",
+    "rows": [
+     "code-sleep-b07:m0021"
+    ]
+   },
+   {
+    "line": "Python tools/ scripts: Python 3.12 via uv (`uv run tools/<script>.py`).",
+    "rows": [
+     "code-sleep-b08:m0015"
+    ]
+   },
+   {
+    "line": "release.yml builds api and worker images to ECR acme/<service> (us-east-1), tags git tag + sha-<commit>; build job timeout raised 15 to 25 min; .github/ edits need Priya's team.",
+    "rows": [
+     "code-sleep-b08:m0019",
+     "code-sleep-b08:m0020"
+    ]
+   },
+   {
+    "line": "ci.yml has pdf-perf job (`pnpm --filter @acme/pdf perf`, ~25 min, 40 min timeout, uploads perf-results.json) after check on every push/PR (Jordan wants perf numbers each change); concurrency cancel-in-progress kills in-flight runs, so busy branches may rarely get numbers; supersedes earlier no-benchmarks-in-CI note.",
+    "rows": [
+     "code-sleep-b09:m0020"
+    ]
+   },
+   {
+    "line": "`pnpm tsx scripts/count-todos.ts` counts TODO/FIXME per package (2026-10-23: web 30, api 24, worker 10, cli 4; 9 of 54 cite a Linear id).",
+    "rows": [
+     "code-sleep-b10:m0031"
+    ]
+   }
+  ],
+  "jobs": [
+   {
+    "line": "Acme moved off RabbitMQ: worker consumes BullMQ queues on Redis 7; Bull Board at /admin/queues on worker (basic auth), link that. Run locally: redis + `pnpm --filter worker dev`, metrics 9464.",
+    "rows": [
+     "code-sleep-b05:m0002",
+     "code-sleep-b04:m0004"
+    ]
+   },
+   {
+    "line": "Retry policy (queue/retry.ts, all consumers): maxRetries 3, backoff 1s/2s/4s, then DLQ (+Slack #alerts); ack after write. Supersedes 5 attempts.",
+    "rows": [
+     "code-sleep-b00:m0014",
+     "code-sleep-b03:m0007"
+    ]
+   },
+   {
+    "line": "Worker concurrency 5 per process (WORKER_CONCURRENCY, queues.ts); for month-end backlog raise max replicas, not per-process concurrency.",
+    "rows": [
+     "code-sleep-b02:m0007"
+    ]
+   },
+   {
+    "line": "events.invoice-paid (deliver-invoice-paid.ts) POSTs invoice.paid to orgs.callback_url, 10s timeout, throws on non-2xx for retry; enqueue in api payment-succeeded handler (billing) and tests still TODO.",
+    "rows": [
+     "code-sleep-b04:m0020"
+    ]
+   },
+   {
+    "line": "image-resize lockDuration: 5000 but jobs take 7.5-9s, so they stall and run twice (144 on 2026-09-21); fix ~60000 or remove override; Jordan said later.",
+    "rows": [
+     "code-sleep-b05:m0029"
+    ]
+   },
+   {
+    "line": "invoice-reminders: BullMQ scheduler daily 13:00 UTC, fan-out per org, jobId invoice-reminder:<invoiceId>:<date>. INCIDENT Sat 2026-10-17 08:52-09:41: worker crashloop from new invoice-reminder repeatable job registered at startup (4c1d9e2, in Friday's tag); mitigated by disabling the schedule via feature flag; root cause suspected in schedule registration; follow-up ticket, incident follow-up Monday.",
+    "rows": [
+     "code-sleep-b05:m0037",
+     "code-sleep-b09:m0013"
+    ]
+   },
+   {
+    "line": "billing-sync (every 15 min) can delay Stripe invoices 30+ min: filters created >= lastRunAt (later-finalized drafts skipped), lastRunAt set at run end; suggest event-based sync or start-time plus overlap; billing code, Jordan reviews first; not confirmed as cause.",
+    "rows": [
+     "code-sleep-b06:m0027"
+    ]
+   },
+   {
+    "line": "Worker shutdown on SIGTERM: stops taking jobs, drains in-flight 30s (GRACE_PERIOD_MS), helm terminationGracePeriodSeconds 30; image-resize jobs can exceed it and w.close() may pick up one more job; Priya says it's on our side; fix (pause before close; 90s/100s) not made.",
+    "rows": [
+     "code-sleep-b07:m0007"
+    ]
+   },
+   {
+    "line": "Crons are BullMQ upsertJobScheduler in services/worker/src/schedules.ts: nightly-digest 07:00 America/Toronto (moved from 06:00 on 2026-10-05), billing-sync every 15 min, purge-soft-deleted Sundays 03:30 UTC.",
+    "rows": [
+     "code-sleep-b07:m0020"
+    ]
+   },
+   {
+    "line": "Every worker job handler must be idempotent using job id as key (webhooks: redis idem:webhooks:<job id> SET NX, done after success, 24h expiry).",
+    "rows": [
+     "code-sleep-b08:m0012"
+    ]
+   },
+   {
+    "line": "Queues: email, images, billing-sync, webhooks (QUEUE_NAMES in queues.ts). Bug: apps/api/src/jobs/enqueue.ts:31 enqueues \"billing_sync\" (underscore) so jobs are silently dropped; unfixed.",
+    "rows": [
+     "code-sleep-b08:m0021"
+    ]
+   },
+   {
+    "line": "PDF rendering (pdf/invoice-pdf-export): always end PDFKit docs (try/finally doc.end()); null invoice.body crashed email queue, leaks caused staging OOMKills.",
+    "rows": [
+     "code-sleep-b08:m0024"
+    ]
+   },
+   {
+    "line": "Staging redis maxmemory-policy volatile-lru -> noeviction (PR #1189, acme-398-redis-param-group): writes fail OOM when full instead of evicting.",
+    "rows": [
+     "code-sleep-b08:m0009"
+    ]
+   },
+   {
+    "line": "Grafana queues.json has 'billing-sync queue depth' panel (bullmq waiting+active); dry-run clean, not pushed.",
+    "rows": [
+     "code-sleep-b09:m0005"
+    ]
+   }
+  ],
+  "git": [
+   {
+    "line": "Standing rule: never use git stash; commit WIP to the branch.",
+    "rows": [
+     "code-sleep-b00:m0025"
+    ]
+   },
+   {
+    "line": "Never rewrite/squash pushed commits (Marco branches off Jordan's); add commits on top.",
+    "rows": [
+     "code-sleep-b01:m0005"
+    ]
+   },
+   {
+    "line": "Branches: acme-<ticket>-<slug> (lowercase Linear id), e.g. acme-447-render-fallback, acme-431-org-switcher-close, acme-452-clients-page-size; PRs tracked by ticket. Commit subjects imperative with body explaining why.",
+    "rows": [
+     "code-sleep-b00:m0005",
+     "code-sleep-b06:m0019",
+     "code-sleep-b10:m0017"
+    ]
+   },
+   {
+    "line": "PR needs one CODEOWNERS approval + green CI; packages/cli/ had no CODEOWNERS line in b00 (b01 says @acme/backend owns it); reorg #744 wrote /infrastructure/ wrongly, fixed on acme-239-codeowners-infra.",
+    "rows": [
+     "code-sleep-b00:m0031",
+     "code-sleep-b01:m0020"
+    ]
+   },
+   {
+    "line": "Billing/Stripe code (apps/api billing, stripe webhook route and handlers) never changes without Jordan's review: leave it uncommitted for his review (raw-body change and stripe-events.ts handlers-map refactor waiting); draft PR and tag Jordan.",
+    "rows": [
+     "code-sleep-b01:m0022",
+     "code-sleep-b08:m0018"
+    ]
+   },
+   {
+    "line": "Never edit a merged migration; add a new one.",
+    "rows": [
+     "code-sleep-b01:m0004"
+    ]
+   },
+   {
+    "line": "packages/cli/dist/index.js tracked, stale, hand-patched by Marco (a91c3e2); ask Marco, leave it.",
+    "rows": [
+     "code-sleep-b00:m0022"
+    ]
+   },
+   {
+    "line": "`pnpm changeset` for user-facing changes.",
+    "rows": [
+     "code-sleep-b00:m0007"
+    ]
+   },
+   {
+    "line": "Owners: Lena apps/web, Marco apps/api + services/worker, Priya infra/ + .github/ (platform team auto-requested).",
+    "rows": [
+     "code-sleep-b00:m0054",
+     "code-sleep-b01:m0020"
+    ]
+   },
+   {
+    "line": "No emojis in commit messages. Prefer gh CLI for issues/PRs.",
+    "rows": [
+     "code-sleep-b02:m0011",
+     "code-sleep-b02:m0015"
+    ]
+   },
+   {
+    "line": "Standing rule: never merge PRs yourself; push to the PR branch and let Jordan merge.",
+    "rows": [
+     "code-sleep-b05:m0013"
+    ]
+   },
+   {
+    "line": "Keep diffs small, one concern per PR; split unrelated commits into branches from origin/main (acme-211-csv-export, acme-213-api-pool-max, acme-214-worker-servicemonitor).",
+    "rows": [
+     "code-sleep-b06:m0024"
+    ]
+   },
+   {
+    "line": "Do not create or push release tags until Jordan says go.",
+    "rows": [
+     "code-sleep-b06:m0009"
+    ]
+   },
+   {
+    "line": "infra/ and .github/ PRs need platform (Priya) review and plan pasted in the PR description; local plan: `make plan ENV=staging` from infra/.",
+    "rows": [
+     "code-sleep-b06:m0007",
+     "code-sleep-b08:m0008",
+     "code-sleep-b08:m0020"
+    ]
+   },
+   {
+    "line": "pnpm only; never commit yarn.lock/package-lock.json (untracked yarn.lock keeps reappearing). Git hooks via lefthook; remove leftover .husky refs.",
+    "rows": [
+     "code-sleep-b07:m0001",
+     "code-sleep-b07:m0002",
+     "code-sleep-b07:m0004"
+    ]
+   },
+   {
+    "line": "Branch acme-438-remove-tf-local-backend (5e0a1c4) removes committed backend_override.tf; not pushed, no PR; PR needs Priya review and plan showing 0 to add.",
+    "rows": [
+     "code-sleep-b07:m0010",
+     "code-sleep-b07:m0011"
+    ]
+   },
+   {
+    "line": "Open: #1192 (acme invoices list), #1189 acme-398-redis-param-group, #1484 acme-431-org-switcher-close (approved), acme-447-render-fallback (9b3e1d7 unpushed), acme-452-clients-page-size, acme-447-jwt-clock-skew, acme-431-prod-read-replica, ts-verbatim-imports; export work separate from #1192.",
+    "rows": [
+     "code-sleep-b08:m0003",
+     "code-sleep-b08:m0009",
+     "code-sleep-b10:m0010",
+     "code-sleep-b10:m0018",
+     "code-sleep-b10:m0017",
+     "code-sleep-b08:m0010",
+     "code-sleep-b08:m0030",
+     "code-sleep-b08:m0034"
+    ]
+   }
+  ],
+  "work-task": [
+   {
+    "line": "Linear ACME team; branch = lowercase Linear id.",
+    "rows": [
+     "code-sleep-b00:m0005"
+    ]
+   },
+   {
+    "line": "Jordan wants short bullet-list summary on finishing, not paragraphs.",
+    "rows": [
+     "code-sleep-b00:m0048"
+    ]
+   },
+   {
+    "line": "Owners: Lena Fischer (apps/web), Marco Bianchi (apps/api, worker), Priya Shah (infra, .github). Sam asked Jordan to review onboarding docs.",
+    "rows": [
+     "code-sleep-b00:m0054"
+    ]
+   },
+   {
+    "line": "Billing code changes need Jordan's review via draft PR (applies to Claude and contractors).",
+    "rows": [
+     "code-sleep-b01:m0022"
+    ]
+   },
+   {
+    "line": "Test end to end in the running app before a PR and say what was checked; re-check for bugs and security before saying done.",
+    "rows": [
+     "code-sleep-b02:m0001",
+     "code-sleep-b02:m0030"
+    ]
+   },
+   {
+    "line": "Wants concise answers: code plus 1-2 lines; skip basics; tighten up when too long-winded (2026-10-05); say plainly if a fix is uncertain.",
+    "rows": [
+     "code-sleep-b05:m0032",
+     "code-sleep-b07:m0017",
+     "code-sleep-b03:m0006"
+    ]
+   },
+   {
+    "line": "Team: Lena frontend owner, Marco backend (wrote docs/architecture/payments.md), Priya infra; Lena flagged web onboarding doc stale.",
+    "rows": [
+     "code-sleep-b05:m0019"
+    ]
+   },
+   {
+    "line": "Standing rule: for any large refactor, show a plan and wait for explicit approval before touching code.",
+    "rows": [
+     "code-sleep-b06:m0003"
+    ]
+   },
+   {
+    "line": "CLI --json missing on org list, org switch, clients list (as of 2026-10-07); add per the --json rule.",
+    "rows": [
+     "code-sleep-b08:m0002"
+    ]
+   },
+   {
+    "line": "Customer Dana Whitcombe (Northwind) via Sam Ortiz, 2026-10-12: invoice export for Xero bookkeeper (all invoices incl. voided; columns: number, client name, client tax id, issue date, due date, subtotal, tax, total, currency, status, paid date; USD/CAD unconverted; nice: monthly email on the 1st). Current CSV is client-side (export-csv-button.tsx); no ticket or reply yet.",
+    "rows": [
+     "code-sleep-b08:m0036"
+    ]
+   },
+   {
+    "line": "Pending: x-org-id guard on org-scoped API routes (403 problem+json); share-link server page + SHARE_LINK_SECRET in .env.example.",
+    "rows": [
+     "code-sleep-b09:m0017",
+     "code-sleep-b09:m0014"
+    ]
+   },
+   {
+    "line": "Marco is who Jordan consults for storage decisions; receipt attachments blocked on his answer.",
+    "rows": [
+     "code-sleep-b10:m0005",
+     "code-sleep-b10:m0006"
+    ]
+   },
+   {
+    "line": "Pending: real-browser e2e of create-invoice-and-send on local dev (runner/folder and auth approach to be found by Jordan; selectors: Client label, 'Line N description/quantity/unit price', 'Save draft', 'Send invoice' on drafts).",
+    "rows": [
+     "code-sleep-b10:m0027"
+    ]
+   },
+   {
+    "line": "Pending: invoiceExport flag (flag service unconfirmed); `acme invoices list --since` unfinished.",
+    "rows": [
+     "code-sleep-b10:m0002",
+     "code-sleep-b10:m0033"
+    ]
+   },
+   {
+    "line": "Lena Fischer owns web login/layout (a81f2c3, 2026-10-19); Google sign-in vanished 10-20, Jordan checking dashboard.",
+    "rows": [
+     "code-sleep-b10:m0023",
+     "code-sleep-b10:m0022"
+    ]
+   }
+  ],
+  "api": [
+   {
+    "line": "API is Fastify 5 (Express 4 migrated away, PR #412): plugins in apps/api/src/plugins/ (auth, cors, rate-limit, request-id, error-handler); handlers (request, reply); routes versioned under /v1 (paths without /v1 are wrong).",
+    "rows": [
+     "code-sleep-b03:m0004",
+     "code-sleep-b09:m0002"
+    ]
+   },
+   {
+    "line": "Validation zod only; schemas in apps/api/src/schemas/, safeParse -> 400 invalid_body.",
+    "rows": [
+     "code-sleep-b01:m0026"
+    ]
+   },
+   {
+    "line": "Keep connectRetryWindowMs >= 120_000. Pool size env PG_POOL_MAX (env.ts, no default, not set in helm; value from synced secret, unknown); older note says 10 per pod. 'too many clients already' = pods x pool > max_connections.",
+    "rows": [
+     "code-sleep-b00:m0009",
+     "code-sleep-b06:m0020",
+     "code-sleep-b08:m0004"
+    ]
+   },
+   {
+    "line": "Every table has org_id; every query must filter by req.auth.orgId. JSON camelCase (totalCents); convert SUM() DECIMAL strings to numbers.",
+    "rows": [
+     "code-sleep-b02:m0012"
+    ]
+   },
+   {
+    "line": "Cursor pagination (opaque cursor on created_at + id), never offset; decode cursor createdAt to Date. Known bug: GET /v1/clients uses `id > cursor` while ordering by lower(name), id, so pages skip/repeat; keyset (lower(name), id) fix pending Jordan's go-ahead.",
+    "rows": [
+     "code-sleep-b05:m0009",
+     "code-sleep-b05:m0014",
+     "code-sleep-b10:m0016"
+    ]
+   },
+   {
+    "line": "Errors are RFC 7807 problem+json via problem() helper (lib/problem.ts); rows soft-deleted via deleted_at, lists/gets filter deleted_at IS NULL.",
+    "rows": [
+     "code-sleep-b05:m0030"
+    ]
+   },
+   {
+    "line": "Money integer cents; invoices/totals.ts rounds each line's net and tax to whole cents then sums (fixed Northwind 1-cent mismatch); issued invoices keep stored totals.",
+    "rows": [
+     "code-sleep-b05:m0010",
+     "code-sleep-b05:m0039"
+    ]
+   },
+   {
+    "line": "Payments (read docs/architecture/payments.md): Stripe Checkout redirect, POST /v1/webhooks/stripe, stripe_events idempotent, job updates invoice status, payout.paid creates payouts; GET /v1/payouts (acme-238, PR #418); backfill of pre-migration payouts open.",
+    "rows": [
+     "code-sleep-b05:m0011",
+     "code-sleep-b05:m0012"
+    ]
+   },
+   {
+    "line": "CSV exports (lib/csv.ts): RFC 4180 quoting, leading ' for = + - @, CRLF line endings kept (Jordan's choice), filename invoices-<org slug>.csv; customer-facing so mention in PR (acme-211-csv-export).",
+    "rows": [
+     "code-sleep-b05:m0035",
+     "code-sleep-b06:m0022"
+    ]
+   },
+   {
+    "line": "GET /v1/invoices returns legacy key `items` instead of `data` when org has no invoices; CLI falls back to items then []; remove after ACME-418.",
+    "rows": [
+     "code-sleep-b08:m0006"
+    ]
+   },
+   {
+    "line": "Stripe webhook /v1/webhooks/stripe needs raw body (fastify-raw-body global:false, route rawBody:true; constructEvent gets Buffer, not JSON.stringify). Billing code: leave uncommitted for Jordan.",
+    "rows": [
+     "code-sleep-b08:m0017",
+     "code-sleep-b08:m0018"
+    ]
+   },
+   {
+    "line": "Browser API calls go through apps/web/lib/api.ts with credentials: include (raw fetch 401s).",
+    "rows": [
+     "code-sleep-b09:m0001"
+    ]
+   },
+   {
+    "line": "Pending: global guard on org-scoped routes (clients, invoices, orgs, uploads; not health/webhooks) requiring x-org-id matching an org of the session, else 403 problem+json; web already sends it (lib/org-context.ts); framework is Fastify 5.",
+    "rows": [
+     "code-sleep-b09:m0017"
+    ]
+   },
+   {
+    "line": "Open: customers randomly get Unauthorized and refresh works (Sentry 7d: 1,284 events, 61 users, 9 orgs, all 3 api pods, 87% within 2s of new browser session, flat across last 3 deploys); cause unknown; Jordan will dig up old ticket.",
+    "rows": [
+     "code-sleep-b09:m0007"
+    ]
+   },
+   {
+    "line": "Receipt PDF attachments on expenses: none exist in form or apps/api expenses route; Jordan to ask Marco about storage; fallback: multipart POST via @fastify/multipart (new dependency, needs Jordan's OK, bytes through API pods) with attachment row (org_id). Blocked until Marco answers.",
+    "rows": [
+     "code-sleep-b10:m0005",
+     "code-sleep-b10:m0006"
+    ]
+   },
+   {
+    "line": "GET /v1/clients excludes archived unless ?includeArchived=true (literal enum 'true'/'false', not z.coerce.boolean); sorted by lower(name), id. expenseCategoryBody (name 1-60, #rrggbb color, optional parentId) in schemas/expenses.ts.",
+    "rows": [
+     "code-sleep-b10:m0015",
+     "code-sleep-b10:m0012"
+    ]
+   },
+   {
+    "line": "'recieved' in routes/v1/payments.ts is an API response value (status), intentionally left (clients may match; payments.test.ts expects it); only worker comment/log typos fixed.",
+    "rows": [
+     "code-sleep-b10:m0028"
+    ]
+   },
+   {
+    "line": "`acme invoices list --since <YYYY-MM-DD>` unfinished: register flag in packages/cli/src/index.ts, add issuedFrom to api/client.ts list types, confirm API has issued-from filter, parseSince tests; CLI client column truncated to 24 chars (--json full name).",
+    "rows": [
+     "code-sleep-b10:m0033",
+     "code-sleep-b10:m0032"
+    ]
+   }
+  ],
+  "release": [
+   {
+    "line": "`pnpm changeset` for user-facing changes.",
+    "rows": [
+     "code-sleep-b00:m0007"
+    ]
+   },
+   {
+    "line": "CLI release: merge Changesets version PR, then publish job runs `npm publish --provenance`.",
+    "rows": [
+     "code-sleep-b00:m0046"
+    ]
+   },
+   {
+    "line": "@acme/cli is ESM-only since PR #702; ERR_REQUIRE_ESM = old Node, tell customers Node 18+ and `npm i -g @acme/cli`; engines field suggested, not added.",
+    "rows": [
+     "code-sleep-b01:m0021"
+    ]
+   },
+   {
+    "line": "Tracked packages/cli/dist/index.js is stale, hand-patched by Marco; ask Marco first.",
+    "rows": [
+     "code-sleep-b00:m0022"
+    ]
+   },
+   {
+    "line": "`acme invoices export` (branch acme-240-invoices-export) needs a changeset before PR; user-facing CLI changes always need one.",
+    "rows": [
+     "code-sleep-b03:m0016",
+     "code-sleep-b03:m0017"
+    ]
+   },
+   {
+    "line": "@acme/cli on npm (restricted); latest published 2.7.1 on 2026-10-09, next tag 2.8.0-rc.0; update-notifier checks daily, notice on stderr, skipped in CI, NO_UPDATE_NOTIFIER=1 silences.",
+    "rows": [
+     "code-sleep-b04:m0008",
+     "code-sleep-b09:m0003"
+    ]
+   },
+   {
+    "line": "Prod deploys from git tags v* via release.yml (~12 min); builds api/worker images to ECR acme/<service> tagged tag + sha-<commit>; build timeout 25 min; prod worker ran v2026.10.06.",
+    "rows": [
+     "code-sleep-b05:m0003",
+     "code-sleep-b05:m0004",
+     "code-sleep-b08:m0019"
+    ]
+   },
+   {
+    "line": "No prod release tags on Fridays. Tags are calendar-versioned (v2026.09.17 latest); changelog from `git log <last tag>..origin/main`; do not create or push a tag until Jordan says go.",
+    "rows": [
+     "code-sleep-b06:m0008",
+     "code-sleep-b06:m0009"
+    ]
+   },
+   {
+    "line": "CLI crash-after-update report (could not reproduce on fresh 2.4.1); Jordan wants patch 2.4.2 via packages/cli/package.json once cause known.",
+    "rows": [
+     "code-sleep-b06:m0014"
+    ]
+   },
+   {
+    "line": "CSV export change (RFC 4180 quoting, CRLF kept, invoices-<org slug>.csv) is customer-facing: mention in PR (branch acme-211-csv-export).",
+    "rows": [
+     "code-sleep-b06:m0022"
+    ]
+   },
+   {
+    "line": "Jordan planned release tag 2026-10-09 for PR #1192 (invoices list); that is a Friday, against his rule.",
+    "rows": [
+     "code-sleep-b08:m0003",
+     "code-sleep-b06:m0008"
+    ]
+   },
+   {
+    "line": "Friday's tag (2026-10-16) shipped invoice-reminder job (4c1d9e2) that crashlooped worker 2026-10-17.",
+    "rows": [
+     "code-sleep-b09:m0013"
+    ]
+   }
+  ],
+  "database": [
+   {
+    "line": "Standing rule: no destructive DB commands (drop, truncate, reset) without asking Jordan, even locally.",
+    "rows": [
+     "code-sleep-b00:m0008",
+     "code-sleep-b00:m0053"
+    ]
+   },
+   {
+    "line": "Never edit a merged migration; add new (0042 reminder_days default 7 fixed by 0043 to 3).",
+    "rows": [
+     "code-sleep-b01:m0004"
+    ]
+   },
+   {
+    "line": "Primary DB is Postgres 16 (ADR 0014, accepted 2026-09-08, owner Marco); MySQL 8 retired, supersedes earlier MySQL claim. Local postgres:16.4 (user/password/db 'acme', 5432), redis:7.2; DATABASE_URL=postgres://user:pass@host:5432/acme; migrations restart at apps/api/drizzle/0031_pg_baseline.sql; Drizzle dialect postgresql.",
+    "rows": [
+     "code-sleep-b04:m0001",
+     "code-sleep-b00:m0017"
+    ]
+   },
+   {
+    "line": "Prod RDS Multi-AZ, 14-day backups, restore to new instance never over live; failover 90s, keep retry window >= 120_000.",
+    "rows": [
+     "code-sleep-b00:m0014",
+     "code-sleep-b00:m0009"
+    ]
+   },
+   {
+    "line": "Pooler on port 6432; transaction mode needs prepare:false (not yet passed); errors after each prod deploy unresolved. Pool size env PG_POOL_MAX (no default, not in helm; value in synced secret, unknown); 'too many clients already' on staging = pods x pool > max_connections.",
+    "rows": [
+     "code-sleep-b00:m0032",
+     "code-sleep-b05:m0033",
+     "code-sleep-b08:m0004"
+    ]
+   },
+   {
+    "line": "Local reset: remove DB volume, compose up db redis, migrate.ts + seed.ts; needs Jordan's ok. Jordan now runs OrbStack (docker context 'orbstack'); its Postgres volume started empty so migrations had to be re-run.",
+    "rows": [
+     "code-sleep-b00:m0053",
+     "code-sleep-b04:m0032"
+    ]
+   },
+   {
+    "line": "Every query filters by org_id (req.auth.orgId); SUM() DECIMAL strings to numbers.",
+    "rows": [
+     "code-sleep-b02:m0012"
+    ]
+   },
+   {
+    "line": "Pending migration: nullable reminder.claimedAt (not written; Jordan said later). ORM is Drizzle; apply migrations with `pnpm --filter api db:migrate` (drizzle-kit).",
+    "rows": [
+     "code-sleep-b02:m0006",
+     "code-sleep-b03:m0013",
+     "code-sleep-b05:m0008"
+    ]
+   },
+   {
+    "line": "Prod DB access only via Tailscale: get into eng-prod-readers (ask Priya), `tailscale up`, read-only creds from Secrets Manager prod/db/readonly, psql acme-prod.cluster-ro.internal:5432 db acme; set application_name to your name; sessions logged; writes only via migrations (docs/runbooks/prod-db-access.md).",
+    "rows": [
+     "code-sleep-b04:m0033",
+     "code-sleep-b04:m0006"
+    ]
+   },
+   {
+    "line": "Drizzle schema apps/api/src/db/schema.ts is source of truth; after editing run `pnpm --filter api db:generate` (drizzle-kit generate) into apps/api/drizzle/; new tables: UUID v7 PK, org_id, created_at, deleted_at, org_id index. Local DB missing a new column (invoices.paid_at 500) means migrate not run: `pnpm --filter api db:migrate`.",
+    "rows": [
+     "code-sleep-b06:m0011",
+     "code-sleep-b07:m0006",
+     "code-sleep-b08:m0037",
+     "code-sleep-b08:m0032"
+    ]
+   },
+   {
+    "line": "API reads DB only from DATABASE_URL (no PG* fallbacks, fails fast at boot); .env.local needs it. Seed: `pnpm --filter api db:seed`.",
+    "rows": [
+     "code-sleep-b07:m0005",
+     "code-sleep-b07:m0015"
+    ]
+   },
+   {
+    "line": "Migration 0042 invoices_org_id_idx is plain CREATE INDEX: staging (1.9M rows, 1.2 GB) blocked writes 6.8s; prod ~4x so expect 25-30s; CONCURRENTLY needs hand-written migration outside a transaction (drizzle wraps each file); decision pending.",
+    "rows": [
+     "code-sleep-b08:m0038"
+    ]
+   },
+   {
+    "line": "Plan: prod read replica on branch acme-431-prod-read-replica and check replication lag; unresolved (which IaC stack owns the prod instance, how to reach prod).",
+    "rows": [
+     "code-sleep-b08:m0030"
+    ]
+   },
+   {
+    "line": "tools/sql/monthly_revenue.sql written in plain standard SQL (engine was unknown to author; DB is Postgres 16), untested on real data. trailmix: hikes/migrations/0007_hike_elevation_gain.py generated, Jordan must run `python manage.py migrate`.",
+    "rows": [
+     "code-sleep-b09:m0011",
+     "code-sleep-b09:m0016"
+    ]
+   },
+   {
+    "line": "Receipt attachments would need an attachment row with org_id; storage decision pending with Marco.",
+    "rows": [
+     "code-sleep-b10:m0005",
+     "code-sleep-b10:m0006"
+    ]
+   },
+   {
+    "line": "trailmix Hike.elevation_gain_m (PositiveIntegerField null/blank) migration 0007_hike_elevation_gain_m.py applied to local SQLite, 41 tests pass.",
+    "rows": [
+     "code-sleep-b10:m0009"
+    ]
+   }
+  ],
+  "observability": [
+   {
+    "line": "pino only; never log whole request bodies; redacts auth headers, cookies, secret fields.",
+    "rows": [
+     "code-sleep-b00:m0004",
+     "code-sleep-b03:m0002",
+     "code-sleep-b04:m0002"
+    ]
+   },
+   {
+    "line": "Sentry for errors (SENTRY_DSN), incl. CLI.",
+    "rows": [
+     "code-sleep-b00:m0023"
+    ]
+   },
+   {
+    "line": "PostHog in apps/web/app/providers.tsx; invoice_sent event. Worker metrics at :9464/metrics.",
+    "rows": [
+     "code-sleep-b01:m0007",
+     "code-sleep-b01:m0028"
+    ]
+   },
+   {
+    "line": "14 prod CloudWatch alarms route to pagerduty-oncall SNS (incl. api-stripe-webhook-5xx: >5 5xx/5 min pages at night); none cover worker Redis.",
+    "rows": [
+     "code-sleep-b00:m0037",
+     "code-sleep-b01:m0034"
+    ]
+   },
+   {
+    "line": "Priya wants prod alarm for worker Redis memory > 80% for 10 min (draft infra/src/alarms/worker.ts, metric namespace TODO, likely AWS/ElastiCache); not merged.",
+    "rows": [
+     "code-sleep-b01:m0034"
+    ]
+   },
+   {
+    "line": "Bull Board at /admin/queues on worker (basic auth) replaces RabbitMQ UI.",
+    "rows": [
+     "code-sleep-b05:m0002"
+    ]
+   },
+   {
+    "line": "Worker Prometheus :9464/metrics; helm ServiceMonitor 30s so Grafana scrapes (branch acme-214-worker-servicemonitor).",
+    "rows": [
+     "code-sleep-b06:m0021"
+    ]
+   },
+   {
+    "line": "2026-10-12 staging 5xx spike: deploy rolled pods before readiness passed (api helm probes on /health, path to confirm).",
+    "rows": [
+     "code-sleep-b08:m0016"
+    ]
+   },
+   {
+    "line": "Metrics/logs to Grafana Cloud (stack acme) via Grafana Agent per cluster; dashboards JSON in infra/grafana/dashboards (api-overview, billing, worker-images, queues), never edit in the UI (sync overwrites); preview `pnpm tsx infra/grafana/sync.ts --dry-run`; CI pushes on main; alert rules in infra/grafana/alerts. worker-images metric names unverified. Queues panel 'billing-sync queue depth' added, not pushed.",
+    "rows": [
+     "code-sleep-b09:m0004",
+     "code-sleep-b09:m0005",
+     "code-sleep-b08:m0028"
+    ]
+   },
+   {
+    "line": "Worker crashloop Sat 2026-10-17 08:52-09:41 from invoice-reminder schedule (4c1d9e2); disabled via flag; follow-up Monday. Agent machine has no kubectl contexts, so prod pods can't be inspected from it.",
+    "rows": [
+     "code-sleep-b09:m0013",
+     "code-sleep-b09:m0012"
+    ]
+   },
+   {
+    "line": "Open: random Unauthorized (1,284 Sentry events/7d, 61 users, 9 orgs); cause unknown.",
+    "rows": [
+     "code-sleep-b09:m0007"
+    ]
+   },
+   {
+    "line": "app/error.tsx boundary shows digest reference, hides error messages.",
+    "rows": [
+     "code-sleep-b10:m0018"
+    ]
+   }
+  ],
+  "deploy": [
+   {
+    "line": "Infra: Terraform 1.8.5 in infra/terraform, single AWS provider, us-east-1 for everything (no provider aliases without platform); S3 buckets acme-${var.env}-<name>, public access blocked, KMS (aws:kms). Pulumi removed 2026-08-26.",
+    "rows": [
+     "code-sleep-b02:m0013",
+     "code-sleep-b03:m0010"
+    ]
+   },
+   {
+    "line": "Never apply infra from a laptop; only CI plan/apply (Priya). infra/ and .github/ are platform-owned: platform review and plan output in the PR; local plan `make plan ENV=staging` from infra/.",
+    "rows": [
+     "code-sleep-b01:m0016",
+     "code-sleep-b06:m0007",
+     "code-sleep-b08:m0008",
+     "code-sleep-b08:m0020"
+    ]
+   },
+   {
+    "line": "Tag every taggable resource with team and env; Jordan's team=payments; only aws_s3_bucket taggable among bucket sub-resources.",
+    "rows": [
+     "code-sleep-b00:m0040"
+    ]
+   },
+   {
+    "line": "EKS cluster acme-prod; worker KEDA 1-20 (1/50 msgs); api HPA CPU 70% 3-12. Prod Redis ElastiCache single shard, cluster mode off.",
+    "rows": [
+     "code-sleep-b00:m0033",
+     "code-sleep-b00:m0039",
+     "code-sleep-b01:m0002"
+    ]
+   },
+   {
+    "line": "Secrets: dev 1Password acme-dev; prod AWS Secrets Manager synced to k8s by External Secrets Operator (api chart pulls only keys in `secrets:` of infra/helm/api/values-prod.yaml, prefix prod/api, 1h refresh); new secret: add to list, ESO sync, restart pods.",
+    "rows": [
+     "code-sleep-b00:m0035",
+     "code-sleep-b03:m0027"
+    ]
+   },
+   {
+    "line": "Prod deploys from git tags v* via release.yml (GitHub Actions); web on Vercel with preview per PR.",
+    "rows": [
+     "code-sleep-b05:m0003",
+     "code-sleep-b05:m0016"
+    ]
+   },
+   {
+    "line": "Never deploy to prod (or push release tags) on Fridays: Friday's tag (2026-10-16) carried the invoice-reminder job that crashlooped the worker Sat 2026-10-17 (disabled via flag).",
+    "rows": [
+     "code-sleep-b06:m0008",
+     "code-sleep-b09:m0013"
+    ]
+   },
+   {
+    "line": "NEXT_PUBLIC_API_URL missing for Vercel Preview (only Production), so staging calls localhost:4000; add for Preview and redeploy (Jordan with Priya); reports/actions.ts uses server-side API_URL instead; NEXT_PUBLIC vars must never hold secrets.",
+    "rows": [
+     "code-sleep-b06:m0028",
+     "code-sleep-b04:m0003"
+    ]
+   },
+   {
+    "line": "Terraform state: S3 acme-tfstate (platform/prod.tfstate, us-east-1) + DynamoDB lock acme-tfstate-lock (backend.tf). Committed backend_override.tf (b27f9aa) made CI plans show 47 to add; removal on acme-438-remove-tf-local-backend unpushed; run `terraform init -reconfigure` if you used the override.",
+    "rows": [
+     "code-sleep-b07:m0010"
+    ]
+   },
+   {
+    "line": "Worker SIGTERM: 30s drain (GRACE_PERIOD_MS in shutdown.ts, terminationGracePeriodSeconds 30 in infra/helm/worker/values.yaml); deploys kill pods mid-job (image-resize >30s); proposed: pause workers before close, raise both (90s app, 100s Helm); not made.",
+    "rows": [
+     "code-sleep-b07:m0007"
+    ]
+   },
+   {
+    "line": "Staging redis maxmemory-policy now noeviction (PR #1189): writes fail OOM when full.",
+    "rows": [
+     "code-sleep-b08:m0009"
+    ]
+   },
+   {
+    "line": "api helm probes on /health (guessed; API serves /healthz? confirm); 2026-10-12 staging 5xx spike came from rolling pods before readiness.",
+    "rows": [
+     "code-sleep-b08:m0016",
+     "code-sleep-b00:m0015"
+    ]
+   },
+   {
+    "line": "Images: api and worker to ECR acme/<service> us-east-1, tagged git tag and sha-<commit>; prod worker ran v2026.10.06.",
+    "rows": [
+     "code-sleep-b08:m0019"
+    ]
+   },
+   {
+    "line": "Incident 2026-10-17: worker crashloop from invoice-reminder schedule (4c1d9e2), mitigated by flag; follow-up Monday. Agent machine has no kubectl contexts.",
+    "rows": [
+     "code-sleep-b09:m0013",
+     "code-sleep-b09:m0012"
+    ]
+   },
+   {
+    "line": "SHARE_LINK_SECRET env needed for share links (add to .env.example; prod secret via ESO list).",
+    "rows": [
+     "code-sleep-b09:m0014"
+    ]
+   },
+   {
+    "line": "Vercel prod build failing on release branch: dev auth publishable key suspected in NEXT_PUBLIC_AUTH_PUBLISHABLE_KEY (Production); unresolved.",
+    "rows": [
+     "code-sleep-b10:m0013"
+    ]
+   },
+   {
+    "line": "Plan: invoice export behind feature flag invoiceExport for beta orgs; which flag service is unconfirmed (assistant awaiting Jordan's answer).",
+    "rows": [
+     "code-sleep-b10:m0002",
+     "code-sleep-b10:m0001"
+    ]
+   }
+  ],
+  "dependency": [
+   {
+    "line": "pnpm 9 (pinned 9.12.0) only; npm/yarn forbidden (CI rejects their lockfiles; only-allow doesn't catch `yarn add`). Renovate opens PRs Mondays: patch automerged once CI green; minor/major need human review.",
+    "rows": [
+     "code-sleep-b07:m0001",
+     "code-sleep-b05:m0034"
+    ]
+   },
+   {
+    "line": "Node pinned 20.11 (.nvmrc, engines >=20.11 <21) since 2026-08-27.",
+    "rows": [
+     "code-sleep-b02:m0004"
+    ]
+   },
+   {
+    "line": "zod: PR #1312 patch-level (3.24.1) fix a8c4f31 unpushed; PR #426 (4.1.5 major) fails typecheck/api tests, 37 call sites, left for Jordan's call.",
+    "rows": [
+     "code-sleep-b02:m0021",
+     "code-sleep-b03:m0025"
+    ]
+   },
+   {
+    "line": "Never bump major versions without asking Jordan first even if CI green; patch/minor deps-bot PRs with green CI OK to squash auto-merge, still need CODEOWNERS approval.",
+    "rows": [
+     "code-sleep-b03:m0024"
+    ]
+   },
+   {
+    "line": "CLI engines node>=18 and must support Node 18+ (tsup node18), but runtime-check.ts MIN_MAJOR=20 is a guess; confirm and align (customer crash report pending).",
+    "rows": [
+     "code-sleep-b04:m0031",
+     "code-sleep-b06:m0016",
+     "code-sleep-b06:m0014"
+    ]
+   },
+   {
+    "line": "Ask Jordan before adding any new dependency.",
+    "rows": [
+     "code-sleep-b06:m0018"
+    ]
+   },
+   {
+    "line": "CI `pnpm install --frozen-lockfile`: commit pnpm-lock.yaml with dep changes (tsx ^4.20.3 added to packages/cli devDependencies by hand, lockfile not updated; run pnpm install).",
+    "rows": [
+     "code-sleep-b06:m0005",
+     "code-sleep-b07:m0018"
+    ]
+   },
+   {
+    "line": "deps-bot @types/node 20.14.10 -> 20.16.5 (#493) breaks packages/cli typecheck (7 errors from undici Response import vs DOM lib); fix proposed, deferred ('later').",
+    "rows": [
+     "code-sleep-b07:m0019"
+    ]
+   },
+   {
+    "line": "deps-bot: minor bumps (typescript 5.7.2 #1199, drizzle-orm 0.36.1 #1198) wait for review; patch automerge after CI. moment is banned (date-fns); still in apps/web/package.json line 34, may be removed.",
+    "rows": [
+     "code-sleep-b08:m0035",
+     "code-sleep-b08:m0022"
+    ]
+   },
+   {
+    "line": "trailmix requirements.txt lacks gpxpy needed by import_gpx; waits for Jordan's go-ahead.",
+    "rows": [
+     "code-sleep-b08:m0025"
+    ]
+   },
+   {
+    "line": "Audit (dev-tooling only, not urgent): path-to-regexp via storybook and cookie via msw fixed by Monday Renovate batch; cross-spawn 7.0.3 via lefthook (pins execa 5.x) needs pnpm.overrides cross-spawn >=7.0.5.",
+    "rows": [
+     "code-sleep-b09:m0022"
+    ]
+   },
+   {
+    "line": "Don't add @fastify/multipart (receipt uploads) without Jordan's OK.",
+    "rows": [
+     "code-sleep-b10:m0005"
+    ]
+   }
+  ],
+  "docs": [
+   {
+    "line": "Update docs/ when public behavior changes (CLI commands in docs/cli.md).",
+    "rows": [
+     "code-sleep-b00:m0051"
+    ]
+   },
+   {
+    "line": "docs/architecture.md says MySQL 8 but DB is Postgres 16 (ADR 0014); fix stale docs/comments.",
+    "rows": [
+     "code-sleep-b00:m0017",
+     "code-sleep-b04:m0001"
+    ]
+   },
+   {
+    "line": "Onboarding docs: docs/onboarding.md (.env.local, 1Password acme-dev); Lena flagged web onboarding doc stale; Sam asked Jordan to review.",
+    "rows": [
+     "code-sleep-b01:m0023",
+     "code-sleep-b00:m0054",
+     "code-sleep-b05:m0019"
+    ]
+   },
+   {
+    "line": "Licensing: repo proprietary, packages/cli MIT.",
+    "rows": [
+     "code-sleep-b00:m0016"
+    ]
+   },
+   {
+    "line": "OpenAPI yaml generated, never hand-edit.",
+    "rows": [
+     "code-sleep-b00:m0045"
+    ]
+   },
+   {
+    "line": "Note the CSV header change amount_cents in docs/release notes; webhooks signature docs: X-Acme-Signature, HMAC SHA-256.",
+    "rows": [
+     "code-sleep-b02:m0009",
+     "code-sleep-b02:m0016"
+    ]
+   },
+   {
+    "line": "i18n strings need en/fr/es keys; UI copy 'New invoice', no exclamation marks in empty states.",
+    "rows": [
+     "code-sleep-b04:m0019",
+     "code-sleep-b04:m0013"
+    ]
+   },
+   {
+    "line": "CLI install docs: restricted npm @acme/cli, needs npm org login; engines node>=18 pending alignment.",
+    "rows": [
+     "code-sleep-b04:m0008",
+     "code-sleep-b04:m0031"
+    ]
+   },
+   {
+    "line": "CLI telemetry opt-out ACME_TELEMETRY=0; `acme status` prints on/off.",
+    "rows": [
+     "code-sleep-b05:m0001"
+    ]
+   },
+   {
+    "line": "Read docs/architecture/payments.md (Marco) before payment work; public API field changes also go in docs/api/invoices.md by hand.",
+    "rows": [
+     "code-sleep-b05:m0011",
+     "code-sleep-b05:m0040"
+    ]
+   },
+   {
+    "line": "apps/web README stale (yarn/ESLint; link docs/frontend/testing.md moved to docs/web/testing.md); Jordan will update.",
+    "rows": [
+     "code-sleep-b05:m0018",
+     "code-sleep-b05:m0022"
+    ]
+   },
+   {
+    "line": "Jordan wants tight replies ('you're being kinda long-winded', 2026-10-05); code plus 1-2 lines.",
+    "rows": [
+     "code-sleep-b05:m0032",
+     "code-sleep-b07:m0017"
+    ]
+   },
+   {
+    "line": "Lena owns apps/web/messages files, mid-refactor: don't edit.",
+    "rows": [
+     "code-sleep-b07:m0014"
+    ]
+   },
+   {
+    "line": "Comment only the why, never restate code.",
+    "rows": [
+     "code-sleep-b08:m0011"
+    ]
+   },
+   {
+    "line": "CLI README already documents `acme invoices list --since` but code not finished.",
+    "rows": [
+     "code-sleep-b10:m0033"
+    ]
+   }
+  ],
+  "finance": [
+   {
+    "line": "Reconcile: Stripe allocations on soft-deleted invoices are unapplied (sumAllocations skips; fix 5a7e2c9).",
+    "rows": [
+     "code-sleep-b01:m0018"
+    ]
+   },
+   {
+    "line": "Billing code (apps/api/src/billing/, worker jobs/billing/) needs Jordan's review; draft PR and tag Jordan.",
+    "rows": [
+     "code-sleep-b01:m0022"
+    ]
+   },
+   {
+    "line": "Format money with formatMoney (JPY zero-decimal), never cents / 100.",
+    "rows": [
+     "code-sleep-b01:m0013"
+    ]
+   },
+   {
+    "line": "Round each invoice line to whole cents before summing (integer cents, fractional quantities).",
+    "rows": [
+     "code-sleep-b03:m0009"
+    ]
+   },
+   {
+    "line": "Dunning payment-failed email (apps/api/emails/payment-failed.tsx) not yet wired; Jordan wants to review where it fires.",
+    "rows": [
+     "code-sleep-b03:m0033"
+    ]
+   },
+   {
+    "line": "formatMoney rounds on decimal string (2.005 float error); better to format from integer cents.",
+    "rows": [
+     "code-sleep-b04:m0007"
+    ]
+   },
+   {
+    "line": "Money is integer cents (amount_cents bigint); invoice totals round each line's net and tax to whole cents then sum.",
+    "rows": [
+     "code-sleep-b05:m0010",
+     "code-sleep-b05:m0039"
+    ]
+   },
+   {
+    "line": "Payments: Stripe Checkout redirect (no card data in web), stripe_events idempotent, payout.paid creates payouts (Settings > Payouts); read docs/architecture/payments.md.",
+    "rows": [
+     "code-sleep-b05:m0011"
+    ]
+   },
+   {
+    "line": "billing-sync (every 15 min) can delay Stripe invoices 30+ min; unconfirmed cause of finance's flagged invoices; wait for Jordan's review.",
+    "rows": [
+     "code-sleep-b06:m0027"
+    ]
+   },
+   {
+    "line": "Stripe/billing code and webhook raw-body change left uncommitted for Jordan's review.",
+    "rows": [
+     "code-sleep-b08:m0018",
+     "code-sleep-b08:m0017"
+    ]
+   },
+   {
+    "line": "Sam wants monthly revenue rollup per org for finance export: tools/sql/monthly_revenue.sql (paid, non-deleted, last 12 months, running total, cents), plain standard SQL, not run on real data.",
+    "rows": [
+     "code-sleep-b09:m0011"
+    ]
+   },
+   {
+    "line": "Supported currencies: USD, CAD, EUR, GBP, AUD; getPrimaryCurrency = first line item currency else org.",
+    "rows": [
+     "code-sleep-b10:m0025"
+    ]
+   }
+  ],
+  "message": [
+   {
+    "line": "Reminder email subjects: 'Reminder: INV-... is due in N days' / 'is due today' / 'INV-... is N days overdue' (singular at 1), UTC calendar days (send-reminder.ts).",
+    "rows": [
+     "code-sleep-b01:m0035"
+    ]
+   },
+   {
+    "line": "Email via Resend (apps/api/src/lib/mailer.ts, RESEND_API_KEY); templates are React Email in apps/api/emails (invoice-sent, receipt, welcome, payment-failed), each exports PreviewProps and a SUBJECT constant (to add on payment-failed).",
+    "rows": [
+     "code-sleep-b03:m0032",
+     "code-sleep-b03:m0033"
+    ]
+   },
+   {
+    "line": "payment-failed email (invoice no., amount, card last 4, Retry payment button) not hooked up; Jordan reviews where it fires.",
+    "rows": [
+     "code-sleep-b03:m0033"
+    ]
+   },
+   {
+    "line": "Support ticket reply (client agency CLI crash after install) kept generic on package name until they send error output.",
+    "rows": [
+     "code-sleep-b04:m0031"
+    ]
+   },
+   {
+    "line": "Reminder emails: daily 13:00 UTC job emails per invoice due in 3 days with pay link from api internal endpoint (worker API_URL).",
+    "rows": [
+     "code-sleep-b05:m0037"
+    ]
+   },
+   {
+    "line": "Jordan may raise the 'recieve' typo (en.json paymentPending) with Lena; don't edit her files.",
+    "rows": [
+     "code-sleep-b07:m0014"
+    ]
+   },
+   {
+    "line": "Customer Dana Whitcombe (Northwind) export request forwarded by Sam Ortiz 2026-10-12; no ticket or reply yet (columns/format in work-task).",
+    "rows": [
+     "code-sleep-b08:m0036"
+    ]
+   }
+  ],
+  "schedule": [
+   {
+    "line": "Prod EKS 1.29 upgrade pencilled 2026-10-06 (owner Priya; outcome not recorded); AWS LB Controller must be upgraded from v2.6.2 first.",
+    "rows": [
+     "code-sleep-b06:m0013",
+     "code-sleep-b06:m0012"
+    ]
+   },
+   {
+    "line": "Never deploy to prod or tag releases on Fridays. Note Jordan planned a tag on 2026-10-09, a Friday: confirm before assuming.",
+    "rows": [
+     "code-sleep-b06:m0008",
+     "code-sleep-b08:m0003"
+    ]
+   },
+   {
+    "line": "No release tag until Jordan says go; latest tag v2026.09.17 (as of 2026-09-24).",
+    "rows": [
+     "code-sleep-b06:m0009"
+    ]
+   },
+   {
+    "line": "Priya's branch priya/acme-212-redis-sg (worker to Redis ingress) is needed for Marco's worker rollout but Jordan has not authorized pushing to prod.",
+    "rows": [
+     "code-sleep-b06:m0006"
+    ]
+   },
+   {
+    "line": "Jordan: long-weekend hike near Tobermory right after 2026-10-02.",
+    "rows": [
+     "code-sleep-b07:m0016"
+    ]
+   },
+   {
+    "line": "Worker cron (BullMQ upsertJobScheduler, services/worker/src/schedules.ts): nightly-digest 07:00 America/Toronto (moved from 06:00 on 2026-10-05), billing-sync every 15 min, purge-soft-deleted Sundays 03:30 UTC.",
+    "rows": [
+     "code-sleep-b07:m0020"
+    ]
+   },
+   {
+    "line": "Wants k6 load suite (~40 min, hits staging) as GitHub Actions job: own job, longer timeout, ideally workflow_dispatch/scheduled; check with Priya first (.github/ platform-owned).",
+    "rows": [
+     "code-sleep-b07:m0021"
+    ]
+   },
+   {
+    "line": "Release tag planned 2026-10-09 for PR #1192 (acme invoices list); prod worker ran acme/worker:v2026.10.06 on 2026-10-09.",
+    "rows": [
+     "code-sleep-b08:m0003",
+     "code-sleep-b08:m0019"
+    ]
+   },
+   {
+    "line": "Customer Dana (Northwind) nice-to-have: monthly scheduled export email on the 1st; no ticket/reply yet.",
+    "rows": [
+     "code-sleep-b08:m0036"
+    ]
+   },
+   {
+    "line": "Incident review Monday 2026-10-19 (worker crashloop 2026-10-17, invoice-reminder schedule disabled via flag).",
+    "rows": [
+     "code-sleep-b09:m0013"
+    ]
+   }
+  ],
+  "travel": [
+   {
+    "line": "Jordan planned a long-weekend hike near Tobermory (Bruce Peninsula) right after 2026-10-02; he hikes (trailmix side project tracks hikes).",
+    "rows": [
+     "code-sleep-b07:m0016",
+     "code-sleep-b04:m0010"
+    ]
+   }
+  ],
+  "learning": [
+   {
+    "line": "Jordan's side project trailmix: Django with HTMX partials, Hike/Photo (and Trail, Region, Tag) models; he sometimes asks Django ORM questions in work sessions.",
+    "rows": [
+     "code-sleep-b07:m0012",
+     "code-sleep-b05:m0007"
+    ]
+   },
+   {
+    "line": "trailmix gotchas: auto_now doesn't fire on QuerySet.update()/bulk_update(); htmx POSTs need CSRF header (test client skips CSRF); only form carries hx-*; uploads need multipart encoding.",
+    "rows": [
+     "code-sleep-b04:m0018",
+     "code-sleep-b03:m0019",
+     "code-sleep-b02:m0008",
+     "code-sleep-b00:m0042"
+    ]
+   },
+   {
+    "line": "trailmix: Django 5.1.2, django-htmx, psycopg 3, pillow; deployed on fly.io (app trailmix, yyz); suggested [deploy] release_command = \"python manage.py migrate --noinput\" in fly.toml with backwards-compatible migrations; Trail.difficulty now nullable.",
+    "rows": [
+     "code-sleep-b08:m0005",
+     "code-sleep-b08:m0025",
+     "code-sleep-b08:m0033"
+    ]
+   },
+   {
+    "line": "trailmix import_gpx command needs gpxpy, not in requirements.txt; waits for Jordan's go-ahead to add.",
+    "rows": [
+     "code-sleep-b08:m0025"
+    ]
+   },
+   {
+    "line": "trailmix htmx pattern: views check HX-Request, return partials (hikes/_list.html; hikes/_form.html with 422 on errors); hike form targets #hike-rows (tbody) with hx-swap=afterbegin (whole-table outerHTML swap was the bug). Hike.elevation_gain_m migrated locally.",
+    "rows": [
+     "code-sleep-b09:m0009",
+     "code-sleep-b10:m0004",
+     "code-sleep-b10:m0009"
+    ]
+   },
+   {
+    "line": "trailmix Django admin: show distance as '<n.n> km' via @admin.display `distance` with ordering='distance_km' in hikes/admin.py.",
+    "rows": [
+     "code-sleep-b10:m0021"
+    ]
+   }
+  ],
+  "reminder": [
+   {
+    "line": "Deferred ('later'): notification-preferences settings page shell (heading + empty form) in the dashboard; inspect apps/web and match existing settings screens.",
+    "rows": [
+     "code-sleep-b07:m0009"
+    ]
+   },
+   {
+    "line": "Jordan may mention the 'recieve' typo (paymentPending string in en.json) to Lena; do not edit messages files (Lena mid-refactor).",
+    "rows": [
+     "code-sleep-b07:m0014"
+    ]
+   },
+   {
+    "line": "Customer Dana Whitcombe (Northwind) export request (via Sam Ortiz, 2026-10-12): no ticket or reply yet.",
+    "rows": [
+     "code-sleep-b08:m0036"
+    ]
+   },
+   {
+    "line": "CLI --json still missing on org list, org switch, clients list (as of 2026-10-07).",
+    "rows": [
+     "code-sleep-b08:m0002"
+    ]
+   },
+   {
+    "line": "Incident follow-up Monday 2026-10-19: worker crashloop from invoice-reminder schedule (4c1d9e2), schedule disabled via feature flag; follow-up ticket filed.",
+    "rows": [
+     "code-sleep-b09:m0013"
+    ]
+   },
+   {
+    "line": "Jordan to dig up old ticket on random API Unauthorized.",
+    "rows": [
+     "code-sleep-b09:m0007"
+    ]
+   },
+   {
+    "line": "TODO share link: add SHARE_LINK_SECRET to .env.example and build /share/invoices page.",
+    "rows": [
+     "code-sleep-b09:m0014"
+    ]
+   },
+   {
+    "line": "Jordan awaiting: flag service for invoiceExport (beta orgs), answer from Marco on receipt storage, e2e runner choice.",
+    "rows": [
+     "code-sleep-b10:m0002",
+     "code-sleep-b10:m0005",
+     "code-sleep-b10:m0027"
+    ]
+   },
+   {
+    "line": "Jordan to verify Vercel Production NEXT_PUBLIC_AUTH_PUBLISHABLE_KEY (dev key suspected) and Google sign-in setting in auth provider dashboard.",
+    "rows": [
+     "code-sleep-b10:m0013",
+     "code-sleep-b10:m0022"
+    ]
+   },
+   {
+    "line": "Push acme-447-render-fallback (9b3e1d7 unpushed).",
+    "rows": [
+     "code-sleep-b10:m0018"
+    ]
+   }
+  ]
+ }
+}

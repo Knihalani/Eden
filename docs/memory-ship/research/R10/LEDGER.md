@@ -1959,3 +1959,36 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **Measure:** latency p50 / p90 and its relation to pool size; recall of needed items that have a covering row in
   the pool (all, and those also in G0@15); turns with any pick, need vs no-need; picks per turn.
 - **No verdict rule.** Compared descriptively with C10's 15-candidate Jev runs.
+- **Result (2026-10-19, `python3 benchmarks/memory-stream/wide_check.py --world <w>` then `--report`):** no
+  unanswered questions in either world.
+
+  | | code | life |
+  |---|---|---|
+  | turns (need + no-need) | 110 (55 + 55) | 158 (79 + 79) |
+  | pool size median / max | 92 / 150 | 145 / 150 |
+  | latency p50 / p90 / max | 0.389 / 0.556 / 0.683 s | 0.508 / 0.624 / 0.775 s |
+  | p50 at pool 0–49 / 50–99 / 100–150 | 0.290 / 0.341 / 0.490 s | 0.264 / 0.362 / 0.535 s |
+  | recall of needed items in the pool (p ≥ 0.7, top 4) | 43/58 = 0.741 | 40/63 = 0.635 |
+  | … of those also in G0@15 | 33/37 = 0.892 | 25/33 = 0.758 |
+  | turns with any pick: need / no-need | 51/55, 29/55 | 71/79, 38/79 |
+  | picks per turn (mean) | 2.15 | 1.88 |
+
+- **Post hoc (not pre-registered; `python3 benchmarks/memory-stream/wide_post.py`):** recall / no-need turns
+  firing / mean picks:
+  - code: p ≥ 0.7 top 8: 46/58 = 0.793, 29, 2.98; uncapped 47/58 = 0.810; p ≥ 0.5 top 8: 48/58 = 0.828, 39, 4.84.
+  - life: p ≥ 0.7 top 8: 45/63 = 0.714, 38, 2.41; uncapped 0.714; p ≥ 0.5 top 8: 51/63 = 0.810, 53, 4.37.
+- **What this says:** speed is not the limit: 150 candidates take about half a second, well inside the 3 s budget.
+  Accuracy is: over a wide pool Jev finds 64–74% of the needed rows it is shown (76–89% of the ones G0 would also
+  have shown), and fires on about half the no-need turns. A cap of 8 picks instead of 4 buys 5–8 points. The
+  checker, not the candidate generator, becomes the bottleneck once the pool is wide.
+
+## C11-E4 result (code) · 2026-10-19
+- **Result (`python3 benchmarks/memory-stream/recall_funnel.py --worlds code --cards`):** 11 incremental batches;
+  each card ≤ 20 lines and cites only rows already written (checked by the card agent and by the scorer's
+  visibility rule). Needed items with a covering row: 58. Cards alone 0.84; G0 + entity + time capped 0.78; union
+  with cards 0.97. Card lines per turn median / max 50 / 110; pool (rows + card lines) median / max 77 / 138.
+  Compare C11-E2's capped union: 0.83 at a pool of 36.
+- The card agent left three conflicts open in the cards (feature-flag vendor, pool size, Friday deploys); it
+  replaced lines on supersession (MySQL 8 → Postgres 16, Node 18 → 20.11, Express 4 → Fastify 5).
+- **What this says:** a fixed-size card per action type recovers what the action set found (0.97 in a pool whose
+  size depends on how many action types a turn touches, not on the store). Life is still running.
