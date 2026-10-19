@@ -1,0 +1,85 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "cases": [
+  {
+   "event": "life-s098-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 accounts for Wen Li vegan and considers Saffron Lane; R0 generic search."
+  },
+  {
+   "event": "life-s060-e002",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 correctly names Wednesday standup, Tom 1:1 11:30, pickup; R0 acceptable but generic."
+  },
+  {
+   "event": "life-s017-e020",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 tailors unscented gift to Grace's piano and Daniel's engineering; R0 says it doesn't know their tastes."
+  },
+  {
+   "event": "life-s001-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 accounts for Sam being vegetarian for food options; R0 fine but misses it."
+  },
+  {
+   "event": "life-s145-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both search nearby, uncrowded patches with drive times for 1:30 departure."
+  },
+  {
+   "event": "life-s028-e010",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both pull TD grocery data for three months with consistent comparison."
+  },
+  {
+   "event": "life-s130-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 checks texts honestly; R1 anchors on Aug 28 finish date, likely stale given later September start."
+  },
+  {
+   "event": "life-s028-e028",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 adds architecture-specific angle (deadlines, site visits); both draft for review."
+  },
+  {
+   "event": "life-s155-e007",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 ties check to readiness doc due to Tom 2026-10-28 before GA; R1 misses deadline."
+  },
+  {
+   "event": "life-s023-e028",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 notes child application, other-parent consent, Leo's birthdate; R0 adequate generic list."
+  }
+ ]
+}

@@ -1,0 +1,85 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "cases": [
+  {
+   "event": "life-s038-e024",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly say written Portuguese is readable, spoken harder; offer phrase list. R1 ties in B1 level."
+  },
+  {
+   "event": "life-s041-e003",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both handle Marcus reply and write a warm, short, emoji-free card from all three."
+  },
+  {
+   "event": "life-s157-e000",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Neither flags Leo's recorded birthday (July 17); R1 adds correct skating-lesson clash and cashew/pistachio allergy."
+  },
+  {
+   "event": "life-s028-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both plan the Linear-to-Notion risk doc; R1 correctly applies ISO dates for work docs."
+  },
+  {
+   "event": "life-s077-e034",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 applies relevant facts: unscented products for Sam's migraines, basement back wall, sump pump, furnace filter. R1 generic."
+  },
+  {
+   "event": "life-s141-e023",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give accurate general tow-retrieval steps without inventing fees."
+  },
+  {
+   "event": "life-s131-e029",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Identical brief acknowledgement of shorter replies."
+  },
+  {
+   "event": "life-s035-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Identical light, fitting reply to the anecdote."
+  },
+  {
+   "event": "life-s027-e020",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Identical, reasonable metric conversions in grams."
+  },
+  {
+   "event": "life-s143-e013",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Identical concise acknowledgement."
+  }
+ ]
+}

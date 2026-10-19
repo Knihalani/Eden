@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "cases": [
+{"event": "code-s013-e004", "scores": [2, 2, 3], "why": "C covers stdout snapshot test, changeset and docs; B misses changeset; A is generic on tests, no changeset or docs."},
+{"event": "code-s021-e018", "scores": [1, 2, 3], "why": "C uses known KEDA scaling correctly; A invents replica numbers (1-20, 50/msg); B ignores known KEDA fact."},
+{"event": "code-s030-e000", "scores": [1, 2, 3], "why": "No record of yesterday; A fabricates in-flight branches. C checks git and PRs; B omits PRs, checks stashes."},
+{"event": "code-s037-e000", "scores": [3, 3, 1], "why": "A and B acknowledge rule and plan correctly with gh; C fabricates a zod PR and unpushed local commit."},
+{"event": "code-s040-e008", "scores": [2, 3, 3], "why": "B and C do the three tasks; A adds unasked placeholder/replace-key notion beyond verifying publishable key."},
+{"event": "code-s055-e000", "scores": [3, 2, 3], "why": "A and C use known Fastify 5 + pino onResponse hook; B rediscovers framework it should know."},
+{"event": "code-s057-e010", "scores": [3, 1, 2], "why": "A gives known PgBouncer prepare:false concisely; B invents pool.ts/driver.ts state; C hedges on a known fact."},
+{"event": "code-s068-e008", "scores": [2, 3, 1], "why": "Rule is ask before adding a dependency: B correct; A hedges; C cites wrong rule and unverified vitest claims."},
+{"event": "code-s078-e016", "scores": [1, 3, 3], "why": "B and C plan correctly; A fabricates half-finished working-tree edits and Skeleton export details."},
+{"event": "code-s080-e014", "scores": [3, 2, 2], "why": "A covers changeset, lockfile, e2e, Friday deploy check, no tag. B misses changeset; C misses Friday check and e2e."},
+{"event": "code-s080-e020", "scores": [3, 2, 1], "why": "Pool max is 10 per pod: A correct; B hedges; C adds fabricated Priya agreement and HPA pod range."},
+{"event": "code-s085-e000", "scores": [3, 1, 2], "why": "A matches pnpm 9, nvm, env and 1Password facts; B asserts unverified stale yarn field/versions; C generic rediscovery."},
+{"event": "code-s085-e010", "scores": [2, 3, 2], "why": "Bull Board at /admin/queues is known: B correct and hedged; A asserts worker not running; C misses Bull Board."},
+{"event": "code-s092-e012", "scores": [3, 2, 1], "why": "A gives known port 9464 /metrics and checks rest; B generic; C fabricates enqueue bug and dashboard path."},
+{"event": "code-s103-e031", "scores": [2, 1, 3], "why": "C matches both known fixes; A's explicit-timezone fix conflicts with known fix; B wrongly claims dueDate is date-only."}
+]}

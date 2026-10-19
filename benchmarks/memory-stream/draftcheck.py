@@ -26,9 +26,13 @@ def _dir(world, *p):
 
 
 def _down(world):
+    """The C3-E4 responses the draft check was run on (archived in downstream/old-c3 when C4-E10 re-ran them)."""
     d = os.path.join(HERE, "downstream", world)
     key = json.load(open(os.path.join(d, "key.json")))["key"]
-    resp = {c["event"]: c["responses"] for c in json.load(open(os.path.join(d, "out", "responses.json")))["cases"]}
+    rp = os.path.join(HERE, "downstream", "old-c3", world, "responses.json")
+    if not os.path.exists(rp):
+        rp = os.path.join(d, "out", "responses.json")
+    resp = {c["event"]: c["responses"] for c in json.load(open(rp))["cases"]}
     src = {c["event"]: c for c in json.load(open(os.path.join(d, "in", "responses-in.json")))["cases"]}
     return key, resp, src
 
@@ -128,7 +132,9 @@ def _final(world):
 
 def judge_prep(a):
     import score
+    from evidence import History
     stream, items = score.load_stream(a.world)
+    hist = History(stream)
     evs = {e["id"]: e for e in score.scored_events(stream)}
     key, resp, src = _down(a.world)
     fin = _final(a.world)
@@ -146,8 +152,10 @@ def judge_prep(a):
         jkey[eid] = order
         facts = [items[i]["text"] for i, t in sorted(e["_stated"].items(), key=lambda kv: kv[1])
                  if not (items[i].get("superseded_by") in e["_stated"])]
-        cases.append({"event": eid, "text": src[eid]["text"], "recent": src[eid]["recent"],
-                      "reference_facts": facts, "responses": [conds[c] for c in order]})
+        base = src[eid]["text"] + " " + " ".join(x["text"] for x in src[eid]["recent"])
+        resps = [conds[c] for c in order]
+        cases.append({"event": eid, "text": src[eid]["text"], "recent": src[eid]["recent"], "reference_facts": facts,
+                      "history_evidence": hist.evidence(eid, base, resps), "responses": resps})
     json.dump({"cases": cases, "output": f"benchmarks/memory-stream/draftcheck/{a.world}/out/judged.json"},
               open(_dir(a.world, "in", "judge-in.json"), "w"), indent=1, ensure_ascii=False)
     json.dump(jkey, open(_dir(a.world, "judge-key.json"), "w"), indent=1)
