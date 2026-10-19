@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s060-e002",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both are compassionate and propose thinning tomorrow's calendar with approval, keeping the evening for the diya."
+  },
+  {
+   "event": "life-s068-e024",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both ask about the guests' allergies but miss Leo's tree-nut allergy, which means a nut-free order; they confirm before ordering."
+  },
+  {
+   "event": "life-s072-e010",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Only the topic is on record; both honestly offer to search past summaries and notes rather than guess."
+  },
+  {
+   "event": "life-s077-e026",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both warmly acknowledge the lazy Saturday and hold the drop-off info; fine."
+  },
+  {
+   "event": "life-s077-e034",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both create the checklist and look up couch removal options; reasonable."
+  },
+  {
+   "event": "life-s085-e015",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give an accurate, concise Slack reminder and await go-ahead."
+  },
+  {
+   "event": "life-s087-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Venting rule: the first reflects and asks before offering help; the second jumps to drafting a reply and setting a reminder unasked."
+  },
+  {
+   "event": "life-s088-e000",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "First is a clean checklist. Second adds unsupported Home Hardware prices and clutter beyond the requested checklist."
+  },
+  {
+   "event": "life-s091-e008",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Second uses Notion and Linear links, the team's tools, with a triage view. First hedges on where to put it."
+  },
+  {
+   "event": "life-s096-e007",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give accurate, kid-friendly explanations of howling at sirens."
+  }
+ ]
+}
