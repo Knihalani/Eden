@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s022-e017",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Both handle test and emoji rule; R0 adds unrequested changeset for the earlier header change."
+  },
+  {
+   "event": "code-s022-e032",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Database is MySQL 8 (? placeholders); R1 wrongly attributes string sums to Postgres. Fix same."
+  },
+  {
+   "event": "code-s023-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both correctly search for unknown bucket; R1 hedges toward Linear when user explicitly asked for a gh issue."
+  },
+  {
+   "event": "code-s025-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "No record of image job in evidence; reading code before summarizing is right."
+  },
+  {
+   "event": "code-s027-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both reproduce first and fix loading reset with try/finally plus test."
+  },
+  {
+   "event": "code-s027-e008",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "History holds days of work (stats fix, rethrow test, reminders, etc.); both claim they cannot see earlier days."
+  },
+  {
+   "event": "code-s027-e022",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Simple acknowledgement; both accurate."
+  },
+  {
+   "event": "code-s027-e049",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "History shows --json already works on invoices list; R0 checks first, R1 adds a duplicate."
+  },
+  {
+   "event": "code-s027-e058",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both accurate status: zod committed not pushed, --json done."
+  },
+  {
+   "event": "code-s028-e017",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both use shadcn, lucide and aria-label rule correctly."
+  },
+  {
+   "event": "code-s030-e027",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both explain AsyncLocalStorage accurately and tie it to request-id gap."
+  },
+  {
+   "event": "code-s033-e016",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both acknowledge parking and start atomic fix investigation."
+  },
+  {
+   "event": "code-s035-e008",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give correct htmx CSRF fixes."
+  },
+  {
+   "event": "code-s035-e033",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both target clock/timezone dependency with fixed now instead of retry."
+  },
+  {
+   "event": "code-s036-e010",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "Export command uses commander (current fact); R1 wrongly says the CLI uses yargs."
+  }
+ ]
+}
