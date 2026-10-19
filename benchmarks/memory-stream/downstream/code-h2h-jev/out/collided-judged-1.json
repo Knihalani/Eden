@@ -1,0 +1,156 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s035-e008",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly diagnose missing CSRF token in the htmx partial and propose sensible checks or fixes."
+  },
+  {
+   "event": "code-s036-e010",
+   "scores": [
+    3,
+    3,
+    2,
+    2
+   ],
+   "why": "Export already requires --from/--to; R0/R1 handle the overlap, R2/R3 ignore it."
+  },
+  {
+   "event": "code-s043-e000",
+   "scores": [
+    2,
+    2,
+    3,
+    2
+   ],
+   "why": "PostHog is known; R2 states what's tracked accurately, R0/R1 don't use it, R3 adds unsupported 'pageviews off' claim."
+  },
+  {
+   "event": "code-s045-e000",
+   "scores": [
+    2,
+    1,
+    2,
+    2
+   ],
+   "why": "Outgoing webhooks are already HMAC-signed via X-Acme-Signature; R0/R2/R3 ask instead of reusing it, R1 omits signing entirely."
+  },
+  {
+   "event": "code-s045-e012",
+   "scores": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "why": "Recaps are accurate but all are paragraphs despite the known short-bullet-summary preference."
+  },
+  {
+   "event": "code-s046-e008",
+   "scores": [
+    2,
+    2,
+    3,
+    1
+   ],
+   "why": "R2 notes the Changeset and the helper caveat; R0/R1 skip the Changeset; R3 uses the stale org-timezone formatter and asserts unverified API behavior."
+  },
+  {
+   "event": "code-s048-e005",
+   "scores": [
+    3,
+    2,
+    2,
+    3
+   ],
+   "why": "R0/R3 know the CLI is ESM-only and the guard needs a pre-ESM entry; R1 invents an earlier error, R2 asks for a package name it should know."
+  },
+  {
+   "event": "code-s050-e000",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly update telemetry status and the BullMQ/Bull Board section."
+  },
+  {
+   "event": "code-s055-e005",
+   "scores": [
+    3,
+    2,
+    2,
+    2
+   ],
+   "why": "All fix seed emails; only R0 keeps the plan to branch off main."
+  },
+  {
+   "event": "code-s056-e000",
+   "scores": [
+    2,
+    3,
+    3,
+    3
+   ],
+   "why": "All attach the digest to Sentry; R0 brings up an unsupported 'request-id idea' as pending approval."
+  },
+  {
+   "event": "code-s057-e030",
+   "scores": [
+    2,
+    3,
+    3,
+    3
+   ],
+   "why": "R0 hedges about RabbitMQ when the facts say BullMQ; the others plan the queue soundly with idempotency."
+  },
+  {
+   "event": "code-s058-e000",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly target per-line rounding to whole cents before summing."
+  },
+  {
+   "event": "code-s058-e007",
+   "scores": [
+    2,
+    3,
+    3,
+    2
+   ],
+   "why": "Forms use react-hook-form with zodResolver; R1/R2 follow the org-form pattern, R0/R3 stay generic."
+  },
+  {
+   "event": "code-s058-e012",
+   "scores": [
+    2,
+    3,
+    3,
+    2
+   ],
+   "why": "OpenAPI is generated from zod; R1/R2 regenerate it and update docs, R0/R3 don't know how the docs are produced."
+  },
+  {
+   "event": "code-s060-e000",
+   "scores": [
+    3,
+    3,
+    2,
+    3
+   ],
+   "why": "Rule: only open invoices can be overdue; R2 hedges on void and leaves out drafts."
+  }
+ ]
+}

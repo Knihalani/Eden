@@ -1,0 +1,106 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s098-e009",
+   "scores": [
+    2,
+    1,
+    2,
+    1
+   ],
+   "why": "API is Fastify 5 (known fact); R1/R3 keep asking the user; R0/R2 at least self-check."
+  },
+  {
+   "event": "code-s098-e015",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All give correct short 400 vs 422 answer."
+  },
+  {
+   "event": "code-s098-e019",
+   "scores": [
+    2,
+    2,
+    3,
+    3
+   ],
+   "why": "Node pinned 20.11, so fine; R3 uses it, R0/R1 hedge on known version."
+  },
+  {
+   "event": "code-s101-e000",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All accurate explanations with sensible offer to check flagged line."
+  },
+  {
+   "event": "code-s101-e003",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "Acknowledgements all fine."
+  },
+  {
+   "event": "code-s103-e000",
+   "scores": [
+    3,
+    2,
+    1,
+    3
+   ],
+   "why": "elevation_gain field and 0007 migration already exist; R0/R3 catch it, R1 vague, R2 would duplicate."
+  },
+  {
+   "event": "code-s105-e019",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All give the correct admin.display method approach."
+  },
+  {
+   "event": "code-s108-e040",
+   "scores": [
+    2,
+    3,
+    2,
+    2
+   ],
+   "why": "scripts/count-todos.ts already exists from 10-18; only R1 checks for it."
+  },
+  {
+   "event": "code-s108-e045",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly distinguish as const and satisfies."
+  },
+  {
+   "event": "code-s108-e047",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All accurately explain using/Symbol.dispose."
+  }
+ ]
+}
