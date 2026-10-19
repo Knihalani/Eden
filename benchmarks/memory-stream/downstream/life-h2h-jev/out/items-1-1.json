@@ -1,0 +1,185 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s046-e041#1",
+   "response": "Posting the congratulations to #product-team now. I don't have anything saved from last spring's search, so I won't guess what it was; the Canadian Tulip Festival usually runs around mid-May, so it may be what you remember, but I'll check the 2026 dates and kid-friendly events for the May long weekend. Action: Post to #product-team, then look up Ottawa events for the long weekend and send you the best options."
+  },
+  {
+   "id": "life-s017-e012#1",
+   "response": "From this conversation I only see one background item, the Big Apple holiday-hours check, and it has finished. I can't confirm other tasks from here, so I'd rather check the live task list than guess. Action: Check the active task list and tell you which, if any, are still running."
+  },
+  {
+   "id": "life-s103-e007#1",
+   "response": "Sorry, that's frustrating. Before filing, take photos of the dent and scratch and the parking spot, and ask Loblaws whether the lot has cameras; also compare the repair estimate with your deductible, since a small claim may not be worth it. I don't have your policy details here. Action: Find your insurer and policy number in your email, draft the claim with when and where it happened, and ask you for the photos."
+  },
+  {
+   "id": "life-s037-e011#1",
+   "response": "Sent the thank-you to Hannah. For five with no shellfish and nothing cooked with wine for Grace: baked brie with cranberry and crudites with whipped feta to start, a roast chicken with roast potatoes and carrots, and a make-ahead dessert, with a Pomegranate Rosemary Fizz made with non-alcoholic sparkling wine for the toast. Let me know if anyone else has dietary needs. Action: Send the text to Hannah and save the menu with a shopping list to your NYE note."
+  },
+  {
+   "id": "life-s026-e012#1",
+   "response": "Booking a half hour with Diego and Aisha on the 13th in the afternoon, as you asked (my usual default is 25 minutes, but you said half an hour). Agenda: 1) walk through the new onboarding flows 2) feedback and open questions 3) decisions and next steps. Action: Find a 30-minute afternoon slot on the 13th when all three are free and send the invite with the agenda."
+  },
+  {
+   "id": "life-s087-e029#1",
+   "response": "Draft: 'Hey! Leo and I are heading to Riverdale Park East tomorrow around 10:30 for the playground and the market. Want to come with the kids? No pressure if you're wiped.' Action: Hold the draft until you say send."
+  },
+  {
+   "id": "life-s037-e017#1",
+   "response": "Glad the Wellington works. For you and Leo I'd make one-bowl brownies: he stirs, there's no chilling or waiting for dough, and they bake in about half an hour; I'll keep them nut-free unless you tell me otherwise. Loblaws opens at 7:00 on Wednesday if you need ingredients. Action: Save the recipe and shopping list, and suggest a Saturday-morning baking slot with Leo for January for you to approve."
+  },
+  {
+   "id": "life-s148-e018#1",
+   "response": "The offsite is Thu 12 Nov. I'll count weekdays from tomorrow, skipping weekends and Thanksgiving (Mon 12 Oct) if it falls in range, and I'll say whether the number includes the offsite day. Action: Run the count against the calendar and send you the number."
+  },
+  {
+   "id": "life-s018-e010#1",
+   "response": "Happy to distract you, and I hope your mom's cousin picks up soon. For a single architect who bikes and loves old buildings: Cabbagetown for Victorian rowhouses and the Don Valley trails, the Annex for older houses and the Bloor bike lane, or Leslieville/Riverside for brick warehouses and easy rides downtown. The right pick depends on where her office is. Action: Once you know her office location, shortlist places within a 20-minute ride."
+  },
+  {
+   "id": "life-s005-e002#1",
+   "response": "Use the exact title from your offer letter or HR profile, since the form usually checks it against payroll; I don't want to guess it at 10pm. Action: Search your email and Drive for the offer letter or latest HR record, pull the exact title, and draft a one-line description of your areas for you to approve."
+  },
+  {
+   "id": "life-s131-e022#1",
+   "response": "Here's a first go: 'To Neha and [partner's name]: they say love is finding someone who gets you, and Neha has found someone who still does after seeing her group chats. May your life together be as good as the food at this party, and may you always agree on the thermostat. To the happy couple!' Action: Wait for the partner's name and one real story about the two of them, then personalise it."
+  },
+  {
+   "id": "life-s046-e021#1",
+   "response": "Hydro reminder set. For the dashboard sync I'll book 25 minutes next Thursday morning at 10:00 with Aisha and Diego, since Tuesday mornings are your focus block and standup runs Monday, Wednesday and Friday at 9:45, and it keeps clear of the 9:30 earliest limit. Agenda: 1) empty-state copy 2) loading skeleton 3) who owns the Looker link. Action: Confirm Aisha and Diego are free Thursday at 10:00, book it with the agenda, and set the hydro reminder for the day before the 3 Feb due date."
+  },
+  {
+   "id": "life-s046-e016#1",
+   "response": "EFT is the cheap, batched, usually next-business-day rail; a wire is the expensive, individual, near-real-time one. EFT runs through Payments Canada's batch system at very low cost per payment, while wires go through Lynx, are irrevocable once sent and cost roughly $15 to $50 or more each. Interac e-Transfer is a third thing, consumer-oriented and near-instant. Action: Draft a one-line definition for your deck, such as 'EFT: batched, next-day, low cost. Wire: same-day, per-payment, higher cost.'"
+  },
+  {
+   "id": "life-s096-e026#1",
+   "response": "You should be proud. Leading something end to end as a senior PM and having it hold up in the real world is a big deal. Action: Add a line to your career notes: 'Shipped Instant Payouts launch at Lumen Pay, May 2026, first project led end to end as senior PM.'"
+  },
+  {
+   "id": "life-s088-e038#1",
+   "response": "Draft: 'Team, the beta passed 10,000 payouts this week. Every one of those was a merchant getting paid faster because of the care you put into it. Thank you, I'm proud of this group.' Action: Save it as a draft for you to post tomorrow."
+  },
+  {
+   "id": "life-s105-e032#1",
+   "response": "I don't have a note of what you said helps you unwind on weekends, so I won't guess. For tomorrow, a low-effort plan: a slow morning, coffee, a walk with Biscuit, and nothing scheduled after that. Action: Mark tomorrow as 'no plans' on your calendar, and tell me what you enjoy so I can save it for next time."
+  },
+  {
+   "id": "life-s077-e028#1",
+   "response": "For the sync opener, try a two-minute 'one good thing from this week' round, or a quick poll like 'best snack in the office'. For the evening at home, a cook-together dinner or takeout with a movie or board game, with nothing else scheduled. Action: Add the warm-up as the first line of the sync agenda and hold the evening as free on the calendar."
+  },
+  {
+   "id": "life-s026-e000#1",
+   "response": "Texting Nate: 'Hi Nate, are the cabinets still arriving Monday?' I'm saving that he prefers texts, I should never call him, and he starts work at 7:30 am. Action: Send the text, and search your email for Northline Renovations invoices and add them to the reno sheet with date, invoice number, amount, tax and paid status."
+  },
+  {
+   "id": "life-s106-e005#1",
+   "response": "Order on hold. I don't have the details of your basement kitchen setup saved, so I won't guess what you have to cook with. Action: Search your notes and email for the basement kitchen setup, and if I find nothing, ask you to list what's there so I can plan simple meals around it."
+  },
+  {
+   "id": "life-s087-e031#1",
+   "response": "Sent to Hannah. For Olivia's blurb I'll pull the v1 scope from the PRD so I only list what's in it, use 'target' wording, say 'merchant' and avoid em dashes, and leave the GA date out since you've held that back. Action: Draft the 4 to 5 line blurb from the PRD and rollout plan and show you before anything goes to Olivia."
+  },
+  {
+   "id": "life-s110-e009#1",
+   "response": "Tell him: the siren sounds to Biscuit like another dog singing far away, so he's joining the song to say 'I'm here!' It's usually more like singing along than being hurt. Action: Nothing needed, hope the noise stops soon."
+  },
+  {
+   "id": "life-s070-e002#1",
+   "response": "Sure, I'll check the holds on your Toronto Public Library card ending 4417 at Pape/Danforth and Leslieville, and see what's due this week. Action: Check your account, list ready holds with branch and pickup deadlines, and renew any due items that can be renewed."
+  },
+  {
+   "id": "life-s138-e007#1",
+   "response": "I can see two notes, 'Riya - Lisbon' and 'Lisbon Dec 2026', but I don't have their contents here, so I'll open them. Typical late December in Lisbon is mild and damp, roughly 8 to 15 C with some rain, so pack layers, a waterproof jacket and something warm for a late night outside on NYE. Action: Open both notes, then send Leo a simple 'what NYE will look like' summary and add a packing list."
+  },
+  {
+   "id": "life-s106-e000#1",
+   "response": "I'll skip scented options, since Sam gets migraines from strong fragrances and there are no air fresheners or candles in your home. Unscented bamboo charcoal odour absorbers soak up smells instead of masking them, and a HEPA purifier with a carbon filter would help with the drywall dust too. Action: Find unscented charcoal bags in stock nearby for pickup before the week starts, and bring you one option with the price before I order."
+  },
+  {
+   "id": "life-s133-e000#1",
+   "response": "Booking 25 minutes on the 9th at 3:30 pm with Olivia and Aisha. Agenda: 1) where certification stands 2) what sales can and can't say 3) next checkpoint. Action: Check both calendars for a conflict, then send the invite with the agenda."
+  },
+  {
+   "id": "life-s066-e016#1",
+   "response": "I need the old pricing page URL, and the new one, so I'm not guessing what to search for. Once I have them I'll scan your beta materials for links to the old page. Action: Ask you for both URLs, then search the beta docs and list each file with a stale link."
+  },
+  {
+   "id": "life-s007-e013#1",
+   "response": "Booking Ascari Enoteca for Sat 16 Aug at 19:00, party of 5, with plenty of vegetarian pastas and a kids' butter pasta for Leo. For Vancouver, I'll look at flights for the three of you, Oct 10 to 13, which is Thanksgiving weekend, so fares may be high. Action: Book Ascari and search Toronto to Vancouver for three, Oct 10 out and Oct 13 back, and bring back what I find."
+  },
+  {
+   "id": "life-s050-e011#1",
+   "response": "Saying yes to Hannah and adding pancakes at 9 on Sunday to the family calendar. Action: Text Hannah a yes, add 'Pancakes at Hannah's' Sunday 9:00, and check for any clash first."
+  },
+  {
+   "id": "life-s012-e018#1",
+   "response": "Draft: 'Hi neighbours! Street yard sale this Sat Oct 4, 9 to 1 (rain date Sun Oct 5). Set up tables on your own driveway, and no early birds before 9, please. Happy sorting!' Action: Hold it for your OK before posting to the group chat."
+  },
+  {
+   "id": "life-s150-e028#1",
+   "response": "Status set to 'Heads down till 3'. Here's the note: 'Doing focus time until 3 pm. I'll catch up on Slack after, ping me if something is urgent.' Action: Set the Slack status and leave the note as a draft for you to post."
+  },
+  {
+   "id": "life-s046-e013#1",
+   "response": "Checking last night's Raptors result for Sam now. I don't have it yet and won't guess. Action: Look up the score and send it to you."
+  },
+  {
+   "id": "life-s023-e017#1",
+   "response": "On it: a 30-minute slot Mon to Wed with Aisha and Diego for the payout edge cases. Aisha's list on negative balances and reversed transfers is in the doc, so I'll attach it. Agenda: 1) review the edge-case list 2) what needs PM input before sizing 3) next steps. Action: Check all three calendars, pick the earliest slot that works for everyone and book it."
+  },
+  {
+   "id": "life-s131-e020#1",
+   "response": "Draft for Priya: 'Hi [name], thanks for the updated direction on the facade. Since this is the second change to the brief after the design was approved, the revised drawings fall outside our original scope. We'd be glad to proceed with a short change order covering the added hours, and can turn the revised set around once it's signed. Happy to talk it through on a call.' Action: Wait for the client's name and her hours estimate to fill in the brackets."
+  },
+  {
+   "id": "life-s048-e006#1",
+   "response": "I'd start with ChessKid: it's built for kids, with lessons and games and no open chat with strangers. Lichess is a free, ad-free backup but made for older players. I'll check the current ads and in-app purchase details before you install anything. Action: Verify ChessKid's pricing and in-app purchases and send you a link."
+  },
+  {
+   "id": "life-s076-e012#1",
+   "response": "Ordering from Pai on Duncan: a family-style spread for three, delivered at 6:00, kept under $100 including delivery and tip. I'll choose a curry, a noodle dish, a vegetable dish and rice. Action: Pull the menu, place the order for 6:00 delivery and send you the confirmation and total."
+  },
+  {
+   "id": "life-s092-e000#1",
+   "response": "Checking the City of Toronto yard waste schedule for your street. I'll add the next two pickups to the calendar with an evening-before reminder to put out the bags. Action: Look up the schedule, add the next two dates, and tell you what they are."
+  },
+  {
+   "id": "life-s016-e002#1",
+   "response": "In Canada they're effectively the same thing in everyday use: EFT is the Canadian term for batched bank-to-bank transfers, while ACH is the US network name (Nacha) that people use loosely. Canada's equivalent runs through Payments Canada's clearing system. Action: Add a one-line note to your glossary: 'EFT for Canada, ACH for the US.'"
+  },
+  {
+   "id": "life-s047-e006#1",
+   "response": "No, damage deposits aren't allowed in Ontario. Under the Residential Tenancies Act a landlord can only take a last month's rent deposit, so Diego can ask for any separate damage deposit back, and if the landlord refuses he can file a T1 with the Landlord and Tenant Board within a year of moving out. For real damage beyond normal wear and tear, the landlord has to apply to the LTB; scuffed walls after some years are usually wear and tear. Action: Pull the LTB and CLEO links and a short summary you can forward to Diego."
+  },
+  {
+   "id": "life-s077-e010#1",
+   "response": "Good. I'll still gather wall options this afternoon so you have something to send Nate before Monday. Action: Collect a few wall options and send them to you to forward to Nate."
+  },
+  {
+   "id": "life-s136-e034#1",
+   "response": "I don't have your trip dates or the city she lives in in front of me, so I can't say when exactly you're arriving, what the rains will be like, or what time it is there right now. Action: Check your calendar for the trip dates and your contacts for her location, then give you the local time and the rain outlook for those dates."
+  },
+  {
+   "id": "life-s097-e013#1",
+   "response": "Try: 'Thirty-one years at Riverdale and you leave the place better than you found it. Thank you for the example you set, and enjoy the time that is finally yours.' It stays plain and warm without the greeting-card sparkle. Action: Adjust the tone or length if Sam wants something shorter or more personal."
+  },
+  {
+   "id": "life-s030-e000#1",
+   "response": "Hola! The full one is: 'Tres tristes tigres tragaban trigo en un trigal, en tres tristes trastos, tragaban trigo tres tristes tigres.' Say it slowly first, then speed up, and Carlos will notice the rolled r's; and the dread before launch week on Sunday night is normal. Action: Send you a harder one, like 'El perro de San Roque no tiene rabo...', if that one is too easy."
+  },
+  {
+   "id": "life-s156-e000#1",
+   "response": "A cardboard box can work: last year's cardboard robot lasted until about 8pm, so reinforce the seams with tape and add a strip of reflective tape so he's visible. Then sort four things: what he's going as, who's walking with him, what time you leave, and who handles the door and candy. Action: Wait for the costume idea, then make a parts list and a short checklist for the night."
+  },
+  {
+   "id": "life-s140-e051#1",
+   "response": "That sounds really frustrating: your protected Tuesday morning gets taken, then a same-week Montreal day trip lands on you at the last minute, and you're the one bending again. I'm just listening on that. For Montreal on Thu 8th, I'll look for a morning outbound and an evening return that gets you home for dinner. Action: Search trains and flights for Thu 8 Oct and bring back the options, and ask what time the bank meeting starts."
+  },
+  {
+   "id": "life-s040-e018#1",
+   "response": "I don't have the numbers from 13 Dec saved, and bag recipes differ, so I need the quantities and the printed yield. The rule is simple: for three dozen from a one-dozen recipe, multiply every ingredient by 3, same oven temperature (190 C is typical) and bake in batches. I'll give it in metric and keep it nut-free for Leo. Action: Search my notes for the 13 Dec chat, and otherwise wait for the quantities and send the tripled recipe in metric."
+  }
+ ]
+}
