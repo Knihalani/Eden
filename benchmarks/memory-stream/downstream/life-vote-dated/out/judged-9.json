@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s115-e008", "scores": [2, 2], "why": "History implies Leo's passport needed renewal by Jan 2026; R0 uses it but overstates. R1 gives Schengen rule, ignores history."},
+{"event": "life-s118-e000", "scores": [2, 2], "why": "Both search sensibly; neither anchors on known current premium of $1,640/yr."},
+{"event": "life-s120-e003", "scores": [1, 3], "why": "Data requests go to Wen via #data-requests with three days notice and metric definition; R0 bypasses it."},
+{"event": "life-s121-e000", "scores": [3, 3], "why": "No usual order on record; both ask shop and order."},
+{"event": "life-s122-e004", "scores": [1, 1], "why": "Collection day is Tuesday, green bin weekly. R0 invents Sunday/Monday note; R1 claims no schedule saved."},
+{"event": "life-s123-e004", "scores": [3, 3], "why": "Both proceed with the offered note for Tanvi."},
+{"event": "life-s123-e011", "scores": [3, 3], "why": "Both do a dry run before renaming."},
+{"event": "life-s126-e000", "scores": [3, 3], "why": "Both fine."},
+{"event": "life-s126-e021", "scores": [3, 3], "why": "Both short, warm, as asked."},
+{"event": "life-s128-e000", "scores": [1, 1], "why": "Appointments are on record: Riya 3 Nov 8:00, Leo 8:45. Neither knows."},
+{"event": "life-s131-e020", "scores": [3, 3], "why": "Both polite, firm change-order drafts."},
+{"event": "life-s131-e022", "scores": [3, 3], "why": "Both give short funny toasts and ask for names."},
+{"event": "life-s131-e027", "scores": [3, 1], "why": "Role-play learning and Mexican vocabulary are on record; R1 says it doesn't know."},
+{"event": "life-s132-e000", "scores": [3, 3], "why": "Both add birthday and 5 Nov reminder correctly."},
+{"event": "life-s133-e000", "scores": [3, 3], "why": "Both book 25 min with agenda; R1 adds relevant 'target' wording rule for Olivia."}
+]}
