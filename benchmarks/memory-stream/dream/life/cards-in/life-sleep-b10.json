@@ -1,0 +1,354 @@
+{
+ "batch": "life-sleep-b10",
+ "rows": [
+  {
+   "id": "life-sleep-b10:m0001",
+   "kind": "routine",
+   "text": "Riya's weekly runs with Marcus are Wednesdays 06:15-07:15 and Saturdays 07:30-08:45 at Ashbridges Bay (changed in June 2026 when Marcus started a new job). The old Sunday 07:30 Leslie St series was ended.",
+   "actions": [
+    "schedule",
+    "health"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0002",
+   "kind": "rule",
+   "text": "Lumen Pay requires every employee to enrol a hardware security key by 2026-07-31; laptops without one lose SSO access.",
+   "actions": [
+    "work-task",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0003",
+   "kind": "fact",
+   "text": "Lumen Pay desk booking moves to the Robin app from 2026-07-06; a second office floor at King West opens in September 2026.",
+   "actions": [
+    "work-task",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0004",
+   "kind": "routine",
+   "text": "Lumen Pay summer hours: Fridays end at 15:00 in July and August for teams that are not on call.",
+   "actions": [
+    "schedule",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0005",
+   "kind": "fact",
+   "text": "Lumen Pay wellness spending account rises to $750/year starting July 2026.",
+   "actions": [
+    "health",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0006",
+   "kind": "preference",
+   "text": "Riya prefers a single recommendation rather than three options; give one pick with at most a single fallback only if it really matters.",
+   "actions": [
+    "purchase",
+    "booking",
+    "travel"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0007",
+   "kind": "person",
+   "text": "Riya's household: partner Sam Okafor (a teacher), son Leo, and Biscuit, their beagle. They live in Leslieville, Toronto.",
+   "actions": [
+    "family",
+    "pet"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0008",
+   "kind": "plan",
+   "text": "Riya's mother lives in Mumbai. In June 2026 Riya wanted to send her a box of mithai because she sounded low; Brijwasi Sweets (about Rs 1,450 + Rs 120 delivery, same day if ordered before 14:00 IST, best freshness reviews) was recommended, and the order is on hold until Riya sends her mom's delivery address.",
+   "actions": [
+    "message",
+    "purchase",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0009",
+   "kind": "person",
+   "text": "Riya Malhotra is a product lead for Payouts at Lumen Pay (Linear team PAY). Colleagues: Tom Becker (asks area leads for recaps, runs #product-leads), Aisha Rahman (works on payouts, PRD reviews), Diego (mocks and timelines), Wen Li (dashboard questions), Olivia Grant (sales).",
+   "actions": [
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0010",
+   "kind": "episode",
+   "text": "The Lumen Pay product offsite was held 2026-06-09 to 2026-06-11 at Deerhurst Resort in Muskoka. Riya wrote the Payouts offsite recap in Notion doc d-7731 (Product/Offsite 2026), decisions first, one page, for Tom Becker.",
+   "actions": [
+    "work-task",
+    "docs"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0011",
+   "kind": "fact",
+   "text": "Decision at the June 2026 Lumen Pay offsite: multi-currency wallets are postponed to H1 2027 because the compliance review of FINTRAC reporting will not finish in 2026. Linear PAY-1388 moved to Backlog accordingly.",
+   "actions": [
+    "work-task",
+    "docs"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0012",
+   "kind": "person",
+   "text": "Hannah Cho is a close neighbour/friend of Riya; her kids are Jun and Ellie. Jun and Leo play together, and Hannah has covered Leo's school pickup and had him over (e.g. Thu 25 Jun 2026). Riya sent Hannah a thank-you and offered a return favour. Hannah turned 40 on 2026-06-27 and recommended contractor Nate.",
+   "actions": [
+    "family",
+    "message",
+    "home"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0013",
+   "kind": "routine",
+   "text": "Riya takes Spanish lessons with Carlos Méndez on Zoom (observed Thursdays 19:30-20:30); Carlos emails homework. Currently working on the subjunctive and noun vocabulary. Riya's Dec 2026 Lisbon trip and a Mexico City interest motivate the Spanish practice.",
+   "actions": [
+    "learning",
+    "schedule",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0014",
+   "kind": "fact",
+   "text": "Leo is 7 and was in Grade 2 at Morse Street PS (teacher Ms. Alvarez) in 2025-26; Fall 2026 class lists are posted on Edsby in the last week of August. His last shoe order in mail was size 12.",
+   "actions": [
+    "family",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0015",
+   "kind": "plan",
+   "text": "Riya's Lumen Pay hardware security key shipped (Canada Post 7023 5521 0098 CA, arriving Tue 23 Jun 2026); she still must enrol it by 2026-07-31.",
+   "actions": [
+    "work-task",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0016",
+   "kind": "episode",
+   "text": "On the night of 2026-06-19 someone dinged Riya's car in the Loblaws lot (scratch and dent on the rear bumper, no note). Insurance claim not yet started: Riya needs to supply the policy number (on the pink slip in the glovebox). Advice: photos, ask store for lot camera footage (kept about a week), possible police collision report.",
+   "actions": [
+    "finance",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0017",
+   "kind": "fact",
+   "text": "Riya and Sam decided on 2026-05-30 to take the December 2026 holiday in Lisbon rather than Mexico City: Lisbon has direct YYZ-LIS flights (about 7 h overnight), mild 12-15 C weather and is walkable; Mexico City had no direct flight on their dates (3-5 h layovers via Houston/Dallas) and a longer travel day for Leo. Notes in 'Dec 2026 holiday - options' (n-3982).",
+   "actions": [
+    "travel",
+    "booking",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0018",
+   "kind": "fact",
+   "text": "Riya takes levothyroxine; after her June 2026 blood test Dr. Patel (Patel Family Medicine) raised the dose to 75 mcg once a day, each morning on an empty stomach, 30 minutes before coffee or food. Prescription at Shoppers Drug Mart, Queen & Carlaw.",
+   "actions": [
+    "health",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0019",
+   "kind": "person",
+   "text": "Sam Okafor is a teacher: he marks exams in June and teaches until 15:10 on school days. Riya's family calendar and Sam's calendar are tracked separately.",
+   "actions": [
+    "schedule",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0020",
+   "kind": "plan",
+   "text": "Riya needs a repeat TSH blood test 6-8 weeks after the June 2026 dose change (around mid-August 2026); Dr. Patel's requisition is needed first and LifeLabs Queen & Carlaw is where she goes.",
+   "actions": [
+    "health",
+    "schedule",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0021",
+   "kind": "plan",
+   "text": "Riya's mid-year performance self-review in Lattice is due Fri 2026-07-10 (reminders set Tue 30 Jun 10:00 and Mon 6 Jul 09:30); H1 evidence is already gathered in Notion under Riya/Reviews. Manager reviews open 2026-07-13.",
+   "actions": [
+    "work-task",
+    "reminder",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0022",
+   "kind": "routine",
+   "text": "Mondays are Riya's work-from-home days. Her daily standup is at 09:45 (09:45-10:00).",
+   "actions": [
+    "schedule",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0023",
+   "kind": "routine",
+   "text": "Biscuit is walked at noon by dog walker Jess, booked through Rover (about 2 walks a week, invoiced and auto-paid from Riya's Visa).",
+   "actions": [
+    "pet",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0024",
+   "kind": "fact",
+   "text": "Riya's car insurance is Belairdirect; auto premium $118.40 is charged monthly on the 1st (e.g. 2026-07-01).",
+   "actions": [
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0025",
+   "kind": "plan",
+   "text": "Dr. Patel's requisition for the repeat TSH blood test is on file at LifeLabs Queen & Carlaw (valid 6-8 weeks). A slot is held Wed 2026-08-05 08:15 (hold lasts 24 h) pending Riya's OK; alternates Tue 4 Aug 07:30 and Thu 6 Aug 07:00.",
+   "actions": [
+    "health",
+    "schedule",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0026",
+   "kind": "fact",
+   "text": "Kitchen reno contractor decision (notes 2026-02-08): Riya and Sam hired Northline Renovations (Nate) at $68,500 over Brickhouse Kitchens ($79,000, start Jan 2027) and CityFix Contracting ($58,200, mixed reviews), because Nate could start September 2026 and Hannah gave strong reviews from her basement job.",
+   "actions": [
+    "home",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0027",
+   "kind": "plan",
+   "text": "Kitchen reno finances: Barzotti balance invoice of $14,700 is due 2026-07-15; $31,240 paid to date on the kitchen as of 2026-07-01.",
+   "actions": [
+    "finance",
+    "home",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0028",
+   "kind": "preference",
+   "text": "Biscuit's supplies: monthly food is the 13.6 kg bag from the pet store at Queen & Logan (about $94.99 + tax; in-store pickup works, Sam can collect); poop bags are BioBag compostable (8 rolls, 120 bags) from Pet Valu, $16.99.",
+   "actions": [
+    "pet",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0029",
+   "kind": "preference",
+   "text": "Riya's mom has trouble with WhatsApp video (it freezes and flusters her); use Zoom instead, a saved recurring link with no waiting room and simple steps (tap link, tap Join, allow camera). The weekly call link is meeting 841 2005 7731, passcode 4410, but the day and time have not yet been given.",
+   "actions": [
+    "schedule",
+    "family",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0030",
+   "kind": "plan",
+   "text": "Payouts release freeze runs Thu 2026-07-02 12:00 to Mon 2026-07-06 09:00 for the bank-partner cutover; a reminder draft for #payouts-launch is saved, not posted.",
+   "actions": [
+    "release",
+    "message",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0031",
+   "kind": "plan",
+   "text": "Carlos told Riya to drill the subjunctive with a proper grammar book. Pick: 'Practice Makes Perfect: Spanish Subjunctive Up Close' ($24.95, Indigo, or in stock at Indigo Danforth); not ordered, awaiting Riya's go-ahead.",
+   "actions": [
+    "learning",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0032",
+   "kind": "plan",
+   "text": "Curzon St neighbourhood summer street party (organiser Carol Dempsey): date must be chosen between Sat 25 Jul and Sat 8 Aug 2026 (permit takes 6 weeks; apply this week of 2 Jul). Riya only needs to reply with her date and whether she will volunteer. Cost $25/household, potluck, petition needs 60% (14 of 31 signed; sign at #42); Mike prefers 8 Aug, Priti only 25 Jul, Hannah either.",
+   "actions": [
+    "schedule",
+    "message",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0033",
+   "kind": "plan",
+   "text": "Kitchen reno: Nate (Northline) needs Riya's final countertop material, colour and edge profile confirmed with his fabricator by Tue 7 Jul 2026, for templating on Thu 9 Jul 08:00-10:00 (Hannah has a spare key if nobody is home). Riya was checking with Sam; choice not yet recorded.",
+   "actions": [
+    "home",
+    "schedule",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0034",
+   "kind": "plan",
+   "text": "Riya and Sam will not go to Ottawa for Christmas 2026 because of the Lisbon trip. Grace and Daniel (told 2026-07-04) will visit Toronto in November 2026 instead; Riya has a reminder Tue 2026-09-08 09:30 to start planning their visit.",
+   "actions": [
+    "family",
+    "travel",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0035",
+   "kind": "plan",
+   "text": "Sam wants a week at a cottage Mon 14 to Fri 18 Sep 2026, with a dock, within 3 hours of home. Top pick is Loon Call Cottage, Lake Kashagawigamog (Haliburton): 3 bedrooms, private dock, kayaks, $1,450 for 4 nights, 2 h 50 min, free cancellation until 2026-08-31; alternative Birch Point on Stony Lake ($1,120, shared dock, 2 h 15 min). Not yet held.",
+   "actions": [
+    "travel",
+    "booking",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0036",
+   "kind": "plan",
+   "text": "Olivia Grant's EA Jess Park asked to move the QBR prep from Tuesday to Wed 8 Jul 2026 at 10:00 (45 min, same room); the slot is free after standup. Reply was drafted, awaiting Riya's OK to send.",
+   "actions": [
+    "schedule",
+    "message",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b10:m0037",
+   "kind": "routine",
+   "text": "Garbage and recycling: bins go out Sunday night (calendar nudge 'Garbage & recycling night' at 20:00); collection is Monday morning, alternating blue bin + garbage weeks.",
+   "actions": [
+    "home",
+    "reminder"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/life/cards/life-sleep-b10.json"
+}

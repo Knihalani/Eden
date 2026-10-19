@@ -1,0 +1,391 @@
+{
+ "batch": "life-sleep-b05",
+ "rows": [
+  {
+   "id": "life-sleep-b05:m0001",
+   "kind": "person",
+   "text": "Riya Malhotra works at Lumen Pay as a product lead/PM; Olivia Grant is her sales colleague who asks her for Instant Payouts rollout dates for prospects.",
+   "actions": [
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0002",
+   "kind": "plan",
+   "text": "Instant Payouts rollout plan (Notion 'Instant Payouts - rollout plan'): closed beta of 40 merchants live since 2026-01-19; Phase 2 expanded beta (~400 merchants, invited by vertical, hospitality/restaurants included) planned week of 2026-03-16, blocked by LIN-2291 (ledger reconciliation latency) and LIN-2304 (fraud rules v2 tuning); general availability TBD.",
+   "actions": [
+    "work-task",
+    "message",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0003",
+   "kind": "person",
+   "text": "Riya's household: partner Sam Okafor (high school chemistry teacher, does marking) and son Leo (Grade 2 at Morse Street Public School); they live in Leslieville, Toronto.",
+   "actions": [
+    "family",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0004",
+   "kind": "person",
+   "text": "Hannah Cho is a close family friend and neighbour near Carlaw; her son Jun is Leo's friend and their families do pancakes and playdates together.",
+   "actions": [
+    "family",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0005",
+   "kind": "plan",
+   "text": "Riya plans a March break trip (week of 2026-03-16, arriving Sun Mar 15, back Thu Mar 19) to Drumheller, Alberta with Leo only (Sam has marking) to visit the Royal Tyrrell Museum; needs 3-night hotel and flights; options Canalta Jurassic $142/night or Ramada $129/night; parked pending Riya talking to Sam. Tyrrell admission: ages 6 and under free, youth 7-17 $10, adult $21.",
+   "actions": [
+    "travel",
+    "family",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0006",
+   "kind": "plan",
+   "text": "Riya intends to volunteer at the Leslieville Community Garden on Sat 2026-04-11, 9:00-12:00 (compost turning and path mulch); email reply to coordinator Marguerite counts as sign-up; draft d-7734 was prepared but not confirmed sent.",
+   "actions": [
+    "schedule",
+    "message",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0007",
+   "kind": "fact",
+   "text": "Riya's Toronto Public Library card ends in 4417; she uses the Pape/Danforth and Leslieville branches and usually has holds and renewals.",
+   "actions": [
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0008",
+   "kind": "routine",
+   "text": "Riya's recurring weekly schedule: Payouts standup Mon/Wed/Fri 09:45-10:00; YMCA strength Tue and Thu 06:15-07:15; run with Marcus Saturday 07:00; Leo swim Saturday 10:00; Leo piano with Mrs. Greene Monday 16:30; Spanish class with Carlos (Zoom) Thursday 19:30; pizza and movie night Friday 18:00.",
+   "actions": [
+    "schedule",
+    "family",
+    "health"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0009",
+   "kind": "fact",
+   "text": "Snow removal at Riya's house is Eastend Plow & Property (contact Rui, mobile +1 416-555-0148), seasonal contract 2025-26 prepaid $640 on Nov 3, plows when 5 cm of snow falls; they skipped the driveway on 2026-02-05 and 2026-02-07 and Riya complained by text; contract clause 6 allows a pro-rated refund request if service stays patchy.",
+   "actions": [
+    "home",
+    "finance",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0010",
+   "kind": "fact",
+   "text": "Household budget: monthly spending envelope is $4,100 (finance-agent tracks it; $2,412 spent by Feb 7 2026).",
+   "actions": [
+    "finance",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0011",
+   "kind": "episode",
+   "text": "Morse Street PS: Family Day Mon 2026-02-16 no school; Grade 2 science centre field trip Mar 4 needs permission form and $12 by 2026-02-27.",
+   "actions": [
+    "family",
+    "reminder",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0012",
+   "kind": "episode",
+   "text": "Settlely is a payment-reconciliation vendor Riya's team evaluated: demo held Fri 2026-02-13 11:00 organized by Jordan Kim with Aisha Rahman and Wen Li; pricing Starter US$0.04/match min US$500/mo, Growth US$0.025/match min US$2,500/mo, Enterprise custom; no Canadian data residency (EU and US only), a question to raise; materials filed in Drive > Work > Vendors > Settlely.",
+   "actions": [
+    "work-task",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0013",
+   "kind": "preference",
+   "text": "Gift ideas for Sam (partner): vintage Penguin paperbacks (orange, pre-1970, he has about 40), Fellow Ode Gen 2 grinder ($449 at Pilot Coffee Roasters or Eight Ounce Coffee), a new lab-style apron. Gift ideas for Leo: Lego Jurassic World Pyroraptor set, reading headlamp. Grace (in Ottawa) asks Riya what to get Sam.",
+   "actions": [
+    "purchase",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0014",
+   "kind": "plan",
+   "text": "Riya is training with Marcus for long runs and plans to buy Brooks Ghost 17 (women's 8.5, $189.99; in stock at Running Room Queen & Broadview), recommended over Asics Novablast 5 ($194.99); needs her yes since over $150.",
+   "actions": [
+    "purchase",
+    "health",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0015",
+   "kind": "rule",
+   "text": "Standing rule for Riya's agent: ask Riya before any purchase over $150 CAD (replaces the older, fiddlier limit); smaller reorders of household staples (detergent, dog food, dishwasher pods and the like) can go through without asking.",
+   "actions": [
+    "purchase",
+    "finance",
+    "home"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0016",
+   "kind": "fact",
+   "text": "Dishwasher pods reorder preference: Finish Quantum 82 count from Canadian Tire, paid with the TD Visa on file ($31.63 on 2026-02-12).",
+   "actions": [
+    "purchase",
+    "home",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0017",
+   "kind": "person",
+   "text": "Tom Becker is Riya's work colleague (1:1 on Wednesdays 11:30 and organizes the Q1 roadmap check-in and product-leads asks); Tom requested Q1 roadmap one-pagers by Wed 2026-02-18.",
+   "actions": [
+    "work-task",
+    "schedule",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0018",
+   "kind": "routine",
+   "text": "Riya takes Spanish classes with Carlos (Zoom, Thursday 19:30) at B1-B2 level; she does homework and keeps notes in 'Spanish homework'; she wants quizzes aimed at her weak areas.",
+   "actions": [
+    "learning",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0019",
+   "kind": "person",
+   "text": "Olivia Grant was promoted to Head of Sales at Lumen Pay as of February 2026 and now runs the quarterly business review (QBR) with product, so Riya works with her more often.",
+   "actions": [
+    "work-task",
+    "schedule",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0020",
+   "kind": "person",
+   "text": "Ira, daughter of Kabir and Mei, was born 2026-02-14 in Vancouver; Riya is Ira's godmother.",
+   "actions": [
+    "purchase",
+    "travel",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0021",
+   "kind": "fact",
+   "text": "Riya has no drug allergy information on file with the agent; Shoppers Drug Mart (Queen St E & Carlaw, pharmacist phone 416-555-0172) holds her medication profile, and Dr. Patel (Danforth Family Health Team) is her doctor.",
+   "actions": [
+    "health",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0022",
+   "kind": "episode",
+   "text": "Riya bought a knitted blanket for baby Ira (February 2026) as her newborn gift; nobody else should buy the same.",
+   "actions": [
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0023",
+   "kind": "fact",
+   "text": "Kitchen renovation: contractor Northline Renovations (Nate); custom white-oak cabinets from Barzotti ordered through Nate, $9,800 deposit paid 2026-02-20; tile quote rev 2 $3,140 (backsplash + floor); open items: appliance package, pendant lights, wall paint colour. Details are in Riya's 'kitchen reno' note.",
+   "actions": [
+    "home",
+    "finance",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0024",
+   "kind": "preference",
+   "text": "Groceries: Riya orders from PC Express for Saturday morning pickup (Loblaws Lakeshore, 9:00-10:00 slot) and buys no-name brand for staples.",
+   "actions": [
+    "home",
+    "purchase",
+    "food"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0025",
+   "kind": "rule",
+   "text": "Decision: Riya and Sam are keeping Leo at Morse Street Public School rather than moving him to French immersion at Duke of Connaught (close friends there, five-minute walk); ignore immersion info nights.",
+   "actions": [
+    "family",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0026",
+   "kind": "plan",
+   "text": "Riya wants to plan ahead for Sam's birthday and their anniversary (she always leaves anniversary to the last week); exact dates not yet recorded; the agent offered reminders three weeks out. Gift directions: vintage lab glassware print, molecular gastronomy class, theatre tickets, pottery class for two.",
+   "actions": [
+    "reminder",
+    "purchase",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0027",
+   "kind": "episode",
+   "text": "Priya Nair (friend) paid a Montreal bathroom contractor a $6,000 deposit on 2026-01-19 and the contractor went silent; RBQ security bond claim must be filed within 1 year of the deposit (by 2027-01-19), with demand letter (mise en demeure), contract, proof of payment; quote and receipt filed under Personal > Priya.",
+   "actions": [
+    "finance",
+    "message",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0028",
+   "kind": "plan",
+   "text": "Barzotti cabinet production slot is the week of 2026-04-13; Barzotti asks for the final cabinet hardware choice by 2026-03-09 (Nate cc'd).",
+   "actions": [
+    "home",
+    "reminder",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0029",
+   "kind": "routine",
+   "text": "Riya's weekly payouts status post is due Fridays by 16:00.",
+   "actions": [
+    "work-task",
+    "reminder",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0030",
+   "kind": "plan",
+   "text": "Instant Payouts: expanded beta (~400 merchants) on track for week of 2026-03-16; general availability is scheduled for 2026-09-15 (engineering sign-off by Aisha on 2026-03-02, recorded in Riya's payouts note and Notion rollout plan); LIN-2291 closed 2026-02-27, LIN-2304 in progress.",
+   "actions": [
+    "work-task",
+    "message",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0031",
+   "kind": "episode",
+   "text": "The held email draft to Olivia (d-7902) for the Instant Payouts GA date was not to be sent yet; Riya said 'not yet on Olivia' after confirming 2026-09-15.",
+   "actions": [
+    "message",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0032",
+   "kind": "plan",
+   "text": "Kitchen renovation finishing date per Nate's schedule (2026-03-02): 2026-08-28.",
+   "actions": [
+    "home",
+    "schedule",
+    "travel"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0033",
+   "kind": "fact",
+   "text": "Payouts API error codes: the current list is generated from the OpenAPI spec in the payouts-api repo at docs/errors.md (21 codes, 7 INSTANT_*); the Notion page is stale (last edited 2025-09-30); Wen Li has a Looker breakdown of error rates by code.",
+   "actions": [
+    "docs",
+    "api",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0034",
+   "kind": "plan",
+   "text": "Tom Becker's 5-year work anniversary is the week of 2026-03-09; Riya wants to buy him a bottle of his favourite whisky but it is not recorded anywhere (ask Diego or Aisha, or Riya).",
+   "actions": [
+    "purchase",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0035",
+   "kind": "plan",
+   "text": "Tom Becker assigned Riya LIN-2351 'Instant Payouts GA readiness checklist' due 2026-03-20; each PM must add Q2 milestones to the QBR prep doc by Thu 2026-03-05.",
+   "actions": [
+    "work-task",
+    "reminder",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0036",
+   "kind": "plan",
+   "text": "Riya plans to visit Kabir, Mei and baby Ira in Vancouver over the August long weekend 2026 (Fri Jul 31 to Tue Aug 4), probably alone, maybe with Leo; fares about $640-690 CAD return (WestJet $642, Air Canada $689); fares rise 15-25% by May; she will ask about flights in April, price watch cancelled.",
+   "actions": [
+    "travel",
+    "booking",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0037",
+   "kind": "fact",
+   "text": "Ellie Cho (Hannah's daughter) is allergic to dairy; avoid cheese, cheddar snacks and milk chocolate when she visits.",
+   "actions": [
+    "food",
+    "health",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0038",
+   "kind": "plan",
+   "text": "Olivia Grant organizes QBR prep; Riya asked to move Thu 2026-03-05 QBR prep to 11:00 because the Q1 roadmap check-in is 10:00-10:50 (draft d-7915).",
+   "actions": [
+    "schedule",
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0039",
+   "kind": "rule",
+   "text": "Hannah Cho keeps a spare key to Riya's house and lets Nate's crew (Northline Renovations) in when nobody is home; if the crew texts about access, Hannah has the key.",
+   "actions": [
+    "home",
+    "message",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b05:m0040",
+   "kind": "fact",
+   "text": "Riya's mother lives in Mumbai ; on 2026-03-08 Riya checked Mumbai time to call her and found she was already asleep, so check the time difference before suggesting calls.",
+   "actions": [
+    "schedule",
+    "family",
+    "message"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/life/cards/life-sleep-b05.json"
+}

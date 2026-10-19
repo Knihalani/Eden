@@ -1,0 +1,357 @@
+{
+ "batch": "life-sleep-b15",
+ "rows": [
+  {
+   "id": "life-sleep-b15:m0001",
+   "kind": "fact",
+   "text": "Lumen Pay's north-star metric is monthly active paying merchants (MAPM); it was 18,400 at the end of Q3 2026 (Jul 16,950, Aug 17,720 incl. 310 reactivated, Sep 18,400). Riya put this as the baseline in the 'Payouts Q4 2026 planning' Notion doc header.",
+   "actions": [
+    "work-task",
+    "docs"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0002",
+   "kind": "fact",
+   "text": "Riya's kitchen is gutted for a renovation by Northline Renovations (contact Nate); there is no oven, only a hot plate, so baking is impossible at home. Nate's crew delivered 14 flat-packed Barzotti cabinet boxes on 2026-10-09 needing a dry spot off the floor (not the garage, which is damp). Northline invoice #4 was paid Oct 14.",
+   "actions": [
+    "home",
+    "food",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0003",
+   "kind": "plan",
+   "text": "Leo's school is Morse Street Public School; his Grade 2 teacher is Ms. Alvarez, Room 104. Riya is a confirmed volunteer on Leo's class trip to the Royal Ontario Museum on Thu 2026-11-26: bus leaves 9:15 am, volunteers arrive Room 104 by 9:00, back about 2:30 pm, group of four students, bring photo ID.",
+   "actions": [
+    "family",
+    "schedule",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0004",
+   "kind": "episode",
+   "text": "Thu 2026-11-26 is a conflict day: Riya volunteers on Leo's ROM trip 9:00-14:30, but her calendar also has Payouts design crit 10:30-11:00 (Diego), merchant advisory call prep 13:00-13:25, and Wavecrest partner sync 14:30-15:00 (Aisha). Riya said she would deal with it later.",
+   "actions": [
+    "schedule",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0005",
+   "kind": "fact",
+   "text": "Dr. Lin is the dentist for Riya and Leo (6-month cleanings), phone (416) 555-0148; Riya's contact card has no address saved. Online booking requires the patient's date of birth and health card number, and injuries need a phone call.",
+   "actions": [
+    "health",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0006",
+   "kind": "routine",
+   "text": "Riya's standing work rhythm: Payouts standup is 9:45-10:00 on Mon, Wed and Fri (none on Thursdays); Thursdays are her office days. Riya sometimes sets Slack status 'heads down' and posts a short focus-time note in #payouts-team.",
+   "actions": [
+    "schedule",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0007",
+   "kind": "plan",
+   "text": "Quarterly business review with Olivia Grant's sales team is on Thu 2026-11-12; Riya presents the payouts roadmap (time TBC, all-day calendar event). It collides with the Lumen Pay quarterly planning offsite at Gladstone House (09:00-18:00) that day. Riya was offered to ask Olivia to fit the QBR around the offsite.",
+   "actions": [
+    "schedule",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0008",
+   "kind": "plan",
+   "text": "Lisbon trip: Riya booked a private driver for a Sintra day trip (Pena Palace, Quinta da Regaleira) on Wed 2026-12-23, pickup 9:00 am Lisbon time at the hotel lobby, 8 hours, EUR 260 paid (386.62 CAD).",
+   "actions": [
+    "travel",
+    "booking",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0009",
+   "kind": "plan",
+   "text": "Leo's parent-teacher interview with Ms. Alvarez is Thu 2026-11-12 at 16:00, Room 104, Morse Street PS.",
+   "actions": [
+    "schedule",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0010",
+   "kind": "plan",
+   "text": "Riya committed to Tom Becker (her manager at Lumen Pay) to deliver the 2027 roadmap draft for payouts and onboarding by 2026-11-06, covering three bets with rough sizing from Aisha, and to share an outline the week before (about Fri 2026-10-30). Do not overpromise other timing to Tom.",
+   "actions": [
+    "work-task",
+    "reminder",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0011",
+   "kind": "plan",
+   "text": "Riya's winter tire swap (stored tires on rims, 2019 Mazda CX-5) is booked at Canadian Tire Leslie St on Sun 2026-11-08 at 9:00 am; arrive 10 minutes early.",
+   "actions": [
+    "schedule",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0012",
+   "kind": "plan",
+   "text": "Riya promised Tom Becker the Instant Payouts launch readiness review doc by Wed 2026-10-28, a week before GA. Tom asked for two pages max (he reads it on the train).",
+   "actions": [
+    "work-task",
+    "docs",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0013",
+   "kind": "plan",
+   "text": "Riya promised her friend Priya Nair to help her pack for the move to the Junction on Sat 2026-10-31 in the morning (calendar 09:00-12:00); Priya provides coffee and bagels.",
+   "actions": [
+    "schedule",
+    "reminder",
+    "home"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0014",
+   "kind": "plan",
+   "text": "Christmas Eve dinner is reserved at Prado, Lisbon on 2026-12-24 at 7:30 pm for three (2 adults, 1 child), window table requested; set menu only, so tell Prado about dietary needs in advance.",
+   "actions": [
+    "booking",
+    "food",
+    "travel"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0015",
+   "kind": "plan",
+   "text": "Riya bought Lisbon Oceanarium tickets for Sun 2026-12-27 at 10:00 am because Leo loves sea otters.",
+   "actions": [
+    "travel",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0016",
+   "kind": "plan",
+   "text": "Riya promised Kabir she would send Ira a hand-knit blanket from the Leslieville Christmas market before 2026-12-10 so it arrives in Vancouver before Christmas.",
+   "actions": [
+    "purchase",
+    "message",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0017",
+   "kind": "person",
+   "text": "Riya's household: partner Sam Okafor, son Leo (7, Grade 2), and dog Biscuit.",
+   "actions": [
+    "family",
+    "pet"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0018",
+   "kind": "plan",
+   "text": "Riya promised Diego Fernández written feedback on his senior designer promotion packet by Fri 2026-10-23 (packet in shared Drive folder 'Diego promo 2026'); he most wants comments on the 'scope and impact' section. Riya confirmed by email on 2026-10-16.",
+   "actions": [
+    "work-task",
+    "message",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0019",
+   "kind": "plan",
+   "text": "Leo's parent-teacher interview with Ms. Alvarez was rebooked to Fri 2026-11-13 at 5:15 pm, Room 104, Morse Street PS, because of the Lumen Pay planning offsite on 11-12. Sam Okafor will join.",
+   "actions": [
+    "family",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0020",
+   "kind": "plan",
+   "text": "Halloween 2026 plan (agreed with Hannah Cho): Leo goes trick-or-treating as an astronaut with Ellie and Jun; the kids leave from Hannah's house at 5:45 pm, Hannah walks them (Riya may join if back in time), and Sam stays home handing out candy. Leo has a nut allergy concern (cashews/pistachios, EpiPen Jr. mentioned by assistant).",
+   "actions": [
+    "family",
+    "health",
+    "food"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0021",
+   "kind": "plan",
+   "text": "Riya promised Hannah Cho two dozen nut-free oatmeal chocolate-chip cookies for the Morse Street PS bake sale on Fri 2026-10-30. Rules: nut-free, individually bagged with ingredient label, no-bake items allowed if labelled; drop-off at the school gym 8:30-8:50 am; volunteers needed for the 12:00-13:00 table. Riya has no oven; use chocolate chips labelled peanut and tree nut free.",
+   "actions": [
+    "food",
+    "health",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0022",
+   "kind": "episode",
+   "text": "Riya hosted Thanksgiving dinner on 2026-10-11 for Priya, Hannah's family and Marcus, cooking on a hot plate because the kitchen was gutted; Hannah lent folding chairs that Riya promised to return that weekend. Hannah also borrowed Riya's pie dish and returns it to the porch.",
+   "actions": [
+    "reminder",
+    "home"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0023",
+   "kind": "preference",
+   "text": "Riya wants the assistant to stop ending every message with a question; only ask when it genuinely cannot proceed without her (it makes her feel she owes homework).",
+   "actions": [
+    "message",
+    "work-task",
+    "docs"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0024",
+   "kind": "routine",
+   "text": "Riya puts the green bin out on Sunday nights and always forgets; a reminder was set for Sun 2026-10-18 at 20:30 (private calendar event). Weekly recurrence was offered but not confirmed.",
+   "actions": [
+    "home",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0025",
+   "kind": "plan",
+   "text": "Riya's holiday photo card: pick a photo and send the order by Sun 2026-10-25. Candidates from Favourites: Kitsilano Beach family shot (IMG_8412) or Leo and Biscuit at Woodbine (IMG_8790).",
+   "actions": [
+    "purchase",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0026",
+   "kind": "plan",
+   "text": "Riya takes Spanish lessons with teacher Carlos Méndez on Thursdays; for the lesson on Thu 2026-10-22 she owes two 300-word essays: 'mi trabajo' (present subjunctive) and one about the Lisbon trip plans. Planned outline Sat, draft Sun, polish Tue (note n_88510).",
+   "actions": [
+    "learning",
+    "reminder",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0027",
+   "kind": "fact",
+   "text": "Leo has a library card that Riya plans to renew at the Pape/Danforth branch (Sat hours 9:00-17:00, book drop open 24/7); it's on her Errands note. Riya keeps running notes in the Notes app: 'Errands' and 'Shopping list', and a Notion 'Riya to-do' page with an Archive.",
+   "actions": [
+    "reminder",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0028",
+   "kind": "person",
+   "text": "Priya Nair is Riya's friend moving from a rental in Ontario; her old landlord withheld her last month's rent deposit citing scuff marks. Riya also owes Priya a review of her website copy.",
+   "actions": [
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0029",
+   "kind": "fact",
+   "text": "Instant Payouts readiness review: Aisha will own weekend feature-flag flips (flag name instant_payouts_ga); error budget is per day; PAY-1227 (on-call runbook update) is assigned to Marco Ruiz. Still on Riya: legal review of updated merchant terms (no update since Oct 9). Open items: macro for delayed payouts not approved (Support lead), banner copy v2 needs PM sign-off (Diego), PAY-1224 awaiting Riya's review.",
+   "actions": [
+    "work-task",
+    "reminder",
+    "observability"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0030",
+   "kind": "plan",
+   "text": "Olivia's QBR deck skeleton (in #sales-product) tags slides 6-9 to Riya; no deadline given.",
+   "actions": [
+    "work-task",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0031",
+   "kind": "plan",
+   "text": "Tom Becker asked everyone for December out-of-office and early-leave days in the team calendar by Fri 2026-10-23. Riya's Lisbon trip: flight TAP TP260 YYZ to LIS on Sun 2026-12-20 at 22:10, so OOO Mon 21 Dec to Fri 1 Jan. Riya's 1:1 with Tom is Wednesdays 11:30-11:55.",
+   "actions": [
+    "schedule",
+    "travel"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0032",
+   "kind": "plan",
+   "text": "Morse Street PS notices: picture day retakes on 2026-11-04 in the gym (bring order form); November hot lunch orders close 2026-10-23.",
+   "actions": [
+    "family",
+    "food",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0033",
+   "kind": "fact",
+   "text": "Visa statement of $2,036.55 is due Nov 7 2026 with autopay on; takeout spending was $612 in October so far, up 22% on September.",
+   "actions": [
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0034",
+   "kind": "plan",
+   "text": "Onboarding design review booked with Aisha Rahman and Diego Fernández on Thu 2026-11-26, 10:00-10:25 Toronto time at King St W office (room Fraser) plus Zoom; agenda: KYC retry screens, empty states, open questions. NOTE: this overlaps Riya's ROM class-trip volunteering that day (9:00-14:30).",
+   "actions": [
+    "schedule",
+    "work-task",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0035",
+   "kind": "plan",
+   "text": "Leo turns 8 on 2027-01-22; Riya is planning his party at Wonder Workshop (Queen St East, Leslieville) on Sat 2027-01-23 for twelve kids: Master Builder package $495 + HST (up to 14 kids, 2 hours, robotics/stop-motion), $100 refundable deposit (up to 30 days before), outside food allowed, nut-free facility, slots 11:00/13:30/16:00. Leo has a skating lesson 10:30-11:15 that day at Jimmie Simpson rink, so choose 13:30 or 16:00. Nothing booked yet.",
+   "actions": [
+    "family",
+    "booking",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0036",
+   "kind": "fact",
+   "text": "PAY-1224 (merchant email template for delayed payouts, assignee Priyanka S.) is In Review with Riya as reviewer, waiting on her approval as of 2026-10-22; Support keeps asking about it. Open High bugs: PAY-1241 (mobile payout status stuck, Aisha's team) and PAY-1244 (CSV export timezone off by one hour, unassigned; should be assigned before GA). Riya wants October incidents (INC-311, INC-318) and open bugs in the readiness doc's risks section.",
+   "actions": [
+    "work-task",
+    "reminder",
+    "observability"
+   ]
+  },
+  {
+   "id": "life-sleep-b15:m0037",
+   "kind": "plan",
+   "text": "Riya's week of 2026-10-26: Tue 27 Oct fasting from midnight for 10:30 physical with Dr. Patel (bloodwork before); Wed 28 Oct run 6:15-7:15 with Marcus at Ashbridges Bay; Fri 30 Oct bake sale drop-off 8:30. Riya wants early-morning commitments laid out so she doesn't disrupt Sam's mornings; early commitments should be added as recurring events visible to Sam.",
+   "actions": [
+    "schedule",
+    "health",
+    "reminder"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/life/cards/life-sleep-b15.json"
+}

@@ -1,0 +1,372 @@
+{
+ "batch": "life-sleep-b06",
+ "rows": [
+  {
+   "id": "life-sleep-b06:m0001",
+   "kind": "routine",
+   "text": "Riya's father, Vikram Malhotra, died on 2022-03-18. Around March 18 each year Riya prefers a lighter schedule (thin out meetings, nothing sprint-like); she lights a diya at home in the evening.",
+   "actions": [
+    "schedule",
+    "work-task",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0002",
+   "kind": "fact",
+   "text": "Riya's current subscriptions: Netflix (standard), Spotify Family, Crave, and The Globe and Mail digital. She cancelled Disney+ in March 2026 (access ended 2026-03-11, no charge since).",
+   "actions": [
+    "finance",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0003",
+   "kind": "routine",
+   "text": "Wednesdays at 15:30 Riya does the pickup of Leo and Jun (Wed swap with Jun's family).",
+   "actions": [
+    "schedule",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0004",
+   "kind": "person",
+   "text": "Riya works at LumenPay on the Payouts team (Instant Payouts project). Colleagues: Tom Becker (her manager-level 1:1 on Wednesdays 11:30), Aisha Rahman (engineering, ledger), Olivia Grant (sales/product), Diego Fernandez (design), Mina Park, Tariq Osei. She commutes by streetcar on office days; Slack channels include #payouts-team and #payouts-eng.",
+   "actions": [
+    "work-task",
+    "schedule",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0005",
+   "kind": "episode",
+   "text": "Priya is a friend of Riya in Montreal whose law/professional firm asked her to transfer to its Toronto office (March 2026); she was torn about it.",
+   "actions": [
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0006",
+   "kind": "fact",
+   "text": "Dr. Lin (Riya's and Leo's dentist, cleanings every 6 months) moved in March 2026 to Danforth Smiles, 822 Danforth Ave near Pape station; phone 416-555-0144, booking at danforthsmiles.example.com. The old Queen East Dental address is outdated.",
+   "actions": [
+    "health",
+    "booking",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0007",
+   "kind": "preference",
+   "text": "Notification preference: work items come as push notifications; personal items as a single evening digest at 20:30 (no all-day pings).",
+   "actions": [
+    "reminder",
+    "message",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0008",
+   "kind": "episode",
+   "text": "Riya asked on 2026-03-06 about plantar fasciitis (heel inflammation, sharp first steps in morning; most cases settle in 6-12 months with stretching, supportive shoes and load management, often sooner). Her heel was bothering her again on 2026-03-24.",
+   "actions": [
+    "health",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0009",
+   "kind": "rule",
+   "text": "Decision (Riya and Sam, March 2026): not replacing the 2019 Mazda CX-5 in 2026; the money goes to the kitchen renovation. Revisit buying an EV in 2028. CX-5 stays; keep Downtown Mazda service reminders (60,000 km service) but trade-in offers are unwanted and unsubscribed.",
+   "actions": [
+    "purchase",
+    "finance",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0010",
+   "kind": "fact",
+   "text": "Plantar fasciitis in early 2026 was mild and her left foot is now much better; calf stretches suggested by Marcus worked.",
+   "actions": [
+    "health"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0011",
+   "kind": "rule",
+   "text": "Riya replaces her Brooks Ghost running shoes every 600 km. Current pair (Ghost 15, black/teal, first run 2025-08-03) was at 571 km on 2026-03-22; flag when the running log passes 560 km and prompt a reorder (Ghost 17 women's 8.5, about $180-190 in Canada).",
+   "actions": [
+    "purchase",
+    "health",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0012",
+   "kind": "preference",
+   "text": "Spanish practice preference: when Riya writes in Spanish, reply in Spanish and list only the three most important corrections in bold at the end (not every mistake inline). Corrections are added to the Anki deck 'Español B2 - errores'.",
+   "actions": [
+    "learning",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0013",
+   "kind": "preference",
+   "text": "Riya wants clean workplace-safe finance jokes to open Friday standup; nothing cringey and nothing about crypto. Saved backups in notes as 'standup openers'.",
+   "actions": [
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0014",
+   "kind": "plan",
+   "text": "Leo's grade 2 Career Day is Tue 2026-03-31, 9:15 in Room 104 (Ms. Alvarez); Riya gives a talk of about 5 minutes plus questions, hands-on with props; parents arrive by 9:05.",
+   "actions": [
+    "schedule",
+    "family",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0015",
+   "kind": "plan",
+   "text": "Morse Street PS dates: Spring Photo Day Thu 2026-04-09 (retakes 2026-05-14); Friday 2026-04-10 is a PA Day (school closed for students).",
+   "actions": [
+    "family",
+    "schedule",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0016",
+   "kind": "person",
+   "text": "Marcus Bell is Riya's running partner and a physiotherapist (as of March 2026 choosing between two physio clinic job offers; training for a marathon).",
+   "actions": [
+    "health",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0017",
+   "kind": "plan",
+   "text": "Decision (Riya and Sam, March 2026): no $1,900 two-week overnight camp (Camp Wanakita) for Leo in summer 2026 (too young; decline email sent). Leo (age 6, turning 7 in July) does Riverdale Farm day camp Weeks 2 and 3 (Jul 13-24, 9:00-16:00, $245/week), $100 non-refundable deposit per week ($200 total, by e-transfer, ref RFC-26-0417), balance due 2026-06-01.",
+   "actions": [
+    "family",
+    "finance",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0018",
+   "kind": "episode",
+   "text": "Riya asked Hannah Cho whether her son Jun wants the same Riverdale Farm camp weeks (Jul 13-24) so they could split drop-offs. Hannah's number is +1 416-555-0163; Jun is Leo's close friend.",
+   "actions": [
+    "family",
+    "message",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0019",
+   "kind": "plan",
+   "text": "A tentative Vancouver trip is on the calendar from Fri 2026-07-31 to Tue 2026-08-04; it overlaps camp Weeks 4 and 5, so only Weeks 2-3 are booked.",
+   "actions": [
+    "travel",
+    "family",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0020",
+   "kind": "rule",
+   "text": "Spending rule: the assistant asks Riya before any payment over $150. The assistant has no record of which account is used for family expenses vs. Riya's personal money; ask her or check the e-transfer 'From' dropdown (last four digits).",
+   "actions": [
+    "purchase",
+    "finance",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0021",
+   "kind": "fact",
+   "text": "Toronto yard waste pickup for Riya's street (Leslieville, Thursday collection): resumes Thu 2026-04-09, then every other Thursday. Paper yard waste bags or labelled rigid containers only (no plastic); branches under 7.5 cm, bundled, max 1.2 m long and 20 kg. Cheapest paper bags: Home Depot Leslie St 10-pack $11.98.",
+   "actions": [
+    "home",
+    "purchase",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0022",
+   "kind": "plan",
+   "text": "Kitchen renovation is by Northline Renovations; contact Nate (+1 647-555-0119). As of 2026-03-30 no firm completion date was on file (Riya asked Nate); the house may be a construction zone into early September. Kabir, Mei and Ira might fly in for a week in early September 2026; the question is whether they can stay with Riya, else a furnished rental.",
+   "actions": [
+    "home",
+    "travel",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0023",
+   "kind": "person",
+   "text": "Sam Okafor is Riya's partner (husband); Leo is their son, Leo Okafor-Malhotra, age 6 (turning 7 in July 2026). They live in Leslieville, Toronto; they have a beagle named Biscuit.",
+   "actions": [
+    "family",
+    "pet",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0024",
+   "kind": "preference",
+   "text": "Riya's coffee order is an oat milk cortado (no longer a latte); she switches to decaf after 14:00 because caffeine hurts her sleep.",
+   "actions": [
+    "food",
+    "health",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0025",
+   "kind": "fact",
+   "text": "Instant Payouts project (LumenPay): PAY-1421 (AML threshold sign-off) was blocked on legal review and blocked PAY-1403 (per-merchant daily instant cap); legal sign-off meeting was set for 2026-04-16 14:30. PAY-1417 (payout.failed retry policy) was waiting on a decision from Riya.",
+   "actions": [
+    "work-task",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0026",
+   "kind": "fact",
+   "text": "Instant payout market scan (2026-04-08), in PRD Appendix C: Stripe 1.5% (min $0.50), Square 1.75%, Shopify Payments 1.5%, Helcim has no instant product; net amount received is the most prominent number at confirmation. Design principles: never charge a fee on a failed payout, show net first, explain ineligibility plainly. Real-Time Rail has a phased 2026 launch, so card rails remain the practical path.",
+   "actions": [
+    "work-task",
+    "docs"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0027",
+   "kind": "plan",
+   "text": "The old pricing page lumenpay.example.com/pricing-legacy moved to lumenpay.example.com/pricing. Riya still needs to fix 5 links in: Instant Payouts PRD (Overview, Appendix B), Beta merchant FAQ, Onboarding 2.0 retro, Sales one-pager draft, before beta materials go out.",
+   "actions": [
+    "work-task",
+    "docs",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0028",
+   "kind": "fact",
+   "text": "Dog walking costs are not tax deductible for Riya; the dog walking receipts were moved out of the tax deductions folder (/Taxes/2025/Deductions) to /Household/Biscuit. Biscuit is the family dog.",
+   "actions": [
+    "finance",
+    "pet"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0029",
+   "kind": "routine",
+   "text": "Running with Marcus Bell: Sundays 07:30 (since 2026-04-19, moved from Saturdays because Leo has Saturday morning soccer); meet at the foot of Leslie Street for the Tommy Thompson Park out-and-back.",
+   "actions": [
+    "schedule",
+    "health",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0030",
+   "kind": "routine",
+   "text": "Leo plays in the Leslieville house league soccer (U8), Saturdays 9:00-10:00 at Jimmie Simpson Park field 2 (arrive 8:45), April to June and September to October. 2026 spring season: 2026-04-18 to 2026-06-20, no game Sat 2026-05-16, picture day Sat 2026-05-30. Saturday mornings are therefore busy.",
+   "actions": [
+    "schedule",
+    "family",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0031",
+   "kind": "fact",
+   "text": "Car insurance for the 2019 Mazda CX-5 moved in April 2026 from Intact to Belairdirect: policy BD-AU-7731904, 2026-04-15 to 2027-04-15, $118.42/month, about $410/year cheaper; renews each April. Intact policy cancelled effective 2026-04-15 with a $61.27 prorated refund (ref RF-2026-0419-3381, 5-7 business days). Any Intact mail is just cancellation/refund. Documents are in Drive /Household/Car/Insurance.",
+   "actions": [
+    "finance",
+    "home",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0032",
+   "kind": "fact",
+   "text": "Leslieville Farmers' Market 2026: opens Sun 2026-05-10 (Mother's Day), Sundays 9:00-14:00 at Jonathan Ashbridge Park, 1515 Queen St E, through 2026-10-25.",
+   "actions": [
+    "schedule",
+    "food",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0033",
+   "kind": "rule",
+   "text": "Decision (Riya and Sam, April 2026): kitchen countertops are Caesarstone 'Frosty Carrina' quartz, not marble (marble stains too easily). Nate at Northline Renovations was told to go ahead with the fabricator and give a template date.",
+   "actions": [
+    "home",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0034",
+   "kind": "episode",
+   "text": "Grace (relative in Ottawa) wants to send Leo a just-because parcel; Riya will ask Leo what he is into. The assistant has no note of Leo's current interests; suggest nut-free items.",
+   "actions": [
+    "purchase",
+    "family",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0035",
+   "kind": "plan",
+   "text": "Riya wants a dental cleaning with Dr. Lin at Danforth Smiles on Wed 2026-04-22, late morning; slots offered 11:00 or 11:40 (60 min, about 15 min from home); not yet booked as of 2026-04-19.",
+   "actions": [
+    "booking",
+    "schedule",
+    "health"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0036",
+   "kind": "fact",
+   "text": "Biscuit's regular vet, Dr. Moreau's clinic, is weekdays only. Weekend vets near Leslieville (all accept new patients): Riverside Veterinary Clinic, 690 Queen St E (Sat 9-17, Sun 10-16, walk-ins Sat mornings); Danforth Animal Clinic, 1050 Danforth Ave (Sat-Sun 9-15, walk-ins, 30-60 min wait); Queen East Pet Hospital, 1286 Queen St E (Sat 8-14, no walk-ins, phone triage Sundays).",
+   "actions": [
+    "pet",
+    "health",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0037",
+   "kind": "rule",
+   "text": "Decision (2026-04-19, PRD decision log, PAY-1417): payout webhook retries use exponential backoff with a 72-hour retry window (Aisha Rahman's proposal), chosen over a fixed 24-hour window. Owner: Riya Malhotra.",
+   "actions": [
+    "api",
+    "work-task",
+    "docs"
+   ]
+  },
+  {
+   "id": "life-sleep-b06:m0038",
+   "kind": "fact",
+   "text": "Instant Payouts beta: 40 merchants (mix of retail, food service, trades), 6 weeks. Success bar, all must hold for 2 consecutive weeks: payout success rate >= 99.5% and median payout time < 30 minutes. GA exit: success bar met and no Sev-1 incidents in the final 2 weeks.",
+   "actions": [
+    "work-task",
+    "docs",
+    "observability"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/life/cards/life-sleep-b06.json"
+}

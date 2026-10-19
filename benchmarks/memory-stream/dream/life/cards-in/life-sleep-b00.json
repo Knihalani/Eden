@@ -1,0 +1,785 @@
+{
+ "batch": "life-sleep-b00",
+ "rows": [
+  {
+   "id": "life-sleep-b00:m0001",
+   "kind": "fact",
+   "text": "Sam Okafor (Riya's partner) is vegetarian, which also means no fish or seafood (not pescatarian).",
+   "actions": [
+    "food",
+    "booking",
+    "health"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0002",
+   "kind": "preference",
+   "text": "Sam Okafor's birthday is March 22; he prefers a quiet dinner at home over a restaurant party, so never plan him a big event.",
+   "actions": [
+    "family",
+    "booking",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0003",
+   "kind": "routine",
+   "text": "Riya runs with Marcus Bell on Tuesdays and Thursdays at 6:30 am along the Martin Goodman Trail, so those early mornings are unavailable.",
+   "actions": [
+    "schedule",
+    "health"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0004",
+   "kind": "person",
+   "text": "Tom Becker is Riya's manager (VP Product at Lumen Pay). He reads everything on his phone between meetings and hates long threads: keep emails to Tom under 5 sentences with the ask in the first line.",
+   "actions": [
+    "message",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0005",
+   "kind": "person",
+   "text": "Aisha Rahman is the engineering lead on Riya's team. She prefers async Slack threads over meetings and wants specs at least two weeks before sprint planning.",
+   "actions": [
+    "work-task",
+    "message",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0006",
+   "kind": "routine",
+   "text": "Team standup is Mondays, Wednesdays and Fridays at 9:45. Tuesday mornings (09:00-12:00) are Riya's no-meeting focus block; Payments guild sync series was declined.",
+   "actions": [
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0007",
+   "kind": "person",
+   "text": "Priya Nair is Riya's best friend, from McGill; she is an architect now living in Montreal.",
+   "actions": [
+    "travel",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0008",
+   "kind": "fact",
+   "text": "Riya's car, a Mazda CX-5, is insured with Intact Insurance and renews each April; remind her in March.",
+   "actions": [
+    "finance",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0009",
+   "kind": "routine",
+   "text": "Riya has a Spanish lesson with Carlos every Tuesday at 19:00.",
+   "actions": [
+    "schedule",
+    "learning"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0010",
+   "kind": "fact",
+   "text": "Riya's household: partner Sam, son Leo (6, turning 7 in the fall), and Biscuit, a beagle born around April 2022 who is food-motivated and steals bread off the counter; do not leave bread out.",
+   "actions": [
+    "pet",
+    "family",
+    "home"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0011",
+   "kind": "person",
+   "text": "Kabir Malhotra is Riya's younger brother, a software engineer at a game studio in Vancouver, married to Mei Malhotra.",
+   "actions": [
+    "family",
+    "travel",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0012",
+   "kind": "routine",
+   "text": "Riya works in the Lumen Pay office on King Street West on Tuesdays and Thursdays and from home the rest of the week.",
+   "actions": [
+    "schedule",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0013",
+   "kind": "rule",
+   "text": "Rule: ask Riya before any purchase over $100. No exceptions.",
+   "actions": [
+    "purchase",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0014",
+   "kind": "rule",
+   "text": "Rule: do not text Sam's parents (Grace and Daniel Okafor) on Riya's behalf.",
+   "actions": [
+    "message",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0015",
+   "kind": "preference",
+   "text": "Flight preferences: WestJet first, aisle seat, never basic economy.",
+   "actions": [
+    "travel"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0016",
+   "kind": "preference",
+   "text": "Always show prices in CAD; convert any foreign currency and put the original in brackets, e.g. CA$137 (US$100).",
+   "actions": [
+    "finance",
+    "purchase",
+    "travel"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0017",
+   "kind": "person",
+   "text": "Hannah Cho is Riya's neighbour two doors down (added to contacts by Sam). She is a nurse at Michael Garron Hospital with some night shifts, so text before calling in daytime. Her kids are Ellie (10) and Jun (7). Mobile +1 416-555-0193.",
+   "actions": [
+    "message",
+    "schedule",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0018",
+   "kind": "routine",
+   "text": "Riya takes levothyroxine 50 mcg every morning for hypothyroidism, 30 minutes before coffee; daily reminder at 06:45.",
+   "actions": [
+    "health",
+    "reminder",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0019",
+   "kind": "fact",
+   "text": "Riya and Sam met in 2015 at a friend's board-game night; wedding/anniversary treated as June 8 (this is later corrected).",
+   "actions": [
+    "family",
+    "reminder",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0020",
+   "kind": "fact",
+   "text": "Sam Okafor teaches grade 11 and 12 chemistry at Riverdale Collegiate Institute; Sunday evenings he is often marking lab reports, so plan dates with Sam on Saturdays, not Sundays.",
+   "actions": [
+    "schedule",
+    "family",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0021",
+   "kind": "fact",
+   "text": "House: basement floods slightly near the back wall in heavy spring rain (only that strip). Sump pump replaced May 2024 (Zoeller M53, $640). Furnace serviced 2023-09 (Reliance); eavestroughs cleaned 2024-10.",
+   "actions": [
+    "home",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0022",
+   "kind": "plan",
+   "text": "Kitchen reno is by Northline Renovations (contact Nate); deposit #2 of $8,500 was scheduled from TD joint chequing on 2025-07-24; cabinet install is Sat 2025-08-23 (all day). Nate prefers email.",
+   "actions": [
+    "home",
+    "finance",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0023",
+   "kind": "rule",
+   "text": "Rule: never send an email on Riya's behalf without showing her the draft first, even a tiny one.",
+   "actions": [
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0024",
+   "kind": "fact",
+   "text": "Riya's dentist is Dr. Lin at Queen East Dental, 1046 Queen St E.",
+   "actions": [
+    "health",
+    "schedule",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0025",
+   "kind": "preference",
+   "text": "Riya loves South Indian food, especially masala dosa; her favourite local spot is Saffron Lane on Queen Street East.",
+   "actions": [
+    "food",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0026",
+   "kind": "preference",
+   "text": "Format meeting summaries as three sections: Decisions, Action items (with owner and date), Open questions.",
+   "actions": [
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0027",
+   "kind": "preference",
+   "text": "Date format: in chat write like 'Mon 19 Oct'; in work documents use ISO format like 2026-10-19.",
+   "actions": [
+    "message",
+    "work-task",
+    "docs"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0028",
+   "kind": "rule",
+   "text": "Calendar invites Riya's agent creates must state the time in Toronto time, and also in IST if Riya's mother in Mumbai is invited.",
+   "actions": [
+    "schedule",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0029",
+   "kind": "rule",
+   "text": "Leo goes to bed at 7:45 pm on school nights: nothing after dinner on weeknights once school is back. Leo does not do well with sleepovers yet; decline politely if anyone asks.",
+   "actions": [
+    "family",
+    "schedule",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0030",
+   "kind": "routine",
+   "text": "Riya's 1:1 with Tom Becker is weekly on Thursdays at 14:00.",
+   "actions": [
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0031",
+   "kind": "procedure",
+   "text": "Wen Li is the data analyst Riya works with. Data requests go through the #data-requests Slack channel with at least three business days of notice and a written metric definition, otherwise Wen bounces them.",
+   "actions": [
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0032",
+   "kind": "preference",
+   "text": "Flight preferences beyond airline: prefer direct flights even if up to $300 more, aisle seat, and avoid red-eyes unless the arrival is in the morning.",
+   "actions": [
+    "travel"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0033",
+   "kind": "plan",
+   "text": "Plan: Kabir wants Riya's family in Vancouver in the fall; Thanksgiving trip YYZ-YVR considered for Fri 2025-10-10 to Mon 2025-10-13 for 3 (2 adults + child). Nothing held; fare watch active. Flair via Calgary $1,128 (cheapest), WestJet $1,402 (red-eye return), Air Canada $1,596, WestJet midday $1,689.",
+   "actions": [
+    "travel",
+    "family",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0034",
+   "kind": "routine",
+   "text": "Riya runs with Marcus Bell on Saturdays at 7:00 am, a 10 km loop along the Martin Goodman Trail starting at Woodbine Beach (standing weekly event since 2025-07-19).",
+   "actions": [
+    "schedule",
+    "health"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0035",
+   "kind": "plan",
+   "text": "Riya plans to sit the DELE B2 Spanish exam in May 2026; registration for the May 2026 session opens in February 2026 (Instituto Cervantes, Toronto centres).",
+   "actions": [
+    "learning",
+    "reminder",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0036",
+   "kind": "fact",
+   "text": "Lumen Pay tool stack: Linear for tickets, Slack for chat, Notion for docs, Figma for design, Looker for metrics, Google Workspace for mail and calendar.",
+   "actions": [
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0037",
+   "kind": "fact",
+   "text": "Home internet is Bell Fibe at $95 a month.",
+   "actions": [
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0038",
+   "kind": "procedure",
+   "text": "Payouts v2 PRD lives in Notion, created from the team's PRD-v3 template (one-page summary, Requirements, Design, Rollout, Decision log); dates in ISO. PRD drafts also include a Non-goals section and an Open questions table with owner and due-date columns.",
+   "actions": [
+    "work-task",
+    "docs"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0039",
+   "kind": "plan",
+   "text": "Commitment: Aisha needs the payouts v2 spec by Aug 25 for the Sep 8 sprint; on 2025-07-25 Riya told Aisha by email the spec will be in Notion by 2025-08-18, with open questions on ledger reconciliation flagged at the top.",
+   "actions": [
+    "work-task",
+    "schedule",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0040",
+   "kind": "fact",
+   "text": "Recurring finances: mortgage with TD (biweekly); RESP for Leo $208/month at TD (full CESG grant, 20% up to $500/yr); Spotify family and Netflix; monthly e-transfer to Carlos (Spanish tutor).",
+   "actions": [
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0041",
+   "kind": "person",
+   "text": "Sam's parents are Grace and Daniel Okafor, who live in Alta Vista, Ottawa. Daniel is a retired civil engineer who will have opinions about the reno; Grace still teaches piano.",
+   "actions": [
+    "family",
+    "purchase",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0042",
+   "kind": "plan",
+   "text": "Plan: weekend of 16-17 Aug 2025 with Sam's parents Grace and Daniel Okafor; dinner Sat 2025-08-16 19:00 at Ascari Enoteca (Queen St E), party of 5, ref ASC-4471.",
+   "actions": [
+    "family",
+    "booking",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0043",
+   "kind": "rule",
+   "text": "Olivia Grant is Director of Sales Enablement at Lumen Pay and often asks Riya for feature dates to share with prospects. Never give Olivia or anyone in sales a feature date until Aisha Rahman has signed off; drafts to Olivia say 'target', not 'launch date'.",
+   "actions": [
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0044",
+   "kind": "rule",
+   "text": "When Riya writes in Spanish, reply in Spanish and correct every mistake inline. She wants to practise Spanish with the agent sometimes.",
+   "actions": [
+    "learning",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0045",
+   "kind": "fact",
+   "text": "Riya's banking: TD joint chequing with Sam is the household bills account; her own savings are in EQ Bank and must not be touched. Also a TD Visa.",
+   "actions": [
+    "finance",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0046",
+   "kind": "routine",
+   "text": "Riya calls her mother Anjali every Sunday at 9:00 am Toronto time (6:30 pm Mumbai); keep that slot clear (later corrected).",
+   "actions": [
+    "schedule",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0047",
+   "kind": "fact",
+   "text": "Spanish learning: Carlos's intake notes say Riya learns best through role-play of real situations (ordering food, work meeting, doctor's visit) and wants Mexican vocabulary (carro, computadora) rather than Castilian. Weak spots: ser/estar, preterite vs imperfect, gender of -ma nouns, subjunctive after 'cuando'. Level B1 working toward B2; goal is an hour-long conversation without English by the 2027 trip to Mexico City.",
+   "actions": [
+    "learning"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0048",
+   "kind": "person",
+   "text": "Marcus Bell is Riya's friend from a running club, a physiotherapist training for the Chicago Marathon; he often pushes longer runs (e.g. 16k).",
+   "actions": [
+    "health",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0049",
+   "kind": "fact",
+   "text": "Biscuit's vet is Dr. Moreau at Leslieville Animal Hospital on Queen Street East.",
+   "actions": [
+    "pet",
+    "schedule",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0050",
+   "kind": "preference",
+   "text": "Riya dislikes cilantro: leave it out of recipes and food orders, always.",
+   "actions": [
+    "food",
+    "booking",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0051",
+   "kind": "preference",
+   "text": "Style: when Riya asks something, give the answer first, then bullet points; no preamble, do not restate her question.",
+   "actions": [
+    "message",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0052",
+   "kind": "rule",
+   "text": "Calendar rule: never book meetings for Riya before 9:30 or after 17:00.",
+   "actions": [
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0053",
+   "kind": "routine",
+   "text": "Biscuit walks (agreed with Sam, July 2025): Riya walks him every morning at 6:30 am (Leslie Street Spit loop on weekends, around the block on weekdays); Sam does the 9:00 pm walk.",
+   "actions": [
+    "pet",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0054",
+   "kind": "fact",
+   "text": "Health (private): Riya is allergic to penicillin (hives) and has seasonal allergies in May managed with Reactine. Mention the penicillin allergy whenever a doctor or pharmacy comes up.",
+   "actions": [
+    "health",
+    "booking",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0055",
+   "kind": "fact",
+   "text": "Riya Malhotra is a Senior Product Manager at Lumen Pay (started 2024-02-05), owning Merchant payouts and Merchant onboarding; manager Tom Becker.",
+   "actions": [
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0056",
+   "kind": "preference",
+   "text": "Riya's usual coffee order is an oat milk latte.",
+   "actions": [
+    "food",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0057",
+   "kind": "person",
+   "text": "Diego Fernández is the designer on Riya's team. Give him feedback as Figma comments, not DMs, and frame it as a problem statement rather than a proposed solution.",
+   "actions": [
+    "message",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0058",
+   "kind": "routine",
+   "text": "Riya does a 6:00 am spin class at Spin Society on Queen Street East every Wednesday (class may shift to 6:15 on occasion).",
+   "actions": [
+    "schedule",
+    "health"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0059",
+   "kind": "preference",
+   "text": "Use Canadian spelling in everything written for Riya (colour, centre, cheque, organize).",
+   "actions": [
+    "message",
+    "docs",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0060",
+   "kind": "plan",
+   "text": "Idea: go to the Canadian Tulip Festival in Ottawa in May 2026 with Sam's parents (they did not go in 2025); check dates in April.",
+   "actions": [
+    "travel",
+    "family",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0061",
+   "kind": "person",
+   "text": "Carlos Méndez is Riya's online Spanish tutor from Guadalajara (lessons on Zoom). Riya pays monthly by Interac e-transfer, $180 CAD for four lessons (carlos.mendez.es@example.com).",
+   "actions": [
+    "finance",
+    "learning",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0062",
+   "kind": "preference",
+   "text": "Spanish vocabulary lists go in a table: Spanish, English, example sentence (Riya studies them in Anki).",
+   "actions": [
+    "learning"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0063",
+   "kind": "preference",
+   "text": "Riya's work email style: warm but brief, no exclamation marks, signed 'Best, Riya'.",
+   "actions": [
+    "message",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0064",
+   "kind": "preference",
+   "text": "Always give temperatures in both Celsius and Fahrenheit (Daniel Okafor only thinks in Fahrenheit).",
+   "actions": [
+    "travel",
+    "food",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0065",
+   "kind": "rule",
+   "text": "Leo is allergic to tree nuts: the family keeps all nuts out of his lunches, no exceptions, even if camp or school says it is nut-aware.",
+   "actions": [
+    "food",
+    "family",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0066",
+   "kind": "rule",
+   "text": "Hotel rule: only fully refundable rates, ideally within walking distance of transit.",
+   "actions": [
+    "travel",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0067",
+   "kind": "plan",
+   "text": "Plan: Riya visits Priya Nair in Montreal Fri 2025-09-12 to Sun 2025-09-14; Hôtel Monville booked, fully refundable until 2025-09-10 ($548.70, confirmation MV-88213).",
+   "actions": [
+    "travel",
+    "booking",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0068",
+   "kind": "person",
+   "text": "Anjali Malhotra is Riya's mother, living in Bandra, Mumbai; retired school principal with type 2 diabetes, so gifts and sweets must be sugar-free. Riya sends a rakhi box each early August (ships about 7 days to Mumbai).",
+   "actions": [
+    "purchase",
+    "health",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0069",
+   "kind": "plan",
+   "text": "Riya and Sam's anniversary is June 16 (married 2018-06-16; met 2015-06-16). They usually go out for dinner without Leo, so a sitter is needed; dinner Tue 2026-06-16 for 2, restaurant reservations for June 2026 open in April 2026. Shortlist: Edulis, Ascari Enoteca, Planta Queen (vegetarian-friendly). Sitter candidates: Maya R. ($20/h), Josie T. ($22/h), Ana P. ($17/h).",
+   "actions": [
+    "booking",
+    "family",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0070",
+   "kind": "preference",
+   "text": "Sam drinks oat-milk flat whites and dislikes anything hazelnut-flavoured.",
+   "actions": [
+    "purchase",
+    "food"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0071",
+   "kind": "preference",
+   "text": "In the PRD and Riya's work writing: use 'use' instead of 'leverage'; Tom Becker also flags 'synergy', 'north star', 'low-hanging fruit', 'utilize'. Avoid that jargon.",
+   "actions": [
+    "work-task",
+    "message",
+    "docs"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0072",
+   "kind": "rule",
+   "text": "Team practice: disagree and commit; every product decision goes into the Notion decision log within 24 hours.",
+   "actions": [
+    "work-task",
+    "docs"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0073",
+   "kind": "routine",
+   "text": "Riya's video call with her mother Anjali is every Sunday at 9:00 pm Toronto time (6:30 am Monday in Mumbai, before her morning walk); not the morning, since Anjali is at the temple then. Keep the slot clear.",
+   "actions": [
+    "schedule",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0074",
+   "kind": "preference",
+   "text": "Kabir Malhotra's birthday is August 5. Riya and Kabir do not give real gifts; they swap silly novelty mugs as a tradition.",
+   "actions": [
+    "purchase",
+    "family",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0075",
+   "kind": "preference",
+   "text": "Riya does not want a play-by-play narration of steps; just show the results/options when they come in.",
+   "actions": [
+    "travel",
+    "purchase",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0076",
+   "kind": "rule",
+   "text": "Restaurant booking rule: book for 19:00 and check there are good vegetarian options, every time.",
+   "actions": [
+    "booking",
+    "food"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0077",
+   "kind": "plan",
+   "text": "Leo's school year at Morse Street PS: first day Tue 2025-09-02; class list posts Thu 2025-08-28; before/after care registration closes Fri 2025-08-15.",
+   "actions": [
+    "family",
+    "reminder",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0078",
+   "kind": "plan",
+   "text": "Fare watch placed for YYZ-YVR Oct 10-13 2025, 3 travellers (reports any drop over $100); Thanksgiving fares usually rise after early September. Riya said not to hold any flight yet.",
+   "actions": [
+    "travel",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0079",
+   "kind": "fact",
+   "text": "Biscuit eats only Purina Pro Plan Sensitive Skin & Stomach, Salmon & Rice (13.6 kg, ordered from Pet Valu); no chicken-based food, which gave him itchy skin. Check listings are not another flavour.",
+   "actions": [
+    "pet",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0080",
+   "kind": "routine",
+   "text": "Riya does 15 minutes of Spanish Anki cards every weekday morning (on the streetcar).",
+   "actions": [
+    "learning",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0081",
+   "kind": "rule",
+   "text": "Rule (verbatim from Riya): when the agent schedules a work meeting for Riya, it defaults to 25 minutes and always puts an agenda in the invite. Riya declines meetings with no agenda.",
+   "actions": [
+    "schedule",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0082",
+   "kind": "routine",
+   "text": "Property tax is paid by pre-authorized debit from the TD joint account (****4471): $612.40 on 2025-09-02, 2025-10-01 and 2025-11-03. No action needed.",
+   "actions": [
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0083",
+   "kind": "routine",
+   "text": "Green bin and recycling go out Wednesdays at 19:00, before Leo's bedtime routine at 19:45.",
+   "actions": [
+    "home",
+    "schedule",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b00:m0084",
+   "kind": "plan",
+   "text": "Family birthdays: Sam March 22, Leo October 21 (turning 7 in 2025), Kabir August 5. Riya wants all family birthdays yearly in the calendar with a reminder a week before; dates still missing for Anjali, Mei, Grace Okafor, Daniel Okafor (ask Riya).",
+   "actions": [
+    "reminder",
+    "family",
+    "schedule"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/life/cards/life-sleep-b00.json"
+}

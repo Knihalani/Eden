@@ -1,0 +1,317 @@
+{
+ "batch": "code-sleep-b03",
+ "rows": [
+  {
+   "id": "code-sleep-b03:m0001",
+   "kind": "rule",
+   "text": "All packages in acme-platform are ESM: every package.json has \"type\": \"module\", so no require() anywhere; use import.",
+   "actions": [
+    "code-style",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0002",
+   "kind": "rule",
+   "text": "Rule: keep secrets and tokens out of logs and error messages (a bearer token once showed up in an error log). The api logger (apps/api/src/lib/logger.ts, pino) now redacts auth headers, cookies and password/token/secret/apiKey fields, and scrubMessage() strips Bearer tokens from free-text messages.",
+   "actions": [
+    "observability",
+    "code-style",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0003",
+   "kind": "fact",
+   "text": "API request ids: apps/api request-id middleware takes the x-request-id header (or generates a UUID), puts it on every request log as requestId and echoes it on the response. As of 2026-09-03 the web app never sends x-request-id and the error handler does not tag Sentry with it, so API logs cannot be lined up with web requests when debugging Sentry issues; proposed fix (add header to web fetch client, Sentry.setTag('requestId')) was not yet approved.",
+   "actions": [
+    "observability",
+    "debugging",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0004",
+   "kind": "fact",
+   "text": "The acme-platform API was migrated from Express 4 to Fastify 5 (PR #412 by Marco, api 3.0.0). Middleware are now Fastify plugins in apps/api/src/plugins/ (auth, cors, rate-limit, request-id, error-handler), route handlers take (request, reply), tests use app.inject(). Express, body-parser and express-rate-limit are gone.",
+   "actions": [
+    "api",
+    "tests",
+    "dependency"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0005",
+   "kind": "rule",
+   "text": "Search in acme-platform uses Postgres tsvector columns (see apps/api/drizzle/0031_clients_search.sql and db/schema/clients.ts), not Elasticsearch; do not pull in any search service.",
+   "actions": [
+    "database",
+    "api",
+    "dependency"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0006",
+   "kind": "preference",
+   "text": "Preference: if a fix is uncertain, say so plainly instead of guessing; the user lost an hour to a confident wrong guess.",
+   "actions": [
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0007",
+   "kind": "fact",
+   "text": "Worker retry policy (services/worker/src/queue/retry.ts, shared by every consumer): maxRetries 3 with exponential backoff starting at 1s (1s, 2s, 4s), then the message goes to the dead-letter queue (DLQ). Worker acks after the write, not before.",
+   "actions": [
+    "jobs",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0008",
+   "kind": "fact",
+   "text": "Gotcha: on Windows the CLI config path broke because paths were built from process.env.HOME with hard-coded '/'. Always use path.join and os.homedir() for anything under the home directory (fixed in packages/cli config.ts and cache.ts, ~/.acme/config.json). The fix was not tested on a real Windows machine.",
+   "actions": [
+    "debugging",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0009",
+   "kind": "fact",
+   "text": "Money in acme-platform: API unit prices are integer cents and invoice line quantity can be fractional (hours like 2.5), so round each line to whole cents before summing. apps/web formatMoney(cents, currency) takes cents and uses Intl.NumberFormat (fixed the $1,204.3000000002 float noise).",
+   "actions": [
+    "finance",
+    "frontend",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0010",
+   "kind": "fact",
+   "text": "Infra: AWS single provider in infra/terraform/providers.tf, region us-east-1 for everything (app, data, backups, state bucket); do not add provider aliases for other regions without talking to platform. S3 buckets follow acme-${var.env}-<name> with public access blocked and KMS (aws:kms) encryption; default tags team/env. Terraform v1.8.5.",
+   "actions": [
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0011",
+   "kind": "preference",
+   "text": "Preference: shorter answers; the user does not want basics explained (e.g. terraform basics).",
+   "actions": [
+    "docs",
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0012",
+   "kind": "plan",
+   "text": "Plan: Priya will create the S3 bucket for monthly invoice export zips herself; the bucket work was parked and Claude should not draft it unless asked.",
+   "actions": [
+    "deploy",
+    "work-task"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0013",
+   "kind": "fact",
+   "text": "Invoice numbers (format INV-0042) come from a per-org counter table invoice_counters (migration apps/api/drizzle/0034_invoice_counters.sql); nextInvoiceNumber(tx, orgId) does an atomic upsert and must be called inside the same transaction that inserts the invoice. Fixes number collisions under parallel API tests. Drizzle migrations were at 0034.",
+   "actions": [
+    "database",
+    "api",
+    "tests"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0014",
+   "kind": "fact",
+   "text": "CLI (@acme/cli, packages/cli, binary 'acme') is built with commander (replaced yargs in #409): each command group exports registerX(program) and subcommands register next to each other (e.g. commands/invoices/index.ts registers list and export). ESM, bundled with tsup to dist/index.js. TypeScript is strict with noUncheckedIndexedAccess (tsconfig.base.json, NodeNext), so indexing returns T | undefined and needs a check.",
+   "actions": [
+    "code-style",
+    "build-ci",
+    "dependency"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0015",
+   "kind": "rule",
+   "text": "Rule for CLI commands: throw UsageError (exit code 2) for bad flags instead of calling process.exit inside handlers (pattern in commands/config.ts); errors otherwise print the message and exit 1.",
+   "actions": [
+    "code-style",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0016",
+   "kind": "rule",
+   "text": "A user-facing CLI change needs a changeset (release tooling) before the PR.",
+   "actions": [
+    "release",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0017",
+   "kind": "episode",
+   "text": "Command `acme invoices export --format csv|json --out <file> [--status]` was implemented in packages/cli/src/commands/invoices/export.ts and pushed on branch acme-240-invoices-export (commit 7e31b05) on 2026-09-07; no PR opened yet and a changeset is still needed.",
+   "actions": [
+    "git",
+    "release"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0018",
+   "kind": "fact",
+   "text": "Avatars are served from the CDN cdn.acme.dev (Lena moved them); apps/web/next.config.ts images.remotePatterns allows img.clerk.com and cdn.acme.dev. Any new remote image host must be added to remotePatterns, and config changes need a dev-server restart.",
+   "actions": [
+    "frontend",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0019",
+   "kind": "fact",
+   "text": "trailmix is Jordan's Django + htmx side project (~/code/trailmix). htmx POSTs need the CSRF token: base.html has <body hx-headers='{\"X-CSRFToken\": \"{{ csrf_token }}\"}'>. Models: Hike (user, name, date) and Segment (hike, order, elevation_delta_m); hike list view annotates elevation_gain_m via Sum with filter positive deltas. Its tests use the Django test client, which skips CSRF checks, so CSRF fixes need a manual browser check.",
+   "actions": [
+    "frontend",
+    "debugging",
+    "tests"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0020",
+   "kind": "fact",
+   "text": "Gotcha for date tests in apps/web: mixing UTC dates (toISOString) with local-time dates caused a flaky invoice-status test (failed ~1 in 5 on CI, 11/50 under America/Los_Angeles). Components take an optional `now` prop and tests pass a fixed date; verify under several TZ values (UTC, America/Toronto, Asia/Tokyo). Date-only due dates are compared as UTC calendar days in apps/web/lib/due-label.ts.",
+   "actions": [
+    "tests",
+    "debugging",
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0021",
+   "kind": "preference",
+   "text": "Preference: invoice numbers and amounts in tables use a monospace font with tabular-nums (JetBrains Mono, set as Tailwind --font-mono in apps/web/app/globals.css via Google Fonts import) so digits do not jump; loading typefaces via CSS @import was flagged as possibly not matching the app's existing font setup.",
+   "actions": [
+    "frontend",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0022",
+   "kind": "fact",
+   "text": "Drizzle gotcha: relation loading must be explicit via `with:` (db.query.X.findMany) or you get N+1 loops. The orders list (apps/api/src/routes/orders/list.ts) was fixed from 101 queries / 1874ms to 1 query / 61ms for 50 orders. A reviewer found the same per-row loop in routes/payments/list.ts (payment attempts) and routes/clients/list.ts (contacts); a follow-up ticket was suggested and not done.",
+   "actions": [
+    "database",
+    "api",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0023",
+   "kind": "plan",
+   "text": "Plan: add `--since <date>` to `acme invoices export` for finance (API supports ?since=YYYY-MM-DD). Done: ListInvoicesParams.since in packages/cli/src/api.ts and parseSince (packages/cli/src/parse-since.ts, throws UsageError) with tests. Remaining: declare the --since option on the export subcommand and pass parseSince(opts.since) to listInvoices.",
+   "actions": [
+    "work-task",
+    "api",
+    "tests"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0024",
+   "kind": "rule",
+   "text": "Rule: do not bump major versions of dependencies without asking the user first, even if CI is green. Patch/minor deps-bot PRs with green CI were approved and squash auto-merged on request; they still need a CODEOWNERS approval.",
+   "actions": [
+    "dependency",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0025",
+   "kind": "plan",
+   "text": "Open decision: deps-bot PR #426 bumps zod 3.23.8 -> 4.1.5 (major); typecheck and api tests fail, 37 call sites in apps/api and packages/cli are affected (z.string().email() deprecation, changed error map API). Left alone pending the user's call.",
+   "actions": [
+    "dependency",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0026",
+   "kind": "fact",
+   "text": "Why Drizzle instead of Prisma (ADR 0009, accepted 2026-05-12, docs/adr/0009-orm.md): Prisma's query engine made cold starts 3-4 s on new pods and job runners, slowing scale-out under bursts; Drizzle has no engine and cold start dropped to ~400 ms. Trade-offs: no Prisma Studio (use psql or TablePlus) and explicit relation loading (watch N+1).",
+   "actions": [
+    "database",
+    "debugging",
+    "dependency"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0027",
+   "kind": "procedure",
+   "text": "Secrets in k8s come from AWS Secrets Manager via External Secrets Operator. The api Helm chart (infra/helm/api/templates/externalsecret.yaml) only pulls keys listed under `secrets:` in infra/helm/api/values-prod.yaml (and staging values), with secretsPrefix prod/api (refresh 1h). A new env secret must be added to that list, then ESO sync (or force-sync) and a pod restart. infra/ changes need Priya's review as CODEOWNER.",
+   "actions": [
+    "deploy",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0028",
+   "kind": "plan",
+   "text": "Open: POSTHOG_API_KEY is missing in prod api pods because it is not in the `secrets:` list of infra/helm/api/values-prod.yaml; fix (add `- name: POSTHOG_API_KEY` there and in staging, deploy, restart pods) was proposed on 2026-09-08 but not made yet. Priya reported it.",
+   "actions": [
+    "deploy",
+    "debugging",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0029",
+   "kind": "plan",
+   "text": "CI problem (as of 2026-09-08): .github/workflows/ci.yml runs lint, typecheck, build and test on the whole repo for every PR; only the pnpm store is cached. Median 13m52s (install 1m05, lint 21s, typecheck 1m48, build 3m31, test 6m49; api tests 3m40s with Testcontainers); 12 of 20 runs touched only one app or docs. User wants affected-only runs (e.g. pnpm --filter \"...[origin/main]\" with fetch-depth 0) plus reused build/test results between runs; asked whether an orchestration layer for caching already exists in the repo before rewriting. Deferred ('come back to that').",
+   "actions": [
+    "build-ci",
+    "work-task"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0030",
+   "kind": "episode",
+   "text": "Ops note: api pod api-7c9f8d-x2kq was OOMKilled (512Mi limit) during the nightly export job on 2026-09-08, the second time that week; no user impact.",
+   "actions": [
+    "observability",
+    "deploy",
+    "jobs"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0031",
+   "kind": "fact",
+   "text": "scripts/stale-branches.ts (run: pnpm tsx scripts/stale-branches.ts [--days 60] [--remote origin]) lists remote branches with no commits in N days with author and date; read-only, never deletes. Reviewer suggests validating --days (NaN lists nothing). Uncommitted as of 2026-09-08.",
+   "actions": [
+    "git",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0032",
+   "kind": "fact",
+   "text": "Transactional email in acme-platform is sent through Resend (apps/api/src/lib/mailer.ts, RESEND_API_KEY) and templates are React Email components in apps/api/emails (invoice-sent, receipt, welcome, payment-failed) using shared components/layout, button, footer. Templates export PreviewProps; reviewer asks for a SUBJECT constant per template as in invoice-sent.tsx.",
+   "actions": [
+    "message",
+    "frontend",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b03:m0033",
+   "kind": "plan",
+   "text": "Dunning work in progress (2026-09-08): apps/api/emails/payment-failed.tsx (invoice number, amount, card last 4, Retry payment button to hosted invoice URL) is written but not hooked into mailer.ts or the dunning job; the user wants to review where it fires since it is billing flow. SUBJECT export still to add.",
+   "actions": [
+    "message",
+    "finance",
+    "jobs"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/code/cards/code-sleep-b03.json"
+}

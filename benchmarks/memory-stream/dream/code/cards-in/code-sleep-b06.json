@@ -1,0 +1,257 @@
+{
+ "batch": "code-sleep-b06",
+ "rows": [
+  {
+   "id": "code-sleep-b06:m0001",
+   "kind": "rule",
+   "text": "Standing fix for ERR_REQUIRE_ESM in acme-platform packages: set \"type\": \"module\" in the package's package.json, import local files with the .js extension, and use import/export instead of require()/module.exports. Applied to scripts/seed-demo (@acme/seed-demo).",
+   "actions": [
+    "build-ci",
+    "debugging",
+    "dependency"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0002",
+   "kind": "fact",
+   "text": "Jordan is setting up a new work laptop (Sept 2026); the fresh clone of acme-platform is at ~/code/acme-platform. scripts/seed-demo needs Postgres running and DATABASE_URL set before `pnpm start`.",
+   "actions": [
+    "build-ci",
+    "database"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0003",
+   "kind": "rule",
+   "text": "Standing rule from Jordan: for any large refactor, show a plan first and wait for explicit approval before touching any code.",
+   "actions": [
+    "code-style",
+    "work-task"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0004",
+   "kind": "plan",
+   "text": "Planned refactor of apps/api/src/routes/invoices.ts (917 lines): split into routes/invoices/ with index.ts, crud.ts, lifecycle.ts, pdf.ts, export.ts, schemas.ts, service.ts; OpenAPI output must stay byte-identical. Jordan said the plan looks fine but told Claude to hold off (as of 2026-09-24); not started. Coverage is weak for the PDF and export.csv routes (78.4% lines); computeTotals and loadInvoiceWithLines are imported by routes/payments.ts and emails/invoice-sent.tsx.",
+   "actions": [
+    "code-style",
+    "api",
+    "tests"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0005",
+   "kind": "fact",
+   "text": "Gotcha: CI in acme-platform runs `pnpm install --frozen-lockfile`, so after adding or changing a dependency you must commit pnpm-lock.yaml too, otherwise the install job fails with ERR_PNPM_OUTDATED_LOCKFILE.",
+   "actions": [
+    "dependency",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0006",
+   "kind": "plan",
+   "text": "Priya Shah's branch priya/acme-212-redis-sg adds an ingress rule (aws_security_group_rule.redis_from_worker, tcp/6379) letting the worker node security group reach Redis/ElastiCache, plus a variable worker_node_sg_id with no default that every environment must set. Marco needs it for the worker rollout (BullMQ consumers move to a new node group). Claude asked whether to push it to prod; Jordan has not authorized that.",
+   "actions": [
+    "deploy",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0007",
+   "kind": "rule",
+   "text": "Rule: any change under infra/ needs a review from the platform team and the terraform/plan output pasted into the PR description.",
+   "actions": [
+    "deploy",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0008",
+   "kind": "rule",
+   "text": "Rule of thumb from Jordan: never deploy to production on Fridays (also no prod release tags on Fridays).",
+   "actions": [
+    "deploy",
+    "release"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0009",
+   "kind": "fact",
+   "text": "Release tags in acme-platform are calendar-versioned like v2026.09.17 (latest at 2026-09-24); the changelog for the next tag is built from `git log <last tag>..origin/main`. Claude must not create or push a tag until Jordan says go.",
+   "actions": [
+    "release",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0010",
+   "kind": "procedure",
+   "text": "To inspect web bundle size, run `ANALYZE=true pnpm --filter web build` (reports in apps/web/.next/analyze/). On 2026-09-24, /dashboard First Load JS was 461 kB (298 kB at last tag); biggest: recharts+d3 312 kB (revenue-chart.tsx), @clerk/nextjs 88 kB, full date-fns locale 71 kB.",
+   "actions": [
+    "frontend",
+    "build-ci",
+    "dependency"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0011",
+   "kind": "fact",
+   "text": "The Drizzle ORM schema in apps/api/src/db/schema.ts is the single source of truth for tables; migrations in apps/api/drizzle/ are generated with `pnpm --filter api db:generate`. A nullable invoices.po_number column was added (migration 0042) but is not yet in the zod schemas or invoice DTO.",
+   "actions": [
+    "database",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0012",
+   "kind": "fact",
+   "text": "Gotcha: AWS Load Balancer Controller must be upgraded before the EKS cluster goes to 1.29. On 2026-09-16 staging had ~1h45m of ingress 404s because controller v2.6.2 could not reconcile after the 1.28 to 1.29 upgrade (fixed with v2.8.1). acme-prod still runs controller v2.6.2 (chart 1.6.2) on cluster 1.28; the controller step is still missing from infra/docs/runbooks/eks-upgrade.md.",
+   "actions": [
+    "deploy",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0013",
+   "kind": "plan",
+   "text": "Plan: acme-prod EKS 1.29 upgrade is pencilled in for 2026-10-06, owner Priya Shah. The AWS Load Balancer Controller upgrade from v2.6.2 must happen first.",
+   "actions": [
+    "deploy",
+    "schedule"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0014",
+   "kind": "episode",
+   "text": "Open issue as of 2026-09-24: a customer reported the acme CLI crashes on launch after updating; Claude could not reproduce with a fresh 2.4.1 build from main (--version, whoami, invoices list work). Waiting on support for the full error text, OS and runtime details. Jordan wants a patch release (2.4.2 via packages/cli/package.json) once understood.",
+   "actions": [
+    "debugging",
+    "release"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0015",
+   "kind": "fact",
+   "text": "The login page is apps/web/app/login/page.tsx and renders Clerk's SignIn component (path routing on /login, redirects to /dashboard).",
+   "actions": [
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0016",
+   "kind": "rule",
+   "text": "The acme CLI (packages/cli) must support Node 18 and later: no newer APIs without a fallback (tsup target is node18). Known violation found 2026-09-24: Array.prototype.toSorted (Node 20+) in src/commands/invoices-export.ts:27 needs a fallback; also avoid import.meta.dirname/filename.",
+   "actions": [
+    "code-style",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0017",
+   "kind": "procedure",
+   "text": "To switch kubectl context to prod: `aws eks update-kubeconfig --name acme-prod --region us-east-1`.",
+   "actions": [
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0018",
+   "kind": "rule",
+   "text": "Rule: ask Jordan before adding a new dependency (npm/pnpm package).",
+   "actions": [
+    "dependency"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0019",
+   "kind": "preference",
+   "text": "Commit message convention: imperative mood subject (e.g. \"Add po_number column to invoices\") with a short body explaining why.",
+   "actions": [
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0020",
+   "kind": "decision",
+   "text": "Postgres pool max is 10 connections per pod for the API (apps/api/src/db/client.ts), agreed by Jordan and Priya after staging 'too many connections'. Scale pods, not the pool. Reviewer note: pool size times max pods must stay under the PgBouncer limit.",
+   "actions": [
+    "database",
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0021",
+   "kind": "fact",
+   "text": "The worker exposes Prometheus metrics on port 9464 at /metrics. The helm chart infra/helm/worker has a metrics values block, a named metrics Service port and a ServiceMonitor (30s) so Grafana scrapes it (branch acme-214-worker-servicemonitor).",
+   "actions": [
+    "observability",
+    "deploy",
+    "jobs"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0022",
+   "kind": "decision",
+   "text": "API CSV export (apps/api/src/lib/csv.ts) quotes fields containing commas, quotes or newlines per RFC 4180 and uses CRLF line endings (Jordan chose to keep CRLF); download filename is invoices-<org slug>.csv. This changes the customer-facing file, so mention it in PR descriptions (branch acme-211-csv-export).",
+   "actions": [
+    "api",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0023",
+   "kind": "procedure",
+   "text": "Local setup for acme-platform: clone acme/acme-platform, `nvm use`, `pnpm install`, `docker compose up -d db redis` (compose also defines mailpit), `pnpm --filter api db:migrate` once, then `pnpm dev` at the root (turbo run dev) starts web, api (port 4000) and worker. Local env variables come from Lena. Used for onboarding a contractor starting 2026-09-25.",
+   "actions": [
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0024",
+   "kind": "preference",
+   "text": "Preference: keep diffs small, one concern per pull request; unrelated commits get split into their own branches cut from origin/main (e.g. acme-211-csv-export, acme-213-api-pool-max, acme-214-worker-servicemonitor).",
+   "actions": [
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0025",
+   "kind": "fact",
+   "text": "New authenticated pages in apps/web go under apps/web/app/(dashboard)/ (gets sidebar/header layout, assumes signed-in user); public pages go in app/(marketing). Route group names are not in the URL. Lena wants a /reports page at app/(dashboard)/reports/page.tsx; Jordan has half-finished edits there in the working tree.",
+   "actions": [
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0026",
+   "kind": "episode",
+   "text": "Gotcha: updating all apps/web deps to latest (acme-216-web-deps-latest) broke things: next-intl 4.1.0, recharts 3.0.0, tailwind-merge 3.0.1 and lucide-react 1.0.2 are major bumps causing 3 type errors and 13 test failures (Trash2 renamed TrashIcon, tooltip API, provider setup). Minor/patch bumps (@clerk/nextjs 6.9.6, zod 3.23.9, react-query 5.62.2) are fine; deps-bot PRs #1426/#1427 overlap.",
+   "actions": [
+    "dependency",
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0027",
+   "kind": "fact",
+   "text": "billing-sync (services/worker/src/jobs/billing-sync.ts, every 15 min) can delay Stripe invoices 30+ minutes: it filters created >= lastRunAt, so drafts finalized later are skipped, and lastRunAt is set at run end rather than start. Suggested fix is event-based sync (invoice.finalized/paid) or recording start time plus overlap. It is billing code, so wait for Jordan's review before changing it. Not confirmed as the cause for finance's flagged invoices.",
+   "actions": [
+    "jobs",
+    "finance",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b06:m0028",
+   "kind": "fact",
+   "text": "Web reads the API base URL from NEXT_PUBLIC_API_URL (apps/web/lib/api-client.ts), falling back to http://localhost:4000. On Vercel the variable exists only for Production, not Preview, so staging (a preview environment) calls localhost:4000; fix is to add it for Preview and redeploy (Jordan is sorting with Priya). reports/actions.ts uses server-side API_URL, a different variable.",
+   "actions": [
+    "frontend",
+    "deploy",
+    "debugging"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/code/cards/code-sleep-b06.json"
+}

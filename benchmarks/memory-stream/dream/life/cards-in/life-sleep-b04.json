@@ -1,0 +1,338 @@
+{
+ "batch": "life-sleep-b04",
+ "rows": [
+  {
+   "id": "life-sleep-b04:m0001",
+   "kind": "fact",
+   "text": "Riya's home internet since January 2026 is TekSavvy Fibre 1 Gbps at $70/month ($79.10 with HST), pre-authorized debit on the 15th, service address Leslieville, Toronto; customer-owned modem. Bell Fibe was cancelled effective 2026-01-02 and is no longer used.",
+   "actions": [
+    "home",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0002",
+   "kind": "plan",
+   "text": "Riya must return the Bell Home Hub modem by 2026-02-01 via Canada Post using the prepaid label in the Bell final-bill email, or Bell charges a $150 non-return fee. Bell final bill $31.67 (due 2026-01-28) autopays from the TD joint chequing account.",
+   "actions": [
+    "reminder",
+    "finance",
+    "home"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0003",
+   "kind": "routine",
+   "text": "Riya's weekly 1:1 with her manager Tom Becker moved from Thursdays 14:00 to Wednesdays 11:30-12:00 starting 2026-01-14, because Thursdays clashed with Tom's exec staff meeting. Tom organizes the series. Wed 11 Mar 2026 will likely be skipped (Tom's own roadmap dry run); Wed 4 Feb has a clash with Diego's design crit.",
+   "actions": [
+    "schedule",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0004",
+   "kind": "person",
+   "text": "Grace and Daniel Okafor are Sam's parents (Riya's in-laws), living at 1419 Kilborn Pl, Ottawa (Alta Vista). The family spent Christmas 2025 with them (2025-12-24 to 2025-12-28), driving up in the Mazda. Riya sent a thank-you card from 'Riya, Sam and Leo'; no emoji in cards.",
+   "actions": [
+    "message",
+    "family",
+    "travel"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0005",
+   "kind": "person",
+   "text": "Marcus Bell (+1 416-555-0142) is a friend who exercises with Riya: Saturday 07:00 runs and an early Wednesday workout; he asked about a new 6:15 class at the Y. On 2026-01-10 Riya said she is reconsidering her whole routine and promised Marcus an answer by Monday 2026-01-12.",
+   "actions": [
+    "schedule",
+    "health",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0006",
+   "kind": "fact",
+   "text": "Household budget is $6,000/month on the TD joint chequing account; December 2025 came in $412 over ($6,412), mostly gifts (+$268) and groceries (+$190). January budget unchanged.",
+   "actions": [
+    "finance",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0007",
+   "kind": "routine",
+   "text": "Leo (Riya and Sam's son, about 7, Grade 2 at Morse Street PS) passed to Swimmer 3 and has swim lessons Saturdays 10:00-10:45 at Pape Recreation Centre, 953 Gerrard St E, from 2026-01-17 to 2026-03-21 (family calendar series, 45-min reminder).",
+   "actions": [
+    "schedule",
+    "family",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0008",
+   "kind": "preference",
+   "text": "Riya's focus music is Khruangbin and A. R. Rahman instrumentals (no vocal-heavy tracks); playlist 'Deep Work, Tue' (about 3 h, 41 tracks) was built for her on 2026-01-12.",
+   "actions": []
+  },
+  {
+   "id": "life-sleep-b04:m0009",
+   "kind": "routine",
+   "text": "Riya dropped spin class (it wasn't working). Since 2026-01-13 she does strength training at the Leslieville YMCA on Tuesdays and Thursdays 06:15-07:05, and must be home by 7:15 so Sam can leave for school. Wednesday early slots are no longer her workout time.",
+   "actions": [
+    "schedule",
+    "health",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0010",
+   "kind": "plan",
+   "text": "Riya has a Montreal trip Fri 2026-02-06 to Sun 2026-02-08 to visit her friend Priya: booked Hotel Le Petit Plateau (Rue Rachel E, Plateau), confirmation HPP-55120, queen courtyard room, non-refundable, $433.94 charged to Visa ending 2291. Sam stays solo with Leo that weekend, including Leo's swim on Sat 2026-02-07 10:00.",
+   "actions": [
+    "travel",
+    "schedule",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0011",
+   "kind": "person",
+   "text": "Riya's mother Anjali Malhotra lives in Bandra West, Mumbai (email anjali.malhotra@example.com, WhatsApp +91 98200 55117); her brother Kabir Malhotra lives in Vancouver (kabir.m@example.com, +1 604-555-0193) and has a baby, Ira. Mom is planning an April 2026 trip to Vancouver to meet Ira.",
+   "actions": [
+    "message",
+    "family",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0012",
+   "kind": "plan",
+   "text": "Family video call (Riya, Mom, Kabir) on Sat 2026-01-24 11:00 Toronto time (8:00 Kabir) to plan Mom's April Vancouver trip. Flight options BOM-YVR priced one-way: Air India via DEL depart 2026-04-14 $1,412; Cathay via HKG depart 2026-04-12 $1,586; Air Canada via LHR depart 2026-04-15 $1,690; return legs not priced; Air India and Air Canada offer free meet-and-assist.",
+   "actions": [
+    "schedule",
+    "travel",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0013",
+   "kind": "preference",
+   "text": "Riya unsubscribed from promo emails of Old Navy, Wayfair, Uber Eats (marketing only; receipts kept), Lululemon and Dyson (marked spam, never signed up) on 2026-01-18 and archived 1,094 of them. She dislikes promo clutter; do not re-subscribe her or surface these senders' promotions.",
+   "actions": [
+    "message",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0014",
+   "kind": "person",
+   "text": "Riya is a product manager at Lumen Pay (payouts). Colleagues: Tom Becker (manager), Aisha Rahman (engineer, owner of PAY-1164 serializer refactor), Diego Fernandez (design; prefers async in Figma), Wen (analyst, promoted to Senior Analyst Jan 2026), Olivia (Instant Payouts beta merchant list). Work projects: Instant Payouts beta, payouts dashboard empty states.",
+   "actions": [
+    "work-task",
+    "message",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0015",
+   "kind": "episode",
+   "text": "Linear draft PAY-1207 (medium, bug+payouts): payout CSV export drops the currency column for merchants with 2+ payout accounts (e.g. mid_7Q2KX9), since the 2026-01-14 release; likely root cause PAY-1164 serializer refactor (Aisha Rahman). Zendesk #48812, #48655. Draft was not yet submitted.",
+   "actions": [
+    "work-task",
+    "debugging",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0016",
+   "kind": "fact",
+   "text": "Toronto Hydro (account 6620 1187 33) is not on pre-authorized payment and Riya has paid close to the due date twice, so bills are paid manually. January 2026 bill $164.28 due 2026-02-03; average bill $128.40/month; winter about 30% above average. Riya accepted payment reminders (set 2026-01-30 12:00 for this one).",
+   "actions": [
+    "finance",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0017",
+   "kind": "fact",
+   "text": "Product terminology: payouts to merchants arrive by EFT (batched, next business day, low cost), not by wire (individual, same-day, $15-$50+); Riya is irritated when sales decks use them interchangeably.",
+   "actions": [
+    "work-task",
+    "message",
+    "docs"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0018",
+   "kind": "plan",
+   "text": "Meeting 'Payouts dashboard: empty states' Tue 2026-01-27 10:00-10:25 with Aisha (accepted) and Diego (tentative, suggested async in Figma); Riya chose to keep the meeting. Agenda: empty-state copy, loading skeleton, owner of Looker link.",
+   "actions": [
+    "schedule",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0019",
+   "kind": "fact",
+   "text": "Riya is learning Spanish (writes to the assistant in Spanish for practice, accepts corrections) and is preparing for the DELE B2 exam. She often gets noun-gender exceptions wrong: el problema, el mapa, el tema, la mano.",
+   "actions": [
+    "learning",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0020",
+   "kind": "plan",
+   "text": "Kitchen renovation: contractor Nate (Northline Renovations) quoted the backsplash at $3,860 for zellige install vs $1,420 for ceramic lookalike and needs a decision by Fri 2026-01-30 to keep the tiling crew slot. Riya likes white or sage zellige; photos saved in notes 'kitchen reno / backsplash ideas 2'. Not yet decided as of 2026-01-22.",
+   "actions": [
+    "home",
+    "purchase",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0021",
+   "kind": "plan",
+   "text": "Morse Street PS (Leo's school, Grade 2) deadlines: February pizza lunch order and payment in School Cash Online and Riverdale Farm trip permission form (trip Thu 2026-02-12) both due Fri 2026-01-30; school bake sale 2026-02-13. Riya added both to her to-do for Thu 2026-01-29.",
+   "actions": [
+    "family",
+    "reminder",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0022",
+   "kind": "plan",
+   "text": "Riya is thinking of taking Leo to visit Grace and Daniel in Ottawa over the Victoria Day long weekend, Sat 2026-05-16 to Mon 2026-05-18; no fun-activities research saved from last spring. Offered to search Leo-friendly activities.",
+   "actions": [
+    "travel",
+    "family",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0023",
+   "kind": "preference",
+   "text": "Riya muted the 'Parking garage access changes' all-staff thread (Lumen Pay All) and archived 304 LinkedIn notification emails, keeping real messages; she may later want LinkedIn job alerts switched to weekly. She prefers low email noise.",
+   "actions": [
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0024",
+   "kind": "plan",
+   "text": "Riya told Morse Street School Council (reply sent 2026-01-22) she can't volunteer for the 2026-02-13 bake sale but will gladly help with the spring fair (setup, booth shift) and asked to be kept on that list.",
+   "actions": [
+    "message",
+    "family",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0025",
+   "kind": "plan",
+   "text": "Riya's car is a Mazda CX-5; auto insurance premium rose again in Jan 2026 and she wants to shop around. Policy number, insurer and term end date are NOT in email or notes (paper or insurer app); she planned to send a photo of the renewal letter. Plan: get quotes 30-45 days before term end.",
+   "actions": [
+    "finance",
+    "purchase",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0026",
+   "kind": "episode",
+   "text": "Diego Fernandez is moving apartments in Ontario and his landlord wants to deduct from a 'damage deposit'; Riya was told damage deposits are not allowed under the Ontario Residential Tenancies Act, he can file an LTB T1 within a year, and she planned to forward the CLEO page.",
+   "actions": [
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0027",
+   "kind": "preference",
+   "text": "Leo (age 6-7) is obsessed with chess from his school club. Recommended Dinosaur Chess ($6.99 one-time, no ads, no in-app purchases, ages 5-8) now and ChessKid free tier later; Riya wants kids' apps with no ads or loot-box mechanics. Purchase on the iPad not yet confirmed.",
+   "actions": [
+    "purchase",
+    "family",
+    "learning"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0028",
+   "kind": "person",
+   "text": "Daniel Okafor (Sam's father) had a knee replacement in January 2026; it went fine, but he is avoiding long stairs and long drives for a while. Keep in mind for visits and plans with Grace and Daniel in Ottawa.",
+   "actions": [
+    "travel",
+    "family",
+    "health"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0029",
+   "kind": "person",
+   "text": "Tom Becker likes single-malt Scotch, especially Lagavulin; for his farewell-to-the-old-office card the team is chipping in for a bottle (Lagavulin 16 about $150 at LCBO). Because it is over $100, collect who is chipping in before buying.",
+   "actions": [
+    "purchase",
+    "finance",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0030",
+   "kind": "rule",
+   "text": "Riya's 'For the assistant' note (updated 2026-02-03) is her authoritative standing-instructions list; re-read it when she says it changed.",
+   "actions": [
+    "message",
+    "purchase",
+    "travel"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0031",
+   "kind": "rule",
+   "text": "PRIVATE: Riya's therapist is Joanne; sessions every other Tuesday 17:30 over video. Keep it ONLY on her personal calendar, never on the shared family calendar, and never mention it in anything Sam or others can see.",
+   "actions": [
+    "schedule",
+    "health",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0032",
+   "kind": "rule",
+   "text": "Flights: book Air Canada by preference (Riya is Aeroplan 25K), aisle seats, never basic economy.",
+   "actions": [
+    "travel",
+    "booking",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0033",
+   "kind": "rule",
+   "text": "Bill reminders: set them 3 days before the due date.",
+   "actions": [
+    "reminder",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0034",
+   "kind": "plan",
+   "text": "Riya postponed the DELE B2 Spanish exam from Sat 2026-05-23 to Sat 2026-11-21 (09:00-14:00, Toronto test centre) because the Instant Payouts beta left no study time this spring. Offered to draft a study plan backwards from 21 Nov.",
+   "actions": [
+    "learning",
+    "schedule",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b04:m0035",
+   "kind": "episode",
+   "text": "Snow-day indoor games for Leo (list from 2026-01-27, notes 'Snow day indoor games'): floor is lava, sock skating relay, blanket fort with flashlight reading, painter's tape hopscotch, indoor scavenger hunt, balloon keep-up. Leo wants floor-is-lava again.",
+   "actions": [
+    "family"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/life/cards/life-sleep-b04.json"
+}
