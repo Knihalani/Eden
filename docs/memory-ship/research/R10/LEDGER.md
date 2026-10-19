@@ -1387,3 +1387,12 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   sample, even at the last tool call; the check would have to run on something about as fast as a small hosted model
   on a good day (≈ 1–3 s; not measured here). Caveats: one machine, one model, n = 12, and writes were denied, which
   ends edit turns early (more calls would follow in a real edit turn, so the later-call counts are a floor).
+
+## C8-E5 · 2026-10-19 · Could the check run late and deliver at the next turn? (post hoc label check)
+- **Idea:** with no time pressure, a slow D37 model checks turn t in the background, and its packet is delivered at
+  turn t+1's Submit (model-free at the hook). It helps only if turn t+1 needs what turn t needed.
+- **Labels (dev human turns with a need and an earlier human turn in the same session):** turns whose needs or
+  in-context items overlap the previous turn's: code 0 of 37, life 0 of 59. A further 18 of 55 code and 20 of 79 life
+  need turns are the first human turn of their session, with no earlier turn to check.
+- **Verdict: dead on this benchmark.** Each need in StreamBench is its own moment. This may understate continuity in
+  real work (the worlds were authored that way), but nothing here supports building it.

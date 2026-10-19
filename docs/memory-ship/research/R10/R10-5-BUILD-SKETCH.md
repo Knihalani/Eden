@@ -48,6 +48,13 @@ slice spec. If R10-5 is approved, a slice turns this into one under the normal l
      - `verify_nim.py` runs the re-measure in one command once `NVIDIA_API_KEY` is in the environment (C8-T1). It
        prints the quality numbers and p50/p95 latency.
 
+## What does not get around the 3-second budget
+
+- **Checking late and delivering at the next turn** (C8-E5): on this benchmark a need turn never shares a need with
+  the turn before it (code 0 of 37, life 0 of 59).
+- **A model-free copy of the checker** (C7-E2): it picks no better than the hook's matcher.
+- So the choice is a fast hosted small model during the turn, or no checker.
+
 ## Not measured yet
 
 - The checker's own latency on either provider (C8-E4 measured only the budget, on 12 sessions).
