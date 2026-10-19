@@ -1,0 +1,156 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s007-e006",
+   "scores": [
+    2,
+    3,
+    3,
+    3
+   ],
+   "why": "All give hx-disabled-elt + hx-sync; R0's hx-disabled-elt=\"this\" on the form won't actually disable the button."
+  },
+  {
+   "event": "code-s007-e027",
+   "scores": [
+    2,
+    2,
+    2,
+    3
+   ],
+   "why": "All plan retry correctly; only R3 accounts for uncommitted unrelated work on the current branch and cuts a fresh branch."
+  },
+  {
+   "event": "code-s007-e039",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly read the trace and propose tracing the missing lineItems data before fixing."
+  },
+  {
+   "event": "code-s008-e009",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All plan proper from/to route tests, coverage check and bullet summary."
+  },
+  {
+   "event": "code-s013-e000",
+   "scores": [
+    2,
+    3,
+    3,
+    3
+   ],
+   "why": "All correct; R0 references an unexplained 'PR' usage grep."
+  },
+  {
+   "event": "code-s018-e010",
+   "scores": [
+    3,
+    3,
+    2,
+    3
+   ],
+   "why": "Node 18 LTS is known; R2 asks for the version instead of using it."
+  },
+  {
+   "event": "code-s018-e021",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All leave auth to Lena and add an accessible copy button."
+  },
+  {
+   "event": "code-s020-e014",
+   "scores": [
+    3,
+    2,
+    3,
+    3
+   ],
+   "why": "'Do it' refers to font fix; R1 also does expand=lineItems first, overreaching."
+  },
+  {
+   "event": "code-s020-e019",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All acknowledge the e2e-before-PR rule appropriately."
+  },
+  {
+   "event": "code-s020-e034",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly note background suite and typecheck still running."
+  },
+  {
+   "event": "code-s021-e035",
+   "scores": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "why": "Infra is Pulumi TS and needs team/env tags; R0/R1/R3 miss tags, R2 uses stale terraform and asks known team value."
+  },
+  {
+   "event": "code-s022-e017",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All add rethrow test and remove CHANGELOG emoji correctly."
+  },
+  {
+   "event": "code-s027-e049",
+   "scores": [
+    1,
+    3,
+    1,
+    1
+   ],
+   "why": "History shows invoices list already has --json; only R1 checks before adding a duplicate flag."
+  },
+  {
+   "event": "code-s028-e017",
+   "scores": [
+    3,
+    3,
+    3,
+    2
+   ],
+   "why": "All use shadcn Button, lucide icon, aria-label; R3 schedules the sweep immediately despite 'later'."
+  },
+  {
+   "event": "code-s033-e016",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All reasonable first steps to diagnose the invoice-number race."
+  }
+ ]
+}
