@@ -10,6 +10,7 @@ item under each generator; recall@k and the share at rank ≤ 3 (a scale proxy).
     python3 benchmarks/memory-stream/recall_funnel.py --cards                         (C11-E4: dream action cards)
     python3 benchmarks/memory-stream/recall_funnel.py --worlds life --episodes        (C11-E5: episodic layer)
     python3 benchmarks/memory-stream/recall_funnel.py --growth                        (C11-E6: channel growth)
+    python3 benchmarks/memory-stream/recall_funnel.py --rare                          (C11-E7: no hub entities)
 """
 import argparse, datetime, glob, json, math, os, re, sys
 
@@ -456,6 +457,40 @@ def growth(world, thr=0.5):
           f"N >= {med}: {sum(hi)}/{len(hi)} = {sum(hi) / len(hi):.3f}")
 
 
+def rare(world):
+    """C11-E7: the entity channel restricted to entities on at most max(5, 0.02 · N) visible rows."""
+    g = Generators(world)
+    pts, hits, tot = [], {"entity": 0, "rare entity": 0}, 0
+    for e, need in need_turns(g, world):
+        vis = {r["id"] for r in g.lex.visible(e["_order"])}
+        n = len(vis)
+        df = {}
+        for i in vis:
+            for x in g.ents[i]:
+                df[x] = df.get(x, 0) + 1
+        h = max(5, 0.02 * n)
+        ment = g.mentioned(M.strip_paste(e["text_all"]) + " " + g.ctx.get(e["id"], ""))
+        rare_m = {x for x in ment if df.get(x, 0) <= h}
+        ent = {i for i in vis if g.ents[i] & ment}
+        rent = {i for i in vis if g.ents[i] & rare_m}
+        if n >= 20:
+            pts.append((n, len(rent)))
+        for item in need:
+            cover = [i for i in vis if item in g.by_id[i]["covers"]]
+            if cover:
+                tot += 1
+                hits["entity"] += any(i in ent for i in cover)
+                hits["rare entity"] += any(i in rent for i in cover)
+    xy = [(math.log(n), math.log(m)) for n, m in pts if m]
+    mx, my = sum(x for x, _ in xy) / len(xy), sum(y for _, y in xy) / len(xy)
+    b = sum((x - mx) * (y - my) for x, y in xy) / sum((x - mx) ** 2 for x, _ in xy)
+    frac = sorted(m / n for n, m in pts)
+    sizes = sorted(m for _, m in pts)
+    print(world, "needed items with a covering row", tot, {k: f"{v}/{tot} = {v / tot:.3f}" for k, v in hits.items()})
+    print(f"   rare entity: slope b {b:.3f}, empty {sum(1 for _, m in pts if not m)}/{len(pts)}, "
+          f"median share of N {frac[len(frac) // 2]:.3f}, median / max size {sizes[len(sizes) // 2]} / {sizes[-1]}")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--worlds", nargs="*", default=["code", "life"])
@@ -465,6 +500,7 @@ if __name__ == "__main__":
     ap.add_argument("--cards", action="store_true", help="C11-E4 dream action cards")
     ap.add_argument("--episodes", action="store_true", help="C11-E5 episodic layer")
     ap.add_argument("--growth", action="store_true", help="C11-E6 channel growth with store size")
+    ap.add_argument("--rare", action="store_true", help="C11-E7 entity channel without hub entities")
     ap.add_argument("--thr", type=float, default=0.5, help="--actions: Jev threshold for a turn's action types")
     a = ap.parse_args()
     for w in a.worlds:
@@ -476,5 +512,7 @@ if __name__ == "__main__":
             episodes(w)
         elif a.growth:
             growth(w)
+        elif a.rare:
+            rare(w)
         else:
             (channels if a.channels else missing if a.missing else run)(w)
