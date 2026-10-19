@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s036-e003", "scores": [1, 2, 1, 2], "why": "$45,897 projected already exceeds ~$43,636 base; R0 wrongly says only above $45,897; R2 asks needlessly; R3 gives tally."},
+{"event": "life-s037-e004", "scores": [1, 1, 1, 1], "why": "Last cake was Bobbette & Belle 8-inch vanilla ($68); all claim not to know it."},
+{"event": "life-s037-e009", "scores": [3, 3, 3, 3], "why": "All give a fitting short thank-you draft held for approval."},
+{"event": "life-s046-e021", "scores": [3, 3, 3, 3], "why": "All book a 25-min morning sync with agenda; R1 notes focus block and window."},
+{"event": "life-s046-e029", "scores": [2, 2, 2, 3], "why": "Rule: correct every Spanish mistake inline; only R3 fixes 'Soy en la oficina' to 'Estoy'."},
+{"event": "life-s047-e019", "scores": [2, 2, 2, 3], "why": "Car is with Intact, renews each April; only R3 uses it. Others give generic but sound advice."},
+{"event": "life-s048-e000", "scores": [3, 3, 3, 3], "why": "No observation on file at this point; all offer to look it up, metric where mentioned."},
+{"event": "life-s050-e016", "scores": [2, 1, 2, 2], "why": "R1 asks Leo's age though it's known (6); none apply refundable/hotel prefs; otherwise reasonable."},
+{"event": "life-s051-e002", "scores": [1, 2, 2, 2], "why": "R0 cites stale Jan 12 reno start for February week; others just defer to calendar pull."},
+{"event": "life-s052-e008", "scores": [1, 1, 2, 2], "why": "Known weak spots (ser/estar, por/para, cuando subjunctive, gender); R2/R3 partially use them, none gives the quiz."},
+{"event": "life-s057-e000", "scores": [3, 3, 2, 2], "why": "Rule: no date to sales until Aisha signs off; R0/R1 apply it, R2/R3 ignore sign-off."},
+{"event": "life-s057-e015", "scores": [3, 1, 3, 1], "why": "Tom likes Lagavulin per Feb notes; R0/R2 recall it, R1/R3 claim not to know."},
+{"event": "life-s058-e000", "scores": [3, 3, 3, 2], "why": "Light reply fits; R3 adds unprompted passport to-do check."},
+{"event": "life-s058-e002", "scores": [2, 3, 3, 2], "why": "Flight prefs now Air Canada, no basic economy, aisle, CAD; R1/R2 apply them, R0/R3 don't."},
+{"event": "life-s058-e007", "scores": [3, 3, 3, 3], "why": "No calendar data on record; all reasonably offer to pull Tom's calendar."}
+]}
