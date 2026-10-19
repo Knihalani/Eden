@@ -1786,3 +1786,18 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   none, from the row text and kind alone (`dream/<world>/out/tags-*.json`).
 - **Measure:** the action channel's coverage of needed items, its union with C11-E1's channels, and pool sizes.
   No verdict rule; it decides whether the registry goes into the build plan.
+
+## C11-E3 · 2026-10-19 · What the dreaming step leaves out (diagnostic)
+- **Needed items absent even from the session-end store** (dev need turns), by the world's item kind:
+  - code: fact 4 of 44, preference 1 of 3; procedures, episodes and constraints all stored.
+  - life: **episode 11 of 15**, **tool result 6 of 8**, commitment 2 of 3, fact 2 of 18, routine 2 of 11,
+    relationship 1 of 1; preferences, instructions, plans, people and decisions all stored.
+- **Every life item, share ever stored by the compiler:** episode 7 of 36, tool result 10 of 30; person 35/35,
+  preference 28/28, plan 42/46, fact 44/48, routine 28/30, instruction 26/27, commitment 16/17, decision 15/17.
+- **Examples missed:** "2026-01-17: Riya asked for photos of zellige tile backsplashes; she did not pick one";
+  "Order confirmation: one 8-inch vanilla cake, pickup 2025-11-08"; "Directions to Glebe, Ottawa, 452 km";
+  "Riya promised her mother a video call every Sunday at 9 pm".
+- **What this says:** the compiler does semantic memory well and drops episodic memory, as its spec told it to
+  ("not one-off requests; not tool output"). Later turns ask "where did we leave the backsplash", "when is the cake
+  pickup". A dreaming system needs an episodic layer next to the semantic one: compact, dated records of what
+  happened and what tools returned, indexed by time and entity, rolled up over time so it stays bounded at scale.
