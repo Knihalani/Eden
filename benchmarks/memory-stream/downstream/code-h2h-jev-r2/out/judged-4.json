@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "code-s100-e000", "scores": [1, 2, 3, 2], "why": "GrowthBook is known; R0 misses it. R1/R3 make unsupported assumptions about which export (web vs different); R2 clean."},
+{"event": "code-s105-e008", "scores": [3, 1, 3, 3], "why": "URL search params is right; R1 invents a useInvoiceQueryState hook with a former name, unsupported."},
+{"event": "code-s105-e015", "scores": [2, 2, 3, 2], "why": "Slugify already exists in api/cli; R2 flags reuse. R0 invents notes and file name; R1/R3 ignore existing helpers."},
+{"event": "code-s106-e004", "scores": [3, 2, 2, 3], "why": "CSP is set in next.config.ts headers(); R1/R2 hedge on whether a CSP exists."},
+{"event": "code-s107-e006", "scores": [2, 1, 2, 1], "why": "A /pricing page already exists in (marketing); R0/R1 miss it. R2/R3 cite unsupported PR #824; R3 misattributes reports edits to Lena."},
+{"event": "code-s108-e000", "scores": [2, 2, 3, 2], "why": "Playwright, pnpm --filter web e2e, port 3000 known; R2 also guards against real email; R3 skips that."},
+{"event": "code-s108-e018", "scores": [3, 3, 3, 2], "why": "All plan correct investigation; R3 raises a comma-escaping bug already fixed (stale)."},
+{"event": "code-s108-e027", "scores": [3, 3, 3, 3], "why": "All grep, fix safe hits, flag API-contract values."},
+{"event": "code-s108-e032", "scores": [3, 1, 3, 3], "why": "R1 claims api tests passed (318) before that run finished; unsupported at that moment."},
+{"event": "code-s108-e036", "scores": [3, 3, 3, 3], "why": "All correct closing acknowledgements; api 318 now confirmed."},
+{"event": "code-s001-e020", "scores": [3, 3, 2, 3], "why": "Reading the build config is appropriate; R2 adds irrelevant destructive-DB promise."},
+{"event": "code-s001-e037", "scores": [3, 3, 3, 3], "why": "All propose a read-only, evidence-based staleness review."},
+{"event": "code-s002-e008", "scores": [3, 3, 3, 3], "why": "All acknowledge rules and run read-only git log on packages/cli/dist, checking tracking."},
+{"event": "code-s003-e015", "scores": [3, 3, 3, 3], "why": "All give correct differences and note Node 18 availability."},
+{"event": "code-s003-e021", "scores": [2, 2, 2, 1], "why": "All miss the cli-invoices-export GrowthBook flag not yet created, which blocks the run; R3 invents ACME_API_URL."}
+]}

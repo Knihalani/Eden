@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "code-s070-e002", "scores": [3, 3, 3, 3], "why": "All give an accurate structuredClone vs JSON round-trip comparison, consistent with earlier answers."},
+{"event": "code-s070-e004", "scores": [3, 3, 3, 3], "why": "Simple acknowledgement; all appropriate."},
+{"event": "code-s070-e012", "scores": [2, 2, 2, 2], "why": "All acknowledge leaving yarn.lock and plan a fix, but none use the history on the shared initials helper in lib/text.ts or the earlier user-avatar fix."},
+{"event": "code-s071-e012", "scores": [3, 3, 3, 3], "why": "All accurately summarize the CSV fix, the tests and the suite result, and offer to commit."},
+{"event": "code-s076-e005", "scores": [3, 3, 3, 3], "why": "Light banter; all accurately note the rename verified clean."},
+{"event": "code-s076-e014", "scores": [3, 3, 2, 3], "why": "The web e2e run is still in progress; the third says nothing is pending and ignores it."},
+{"event": "code-s076-e025", "scores": [3, 3, 3, 3], "why": "All correctly separate keep-alive connection reuse from h2 multiplexing and note TCP head-of-line blocking."},
+{"event": "code-s077-e013", "scores": [3, 2, 2, 3], "why": "Repo uses pnpm 9 and lockfile must be committed; two responses still ask user which install command to use."},
+{"event": "code-s080-e036", "scores": [3, 2, 3, 3], "why": "Solid plans; second distracts with stale 'overdue' status question though API enum is the four given."},
+{"event": "code-s080-e046", "scores": [3, 2, 3, 3], "why": "CLI tests are stdout snapshots so help-text snapshots may change; second ignores that and greps whole repo."},
+{"event": "code-s082-e011", "scores": [3, 3, 3, 3], "why": "All acknowledge the rule and remove the two restating comments, keeping the clock skew one."},
+{"event": "code-s087-e000", "scores": [2, 3, 1, 2], "why": "Tailwind v4 is CSS-first, so the dark variant must be set in globals.css; v3 darkMode/config advice is stale; the third just adds dark: classes again."},
+{"event": "code-s091-e000", "scores": [3, 3, 3, 3], "why": "Nothing known about update checks; all correctly decline to guess and plan to check code."},
+{"event": "code-s091-e007", "scores": [3, 3, 3, 3], "why": "All propose a reasonable formatBytes util with tests and edge cases."},
+{"event": "code-s092-e010", "scores": [3, 3, 3, 3], "why": "All correctly note the web tests are still running and will report."}
+]}
