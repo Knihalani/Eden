@@ -1,0 +1,21 @@
+{
+  "batch": "j00",
+  "judge": "haiku (claude-code subagent)",
+  "cases": [
+    {"event": "code-s036-e010", "needed": ["code-sleep-b03:m0014", "code-sleep-b03:m0015", "code-sleep-b03:m0017"]},
+    {"event": "code-s072-e000", "needed": ["code-sleep-b04:m0001", "code-sleep-b04:m0032", "code-sleep-b05:m0008"]},
+    {"event": "code-s057-e010", "needed": ["code-sleep-b00:m0032"]},
+    {"event": "code-s105-e008", "needed": ["code-sleep-b05:m0021", "code-sleep-b05:m0015", "code-sleep-b01:m0027"]},
+    {"event": "code-s092-e010", "needed": []},
+    {"event": "code-s061-e000", "needed": ["code-sleep-b04:m0015", "code-sleep-b04:m0019", "code-sleep-b04:m0013"]},
+    {"event": "code-s056-e026", "needed": []},
+    {"event": "code-s027-e000", "needed": []},
+    {"event": "code-s048-e000", "needed": []},
+    {"event": "code-s028-e011", "needed": []},
+    {"event": "code-s071-e000", "needed": ["code-sleep-b05:m0035", "code-sleep-b06:m0022"]},
+    {"event": "code-s071-e012", "needed": []},
+    {"event": "code-s060-e015", "needed": ["code-sleep-b03:m0001"]},
+    {"event": "code-s070-e012", "needed": []},
+    {"event": "code-s107-e000", "needed": ["code-sleep-b00:m0044", "code-sleep-b02:m0003"]}
+  ]
+}
