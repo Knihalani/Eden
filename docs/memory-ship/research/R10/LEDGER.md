@@ -976,3 +976,38 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - **Confirmed:** verify − eden ≥ +0.05 on both worlds, and verify > 0 on both.
   - **Not confirmed:** verify − eden < 0 on either world.
   - In between: partial.
+
+## C5-E7 · 2026-10-19 · Head to head on fresh turns: result
+- **Run:**
+  - code 70 turns (25 plan-need, 15 labeler-only, 30 no-need); life 75 (30 / 15 / 30).
+  - Packets: verify fired on code 38/70; eden on code 65/70.
+  - One life case (life-s075-e000) was skipped by a judge call and judged alone afterwards.
+  - `h2h.py code life`.
+- **Numbers** (condition − none, mean per group; better/worse turn counts):
+
+  | World | Group | n | Eden (dated) | Verify (dated) |
+  |---|---|---|---|---|
+  | code | plan-need | 25 | +0.08 (5 / 3) | **+0.56 (13 / 2)** |
+  | code | labeler-only | 15 | −0.2 (0 / 3) | −0.067 (3 / 3) |
+  | code | no-need | 30 | +0.033 (4 / 2) | +0.067 (5 / 3) |
+  | life | plan-need | 30 | −0.133 (2 / 6) | **+0.6 (15 / 2)** |
+  | life | labeler-only | 15 | +0.067 (3 / 1) | +0.2 (5 / 2) |
+  | life | no-need | 30 | 0.0 (4 / 5) | 0.0 (4 / 4) |
+
+  Per-turn utility with dev's real group shares:
+  - **code:** eden 0.0, verify +0.1134, difference **+0.1134**;
+  - **life:** eden −0.0039, verify +0.1252, difference **+0.1291**.
+
+  Paired bootstrap 95% CI of the difference (turns resampled within groups, 4000 draws): code [−0.0695, +0.2955], life [−0.0441, +0.2893].
+- **Verdict: confirmed by the pre-registered rule** (difference ≥ +0.05 and verify > 0 on both worlds).
+  - Stated plainly: the 95% intervals still include 0. The no-need group carries about 2/3 of the weight, and its 30 turns are noisy. More turns are needed for statistical firmness.
+- **What this establishes:**
+  - On fresh turns, with dated delivery, the off-hook verifier lifts replies where memory is needed: code +0.56, life +0.6, against eden's +0.08 and −0.13.
+  - It does no measurable harm where memory is not needed (+0.07 / 0.0).
+  - It is the first push design that beats the shipping plugin, by its effect on replies, on both worlds.
+- **Caveats:**
+  - One responder run per condition.
+  - All models are Claude.
+  - Latency and cost of the off-hook haiku call are not measured.
+  - Delivery at the first tool call is simulated: the responder sees the packet as context, not mid-turn.
+  - Eden was dated here too, so the comparison is fair, but eden as shipped is undated (C5-E3: about 0 too).

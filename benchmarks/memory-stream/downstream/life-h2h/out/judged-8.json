@@ -1,0 +1,1 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [{"event": "life-s075-e000", "scores": [2, 3, 2], "why": "Response 2 correctly names TekSavvy (Bell cancelled) and customer-owned modem; others look up provider generically, workable but misses known fact."}]}
