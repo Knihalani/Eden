@@ -1,0 +1,353 @@
+{
+ "batch": "life-sleep-b12",
+ "sessions": [
+  {
+   "id": "life-s120",
+   "episodes": [
+    {
+     "text": "2026-08-08 Riya reviewed the transcript of the 'Payouts retry UX review' (Fri 7 Aug, 15:30-16:15, Riya Malhotra, Aisha Rahman, Diego Fernández): decided v1 ships per-payout retry only; bulk retry (needed for merchants with 20+ failed payouts, needs batch endpoint plus idempotency, ~two sprints) goes on the v1.1 list with Diego's flows; Diego will park bulk flows in Figma and add an empty-state hint pointing to the CSV export. Assistant offered a write-up; Riya declined for now (none filed).",
+     "entities": [
+      "Riya Malhotra",
+      "Aisha Rahman",
+      "Diego Fernández",
+      "Payouts retry UX review",
+      "bulk retry",
+      "v1.1",
+      "Figma"
+     ]
+    },
+    {
+     "text": "2026-08-08 Riya asked for the failed payout breakdown by receiving bank for the last 30 days, for Wed 12 Aug roadmap prep. Slack search found no existing pull; PAY-412 (failed-payout reasons tagged in ledger, announced by Aisha Rahman 29 Jul in #payouts-eng) merged 30 Jul. Assistant drafted a request message; open thread: Riya has not said who to send it to or DM vs channel.",
+     "entities": [
+      "Riya",
+      "PAY-412",
+      "Aisha Rahman",
+      "#payouts-eng",
+      "roadmap prep"
+     ]
+    },
+    {
+     "text": "2026-08-08 Background task result: July Visa statement reconciliation matched 41 of 44 transactions to receipts in Drive/Receipts/2026-07; unmatched: Jul 06 Uber Eats $38.22, Jul 14 YVR Duty Free $64.90, Jul 27 Shell Leslie St $71.15; no duplicates; table saved to Drive/Receipts/2026-07/reconciliation.csv.",
+     "entities": [
+      "Visa",
+      "Uber Eats",
+      "YVR Duty Free",
+      "Shell Leslie St",
+      "Drive/Receipts"
+     ]
+    },
+    {
+     "text": "2026-08-08 Weekend digest: Olivia Grant in #sales-product asked for an updated pricing one-pager (no deadline); Diego Fernández shared 'Retry flows v1' in Figma; PAY-431 'Payout status webhook sends duplicate events' moved to In Review by Aisha Rahman; no incidents.",
+     "entities": [
+      "Olivia Grant",
+      "Diego Fernández",
+      "PAY-431",
+      "Aisha Rahman",
+      "#sales-product"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s121",
+   "episodes": [
+    {
+     "text": "2026-08-08 Riya, walking home past Te Aro (983 Queen St E, open until 20:00, pickup wait 10-15 min, Visa ending 4417 on file), asked for a pickup order; assistant asked for drink and milk; Riya cancelled and went home without ordering.",
+     "entities": [
+      "Riya",
+      "Te Aro",
+      "Visa ending 4417"
+     ]
+    },
+    {
+     "text": "2026-08-08 Reminder rem_7f31c2 created for Mon 2026-08-10 08:30 (Toronto, push): renew Leo's expired library card (Toronto Public Library, Pape/Danforth branch or online).",
+     "entities": [
+      "Leo",
+      "Toronto Public Library",
+      "rem_7f31c2"
+     ]
+    },
+    {
+     "text": "2026-08-08 Background task result: replacement patio umbrella options under $80 (fits existing 1.5 in table hole): Canadian Tire CANVAS 9 ft tilt navy $69.99 in stock at Leaside with pickup tomorrow (4.5 stars, 212 ratings, best reviewed); Home Depot Hampton Bay 9 ft beige $74.98 ships 3-5 days; Walmart Mainstays 9 ft grey $49.97 ships 5-7 days (weak crank). Nothing ordered.",
+     "entities": [
+      "Canadian Tire",
+      "Home Depot",
+      "Walmart",
+      "patio umbrella"
+     ]
+    },
+    {
+     "text": "2026-08-08 Evening triage: Northline Renovations sent updated schedule PDF and asks Riya to confirm the countertop template date (open); also Morse Street PS newsletter and Air Canada survey for July trip.",
+     "entities": [
+      "Northline Renovations",
+      "Morse Street PS",
+      "Air Canada"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s122",
+   "episodes": [
+    {
+     "text": "2026-08-11 Riya asked for a Linear ticket draft (not filed): payouts CSV export drops the currency column for merchants with more than one payout account, P2, Payouts project. No existing ticket (found PAY-388 dates in UTC, PAY-402 export timeouts above 50k rows, related code path). Draft given; awaiting Riya's go to file.",
+     "entities": [
+      "Riya",
+      "Linear",
+      "PAY-402",
+      "PAY-388",
+      "CSV export"
+     ]
+    },
+    {
+     "text": "2026-08-11 Calendar conflict flagged: 'Vendor demo: Modern Treasury' Thu 13 Aug 14:00-14:30 overlaps 'Payouts GA readiness check' 14:00-14:45 (organizer Aisha Rahman); suggested moving the demo to Thu 15:00 or Fri 10:00. Not resolved.",
+     "entities": [
+      "Modern Treasury",
+      "Aisha Rahman",
+      "Payouts GA readiness check"
+     ]
+    },
+    {
+     "text": "2026-08-11 Green bin day: Riya's collection day is Wednesday (Leslieville, Toronto); week of Aug 10 is Green Bin + Garbage (Wed 12 Aug), week of Aug 17 Green Bin + Recycling; Civic Holiday delayed the week of Aug 3; bins out by 7:00.",
+     "entities": [
+      "Riya",
+      "TOwaste",
+      "green bin"
+     ]
+    },
+    {
+     "text": "2026-08-11 Background task: Carrier furnace warranty found: Carrier_Warranty_59SC5_Registration.pdf in Drive/Home/Appliances (email from Carrier Canada 2021-11-04); model 59SC5B080E17, serial 2121A43817; 10-year parts limited warranty expires 2031-10-28, labour not covered, heat exchanger 20-year limited.",
+     "entities": [
+      "Carrier",
+      "furnace",
+      "59SC5B080E17"
+     ]
+    },
+    {
+     "text": "2026-08-11 Background task: unopened newsletter senders in last 90 days (0 opens, 4+ emails): Wayfair Canada 31, Old Navy 24, Lenny's Podcast promos 11, Medium Daily Digest 88, Eventbrite Toronto 19, Sport Chek 22, Product Hunt Daily 63, Uber Eats offers 27, Hotels.com deals 14, CB Insights 12, Indeed job alerts 9, Fitbit tips 6. Nothing unsubscribed; awaiting Riya's choice of which to drop.",
+     "entities": [
+      "Riya",
+      "Gmail",
+      "unsubscribe"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s123",
+   "episodes": [
+    {
+     "text": "2026-08-13 Riya asked whether a 9% rent increase for friend Tanvi (condo in Liberty Village, built ~2010) is legal in Ontario. Answer: 2026 guideline is 2.1% for units first occupied before 15 Nov 2018; above-guideline needs LTB approval; Form N1 with 90 days' notice, once per 12 months; if N1 for 9% without LTB application she can pay the guideline amount.",
+     "entities": [
+      "Riya",
+      "Tanvi",
+      "Liberty Village",
+      "Landlord and Tenant Board",
+      "Form N1"
+     ]
+    },
+    {
+     "text": "2026-08-13 Created note 'Tanvi - rent increase (Ontario)' with shareable link notes.example.com/s/k2v9tanvi, for Riya to send Tanvi.",
+     "entities": [
+      "Tanvi",
+      "notes.example.com/s/k2v9tanvi"
+     ]
+    },
+    {
+     "text": "2026-08-13 Morse Street PS notice: first day of school Tue 8 Sep 2026; class lists on Edsby Fri 4 Sep after 15:00; kindergarten staggered entry schedule attached; before-and-after-care registration closes Mon 24 Aug.",
+     "entities": [
+      "Morse Street PS",
+      "Edsby"
+     ]
+    },
+    {
+     "text": "2026-08-13 Renamed 5 Scan_*.pdf files in ~/Downloads by scan date: 2026-07-21-scan.pdf, 2026-07-21-scan-2.pdf, 2026-08-02-scan.pdf, 2026-08-11-scan.pdf, 2026-08-12-scan.pdf.",
+     "entities": [
+      "Riya",
+      "Downloads"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s124",
+   "episodes": [
+    {
+     "text": "2026-08-15 Weekly inbox sweep (unread since Aug 8): Toronto Hydro August bill ready (auto-pay); Morse Street PS reminder that before/after care registration closes Mon 24 Aug; Diego Fernández commented in Figma on 'Retry flows v1' (Aug 13); Canada Post left a parcel at the side door Wed 12 Aug. LinkedIn and Spotify emails archived.",
+     "entities": [
+      "Toronto Hydro",
+      "Morse Street PS",
+      "Diego Fernández",
+      "Canada Post",
+      "Figma"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s125",
+   "episodes": [
+    {
+     "text": "2026-08-17 Passport renewal for Riya Malhotra (ref P-2026-0729-77341, submitted 2026-07-29 at Service Canada Scarborough Town Centre): status PRINTED, in transit as of 2026-08-14, expected by mail by 2026-08-21; needed for December.",
+     "entities": [
+      "Riya Malhotra",
+      "passport",
+      "Service Canada",
+      "P-2026-0729-77341"
+     ]
+    },
+    {
+     "text": "2026-08-17 Gutter cleaning quotes (semi-detached, 2 storeys): Clean Gutters Toronto $189 (Sep 12 or 19); iWash Exterior $215 with photo report (Sep 5); Leaside Handyman Co. $160 cash only, earliest Oct 3, only 14 reviews. None booked.",
+     "entities": [
+      "Clean Gutters Toronto",
+      "iWash Exterior",
+      "Leaside Handyman Co."
+     ]
+    },
+    {
+     "text": "2026-08-17 Riya asked to convert 250 EUR for the Alfama apartment damage deposit: 371.40 CAD at 1.4856 (Bank of Canada, 2026-08-14); card FX likely adds 2-2.5%.",
+     "entities": [
+      "Riya",
+      "Alfama apartment",
+      "EUR",
+      "CAD"
+     ]
+    },
+    {
+     "text": "2026-08-17 Price check Brother HL-L2460DW laser printer: Best Buy $189.99, Staples $169.99 (was $199.99, sale ends Aug 23), Costco.ca out of stock; lowest in 30 days $169.99. Nothing ordered.",
+     "entities": [
+      "Brother HL-L2460DW",
+      "Best Buy",
+      "Staples",
+      "Costco.ca"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s126",
+   "episodes": [
+    {
+     "text": "2026-08-22 Riya's Personal notes since Aug 1 (7): Lisbon ideas for Leo, gift ideas (Hannah olive oil), back to school, Sleep (decided Aug 2026: no caffeine after 2 pm, awake at 1am three nights), Sleep (2), Spanish reading ('Como agua para chocolate', one chapter a week, DELE reading practice, Ch. 1 done), Spanish words (rebozo, champurrado, torreja, nata). Assistant proposed merging the two Sleep notes and the two Spanish notes; awaiting approval.",
+     "entities": [
+      "Riya",
+      "Hannah",
+      "Leo",
+      "DELE",
+      "Como agua para chocolate"
+     ]
+    },
+    {
+     "text": "2026-08-22 Riya's heel is sore after a long run with Marcus and asked for a physio next week after work or Saturday. Queen East Physio & Sport (1150 Queen St E, 4.8, direct billing) initial assessment 60 min $120: Mon 24 Aug 17:30 (Jamie Ko), Wed 26 Aug 18:15 (Jamie Ko), Thu 27 Aug 19:00 (Sara Bhatt), Sat 29 Aug 10:30 (Sara Bhatt). Not yet booked; awaiting choice.",
+     "entities": [
+      "Riya",
+      "Marcus",
+      "Queen East Physio & Sport",
+      "Jamie Ko",
+      "Sara Bhatt"
+     ]
+    },
+    {
+     "text": "2026-08-22 Reordered Earth Rated compostable unscented poop bags 120 ct from Pet Valu: order PV-2290184, total $20.33, free delivery, arriving Wed 26 Aug.",
+     "entities": [
+      "Pet Valu",
+      "Earth Rated",
+      "PV-2290184"
+     ]
+    },
+    {
+     "text": "2026-08-22 To-do added to Home list: call plumber re basement laundry tap dripping, due Mon 2026-08-24.",
+     "entities": [
+      "Riya",
+      "plumber"
+     ]
+    },
+    {
+     "text": "2026-08-22 Background results: AUDIBLE*CA $14.99 charge on Aug 19 is Audible Premium Plus from a trial started Jul 19 on Sam's Amazon account (Visa default card), renews monthly, one credit unused; nothing cancelled, ask Sam. August spending 1-22 Aug $3,912 (groceries $684, dining $211, kids' activities $340); Toronto Hydro auto-paid $142.37, up 18%. Weekend options for Leo: Riverdale Park East outdoor movie Sat 29 Aug 20:15 'Paddington in Peru'; Evergreen Brick Works nature walk Sun 30 Aug 10:00-11:30 $12/child, 6 spots left. Contacts: 6 duplicate pairs merged, 412 remain.",
+     "entities": [
+      "Sam",
+      "Audible",
+      "Visa",
+      "Toronto Hydro",
+      "Leo",
+      "Riverdale Park East",
+      "Evergreen Brick Works"
+     ]
+    },
+    {
+     "text": "2026-08-22 Staging payouts failing with 'bank_timeout' for one partner since ~20:30 (Aisha Rahman in #payouts-eng, not affecting production); outcome to be in Monday's digest. Riya asked for shorter answers going forward.",
+     "entities": [
+      "Aisha Rahman",
+      "#payouts-eng",
+      "Riya"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s127",
+   "episodes": [
+    {
+     "text": "2026-08-22 Riya chose the dishwasher: Bosch 800 Series SHP78CM5N, $1,649 at Canadian Appliance Source (over a Miele; quieter, 42 dBA). Assistant texted Nate (Northline Renovations) the model, cutout 60.9 cm W x 86.0-87.6 cm H x 61.0 cm D and spec sheet link, sent 22:53.",
+     "entities": [
+      "Riya",
+      "Nate",
+      "Northline Renovations",
+      "Bosch SHP78CM5N",
+      "Canadian Appliance Source",
+      "Miele"
+     ]
+    },
+    {
+     "text": "2026-08-22 Grout sealer options for kitchen backsplash: Miracle Sealants 511 Impregnator 946 mL $42.97 Home Depot; Aqua Mix Sealer's Choice Gold 946 mL $54.99 Tile Depot (best stain tests); StoneTech BulletProof 710 mL $49.98 Lowe's; ask whether Nate's crew already seals.",
+     "entities": [
+      "Nate",
+      "Aqua Mix",
+      "Miracle Sealants",
+      "StoneTech"
+     ]
+    },
+    {
+     "text": "2026-08-22 FinTech Toronto panel 'Getting paid faster' Thu 27 Aug 18:30 at MaRS Discovery District (other panelists Dana Whitford of Wealthsimple, Arjun Kapoor of Shopify Payments; contact Meghan): bio (60-80 words, third person) and square headshot (800 px+) due Sun 23 Aug. Assistant offered to draft the bio; open: what to include and which headshot.",
+     "entities": [
+      "Riya",
+      "FinTech Toronto",
+      "MaRS Discovery District",
+      "Dana Whitford",
+      "Arjun Kapoor",
+      "Meghan"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s128",
+   "episodes": [
+    {
+     "text": "2026-08-23 Danforth Smiles confirmed (Aug 21) appointments with Dr. Lin at 822 Danforth Ave on Tue 2026-11-03: Riya cleaning 8:00 am, Leo Malhotra checkup 8:45 am; arrive 10 min early; 48 hours' cancellation; phone 416-555-0182. Assistant offered to add to calendar and reply C; open. Note: Leo's 8:45 appointment clashes with school bell at 8:45, tell school via Edsby.",
+     "entities": [
+      "Riya",
+      "Leo Malhotra",
+      "Danforth Smiles",
+      "Dr. Lin",
+      "Edsby"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s129",
+   "episodes": [
+    {
+     "text": "2026-08-24 Riya asked which summer camp Leo attended and why another was rejected, for Hannah (next year). Email search 'camp registration 2026' and notes search 'camp' found nothing; assistant asked for the camp name or to ask Sam. Open.",
+     "entities": [
+      "Riya",
+      "Leo",
+      "Hannah",
+      "Sam"
+     ]
+    }
+   ]
+  }
+ ]
+}
