@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s051-e006",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly plan to use gh to find the release.yml run and break down job/step timings in background."
+  },
+  {
+   "event": "code-s051-e011",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All set pricing to 60, scan other marketing routes, leave cache ref to user; placeholder-price note is harmless."
+  },
+  {
+   "event": "code-s055-e011",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All rewrite the structure section from the real apps/web layout for Next 15 App Router."
+  },
+  {
+   "event": "code-s056-e008",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "Correct locale mismatch diagnosis; R0 hedges 'if we use next-intl' though next-intl is in use."
+  },
+  {
+   "event": "code-s056-e020",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R0 omits org_id scoping required on every query; R1 and R2 include org scope and branch naming."
+  },
+  {
+   "event": "code-s056-e026",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "R2 uses shadcn AlertDialog, server action, aria-label; R1 cites a 409 not yet existing; R0 skips server-action convention."
+  },
+  {
+   "event": "code-s056-e032",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All route the 409 through problem() helper with test; consistent with branch state."
+  },
+  {
+   "event": "code-s057-e015",
+   "scores": [
+    1,
+    2,
+    2
+   ],
+   "why": "Known gotcha: PgBouncer transaction mode needs prepare: false. R0 omits it; R1/R2 only guess it as hypothesis."
+  },
+  {
+   "event": "code-s061-e007",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All commit to plan-first, wait for approval, for this and future large refactors."
+  },
+  {
+   "event": "code-s068-e017",
+   "scores": [
+    1,
+    2,
+    2
+   ],
+   "why": "None names app/(dashboard)/reports known from history; R0 also wrongly says no rule on adding dependencies."
+  }
+ ]
+}

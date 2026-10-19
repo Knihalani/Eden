@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s011-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All respect no-edit-migration and no-rewrite rules and plan the three tasks sensibly."
+  },
+  {
+   "event": "code-s012-e000",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "All hedge on lint history though Biome is the known linter; CORS plans correct."
+  },
+  {
+   "event": "code-s013-e030",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All plan a grep-driven rename with typecheck and tests."
+  },
+  {
+   "event": "code-s015-e017",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "Explanations correct but all hedge on Next version though Next.js 15 is a known fact."
+  },
+  {
+   "event": "code-s018-e000",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "R1 runs only pnpm dev, missing docker compose db/redis; others check compose and scripts."
+  },
+  {
+   "event": "code-s018-e004",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "R0 asserts Terraform despite stated migration; R1 ignores known infra/ location; R2 uses infra/ and tag rule."
+  },
+  {
+   "event": "code-s021-e006",
+   "scores": [
+    3,
+    2,
+    1
+   ],
+   "why": "R2 claims Node unpinned, stale after the pinning request; R1 says she for the user."
+  },
+  {
+   "event": "code-s021-e028",
+   "scores": [
+    3,
+    3,
+    1
+   ],
+   "why": "R2 claims an existing CI-guarded bench script not yet established; others plan it."
+  },
+  {
+   "event": "code-s021-e031",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "R0 recalls prior hx-sync/hx-disabled-elt fix covering Enter; others answer generically."
+  },
+  {
+   "event": "code-s022-e032",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "R0 drags in unrelated coverage/from-to work; R1 assumes Postgres though DB is MySQL; R2 handles nulls."
+  }
+ ]
+}
