@@ -1,0 +1,156 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s091-e012",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "Empathetic replies; mentioning pending bike slot and feedback log is fine."
+  },
+  {
+   "event": "life-s092-e000",
+   "scores": [
+    2,
+    2,
+    2,
+    3
+   ],
+   "why": "History has every-other-Thursday from 9 Apr; R3 uses it; R2 invents an older Tuesday note; R0/R1 don't know."
+  },
+  {
+   "event": "life-s096-e031",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All short goodnights honoring no-offers request."
+  },
+  {
+   "event": "life-s097-e013",
+   "scores": [
+    2,
+    3,
+    3,
+    3
+   ],
+   "why": "Good non-cheesy lines; R0 ends with a question despite recent no-offers request."
+  },
+  {
+   "event": "life-s097-e019",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All give sensible fort supply lists."
+  },
+  {
+   "event": "life-s100-e025",
+   "scores": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "why": "All recommend one shop but show prices only in rupees, ignoring CAD-with-original rule."
+  },
+  {
+   "event": "life-s102-e002",
+   "scores": [
+    3,
+    3,
+    2,
+    3
+   ],
+   "why": "All say yes and plan indoor play; R2 ends with an offer question after no-offers request."
+  },
+  {
+   "event": "life-s105-e019",
+   "scores": [
+    2,
+    3,
+    2,
+    2
+   ],
+   "why": "Reminders for 30 Jun and 6 Jul already set; only R1 knows; others duplicate or set late ones."
+  },
+  {
+   "event": "life-s106-e000",
+   "scores": [
+    3,
+    3,
+    2,
+    2
+   ],
+   "why": "Unscented fixes all; R0/R1 cite Sam's migraines; R2/R3 offer 2-3 options despite one-pick request."
+  },
+  {
+   "event": "life-s106-e007",
+   "scores": [
+    2,
+    2,
+    2,
+    3
+   ],
+   "why": "Basement kitchen is microwave, hotplate, old fridge; R0-R2 still ask for the list; R3 adds useful plumber prep."
+  },
+  {
+   "event": "life-s107-e022",
+   "scores": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "why": "All tighten the sentence correctly."
+  },
+  {
+   "event": "life-s110-e007",
+   "scores": [
+    3,
+    2,
+    2,
+    3
+   ],
+   "why": "R0/R3 give correct ECCC criteria (2 vs 3+ days, 31/20, humidex 40); R1/R2 hedge."
+  },
+  {
+   "event": "life-s110-e009",
+   "scores": [
+    2,
+    3,
+    3,
+    2
+   ],
+   "why": "Kid-friendly answers; R0/R3 say 'your dog' instead of Biscuit."
+  },
+  {
+   "event": "life-s111-e000",
+   "scores": [
+    3,
+    2,
+    2,
+    2
+   ],
+   "why": "R0 uses booked total and March fares honestly; others recall nothing."
+  },
+  {
+   "event": "life-s111-e035",
+   "scores": [
+    2,
+    2,
+    2,
+    3
+   ],
+   "why": "Leo's swim shirt was forgotten; only R3 notices he lacks it for tomorrow's pool."
+  }
+ ]
+}

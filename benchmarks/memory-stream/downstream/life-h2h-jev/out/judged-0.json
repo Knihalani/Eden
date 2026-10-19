@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s003-e000", "scores": [1, 3, 3, 3], "why": "R0 only promises the table without giving any vocabulary; others deliver correct three-column tables and acknowledge the Tuesday role-play."},
+{"event": "life-s003-e021", "scores": [2, 3, 3, 2], "why": "Ambulance question not in available evidence, so looking it up is fine. R0 odd 'sunflower-seed-free sandwich'; R3 bluntly 'can't tell you'."},
+{"event": "life-s005-e002", "scores": [1, 1, 1, 1], "why": "History HR profile gives Senior Product Manager, merchant payouts and onboarding; all responses claim not to know and defer."},
+{"event": "life-s007-e013", "scores": [2, 2, 2, 2], "why": "Ascari booking correct; none applies known flight preferences (WestJet, direct, aisle, no basic economy) to the Vancouver search."},
+{"event": "life-s013-e020", "scores": [3, 3, 3, 3], "why": "All add the recurring Tuesday 17:30 swim event briefly, matching the request for shorter answers."},
+{"event": "life-s013-e023", "scores": [3, 3, 3, 3], "why": "Simple to-do add; all correct and concise."},
+{"event": "life-s017-e008", "scores": [2, 2, 2, 3], "why": "Route not in available evidence; R3 gives the ~4.5 h estimate supported by history; others only defer."},
+{"event": "life-s018-e010", "scores": [3, 3, 3, 3], "why": "All give sensible Toronto neighbourhoods for a cycling architect who likes old buildings, with brief nod to mom situation."},
+{"event": "life-s018-e017", "scores": [3, 3, 3, 3], "why": "All correctly attribute pastel de nata to Jeronimos monks in Belem, Lisbon, with kid-friendly framing."},
+{"event": "life-s022-e000", "scores": [1, 1, 1, 1], "why": "History already computed Costco answer: 5 trips, $1,141, Executive $130, downgrade to Gold Star before 18 Nov; all ignore it."},
+{"event": "life-s026-e000", "scores": [3, 3, 3, 3], "why": "All text Nate rather than call and pull invoices; R0 and R3 usefully include known invoice NR-2207."},
+{"event": "life-s027-e029", "scores": [3, 3, 3, 3], "why": "Light banter, all appropriate; R3 ties in the ongoing reno nicely."},
+{"event": "life-s027-e031", "scores": [3, 3, 3, 3], "why": "All capture Jess, Mon/Wed/Fri noon, $25, $75/week, calendar and budget; R2/R3 flag Monday cabinet delivery reasonably."},
+{"event": "life-s028-e014", "scores": [3, 3, 3, 3], "why": "All accurately recap Felipe budget ($729 vs $350), the six-risk Notion page, and pending grocery pull."},
+{"event": "life-s030-e000", "scores": [3, 3, 3, 2], "why": "R0-R2 give the full tres tristes tigres; R3 gives a non-standard shortened version, though its cuando twister is clever."}
+]}

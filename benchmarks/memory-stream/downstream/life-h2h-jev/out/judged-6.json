@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s023-e017", "scores": [3, 2, 2, 3], "why": "R1/R4 use Aisha's doc as pre-read; R4 also avoids Wed pickup. R2 earliest-slot ignores constraints; R3 thin."},
+{"event": "life-s025-e000", "scores": [2, 2, 2, 3], "why": "R4 uses Q4 plan workstreams, bank partner migration risk and 2.5-engineer capacity; others generic."},
+{"event": "life-s025-e036", "scores": [3, 3, 2, 3], "why": "Typical 2-3+ weeks; R3 gives no estimate at all, just defers."},
+{"event": "life-s026-e012", "scores": [3, 2, 3, 2], "why": "13th is Thu 13 Nov; R1 resolves date, R3 avoids Tom 1:1 at 14:00; R2/R4 ignore Thursday context."},
+{"event": "life-s035-e008", "scores": [3, 3, 3, 3], "why": "All give sensible daycare tour questions."},
+{"event": "life-s037-e000", "scores": [3, 3, 3, 3], "why": "Warm brief chit-chat replies, all fine."},
+{"event": "life-s037-e011", "scores": [1, 1, 3, 2], "why": "Sam is vegetarian; R1/R2 roast chicken main. R4 vegetarian but omits sending Hannah text."},
+{"event": "life-s037-e017", "scores": [3, 3, 2, 2], "why": "Brownies suit stirring/no waiting; R2 nut-free for Leo. Loaf needs long wait; molten cakes not morning bake."},
+{"event": "life-s037-e020", "scores": [3, 3, 3, 3], "why": "Neither flight search nor podcast note available; all honestly search rather than guess."},
+{"event": "life-s040-e009", "scores": [3, 3, 3, 3], "why": "All set reminder and fix the 1:1 copy to Wed 11:30 sensibly."},
+{"event": "life-s040-e018", "scores": [2, 3, 2, 3], "why": "Tripling correct; R2/R4 use metric/Celsius preference, R2 nut-free for Leo."},
+{"event": "life-s042-e008", "scores": [2, 2, 3, 2], "why": "Only R3 flags clash with Tue/Thu 6:30 runs with Marcus."},
+{"event": "life-s045-e000", "scores": [2, 3, 3, 2], "why": "R2/R3 recall Old Navy needs login to unsubscribe; R1/R4 miss it."},
+{"event": "life-s046-e013", "scores": [3, 3, 3, 3], "why": "No score known; all look it up rather than guess."},
+{"event": "life-s046-e016", "scores": [3, 3, 3, 3], "why": "All correctly distinguish batched EFT from same-day final wire."}
+]}
