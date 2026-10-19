@@ -1,0 +1,21 @@
+{
+ "batch": "j09",
+ "judge": "haiku (claude-code subagent)",
+ "cases": [
+  {"event": "code-s047-e031", "needed": []},
+  {"event": "code-s091-e000", "needed": []},
+  {"event": "code-s007-e036", "needed": []},
+  {"event": "code-s047-e032", "needed": []},
+  {"event": "code-s051-e006", "needed": []},
+  {"event": "code-s038-e000", "needed": []},
+  {"event": "code-s058-e000", "needed": ["code-sleep-b03:m0009"]},
+  {"event": "code-s022-e008", "needed": ["code-sleep-b00:m0023"]},
+  {"event": "code-s088-e000", "needed": []},
+  {"event": "code-s068-e023", "needed": ["code-sleep-b03:m0024", "code-sleep-b00:m0025"]},
+  {"event": "code-s045-e007", "needed": []},
+  {"event": "code-s027-e007", "needed": []},
+  {"event": "code-s027-e049", "needed": ["code-sleep-b01:m0011", "code-sleep-b00:m0050"]},
+  {"event": "code-s003-e000", "needed": ["code-sleep-b00:m0003"]},
+  {"event": "code-s057-e028", "needed": []}
+ ]
+}
