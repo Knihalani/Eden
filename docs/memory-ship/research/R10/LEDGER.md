@@ -1050,3 +1050,26 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - **Firm** if the pooled 95% CI lower bound of verify − eden is > 0 on both worlds.
   - **Lead stands** if the point estimate stays ≥ +0.05 on both but a CI includes 0.
   - **Weakened** if the point estimate falls below +0.05 on either world.
+
+## C6-E1 · 2026-10-19 · Firming up the head-to-head: result
+- **Run:** 75 new code turns and 94 new life turns (all judged), via `h2h.py code life --pool h2h2`.
+- **Pooled with C5-E7** (condition − none per group; better/worse turn counts):
+
+  | World | Group | n | Eden (dated) | Verify (dated) |
+  |---|---|---|---|---|
+  | code | plan-need | 25 | +0.08 (5 / 3) | +0.56 (13 / 2) |
+  | code | labeler-only | 30 | −0.167 (0 / 5) | −0.033 (4 / 4) |
+  | code | no-need | 90 | −0.022 (8 / 10) | −0.011 (12 / 13) |
+  | life | plan-need | 49 | −0.02 (5 / 8) | **+0.49 (20 / 2)** |
+  | life | labeler-only | 30 | +0.233 (9 / 1) | +0.3 (13 / 5) |
+  | life | no-need | 90 | −0.022 (7 / 10) | +0.056 (12 / 8) |
+
+  Per-turn utility, pooled:
+  - **code:** verify +0.0656, eden −0.0325, difference **+0.0981**, 95% CI **[−0.0158, +0.2158]**;
+  - **life:** verify +0.1676, eden +0.033, difference **+0.1346**, 95% CI **[+0.0352, +0.2332]**.
+
+  New turns alone: code difference +0.0228 [−0.1033, +0.1489] (no plan-need turns remained for code); life +0.0973 [−0.0392, +0.2305].
+- **Verdict, by the rule: lead stands** (point estimates ≥ +0.05 on both worlds, but the code CI includes 0).
+  - **Firm on life.** The dated verifier beats today's plugin, with the CI above 0.
+  - **Code is not firm.** Its advantage comes entirely from plan-need turns, and all 55 dev plan-need turns are now used. Code no-need turns are a wash for both systems.
+- **Next for code:** the only way to firm it up on dev is a second responder and judge run on the same turns (to cut noise), or new need turns from the test split or a fresh code world. The test split stays unlooked-at, so this needs a decision in a later cycle.
