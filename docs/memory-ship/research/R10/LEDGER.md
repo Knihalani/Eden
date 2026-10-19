@@ -1913,3 +1913,23 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   N. The plan projects set sizes to N = 10^4, 10^5 and 10^6 from b (an extrapolation over 2–4 orders of magnitude,
   stated as such).
 - **No verdict rule.**
+- **Result (2026-10-19, `python3 benchmarks/memory-stream/recall_funnel.py --growth`):** turns with N ≥ 20: code
+  54, life 76.
+
+  | World | Channel | Slope b | Empty sets | Median share of N | Projected at 10^4 / 10^5 / 10^6 |
+  |---|---|---|---|---|---|
+  | code | entity | 0.624 | 0/54 | 0.124 | 233 / 980 / 4123 |
+  | code | time | — | 54/54 | — | (no code turn names a weekday or month a row holds) |
+  | code | action | 1.168 | 0/54 | 0.419 | 7558 / 111410 / 1642154 |
+  | life | entity | 1.176 | 1/76 | 0.195 | 2737 / 41044 / 615407 |
+  | life | time | 0.562 | 23/76 | 0.020 | 88 / 320 / 1166 |
+  | life | action | 1.184 | 3/76 | 0.480 | 8328 / 127122 / 1940454 |
+
+  G0@15 recall by store size: code N < 279: 18/27 = 0.667, N ≥ 279: 19/31 = 0.613; life N < 331: 15/33 = 0.455,
+  N ≥ 331: 18/36 = 0.500.
+- **What this says:** the action channel grows in proportion to the store (b ≈ 1.17 in both worlds), so as a set
+  it is unusable at scale; it must be replaced by something fixed-size (cards). The entity channel is sublinear in
+  code but linear in life, where a few hub entities (the user's partner, children, home) sit on a fifth of all rows:
+  hub entities need their own fixed-size cards, and the entity channel should use only rarer entities. The time
+  channel stays small. Over this range (tens to hundreds of rows) G0's top-15 recall does not fall with N; whether
+  it holds at 10^5 rows is untested. The projections extrapolate 2–4 orders of magnitude past the data.
