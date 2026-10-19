@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s108-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 knows she owns the B1-B2 Gram\u00e1tica, wants Mexican Spanish and Canadian retailers; R1 knows none of it."
+  },
+  {
+   "event": "life-s143-e009",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 flags Thu 18 Mar is her father's death anniversary, when she wants a light day; R0 misses it."
+  },
+  {
+   "event": "life-s097-e004",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "R1 gives approx April 2022, bread stealing, siren howling, food sensitivity; R0 wrongly says nothing saved."
+  },
+  {
+   "event": "life-s038-e000",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "R0 cites the Home Depot filter order and checks pickup; R1 wrongly says nothing saved."
+  },
+  {
+   "event": "life-s155-e022",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "R0 gets the Dec 10 early leave and Lisbon OOO from 21 Dec, plus the snow-day note; R1 knows nothing."
+  },
+  {
+   "event": "life-s007-e000",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "R1 drafts with walk, bread, siren info and explains howling from July chat; R0 knows nothing."
+  },
+  {
+   "event": "life-s096-e007",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Both give good kid explanations; R0 misdates the earlier question/article reference."
+  },
+  {
+   "event": "life-s126-e005",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 links prior plantar fasciitis, shoe mileage and Saturday swim conflict; R0 lacks the history."
+  },
+  {
+   "event": "life-s056-e000",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "R1 knows March 22, quiet dinner, Ode grinder, Penguins, but hedges on anniversary though June 16 superseded June 8; R0 knows nothing."
+  },
+  {
+   "event": "life-s047-e009",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both order within budget and date; R0 also applies Canadian-retailer preference."
+  }
+ ]
+}
