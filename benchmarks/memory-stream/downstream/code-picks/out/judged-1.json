@@ -1,0 +1,78 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s030-e013",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add pino redaction properly with ESM; equivalent."
+  },
+  {
+   "event": "code-s033-e020",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both proceed with the agreed counter migration concisely."
+  },
+  {
+   "event": "code-s035-e033",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 applies known dueDate UTC-parsing pattern plus clock pinning; R0 generic."
+  },
+  {
+   "event": "code-s035-e058",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 uses known Tailwind v4 CSS-first config; R1 generic but tabular-nums tip is useful."
+  },
+  {
+   "event": "code-s038-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 knows charts in infra/helm per service; R1 generic."
+  },
+  {
+   "event": "code-s038-e019",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both omit the session's earlier POSTHOG_API_KEY ExternalSecret diagnosis."
+  },
+  {
+   "event": "code-s046-e016",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 adds required changeset and handles snapshot tests; R1 misses changeset."
+  },
+  {
+   "event": "code-s057-e010",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "R0 recalls PgBouncer transaction mode needs prepare:false; R1 fails to answer."
+  },
+  {
+   "event": "code-s057-e030",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "R0 misses removeOnComplete gotcha; R1 cites it but idempotency claim relies on stale RabbitMQ-era job."
+  }
+ ]
+}
