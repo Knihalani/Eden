@@ -1,0 +1,10 @@
+{
+ "batch": "v004",
+ "verifier": "typesafe:jev-latest:list",
+ "cases": [
+  {
+   "event": "code-s003-e026",
+   "scores": {}
+  }
+ ]
+}
