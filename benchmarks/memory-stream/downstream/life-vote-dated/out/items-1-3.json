@@ -1,0 +1,141 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s132-e000#1",
+   "response": "Noted: Grace turns 68 on Thursday 19 Nov 2026. Two weeks ahead is Thursday 5 Nov.\nAction: Add 'Grace's 68th birthday' on Thu 19 Nov 2026 and a reminder on Thu 5 Nov to sort her gift."
+  },
+  {
+   "id": "life-s136-e021#1",
+   "response": "TFSA: you contribute after-tax money, and growth and withdrawals are tax-free, with flexible withdrawals. RRSP: contributions are deductible now, and you pay tax on withdrawal, so it helps most when your tax rate now is higher than in retirement.\nAction: None needed; I can text it to Sam if you want."
+  },
+  {
+   "id": "life-s068-e014#1",
+   "response": "My notes only cover the winter market: Sundays 10:00 to 14:00 indoors at Jimmie Simpson Rec Centre until Apr 26 2026, with no Saturday market. I don't have this year's outdoor opening date, so I'll check the market's own listing.\nAction: Look up the Leslieville Farmers' Market's official 2026 season start date and location and report back."
+  },
+  {
+   "id": "life-s140-e033#1",
+   "response": "I'll read Sam's text first in case he already has a dinner plan. Then I'll find something that doesn't need the hotplate, probably takeout or pickup.\nAction: Read Sam's message, then suggest one no-cooking dinner option for tonight based on it."
+  },
+  {
+   "id": "life-s048-e000#1",
+   "response": "I'll pull the observed weather for Ottawa on Sunday the 25th rather than guess, and give temperatures in both Celsius and Fahrenheit so you can pass it to Daniel.\nAction: Pull Ottawa's high, low, snowfall and wind for Sunday the 25th and report them in C and F."
+  },
+  {
+   "id": "life-s037-e017#1",
+   "response": "Make a chocolate yogurt loaf with sprinkles. It's one bowl, he can measure, stir and add the sprinkles, and it's in the oven fast. For January weekend mornings I'd line up a few more projects like that, easy ones where the stirring comes before the waiting.\nAction: Save the loaf recipe for Wednesday and draft a short list of simple weekend-morning baking projects for January."
+  },
+  {
+   "id": "life-s085-e017#1",
+   "response": "Posting the retro reminder now. Fee on a $100 / $1,000 payment:\n\n| Plan | $100 | $1,000 |\n|---|---|---|\n| Starter (2.9% + 30c) | $3.20 | $29.30 |\n| Growth (2.6% + 25c) | $2.85 | $26.25 |\n| Scale (2.2% + 20c) | $2.40 | $22.20 |\n| Enterprise | custom | custom |\n\nAction: Post the retro reminder in #payouts-launch and put the table in a note."
+  },
+  {
+   "id": "life-s026-e000#1",
+   "response": "I'll text Nate, not call or email. One thing to check: my notes had the cabinet delivery down for Thu 16 Oct 2025, 8:00 to 10:00, so Monday would be a change. I'll also pull his invoices into the reno sheet, including the $6,500 progress invoice #NR-2207 and the $8,500 deposit #2 already on file.\nAction: Text Nate 'Are the cabinets still arriving Monday?' (he starts at 7:30), and collect all his invoices into the reno sheet."
+  },
+  {
+   "id": "life-s013-e023#1",
+   "response": "Added.\nAction: Add 'Get passport photos for Leo' to your to-do list."
+  },
+  {
+   "id": "life-s037-e004#1",
+   "response": "I don't have the bakery or the cake saved, so I'll check your email and card history for last time's order rather than guess. Once we know the bakery, I'll check their NYE hours.\nAction: Search email receipts and card history for the cake order, then confirm the order and pickup time with you before placing it."
+  },
+  {
+   "id": "life-s036-e003#1",
+   "response": "A $48,000 budget with a 10% contingency means about $43,636 for the work and about $4,364 for contingency, assuming the 10% is on top of the base. I'll set Nate's revised quote against that and show how much of the contingency it uses.\nAction: Pull Nate's revised quote from email, build the side-by-side against the $48,000, and show the remaining contingency."
+  },
+  {
+   "id": "life-s100-e000#1",
+   "response": "I'll skim this afternoon's all-hands email and give you the four things that actually matter: decisions, dates and anything that affects you.\nAction: Open the email and send you four short bullets."
+  },
+  {
+   "id": "life-s115-e008#1",
+   "response": "I don't have the passport expiry dates in front of me. For the Lisbon trip back on 30 Dec 2026, Schengen countries generally want at least 3 months of validity after departure, so each passport should be good past 30 Mar 2027. I'll check all three, Leo's first.\nAction: Look up each passport's expiry in your Drive and Wallet and compare to 30 Mar 2027, or ask you for a photo of the ID pages if I can't find them."
+  },
+  {
+   "id": "life-s063-e007#1",
+   "response": "Enjoy the porch and the sun. The career day talk can wait until you're ready.\nAction: Leave the talk draft for later and make no changes to your calendar."
+  },
+  {
+   "id": "life-s017-e008#1",
+   "response": "I don't have yesterday's route in front of me, so I'll pull it from the conversation before quoting a time. Whatever it says, the planned time almost certainly didn't include the Big Apple stop, where the bakery and washroom wait can be 15 to 20 minutes around midday.\nAction: Find yesterday's route and give you the planned drive time compared to how long it took."
+  },
+  {
+   "id": "life-s076-e007#1",
+   "response": "I can't give a solid arrival time yet, because I need Leo's Friday dismissal time and Grace and Daniel's address. One catch: under the pickup swap, Hannah normally does Friday pickups for Leo and Jun, so I'll confirm whether you're picking up next Friday.\nAction: Look up Leo's dismissal time and the address, then estimate the arrival time with Friday traffic."
+  },
+  {
+   "id": "life-s087-e031#1",
+   "response": "Sending the text to Hannah. For Olivia, I'll draft the Instant Payouts v1 blurb as a draft only, with no dates, since nothing goes to sales until Aisha signs off and any date reads 'target'. The held draft to Olivia stays unsent.\nAction: Send the text to Hannah, then pull the v1 scope from Linear and the PRD and write a 4-5 line draft for you to review."
+  },
+  {
+   "id": "life-s123-e011#1",
+   "response": "I'll rename the Scan_*.pdf files to the date they were scanned, using each file's date metadata, as YYYY-MM-DD, adding a suffix if two share a date. First I'll show you the list so nothing gets renamed wrong.\nAction: Run a dry run listing old and new names for all Scan_*.pdf files in Downloads and wait for your OK."
+  },
+  {
+   "id": "life-s106-e005#1",
+   "response": "Holding the order. Your basement kitchen has a microwave, an induction hotplate and the old fridge, and the hotplate needs flat-bottom induction pans: the cast iron works, the old aluminium pot doesn't. So think microwave meals and one-pan cast iron dinners.\nAction: Hold the charcoal bag order and draft a 3 to 4 dinner plan that uses only the microwave and the hotplate with cast iron."
+  },
+  {
+   "id": "life-s102-e009#1",
+   "response": "On it: all 12 items are going into one grocery order. The Sandbanks permit isn't booked: 38 were left for Sat 27 Jun as of 17:40 at $21 each, and weekend permits tend to sell out by Thursday evening, so decide with Sam before then. Also, if that Saturday is the rainy one with Jun coming over from 1 to 4, it may be worth rethinking.\nAction: Build the grocery cart with your list and send it to you for a final check, and remind you to ask Sam about PEC tonight."
+  },
+  {
+   "id": "life-s046-e021#1",
+   "response": "Reminder it is. I'll set the hydro payment reminder a few days before the due date and check the date on the bill. I'll book the 25-minute sync with Aisha and Diego next week in a morning slot that works for both, with your three agenda items in the invite.\nAction: Set the hydro reminder, then find a shared morning slot next week and book the 25-minute payouts dashboard empty-states sync."
+  },
+  {
+   "id": "life-s068-e021#1",
+   "response": "I have Dr. Lin at Queen East Dental, 1046 Queen St E. I'll ask for Apr 22 late morning, and if that's taken I'll offer the nearest alternatives.\nAction: Check your calendar for Apr 22 late morning and request the cleaning with Dr. Lin, then confirm the slot with you."
+  },
+  {
+   "id": "life-s002-e020#1",
+   "response": "I can't give an honest read yet because I haven't seen any lesson feedback or practice results.\n- Quickest real read: a 10-minute spoken check with me, or Carlos's assessment.\n- Rule saved: no meetings before 9:30 or after 17:00.\n\nAction: Save the calendar rule and run a short baseline Spanish conversation whenever you're ready."
+  },
+  {
+   "id": "life-s137-e018#1",
+   "response": "Friday at last, and it's been a lot. For next week, the Fintech Meetup talk title and headshot are due 18 Sep.\nAction: None tonight; I'll flag the talk title on Monday."
+  },
+  {
+   "id": "life-s012-e018#1",
+   "response": "Draft: 'Hi neighbours! Street yard sale Saturday Oct 4, 9 to 1, rain date Sunday the 5th. Please set up tables on your own driveway, and no early birds before 9. See you there!'\nAction: Post it to the street group chat once you approve."
+  },
+  {
+   "id": "life-s018-e000#1",
+   "response": "Welcome home. Tuesday after a drive feels twice as long, so go easy on yourself.\nAction: Pull up today's calendar so you can see what's actually left."
+  },
+  {
+   "id": "life-s021-e000#1",
+   "response": "Congratulations on your first half marathon, 2:04:37 at Toronto Waterfront, and a thank-you to Marcus. All three are set. The first Friday reminder is 24 Oct.\nAction: Create a Fridays 15:00 reminder for the #payouts-launch status update with a Linear pre-draft, block Friday evenings for pizza and movie night, and save the race result."
+  },
+  {
+   "id": "life-s105-e000#1",
+   "response": "Riverside Drain & Plumbing (4.7, Broadview Ave) is 24/7 emergency, so I'd try them first for today or Monday. East End Plumbing Co. (4.8, Queen St E) is the backup: service call $129, but their openings in my notes are Tue 21 Oct 8-10 and Wed 22 Oct 13-15. Ask for a frost-free hose bib replacement rather than a washer fix, from $285 installed, and shut off the inside valve in the meantime if you can.\nAction: Check Riverside for same-day or Monday availability and report back, with East End as backup."
+  },
+  {
+   "id": "life-s088-e023#1",
+   "response": "Glad Biscuit's okay. Since chicken has given him itchy skin before, keep an eye on that. For sprint planning, Aisha likes async Slack threads over meetings, so I'd propose cutting payout nicknames and the scheduled-payouts calendar view in a thread and ask her to confirm by Thursday.\nAction: Draft the Slack thread to Aisha for your review before sending."
+  },
+  {
+   "id": "life-s071-e002#1",
+   "response": "Draft to Mummy: 'Hi Mummy, from this week let's talk on Saturdays at 8:30 am my time, which is 6:00 pm for you, because Sunday mornings are taken by Leo's soccer. Kabir can join then if Ira lets him. Love, Riya.'\nAction: Send that to your mom, move the recurring call from Sunday 9:00 to Saturday 8:30 starting this week, and message Kabir the new time."
+  },
+  {
+   "id": "life-s007-e013#1",
+   "response": "Booking Ascari Enoteca for Sat 16 Aug at 19:00 for 5, with the vegetarian pastas and the kids' butter pasta. Flights for Oct 10 to 13 to Vancouver for the three of you are next.\nAction: Book Ascari for 19:00 on Sat 16 Aug for 5, then search Vancouver round trips for three, out Oct 10 and back Oct 13, and send options."
+  },
+  {
+   "id": "life-s096-e031#1",
+   "response": "Night, Riya.\nAction: None."
+  },
+  {
+   "id": "life-s077-e012#1",
+   "response": "Draft: 'Hi, thanks for organizing the street party. I can take the 2-4pm volunteer slot at the lemonade table, but I won't be able to help with setup. Looking forward to it. Best, Riya'\nAction: Save it as a draft for your review, not sent."
+  },
+  {
+   "id": "life-s150-e000#1",
+   "response": "From my notes as of Aug 26, PAY-1182 (GA readiness checklist, P1) and PAY-1190 (GA announcement email copy, P2, where the copy is your call) both block the GA milestone. PAY-1216, the support macro, needs your tone review but isn't a formal blocker. That may be out of date, so I'll check Linear directly.\nAction: Query Linear PAY for currently blocked tickets and compare with those notes before standup."
+  }
+ ]
+}

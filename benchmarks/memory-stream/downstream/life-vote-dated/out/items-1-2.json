@@ -1,0 +1,185 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s070-e002#1",
+   "response": "Got it, Tom can wait until after dinner. I don't have your library account in front of me, so I'll check which holds are ready for pickup and what's due this week.\nAction: Pull your library holds, list the ready ones with pickup branch and expiry, and list loans due this week."
+  },
+  {
+   "id": "life-s046-e041#1",
+   "response": "Yes, adding both to Thursday's list: Nate's backsplash decision and the Morse Street pizza lunch and Riverdale Farm forms, all due Fri 30 Jan. I don't have a note of what you looked into last spring for the May trip, so I'll search your notes and past chats first and then look at what's on up there that long weekend.\nAction: Add both items to Thursday's to-do list, then search your saved notes for last spring's ideas and check events near Grace and Daniel's over the May long weekend."
+  },
+  {
+   "id": "life-s063-e000#1",
+   "response": "The gap is bigger than 10% makes it look: 45 minutes versus 10 each way is about 70 minutes a day back. I'd tell Marcus to turn the 10% into after-tax dollars per month, then ask what 70 minutes a day is worth to him, and whether the clinic with the short ride has the better caseload and mentorship. If those are close, the bike ride is hard to beat.\nAction: Draft a short message to Marcus with those three questions for you to send."
+  },
+  {
+   "id": "life-s022-e016#1",
+   "response": "Congratulations again on the half. Adding it as your official entry: Toronto Waterfront Half Marathon, October 19, 2025, 2:04:37.\nAction: Add that entry to your running stats and tag it so it lands in the December yearly recap."
+  },
+  {
+   "id": "life-s048-e006#1",
+   "response": "Good timing for a chess phase. I'd start from ChessKid, which is built for children and has no open chat, and Lichess, which is free with no ads at all, but I want to check the current store listings for ads and in-app purchases before I commit to one.\nAction: Check the current App Store and Play listings for ads and in-app purchases, then give you one pick for a 6-7 year old."
+  },
+  {
+   "id": "life-s058-e002#1",
+   "response": "Lovely plan. The August long weekend is the civic holiday weekend, so fares can run high and it's worth looking early.\nAction: Search round-trip fares to Vancouver for Friday to Monday of the August 2026 long weekend, priced for one traveller and for two (you and Leo), and send you rough ranges."
+  },
+  {
+   "id": "life-s087-e029#1",
+   "response": "Here's a draft: 'Hey! Leo and I are heading to the playground and market thing at Riverdale Park East tomorrow around 10:30. Want to come with the kids? No pressure if the day's already full.'\nAction: Send that to Hannah once you say yes, or tweak the wording first."
+  },
+  {
+   "id": "life-s136-e017#1",
+   "response": "Anytime.\nAction: Nothing more needed; the 7:50 reminder stands and I'll send the street-cleaning schedule when I have it."
+  },
+  {
+   "id": "life-s027-e029#1",
+   "response": "A beagle snore that gets mistaken for drilling is impressive. At least he's sleeping hard and Diego got a story out of it.\nAction: None needed."
+  },
+  {
+   "id": "life-s077-e044#1",
+   "response": "Timer's on, 25 minutes. Enjoy the garden beds.\nAction: Start a 25-minute timer now and ping you when it ends."
+  },
+  {
+   "id": "life-s105-e028#1",
+   "response": "Classic beagle invoice stare. He's either collecting for a missed snack or just checking that you're still alive.\nAction: None needed."
+  },
+  {
+   "id": "life-s025-e036#1",
+   "response": "I don't want to guess the mail time to Mumbai, because international letter delivery varies a lot and tends to be slow, so I'll look up Canada Post's current estimate and the last posting date for your deadline.\nAction: Check Canada Post's current delivery estimate for Toronto to Mumbai letter mail and report back."
+  },
+  {
+   "id": "life-s105-e032#1",
+   "response": "You said baking on weekend mornings with Leo is one of your favourite ways to unwind, so I'd build tomorrow around that. Keep it easy: a simple recipe he can help with, since he's good at stirring and bad at waiting, and nothing else scheduled.\nAction: Pick one easy recipe for tomorrow morning, block the morning on your calendar, and leave the rest of the day open."
+  },
+  {
+   "id": "life-s030-e000#1",
+   "response": "Full version: 'Tres tristes tigres tragaban trigo en un trigal, en tres tristes trastos, tragaban trigo tres tristes tigres.' Say it fast and watch Carlos squirm. My notes have your Carlos lesson on Zoom at 20:00 with a 19:30 homework review, so if that's tonight you have time to practise it twice. For the Sunday dread, we can set a hard stop that evening.\nAction: Send you the tongue twister split into phrases for practice, and block a short Sunday evening wind-down before launch week."
+  },
+  {
+   "id": "life-s110-e009#1",
+   "response": "Tell him: the siren sounds like another dog howling from far away, so the dog howls back to say 'I'm here!' It's his way of singing along, and it usually doesn't hurt his ears.\nAction: None needed."
+  },
+  {
+   "id": "life-s150-e015#1",
+   "response": "Poor Leo. I have Dr. Lin at Queen East Dental, 1046 Queen St E, so I'll ask for the earliest after-school slot this week and mention the chipped front tooth, since they may want to see it quickly. I'll check the travel time from home once I know the slot.\nAction: Contact Queen East Dental for an after-school appointment for Leo this week, then confirm the time and the trip duration from home with you."
+  },
+  {
+   "id": "life-s046-e016#1",
+   "response": "An EFT is a batched, low-cost payment that usually lands the next business day. A wire is sent individually, usually settles the same day, can't be recalled once sent, and costs far more per payment. Interac e-Transfer is a third thing, a consumer-oriented near-instant rail.\nAction: Write you a two-line glossary you can drop into the deck comments for sales."
+  },
+  {
+   "id": "life-s051-e006#1",
+   "response": "For jammy ramen eggs, lower cold eggs into boiling water for about 6.5 to 7 minutes, then straight into ice water for 5 minutes before peeling. Marinating them in soy and mirin overnight gives the classic ramen look.\nAction: Set a 7-minute timer for you when you start boiling tomorrow."
+  },
+  {
+   "id": "life-s141-e017#1",
+   "response": "Your DELE B2 is Sat 21 Nov, 09:00-14:00 at the Toronto test centre, so this week should lean toward exam-style practice. I'd do a timed writing task, a listening section and one speaking drill on top of your daily 15 minutes of Anki. I don't have your class day and time in front of me, so I'll find it on the calendar before blocking.\nAction: Find this week's Spanish class on your calendar, block a study session before it, and sketch a plan working back from 21 Nov."
+  },
+  {
+   "id": "life-s018-e010#1",
+   "response": "Happy to distract. For Priya I'd shortlist Cabbagetown for Victorian houses, Riverside and Leslieville for brick rowhouses and bike lanes toward downtown, and Queen West for converted warehouses. Hope your mom's phone turns out to be dead, and let me know when she answers.\nAction: Put together a short comparison of those three neighbourhoods for an architect who bikes, and stay ready to draft messages to your mom."
+  },
+  {
+   "id": "life-s077-e000#1",
+   "response": "I don't have the inspiration you were browsing saved in front of me, so I'll search your notes and saved photos for it first. If there isn't enough, I'll gather fresh options so you can answer Nate before Monday.\nAction: Search your notes and saved photos for the kitchen wall inspiration and report what I find, then collect fresh options if it's thin."
+  },
+  {
+   "id": "life-s027-e031#1",
+   "response": "Got it: Jess from Rover walks Biscuit at noon on Mon, Wed and Fri at $25 a walk, starting Monday. That's $75 a week, roughly $325 a month. It sits alongside your 6:30 am walk and Sam's 9 pm walk.\nAction: Add a recurring Mon/Wed/Fri 12:00 'Jess walks Biscuit' event starting Monday, and add $75/week to the pet budget."
+  },
+  {
+   "id": "life-s002-e000#1",
+   "response": "Done, I'll hold Sunday 9:00 am Toronto time (6:30 pm in Mumbai) for your call with Anjali as a recurring block. For Spanish, I'd do 10 to 15 minutes of short role-plays on most days, using real situations, and I'll pick the topics from whatever Carlos has been working on. What are you working on with him right now?\nAction: Create a recurring Sunday 9:00 am 'Call Mom (Anjali)' block and mark it protected; start a first short Spanish role-play when you're back from the run."
+  },
+  {
+   "id": "life-s106-e000#1",
+   "response": "Drywall dust and old curry is a rough combination. I'd go with activated charcoal bags to absorb the smell, plus a HEPA and carbon air purifier if you want the dust gone fast, and wiping surfaces with a damp cloth helps more than anything scented. I'll find one option that can arrive before the week starts.\nAction: Find one purifier or charcoal option with delivery before Monday and show it to you for approval before ordering."
+  },
+  {
+   "id": "life-s136-e034#1",
+   "response": "I don't have your travel dates or your mom's local time in front of me, so I won't guess either one. I'll check your calendar for the trip, check the weather and rain outlook for her area at those dates, and work out whether it's too late to call now.\nAction: Look up your trip dates and your mom's local time, check the forecast for then, and draft a reply to her."
+  },
+  {
+   "id": "life-s060-e019#1",
+   "response": "Scheduled the Slack message for 9:00 tomorrow. For Priya, some useful questions: What would a great day look like in three years at each office? What does she lose by moving, and what does the firm offer for relocation, pay and timing? If she said no, what's the realistic cost, and what would she regret more in a year?\nAction: Schedule the #payouts-team message for 9:00 tomorrow and write those questions as a short text you can send Priya."
+  },
+  {
+   "id": "life-s110-e007#1",
+   "response": "A heat warning means two or more days of dangerous heat. An extended heat warning means three or more days, so it's the same threshold lasting longer.\nAction: None needed."
+  },
+  {
+   "id": "life-s102-e002#1",
+   "response": "I'll tell Hannah yes for Saturday 1 to 4. For the boys: a Lego build-and-swap challenge, a cushion obstacle course with a timer, a scavenger hunt around the house, and a movie to wind down before pickup.\nAction: Text Hannah a yes for Saturday 1-4, and write the scavenger hunt clues if you want them."
+  },
+  {
+   "id": "life-s020-e016#1",
+   "response": "I'll build it in three sections. Ser vs estar: estar for emotions and where something is, but ser for where an event happens. Por vs para: cause, duration and exchange versus purpose, deadline and recipient. Subjunctive after cuando for the future: 'cuando llegue a casa, te llamo.'\nAction: Build a one-page drill sheet with fill-in-the-blank sentences and an answer key, starting with the cuando llegue example."
+  },
+  {
+   "id": "life-s037-e020#1",
+   "response": "I don't have either on hand: the Ottawa flight comparison isn't something I can see, and I can't see your podcast note's contents either. I'll search your email and notes for both, and if the flights aren't there I'll rerun them for Sam's February PD day.\nAction: Search your email and notes for the earlier Ottawa flight options and open your podcast note, then ask you the PD day date if I have to re-search."
+  },
+  {
+   "id": "life-s006-e000#1",
+   "response": "Three days late is forgivable when the tradition is silly mugs. I'll look for something truly ridiculous that can reach Vancouver fast, and I'll check the delivery date before you commit.\nAction: Find the most ridiculous mug with the fastest shipping to Vancouver and send you one pick with price and arrival date for approval."
+  },
+  {
+   "id": "life-s088-e038#1",
+   "response": "Draft: 'Team, the beta passed 10,000 payouts this week. Each of those is a merchant who got paid on time because of the care you put into this. Thank you, truly.' It's warm without the hype.\nAction: Save it as a draft for you to post tomorrow."
+  },
+  {
+   "id": "life-s017-e012#1",
+   "response": "Nothing I started in this conversation is still running. The Big Apple hours check finished: open 8:00 to 20:00 on Thanksgiving Monday, with the bakery pie counter closing at 19:00. Two things still need an answer from you: whether to cancel or keep Leo's Monday piano, and the Q4 roadmap prep doc.\nAction: Hold on those two questions until you reply."
+  },
+  {
+   "id": "life-s128-e000#1",
+   "response": "I don't have a confirmation saved. I'll search your email and texts for anything from the dentist about November.\nAction: Search email and texts for November appointment confirmations for you and Leo and report the dates and times, or tell you if none came."
+  },
+  {
+   "id": "life-s058-e014#1",
+   "response": "Asking Olivia for 11:00 for QBR prep on Thu 5 Mar. For Ellie Cho's dairy allergy, I don't have a list of what's in the house, so I'll check your recent grocery orders. Whatever we pick, read the labels for milk, since things like crackers, granola bars and chocolate can contain it.\nAction: Send Olivia the 11:00 request, check recent grocery orders for dairy-free snacks, and note Ellie's dairy allergy."
+  },
+  {
+   "id": "life-s042-e008#1",
+   "response": "Calendar swaps coming. Spin goes, and strength training at the Leslieville YMCA takes Tuesdays and Thursdays at 6:15 am with you home by 7:15 so Sam can leave for school. I'll check the travel time so the session ends in time.\nAction: Delete the recurring Wednesday 6:00 am spin class, add Tue/Thu 6:15 YMCA strength training with a 7:15 home deadline, and build the Khruangbin and A. R. Rahman instrumental focus playlist for tomorrow."
+  },
+  {
+   "id": "life-s005-e002#1",
+   "response": "I don't want to guess your exact title for an official form. I'll check your HR profile, offer letter or email signature for the title and pull your responsibilities from your recent work so you can paste something accurate.\nAction: Look up your official job title and draft a two-line responsibilities summary for you to confirm."
+  },
+  {
+   "id": "life-s131-e022#1",
+   "response": "Draft: 'Neha, they say marriage is about finding someone who laughs at your jokes. [Partner] clearly has the stamina. Here's to a lifetime of agreeing on the thermostat and never once splitting the last samosa. Cheers to you both!' I need the partner's name and one real detail to make it land.\nAction: Finalise the toast once you send me the name and a detail about Neha."
+  },
+  {
+   "id": "life-s100-e025#1",
+   "response": "Great. My one pick for the mithai is Brijwasi Sweets: Rs 1,450 plus Rs 120 delivery, same day if ordered before 14:00 IST, and the best freshness reviews at 4.6. I still need her delivery address.\nAction: Wait for your go-ahead and her address, then place the Brijwasi order."
+  },
+  {
+   "id": "life-s107-e005#1",
+   "response": "In-store pickup it is. Slack draft: 'Quick reminder, the release freeze runs Thursday 12:00 to Monday 09:00 for the bank-partner cutover. Please get anything you need merged before noon Thursday. Thanks, all.'\nAction: Switch Biscuit's food to pick-up at Queen & Logan, text Sam to grab it, and save the Slack note as a draft for you."
+  },
+  {
+   "id": "life-s083-e000#1",
+   "response": "Sleepover approved by the sound of it. Hannah grabs both boys at 3:30 for pizza and a movie, then brings Leo back tomorrow morning.\nAction: Text Hannah a yes from you, add the sleepover to the family calendar with the 3:30 pickup tonight, and ask you what time Leo is due back tomorrow."
+  },
+  {
+   "id": "life-s023-e017#1",
+   "response": "I'll find a half hour between Mon and Wed that works for you, Aisha and Diego. Aisha already posted the edge-case list for negative balances and reversed transfers in the doc, so I'll put that link in the invite.\nAction: Check all three calendars for a shared 30-minute slot Mon-Wed and book it with the agenda and doc link."
+  },
+  {
+   "id": "life-s028-e014#1",
+   "response": "This morning: I added Felipe from Paws on Pape to the pet budget, which puts pet spend at about $729 a month against a $350 budget. I built the 'Payouts v2 launch risks (2025-11-12)' Notion page from Linear with 6 rows for tomorrow's standup. The October grocery total with an August and September comparison is still being pulled.\nAction: Send you the grocery numbers when the pull finishes."
+  },
+  {
+   "id": "life-s077-e010#1",
+   "response": "Sunday 10 May it is for opening day. I'll still gather fresh wall options this afternoon so you can send Nate a link before Monday.\nAction: Collect a few options for the wall behind the range and sink and message you after lunch."
+  },
+  {
+   "id": "life-s006-e015#1",
+   "response": "You're welcome. Enjoy the quiet evening with Biscuit.\nAction: None needed."
+  }
+ ]
+}
