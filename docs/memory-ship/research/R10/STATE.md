@@ -106,9 +106,15 @@ Families differ in mechanism. Every kill criterion was written before its run.
 
 ## Next three experiments
 
-1. **Done (C6-E1, C6-E2, C7-E3): firm by rule on two runs per world** (caveats above). Still open: a non-Claude responder or judge, and a re-measure on a model D37 allows.
-2. **Model-free selection good enough to stand alone** (C6-E3 says the vote is not): learn from the verifier's picks at sleep (distil to cues), or ask the user to allow the in-turn call (R10-5). Also: **latency and cost of the off-hook verifier:** one haiku call per turn with ≤ 15 candidates, measured; and real PreToolUse delivery in a headless Claude Code run.
-3. **Episodic state rows:** expire or date-gate in-flight state at sleep, so "where did we leave things" gets the latest state.
+1. **Checker latency with thinking off** (blocked here): the short-reply checker (F22c) by a direct API call with
+   thinking disabled, and on NIM (`verify_nim.py`). It needs an API key or `NVIDIA_API_KEY` in the environment. It
+   decides whether the in-turn checker fits the ~3 s budget (C8-E4, C9-E2).
+2. **The user's R10-5 decision** (a fast hosted small model in the turn, or no checker); the build sketch states it.
+   If approved, a slice builds it: off-hook check, delivery at the first tool call after it finishes, dated rows.
+3. **Non-Claude responder or judge** for the outcome measure (needs NIM), and a per-session sleep store to measure
+   the head-to-head without the harness's batch lag (C8-E2).
+- Done or dead: model-free selection (C6-E3, C7-E1, C7-E2: not enough); next-turn delivery (C8-E5: dead); episodic
+  state rows are partly covered by supersession (C5-E5) and dating (C5-E6).
 
 ## Cycle 9 findings (LEDGER C9-…)
 
