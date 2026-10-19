@@ -1341,3 +1341,17 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   runs), so only aggregates over about 150 turns carry information, and a second run is worth what it cost. The
   verifier's effect replicates better than eden's (higher r on three of four), which fits a real effect against a
   near-zero one. Per-turn examples in this ledger illustrate; they never decide.
+
+## C8-E4 · 2026-10-19 · Time from Submit to the first tool call in real Claude Code sessions (pre-registration)
+- **Why:** R10-5's checker must finish before the turn's first tool call (R10-5-BUILD-SKETCH.md). The harness has no
+  clock; a real session does.
+- **Setup:** headless `claude -p` (the CLI's default model) in a throwaway worktree of this repo at origin/main;
+  hooks log timestamps at UserPromptSubmit, every PreToolUse and Stop. Read-only tools allowed (Read, Grep, Glob,
+  `git log`/`git diff`); writes are denied, which can only delay or remove the first call, never hasten it.
+  12 fixed prompts, one fresh session each: 10 ordinary coding asks about this repo, 2 with no work ("thanks…",
+  arithmetic). Prompts are listed in `benchmarks/memory-stream/ttft/prompts.txt`.
+- **Measure:** first PreToolUse − Submit (seconds), p50 / p90 / max over the turns that make a call; the share of
+  turns with no call; Stop − Submit for those.
+- **What it informs (set before running):** a checker whose p95 latency is above the p50 of this gap misses more
+  than half of the turns it would serve. D37's recorded NIM p95 (40–70 s) is the case in question. It is a timing
+  measurement on one machine and one model, not an outcome measure.
