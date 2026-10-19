@@ -1,0 +1,78 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s012-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 knows Biome replaced ESLint/Prettier; R0 doesn't recall that decision."
+  },
+  {
+   "event": "code-s013-e004",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both reasonable plans for adding --json; nothing known contradicts either."
+  },
+  {
+   "event": "code-s015-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 uses known setup facts (pnpm dev, Testcontainers, Apple Silicon); R1 hedges on commands it should know."
+  },
+  {
+   "event": "code-s021-e018",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 knows worker already autoscales via KEDA, so check scaling/max first; R1 misses that."
+  },
+  {
+   "event": "code-s022-e008",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 knows Sentry + pino; R0 doesn't know the exception tracker."
+  },
+  {
+   "event": "code-s023-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 recalls the bucket, Pulumi move, and flags API may not be Fastify; R1 forgot the bucket."
+  },
+  {
+   "event": "code-s027-e035",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly list the five fixes and verify."
+  },
+  {
+   "event": "code-s027-e049",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "History shows invoices list already has --json; R1 catches it, R0 would duplicate."
+  },
+  {
+   "event": "code-s028-e012",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both fix aria-label correctly; R0 rightly avoids amending pushed branch."
+  }
+ ]
+}
