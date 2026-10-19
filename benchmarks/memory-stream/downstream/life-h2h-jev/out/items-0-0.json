@@ -1,0 +1,185 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s045-e000#0",
+   "response": "On it: I'll unsubscribe you from Old Navy, Wayfair, Uber Eats promos and Lululemon, and archive everything already in your inbox from them. The Dyson one you never signed up for I'll treat as spam, so I'll report and block it rather than click any links in it. Action: search the inbox by sender, unsubscribe via each sender's unsubscribe header, archive the existing emails, then tell you what got cleared and anything I couldn't unsubscribe automatically."
+  },
+  {
+   "id": "life-s141-e017#0",
+   "response": "Happy to. I don't have your class time or notes from your last lesson in front of me, so I'll check your calendar and then pick focus areas from what you struggled with last time rather than guess. Action: look up the Spanish class on your calendar, find open slots before it and hold one or two study blocks, then send you the focus list for approval."
+  },
+  {
+   "id": "life-s140-e033#0",
+   "response": "I'll read Sam's text first so we plan around whatever he said. For tonight, with the temporary basement kitchen (microwave, hotplate, old fridge) and you done with the hotplate, the realistic options are a microwave-friendly dinner or takeout. Action: open Sam's text and tell you what it says, then suggest two or three dinner options (one microwave-only, one order-in) and wait for your pick."
+  },
+  {
+   "id": "life-s040-e018#0",
+   "response": "Easy: tripling is just multiplying every ingredient by 3, and the bake time stays the same, though you'll need to bake in batches and use a bigger bowl. I don't have the numbers from 13 Dec in front of me, so I'll pull that chat up rather than guess at quantities. Action: find the 13 Dec conversation and send the tripled ingredient list; if I can't find it, I'll ask you to read me the amounts off the bag."
+  },
+  {
+   "id": "life-s027-e029#0",
+   "response": "That's a serious snore for a beagle, Diego deserves a medal for staying on the call. Hope he keeps the volume down for your next meeting. Action: nothing needed, I'm here if you want anything."
+  },
+  {
+   "id": "life-s140-e044#0",
+   "response": "I don't know tonight's puck drop offhand, so I'll look it up rather than guess. Action: check the Leafs schedule for tonight, tell you the start time and channel, and offer a reminder timed for after Leo's in bed."
+  },
+  {
+   "id": "life-s028-e014#0",
+   "response": "So far this morning: we added Felipe from Paws on Pape to the pet budget ($50/week, which puts monthly pet spend at about $729 against the $350 budget), and I pulled the six open payouts launch risks from Linear into a Notion page called 'Payouts v2 launch risks (2025-11-12)'. The third item, October grocery spend from the TD joint account and Visa compared with August and September, is still running. Action: send you the grocery comparison as soon as it comes back."
+  },
+  {
+   "id": "life-s037-e011#0",
+   "response": "Here's a no-shellfish, alcohol-free-friendly menu for 5 that's not fussy: roast chicken with lemon and herbs (or a mushroom Wellington if you want it vegetarian), roast potatoes, green beans, and a make-ahead dessert like a chocolate pot de creme. For starters, baked brie with crackers and a crudites platter. For Grace, a Pomegranate Rosemary Fizz: pomegranate juice, lime, rosemary syrup and sparkling water or alcohol-free sparkling wine in a flute, so she toasts with everyone. Action: send the Hannah thank-you text now, save the menu to your notes, and offer a shopping list when you're ready."
+  },
+  {
+   "id": "life-s145-e020#0",
+   "response": "Dry first: use a soft microfiber dust mop or a vacuum with the floor-brush head and the beater bar off, going with the grain, because sweeping with a stiff broom and wet mopping both drive fine drywall dust into the finish. Once the loose dust is up, go over it with a barely damp microfiber cloth and a pH-neutral wood floor cleaner, then buff dry. That's the whole plan, and I'm happy to just listen about the kitchen too. Action: save these steps as a short checklist in your notes so Sam can follow it, and I'm here whenever you want to talk."
+  },
+  {
+   "id": "life-s071-e002#0",
+   "response": "Got it: Saturdays 8:30 am Toronto, 6:00 pm Mumbai, starting this week, with Sundays out because of Leo's soccer. I'll tell your mom nicely, update the recurring event with both times in the invite, and send Kabir the new time (8:30 am Toronto is 5:30 am his time in Vancouver). Draft for Mummy: 'Hi Mummy, we're moving our call to Saturdays at 8:30 am Toronto time, which is 6:00 pm for you, because Leo has soccer on Sunday mornings now. Starts this week, hope that works for you!' Action: send that to your mom on WhatsApp, change the recurring Sunday event to Saturdays 8:30 am (stating Toronto time and IST), and message Kabir the new time."
+  },
+  {
+   "id": "life-s012-e018#0",
+   "response": "Here's a draft for the street group chat: 'Street yard sale! Saturday Oct 4, 9am to 1pm (rain date Sunday Oct 5). Set up your tables on your own driveway, and please no early birds before 9! Come by, sell, swap and say hi to the neighbours.' Action: hold it as a draft for your OK, then post it to the group chat on your word, and add Oct 4 (rain date Oct 5) to the family calendar."
+  },
+  {
+   "id": "life-s097-e019#0",
+   "response": "A cardboard fort needs only a few extras: packing or duct tape, a box cutter for you (adults only), markers or paint, old blankets or sheets for the roof, and clothespins or binder clips to hold fabric. Fun add-ons are a flashlight or battery fairy lights, and cushions inside. Action: save this as a quick supply list in your notes, and I can check the basement list with you tonight so nothing's missing before tomorrow after school."
+  },
+  {
+   "id": "life-s128-e000#0",
+   "response": "I don't know yet, so I'll check instead of guessing. Action: search your email and texts for November confirmations from the dentist for you and Leo, and tell you which are confirmed, which are still pending, and the dates and times."
+  },
+  {
+   "id": "life-s026-e000#0",
+   "response": "Texting only, never calling. Draft: 'Hi Nate, quick check, are the cabinets still arriving Monday? Thanks, Riya.' I'll send it now and pull his invoices into the reno sheet. Action: text Nate, then collect all Northline Renovations invoices from your email (including #NR-2207, $6,500) into the reno sheet and tell you the total."
+  },
+  {
+   "id": "life-s077-e044#0",
+   "response": "Timer's on, happy gardening. Action: start a 25 minute timer and ping you when it's done."
+  },
+  {
+   "id": "life-s106-e007#0",
+   "response": "Got it, the charcoal bags order stays on hold until you've talked to Sam. When you know what's set up in the basement kitchen (heat, cold storage, any oven), tell me and I'll plan five dinners around it with a short shopping list. Action: leave the order on hold and wait for your list of appliances."
+  },
+  {
+   "id": "life-s077-e028#0",
+   "response": "For the team sync kickoff, something light: a two-minute 'one small win from the week' round, or a quick 'high and low of the week' so everyone speaks once. For the open evening at home, pick one low-effort thing, like takeout and a board game with Leo, or a walk for ice cream, so it's not another thing to plan. Action: tell me which day it is and I'll add the warm-up to the sync agenda and hold the evening on the family calendar."
+  },
+  {
+   "id": "life-s063-e007#0",
+   "response": "That sounds like the best part of the day, enjoy the coffee in the sun. We can pick the rest back up whenever you're ready. Action: nothing for now."
+  },
+  {
+   "id": "life-s063-e000#0",
+   "response": "My take for Marcus: if the pay gap is only about 10%, I'd lean towards the clinic with the 10 minute bike ride, because the 45 minute subway commute costs him roughly 70 minutes a day, and the extra pay may shrink a lot after tax. He should compare the 10% in after-tax dollars per month against the commute time, and also ask about caseload, mentorship and room to grow at each clinic. If the longer-commute clinic is clearly better on those, that can win. Action: I can draft a short message you can send Marcus with these questions."
+  },
+  {
+   "id": "life-s027-e031#0",
+   "response": "Done and noted: Jess from Rover walks Biscuit at noon on Mondays, Wednesdays and Fridays at $25 a walk, starting Monday, which comes to $75 a week. Action: add a recurring Mon/Wed/Fri noon event 'Jess (Rover) walks Biscuit' starting this Monday and add $75/week to the pet budget, then tell you the new monthly total."
+  },
+  {
+   "id": "life-s003-e021#0",
+   "response": "Five nut-free lunches: turkey and cheese wraps with cucumber; pasta salad with cheese cubes and cherry tomatoes; hummus and cheese pita pockets with carrot sticks; mini egg muffins with fruit; and a sunflower-seed-free sandwich with a yogurt tube. All nut-free, and I'll flag anything where a label says 'may contain tree nuts'. I don't have the Biscuit and ambulance conversation in front of me, so I won't guess what you asked. Action: search our history for that question and tell Leo exactly what you asked, and save the lunch list to your notes."
+  },
+  {
+   "id": "life-s062-e000#0",
+   "response": "Noted, and happy to get you out of the dealer's inbox. Decision on record: no replacement for the 2019 Mazda CX-5 in 2026, the money goes to the kitchen renovation, revisit an EV in 2028. Action: find the Mazda dealer emails, unsubscribe and set a filter to archive any future ones, save the decision to your notes, and offer a 2028 reminder to revisit an EV."
+  },
+  {
+   "id": "life-s017-e008#0",
+   "response": "I don't have yesterday's route text in front of me, and I don't want to guess at the time it said. Action: pull up yesterday's route from our chat or maps history and tell you the estimated drive time next to how long it actually took."
+  },
+  {
+   "id": "life-s018-e000#0",
+   "response": "Long weekends do that, and the first day back always feels like the longest. Glad the drive was fine. Action: pull up today's calendar and flag only what really needs you, so you can go easy on the rest."
+  },
+  {
+   "id": "life-s097-e013#0",
+   "response": "A few that stay on the right side of cheesy: 'Thirty-one years of keeping this place running. The department won't be the same without you.' Or: 'Thank you for every timetable you untangled and every new teacher you quietly looked after.' Or: 'You set the standard here. Enjoy having your time back.' Action: tell me which tone suits (funny, warm or understated) and I'll tune it, then save the chosen line for Sam."
+  },
+  {
+   "id": "life-s083-e000#0",
+   "response": "That's kind of Hannah and Jun, but I don't want to send a yes yet: your notes say Leo isn't doing well with sleepovers yet, and he's in bed at 7:45 on school nights, so I'd politely decline. Draft: 'Thank you so much, Jun and you are so sweet to offer. Leo isn't quite ready for sleepovers yet, but we'd love to do a playdate after school or pancakes this weekend.' Action: hold off on both the text and the calendar entry until you OK the decline or tell me to say yes."
+  },
+  {
+   "id": "life-s023-e017#0",
+   "response": "I'll find a 30 minute slot Monday to Wednesday that works for all three of you and put an agenda in the invite. Aisha prefers async threads over meetings, and she's already posted the edge-case list in the doc asking for PM eyes, so I'll note in the invite that the list is the pre-read. Proposed agenda: 1) negative balances edge cases, 2) reversed transfers edge cases, 3) decisions and sizing. Action: check all three calendars Monday to Wednesday, pick a common 30 minute slot, and send the invite with the agenda."
+  },
+  {
+   "id": "life-s046-e041#0",
+   "response": "Yes, post the congratulations to #product-team. For May, the obvious idea is the Canadian Tulip Festival in Ottawa, which you'd noted for May 2026 with Grace and Daniel (they didn't go in 2025). I need to check the 2026 festival dates against the long weekend before suggesting anything firm. Action: post Wen's note to #product-team, then look up the Tulip Festival 2026 dates and what else is on in Ottawa that weekend, and send you a short list."
+  },
+  {
+   "id": "life-s058-e007#0",
+   "response": "I'll pull Tom's calendar for the 24th and note when he was free. If I only have free/busy access rather than meeting details, I'll say so. Action: open Tom's calendar for the 24th and list the open windows, so you can say precisely why the pricing review slipped."
+  },
+  {
+   "id": "life-s087-e031#0",
+   "response": "Sending the text to Hannah now. For Olivia's blurb, I'll draft it from the Instant Payouts v1 scope in the PRD, in calm, concrete wording with no hype, using 'merchant', and with no dates (any date goes as a 'target' only after Aisha signs off). Action: send the Hannah text, pull the v1 scope from Notion, and draft 4-5 lines for your review before anything goes to Olivia."
+  },
+  {
+   "id": "life-s036-e003#0",
+   "response": "I'll build that comparison. The last figures I have are from Nov 17: invoiced plus approved change orders $36,047 including HST, remaining contracted work $9,850, projected total $45,897 against the $48,000 budget (headroom $2,103, 4.4%), and three change orders already totalling $4,840 plus HST, so your hunch is plausible. I haven't seen the revised quote yet, so I won't guess at what it does to the contingency. Action: pull Nate's revised quote from your email and have a side-by-side with the budget ready for after the design review."
+  },
+  {
+   "id": "life-s046-e016#0",
+   "response": "An EFT is a batched bank-to-bank deposit, usually arriving the next business day or a couple of days later, and cheap per payout. A wire transfer is an individual transfer, typically same-day, and costs noticeably more per payment (often tens of dollars). So for merchants getting regular payouts, it's EFT, and calling it a wire in a deck oversells the speed and misstates the cost. Action: I can draft a one-line note for sales to use in the deck if you'd like."
+  },
+  {
+   "id": "life-s105-e032#0",
+   "response": "I don't have that saved, so I won't guess what you said. Action: search our past chats and your notes for what you said helps you unwind on weekends, and send you a low-effort plan for tomorrow built on it."
+  },
+  {
+   "id": "life-s020-e016#0",
+   "response": "Good call, and the fix for your example is 'cuando llegue a casa te llamo' (subjunctive after cuando when it's about the future). I'll make a one-page drill sheet with ser vs estar (emotions and locations), por vs para, and cuando plus subjunctive, with fill-in-the-blank sentences and an answer key. Action: build the sheet, save it to your notes, and send it before your next lesson."
+  },
+  {
+   "id": "life-s102-e009#0",
+   "response": "I'll build this on PC Express, as you usually do, for Saturday morning pickup at Loblaws Lakeshore in the 9:00-10:00 slot, with no-name brand for the staples. Action: build the cart with milk, eggs, bread, rice, pasta, bananas, apples, yogurt tubes, cheddar, dish soap, paper towels and the veggie dumplings (matching Sam's usual brand if I can find it), and show you the cart and total before checking out."
+  },
+  {
+   "id": "life-s046-e013#0",
+   "response": "I don't have the score, so I'll look it up rather than guess. Action: check last night's Raptors result and send Sam the final score and a line on how they did."
+  },
+  {
+   "id": "life-s087-e029#0",
+   "response": "Draft: 'Hey Hannah! Leo and I are heading to Riverdale Park East around 10:30 tomorrow for the playground and the market. Want to come with the kids? No pressure if you're wiped.' Action: send it on your OK and put it on the calendar once she says yes."
+  },
+  {
+   "id": "life-s040-e009#0",
+   "response": "Reminder is set for 17:15. On the 1:1: since Tom owns the series I can't change the event itself, but I can fix your copy. Action: add the 17:15 reminder for the Shoppers pickup, then check for Tom's updated Wednesday 11:30 series starting January 2026, accept it and remove your Thursday copy; if his new invite isn't there, I'll ask Tom to update it or make a personal Wednesday hold in the meantime."
+  },
+  {
+   "id": "life-s006-e000#0",
+   "response": "Three days late is fine when the tradition is silly mugs. I'll look for the most absurd mug that can reach Vancouver quickly. Action: search novelty mugs ranked by ridiculousness and reviews, filter to those that can deliver to Vancouver BC within about 3 days, and show you the top few with prices; I won't order until you pick."
+  },
+  {
+   "id": "life-s088-e023#0",
+   "response": "Glad Biscuit is fine. Since Aisha prefers async Slack threads over meetings, I'd do this in a thread. Draft: 'Hi Aisha, for sprint planning on Mon the 25th I'd like to cut payout nicknames and the scheduled-payouts calendar view from the sprint. Can you take a look and let me know by Thursday if you see any problem with that?' Action: show you the draft, post it to Aisha on your OK, and just show you her answer when it comes in."
+  },
+  {
+   "id": "life-s115-e008#0",
+   "response": "I'll check all three. The trip is Fri 18 Dec to Wed 30 Dec, and many countries want a passport valid for at least three months after you leave, so the cut-off is about the end of March 2027. I don't have the expiry dates in front of me. Action: find the expiry dates for you, Sam and Leo in your notes or email, compare them to the trip, and tell you if Leo's (or anyone's) needs renewing, with the processing time."
+  },
+  {
+   "id": "life-s075-e000#0",
+   "response": "Two dropped calls is enough to act. I don't have your provider noted here, so I'll confirm who it is from your latest internet bill. Action: find the provider, check their outage page for your area, and open a support ticket noting the repeated drops this afternoon and your deadline before the weekend; I'll confirm the account details with you before submitting."
+  },
+  {
+   "id": "life-s006-e011#0",
+   "response": "For Jess: compare the monthly carrying costs against realistic rent, since cashflow often decides it. Also weigh the mortgage renewal date and rate, repairs and vacancy risk, how landlord duties fit her life, the tax effect of renting (including capital gains rules on her home), and what the condo market looks like if she sells later. If she wants the flexibility to move back or isn't sure of her timeline, renting for a couple of years can make sense, as long as the numbers cover costs. Action: I can turn this into a short checklist or a comparison sheet for her."
+  },
+  {
+   "id": "life-s047-e006#0",
+   "response": "Generally no: in Ontario a landlord can't take a damage deposit, only a last-month's-rent deposit (and a refundable key deposit), and scuffed walls are usually normal wear and tear. The landlord can still apply to the Landlord and Tenant Board for real damage beyond that. Diego should ask what law they're relying on, in writing. Action: none now, and I can find the LTB info or draft a note for him whenever you want."
+  },
+  {
+   "id": "life-s057-e015#0",
+   "response": "I'll post the Slack message. Tom's whisky is Lagavulin, a single malt, and Lagavulin 16 is about $150 at LCBO per my last note. Since that's over $100, I'll check the current price and stock and wait for your go-ahead before buying. Action: post the draft to #payouts-launch, then look up Lagavulin 16 at LCBO and confirm with you before ordering."
+  }
+ ]
+}
