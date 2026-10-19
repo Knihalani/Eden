@@ -238,6 +238,46 @@ def prep_h2h(a):
           f"verify.py --events {os.path.join(d, 'missing.json')} --tag cal-ds2")
 
 
+def prep_system(a):
+    """C6-E3: a hook-side method (no model) on given turns: none / system, where system is `methods.make(a.system)`'s
+    packet at the turn on the strict sleep store, delivered at Submit, each row dated by its visibility time when
+    a.dated. Turns and groups come from the keys of the downstream subs in a.turns (comma-separated)."""
+    import score, sleep, methods, judge
+    stream, items = score.load_stream(a.world)
+    cov = score.Coverage(items)
+    evs = {e["id"]: e for e in score.scored_events(stream)}
+    rows = sleep.rows(stream, a.world, strict=True)
+    m = methods.make(a.system, rows, stream, items, cov)
+    day = {}
+    for sess in stream["sessions"]:
+        for ev in sess["events"]:
+            day[ev["_order"]] = sess["ts"][:10]
+    base = {}
+    for sub in a.turns.split(","):
+        base.update(json.load(open(os.path.join(HERE, "downstream", sub, "key.json")))["key"])
+    rng = random.Random(29)
+    d = os.path.join(HERE, "downstream", a.sub)
+    os.makedirs(os.path.join(d, "in"), exist_ok=True)
+    os.makedirs(os.path.join(d, "out"), exist_ok=True)
+    cases, key, fired = [], {}, 0
+    for eid in sorted(base):
+        e = evs[eid]
+        ids = m.packet(e, e["_order"])
+        packet = [(f"[as of {day.get(int(m.by_id[i]['t']), '?')}] " if a.dated else "") + m.by_id[i]["text"]
+                  for i in ids]
+        fired += bool(packet)
+        conds = {"none": [], "system": packet}
+        order = list(conds)
+        rng.shuffle(order)
+        key[eid] = {"group": base[eid]["group"], "order": order, "needs": []}
+        cases.append({"event": eid, "text": e["text_all"][:2500], "recent": judge.context(stream, eid),
+                      "packets": [conds[c] for c in order]})
+    json.dump({"cases": cases}, open(os.path.join(d, "in", "responses-in.json"), "w"), indent=1, ensure_ascii=False)
+    json.dump({"system": a.system + (" (dated)" if a.dated else ""), "key": key},
+              open(os.path.join(d, "key.json"), "w"), indent=1)
+    print(len(cases), "cases;", fired, "with a packet")
+
+
 def items(a):
     """Order-free responder input: one item per (turn, packet), each with its own id (C4-E10: responders that answer
     a list of packets swapped the order). A turn's items never share a file: item j of every turn goes to group j,
@@ -312,7 +352,7 @@ def report(a):
         s = dict(zip(k["order"], judged[eid]))
         g = by.setdefault(k["group"], {"n": 0, "effect": 0.0, "needs": 0, "sys": 0.0})
         g["n"] += 1
-        alt = next((c for c in ("picks", "eden", "verify") if c in s), None)
+        alt = next((c for c in ("picks", "eden", "verify", "system") if c in s), None)
         if alt:  # prep-picks / prep-eden / prep-verify runs: report that condition − none
             s = dict(s, oracle=s[alt])
         eff = s["oracle"] - s["none"]
@@ -328,8 +368,8 @@ def report(a):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["prep", "prep-picks", "prep-eden", "prep-verify", "prep-h2h", "items", "collect",
-                                    "judge-prep", "report"])
+    ap.add_argument("cmd", choices=["prep", "prep-picks", "prep-eden", "prep-verify", "prep-h2h", "prep-system",
+                                    "items", "collect", "judge-prep", "report"])
     ap.add_argument("--sub", default="", help="subdirectory of downstream/ (default: the world)")
     ap.add_argument("--tag", default="", help="prep-picks: the judge run whose picks are tested")
     ap.add_argument("--world", required=True)
@@ -342,8 +382,10 @@ if __name__ == "__main__":
     ap.add_argument("--counts", default="30,15,30", help="prep-h2h: plan-need, labeler-only, no-need turns")
     ap.add_argument("--seed", type=int, default=23, help="prep-h2h: sampling seed")
     ap.add_argument("--exclude", default="", help="prep-h2h: comma-separated downstream subs whose turns are used")
+    ap.add_argument("--turns", default="", help="prep-system: comma-separated downstream subs whose turns to use")
     ap.add_argument("--fired-only", action="store_true", help="prep-verify: keep only turns where verify fires")
     a = ap.parse_args()
     cmds = {"prep": prep, "prep-picks": prep_picks, "prep-eden": prep_eden, "prep-verify": prep_verify,
-            "prep-h2h": prep_h2h, "items": items, "collect": collect, "judge-prep": judge_prep, "report": report}
+            "prep-h2h": prep_h2h, "prep-system": prep_system, "items": items, "collect": collect,
+            "judge-prep": judge_prep, "report": report}
     cmds[a.cmd](a)
