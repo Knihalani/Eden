@@ -61,11 +61,11 @@ On realistic streams, lexical retrieval is far weaker than the pair fixtures sug
    - a gate distilled from a strong model's decisions;
    - static word vectors.
    An independent blank-slate design converged on the same wall (about 0.3 recall@4) and on the same remedies (sleep-time situations and clean statements). Its one new mechanism, budgeted firing calibrated per user, is adopted. It adds about +0.1 silence on code.
-7. **The labels are valid; wrong bullets cost tokens, not measured quality** (downstream check, BRIEF §4.7; re-measured in C4-E10 after two harness fixes).
-   - Memory changes the outcome on 77% of plan-labelled need turns in both worlds (+0.8 code, +0.9 life, on a 0–3 scale). These sizes are provisional: in some turns the no-memory reply was written in the same prompt as the memory reply (C4-R); a re-run is due.
-   - Half of the independent labeler's extra needs are real but mild.
-   - The cheap hook-side vote keeps about 21% of the available benefit on code.
-   - A packet on turns that need nothing scored the same as no packet (0.0). The earlier "−0.40 harm" came from a responder that swapped reply order and a judge that called true history "fabricated"; it is withdrawn.
+7. **Memory matters a lot, and wrong memories hurt** (downstream check, BRIEF §4.7; clean re-run C5-E1).
+   - The right memories improve the reply on 97% of coding and 87% of personal-assistant turns that need them (+1.2 and +1.1 on a 0–3 scale).
+   - The cheap hook-side matcher captures about half of that on coding (+0.63).
+   - But on turns that need nothing, its wrong memories make the reply worse (−0.47, against a noise level of −0.07). A wrong memory costs about 40% of what a right one gains, so Eden should only push a memory when it is at least about 30% sure it is needed.
+   - (Two earlier versions of this check had protocol bugs; their numbers are superseded.)
 8. **Benchmark realism, after fixes.**
    - The coverage rule is calibrated against a judge (κ 0.86).
    - Prompts were shortened toward R6's lengths (p50 15 words; R6's is 12).
@@ -78,8 +78,8 @@ On realistic streams, lexical retrieval is far weaker than the pair fixtures sug
    - The first measurement checked 50 turns per call and looked much quieter (silence 0.66). The model was comparing turns with each other, which a real hook never can. That number is retracted. A calibrated version (C4-E11) tuned well on the main set but its cutoff did not carry over to fresh cases.
    - Two of the critic's alternatives are dead: showing the small model the whole store instead of a shortlist (no better), and checking the agent's draft reply before the user sees it (it flags as often when nothing is needed as when something is).
 
-10. **The test's labels undercount what coding users need** (cycle 4, C4-E13; provisional until a re-run with a responder fix the reviewer asked for).
-   - On turns labelled "no memory needed" where the strong model still picked memories, those picks improved the reply about half the time on coding (47% helped, 7% hurt) and about a quarter of the time on the personal assistant (27% helped, 13% hurt).
+10. **The test's labels undercount what coding users need, but not personal-assistant users** (C4-E13, confirmed by the clean re-run C5-E1).
+   - On turns labelled "no memory needed" where the strong model still picked memories, those picks improved the reply on coding (60% helped, 17% hurt) but not on the personal assistant (23% helped, 20% hurt: the model just over-flags there).
    - What it found was mostly recent project state (open branches, unpushed work, open PRs) that the planned labels never tagged.
    - So "stays quiet when nothing is needed" has been partly punishing correct behaviour on coding. The next step is labels checked by outcome: a memory counts as needed if adding it actually makes the reply better.
 11. **Even the strong model over-flags when it sees one turn at a time** (C4-E12), and a confidence cutoff tuned on the main set does not carry over to fresh, shorter prompts (C4-E11).

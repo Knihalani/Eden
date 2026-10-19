@@ -756,3 +756,39 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - C4-E10's verdict ("memory changes the outcome on most plan-need turns") stands if plan oracle − none ≥ +0.5 on both worlds.
   - R10-3's withdrawal stands if vote − none on code no-need turns is ≥ −0.1.
   - The re-run numbers replace the provisional ones whatever they show.
+
+## C5-E1 · 2026-10-19 · Re-run of C4-E10 and C4-E13 with the per-turn responder split: result
+- **Run:** `downstream.py items` → sonnet responders, one group per call. One code file came back with 35 of 45 items; the 10 missing items were answered in a separate call (`items-1-2`). Then `collect`, `judge-prep` (history evidence), the blind opus judge and `report`.
+- **Downstream effect (replaces C4-E10):**
+
+  | World | Group | n | Mean none / oracle (/ vote) | Oracle − none | Share ≥ 1 | Vote − none | Vote effect distribution |
+  |---|---|---|---|---|---|---|---|
+  | code | plan | 30 | 1.73 / 2.97 / 2.37 | **+1.233** | 0.967 | +0.633 | −1: 2, 0: 12, +1: 12, +2: 3, +3: 1 |
+  | code | labeler-only | 15 | 2.07 / 2.87 / 2.33 | +0.8 | 0.733 | +0.267 | −1: 1, 0: 10, +1: 3, +2: 1 |
+  | code | no-need | 15 | 2.6 / 2.53 / 2.13 | −0.067 | 0.0 | **−0.467** | −2: 2, −1: 4, 0: 8, +1: 1 |
+  | life | plan | 30 | 1.7 / 2.8 | **+1.1** | 0.867 | — | — |
+  | life | labeler-only | 15 | 2.4 / 2.93 | +0.533 | 0.533 | — | — |
+  | life | no-need | 15 | 2.87 / 2.8 | −0.067 | 0.0 | — | — |
+
+- **Judge's "false" fires (replaces C4-E13):**
+
+  | World | Group | n | Mean picks − none | Share ≥ 1 | Distribution |
+  |---|---|---|---|---|---|
+  | code | plan-no-need, judge fired | 30 | **+0.467** | 0.6 | −1: 5, 0: 7, +1: 17, +2: 1 |
+  | code | plan need, judge fired | 15 | +0.8 | 0.8 | −1: 1, 0: 2, +1: 11, +2: 1 |
+  | life | plan-no-need, judge fired | 30 | **−0.033** | 0.233 | −2: 2, −1: 4, 0: 17, +1: 7 |
+  | life | plan need, judge fired | 15 | +0.867 | 0.8 | −2: 1, −1: 1, 0: 1, +1: 8, +2: 4 |
+
+- **Verdicts, by the C5-E1 rules:**
+  - **Memory matters more than C4-E10 said.** The right packet improves the outcome on 97% (code) and 87% (life) of plan-need turns, at +1.23 and +1.1. C4-E10's verdict stands, with larger effects.
+  - **Wrong packets do hurt: R10-3's withdrawal is reversed.** On code no-need turns the vote scores −0.467 against no memory, while the empty-packet noise floor is −0.067; 6 of 15 turns got worse and 1 better. The rule required vote − none ≥ −0.1.
+    - The C4-E10 "0.0" came from the confounded split: no-memory replies written in the same prompt as the packet replies copied their mistakes.
+    - The vote also keeps about half of the available benefit on code plan turns (+0.633 of +1.233), more than the 21% C4-E10 showed.
+  - **C4-E13 holds on code:** the plan labels miss real needs (+0.467, 60% helped, 17% hurt).
+  - **On life the C4-E13 verdict changes from "mixed" to "over-fire"** (−0.033; 7 helped, 6 hurt). On life, plan labels are a fair silence target. On code they are not.
+- **What this means for the push design:** firing has a real cost (about −0.5 on a wrong turn) and a real benefit (about +1.2 on a right turn). With code's measured help/hurt rates, a packet is worth sending when P(needed) > about 0.3. That is a value-of-information threshold (F6), which we can now measure.
+- **Caveats:**
+  - One responder run per condition.
+  - n = 15 in the small groups.
+  - All models are Claude.
+  - The judge reported that some reference facts contradict each other (for example Express 4 vs Fastify 5), and scored against the later fact. The world's superseded links may be incomplete; to check.
