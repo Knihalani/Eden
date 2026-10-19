@@ -1,0 +1,2215 @@
+{
+ "code-s003-e000": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "code-s003-e019": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "code-s003-e021": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "code-s003-e026": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "code-s005-e000": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "code-s007-e006": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "code-s007-e036": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "code-s008-e000": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "code-s010-e009": {
+  "pool": [
+   "code-sleep-b00:m0048",
+   "code-sleep-b00:m0003"
+  ],
+  "scores": {
+   "code-sleep-b00:m0048": 0.69,
+   "code-sleep-b00:m0003": 0.52
+  },
+  "latency_s": 0.982,
+  "attempts": 1
+ },
+ "code-s012-e000": {
+  "pool": [
+   "code-sleep-b00:m0038",
+   "code-sleep-b00:m0048",
+   "code-sleep-b00:m0047",
+   "code-sleep-b00:m0054"
+  ],
+  "scores": {
+   "code-sleep-b00:m0038": 0.78,
+   "code-sleep-b00:m0048": 0.77,
+   "code-sleep-b00:m0047": 0.68,
+   "code-sleep-b00:m0054": 0.53
+  },
+  "latency_s": 0.22,
+  "attempts": 1
+ },
+ "code-s013-e018": {
+  "pool": [
+   "code-sleep-b00:m0048",
+   "code-sleep-b00:m0038"
+  ],
+  "scores": {
+   "code-sleep-b00:m0048": 0.7,
+   "code-sleep-b00:m0038": 0.7
+  },
+  "latency_s": 0.216,
+  "attempts": 1
+ },
+ "code-s013-e040": {
+  "pool": [
+   "code-sleep-b00:m0024",
+   "code-sleep-b00:m0048"
+  ],
+  "scores": {
+   "code-sleep-b00:m0024": 0.87,
+   "code-sleep-b00:m0048": 0.61
+  },
+  "latency_s": 0.205,
+  "attempts": 1
+ },
+ "code-s015-e000": {
+  "pool": [
+   "code-sleep-b00:m0035",
+   "code-sleep-b00:m0012",
+   "code-sleep-b00:m0048",
+   "code-sleep-b00:m0020",
+   "code-sleep-b00:m0008",
+   "code-sleep-b00:m0054",
+   "code-sleep-b00:m0053",
+   "code-sleep-b00:m0026",
+   "code-sleep-b00:m0034"
+  ],
+  "scores": {
+   "code-sleep-b00:m0035": 0.86,
+   "code-sleep-b00:m0012": 0.67,
+   "code-sleep-b00:m0048": 0.78,
+   "code-sleep-b00:m0020": 0.66,
+   "code-sleep-b00:m0008": 0.45,
+   "code-sleep-b00:m0054": 0.46,
+   "code-sleep-b00:m0053": 0.33,
+   "code-sleep-b00:m0026": 0.35,
+   "code-sleep-b00:m0034": 0.44
+  },
+  "latency_s": 0.252,
+  "attempts": 1
+ },
+ "code-s018-e010": {
+  "pool": [
+   "code-sleep-b00:m0026",
+   "code-sleep-b00:m0034",
+   "code-sleep-b00:m0048"
+  ],
+  "scores": {
+   "code-sleep-b00:m0026": 0.69,
+   "code-sleep-b00:m0034": 0.68,
+   "code-sleep-b00:m0048": 0.66
+  },
+  "latency_s": 0.207,
+  "attempts": 1
+ },
+ "code-s018-e016": {
+  "pool": [
+   "code-sleep-b00:m0001",
+   "code-sleep-b00:m0048",
+   "code-sleep-b00:m0054"
+  ],
+  "scores": {
+   "code-sleep-b00:m0001": 0.93,
+   "code-sleep-b00:m0048": 0.72,
+   "code-sleep-b00:m0054": 0.63
+  },
+  "latency_s": 0.206,
+  "attempts": 1
+ },
+ "code-s021-e035": {
+  "pool": [
+   "code-sleep-b00:m0040",
+   "code-sleep-b01:m0029",
+   "code-sleep-b01:m0016",
+   "code-sleep-b00:m0041",
+   "code-sleep-b00:m0048"
+  ],
+  "scores": {
+   "code-sleep-b00:m0040": 0.89,
+   "code-sleep-b01:m0029": 0.86,
+   "code-sleep-b01:m0016": 0.79,
+   "code-sleep-b00:m0041": 0.84,
+   "code-sleep-b00:m0048": 0.79
+  },
+  "latency_s": 0.223,
+  "attempts": 1
+ },
+ "code-s022-e000": {
+  "pool": [
+   "code-sleep-b00:m0006",
+   "code-sleep-b00:m0048"
+  ],
+  "scores": {
+   "code-sleep-b00:m0006": 0.94,
+   "code-sleep-b00:m0048": 0.75
+  },
+  "latency_s": 0.219,
+  "attempts": 1
+ },
+ "code-s022-e008": {
+  "pool": [
+   "code-sleep-b00:m0023",
+   "code-sleep-b00:m0004",
+   "code-sleep-b00:m0048",
+   "code-sleep-b00:m0047",
+   "code-sleep-b00:m0050",
+   "code-sleep-b00:m0025",
+   "code-sleep-b01:m0005"
+  ],
+  "scores": {
+   "code-sleep-b00:m0023": 0.9,
+   "code-sleep-b00:m0004": 0.86,
+   "code-sleep-b00:m0048": 0.77,
+   "code-sleep-b00:m0047": 0.48,
+   "code-sleep-b00:m0050": 0.81,
+   "code-sleep-b00:m0025": 0.58,
+   "code-sleep-b01:m0005": 0.53
+  },
+  "latency_s": 0.327,
+  "attempts": 1
+ },
+ "code-s023-e000": {
+  "pool": [
+   "code-sleep-b00:m0041",
+   "code-sleep-b00:m0048",
+   "code-sleep-b00:m0005",
+   "code-sleep-b01:m0016",
+   "code-sleep-b00:m0047",
+   "code-sleep-b01:m0029",
+   "code-sleep-b01:m0002",
+   "code-sleep-b00:m0031",
+   "code-sleep-b00:m0025"
+  ],
+  "scores": {
+   "code-sleep-b00:m0041": 0.9,
+   "code-sleep-b00:m0048": 0.8,
+   "code-sleep-b00:m0005": 0.67,
+   "code-sleep-b01:m0016": 0.74,
+   "code-sleep-b00:m0047": 0.75,
+   "code-sleep-b01:m0029": 0.68,
+   "code-sleep-b01:m0002": 0.69,
+   "code-sleep-b00:m0031": 0.56,
+   "code-sleep-b00:m0025": 0.61
+  },
+  "latency_s": 0.253,
+  "attempts": 1
+ },
+ "code-s026-e000": {
+  "pool": [
+   "code-sleep-b01:m0023",
+   "code-sleep-b00:m0020",
+   "code-sleep-b01:m0028",
+   "code-sleep-b00:m0048"
+  ],
+  "scores": {
+   "code-sleep-b01:m0023": 0.71,
+   "code-sleep-b00:m0020": 0.67,
+   "code-sleep-b01:m0028": 0.66,
+   "code-sleep-b00:m0048": 0.65
+  },
+  "latency_s": 0.191,
+  "attempts": 1
+ },
+ "code-s027-e000": {
+  "pool": [
+   "code-sleep-b00:m0048"
+  ],
+  "scores": {
+   "code-sleep-b00:m0048": 0.43
+  },
+  "latency_s": 0.206,
+  "attempts": 1
+ },
+ "code-s027-e022": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "code-s028-e006": {
+  "pool": [
+   "code-sleep-b00:m0048",
+   "code-sleep-b01:m0005",
+   "code-sleep-b00:m0005",
+   "code-sleep-b00:m0052"
+  ],
+  "scores": {
+   "code-sleep-b00:m0048": 0.69,
+   "code-sleep-b01:m0005": 0.49,
+   "code-sleep-b00:m0005": 0.58,
+   "code-sleep-b00:m0052": 0.52
+  },
+  "latency_s": 0.222,
+  "attempts": 1
+ },
+ "code-s028-e012": {
+  "pool": [
+   "code-sleep-b00:m0048"
+  ],
+  "scores": {
+   "code-sleep-b00:m0048": 0.7
+  },
+  "latency_s": 0.191,
+  "attempts": 1
+ },
+ "code-s033-e020": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "code-s035-e008": {
+  "pool": [
+   "code-sleep-b02:m0008",
+   "code-sleep-b00:m0042",
+   "code-sleep-b00:m0048"
+  ],
+  "scores": {
+   "code-sleep-b02:m0008": 0.61,
+   "code-sleep-b00:m0042": 0.63,
+   "code-sleep-b00:m0048": 0.68
+  },
+  "latency_s": 0.265,
+  "attempts": 1
+ },
+ "code-s035-e047": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "code-s035-e058": {
+  "pool": [
+   "code-sleep-b00:m0048"
+  ],
+  "scores": {
+   "code-sleep-b00:m0048": 0.61
+  },
+  "latency_s": 0.223,
+  "attempts": 1
+ },
+ "code-s036-e010": {
+  "pool": [
+   "code-sleep-b01:m0011",
+   "code-sleep-b00:m0048",
+   "code-sleep-b00:m0011",
+   "code-sleep-b00:m0051",
+   "code-sleep-b00:m0047",
+   "code-sleep-b00:m0027",
+   "code-sleep-b02:m0023"
+  ],
+  "scores": {
+   "code-sleep-b01:m0011": 0.73,
+   "code-sleep-b00:m0048": 0.71,
+   "code-sleep-b00:m0011": 0.75,
+   "code-sleep-b00:m0051": 0.77,
+   "code-sleep-b00:m0047": 0.51,
+   "code-sleep-b00:m0027": 0.67,
+   "code-sleep-b02:m0023": 0.47
+  },
+  "latency_s": 0.206,
+  "attempts": 1
+ },
+ "code-s038-e007": {
+  "pool": [
+   "code-sleep-b00:m0054",
+   "code-sleep-b01:m0020",
+   "code-sleep-b00:m0048"
+  ],
+  "scores": {
+   "code-sleep-b00:m0054": 0.46,
+   "code-sleep-b01:m0020": 0.48,
+   "code-sleep-b00:m0048": 0.76
+  },
+  "latency_s": 0.221,
+  "attempts": 1
+ },
+ "code-s038-e019": {
+  "pool": [
+   "code-sleep-b00:m0048"
+  ],
+  "scores": {
+   "code-sleep-b00:m0048": 0.78
+  },
+  "latency_s": 0.198,
+  "attempts": 1
+ },
+ "code-s038-e021": {
+  "pool": [
+   "code-sleep-b00:m0048"
+  ],
+  "scores": {
+   "code-sleep-b00:m0048": 0.52
+  },
+  "latency_s": 0.248,
+  "attempts": 1
+ },
+ "code-s045-e000": {
+  "pool": [
+   "code-sleep-b01:m0022",
+   "code-sleep-b02:m0016",
+   "code-sleep-b00:m0048",
+   "code-sleep-b00:m0018",
+   "code-sleep-b02:m0012",
+   "code-sleep-b00:m0017",
+   "code-sleep-b00:m0028",
+   "code-sleep-b03:m0007"
+  ],
+  "scores": {
+   "code-sleep-b01:m0022": 0.91,
+   "code-sleep-b02:m0016": 0.76,
+   "code-sleep-b00:m0048": 0.81,
+   "code-sleep-b00:m0018": 0.8,
+   "code-sleep-b02:m0012": 0.71,
+   "code-sleep-b00:m0017": 0.28,
+   "code-sleep-b00:m0028": 0.74,
+   "code-sleep-b03:m0007": 0.68
+  },
+  "latency_s": 0.249,
+  "attempts": 1
+ },
+ "code-s045-e012": {
+  "pool": [
+   "code-sleep-b00:m0048",
+   "code-sleep-b03:m0011"
+  ],
+  "scores": {
+   "code-sleep-b00:m0048": 0.89,
+   "code-sleep-b03:m0011": 0.85
+  },
+  "latency_s": 0.199,
+  "attempts": 1
+ },
+ "code-s046-e016": {
+  "pool": [
+   "code-sleep-b00:m0048",
+   "code-sleep-b03:m0016"
+  ],
+  "scores": {
+   "code-sleep-b00:m0048": 0.66,
+   "code-sleep-b03:m0016": 0.78
+  },
+  "latency_s": 0.232,
+  "attempts": 1
+ },
+ "code-s046-e022": {
+  "pool": [
+   "code-sleep-b00:m0050",
+   "code-sleep-b01:m0005",
+   "code-sleep-b00:m0005",
+   "code-sleep-b00:m0025"
+  ],
+  "scores": {
+   "code-sleep-b00:m0050": 0.75,
+   "code-sleep-b01:m0005": 0.69,
+   "code-sleep-b00:m0005": 0.51,
+   "code-sleep-b00:m0025": 0.54
+  },
+  "latency_s": 0.213,
+  "attempts": 1
+ },
+ "code-s048-e000": {
+  "pool": [
+   "code-sleep-b00:m0048",
+   "code-sleep-b03:m0006"
+  ],
+  "scores": {
+   "code-sleep-b00:m0048": 0.74,
+   "code-sleep-b03:m0006": 0.71
+  },
+  "latency_s": 0.192,
+  "attempts": 1
+ },
+ "code-s048-e005": {
+  "pool": [
+   "code-sleep-b01:m0021",
+   "code-sleep-b03:m0011",
+   "code-sleep-b03:m0016",
+   "code-sleep-b00:m0048",
+   "code-sleep-b00:m0007",
+   "code-sleep-b02:m0004",
+   "code-sleep-b03:m0006",
+   "code-sleep-b00:m0011",
+   "code-sleep-b02:m0017",
+   "code-sleep-b00:m0027",
+   "code-sleep-b03:m0014",
+   "code-sleep-b02:m0029",
+   "code-sleep-b00:m0026",
+   "code-sleep-b00:m0004",
+   "code-sleep-b01:m0023"
+  ],
+  "scores": {
+   "code-sleep-b01:m0021": 0.76,
+   "code-sleep-b03:m0011": 0.81,
+   "code-sleep-b03:m0016": 0.77,
+   "code-sleep-b00:m0048": 0.84,
+   "code-sleep-b00:m0007": 0.75,
+   "code-sleep-b02:m0004": 0.58,
+   "code-sleep-b03:m0006": 0.67,
+   "code-sleep-b00:m0011": 0.7,
+   "code-sleep-b02:m0017": 0.32,
+   "code-sleep-b00:m0027": 0.29,
+   "code-sleep-b03:m0014": 0.41,
+   "code-sleep-b02:m0029": 0.54,
+   "code-sleep-b00:m0026": 0.49,
+   "code-sleep-b00:m0004": 0.63,
+   "code-sleep-b01:m0023": 0.12
+  },
+  "latency_s": 0.212,
+  "attempts": 1
+ },
+ "code-s051-e006": {
+  "pool": [
+   "code-sleep-b00:m0048",
+   "code-sleep-b03:m0011",
+   "code-sleep-b03:m0006",
+   "code-sleep-b03:m0029",
+   "code-sleep-b02:m0015"
+  ],
+  "scores": {
+   "code-sleep-b00:m0048": 0.74,
+   "code-sleep-b03:m0011": 0.78,
+   "code-sleep-b03:m0006": 0.69,
+   "code-sleep-b03:m0029": 0.63,
+   "code-sleep-b02:m0015": 0.58
+  },
+  "latency_s": 0.217,
+  "attempts": 1
+ },
+ "code-s055-e000": {
+  "pool": [
+   "code-sleep-b04:m0002",
+   "code-sleep-b00:m0004",
+   "code-sleep-b03:m0004",
+   "code-sleep-b03:m0002",
+   "code-sleep-b00:m0047",
+   "code-sleep-b00:m0048"
+  ],
+  "scores": {
+   "code-sleep-b04:m0002": 0.93,
+   "code-sleep-b00:m0004": 0.9,
+   "code-sleep-b03:m0004": 0.86,
+   "code-sleep-b03:m0002": 0.74,
+   "code-sleep-b00:m0047": 0.65,
+   "code-sleep-b00:m0048": 0.74
+  },
+  "latency_s": 0.171,
+  "attempts": 1
+ },
+ "code-s057-e006": {
+  "pool": [
+   "code-sleep-b00:m0048"
+  ],
+  "scores": {
+   "code-sleep-b00:m0048": 0.4
+  },
+  "latency_s": 0.199,
+  "attempts": 1
+ },
+ "code-s057-e010": {
+  "pool": [
+   "code-sleep-b00:m0032",
+   "code-sleep-b03:m0006",
+   "code-sleep-b03:m0011",
+   "code-sleep-b00:m0048"
+  ],
+  "scores": {
+   "code-sleep-b00:m0032": 0.92,
+   "code-sleep-b03:m0006": 0.65,
+   "code-sleep-b03:m0011": 0.68,
+   "code-sleep-b00:m0048": 0.46
+  },
+  "latency_s": 0.226,
+  "attempts": 1
+ },
+ "code-s057-e017": {
+  "pool": [
+   "code-sleep-b03:m0011",
+   "code-sleep-b00:m0048",
+   "code-sleep-b02:m0019",
+   "code-sleep-b02:m0011",
+   "code-sleep-b04:m0012",
+   "code-sleep-b03:m0024"
+  ],
+  "scores": {
+   "code-sleep-b03:m0011": 0.62,
+   "code-sleep-b00:m0048": 0.67,
+   "code-sleep-b02:m0019": 0.66,
+   "code-sleep-b02:m0011": 0.62,
+   "code-sleep-b04:m0012": 0.4,
+   "code-sleep-b03:m0024": 0.58
+  },
+  "latency_s": 0.227,
+  "attempts": 1
+ },
+ "code-s057-e022": {
+  "pool": [
+   "code-sleep-b02:m0001",
+   "code-sleep-b00:m0048"
+  ],
+  "scores": {
+   "code-sleep-b02:m0001": 0.59,
+   "code-sleep-b00:m0048": 0.62
+  },
+  "latency_s": 0.194,
+  "attempts": 1
+ },
+ "code-s057-e028": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "code-s057-e030": {
+  "pool": [
+   "code-sleep-b00:m0028",
+   "code-sleep-b01:m0012",
+   "code-sleep-b02:m0006",
+   "code-sleep-b00:m0049",
+   "code-sleep-b01:m0035",
+   "code-sleep-b00:m0048",
+   "code-sleep-b01:m0004",
+   "code-sleep-b04:m0024",
+   "code-sleep-b00:m0018",
+   "code-sleep-b04:m0004",
+   "code-sleep-b03:m0032",
+   "code-sleep-b04:m0001",
+   "code-sleep-b00:m0010",
+   "code-sleep-b03:m0007",
+   "code-sleep-b02:m0007"
+  ],
+  "scores": {
+   "code-sleep-b00:m0028": 0.76,
+   "code-sleep-b01:m0012": 0.8,
+   "code-sleep-b02:m0006": 0.7,
+   "code-sleep-b00:m0049": 0.8,
+   "code-sleep-b01:m0035": 0.5,
+   "code-sleep-b00:m0048": 0.63,
+   "code-sleep-b01:m0004": 0.55,
+   "code-sleep-b04:m0024": 0.57,
+   "code-sleep-b00:m0018": 0.6,
+   "code-sleep-b04:m0004": 0.48,
+   "code-sleep-b03:m0032": 0.44,
+   "code-sleep-b04:m0001": 0.41,
+   "code-sleep-b00:m0010": 0.43,
+   "code-sleep-b03:m0007": 0.46,
+   "code-sleep-b02:m0007": 0.42
+  },
+  "latency_s": 0.292,
+  "attempts": 1
+ },
+ "code-s058-e000": {
+  "pool": [
+   "code-sleep-b03:m0009",
+   "code-sleep-b04:m0007",
+   "code-sleep-b03:m0006",
+   "code-sleep-b00:m0048",
+   "code-sleep-b01:m0013",
+   "code-sleep-b01:m0022"
+  ],
+  "scores": {
+   "code-sleep-b03:m0009": 0.9,
+   "code-sleep-b04:m0007": 0.86,
+   "code-sleep-b03:m0006": 0.82,
+   "code-sleep-b00:m0048": 0.79,
+   "code-sleep-b01:m0013": 0.78,
+   "code-sleep-b01:m0022": 0.91
+  },
+  "latency_s": 0.259,
+  "attempts": 1
+ },
+ "code-s058-e007": {
+  "pool": [
+   "code-sleep-b01:m0037",
+   "code-sleep-b04:m0019",
+   "code-sleep-b02:m0030",
+   "code-sleep-b02:m0001",
+   "code-sleep-b00:m0048",
+   "code-sleep-b00:m0047",
+   "code-sleep-b04:m0009"
+  ],
+  "scores": {
+   "code-sleep-b01:m0037": 0.9,
+   "code-sleep-b04:m0019": 0.67,
+   "code-sleep-b02:m0030": 0.79,
+   "code-sleep-b02:m0001": 0.75,
+   "code-sleep-b00:m0048": 0.75,
+   "code-sleep-b00:m0047": 0.6,
+   "code-sleep-b04:m0009": 0.72
+  },
+  "latency_s": 0.27,
+  "attempts": 1
+ },
+ "code-s058-e012": {
+  "pool": [
+   "code-sleep-b00:m0045",
+   "code-sleep-b01:m0026",
+   "code-sleep-b00:m0051",
+   "code-sleep-b02:m0012",
+   "code-sleep-b03:m0011",
+   "code-sleep-b00:m0048",
+   "code-sleep-b02:m0001",
+   "code-sleep-b03:m0004"
+  ],
+  "scores": {
+   "code-sleep-b00:m0045": 0.9,
+   "code-sleep-b01:m0026": 0.89,
+   "code-sleep-b00:m0051": 0.77,
+   "code-sleep-b02:m0012": 0.5,
+   "code-sleep-b03:m0011": 0.75,
+   "code-sleep-b00:m0048": 0.78,
+   "code-sleep-b02:m0001": 0.77,
+   "code-sleep-b03:m0004": 0.67
+  },
+  "latency_s": 0.312,
+  "attempts": 1
+ },
+ "code-s060-e015": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b00:m0034",
+   "code-sleep-b00:m0048",
+   "code-sleep-b03:m0006"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.67,
+   "code-sleep-b00:m0034": 0.82,
+   "code-sleep-b00:m0048": 0.55,
+   "code-sleep-b03:m0006": 0.42
+  },
+  "latency_s": 0.218,
+  "attempts": 1
+ },
+ "code-s060-e021": {
+  "pool": [
+   "code-sleep-b02:m0004",
+   "code-sleep-b05:m0018",
+   "code-sleep-b05:m0032",
+   "code-sleep-b01:m0023",
+   "code-sleep-b04:m0001",
+   "code-sleep-b00:m0034",
+   "code-sleep-b00:m0048",
+   "code-sleep-b01:m0031",
+   "code-sleep-b00:m0012",
+   "code-sleep-b05:m0024",
+   "code-sleep-b00:m0008",
+   "code-sleep-b00:m0026",
+   "code-sleep-b01:m0028",
+   "code-sleep-b00:m0035",
+   "code-sleep-b03:m0006"
+  ],
+  "scores": {
+   "code-sleep-b02:m0004": 0.88,
+   "code-sleep-b05:m0018": 0.76,
+   "code-sleep-b05:m0032": 0.75,
+   "code-sleep-b01:m0023": 0.68,
+   "code-sleep-b04:m0001": 0.77,
+   "code-sleep-b00:m0034": 0.65,
+   "code-sleep-b00:m0048": 0.68,
+   "code-sleep-b01:m0031": 0.67,
+   "code-sleep-b00:m0012": 0.52,
+   "code-sleep-b05:m0024": 0.68,
+   "code-sleep-b00:m0008": 0.53,
+   "code-sleep-b00:m0026": 0.53,
+   "code-sleep-b01:m0028": 0.46,
+   "code-sleep-b00:m0035": 0.34,
+   "code-sleep-b03:m0006": 0.58
+  },
+  "latency_s": 0.251,
+  "attempts": 1
+ },
+ "code-s061-e000": {
+  "pool": [
+   "code-sleep-b02:m0001",
+   "code-sleep-b04:m0009",
+   "code-sleep-b00:m0048",
+   "code-sleep-b04:m0019",
+   "code-sleep-b02:m0030",
+   "code-sleep-b04:m0028",
+   "code-sleep-b00:m0047",
+   "code-sleep-b03:m0006",
+   "code-sleep-b04:m0015"
+  ],
+  "scores": {
+   "code-sleep-b02:m0001": 0.86,
+   "code-sleep-b04:m0009": 0.81,
+   "code-sleep-b00:m0048": 0.72,
+   "code-sleep-b04:m0019": 0.77,
+   "code-sleep-b02:m0030": 0.73,
+   "code-sleep-b04:m0028": 0.76,
+   "code-sleep-b00:m0047": 0.41,
+   "code-sleep-b03:m0006": 0.44,
+   "code-sleep-b04:m0015": 0.38
+  },
+  "latency_s": 0.251,
+  "attempts": 1
+ },
+ "code-s061-e020": {
+  "pool": [
+   "code-sleep-b01:m0016",
+   "code-sleep-b05:m0013",
+   "code-sleep-b01:m0005",
+   "code-sleep-b05:m0032",
+   "code-sleep-b02:m0013",
+   "code-sleep-b03:m0011",
+   "code-sleep-b00:m0048",
+   "code-sleep-b01:m0020",
+   "code-sleep-b03:m0010",
+   "code-sleep-b01:m0029",
+   "code-sleep-b01:m0002",
+   "code-sleep-b00:m0054"
+  ],
+  "scores": {
+   "code-sleep-b01:m0016": 0.89,
+   "code-sleep-b05:m0013": 0.78,
+   "code-sleep-b01:m0005": 0.68,
+   "code-sleep-b05:m0032": 0.67,
+   "code-sleep-b02:m0013": 0.85,
+   "code-sleep-b03:m0011": 0.66,
+   "code-sleep-b00:m0048": 0.64,
+   "code-sleep-b01:m0020": 0.6,
+   "code-sleep-b03:m0010": 0.56,
+   "code-sleep-b01:m0029": 0.47,
+   "code-sleep-b01:m0002": 0.5,
+   "code-sleep-b00:m0054": 0.6
+  },
+  "latency_s": 0.24,
+  "attempts": 1
+ },
+ "code-s063-e013": {
+  "pool": [
+   "code-sleep-b00:m0007",
+   "code-sleep-b05:m0032",
+   "code-sleep-b02:m0009",
+   "code-sleep-b00:m0048",
+   "code-sleep-b03:m0011",
+   "code-sleep-b05:m0003",
+   "code-sleep-b03:m0016"
+  ],
+  "scores": {
+   "code-sleep-b00:m0007": 0.76,
+   "code-sleep-b05:m0032": 0.69,
+   "code-sleep-b02:m0009": 0.58,
+   "code-sleep-b00:m0048": 0.58,
+   "code-sleep-b03:m0011": 0.63,
+   "code-sleep-b05:m0003": 0.69,
+   "code-sleep-b03:m0016": 0.3
+  },
+  "latency_s": 0.254,
+  "attempts": 1
+ },
+ "code-s066-e025": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "code-s066-e028": {
+  "pool": [
+   "code-sleep-b01:m0008",
+   "code-sleep-b05:m0032",
+   "code-sleep-b03:m0011",
+   "code-sleep-b00:m0048",
+   "code-sleep-b01:m0020",
+   "code-sleep-b01:m0016"
+  ],
+  "scores": {
+   "code-sleep-b01:m0008": 0.88,
+   "code-sleep-b05:m0032": 0.84,
+   "code-sleep-b03:m0011": 0.79,
+   "code-sleep-b00:m0048": 0.69,
+   "code-sleep-b01:m0020": 0.43,
+   "code-sleep-b01:m0016": 0.12
+  },
+  "latency_s": 0.272,
+  "attempts": 1
+ },
+ "code-s067-e000": {
+  "pool": [
+   "code-sleep-b01:m0023",
+   "code-sleep-b00:m0020",
+   "code-sleep-b01:m0028",
+   "code-sleep-b05:m0032",
+   "code-sleep-b03:m0011",
+   "code-sleep-b00:m0007",
+   "code-sleep-b02:m0009",
+   "code-sleep-b02:m0004",
+   "code-sleep-b05:m0018",
+   "code-sleep-b04:m0001",
+   "code-sleep-b03:m0016",
+   "code-sleep-b04:m0004",
+   "code-sleep-b00:m0048",
+   "code-sleep-b00:m0035",
+   "code-sleep-b00:m0030"
+  ],
+  "scores": {
+   "code-sleep-b01:m0023": 0.96,
+   "code-sleep-b00:m0020": 0.83,
+   "code-sleep-b01:m0028": 0.85,
+   "code-sleep-b05:m0032": 0.87,
+   "code-sleep-b03:m0011": 0.86,
+   "code-sleep-b00:m0007": 0.89,
+   "code-sleep-b02:m0009": 0.84,
+   "code-sleep-b02:m0004": 0.83,
+   "code-sleep-b05:m0018": 0.71,
+   "code-sleep-b04:m0001": 0.72,
+   "code-sleep-b03:m0016": 0.71,
+   "code-sleep-b04:m0004": 0.67,
+   "code-sleep-b00:m0048": 0.69,
+   "code-sleep-b00:m0035": 0.82,
+   "code-sleep-b00:m0030": 0.76
+  },
+  "latency_s": 0.226,
+  "attempts": 1
+ },
+ "code-s068-e008": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b04:m0008",
+   "code-sleep-b00:m0034",
+   "code-sleep-b00:m0048",
+   "code-sleep-b03:m0001",
+   "code-sleep-b05:m0034"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.71,
+   "code-sleep-b04:m0008": 0.75,
+   "code-sleep-b00:m0034": 0.78,
+   "code-sleep-b00:m0048": 0.49,
+   "code-sleep-b03:m0001": 0.27,
+   "code-sleep-b05:m0034": 0.58
+  },
+  "latency_s": 0.287,
+  "attempts": 1
+ },
+ "code-s068-e023": {
+  "pool": [
+   "code-sleep-b03:m0024",
+   "code-sleep-b00:m0025",
+   "code-sleep-b03:m0025",
+   "code-sleep-b00:m0034",
+   "code-sleep-b04:m0009",
+   "code-sleep-b02:m0021",
+   "code-sleep-b05:m0034",
+   "code-sleep-b02:m0001",
+   "code-sleep-b00:m0048",
+   "code-sleep-b01:m0005",
+   "code-sleep-b02:m0030",
+   "code-sleep-b05:m0018",
+   "code-sleep-b00:m0047",
+   "code-sleep-b00:m0007",
+   "code-sleep-b00:m0052"
+  ],
+  "scores": {
+   "code-sleep-b03:m0024": 0.85,
+   "code-sleep-b00:m0025": 0.85,
+   "code-sleep-b03:m0025": 0.84,
+   "code-sleep-b00:m0034": 0.77,
+   "code-sleep-b04:m0009": 0.83,
+   "code-sleep-b02:m0021": 0.74,
+   "code-sleep-b05:m0034": 0.75,
+   "code-sleep-b02:m0001": 0.71,
+   "code-sleep-b00:m0048": 0.67,
+   "code-sleep-b01:m0005": 0.7,
+   "code-sleep-b02:m0030": 0.65,
+   "code-sleep-b05:m0018": 0.7,
+   "code-sleep-b00:m0047": 0.55,
+   "code-sleep-b00:m0007": 0.38,
+   "code-sleep-b00:m0052": 0.54
+  },
+  "latency_s": 0.298,
+  "attempts": 1
+ },
+ "code-s070-e012": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b02:m0001",
+   "code-sleep-b03:m0006",
+   "code-sleep-b00:m0048",
+   "code-sleep-b02:m0030"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.82,
+   "code-sleep-b02:m0001": 0.71,
+   "code-sleep-b03:m0006": 0.55,
+   "code-sleep-b00:m0048": 0.5,
+   "code-sleep-b02:m0030": 0.71
+  },
+  "latency_s": 0.224,
+  "attempts": 1
+ },
+ "code-s071-e012": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "code-s071-e014": {
+  "pool": [
+   "code-sleep-b04:m0002",
+   "code-sleep-b00:m0004",
+   "code-sleep-b03:m0002",
+   "code-sleep-b05:m0032",
+   "code-sleep-b00:m0048",
+   "code-sleep-b03:m0006",
+   "code-sleep-b06:m0024",
+   "code-sleep-b05:m0037",
+   "code-sleep-b04:m0009",
+   "code-sleep-b00:m0049"
+  ],
+  "scores": {
+   "code-sleep-b04:m0002": 0.91,
+   "code-sleep-b00:m0004": 0.89,
+   "code-sleep-b03:m0002": 0.68,
+   "code-sleep-b05:m0032": 0.76,
+   "code-sleep-b00:m0048": 0.57,
+   "code-sleep-b03:m0006": 0.61,
+   "code-sleep-b06:m0024": 0.62,
+   "code-sleep-b05:m0037": 0.68,
+   "code-sleep-b04:m0009": 0.51,
+   "code-sleep-b00:m0049": 0.55
+  },
+  "latency_s": 0.256,
+  "attempts": 1
+ },
+ "code-s075-e000": {
+  "pool": [
+   "code-sleep-b00:m0038",
+   "code-sleep-b05:m0032",
+   "code-sleep-b01:m0005",
+   "code-sleep-b01:m0009",
+   "code-sleep-b00:m0048",
+   "code-sleep-b06:m0019",
+   "code-sleep-b01:m0022",
+   "code-sleep-b06:m0004"
+  ],
+  "scores": {
+   "code-sleep-b00:m0038": 0.93,
+   "code-sleep-b05:m0032": 0.86,
+   "code-sleep-b01:m0005": 0.78,
+   "code-sleep-b01:m0009": 0.89,
+   "code-sleep-b00:m0048": 0.82,
+   "code-sleep-b06:m0019": 0.68,
+   "code-sleep-b01:m0022": 0.32,
+   "code-sleep-b06:m0004": 0.42
+  },
+  "latency_s": 0.253,
+  "attempts": 1
+ },
+ "code-s075-e015": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b03:m0011",
+   "code-sleep-b00:m0048",
+   "code-sleep-b02:m0030",
+   "code-sleep-b02:m0001",
+   "code-sleep-b04:m0009",
+   "code-sleep-b00:m0026",
+   "code-sleep-b06:m0024"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.85,
+   "code-sleep-b03:m0011": 0.79,
+   "code-sleep-b00:m0048": 0.71,
+   "code-sleep-b02:m0030": 0.79,
+   "code-sleep-b02:m0001": 0.6,
+   "code-sleep-b04:m0009": 0.67,
+   "code-sleep-b00:m0026": 0.58,
+   "code-sleep-b06:m0024": 0.57
+  },
+  "latency_s": 0.28,
+  "attempts": 1
+ },
+ "code-s076-e021": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b04:m0019",
+   "code-sleep-b04:m0009"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.64,
+   "code-sleep-b04:m0019": 0.67,
+   "code-sleep-b04:m0009": 0.57
+  },
+  "latency_s": 0.208,
+  "attempts": 1
+ },
+ "code-s077-e005": {
+  "pool": [
+   "code-sleep-b06:m0005",
+   "code-sleep-b06:m0018",
+   "code-sleep-b03:m0024",
+   "code-sleep-b04:m0009",
+   "code-sleep-b05:m0032",
+   "code-sleep-b00:m0034",
+   "code-sleep-b05:m0018",
+   "code-sleep-b00:m0048",
+   "code-sleep-b03:m0001",
+   "code-sleep-b00:m0027",
+   "code-sleep-b00:m0011",
+   "code-sleep-b02:m0001",
+   "code-sleep-b06:m0016",
+   "code-sleep-b02:m0004",
+   "code-sleep-b05:m0034"
+  ],
+  "scores": {
+   "code-sleep-b06:m0005": 0.78,
+   "code-sleep-b06:m0018": 0.82,
+   "code-sleep-b03:m0024": 0.34,
+   "code-sleep-b04:m0009": 0.76,
+   "code-sleep-b05:m0032": 0.71,
+   "code-sleep-b00:m0034": 0.58,
+   "code-sleep-b05:m0018": 0.58,
+   "code-sleep-b00:m0048": 0.65,
+   "code-sleep-b03:m0001": 0.5,
+   "code-sleep-b00:m0027": 0.64,
+   "code-sleep-b00:m0011": 0.63,
+   "code-sleep-b02:m0001": 0.56,
+   "code-sleep-b06:m0016": 0.53,
+   "code-sleep-b02:m0004": 0.56,
+   "code-sleep-b05:m0034": 0.49
+  },
+  "latency_s": 0.36,
+  "attempts": 1
+ },
+ "code-s080-e014": {
+  "pool": [
+   "code-sleep-b03:m0016",
+   "code-sleep-b06:m0005",
+   "code-sleep-b00:m0007",
+   "code-sleep-b02:m0001",
+   "code-sleep-b02:m0015",
+   "code-sleep-b04:m0009",
+   "code-sleep-b00:m0050",
+   "code-sleep-b06:m0009",
+   "code-sleep-b00:m0031",
+   "code-sleep-b06:m0019",
+   "code-sleep-b05:m0013",
+   "code-sleep-b00:m0048",
+   "code-sleep-b03:m0017",
+   "code-sleep-b06:m0008",
+   "code-sleep-b06:m0018"
+  ],
+  "scores": {
+   "code-sleep-b03:m0016": 0.91,
+   "code-sleep-b06:m0005": 0.92,
+   "code-sleep-b00:m0007": 0.88,
+   "code-sleep-b02:m0001": 0.84,
+   "code-sleep-b02:m0015": 0.84,
+   "code-sleep-b04:m0009": 0.88,
+   "code-sleep-b00:m0050": 0.85,
+   "code-sleep-b06:m0009": 0.87,
+   "code-sleep-b00:m0031": 0.76,
+   "code-sleep-b06:m0019": 0.83,
+   "code-sleep-b05:m0013": 0.67,
+   "code-sleep-b00:m0048": 0.72,
+   "code-sleep-b03:m0017": 0.78,
+   "code-sleep-b06:m0008": 0.67,
+   "code-sleep-b06:m0018": 0.73
+  },
+  "latency_s": 0.241,
+  "attempts": 1
+ },
+ "code-s080-e020": {
+  "pool": [
+   "code-sleep-b06:m0020",
+   "code-sleep-b05:m0033",
+   "code-sleep-b00:m0048",
+   "code-sleep-b00:m0032"
+  ],
+  "scores": {
+   "code-sleep-b06:m0020": 0.94,
+   "code-sleep-b05:m0033": 0.54,
+   "code-sleep-b00:m0048": 0.57,
+   "code-sleep-b00:m0032": 0.47
+  },
+  "latency_s": 0.278,
+  "attempts": 1
+ },
+ "code-s080-e024": {
+  "pool": [
+   "code-sleep-b06:m0005",
+   "code-sleep-b07:m0001",
+   "code-sleep-b06:m0018",
+   "code-sleep-b04:m0009",
+   "code-sleep-b05:m0032",
+   "code-sleep-b05:m0018",
+   "code-sleep-b07:m0017",
+   "code-sleep-b07:m0018",
+   "code-sleep-b00:m0048",
+   "code-sleep-b03:m0024",
+   "code-sleep-b00:m0034",
+   "code-sleep-b07:m0002",
+   "code-sleep-b05:m0034",
+   "code-sleep-b04:m0028",
+   "code-sleep-b03:m0001"
+  ],
+  "scores": {
+   "code-sleep-b06:m0005": 0.91,
+   "code-sleep-b07:m0001": 0.79,
+   "code-sleep-b06:m0018": 0.79,
+   "code-sleep-b04:m0009": 0.83,
+   "code-sleep-b05:m0032": 0.73,
+   "code-sleep-b05:m0018": 0.47,
+   "code-sleep-b07:m0017": 0.67,
+   "code-sleep-b07:m0018": 0.71,
+   "code-sleep-b00:m0048": 0.57,
+   "code-sleep-b03:m0024": 0.31,
+   "code-sleep-b00:m0034": 0.47,
+   "code-sleep-b07:m0002": 0.51,
+   "code-sleep-b05:m0034": 0.49,
+   "code-sleep-b04:m0028": 0.47,
+   "code-sleep-b03:m0001": 0.66
+  },
+  "latency_s": 0.231,
+  "attempts": 1
+ },
+ "code-s080-e046": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b07:m0014",
+   "code-sleep-b07:m0017",
+   "code-sleep-b00:m0048",
+   "code-sleep-b03:m0011",
+   "code-sleep-b03:m0006"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.76,
+   "code-sleep-b07:m0014": 0.75,
+   "code-sleep-b07:m0017": 0.75,
+   "code-sleep-b00:m0048": 0.63,
+   "code-sleep-b03:m0011": 0.65,
+   "code-sleep-b03:m0006": 0.57
+  },
+  "latency_s": 0.213,
+  "attempts": 1
+ },
+ "code-s081-e007": {
+  "pool": [
+   "code-sleep-b00:m0013",
+   "code-sleep-b02:m0004",
+   "code-sleep-b04:m0009",
+   "code-sleep-b03:m0006",
+   "code-sleep-b01:m0023",
+   "code-sleep-b00:m0048",
+   "code-sleep-b00:m0053",
+   "code-sleep-b06:m0023",
+   "code-sleep-b07:m0005",
+   "code-sleep-b00:m0008",
+   "code-sleep-b01:m0028",
+   "code-sleep-b00:m0047",
+   "code-sleep-b02:m0001",
+   "code-sleep-b04:m0001",
+   "code-sleep-b03:m0004"
+  ],
+  "scores": {
+   "code-sleep-b00:m0013": 0.83,
+   "code-sleep-b02:m0004": 0.62,
+   "code-sleep-b04:m0009": 0.59,
+   "code-sleep-b03:m0006": 0.77,
+   "code-sleep-b01:m0023": 0.73,
+   "code-sleep-b00:m0048": 0.75,
+   "code-sleep-b00:m0053": 0.59,
+   "code-sleep-b06:m0023": 0.68,
+   "code-sleep-b07:m0005": 0.63,
+   "code-sleep-b00:m0008": 0.6,
+   "code-sleep-b01:m0028": 0.46,
+   "code-sleep-b00:m0047": 0.57,
+   "code-sleep-b02:m0001": 0.61,
+   "code-sleep-b04:m0001": 0.7,
+   "code-sleep-b03:m0004": 0.58
+  },
+  "latency_s": 0.24,
+  "attempts": 1
+ },
+ "code-s081-e017": {
+  "pool": [
+   "code-sleep-b00:m0048",
+   "code-sleep-b05:m0013",
+   "code-sleep-b05:m0032",
+   "code-sleep-b07:m0017",
+   "code-sleep-b04:m0009",
+   "code-sleep-b03:m0011",
+   "code-sleep-b07:m0011",
+   "code-sleep-b06:m0007",
+   "code-sleep-b02:m0015"
+  ],
+  "scores": {
+   "code-sleep-b00:m0048": 0.69,
+   "code-sleep-b05:m0013": 0.72,
+   "code-sleep-b05:m0032": 0.65,
+   "code-sleep-b07:m0017": 0.65,
+   "code-sleep-b04:m0009": 0.73,
+   "code-sleep-b03:m0011": 0.58,
+   "code-sleep-b07:m0011": 0.55,
+   "code-sleep-b06:m0007": 0.6,
+   "code-sleep-b02:m0015": 0.48
+  },
+  "latency_s": 0.234,
+  "attempts": 1
+ },
+ "code-s082-e005": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b07:m0017",
+   "code-sleep-b00:m0048",
+   "code-sleep-b07:m0013"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.6,
+   "code-sleep-b07:m0017": 0.61,
+   "code-sleep-b00:m0048": 0.4,
+   "code-sleep-b07:m0013": 0.74
+  },
+  "latency_s": 0.205,
+  "attempts": 1
+ },
+ "code-s082-e025": {
+  "pool": [
+   "code-sleep-b00:m0015",
+   "code-sleep-b06:m0007",
+   "code-sleep-b07:m0011",
+   "code-sleep-b01:m0020",
+   "code-sleep-b01:m0008",
+   "code-sleep-b01:m0016",
+   "code-sleep-b00:m0048",
+   "code-sleep-b00:m0054",
+   "code-sleep-b03:m0006",
+   "code-sleep-b02:m0013",
+   "code-sleep-b04:m0009"
+  ],
+  "scores": {
+   "code-sleep-b00:m0015": 0.89,
+   "code-sleep-b06:m0007": 0.63,
+   "code-sleep-b07:m0011": 0.67,
+   "code-sleep-b01:m0020": 0.6,
+   "code-sleep-b01:m0008": 0.86,
+   "code-sleep-b01:m0016": 0.27,
+   "code-sleep-b00:m0048": 0.69,
+   "code-sleep-b00:m0054": 0.39,
+   "code-sleep-b03:m0006": 0.49,
+   "code-sleep-b02:m0013": 0.28,
+   "code-sleep-b04:m0009": 0.56
+  },
+  "latency_s": 0.233,
+  "attempts": 1
+ },
+ "code-s082-e035": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b00:m0008",
+   "code-sleep-b00:m0048",
+   "code-sleep-b05:m0007",
+   "code-sleep-b04:m0010",
+   "code-sleep-b01:m0004",
+   "code-sleep-b07:m0012",
+   "code-sleep-b07:m0017"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.71,
+   "code-sleep-b00:m0008": 0.64,
+   "code-sleep-b00:m0048": 0.58,
+   "code-sleep-b05:m0007": 0.58,
+   "code-sleep-b04:m0010": 0.54,
+   "code-sleep-b01:m0004": 0.79,
+   "code-sleep-b07:m0012": 0.45,
+   "code-sleep-b07:m0017": 0.56
+  },
+  "latency_s": 0.229,
+  "attempts": 1
+ },
+ "code-s082-e052": {
+  "pool": [
+   "code-sleep-b00:m0048",
+   "code-sleep-b05:m0032",
+   "code-sleep-b07:m0017",
+   "code-sleep-b02:m0030"
+  ],
+  "scores": {
+   "code-sleep-b00:m0048": 0.66,
+   "code-sleep-b05:m0032": 0.67,
+   "code-sleep-b07:m0017": 0.73,
+   "code-sleep-b02:m0030": 0.62
+  },
+  "latency_s": 0.215,
+  "attempts": 1
+ },
+ "code-s083-e005": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b07:m0017",
+   "code-sleep-b00:m0048",
+   "code-sleep-b03:m0006",
+   "code-sleep-b06:m0003"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.74,
+   "code-sleep-b07:m0017": 0.71,
+   "code-sleep-b00:m0048": 0.34,
+   "code-sleep-b03:m0006": 0.3,
+   "code-sleep-b06:m0003": 0.47
+  },
+  "latency_s": 0.29,
+  "attempts": 1
+ },
+ "code-s083-e017": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b01:m0022",
+   "code-sleep-b06:m0003",
+   "code-sleep-b07:m0017",
+   "code-sleep-b02:m0030",
+   "code-sleep-b04:m0009",
+   "code-sleep-b00:m0048",
+   "code-sleep-b00:m0047",
+   "code-sleep-b07:m0013",
+   "code-sleep-b03:m0001"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.8,
+   "code-sleep-b01:m0022": 0.82,
+   "code-sleep-b06:m0003": 0.83,
+   "code-sleep-b07:m0017": 0.77,
+   "code-sleep-b02:m0030": 0.79,
+   "code-sleep-b04:m0009": 0.76,
+   "code-sleep-b00:m0048": 0.67,
+   "code-sleep-b00:m0047": 0.74,
+   "code-sleep-b07:m0013": 0.69,
+   "code-sleep-b03:m0001": 0.66
+  },
+  "latency_s": 0.265,
+  "attempts": 1
+ },
+ "code-s085-e000": {
+  "pool": [
+   "code-sleep-b01:m0023",
+   "code-sleep-b02:m0004",
+   "code-sleep-b04:m0001",
+   "code-sleep-b07:m0001",
+   "code-sleep-b06:m0023",
+   "code-sleep-b05:m0008",
+   "code-sleep-b07:m0005",
+   "code-sleep-b03:m0011",
+   "code-sleep-b01:m0028",
+   "code-sleep-b05:m0018",
+   "code-sleep-b07:m0003",
+   "code-sleep-b00:m0012",
+   "code-sleep-b06:m0002",
+   "code-sleep-b00:m0020",
+   "code-sleep-b04:m0032"
+  ],
+  "scores": {
+   "code-sleep-b01:m0023": 0.93,
+   "code-sleep-b02:m0004": 0.93,
+   "code-sleep-b04:m0001": 0.9,
+   "code-sleep-b07:m0001": 0.88,
+   "code-sleep-b06:m0023": 0.88,
+   "code-sleep-b05:m0008": 0.86,
+   "code-sleep-b07:m0005": 0.86,
+   "code-sleep-b03:m0011": 0.85,
+   "code-sleep-b01:m0028": 0.76,
+   "code-sleep-b05:m0018": 0.52,
+   "code-sleep-b07:m0003": 0.75,
+   "code-sleep-b00:m0012": 0.8,
+   "code-sleep-b06:m0002": 0.49,
+   "code-sleep-b00:m0020": 0.81,
+   "code-sleep-b04:m0032": 0.57
+  },
+  "latency_s": 0.243,
+  "attempts": 1
+ },
+ "code-s085-e010": {
+  "pool": [
+   "code-sleep-b05:m0002",
+   "code-sleep-b05:m0032",
+   "code-sleep-b04:m0004",
+   "code-sleep-b03:m0006",
+   "code-sleep-b01:m0028",
+   "code-sleep-b00:m0048",
+   "code-sleep-b01:m0006",
+   "code-sleep-b05:m0044"
+  ],
+  "scores": {
+   "code-sleep-b05:m0002": 0.92,
+   "code-sleep-b05:m0032": 0.8,
+   "code-sleep-b04:m0004": 0.68,
+   "code-sleep-b03:m0006": 0.6,
+   "code-sleep-b01:m0028": 0.46,
+   "code-sleep-b00:m0048": 0.48,
+   "code-sleep-b01:m0006": 0.51,
+   "code-sleep-b05:m0044": 0.62
+  },
+  "latency_s": 0.291,
+  "attempts": 1
+ },
+ "code-s085-e014": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b07:m0017",
+   "code-sleep-b03:m0011",
+   "code-sleep-b02:m0014",
+   "code-sleep-b00:m0048",
+   "code-sleep-b01:m0010",
+   "code-sleep-b06:m0028"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.83,
+   "code-sleep-b07:m0017": 0.81,
+   "code-sleep-b03:m0011": 0.77,
+   "code-sleep-b02:m0014": 0.59,
+   "code-sleep-b00:m0048": 0.57,
+   "code-sleep-b01:m0010": 0.69,
+   "code-sleep-b06:m0028": 0.54
+  },
+  "latency_s": 0.267,
+  "attempts": 1
+ },
+ "code-s086-e000": {
+  "pool": [
+   "code-sleep-b04:m0033",
+   "code-sleep-b04:m0001",
+   "code-sleep-b05:m0032",
+   "code-sleep-b03:m0011",
+   "code-sleep-b00:m0048",
+   "code-sleep-b04:m0006",
+   "code-sleep-b00:m0017",
+   "code-sleep-b06:m0007",
+   "code-sleep-b00:m0008",
+   "code-sleep-b01:m0016",
+   "code-sleep-b02:m0013",
+   "code-sleep-b00:m0035",
+   "code-sleep-b05:m0033",
+   "code-sleep-b00:m0032",
+   "code-sleep-b00:m0054"
+  ],
+  "scores": {
+   "code-sleep-b04:m0033": 0.93,
+   "code-sleep-b04:m0001": 0.83,
+   "code-sleep-b05:m0032": 0.85,
+   "code-sleep-b03:m0011": 0.81,
+   "code-sleep-b00:m0048": 0.83,
+   "code-sleep-b04:m0006": 0.57,
+   "code-sleep-b00:m0017": 0.54,
+   "code-sleep-b06:m0007": 0.84,
+   "code-sleep-b00:m0008": 0.53,
+   "code-sleep-b01:m0016": 0.78,
+   "code-sleep-b02:m0013": 0.6,
+   "code-sleep-b00:m0035": 0.42,
+   "code-sleep-b05:m0033": 0.33,
+   "code-sleep-b00:m0032": 0.24,
+   "code-sleep-b00:m0054": 0.41
+  },
+  "latency_s": 0.31,
+  "attempts": 1
+ },
+ "code-s086-e004": {
+  "pool": [
+   "code-sleep-b06:m0021",
+   "code-sleep-b04:m0004",
+   "code-sleep-b00:m0048",
+   "code-sleep-b01:m0028",
+   "code-sleep-b03:m0006",
+   "code-sleep-b02:m0018",
+   "code-sleep-b00:m0033"
+  ],
+  "scores": {
+   "code-sleep-b06:m0021": 0.9,
+   "code-sleep-b04:m0004": 0.65,
+   "code-sleep-b00:m0048": 0.68,
+   "code-sleep-b01:m0028": 0.54,
+   "code-sleep-b03:m0006": 0.5,
+   "code-sleep-b02:m0018": 0.37,
+   "code-sleep-b00:m0033": 0.51
+  },
+  "latency_s": 0.53,
+  "attempts": 1
+ },
+ "code-s087-e012": {
+  "pool": [
+   "code-sleep-b05:m0008",
+   "code-sleep-b01:m0028",
+   "code-sleep-b05:m0040",
+   "code-sleep-b06:m0011",
+   "code-sleep-b00:m0020",
+   "code-sleep-b04:m0001",
+   "code-sleep-b07:m0005",
+   "code-sleep-b05:m0038",
+   "code-sleep-b01:m0004",
+   "code-sleep-b02:m0012",
+   "code-sleep-b00:m0048",
+   "code-sleep-b01:m0023",
+   "code-sleep-b06:m0023",
+   "code-sleep-b00:m0008",
+   "code-sleep-b02:m0004"
+  ],
+  "scores": {
+   "code-sleep-b05:m0008": 0.77,
+   "code-sleep-b01:m0028": 0.83,
+   "code-sleep-b05:m0040": 0.75,
+   "code-sleep-b06:m0011": 0.65,
+   "code-sleep-b00:m0020": 0.7,
+   "code-sleep-b04:m0001": 0.47,
+   "code-sleep-b07:m0005": 0.76,
+   "code-sleep-b05:m0038": 0.72,
+   "code-sleep-b01:m0004": 0.51,
+   "code-sleep-b02:m0012": 0.49,
+   "code-sleep-b00:m0048": 0.67,
+   "code-sleep-b01:m0023": 0.63,
+   "code-sleep-b06:m0023": 0.52,
+   "code-sleep-b00:m0008": 0.27,
+   "code-sleep-b02:m0004": 0.19
+  },
+  "latency_s": 0.243,
+  "attempts": 1
+ },
+ "code-s088-e000": {
+  "pool": [
+   "code-sleep-b03:m0019",
+   "code-sleep-b05:m0007",
+   "code-sleep-b02:m0001",
+   "code-sleep-b02:m0008"
+  ],
+  "scores": {
+   "code-sleep-b03:m0019": 0.69,
+   "code-sleep-b05:m0007": 0.43,
+   "code-sleep-b02:m0001": 0.54,
+   "code-sleep-b02:m0008": 0.22
+  },
+  "latency_s": 0.225,
+  "attempts": 1
+ },
+ "code-s093-e000": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b02:m0001",
+   "code-sleep-b02:m0026",
+   "code-sleep-b07:m0017",
+   "code-sleep-b08:m0013",
+   "code-sleep-b00:m0048",
+   "code-sleep-b02:m0030",
+   "code-sleep-b05:m0017",
+   "code-sleep-b02:m0022",
+   "code-sleep-b04:m0019",
+   "code-sleep-b05:m0025",
+   "code-sleep-b05:m0030"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.84,
+   "code-sleep-b02:m0001": 0.8,
+   "code-sleep-b02:m0026": 0.84,
+   "code-sleep-b07:m0017": 0.75,
+   "code-sleep-b08:m0013": 0.77,
+   "code-sleep-b00:m0048": 0.77,
+   "code-sleep-b02:m0030": 0.86,
+   "code-sleep-b05:m0017": 0.83,
+   "code-sleep-b02:m0022": 0.71,
+   "code-sleep-b04:m0019": 0.68,
+   "code-sleep-b05:m0025": 0.76,
+   "code-sleep-b05:m0030": 0.57
+  },
+  "latency_s": 0.275,
+  "attempts": 1
+ },
+ "code-s095-e011": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "code-s096-e000": {
+  "pool": [
+   "code-sleep-b04:m0001",
+   "code-sleep-b05:m0010",
+   "code-sleep-b05:m0032",
+   "code-sleep-b03:m0009",
+   "code-sleep-b02:m0012",
+   "code-sleep-b07:m0017",
+   "code-sleep-b08:m0013",
+   "code-sleep-b00:m0048",
+   "code-sleep-b05:m0039",
+   "code-sleep-b04:m0024"
+  ],
+  "scores": {
+   "code-sleep-b04:m0001": 0.74,
+   "code-sleep-b05:m0010": 0.93,
+   "code-sleep-b05:m0032": 0.87,
+   "code-sleep-b03:m0009": 0.88,
+   "code-sleep-b02:m0012": 0.68,
+   "code-sleep-b07:m0017": 0.81,
+   "code-sleep-b08:m0013": 0.78,
+   "code-sleep-b00:m0048": 0.7,
+   "code-sleep-b05:m0039": 0.78,
+   "code-sleep-b04:m0024": 0.63
+  },
+  "latency_s": 0.249,
+  "attempts": 1
+ },
+ "code-s097-e000": {
+  "pool": [
+   "code-sleep-b06:m0017",
+   "code-sleep-b00:m0033",
+   "code-sleep-b05:m0032",
+   "code-sleep-b01:m0034",
+   "code-sleep-b03:m0011",
+   "code-sleep-b03:m0006",
+   "code-sleep-b00:m0048",
+   "code-sleep-b07:m0007",
+   "code-sleep-b05:m0033",
+   "code-sleep-b08:m0016",
+   "code-sleep-b00:m0015",
+   "code-sleep-b00:m0054",
+   "code-sleep-b08:m0021",
+   "code-sleep-b06:m0021",
+   "code-sleep-b00:m0037"
+  ],
+  "scores": {
+   "code-sleep-b06:m0017": 0.82,
+   "code-sleep-b00:m0033": 0.83,
+   "code-sleep-b05:m0032": 0.85,
+   "code-sleep-b01:m0034": 0.55,
+   "code-sleep-b03:m0011": 0.83,
+   "code-sleep-b03:m0006": 0.79,
+   "code-sleep-b00:m0048": 0.68,
+   "code-sleep-b07:m0007": 0.45,
+   "code-sleep-b05:m0033": 0.43,
+   "code-sleep-b08:m0016": 0.55,
+   "code-sleep-b00:m0015": 0.55,
+   "code-sleep-b00:m0054": 0.71,
+   "code-sleep-b08:m0021": 0.43,
+   "code-sleep-b06:m0021": 0.63,
+   "code-sleep-b00:m0037": 0.53
+  },
+  "latency_s": 0.274,
+  "attempts": 1
+ },
+ "code-s097-e005": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b02:m0030",
+   "code-sleep-b02:m0001",
+   "code-sleep-b08:m0013",
+   "code-sleep-b07:m0017",
+   "code-sleep-b02:m0026",
+   "code-sleep-b00:m0048",
+   "code-sleep-b02:m0016",
+   "code-sleep-b05:m0025",
+   "code-sleep-b01:m0036",
+   "code-sleep-b06:m0024"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.81,
+   "code-sleep-b02:m0030": 0.8,
+   "code-sleep-b02:m0001": 0.82,
+   "code-sleep-b08:m0013": 0.67,
+   "code-sleep-b07:m0017": 0.68,
+   "code-sleep-b02:m0026": 0.62,
+   "code-sleep-b00:m0048": 0.62,
+   "code-sleep-b02:m0016": 0.38,
+   "code-sleep-b05:m0025": 0.73,
+   "code-sleep-b01:m0036": 0.54,
+   "code-sleep-b06:m0024": 0.48
+  },
+  "latency_s": 0.248,
+  "attempts": 1
+ },
+ "code-s097-e021": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b00:m0048",
+   "code-sleep-b02:m0001",
+   "code-sleep-b00:m0052",
+   "code-sleep-b02:m0030",
+   "code-sleep-b03:m0006"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.75,
+   "code-sleep-b00:m0048": 0.59,
+   "code-sleep-b02:m0001": 0.58,
+   "code-sleep-b00:m0052": 0.6,
+   "code-sleep-b02:m0030": 0.62,
+   "code-sleep-b03:m0006": 0.51
+  },
+  "latency_s": 0.22,
+  "attempts": 1
+ },
+ "code-s098-e000": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b05:m0030",
+   "code-sleep-b07:m0017",
+   "code-sleep-b03:m0004",
+   "code-sleep-b08:m0013",
+   "code-sleep-b00:m0048",
+   "code-sleep-b05:m0028",
+   "code-sleep-b02:m0012",
+   "code-sleep-b01:m0026"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.86,
+   "code-sleep-b05:m0030": 0.88,
+   "code-sleep-b07:m0017": 0.81,
+   "code-sleep-b03:m0004": 0.91,
+   "code-sleep-b08:m0013": 0.79,
+   "code-sleep-b00:m0048": 0.74,
+   "code-sleep-b05:m0028": 0.88,
+   "code-sleep-b02:m0012": 0.63,
+   "code-sleep-b01:m0026": 0.6
+  },
+  "latency_s": 0.223,
+  "attempts": 1
+ },
+ "code-s098-e007": {
+  "pool": [
+   "code-sleep-b03:m0004",
+   "code-sleep-b05:m0028"
+  ],
+  "scores": {
+   "code-sleep-b03:m0004": 0.63,
+   "code-sleep-b05:m0028": 0.63
+  },
+  "latency_s": 0.18,
+  "attempts": 1
+ },
+ "code-s098-e009": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "code-s098-e032": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b03:m0006",
+   "code-sleep-b00:m0048",
+   "code-sleep-b04:m0009"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.71,
+   "code-sleep-b03:m0006": 0.76,
+   "code-sleep-b00:m0048": 0.63,
+   "code-sleep-b04:m0009": 0.79
+  },
+  "latency_s": 0.25,
+  "attempts": 1
+ },
+ "code-s098-e035": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b02:m0001",
+   "code-sleep-b04:m0009",
+   "code-sleep-b03:m0006"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.75,
+   "code-sleep-b02:m0001": 0.57,
+   "code-sleep-b04:m0009": 0.63,
+   "code-sleep-b03:m0006": 0.48
+  },
+  "latency_s": 0.254,
+  "attempts": 1
+ },
+ "code-s100-e000": {
+  "pool": [
+   "code-sleep-b00:m0023",
+   "code-sleep-b05:m0032",
+   "code-sleep-b03:m0011",
+   "code-sleep-b07:m0017",
+   "code-sleep-b08:m0013",
+   "code-sleep-b00:m0048"
+  ],
+  "scores": {
+   "code-sleep-b00:m0023": 0.95,
+   "code-sleep-b05:m0032": 0.87,
+   "code-sleep-b03:m0011": 0.8,
+   "code-sleep-b07:m0017": 0.82,
+   "code-sleep-b08:m0013": 0.78,
+   "code-sleep-b00:m0048": 0.3
+  },
+  "latency_s": 0.204,
+  "attempts": 1
+ },
+ "code-s101-e013": {
+  "pool": [
+   "code-sleep-b01:m0014",
+   "code-sleep-b02:m0001",
+   "code-sleep-b05:m0032",
+   "code-sleep-b04:m0009",
+   "code-sleep-b02:m0030",
+   "code-sleep-b09:m0001",
+   "code-sleep-b05:m0028",
+   "code-sleep-b00:m0048",
+   "code-sleep-b01:m0026",
+   "code-sleep-b02:m0018",
+   "code-sleep-b03:m0004",
+   "code-sleep-b05:m0017",
+   "code-sleep-b00:m0047",
+   "code-sleep-b05:m0016",
+   "code-sleep-b05:m0025"
+  ],
+  "scores": {
+   "code-sleep-b01:m0014": 0.81,
+   "code-sleep-b02:m0001": 0.8,
+   "code-sleep-b05:m0032": 0.83,
+   "code-sleep-b04:m0009": 0.7,
+   "code-sleep-b02:m0030": 0.78,
+   "code-sleep-b09:m0001": 0.84,
+   "code-sleep-b05:m0028": 0.68,
+   "code-sleep-b00:m0048": 0.68,
+   "code-sleep-b01:m0026": 0.82,
+   "code-sleep-b02:m0018": 0.71,
+   "code-sleep-b03:m0004": 0.41,
+   "code-sleep-b05:m0017": 0.72,
+   "code-sleep-b00:m0047": 0.74,
+   "code-sleep-b05:m0016": 0.43,
+   "code-sleep-b05:m0025": 0.71
+  },
+  "latency_s": 0.255,
+  "attempts": 1
+ },
+ "code-s102-e006": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b00:m0048",
+   "code-sleep-b07:m0017",
+   "code-sleep-b08:m0013",
+   "code-sleep-b09:m0019"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.74,
+   "code-sleep-b00:m0048": 0.79,
+   "code-sleep-b07:m0017": 0.76,
+   "code-sleep-b08:m0013": 0.75,
+   "code-sleep-b09:m0019": 0.44
+  },
+  "latency_s": 0.196,
+  "attempts": 1
+ },
+ "code-s103-e031": {
+  "pool": [
+   "code-sleep-b05:m0027",
+   "code-sleep-b08:m0029",
+   "code-sleep-b02:m0002",
+   "code-sleep-b01:m0012",
+   "code-sleep-b04:m0024",
+   "code-sleep-b00:m0019",
+   "code-sleep-b02:m0001",
+   "code-sleep-b02:m0025",
+   "code-sleep-b04:m0009",
+   "code-sleep-b00:m0010",
+   "code-sleep-b06:m0024"
+  ],
+  "scores": {
+   "code-sleep-b05:m0027": 0.87,
+   "code-sleep-b08:m0029": 0.8,
+   "code-sleep-b02:m0002": 0.78,
+   "code-sleep-b01:m0012": 0.68,
+   "code-sleep-b04:m0024": 0.64,
+   "code-sleep-b00:m0019": 0.67,
+   "code-sleep-b02:m0001": 0.57,
+   "code-sleep-b02:m0025": 0.63,
+   "code-sleep-b04:m0009": 0.44,
+   "code-sleep-b00:m0010": 0.54,
+   "code-sleep-b06:m0024": 0.45
+  },
+  "latency_s": 0.294,
+  "attempts": 1
+ },
+ "code-s105-e000": {
+  "pool": [
+   "code-sleep-b05:m0025",
+   "code-sleep-b02:m0001",
+   "code-sleep-b04:m0009",
+   "code-sleep-b00:m0050",
+   "code-sleep-b02:m0030",
+   "code-sleep-b06:m0019",
+   "code-sleep-b00:m0048",
+   "code-sleep-b01:m0005",
+   "code-sleep-b07:m0017",
+   "code-sleep-b06:m0025",
+   "code-sleep-b00:m0025",
+   "code-sleep-b06:m0024",
+   "code-sleep-b03:m0006",
+   "code-sleep-b02:m0026",
+   "code-sleep-b07:m0003"
+  ],
+  "scores": {
+   "code-sleep-b05:m0025": 0.89,
+   "code-sleep-b02:m0001": 0.86,
+   "code-sleep-b04:m0009": 0.84,
+   "code-sleep-b00:m0050": 0.85,
+   "code-sleep-b02:m0030": 0.8,
+   "code-sleep-b06:m0019": 0.83,
+   "code-sleep-b00:m0048": 0.76,
+   "code-sleep-b01:m0005": 0.54,
+   "code-sleep-b07:m0017": 0.72,
+   "code-sleep-b06:m0025": 0.79,
+   "code-sleep-b00:m0025": 0.64,
+   "code-sleep-b06:m0024": 0.58,
+   "code-sleep-b03:m0006": 0.57,
+   "code-sleep-b02:m0026": 0.72,
+   "code-sleep-b07:m0003": 0.71
+  },
+  "latency_s": 0.23,
+  "attempts": 1
+ },
+ "code-s105-e008": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b02:m0001",
+   "code-sleep-b00:m0048",
+   "code-sleep-b04:m0009",
+   "code-sleep-b03:m0006",
+   "code-sleep-b06:m0024",
+   "code-sleep-b05:m0021",
+   "code-sleep-b00:m0002",
+   "code-sleep-b05:m0036",
+   "code-sleep-b02:m0030",
+   "code-sleep-b09:m0019",
+   "code-sleep-b05:m0015",
+   "code-sleep-b01:m0033"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.8,
+   "code-sleep-b02:m0001": 0.82,
+   "code-sleep-b00:m0048": 0.75,
+   "code-sleep-b04:m0009": 0.76,
+   "code-sleep-b03:m0006": 0.52,
+   "code-sleep-b06:m0024": 0.7,
+   "code-sleep-b05:m0021": 0.74,
+   "code-sleep-b00:m0002": 0.71,
+   "code-sleep-b05:m0036": 0.58,
+   "code-sleep-b02:m0030": 0.67,
+   "code-sleep-b09:m0019": 0.44,
+   "code-sleep-b05:m0015": 0.61,
+   "code-sleep-b01:m0033": 0.67
+  },
+  "latency_s": 0.249,
+  "attempts": 1
+ },
+ "code-s106-e000": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b05:m0016",
+   "code-sleep-b07:m0017",
+   "code-sleep-b08:m0013",
+   "code-sleep-b03:m0006",
+   "code-sleep-b00:m0048",
+   "code-sleep-b05:m0025",
+   "code-sleep-b01:m0032",
+   "code-sleep-b00:m0006"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.87,
+   "code-sleep-b05:m0016": 0.91,
+   "code-sleep-b07:m0017": 0.84,
+   "code-sleep-b08:m0013": 0.83,
+   "code-sleep-b03:m0006": 0.78,
+   "code-sleep-b00:m0048": 0.74,
+   "code-sleep-b05:m0025": 0.45,
+   "code-sleep-b01:m0032": 0.24,
+   "code-sleep-b00:m0006": 0.19
+  },
+  "latency_s": 0.2,
+  "attempts": 1
+ },
+ "code-s106-e004": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b07:m0017",
+   "code-sleep-b08:m0013",
+   "code-sleep-b00:m0048",
+   "code-sleep-b09:m0019"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.78,
+   "code-sleep-b07:m0017": 0.7,
+   "code-sleep-b08:m0013": 0.7,
+   "code-sleep-b00:m0048": 0.39,
+   "code-sleep-b09:m0019": 0.39
+  },
+  "latency_s": 0.195,
+  "attempts": 1
+ },
+ "code-s107-e000": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b00:m0044",
+   "code-sleep-b07:m0017",
+   "code-sleep-b08:m0013",
+   "code-sleep-b02:m0003",
+   "code-sleep-b07:m0013",
+   "code-sleep-b00:m0048",
+   "code-sleep-b09:m0019"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.86,
+   "code-sleep-b00:m0044": 0.84,
+   "code-sleep-b07:m0017": 0.84,
+   "code-sleep-b08:m0013": 0.81,
+   "code-sleep-b02:m0003": 0.77,
+   "code-sleep-b07:m0013": 0.82,
+   "code-sleep-b00:m0048": 0.64,
+   "code-sleep-b09:m0019": 0.41
+  },
+  "latency_s": 0.264,
+  "attempts": 1
+ },
+ "code-s107-e006": {
+  "pool": [
+   "code-sleep-b01:m0024",
+   "code-sleep-b05:m0005",
+   "code-sleep-b06:m0025",
+   "code-sleep-b05:m0025",
+   "code-sleep-b01:m0025",
+   "code-sleep-b05:m0032",
+   "code-sleep-b02:m0001",
+   "code-sleep-b00:m0036",
+   "code-sleep-b02:m0030",
+   "code-sleep-b05:m0016",
+   "code-sleep-b04:m0019",
+   "code-sleep-b00:m0048",
+   "code-sleep-b08:m0014",
+   "code-sleep-b05:m0017",
+   "code-sleep-b00:m0001"
+  ],
+  "scores": {
+   "code-sleep-b01:m0024": 0.93,
+   "code-sleep-b05:m0005": 0.87,
+   "code-sleep-b06:m0025": 0.89,
+   "code-sleep-b05:m0025": 0.82,
+   "code-sleep-b01:m0025": 0.85,
+   "code-sleep-b05:m0032": 0.8,
+   "code-sleep-b02:m0001": 0.74,
+   "code-sleep-b00:m0036": 0.84,
+   "code-sleep-b02:m0030": 0.8,
+   "code-sleep-b05:m0016": 0.63,
+   "code-sleep-b04:m0019": 0.78,
+   "code-sleep-b00:m0048": 0.71,
+   "code-sleep-b08:m0014": 0.7,
+   "code-sleep-b05:m0017": 0.37,
+   "code-sleep-b00:m0001": 0.42
+  },
+  "latency_s": 0.223,
+  "attempts": 1
+ },
+ "code-s108-e000": {
+  "pool": [
+   "code-sleep-b04:m0012",
+   "code-sleep-b02:m0019",
+   "code-sleep-b05:m0032",
+   "code-sleep-b00:m0044",
+   "code-sleep-b01:m0028",
+   "code-sleep-b02:m0001",
+   "code-sleep-b02:m0003",
+   "code-sleep-b00:m0020",
+   "code-sleep-b01:m0023",
+   "code-sleep-b06:m0023",
+   "code-sleep-b08:m0026",
+   "code-sleep-b03:m0020",
+   "code-sleep-b05:m0025",
+   "code-sleep-b02:m0030",
+   "code-sleep-b00:m0047"
+  ],
+  "scores": {
+   "code-sleep-b04:m0012": 0.85,
+   "code-sleep-b02:m0019": 0.81,
+   "code-sleep-b05:m0032": 0.88,
+   "code-sleep-b00:m0044": 0.66,
+   "code-sleep-b01:m0028": 0.75,
+   "code-sleep-b02:m0001": 0.76,
+   "code-sleep-b02:m0003": 0.63,
+   "code-sleep-b00:m0020": 0.66,
+   "code-sleep-b01:m0023": 0.61,
+   "code-sleep-b06:m0023": 0.57,
+   "code-sleep-b08:m0026": 0.66,
+   "code-sleep-b03:m0020": 0.54,
+   "code-sleep-b05:m0025": 0.49,
+   "code-sleep-b02:m0030": 0.57,
+   "code-sleep-b00:m0047": 0.57
+  },
+  "latency_s": 0.214,
+  "attempts": 1
+ },
+ "code-s108-e036": {
+  "pool": [],
+  "scores": {},
+  "latency_s": null
+ },
+ "code-s108-e040": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b03:m0001",
+   "code-sleep-b07:m0017",
+   "code-sleep-b08:m0013",
+   "code-sleep-b04:m0002",
+   "code-sleep-b00:m0038",
+   "code-sleep-b00:m0026",
+   "code-sleep-b02:m0028",
+   "code-sleep-b05:m0018",
+   "code-sleep-b09:m0019",
+   "code-sleep-b06:m0001",
+   "code-sleep-b08:m0011",
+   "code-sleep-b07:m0001",
+   "code-sleep-b00:m0048",
+   "code-sleep-b06:m0018"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.85,
+   "code-sleep-b03:m0001": 0.87,
+   "code-sleep-b07:m0017": 0.79,
+   "code-sleep-b08:m0013": 0.73,
+   "code-sleep-b04:m0002": 0.51,
+   "code-sleep-b00:m0038": 0.64,
+   "code-sleep-b00:m0026": 0.75,
+   "code-sleep-b02:m0028": 0.7,
+   "code-sleep-b05:m0018": 0.55,
+   "code-sleep-b09:m0019": 0.41,
+   "code-sleep-b06:m0001": 0.57,
+   "code-sleep-b08:m0011": 0.69,
+   "code-sleep-b07:m0001": 0.48,
+   "code-sleep-b00:m0048": 0.58,
+   "code-sleep-b06:m0018": 0.51
+  },
+  "latency_s": 0.247,
+  "attempts": 1
+ },
+ "code-s108-e045": {
+  "pool": [
+   "code-sleep-b05:m0032",
+   "code-sleep-b07:m0017",
+   "code-sleep-b03:m0011",
+   "code-sleep-b08:m0013",
+   "code-sleep-b09:m0019"
+  ],
+  "scores": {
+   "code-sleep-b05:m0032": 0.8,
+   "code-sleep-b07:m0017": 0.8,
+   "code-sleep-b03:m0011": 0.76,
+   "code-sleep-b08:m0013": 0.81,
+   "code-sleep-b09:m0019": 0.33
+  },
+  "latency_s": 0.201,
+  "attempts": 1
+ }
+}

@@ -2001,3 +2001,10 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   (need / no-need), picks per turn, and the second call's latency; next to the one-pass p ≥ 0.7 top 8 numbers of
   C11-E8's post hoc table (code 0.793 / 29 no-need turns; life 0.714 / 38).
 - **No verdict rule.**
+- **Result (2026-10-19, `python3 benchmarks/memory-stream/wide_check.py --world <w> --second`):**
+  - code: recall 45/58 = 0.776; turns with any pick need 51/55, no-need 29/55; picks per turn 2.85; second call
+    p50 0.232 s, p90 0.291 s. (One pass, p ≥ 0.7 top 8: 0.793, no-need 29.)
+  - life: recall 45/63 = 0.714; need 72/79, no-need 37/79; picks 2.53; p50 0.233 s, p90 0.279 s. (One pass: 0.714,
+    no-need 38.)
+- **What this says:** a narrow second pass changes nothing: Jev gives the same verdicts on a row whether it sees it
+  among 150 candidates or 15. The wide pool does not confuse it; the misses are rows it judges unneeded either way.

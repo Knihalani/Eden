@@ -222,8 +222,8 @@ The checker is now the weakest step. Work on it, in order of expected value:
 
 1. **Give the checker the cards as context.** A row is easier to judge when the checker knows the user's standing
    rules and current plans. Cheap to test on the C11-E8 data.
-2. **Two passes.** A wide pass at a low threshold (p ≥ 0.5 reaches 81–83% recall, C11-E8 post hoc), then a narrow
-   pass over its ≤ 15 picks with the C10-E2 question (untested as a second pass).
+2. **Two passes: tested, no gain** (C11-E9). A narrow second pass over the wide pass's top 15 gives the same
+   recall (code 0.776, life 0.714): Jev judges a row the same among 150 candidates or 15.
 3. **Average two calls.** Repeat calls disagree on about 10% of packets (C10-R); averaging two parallel calls costs
    no time.
 4. **Learn from feedback.** Per-user calibration of the threshold from what the agent used.
