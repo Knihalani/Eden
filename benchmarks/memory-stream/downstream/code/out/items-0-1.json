@@ -1,0 +1,65 @@
+{
+  "responder": "sonnet (claude-code subagent)",
+  "items": [
+    {
+      "id": "code-s078-e016#0",
+      "response": "Sure. I'll add skeletons to the 4 summary cards on the reports page, sized to match the loaded cards so nothing shifts when data arrives.\nAction: Find the summary cards component and its loading state, reuse an existing skeleton component if there is one, add the skeletons, and run the web tests."
+    },
+    {
+      "id": "code-s035-e006#0",
+      "response": "Yes, by default. next/image sends requests to /_next/image on our Next server, which fetches the remote image, resizes and converts it, and caches the result, so the first request for each size and format hits our node process. We saw avatars from cdn.acme.dev resolving through /_next/image in the built app. The `unoptimized` prop or a custom loader would go straight to the CDN instead, if you want that.\nAction: No change needed; say so if you want me to switch avatars to a direct CDN loader."
+    },
+    {
+      "id": "code-s040-e008#0",
+      "response": "On it. I'll swap the three console.log calls (routes/invoices.ts:88, send-reminder.ts:41, plugins/auth.ts:57) for the pino logger, and for the invoices one I'll log only a few safe fields, not the whole body. Then I'll check the NEXT_PUBLIC_ stripe var in apps/web/.env.example is the publishable key (pk_), not a secret.\nAction: Make the logger swaps, fix .env.example if needed, then start redis with docker compose and run `pnpm --filter worker dev` to confirm the worker boots."
+    },
+    {
+      "id": "code-s002-e013#0",
+      "response": "Okay, I'll leave the dist/index.js untracking until you've asked Marco. For the export, I'll report failures to Sentry using the SENTRY_DSN env var, gate the command behind a GrowthBook flag, and add a Vitest stdout snapshot for the csv output. On the stash, I won't use git stash from here on, and I'll look at what's in it before doing anything to it.\nAction: Run git stash list and show the stash contents, ask you before dropping it or moving it onto the branch as a commit, then implement the export changes, checking the existing flag naming first rather than inventing a flag key."
+    },
+    {
+      "id": "code-s013-e040#0",
+      "response": "I'd rather read the setup than describe it from memory.\nAction: Look at the CLI package's test config and existing test files to see the runner, how stdout is captured and where tests live, then write a test for the --json flag in that style."
+    },
+    {
+      "id": "code-s021-e018#0",
+      "response": "It depends on the bottleneck. Raising concurrency from 5 puts more load on each process (DB connections, outbound mail), while adding replicas scales out without changing per-process pressure, so I'd lean on replicas first unless the job is idle-waiting on I/O. I don't know the current replica count or limits.\nAction: Check the worker chart for replicas or autoscaling and the reminder job's resource use and downstream rate limits, then give you a specific recommendation."
+    },
+    {
+      "id": "code-s038-e007#0",
+      "response": "Understood. The usual fix is to run tasks only for packages affected by the change (with a filter against the base branch) and to cache build and test outputs so unchanged packages are skipped. I don't know what tooling CI uses today, so I'll look first.\nAction: Read the CI workflow and the root build config, measure where the 14 minutes go, then propose a concrete change for affected-only runs plus caching."
+    },
+    {
+      "id": "code-s085-e014#0",
+      "response": "Ingress is the AWS Load Balancer Controller with ACM certificates, so TLS terminates at the load balancer. ACM renews its certs automatically as long as they're in use and the validation records are still in place, so renewal itself is mostly hands-off. I'd confirm the details from the ingress config before you quote them to Priya.\nAction: Look at the api ingress in the helm chart for the host and the certificate annotation, then give you a short talking-point summary."
+    },
+    {
+      "id": "code-s055-e000#0",
+      "response": "Sure. I'll add a request hook that records start time and logs method, route, status code and duration in ms when the response finishes, using the route pattern rather than the raw URL so ids and query strings stay out of the logs.\nAction: Find the API's server setup and logger, add the timing hook, add a test that a request produces one line with the four fields, and run the api tests."
+    },
+    {
+      "id": "code-s063-e009#0",
+      "response": "Sure. I'll draft it with a summary of the change, what it affects, and a 'Plan output' section with a placeholder to paste into, noting the platform team's review is needed since it's under infra/.\nAction: Look at the diff on her redis security group branch, write the PR description to a file with a clearly marked spot for the plan output, and show it to you."
+    },
+    {
+      "id": "code-s037-e000#0",
+      "response": "Sure. I'll sort the deps-bot PRs by patch, minor and major, and I won't bump any major version without asking you first, even where CI is green.\nAction: List the open deps-bot PRs with gh, check each one's version change and CI status, and report which are safe and which are majors that need your call, without merging anything."
+    },
+    {
+      "id": "code-s082-e049#0",
+      "response": "Anytime.\nAction: Nothing further to do for now."
+    },
+    {
+      "id": "code-s103-e007#0",
+      "response": "Likely the dropdown isn't using the outside-click handling that comes with the shadcn component, for example a controlled open state without an onOpenChange. UI components live in apps/web/components/ui, so I'll see whether the switcher is built on them.\nAction: Find the org switcher, check how its open state is handled, fix it to close on outside click (and Escape), add a test, and avoid changing the shared ui primitives unless that's the cause."
+    },
+    {
+      "id": "code-s097-e005#0",
+      "response": "Sure. I'll build share-link.ts to sign `invoiceId` plus expiry with HMAC-SHA256 and verify with a constant-time comparison. The secret must stay server-side, so the preview component can't sign in the browser; it should call a server action or route that returns the link.\nAction: Check how env secrets are handled in apps/web and whether the preview is a client component, write share-link.ts with sign and verify plus tests (including expired and tampered links), and wire the copy button to it."
+    },
+    {
+      "id": "code-s067-e000#0",
+      "response": "Draft Slack message: 'Welcome! To run the repo locally: nvm use (Node 20.11 is pinned in .nvmrc), then pnpm install. Copy .env.example to .env.local and pull the secrets from the 1Password vault acme-dev. Containers run on OrbStack, not Docker Desktop. Then pnpm dev at the root starts web, api and worker via Turborepo.' For the csv export fix, it's user-facing, so it needs a changeset.\nAction: Post the draft for your edits, run `pnpm changeset` for the csv fix, and open the PR; I won't tag or release until you say go."
+    }
+  ]
+}
