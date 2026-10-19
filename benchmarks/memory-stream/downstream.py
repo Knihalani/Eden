@@ -141,6 +141,11 @@ def prep_verify(a):
            ["cases"]}
     base = json.load(open(os.path.join(HERE, "downstream", a.world, "key.json")))["key"]
     vis = lambda r, e: r["t"] < e["_order"] and (r.get("invalid_at") is None or r["invalid_at"] > e["_order"])
+    day = {}  # event order → its session's date, to date a row by when it was written (C5-E6)
+    for sess in stream["sessions"]:
+        for ev in sess["events"]:
+            day[ev["_order"]] = sess["ts"][:10]
+    dated = lambda r: f"[as of {day.get(int(r['t']), '?')}] {r['text']}" if a.dated else r["text"]
     rng = random.Random(19)
     d = os.path.join(HERE, "downstream", a.sub)
     os.makedirs(os.path.join(d, "in"), exist_ok=True)
@@ -149,7 +154,7 @@ def prep_verify(a):
     for eid in sorted(base):
         e = evs[eid]
         pick = [i for i, p in vp.get(eid, []) if p >= a.p and i in rows and vis(rows[i], e)][:4]
-        packet = [rows[i]["text"] for i in pick] if acts.get(eid) else []
+        packet = [dated(rows[i]) for i in pick] if acts.get(eid) else []
         fired += bool(packet)
         conds = {"none": [], "verify": packet}
         order = list(conds)
@@ -262,6 +267,7 @@ if __name__ == "__main__":
     ap.add_argument("--system", default="")
     ap.add_argument("--per", type=int, default=45)
     ap.add_argument("--p", type=float, default=0.6, help="prep-verify: verifier threshold")
+    ap.add_argument("--dated", action="store_true", help="prep-verify: prefix each row with the date it was written")
     a = ap.parse_args()
     cmds = {"prep": prep, "prep-picks": prep_picks, "prep-eden": prep_eden, "prep-verify": prep_verify, "items": items,
             "collect": collect, "judge-prep": judge_prep, "report": report}
