@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s046-e022",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both keep the commit to the paid-at files, need the Linear id for the branch, and leave the CLI/pdf changes uncommitted."
+  },
+  {
+   "event": "code-s055-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A knows the API is now Fastify 5 and uses plugins with request.log; B doesn't know the framework."
+  },
+  {
+   "event": "code-s057-e010",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "A answers with the PgBouncer transaction-mode prepare:false gotcha; B fails to recall a known fact it was directly asked for."
+  },
+  {
+   "event": "code-s061-e012",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "A pulls the install log. B claims it already pushed a lockfile fix, which hasn't happened yet."
+  },
+  {
+   "event": "code-s061-e020",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "B knows that applies run only through CI and need platform CODEOWNERS review; A is safe but doesn't know the approval rules."
+  },
+  {
+   "event": "code-s063-e009",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both draft with a platform review item and a placeholder for the plan output; both are acceptable."
+  },
+  {
+   "event": "code-s067-e000",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "A names the wrong CSV fix (the amount_cents rename instead of the comma/CRLF fix). B is generic and misses Changesets."
+  },
+  {
+   "event": "code-s078-e016",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add sized skeletons and check the existing component; A hedges appropriately on an old note."
+  },
+  {
+   "event": "code-s080-e014",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Neither flags that the 9th is a Friday (no Friday deploys). A also misses the changeset; B covers the changeset and lockfile."
+  },
+  {
+   "event": "code-s080-e020",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "A recalls max 10 connections per pod (scale pods, not pool); B fails to answer a known value it was directly asked for."
+  }
+ ]
+}
