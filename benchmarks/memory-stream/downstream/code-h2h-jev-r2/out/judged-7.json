@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "code-s045-e007", "scores": [3,3,3,3], "why": "No DNS fact or history available yet; all reasonably search the repo instead of guessing."},
+{"event": "code-s046-e000", "scores": [3,3,1,2], "why": "History shows existing pdfFilename slug helper; first two use it. Third invents a prior user request; fourth ignores the existing helper."},
+{"event": "code-s047-e026", "scores": [3,2,3,2], "why": "Copy lives in next-intl messages files; first and third check them, others look only in the component."},
+{"event": "code-s047-e032", "scores": [3,3,3,2], "why": "Fourth says both changes passed web tests, but the void prompt is CLI code covered by CLI tests."},
+{"event": "code-s048-e011", "scores": [3,3,3,3], "why": "All correctly diagnose a stale docker context or DOCKER_HOST and switch to OrbStack."},
+{"event": "code-s051-e006", "scores": [3,3,3,3], "why": "All plan to pull release.yml run timings with gh in the background."},
+{"event": "code-s051-e011", "scores": [3,3,3,3], "why": "All fix pricing to 60 and check other marketing routes."},
+{"event": "code-s055-e011", "scores": [3,3,3,3], "why": "All rewrite the section from the real app tree for Next 15 App Router."},
+{"event": "code-s056-e008", "scores": [2,3,2,2], "why": "Correct locale mismatch diagnosis; none cite the next-intl useFormatter pattern already used. Second also checks other date sites."},
+{"event": "code-s056-e020", "scores": [3,3,2,2], "why": "Third mixes stale invalid_body error with problem+json; fourth omits required org_id scoping."},
+{"event": "code-s056-e026", "scores": [2,2,3,3], "why": "Server actions are the form convention; first two assert an AlertDialog in components/ui not shown in listing."},
+{"event": "code-s056-e032", "scores": [3,3,3,3], "why": "All route the 409 through problem() with an org-scoped open-invoices check and a test."},
+{"event": "code-s057-e015", "scores": [2,2,1,1], "why": "Known gotcha: PgBouncer transaction mode needs prepare: false. First two call it a guess; last two omit it."},
+{"event": "code-s061-e007", "scores": [3,3,3,3], "why": "All acknowledge plan-first rule and plan read-only."},
+{"event": "code-s068-e017", "scores": [2,2,2,2], "why": "README shows signed-in pages under app/(dashboard); none name it, all defer to inspecting the layout."}
+]}
