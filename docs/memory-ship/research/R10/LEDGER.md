@@ -1209,3 +1209,24 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - **Worth a downstream run** if precision ≥ vote k2 + 0.10 and recall ≥ vote k2 − 0.02, on at least 3 of the 4.
   - **Dead** if precision is not above vote k2 on at least 3 of the 4.
   - **Unclear** otherwise (report, no downstream run).
+
+## C7-E2 · 2026-10-19 · Distil the verifier into a model-free scorer: result
+- **Training** (`distill.py train --worlds code|life|code+life`): the shortlist rebuilds the verifier's exactly
+  (code 4095/4095 candidates, life 4993/4994). The verifier fires on 0.4719 (code), 0.4983 (life) and 0.4858
+  (both) of the training human turns; thresholds 0.2856 / 0.3125 / 0.293. Fit to the verifier's p on the training
+  rows: corr 0.599 / 0.5545 / 0.5729. The largest weights are the lexical score, situation entry and the bank score.
+- **Tests** (human turns; recall / precision / silence):
+
+  | Test | Vote k2 | Distilled | Verifier p0.6 |
+  |---|---|---|---|
+  | (a) train code → life dev | 0.1751 / 0.0817 / 0.5278 | 0.1962 / 0.113 / 0.5741 | 0.2785 / 0.2171 / 0.7407 |
+  | (a) train life → code dev | 0.2697 / 0.103 / 0.5545 | 0.2606 / 0.1345 / 0.6091 | 0.5121 / 0.2308 / 0.6364 |
+  | (b) both → code-rt1 | 0.1276 / 0.1569 / 0.6444 | 0.1034 / 0.1163 / 0.6667 | 0.3414 / 0.3673 / 0.7778 |
+  | (b) both → life-rt1 | 0.1739 / 0.1489 / 0.6176 | 0.1558 / 0.1395 / 0.6176 | 0.0688 / 0.1667 / 0.8529 |
+
+- **Verdict, by the rule: dead.** Precision is above vote k2 on 2 of the 4 tests (+0.0313 and +0.0315 on dev),
+  below on both red-team worlds (−0.0406, −0.0094); the rule needed 3 of 4. It never reaches the +0.10 line.
+- **What this says:** the features a hook can compute cheaply (word overlap, self-play matches, new entities,
+  recency, row kind) explain about a third of the verifier's judgment (corr ≈ 0.57), and the learned mix of them is
+  no better a picker than the hand-set vote. The verifier's edge is understanding the turn, which these features do
+  not carry. F16 (C3-E2) found the same at the turn level; this closes the row level.
