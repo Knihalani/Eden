@@ -1,0 +1,514 @@
+{
+ "batch": "a01",
+ "model": "sonnet (claude-code subagent)",
+ "cases": [
+  {
+   "event": "code-s027-e000",
+   "predictions": []
+  },
+  {
+   "event": "code-s027-e007",
+   "predictions": []
+  },
+  {
+   "event": "code-s027-e022",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0050",
+     "if": [
+      "commit",
+      "push",
+      "open a pr"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s027-e035",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0050",
+     "if": [
+      "commit",
+      "push",
+      "open a pr"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b01:m0005",
+     "if": [
+      "rebase",
+      "force push",
+      "amend",
+      "squash"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s027-e049",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0050",
+     "if": [
+      "commit",
+      "push",
+      "open a pr"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b01:m0005",
+     "if": [
+      "rebase",
+      "force push",
+      "amend",
+      "squash"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s028-e006",
+   "predictions": [
+    {
+     "row": "code-sleep-b02:m0001",
+     "if": [
+      "open a pr",
+      "put the pr up",
+      "pr"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b02:m0015",
+     "if": [
+      "gh",
+      "pr",
+      "open the pr"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b00:m0050",
+     "if": [
+      "pr",
+      "commit",
+      "title"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s028-e010",
+   "predictions": []
+  },
+  {
+   "event": "code-s028-e011",
+   "predictions": []
+  },
+  {
+   "event": "code-s028-e012",
+   "predictions": [
+    {
+     "row": "code-sleep-b02:m0015",
+     "if": [
+      "gh",
+      "open the pr",
+      "pr"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b02:m0001",
+     "if": [
+      "open a pr",
+      "pr"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s030-e013",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0050",
+     "if": [
+      "commit",
+      "push",
+      "open a pr"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b00:m0025",
+     "if": [
+      "stash",
+      "checkout",
+      "switch branch"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b02:m0030",
+     "if": [
+      "commit",
+      "push",
+      "pr",
+      "done"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s033-e020",
+   "predictions": [
+    {
+     "row": "code-sleep-b01:m0004",
+     "if": [
+      "migration",
+      "0034",
+      "migrate"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b00:m0008",
+     "if": [
+      "drop",
+      "truncate",
+      "reset",
+      "backfill"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b00:m0013",
+     "if": [
+      "test",
+      "tests",
+      "docker"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s035-e008",
+   "predictions": []
+  },
+  {
+   "event": "code-s035-e033",
+   "predictions": [
+    {
+     "row": "code-sleep-b01:m0033",
+     "if": [
+      "flaky",
+      "timezone",
+      "tz",
+      "fake timers"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b01:m0012",
+     "if": [
+      "date",
+      "timezone",
+      "utc"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s035-e044",
+   "predictions": []
+  },
+  {
+   "event": "code-s035-e047",
+   "predictions": []
+  },
+  {
+   "event": "code-s035-e058",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0050",
+     "if": [
+      "commit",
+      "push",
+      "open a pr"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s036-e000",
+   "predictions": []
+  },
+  {
+   "event": "code-s036-e010",
+   "predictions": [
+    {
+     "row": "code-sleep-b02:m0012",
+     "if": [
+      "org_id",
+      "orgid",
+      "query",
+      "queries"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b00:m0050",
+     "if": [
+      "commit",
+      "push",
+      "open a pr"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s038-e000",
+   "predictions": []
+  },
+  {
+   "event": "code-s038-e007",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0045",
+     "if": [
+      "ci",
+      "affected",
+      "cache",
+      "build"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b02:m0005",
+     "if": [
+      "ci",
+      "runner",
+      "benchmark"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s038-e019",
+   "predictions": []
+  },
+  {
+   "event": "code-s038-e021",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0050",
+     "if": [
+      "commit",
+      "push",
+      "open a pr"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b00:m0038",
+     "if": [
+      "lint",
+      "biome",
+      "push"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s040-e007",
+   "predictions": []
+  },
+  {
+   "event": "code-s040-e008",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0004",
+     "if": [
+      "console.log",
+      "logger",
+      "swap them",
+      "pino"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b03:m0002",
+     "if": [
+      "log",
+      "request body",
+      "token"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b00:m0050",
+     "if": [
+      "commit",
+      "push",
+      "open a pr"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s045-e000",
+   "predictions": []
+  },
+  {
+   "event": "code-s045-e007",
+   "predictions": []
+  },
+  {
+   "event": "code-s045-e012",
+   "predictions": [
+    {
+     "row": "code-sleep-b01:m0022",
+     "if": [
+      "billing",
+      "payment-succeeded",
+      "enqueue"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b00:m0050",
+     "if": [
+      "commit",
+      "push",
+      "open a pr"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s046-e016",
+   "predictions": [
+    {
+     "row": "code-sleep-b03:m0014",
+     "if": [
+      "cli",
+      "invoices list",
+      "command"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b00:m0024",
+     "if": [
+      "cli",
+      "snapshot",
+      "test"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s046-e022",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0050",
+     "if": [
+      "commit",
+      "push",
+      "open a pr"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b04:m0009",
+     "if": [
+      "push",
+      "pr",
+      "full test"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s047-e000",
+   "predictions": []
+  },
+  {
+   "event": "code-s047-e008",
+   "predictions": []
+  },
+  {
+   "event": "code-s047-e018",
+   "predictions": []
+  },
+  {
+   "event": "code-s047-e031",
+   "predictions": []
+  },
+  {
+   "event": "code-s047-e032",
+   "predictions": []
+  },
+  {
+   "event": "code-s047-e035",
+   "predictions": []
+  },
+  {
+   "event": "code-s048-e000",
+   "predictions": []
+  },
+  {
+   "event": "code-s048-e005",
+   "predictions": []
+  },
+  {
+   "event": "code-s051-e006",
+   "predictions": []
+  },
+  {
+   "event": "code-s051-e024",
+   "predictions": [
+    {
+     "row": "code-sleep-b00:m0050",
+     "if": [
+      "commit",
+      "push",
+      "open a pr"
+     ],
+     "always": false
+    },
+    {
+     "row": "code-sleep-b04:m0009",
+     "if": [
+      "push",
+      "pr",
+      "full test"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "code-s055-e000",
+   "predictions": []
+  }
+ ]
+}
