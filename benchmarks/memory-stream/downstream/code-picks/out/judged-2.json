@@ -1,0 +1,78 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s058-e012",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A knows OpenAPI spec is generated from zod schemas, regenerates; B unsure where docs come from."
+  },
+  {
+   "event": "code-s060-e021",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A knows Node 20.11 pin, nvm use, pnpm; B hedges on versions it should know."
+  },
+  {
+   "event": "code-s061-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A knows InvoicesEmptyState file, next-intl, test conventions; B generic but fine."
+  },
+  {
+   "event": "code-s063-e013",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A ties tag to release.yml deploy, records the rule, holds tag; B doesn't write rule down."
+  },
+  {
+   "event": "code-s066-e019",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "B does it concisely as user prefers; A adds stale claim about driver not passing prepare:false."
+  },
+  {
+   "event": "code-s066-e028",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add ServiceMonitor, check port name and selector labels, render with helm template."
+  },
+  {
+   "event": "code-s068-e017",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A knows App Router, no pages/, app/(dashboard)/reports; B hedges on known layout."
+  },
+  {
+   "event": "code-s071-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "B reuses existing RFC 4180 csv.ts helpers; A reinvents escaping."
+  },
+  {
+   "event": "code-s077-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add tsx devDependency and commit lockfile for frozen-lockfile CI."
+  }
+ ]
+}
