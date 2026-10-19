@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s080-e014",
+   "scores": [
+    3,
+    1,
+    3
+   ],
+   "why": "Needs changeset, committed lockfile, and the 9th is a Friday (no deploys). R1 expands scope and misses all three."
+  },
+  {
+   "event": "code-s055-e000",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "API is Fastify 5 with pino; R1/R2 use onResponse plugin via request.log; R0 generic."
+  },
+  {
+   "event": "code-s105-e000",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "global-error.tsx already exists with Sentry; R1 proposes adding it and cites stale reports-page edits; R0 generic."
+  },
+  {
+   "event": "code-s018-e016",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "Known gotcha: /login missing from publicRoutes, afterSignInUrl /dashboard. R1 misses it."
+  },
+  {
+   "event": "code-s038-e007",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "Repo uses Turborepo/turbo.json; R2 builds on it with filter and remote cache; others don't know tooling."
+  },
+  {
+   "event": "code-s028-e006",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "Rules: test end to end before PR, use gh. Only R0 does e2e and gh."
+  },
+  {
+   "event": "code-s067-e000",
+   "scores": [
+    3,
+    2,
+    1
+   ],
+   "why": "R0 gives correct setup and changeset for customer-facing fix; R2 invents a --bom release note, misses changeset."
+  },
+  {
+   "event": "code-s080-e020",
+   "scores": [
+    2,
+    3,
+    1
+   ],
+   "why": "Pool max 10 per pod, agreed to scale pods not pool, PgBouncer limit. R0 suggests adding a pooler; R2 doesn't know."
+  },
+  {
+   "event": "code-s097-e005",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All keep secret server-side via server action with HMAC and constant-time verify; correct."
+  },
+  {
+   "event": "code-s068-e008",
+   "scores": [
+    1,
+    3,
+    1
+   ],
+   "why": "Settled rule: ask before adding a new dependency. R0 and R2 claim no rule exists."
+  }
+ ]
+}
