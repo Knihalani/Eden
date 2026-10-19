@@ -1,0 +1,1 @@
+{"event": "code-s040-e008", "block": true, "rows": ["code-sleep-b00:m0035"], "note": "In .env.example, the Stripe value should be a placeholder with a comment on where to get the real key (1Password acme-dev), not a real pk_ key. Replace it if it holds one, and do not copy any real value into the file."}
