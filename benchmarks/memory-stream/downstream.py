@@ -69,7 +69,8 @@ def prep_picks(a):
     rows = {r["id"]: r for r in sleep.rows(stream, a.world, strict=True)}
     picks = judge.packets(a.world, "sleep", a.tag)
     rng = random.Random(9)
-    visible = lambda i: [r for r in picks[i] if r in rows and rows[r]["t"] < evs[i]["_order"]]
+    vis_at = lambda r, e: r["t"] < e["_order"] and (r.get("invalid_at") is None or r["invalid_at"] > e["_order"])
+    visible = lambda i: [r for r in picks[i] if r in rows and vis_at(rows[r], evs[i])]
     fired = sorted(i for i in picks if visible(i) and evs[i]["t"] == "human" and evs[i]["_split"] == "dev")
     noneed = [i for i in fired if not set(evs[i]["labels"]["needs"]) - set(evs[i]["labels"].get("in_context", []))]
     need = [i for i in fired if i not in noneed]
@@ -80,7 +81,7 @@ def prep_picks(a):
     cases, key = [], {}
     for eid in pick:
         e = evs[eid]
-        vis = [rows[r]["text"] for r in picks[eid] if r in rows and rows[r]["t"] < e["_order"]]
+        vis = [rows[r]["text"] for r in visible(eid)]
         conds = {"none": [], "picks": vis}
         order = list(conds)
         rng.shuffle(order)
@@ -94,19 +95,26 @@ def prep_picks(a):
 
 
 def items(a):
-    """Order-free responder input: one item per (turn, packet), shuffled, each with its own id (C4-E10: responders
-    that answer a list of packets swapped the order on 13 of 45 life and 4 of 45 code cases)."""
+    """Order-free responder input: one item per (turn, packet), each with its own id (C4-E10: responders that answer
+    a list of packets swapped the order). A turn's items never share a file: item j of every turn goes to group j,
+    split into files of `per` (review of C4-E10: a responder that sees a turn with and without memory in one prompt
+    copies facts into the no-memory reply)."""
     d = os.path.join(HERE, "downstream", a.sub or a.world)
     src = json.load(open(os.path.join(d, "in", "responses-in.json")))["cases"]
-    out = [{"id": f"{c['event']}#{j}", "text": c["text"], "recent": c["recent"], "packet": p}
-           for c in src for j, p in enumerate(c["packets"])]
-    random.Random(13).shuffle(out)
-    per = a.per
-    for b in range(0, len(out), per):
-        name = f"items-{b // per}"
-        json.dump({"items": out[b:b + per], "output": f"benchmarks/memory-stream/downstream/{a.sub or a.world}/out/{name}.json"},
-                  open(os.path.join(d, "in", f"{name}.json"), "w"), indent=1, ensure_ascii=False)
-        print(name, len(out[b:b + per]))
+    rng = random.Random(13)
+    groups = {}
+    for c in src:
+        for j, p in enumerate(c["packets"]):
+            groups.setdefault(j, []).append({"id": f"{c['event']}#{j}", "text": c["text"], "recent": c["recent"],
+                                             "packet": p})
+    for j, out in sorted(groups.items()):
+        rng.shuffle(out)
+        for b in range(0, len(out), a.per):
+            name = f"items-{j}-{b // a.per}"
+            dest = f"benchmarks/memory-stream/downstream/{a.sub or a.world}/out/{name}.json"
+            json.dump({"items": out[b:b + a.per], "output": dest},
+                      open(os.path.join(d, "in", f"{name}.json"), "w"), indent=1, ensure_ascii=False)
+            print(name, len(out[b:b + a.per]))
 
 
 def collect(a):
@@ -183,4 +191,6 @@ if __name__ == "__main__":
     ap.add_argument("--system", default="")
     ap.add_argument("--per", type=int, default=45)
     a = ap.parse_args()
-    {"prep": prep, "prep-picks": prep_picks, "items": items, "collect": collect, "judge-prep": judge_prep, "report": report}[a.cmd](a)
+    cmds = {"prep": prep, "prep-picks": prep_picks, "items": items, "collect": collect, "judge-prep": judge_prep,
+            "report": report}
+    cmds[a.cmd](a)
