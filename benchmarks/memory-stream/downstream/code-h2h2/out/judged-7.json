@@ -1,0 +1,51 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s103-e000",
+   "scores": [
+    1,
+    1,
+    3
+   ],
+   "why": "Field already added as elevation_gain (migration 0007) and list view annotates elevation_gain_m; only R3 catches the duplicate/clash."
+  },
+  {
+   "event": "code-s105-e019",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give the correct admin.display method with ordering; R3 shows code directly."
+  },
+  {
+   "event": "code-s108-e040",
+   "scores": [
+    1,
+    1,
+    3
+   ],
+   "why": "scripts/count-todos.ts already exists from yesterday; R1/R2 would rewrite it blindly, R3 checks first."
+  },
+  {
+   "event": "code-s108-e045",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly explain satisfies vs as const and the combination."
+  },
+  {
+   "event": "code-s108-e047",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "Correct explanation; all hedge on Node/tsconfig though Node 20.11 is pinned (has Symbol.dispose); none name lib esnext.disposable."
+  }
+ ]
+}

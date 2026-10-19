@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s051-e006",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "All plan gh timing breakdown; R2 cites ci.yml pnpm cache, a different workflow, as release suspect."
+  },
+  {
+   "event": "code-s051-e011",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All fix pricing to 60 and scan other marketing routes in background."
+  },
+  {
+   "event": "code-s055-e011",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All rewrite from real apps/web layout for Next 15 App Router."
+  },
+  {
+   "event": "code-s056-e008",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly diagnose locale-dependent date formatting and propose explicit shared formatter."
+  },
+  {
+   "event": "code-s056-e020",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All soft delete via deleted_at, problem+json, org scoping, tests."
+  },
+  {
+   "event": "code-s056-e026",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All plan confirm dialog with problem+json error handling; R2 aligns with shadcn/aria-label conventions."
+  },
+  {
+   "event": "code-s056-e032",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All route 409 through problem() with org-scoped open-invoices check and test."
+  },
+  {
+   "event": "code-s057-e015",
+   "scores": [
+    1,
+    1,
+    1
+   ],
+   "why": "All miss known gotcha: PgBouncer transaction mode needs prepare: false, likely dropped in c81e02a."
+  },
+  {
+   "event": "code-s061-e007",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All commit to plan-only and remember rule for future large refactors."
+  },
+  {
+   "event": "code-s068-e017",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "Comment correct, but all hedge on /reports; known layout puts authenticated pages in app/(dashboard)."
+  }
+ ]
+}
