@@ -1,0 +1,479 @@
+{
+ "batch": "a04",
+ "model": "sonnet (claude-code subagent)",
+ "cases": [
+  {
+   "event": "life-s100-e035",
+   "predictions": [
+    {
+     "row": "life-sleep-b00:m0026",
+     "if": [
+      "decision",
+      "recap",
+      "action item",
+      "open question"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0072",
+     "if": [
+      "decision",
+      "log",
+      "notion"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0071",
+     "if": [
+      "recap",
+      "write",
+      "draft",
+      "wording"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0027",
+     "if": [
+      "date",
+      "deadline",
+      "ship",
+      "by"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s101-e004",
+   "predictions": [
+    {
+     "row": "life-sleep-b00:m0026",
+     "if": [
+      "action item",
+      "decision",
+      "owner",
+      "open question"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0072",
+     "if": [
+      "decision log",
+      "decision",
+      "notion"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s101-e010",
+   "predictions": []
+  },
+  {
+   "event": "life-s102-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s102-e002",
+   "predictions": [
+    {
+     "row": "life-sleep-b00:m0047",
+     "if": [
+      "warm-up",
+      "warm up",
+      "waiter",
+      "role-play",
+      "scenario"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b06:m0012",
+     "if": [
+      "spanish",
+      "corrections",
+      "español",
+      "hola"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b02:m0006",
+     "if": [
+      "ser",
+      "estar",
+      "subjunctive",
+      "quiz",
+      "mistakes"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b04:m0019",
+     "if": [
+      "noun",
+      "gender",
+      "problema",
+      "dele"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s102-e008",
+   "predictions": []
+  },
+  {
+   "event": "life-s102-e009",
+   "predictions": [
+    {
+     "row": "life-sleep-b09:m0013",
+     "if": [
+      "snack",
+      "nut",
+      "allerg",
+      "lunch",
+      "bake"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b03:m0010",
+     "if": [
+      "lego",
+      "dinosaur",
+      "snack",
+      "lunch",
+      "mushroom"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s102-e013",
+   "predictions": []
+  },
+  {
+   "event": "life-s102-e016",
+   "predictions": []
+  },
+  {
+   "event": "life-s103-e007",
+   "predictions": []
+  },
+  {
+   "event": "life-s105-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s105-e004",
+   "predictions": [
+    {
+     "row": "life-sleep-b02:m0005",
+     "if": [
+      "plumber",
+      "tap",
+      "east end",
+      "book"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s105-e011",
+   "predictions": []
+  },
+  {
+   "event": "life-s105-e030",
+   "predictions": []
+  },
+  {
+   "event": "life-s105-e032",
+   "predictions": []
+  },
+  {
+   "event": "life-s106-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s106-e005",
+   "predictions": [
+    {
+     "row": "life-sleep-b01:m0027",
+     "if": [
+      "febreze",
+      "candle",
+      "plug-in",
+      "scent",
+      "air freshener"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s106-e007",
+   "predictions": [
+    {
+     "row": "life-sleep-b08:m0006",
+     "if": [
+      "microwave",
+      "hotplate",
+      "fridge",
+      "basement",
+      "appliance"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0001",
+     "if": [
+      "dinner",
+      "cook",
+      "meal",
+      "sam",
+      "vegetarian"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0050",
+     "if": [
+      "dinner",
+      "recipe",
+      "cook",
+      "meal"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b09:m0013",
+     "if": [
+      "dinner",
+      "recipe",
+      "lunch",
+      "snack",
+      "nut"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s107-e013",
+   "predictions": []
+  },
+  {
+   "event": "life-s107-e024",
+   "predictions": [
+    {
+     "row": "life-sleep-b02:m0021",
+     "if": [
+      "prd",
+      "sentence",
+      "rewrite",
+      "clunky",
+      "merchant"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0071",
+     "if": [
+      "prd",
+      "sentence",
+      "wording",
+      "leverage"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s108-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s110-e009",
+   "predictions": []
+  },
+  {
+   "event": "life-s110-e012",
+   "predictions": []
+  },
+  {
+   "event": "life-s110-e025",
+   "predictions": []
+  },
+  {
+   "event": "life-s111-e007",
+   "predictions": [
+    {
+     "row": "life-sleep-b08:m0004",
+     "if": [
+      "vancouver",
+      "kitsilano",
+      "kabir",
+      "mei",
+      "trip"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b08:m0005",
+     "if": [
+      "ira",
+      "mei",
+      "kabir",
+      "stay",
+      "sleep"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s111-e018",
+   "predictions": []
+  },
+  {
+   "event": "life-s113-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s115-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s115-e005",
+   "predictions": []
+  },
+  {
+   "event": "life-s115-e023",
+   "predictions": []
+  },
+  {
+   "event": "life-s115-e028",
+   "predictions": [
+    {
+     "row": "life-sleep-b00:m0076",
+     "if": [
+      "book",
+      "reserve",
+      "dinner",
+      "restaurant",
+      "christmas eve"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0001",
+     "if": [
+      "bacalhau",
+      "menu",
+      "eat",
+      "sam",
+      "restaurant"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b03:m0033",
+     "if": [
+      "plan",
+      "itinerary",
+      "activity",
+      "day",
+      "christmas"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b10:m0017",
+     "if": [
+      "lisbon",
+      "trip",
+      "december",
+      "flights"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s116-e005",
+   "predictions": []
+  },
+  {
+   "event": "life-s118-e006",
+   "predictions": []
+  },
+  {
+   "event": "life-s118-e007",
+   "predictions": []
+  },
+  {
+   "event": "life-s118-e013",
+   "predictions": []
+  },
+  {
+   "event": "life-s118-e015",
+   "predictions": []
+  },
+  {
+   "event": "life-s120-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s120-e003",
+   "predictions": [
+    {
+     "row": "life-sleep-b08:m0021",
+     "if": [
+      "write-up",
+      "write up",
+      "post",
+      "decision",
+      "launch"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0026",
+     "if": [
+      "summary",
+      "write-up",
+      "write up",
+      "notes"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0072",
+     "if": [
+      "decision",
+      "log",
+      "notion"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s121-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s123-e000",
+   "predictions": []
+  }
+ ]
+}

@@ -12,6 +12,7 @@
 {"event": "life-s101-e000", "needed": ["b036"], "why": "decisions logged in Notion decision log within 24h"},
 {"event": "life-s101-e004", "needed": ["c062", "c047", "a013", "a040", "a023"], "why": "one activity/day for Leo; Saturday soccer, swim lesson, run and call with mom conflict with the plan"},
 {"event": "life-s101-e010", "needed": ["b018", "c022", "c049"], "why": "Wed standup 9:45 clashes with workshop; noon Biscuit walk; usual WFH day"},
+{"event": "life-s101-e012", "needed": [], "why": ""},
 {"event": "life-s102-e000", "needed": ["b021", "b050"], "why": "role-play preference; recurring mistakes for warm-up"},
 {"event": "life-s102-e002", "needed": ["a012", "a011"], "why": "Leo's interests for indoor plan; nut allergy for snacks"},
 {"event": "life-s102-e009", "needed": ["b067", "b066"], "why": "PC Express Saturday pickup, no-name staples; ask before purchases over $150"},
