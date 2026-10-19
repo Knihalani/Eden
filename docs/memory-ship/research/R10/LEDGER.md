@@ -1337,7 +1337,7 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   | life-h2h | 75 | 0.59 / 0.76 | 0.294 / 0.653 |
   | life-h2h2 | 94 | 0.459 / 0.691 | 0.266 / 0.691 |
 
-- **What this says:** a single turn's verdict is mostly noise (r 0.05–0.59; about a third of signs flip between
+- **What this says:** a single turn's verdict is mostly noise (r 0.05–0.59; a quarter to a third of signs differ between
   runs), so only aggregates over about 150 turns carry information, and a second run is worth what it cost. The
   verifier's effect replicates better than eden's (higher r on three of four), which fits a real effect against a
   near-zero one. Per-turn examples in this ledger illustrate; they never decide.
