@@ -357,6 +357,7 @@ def main():
     ap.add_argument("--split", default="dev", help="dev | test | fresh (red-team sessions) | all")
     ap.add_argument("--sleep-tag", default="out")
     ap.add_argument("--strict", action="store_true", help="leak-free sleep store: rows visible after their batch")
+    ap.add_argument("--only", default="", help="judge tag: score only the events that tag's judge run covers")
     ap.add_argument("--sample", choices=["all", "judge"], default="all",
                     help="judge: score only the judge sample's events (same events as judge and pull)")
     ap.add_argument("--ci", action="store_true", help="bootstrap 95%% intervals (human recall, silence, precision)")
@@ -385,6 +386,10 @@ def main():
         import judge
         jp = judge.packets(a.world, "sleep")
         events = [e for e in events if e["id"] in jp]
+    if a.only:
+        import judge
+        jo = judge.packets(a.world, "sleep", a.only)
+        events = [e for e in events if e["id"] in jo]
     results = {}
     import methods
     for name in a.systems.split():
