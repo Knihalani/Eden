@@ -1,6 +1,6 @@
 # R10 — research state (re-read at the start of every cycle)
 
-**Last updated:** cycle 5 (2026-10-19). Draft PR: https://github.com/Knihalani/Eden/pull/149. Branch: `claude/r10-retrieval-benchmark-sf1jho` (from `claude/eden-retrieval-research-lna5mi` + `research/r10-retrieval`).
+**Last updated:** cycle 6 (2026-10-19). Draft PR: https://github.com/Knihalani/Eden/pull/149. Branch: `claude/r10-retrieval-benchmark-sf1jho` (from `claude/eden-retrieval-research-lna5mi` + `research/r10-retrieval`).
 
 The user's brief is `BRIEF.md`. In short: retrieval "basically perfect"; not only coding; no mundane methods; no local optima; a benchmark that reflects real use. The loop never ends, and this file is its memory. LEDGER.md is the append-only experiment log. LOOKS.md logs every test or holdout look.
 
@@ -28,7 +28,7 @@ Per-turn effect on the agent's replies (blind opus judge with history evidence, 
 | **F22b verifier p 0.6, dated, deferred** | **+0.113** | **+0.125** |
 | right packet (oracle), on need turns only (C5-E1) | +1.23 per need turn | +1.1 per need turn |
 
-Pooled with C6-E1 (more fresh turns) and, for code, averaged over a second independent run (C6-E2): **code +0.101 [+0.009, +0.199] (firm), life +0.135 [+0.035, +0.233] (firm)**.
+Pooled with C6-E1 (more fresh turns) and, for code, averaged over a second independent run (C6-E2): **code +0.101 [+0.0085, +0.199], life +0.135 [+0.035, +0.233]: firm by the pre-registered rules.** Code is firm only on the two-run average (a pre-registered second look; neither run alone excludes 0); life rests on one responder run. Measured on haiku, which D37 does not allow.
 
 ## Pareto frontier (StreamBench dev; per arm)
 
@@ -106,13 +106,13 @@ Families differ in mechanism. Every kill criterion was written before its run.
 
 ## Next three experiments
 
-1. **Done (C6-E1, C6-E2): the head-to-head is firm on both worlds.** Still open: a non-Claude responder or judge, if any is reachable.
+1. **Done (C6-E1, C6-E2): firm by rule** (caveats above). Still open: a non-Claude responder or judge, and a re-measure on a model D37 allows.
 2. **Model-free selection good enough to stand alone** (C6-E3 says the vote is not): learn from the verifier's picks at sleep (distil to cues), or ask the user to allow the in-turn call (R10-5). Also: **latency and cost of the off-hook verifier:** one haiku call per turn with ≤ 15 candidates, measured; and real PreToolUse delivery in a headless Claude Code run.
 3. **Episodic state rows:** expire or date-gate in-flight state at sleep, so "where did we leave things" gets the latest state.
 
 ## Cycle 6 findings (LEDGER C6-E1…E3)
 
-- **The head-to-head is firm on both worlds** (C6-E1, C6-E2): dated off-hook verifier vs today's plugin, code +0.101 [+0.009, +0.199], life +0.135 [+0.035, +0.233] per turn.
+- **The head-to-head is firm by the pre-registered rules** (C6-E1, C6-E2): dated off-hook verifier vs today's plugin, code +0.101 [+0.0085, +0.199] (two-run average only), life +0.135 [+0.035, +0.233] (one run).
 - **Dating alone does not rescue the model-free hook vote** (C6-E3): code +0.018, life −0.004. The verifier's judgment is what pays; R10-5's in-turn model call is the decision to make.
 
 ## Cycle 5 findings (LEDGER C5-E1…E7)
