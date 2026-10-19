@@ -5,6 +5,7 @@ hold the row, then lexical score, cut at 150; one Jev request per turn with the 
     python3 benchmarks/memory-stream/wide_check.py --world code          (runs the calls; resumes)
     python3 benchmarks/memory-stream/wide_check.py --world code --report
     python3 benchmarks/memory-stream/wide_check.py --world code --second [--report]   (C11-E9: narrow second pass)
+    python3 benchmarks/memory-stream/wide_check.py --world code --implied [--report]  (C11-E10: implied steps)
 → dream/<world>/wide/out.json: {event: {"need": [...], "pool": [...], "scores": {row: p}, "latency_s": s}}
 """
 import argparse, glob, json, os, random, sys
@@ -180,13 +181,83 @@ def second(world, keep=15, thr1=0.5, rep=False):
           f"; second call p50 {lat[len(lat) // 2]:.3f} s, p90 {lat[int(0.9 * len(lat))]:.3f} s")
 
 
+IMPLIED_Q = ("`turn` is the user's newest message to their assistant; `recent` is the conversation just before it. "
+             "`row` is one note from the assistant's long-term memory about this user. Question: does `row` state a "
+             "rule, convention, setup fact or past fix that applies to a step the assistant would likely take to "
+             "carry out `turn`, including steps the user did not name (committing, branching, testing, deploying, "
+             "editing a file the row governs)?")
+IMPLIED_C = {
+    "true": "Yes when doing the work the turn asks for would, in the normal course, involve a step that `row` "
+            "constrains or informs, even if the turn does not mention that step.",
+    "false": "No when no likely step of the work touches what `row` is about, or when the turn needs no work (small "
+             "talk, a thank-you, a question `row` does not bear on).",
+}
+
+
+def implied(world, rep=False):
+    """C11-E10: one implied-step question per wide-pool row, in its own request; a row is picked if needed p ≥ 0.7
+    or implied p ≥ 0.7, top 8 by the larger."""
+    import judge
+    g = Generators(world)
+    d = os.path.join(HERE, "dream", world, "wide")
+    wide = json.load(open(os.path.join(d, "out.json")))
+    path = os.path.join(d, "implied.json")
+    out = json.load(open(path)) if os.path.exists(path) else {}
+    if not rep:
+        cfg = env()
+        if not cfg["TYPESAFE_API_KEY"]:
+            sys.exit("TYPESAFE_API_KEY must be set (environment or .env)")
+        ev = {e["id"]: e for s in g.stream["sessions"] for e in s["events"]}
+        for eid, r in wide.items():
+            if eid in out:
+                continue
+            rec = {"scores": {}, "latency_s": None}
+            if r["pool"]:
+                state = {"turn": M.strip_paste(ev[eid]["text_all"])[:3000], "recent": judge.context(g.stream, eid, 4)}
+                qs = {f"q{n}": {"type": "noul", "instructions": {"row": g.by_id[i]["text"], "question": IMPLIED_Q},
+                                "criteria": IMPLIED_C} for n, i in enumerate(r["pool"])}
+                reply, secs, attempts = call(cfg, state, qs, timeout=120)
+                ans = reply.get("answers", {})
+                rec["scores"] = {i: combine(ans, n, "list") for n, i in enumerate(r["pool"])}
+                rec.update(latency_s=round(secs, 3), attempts=attempts)
+            out[eid] = rec
+            json.dump(out, open(path, "w"), indent=1)
+    tot = hit = 0
+    fired = {"need": [0, 0], "no-need": [0, 0]}
+    npk, lat = [], []
+    for eid, r in wide.items():
+        a = {i: p for i, p in r["scores"].items() if p is not None}
+        b = {i: p for i, p in out[eid]["scores"].items() if p is not None}
+        top = {i: max(a.get(i, 0.0), b.get(i, 0.0)) for i in set(a) | set(b)}
+        picks = sorted((i for i in top if top[i] >= THR), key=lambda i: (-top[i], i))[:8]
+        npk.append(len(picks))
+        if out[eid]["latency_s"] is not None:
+            lat.append(out[eid]["latency_s"])
+        k = "need" if r["need"] else "no-need"
+        fired[k][0] += 1
+        fired[k][1] += bool(picks)
+        for item in r["need"]:
+            cover = [i for i in r["pool"] if item in g.by_id[i]["covers"]]
+            if cover:
+                tot += 1
+                hit += any(i in picks for i in cover)
+    lat.sort()
+    print(world, len(out), "turns; needed or implied recall", f"{hit}/{tot} = {hit / tot:.3f};",
+          "turns with any pick", {k: f"{v[1]}/{v[0]}" for k, v in fired.items()},
+          "; picks per turn mean", round(sum(npk) / len(npk), 2),
+          f"; implied call p50 {lat[len(lat) // 2]:.3f} s, p90 {lat[int(0.9 * len(lat))]:.3f} s")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--world", required=True)
     ap.add_argument("--report", action="store_true")
     ap.add_argument("--second", action="store_true", help="C11-E9 narrow second pass")
+    ap.add_argument("--implied", action="store_true", help="C11-E10 implied-step question")
     a = ap.parse_args()
-    if a.second:
+    if a.implied:
+        implied(a.world, rep=a.report)
+    elif a.second:
         second(a.world, rep=a.report)
     else:
         report(a.world) if a.report else run(a.world)
