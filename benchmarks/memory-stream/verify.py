@@ -49,8 +49,7 @@ def prep(world, n, per, tag="", fresh=False, contrast=0, events=""):
         q = dict(e, text_all=methods.strip_paste(e["text_all"]))
         a = lex.scores(q, e["_order"])
         b = bank.scores(q, e["_order"])
-        top = sorted(a, key=lambda i: (-a[i], i))[: n // 2] + sorted(b, key=lambda i: (-b[i], i))[:n]
-        cand = list(dict.fromkeys(top))[:n]
+        cand = methods.shortlist(a, b, n)
         case = {"event": eid, "type": e["t"], "text": e["text_all"][:2000], "recent": judge.context(stream, eid, 4),
                 "candidates": [{"id": i, "text": lex.by_id[i]["text"]} for i in cand]}
         if contrast:  # causal calibration: the user's own human turns from earlier sessions (C4-E11)

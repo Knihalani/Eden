@@ -387,6 +387,13 @@ class Situation(Base):
         return [i for i in sorted(sc, key=lambda i: (-sc[i], i)) if sc[i] >= tau][: self.k]
 
 
+def shortlist(lex_scores, bank_scores, n=15):
+    """The verifier's candidates (F22, C7-E2): the lexical top n/2, then the bank top n, first n unique."""
+    a, b = lex_scores, bank_scores
+    top = sorted(a, key=lambda i: (-a[i], i))[: n // 2] + sorted(b, key=lambda i: (-b[i], i))[:n]
+    return list(dict.fromkeys(top))[:n]
+
+
 def budget_gate(obj, e, scores):
     """Budgeted firing (from the blank-slate design, C3): a turn fires only when its evidence (sum of its top-3 row
     scores) beats the `budget` quantile of the earlier scored turns' evidence. The packet rate then calibrates itself

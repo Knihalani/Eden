@@ -113,8 +113,8 @@ Families differ in mechanism. Every kill criterion was written before its run.
 ## Cycle 7 findings (LEDGER C7-E1…)
 
 - **A tightened model-free vote (k ≤ 2, superseded store, dated) is positive but not firm** (C7-E1): code +0.013
-  [−0.095, +0.117], life +0.063 [−0.028, +0.153]. Supersession helps life's wrong fires; code is unchanged. Row
-  choice, not delivery, holds the vote back.
+  [−0.095, +0.117], life +0.063 [−0.028, +0.153]. Life's fired no-need turns rose (post hoc, between runs, and k ≤ 2
+  and supersession changed together, so not attributable); code is unchanged. Row choice holds the vote back.
 - **Distilling the verifier into a model-free scorer is dead** (C7-E2): precision beats the vote on dev (+0.03) but
   not on the red-team worlds. Cheap hook features carry about a third of the verifier's judgment (corr ≈ 0.57).
 - **The head-to-head is firm on both worlds over two runs** (C7-E3): life run 2 +0.1338 [+0.0181, +0.2475]
