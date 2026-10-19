@@ -1,0 +1,1 @@
+{"event": "code-s085-e000", "block": true, "rows": ["code-sleep-b07:m0001", "code-sleep-b02:m0004", "code-sleep-b01:m0023"], "note": "Use pnpm 9.12.0 (not npm or yarn; the root packageManager field is stale and says yarn), run nvm use for Node 20.11 before installing, and copy each app's .env.example to .env.local (not .env) with secrets from the acme-dev 1Password vault."}

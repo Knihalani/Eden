@@ -1,0 +1,1 @@
+{"event": "code-s085-e010", "block": true, "rows": ["code-sleep-b05:m0002", "code-sleep-b04:m0004"], "note": "Bull Board is already mounted at /admin/queues on the worker behind basic auth, so point the user there instead of grepping for a queue dashboard. The worker runs BullMQ on Redis 7, not RabbitMQ."}
