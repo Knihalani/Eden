@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "code-s023-e000", "scores": [3,1,1,1], "why": "API is Express 4 per facts; only first flags the Fastify plugin mismatch. Others would write a Fastify plugin blindly."},
+{"event": "code-s025-e000", "scores": [3,3,3,3], "why": "No image-job fact known yet; all sensibly read the code before summarizing."},
+{"event": "code-s027-e000", "scores": [3,3,3,3], "why": "All give a plausible hypothesis, reproduce, fix loading state and add a test."},
+{"event": "code-s027-e008", "scores": [2,2,2,2], "why": "History holds a git log of recent days; all defer to git log instead of recapping known work."},
+{"event": "code-s027-e022", "scores": [3,3,3,3], "why": "Short acknowledgements; zod PR mention is relevant follow-up. All accurate."},
+{"event": "code-s027-e058", "scores": [3,3,2,3], "why": "Third omits commit and --json work and says nothing pending while lint result unseen."},
+{"event": "code-s030-e027", "scores": [2,2,2,3], "why": "API tests already finished; first three say still waiting. Fourth correctly waits on user's yes for request-id change."},
+{"event": "code-s035-e033", "scores": [3,2,3,3], "why": "History shows known TZ clock flake fixed via fake timers under Toronto/UTC; second omits TZ check."},
+{"event": "code-s038-e028", "scores": [3,3,3,3], "why": "All correct general explanations of Deployment vs StatefulSet."},
+{"event": "code-s041-e005", "scores": [3,2,3,3], "why": "Second misses the negative half-cent rounding asymmetry the credit-note tests should expose."},
+{"event": "code-s041-e009", "scores": [2,3,2,2], "why": "History shows @acme/cli with bin acme; first and third claim not knowing; fourth adds unsupported ACME_API_URL."},
+{"event": "code-s041-e013", "scores": [3,3,3,2], "why": "All propose tbody swap or morph; fourth adds distracting, less relevant advice."},
+{"event": "code-s041-e021", "scores": [2,3,3,3], "why": "Filter keeps its own kind prop; first would rename all uses without checking."},
+{"event": "code-s041-e038", "scores": [3,3,3,3], "why": "All accurately state pushed branch, full suite run, no PR."},
+{"event": "code-s042-e005", "scores": [3,3,3,3], "why": "All correctly separate blocking items, copy asks and opinions."}
+]}
