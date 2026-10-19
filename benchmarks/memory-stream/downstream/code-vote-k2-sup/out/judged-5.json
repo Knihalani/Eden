@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s058-e007",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 follows known react-hook-form+zodResolver pattern (org-form.tsx); R1 claims no knowledge of conventions. Neither names server actions."
+  },
+  {
+   "event": "code-s058-e012",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "OpenAPI is generated from zod schemas; R0 hedges 'any OpenAPI spec', R1 says it doesn't know how docs are generated."
+  },
+  {
+   "event": "code-s060-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both restrict Overdue to unpaid/open invoices with tests; R1's open-only rule is consistent with history."
+  },
+  {
+   "event": "code-s060-e021",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 applies the known .nvmrc Node 20.11 pin and nvm use; R0 claims not to know Node version/package manager."
+  },
+  {
+   "event": "code-s060-e026",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R0 attributes old laptop's Node 18 to the new laptop; R1 sensibly follows up on tests and seed prerequisites."
+  },
+  {
+   "event": "code-s061-e007",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both acknowledge plan-first rule going forward and stop for approval."
+  },
+  {
+   "event": "code-s066-e013",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both slug the org into the filename; R0 reuses existing csv-filename helper and slugify."
+  },
+  {
+   "event": "code-s066-e028",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 knows infra/helm per-service layout; R1 claims not to know chart layout. Neither mentions platform review."
+  },
+  {
+   "event": "code-s067-e006",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly explain up -d versus start."
+  },
+  {
+   "event": "code-s068-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both check push status, split commits onto branches off main, keep csv alone."
+  },
+  {
+   "event": "code-s068-e017",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both post Marco's comment and inspect apps/web route groups before placing /reports."
+  },
+  {
+   "event": "code-s068-e023",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Rules: no git stash, no major bumps without asking. R0 offers worktree and flags majors first; R1 stashes and bumps majors."
+  },
+  {
+   "event": "code-s070-e000",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Billing-sync findings await the user's review; R1 wrongly says nothing is queued, R0 just neutral."
+  },
+  {
+   "event": "code-s070-e002",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Both accurate; R0 references a nonexistent reviewer-flagged item."
+  },
+  {
+   "event": "code-s070-e004",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Simple acknowledgment; both fine."
+  }
+ ]
+}
