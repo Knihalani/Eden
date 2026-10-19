@@ -1,0 +1,141 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s070-e006",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Simple thanks; all fine, Tom's link reminder is a reasonable touch."
+  },
+  {
+   "event": "life-s071-e002",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "Facts say Leo's soccer is Saturdays 9:00; only R0 flags the 8:30 Saturday clash."
+  },
+  {
+   "event": "life-s072-e000",
+   "scores": [
+    3,
+    1,
+    3
+   ],
+   "why": "R1 invents an older note placing Riverside on Queen St E; others update and book properly."
+  },
+  {
+   "event": "life-s077-e000",
+   "scores": [
+    1,
+    1,
+    3
+   ],
+   "why": "History: 17 Jan zellige backsplash photos, white/sage follow-up; only R2 recalls them."
+  },
+  {
+   "event": "life-s077-e010",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "Acknowledgement fine; R2 adds calendar event unasked after she said ok cool."
+  },
+  {
+   "event": "life-s077-e012",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All draft the requested reply correctly and hold for approval."
+  },
+  {
+   "event": "life-s077-e044",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Timer set; all equivalent."
+  },
+  {
+   "event": "life-s085-e010",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give reasonable daycare waitlist ideas to pass on."
+  },
+  {
+   "event": "life-s085-e017",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "Math correct throughout; R1 skips the table, R2 adds confusing 'cents are dollars' note."
+  },
+  {
+   "event": "life-s085-e023",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Light small talk; all respond appropriately."
+  },
+  {
+   "event": "life-s085-e027",
+   "scores": [
+    2,
+    1,
+    2
+   ],
+   "why": "All omit the posted Slack reminder, table and daycare ideas; R1 falsely says nothing else was sent."
+  },
+  {
+   "event": "life-s087-e029",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All draft a fine casual text to Hannah."
+  },
+  {
+   "event": "life-s088-e015",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "Riya likes one main activity daily; R2 packs the afternoon too."
+  },
+  {
+   "event": "life-s088-e023",
+   "scores": [
+    1,
+    3,
+    1
+   ],
+   "why": "Riya pairs with Aisha on cuts with Wen's numbers; only R1 brings data and books the session."
+  },
+  {
+   "event": "life-s090-e005",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly flag incomplete camp forms before day 1."
+  }
+ ]
+}

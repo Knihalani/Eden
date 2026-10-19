@@ -1,0 +1,141 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s091-e012",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "Simple empathy fits; R1 adds pending items and an unsupported short-ride remark."
+  },
+  {
+   "event": "life-s092-e000",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "History has Leslieville every-other-Thursday yard waste schedule; R0/R2 claim nothing saved."
+  },
+  {
+   "event": "life-s096-e031",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Brief goodnight without offers, as just requested."
+  },
+  {
+   "event": "life-s097-e013",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give suitable non-cheesy card lines."
+  },
+  {
+   "event": "life-s097-e019",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give reasonable fort supply lists."
+  },
+  {
+   "event": "life-s100-e025",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "All show rupees only, not CAD with original in brackets; none notes Anjali has type 2 diabetes."
+  },
+  {
+   "event": "life-s102-e002",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R0 suggests baking/pizzas, but kitchen is under renovation with only a basement microwave and hotplate."
+  },
+  {
+   "event": "life-s105-e019",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R0 claims an existing reminder request unsupported by anything."
+  },
+  {
+   "event": "life-s106-e000",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "R0/R1 avoid scent per Sam migraines and confirm before order; R2 vaguer, no clear pick."
+  },
+  {
+   "event": "life-s106-e007",
+   "scores": [
+    1,
+    1,
+    1
+   ],
+   "why": "All fail to correct prior miss: basement kitchen has microwave, induction hotplate, old fridge; nor drop scented items."
+  },
+  {
+   "event": "life-s107-e022",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All produce clean rewrites."
+  },
+  {
+   "event": "life-s110-e007",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "R0/R2 give correct 2-day vs 3+ day distinction; R1 hedges on thresholds."
+  },
+  {
+   "event": "life-s110-e009",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give good kid explanation."
+  },
+  {
+   "event": "life-s111-e000",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "R0 recalls earlier Aug-weekend fares (89/42) and notes dates differ; others claim nothing found."
+  },
+  {
+   "event": "life-s111-e035",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R0 adds irrelevant checklist recap; R1 useful pool timing; R2 fine."
+  }
+ ]
+}

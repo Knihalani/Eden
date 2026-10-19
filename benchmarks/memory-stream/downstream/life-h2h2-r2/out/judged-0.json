@@ -1,0 +1,141 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s002-e000",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "All set the slot; 0 and 1 give concrete role-play plan; 2 vaguer daily chat."
+  },
+  {
+   "event": "life-s002-e020",
+   "scores": [
+    1,
+    2,
+    2
+   ],
+   "why": "Agent holds Carlos's lesson notes; 0 wrongly says it has none; 1 and 2 hedge."
+  },
+  {
+   "event": "life-s002-e023",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "All save correctly; 2 oddly mentions vet bookings for her penicillin allergy."
+  },
+  {
+   "event": "life-s006-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correct: no address on file, ask before ordering."
+  },
+  {
+   "event": "life-s006-e011",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "All sound; 2 ignores her answer-first bullet-point preference."
+  },
+  {
+   "event": "life-s006-e015",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All fine closings."
+  },
+  {
+   "event": "life-s008-e000",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "All reorder without noting the ask-before-$100 rule; a 13.6 kg bag costs over $100."
+  },
+  {
+   "event": "life-s012-e018",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All drafts accurate; posting only after approval."
+  },
+  {
+   "event": "life-s016-e002",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All accurate EFT/ACH explanations."
+  },
+  {
+   "event": "life-s017-e012",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "Nothing clearly still running; 0 hedges unnecessarily; 1 and 2 accurate."
+  },
+  {
+   "event": "life-s018-e000",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "1 offers a focused due-today check (Aisha's question due Wed); 0 and 2 weaker."
+  },
+  {
+   "event": "life-s018-e005",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give a reasonable rule of thumb."
+  },
+  {
+   "event": "life-s020-e016",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "0 and 2 fine; 1 mislabels it the future subjunctive."
+  },
+  {
+   "event": "life-s021-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All set the reminder and acknowledge the race correctly."
+  },
+  {
+   "event": "life-s022-e016",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All log the race correctly; pace math in 1 is right."
+  }
+ ]
+}
