@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s091-e012",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "Venting turn; 0 just reflects. 1 adds unsupported 'not the first' claim; 2 piles pending tasks onto a vent."
+  },
+  {
+   "event": "life-s092-e000",
+   "scores": [
+    1,
+    3,
+    1
+   ],
+   "why": "History has Thursday biweekly yard waste from 9 Apr with rules; only 1 uses it and derives Jun 4/18."
+  },
+  {
+   "event": "life-s096-e031",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Simple goodnight; all brief, no trailing offers, consistent with her request."
+  },
+  {
+   "event": "life-s097-e013",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give non-cheesy card lines suited to a retiring department head."
+  },
+  {
+   "event": "life-s097-e019",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give sensible fort supply lists; 2's callback to the earlier fort is accurate."
+  },
+  {
+   "event": "life-s100-e025",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "All recommend Brijwasi correctly but quote only rupees, ignoring the CAD-first price rule."
+  },
+  {
+   "event": "life-s102-e002",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All say yes to Hannah and give a reasonable three-hour indoor plan."
+  },
+  {
+   "event": "life-s105-e019",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "Reminders were already set earlier; 0 recognises that, 1 and 2 treat it as new and duplicate."
+  },
+  {
+   "event": "life-s106-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All pick unscented charcoal, respecting Sam's fragrance migraines, and confirm before ordering."
+  },
+  {
+   "event": "life-s106-e007",
+   "scores": [
+    1,
+    1,
+    2
+   ],
+   "why": "Basement kitchen is known (microwave, hotplate, old fridge); 0 and 1 re-ask; 2 omits it but adds plumber info."
+  }
+ ]
+}

@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s002-e000",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "R2 asks for lesson days though Tuesday 19:00 Carlos lesson is on file; R0/R1 fit well, DST note in R2 is correct."
+  },
+  {
+   "event": "life-s002-e020",
+   "scores": [
+    1,
+    2,
+    1
+   ],
+   "why": "All claim no evidence though Carlos's intake and lesson notes exist; R1 at least plans to find the notes."
+  },
+  {
+   "event": "life-s002-e023",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All save the allergies privately and correctly."
+  },
+  {
+   "event": "life-s006-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All handle the belated silly-mug search to Vancouver appropriately."
+  },
+  {
+   "event": "life-s006-e011",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "Content similar; only R0 follows Riya's answer-first-then-bullets preference."
+  },
+  {
+   "event": "life-s006-e015",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Simple sign-off; R2's brief recap is harmless."
+  },
+  {
+   "event": "life-s008-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All reorder the salmon formula with flavour check; equivalent."
+  },
+  {
+   "event": "life-s012-e018",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All drafts accurate with correct dates and details."
+  },
+  {
+   "event": "life-s016-e002",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "R1 says no strict difference, blurring that ACH and Canadian EFT are separate systems."
+  },
+  {
+   "event": "life-s017-e012",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "All say nothing running; R0/R2 verify full task list, R1 does not."
+  }
+ ]
+}

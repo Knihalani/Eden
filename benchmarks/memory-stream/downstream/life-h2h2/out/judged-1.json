@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s018-e000",
+   "scores": [
+    2,
+    1,
+    2
+   ],
+   "why": "Misses today's 11:00 Q4 roadmap preview with no prep; R1 claims nothing to deal with."
+  },
+  {
+   "event": "life-s018-e005",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give a sound rule of thumb for flattened retention."
+  },
+  {
+   "event": "life-s020-e016",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "R0 tailors to role-play and Mexican vocabulary per tutor notes; R2 mislabels future subjunctive."
+  },
+  {
+   "event": "life-s021-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All handle reminder, Friday block, and congratulations correctly."
+  },
+  {
+   "event": "life-s022-e016",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All log the race correctly; pace 5:54/km is accurate."
+  },
+  {
+   "event": "life-s023-e017",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "Only R0 applies the 25-minute default rule; R2 links Aisha's doc, R1 uses 30 minutes."
+  },
+  {
+   "event": "life-s025-e000",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "R1 uses known Q4 plan and the November bank partner migration risk; others generic."
+  },
+  {
+   "event": "life-s025-e036",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "R1 gives no estimate; R2 references mom's 3 Nov birthday, already past."
+  },
+  {
+   "event": "life-s026-e012",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "R0 applies 25-minute rule; R2 catches Thursday 14:00 Tom 1:1; R1 neither."
+  },
+  {
+   "event": "life-s035-e008",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give solid daycare tour questions."
+  }
+ ]
+}
