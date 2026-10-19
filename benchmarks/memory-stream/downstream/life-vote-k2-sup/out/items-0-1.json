@@ -1,0 +1,185 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s140-e033#0",
+   "response": "I'll read Sam's text first. For dinner, the basement kitchen is only a microwave, an induction hotplate and the old fridge, so I'd go microwave-friendly or order in rather than the hotplate. I'll also check this month's Eating out total against the $400 limit before suggesting delivery.\nAction: read Sam's text, check the Eating out balance, and suggest two or three dinners for tonight."
+  },
+  {
+   "id": "life-s018-e010#0",
+   "response": "Here are neighbourhoods for Priya. Cabbagetown has Victorian streets and a short bike ride to the core. The Annex has big old houses and a bike lane downtown. Little Portugal and Trinity Bellwoods are lively and easy by bike, with Corktown and the Distillery if she wants converted industrial buildings. I'll tell you the moment your mom texts back.\nAction: send you the short list and flag any reply from your mom."
+  },
+  {
+   "id": "life-s068-e008#0",
+   "response": "From my notes, the gift ideas for Leo were the Lego Jurassic World Pyroraptor set and a reading headlamp, so dinosaurs look like a safe bet, though that note is from March and may be out of date. I don't have any food restrictions for him on file, so please tell me what to pass on to Grace and I won't guess on allergies.\nAction: draft a reply for Grace once you confirm what Leo is into now and what to avoid."
+  },
+  {
+   "id": "life-s087-e029#0",
+   "response": "Draft: \"Hey Hannah! Leo and I are heading to Riverdale Park East tomorrow around 10:30 for the playground and the market. Want to come with the kids? No pressure if the day gets away from you!\"\nAction: send it to Hannah once you approve."
+  },
+  {
+   "id": "life-s105-e028#0",
+   "response": "He's either counting down to dinner or reminding you about his walk, and he's not backing down. Hard to argue with those eyes.\nAction: nothing needed."
+  },
+  {
+   "id": "life-s156-e000#0",
+   "response": "Eleven days is plenty if you sort it in order. This week: the costume (we can build it from the box), treats for the door, and who is taking Leo out and when. Closer to the night: reflective bits or a flashlight, warm layers under the costume, and the plan for any school party.\nAction: build a dated Halloween checklist, and ask what the box is meant to become so I can list the materials."
+  },
+  {
+   "id": "life-s051-e006#0",
+   "response": "For jammy yolks, lower the eggs into boiling water for about 6.5 to 7 minutes, then straight into an ice bath for a few minutes. Peel, and marinate in soy sauce and mirin for several hours. Since Leo wants them tomorrow, start them tonight.\nAction: add \"make ramen eggs\" to tonight's list."
+  },
+  {
+   "id": "life-s057-e015#0",
+   "response": "From my notes, Tom likes single-malt Scotch, especially Lagavulin, and Lagavulin 16 was about $150 at LCBO when I last checked. If it's a team gift it's over $100, so collect who is chipping in before buying.\nAction: check LCBO stock and today's price for Lagavulin 16, and wait for your go-ahead before buying."
+  },
+  {
+   "id": "life-s076-e012#0",
+   "response": "On it: a family-style Thai spread from Pai on Duncan for three, delivered at 6, under $100 including tax, tip and delivery. I'll pick a curry, a noodle dish, rice, a vegetable and a starter.\nAction: look at Pai's menu, build the order within $100, and schedule delivery for 18:00."
+  },
+  {
+   "id": "life-s131-e020#0",
+   "response": "Draft for Priya to send: \"Hi [Client], thanks for your note. The facade drawings were produced to the brief we agreed, and the two later changes to that brief fall outside the original scope. We're glad to revise them and I'll send a quote and timeline for the changes. Happy to talk it through this week.\"\nAction: send you the draft to forward to Priya."
+  },
+  {
+   "id": "life-s002-e023#0",
+   "response": "Saved: penicillin allergy (hives) and seasonal allergies in May managed with Reactine. I'll keep it in a private note and not share it with anyone.\nAction: save the medical details to a private note."
+  },
+  {
+   "id": "life-s075-e000#0",
+   "response": "Let's check. Your home internet is TekSavvy Fibre 1 Gbps at the Leslieville address with your own modem, so I'll check their outage status first, then open a ticket noting two dropped calls this afternoon and the customer-owned modem.\nAction: check for a TekSavvy outage, open a ticket with the details, and report the ticket number and timeline."
+  },
+  {
+   "id": "life-s111-e027#0",
+   "response": "You didn't say the exact rule, so here's what I'd save: carry-on only to skip the bag wait, and a checklist for Leo (swim shirt, stuffie, and the rest) built three days before departure. Correct me if you meant something different.\nAction: save the packing rule once you confirm, and make Leo's checklist now for the trip home."
+  },
+  {
+   "id": "life-s107-e022#0",
+   "response": "Here's a cleaner version: \"If a bank-side error causes a payout to fail, the system shall automatically retry the payout without merchant action.\" It keeps the meaning and drops the nested clauses.\nAction: send you the line, and drop it into the PRD if you want."
+  },
+  {
+   "id": "life-s105-e004#0",
+   "response": "Booking East End Plumbing for Monday 29 Jun. Reminders set: start the Lattice self-review (due 2026-07-10) on Tue 30 Jun since Monday has the plumber, and again on Mon 6 Jul, the week it's due.\nAction: book the plumber for Monday morning and set both Lattice reminders."
+  },
+  {
+   "id": "life-s037-e009#0",
+   "response": "Draft: \"Hannah, thank you so much for the shortbread! Leo ate four before I could hide the tin. Happy holidays!\"\nAction: send it to Hannah once you approve."
+  },
+  {
+   "id": "life-s037-e020#0",
+   "response": "I don't have either in front of me, so I'll find the Ottawa flight search from before you decided to drive, and your podcast note. I'll base the new picks on what's actually in the note.\nAction: find the flight options for Sam's February PD day, open your podcast note, and send you both."
+  },
+  {
+   "id": "life-s110-e007#0",
+   "response": "In Toronto's system, a heat warning means hot days and nights are forecast for two or more days in a row. An extended heat warning means those conditions are expected to last three or more days, so the extra step is more cooling support. Thresholds can vary a bit by region.\nAction: nothing needed, I can find nearby cooling centres if useful."
+  },
+  {
+   "id": "life-s006-e015#0",
+   "response": "Anytime. Tomorrow's plan: dry cleaner at 9, Home Depot, then the library, home well before 1.\nAction: nothing needed. Enjoy Biscuit's snoring."
+  },
+  {
+   "id": "life-s113-e000#0",
+   "response": "I'll end your out-of-office as of tomorrow morning and swap in: \"Hi, I'm back but catching up on email, so replies may be slower than usual. Best, Riya\". I'll keep that message running until you tell me to stop.\nAction: end the current auto-reply tomorrow morning and set the catching-up message."
+  },
+  {
+   "id": "life-s085-e017#0",
+   "response": "Posted. Fee table:\n| Plan | Rate | $100 | $1,000 |\n|---|---|---|---|\n| Starter | 2.9% + 30c | $3.20 | $29.30 |\n| Growth | 2.6% + 25c | $2.85 | $26.25 |\n| Scale | 2.2% + 20c | $2.40 | $22.20 |\n| Enterprise | custom | n/a | n/a |\nAction: post the retro reminder in #payouts-launch and send you the table."
+  },
+  {
+   "id": "life-s016-e002#0",
+   "response": "EFT is the general term for an electronic funds transfer. ACH is the American batch system, and the Canadian equivalent is Payments Canada's Automated Funds Transfer (AFT), which is why people say \"EFT\" for it here. So they're often used interchangeably, though ACH strictly means the US network.\nAction: nothing needed."
+  },
+  {
+   "id": "life-s136-e017#0",
+   "response": "Anytime. Your 7:50 car reminder is set, and I'll send the street-cleaning schedule when the lookup finishes.\nAction: nothing needed."
+  },
+  {
+   "id": "life-s096-e031#0",
+   "response": "Night, Riya. Congratulations again on a launch that worked.\nAction: none."
+  },
+  {
+   "id": "life-s136-e021#0",
+   "response": "TFSA: you put in after-tax money, and growth and withdrawals are tax-free, with the room coming back the next year. RRSP: contributions are deductible now and withdrawals are taxed later, which pays off most if your tax rate now is higher than in retirement.\nAction: nothing needed."
+  },
+  {
+   "id": "life-s022-e000#0",
+   "response": "I don't have your Costco spend or the membership fee in front of me, so I won't guess. Renewal is worth it if you save more than the fee, and \"barely go\" is a signal it might not be.\nAction: pull the last 12 months of Costco charges from your card statements, compare them with the fee, and recommend renew or skip."
+  },
+  {
+   "id": "life-s040-e018#0",
+   "response": "I don't have the quantities from our Dec 13 chat in front of me, and the classic bag recipe's yield may not match one dozen, so I'd rather not guess. I'll pull the original numbers and multiply by three, and leave the nuts out for Leo's tree-nut allergy.\nAction: find the Dec 13 conversation, triple the quantities for three dozen, and send you the list with nuts omitted."
+  },
+  {
+   "id": "life-s126-e000#0",
+   "response": "I'll list this month's personal notes grouped by topic, with last-edited dates, and flag duplicates and empty ones. I won't delete or merge anything until you say so.\nAction: pull this month's personal notes into a grouped list with suggestions for tidying."
+  },
+  {
+   "id": "life-s003-e021#0",
+   "response": "Five nut-free lunches Leo might eat: turkey and cheese roll-ups with fruit, pasta salad with cucumber and cheese, mini quesadillas, a seed-butter sandwich if the camp allows it, and a bagel with cream cheese and veggies. Check labels on anything packaged. I don't have the Biscuit and ambulance conversation here, so I'll look for it.\nAction: save the lunch list, and search past chats for what you asked about Biscuit and the ambulance."
+  },
+  {
+   "id": "life-s085-e023#0",
+   "response": "Classic May overcorrection. A hoodie in your desk drawer is the long-term fix.\nAction: nothing needed."
+  },
+  {
+   "id": "life-s025-e036#0",
+   "response": "Regular mail from Toronto to Mumbai usually takes a couple of weeks, and sometimes longer. I'll confirm Canada Post's current estimate before you rely on it.\nAction: check Canada Post's delivery estimate to Mumbai, and tell you the latest mailing date for your target arrival."
+  },
+  {
+   "id": "life-s085-e030#0",
+   "response": "Two is the correct number, no regrets needed.\nAction: nothing needed."
+  },
+  {
+   "id": "life-s123-e011#0",
+   "response": "I'll rename them as date plus a counter (for example 2026-06-02 Scan 1.pdf), using each PDF's scan date from its metadata, and the file modified date if there is none. I'll show you the full old-to-new list before changing anything.\nAction: run a dry run on the Scan_*.pdf files in Downloads and send you the proposed names to approve."
+  },
+  {
+   "id": "life-s105-e019#0",
+   "response": "Noted: your mid-year self-review in Lattice is due Fri 10 Jul. I'll put it on the calendar and nudge you Monday 29 Jun after the plumber window, and again on Mon 6 Jul.\nAction: add the 10 Jul due date and both reminders."
+  },
+  {
+   "id": "life-s018-e000#0",
+   "response": "Rough, that long-weekend-after feeling. Glad the drive was fine, you can ease in today.\nAction: nothing needed."
+  },
+  {
+   "id": "life-s107-e005#0",
+   "response": "Draft: \"Quick reminder: release freeze runs Thu 12:00 to Mon 09:00 for the bank-partner cutover. Please get merges in by Thursday morning, and ask in the channel if anything urgent comes up. Thanks all!\" Aisha already has a Thursday 07:00 freeze message scheduled in #payouts-launch, so this is a gentle second reminder.\nAction: save the draft for you to post, and set up in-store pickup at Queen & Logan for Sam."
+  },
+  {
+   "id": "life-s106-e000#0",
+   "response": "Order-wise, I'd go for an odour absorber like charcoal bags for the smell and a HEPA air purifier for the drywall dust. I'll keep each purchase under $150, and I'll check with you before anything over that. I don't know which account to use for family spending, so I'll ask before paying.\nAction: shortlist two or three options under $150 that arrive before the week starts, and ask which card to use."
+  },
+  {
+   "id": "life-s088-e023#0",
+   "response": "Glad he's okay. For sprint planning on Mon the 25th, I'll propose cutting payout nicknames and the scheduled-payouts calendar view, and get Aisha to agree by Thursday.\nAction: draft a short message to Aisha with the proposed cuts and the reason, and find 20 minutes before Thursday."
+  },
+  {
+   "id": "life-s023-e017#0",
+   "response": "I'll find 30 minutes Mon to Wed with Aisha and Diego on the payout edge cases. Aisha's list in the doc covers negative balances and reversed transfers and wants PM eyes before sizing, so I'll put that in the agenda.\nAction: book the first slot all three of us have free, with the agenda: 1) negative balances, 2) reversed transfers, 3) what you need decided before sizing."
+  },
+  {
+   "id": "life-s042-e008#0",
+   "response": "Swapping spin for strength at the Leslieville YMCA, Tuesdays and Thursdays at 6:15 am, ending in time for you to be home by 7:15. I'll build a focus playlist for tomorrow with Khruangbin and A. R. Rahman instrumentals.\nAction: delete the spin events, add Tue/Thu 6:15 YMCA strength (ending by 7:00), and make the playlist."
+  },
+  {
+   "id": "life-s115-e008#0",
+   "response": "According to my notes, Leo's passport expired in January 2026 and the renewal wasn't booked as of last November, so unless it was done since, that's the one to fix before Dec 18. Renewal takes about 10 business days in person or 20 by mail, and the fees may have changed. I don't have Riya's or Sam's expiry dates in front of me.\nAction: search your email and files for passport renewals and expiry dates for all three, and if Leo's isn't renewed, start his today."
+  },
+  {
+   "id": "life-s047-e013#0",
+   "response": "T-rexes would need an enormous cake, fair question. Long day, you're allowed to be tired.\nAction: nothing needed."
+  },
+  {
+   "id": "life-s018-e017#0",
+   "response": "Pastel de nata comes from Belém in Lisbon, where monks at the Jerónimos Monastery made them, and the nearby Pastéis de Belém bakery has sold them since 1837. Kid version: monks needed a way to make money and used spare egg yolks, so they made custard tarts.\nAction: nothing needed."
+  },
+  {
+   "id": "life-s106-e005#0",
+   "response": "Holding the order. I don't have the basement kitchen setup on file, so I won't guess what you can cook with. I'll check your notes, or tell me what's down there and I'll make a simple week of meals.\nAction: hold the order, and search your notes for the basement kitchen setup."
+  },
+  {
+   "id": "life-s071-e002#0",
+   "response": "Reply to your mom: \"Mummy, starting this week we'll talk on Saturdays at 8:30 am my time, which is 6:00 pm for you. Sunday mornings are gone because of Leo's Sunday soccer.\" I'll put both times in the calendar invite.\nAction: send that reply, replace the old Sunday series with the Saturday 8:30 am Toronto / 6:00 pm Mumbai event, and text Kabir the new time."
+  }
+ ]
+}
