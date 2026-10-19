@@ -850,3 +850,13 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - By the pre-registered rule, code is net-negative (by a small margin) and life is near zero.
 - **Correction to C5-E2:** its −0.22 per turn for eden assumed eden's wrong packets cost what the vote's did (−0.467). Measured directly, eden's no-need cost is about −0.07 on code and +0.07 on life, about the noise floor, because past prompts rarely mislead. Eden-today's true utility is near zero, not strongly negative. The C5-E2 rows for other systems keep their stated assumption.
 - **Note:** for life-s028-e010 the judge flagged a response stating grocery totals that appear only in later turns. Its eden packet (two past prompts about the TD account) does not contain them, so the responder invented them. Isolated; one case.
+
+## C5-E4 · 2026-10-19 · The best push method, downstream (pre-registration)
+- **Setup:** `downstream.py prep-verify --p 0.6`. The same 60 turns per world as C5-E1 and C5-E3. Conditions: none / verify.
+  - verify is the calibrated off-hook verifier (F22b): rows with p ≥ 0.6, at most 4, visible at the turn, delivered only on turns with a tool call.
+  - Turns outside the judge sample get verifier outputs from the same prompt, one case per file (`verify/<world>-cal-ds`, via `verify.py --events`).
+  - p 0.6 is the C5-E2 utility compromise, fixed now, before any downstream result.
+  - Protocol as in C5-E1.
+- **Rule, set before running:** the 14%-reweighted verify − none (0.14 × plan-need + 0.86 × no-need effect).
+  - **Better than the plugin** if it beats C5-E3's eden on both worlds (code −0.0433, life +0.0293) by ≥ +0.05.
+  - **Worth building** if it is > +0.05 on both worlds.
