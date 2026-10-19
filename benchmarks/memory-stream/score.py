@@ -270,6 +270,25 @@ def decompose(events, packets, stream, items):
     return {k: [v, round(v / total, 3)] for k, v in sorted(out.items(), key=lambda kv: -kv[1])}
 
 
+def action_text(stream, limit=3):
+    """Per human or trigger event: the inputs of the first `limit` tool calls the agent makes in that turn (the
+    commands, paths and arguments it is about to use). A PreToolUse packet sees these before they run."""
+    out = {}
+    for s in stream["sessions"]:
+        evs = s["events"]
+        for i, e in enumerate(evs):
+            if e["t"] not in ("human", "trigger"):
+                continue
+            calls = []
+            for x in evs[i + 1:]:
+                if x["t"] in ("human", "trigger", "peer", "notification"):
+                    break
+                if x["t"] == "tool" and len(calls) < limit:
+                    calls.append(" ".join(str(v) for v in (x.get("input") or {}).values())[:400])
+            out[e["id"]] = "\n".join(calls)
+    return out
+
+
 def bootstrap(events, packets, cov, items, stream, n=500, seed=11):
     """95% percentile intervals of human recall, silence and precision, resampling events with replacement."""
     import random
@@ -452,9 +471,13 @@ def main():
                 results[f"judge@{a.store}"]["ci95"] = bootstrap(jev, pk, cov, items, stream)
             continue
         m = methods.make(name, rows, stream, items, cov)
+        acts = action_text(stream) if "act=1" in name else {}
         pk = {}
         for e in events:
             now = clock(e)
+            if acts.get(e["id"]):
+                # delivered at the turn's first PreToolUse: the agent's planned calls join the cue
+                e = dict(e, text_all=e["text_all"] + "\n" + acts[e["id"]])
             ids = m.packet(e, now)
             byid = m.by_id
             pk[e["id"]] = [(byid[i]["text"], byid[i]["covers"]) for i in ids]
