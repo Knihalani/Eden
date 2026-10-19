@@ -929,3 +929,35 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **Comparison, set before running:** on the same fired turns, by group, compare C5-E4's undated verify − none with dated verify − none.
   - **Dated helps** if the mean on fired plan-no-need turns rises by ≥ +0.25 (towards 0) on the pooled worlds, while the mean on fired plan-need turns does not fall by more than 0.15.
   - **Dead** otherwise.
+
+## C5-E6 · 2026-10-19 · Dated delivery: result
+- **Numbers** (on the turns where verify fired; dated is this run, undated is C5-E4 on the same turns; verify − none):
+
+  | World | Group | n | Undated | Dated |
+  |---|---|---|---|---|
+  | code | plan-need | 24 | +0.875 | +0.917 |
+  | code | labeler-only | 6 | +0.5 | +0.333 |
+  | code | no-need | 7 | −0.571 | −0.286 |
+  | life | plan-need | 17 | +0.706 | +0.706 |
+  | life | labeler-only | 7 | 0.0 | −0.143 |
+  | life | no-need | 3 | −0.667 | +0.333 |
+  | **pooled** | plan-need | 41 | +0.805 | +0.829 (+0.024) |
+  | **pooled** | labeler-only | 13 | +0.231 | +0.077 (−0.154) |
+  | **pooled** | no-need | 10 | −0.6 | **−0.1 (+0.5)** |
+
+- **Verdict, by the pre-registered rule: dated delivery helps.** Fired no-need turns rise +0.5, past the ≥ +0.25 line; fired need turns do not fall (+0.024).
+  - Caveats:
+    - n = 10 fired no-need turns.
+    - Labeler-only turns dropped −0.154 (n 13; possibly noise, possibly the date making mild needs look stale).
+    - One responder run.
+- **Per-turn utility (post hoc):** non-fired turns count 0 for both runs, using the three-way real group shares of C5-E4.
+
+  | World | Undated verify | Dated verify | Eden today (C5-E3, three-way) |
+  |---|---|---|---|
+  | code | −0.0506 | **+0.0345** | −0.009 |
+  | life | −0.0316 | **+0.0837** | −0.0273 |
+
+  - The two-way 14% versions: code −0.1313 → −0.012; life −0.0587 → +0.1133.
+  - **The first positive per-turn outcome for any push method on both worlds.** Dated verify beats today's plugin by +0.044 (code) and +0.111 (life).
+- **Why it works (from the judge's notes on C5-E4 losses):** wrong packets hurt mostly by presenting old state as current. A date lets the agent treat a row as history ("as of 08-30 the branch was …; let me check now") instead of fact.
+- **Next:** confirm head to head on fresh turns (C5-E7, pre-registered), with dating applied to eden too, for a fair comparison.

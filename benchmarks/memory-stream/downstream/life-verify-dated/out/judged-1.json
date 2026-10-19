@@ -1,0 +1,12 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s050-e000", "scores": [2, 3], "why": "R1 applies Aisha sign-off and 'target' rule with unsent draft; R0 avoids date but ignores the known rule."},
+{"event": "life-s056-e000", "scores": [1, 1], "why": "Both claim no birthday/anniversary dates or gift notes; Mar 22, Jun 16, Penguin paperbacks, Fellow Ode are known."},
+{"event": "life-s058-e010", "scores": [3, 3], "why": "No record of the VIA results in evidence; both honestly say so and offer to re-search or re-pull."},
+{"event": "life-s060-e002", "scores": [3, 3], "why": "Both gentle, keep evening clear for diya, propose changes for approval before acting."},
+{"event": "life-s068-e024", "scores": [1, 2], "why": "Ellie (Jun's sister) is dairy-allergic; both miss it. R0 suggests cheese; R1 asks about allergies first."},
+{"event": "life-s088-e000", "scores": [2, 3], "why": "R1 usefully reuses saved 15 kg mirror research and hardware list; R0 plain correct checklist."},
+{"event": "life-s098-e000", "scores": [3, 1], "why": "R0 knows King St W office Thursday and Wen's vegan need; R1 wrongly claims no office or dietary info."},
+{"event": "life-s100-e006", "scores": [1, 2], "why": "R1 correct PB 2:04:37 and PAD property tax, but invents TD account ending 4471; R0 wrongly says nothing on file."},
+{"event": "life-s101-e004", "scores": [3, 2], "why": "R0 flags Saturday 8:30 mom call conflict and packed day; R1 notes overpacking and driver tastings but misses the call."},
+{"event": "life-s107-e013", "scores": [2, 1], "why": "Call moved to Saturdays 8:30 am Toronto; R1 uses stale Sunday 9 pm slot. R0 checks calendar instead."}
+]}

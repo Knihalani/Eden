@@ -1,0 +1,9 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s108-e000", "scores": [2, 1], "why": "R0 knows Spanish, cuando-subjunctive, Mexican usage but misses she owns Gramatica de uso B1-B2; R1 wrongly doesn't know the language."},
+{"event": "life-s126-e005", "scores": [2, 3], "why": "R1 links to known early-2026 plantar fasciitis and books; R0 ignores that history."},
+{"event": "life-s130-e000", "scores": [3, 2], "why": "R1 suggests stale July countertop request as likely topic though Barzotti concerns cabinets; R0 simply checks."},
+{"event": "life-s131-e015", "scores": [2, 3], "why": "Staples under $150 can be reordered directly; R1 does so with known Finish order, Dyson options first. R0 adds needless approval."},
+{"event": "life-s143-e009", "scores": [3, 1], "why": "March 18 is her father's death anniversary, when she wants a light schedule; only R0 flags the clash."},
+{"event": "life-s155-e007", "scores": [3, 2], "why": "R1 drags in a stale May CAD-USD scope decision as a distraction; R0 does the requested review cleanly."},
+{"event": "life-s155-e022", "scores": [1, 2], "why": "R1 correctly blocks Dec 10 early leave and Lisbon Dec 21-Jan 1 but misses the Jan 27 snow-day record; R0 claims no December plans."}
+]}
