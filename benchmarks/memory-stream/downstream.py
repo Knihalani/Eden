@@ -246,7 +246,7 @@ def prep_system(a):
     stream, items = score.load_stream(a.world)
     cov = score.Coverage(items)
     evs = {e["id"]: e for e in score.scored_events(stream)}
-    rows = sleep.rows(stream, a.world, strict=True)
+    rows = sleep.rows(stream, a.world, strict=True, supersede=a.supersede)
     m = methods.make(a.system, rows, stream, items, cov)
     day = {}
     for sess in stream["sessions"]:
@@ -273,7 +273,8 @@ def prep_system(a):
         cases.append({"event": eid, "text": e["text_all"][:2500], "recent": judge.context(stream, eid),
                       "packets": [conds[c] for c in order]})
     json.dump({"cases": cases}, open(os.path.join(d, "in", "responses-in.json"), "w"), indent=1, ensure_ascii=False)
-    json.dump({"system": a.system + (" (dated)" if a.dated else ""), "key": key},
+    json.dump({"system": a.system + (" (dated)" if a.dated else "") + (" (supersede)" if a.supersede else ""),
+               "key": key},
               open(os.path.join(d, "key.json"), "w"), indent=1)
     print(len(cases), "cases;", fired, "with a packet")
 
@@ -383,6 +384,7 @@ if __name__ == "__main__":
     ap.add_argument("--seed", type=int, default=23, help="prep-h2h: sampling seed")
     ap.add_argument("--exclude", default="", help="prep-h2h: comma-separated downstream subs whose turns are used")
     ap.add_argument("--vtag", default="cal-ds3", help="prep-h2h: verify tag for missing verifier outputs")
+    ap.add_argument("--supersede", action="store_true", help="prep-system: sleep store with the supersession pass")
     ap.add_argument("--turns", default="", help="prep-system: comma-separated downstream subs whose turns to use")
     ap.add_argument("--fired-only", action="store_true", help="prep-verify: keep only turns where verify fires")
     a = ap.parse_args()
