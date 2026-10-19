@@ -1,0 +1,12 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s017-e020", "scores": [3, 3], "why": "Both suggest unscented, local, tailored gifts (Daniel engineering; R1 adds Grace piano); neither errs."},
+{"event": "life-s017-e024", "scores": [2, 3], "why": "R1 uses maintenance log (furnace 2023 overdue, eavestroughs, sump) plus Thursday delivery; R0 generic list."},
+{"event": "life-s022-e004", "scores": [1, 3], "why": "Sam's order is known: oat-milk flat white, no hazelnut. R0 wrongly claims no order on file."},
+{"event": "life-s023-e028", "scores": [3, 1], "why": "R1 invents an open October to-do about passport photos, unsupported; R0 sound generic checklist with verification."},
+{"event": "life-s025-e028", "scores": [3, 1], "why": "Tana French is Riya's favourite, not Priya's; R1 misattributes it to Priya. R0 attributes correctly."},
+{"event": "life-s025-e032", "scores": [3, 3], "why": "Both save Nov 3 birthday with week-before reminder per earlier request; R1 ties to missing-birthdays list."},
+{"event": "life-s026-e017", "scores": [2, 2], "why": "Both miss known Kanchi Silks range Rs 14,000-45,000; R0 oddly mentions duties within Mumbai, R1 odd US$ example."},
+{"event": "life-s027-e014", "scores": [3, 1], "why": "Goals are known (DELE B2 May 2026); R1 wrongly says it has no notes on goals."},
+{"event": "life-s028-e005", "scores": [2, 3], "why": "R1 flags bank partner migration risk tied to known Northbridge blockers; R0 generic, misses known at-risk items."},
+{"event": "life-s043-e002", "scores": [3, 3], "why": "Both honour explicit waiver while keeping refundable-rate rule, Plateau, under $250."}
+]}

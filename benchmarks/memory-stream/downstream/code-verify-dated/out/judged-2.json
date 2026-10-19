@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s081-e017",
+   "scores": [
+    3,
+    0
+   ],
+   "why": "Rule: never merge PRs yourself; R0 leaves merge to user, R1 merges in violation."
+  },
+  {
+   "event": "code-s082-e025",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 uses known /healthz and chart location; R1 doesn't know health endpoint, will look."
+  },
+  {
+   "event": "code-s083-e008",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both scope fastify-raw-body to the route correctly; R1's payments doc check is relevant."
+  },
+  {
+   "event": "code-s085-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 knows Node 20.11 pin, per-app env files, 1Password, compose, migrate; R1 generic."
+  },
+  {
+   "event": "code-s085-e010",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 knows BullMQ and Bull Board at /admin/queues; R0 doesn't know the queue library."
+  },
+  {
+   "event": "code-s086-e004",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 knows worker metrics on 9464 with ServiceMonitor; R1 generic but avoids inventing names."
+  },
+  {
+   "event": "code-s087-e012",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 knows db:migrate and that zod/DTO need paid_at; R0 hedges on known commands."
+  },
+  {
+   "event": "code-s088-e023",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both write a correct standalone slugify; R1 notes api duplication sensibly."
+  },
+  {
+   "event": "code-s092-e012",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "R1 knows 9464/ServiceMonitor and billing_sync typo but misdates it and invents dashboard path; R0 doesn't answer."
+  },
+  {
+   "event": "code-s096-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "DB is Postgres 16 per ADR; R1 hedges on stale MySQL, R0 doesn't know dialect; both check schema."
+  }
+ ]
+}
