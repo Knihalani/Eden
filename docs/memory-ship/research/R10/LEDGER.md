@@ -1725,3 +1725,18 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **What this says:** Jev is a drop-in for the haiku checker on replies (two runs, both worlds), about ten times
   inside the latency budget, and on D37's amended provider list. The claim "the checker beats today's plugin on
   life" now rests on the C6/C7 three-way runs, and these four-way runs do not reproduce it firmly.
+
+## C11-E1 · 2026-10-19 · Getting the needed memory into a bounded candidate set (pre-registration; exploratory)
+- **Why (the user's direction):** recall to 95–100% at massive scale. The funnel (dev, human need turns; needed items
+  that survive each stage) is: in store code 84% / life 67%; in the 15-row shortlist 61% / 40%; kept by the checker
+  55% / 36%; delivered 52% / 27%. The shortlist is the largest leak, and at scale it can only grow: the hook must
+  pick a bounded set from a store 100–10,000× larger, so checking every row (or putting the store in context) is
+  out. The answer has to be better indexes, built while dreaming, and searched in bounded time at the hook.
+- **Measure:** for each needed item on dev need turns, the best rank of a visible row covering it under each
+  candidate generator; recall@k for k = 5, 15, 50; and the share of needed items at rank ≤ 3 (a scale proxy: a
+  rank that is already deep in a 400-row store will not survive a store 100× larger).
+- **Generators** (all model-free at the hook; every index is built offline from the rows' dream-written fields):
+  G0 current (lexical with cues + self-play bank, the verifier's shortlist); G1 + session context (the previous
+  human turns and reply in the query); G2 + entity graph (rows sharing a rare entity with the top rows); G3 + time
+  index (rows whose `when.times` matches the turn's date or a date the turn names); G4 all fused (reciprocal rank).
+- **No verdict rule:** this chooses what to build and test next; every number is reported.
