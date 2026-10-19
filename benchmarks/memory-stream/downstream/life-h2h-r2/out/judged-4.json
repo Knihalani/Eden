@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s115-e008", "scores": [3, 1, 1], "why": "R0 applies 3-month rule and checks all three. R1/R2 claim Leo's passport expired January 2026, unsupported and wrong."},
+{"event": "life-s118-e000", "scores": [3, 3, 1], "why": "R0/R1 fetch documents to compare. R2 asserts a $1,640 home premium baseline not supported by facts or shown history."},
+{"event": "life-s122-e004", "scores": [3, 2, 2], "why": "History: Tuesday collection, green bin weekly. R0 answers Tuesday and verifies. R1 ignores known schedule; R2 hedges without answering."},
+{"event": "life-s123-e004", "scores": [3, 2, 3], "why": "R0/R2 carry all key points including 2.1% cap and pay-guideline option. R1 drops the cap figure and that option."},
+{"event": "life-s126-e000", "scores": [3, 3, 3], "why": "All pull this month's notes for review before changing anything; equivalent and appropriate."},
+{"event": "life-s126-e021", "scores": [3, 3, 3], "why": "Brief, warm goodnight matching her request for short answers; all equivalent."},
+{"event": "life-s131-e027", "scores": [1, 1, 1], "why": "All miss known facts: she learns best via role-play of real situations and wants Mexican, not Castilian, vocabulary."},
+{"event": "life-s138-e007", "scores": [3, 2, 1], "why": "R0 correctly quotes note n-3982 (12-15 C, walkable) and is honest about NYE. R1 defers; R2 invents note names."},
+{"event": "life-s140-e033", "scores": [3, 3, 3], "why": "All read Sam's text first and propose no-hotplate options; appropriate."},
+{"event": "life-s140-e044", "scores": [3, 3, 3], "why": "All look up tonight's game time rather than guess; fine."},
+{"event": "life-s140-e051", "scores": [2, 2, 3], "why": "She explicitly asked for the trip; R0 withholds action. R1 adds distracting invoice reminder mid-vent. R2 reflects and plans well."},
+{"event": "life-s145-e020", "scores": [2, 3, 3], "why": "All give sound dust advice with empathy; R0 uses US spelling 'microfiber' despite Canadian-spelling preference and runs longer."},
+{"event": "life-s148-e018", "scores": [2, 2, 2], "why": "R0/R1 count 23 assuming tomorrow is Fri 9 Oct, likely Thu 8 (24); caveated. R2 gives no number."},
+{"event": "life-s150-e000", "scores": [3, 3, 3], "why": "All pull live blocked tickets; R1 correctly flags August snapshot as stale."},
+{"event": "life-s150-e015", "scores": [3, 2, 2], "why": "R0 knows Dr. Lin moved to Danforth Smiles, 822 Danforth, and the Nov 3 checkup. R1/R2 lack the known address."}
+]}
