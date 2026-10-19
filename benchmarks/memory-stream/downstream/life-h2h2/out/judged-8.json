@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s131-e022",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All three are light 3-4 line toasts with placeholder partner name; none cringe."
+  },
+  {
+   "event": "life-s132-e000",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "All set 19 Nov plus 5 Nov reminder; R0 usefully notes gift needed by Ottawa trip 13 Nov; R1 uses ISO date in chat."
+  },
+  {
+   "event": "life-s133-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Wed 9 Sep 15:30 fits rules; all book 25 min with agenda; R0/R2 also respect target-not-date rule for sales."
+  },
+  {
+   "event": "life-s136-e017",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Simple acknowledgement; all correctly note reminder set and street-cleaning lookup pending."
+  },
+  {
+   "event": "life-s136-e021",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give correct two-line TFSA vs RRSP comparison."
+  },
+  {
+   "event": "life-s136-e034",
+   "scores": [
+    1,
+    1,
+    1
+   ],
+   "why": "All ignore known facts: Mom in Mumbai, trip late March 2027 (dry season, no monsoon), IST +9:30."
+  },
+  {
+   "event": "life-s137-e018",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "R2 acknowledges the week and flags talk title due 18 Sep; R0 skips reflection; R1 uses ISO date in chat."
+  },
+  {
+   "event": "life-s140-e029",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All three are accurate, concise tl;drs of the article."
+  },
+  {
+   "event": "life-s141-e017",
+   "scores": [
+    1,
+    1,
+    2
+   ],
+   "why": "R2 uses known weak spots, DELE date and Thursday lesson but invents emailed homework; R0/R1 claim not to know class time."
+  },
+  {
+   "event": "life-s141-e032",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "R0/R1 query correctly; R2 mislabels a stale team-wide snapshot as payouts-ga tickets."
+  }
+ ]
+}

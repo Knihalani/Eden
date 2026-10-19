@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s077-e012",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All draft the requested reply accurately and hold for approval."
+  },
+  {
+   "event": "life-s077-e044",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All set the 25-minute timer."
+  },
+  {
+   "event": "life-s085-e010",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give sensible, short daycare tips including home agencies and $10/day program."
+  },
+  {
+   "event": "life-s085-e017",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "Math correct in all; only first delivers the requested table, others give inline text."
+  },
+  {
+   "event": "life-s085-e023",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All respond lightly and appropriately to the chat."
+  },
+  {
+   "event": "life-s085-e027",
+   "scores": [
+    2,
+    2,
+    1
+   ],
+   "why": "All omit earlier items (Slack post, fee table, daycare); third presents incomplete list as complete."
+  },
+  {
+   "event": "life-s087-e029",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All draft a suitable text to Hannah and hold for OK."
+  },
+  {
+   "event": "life-s088-e015",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "First and third give concrete Saturday plans; second is vague with an unsupported skating claim."
+  },
+  {
+   "event": "life-s088-e023",
+   "scores": [
+    1,
+    3,
+    1
+   ],
+   "why": "Aisha pushes back on cuts without numbers; only second pulls Wen's adoption data and pairs with her."
+  },
+  {
+   "event": "life-s090-e005",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly flag incomplete camp forms before Mon 29 Jun."
+  }
+ ]
+}

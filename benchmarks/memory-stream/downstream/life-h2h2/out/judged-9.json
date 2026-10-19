@@ -1,0 +1,42 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s148-e012",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "Reminders set fine, but none flag Saturday 10 Oct falls on the Ottawa Thanksgiving trip (Oct 10-13)."
+  },
+  {
+   "event": "life-s150-e028",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All set status till 3 and give a suitable two-line focus note."
+  },
+  {
+   "event": "life-s156-e000",
+   "scores": [
+    1,
+    1,
+    1
+   ],
+   "why": "All ask what Leo is going as and who walks; facts say astronaut, leaving Hannah's 5:45 pm, Sam on candy."
+  },
+  {
+   "event": "life-s156-e004",
+   "scores": [
+    1,
+    1,
+    1
+   ],
+   "why": "None notice Riya is volunteering on the ROM field trip Thu 26 Nov 9:15-2:30, clashing with 10:00."
+  }
+ ]
+}

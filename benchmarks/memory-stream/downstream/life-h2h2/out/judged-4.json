@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s062-e003",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give clean, non-crypto finance jokes suitable for standup."
+  },
+  {
+   "event": "life-s063-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All weigh after-tax pay vs commute hours and job quality sensibly."
+  },
+  {
+   "event": "life-s063-e007",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All acknowledge the moment and park pending items appropriately."
+  },
+  {
+   "event": "life-s066-e016",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "First two find URLs themselves; third adds friction by asking Riya for the URL first."
+  },
+  {
+   "event": "life-s068-e014",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "Only first uses history: winter market runs Sundays at Jimmie Simpson until Apr 26; others just look up."
+  },
+  {
+   "event": "life-s070-e006",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly recap holds, renewals and Tom's pending request."
+  },
+  {
+   "event": "life-s071-e002",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "First flags Saturday 9:00 soccer clash; third correct DST note; second awkward Kabir line, no IST on event."
+  },
+  {
+   "event": "life-s072-e000",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "Second invents a Queen St E address 'on file' for Riverside; others correct."
+  },
+  {
+   "event": "life-s077-e000",
+   "scores": [
+    1,
+    1,
+    3
+   ],
+   "why": "Only third recalls the 17 Jan zellige photos and white/sage follow-up; others say nothing saved."
+  },
+  {
+   "event": "life-s077-e010",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "All acknowledge Monday deadline but none correct the earlier miss of the zellige/white/sage inspiration."
+  }
+ ]
+}
