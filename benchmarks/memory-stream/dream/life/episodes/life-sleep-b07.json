@@ -1,0 +1,202 @@
+{
+ "batch": "life-sleep-b07",
+ "sessions": [
+  {
+   "id": "life-s070",
+   "episodes": [
+    {
+     "text": "2026-04-20 Tom Becker messaged Riya Malhotra asking for the link to where beta merchant numbers live before his exec sync on 2026-04-21; assistant had no saved link. Open: Riya will deal with Tom after dinner.",
+     "entities": [
+      "Tom Becker",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-04-20 Toronto Public Library (card ending 4417, Pape/Danforth): holds ready until Sat 2026-04-25: The Hunter (Tana French) and Dinosaurs Before Dark; Tomorrow, and Tomorrow, and Tomorrow #4 of 31. Due: Lego Ideas Book and Cien a\u00f1os de soledad Wed 2026-04-22, Frog and Toad Together Thu 2026-04-23 (renewal job lib-renew-4471 started); Atomic Habits due 2026-05-04; fines $0.",
+     "entities": [
+      "Toronto Public Library",
+      "Riya Malhotra"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s071",
+   "episodes": [
+    {
+     "text": "2026-04-21 Riya's weekly call with her mother Anjali Malhotra moved from Sunday mornings (Leo's Sunday soccer) to Saturdays 08:30 Toronto time (18:00 Mumbai, 05:30 for Kabir in Vancouver), starting Sat 2026-04-25. Calendar series updated, 10 old Sunday events removed; texted Mummy and Kabir Malhotra; background tasks scan Saturdays through 2026-06-27 and mirror change to family calendar and notify Sam.",
+     "entities": [
+      "Riya Malhotra",
+      "Anjali Malhotra",
+      "Kabir Malhotra",
+      "Leo",
+      "Sam"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s072",
+   "episodes": [
+    {
+     "text": "2026-04-23 Biscuit's vet changed: Dr. Moreau retired April 2026; new vet Dr. Harpreet Kaur, Riverside Veterinary Clinic, Broadview Ave, (416) 555-0193 (open Mon-Thu 8-20, Fri 8-18, Sat 9-14). Contact updated. Request sent for wellness exam, annual shots and rabies booster Mon 2026-04-27 to Thu 2026-04-30 after 17:30; awaiting reply.",
+     "entities": [
+      "Biscuit",
+      "Dr. Kaur",
+      "Dr. Moreau",
+      "Riverside Veterinary Clinic",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-04-23 Riya's laptop charger died near King and Spadina; Best Buy Express, 260 King St W (4 min walk, open till 21:00) stocks Anker 65W $59.99, Insignia 100W with cable $69.99, Belkin 68W with cable $79.99. Assistant recommended Insignia and offered to reserve; no reply recorded.",
+     "entities": [
+      "Riya Malhotra",
+      "Best Buy Express"
+     ]
+    },
+    {
+     "text": "2026-04-23 Riya wants to send Aisha Rahman a podcast/episode summary about how developer-platform companies decide what to charge; assistant could not find it; searching mail, notes and listening history. Digest: PAY-812, PAY-830 (Aisha wants final copy by Mon 2026-04-27), ONB-221 in review; Tom's exec sync Fri 2026-04-24, Riya's item is slot 3 (10 min).",
+     "entities": [
+      "Riya Malhotra",
+      "Aisha Rahman",
+      "Tom Becker"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s073",
+   "episodes": [
+    {
+     "text": "2026-04-23 Library holds at Pape/Danforth to pick up (branch closes 20:30; held until Sat 2026-04-25). Riya asked Google Sheets formula to count payouts over $10,000 in 'Beta payouts - April export' (1,284 rows, amount in column D): =COUNTIF(D2:D, \">10000\"); use >=10000 to include exactly 10000.00; =COUNTIFS(D2:D,\">10000\",E2:E,\"paid\") for paid only.",
+     "entities": [
+      "Riya Malhotra",
+      "Toronto Public Library"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s074",
+   "episodes": [
+    {
+     "text": "2026-04-23 Triage of 47 unread inbox messages started in background for items needing reply by Fri 2026-04-24. City of Toronto notice dated 2026-04-20: Leslieville Watermain Renewal (Contract 26ECS-TI-08WR) on Curzon St, Bertmount Ave, Erie Terrace, start 2026-05-11, completion 2026-09-04, work 7:00-19:00 Mon-Fri, water interruptions up to 8 hours, street parking restricted; contractor Bramco Civil Ltd., inspector M. Ostrowski 416-555-0177; hotline 416-338-2525. Riya lives at 41 Curzon St, Toronto M4M 3B5, so it affects her.",
+     "entities": [
+      "Riya Malhotra",
+      "City of Toronto",
+      "Bramco Civil Ltd.",
+      "41 Curzon St"
+     ]
+    },
+    {
+     "text": "2026-04-23 Added 'Buy printer ink (HP 67)' to Riya's to-do; background price comparison of HP 67 cartridges. Running toilet downstairs: recommended videos (flapper vs fill valve; food colouring test). Visa (card ending 8820) balance $2,184.33 due 2026-05-14, autopay full balance from TD joint chequing; largest charges Northline Renovations $1,450 (electrical deposit), Costco $312.18, PC Express $187.42.",
+     "entities": [
+      "Riya Malhotra",
+      "Northline Renovations",
+      "TD joint chequing"
+     ]
+    },
+    {
+     "text": "2026-04-23 Reminder for 2026-04-24 09:00: plan in-laws' Toronto visit May 16-18, figure out Saturday and where to eat; assistant agreed to prepare Saturday options by morning. Tom reacted to Riya's beta status post asking for it as one slide in Fri exec deck.",
+     "entities": [
+      "Riya Malhotra",
+      "Tom Becker"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s075",
+   "episodes": [
+    {
+     "text": "2026-04-24 Riya's home internet dropped two calls: router had 5 WAN disconnects (14:02, 14:37, 15:11, 15:40, 15:58), speedtest 212 Mbps down/41.8 up, 6.2% packet loss, jitter 61 ms. Assistant cannot open an ISP ticket because provider account is not linked; asked which provider (TekSavvy is the known internet provider from January) or to find the account number in a bill; started 30-minute WAN monitoring and router log pull; advised power-cycling the modem. Open: ticket not yet opened.",
+     "entities": [
+      "Riya Malhotra",
+      "TekSavvy"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s076",
+   "episodes": [
+    {
+     "text": "2026-04-25 Reminder set to put recycling out Sat 2026-04-25 20:00; 'Hang hallway mirror (~15 kg, plaster wall)' added to House list; advice: screw into stud, else heavy-duty toggle bolts or French cleat. Hardware list has snap toggles, French cleat kit, painter's tape, HP 67XL ink.",
+     "entities": [
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-04-25 If leaving right after school pickup Fri 2026-05-01 (pickup 15:15-15:30) to Sam's parents' place, on the road about 15:45; traffic check on the day. Morse Street PS: spring photo day Wed 2026-04-29, online orders close 2026-05-08, retakes 2026-05-21.",
+     "entities": [
+      "Riya Malhotra",
+      "Sam",
+      "Morse Street PS"
+     ]
+    },
+    {
+     "text": "2026-04-25 Dinner order #PAI-58213 from Pai Northern Thai Kitchen on Duncan, delivery 18:00 (17:55-18:10): veg spring rolls, green curry chicken, pad see ew with shrimp, 2 jasmine rice; total $85.12 incl. 15% tip; peanut dishes avoided.",
+     "entities": [
+      "Pai Northern Thai Kitchen",
+      "Riya Malhotra"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s077",
+   "episodes": [
+    {
+     "text": "2026-04-25 Nate (Northline Renovations) needs Riya's choice for the wall behind range and sink by Mon 2026-04-27 (3-week lead time). Kitchen reno open decisions: wall behind range/sink TBD, pendant lights (2 or 3), cabinet hardware brushed brass vs matte black, warm-white under-cabinet lighting. Assistant had nothing saved of earlier inspiration and offered to gather fresh options.",
+     "entities": [
+      "Nate",
+      "Northline Renovations",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-04-25 Replied (sent draft-7731) to Jenna Wu of Leslieville community association: Riya takes the 2-4pm lemonade and snack table slot at the Curzon/Bertmount street party Sat 2026-06-13, not setup. Looking up drop-off for old paint, dead printer and batteries; City Community Environment Day Sat 2026-05-23. Leslieville Farmers' Market opens Sun 2026-05-10, Sundays 9-14 at Jonathan Ashbridge Park.",
+     "entities": [
+      "Jenna Wu",
+      "Riya Malhotra",
+      "Leslieville Farmers' Market"
+     ]
+    },
+    {
+     "text": "2026-04-25 Background tasks: icebreakers for Riya's team sync Fri 2026-05-01 morning, family evening events in east end that day, 15-item spring cleaning checklist saved to Notes, quotes for hauling old basement couch. 'House' note renamed 'House 2026' (4 checked items archived, 5 open). Timer 25 min for garden beds.",
+     "entities": [
+      "Riya Malhotra"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s078",
+   "episodes": [
+    {
+     "text": "2026-04-25 Garden Q&A: tulips, deadheading. Added Compost (2 bags) and Bone meal to Hardware store list. Morse Street PS: Grade 2 Science Centre trip Thu 2026-04-30, buses leave 9:15, back 14:45; Leo's form submitted, $18 payment pending in Edsby, due Mon 2026-04-27; needs hat and water bottle.",
+     "entities": [
+      "Riya Malhotra",
+      "Leo",
+      "Morse Street PS"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s079",
+   "episodes": [
+    {
+     "text": "2026-04-26 Riya ran 14 km with Marcus Bell this morning; rest 48 hours after long run before heavy leg work. Calendar has no trip to see her brother Kabir's family; no date locked in. Reminder set to water garden beds every 2 days at 19:00 from 2026-04-26; soaker hose search (15 m, under $40). Finance peer: TD Visa autopay 2026-05-14 $2,184.33, joint balance leaves $3,940; Spotify Family rises $2/month from June bill. Riya wants short answers today.",
+     "entities": [
+      "Riya Malhotra",
+      "Marcus Bell",
+      "Kabir Malhotra",
+      "Spotify"
+     ]
+    }
+   ]
+  }
+ ]
+}
