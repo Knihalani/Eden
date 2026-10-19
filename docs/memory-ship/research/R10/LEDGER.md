@@ -1635,3 +1635,17 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   list in view it nearly matches the calibrated haiku checker at retrieval level (short by about 0.05 recall on
   code-rt1, ahead on life-rt1). Whether that gap matters for replies is an outcome question: a C6-style downstream
   head-to-head of Jev list 0.7 is the next test.
+
+## C10-E3 · 2026-10-19 · Jev on the outcome measure: four-way head-to-head (pre-registration)
+- **Question:** does Jev (list variant, p ≥ 0.7, from C10-E2's post-hoc look) carry the dated checker's gain over
+  today's plugin into the agent's replies, and how does it compare with the haiku checker on the same turns?
+- **Setup:** `downstream.py prep-h2h-jev --world <w> --sub <w>-h2h-jev --turns <w>-h2h,<w>-h2h2 --jtag jev-list
+  --p 0.7`: the same 145 code and 169 life turns as C5-E7 / C6-E1, with four conditions in one new responder run:
+  none, eden (dated), verify (haiku, dated, the same packets as before) and jev (dated, deferred like verify). Jev's
+  outputs come from `verify_jev.py --variant list` on these turns' shortlists. Protocol as C5-E1 (per-turn split,
+  sonnet responder, blind opus judge with history evidence). Report: `h2h.py --four <w> <w>-h2h-jev`.
+- **Rule, set before running:**
+  - **Jev beats today's plugin** if jev − eden per-turn utility is > 0 on both worlds with CI lower bound > 0 on at
+    least one, and > +0.05 on both.
+  - **Jev matches the haiku checker** if jev − verify ≥ −0.03 on both worlds (point estimates; one run).
+  - Otherwise report both differences as measured. One run; the C6/C7 two-run standard is not met by this alone.

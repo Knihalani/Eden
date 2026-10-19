@@ -279,6 +279,50 @@ def prep_system(a):
     print(len(cases), "cases;", fired, "with a packet")
 
 
+def prep_h2h_jev(a):
+    """C10-E3: the head-to-head turns of a.turns with a fourth condition: the same packets as there (none, eden,
+    verify) plus `jev`, TypeSafe Jev's picks (`verify/<world>-<a.jtag>`, p ≥ a.p, visible, at most 4, dated) under
+    verify's delivery rule (deferred: a turn with no tool call gets nothing). All four go to one new responder run."""
+    import score, sleep, verify, judge
+    stream, items = score.load_stream(a.world)
+    evs = {e["id"]: e for e in score.scored_events(stream)}
+    rows = {r["id"]: r for r in sleep.rows(stream, a.world, strict=True)}
+    acts = score.action_text(stream)
+    jp = verify.picks(a.world, a.jtag)
+    day = {}
+    for sess in stream["sessions"]:
+        for ev in sess["events"]:
+            day[ev["_order"]] = sess["ts"][:10]
+    vis = lambda r, e: r["t"] < e["_order"] and (r.get("invalid_at") is None or r["invalid_at"] > e["_order"])
+    rng = random.Random(31)
+    d = os.path.join(HERE, "downstream", a.sub)
+    os.makedirs(os.path.join(d, "in"), exist_ok=True)
+    os.makedirs(os.path.join(d, "out"), exist_ok=True)
+    cases, key, missing, fired = [], {}, [], 0
+    for sub in a.turns.split(","):
+        k0 = json.load(open(os.path.join(HERE, "downstream", sub, "key.json")))["key"]
+        src = {c["event"]: c for c in json.load(open(os.path.join(HERE, "downstream", sub, "in", "responses-in.json")))[
+            "cases"]}
+        for eid in sorted(k0):
+            e = evs[eid]
+            conds = dict(zip(k0[eid]["order"], src[eid]["packets"]))
+            if eid not in jp:
+                missing.append(eid)
+            sel = [i for i, p in jp.get(eid, []) if p >= a.p and i in rows and vis(rows[i], e)][:4]
+            conds["jev"] = ([f"[as of {day.get(int(rows[i]['t']), '?')}] {rows[i]['text']}" for i in sel]
+                            if acts.get(eid) else [])
+            fired += bool(conds["jev"])
+            order = sorted(conds)
+            rng.shuffle(order)
+            key[eid] = {"group": k0[eid]["group"], "order": order, "needs": [], "from": sub}
+            cases.append({"event": eid, "text": e["text_all"][:2500], "recent": judge.context(stream, eid),
+                          "packets": [conds[c] for c in order]})
+    json.dump({"cases": cases}, open(os.path.join(d, "in", "responses-in.json"), "w"), indent=1, ensure_ascii=False)
+    json.dump({"system": f"h2h + jev:{a.jtag},p={a.p} dated deferred", "key": key},
+              open(os.path.join(d, "key.json"), "w"), indent=1)
+    print(len(cases), "cases;", fired, "with a jev packet;", len(missing), "turns without Jev outputs")
+
+
 def items(a):
     """Order-free responder input: one item per (turn, packet), each with its own id (C4-E10: responders that answer
     a list of packets swapped the order). A turn's items never share a file: item j of every turn goes to group j,
@@ -370,7 +414,7 @@ def report(a):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["prep", "prep-picks", "prep-eden", "prep-verify", "prep-h2h", "prep-system",
-                                    "items", "collect", "judge-prep", "report"])
+                                    "prep-h2h-jev", "items", "collect", "judge-prep", "report"])
     ap.add_argument("--sub", default="", help="subdirectory of downstream/ (default: the world)")
     ap.add_argument("--tag", default="", help="prep-picks: the judge run whose picks are tested")
     ap.add_argument("--world", required=True)
@@ -386,9 +430,11 @@ if __name__ == "__main__":
     ap.add_argument("--vtag", default="cal-ds3", help="prep-h2h: verify tag for missing verifier outputs")
     ap.add_argument("--supersede", action="store_true", help="prep-system: sleep store with the supersession pass")
     ap.add_argument("--turns", default="", help="prep-system: comma-separated downstream subs whose turns to use")
+    ap.add_argument("--jtag", default="jev-list", help="prep-h2h-jev: the Jev verify tag")
     ap.add_argument("--fired-only", action="store_true", help="prep-verify: keep only turns where verify fires")
     a = ap.parse_args()
     cmds = {"prep": prep, "prep-picks": prep_picks, "prep-eden": prep_eden, "prep-verify": prep_verify,
-            "prep-h2h": prep_h2h, "prep-system": prep_system, "items": items, "collect": collect,
+            "prep-h2h": prep_h2h, "prep-system": prep_system, "prep-h2h-jev": prep_h2h_jev, "items": items,
+            "collect": collect,
             "judge-prep": judge_prep, "report": report}
     cmds[a.cmd](a)
