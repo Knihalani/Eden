@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s001-e020",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both read CLI build config; second drags in irrelevant destructive-DB promise."
+  },
+  {
+   "event": "code-s001-e037",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both sensible plans to compare docs against repo and report stale items."
+  },
+  {
+   "event": "code-s002-e008",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both acknowledge rules and check git log, noting dist may be gitignored."
+  },
+  {
+   "event": "code-s003-e015",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly explain structuredClone vs JSON round trip and Node 18 availability."
+  },
+  {
+   "event": "code-s003-e021",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both run the CLI via dev script against staging as instructed."
+  },
+  {
+   "event": "code-s006-e007",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Second keeps debounce off the export branch; first would likely mix unrelated work into it."
+  },
+  {
+   "event": "code-s007-e006",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give correct htmx hx-disabled-elt plus hx-sync drop fix with server backstop."
+  },
+  {
+   "event": "code-s007-e019",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both reasonable empty-state plans reusing existing patterns with a test."
+  },
+  {
+   "event": "code-s007-e025",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both omit the htmx double-submit fix and bucket details; partial summaries of today."
+  },
+  {
+   "event": "code-s007-e027",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both plan 3-try backoff on 502/503/504 limited to idempotent requests with fake-timer tests."
+  },
+  {
+   "event": "code-s007-e036",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correct useLayoutEffect explanations."
+  },
+  {
+   "event": "code-s007-e039",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly read trace and plan to inspect component, caller and API data."
+  },
+  {
+   "event": "code-s008-e009",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both plan from/to route tests, coverage check, bullet summary."
+  },
+  {
+   "event": "code-s010-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both sound device-flow timeout plans handling expiry and slow_down."
+  },
+  {
+   "event": "code-s011-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both handle rules/migration but miss recent move of rate-limiter counters to Redis as OOM suspect."
+  }
+ ]
+}

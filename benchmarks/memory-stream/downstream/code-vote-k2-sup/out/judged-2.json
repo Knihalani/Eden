@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s022-e017",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 removes the CHANGELOG rocket emoji the user pointed out; R0 only checks files it touched."
+  },
+  {
+   "event": "code-s022-e032",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "DB is MySQL 8; R1 wrongly attributes string sums to Postgres. Both plan cast/convert with test."
+  },
+  {
+   "event": "code-s023-e000",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Both ignore yesterday's bucket spec in history and Express-vs-Fastify; R0 claims no record at all. R1 notes Linear convention."
+  },
+  {
+   "event": "code-s025-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both sensibly read the image job before summarizing for support."
+  },
+  {
+   "event": "code-s027-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both diagnose missing loading reset on empty path with finally and test."
+  },
+  {
+   "event": "code-s027-e008",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "History holds days of work (image job, webhooks, reminders, logo timeouts); both recap only this session."
+  },
+  {
+   "event": "code-s027-e022",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both acknowledge correctly; R0 usefully flags failing zod PR."
+  },
+  {
+   "event": "code-s027-e049",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "History shows --json already added to invoices list; R0 checks first, R1 re-implements."
+  },
+  {
+   "event": "code-s027-e058",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both accurate status: zod committed not pushed; R0 also mentions --json done."
+  },
+  {
+   "event": "code-s028-e017",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both use shadcn Button, lucide icon, aria-label per rule."
+  },
+  {
+   "event": "code-s030-e027",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both correct on AsyncLocalStorage; R1 phrasing muddled ('measure by guesswork')."
+  },
+  {
+   "event": "code-s033-e016",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both short, read the file, target race; fine."
+  },
+  {
+   "event": "code-s035-e008",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Partial already has csrf_token per history; R0 adds request-context check and hx-headers; R1 generic, asks for files."
+  },
+  {
+   "event": "code-s035-e033",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both pin the clock with fake timers rather than retry."
+  },
+  {
+   "event": "code-s036-e010",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "CLI moved to commander; R1 claims yargs (stale). R0 correct, validates with usage error."
+  }
+ ]
+}
