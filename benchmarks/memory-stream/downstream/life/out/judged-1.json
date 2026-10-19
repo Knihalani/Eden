@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s108-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "First notes she already owns the Indigo B1-B2 grammar and prefers Canadian retailers; second is generic."
+  },
+  {
+   "event": "life-s143-e009",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Second gently flags 18 March, her father's death anniversary when she wants a lighter schedule; first misses it."
+  },
+  {
+   "event": "life-s097-e004",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "Second uses known facts: born ~April 2022, food-motivated, bread stealing, siren howling, chicken sensitivity; first claims nothing saved."
+  },
+  {
+   "event": "life-s038-e000",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "First cites the Home Depot filter order and correctly says pickup is unconfirmed; second wrongly claims no record."
+  },
+  {
+   "event": "life-s155-e022",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "First gets Lisbon OOO and concert early leave right but ignores saved snow-day games list; second knows neither."
+  },
+  {
+   "event": "life-s007-e000",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "Second uses walk time, bread habit and correct siren explanation; first claims no siren record and leaves placeholders."
+  },
+  {
+   "event": "life-s096-e007",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Second explains beagle instinct and recalls the August 2025 article; first is kid-friendly but generic."
+  },
+  {
+   "event": "life-s126-e005",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Second recalls earlier plantar fasciitis and works around Saturday commitments; first treats it as new with no history."
+  },
+  {
+   "event": "life-s056-e000",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Second knows March 22, quiet dinner, Penguin/Fellow Ode ideas but hedges anniversary despite 2018-06-16 correction; first knows nothing."
+  },
+  {
+   "event": "life-s047-e009",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both fine; first honours Canadian-retailer preference, second ignores it."
+  }
+ ]
+}
