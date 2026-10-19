@@ -1,0 +1,185 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s140-e033#0",
+   "response": "I'll read Sam's text first, then sort dinner. Since you're done with the hotplate, takeout or delivery is the easy answer, and I'll check where this month's Eating out sits against the $400 limit (the last number I have is April's $318). If you'd rather sit down somewhere, I'd book for 19:00 and check the vegetarian options. Action: open Sam's text and tell you what it says, check the Eating out total, then suggest two or three dinner options."
+  },
+  {
+   "id": "life-s018-e010#0",
+   "response": "Good distraction. For an architect who bikes everywhere and likes old buildings: the Annex (big old houses, Bloor bike lane), Little Portugal or Trinity Bellwoods (Victorian rowhouses, Dundas and Ossington bike routes), and Cabbagetown (well-preserved Victorian streets) are the ones I'd start with. I'd narrow it once we know where her Toronto office is, and I hope your mom's phone turns up a call soon. Action: save this as a short neighbourhood list you can send Priya."
+  },
+  {
+   "id": "life-s068-e008#0",
+   "response": "The latest I have are gift ideas from March, a Lego Jurassic World Pyroraptor set and a reading headlamp, so dinosaurs and Lego look like a safe bet, but I can't say what he's obsessing over this month. I don't have any food restrictions for Leo in front of me, so please confirm those yourself, or Grace could stick to a non-food parcel. Action: draft a short reply for Grace with those ideas once you've confirmed the food side."
+  },
+  {
+   "id": "life-s087-e029#0",
+   "response": "Here's a draft: 'Hey Hannah! Leo and I are heading to Riverdale Park East tomorrow around 10:30 for the playground and the market. Want to come with Ellie and Jun? No pressure if you're resting after a shift.' Action: send it to Hannah once you say it looks good."
+  },
+  {
+   "id": "life-s105-e028#0",
+   "response": "He has clearly decided you owe him something, and my guess is a walk or a snack. Action: none."
+  },
+  {
+   "id": "life-s156-e000#0",
+   "response": "Halloween is Sat 31 Oct, so you have time. The list: finish the box costume (ask Leo what it becomes, check he can see and move), candy for the door, a warm layer under the costume, a flashlight or glow sticks, and who takes him out and when. Keep the box out of the recycling until it's done. Action: make a dated checklist, and tell me what the box is turning into."
+  },
+  {
+   "id": "life-s051-e006#0",
+   "response": "Boil for about 6.5 to 7 minutes from boiling water, then straight into an ice bath for jammy yolks. If you want proper ramen eggs for tomorrow, make them tonight and marinate them overnight in soy sauce and mirin. Peel gently under cool water. Action: none, unless you want a reminder for tonight."
+  },
+  {
+   "id": "life-s057-e015#0",
+   "response": "Posting the Slack message. For Tom, my notes say he likes single-malt Scotch, especially Lagavulin; Lagavulin 16 was about $150 at LCBO when I last checked in February. That's over $100, so I'll check with you before buying, and ask if the team is chipping in. Action: post the message in #payouts-launch, then check current LCBO price and stock for Lagavulin 16 and tell you."
+  },
+  {
+   "id": "life-s076-e012#0",
+   "response": "I'll build a family-style order from Pai for the three of you, kept mild to medium on heat with a good mix of dishes, under $100 including delivery and tip, scheduled for 18:00. Tell me if anything has to be avoided. Action: check Pai's menu on Duncan, put together the order, and place it for 18:00 delivery."
+  },
+  {
+   "id": "life-s131-e020#0",
+   "response": "Here's a draft for Priya: 'Hi [name], thank you for the feedback. The brief has changed twice since we began, and the drawings reflect the scope agreed at each stage. We're glad to revise them as a change order with an updated fee and timeline. Could we find 20 minutes this week to agree on scope?' It's a draft for you, not sent. Action: show you the draft, and nothing goes out until you approve."
+  },
+  {
+   "id": "life-s002-e023#0",
+   "response": "Got it: penicillin allergy (hives), and seasonal allergies in May managed with Reactine. I'll keep both in a private medical note and only bring them up when they're relevant, like a prescription or a doctor's visit. Action: create a private 'Medical' note with those two entries."
+  },
+  {
+   "id": "life-s075-e000#0",
+   "response": "Your provider is TekSavvy now (Bell was cancelled in January), so I'll check TekSavvy for an outage at your Leslieville address and open a ticket with them. Because the modem is your own, I'll note that and the two dropped calls this afternoon in the ticket. Action: check TekSavvy's outage status, open a ticket marked urgent before the weekend, and suggest you power-cycle the modem in the meantime."
+  },
+  {
+   "id": "life-s111-e027#0",
+   "response": "That bag wait and the forgotten swim shirt and stuffie are exactly what a checklist fixes. I don't have a packing preference saved, so tell me how you want to do it (when to pack, who owns what), and I'll save it as your standing rule. In the meantime I'll set up Leo's trip-home list with his swim shirt and stuffie at the top. Action: create a shared packing checklist for the trip home and share it with Sam, and ask for the departure date to set reminders."
+  },
+  {
+   "id": "life-s107-e022#0",
+   "response": "Try: 'When a payout fails because of a bank-side error, the system shall automatically reinitiate it without merchant intervention.' It's the same requirement in one clear sentence. Action: replace the sentence in the PRD if you say so."
+  },
+  {
+   "id": "life-s105-e004#0",
+   "response": "Booking East End Plumbing for Monday morning, Mon 29 Jun, 09:00 to 12:00. Your Lattice self-review is due Fri 10 Jul, so I'll set a reminder to start it next week on Tue 30 Jun and another on Mon 6 Jul. Action: confirm the plumber booking and set the two reminders."
+  },
+  {
+   "id": "life-s037-e009#0",
+   "response": "Here's a draft: 'Hannah, thank you so much for the shortbread. Leo ate four before I could hide the tin, so it was a hit. Happy holidays to you and the family!' Action: send it once you say go."
+  },
+  {
+   "id": "life-s037-e020#0",
+   "response": "I don't have the Ottawa flight options in front of me, so I'll search our past chats and your email for what we found and send it to Sam. For podcasts, I'll open your podcast note and pick shows that fit the commute on your office days, Tuesdays and Thursdays. Action: find the flight comparison for Sam, and suggest new podcasts based on your note."
+  },
+  {
+   "id": "life-s110-e007#0",
+   "response": "A heat warning means hot weather is expected for two or more days; roughly highs of 31 C or more with lows of 20 C or more, or a humidex of 40 or more. An extended heat warning means that kind of heat is expected to last longer, about three days or more, usually with extra supports like cooling centres. Check Environment Canada for your area's exact criteria. Action: none."
+  },
+  {
+   "id": "life-s006-e015#0",
+   "response": "You're welcome. Enjoy the rest of the evening, and it looks like Biscuit has you pinned. Action: none."
+  },
+  {
+   "id": "life-s113-e000#0",
+   "response": "I'll end your out-of-office tomorrow morning and change the text to: 'Hi, I'm back but catching up on email, so replies may take a little longer. Best, Riya.' I'll check whether it's set on email, Slack or both, and update all of them. Action: turn it off at the start of tomorrow's workday unless you give me a time, and update the message."
+  },
+  {
+   "id": "life-s085-e017#0",
+   "response": "Posting the reminder. On a $100 / $1,000 payment: Starter $3.20 / $29.30, Growth $2.85 / $26.25, Scale $2.40 / $22.20, and Enterprise is custom, so n/a. Action: post the retro reminder in #payouts-launch, then send you the pricing table."
+  },
+  {
+   "id": "life-s016-e002#0",
+   "response": "ACH is the American system (Automated Clearing House), while in Canada the equivalent is EFT, electronic funds transfer, which runs through Payments Canada's batch systems. So on a Canadian call they usually mean the same kind of bank-to-bank batch payment, though ACH is technically the US term. Action: none."
+  },
+  {
+   "id": "life-s136-e017#0",
+   "response": "Anytime. I'll send over your block's street-cleaning schedule as soon as the lookup comes back. Action: wait for the lookup and pass it on."
+  },
+  {
+   "id": "life-s096-e031#0",
+   "response": "Night, Riya. The wins record is saved in your notes as 'Instant Payouts: wins record'. Action: none."
+  },
+  {
+   "id": "life-s136-e021#0",
+   "response": "RRSP: contributions are tax-deductible now and taxed when you withdraw, best when your tax rate today is higher than it will be in retirement. TFSA: contributions are after-tax, but growth and withdrawals are tax-free and flexible, best when your rate is lower now or you may need the money sooner. Action: none."
+  },
+  {
+   "id": "life-s022-e000#0",
+   "response": "I can't tell yet. It depends on the renewal fee and how much you actually spend there, and I don't have your Costco numbers in front of me. Action: pull the last 12 months of Costco receipts, tally the visits and spend, and compare it to the renewal fee so you can decide before next month."
+  },
+  {
+   "id": "life-s040-e018#0",
+   "response": "I don't have the numbers from 13 Dec saved, so I won't guess the bag recipe's quantities. I'll look for that chat; if I can't find it, send me the amounts and yield on the bag and I'll scale it to three dozen. Either way I'll leave out the optional nuts since Leo is allergic, and it's worth checking the chocolate chip label for tree-nut warnings. Action: search for the 13 Dec conversation, or ask you for the bag amounts."
+  },
+  {
+   "id": "life-s126-e000#0",
+   "response": "I'll list your personal notes from this month and group them into duplicates, stale items and keepers. I won't delete or merge anything without your okay. Action: pull this month's notes, sort them by theme, and send you a tidy-up plan."
+  },
+  {
+   "id": "life-s003-e021#0",
+   "response": "Five nut-free camp lunches: turkey and cheese wraps, pasta with cucumber and cheese, mini pitas with hummus and veggie sticks, a cheese quesadilla, and a chicken and rice bowl; I'll check labels for 'may contain nuts' and skip granola bars. I don't have his favourites, so tell me which ones he actually eats. I also don't have your question about Biscuit and the ambulance in front of me, so I'll search our earlier chats for it. Action: search past chats for the Biscuit ambulance question and send it to you."
+  },
+  {
+   "id": "life-s085-e023#0",
+   "response": "Facilities went full arctic on you. A coat at your desk is a reasonable response. Action: none."
+  },
+  {
+   "id": "life-s025-e036#0",
+   "response": "Regular mail from Toronto to Mumbai usually takes about one to three weeks, and the holiday season can add days. Canada Post publishes current estimates, so I'd confirm those before choosing a date. Action: check Canada Post's international estimate for India and tell you the latest posting date for your target arrival."
+  },
+  {
+   "id": "life-s085-e030#0",
+   "response": "Two is the right number, and pastel de nata are best warm. Action: none."
+  },
+  {
+   "id": "life-s123-e011#0",
+   "response": "I'll rename them with the scan date at the front, like 2026-05-12_Scan_1.pdf, using each PDF's own creation date and the file date if that's missing. If two scans share a date I'll add a number. Action: list every Scan_*.pdf with its proposed new name, wait for your okay, then rename."
+  },
+  {
+   "id": "life-s105-e019#0",
+   "response": "Noted: your mid-year self-review is due in Lattice on Fri 10 Jul. I'll nudge you at the start of next week and again before it's due. Action: add a reminder for next Monday and one for Wed 8 Jul."
+  },
+  {
+   "id": "life-s018-e000#0",
+   "response": "Rough: a long drive and a Tuesday that feels like Thursday. Go easy on yourself this morning. Action: none."
+  },
+  {
+   "id": "life-s107-e005#0",
+   "response": "I'll set up store pickup at Queen & Logan for Biscuit's food so Sam can grab it. Draft for the payouts team: 'Quick reminder: release freeze runs Thu 12:00 to Mon 09:00 for the bank-partner cutover. Please get anything you need merged by Thursday morning, and ping Aisha if something urgent comes up. Thanks all.' Action: set the pickup order, and save the Slack draft without posting."
+  },
+  {
+   "id": "life-s106-e000#0",
+   "response": "Two different problems: charcoal odour absorbers help the old curry smell, and the drywall dust is best handled with a HEPA air purifier and wet-wiping surfaces, rather than something scented that just covers it. I'll price a few options and check what can arrive to 41 Curzon St before the week starts. Anything over $150 I'll check with you first, and I don't have a record of which account to use for household expenses, so tell me which card. Action: shortlist two or three options with delivery dates and wait for your pick."
+  },
+  {
+   "id": "life-s088-e023#0",
+   "response": "Glad Biscuit's okay. I'll check both items in Linear for customer commitments or dependencies before we propose cutting payout nicknames and the scheduled-payouts calendar view. Action: draft a short rationale and find a slot with Aisha before Thursday."
+  },
+  {
+   "id": "life-s023-e017#0",
+   "response": "I'll find 30 minutes for you, Aisha and Diego between Monday and Wednesday. Agenda: 1) review Aisha's edge-case list for negative balances and reversed transfers, 2) agree on priorities, 3) size the work. Action: check the three calendars, book the first slot that works with that agenda, and tell you the time."
+  },
+  {
+   "id": "life-s042-e008#0",
+   "response": "Playlist coming: Khruangbin and A. R. Rahman instrumentals for focus tomorrow. For the gym: I'll remove the spin events and add strength at the Leslieville YMCA on Tuesdays and Thursdays at 6:15, ending in time to be home by 7:15 so Sam can leave for school. I'll block 6:15 to 6:55 unless you tell me the trip takes longer. Action: build the playlist and swap the calendar events, starting tomorrow."
+  },
+  {
+   "id": "life-s115-e008#0",
+   "response": "I'll check all three passports against the Lisbon dates, 18 to 30 Dec. My last note says Leo's passport expired in January 2026 and the renewal hadn't been booked, so unless it was done he can't travel. Action: look for a renewal record for Leo, check each passport's expiry against the return date, and if he's still not renewed, book the Service Canada appointment now."
+  },
+  {
+   "id": "life-s047-e013#0",
+   "response": "A fair question from someone with a T-Rex on the way. Sounds like a long day, and being tired makes sense. Action: none."
+  },
+  {
+   "id": "life-s018-e017#0",
+   "response": "Pastel de nata come from Belem in Lisbon, where monks at the Jeronimos Monastery started making them in the early 1800s. The Kid version: the monks had lots of leftover egg yolks, so they turned them into little custard tarts. A bakery near the monastery began selling them in 1837 and still does. Action: none."
+  },
+  {
+   "id": "life-s106-e005#0",
+   "response": "Holding the order. I don't have a list of the basement kitchen setup in front of me, so tell me what's down there, or I'll search your notes for it. Action: don't place the charcoal bag order, search your notes for the basement kitchen setup, and plan this week's meals once it's confirmed."
+  },
+  {
+   "id": "life-s071-e002#0",
+   "response": "I'll reply to your mom: 'Starting this week our call is Saturdays at 8:30 am my time, 6:00 pm yours, since Sunday mornings are taken by Leo's soccer.' I'll update the recurring event with both Toronto and IST times and send Kabir the new time too. Note that when the clocks change in November, 8:30 am Toronto will be 7:00 pm in Mumbai. Action: send the reply, fix the recurring calendar event, and message Kabir."
+  }
+ ]
+}
