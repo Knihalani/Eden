@@ -1243,3 +1243,23 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - **Lead stands** if the point estimate stays ≥ +0.05.
   - **Weakened** if it falls below +0.05.
   - Run 2 alone is reported too.
+
+## C7-E3 · 2026-10-19 · Life head-to-head, second independent run: result
+- **Run:** the same 169 life turns and packets; a new sonnet responder and a new blind opus judge (history
+  evidence); all 169 turns judged (`life-h2h-r2` 75, `life-h2h2-r2` 94).
+- **Run 2 alone:** verify +0.1189, eden −0.0149, difference **+0.1338, 95% CI [+0.0181, +0.2475]**. It replicates
+  run 1 (+0.1346 [+0.0352, +0.2332]), and on its own it also excludes 0.
+- **Decision measure (each turn averaged over both runs; `h2h.py life --pool h2h2 --runs r2`):**
+
+  | Group | n | Eden (dated) | Verify (dated) |
+  |---|---|---|---|
+  | plan-need | 49 | +0.041 (7 / 10) | **+0.469 (24 / 3)** |
+  | labeler-only | 30 | +0.133 (11 / 3) | +0.25 (14 / 7) |
+  | no-need | 90 | −0.039 (11 / 18) | +0.039 (19 / 12) |
+
+  Per-turn utility: verify +0.1433, eden +0.0091, **difference +0.1342, 95% CI [+0.0415, +0.2275]**.
+- **Verdict, by the rule: firm on life (two runs).** Both worlds now rest on two independent responder and judge
+  runs: code +0.1011 [+0.0085, +0.1988], life +0.1342 [+0.0415, +0.2275]. Unlike code, each life run alone also
+  excludes 0.
+- **Caveats unchanged:** every model is Claude (responder sonnet, judge opus, verifier haiku, sleep compiler sonnet);
+  the verifier's model is not one D37 allows; the turns are synthetic StreamBench turns.

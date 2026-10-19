@@ -106,7 +106,7 @@ Families differ in mechanism. Every kill criterion was written before its run.
 
 ## Next three experiments
 
-1. **Done (C6-E1, C6-E2): firm by rule** (caveats above). Still open: a non-Claude responder or judge, and a re-measure on a model D37 allows.
+1. **Done (C6-E1, C6-E2, C7-E3): firm by rule on two runs per world** (caveats above). Still open: a non-Claude responder or judge, and a re-measure on a model D37 allows.
 2. **Model-free selection good enough to stand alone** (C6-E3 says the vote is not): learn from the verifier's picks at sleep (distil to cues), or ask the user to allow the in-turn call (R10-5). Also: **latency and cost of the off-hook verifier:** one haiku call per turn with ≤ 15 candidates, measured; and real PreToolUse delivery in a headless Claude Code run.
 3. **Episodic state rows:** expire or date-gate in-flight state at sleep, so "where did we leave things" gets the latest state.
 
@@ -117,6 +117,8 @@ Families differ in mechanism. Every kill criterion was written before its run.
   choice, not delivery, holds the vote back.
 - **Distilling the verifier into a model-free scorer is dead** (C7-E2): precision beats the vote on dev (+0.03) but
   not on the red-team worlds. Cheap hook features carry about a third of the verifier's judgment (corr ≈ 0.57).
+- **The head-to-head is firm on both worlds over two runs** (C7-E3): life run 2 +0.1338 [+0.0181, +0.2475]
+  replicates run 1; two-run average +0.1342 [+0.0415, +0.2275]. Code stays +0.1011 [+0.0085, +0.1988].
 
 ## Cycle 6 findings (LEDGER C6-E1…E3)
 
