@@ -1,0 +1,12 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "code-s100-e000", "scores": [1, 3, 2], "why": "Flags are GrowthBook (fact); R1 also recalls the planned cli-invoices-export flag. R0 doesn't know. R2 correct but misses existing flag."},
+{"event": "code-s105-e008", "scores": [1, 3, 3], "why": "URL params with replace on separate branch is right. R0 asserts a useInvoiceQueryState hook unsupported by any evidence."},
+{"event": "code-s105-e015", "scores": [2, 2, 3], "why": "slugify already exists in apps/api/src/lib/slug.ts; R2 reuses it, others only hedge about checking."},
+{"event": "code-s106-e004", "scores": [2, 2, 2], "why": "All correct embeds but hedge on whether a CSP exists; it is known to be set in next.config.ts headers()."},
+{"event": "code-s107-e006", "scores": [2, 1, 2], "why": "Known: Clerk publicRoutes, settings/team page already exists. R1 claims unsupported existing pricing page; R0 generic; R2 right on middleware, misses existing team page."},
+{"event": "code-s108-e000", "scores": [2, 3, 2], "why": "Facts: Playwright, pnpm --filter web e2e, dev server on 3000. R1 knows; R0/R2 hedge on known tooling."},
+{"event": "code-s108-e018", "scores": [3, 3, 3], "why": "All investigate helper vs button duplicate header and add a regression test; equivalent."},
+{"event": "code-s108-e027", "scores": [3, 3, 3], "why": "All grep, fix safe occurrences, and flag API response values; appropriate."},
+{"event": "code-s108-e032", "scores": [3, 3, 3], "why": "All acknowledge leaving api file, worker tests passed, api tests pending; accurate."},
+{"event": "code-s108-e036", "scores": [3, 3, 3], "why": "Brief accurate acknowledgments; R1/R2 correctly note both suites passed."}
+]}
