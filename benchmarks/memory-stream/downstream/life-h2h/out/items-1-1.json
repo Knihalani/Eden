@@ -1,0 +1,125 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s062-e000#1",
+   "response": "Noted: no replacement for the 2019 Mazda CX-5 in 2026, the money goes to the kitchen renovation, and you'll revisit an EV in 2028. I'll opt you out of the dealer's emails and add a filter so any stragglers get archived.\nAction: Find the dealer's emails, use their unsubscribe link or send an opt-out request, set a filter for that sender, and add a note to revisit the EV question in 2028."
+  },
+  {
+   "id": "life-s100-e000#1",
+   "response": "Sure, I'll skim it and keep it to four items. I haven't read it yet, so I'll go by the email rather than guess.\nAction: Find this afternoon's all-hands email, read it, and send the 4 points that matter, including any decisions, deadlines or asks that affect you."
+  },
+  {
+   "id": "life-s036-e003#1",
+   "response": "Will do after the review. I haven't seen Nate's revised quote yet, so I'll put it next to your $48,000 budget (which includes the 10% contingency) line by line and show how much of the contingency the new numbers use up. If I need anything from Nate, I'll text him rather than call.\nAction: After the review, pull Nate's revised quote and the reno sheet, build the side-by-side with the contingency used, and send it to you."
+  },
+  {
+   "id": "life-s076-e012#1",
+   "response": "Happy to surprise you. I'll keep it under $100 for the three of you, family style, for delivery at 6, with nothing containing cilantro (you dislike it) and no nuts of any kind because of Leo's tree nut allergy.\nAction: Pull Pai's menu, pick a family-style spread under $100 that skips cilantro and nuts, add an allergy note to the order, place it for 18:00 delivery, and send you what's coming."
+  },
+  {
+   "id": "life-s126-e000#1",
+   "response": "Sure, I'll list this month's personal notes so you can see the mess in one place.\nAction: Pull your personal notes created or edited this month, show titles with last-edited dates, and suggest a grouping; I won't move or delete anything until you say so."
+  },
+  {
+   "id": "life-s018-e017#1",
+   "response": "Pastel de nata comes from Lisbon, from the Jerónimos Monastery in the Belém neighbourhood. The monks there made them long ago, and after the monasteries closed in the 1830s the recipe went to a nearby bakery, Pastéis de Belém, which opened in 1837 and still makes them. For Leo: 'monks used the leftover egg yolks to make tiny custard tarts, and they're still baked in the same place.'\nAction: None needed, but I can find a bakery near you that sells them if Leo wants to try one."
+  },
+  {
+   "id": "life-s087-e031#1",
+   "response": "Sending the text to Hannah as drafted. For Olivia's blurb, I'll pull the Instant Payouts v1 scope from your payouts notes instead of guessing at features, keep it to 4-5 lines, say 'merchant' and use no em dashes. I'll leave out any date, since the earlier GA date note to Olivia (d-7902) was on hold after you said 'not yet on Olivia', and I'd only use the word 'target' once you give the go-ahead.\nAction: Send the Hannah text, draft the blurb from the v1 scope, and hold it for your review without sending."
+  },
+  {
+   "id": "life-s111-e007#1",
+   "response": "Good news. I'll send the kitchen crew a heads-up that the electrician can come Monday and ask what time suits them, so the two don't collide. I don't have the crew's schedule, so I'll wait for their window before locking a time with the electrician.\nAction: Message the kitchen crew about Monday and ask which window works for them, then confirm the time with the electrician and put it on the calendar."
+  },
+  {
+   "id": "life-s068-e021#1",
+   "response": "Your dentist is Dr. Lin at Queen East Dental, 1046 Queen St E, so I'll request a late-morning cleaning there on Apr 22. I haven't confirmed availability yet, and I'll check that your calendar is free first.\nAction: Check your calendar for late morning on Apr 22, ask Queen East Dental for a cleaning with Dr. Lin then (or the nearest alternative), and confirm with you once they respond."
+  },
+  {
+   "id": "life-s051-e002#1",
+   "response": "I'll pull together next week from the calendars so nothing gets missed. I haven't looked yet, so I won't list anything from memory.\nAction: Pull next week from the family calendar and your work calendar, add school notices and deadlines, and send a day-by-day rundown with any conflicts flagged."
+  },
+  {
+   "id": "life-s083-e000#1",
+   "response": "Yes to the sleepover, how sweet of Jun. Here's the text: 'Hi Hannah, yes please! Thank you so much, Leo is thrilled. See you at 3:30, and thanks for bringing him back in time to walk in with Jun in the morning.' I'll put it in the family calendar from 15:30 today to tomorrow morning, and want me to add a note about anything Hannah should know, like food or bedtime?\nAction: Send the text to Hannah, add the sleepover to the family calendar, and remind you to pack Leo's overnight things before 3:30."
+  },
+  {
+   "id": "life-s148-e018#1",
+   "response": "I'll count weekdays from tomorrow up to Thu 12 Nov and skip Thanksgiving Monday, and I'd rather confirm tomorrow's date than hand you a number off the top of my head. Tom's Q1 page is due Fri 6 Nov, which lands before the offsite, so that may be your real deadline.\nAction: Calculate the business days from tomorrow to Thu 12 Nov and also to Fri 6 Nov, and send you both."
+  },
+  {
+   "id": "life-s096-e026#1",
+   "response": "That's worth saying out loud. Leading Instant Payouts at Lumen Pay to a May 2026 launch, your first project led end to end as a senior PM, and watching it work is a real milestone. Be proud. I can save it in a wins note for review time if you like.\nAction: Add 'Led the Instant Payouts launch end to end, May 2026' to your wins note; the June conflicts can wait until you're ready."
+  },
+  {
+   "id": "life-s027-e031#1",
+   "response": "Noted: Jess from Rover walks him at noon on Mondays, Wednesdays and Fridays at $25 a walk, starting Monday. That's $75 a week, about $325 a month. Monday is also cabinet delivery day (8-10am), so the house may be busy with the crew, and it's worth confirming how Jess gets in.\nAction: Add a recurring Mon/Wed/Fri 12:00 dog walk with Jess from Mon 10 Nov, add $75 a week to the pet budget, and text Jess about access on Monday."
+  },
+  {
+   "id": "life-s050-e016#1",
+   "response": "A dinosaur museum trip is going to be a big hit with Leo. I need the exact 3 nights in the week of Mar 16 to search, and I'll look at hotels in Drumheller and the Royal Tyrrell Museum's ticket price for Leo's age. I won't book anything, since I need your okay before any purchase over $100.\nAction: Ask you which 3 nights, then pull hotel options and Tyrrell child admission prices and send them for your pick."
+  },
+  {
+   "id": "life-s105-e004#1",
+   "response": "Booking East End Plumbing Co. for Monday morning, 29 Jun. For the Lattice review due 2026-07-10, I'll remind you to start next week and again the week of 6 Jul.\nAction: Book East End for Mon 29 Jun morning, and set reminders on Tue 30 Jun to start the self-review and Mon 6 Jul as the final push, ahead of the Fri 10 Jul deadline."
+  },
+  {
+   "id": "life-s102-e009#1",
+   "response": "Sure, I'll build the grocery order with all 12 items. I'll check labels on Leo's items like the yogurt tubes, bread and dumplings for tree nut warnings, and use the dumplings Sam usually gets from your past orders. The Sandbanks day-use permits ($21 each, 38 left for Sat 27 Jun) usually sell out by Thursday evening, so it's worth asking Sam tonight.\nAction: Build the cart and send it for your approval, and keep the Sandbanks task paused until you tell me about PEC."
+  },
+  {
+   "id": "life-s138-e007#1",
+   "response": "I don't have your Lisbon notes in front of me, so I'll open them rather than guess what's in there. In general, Lisbon in late December is mild but damp (roughly 8-15°C / 46-59°F), so think layers, a waterproof jacket and a warm layer for the NYE evening.\nAction: Open the Lisbon note, pull out the NYE plans and anything about weather or packing, and send them to you with a packing list for Leo; I'll check the forecast closer to the trip."
+  },
+  {
+   "id": "life-s131-e027#1",
+   "response": "I don't have your learning preferences or vocab focus saved here, and I'd rather not put words in your mouth. I'll look for it in your notes and earlier practice chats.\nAction: Search your Spanish notes and past practice chats for how you said you learn best and the kind of vocab you wanted, then set up tonight's practice around that; if I can't find it, I'll ask two quick questions."
+  },
+  {
+   "id": "life-s105-e028#1",
+   "response": "Classic shakedown. Either he thinks dinner is late, or he's pitching for a walk.\nAction: None needed; tell me if you want a reminder to feed or walk him."
+  },
+  {
+   "id": "life-s047-e019#1",
+   "response": "Sending the school council email as drafted. For quotes, I'd start about 4 to 6 weeks before your renewal date so there's time to compare, and have the new policy start the day the old one ends before you cancel. Cancellation usually needs written notice and some insurers charge a fee, so I'll check your policy's terms rather than guess.\nAction: Send the school council email, then find the premium letter to get your renewal date, current premium and cancellation terms, and tell you when to start collecting quotes."
+  },
+  {
+   "id": "life-s068-e008#1",
+   "response": "From today's chat, the one thing I know is that Leo is deep into fort-building with couch cushions. I don't have his current interests or any food restrictions on hand, and for the food question I don't want to guess.\nAction: Check your notes for what Leo's into and any food allergies or restrictions, then draft a reply to Grace for you to send."
+  },
+  {
+   "id": "life-s107-e009#1",
+   "response": "Sure, I'll pull up the reno notes, but I don't have the reasons in front of me, so I won't make any up. What I have confirmed is that Nate from Northline Renovations is your kitchen contractor and that he prefers texts over calls.\nAction: Open the reno notes, find the comparison of the three contractors and the reasons you chose Nate, and send you a short bulleted answer to forward to Sam."
+  },
+  {
+   "id": "life-s123-e004#1",
+   "response": "Making the note for Tanvi now, with the summary and links she can use. It will cover that a 2010 condo falls under rent control, the 2.1% guideline for 2026, that anything higher needs LTB approval, the 90 days' written notice on Form N1 (once every 12 months), and that she can pay the guideline amount if she gets an N1 for 9% with no LTB application.\nAction: Create the note with the summary and links to the official Ontario and LTB pages and share it with you; I'd also suggest she confirm her unit's first-occupancy date."
+  },
+  {
+   "id": "life-s046-e021#1",
+   "response": "Booking it with the three agenda items in the invite and the default 25 minutes. I'll find a morning next week that works for Aisha and Diego, and I'll set the Hydro payment reminder for a few days before the due date.\nAction: Check your calendar and theirs for the first free morning next week, book a 25-minute 'Payouts dashboard: empty states' with Aisha and Diego (agenda: empty-state copy, loading skeleton, who owns the Looker link), and set the Hydro reminder once I confirm the due date on the bill."
+  },
+  {
+   "id": "life-s058-e002#1",
+   "response": "What a lovely trip, and Ira will be about five and a half months old by then. I'll pull rough return fares for the August long weekend, Fri 31 Jul to Mon 3 Aug, for one adult and for an adult plus Leo. It's early, so these are ballpark numbers, and fares usually rise as the weekend gets closer.\nAction: Search return fares to Vancouver for those dates, send a rough range for one traveller and for two, and I won't book or set anything without your go-ahead."
+  },
+  {
+   "id": "life-s013-e023#1",
+   "response": "Added 'get passport photos for Leo' to your to-do list.\nAction: Add the item to your to-do list with no due date."
+  },
+  {
+   "id": "life-s106-e005#1",
+   "response": "Holding the order, nothing reserved. I don't have a record of what's in the basement kitchen setup, so I'd rather look than guess what you can cook. Also, East End Plumbing confirmed Raj for Mon 29 Jun between 09:00 and 12:00 and asked that the inside shut-off valve be accessible.\nAction: Hold the charcoal bags and other items, search your notes for the basement kitchen inventory, and if I can't find it, ask you what's down there so I can suggest a simple week of meals."
+  },
+  {
+   "id": "life-s003-e000#1",
+   "response": "Here's a doctor's-visit set for your Tuesday role-play with Carlos, in the table format you want for Anki, and I'll use that format for every vocab list from now on.\n\n| Spanish | English | Example sentence |\n|---|---|---|\n| la cita | appointment | Tengo una cita con la doctora a las tres. |\n| el dolor | pain | Tengo dolor de cabeza desde ayer. |\n| la fiebre | fever | Tengo fiebre desde anoche. |\n| la tos | cough | Tengo tos y me duele la garganta. |\n| los síntomas | symptoms | ¿Cuándo empezaron los síntomas? |\n| el mareo | dizziness | Tengo mareos cuando me levanto. |\n| la receta | prescription | ¿Necesito una receta para este medicamento? |\n| la presión arterial | blood pressure | ¿Me puede tomar la presión arterial? |\n| el análisis de sangre | blood test | Necesito un análisis de sangre. |\n| ser alérgico/a a | to be allergic to | ¿Es usted alérgico a algún medicamento? |\n\nAction: Save the table format as your default for all future Spanish vocab lists, and offer an Anki-ready export if you want it."
+  },
+  {
+   "id": "life-s103-e007#1",
+   "response": "I'm sorry, that's frustrating, especially with no note. To file the claim I need the right insurer and policy number, and since you were planning to shop around this year I won't assume it's the same company as before. It will help to photograph the damage and the spot today, and to ask the store whether the lot has camera footage.\nAction: Find your current auto insurance policy details in your email, draft the claim with the date, location and damage description, and have it ready for you to review before I submit it."
+  }
+ ]
+}
