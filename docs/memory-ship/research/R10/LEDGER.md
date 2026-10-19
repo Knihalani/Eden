@@ -1657,7 +1657,7 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   reported scoring some cases on shortened text. All code judgments from judges that reported a collision (files 0–5)
   were set aside (`out/collided-judged-*.json`, kept for comparison) and re-judged by judges told to use private
   temp directories. The set-aside and re-judged score lists are identical on 9, 8, 12 and 10 of 15 cases in files
-  0, 1, 4, 5, about what two independent judges give. Some judges read the long, near-identical `reference_facts`
+  0, 1, 4, 5 (no baseline for two independent judges was measured). Some judges read the long, near-identical `reference_facts`
   list as a diff between cases rather than verbatim (they said so); every other field was read in full.
 - **Per group (condition − none):**
 
@@ -1721,8 +1721,9 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **Context:** in these four-way runs the haiku checker's own lead over eden on life is +0.051 (two-run average),
   smaller than in the three-way C6/C7 runs (+0.1342). Eden scores higher on life here (+0.0409 against +0.0091 in
   C7-E3), on different responder and judge runs. Jev tracks the haiku checker closely in both worlds; what moved is
-  the life baseline, not Jev relative to haiku.
-- **What this says:** Jev is a drop-in for the haiku checker on replies (two runs, both worlds), about ten times
+  the life baseline (and haiku's own life utility, +0.1433 in C7-E3 → +0.0919), not Jev relative to haiku.
+- **What this says:** Jev matches the haiku checker on replies on point estimates (two runs, both worlds; the CIs of
+  the difference span about ±0.08), about ten times
   inside the latency budget, and on D37's amended provider list. The claim "the checker beats today's plugin on
   life" now rests on the C6/C7 three-way runs, and these four-way runs do not reproduce it firmly.
 
@@ -1750,7 +1751,7 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   | G0 lexical + bank (today's shortlist) | 0.275 / 0.536 / 0.739 | 0.214 / 0.32 / 0.515 |
   | G1 + session context | 0.261 / 0.478 / 0.725 | 0.194 / 0.33 / 0.505 |
   | G2 + entity index and graph | 0.217 / 0.565 / 0.754 | 0.097 / 0.369 / 0.544 |
-  | G3 + time index (turn date) | 0.275 / 0.536 / 0.739 | 0.155 / 0.311 / 0.495 |
+  | G3 + time index (rows whose times name a date in the next 14 days, or the turn's weekday; dates the turn names are not parsed, narrower than the prereg) | 0.275 / 0.536 / 0.739 | 0.155 / 0.311 / 0.495 |
   | G4 all fused (RRF) | 0.232 / 0.565 / 0.725 | 0.146 / 0.369 / 0.534 |
 
   Only about a quarter of needed items rank in the top 3 under any single ranking: a ranked list over a growing store
@@ -1801,3 +1802,42 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   ("not one-off requests; not tool output"). Later turns ask "where did we leave the backsplash", "when is the cake
   pickup". A dreaming system needs an episodic layer next to the semantic one: compact, dated records of what
   happened and what tools returned, indexed by time and entity, rolled up over time so it stays bounded at scale.
+
+## C10-R · 2026-10-19 · Review of the cycle 10 consolidation (REQUEST_CHANGES) and fixes
+- **Jev output provenance:** the head-to-head Jev outputs had been written under the same tag as C10-E2's dev run
+  (`verify/<w>-jev-list`), and `verify.picks` keeps whichever file it reads last. They now have their own tag
+  (`verify/<w>-jev-list-h2h`, call logs split: code 181 dev + 132 head-to-head calls, life 228 + 158). With the
+  split, the C10-E2 dev table reproduces exactly from the documented command. The committed
+  `downstream/<w>-h2h-jev/in/responses-in.json` stays the measured input: in it, the Jev packet of **6 code and 4
+  life turns came from the dev-run call** on identical candidates, not from the call on the head-to-head shortlist
+  (139 and 165 match the head-to-head call). The head-to-head shortlist inputs (`verify/<w>-h2hjev*/in`) exist only
+  in the child session; `verify.py prep --per 1 --contrast 8 --events downstream/<w>-h2h(2)/key.json` rebuilds them.
+- **New finding, Jev's repeat-call variance:** on the events both runs scored with identical candidates, the
+  p ≥ 0.7 packet differs between the two calls for 7 of 64 code and 9 of 83 life events (about 10%). A production
+  checker should not assume one call is deterministic.
+- **Code behind C11-E1's channel table and C11-E3:** `recall_funnel.py --channels` and `--missing` (committed); both
+  reproduce the recorded numbers exactly. C11-E3's "absent" means: no visible row covers the item in the
+  session-end store (`sleep.rows(strict=False)`, rows visible after their own session).
+- **Collision sensitivity** (C10-E3 code judgments): the collided `judged-2.json`, deleted in c2f7169f, is restored
+  as `collided-judged-2.json`. Using the collided judgments instead of the re-judges (reviewer's probe): C10-E3 code
+  jev − eden +0.0792 [−0.0216, +0.1836] (re-judged +0.1017), jev − verify −0.0288 (−0.0117); C10-E4 code jev − eden
+  +0.1107 [+0.0299, +0.19] (+0.122), jev − verify −0.0071 (+0.0015). No verdict changes; C10-E3's "matches" margin
+  would shrink to 0.0012.
+- **Jev and D37's named rule:** D37 (as amended) says the shipped checker is chosen by "p50 latency ≤ 3 s and the
+  C9-E1 quality rule". Jev meets the latency bar but **not** that retrieval rule: base Jev passed 1 of 4 (C10-E1), the
+  pre-registered C10-E2 pick failed, and list 0.7 was chosen after the results and still misses code-rt1 recall
+  (−0.0517). The case for Jev rests on the outcome measure (C10-E3/E4: matches haiku on replies over two runs).
+  Whether D37 should name the outcome measure as its criterion is the user's decision; the docs now say this.
+- **Wording:** C10-E4's context line now notes haiku's own life utility also fell (+0.1433 in C7-E3 → +0.0919);
+  "drop-in" is softened to "matches on point estimates (CIs about ±0.08)"; STATE no longer says life-rt1 was
+  "within 0.03" (it was +0.047 ahead); the sketch no longer frames an unmet rule as "CIs just touching 0"; the
+  headline says list 0.7 was chosen after the results.
+- **Harness:** `h2h.py --four … --runs r2` gives the C10-E4 two-run numbers (reproduce exactly); `recall_funnel.py`
+  line length and dead code fixed; G3's label states what it parses.
+- **Evidence outside artifacts:** the NIM smokes' 404s and the GLM connection failure are recorded only by the child
+  session's report (their `calls.jsonl` files are empty). The `dream/in` builder was an inline script (it writes
+  each store's rows as id, kind, text in files of 100). C11-E1's pre-registration and result were committed minutes
+  apart; it is exploratory with no verdict rule.
+- **Local CI (6400cf08, outside the repo):** format, typecheck, build pass; test:parallel 5319 pass, 32 skip, 3 fail
+  (`switches`, `memory-purge`: root-on-Linux, also fail on main; `doctor` hung-wrap: under load, passes alone).
+  Since then only .py, .json and .md changed.

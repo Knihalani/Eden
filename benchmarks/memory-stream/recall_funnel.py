@@ -3,14 +3,15 @@
 For each dev human need turn in the judge sample and each needed item, the best rank of a visible row covering the
 item under each generator; recall@k and the share at rank ≤ 3 (a scale proxy).
 
-    python3 benchmarks/memory-stream/recall_funnel.py [--worlds code life]
+    python3 benchmarks/memory-stream/recall_funnel.py [--worlds code life]             (C11-E1 generator table)
+    python3 benchmarks/memory-stream/recall_funnel.py --channels                      (C11-E1 channel table)
+    python3 benchmarks/memory-stream/recall_funnel.py --missing                       (C11-E3: what dreaming left out)
 """
 import argparse, datetime, glob, json, math, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import methods as M
-from text import content
 
 MONTHS = {m: i + 1 for i, m in enumerate(["january", "february", "march", "april", "may", "june", "july", "august",
                                           "september", "october", "november", "december"])}
@@ -61,7 +62,8 @@ class Generators:
         df = {}
         for r in self.rows:
             w = r.get("when") or {}
-            es = {e.lower().strip() for e in (r.get("entities") or []) + (w.get("entities") or []) if len(e.strip()) >= 3}
+            es = {e.lower().strip() for e in (r.get("entities") or []) + (w.get("entities") or [])
+                  if len(e.strip()) >= 3}
             self.ents[r["id"]] = es
             for e in es:
                 df[e] = df.get(e, 0) + 1
@@ -77,7 +79,6 @@ class Generators:
                     hist.append(M.strip_paste(ev["text_all"]))
                 elif ev["t"] == "assistant":
                     last = ev.get("text") or ""
-        self.year = {r["id"]: None for r in self.rows}
 
     def mentioned(self, text):
         t = text.lower()
@@ -111,6 +112,96 @@ class Generators:
                 "G3": rrf(lex, bank, tm), "G4": rrf(lex, bank, lctx, ent, graph, tm)}, vis
 
 
+def turn_times(text, d):
+    """Weekdays and months a turn names ("sunday", "weekend", "tomorrow", "july", "next week")."""
+    t = text.lower()
+    days, months = set(), set()
+    for n in DAYS:
+        if re.search(r"\b" + n[:3] + r"(day|s|\b)", t):
+            days.add(n)
+    if "weekend" in t:
+        days |= {"saturday", "sunday"}
+    if "tomorrow" in t:
+        days.add(DAYS[(d.weekday() + 1) % 7])
+    if "tonight" in t or "today" in t:
+        days.add(DAYS[d.weekday()])
+    if "next week" in t or "this week" in t:
+        days |= set(DAYS)
+    for m in MONTHS:
+        if re.search(r"\b" + m[:3] + r"\w*\b", t):
+            months.add(m)
+    return days, months
+
+
+def need_turns(g, world):
+    import score
+    jud = set()
+    for p in glob.glob(os.path.join(HERE, "judge", f"{world}-sleep", "in", "*.json")):
+        jud |= {c["event"] for c in json.load(open(p))["cases"]}
+    for e in score.scored_events(g.stream):
+        if e["_split"] == "dev" and e["t"] == "human" and e["id"] in jud:
+            need = set(e["labels"]["needs"]) - set(e["labels"].get("in_context", []))
+            if need:
+                yield e, need
+
+
+def channels(world):
+    """C11-E1 channel table: G0's top 15, the entity channel (rows holding an entity the turn or its session names),
+    the time channel (rows whose times share a weekday or month the turn names) and their union, as sets."""
+    g = Generators(world)
+    hits = {"G0@15": 0, "entity": 0, "time": 0, "union": 0}
+    tot, pools = 0, []
+    for e, need in need_turns(g, world):
+        vis = {r["id"] for r in g.lex.visible(e["_order"])}
+        text, ctx = M.strip_paste(e["text_all"]), g.ctx.get(e["id"], "")
+        gens, _ = g.score_all(e)
+        g0 = set(sorted(gens["G0"], key=lambda i: -gens["G0"][i])[:15])
+        ment = g.mentioned(text + " " + ctx)
+        ent = {i for i in vis if g.ents[i] & ment}
+        days, months = turn_times(text, g.day[e["id"]])
+        tm = set()
+        for i in vis:
+            s = " ".join((g.by_id[i].get("when") or {}).get("times") or []).lower()
+            if any(x in s or x[:3] + "s" in s for x in days) or any(m in s for m in months):
+                tm.add(i)
+        pool = g0 | ent | tm
+        pools.append(len(pool))
+        for item in need:
+            cover = [i for i in vis if item in g.by_id[i]["covers"]]
+            if not cover:
+                continue
+            tot += 1
+            for name, S in (("G0@15", g0), ("entity", ent), ("time", tm), ("union", pool)):
+                hits[name] += any(i in S for i in cover)
+    pools.sort()
+    print(world, "needed items with a covering row", tot, {k: round(v / tot, 2) for k, v in hits.items()},
+          "union pool median", pools[len(pools) // 2], "p90", pools[int(0.9 * len(pools))])
+
+
+def missing(world):
+    """C11-E3: needed items no visible row covers even in the session-end store (rows visible after their own
+    session, `strict=False`), by item kind; and the share of every world item the compiler ever stored."""
+    import score, sleep
+    g = Generators(world)
+    rows = sleep.rows(g.stream, world, strict=False)
+    o = M.make("lex", rows, g.stream, g.items, g.cov)
+    kind = {x["id"]: x["kind"] for x in g.items} if isinstance(g.items, list) else {k: v["kind"] for k, v in
+                                                                                    g.items.items()}
+    need_k, miss_k = {}, {}
+    for e, need in need_turns(g, world):
+        have = {i for r in o.visible(e["_order"]) for i in r["covers"]}
+        for n in need:
+            need_k[kind[n]] = need_k.get(kind[n], 0) + 1
+            miss_k[kind[n]] = miss_k.get(kind[n], 0) + (n not in have)
+    print(world, "needed, absent from the session-end store:", {k: f"{miss_k[k]}/{need_k[k]}" for k in need_k})
+    stored = {i for r in o.rows for i in r["covers"]}
+    tot, got = {}, {}
+    for n, k in kind.items():
+        tot[k] = tot.get(k, 0) + 1
+        got[k] = got.get(k, 0) + (n in stored)
+    print("   every world item, share ever stored:", {k: f"{got[k]}/{tot[k]}" for k in tot})
+
+
 def run(world):
     import score
     g = Generators(world)
@@ -142,5 +233,8 @@ def run(world):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--worlds", nargs="*", default=["code", "life"])
-    for w in ap.parse_args().worlds:
-        run(w)
+    ap.add_argument("--channels", action="store_true", help="C11-E1 channel table")
+    ap.add_argument("--missing", action="store_true", help="C11-E3 dreaming omissions")
+    a = ap.parse_args()
+    for w in a.worlds:
+        (channels if a.channels else missing if a.missing else run)(w)

@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "code-s060-e021", "scores": [1, 1, 2, 2], "why": "R0/R1 wrongly claim the user's laptop runs Node 18.20.4 (that was Jordan's); R2/R3 hedge on package manager but check pins."},
+{"event": "code-s060-e026", "scores": [3, 3, 3, 3], "why": "Chit-chat; all acknowledge, correctly note background tests and Postgres/DATABASE_URL still needed."},
+{"event": "code-s066-e013", "scores": [3, 3, 2, 2], "why": "R0/R1 reuse slugify from PDF work sensibly; R2 generic; R3 asserts csv-filename.ts builds this filename, which history contradicts (hedged)."},
+{"event": "code-s066-e028", "scores": [2, 3, 2, 3], "why": "R1/R3 know chart is infra/helm/worker with values-prod; R3 keeps separate commit; R0/R2 generic about chart location."},
+{"event": "code-s067-e006", "scores": [3, 3, 3, 3], "why": "All give the correct up -d vs start distinction concisely."},
+{"event": "code-s068-e000", "scores": [3, 3, 3, 3], "why": "All split commits into separate branches/PRs, verify unpushed, keep csv alone."},
+{"event": "code-s068-e023", "scores": [0, 3, 0, 3], "why": "User rules: never git stash, no major bumps without asking. R0/R2 stash and bump majors; R1/R3 follow both rules."},
+{"event": "code-s070-e000", "scores": [3, 3, 3, 3], "why": "Small talk; all respond briefly and wait."},
+{"event": "code-s071-e014", "scores": [3, 3, 3, 3], "why": "All add per-org structured decision logging via existing logger without leaking data."},
+{"event": "code-s072-e000", "scores": [3, 2, 2, 3], "why": "R1/R2 blame stale MySQL-to-Postgres move from weeks ago; R0/R3 investigate actual error, R3 avoids destructive resets."},
+{"event": "code-s073-e000", "scores": [3, 2, 3, 2], "why": "R0 knows schema path, PG16 lacks native v7, asks status; R1/R3 assume existing tables show v7/dialect unknown (they use v4, Postgres)."},
+{"event": "code-s075-e000", "scores": [3, 2, 3, 2], "why": "Repo formats with Biome; R0/R2 use it directly; R1/R3 don't know the formatter."},
+{"event": "code-s076-e000", "scores": [2, 3, 3, 3], "why": "Simple rename; R0 needlessly gates on large-refactor plan rule. Others git mv, update imports, typecheck and test."},
+{"event": "code-s076-e017", "scores": [3, 2, 3, 3], "why": "Simple typo sweep; R1 drags in an irrelevant September invoices copy fix."},
+{"event": "code-s077-e005", "scores": [2, 1, 2, 3], "why": "tsx is already a devDependency in packages/cli (dev script uses it); only R3 notices. R1 only adds dep, ignores scripts."}
+]}

@@ -75,11 +75,15 @@ model, chosen by measurement (LEDGER C10-E1). The decision points as they were p
      140 ms on the server plus 0.7–0.9 s of network. Published attacks can flip its verdicts, so it needs an A6
      security review before shipping. **Measured (C10-E1/E2):** p50 0.21–0.27 s end to end from the container,
      about ten times inside the budget. With precise criteria and the candidate list in the state (threshold 0.7)
-     its picks are close to the calibrated haiku checker (short by about 0.05 recall on code-rt1, ahead on
+     its picks (that variant was chosen after the results) are close to the calibrated haiku checker (short by about 0.05 recall on code-rt1, ahead on
      life-rt1; post hoc). **On replies (C10-E3, one run):** it matches the haiku checker (−0.0117 code,
-     −0.0262 life per turn) and beats today's plugin by +0.1017 / +0.0873, with CIs just touching 0.
+     −0.0262 life per turn) and beats today's plugin by +0.1017 / +0.0873; the pre-registered bar (a CI lower bound
+     above 0) was not met (−0.0009, −0.0073).
      **Two runs (C10-E4):** matches haiku (+0.0015 code, +0.0122 life); beats today's plugin firmly on code
      (+0.122 [+0.0392, +0.2039]), not firmly on life (+0.0632 [−0.0186, +0.1499]).
+   - **D37's named criterion:** D37 says the shipped checker meets p50 ≤ 3 s and the C9-E1 retrieval quality rule.
+     Jev meets the latency bar and fails that retrieval rule; it passes on the outcome measure (C10-E3/E4). Whether
+     D37 should name the outcome measure is the user's call.
    - **An NVIDIA NIM model:** none usable (C10-E1): three of the five candidates return 404, one failed to connect,
      and Nemotron 3.5 Lightning ran at p50 14.3 s with unparseable replies.
      - The repo records hosted p50 1–20 s and p95 40–70 s (EXECUTION.md). Against C8-E4's timings that would reach
