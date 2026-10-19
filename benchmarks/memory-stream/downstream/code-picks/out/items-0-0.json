@@ -1,0 +1,185 @@
+{
+  "responder": "sonnet (claude-code subagent)",
+  "items": [
+    {
+      "id": "code-s080-e020#0",
+      "response": "The API pool max is 10 connections per pod (set in apps/api/src/db/client.ts), which you and Priya agreed on after the earlier 'too many connections' on staging; the rule is to scale pods, not the pool. Since the API autoscales on CPU up to 12 pods, that can mean 120 connections, and pool size times max pods has to stay under the PgBouncer limit, so I'd check that rather than raise the pool. Action: read client.ts to confirm max is 10, then compare pods x 10 against the PgBouncer limit and postgres max_connections for staging."
+    },
+    {
+      "id": "code-s083-e017#0",
+      "response": "The Stripe webhook handler is billing code, and billing changes need your review even for small refactors, so I won't commit this straight onto a shared branch. I can do the switch-to-map refactor as a pure behavior-preserving change (same handlers, same unknown-event fallthrough). Action: make the refactor on a new branch, run the api tests including the stripe signed-fixture case, and open a draft PR tagging you instead of committing to anything else."
+    },
+    {
+      "id": "code-s021-e018#0",
+      "response": "Probably replicas first: the worker already scales with KEDA on queue length (1 to 20 replicas, one per 50 messages), so a big backlog should already be pulling replicas up and the question is whether it has hit the 20 cap or is lagging. I wouldn't raise concurrency from 5 until I know that, and I don't know the current replica count or what the reminder jobs hit downstream (db connections, email provider limits). Action: check the KEDA ScaledObject and current worker replica count in staging/prod and the job duration, then recommend between raising the cap in infra/k8s/ and bumping concurrency."
+    },
+    {
+      "id": "code-s085-e014#0",
+      "response": "What I know: DNS is on Cloudflare (single zone acme.dev), records are declared in infra/dns/records.yaml and applied by the dns-sync workflow, and records are proxied by default. That gives you the public path; what I can't tell you yet is where the cert is issued and renewed (Cloudflare edge cert vs. a cert on the cluster ingress), so I wouldn't state that to Priya until I check. Action: read the api's record in infra/dns/records.yaml and the api ingress/helm values for the TLS setup, then give you a two-line answer."
+    },
+    {
+      "id": "code-s066-e019#0",
+      "response": "Setting `max: 10` on the postgres-js client in apps/api/src/db/client.ts. One thing to check while I'm in that file: the pooler is PgBouncer in transaction mode, which needs prepare: false, and the driver isn't passing that to the raw pool yet, so I'll look at it but not change it unasked. Action: set max to 10 in client.ts, check whether prepare: false actually reaches the client, run typecheck and the api tests, and ask you to confirm the pooler mode if that part is unclear."
+    },
+    {
+      "id": "code-s071-e000#0",
+      "response": "That's the classic unquoted-field CSV bug: a comma in 'Smith, Jones & Co' shifts the columns. The fix is to quote fields containing a comma, double quote or newline and double any inner quotes. Action: find the clients table export code, add the escaping, and add a test with 'Smith, Jones & Co' asserting the row keeps the right column count."
+    },
+    {
+      "id": "code-s061-e000#0",
+      "response": "Easy copy fix in InvoicesEmptyState (components/invoices/empty-state.tsx): 'No invoices yet' plus a period on the subtext. Since web uses next-intl with en/fr/es message files, I'll check whether that copy lives in the messages files and fix the key rather than hardcoding, and keep it to this fix (the shared EmptyState idea is a separate effort). Action: update the strings, then add a vitest test using @testing-library/react with plain assertions like toBeTruthy (no jest-dom) and run it."
+    },
+    {
+      "id": "code-s108-e040#0",
+      "response": "Sure. I'll write it as an ESM TypeScript script (imports, not require; 2-space indent, single quotes, semicolons, external imports first). Action: look at how packages are laid out and what's already in scripts/, then add scripts/count-todos.ts that walks each package's source, counts TODO and FIXME comments, prints a table, and run it once to check the output."
+    },
+    {
+      "id": "code-s033-e020#0",
+      "response": "On it. First the API tests need Docker for Testcontainers, so I'll check `docker info` before running anything, because the suite hangs rather than fails if Docker is down. Action: add migration 0034_invoice_counters.sql with the backfill from current max numbers, switch invoice-number.ts to the atomic per-org counter filtered by org_id, then run the invoice tests in parallel mode."
+    },
+    {
+      "id": "code-s023-e000#0",
+      "response": "Heads up on the bucket: infra is now Pulumi in TypeScript, so it belongs in infra/src/buckets.ts, not Terraform. The existing acme-424-exports-bucket branch has it as infra/s3-exports.tf, which I'd port: acme-<env>-exports, private, AES256, 30-day expiry, tagged via tags(...) with team=payments and env. I won't apply anything from your laptop, only preview, and CI does the apply. Action: write the @fastify/rate-limit plugin (100/min per IP, Redis store) first, then port the bucket to buckets.ts, then open the tracking issue with `gh issue create`."
+    },
+    {
+      "id": "code-s027-e035#0",
+      "response": "The five errors on deps/zod-3.24.1 are the ones in the repo-wide typecheck: invoices.ts:62 and clients.ts:88 (real behavior fixes), webhook.ts:14 and :31, and ClientForm.tsx:47 in web. Action: fix all five on that branch (guard the optional discount, narrow vatId to the company branch, drop the bad annotation, fix the merge chain, fix ClientForm), then re-run the full typecheck and the tests, without committing until you say so."
+    },
+    {
+      "id": "code-s105-e000#0",
+      "response": "I'll add a render-error fallback with a 'Try again' button on branch acme-447. I haven't looked at how the dashboard is routed yet, so I'll check the Next router setup first (for the App Router that means an error.tsx using the reset callback), and log the error so it isn't silent. Action: check out or create acme-447, add the fallback and a test that a throwing child renders it and the button calls reset, then commit it."
+    },
+    {
+      "id": "code-s057-e030#0",
+      "response": "Plan for invoice-reminders: a daily repeatable job per org that queries invoices due in exactly 3 days and enqueues one reminder email each. Open questions I'd settle by reading code rather than guessing: how existing queues and repeatable jobs are defined in the worker, and which timezone defines 'a day' for an org. Action: read the existing worker queue and job setup, then add the queue, the daily scheduler and a handler with a test; I'll make enqueueing idempotent per invoice so a retry can't send two emails."
+    },
+    {
+      "id": "code-s035-e058#0",
+      "response": "Fair; for aligned digits a monospace font works, and `tabular-nums` alone would also fix the width jitter without a new font, so I'll mention that option. Web uses Tailwind v4 with CSS-first config in apps/web/app/globals.css, so the font goes in as an @theme token there and I won't create a tailwind.config.js. Action: add JetBrains Mono as a mono font token in globals.css, apply it to the invoice number and amount columns, and check the tables render without shifting."
+    },
+    {
+      "id": "code-s046-e016#0",
+      "response": "Will do with picocolors (not chalk) on the status column of `invoices list`: paid green, overdue red, and sensible colors for the rest. This is a user-facing CLI change, so it needs a changeset before the PR. Action: add the coloring, update any stdout snapshots, run `pnpm changeset`, and run the CLI tests."
+    },
+    {
+      "id": "code-s027-e049#0",
+      "response": "Committing the zod fixes on deps/zod-3.24.1 as new commits (no rewriting anything pushed), then the --json flag. Since the flag is a separate concern, I'll put it on its own branch/commit rather than mixing it into the dependency bump. Action: commit the typecheck fixes to the zod branch, then check how other commands print output and add `--json` to `acme invoices list` with a test."
+    },
+    {
+      "id": "code-s102-e006#0",
+      "response": "- Added `maskIban` to apps/web/lib/format.ts (strips spaces, uppercases, masks all but the last 4, groups in 4s)\n- Three tests in apps/web/lib/format.test.ts pass\n- Root lint and the full web suite were started in the background; I haven't seen those results yet\n\nAction: check the lint and web suite results, then give you the final list for standup."
+    },
+    {
+      "id": "code-s080-e014#0",
+      "response": "Before committing: you said --json on every command, and the audit showed org list, org switch and clients list still don't have it, so the PR would break that rule. The invoices command also has no tests yet. Action: add --json to those three commands using the existing printJson, add a test for invoices list, then commit and open the PR (cli-table3 included) in time for your tag on the 9th."
+    },
+    {
+      "id": "code-s066-e028#0",
+      "response": "I'll add a ServiceMonitor to the worker helm chart for port 9464, path /metrics. I need to check the chart first: whether the worker Service already exposes that port with a name, and which label Prometheus uses to select ServiceMonitors, otherwise Grafana won't pick it up. Action: read the worker chart, add templates/servicemonitor.yaml with the port, path and selector wired from values, and render it with `helm template` to check."
+    },
+    {
+      "id": "code-s082-e017#0",
+      "response": "I'll key the webhooks handler on the BullMQ job id. Note completed jobs are only kept for the last 1000 (removeOnComplete: 1000), so I shouldn't rely on finding the old job in the queue: I'll record the job id in Redis with SET NX and a TTL (or the db) and skip if it's already claimed. Action: read services/worker/src/jobs/webhooks.ts, add the idempotency check with a test simulating a redelivery after restart, comments only for the why, then run the full `pnpm test` before pushing."
+    },
+    {
+      "id": "code-s103-e031#0",
+      "response": "Two separate causes. The build error is a dev Clerk key (pk_test_) in a production build, so the release branch's Vercel production env needs the live publishable key; I can't see or change Vercel settings, so I'd check that with you. The hydration warning is a server/client time format mismatch, so I'll use next-intl's useFormatter().dateTime for the due date instead of toLocaleDateString or suppressHydrationWarning. Action: find the due date cell and switch it to useFormatter, add a test, and tell you which Vercel env var to check."
+    },
+    {
+      "id": "code-s068-e017#0",
+      "response": "Will leave Marco the comment on acme-215-clerk-verify: restore the isActiveMember check (it's a DB lookup, not a Clerk call), keep the test as is. For /reports: web is Next.js 15 App Router with no pages/ directory, so it goes in a route group under app/. If it's for signed-in users, that's app/(dashboard)/reports/page.tsx; tell me if it should be public. Action: post the review comment, then scaffold the reports page there."
+    },
+    {
+      "id": "code-s015-e000#0",
+      "response": "Writing the local setup section now. I'll cover: copy .env.example to .env.local, secrets from the 1Password vault acme-dev, `pnpm dev` from the root to start web, api and worker, Docker running for the API tests (Testcontainers hang if Docker is stopped), and the Apple Silicon note about not running under Rosetta and `pnpm rebuild sharp` after switching Node. Noted on billing: I won't change billing code without your review. Action: check .nvmrc for the actual Node version before writing it down, since I'm not sure the Node 18 note is current, then write the section in docs/onboarding.md."
+    },
+    {
+      "id": "code-s082-e005#0",
+      "response": "Doing the rename, but it's a separate concern from the clock-skew fix, so I'll keep it in its own branch cut from origin/main rather than piling it into the current diff. Action: grep for every getSessionClaims reference (code, tests, docs), do the rename on that separate branch, run the api tests, and tell you the branch name; ask if you want a specific ticket number."
+    },
+    {
+      "id": "code-s098-e007#0",
+      "response": "I still need the framework and major version, and rather than wait on you I can read it off the repo. Action: check apps/api/package.json for the HTTP framework and version, then write the org guard in the matching registration style (middleware/hook/plugin) for the org-scoped routes, with 403 problem+json for a missing or mismatched x-org-id."
+    },
+    {
+      "id": "code-s012-e000#0",
+      "response": "I can't confirm from memory that those files were removed, so I'll check the git history for when .eslintrc.json and .prettierrc were deleted from apps/api before saying anything about Lena's PR. For CORS: parse CORS_ORIGINS as a comma-separated list (trimmed), allow only exact matches, and no wildcard or reflection fallback. Action: check the history and the current CORS config in apps/api, implement the allowlist with tests for allowed, unknown and missing-origin cases, and draft a comment for Lena's PR."
+    },
+    {
+      "id": "code-s060-e021#0",
+      "response": "The repo pins Node 20.11 in .nvmrc and engines is >=20.11 <21, so on the new laptop I need nvm install and nvm use before installing, otherwise it fails with an engines error. The repo uses pnpm, not yarn. Action: in ~/code/acme-platform run `nvm install && nvm use`, then `pnpm install`, then copy each app's .env.example to .env.local (secrets from the acme-dev vault) and start db and redis with docker compose so the seed can run."
+    },
+    {
+      "id": "code-s063-e013#0",
+      "response": "Noted: never deploy to production on Fridays. Prod deploys go out from git tags v* via release.yml (about 12 minutes), so pushing a tag today is a deploy, and Thursday is fine. Action: record the rule in the repo's agent notes, generate the changelog from commits since the last v* tag, and have it ready after lunch, without pushing the tag until you say go."
+    },
+    {
+      "id": "code-s077-e005#0",
+      "response": "Adding tsx as a devDependency of packages/cli. CI installs with --frozen-lockfile, so pnpm-lock.yaml has to be committed with the package.json change or the install job fails. Action: run `pnpm add -D tsx` filtered to the cli package, check it runs a script from scripts/ directly, and commit package.json and pnpm-lock.yaml together."
+    },
+    {
+      "id": "code-s097-e005#0",
+      "response": "One design constraint: the HMAC secret must never reach the browser, so signing can't run in a client component and the secret can't be a NEXT_PUBLIC_ var. I'll keep share-link.ts server-only and have the preview's copy button call a server action that returns the signed URL. Action: write share-link.ts (HMAC over invoice id + expiry, constant-time verification), add a placeholder SHARE_LINK_SECRET to .env.example with a comment pointing to 1Password acme-dev, add colocated tests, keep the component under 150 lines, and re-check for bugs and security issues before calling it done."
+    },
+    {
+      "id": "code-s087-e000#0",
+      "response": "With Tailwind v4 the dark: variant follows the OS media query by default, so with next-themes on the class strategy the badge won't respond unless globals.css defines the variant. I'll fix it there (CSS-first config, no tailwind.config.js). Action: check apps/web/app/globals.css for an `@custom-variant dark` rule and add one if missing, then give InvoiceStatusBadge dark styles per status and verify it by toggling the theme."
+    },
+    {
+      "id": "code-s013-e004#0",
+      "response": "Adding `--json` to `acme invoices list` in packages/cli (a commander command in src/commands/, registered in src/index.ts). It should print plain JSON with no colors or table. Action: add the flag and a Vitest stdout snapshot test for it, run `pnpm changeset` since it's user-facing, and update docs/cli.md."
+    },
+    {
+      "id": "code-s108-e018#0",
+      "response": "I haven't looked at that export yet, so I won't guess the cause. A doubled header usually means the header gets written once by the export code and once by the serializer, but I'd confirm. Action: find the expenses CSV export code, write a failing test that asserts exactly one header row, then fix it."
+    },
+    {
+      "id": "code-s038-e000#0",
+      "response": "I'll start with the api chart in infra/helm/api: look at its ExternalSecret template and the values.yaml and values-prod.yaml entries for whether POSTHOG_API_KEY is mapped from Secrets Manager into the pod env. I can't see AWS from here, so whether the key exists in Secrets Manager is a separate check. infra/ is Priya's team's, so anything I change goes through a PR for her review. Action: read the ExternalSecret and values files and report what's missing, without editing."
+    },
+    {
+      "id": "code-s091-e007#0",
+      "response": "I'll add a small formatBytes util in apps/web/lib, e.g. 1234567 -> '1.2 MB'. I'll use 1024-based units unless you want SI (1000), and check whether a formatting file already exists in apps/web/lib. Action: write the util plus a test covering 0, under 1 KB, KB, MB and large values, using whatever test runner apps/web already uses, and run it."
+    },
+    {
+      "id": "code-s022-e008#0",
+      "response": "I don't know which exception tracker we use, so I'll check the repo instead of guessing. Action: grep the worker for an existing error-reporting SDK and logger, wire the pdf render job's catch to report and log the error with the invoice id and rethrow or mark the job failed, add a test, then commit."
+    },
+    {
+      "id": "code-s028-e012#0",
+      "response": "Adding an aria-label to the trash button in the line item row, plus a scan of the other icon-only buttons nearby since the rule is always. Since this lands on a pushed branch, I'll add a new commit on top, no amending. Action: add the label (e.g. 'Remove line item', via the existing translation mechanism if labels are translated), add a test asserting the button's accessible name, and commit."
+    },
+    {
+      "id": "code-s108-e000#0",
+      "response": "I'll write a Playwright spec for the create-and-send flow: first start the dev server on port 3000 (`pnpm --filter web dev`), then run `pnpm --filter web e2e`. I'll use retrying assertions like expect(locator).toHaveText(...) and avoid reading rows once with allTextContents() after a click, since that's flaky. I'll click the 'New invoice' button (that's the label on every create button). Action: write e2e/invoices/ for the flow (new invoice, pick client, add a line, save, send), run it with --repeat-each to check it's stable, and note the known unrelated 'downloads pdf' failure in detail.spec.ts."
+    },
+    {
+      "id": "code-s106-e004#0",
+      "response": "I'll add a responsive 16:9 YouTube embed (id aB3xK9qLm2Q) to the getting started page, using youtube-nocookie.com with a title and lazy loading. The site sends a strict CSP header from next.config.ts, so I need to check whether frame-src or default-src would block the iframe and add the YouTube domain if so. Action: add the embed in an aspect-video wrapper, check the CSP in apps/web/next.config.ts, and load the page to confirm the video isn't blocked."
+    },
+    {
+      "id": "code-s030-e013#0",
+      "response": "Understood: ESM only, no require(), and no secrets in logs. For the api logger, I'll use pino's `redact` option for authorization headers, cookies and token or password fields, and add an error serializer that scrubs bearer tokens from messages. No console.log. Action: find the api logger config, add the redaction and a test that logs a bearer token and asserts it is censored, then re-check for gaps before calling it done."
+    },
+    {
+      "id": "code-s038-e019#0",
+      "response": "- CI analysis: median run is 13m 52s, the only cache is the pnpm store, and 12 of 20 runs touched one app or docs but built and tested everything. I proposed pnpm's changed-package filter plus a build cache; nothing changed yet.\n- Wrote scripts/stale-branches.ts (read-only, 60-day default): 4 stale branches on origin, oldest acme-141-old-billing-page at 129 days.\n- Open item: a reviewer note that `--days abc` yields NaN and silently lists nothing; not fixed yet.\n\nAction: that's what I can see in this conversation; I'd check git status for anything else, and fix the --days validation if you want."
+    },
+    {
+      "id": "code-s107-e006#0",
+      "response": "/pricing apparently already exists (apps/web/app/(marketing)/pricing, PR #824) with placeholder prices that marketing still needs to confirm, so I'd check its state before building a second one. /settings/team is for signed-in users, so it goes under apps/web/app/(dashboard)/settings/team/page.tsx; Clerk middleware protects all routes except those in the publicRoutes matcher, so only a new public page would need adding there. Action: check the existing pricing page and middleware.ts, then add the team page listing org members from the API."
+    },
+    {
+      "id": "code-s035-e033#0",
+      "response": "'Overdue' vs 'Due today' flipping 1 in 5 smells like the test depends on the real clock or timezone (a date boundary), but I haven't read it yet. Action: read invoice-status.test.tsx and the component, find where the current date comes in, pin it with fake timers and a fixed system time, and run it repeatedly (e.g. --repeat-each) to show it's stable."
+    },
+    {
+      "id": "code-s058-e012#0",
+      "response": "Adding `memo` as an optional string, max 500, to the create-invoice zod schema in apps/api/src/schemas. The OpenAPI spec is generated from those schemas, so I won't hand-edit the YAML. I also need to check that the invoices table has a column to store it. Action: add the field with .max(500).optional(), persist it (migration if there's no column), add a route test for valid, too-long and missing, then run `pnpm turbo run openapi --filter api` and confirm the memo shows up in the spec."
+    },
+    {
+      "id": "code-s057-e010#0",
+      "response": "That's PgBouncer in transaction mode: prepared statements must be off, so the driver needs `prepare: false`. It's already in pool.ts and the options type in driver.ts, but the driver doesn't pass it to the raw pool yet, which may explain the post-deploy burst. Action: pass `prepare: false` through to the raw pool and add a test that the client options include it."
+    }
+  ]
+}
