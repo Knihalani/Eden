@@ -1,0 +1,332 @@
+{
+ "batch": "a03",
+ "model": "sonnet (claude-code subagent)",
+ "cases": [
+  {
+   "event": "life-s080-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s082-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s083-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s085-e004",
+   "predictions": []
+  },
+  {
+   "event": "life-s085-e010",
+   "predictions": [
+    {
+     "row": "life-sleep-b00:m0004",
+     "if": [
+      "tom",
+      "reply",
+      "email"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0057",
+     "if": [
+      "diego",
+      "figma",
+      "funnel"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s085-e017",
+   "predictions": []
+  },
+  {
+   "event": "life-s085-e027",
+   "predictions": []
+  },
+  {
+   "event": "life-s085-e030",
+   "predictions": []
+  },
+  {
+   "event": "life-s085-e039",
+   "predictions": [
+    {
+     "row": "life-sleep-b04:m0017",
+     "if": [
+      "wire",
+      "ach",
+      "eft",
+      "sales",
+      "pricing"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s086-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s087-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s087-e004",
+   "predictions": []
+  },
+  {
+   "event": "life-s087-e009",
+   "predictions": []
+  },
+  {
+   "event": "life-s087-e014",
+   "predictions": []
+  },
+  {
+   "event": "life-s087-e016",
+   "predictions": [
+    {
+     "row": "life-sleep-b02:m0013",
+     "if": [
+      "calgary",
+      "neighbourhood",
+      "rent",
+      "sister"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s087-e025",
+   "predictions": []
+  },
+  {
+   "event": "life-s087-e029",
+   "predictions": []
+  },
+  {
+   "event": "life-s087-e031",
+   "predictions": [
+    {
+     "row": "life-sleep-b00:m0017",
+     "if": [
+      "hannah",
+      "send",
+      "text"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s087-e038",
+   "predictions": [
+    {
+     "row": "life-sleep-b00:m0043",
+     "if": [
+      "olivia",
+      "blurb",
+      "deck",
+      "launch date"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0063",
+     "if": [
+      "olivia",
+      "email",
+      "send",
+      "blurb"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s088-e015",
+   "predictions": []
+  },
+  {
+   "event": "life-s088-e019",
+   "predictions": []
+  },
+  {
+   "event": "life-s088-e023",
+   "predictions": [
+    {
+     "row": "life-sleep-b07:m0007",
+     "if": [
+      "vet",
+      "emergency",
+      "biscuit",
+      "call"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b06:m0036",
+     "if": [
+      "vet",
+      "emergency",
+      "weekend",
+      "open"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0017",
+     "if": [
+      "hannah",
+      "on my way",
+      "fence"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s088-e035",
+   "predictions": []
+  },
+  {
+   "event": "life-s088-e038",
+   "predictions": []
+  },
+  {
+   "event": "life-s090-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s090-e014",
+   "predictions": []
+  },
+  {
+   "event": "life-s091-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s091-e008",
+   "predictions": []
+  },
+  {
+   "event": "life-s092-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s096-e007",
+   "predictions": []
+  },
+  {
+   "event": "life-s096-e009",
+   "predictions": []
+  },
+  {
+   "event": "life-s096-e026",
+   "predictions": []
+  },
+  {
+   "event": "life-s096-e028",
+   "predictions": [
+    {
+     "row": "life-sleep-b06:m0038",
+     "if": [
+      "wins",
+      "record",
+      "review",
+      "kudos"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s097-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s097-e004",
+   "predictions": [
+    {
+     "row": "life-sleep-b08:m0004",
+     "if": [
+      "dates",
+      "july",
+      "9 jul",
+      "vancouver",
+      "away"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0017",
+     "if": [
+      "hannah",
+      "text",
+      "send"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s097-e013",
+   "predictions": []
+  },
+  {
+   "event": "life-s098-e004",
+   "predictions": [
+    {
+     "row": "life-sleep-b03:m0014",
+     "if": [
+      "lunch",
+      "saffron",
+      "book",
+      "reserve",
+      "menu"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0050",
+     "if": [
+      "lunch",
+      "order",
+      "menu",
+      "dish"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0025",
+     "if": [
+      "saffron",
+      "south indian",
+      "dosa"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s098-e013",
+   "predictions": []
+  },
+  {
+   "event": "life-s100-e006",
+   "predictions": []
+  },
+  {
+   "event": "life-s100-e017",
+   "predictions": []
+  }
+ ]
+}

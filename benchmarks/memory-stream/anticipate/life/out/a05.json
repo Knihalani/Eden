@@ -1,0 +1,438 @@
+{
+ "batch": "a05",
+ "model": "sonnet (claude-code subagent)",
+ "cases": [
+  {
+   "event": "life-s123-e009",
+   "predictions": []
+  },
+  {
+   "event": "life-s125-e004",
+   "predictions": [
+    {
+     "row": "life-sleep-b11:m0014",
+     "if": [
+      "passport",
+      "leo",
+      "renew",
+      "lisbon"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s126-e003",
+   "predictions": []
+  },
+  {
+   "event": "life-s126-e005",
+   "predictions": []
+  },
+  {
+   "event": "life-s127-e005",
+   "predictions": []
+  },
+  {
+   "event": "life-s131-e012",
+   "predictions": []
+  },
+  {
+   "event": "life-s131-e015",
+   "predictions": [
+    {
+     "row": "life-sleep-b00:m0069",
+     "if": [
+      "met",
+      "first met",
+      "anniversary",
+      "2015",
+      "board game"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0001",
+     "if": [
+      "food",
+      "dinner",
+      "dessert",
+      "recreate",
+      "menu"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s131-e022",
+   "predictions": [
+    {
+     "row": "life-sleep-b11:m0018",
+     "if": [
+      "priya",
+      "architect",
+      "firm",
+      "client"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s131-e027",
+   "predictions": [
+    {
+     "row": "life-sleep-b02:m0021",
+     "if": [
+      "copy",
+      "tone",
+      "macro",
+      "email",
+      "draft"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0071",
+     "if": [
+      "copy",
+      "draft",
+      "announcement",
+      "wording"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s133-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s133-e004",
+   "predictions": []
+  },
+  {
+   "event": "life-s136-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s136-e034",
+   "predictions": [
+    {
+     "row": "life-sleep-b00:m0063",
+     "if": [
+      "send",
+      "email",
+      "tone",
+      "reply",
+      "shorter"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b02:m0021",
+     "if": [
+      "merchant",
+      "reply",
+      "draft",
+      "customer"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s137-e015",
+   "predictions": []
+  },
+  {
+   "event": "life-s137-e022",
+   "predictions": []
+  },
+  {
+   "event": "life-s137-e029",
+   "predictions": []
+  },
+  {
+   "event": "life-s140-e009",
+   "predictions": []
+  },
+  {
+   "event": "life-s140-e025",
+   "predictions": []
+  },
+  {
+   "event": "life-s140-e027",
+   "predictions": []
+  },
+  {
+   "event": "life-s140-e033",
+   "predictions": []
+  },
+  {
+   "event": "life-s140-e039",
+   "predictions": [
+    {
+     "row": "life-sleep-b09:m0013",
+     "if": [
+      "order",
+      "send",
+      "go",
+      "bento",
+      "allerg"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s140-e048",
+   "predictions": []
+  },
+  {
+   "event": "life-s140-e051",
+   "predictions": [
+    {
+     "row": "life-sleep-b00:m0045",
+     "if": [
+      "account",
+      "joint",
+      "chequing",
+      "visa",
+      "transfer"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b06:m0020",
+     "if": [
+      "send",
+      "pay",
+      "transfer",
+      "confirm"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b02:m0034",
+     "if": [
+      "nate",
+      "northline",
+      "invoice",
+      "e-transfer"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s141-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s141-e017",
+   "predictions": []
+  },
+  {
+   "event": "life-s141-e023",
+   "predictions": [
+    {
+     "row": "life-sleep-b10:m0013",
+     "if": [
+      "thursday",
+      "19:30",
+      "class",
+      "carlos",
+      "study"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b06:m0012",
+     "if": [
+      "spanish",
+      "español",
+      "corrections"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s141-e030",
+   "predictions": []
+  },
+  {
+   "event": "life-s143-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s143-e009",
+   "predictions": [
+    {
+     "row": "life-sleep-b11:m0019",
+     "if": [
+      "wavecrest",
+      "cert",
+      "ga",
+      "launch",
+      "tom"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s145-e020",
+   "predictions": [
+    {
+     "row": "life-sleep-b03:m0009",
+     "if": [
+      "vent",
+      "just talk",
+      "listen",
+      "frustrated",
+      "venting"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b01:m0015",
+     "if": [
+      "worried",
+      "anxious",
+      "stress",
+      "plan"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s145-e023",
+   "predictions": []
+  },
+  {
+   "event": "life-s147-e005",
+   "predictions": []
+  },
+  {
+   "event": "life-s148-e000",
+   "predictions": []
+  },
+  {
+   "event": "life-s148-e003",
+   "predictions": [
+    {
+     "row": "life-sleep-b10:m0019",
+     "if": [
+      "sam",
+      "take it",
+      "interview",
+      "slot",
+      "edsby"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b01:m0002",
+     "if": [
+      "alvarez",
+      "edsby",
+      "interview",
+      "teacher"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s148-e012",
+   "predictions": []
+  },
+  {
+   "event": "life-s150-e004",
+   "predictions": [
+    {
+     "row": "life-sleep-b00:m0057",
+     "if": [
+      "diego",
+      "des-341",
+      "copy",
+      "figma"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0005",
+     "if": [
+      "aisha",
+      "eng-2290",
+      "nudge",
+      "ping"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0031",
+     "if": [
+      "wen",
+      "data-88",
+      "data request"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s150-e007",
+   "predictions": []
+  },
+  {
+   "event": "life-s150-e014",
+   "predictions": []
+  },
+  {
+   "event": "life-s150-e015",
+   "predictions": [
+    {
+     "row": "life-sleep-b14:m0022",
+     "if": [
+      "q4",
+      "planning doc",
+      "tom",
+      "draft",
+      "due"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b00:m0071",
+     "if": [
+      "north star",
+      "doc",
+      "draft",
+      "wording"
+     ],
+     "always": false
+    },
+    {
+     "row": "life-sleep-b02:m0021",
+     "if": [
+      "doc",
+      "draft",
+      "merchant",
+      "write"
+     ],
+     "always": false
+    }
+   ]
+  },
+  {
+   "event": "life-s152-e000",
+   "predictions": []
+  }
+ ]
+}
