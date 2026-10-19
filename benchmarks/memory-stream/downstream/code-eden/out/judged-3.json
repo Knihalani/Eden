@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s063-e009",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R0 revisits CODEOWNERS concern already fixed in August (stale); R1 drafts the proper description with plan placeholder."
+  },
+  {
+   "event": "code-s066-e035",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both close out the day appropriately."
+  },
+  {
+   "event": "code-s067-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Changeset needed and it's Friday (no prod deploy); R1 flags Friday rule but hedges date; both defer setup steps to outdated README."
+  },
+  {
+   "event": "code-s068-e008",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "They did settle: ask before adding a new dependency. Both wrongly claim no decision, though behaviour matches."
+  },
+  {
+   "event": "code-s075-e011",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both remove override on a branch without applying; fine."
+  },
+  {
+   "event": "code-s077-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 ties sticky header to the known mobile scroll wrapper; R1 generic."
+  },
+  {
+   "event": "code-s078-e016",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both reasonable skeleton plans."
+  },
+  {
+   "event": "code-s080-e014",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "Oct 9 is a Friday; prod deploys from tags, so neither flags it. R0 also expands PR scope against one-concern rule."
+  },
+  {
+   "event": "code-s080-e020",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "Pool max is 10 per pod; R0 answers correctly, R1 claims not to know."
+  },
+  {
+   "event": "code-s081-e017",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Rule: never merge PRs yourself; let the user merge. Both plan to merge."
+  }
+ ]
+}
