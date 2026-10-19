@@ -1,0 +1,92 @@
+{"batch": "a01", "model": "sonnet (claude-code subagent)", "cases": [
+{"event": "life-s023-e021", "predictions": [
+ {"row": "life-sleep-b00:m0081", "if": ["send", "slot", "book", "invite", "meeting"], "always": false},
+ {"row": "life-sleep-b01:m0004", "if": ["send", "slot", "book", "invite", "meeting"], "always": false}]},
+{"event": "life-s025-e014", "predictions": []},
+{"event": "life-s025-e028", "predictions": [
+ {"row": "life-sleep-b00:m0007", "if": ["priya", "friend", "visit", "mystery"], "always": false},
+ {"row": "life-sleep-b00:m0013", "if": ["order", "buy", "purchase", "hardcover"], "always": false}]},
+{"event": "life-s025-e032", "predictions": [
+ {"row": "life-sleep-b01:m0006", "if": ["order", "book city", "buy", "type books"], "always": false}]},
+{"event": "life-s026-e008", "predictions": []},
+{"event": "life-s026-e012", "predictions": [
+ {"row": "life-sleep-b00:m0081", "if": ["book", "half hour", "agenda", "diego", "aisha"], "always": false},
+ {"row": "life-sleep-b01:m0004", "if": ["book", "half hour", "meeting", "afternoon"], "always": false},
+ {"row": "life-sleep-b00:m0005", "if": ["aisha", "book", "meeting", "walk through"], "always": false}]},
+{"event": "life-s026-e017", "predictions": [
+ {"row": "life-sleep-b00:m0068", "if": ["mom", "mother", "anjali", "saree", "gift"], "always": false},
+ {"row": "life-sleep-b00:m0016", "if": ["price", "rs.", "how much", "cost", "rupee"], "always": false},
+ {"row": "life-sleep-b00:m0013", "if": ["buy", "order", "purchase", "saree"], "always": false}]},
+{"event": "life-s026-e025", "predictions": []},
+{"event": "life-s026-e029", "predictions": []},
+{"event": "life-s027-e014", "predictions": [
+ {"row": "life-sleep-b00:m0057", "if": ["diego", "figma", "feedback", "design review"], "always": false}]},
+{"event": "life-s027-e031", "predictions": [
+ {"row": "life-sleep-b00:m0010", "if": ["biscuit", "dog", "beagle"], "always": false},
+ {"row": "life-sleep-b01:m0008", "if": ["biscuit", "dog", "howl"], "always": false}]},
+{"event": "life-s027-e038", "predictions": [
+ {"row": "life-sleep-b00:m0053", "if": ["walk", "walker", "biscuit", "felipe", "dog"], "always": false}]},
+{"event": "life-s028-e010", "predictions": []},
+{"event": "life-s037-e004", "predictions": [
+ {"row": "life-sleep-b00:m0041", "if": ["sam's parents", "grace", "daniel", "nye", "driving down"], "always": false},
+ {"row": "life-sleep-b00:m0001", "if": ["dinner", "nye", "cake", "menu"], "always": false}]},
+{"event": "life-s037-e006", "predictions": [
+ {"row": "life-sleep-b00:m0011", "if": ["kabir", "mei", "ira", "leave", "vancouver"], "always": false},
+ {"row": "life-sleep-b02:m0048", "if": ["kabir", "ira", "mei", "baby"], "always": false}]},
+{"event": "life-s037-e009", "predictions": [
+ {"row": "life-sleep-b00:m0041", "if": ["grace", "daniel", "nye", "parents", "cake"], "always": false}]},
+{"event": "life-s038-e000", "predictions": [
+ {"row": "life-sleep-b01:m0013", "if": ["furnace", "filter", "filters"], "always": false},
+ {"row": "life-sleep-b01:m0025", "if": ["furnace", "filter", "filters", "reminder"], "always": false}]},
+{"event": "life-s038-e006", "predictions": []},
+{"event": "life-s038-e009", "predictions": []},
+{"event": "life-s038-e017", "predictions": [
+ {"row": "life-sleep-b02:m0001", "if": ["goals", "2026", "year-end", "work"], "always": false},
+ {"row": "life-sleep-b02:m0010", "if": ["goals", "2026", "health", "running"], "always": false},
+ {"row": "life-sleep-b00:m0035", "if": ["goals", "learning", "spanish", "2026"], "always": false},
+ {"row": "life-sleep-b00:m0047", "if": ["goals", "learning", "spanish", "year-end"], "always": false}]},
+{"event": "life-s038-e024", "predictions": [
+ {"row": "life-sleep-b00:m0066", "if": ["lisbon", "hotel", "trip", "family"], "always": false},
+ {"row": "life-sleep-b00:m0032", "if": ["lisbon", "flight", "travel", "trip"], "always": false}]},
+{"event": "life-s040-e000", "predictions": [
+ {"row": "life-sleep-b00:m0037", "if": ["bell", "internet", "fibe", "bill"], "always": false}]},
+{"event": "life-s040-e006", "predictions": []},
+{"event": "life-s041-e000", "predictions": []},
+{"event": "life-s043-e002", "predictions": [
+ {"row": "life-sleep-b02:m0030", "if": ["library", "books", "card", "holds"], "always": false}]},
+{"event": "life-s045-e007", "predictions": []},
+{"event": "life-s046-e021", "predictions": [
+ {"row": "life-sleep-b00:m0081", "if": ["sync", "meeting", "book", "agenda", "25"], "always": false},
+ {"row": "life-sleep-b01:m0004", "if": ["sync", "meeting", "book", "next week"], "always": false},
+ {"row": "life-sleep-b00:m0005", "if": ["aisha", "sync", "meeting"], "always": false},
+ {"row": "life-sleep-b00:m0057", "if": ["diego", "sync", "meeting", "figma"], "always": false}]},
+{"event": "life-s046-e031", "predictions": [
+ {"row": "life-sleep-b00:m0044", "if": ["el", "la", "mapa", "mano", "problema", "tema"], "always": false}]},
+{"event": "life-s046-e041", "predictions": []},
+{"event": "life-s047-e009", "predictions": [
+ {"row": "life-sleep-b03:m0010", "if": ["dinosaur", "costume", "leo", "animal"], "always": false},
+ {"row": "life-sleep-b01:m0006", "if": ["order", "buy", "costume", "shop"], "always": false},
+ {"row": "life-sleep-b00:m0013", "if": ["order", "buy", "costume", "under"], "always": false}]},
+{"event": "life-s047-e019", "predictions": [
+ {"row": "life-sleep-b03:m0010", "if": ["t-rex", "dinosaur", "dino", "leo"], "always": false}]},
+{"event": "life-s047-e025", "predictions": [
+ {"row": "life-sleep-b00:m0008", "if": ["insurance", "intact", "premium", "car"], "always": false}]},
+{"event": "life-s050-e000", "predictions": [
+ {"row": "life-sleep-b00:m0043", "if": ["olivia", "feature", "date", "launch", "instant"], "always": false},
+ {"row": "life-sleep-b00:m0063", "if": ["draft", "reply", "write", "email"], "always": false},
+ {"row": "life-sleep-b04:m0014", "if": ["olivia", "instant payouts", "beta"], "always": false}]},
+{"event": "life-s050-e007", "predictions": [
+ {"row": "life-sleep-b02:m0030", "if": ["library", "tpl", "holds", "card"], "always": false}]},
+{"event": "life-s050-e011", "predictions": [
+ {"row": "life-sleep-b00:m0017", "if": ["hannah", "pancakes", "neighbour"], "always": false},
+ {"row": "life-sleep-b03:m0007", "if": ["calendar", "family calendar", "put it on"], "always": false}]},
+{"event": "life-s050-e016", "predictions": []},
+{"event": "life-s051-e000", "predictions": []},
+{"event": "life-s051-e002", "predictions": [
+ {"row": "life-sleep-b04:m0003", "if": ["next week", "rundown", "what's on", "schedule", "calendar"], "always": false},
+ {"row": "life-sleep-b04:m0009", "if": ["next week", "rundown", "what's on", "schedule"], "always": false},
+ {"row": "life-sleep-b04:m0007", "if": ["next week", "rundown", "what's on", "weekend"], "always": false},
+ {"row": "life-sleep-b02:m0009", "if": ["next week", "rundown", "friday", "what's on"], "always": false}]},
+{"event": "life-s051-e005", "predictions": []},
+{"event": "life-s051-e011", "predictions": []}
+]}
