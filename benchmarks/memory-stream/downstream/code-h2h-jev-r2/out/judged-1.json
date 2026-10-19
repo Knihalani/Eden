@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "code-s035-e008", "scores": [3, 3, 3, 2], "why": "All identify missing token/header or context; last only asks user to show files instead of looking."},
+{"event": "code-s036-e010", "scores": [2, 3, 2, 2], "why": "Needs interplay with required --from/--to and docs/cli.md; last wrongly says newest note is yargs (commander now)."},
+{"event": "code-s043-e000", "scores": [3, 2, 2, 3], "why": "PostHog with invoice_sent known; sm/md sizes known. Third asserts unsupported 'pageview capture off'."},
+{"event": "code-s045-e000", "scores": [2, 2, 3, 2], "why": "Webhooks are signed HMAC SHA-256 X-Acme-Signature; none use it. Third adds idempotency and SSRF safeguards."},
+{"event": "code-s045-e012", "scores": [2, 2, 2, 2], "why": "Recaps accurate but user prefers short bullet-list summaries; all wrote paragraphs."},
+{"event": "code-s046-e008", "scores": [3, 3, 3, 3], "why": "All keep UTC in api and format in UI; org timezone formatter use is history-supported."},
+{"event": "code-s048-e005", "scores": [3, 1, 2, 3], "why": "ESM-only CLI, Node 18+, @acme/cli known; second invents user's laptop install trouble, third stays generic."},
+{"event": "code-s050-e000", "scores": [3, 3, 3, 3], "why": "All correctly add telemetry line and replace RabbitMQ with BullMQ/Bull Board link."},
+{"event": "code-s055-e005", "scores": [2, 3, 2, 2], "why": "API is Fastify 5 (known); responses saying timing still waits on framework question miss it."},
+{"event": "code-s056-e000", "scores": [1, 3, 3, 3], "why": "First invents an unapproved request-id/Sentry-tag idea from 'notes'; others correctly attach error.digest as tag."},
+{"event": "code-s057-e030", "scores": [2, 3, 3, 2], "why": "Worker is BullMQ now; first cites stale RabbitMQ; fourth claims an unsupported earlier subject-line note."},
+{"event": "code-s058-e000", "scores": [3, 2, 3, 2], "why": "Known convention: round each line to cents then sum; generic responses don't apply it."},
+{"event": "code-s058-e007", "scores": [2, 3, 3, 2], "why": "Forms use react-hook-form with zod and org-form.tsx exists; generic responses miss this."},
+{"event": "code-s058-e012", "scores": [2, 3, 3, 2], "why": "Spec is generated from zod via turbo openapi and docs/ need updating; others hedge on how docs are produced."},
+{"event": "code-s060-e000", "scores": [3, 3, 3, 3], "why": "All gate overdue on status so paid wins, with tests for paid past due."}
+]}
