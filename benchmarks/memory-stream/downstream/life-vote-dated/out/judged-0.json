@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s002-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both protect Sunday slot and propose sensible practice; R0 notes DST shift correctly."
+  },
+  {
+   "event": "life-s002-e020",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither can assess level; both save rule. R0 ignores bullet format; R1 omits existing lesson notes context."
+  },
+  {
+   "event": "life-s002-e023",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Both save allergies correctly; R1 follows answer-first bullet preference."
+  },
+  {
+   "event": "life-s003-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both give table vocab; R1 has accent error 'sintoma' in a Spanish study list."
+  },
+  {
+   "event": "life-s003-e021",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give nut-free lunches and honestly lack the Biscuit ambulance record at this point."
+  },
+  {
+   "event": "life-s005-e002",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Facts state title Senior Product Manager owning merchant payouts and onboarding; both fail to provide it."
+  },
+  {
+   "event": "life-s006-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both find fast mug to Vancouver and seek approval before ordering."
+  },
+  {
+   "event": "life-s006-e011",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Both cover key considerations; R1 follows answer-first bullet format Riya requested."
+  },
+  {
+   "event": "life-s006-e015",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Simple sign-off handled well by both."
+  },
+  {
+   "event": "life-s007-e013",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both book Ascari correctly but ignore flight preferences (WestJet, direct, aisle, no basic economy)."
+  },
+  {
+   "event": "life-s008-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both verify salmon flavour, avoid chicken, check bag size."
+  },
+  {
+   "event": "life-s012-e018",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both drafts accurate and wait for approval."
+  },
+  {
+   "event": "life-s013-e020",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add recurring swim lesson, short as requested."
+  },
+  {
+   "event": "life-s013-e023",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add to-do item concisely."
+  },
+  {
+   "event": "life-s016-e002",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both explain ACH vs EFT accurately; R1 slightly more detailed."
+  }
+ ]
+}
