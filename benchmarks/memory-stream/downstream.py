@@ -104,7 +104,7 @@ def items(a):
     per = a.per
     for b in range(0, len(out), per):
         name = f"items-{b // per}"
-        json.dump({"items": out[b:b + per], "output": f"benchmarks/memory-stream/downstream/{a.world}/out/{name}.json"},
+        json.dump({"items": out[b:b + per], "output": f"benchmarks/memory-stream/downstream/{a.sub or a.world}/out/{name}.json"},
                   open(os.path.join(d, "in", f"{name}.json"), "w"), indent=1, ensure_ascii=False)
         print(name, len(out[b:b + per]))
 
@@ -142,7 +142,7 @@ def judge_prep(a):
         base = s["text"] + " " + " ".join(x["text"] for x in s["recent"])
         cases.append({"event": c["event"], "text": s["text"], "recent": s["recent"], "reference_facts": facts,
                       "history_evidence": hist.evidence(c["event"], base, c["responses"]), "responses": c["responses"]})
-    json.dump({"cases": cases, "output": f"benchmarks/memory-stream/downstream/{a.world}/out/judged.json"},
+    json.dump({"cases": cases, "output": f"benchmarks/memory-stream/downstream/{a.sub or a.world}/out/judged.json"},
               open(os.path.join(d, "in", "judge-in.json"), "w"), indent=1, ensure_ascii=False)
     print(len(cases), "cases for the judge")
 
