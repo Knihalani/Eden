@@ -380,3 +380,22 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 ## C3-E7 · 2026-10-18 · Review corrections (independent PR reviewer, APPROVE)
 - C3-E4's "wrong bullets hurt outcomes (−0.40)" overstates it. The empty oracle condition scores −0.267 on the same no-need turns, which is noise, so the packet's own effect is about −0.13 (n 15, one responder run). The verdict becomes "suggestive"; re-measure at a larger n.
 - The harness edit (an optional `text` on Write specs in `benchmarks/memory-long-horizon/harness/shape.ts`) changes `harness_sha` from 07f8ef6d… to 2eecf75e…. Any slice pre-registered against main's harness amends its prereg visibly. None is in progress.
+
+## C4-E1 · 2026-10-19 · F20 per-user need model from the user's own history
+- **Setup:** `methods_hist.py`. History labels come from the independent labeler (sonnet). They are used causally: only sessions that ended before the turn's session.
+  - A turn is matched by idf cosine against each memory's past needing turns; oracle store.
+  - Scored against the plan's labels, which the labeler never saw.
+- **Kill criterion (pre-run):** AUC < 0.75.
+- **Numbers (code dev):**
+
+  | What | Result |
+  |---|---|
+  | AUC, max score vs plan labels (all dev) | 0.647 (55 / 336) |
+  | AUC, later half of the stream only | 0.618 (40 / 172) |
+  | τ 0.25 | recall 0.0364, silence 0.9256 |
+  | τ 0.35 | recall 0.0182, silence 0.9702 |
+
+- **Verdict: dead.**
+  - A memory is needed once or twice in a stream, so history gives almost no positives.
+  - Two turns that need the same memory rarely share words.
+  - Learning from history does not escape the lexical wall. The understanding has to come from a model, not from comparing texts.
