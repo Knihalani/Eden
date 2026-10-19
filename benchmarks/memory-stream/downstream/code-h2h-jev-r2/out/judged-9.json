@@ -1,0 +1,12 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "code-s098-e009", "scores": [2, 2, 2, 2], "why": "The API is known to be Fastify 5 (facts, history); all still treat the framework as unknown instead of writing the guard as a Fastify plugin."},
+{"event": "code-s098-e015", "scores": [3, 3, 3, 3], "why": "All give the standard 400 vs 422 distinction briefly and plan to stay consistent with the existing API."},
+{"event": "code-s098-e019", "scores": [2, 3, 3, 3], "why": "Correct and short; first offers to check the Node range though the repo is known to be pinned at 20.11."},
+{"event": "code-s101-e000", "scores": [3, 3, 3, 2], "why": "All accurate; the fourth overclaims that structuredClone is faster even on plain JSON data (history says JSON can win on small objects)."},
+{"event": "code-s101-e003", "scores": [3, 3, 3, 3], "why": "Simple acknowledgement; all appropriate."},
+{"event": "code-s103-e000", "scores": [3, 2, 1, 3], "why": "History: Hike already has elevation_gain with unapplied migration 0007, and an elevation_gain_m annotation exists; the third ignores both, the second is vague."},
+{"event": "code-s105-e019", "scores": [3, 3, 3, 3], "why": "All give a correct admin.display method with formatting, a None guard and sortable ordering."},
+{"event": "code-s108-e040", "scores": [2, 2, 2, 2], "why": "History shows scripts/count-todos.ts already exists; none notice it, and all plan to write it from scratch."},
+{"event": "code-s108-e045", "scores": [3, 3, 3, 3], "why": "All correctly explain as const vs satisfies and their combination."},
+{"event": "code-s108-e047", "scores": [3, 3, 2, 3], "why": "All explain using/Symbol.dispose correctly; the third tells the user to check which Node runs though it is pinned to 20.11."}
+]}
