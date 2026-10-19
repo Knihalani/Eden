@@ -1,0 +1,11 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s068-e024", "scores": [3, 1], "why": "R0 covers Ellie's dairy and Leo's tree-nut allergies, no-name, Lakeshore store; R1 suggests cheese and claims not to know allergies."},
+{"event": "life-s076-e007", "scores": [3, 1], "why": "R0 uses 452 km / 4h35, Alta Vista, Friday traffic and Big Apple stop; R1 wrongly says it lacks Sam's parents' address."},
+{"event": "life-s077-e007", "scores": [3, 2], "why": "R0 gives the already-found May 10 opening details; R1 claims not to know and re-searches."},
+{"event": "life-s077-e017", "scores": [3, 3], "why": "Both send the reply and sensibly look up City drop-off options for hazardous waste and e-waste."},
+{"event": "life-s082-e000", "scores": [3, 2], "why": "Both pick the watermain and lot closure; R0 ties it to her 501 office-day commute, R1 less personalized."},
+{"event": "life-s087-e016", "scores": [3, 3], "why": "Both plan a sensible needs-a-reply triage of this week's inbox."},
+{"event": "life-s087-e029", "scores": [3, 3], "why": "Both draft a fitting invite; R0 names Ellie and Jun and notes Ellie's dairy allergy."},
+{"event": "life-s087-e031", "scores": [2, 3], "why": "R1 applies no-date-to-Olivia rule, 'merchant', no em dashes; R0 just defers to docs without known rules."},
+{"event": "life-s088-e038", "scores": [3, 3], "why": "Both give warm, brief, uncheesy drafts consistent with her style."}
+]}
