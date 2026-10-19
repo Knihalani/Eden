@@ -1,0 +1,26 @@
+{
+ "batch": "v070",
+ "verifier": "typesafe:jev-latest",
+ "cases": [
+  {
+   "event": "life-s047-e019",
+   "scores": {
+    "life-sleep-b00:m0008": 0.57,
+    "life-sleep-b02:m0025": 0.03,
+    "life-sleep-b02:m0054": 0.03,
+    "life-sleep-b02:m0014": 0.04,
+    "life-sleep-b01:m0023": 0.05,
+    "life-sleep-b02:m0019": 0.14,
+    "life-sleep-b00:m0074": 0.03,
+    "life-sleep-b00:m0067": 0.04,
+    "life-sleep-b00:m0024": 0.02,
+    "life-sleep-b02:m0049": 0.19,
+    "life-sleep-b00:m0034": 0.02,
+    "life-sleep-b03:m0013": 0.09,
+    "life-sleep-b00:m0022": 0.07,
+    "life-sleep-b02:m0048": 0.03,
+    "life-sleep-b02:m0032": 0.03
+   }
+  }
+ ]
+}
