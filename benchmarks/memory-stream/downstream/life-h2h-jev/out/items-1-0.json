@@ -1,0 +1,185 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s145-e020#1",
+   "response": "Sweeping drives the fine drywall dust into the air and across the boards, so Sam's broom probably did spread it. Go over the floor with a dry microfiber mop, or a vacuum on its soft-brush hard-floor setting with the beater bar off, then a barely damp microfiber mop, because wet dust turns to paste and dry rubbing scratches. And I'm happy to just talk about the kitchen too. Action: Wait for how the floor turns out and keep listening if you want to vent more."
+  },
+  {
+   "id": "life-s097-e019#1",
+   "response": "A cardboard fort is a great pick. Besides the boxes you'll want strong tape (packing or duct), a box cutter or sturdy scissors for you to do the cutting, markers or paint for Leo to decorate, and a few blankets plus a flashlight for the inside. Check that the boxes are flat-packed or sturdy enough to stack. Action: Save a short supplies checklist to your notes and remind you this evening to bring the boxes up from the basement."
+  },
+  {
+   "id": "life-s136-e017#1",
+   "response": "Anytime. Action: Keep the 7:50 car reminder and send you the full street-cleaning schedule for your block once the lookup finishes."
+  },
+  {
+   "id": "life-s122-e004#1",
+   "response": "I don't have your collection calendar saved, so I won't guess a day. A holiday week usually pushes pickup back a day, but I'd rather confirm it against the city schedule for your address. Action: Look up this week's green bin day for your address and tell you."
+  },
+  {
+   "id": "life-s126-e021#1",
+   "response": "Classic Sam, twenty minutes in. Sleep well. Action: Nothing tonight; the plumber call stays on Monday's to-do."
+  },
+  {
+   "id": "life-s088-e015#1",
+   "response": "That sounds like a fun trip. A simple Saturday: skate the Rideau Canal Skateway in the morning (rent skates and a sled chair for Leo), a BeaverTails break on the ice, lunch at Grace and Daniel's place, then ice sculptures and a snow playground in the afternoon and an early dinner so Leo's bedtime holds. Winterlude usually runs through February weekends, but I'd confirm the dates and that the skateway is open before you commit. Action: Save this to your notes as 'Winterlude Saturday' and check the Winterlude dates once they're published, then put a placeholder on the calendar."
+  },
+  {
+   "id": "life-s047-e019#1",
+   "response": "Sent the school council reply. For quotes, start about a month before your renewal date so you can compare and have the new policy begin the day the old one ends; I don't have your renewal date, so I'd read it off the letter. You can generally cancel with written notice, but some insurers charge a short-term fee, and never cancel until the new policy is active so there's no gap in coverage. Action: Send the school council draft now, then pull the renewal date from the insurance letter and set a reminder to start quotes."
+  },
+  {
+   "id": "life-s047-e013#1",
+   "response": "Honestly a fair question, a T-rex party would need a very big cake. Sounds like a long day, I hope you get to sit down soon. Action: Nothing needed tonight; the costume arrives Tue 27 Jan and I'll watch the delivery."
+  },
+  {
+   "id": "life-s141-e017#1",
+   "response": "Focus on the subjunctive and the noun vocabulary Carlos has you on, plus a quick drill on your gender exceptions (el problema, el mapa, el tema, la mano), since the DELE B2 exam on Sat 21 Nov is the target. Finish any homework Carlos emailed first. I'm assuming the lesson is still Thursday at 19:30. Action: Block Thu 24 Sep 18:30-19:15 as 'Spanish prep', check your email for Carlos's homework, and put together a short subjunctive and noun-gender quiz."
+  },
+  {
+   "id": "life-s123-e004#1",
+   "response": "On it. The note will say that a 2010 condo is covered by rent control, the 2026 guideline cap is 2.1%, anything above needs LTB approval, and the landlord must give 90 days' written notice on Form N1, only once every 12 months. If she gets an N1 for 9% with no LTB application, she can pay just the guideline amount. Action: Save the note with the Landlord and Tenant Board and CLEO pages linked after I confirm the links, and send it to you to forward to Tanvi."
+  },
+  {
+   "id": "life-s113-e000#1",
+   "response": "Updating the message to: 'Hi, I'm back but still catching up, so replies may take a little longer. Best, Riya'. Your out-of-office will switch off tomorrow morning; tell me if you want a specific time, otherwise I'll end it first thing. Action: Change the auto-reply text now and schedule it to end tomorrow morning."
+  },
+  {
+   "id": "life-s115-e008#1",
+   "response": "You're probably right about Leo: my notes say his passport was due to expire in January 2026 and yours in March 2026, but I have no record that either was renewed, and I don't have Sam's at all. For Portugal the usual Schengen rule is at least three months of validity past your departure date, so each passport needs to be good through about 30 Mar 2027. Action: Search your email, notes and Drive for renewal confirmations and report each passport's expiry, and if any are not renewed, find appointments (simplified child renewal takes 10 business days in person, 20 by mail)."
+  },
+  {
+   "id": "life-s126-e000#1",
+   "response": "Pulling your personal notes from this month now, with titles and last-edited dates, and I'll flag duplicates and near-empty ones to make the tidying faster. Action: Fetch and list this month's notes in your personal folder."
+  },
+  {
+   "id": "life-s111-e007#1",
+   "response": "Good news about the electrician. To pick a time that works for the crew I need his arrival window, and I don't have a contact for the crew in front of me. Action: Find the electrician's Monday confirmation in your email, then text your kitchen contractor a proposed time that avoids overlap and report back."
+  },
+  {
+   "id": "life-s068-e014#1",
+   "response": "All I have saved is the winter market: Sundays 10:00-14:00 indoors at Jimmie Simpson Rec Centre (870 Queen St E), ending Apr 26 2026. I don't have this year's outdoor season start date, so I won't guess. Action: Look up the Leslieville Farmers' Market's opening date, location and hours for this season and send them to you."
+  },
+  {
+   "id": "life-s107-e022#1",
+   "response": "Try: 'If a payout fails because of a bank-side error, the system shall automatically reinitiate the payout, with no merchant action required.' It drops the nested 'that is caused by' and the passive 'being required'. Action: Wait for your OK, then swap it into the PRD."
+  },
+  {
+   "id": "life-s058-e007#1",
+   "response": "Pulling Tom's calendar for the 24th to see when he was actually free, and I'll line it up against when the pricing review was scheduled so the write-up has a clean timeline. If his calendar only shows busy blocks for that day, I'll say so instead of guessing. Action: Fetch Tom's calendar for the 24th and list his free windows."
+  },
+  {
+   "id": "life-s027-e031#1",
+   "response": "Got it: Jess from Rover walks him at noon on Mondays, Wednesdays and Fridays at $25 a walk, which is $75 a week. Action: Add a recurring Mon/Wed/Fri 12:00 'Jess (Rover) walks Biscuit' event starting this coming Monday and add a $75 per week line to the pet budget."
+  },
+  {
+   "id": "life-s105-e028#1",
+   "response": "He's either presenting an invoice or has noticed it's close to dinner. Beagles are very good at collecting. Action: Nothing needed unless you want me to set a reminder for his next meal or walk."
+  },
+  {
+   "id": "life-s137-e018#1",
+   "response": "A full week, and Friday is the right place to land. The meetup page still needs your talk title (and the bio and headshot) by 18 Sep, so that's the only loose end. Action: Hold the meetup items until you pick a title, nothing else needed tonight."
+  },
+  {
+   "id": "life-s075-e000#1",
+   "response": "I'll check TekSavvy first, since that's your provider now (Bell was cancelled), and look for a Leslieville outage. Since you own the modem, support will likely ask for a power-cycle, so I'll note that you've had two dropped calls this afternoon. Action: Check TekSavvy's outage status for your address, and if there's no outage open a support ticket today and send you the ticket number."
+  },
+  {
+   "id": "life-s140-e029#1",
+   "response": "TL;DR: the hour before bed matters more than total screen time. In a 2025 study of 1,200 kids aged 6 to 9, screen use in the last 60 minutes meant falling asleep about 19 minutes later, mostly with handheld devices, because of light, stimulating games and lost wind-down routines. What worked: a fixed screens-off time an hour before bed every night including weekends, devices charging in the kitchen, TV only in a shared room, and a choice of two books, and sleep onset normalised within two weeks. The author's point is that it's about when, not whether. Action: Nothing more unless you want a one-line reply for Hannah's group chat."
+  },
+  {
+   "id": "life-s002-e020#1",
+   "response": "I can't give an honest grade yet: I have no sample of your Spanish or notes from Carlos in front of me. Rule saved: I will never book meetings for you before 9:30 or after 17:00. Action: Save the calendar rule, and ask you to write a short paragraph in Spanish so I can give specific corrections and a real read on your level."
+  },
+  {
+   "id": "life-s013-e020#1",
+   "response": "Added: Leo's swim, Tuesdays at 5:30 pm, Pam McConnell Aquatic Centre in Regent Park, starting tomorrow. Action: Create the weekly recurring event now with no end date until you tell me the session count."
+  },
+  {
+   "id": "life-s090-e005#1",
+   "response": "You're welcome. One thing still open: the camper health form and the authorized pickup list aren't marked complete in the City camp portal, and both are needed before day 1 on Mon 29 Jun. Action: Set a reminder for this weekend to finish the camp forms."
+  },
+  {
+   "id": "life-s156-e004#1",
+   "response": "No rush on the Halloween plan. Booking the onboarding design review for Thu 26 Nov at 10:00, 25 minutes, with Aisha and Diego, agenda: 1) KYC retry screens 2) empty states 3) open questions. Action: Check all three calendars for conflicts first, then send the invite with the agenda."
+  },
+  {
+   "id": "life-s100-e025#1",
+   "response": "You're welcome. When you're ready for the mithai, my pick is Brijwasi Sweets: best freshness reviews, Rs 1,450 plus Rs 120 delivery, same day if ordered before 14:00 IST. Action: Hold the order until you give me her address and a go-ahead; Spy series night stays blocked for Sunday 20:30."
+  },
+  {
+   "id": "life-s006-e015#1",
+   "response": "You're welcome, and enjoy the quiet with Biscuit. Good luck with the errands tomorrow. Action: None needed."
+  },
+  {
+   "id": "life-s085-e027#1",
+   "response": "Here's what I have in this chat: the out-of-office draft for Fri 22 May (back Mon 25 May, Aisha covers payouts) is written but not set, and I pulled the beta retro RSVPs (9 yes, Olivia tentative, Jonah no reply, 14 stickies, webhook retries the top theme). I also said I'd check your calendar for anything on the 22nd that needs moving, and I haven't reported on that yet. Action: Finish the 22 May calendar check and tell you what, if anything, needs to move."
+  },
+  {
+   "id": "life-s085-e010#1",
+   "response": "A few ideas to pass on: get on the waitlists at several centres now rather than one, ask licensed home child care agencies because they often have openings sooner, ask each centre when infants move up to toddler rooms since spots open then, and check the city's child care registry for subsidy or a central waitlist. Action: Draft a short text for you to forward to Diego."
+  },
+  {
+   "id": "life-s077-e044#1",
+   "response": "Timer set for 25 minutes, have a good time in the garden beds. Action: Start the 25-minute timer now and ping you when it's done."
+  },
+  {
+   "id": "life-s057-e015#1",
+   "response": "Posting the Slack message now. I don't have Tom's favourite whisky saved anywhere I can see, so I won't guess a bottle. Action: Search your notes and past messages for it, and if nothing turns up, suggest asking someone close to Tom and give you a safe fallback to consider."
+  },
+  {
+   "id": "life-s051-e002#1",
+   "response": "I'll pull your calendar and the family calendar for next week and give you a day-by-day rundown with any overlaps flagged. Action: Fetch both calendars for next week and send the rundown."
+  },
+  {
+   "id": "life-s111-e035#1",
+   "response": "Have a great dinner. For tomorrow's pool trip, lanes are closed 7:00-9:00 for swim club, so going after 9 is best, and it's open until 20:45. Action: Set a reminder for the morning to pack Leo's swim gear."
+  },
+  {
+   "id": "life-s018-e005#1",
+   "response": "A common rule of thumb: call it flat when the period-over-period drop stays under about 1 to 2 percentage points for three or more periods in a row. Check several cohorts on the same axis from period 0, since one flat cohort can be noise. Action: Send me the cohort data or chart and I'll mark where each cohort flattens."
+  },
+  {
+   "id": "life-s088-e023#1",
+   "response": "Glad Biscuit is okay. I'll get time with Aisha before Thursday to agree on cutting payout nicknames and the scheduled-payouts calendar view from the Mon 25 May sprint planning. Action: Check Aisha's calendar for a short slot Tue to Thu, send the invite with those two cuts as the agenda, and note any ticket impact."
+  },
+  {
+   "id": "life-s100-e000#1",
+   "response": "I'll skim this afternoon's all-hands email and pull the four points that actually matter, with any dates or actions that touch you. Action: Find the email, and send a four-bullet summary."
+  },
+  {
+   "id": "life-s063-e000#1",
+   "response": "I'd lean toward the clinic that's a 10-minute bike ride away: 45 minutes versus 10 each way is about 70 extra minutes a day, and a 10% raise rarely buys that back unless he has a specific money goal. The things that could flip it are caseload, mentorship, hours and room to grow at the higher-paying clinic. Action: Draft a few talking points and questions you can pass on to Marcus."
+  },
+  {
+   "id": "life-s037-e000#1",
+   "response": "Merry belated Christmas! Pyjamas until 11, a Lego truck built three times and Sam asleep with Biscuit sounds like peak Boxing Day. Action: Nothing needed, enjoy the slow morning."
+  },
+  {
+   "id": "life-s096-e031#1",
+   "response": "Night. Action: None."
+  },
+  {
+   "id": "life-s002-e000#1",
+   "response": "Sunday 9:00 am Toronto time is held for your call with Anjali, kept clear every week, and I'll anchor it to 9:00 Toronto time so the clock change doesn't move it. For Spanish, short daily exchanges work well: you write three to five sentences about your day, I correct and explain, and I keep a running list of repeated mistakes to bring to Carlos. Action: Create a recurring Sunday 9:00 'Call Mom (Anjali)' event marked busy with no end date, and send you the first Spanish prompt after your run."
+  },
+  {
+   "id": "life-s051-e006#1",
+   "response": "For jammy yolks, lower cold eggs into boiling water for 6.5 to 7 minutes, then straight into an ice bath. For ramen eggs, peel them and marinate in a soy and mirin mix for at least a few hours, so boiling tonight works better than tomorrow morning. Action: Set a reminder for this evening to boil the eggs."
+  },
+  {
+   "id": "life-s105-e004#1",
+   "response": "Booking East End Plumbing for Monday morning, 29 Jun. For your Lattice self-review, due 2026-07-10, I'll remind you to start next week and again the week of the deadline. Action: Book East End Plumbing for Mon 29 Jun, and set reminders for Tue 30 Jun (start the review) and Mon 6 Jul (week of the Fri 10 Jul deadline)."
+  },
+  {
+   "id": "life-s105-e019#1",
+   "response": "Noted, the Lattice mid-year self-review is due 2026-07-10. You already asked me to remind you to start it next week and again the week of, so I'll make sure both are in place. Action: Verify both reminders exist, and if not set one for Tue 30 Jun and another for Mon 6 Jul."
+  },
+  {
+   "id": "life-s111-e027#1",
+   "response": "I don't have a packing rule of yours saved, so here's what I take from what you said, to confirm: avoid the long bag wait by travelling carry-on only when possible, and make a checklist for Leo ahead of time, including his swim shirt and stuffie. Action: Save that as a draft packing rule once you OK it, then build Leo's trip-home checklist once I confirm the departure date and share it with Sam."
+  }
+ ]
+}
