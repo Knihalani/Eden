@@ -746,3 +746,13 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **Noted:**
   - C4-E7's kill line (in critic-c4.md) was committed in the same commit as its result, so git cannot show it predates scoring.
   - C4-E8's drafts include the known swapped C3-E4 cases.
+
+## C5-E1 · 2026-10-19 · Re-run of C4-E10 and C4-E13 with the per-turn responder split (pre-registration)
+- **Setup:** the same turns, keys and conditions as C4-E10 (`downstream/code`, `downstream/life`) and C4-E13 (`downstream/<world>-picks`).
+  - `downstream.py items` now puts item j of every turn in group j, so no responder prompt sees one turn twice.
+  - The old outputs moved to `downstream/old-c4/`. Responder: sonnet. Judge: opus, blind, with history evidence. Prompts are as in PROMPTS.md.
+- **Rules (set before running):**
+  - C4-E13's decision rule applies unchanged to the re-run: ≥ +0.3 with ≥ 30% helped means the labels miss needs; ≤ +0.1 means the models over-fire.
+  - C4-E10's verdict ("memory changes the outcome on most plan-need turns") stands if plan oracle − none ≥ +0.5 on both worlds.
+  - R10-3's withdrawal stands if vote − none on code no-need turns is ≥ −0.1.
+  - The re-run numbers replace the provisional ones whatever they show.
