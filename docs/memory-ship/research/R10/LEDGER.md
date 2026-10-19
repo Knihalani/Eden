@@ -1948,3 +1948,14 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **What this says:** dropping hub entities bounds the channel (slope 0.29–0.48, about 15–17 rows) but loses a
   quarter (code) to almost half (life) of what it found: the hub entities carry real needs. So hubs need a bounded
   form of their own, a dream-kept card per hub entity, rather than being dropped.
+
+## C11-E8 · 2026-10-19 · Jev over a wide candidate pool (pre-registration; exploratory)
+- **Question:** the bounded read path needs the checker to pick from far more than 15 candidates. Does Jev keep its
+  accuracy and speed over a pool of about 100–150?
+- **Setup:** dev judge-sample human turns: every need turn, plus the same number of no-need turns (seeded sample,
+  seed 1). Pool = C11-E2's uncapped union (G0@15 ∪ entity ∪ time ∪ action at p ≥ 0.5), ordered G0 first, then by
+  how many channels hold the row, then lexical score, and cut at 150. One Jev request per turn, the `list` variant of
+  C10-E2 (RICH_Q / RICH_C, candidates in the state). Picks: p ≥ 0.7, top 4 by p.
+- **Measure:** latency p50 / p90 and its relation to pool size; recall of needed items that have a covering row in
+  the pool (all, and those also in G0@15); turns with any pick, need vs no-need; picks per turn.
+- **No verdict rule.** Compared descriptively with C10's 15-candidate Jev runs.
