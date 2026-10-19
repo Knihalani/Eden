@@ -1,0 +1,31 @@
+{
+ "batch": "j03",
+ "judge": "haiku (claude-code subagent)",
+ "cases": [
+  {"event": "life-s098-e004", "needed": ["life-sleep-b00:m0021"]},
+  {"event": "life-s106-e007", "needed": ["life-sleep-b08:m0006", "life-sleep-b01:m0027"]},
+  {"event": "life-s088-e038", "needed": ["life-sleep-b01:m0034", "life-sleep-b02:m0021", "life-sleep-b00:m0071"]},
+  {"event": "life-s072-e010", "needed": ["life-sleep-b00:m0005", "life-sleep-b00:m0049"]},
+  {"event": "life-s107-e013", "needed": ["life-sleep-b07:m0004", "life-sleep-b04:m0011"]},
+  {"event": "life-s053-e003", "needed": ["life-sleep-b00:m0011"]},
+  {"event": "life-s137-e022", "needed": []},
+  {"event": "life-s091-e000", "needed": ["life-sleep-b00:m0004", "life-sleep-b01:m0022"]},
+  {"event": "life-s102-e008", "needed": ["life-sleep-b09:m0013", "life-sleep-b03:m0010"]},
+  {"event": "life-s127-e005", "needed": ["life-sleep-b02:m0034"]},
+  {"event": "life-s087-e029", "needed": ["life-sleep-b00:m0017", "life-sleep-b05:m0037"]},
+  {"event": "life-s156-e000", "needed": ["life-sleep-b03:m0010"]},
+  {"event": "life-s102-e016", "needed": ["life-sleep-b05:m0024", "life-sleep-b00:m0010"]},
+  {"event": "life-s087-e004", "needed": ["life-sleep-b03:m0009"]},
+  {"event": "life-s046-e031", "needed": ["life-sleep-b01:m0034"]},
+  {"event": "life-s005-e000", "needed": []},
+  {"event": "life-s083-e000", "needed": ["life-sleep-b00:m0029"]},
+  {"event": "life-s051-e002", "needed": ["life-sleep-b03:m0007", "life-sleep-b04:m0003", "life-sleep-b04:m0009"]},
+  {"event": "life-s047-e009", "needed": ["life-sleep-b01:m0006", "life-sleep-b03:m0010"]},
+  {"event": "life-s108-e000", "needed": ["life-sleep-b01:m0006", "life-sleep-b00:m0047"]},
+  {"event": "life-s025-e014", "needed": []},
+  {"event": "life-s028-e010", "needed": []},
+  {"event": "life-s056-e008", "needed": ["life-sleep-b00:m0002", "life-sleep-b00:m0069"]},
+  {"event": "life-s078-e006", "needed": []},
+  {"event": "life-s050-e007", "needed": ["life-sleep-b00:m0043", "life-sleep-b04:m0017"]}
+ ]
+}

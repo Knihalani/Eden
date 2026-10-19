@@ -1,0 +1,31 @@
+{
+ "batch": "j00",
+ "judge": "haiku (claude-code subagent)",
+ "cases": [
+  {"event": "life-s017-e006", "needed": []},
+  {"event": "life-s076-e007", "needed": ["life-sleep-b01:m0026", "life-sleep-b04:m0004"]},
+  {"event": "life-s037-e006", "needed": ["life-sleep-b00:m0011"]},
+  {"event": "life-s058-e013", "needed": ["life-sleep-b00:m0081"]},
+  {"event": "life-s126-e003", "needed": ["life-sleep-b11:m0005"]},
+  {"event": "life-s152-e000", "needed": []},
+  {"event": "life-s145-e020", "needed": ["life-sleep-b01:m0027"]},
+  {"event": "life-s088-e023", "needed": ["life-sleep-b00:m0005"]},
+  {"event": "life-s026-e029", "needed": ["life-sleep-b00:m0013", "life-sleep-b01:m0006"]},
+  {"event": "life-s105-e004", "needed": []},
+  {"event": "life-s090-e000", "needed": ["life-sleep-b06:m0017", "life-sleep-b00:m0065"]},
+  {"event": "life-s012-e008", "needed": []},
+  {"event": "life-s087-e000", "needed": ["life-sleep-b03:m0009"]},
+  {"event": "life-s012-e021", "needed": []},
+  {"event": "life-s023-e021", "needed": ["life-sleep-b00:m0081", "life-sleep-b00:m0005"]},
+  {"event": "life-s140-e027", "needed": ["life-sleep-b03:m0033", "life-sleep-b13:m0007"]},
+  {"event": "life-s040-e006", "needed": []},
+  {"event": "life-s087-e016", "needed": []},
+  {"event": "life-s063-e009", "needed": []},
+  {"event": "life-s012-e005", "needed": []},
+  {"event": "life-s037-e009", "needed": []},
+  {"event": "life-s131-e022", "needed": ["life-sleep-b01:m0034"]},
+  {"event": "life-s015-e004", "needed": ["life-sleep-b00:m0021"]},
+  {"event": "life-s077-e000", "needed": ["life-sleep-b04:m0020", "life-sleep-b05:m0023", "life-sleep-b02:m0034"]},
+  {"event": "life-s037-e004", "needed": ["life-sleep-b00:m0065"]}
+ ]
+}
