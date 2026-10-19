@@ -1,0 +1,185 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s088-e015#1",
+   "response": "Happy to. A Winterlude Saturday with Leo could be a morning skate on the Rideau Canal Skateway (he already likes skating from what you've said), a BeaverTails stop, a warm lunch break, then something low-key indoors in the afternoon so he doesn't run out of steam. I don't have the Winterlude dates for next February, so I'd confirm those before pinning times.\nAction: Check the Winterlude dates and canal skateway conditions and rentals, then save a draft Saturday plan to your notes for you to react to."
+  },
+  {
+   "id": "life-s091-e012#1",
+   "response": "Ugh, that sounds miserable, standing the whole way with a backpack in your face, and not the first packed streetcar ride you've had to endure. Hope the ride home is kinder.\nAction: Nothing to do here; I'll leave the bike-shop slot and the feedback-log location question open until you want them."
+  },
+  {
+   "id": "life-s140-e029#1",
+   "response": "TL;DR: the hour before bed matters more than total screen time. In a 2025 study of 1,200 kids aged 6 to 9, those on a screen in the last 60 minutes fell asleep about 19 minutes later, worst with handhelds held close to the face and games, mildest with a shared TV or a calm documentary. What helped: a fixed screens-off time an hour before bed every night including weekends, devices charging in the kitchen, and a choice of two books instead of haggling over minutes, with sleep onset back to normal within two weeks.\nAction: Nothing else needed; copy this straight into the group chat if you want."
+  },
+  {
+   "id": "life-s063-e007#1",
+   "response": "Enjoy it, a sunny porch and a coffee is a good way to mark the first spring day. We can pick up the Marcus clinic question and the career day talk whenever you're ready.\nAction: Park both for now; the career day prep block on your calendar starts in about 30 minutes."
+  },
+  {
+   "id": "life-s018-e005#1",
+   "response": "Rough rule of thumb: a retention curve has flattened when the period-over-period drop stays small, for example under 1 to 2 percentage points for three or more consecutive periods, so the line runs almost parallel to the x-axis. It's more convincing if the plateau holds across several cohorts and the cohorts are big enough that it isn't noise. The exact threshold depends on your cadence, so define it up front (less than X points per week for N weeks) and use it consistently.\nAction: If you share the curve or the numbers, I'll check it against that rule."
+  },
+  {
+   "id": "life-s106-e007#1",
+   "response": "Got it, the charcoal bags stay on hold until you've talked to Sam.\nAction: Nothing ordered; I'm waiting on Sam's input and on your list of what's set up in the basement kitchen so I can plan the dinners."
+  },
+  {
+   "id": "life-s105-e019#1",
+   "response": "Noted: your mid-year performance self-review in Lattice is due 2026-07-10, which is a Friday. Enjoy the report card tonight.\nAction: Add the due date to your calendar and set a reminder a few days ahead so it doesn't become a Friday scramble."
+  },
+  {
+   "id": "life-s026-e012#1",
+   "response": "On it. I'll aim for a 30-minute slot on the 13th in the afternoon when Diego and Aisha are both free, with this agenda: 1) walk through the new onboarding flows, 2) open questions and feedback, 3) decisions and next steps.\nAction: Check Diego's and Aisha's calendars for an afternoon opening on the 13th and send the invite with that agenda once I find a time that works for all three."
+  },
+  {
+   "id": "life-s088-e023#1",
+   "response": "Glad Biscuit is okay, chicken skin and all. Since you always pair with Aisha on scope cuts before sprint planning and she pushes back on any cut without numbers, I'll pull adoption numbers for payout nicknames and the scheduled-payouts calendar view, plus the data Wen Li usually gives you. Planning is Mon 25th, so Thursday works as the deadline.\nAction: Pull the adoption numbers for both features and propose a 30-minute slot with Aisha on or before Thursday."
+  },
+  {
+   "id": "life-s037-e017#1",
+   "response": "Glad the Wellington landed. My pick is one-bowl brownies: Leo can measure and stir, the bake is short, and while it's in the oven he can dust them with icing sugar and pick the berries for the top, which keeps him busy during the wait. I'd keep them nut-free to be safe. Wednesday morning is perfect for an evening dessert.\nAction: Send you the recipe and a shopping list, and pencil in a baking morning for the first January weekends once you pick days."
+  },
+  {
+   "id": "life-s107-e022#1",
+   "response": "Tighter version: \"If a payout fails because of a bank-side error, the system shall automatically retry it without merchant intervention.\" It drops the passive \"is caused by\" and the clunky \"intervention being required\". If you need the retry timing or attempt limit, I'd put that in a separate requirement.\nAction: Swap this into the PRD once you're happy with it."
+  },
+  {
+   "id": "life-s046-e016#1",
+   "response": "EFT is the broad term for electronic bank-to-bank transfers in Canada, typically batched, low cost and settling in a day or two (payroll deposits, pre-authorized debits). A wire is a single, individually sent, usually higher-value payment, often same day, with a higher fee and much harder to reverse. A wire is technically a kind of electronic transfer, but for merchant payouts they differ in speed, cost and reversibility, so sales shouldn't swap them.\nAction: I can draft a one-line definition of each for the deck so the wording stays consistent."
+  },
+  {
+   "id": "life-s006-e000#1",
+   "response": "Three days late is still well within silly-mug tradition. I'll look for the most absurd novelty mugs that can reach Vancouver within a few days and show you the strongest options with prices and delivery dates.\nAction: Search for novelty mugs that ship to Vancouver quickly, rank them by ridiculousness and reviews, and draft a short belated-birthday text to Kabir for you to send."
+  },
+  {
+   "id": "life-s131-e020#1",
+   "response": "Draft for Priya: \"Hi [client name], thanks for the updated direction on the facade. Because the brief has changed twice since the design was approved, the revised drawings fall outside our original scope. We're glad to take them on under a short change order covering the additional hours, and can turn the revised set around once it's signed. Best, Priya\"\nAction: Fill in the client name and add the hours estimate; I can make it softer or firmer if you want."
+  },
+  {
+   "id": "life-s018-e000#1",
+   "response": "Welcome home. Driving back on the Monday of a long weekend will wreck anyone, so a Tuesday that feels like a Wednesday is fair. Coffee first.\nAction: Nothing to deal with yet; I'll keep the to-do list light and flag only what's due today when you're ready."
+  },
+  {
+   "id": "life-s021-e000#1",
+   "response": "Congratulations on your first half marathon! 21K at the Toronto waterfront in 2:04:37 is a big deal, and Marcus earned his credit for dragging you through it. All three are set: a Friday 15:00 reminder for the payouts status update, pre-drafted from Linear as five bullets with red/amber/green per workstream so it's ready before your 16:00 post, and Friday evenings kept clear for pizza and movie night.\nAction: Create the recurring Friday 15:00 reminder with the Linear pre-draft, block Friday evenings on your calendar, and log the race (2025-10-19, 2:04:37) in your notes."
+  },
+  {
+   "id": "life-s077-e000#1",
+   "response": "I'll look in your 'kitchen reno' note and anything saved from your earlier browsing for backsplash and wall inspiration. I can't promise there's a saved set, and the tile quote (rev 2, $3,140) covers backsplash plus floor, so it's useful context for the choice. Nate prefers texts, so I'll send him a link rather than call.\nAction: Search your kitchen reno note and saved items for wall inspiration; if there's little, gather fresh options for you to pick from before Monday."
+  },
+  {
+   "id": "life-s062-e003#1",
+   "response": "Try this: \"I'd tell you a joke about compound interest, but you'd have to wait for it to grow.\" A backup: \"Why don't accountants ever get lost? They always know where to find the bottom line.\" Both are clean and nobody has to know what a basis point is.\nAction: Pick whichever fits your standup tone and I'll tweak it toward payouts if you want."
+  },
+  {
+   "id": "life-s090-e005#1",
+   "response": "You're welcome. Camp details so far: drop-off at the Winchester St gate 8:45 to 9:15, pickup 15:45 to 16:15 at the same gate. The camper health form and the authorized pickup list still aren't completed on your account, and they're needed before day 1 on Mon 29 Jun.\nAction: Wait for the name-label results, then remind you this weekend to finish the forms and order labels."
+  },
+  {
+   "id": "life-s085-e027#1",
+   "response": "From what I can see here: I drafted your out-of-office for Fri 22 May (back Mon 25 May, Aisha Rahman covering payouts), not sent yet. I also pulled the beta retro status for Thu 14 May at 14:00: 9 accepted, Olivia tentative, Jonah no reply, 14 stickies on the Miro board with retry and webhook confusion the top theme.\nAction: Check your calendar for anything on the 22nd that needs moving, and hold the OOO until you approve it."
+  },
+  {
+   "id": "life-s020-e016#1",
+   "response": "Here's the plan for the drill sheet: three sections with an answer key at the end. 1) Ser vs estar with emotions and locations, fill-in-the-blank like \"Ella ___ cansada\" and \"La fiesta ___ en mi casa\". 2) Por vs para. 3) The subjunctive after cuando for future events, like \"Cuando llegue a casa, te llamo\", not \"llego\".\nAction: Build the full one-page sheet with a handful of questions per section and save it to your notes before your next lesson."
+  },
+  {
+   "id": "life-s002-e020#1",
+   "response": "I can't give you an honest read on your Spanish from here, because I don't have your lesson notes or any scores in front of me and I'd be guessing. Calendar rule saved: no meetings before 9:30 or after 17:00, ever.\nAction: Save the calendar rule, then look for Carlos's lesson notes so I can give you a real assessment, or give you a short quick-check quiz."
+  },
+  {
+   "id": "life-s141-e032#1",
+   "response": "Pulling them now: open tickets tagged payouts-ga assigned to you, titles and status only.\nAction: Query Linear for your open payouts-ga tickets and send back a plain list of title and status."
+  },
+  {
+   "id": "life-s008-e000#1",
+   "response": "Got it, Biscuit gets the salmon formula only. Enjoy the Anki cards. I'll check the listing text carefully so it isn't chicken or any other flavour.\nAction: Find the Purina Pro Plan Sensitive Skin & Stomach salmon listing, confirm the flavour on the listing and ingredients, match the bag size you usually order, then place the order and send you the confirmation."
+  },
+  {
+   "id": "life-s137-e018#1",
+   "response": "It was a big week, and you still got swim lessons registered, a speaker bio written and a chore chart comparison done. The one date coming up is the Toronto Fintech Meetup talk title, due 2026-09-18, along with the headshot.\nAction: Nothing needed tonight; I'll remind you early next week about the talk title and headshot."
+  },
+  {
+   "id": "life-s071-e002#1",
+   "response": "Draft for your mum: \"Hi Mummy, we're moving our call to Saturdays at 8:30 am my time, which is 6:00 pm for you, starting this week. Sunday mornings are taken by Leo's soccer now. Talk soon, and Kabir, same time for you.\"\nAction: Send that to your mum, change the recurring calendar event to Saturdays 8:30 am Toronto time, and text Kabir the new time."
+  },
+  {
+   "id": "life-s023-e017#1",
+   "response": "Will do. Aisha's edge-case list for negative balances and reversed transfers is already in the doc, and she wants PM eyes before sizing, so I'll suggest skimming it before the call.\nAction: Check your, Aisha's and Diego's calendars Monday to Wednesday, pick a shared 30-minute slot, and send the invite with an agenda of negative balances, reversed transfers and sizing."
+  },
+  {
+   "id": "life-s133-e000#1",
+   "response": "Setting it up: 25 minutes with Olivia and Aisha on the 9th at 3:30pm, with your agenda: 1) where certification stands, 2) what sales can and can't say, 3) next checkpoint.\nAction: Create the invite for 3:30 to 3:55pm on the 9th, check for conflicts first, and tell you if anyone is busy."
+  },
+  {
+   "id": "life-s025-e000#1",
+   "response": "I'll pull every open payouts ticket and group them by workstream. From what I have, the workstreams to expect are reconciliation CSV export v2, payout status webhooks and the instant payout fee experiment, with about 2.5 engineers on it. The known risk is the bank partner API migration in November, so I'll check which tickets depend on it.\nAction: Pull the open payouts tickets from Linear, group by workstream, and send you a list with the December launch risks ranked."
+  },
+  {
+   "id": "life-s060-e022#1",
+   "response": "I'll send Priya's questions as a clean message you can forward. For the money cleanup, I'll check your statements and email for any Disney+ charge after your March 2026 cancellation. The four you're keeping are Netflix (standard), Spotify Family, Crave and The Globe and Mail digital.\nAction: Search your card and bank statements and email for Disney+ charges since the cancellation and confirm the cancellation email, then send you the four remaining subscriptions with amounts and renewal dates."
+  },
+  {
+   "id": "life-s111-e000#1",
+   "response": "Welcome to Kabir's! I don't have the earlier flight search or the Lafourcade song piece in front of me, so I'd rather look than guess at the fare or the song.\nAction: Search your notes, email and past searches for the flight search from before you booked and for the Lafourcade piece; if either isn't there, I'll ask you to describe it and redo it."
+  },
+  {
+   "id": "life-s047-e006#1",
+   "response": "Short answer: no, damage deposits aren't allowed in Ontario. A landlord can only take a last month's rent deposit, and for damage beyond normal wear the landlord has to apply to the Landlord and Tenant Board, not deduct it. Scuffed walls are usually normal wear, and if Diego paid a separate deposit he can ask for it back, or file a T1 application with the LTB within a year of moving out.\nAction: Pull together a plain-language summary and the CLEO page for you to send Diego."
+  },
+  {
+   "id": "life-s017-e012#1",
+   "response": "From what I can see, nothing is still running: the Big Apple hours check finished (open 8:00 to 20:00 on Thanksgiving Monday, pie counter closes at 19:00). The one open item is waiting on you: Leo's piano with Mrs. Greene at 16:30 on Monday, cancel or keep?\nAction: Wait for your call on the piano lesson and update the calendar accordingly."
+  },
+  {
+   "id": "life-s085-e017#1",
+   "response": "Posting the retro reminder to #payouts-launch now. Fees on a $100 / $1,000 payment, treating amounts as CAD: Starter $3.20 / $29.30; Growth $2.85 / $26.25; Scale $2.40 / $22.20; Enterprise is custom so no figure.\nAction: Post the Slack message and send you the table."
+  },
+  {
+   "id": "life-s150-e028#1",
+   "response": "Setting you to heads down until 3. Note for #payouts-team: \"Heads down on focus time until 3pm. I'll catch up on messages after, so ping me only if it's urgent.\"\nAction: Set your Slack status to heads down until 3:00 and post the note to #payouts-team; the dentist slots stay unbooked until you're ready."
+  },
+  {
+   "id": "life-s077-e010#1",
+   "response": "Sounds good. The kitchen wall choice for Nate is still due Monday, and he has a 3-week lead time.\nAction: Gather fresh options for the wall behind the range and sink this afternoon and send you a short list to choose from."
+  },
+  {
+   "id": "life-s087-e029#1",
+   "response": "Draft: \"Hi Hannah, Leo and I are heading to the playground and the market at Riverdale Park East tomorrow around 10:30. Would you and the kids like to join us?\"\nAction: Send it to Hannah once you say go."
+  },
+  {
+   "id": "life-s110-e007#1",
+   "response": "A heat warning means two or more days of very high heat are expected, and an extended heat warning means three or more days. In southern Ontario the trigger is roughly daytime highs of 31, overnight lows of 20 or more, or a humidex of 40 or higher. Same precautions either way, just plan for more hot nights in a row with an extended one.\nAction: No action needed; the evening digest has nothing waiting on you."
+  },
+  {
+   "id": "life-s077-e012#1",
+   "response": "Draft: \"Hi, thanks for organizing the street party. I can take the 2 to 4pm volunteer slot at the lemonade table, but I won't be able to help with setup. Best, Riya\"\nAction: Send it once you approve it; I'll fill in the organizer's name if you give me one."
+  },
+  {
+   "id": "life-s156-e004#1",
+   "response": "Setting it up: 25 minutes with Aisha and Diego on Thursday 26 Nov at 10:00, with the agenda: 1) KYC retry screens, 2) empty states, 3) open questions.\nAction: Create the invite for 10:00 to 10:25, check everyone's calendar for conflicts first, and tell you if anything clashes."
+  },
+  {
+   "id": "life-s121-e000#1",
+   "response": "I can do that, but I don't know which shop you mean or what you want to order, and I won't guess at a pickup order near Te Aro when it needs to be ready in 15 minutes.\nAction: Tell me the shop and the items, or I can check your recent orders for a usual place and show you one suggestion."
+  },
+  {
+   "id": "life-s092-e000#1",
+   "response": "Your street's yard waste is Thursday collection, every other Thursday, with Victoria Day week having shifted by a day. If we're past 22 May, the next ones on that cycle are Thu 4 Jun and Thu 18 Jun, but holiday weeks can shift them, so I'll confirm against the city calendar. Paper yard waste bags or labelled rigid containers only, no plastic, and branches under 7.5 cm, bundled, max 1.2 m long and 20 kg.\nAction: Verify the next two dates on the City of Toronto collection calendar, add them with a reminder the evening before, and add paper bags to your shopping list."
+  },
+  {
+   "id": "life-s051-e000#1",
+   "response": "Yes, it used to be in late January. The 9/11 postponement pushed the 2002 game into February, and the later 17-game regular season, which the NFL began in 2021, locked in a second Sunday in February slot. Sunday is the TV choice, since it's the biggest audience night of the week.\nAction: None needed."
+  },
+  {
+   "id": "life-s136-e017#1",
+   "response": "Anytime. Your 7:50 reminder to move the car is set, and the street-cleaning schedule lookup for your block is still running.\nAction: Send you the full street-cleaning schedule when the lookup comes back."
+  },
+  {
+   "id": "life-s136-e034#1",
+   "response": "I don't have your travel dates or the time difference to your mom's place in front of me, so I won't guess when you're arriving or whether it's too late to call. I'd check the dates first, then see what the forecast says about rain for that week.\nAction: Check your calendar and email for the trip dates, look up the rain outlook for her area for those days, and tell you whether it's a reasonable time to call right now."
+  }
+ ]
+}
