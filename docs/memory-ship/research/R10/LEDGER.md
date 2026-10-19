@@ -1486,6 +1486,12 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **Reply size:** the short checker keeps on average 1.59 (code), 1.23 (life), 1.65 (code-rt1), 1.0 (life-rt1) rows
   per case, and nothing on 67 / 87 / 23 / 30 cases. The reply is a few dozen tokens instead of 15 scores (thinking
   aside).
+- **Invented ids:** in 4 code dev files the short checker named 5 row ids that were not among that case's
+  candidates (the calibrated outputs have none). Scoring only each case's candidates moves code dev short precision
+  from 0.2093 to 0.2118 (reviewer probe); the verdict does not change.
+- **Silence (counter-metric, not in the rule):** lower on all four tests, cal → short: code 0.6364 → 0.6091, life
+  0.7407 → 0.7315, code-rt1 0.7778 → 0.7556, life-rt1 0.8529 → 0.8235. The short checker fires on more no-need turns.
+  life-rt1 has 57 human turns at recall ≈ 0.1 and code dev passes precision by 0.0085, so 3 of 4 is weak evidence.
 - **Caveats:** retrieval-level only, against plan labels; a downstream run would be needed before it replaces the
   calibrated checker in an outcome claim. Latency is not measured here (the CLI keeps thinking on; C8-E6), so whether
   it fits the ~3 s budget is still open; C8-E6's fit puts ≈ 2.4 s fixed under each CLI call.
@@ -1498,9 +1504,19 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 
 ## C9-E2 · 2026-10-19 · Latency of the short-reply checker through the CLI: result
 - **20 calls:** API time **p50 4994 ms, p90 7727 ms, max 10045 ms, min 2491 ms** (C8-E6 full-score: p50 5645 ms).
-  Output tokens median 591, of which thinking median 563, so the visible reply is now about 30 tokens and thinking is
+  Output tokens median 591, of which thinking median 563 (index rule int(f·n); conventional medians 585 and 539), so the visible reply is now about 30 tokens and thinking is
   almost all of the output (`ttft/checker-latency-c9e2.json`).
 - **What this says:** the short reply removes the scoring text, but through the CLI thinking dominates and the call
   is still about 5 s at p50. The remaining lever is turning thinking off, which this environment cannot do. By
   C8-E6's fit (≈ 3.9 ms per output token, ≈ 2.4 s fixed), dropping ~560 thinking tokens would land near 2.5–3 s, at
   the edge of the ~3 s budget; that is an extrapolation, not a measurement.
+
+## C9-R · 2026-10-19 · Review of the cycle 9 consolidation (APPROVE, minor fixes)
+- Recorded above: the 5 invented ids and their effect, the silence drop on all four tests, the median convention.
+- STATE: code-rt1 precision "drops 0.056 (limit 0.03)". Sketch: "passes 3 of 4 quality tests" in place of "picks
+  as well". PROMPTS.md: an F22c row with the short-reply output rule (subagent and CLI forms).
+- **Local CI on 07013892** (outside the repo): format, typecheck, build pass; test:parallel 5319 pass, 32 skip,
+  4 fail. `switches.test.ts` and `memory-purge.test.ts` are the root-on-Linux failures that also fail on origin/main;
+  `doctor.test.ts` ("a hung wrap fetch") and `benchmarks/memory-long-horizon/harness/replay.test.ts` (a hook timed
+  out) failed under load and pass alone (40 and 6 tests, 0 fail; the reviewer re-ran both too). No code changed in
+  this cycle.
