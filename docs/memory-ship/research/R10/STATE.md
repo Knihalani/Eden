@@ -118,6 +118,8 @@ Families differ in mechanism. Every kill criterion was written before its run.
 - **The in-turn checker has about 3 seconds** (C8-E4, 12 real headless sessions): first tool call at p50 2.92 s;
   a 40 s checker would reach no turn, even at the turn's last tool call. A hosted NIM model at D37's recorded
   40–70 s p95 cannot serve in the turn.
+- **The measured small-model checker takes 5.6 s at p50 through the CLI** (C8-E6), mostly thinking tokens: about
+  twice the budget. A short-reply, no-thinking variant is the next thing to measure (latency and quality).
 
 ## Cycle 7 findings (LEDGER C7-E1…)
 

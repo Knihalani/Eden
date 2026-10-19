@@ -33,6 +33,9 @@ slice spec. If R10-5 is approved, a slice turns this into one under the normal l
     Submit at the median (p50 2.92 s; p90 14.13 s). Even delivering at any later tool call of the turn, a checker
     that takes 10 s reaches 3 of 12 turns, and one that takes 40 s reaches none. **The check needs to answer in about
     3 seconds.**
+- **The measured checker is about twice too slow as run here** (C8-E6, 20 calls through the CLI): p50 5.6 s,
+  p90 8.4 s, mostly ~600 tokens of thinking the CLI keeps on. Turning thinking off and asking only for the kept rows
+  should bring it near the budget, but that is unmeasured and changes the prompt, so its quality must be re-measured.
 - **Turns with no tool call get nothing.** On personal-assistant turns that need memory this is 11 of 49 (questions
   like "remind me what I said…"). Fixing it would add at most about +0.015 per turn (C8-E1).
 
@@ -57,6 +60,6 @@ slice spec. If R10-5 is approved, a slice turns this into one under the normal l
 
 ## Not measured yet
 
-- The checker's own latency on either provider (C8-E4 measured only the budget, on 12 sessions).
+- The checker's latency with thinking off and a short reply, and on NIM (C8-E6 measured haiku through the CLI only).
 - Any non-Claude responder or judge.
 - Real user transcripts. Every number above comes from synthetic worlds.
