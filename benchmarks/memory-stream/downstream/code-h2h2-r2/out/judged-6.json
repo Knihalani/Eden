@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s082-e011",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All acknowledge the why-only comment rule and remove the two comments correctly."
+  },
+  {
+   "event": "code-s087-e000",
+   "scores": [
+    1,
+    2,
+    3
+   ],
+   "why": "R0 cites v3 darkMode config and invents badge API; R2 checks Tailwind v4 dark variant config; R1 omits config check."
+  },
+  {
+   "event": "code-s091-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "No fact known yet about update checks; all correctly decline to guess and plan to inspect packages/cli."
+  },
+  {
+   "event": "code-s091-e007",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All propose a sensible formatBytes util with tests; R1 notes named export; all fine."
+  },
+  {
+   "event": "code-s092-e010",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All acknowledge and correctly track the pending web test run."
+  },
+  {
+   "event": "code-s098-e009",
+   "scores": [
+    1,
+    2,
+    2
+   ],
+   "why": "API is Fastify 5 (known); R0 keeps blocking the user; R1/R2 self-serve from package.json but should already know."
+  },
+  {
+   "event": "code-s098-e015",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give the correct short 400 vs 422 distinction, respecting brevity."
+  },
+  {
+   "event": "code-s098-e019",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "Correct; R0 ties to pinned Node 20.11; R2 offers to check a Node version already known."
+  },
+  {
+   "event": "code-s101-e000",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "All explain correctly; R1 plans to swap code and reply on the PR unasked."
+  },
+  {
+   "event": "code-s101-e003",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "Simple thanks; R1 launches unrequested PR work; R0/R2 close appropriately."
+  }
+ ]
+}

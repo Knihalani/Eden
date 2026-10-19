@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s041-e009",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "package.json shows @acme/cli with bin acme; R1 states it and offers run-from-source; R0/R2 only defer."
+  },
+  {
+   "event": "code-s041-e013",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R1/R2 swap tbody with hx-select; R0 uses innerHTML on tbody without hx-select and adds irrelevant form advice."
+  },
+  {
+   "event": "code-s041-e021",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly attribute errors to missed rename sites and note the filter own kind prop."
+  },
+  {
+   "event": "code-s041-e038",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "All accurate; R2 claims typecheck clean after size change, which was not re-run."
+  },
+  {
+   "event": "code-s042-e005",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly separate blocking items, cheap copy fixes and optional follow-ups."
+  },
+  {
+   "event": "code-s045-e007",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "DNS location not yet known; all reasonably propose searching infra and docs before answering."
+  },
+  {
+   "event": "code-s046-e000",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "History shows pdfFilename slug helper already exists; R2 recalls it, others propose rebuilding with a different format."
+  },
+  {
+   "event": "code-s047-e026",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All plan grep across messages/components, fix typo, responsive illustration, run tests."
+  },
+  {
+   "event": "code-s047-e032",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All acknowledge correctly; nothing committed yet, offer to commit."
+  },
+  {
+   "event": "code-s048-e011",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "R1/R2 correctly diagnose docker context/DOCKER_HOST; R0 adds an irrelevant console.log digression."
+  }
+ ]
+}
