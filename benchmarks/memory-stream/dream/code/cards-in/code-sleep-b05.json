@@ -1,0 +1,409 @@
+{
+ "batch": "code-sleep-b05",
+ "rows": [
+  {
+   "id": "code-sleep-b05:m0001",
+   "kind": "fact",
+   "text": "Acme CLI telemetry is opt-out: users disable it with ACME_TELEMETRY=0, and `acme status` prints whether telemetry is on or off (telemetryEnabled() in packages/cli/src/telemetry.ts).",
+   "actions": [
+    "docs",
+    "observability"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0002",
+   "kind": "fact",
+   "text": "Acme has moved off RabbitMQ: the worker consumes BullMQ queues on Redis 7. Bull Board is mounted at /admin/queues on the worker behind basic auth; link that instead of the RabbitMQ management UI.",
+   "actions": [
+    "jobs",
+    "observability",
+    "docs"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0003",
+   "kind": "fact",
+   "text": "Acme CI runs on GitHub Actions: workflows are in .github/workflows/ci.yml, and prod deploys go out from git tags v* via release.yml. A normal release run takes about 12 minutes.",
+   "actions": [
+    "build-ci",
+    "deploy",
+    "release"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0004",
+   "kind": "fact",
+   "text": "Gotcha: release.yml build-images once took 41 minutes because the buildx cache ref was renamed from :buildcache to :main (commit 8c1f2d0) but cache-to still writes :buildcache, so cache-from missed and all layers rebuilt. The user said they would fix the cache ref themselves; cache-from and cache-to must use the same ref (release.yml lines 41-52).",
+   "actions": [
+    "build-ci",
+    "debugging",
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0005",
+   "kind": "rule",
+   "text": "Convention: marketing pages in apps/web/app/(marketing) use ISR with `export const revalidate = 60`. The blog/[slug] route is at 3600 and left as is; about and legal/terms are static with no revalidate export.",
+   "actions": [
+    "frontend",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0006",
+   "kind": "fact",
+   "text": "Gotcha: the Checkbox in apps/web components/ui is the Radix one (a button, not an input), so use onCheckedChange (true | false | 'indeterminate') rather than onChange.",
+   "actions": [
+    "frontend",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0007",
+   "kind": "fact",
+   "text": "The user has a side project called trailmix at /Users/jordan/code/trailmix: a Django app with htmx (hikes app with Hike, Trail, Region, Tag models). It is separate from acme-platform; view hike_create returns the _form.html partial for HX-Request.",
+   "actions": [
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0008",
+   "kind": "rule",
+   "text": "Rule in acme-platform: apply DB migrations with `pnpm --filter api db:migrate` (drizzle-kit).",
+   "actions": [
+    "database",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0009",
+   "kind": "rule",
+   "text": "Rule in acme-platform: list endpoints use cursor pagination (opaque cursor on created_at + id), never offset pagination.",
+   "actions": [
+    "api",
+    "database"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0010",
+   "kind": "rule",
+   "text": "Rule in acme-platform: money is stored as integer cents (e.g. amount_cents bigint), never floats.",
+   "actions": [
+    "database",
+    "finance",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0011",
+   "kind": "fact",
+   "text": "Payments architecture (docs/architecture/payments.md, read it before payment work): checkout uses Stripe Checkout in redirect mode and the web app never sees card data; Stripe calls POST /v1/webhooks/stripe, events are stored idempotently in stripe_events and a job updates invoice status; the payout.paid webhook creates payouts rows, shown under Settings > Payouts. Open question: backfilling payouts created before the connected-account migration.",
+   "actions": [
+    "finance",
+    "api",
+    "docs"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0012",
+   "kind": "episode",
+   "text": "Ticket acme-238 is the payouts list endpoint (GET /v1/payouts, cursor-paginated by (created_at, id), table payouts from migration 0044). It was merged to main as PR #418.",
+   "actions": [
+    "api",
+    "git",
+    "database"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0013",
+   "kind": "rule",
+   "text": "Standing rule from the user: never merge pull requests yourself. Push to the PR branch and let the user do the merge.",
+   "actions": [
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0014",
+   "kind": "fact",
+   "text": "Reviewer gotcha: when comparing a timestamptz column in SQL cursors, decode the cursor's createdAt to a Date (decodeCursor in apps/api/src/lib/cursor.ts does; malformed cursors raise InvalidCursorError, a 400); passing an ISO string forces an implicit cast and the index is not used.",
+   "actions": [
+    "database",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0015",
+   "kind": "fact",
+   "text": "The dashboard date range picker keeps its selection in the URL as ?range=<preset>, defaulting to 30d; it uses router.replace so the back button is not flooded.",
+   "actions": [
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0016",
+   "kind": "fact",
+   "text": "apps/web stack and decisions: auth is Clerk (moved off Auth0 in August, ACME-171; middleware.ts); web deploys on Vercel with a preview deployment per PR; UI is shadcn/ui plus Tailwind; TanStack Query for server state, zustand for client state; no Redux.",
+   "actions": [
+    "frontend",
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0017",
+   "kind": "rule",
+   "text": "Decision (July): form posts in apps/web use server actions instead of API routes; do not add new files under app/api/ for form submissions. app/api only holds webhooks.",
+   "actions": [
+    "frontend",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0018",
+   "kind": "fact",
+   "text": "The repo uses pnpm (not yarn) and lint is Biome run as `pnpm lint` at the root, not ESLint; web commands are `pnpm --filter web dev|test|build`. The apps/web README still says yarn/ESLint and the user will update it later.",
+   "actions": [
+    "dependency",
+    "build-ci",
+    "docs"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0019",
+   "kind": "person",
+   "text": "Team: Lena is the frontend owner, Marco is backend, Priya is infra. Marco wrote docs/architecture/payments.md; Lena flagged the web onboarding doc as stale.",
+   "actions": [
+    "work-task",
+    "docs"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0020",
+   "kind": "fact",
+   "text": "Invoice numbers display as INV-000123: prefix INV, zero-padded to 6 digits, numbers over 999999 print as-is; helper is formatInvoiceNumber in apps/web/lib/format-invoice-number.ts (throws RangeError for negative or non-integer).",
+   "actions": [
+    "frontend",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0021",
+   "kind": "fact",
+   "text": "The customers table defaults to sort by last activity, newest first (nuqs defaults sort=lastActivity, dir=desc in useCustomerQueryState). The invoices filter hook was renamed useInvoiceFilters -> useInvoiceQueryState.",
+   "actions": [
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0022",
+   "kind": "plan",
+   "text": "apps/web cleanup candidates: lib/legacy-session.ts is dead code (only a type named Auth0Profile); apps/web/.env.example has unused AUTH0_DOMAIN/AUTH0_CLIENT_ID and lacks NEXT_PUBLIC_POSTHOG_HOST and SENTRY_AUTH_TOKEN; the README link to docs/frontend/testing.md moved to docs/web/testing.md.",
+   "actions": [
+    "docs",
+    "code-style",
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0023",
+   "kind": "plan",
+   "text": "Pending (parked by the user): add API request timing, logging method, matched route pattern (e.g. /v1/invoices/:id, not raw URL), status code and duration in ms for every request, as a plugin next to apps/api/src/plugins/request-id.ts using the existing logger so lines carry the request id.",
+   "actions": [
+    "observability",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0024",
+   "kind": "fact",
+   "text": "apps/api/scripts/seed.ts is seeded with faker.seed(20260921) and builds unique emails like first.last.<org>-<index>@example.com (random faker emails collided on the unique index); run as `pnpm --filter api exec tsx scripts/seed.ts --reset`.",
+   "actions": [
+    "database",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0025",
+   "kind": "fact",
+   "text": "apps/web is Next.js 15 (15.0.3) with the App Router; there is no pages/ directory. Route groups under app/: (marketing), (auth), (dashboard), api (webhooks only).",
+   "actions": [
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0026",
+   "kind": "fact",
+   "text": "global-error.tsx in apps/web reports to Sentry with the Next error digest as tag `digest` and extra data, and shows it on the error page as \"Error id\", so Sentry events can be matched to server logs.",
+   "actions": [
+    "observability",
+    "frontend",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0027",
+   "kind": "rule",
+   "text": "Gotcha: do not format dates with toLocaleDateString(undefined, ...) in SSR components; it causes hydration mismatches (server en-US vs browser locale). Use next-intl useFormatter().dateTime(...) as customer-row.tsx does.",
+   "actions": [
+    "frontend",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0028",
+   "kind": "fact",
+   "text": "The api is Fastify (plugins in apps/api/src/plugins, FastifyReply helpers) with drizzle and zod.",
+   "actions": [
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0029",
+   "kind": "plan",
+   "text": "Staging worker issue: image-resize jobs take 7.5-9s but services/worker/src/queues/image-resize.ts sets lockDuration: 5000, so jobs stall and run twice (144 double-processed on 2026-09-21, none dead-lettered). The user said to change the lock later; fix is lockDuration ~60000 or remove the override (default 30s).",
+   "actions": [
+    "jobs",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0030",
+   "kind": "rule",
+   "text": "API convention: errors are returned as RFC 7807 problem+json via the problem() helper in apps/api/src/lib/problem.ts, including 400/404/409; rows are soft-deleted with a deleted_at column, never hard deleted (list and get filter deleted_at IS NULL).",
+   "actions": [
+    "api",
+    "database",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0031",
+   "kind": "episode",
+   "text": "Ticket acme-247: DELETE /v1/customers/:id soft-deletes (deleted_at), returns 204; 400 invalid id, 404 missing, 409 if the customer has open invoices (draft, sent, overdue) with type URI https://docs.acme.dev/errors/customer-has-open-invoices (page does not exist yet). The UI says \"Archive customer\" instead of delete (DeleteCustomerButton, server action deleteCustomer). Merged to main as PR #427.",
+   "actions": [
+    "api",
+    "database",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0032",
+   "kind": "preference",
+   "text": "Preference: the user wants concise answers, code plus 1-2 lines of explanation, not long write-ups.",
+   "actions": [
+    "work-task",
+    "debugging",
+    "docs"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0033",
+   "kind": "fact",
+   "text": "Unresolved: after every prod deploy there is a burst of odd postgres errors through the connection pooler (pooler service on port 6432 per infra/helm/api/values.yaml), then it settles. The user remembers a known gotcha about the pooler setup and what the db driver (postgres-js in apps/api/src/db/client.ts) needs, but it is not documented; commit c81e02a rewrote the client options and may have dropped an option. Ask the user to confirm the pooler mode.",
+   "actions": [
+    "database",
+    "deploy",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0034",
+   "kind": "rule",
+   "text": "Testing and dependency conventions (docs/onboarding.md): unit tests use Vitest, end-to-end tests use Playwright; Renovate opens dependency update PRs every Monday, patch updates are automerged once CI is green, minor and major updates need human review.",
+   "actions": [
+    "tests",
+    "dependency",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0035",
+   "kind": "fact",
+   "text": "CSV exports in apps/api use csvRow/csvCell from apps/api/src/lib/csv.ts: RFC 4180 quoting for commas, quotes and newlines, and a leading ' on cells starting with = + - @ to block spreadsheet formula injection.",
+   "actions": [
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0036",
+   "kind": "fact",
+   "text": "Customers search box debounces input by 300ms before updating the q URL param. Convention for text-input filters: keep local state, update URL query state after debounce.",
+   "actions": [
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0037",
+   "kind": "fact",
+   "text": "Worker queue invoice-reminders (services/worker/src/queues/invoice-reminders.ts): BullMQ job scheduler runs daily at 13:00 UTC (9:00 Toronto), fans out one job per active org, which enqueues an email job per invoice due in 3 days with jobId invoice-reminder:<invoiceId>:<date> to avoid duplicates. The reminder email needs a pay link from the api's internal endpoint, wired via worker env API_URL.",
+   "actions": [
+    "jobs",
+    "message"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0038",
+   "kind": "fact",
+   "text": "Locally the api listens on port 4000 (PORT default in apps/api/src/env.ts and .env.example); the worker has API_URL defaulting to http://localhost:4000.",
+   "actions": [
+    "api",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0039",
+   "kind": "fact",
+   "text": "Invoice totals (apps/api/src/invoices/totals.ts) round each line's net and tax to whole cents first, then sum integers, so totals match the displayed line amounts; this fixed a one-cent mismatch flagged by customer Northwind. Already-issued invoices keep their stored totals; only new and edited invoices use the new math.",
+   "actions": [
+    "finance",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0040",
+   "kind": "rule",
+   "text": "When adding fields to the public API (e.g. POST /v1/invoices), also update docs/api/invoices.md by hand so the integrations folks see them. POST /v1/invoices now has an optional memo (max 500 chars, internal only, not shown to the customer; column from migration 0042) besides notes (max 2000, shown on PDF).",
+   "actions": [
+    "api",
+    "docs",
+    "database"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0041",
+   "kind": "plan",
+   "text": "Company profile settings form (apps/web settings/company): fields company name (required), tax id (optional), sender email for invoices (required); server action saveCompany PATCHes /v1/org/profile. A settings/company/page.tsx that loads and renders the profile was still to be written.",
+   "actions": [
+    "frontend",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0042",
+   "kind": "fact",
+   "text": "Staging is at staging.acme.dev and deploys automatically from main; https://staging.acme.dev/version returns the deployed sha and /healthz reports postgres and redis status.",
+   "actions": [
+    "deploy",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0043",
+   "kind": "plan",
+   "text": "Plan acme-252: add a private S3 bucket for invoice PDF exports on branch acme-252-invoice-export-bucket, with the team and env tags, public access blocked, encryption on. Where the uploads bucket is defined in infra/ (tool and folder) was unknown; the user will point to it. Infra changes go through normal CI plan/apply, never from the agent's machine.",
+   "actions": [
+    "deploy",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b05:m0044",
+   "kind": "plan",
+   "text": "The api enqueues background jobs to the worker with BullMQ (queues in apps/api/src/jobs/queue.ts: emails, pdf-render, invoice-pdf-export). The invoice-pdf-export job is enqueued with exportId and orgId and jobId invoice-pdf-export:<exportId>; the worker does not consume this queue yet (next piece of acme-252 work).",
+   "actions": [
+    "jobs",
+    "api"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/code/cards/code-sleep-b05.json"
+}

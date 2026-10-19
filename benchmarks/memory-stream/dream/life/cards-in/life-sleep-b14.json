@@ -1,0 +1,331 @@
+{
+ "batch": "life-sleep-b14",
+ "rows": [
+  {
+   "id": "life-sleep-b14:m0001",
+   "kind": "person",
+   "text": "Riya Malhotra's household: partner Sam Okafor, son Leo Okafor-Malhotra (age 7, grade 2 at Morse Street Public School), dog Biscuit.",
+   "actions": [
+    "family",
+    "pet"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0002",
+   "kind": "fact",
+   "text": "Travel insurance for the Lisbon trip (Dec 2026): Riya chose the Blue Cross family plan ($212 CAD, policy BCT-7731-0924-F, covers Riya, Sam and Leo) over the credit card coverage, because the card excludes trip interruption for kids. 24/7 assistance line +1-506-555-0142 (collect). Wallet card and policy PDFs are saved offline on her iPhone and in the 'Lisbon Dec 2026' note; Riya wants this reason at the top of the note so she stops re-explaining it to Sam.",
+   "actions": [
+    "travel",
+    "finance",
+    "health"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0003",
+   "kind": "preference",
+   "text": "Sam Okafor has been pescatarian since September 2026: he eats fish and seafood but still no meat or poultry, because Dr. Patel found his iron and B12 low. Sushi is now on the table for him.",
+   "actions": [
+    "food",
+    "health",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0004",
+   "kind": "preference",
+   "text": "Riya protects Tuesday mornings; Tom Becker (her manager) moved the Wavecrest partner review onto a Tuesday morning, which annoyed her, and she feels she is always the one who bends on scheduling.",
+   "actions": [
+    "schedule",
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0005",
+   "kind": "plan",
+   "text": "Riya was asked by Tom Becker to attend an in-person bank meeting in Montreal on Thu 8 Oct 2026 as a day trip: out in the morning, home for dinner. Options found: Porter PD 441 YTZ 07:00 to YUL 08:15 returning PD 468 18:30, landing 19:45, $289 (Billy Bishop is 15 min from home); Air Canada from Pearson 07:00 out, 18:00 back, from $268. Not yet booked at last check; VIA Rail judged too slow.",
+   "actions": [
+    "travel",
+    "booking",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0006",
+   "kind": "plan",
+   "text": "Lisbon (Dec 2026) getting-around plan: Tram 28 costs EUR 3.10 on board, board at Martim Moniz before 9:00 or after 19:00; use Viva Viagem card (EUR 0.50) with 24h passes at EUR 7.00 on most days (no child price for passes; a 7 year old pays adult); one 24h Lisboa Card day for Belem (Jeronimos plus Belem Tower). Added to the 'Lisbon Dec 2026' note. Riya is a woman: 'obrigada' for thank you; 'a conta, por favor' for the bill.",
+   "actions": [
+    "travel",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0007",
+   "kind": "routine",
+   "text": "Yard waste collection at Riya's home is Tuesdays (Week 2 area). Remaining 2026 pickups: 29 Sep, 13 Oct, 27 Oct, 10 Nov, 24 Nov, and final 1 Dec. Paper yard-waste bags or open rigid bins only, max 20 kg, no plastic. Riya added 19:30 'Yard waste out tonight' reminders on the Family calendar the night before each (28 Sep, 12 Oct, 26 Oct, 9 Nov, 23 Nov, 30 Nov).",
+   "actions": [
+    "home",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0008",
+   "kind": "fact",
+   "text": "Sam Okafor sometimes drives to Riverdale after school. Gardiner Expressway weekend full closures between the DVP and Jarvis continue through Sun 22 Nov 2026; weekdays two lanes each way are open; Lake Shore is the usual weekend detour.",
+   "actions": [
+    "travel",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0009",
+   "kind": "routine",
+   "text": "Riya is taking a Spanish class (level about B1+, Mexican vocabulary; reading 'Como agua para chocolate'). The class day and time are not on her calendar; she asked for an hour of study time blocked before it. Her notes 'Spanish homework' and 'Spanish drills' hold the homework and drills.",
+   "actions": [
+    "learning",
+    "schedule",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0010",
+   "kind": "plan",
+   "text": "Mumbai trip: Riya flies alone Fri 5 Feb 2027 to Tue 16 Feb 2027 (moved from late March) to be there for her mother Anjali's 65th birthday on 2027-02-09; Sam and Leo are not coming because of school. Cheapest direct is Air India AI 188 nonstop 21:50 at $1,585 CAD (was $1,540); Air Canada via Delhi $1,690; Emirates via Dubai $1,512. Fare watch is active with alert below $1,550 or above $1,700; this route usually dips 6-10 weeks before departure. To do: ask Mummy what she wants for the party, check visa/passport photo page (OCI card ok), gifts for Masi and the cousins.",
+   "actions": [
+    "travel",
+    "booking",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0011",
+   "kind": "plan",
+   "text": "Wavecrest partner team confirmed the certification window for Oct 19-23, 2026. Riya's Linear ticket PAY-1602 'GA go/no-go checklist' (In Progress, 7/12 done) is blocked on Wavecrest cert sign-off; other open items: 3x beta load test (Aisha ran it 24 Sep evening), legal review of merchant terms addendum, sales one-pager, GA-week on-call rota. Aisha is the contact for the cert test plan.",
+   "actions": [
+    "work-task",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0012",
+   "kind": "plan",
+   "text": "Q1 2027 roadmap offsite with Tom Becker, tentative holds: Fri 12 Mar 2027 roadmap deck due; Mon 15 - Tue 16 Mar prep; Wed 17 - Thu 18 Mar the offsite. Tom has the same dates held.",
+   "actions": [
+    "schedule",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0013",
+   "kind": "plan",
+   "text": "Thanksgiving 2026: Riya, Sam and Leo are spending Sat 10 Oct to Tue 13 Oct in Ottawa with Sam's parents Grace and Daniel (driving up Saturday morning). Blocked on the Family calendar. No school Mon 12 Oct.",
+   "actions": [
+    "family",
+    "travel",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0014",
+   "kind": "plan",
+   "text": "Kitchen renovation with Northline Renovations (contact Nate): the next progress payment is $7,500, due when the countertops are installed. Recorded in the 'kitchen reno' note.",
+   "actions": [
+    "finance",
+    "home"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0015",
+   "kind": "plan",
+   "text": "Leo's parent-teacher interview with Ms. Alvarez is Thu 12 Nov 2026 at 4:00 pm (15 min), Room 104, Morse Street Public School; sign in at the main office; change via Edsby > Interviews.",
+   "actions": [
+    "family",
+    "schedule",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0016",
+   "kind": "plan",
+   "text": "Leo is registered in Learn-to-Skate lessons (ages 6-8), Saturdays 10:30-11:15 at Jimmie Simpson rink (870 Queen St E), 9 Jan to 13 Mar 2027 (10 sessions, $96 paid, receipt EF-2290417). A CSA-approved hockey helmet is mandatory on the ice.",
+   "actions": [
+    "family",
+    "schedule",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0017",
+   "kind": "plan",
+   "text": "Riya's annual physical with Dr. Patel at the Carlaw Health Centre was booked for Thu 12 Nov 2026 at 8:40 am.",
+   "actions": [
+    "health",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0018",
+   "kind": "plan",
+   "text": "Riya promised her friend Marcus Bell she would run the Chilly Half Marathon in Burlington, ON on Sun 7 Mar 2027 with him; registered 2026-10-01 ($95). A 22-week training plan is in the note 'Chilly Half plan': Wednesday and Saturday runs are anchors, extra easy Monday run, easy runs only in Lisbon weeks, taper in weeks 20-22, expect -5 to 2 C on race day.",
+   "actions": [
+    "health",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0019",
+   "kind": "fact",
+   "text": "Morse Street PS dates: Picture Day Thu 15 Oct 2026 (retakes Nov 19); no school Mon 12 Oct (Thanksgiving). Ontario policy for Grade K-6 (Leo is in grade 2): phones and messaging smartwatches off and out of sight all school day; parents reach Leo via the main office.",
+   "actions": [
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0020",
+   "kind": "plan",
+   "text": "Riya's mother Anjali (Mom, Mummy, Leo's grandmother) will visit Toronto from Mumbai from 10 May to 21 Jun 2027, staying in the guest room once the renovation is done. Blocked on the Family calendar as free. Mother's Day is Sun 9 May, the day before she arrives. Anjali is already making a list of what to bring for Leo.",
+   "actions": [
+    "family",
+    "travel",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0021",
+   "kind": "fact",
+   "text": "Riya and family have had no working kitchen since September 2026 because of the renovation; takeout fatigue and dust are the worst parts for her. Gotcha: never sweep drywall dust off the hardwood floors; HEPA vacuum with a soft brush (no beater bar), then damp-mop with a microfibre pad and plain water, no vinegar or steam mop.",
+   "actions": [
+    "home",
+    "food"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0022",
+   "kind": "plan",
+   "text": "Riya's Q4 2026 payouts planning doc is due to Tom Becker on Fri 30 Oct 2026; a two-hour writing block is on her calendar Tue 20 Oct 09:30-11:30.",
+   "actions": [
+    "work-task",
+    "reminder",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0023",
+   "kind": "plan",
+   "text": "Priya's 37th birthday dinner is Sun 8 Nov 2026 at 7:00 pm at Bar Raval, booked under Riya's name for eight (conf. BR-1108-R), moved from Alo which had no table. Guests: Priya, Arjun, Riya, Sam, Marcus, Tasha, Neil, Jo. Riya promised Priya's sister she would order the cake from Bobbette & Belle (not yet ordered).",
+   "actions": [
+    "booking",
+    "purchase",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0024",
+   "kind": "plan",
+   "text": "Riya's annual physical with Dr. Patel moved to Tue 27 Oct 2026 at 10:30 am at Carlaw Health Centre. Fasting bloodwork first (no food 10-12 hours, water fine) at any LifeLabs using the attached requisition; Riya must reply C to confirm.",
+   "actions": [
+    "health",
+    "schedule",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0025",
+   "kind": "plan",
+   "text": "Nate of Northline Renovations scheduled the kitchen cabinet installation for 14-17 Nov 2026 (crew in at 7:30 each day); cabinets from Barzotti ship the week of 5 Oct. Countertop templating is about a week after install (Caesarstone fabricator; Nate will confirm the day); the $7,500 progress payment comes at countertop install.",
+   "actions": [
+    "home",
+    "schedule",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0026",
+   "kind": "plan",
+   "text": "Biscuit (the dog) stays with Hannah at her house for the Lisbon trip, Sun 20 Dec 2026 to Sat 2 Jan 2027; the Dogs Den booking was cancelled and the $100 deposit refunded. Riya promised Hannah a box of pastéis de nata from Lisbon and will pay for Biscuit's food (drop off a full bag and his bowls).",
+   "actions": [
+    "pet",
+    "travel",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0027",
+   "kind": "routine",
+   "text": "Riya committed on 2026-09-14 to read with Leo for 20 minutes every night at 7:30 pm and to log it in his school reading log (sign and date each entry). Leo is slightly below grade level in reading per Ms. Alvarez in September, but improving; the log shows good progress ('lovely progress on decoding', Oct 2). Riya worries about this; reassure her with the log data.",
+   "actions": [
+    "family",
+    "reminder",
+    "learning"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0028",
+   "kind": "plan",
+   "text": "Riya promised Priya she would review her architecture firm's website copy before 15 Nov 2026 (Priya will send a Google Doc). Also open commitments: soccer snack duty Sat 17 Oct 2026 (orange slices and water) and return Hannah's cooler.",
+   "actions": [
+    "work-task",
+    "reminder",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0029",
+   "kind": "plan",
+   "text": "Leo's winter gear (reminder 7 Oct): Riya needs boots and snow pants for Leo. A MEC cart is previewed but NOT ordered: Toasty Winter Boots size 1 ($79.95) and Slush Snow Pants size 8 ($89.95), total $191.99; Kamik Snowbuster at Simons is cheaper at $64.99. Sizes still to be confirmed.",
+   "actions": [
+    "purchase",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0030",
+   "kind": "plan",
+   "text": "Lumen Pay quarterly planning offsite is Thu 12 Nov 2026, 9:00 am to 6:00 pm at The Gladstone House (1214 Queen St W, 2nd floor ballroom); no on-site parking (Green P at 1169 Queen St W, about $18), take the 501 Queen streetcar; dedicated event Wi-Fi. It clashes with Leo's parent-teacher interview at 4:00 pm on Nov 12; Ms. Alvarez has open slots Wed 11 Nov at 15:45 or 16:15 (changes allowed until Mon 9 Nov 17:00), decision pending. Tom wants one page per area on Q1 bets by Fri 6 Nov. Diego Fernandez will bring 4 A3 copies of the merchant journey map.",
+   "actions": [
+    "schedule",
+    "work-task",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0031",
+   "kind": "plan",
+   "text": "The family's grey 2019 Mazda CX-5: 80,000 km service booked at Downtown Mazda on Mon 19 Oct 2026, 07:30 drop-off (conf. DM-30418, shuttle requested, about 3 h, roughly $489 plus tax); a reminder for car keys and emptying the trunk is set Sun 18 Oct 20:00. Winter tire swap (stored tires at Canadian Tire Leslie St, ticket ST-55821, $79.99) booked Sat 7 Nov 2026 08:30, conf. CT-882107.",
+   "actions": [
+    "schedule",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0032",
+   "kind": "plan",
+   "text": "November 2026 plans changed: Sam's parents Grace and Daniel Okafor cancelled the Ottawa trip because Nate's crew is installing the cabinets that weekend. Instead they will come to Toronto by VIA Rail Fri 20 Nov to Mon 23 Nov 2026, and Riya is hosting Grace's birthday dinner on Sat 21 Nov (18:00, calendared; Grace said please don't fuss). The kitchen should be nearly done by then but the finish date is tight.",
+   "actions": [
+    "family",
+    "schedule",
+    "food"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0033",
+   "kind": "plan",
+   "text": "Leo's grade 2 winter concert is Thu 10 Dec 2026 at 6:30 pm in the Morse Street Public School gym (doors 6:00). Riya already told Tom Becker she will leave work at 5:00 pm that day.",
+   "actions": [
+    "family",
+    "schedule",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b14:m0034",
+   "kind": "plan",
+   "text": "Riya wants to cook Sam a dish he loved once the kitchen is done, but the recipe was never saved (not in notes or starred chats); ask her for the dish name and save a version. She also wants a spring reminder to plan their anniversary early (about six weeks ahead); the anniversary date is not yet known, so ask.",
+   "actions": [
+    "food",
+    "reminder"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/life/cards/life-sleep-b14.json"
+}

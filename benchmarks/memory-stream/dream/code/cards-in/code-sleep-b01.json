@@ -1,0 +1,348 @@
+{
+ "batch": "code-sleep-b01",
+ "rows": [
+  {
+   "id": "code-sleep-b01:m0001",
+   "kind": "fact",
+   "text": "The acme CLI `acme login` uses the OAuth device code flow (prints a user code, approve in browser) and stores the token in the OS keychain via keytar (service 'acme-cli'). As of 2026-08-22 it has a deadline from expires_in, backs off 5s on slow_down, and fails with exit code 1 on denied/expired.",
+   "actions": [
+    "api",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0002",
+   "kind": "fact",
+   "text": "Production Redis for the acme-platform worker is AWS ElastiCache, single shard, cluster mode off.",
+   "actions": [
+    "deploy",
+    "jobs"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0003",
+   "kind": "plan",
+   "text": "Marco wants the worker's rate limiter (services/worker/src/ratelimit.ts) to keep counters in Redis in prod instead of in memory. Review found take() is not atomic (should be a Lua script, ~3.4x faster, 0 over-limit admits vs 37), reset() uses blocking KEYS (use SCAN), and the Redis path has no test.",
+   "actions": [
+    "jobs",
+    "tests",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0004",
+   "kind": "rule",
+   "text": "Never edit a migration that has been merged; add a new migration instead. Example: 0042 (invoice reminders) shipped with invoices.reminder_days default 7, fixed by new 0043_fix_reminder_days_default.sql to default 3.",
+   "actions": [
+    "database",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0005",
+   "kind": "rule",
+   "text": "Do not rewrite or squash commits that are already pushed; Marco branches off the user's branches. Add new commits on top.",
+   "actions": [
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0006",
+   "kind": "episode",
+   "text": "Worker outage on Saturday 2026-08-22: prod Redis hit maxmemory (noeviction) because BullMQ queues (invoices, emails, webhooks) kept completed jobs forever (bull:emails:completed had 1.78M entries). Fixed with removeOnComplete: 1000 in services/worker/src/queues.ts (PR #819); removeOnFail is 5000.",
+   "actions": [
+    "jobs",
+    "debugging",
+    "observability"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0007",
+   "kind": "fact",
+   "text": "PostHog analytics in apps/web is initialised in apps/web/app/providers.tsx (PostHogProvider, capture_pageview false). An invoice_sent event is captured from the invoice send button (Lena asked for it).",
+   "actions": [
+    "frontend",
+    "observability"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0008",
+   "kind": "fact",
+   "text": "Helm charts live in infra/helm, one chart per service (api, web, worker), each with values.yaml and values-prod.yaml.",
+   "actions": [
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0009",
+   "kind": "rule",
+   "text": "ESLint and Prettier were dropped in favour of Biome (PR #512, 2026-03-11). Lint is `biome check .`. Do not add .eslintrc.json or .prettierrc (e.g. Lena's PR wrongly added them to apps/api; ask her to delete them).",
+   "actions": [
+    "code-style",
+    "build-ci",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0010",
+   "kind": "rule",
+   "text": "API CORS (apps/api/src/app.ts) allows only origins listed in the CORS_ORIGINS env var (comma separated), nothing else; requests with no Origin header still pass.",
+   "actions": [
+    "api",
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0011",
+   "kind": "fact",
+   "text": "The acme CLI (packages/cli) is built with yargs; commands live in packages/cli/src/commands. `acme invoices list` supports --status and --json; `acme invoices overdue` is a shortcut for list --status overdue. CLI tests use vitest.",
+   "actions": [
+    "build-ci",
+    "code-style",
+    "tests"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0012",
+   "kind": "fact",
+   "text": "Gotcha: invoice dueDate is a plain calendar date (YYYY-MM-DD); new Date('YYYY-MM-DD') parses as UTC midnight and shows the previous day west of UTC (Vancouver, Toronto). Parse as local with `${dueDate}T00:00:00` (fixed in invoice-row.tsx).",
+   "actions": [
+    "frontend",
+    "debugging",
+    "tests"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0013",
+   "kind": "fact",
+   "text": "Money formatting in apps/web goes through formatMoney(cents, currency, locale='en-CA') in apps/web/lib/money.ts (cached Intl.NumberFormat, handles JPY zero-decimal); the <Money> component and export page use it. Do not hard-code cents / 100.",
+   "actions": [
+    "frontend",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0014",
+   "kind": "fact",
+   "text": "Invoice attachment uploads do not go through the API: browser calls POST /v1/uploads to get a presigned S3 PUT URL (valid 300s), PUTs the file straight to S3, then calls POST /v1/uploads/:id/complete. Upload progress needs XMLHttpRequest (xhr.upload.onprogress); Lena wants a progress bar.",
+   "actions": [
+    "api",
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0015",
+   "kind": "preference",
+   "text": "API data-access naming convention: list* functions (e.g. getInvoicesForClient was renamed listClientInvoices in 2026-08).",
+   "actions": [
+    "code-style",
+    "api",
+    "database"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0016",
+   "kind": "rule",
+   "text": "Never run `terraform apply` (or any infra apply) from a laptop; only the CI plan/apply workflow applies (rule from Priya). Running `terraform plan` locally to paste into the PR is fine.",
+   "actions": [
+    "deploy",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0017",
+   "kind": "fact",
+   "text": "Infra in infra/ is Terraform (infra/s3.tf, env values in infra/envs/staging.tfvars); the uploads bucket CORS origins come from var upload_origins (staging now includes https://app.staging.acme.example.com).",
+   "actions": [
+    "deploy",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0018",
+   "kind": "decision",
+   "text": "Reconcile decision: Stripe payment allocations pointing at soft-deleted invoices are treated as unapplied (reconcile.ts sumAllocations skips them; db.invoicesByIds filters deleted_at). Previously crashed with TypeError 'amountCents' on the Stripe webhook; fixed in commit 5a7e2c9.",
+   "actions": [
+    "finance",
+    "debugging",
+    "database"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0019",
+   "kind": "fact",
+   "text": "Invoice PDF filenames are INV-2026-0412-northwind-creative.pdf style: number plus slugified client name (accents stripped, max 60 chars), falling back to number.pdf if the slug is empty. Implemented in apps/api/src/pdf/filename.ts pdfFilename.",
+   "actions": [
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0020",
+   "kind": "fact",
+   "text": "CODEOWNERS: the platform team (@acme/platform, Priya's team) owns /infra/ and /.github/ and is auto-requested as reviewer; apps/web is @acme/frontend, apps/api, services/worker and packages/cli are @acme/backend. The reorg (#744) had wrongly written /infrastructure/; fixed on branch acme-239-codeowners-infra.",
+   "actions": [
+    "git",
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0021",
+   "kind": "fact",
+   "text": "The @acme/cli package is ESM-only since PR #702 (CJS bundle dropped). ERR_REQUIRE_ESM from customers means an old Node; tell them to upgrade to Node 18+ and reinstall with `npm i -g @acme/cli`. An `engines` field in the CLI package.json was suggested but not added.",
+   "actions": [
+    "release",
+    "debugging",
+    "docs"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0022",
+   "kind": "rule",
+   "text": "Billing code (apps/api/src/billing/ and services/worker/src/jobs/billing/) must not change without Jordan's (the user's) review, even small fixes; open a draft PR and tag Jordan. Applies to Claude and to contractors.",
+   "actions": [
+    "api",
+    "git",
+    "finance"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0023",
+   "kind": "procedure",
+   "text": "Local env setup: copy each app's .env.example (apps/api, apps/web, services/worker) to .env.local, NOT .env (the web app ignores plain .env), and get secrets from the 1Password vault acme-dev. Then `docker compose up -d db redis` and `pnpm dev`. Documented in docs/onboarding.md.",
+   "actions": [
+    "build-ci",
+    "deploy",
+    "docs"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0024",
+   "kind": "fact",
+   "text": "apps/web uses Clerk middleware in apps/web/middleware.ts, which protects every route except those in the publicRoutes matcher; any new public page (e.g. /pricing, added 2026-08-24) must be added there.",
+   "actions": [
+    "frontend",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0025",
+   "kind": "plan",
+   "text": "The /pricing page (apps/web/app/(marketing)/pricing, PR #824) was built for marketing with placeholder prices (Starter 29, Studio 79, Agency 199 per month); marketing must confirm real prices. Use theme tokens like ring-primary, not hard-coded colors.",
+   "actions": [
+    "frontend",
+    "work-task"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0026",
+   "kind": "rule",
+   "text": "Runtime validation uses zod everywhere (no joi, no hand-rolled ifs). API request schemas live in apps/api/src/schemas/ (uploads.ts, clients.ts with a .strict() createClientBody); routes use safeParse and return 400 invalid_body.",
+   "actions": [
+    "code-style",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0027",
+   "kind": "fact",
+   "text": "API list endpoints take ?sort= (createdAt, dueDate, total, number) and ?dir= (asc/desc) via apps/api/src/lib/paging.ts; sorting in web tables is server-side. Reviewer suggested syncing sort to the URL (nuqs / useSearchParams), not yet done.",
+   "actions": [
+    "api",
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0028",
+   "kind": "fact",
+   "text": "Local dev ports: web 3000, api 4000, worker metrics 9464 (/metrics), Postgres 5432, Redis 6379. Start with `docker compose up -d db redis` then `pnpm dev` (turbo).",
+   "actions": [
+    "build-ci",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0029",
+   "kind": "fact",
+   "text": "Infra is now Pulumi in TypeScript (infra/Pulumi.yaml, stacks staging and prod, code in infra/src: queues.ts, buckets.ts, rds.ts, cluster.ts, alarms/, tags.ts). Remaining Terraform lives in infra/legacy-terraform/ until migrated. SQS queues follow queues.ts pattern: queue plus DLQ with redrivePolicy, tags(...).",
+   "actions": [
+    "deploy",
+    "jobs"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0030",
+   "kind": "plan",
+   "text": "Priya wants an SQS queue for the CSV exports feature; none exists yet in staging or prod (existing: webhooks-inbound, webhooks-dlq, emails-bounce). Suggested names exports-jobs and exports-dlq, added in infra/src/queues.ts. Not created yet.",
+   "actions": [
+    "deploy",
+    "jobs"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0031",
+   "kind": "plan",
+   "text": "No Node version is pinned in acme-platform (no .nvmrc, .node-version, .tool-versions or engines). Jordan wants it pinned (.nvmrc at root plus engines in root package.json) because new hires end up on Homebrew's node; the Node major was still to be decided. Note root package.json packageManager says yarn@1.22.22 although the repo uses pnpm.",
+   "actions": [
+    "build-ci",
+    "dependency",
+    "docs"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0032",
+   "kind": "episode",
+   "text": "On staging, PR #828 (Lena Fischer's move of auth pages into the (auth) route group) caused an ERR_TOO_MANY_REDIRECTS sign-in loop (new auth page URL treated as protected). Lena is fixing it; do not touch it.",
+   "actions": [
+    "debugging",
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0033",
+   "kind": "fact",
+   "text": "Jordan works in Toronto time (EDT, UTC-4). Tests that compare local dates with toISOString() (UTC) fail after ~8pm Toronto, so tests must pin the clock with fake timers and be checked under TZ=America/Toronto and TZ=UTC (fixed invoice-filters.test.tsx).",
+   "actions": [
+    "tests",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0034",
+   "kind": "plan",
+   "text": "Priya wants a prod alarm that pages oncall before the worker's Redis fills up again (cf. 2026-08-22). Draft infra/src/alarms/worker.ts: memory > 80% for 10 min via the PagerDuty topic; namespace and metric are still TODO (prod Redis is ElastiCache so likely CloudWatch AWS/ElastiCache). Not merged. The 14 existing prod CloudWatch alarms route to the pagerduty-oncall SNS topic and none cover worker Redis.",
+   "actions": [
+    "observability",
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0035",
+   "kind": "fact",
+   "text": "Reminder email subjects (services/worker/src/jobs/send-reminder.ts reminderSubject): 'Reminder: INV-... is due in N days', 'Reminder: INV-... is due today', or 'INV-... is N days overdue' (singular day when 1), computed in UTC calendar days.",
+   "actions": [
+    "jobs",
+    "message"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0036",
+   "kind": "fact",
+   "text": "Gotcha: imports must match file name case exactly (money.tsx, copy-button.tsx). macOS filesystem is case-insensitive so a wrong-case import builds locally but fails on the Linux CI runner with 'Module not found'.",
+   "actions": [
+    "debugging",
+    "build-ci",
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b01:m0037",
+   "kind": "preference",
+   "text": "Forms in apps/web use react-hook-form with zodResolver (@hookform/resolvers/zod); examples: invoices/new/invoice-form.tsx, settings/org-form.tsx, clients/[id]/edit/client-form.tsx (name, email, currency CAD/USD/EUR/GBP, tax id).",
+   "actions": [
+    "frontend",
+    "code-style"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/code/cards/code-sleep-b01.json"
+}

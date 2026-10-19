@@ -1,0 +1,364 @@
+{
+ "batch": "life-sleep-b07",
+ "rows": [
+  {
+   "id": "life-sleep-b07:m0001",
+   "kind": "fact",
+   "text": "Riya's Toronto Public Library card ends in 4417; her home branch is Pape/Danforth.",
+   "actions": [
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0002",
+   "kind": "plan",
+   "text": "Library holds ready at Pape/Danforth, pick up by Sat 2026-04-25: The Hunter (Tana French) and Dinosaurs Before Dark (Magic Tree House #1). Tomorrow, and Tomorrow, and Tomorrow (G. Zevin) is #4 in the queue of 31.",
+   "actions": [
+    "reminder",
+    "schedule",
+    "learning"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0003",
+   "kind": "plan",
+   "text": "Library renewals done on 2026-04-20: The Lego Ideas Book and Cien años de soledad (Spanish ed.) now due Wed 2026-05-13, Frog and Toad Together due Thu 2026-05-14 (2 renewals left each). Atomic Habits is due Mon 2026-05-04.",
+   "actions": [
+    "reminder",
+    "learning"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0004",
+   "kind": "routine",
+   "text": "Riya's weekly call with her mother Anjali (Mummy, in Mumbai) is now Saturdays 08:30-09:15 Toronto time (18:00 IST Mumbai), starting 2026-04-25. Sunday mornings are no longer used because of Leo's Sunday soccer. Calendar series 'Weekly call: Mom (Anjali)' was moved.",
+   "actions": [
+    "schedule",
+    "family",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0005",
+   "kind": "person",
+   "text": "Kabir (family member, phone +1 604, Pacific time) sometimes joins the Saturday call with Mummy; it is 5:30 am for him, and he has a small child Ira, so he can't be counted on every week. Riya told him the new time on 2026-04-21.",
+   "actions": [
+    "schedule",
+    "family",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0006",
+   "kind": "person",
+   "text": "Riya's household: partner Sam, son Leo (Grade 2 at Morse Street PS, plays Sunday-morning soccer), and dog Biscuit. The shared calendar is 'Malhotra-Okafor family'; Sam gets calendar update notifications from it.",
+   "actions": [
+    "schedule",
+    "family",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0007",
+   "kind": "fact",
+   "text": "Biscuit's vet is now Dr. Harpreet Kaur at Riverside Veterinary Clinic, Broadview Ave, Toronto, (416) 555-0193 (open Mon-Thu 8-20, Fri 8-18, Sat 9-14; online booking). Dr. Moreau retired in April 2026.",
+   "actions": [
+    "pet",
+    "booking",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0008",
+   "kind": "plan",
+   "text": "Biscuit has a vet appointment Tue 2026-04-28 18:00-18:30 with Dr. Kaur at Riverside Veterinary Clinic: wellness exam, DHPP and rabies boosters, about $214.50 before tax. Records transfer from the old clinic was requested; bring any paper vaccine record.",
+   "actions": [
+    "pet",
+    "schedule",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0009",
+   "kind": "preference",
+   "text": "Riya prefers vet and similar appointments on weekdays after 5:30 pm.",
+   "actions": [
+    "schedule",
+    "booking",
+    "pet"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0010",
+   "kind": "fact",
+   "text": "Riya works on the payouts beta launch (tickets PAY-812, PAY-830, ONB-221). Tom Becker runs the Friday exec sync and Riya has a slot in it; Aisha is a teammate who reviews PAY-830 copy.",
+   "actions": [
+    "work-task",
+    "schedule",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0011",
+   "kind": "fact",
+   "text": "Riya's home address is 41 Curzon St, Toronto ON M4M 3B5 (Leslieville, semi-detached house). The household has a Mazda and a basement.",
+   "actions": [
+    "purchase",
+    "booking",
+    "home"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0012",
+   "kind": "plan",
+   "text": "City watermain replacement on Curzon St (Queen to Dundas), Bertmount Ave and Erie Terrace, contractor Bramco Civil, from about Mon 2026-05-11 to Fri 2026-09-04: work weekdays 7:00-19:00, up to 8-hour water shut-offs with advance notice, temporary above-ground hoses (48 h notice), on-street parking restricted, driveway access may be blocked briefly, label bins with house number. Inspector M. Ostrowski 416-555-0177; hotline 416-338-2525. A lead-pipe replacement program may cover the private side.",
+   "actions": [
+    "home",
+    "schedule",
+    "travel"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0013",
+   "kind": "fact",
+   "text": "Riya is renovating her kitchen with Northline Renovations; Nate is the contact. Invoice #NR-1147 (electrical rough-in) was due about 2026-04-30; a $1,450 electrical deposit was charged to the Visa. Open decisions: wall behind range and sink, 2 or 3 pendant lights over island, cabinet hardware brushed brass vs matte black; under-cabinet lighting is decided as warm white.",
+   "actions": [
+    "home",
+    "finance",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0014",
+   "kind": "fact",
+   "text": "Riya's Visa (card ending 8820) statement: balance $2,184.33, due Thu 2026-05-14. Autopay pays the full balance from the TD joint chequing account; the joint balance covers it with about $3,940 to spare.",
+   "actions": [
+    "finance",
+    "purchase",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0015",
+   "kind": "plan",
+   "text": "Pape Rec Centre summer program registration opens Mon 2026-04-27 at 07:00 (Riya wanted a reminder).",
+   "actions": [
+    "reminder",
+    "booking",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0016",
+   "kind": "plan",
+   "text": "Riya's in-laws (Sam's parents) are visiting Toronto May 16-18, 2026. Riya blocked time on 2026-04-24 09:00 to plan: needs something to do on Saturday (May 16) and where to eat; the agent was to prepare Saturday options.",
+   "actions": [
+    "family",
+    "booking",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0017",
+   "kind": "plan",
+   "text": "Riya has 'Buy printer ink (HP 67)' on her To-do. Prices checked 2026-04-23: best is Best Buy HP 67XL black $47.99 (sale until Sun 2026-04-26); Staples 67XL black $49.99, 67XL tri-colour $54.99; Canadian Tire combo pack $59.99. 67XL black is on the Hardware store list.",
+   "actions": [
+    "purchase",
+    "home",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0018",
+   "kind": "episode",
+   "text": "Home internet has been unstable since 2026-04-24 (repeated WAN drops, ~6% packet loss, ONT 'optical signal low' and loss-of-signal errors, pointing to the provider's line, not the router). Riya's internet provider is not known or linked to the agent, so no support ticket has been opened; evidence is saved in Notes as 'internet drops 2026-04-24'.",
+   "actions": [
+    "home",
+    "debugging",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0019",
+   "kind": "plan",
+   "text": "Riya wants to hang a heavy (~15 kg) hallway mirror on plaster-and-lath walls; it is on the 'House 2026' list. Plan: two #10 x 3 in screws into a stud, or two 1/4 in snap toggles / a 60 cm French cleat; tape the spot first. Shopping list at Home Hardware (Queen St E): snap toggles 4-pack $9.49, French cleat kit $24.99, painter's tape $6.99.",
+   "actions": [
+    "home",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0020",
+   "kind": "plan",
+   "text": "Riya and family plan to drive to Sam's parents' place on Fri 2026-05-01, leaving right after school pickup (Riya's pickup is 15:15-15:30; she can leave around 15:45). She wanted a live traffic estimate on the day.",
+   "actions": [
+    "travel",
+    "family",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0021",
+   "kind": "plan",
+   "text": "Morse Street PS spring photo day is Wed 2026-04-29 (no hats); order forms go home Monday, online orders close Fri 2026-05-08, retakes Thu 2026-05-21.",
+   "actions": [
+    "family",
+    "reminder",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0022",
+   "kind": "episode",
+   "text": "Pai Northern Thai Kitchen (Duncan St) is a delivery option the family uses. On 2026-04-25 Riya asked for a family-style surprise order for three under $100; order #PAI-58213 (spring rolls, green curry chicken, pad see ew shrimp, 2 jasmine rice) came to $85.12 with 15% tip, and the agent avoided peanut dishes.",
+   "actions": [
+    "food",
+    "purchase",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0023",
+   "kind": "plan",
+   "text": "Riya must tell Nate (Northline Renovations) by Mon 2026-04-27 what she wants on the wall behind the range and sink; he needs it to order with a 3-week lead time. Nothing from her earlier inspiration browsing is saved; he accepts a picture or product link.",
+   "actions": [
+    "home",
+    "message",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0024",
+   "kind": "plan",
+   "text": "Riya volunteered (reply sent 2026-04-25 to Jenna Wu, neighbourhood association) for the 2-4pm lemonade and snack table at the Curzon/Bertmount street party on Sat 2026-06-13; she cannot do setup (9-11am).",
+   "actions": [
+    "schedule",
+    "message",
+    "food"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0025",
+   "kind": "fact",
+   "text": "Leslieville Farmers' Market opens Sun 2026-05-10 and runs Sundays 9am-2pm at Jonathan Ashbridge Park, 1490 Queen St E, through late October. Riya did not want it added to the calendar.",
+   "actions": [
+    "schedule",
+    "food"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0026",
+   "kind": "plan",
+   "text": "Household disposal: Community Environment Day Sat 2026-05-23 10:00-14:00 at Withrow Park (Logan Ave entrance) takes paint, batteries, small electronics (a second one is Sat 2026-09-12 at Greenwood Park). Other drop-offs: Commissioners St depot (400 Commissioners St, Mon-Sat 7-17), Best Buy Gerrard Square (printers, batteries), Home Hardware Queen St E (paint). Riya has old paint, a dead printer and batteries to drop off.",
+   "actions": [
+    "home",
+    "schedule",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0027",
+   "kind": "plan",
+   "text": "Riya wants the old couch in the basement hauled away. Quotes (2026-04-25), none booked: 1-800-GOT-JUNK $149+tax earliest Tue 04-28; Junk King East Toronto $135+tax earliest Thu 04-30; City bulk pickup free if carried to the curb (book online by Tue). Riya wants to see quotes before booking.",
+   "actions": [
+    "home",
+    "booking",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0028",
+   "kind": "plan",
+   "text": "On Fri 2026-05-01 Riya runs her team's morning sync (wants a light icebreaker; 10 prompts saved in Notes 'icebreakers') and the family evening is open at home. Evening options nearby: Riverdale Farm 'Spring Lambs' until 19:00 (free), Pape/Danforth library family Lego club 18:00-19:00 (registration required).",
+   "actions": [
+    "work-task",
+    "family",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0029",
+   "kind": "fact",
+   "text": "Riya's 'House' note was renamed 'House 2026' on 2026-04-25 (checked items archived to 'House 2026 (archive)'). Her Notes also hold 'Spring cleaning 2026' (15-item checklist) and a 'Hardware store' list.",
+   "actions": [
+    "reminder",
+    "home"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0030",
+   "kind": "plan",
+   "text": "Leo's Grade 2 Science Centre trip is Thu 2026-04-30: buses leave 9:15, return by 14:45; he needs a hat and a refillable water bottle. Permission form is submitted; the $18 payment in Edsby is still pending and due Mon 2026-04-27.",
+   "actions": [
+    "family",
+    "finance",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0031",
+   "kind": "fact",
+   "text": "Riya's Notes 'Hardware store' list (2026-04-25): snap toggles 4-pack, French cleat kit, painter's tape, HP 67XL black ink, compost (2 bags), bone meal.",
+   "actions": [
+    "purchase",
+    "home",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0032",
+   "kind": "person",
+   "text": "Riya runs with her friend Marcus (14 km long run on 2026-04-26) and also does legs at the gym; the agent advised 48 hours between a long run and heavy leg day.",
+   "actions": [
+    "health",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0033",
+   "kind": "plan",
+   "text": "Riya wants to visit her brother's family but as of 2026-04-26 no date is settled: nothing on the calendar; email not yet checked for flights or threads.",
+   "actions": [
+    "travel",
+    "schedule",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0034",
+   "kind": "routine",
+   "text": "Riya's recurring reminder: water the garden beds every other evening at 19:00 (every 2 days, from 2026-04-26). She is looking for a 15 m soaker hose under $40; options: Canadian Tire Yardworks $24.99, Home Depot Swan $27.48, Home Hardware Melnor $29.99; nothing ordered.",
+   "actions": [
+    "reminder",
+    "home",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0035",
+   "kind": "fact",
+   "text": "The household budget has an 'Eating out' limit of $400 per month; April 2026 was at $318 on 2026-04-26, with all other categories under budget. Receipts are sorted into the household budget sheet.",
+   "actions": [
+    "finance",
+    "food",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b07:m0036",
+   "kind": "routine",
+   "text": "Weekly routine: Riya's phone photos are backed up automatically every Saturday 23:00 to the family photo library (612 GB of 2 TB used as of 2026-04-26).",
+   "actions": []
+  },
+  {
+   "id": "life-sleep-b07:m0037",
+   "kind": "fact",
+   "text": "Spotify Family price rises by $2/month starting with the June 2026 bill.",
+   "actions": [
+    "finance",
+    "purchase"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/life/cards/life-sleep-b07.json"
+}

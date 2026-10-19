@@ -1,0 +1,338 @@
+{
+ "batch": "life-sleep-b03",
+ "rows": [
+  {
+   "id": "life-sleep-b03:m0001",
+   "kind": "routine",
+   "text": "Riya tends to feel anxious on Sunday evenings before big launch weeks; what helps most is writing a three-item list for Monday and then a short walk with Biscuit.",
+   "actions": [
+    "health",
+    "pet"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0002",
+   "kind": "rule",
+   "text": "When Riya vents about work stress, listen and reflect first; only offer fixes if she asks.",
+   "actions": [
+    "message",
+    "health"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0003",
+   "kind": "fact",
+   "text": "Onboarding 2.0 launched 2025-10-07 and cut KYC drop-off for new merchants from 38% to 24% in its first month; Tom asked for under 20% by Q1 2026.",
+   "actions": [
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0004",
+   "kind": "plan",
+   "text": "Riya wants a hotel shortlist for a Lisbon family trip next December (2026): must have an elevator, a separate sleeping space for Leo, and a walkable neighbourhood; no all-inclusive resorts (she dislikes them). Shortlisted: Casa do Principe Apartments (Principe Real, from EUR160), Lisbon Family Suites (Chiado, EUR185), Hotel Avenida Lofts (EUR210).",
+   "actions": [
+    "travel",
+    "booking",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0005",
+   "kind": "routine",
+   "text": "Riya takes Spanish lessons with Carlos over Zoom, Thursday 19:30-20:30; she is working toward B1/B2.",
+   "actions": [
+    "learning",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0006",
+   "kind": "plan",
+   "text": "Payouts launch: QA for risk rules Mon 1 Dec 2025, next scheduled release Tue 2 Dec 2025 10:00. PAY-388 (payout history export) was blocked on design sign-off; PAY-421 and PAY-423 unassigned.",
+   "actions": [
+    "work-task",
+    "release",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0007",
+   "kind": "person",
+   "text": "Riya's household: partner Sam Okafor, son Leo, and beagle Biscuit; they keep a shared family calendar named 'Okafor-Malhotra family' that the assistant checks for conflicts before adding events.",
+   "actions": [
+    "schedule",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0008",
+   "kind": "plan",
+   "text": "Leo has a birthday party for his friend Max on Sat 13 Dec 2025 10:00-12:00 at Playground Paradise.",
+   "actions": [
+    "family",
+    "schedule",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0009",
+   "kind": "rule",
+   "text": "Standing rule: when Riya says she just needs to vent, only listen and reflect; no fixes or productivity tips unless she asks, and ask before offering advice.",
+   "actions": [
+    "health",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0010",
+   "kind": "person",
+   "text": "Leo is obsessed with dinosaurs and Lego, especially Lego Jurassic World sets, and hates mushrooms (a scene over mushroom gravy at a past Christmas Eve dinner).",
+   "actions": [
+    "purchase",
+    "food",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0011",
+   "kind": "person",
+   "text": "Hannah Cho is Riya's friend and neighbour-style contact (daughter Ellie, son Jun); Jun walks to school on Mondays and picks things up; Hannah's number is on file for messages.",
+   "actions": [
+    "message",
+    "family",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0012",
+   "kind": "person",
+   "text": "Priya is Riya's close friend in Montreal; she is strictly gluten-free (celiac) and loves Sichuan food; her birthday is December 1 (Riya missed it in 2025 and sent a late gift).",
+   "actions": [
+    "food",
+    "booking",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0013",
+   "kind": "preference",
+   "text": "Riya wants temperatures in Celsius only and all other measurements metric; no Fahrenheit or imperial units.",
+   "actions": [
+    "travel",
+    "food",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0014",
+   "kind": "person",
+   "text": "Wen Li is the payouts team's data analyst and is vegan; team lunches Riya orders must include a proper vegan main, not just a side salad.",
+   "actions": [
+    "food",
+    "booking",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0015",
+   "kind": "plan",
+   "text": "Team lunch for the payouts crew Thu 11 Dec 2025 at the office around 12:30, 8 people; a cart is staged at Mezze & Co. (455 King St W) with mixed grill plus four vegan dishes, total $317.53, not yet placed (awaiting headcount); order cut-off 17:00 Wed 10 Dec. Room 4B has a merchant advisory call until 12:30.",
+   "actions": [
+    "food",
+    "purchase",
+    "booking"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0016",
+   "kind": "fact",
+   "text": "Leslieville Farmers' Market in winter runs Sundays 10:00-14:00 indoors at Jimmie Simpson Rec Centre (870 Queen St E) until Apr 26 2026; there is no Saturday winter market.",
+   "actions": [
+    "schedule",
+    "home",
+    "food"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0017",
+   "kind": "plan",
+   "text": "Family plan: Leslieville holiday farmers market with Leo on Sun 14 Dec 2025, 10:30-12:30 at Jimmie Simpson Rec Centre (on the family calendar); skating party at Greenwood Park that day 14:00-16:30 is optional.",
+   "actions": [
+    "family",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0018",
+   "kind": "plan",
+   "text": "Morse Street PS Primary Winter Concert is Thu 18 Dec 2025 at 18:30 in the gym; Grade 2 students arrive by 18:00 in a white top; bring a non-perishable food donation; doors open 18:10. Not yet added to the family calendar.",
+   "actions": [
+    "family",
+    "reminder",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0019",
+   "kind": "fact",
+   "text": "Leo is in Grade 2 at Morse Street PS (Edsby is the school portal); Riya's parent council gets volunteer requests there.",
+   "actions": [
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0020",
+   "kind": "plan",
+   "text": "Holiday code freeze: Fri 19 Dec 2025 17:00 until Mon 5 Jan 2026 09:00; hotfixes only, approved by Aisha, deploy window 10:00-14:00 on weekdays; last regular release v4.18 on Tue 16 Dec; v4.19 train resumes 5 Jan. Riya was drafting a #payouts-team Slack post about it.",
+   "actions": [
+    "work-task",
+    "release",
+    "deploy"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0021",
+   "kind": "plan",
+   "text": "Conflict with the freeze: 'Instant payouts limit increase (tier 2)' was targeted Mon 22 Dec 2025 (not started); Riya planned to decide and move it to January. Merchant statements year-end job on 31 Dec was approved by Aisha, who is on call.",
+   "actions": [
+    "work-task",
+    "release",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0022",
+   "kind": "plan",
+   "text": "Riya's passport expires in March 2026; 'Renew passports' (hers and family's) is on her to-do note; closest passport photo place is Shoppers Drug Mart, 1014 Queen St E (0.6 km, $16.99, no appointment).",
+   "actions": [
+    "reminder",
+    "family",
+    "travel"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0023",
+   "kind": "plan",
+   "text": "Leo's Grade 2 class trip to the Ontario Science Centre pop-up is Wed 21 Jan 2026 and needs a signed permission form.",
+   "actions": [
+    "family",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0024",
+   "kind": "plan",
+   "text": "Olivia Grant asked Riya to present for 15 minutes at the Q1 merchant webinar in late January 2026; Riya had not replied as of 9 Dec.",
+   "actions": [
+    "work-task",
+    "message",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0025",
+   "kind": "person",
+   "text": "Work contacts: Tom Becker (Riya's 1:1 and escalation contact, wants board-deck numbers), Aisha Rahman (engineering lead for payouts, approves hotfixes), Diego Fernandez (designer on Payouts v2), Olivia Grant (merchant/sales side), Wen Li (data analyst).",
+   "actions": [
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0026",
+   "kind": "plan",
+   "text": "Kitchen renovation with Northline Renovations (contact Nate): budget $48,000 including 10% contingency (about $4,364); quote v3 of 2025-12-08 is $45,890 (v2 was $43,030; electrical rose to $7,850 for a 200A panel, backsplash to porcelain $1,640, permits $1,450), using about $2,254 of the contingency. Start Mon 12 Jan 2026, about 8 weeks. $9,600 deposit paid 2025-11-20; next payment $13,767 (30%) due 12 Jan 2026 from the TD joint chequing account.",
+   "actions": [
+    "home",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0027",
+   "kind": "person",
+   "text": "Grace Okafor (Sam's mother; husband Daniel Okafor) is allergic to shellfish and does not drink alcohol; offer a real mocktail, not just orange juice.",
+   "actions": [
+    "food",
+    "booking",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0028",
+   "kind": "plan",
+   "text": "NYE 2025: Grace and Daniel Okafor arrive Wed 31 Dec around 15:00 and stay until Fri 2 Jan 2026; dinner for 5 (baked brie, mushroom-spinach Wellington, Pomegranate Rosemary Fizz with Noughty or Freixenet 0.0% from Loblaws Queen & Carlaw / Metro Gerrard Square); Riya wants the same cake as last time from 'that bakery' (bakery details unknown, she will look); Riya and Leo bake a chocolate yogurt loaf that morning.",
+   "actions": [
+    "family",
+    "food",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0029",
+   "kind": "preference",
+   "text": "Baking on weekend mornings with Leo is one of Riya's favourite ways to unwind; she wants to do more of it in January 2026 with simple recipes Leo can help with (he is good at stirring, bad at waiting).",
+   "actions": [
+    "food",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0030",
+   "kind": "preference",
+   "text": "Riya's commute podcast tastes: product and fintech shows, episodes under 45 minutes (Lenny's Podcast short episodes, Fintech Business Weekly, This Week in Fintech); she skips anything over an hour and interview shows with long intros.",
+   "actions": [
+    "learning"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0031",
+   "kind": "plan",
+   "text": "Riya has 'Return Simons sweater' as a to-do with a deadline of Fri 2 Jan 2026.",
+   "actions": [
+    "reminder",
+    "purchase"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0032",
+   "kind": "plan",
+   "text": "Riya's 2026 goals (draft in notes): launch Payouts v2; KYC drop-off below 20%; grow as a manager of managers; Spanish B2 exam prep and a full hour with Carlos without English; keep running 3x a week, maybe a spring 10K; finish the kitchen with no other big projects; Lisbon trip, weekend baking with Leo, Sunday calls with Mom, monthly date night with Sam.",
+   "actions": [
+    "learning",
+    "health",
+    "travel"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0033",
+   "kind": "preference",
+   "text": "On family trips Riya likes one main activity per day and a quiet afternoon break (14:00-16:00 rest block), because Leo melts down when the schedule is too full. A 5-day Lisbon day sketch is saved in her 'Lisbon' note.",
+   "actions": [
+    "travel",
+    "family",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0034",
+   "kind": "plan",
+   "text": "Out-of-office for Riya until Mon 5 Jan 2026 08:00: Aisha Rahman covers payouts, Tom Becker for urgent issues (Tom is reachable for P1 incidents only during Dec 29-Jan 2); the draft (ooo_draft_118) was saved but not yet switched on.",
+   "actions": [
+    "message",
+    "schedule",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b03:m0035",
+   "kind": "fact",
+   "text": "Biscuit is the family's beagle and steals food off the counter.",
+   "actions": [
+    "pet",
+    "food"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/life/cards/life-sleep-b03.json"
+}

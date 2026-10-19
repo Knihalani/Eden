@@ -1,0 +1,299 @@
+{
+ "batch": "code-sleep-b10",
+ "rows": [
+  {
+   "id": "code-sleep-b10:m0001",
+   "kind": "fact",
+   "text": "In acme-platform, apps/web/lib/flags.ts holds only local dev defaults (newInvoiceEditor=false, bulkReminders=true, expenseAttachments=false); real flag values come from an unnamed external 'flag service', and which vendor it is was never confirmed. The org field betaFlags is just a free-form admin-panel label, not used for gating.",
+   "actions": [
+    "frontend",
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0002",
+   "kind": "plan",
+   "text": "Jordan plans to put the invoice export feature behind a feature flag (invoiceExport) for beta orgs only; assistant asked which flag service to use and was awaiting the answer.",
+   "actions": [
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0003",
+   "kind": "preference",
+   "text": "Jordan's reviewer prefers structuredClone over JSON.parse(JSON.stringify(x)) for deep copies (JSON round trip loses Dates, Maps, undefined and throws on cycles).",
+   "actions": [
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0004",
+   "kind": "fact",
+   "text": "Jordan has a side project 'trailmix' in ~/code/trailmix: a Django app with htmx for logging hikes (models Hike, views hikes/views.py, templates hikes/list.html and _row.html). The hike form targets #hike-rows (tbody) with hx-swap=afterbegin; whole-table outerHTML swap was the bug.",
+   "actions": [
+    "frontend",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0005",
+   "kind": "plan",
+   "text": "Receipt PDF attachments on expenses (acme-platform): no attachment/multipart handling exists in the expense form or apps/api expenses route. Jordan said they would ask Marco about the storage side; the fallback proposal is a multipart POST via @fastify/multipart (new dependency, not to be added without Jordan's OK, sends all bytes through API pods) storing an attachment row with org_id. Blocked until Marco answers.",
+   "actions": [
+    "api",
+    "dependency",
+    "database"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0006",
+   "kind": "person",
+   "text": "Marco is the person Jordan consults about storage decisions (file storage for acme-platform).",
+   "actions": [
+    "work-task",
+    "database"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0007",
+   "kind": "fact",
+   "text": "acme-platform stack: pnpm monorepo (apps/web Next.js + React + shadcn/ui + react-hook-form + zod + tanstack-query, apps/api Fastify + drizzle + zod, services/worker, packages/cli @acme/cli); tests use vitest (`pnpm --filter web test`); CI is ci.yml on PRs with Vercel previews and staging at staging.acme.dev.",
+   "actions": [
+    "build-ci",
+    "tests",
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0008",
+   "kind": "fact",
+   "text": "Utility maskIban(iban) lives in apps/web/lib/format.ts (keeps last 4 visible, groups in 4s, uppercases, strips spaces); tests in apps/web/lib/format.test.ts. formatCents and initials are also in format.ts.",
+   "actions": [
+    "frontend",
+    "tests"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0009",
+   "kind": "fact",
+   "text": "trailmix Hike model has elevation_gain_m (PositiveIntegerField, null/blank) added in migration hikes/migrations/0007_hike_elevation_gain_m.py (applied to local SQLite; 41 tests pass).",
+   "actions": [
+    "database",
+    "tests"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0010",
+   "kind": "episode",
+   "text": "OrgSwitcher in acme web (apps/web/components/nav/OrgSwitcher.tsx) now uses the shadcn Popover component (closes on outside click and Escape); PR #1484 (acme-431-org-switcher-close) approved, reviewer nit: add a test that Escape closes it (non-blocking).",
+   "actions": [
+    "frontend",
+    "tests",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0011",
+   "kind": "fact",
+   "text": "ClientSearch debounces its query 300ms via useDebouncedValue in apps/web/hooks/use-debounced-value.ts (placeholderData keeps previous results). Reuse this hook for other search boxes.",
+   "actions": [
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0012",
+   "kind": "fact",
+   "text": "Zod schema expenseCategoryBody (name trimmed 1-60, color #rrggbb hex, optional parentId uuid) is in apps/api/src/schemas/expenses.ts next to createExpenseBody.",
+   "actions": [
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0013",
+   "kind": "episode",
+   "text": "Production build of the release branch on Vercel fails: 'Missing or invalid publishable key for production. Development keys cannot be used in production builds' on /invoices prerender. The env var NEXT_PUBLIC_AUTH_PUBLISHABLE_KEY in Production scope was changed ~3 days before 2026-10-20; suspected a dev-instance key pasted into Production. Jordan was to verify in the auth provider dashboard. Unresolved as of 2026-10-20.",
+   "actions": [
+    "deploy",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0014",
+   "kind": "fact",
+   "text": "Hydration mismatch gotcha: InvoiceDueDate (apps/web/components/invoices/InvoiceDueDate.tsx) used toLocaleString('en-US') in render, so server (UTC) and browser (Jordan is in Toronto, America/Toronto timezone) differ. Jordan had not decided between user-local time and a fixed timezone.",
+   "actions": [
+    "frontend",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0015",
+   "kind": "fact",
+   "text": "GET /v1/clients excludes archived clients unless ?includeArchived=true. The flag is parsed as the literal enum 'true'/'false' (not z.coerce.boolean(), which would turn \"false\" into true). Sort is case-insensitive via lower(name), id tie-break.",
+   "actions": [
+    "api",
+    "database"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0016",
+   "kind": "plan",
+   "text": "Known bug: GET /v1/clients cursor pagination uses `id > cursor` while ordering by lower(name), id, so pages can skip or repeat rows. Proposed fix: (lower(name), id) keyset cursor, left as a follow-up pending Jordan's go-ahead.",
+   "actions": [
+    "api",
+    "database",
+    "debugging"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0017",
+   "kind": "preference",
+   "text": "Jordan's branch naming for acme-platform: acme-<ticket number>-<slug> (e.g. acme-447-render-fallback, acme-431-org-switcher-close, acme-452-clients-page-size); PRs are tracked by those tickets.",
+   "actions": [
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0018",
+   "kind": "episode",
+   "text": "apps/web/app/error.tsx is the root error boundary fallback ('Something went wrong', digest reference, Try again calls reset()); it hides error messages so internal details don't leak. Committed 9b3e1d7 on acme-447-render-fallback, not pushed as of 2026-10-21.",
+   "actions": [
+    "frontend",
+    "git",
+    "observability"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0019",
+   "kind": "fact",
+   "text": "Invoice list filters (status, clientId, from, to) now live in URL search params via useSearchParams and router.replace in InvoiceFilters.tsx, so Back restores them (parseInvoiceFilters in lib/types/invoice.ts); merged in main as 7d20c4e 'url-backed invoice filters'.",
+   "actions": [
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0020",
+   "kind": "fact",
+   "text": "slugify(input, maxLength=64) is in apps/web/lib/slugify.ts: NFKD accent stripping plus a lookup table for letters without decomposition (ß, ø, æ, œ, đ, ł, þ); collapses dashes and trims trailing dash after truncation.",
+   "actions": [
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0021",
+   "kind": "fact",
+   "text": "Preference: Jordan wants the Django admin trailmix distance shown as '<n.n> km' via an @admin.display method `distance` with ordering='distance_km' in hikes/admin.py.",
+   "actions": [
+    "frontend",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0022",
+   "kind": "episode",
+   "text": "On 2026-10-21 a customer reported the 'Continue with Google' sign-in button vanished since 2026-10-20. No code change explains it (only Lena Fischer's a81f2c3 login layout tweak). Suspects: Google social connection disabled for the production instance in the auth provider dashboard, or Google OAuth client secret expired/rotated. Jordan was checking the dashboard; the auth provider's identity was not stated.",
+   "actions": [
+    "debugging",
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0023",
+   "kind": "person",
+   "text": "Lena Fischer is a teammate on acme-platform who works on the web login/layout (commit a81f2c3 'tighten sign-in card layout on small screens', 2026-10-19).",
+   "actions": [
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0024",
+   "kind": "fact",
+   "text": "The getting-started page (apps/web/app/(dashboard)/getting-started/page.tsx) embeds the onboarding video via OnboardingVideo component using youtube-nocookie.com, video id aB3xK9qLm2Q, aspect-video 16:9.",
+   "actions": [
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0025",
+   "kind": "fact",
+   "text": "getPrimaryCurrency(invoice, orgCurrency) in apps/web/lib/invoice-currency.ts returns the first line item's currency, else the org currency. Supported CurrencyCode: USD, CAD, EUR, GBP, AUD.",
+   "actions": [
+    "frontend",
+    "finance"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0026",
+   "kind": "episode",
+   "text": "Added public /pricing page (plans from apps/web/content/plans.ts: Starter $19, Growth $49, Agency $129 per month) and /settings/team page listing org members via getOrgMembers; both placed directly under apps/web/app and the layout/route group was not confirmed with Jordan; team page relies on upstream signed-in check, no own redirect.",
+   "actions": [
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0027",
+   "kind": "plan",
+   "text": "Pending: Jordan wanted a real-browser e2e test of create-invoice-and-send against the local dev server; assistant asked which browser test runner/folder to use and whether to sign in via UI or a saved session; Jordan said they'd find out. Selectors: Client label, 'Line N description/quantity/unit price' aria-labels, buttons 'Save draft' and 'Send invoice' (only shown for drafts).",
+   "actions": [
+    "tests",
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0028",
+   "kind": "rule",
+   "text": "Deliberate decision: the misspelling 'recieved' in apps/api/src/routes/v1/payments.ts is an API response value (status: 'recieved') and is intentionally left as-is by Jordan (clients may match it; payments.test.ts expects it); only worker comment/log typos were fixed. Possible later API cleanup.",
+   "actions": [
+    "api",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0029",
+   "kind": "fact",
+   "text": "ClientPicker prop is now onClientSelect (renamed from onSelect, which shadows the DOM event); call sites NewInvoiceForm, InvoiceFilters, ExpenseFilters. ClientsTable PAGE_SIZES is [10,20,50,100]; API clients limit caps at 100.",
+   "actions": [
+    "frontend",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0030",
+   "kind": "fact",
+   "text": "toCsv in apps/web/lib/csv.ts already writes the header row and escapes cells; don't prepend your own header (ExportCsvButton had duplicated it, fixed).",
+   "actions": [
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0031",
+   "kind": "fact",
+   "text": "scripts/count-todos.ts counts TODO/FIXME per package (run `pnpm tsx scripts/count-todos.ts`). As of 2026-10-23: web 30, api 24, worker 10, cli 4; 9 of 54 markers reference a Linear id.",
+   "actions": [
+    "build-ci",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0032",
+   "kind": "fact",
+   "text": "acme CLI (`acme invoices list`, packages/cli): client column truncated to 24 chars with an ellipsis (truncate() exported from render.ts; reviewer suggests moving it to src/lib/text.ts if reused); --json returns the full name.",
+   "actions": [
+    "api",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b10:m0033",
+   "kind": "plan",
+   "text": "Unfinished: `acme invoices list --since <YYYY-MM-DD>` (issue date filter, validated by parseSince, UsageError exit code 2, passed as issuedFrom). Still to do: register the flag in packages/cli/src/index.ts, add issuedFrom to api/client.ts invoices.list types, confirm the API supports an issued-from filter, add tests for parseSince. The CLI README already documents --since, so it is ahead of the code.",
+   "actions": [
+    "api",
+    "tests",
+    "docs"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/code/cards/code-sleep-b10.json"
+}

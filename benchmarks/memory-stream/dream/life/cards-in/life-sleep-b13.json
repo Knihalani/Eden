@@ -1,0 +1,254 @@
+{
+ "batch": "life-sleep-b13",
+ "rows": [
+  {
+   "id": "life-sleep-b13:m0001",
+   "kind": "fact",
+   "text": "Riya's kitchen renovation by Northline Renovations (contact Nate) is now expected to finish around 2026-11-20, a seven-week delay from 2026-08-28, because Barzotti's custom cabinets are late; plumbing rough-in, panel and drywall are on track.",
+   "actions": [
+    "home",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0002",
+   "kind": "plan",
+   "text": "Riya, Sam and Leo drive to Ottawa Fri 2026-11-13 to Sun 2026-11-15 to stay with Grace and Daniel Okafor for Grace's birthday weekend (on family calendar).",
+   "actions": [
+    "travel",
+    "schedule",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0003",
+   "kind": "plan",
+   "text": "Work conflict: 'Instant Payouts GA retro' (organizer Aisha Rahman) is Fri 2026-11-13 13:00-13:25, which overlaps the Ottawa trip; calendar agent suggested asking Aisha to move it to Thu 2026-11-12. Riya said 'later' on this, unresolved.",
+   "actions": [
+    "schedule",
+    "work-task"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0004",
+   "kind": "fact",
+   "text": "Open payouts tickets for Riya as of 2026-08-26: PAY-1182 GA readiness checklist (P1; still needs Legal and Support sign-off owners, Eng owner is Aisha) and PAY-1190 GA announcement email copy (P2; header done by Diego, copy is Riya's call) both block the GA milestone; PAY-1216 support macro 'my payout is late' needs Riya's tone review (Support wants it before GA, not a formal blocker); PAY-1203 and PAY-1211 not blocking.",
+   "actions": [
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0005",
+   "kind": "person",
+   "text": "Grace Okafor (a piano teacher, lives in Ottawa with Daniel) turns 68 on Thu 2026-11-19; birthday is on the Family calendar yearly. Riya asked for a gift reminder 2 weeks ahead (set for 2026-11-05 09:00). Gift ideas found: NAC Orchestra 'Chopin and Brahms' matinee Sun 2026-11-15 14:00 ($58 each, during the Ottawa weekend), engraved leather music folio ($64.99, Long & McQuade), Henle urtext Schubert Impromptus ($39.95, Indigo).",
+   "actions": [
+    "family",
+    "purchase",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0006",
+   "kind": "plan",
+   "text": "Riya has a 25-minute call 'GA target wording for Sales' with Olivia Grant and Aisha Rahman on Wed 2026-09-09 15:30-15:55 (Toronto time). Agenda: Wavecrest certification status, what Sales can and can't say about the GA target, next checkpoint.",
+   "actions": [
+    "schedule",
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0007",
+   "kind": "plan",
+   "text": "Lisbon flights: TAP TP260 Toronto Pearson (YYZ) Sun 2026-12-20 22:10 to Lisbon 2026-12-21 10:25; return TP259 Lisbon 2027-01-02 12:15 to YYZ 15:40; booking ref 4XK9TR; Riya, Sam, Leo; Economy Classic, 1 checked bag each. Moved to the 20th because Leo's last school day is Fri 2026-12-18 and Sam has exams to mark that week.",
+   "actions": [
+    "travel",
+    "booking",
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0008",
+   "kind": "plan",
+   "text": "Leo's Canadian passport expires 2027-03-04, too close to the Lisbon trip; the renewal must be submitted at Service Canada by 2026-11-06 at the latest (about 20 business days processing). Needs: current passport, 2 photos, guarantor form, Sam's signature.",
+   "actions": [
+    "travel",
+    "family",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0009",
+   "kind": "fact",
+   "text": "Leo started grade 2 in Ms. Alvarez's class at Morse Street Public School on 2026-09-02.",
+   "actions": [
+    "family"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0010",
+   "kind": "routine",
+   "text": "Leo school routine: Sam drops him off at 8:35 am on his way to work; Riya does pickup at 3:30 pm on Mondays, Wednesdays and Fridays; Tuesdays and Thursdays Leo goes to the after-school program until 5:45 pm.",
+   "actions": [
+    "family",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0011",
+   "kind": "episode",
+   "text": "2026-08-26 Wavecrest Bank outage delayed 1,140 Instant Payouts beta payouts for about three hours (no funds lost); postmortem fix was a status banner in the merchant dashboard. Recorded in the 'Q3 review deck' (slide 7 'Beta reliability'), which still needs the Q3 payout success rate from the Payouts Health dashboard.",
+   "actions": [
+    "work-task",
+    "docs",
+    "observability"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0012",
+   "kind": "fact",
+   "text": "Riya paid an extra $180 for seats together on the Lisbon flights: Leo gets the window seat and sits between Riya and Sam. Noted in 'Riya - Lisbon'.",
+   "actions": [
+    "travel",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0013",
+   "kind": "routine",
+   "text": "Leo's piano lessons with Mrs. Greene moved from Mondays to Fridays 16:15-16:45 starting 2026-09-11 (15 lessons through 2026-12-18) because Mondays clash with Riya's weekly 'Roadmap review - Riya' at Lumen Pay. Sam knows.",
+   "actions": [
+    "family",
+    "schedule",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0014",
+   "kind": "plan",
+   "text": "Leo's piano lesson on Fri 2026-11-13 clashes with the Ottawa trip; Mrs. Greene needs one week's notice, so remind Riya on 2026-11-06 to cancel it.",
+   "actions": [
+    "family",
+    "reminder",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0015",
+   "kind": "plan",
+   "text": "Morse Street PS picture day for Leo is Thu 2026-09-24; online orders close 2026-09-22 (forms in Edsby).",
+   "actions": [
+    "family",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0016",
+   "kind": "routine",
+   "text": "Street cleaning on Riya's side of the street (north side) is the 2nd Wednesday of each month, 07:00-11:00, April to November (next 2026-10-14; Nov likely 2026-11-11); south side is 2nd Thursday. Parking ticket $50. Riya asked to be reminded to move the car; a recurring night-before reminder was offered, not confirmed.",
+   "actions": [
+    "reminder",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0017",
+   "kind": "plan",
+   "text": "Northline Renovations invoice NR-2214 (progress draw #3) is due 2026-09-18 and needs Riya's review and payment.",
+   "actions": [
+    "finance",
+    "home",
+    "reminder"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0018",
+   "kind": "person",
+   "text": "Riya works at Lumen Pay as a product manager on merchant payouts and onboarding (Instant Payouts); colleagues include Aisha Rahman (eng), Olivia Grant (Sales), Wen Li, Diego (design), Kofi Asante (Support).",
+   "actions": [
+    "work-task",
+    "message"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0019",
+   "kind": "routine",
+   "text": "Leo's swim: Learn to Swim Level 4 with instructor Kayla, Wednesdays 17:00-17:45 at Pam McConnell Aquatic Centre (640 Dundas St E), 10 sessions 2026-09-16 to 2026-11-18, $118.40 paid. Sam usually takes him. Receipt/barcode saved in Drive > Family > Leo > Swim.",
+   "actions": [
+    "family",
+    "schedule",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0020",
+   "kind": "plan",
+   "text": "Riya is listed as a (TBC) speaker at Toronto Fintech Meetup 'Moving Money for Small Business', Thu 2026-10-01 18:30 at MaRS Discovery District (organizer Farah Siddiqui). Needs a bio under 50 words, 400x400 headshot (ready: Drive > Work > Speaking > headshot-400.jpg) and talk title by 2026-09-18.",
+   "actions": [
+    "work-task",
+    "message",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0021",
+   "kind": "plan",
+   "text": "Morse Street PS Terry Fox Run is Fri 2026-09-25 at 10:00; students can wear red; parent volunteers for water stations sign up in Edsby.",
+   "actions": [
+    "family",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0022",
+   "kind": "plan",
+   "text": "Riya is organizing Priya Nair's 37th birthday dinner Sat 2026-11-07 at Alo (Toronto), table for eight under Riya Malhotra. Alo tasting menu only, $225 per person before tax/tip, $50 per person refundable deposit (to 7 days before), dietary needs need 72 hours' notice. Parties of 7+ use the group dining enquiry form, which accepts dates up to 60 days out (not yet submitted; needs dietary notes). Regular Tock tables release 30 days ahead at 10:00, so 2026-10-08 10:00; reminder set 2026-10-08 09:55.",
+   "actions": [
+    "booking",
+    "food",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0023",
+   "kind": "plan",
+   "text": "Lisbon New Year's Eve 2026 plan: watch the fireworks at Praça do Comércio only a short while, then go back to the hotel because Leo gets overtired. No early kids' fireworks; midnight fireworks over the Tagus; options: Ribeira das Naus steps (quieter) and early family dinner at Time Out Market. Late-December Lisbon averages 15C highs, 8C lows, ~10 rainy days: pack layers, light waterproof jacket, grippy shoes, compact umbrella.",
+   "actions": [
+    "travel",
+    "family",
+    "schedule"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0024",
+   "kind": "fact",
+   "text": "Riya had a dental cleaning with Dr. Lin (Danforth Smiles) on 2026-09-09; next cleaning due March 2027. Online booking only shows 90 days ahead, so March slots open around 2026-12-01 (reminder set); hygienist days Tue and Thu mornings. Receipt ($182, sent to Sun Life) wrongly lists patient as 'Rhea Malhotra'; correction not yet requested.",
+   "actions": [
+    "health",
+    "booking",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0025",
+   "kind": "plan",
+   "text": "Lisbon stay: Memmo Príncipe Real, Family Suite (king bed + kids' room), check-in 2026-12-21 from 15:00 (early check-in requested), check-out 2027-01-02 by 12:00, confirmation MPR-48213; flexible rate, free cancellation until 48 hours before arrival; pay at hotel; elevator access, 6-minute walk from Rato metro. The Alfama Airbnb was cancelled (too many stairs, no elevator with luggage and Leo) with full refund of $2,318.44 to Visa ending 4412.",
+   "actions": [
+    "travel",
+    "booking",
+    "finance"
+   ]
+  },
+  {
+   "id": "life-sleep-b13:m0026",
+   "kind": "plan",
+   "text": "Leslieville Residents' Association: City street tree survey (for a boulevard tree or a free spring 2027 tree) due by 2026-10-15; Tree Planting Day Sat 2026-10-03 9:00-13:00 at Jonathan Ashbridge Park (optional, kids welcome); City pruning on Curzon, Leslie, Logan and Carlaw 2026-10-19 to 2026-10-30 with no-parking signs 24h ahead. Riya was offered a survey reminder, not confirmed.",
+   "actions": [
+    "home",
+    "reminder"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/life/cards/life-sleep-b13.json"
+}

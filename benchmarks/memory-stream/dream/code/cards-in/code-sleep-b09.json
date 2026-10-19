@@ -1,0 +1,216 @@
+{
+ "batch": "code-sleep-b09",
+ "rows": [
+  {
+   "id": "code-sleep-b09:m0001",
+   "kind": "rule",
+   "text": "In acme-platform web app, every browser call to the API must go through the shared wrapper apps/web/lib/api.ts (api() and apiBlob()), which sets credentials: include so the session cookie is sent; raw fetch calls omit the cookie and 401 in staging (reported by Lena).",
+   "actions": [
+    "frontend",
+    "api",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0002",
+   "kind": "fact",
+   "text": "API routes in acme-platform are versioned under /v1 (e.g. /v1/invoices/:id/void, /v1/invoices/export, /v1/invoices/:id/resend); paths without /v1 are wrong.",
+   "actions": [
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0003",
+   "kind": "fact",
+   "text": "The acme CLI (@acme/cli, packages/cli) checks for updates once a day via update-notifier and prints a one-line notice to stderr after the command; it skips the check in CI and NO_UPDATE_NOTIFIER=1 silences it. Latest published version was 2.7.1 on 2026-10-09 (next tag 2.8.0-rc.0).",
+   "actions": [
+    "release",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0004",
+   "kind": "procedure",
+   "text": "Metrics and logs go to Grafana Cloud (stack: acme) via the Grafana Agent in each cluster. Dashboards are JSON files in infra/grafana/dashboards; never edit them in the Grafana UI because the sync overwrites UI edits. Preview with `pnpm tsx infra/grafana/sync.ts --dry-run`; CI pushes on main. Alert rules live in infra/grafana/alerts.",
+   "actions": [
+    "observability",
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0005",
+   "kind": "episode",
+   "text": "A 'billing-sync queue depth' panel (bullmq waiting + active for queue billing-sync) was added to infra/grafana/dashboards/queues.json; the dry-run sync was clean but nothing had been pushed yet.",
+   "actions": [
+    "observability",
+    "jobs",
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0006",
+   "kind": "fact",
+   "text": "Decision: the clients table in acme web sorts newest first by default (created_at desc), set in both hooks/use-clients.ts and the clients-table SortHeader default.",
+   "actions": [
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0007",
+   "kind": "episode",
+   "text": "Open investigation: some customers are randomly bounced with Unauthorized from the API and it works on refresh. Sentry (7 days): 1,284 events, 61 users, 9 orgs, all three api pods, 87% within 2s of a browser getting a new session, retry always succeeds, flat across the last 3 deploys. Root cause not identified; no prior fix found in git history; the user said they would dig up the old ticket.",
+   "actions": [
+    "debugging",
+    "observability",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0008",
+   "kind": "fact",
+   "text": "In the acme web app, pages that only call redirect() (such as settings/page.tsx redirecting /settings to /settings/profile) are not unit-tested.",
+   "actions": [
+    "tests",
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0009",
+   "kind": "fact",
+   "text": "Trailmix is a separate Django + htmx project at /Users/jordan/code/trailmix (hikes app). Pattern used: views check the HX-Request header and return partials (hikes/_list.html on success, hikes/_form.html with 422 on validation errors); non-htmx posts still redirect.",
+   "actions": [
+    "frontend",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0010",
+   "kind": "fact",
+   "text": "The InvoiceRow component in acme web was renamed to InvoiceListItem (files apps/web/components/invoices/invoice-list-item.tsx and its test); no InvoiceRow references remain.",
+   "actions": [
+    "frontend",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0011",
+   "kind": "plan",
+   "text": "Sam asked for a monthly revenue rollup per org for the finance export. tools/sql/monthly_revenue.sql was written (paid, non-deleted invoices, last 12 months, running total per org, amounts in cents) in plain standard SQL because the database engine/version is unknown; it has not been run against real data.",
+   "actions": [
+    "finance",
+    "database",
+    "work-task"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0012",
+   "kind": "fact",
+   "text": "The agent machine has no kubectl contexts configured, so prod pods cannot be inspected from it; how on-call alerts are routed and who is on the rotation is unknown to the assistant.",
+   "actions": [
+    "observability",
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0013",
+   "kind": "episode",
+   "text": "Worker crashloop incident Sat 2026-10-17 08:52-09:41: caused by the new invoice-reminder repeatable job registered at startup (commit 4c1d9e2, in Friday's deployed tag); mitigated by disabling the invoice-reminder schedule via feature flag. Root cause suspected in the schedule registration; follow-up ticket filed, incident open for follow-up Monday.",
+   "actions": [
+    "observability",
+    "jobs",
+    "deploy"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0014",
+   "kind": "plan",
+   "text": "Plan: invoice preview has a 'Copy share link' button using apps/web/lib/share-link.ts, which signs invoiceId.expires with HMAC-SHA256 using env SHARE_LINK_SECRET (7-day expiry) and returns /share/invoices/:id?expires=&sig=. Still to do: add SHARE_LINK_SECRET to .env.example and build the server-side share page that verifies the signature.",
+   "actions": [
+    "frontend",
+    "deploy",
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0015",
+   "kind": "preference",
+   "text": "Loading skeletons in acme web should only appear if loading takes more than 200ms (to avoid a 50ms flash); use the Delayed component (apps/web/components/delayed.tsx, ms=200). The invoices list loading.tsx uses it.",
+   "actions": [
+    "frontend",
+    "code-style"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0016",
+   "kind": "plan",
+   "text": "Trailmix Hike model has a nullable PositiveIntegerField elevation_gain (meters); migration hikes/migrations/0007_hike_elevation_gain.py was generated but the user still has to run `python manage.py migrate`.",
+   "actions": [
+    "database"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0017",
+   "kind": "plan",
+   "text": "Pending task: add a global guard on the acme API org-scoped routes (clients, invoices, orgs, uploads; not health or webhooks) requiring an x-org-id header that matches an org the session belongs to, rejecting otherwise with 403 problem+json. The assistant is waiting for the user to say which HTTP framework and major version the API runs on. The web side already sends the header from apps/web/lib/org-context.ts.",
+   "actions": [
+    "api"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0018",
+   "kind": "preference",
+   "text": "Product copy preference from reviewer: the resend invoice toast should say 'Invoice resent' rather than 'Invoice sent again'.",
+   "actions": [
+    "frontend",
+    "message"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0019",
+   "kind": "preference",
+   "text": "For 2026-10-18 only, the user asked for much shorter replies.",
+   "actions": [
+    "docs",
+    "work-task"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0020",
+   "kind": "fact",
+   "text": "Decision: .github/workflows/ci.yml has a pdf-perf job (pnpm --filter @acme/pdf perf, about 25 min, 40 min timeout, uploads perf-results.json) running after check on every push and PR because the user wants perf numbers on every change. Caveat: workflow concurrency cancel-in-progress means a new push kills an in-flight run, so busy branches may rarely get numbers.",
+   "actions": [
+    "build-ci",
+    "git"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0021",
+   "kind": "fact",
+   "text": "InvoiceStatus in packages/api-client/src/types.ts now includes \"void\" (draft | open | paid | uncollectible | void) so the web status badge typechecks.",
+   "actions": [
+    "api",
+    "frontend"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0022",
+   "kind": "fact",
+   "text": "Dependency audit findings (path-to-regexp via storybook, cookie via msw, cross-spawn 7.0.3 via lefthook) are dev-tooling only and not urgent. Monday's Renovate batch fixes path-to-regexp and cookie; cross-spawn is not covered because lefthook pins execa 5.x and needs a pnpm.overrides entry (cross-spawn >=7.0.5).",
+   "actions": [
+    "dependency",
+    "build-ci"
+   ]
+  },
+  {
+   "id": "code-sleep-b09:m0023",
+   "kind": "episode",
+   "text": "Unknown for acme's worker: how in-flight jobs are handled when k8s kills a worker pod mid-deploy (graceful shutdown handling and termination grace period in the Helm chart were not checked).",
+   "actions": [
+    "jobs",
+    "deploy",
+    "debugging"
+   ]
+  }
+ ],
+ "output": "benchmarks/memory-stream/dream/code/cards/code-sleep-b09.json"
+}
