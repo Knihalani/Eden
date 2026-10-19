@@ -31,8 +31,9 @@ slice spec. If R10-5 is approved, a slice turns this into one under the normal l
 - **Latency budget:** the call must finish before the turn's first tool call, or that turn gets nothing.
   - Nothing ever waits for the call; the turn goes on without it (fail-open).
   - **Measured in real headless Claude Code sessions (C8-E4, n = 12, 10 with a tool call):** the first tool call
-    comes about 3 s after Submit at the median (2.92 s by index, 2.77 s conventional; p90 14.13 s). Even delivering at any later tool call of the turn, a checker
-    that takes 10 s reaches 3 of 12 turns, and one that takes 40 s reaches none. **The check needs to answer in about
+    comes about 3 s after Submit at the median (2.92 s by index, 2.77 s conventional; p90 14.13 s). Even
+    delivering at any later tool call of the turn, a checker that takes 10 s reaches 3 of 12 turns, and one that
+    takes 40 s reaches none. **The check needs to answer in about
     3 seconds.**
 - **The measured checker is about twice too slow as run here** (C8-E6, 20 calls through the CLI): p50 5.6 s,
   p90 8.4 s, mostly ~600 tokens of thinking the CLI keeps on. Turning thinking off and asking only for the kept rows
