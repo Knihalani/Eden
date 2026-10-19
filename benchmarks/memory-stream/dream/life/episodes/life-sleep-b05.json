@@ -1,0 +1,352 @@
+{
+ "batch": "life-sleep-b05",
+ "sessions": [
+  {
+   "id": "life-s050",
+   "episodes": [
+    {
+     "text": "2026-02-06 Olivia Grant asked when Instant Payouts opens beyond the beta for Harbourfront Hospitality (11 locations, ~$40M annual card volume; CFO call Monday 2026-02-09 10:00). Rollout plan (Notion): Phase 1 closed beta 40 merchants live since 2026-01-19; Phase 2 expanded beta ~400 merchants planned week of 2026-03-16 (blockers LIN-2291 ledger reconciliation latency, LIN-2304 fraud rules v2 tuning); hospitality is on the Phase 2 invite list; GA TBD. Assistant drafted reply d-7731 to Olivia (not sent) giving the week of March 16.",
+     "entities": [
+      "Olivia Grant",
+      "Riya Malhotra",
+      "Harbourfront Hospitality",
+      "Instant Payouts"
+     ]
+    },
+    {
+     "text": "2026-02-06 Toronto Public Library (card ending 4417): The Hunter by Tana French ready at Pape/Danforth until 2026-02-13; Dog Man: Big Jim Begins in transit; The Women ebook #212 of 480; two loans due 2026-02-09, renewal started.",
+     "entities": [
+      "Toronto Public Library",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-02-06 Riya accepted Hannah Cho's invitation to pancakes Sun 2026-02-08 09:00-11:00; assistant added 'Pancakes at Hannah's' (evt_5f02c9) to Family calendar with Sam Okafor and Leo and texted Hannah offering fruit or coffee. Triage: Northline Renovations sent revised tile quote $3,140 for backsplash + floor.",
+     "entities": [
+      "Hannah Cho",
+      "Sam Okafor",
+      "Leo",
+      "Northline Renovations"
+     ]
+    },
+    {
+     "text": "2026-02-06 March break trip idea: Riya and Leo to Drumheller (Royal Tyrrell Museum), 3 nights Mar 16-19, Sam stays home marking. Tyrrell: adult $21, youth 7-17 $10, 6 and under free, family $48. Hotels: Canalta Jurassic $142/night (pool, waterslide, breakfast), Ramada $129, Heartwood Inn $189 (adults-oriented). Calgary airport ~90 min away. Open: Riya parked it to talk with Sam; need Leo's age and hotel choice.",
+     "entities": [
+      "Riya Malhotra",
+      "Leo",
+      "Drumheller",
+      "Royal Tyrrell Museum",
+      "Canalta Jurassic",
+      "Sam Okafor"
+     ]
+    },
+    {
+     "text": "2026-02-06 Leslieville Community Garden (coordinator Marguerite) seeks spring volunteers Sat Apr 4, Apr 11, Apr 18 9:00-12:00. Riya chose Sat 2026-04-11 (compost + path mulch); assistant drafted d-7734 (not sent).",
+     "entities": [
+      "Leslieville Community Garden",
+      "Marguerite",
+      "Riya Malhotra"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s051",
+   "episodes": [
+    {
+     "text": "2026-02-07 Calendar for week of 2026-02-09: Mon standup 09:45, fee disclosure review with Diego 13:00, Leo piano (Mrs. Greene) 16:30; Tue 2026-02-10 YMCA 06:15, Settlely vendor intro 15:00; Wed 1:1 Tom 11:30; Thu 2026-02-12 Q1 roadmap check-in moved by Tom Becker to 10:00, Spanish with Carlos 19:30; Fri 2026-02-13 Settlely demo 11:00 (assistant declined Settlely's Thu 10:15 extra slot), pizza and movie night; Sat 2026-02-14 run with Marcus 07:00, Leo swim 10:00; Sun open.",
+     "entities": [
+      "Riya Malhotra",
+      "Tom Becker",
+      "Diego",
+      "Settlely",
+      "Leo",
+      "Marcus"
+     ]
+    },
+    {
+     "text": "2026-02-07 Morse Street PS notice: pizza lunch orders for Fri 2026-02-20 close Tue 2026-02-10 23:59; Grade 2 Ontario Science Centre pop-up trip Mar 4 form and $12 due 2026-02-27; no school Mon 2026-02-16 (Family Day).",
+     "entities": [
+      "Morse Street PS",
+      "Leo"
+     ]
+    },
+    {
+     "text": "2026-02-07 Snow removal: Eastend Plow & Property (Rui, +1 416-555-0148; seasonal contract 2025-26, $640 paid 2025-11-03, 5 cm trigger) skipped Riya's driveway after 7 cm on Thu 2026-02-05 and 9 cm overnight 2026-02-07. Assistant sent polite complaint text to Rui. Finance peer: contract clause 6 allows pro-rated refund request if service stays patchy; household spend $2,412 of $4,100 February envelope.",
+     "entities": [
+      "Eastend Plow & Property",
+      "Rui",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-02-07 Riya wants a grown-ups' dinner for 4 with the Chos (Hannah Cho and partner) Sat 2026-02-14, walkable in Leslieville/Riverside. Options with tables for 4: Lucia on Queen (tapas) 17:30/19:00/19:15/21:00; Gaslight Room 18:00/18:15/20:45; Osteria Carlaw $85 pp prix fixe 17:15 or 21:30; Brickworks Bistro full. Open: time choice and reservation. Also gave jammy egg timing (6.5 min) for Leo's ramen eggs.",
+     "entities": [
+      "Riya Malhotra",
+      "Hannah Cho",
+      "Lucia on Queen",
+      "Gaslight Room",
+      "Osteria Carlaw"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s052",
+   "episodes": [
+    {
+     "text": "2026-02-12 Settlely (reconciliation vendor) demo Fri 2026-02-13 11:00-11:30, organizer Jordan Kim, Zoom https://zoom.example/j/84120937715?pwd=sTl3x, attendees Riya Malhotra, Aisha Rahman, Wen Li; pricing deck to follow. Assistant to file pricing notes into Vendors folder in Drive.",
+     "entities": [
+      "Settlely",
+      "Jordan Kim",
+      "Riya Malhotra",
+      "Aisha Rahman",
+      "Wen Li"
+     ]
+    },
+    {
+     "text": "2026-02-12 Riya's 'Gift ideas' note for Sam: vintage orange Penguin paperbacks (pre-1970), Fellow Ode coffee grinder, lab-style apron; Leo: Lego Jurassic World Pyroraptor, reading headlamp. Grace asked what to get Sam; assistant checking Ode price.",
+     "entities": [
+      "Sam Okafor",
+      "Grace Okafor",
+      "Leo",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-02-12 Spanish warm-up quiz (10 questions) given before class with Carlos tonight; answers pending. Running shoes: assistant recommended Brooks Ghost 17 ($189.99, 283 g, stable) over Asics Novablast 5 ($194.99) for long runs with Marcus. New rule from Riya: ask before any purchase over $150 CAD; household staple reorders under that go through (dishwasher pods reordered). So the Ghost needs her yes.",
+     "entities": [
+      "Riya Malhotra",
+      "Carlos",
+      "Marcus",
+      "Brooks Ghost 17",
+      "Asics Novablast 5"
+     ]
+    },
+    {
+     "text": "2026-02-12 Haiku series: Mondays haiku (2026-02-11, original) got pinned in #payouts-launch; Thursday haiku 'Thursday, almost there, / the roadmap still says Friday, / coffee says, not yet.' Both saved to Riya's 'Fun stuff' note. Slack digest: LIN-2291 p95 11 s on staging; Tom wants Q1 roadmap one-pagers by Wed 2026-02-18; Linear LIN-2318 fee copy review and LIN-2320 beta merchant survey questions assigned to Riya.",
+     "entities": [
+      "Riya Malhotra",
+      "Aisha Rahman",
+      "Tom Becker"
+     ]
+    },
+    {
+     "text": "2026-02-12 Hannah Cho's car was towed off Carlaw; assistant texted Hannah: call Toronto Police towed vehicle line 416-808-2222, likely Commissioners St lot open 24/7, bring ID, ownership, insurance; tow up to $250, storage $55/day after 24 hours.",
+     "entities": [
+      "Hannah Cho",
+      "Riya Malhotra"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s053",
+   "episodes": [
+    {
+     "text": "2026-02-21 Olivia Grant promoted to Head of Sales at Lumen Pay as of February 2026; she now runs the quarterly business review (QBR) with product, so Riya Malhotra will work with her more.",
+     "entities": [
+      "Olivia Grant",
+      "Riya Malhotra",
+      "Lumen Pay"
+     ]
+    },
+    {
+     "text": "2026-02-21 Riya's Spanish homework note (2026-02-19): haber present subjunctive haya, hayas, haya, hayamos, hay\u00e1is, hayan; Carlos assigned 6 sentences with 'Espero que haya...' / 'No creo que hayan...'. Open: Riya to write them for correction.",
+     "entities": [
+      "Riya Malhotra",
+      "Carlos"
+     ]
+    },
+    {
+     "text": "2026-02-21 Ira, daughter of Kabir Malhotra and Mei, was born 2026-02-14 in Vancouver; Riya Malhotra is her godmother. Assistant offered a gift, first-birthday reminder or an 'Ira' note.",
+     "entities": [
+      "Ira",
+      "Kabir Malhotra",
+      "Mei",
+      "Riya Malhotra"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s054",
+   "episodes": [
+    {
+     "text": "2026-02-22 Paddington in Peru for Leo by Friday: on Crave (Movies + HBO add-on) or rent $5.99 on Apple TV/Google Play/Prime; TPL DVD 14 copies, 31 holds; Riverdale branch had a DVD on shelf until 17:00. The Hunter (Tana French) due back at Pape/Danforth today 2026-02-22, no renewals (9 holds); Dog Man due 2026-03-08.",
+     "entities": [
+      "Leo",
+      "Toronto Public Library",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-02-22 Riya has a sinus infection; Dr. Patel's office is calling in an antibiotic and asked about drug allergies. No allergy info found in email or notes (only Shoppers prescription Rx #4410273 notice Nov 2025 and Danforth Family Health Team confirmation). Assistant requested her medication profile from Shoppers Drug Mart (Queen & Carlaw). Riya asked for short replies today.",
+     "entities": [
+      "Riya Malhotra",
+      "Dr. Patel",
+      "Shoppers Drug Mart"
+     ]
+    },
+    {
+     "text": "2026-02-22 Riya bought a knitted blanket as newborn gift for Ira; recorded in new 'Ira' note so nobody double-buys.",
+     "entities": [
+      "Riya Malhotra",
+      "Ira"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s055",
+   "episodes": [
+    {
+     "text": "2026-02-24 Kitchen reno: custom white-oak cabinets ordered from Barzotti through Nate (Northline Renovations); $9,800 deposit paid 2026-02-20, recorded in 'kitchen reno' note. Barzotti production slot week of 2026-04-13. Existing note: tile quote rev 2 $3,140; open items appliance package, pendant lights, wall paint colour.",
+     "entities": [
+      "Barzotti",
+      "Nate",
+      "Northline Renovations",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-02-24 Household decisions: Riya orders groceries via PC Express for Saturday morning pickup and buys no-name staples; Riya and Sam decided Leo stays at Morse Street Public School rather than French immersion at Duke of Connaught (close friends, five-minute walk). Assistant started a PC Express list.",
+     "entities": [
+      "Riya Malhotra",
+      "Sam Okafor",
+      "Leo",
+      "Morse Street Public School",
+      "PC Express"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s056",
+   "episodes": [
+    {
+     "text": "2026-02-27 Riya wants gift and celebration ideas for Sam's birthday and to plan ahead for their anniversary; assistant suggested chemistry-themed gifts (Sam is a high school chemistry teacher) or experiences, and asked for exact dates to set reminders three weeks out. Open: Riya to supply dates.",
+     "entities": [
+      "Sam Okafor",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-02-27 Priya Nair's Montreal contractor took a $6,000 deposit (e-transfer 2026-01-19) and went silent 5 weeks. Options: mise en demeure by registered mail, RBQ licence check and bond claim, Quebec small claims up to $15,000 (fee ~$112-$231). Priya forwarded quote and receipt, filed under Personal > Priya. Assistant checking whether RBQ bond covers residential deposits.",
+     "entities": [
+      "Priya Nair",
+      "Riya Malhotra",
+      "RBQ"
+     ]
+    },
+    {
+     "text": "2026-02-27 Friday digest: LIN-2318 fee copy review due today; LIN-2291 done (p95 8.7 s); Diego left 4 Figma comments on fee disclosure screen 3; weekly payouts status post due 16:00. Barzotti acknowledged the cabinet order.",
+     "entities": [
+      "Riya Malhotra",
+      "Diego",
+      "Aisha Rahman"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s057",
+   "episodes": [
+    {
+     "text": "2026-03-02 Olivia Grant wants the Instant Payouts GA date for a deck. Rollout doc: Phase 2 on track week of 2026-03-16, GA proposed September; LIN-2291 closed 2026-02-27, LIN-2304 in progress. Later Riya said GA is scheduled 2026-09-15, Aisha signed off 2026-03-02; saved in 'payouts' note. Draft d-7902 to Olivia has [DATE] placeholder and is on hold ('not yet on olivia').",
+     "entities": [
+      "Olivia Grant",
+      "Riya Malhotra",
+      "Aisha Rahman",
+      "Instant Payouts"
+     ]
+    },
+    {
+     "text": "2026-03-02 Tomorrow 2026-03-03: YMCA 06:15, focus block, fraud rules review 13:00 King St office, Leo early dismissal 15:15 (PA afternoon); Sam has staff meeting till 17:00 so Riya covers. Assistant texted Hannah Cho asking if Jun is off; later answer: Jun was off and came over. Posted to #payouts-launch asking for current Payouts API error code list (Notion page last edited 2025-09-30 lacks INSTANT_* codes).",
+     "entities": [
+      "Riya Malhotra",
+      "Hannah Cho",
+      "Jun",
+      "Leo",
+      "Sam"
+     ]
+    },
+    {
+     "text": "2026-03-02 Tom Becker created LIN-2351 'Instant Payouts GA readiness checklist' due 2026-03-20 assigned to Riya; Tom asked PMs for Q2 milestones in QBR prep doc by Thu 2026-03-05. Barzotti wants final cabinet hardware choice by 2026-03-09 (Nate cc'd). TD Visa statement $2,184.56 due 2026-03-23. Tom's 5-year work anniversary next week; Riya wanted his favourite whisky but notes had none.",
+     "entities": [
+      "Tom Becker",
+      "Riya Malhotra",
+      "Barzotti",
+      "Nate",
+      "TD Visa"
+     ]
+    },
+    {
+     "text": "2026-03-02 Diego apartment hunting in Roncesvalles: 1BR average $2,350, basements from ~$1,750, city average $2,410, Parkdale $2,180. Nate's schedule: kitchen renovation finishing by 2026-08-28, saved to reno note.",
+     "entities": [
+      "Diego",
+      "Nate",
+      "Riya Malhotra"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s058",
+   "episodes": [
+    {
+     "text": "2026-03-03 Riya considering visiting Kabir, Mei and newborn Ira in Vancouver over the August long weekend 2026 (maybe with Leo). YYZ-YVR Fri Jul 31 - Tue Aug 4: WestJet $642, Air Canada $689, Flair $398 (bags extra); fares rise 15-25% by May. Price watch started then cancelled; Riya will ask again in April.",
+     "entities": [
+      "Riya Malhotra",
+      "Kabir Malhotra",
+      "Mei",
+      "Ira",
+      "Leo",
+      "WestJet",
+      "Air Canada"
+     ]
+    },
+    {
+     "text": "2026-03-03 Tom Becker's calendar 2026-02-24 (for explaining slipped pricing review): free only 10:00-10:30 and 15:30-16:00; exec offsite 10:30-15:30. VIA Rail Toronto-Ottawa Fridays: 15:25-19:47 from $64, 17:00-21:24 from $79, 18:40-23:04 from $59, ~4h22m.",
+     "entities": [
+      "Tom Becker",
+      "VIA Rail",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-03-03 Conflict Thu 2026-03-05 10:00: 'QBR prep' (Olivia Grant) overlaps Q1 roadmap check-in. Assistant drafted d-7915 asking Olivia to move to 11:00 (not sent yet). Ellie Cho (Hannah's daughter) is allergic to dairy and comes over with Jun after school; safe snacks from pantry note: fruit, rice cakes with sunflower seed butter, hummus and carrots, oil popcorn; avoid cheese strings and Goldfish.",
+     "entities": [
+      "Olivia Grant",
+      "Ellie Cho",
+      "Hannah Cho",
+      "Jun",
+      "Riya Malhotra"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s059",
+   "episodes": [
+    {
+     "text": "2026-03-13 Hannah Cho keeps a spare key to Riya's house and lets Nate's crew in when nobody is home.",
+     "entities": [
+      "Hannah Cho",
+      "Nate",
+      "Riya Malhotra"
+     ]
+    },
+    {
+     "text": "2026-03-13 Instant Payouts PRD (Notion, PRD-v3 draft, last edited 2026-03-04): 4,812 words, 9 sections, 6 open questions, 11 unresolved comments, ~19 min read; Tom Becker asked if too long. Assistant started job to list the 11 comments. Riya recalled asking 2026-03-08 about Mumbai time to call her mother, who was already asleep.",
+     "entities": [
+      "Tom Becker",
+      "Riya Malhotra",
+      "Instant Payouts PRD",
+      "Anjali Malhotra"
+     ]
+    }
+   ]
+  }
+ ]
+}

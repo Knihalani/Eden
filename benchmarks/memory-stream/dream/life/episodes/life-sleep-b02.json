@@ -1,0 +1,367 @@
+{
+ "batch": "life-sleep-b02",
+ "sessions": [
+  {
+   "id": "life-s020",
+   "episodes": [
+    {
+     "text": "2025-10-19 Riya prepared the agenda for Mon 2025-10-20 onboarding funnel review (Notion 'Onboarding funnel Q4': goal lift signup to first payout from 41% to 48% by end of Q4; losses at KYC proof-of-address upload 22% (mobile), bank micro-deposit wait, payout schedule step; experiments E14 instant bank verification started 2025-10-06 and E15 step reorder started 2025-10-13). Looker weekly conversion: 40.8% (wk 2025-09-22), 41.3%, 43.9%, 44.6% (wk 10-13); E14 47.1% vs control 41.9% (2 weeks), E15 44.0% vs 43.7% not significant; ~6% duplicate Android kyc_submitted events since 2025-10-08 (ONB-212). 14 open onboarding Linear issues; ONB-201 (Riya, proof-of-address doc list) overdue since 2025-10-17.",
+     "entities": [
+      "Riya",
+      "Aisha Rahman",
+      "Diego Fernandez",
+      "Wen Li",
+      "Tom Becker",
+      "E14",
+      "E15",
+      "ONB-212",
+      "ONB-201"
+     ]
+    },
+    {
+     "text": "2025-10-19 Riya needs an outdoor back tap plumber near Leslieville (tap dripping, freeze coming): East End Plumbing Co. 4.8, Queen St E, openings Tue 2025-10-21 8:00-10:00 or Wed 10-22 13:00-15:00, $129 service call, frost-free hose bib from $285; Riverside Drain & Plumbing 4.7 Broadview, 24/7; Coxwell Plumbing & Heating 4.6. Riya said she will call Riverside tomorrow. Nothing booked.",
+     "entities": [
+      "Riya",
+      "East End Plumbing Co.",
+      "Riverside Drain & Plumbing",
+      "Coxwell Plumbing & Heating"
+     ]
+    },
+    {
+     "text": "2025-10-19 Spanish drill sheet made for Riya's next lesson on her recurring mistakes (ser vs estar, por vs para, subjunctive after cuando for future; saved as note 'Spanish: recurring mistakes'). Explained why leaves turn red vs yellow for Leo. Bill: Toronto Hydro $142.18 for 2025-09-12 to 10-11, due 2025-10-30, autopay from TD joint, usage up 9%. Summarized card issuing team's postmortem of 2025-10-14 (auth-service v4.18.0 synchronous fraud-score call; p99 180 ms to 2.9 s for 14:02-15:47 ET; ~31,000 declines, ~4,200 merchants, 612 tickets, ~$38k goodwill credits; action items due 2025-10-24 to 2025-11-07).",
+     "entities": [
+      "Riya",
+      "Leo",
+      "Toronto Hydro",
+      "Lumen Pay",
+      "J. Okonkwo"
+     ]
+    },
+    {
+     "text": "2025-10-19 Evening digest: Diego says payout schedule copy v2 is ready for review; Wen says ONB-212 fix may change E14 numbers; Aisha asked to keep the review to 45 minutes; ONB-227 'Merchant FAQ: instant verification' assigned to Riya, due 2025-10-24.",
+     "entities": [
+      "Diego Fernandez",
+      "Wen Li",
+      "Aisha Rahman",
+      "ONB-227",
+      "Riya"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s021",
+   "episodes": [
+    {
+     "text": "2025-10-20 Riya finished her first half marathon, Toronto Waterfront 21K, on 2025-10-19, chip time 2:04:37; trained every week with Marcus Bell. Saved in note 'Running log'.",
+     "entities": [
+      "Riya",
+      "Marcus Bell",
+      "Toronto Waterfront Half Marathon"
+     ]
+    },
+    {
+     "text": "2025-10-20 New weekly routines set: Fridays 15:00-15:30 reminder to draft the payouts status update (post by 16:00 in #payouts-launch, five bullets with red/amber/green per workstream; assistant to pre-draft from Linear), event evt_8c21 from 2025-10-24; Friday 18:00-21:00 is pizza and movie night (Leo picks the movie, Sam makes the dough), kept busy, evt_8c22.",
+     "entities": [
+      "Riya",
+      "Leo",
+      "Sam",
+      "#payouts-launch"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s022",
+   "episodes": [
+    {
+     "text": "2025-10-21 Costco: 5 trips in the last year totalling $1,141.20 (latest $312.44 on 2025-09-27); Executive membership $130/yr renews 2025-11-18 with $22.82 reward earned; Gold Star is $65/yr. Assistant recommended downgrading to Gold Star before 18 Nov; Riya has not decided.",
+     "entities": [
+      "Costco",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2025-10-21 Sam Okafor has parent-teacher interviews at Riverdale Collegiate until 8pm, room 214; Riya asked for coffee and snack delivery around 3:30. Option: Rooster Coffee House (Broadview) via DoorDash, scheduled delivery 15:15-15:45, snack suggestion tomato mozzarella sandwich. Open thread: assistant asked how Sam takes his coffee; order not placed. Sam's known preference: oat-milk flat white, never hazelnut.",
+     "entities": [
+      "Sam Okafor",
+      "Riverdale Collegiate Institute",
+      "Rooster Coffee House",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2025-10-21 Riya has a wet patch along the back wall of the garage; weather: Sat 2025-10-18 light rain 6 mm, 11C (52F), dry since. Assistant suggested checking where the downspout drains. Also added official running entry (Toronto Waterfront Half Marathon, 2025-10-19, 2:04:37) and a calendar reminder Sun 2025-12-28 10:00 to build the 2025 running recap (evt_9a03).",
+     "entities": [
+      "Riya",
+      "Toronto"
+     ]
+    },
+    {
+     "text": "2025-10-21 Advice given for friends: Priya Nair's client 90 days late on an $18k invoice (escalate in writing, mise en demeure; Quebec small claims limit $15k); Marcus Bell's sister moving to Calgary in January with husband and toddler (Bridgeland-Riverside, Killarney-Glengarry, Mount Pleasant, Tuscany). Diego asked for decision on payout schedule copy by Thu; Diego moved 'Onboarding copy review' to Wed 2025-10-22 13:00.",
+     "entities": [
+      "Priya Nair",
+      "Marcus Bell",
+      "Diego Fernandez",
+      "Calgary"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s023",
+   "episodes": [
+    {
+     "text": "2025-11-02 Currency: 15,000 INR is about CA$236.59 (1 CAD = 63.4 INR on 2025-11-01), budget CA$240-245 with fees; Riya wants to send a festival bonus to mother Anjali's helper Sunita. Kabir messaged that his baby Ira took her first steps (4 steps); Riya will reply tomorrow.",
+     "entities": [
+      "Riya",
+      "Sunita",
+      "Anjali",
+      "Kabir",
+      "Ira"
+     ]
+    },
+    {
+     "text": "2025-11-02 Inbox cleanup: 214 promo emails from 38 senders since 2025-10-01; unsubscribed from 31 senders, skipped 4 transactional (Toronto Hydro, Presto, Service Ontario, TD Alerts) and 3 needing login (Old Navy, Cineplex, Air Miles; saved in Notes / Inbox cleanup); 198 archived. Labelled 163 emails as 'Receipts' (Amazon 41, Home Depot 18, Costco 4, Uber 37, Indigo 6, misc 57); 12 ambiguous left; auto-filter added. Photos album 'Halloween 2025' (47 photos, 6 videos) shared with Sam; Leo wore a cardboard robot costume.",
+     "entities": [
+      "Riya",
+      "Sam",
+      "Leo"
+     ]
+    },
+    {
+     "text": "2025-11-02 Edge-case sync for payouts (negative balances, reversed transfers) with Aisha Rahman and Diego Fernandez: options Mon 11-03 13:30, Tue 11-04 14:00-14:30, Wed 11-05 10:30; Tue 14:00 was later accepted by both (invite lists edge-case doc as agenda). Wen's E14 lift after ONB-212 fix: +4.3 pts (was +5.2). Friend Leah (book club) has startup vs bank offers; Riya gave advice. Finance: October household spending $4,812 vs $4,600 budget; kitchen reno account $31,450 of $48,000; Rogers bill $118.40 on 2025-11-06.",
+     "entities": [
+      "Aisha Rahman",
+      "Diego Fernandez",
+      "Wen Li",
+      "Leah",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2025-11-02 Leo's passport expires in January; simplified child renewal checklist: form PPTC 482, two photos (one signed by guarantor), current passport, fee $57 (5-year), 10 business days in person or 20 by mail. Appointment slots: Service Canada 25 St. Clair Ave E Thu 11-13 10:20 or Mon 11-17 11:40; Scarborough Town Centre Wed 11-12 09:50 or Sat 11-15 10:10; booking link in Notes / Leo passport. Photo options Saturday: Queen East Photo & Print $17.99, Shoppers Queen & Carlaw $15.99, Gerrard Photo Studio $22. Nothing booked.",
+     "entities": [
+      "Leo",
+      "Service Canada",
+      "Riya",
+      "Sam"
+     ]
+    },
+    {
+     "text": "2025-11-02 Open: no response yet from Tom Becker on 'Q4 roadmap pre-read' (due Mon 2025-11-03). Draft text to Hannah Cho thanking her for the candy swap with the kids and offering a coffee, not yet sent.",
+     "entities": [
+      "Tom Becker",
+      "Hannah Cho",
+      "Riya"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s024",
+   "episodes": [
+    {
+     "text": "2025-11-03 October onboarding funnel from Looker: wk Sep 29 1,912 signups to 788 first payout (41.2%); wk Oct 6 2,044 to 897 (43.9%); wk Oct 13 1,987 to 886 (44.6%); wk Oct 20 2,130 to 963 (45.2%); wk Oct 27 partial 1,501 to 684 (45.6%); October total 9,574 signups, 7,402 KYC complete, 5,233 bank verified, 4,218 first payout (44.1%), using corrected Android event.",
+     "entities": [
+      "Riya",
+      "Looker"
+     ]
+    },
+    {
+     "text": "2025-11-03 Northbridge Bank (contact Katalin Varga) proposed moving same-day settlement cutoff from 16:00 ET to 14:00 ET effective 2026-01-12, with an 18:00 second window at $0.04 per transfer. Riya's call 10:30. MSA (signed 2024-03-18) s7.2 cutoff no earlier than 16:00 ET until 2026-03-31; s14.1 needs 120 days' notice and mutual agreement; ~70 days' notice given. 38.6% of payout files and 44.1% of volume are submitted 14:00-16:00 ET (peak 15:00-15:45). Follow-up: Katalin to come back by 2025-11-14 with options including the 18:00 window at no extra cost through Q1.",
+     "entities": [
+      "Northbridge",
+      "Katalin Varga",
+      "Riya",
+      "Lumen Pay",
+      "Tom Becker"
+     ]
+    },
+    {
+     "text": "2025-11-03 Riya's writing style rules (note 'writing style'): no em dashes, say 'merchant' not 'customer' or 'user' in payouts docs, short paragraphs of at most 3 sentences. Payouts FAQ (draft) in Notion cleaned (v7) accordingly and proofread; Teams link request draft d-5521 discarded after Katalin sent the link.",
+     "entities": [
+      "Riya",
+      "Payouts FAQ",
+      "Katalin Varga"
+     ]
+    },
+    {
+     "text": "2025-11-03 Gift for mother Anjali Malhotra (lonely lately; loves Kanjeevaram silk sarees and Darjeeling tea; never gift cards): tea options delivering to Bandra West: Glenburn Tea Estate box Rs. 2,450, Makaibari Muscatel Collection Rs. 1,980, Teabox Discovery Set Rs. 1,650; saree shops: Kanchi Silks House (Dadar, Rs. 14,000-45,000, video viewing by appointment), Saree Mandir (Linking Road), silkweave.example.com. Links in Notes / Mom gift. Nothing ordered. Also: bin reminder Tuesday collection; yard winterizing checklist; Leo woke at 5:15 after the clock change.",
+     "entities": [
+      "Anjali Malhotra",
+      "Riya",
+      "Kanchi Silks House",
+      "Glenburn Tea Estate",
+      "Leo"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s025",
+   "episodes": [
+    {
+     "text": "2025-11-06 Payouts v2 (launch 2025-12-08, code freeze 2025-12-01): 47 open Linear issues in 5 workstreams. At risk: Bank rails (14 open; PAY-352 Northbridge sandbox creds blocked, PAY-355 cutoff config depends on Northbridge decision due 2025-11-14); Risk & holds (PAY-344 negative-balance recovery due 2025-12-01, owner Mo); Merchant UI watch (PAY-360, PAY-361, PAY-366 unestimated). Katalin said sandbox credentials will be sent Mon 2025-11-10 by 12:00 ET. At-risk summary posted in #payouts-launch; recheck Monday. Riya said she will chase Katalin later.",
+     "entities": [
+      "Riya",
+      "Aisha Rahman",
+      "Diego Fernandez",
+      "Mo",
+      "Katalin Varga",
+      "Payouts v2"
+     ]
+    },
+    {
+     "text": "2025-11-06 Books/shows: Riya loves Tana French and literary mysteries, spy dramas (loved Slow Horses, has seen The Night Manager). Suggestions: The Searcher/The Dry/Garnethill, The Little Drummer Girl, Tinker Tailor Soldier Spy, Dublin Murders. Library: The Searcher print at Leslieville, Garnethill at Pape/Danforth; library card expires 2026-02-14; no holds placed. Gift for Priya Nair (visiting next weekend): Tana French 'The Hunter' hardcover $36 at Book City (Danforth) or Type Books (Queen St W, gift wrap); draft card written; Riya will decide tonight.",
+     "entities": [
+      "Riya",
+      "Priya Nair",
+      "Tana French",
+      "Type Books",
+      "Book City"
+     ]
+    },
+    {
+     "text": "2025-11-06 Bobbette & Belle order #BB-20951 confirmed: 8-inch vanilla cake inscribed 'Chicago done. Legend.' for Marcus Bell's party, pickup Sat 2025-11-08 11:00-13:00 at Queen St E, $68 paid (Visa ending 4417); party starts at 2. Riya's mother Anjali's birthday is November 3; Riya sends flowers through a Mumbai florist and calls at Anjali's morning; yearly reminder set 2026-10-31 (evt_9f40). Mail to Mumbai takes 2-4 weeks. Finance: Visa statement closed at $2,611.92, due 2025-11-26. Riya's family: Kabir's Riverdale Farm trip consent for Leo due Wed 11-12 ($8) still pending.",
+     "entities": [
+      "Marcus Bell",
+      "Anjali",
+      "Riya",
+      "Bobbette & Belle",
+      "Leo"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s026",
+   "episodes": [
+    {
+     "text": "2025-11-06 Nate Kowalczyk (Northline Renovations, kitchen contractor) prefers texts not calls, starts work at 7:30 am; Riya texted him asking if cabinets arrive Monday; he confirmed Monday 2025-11-10, delivery 8-10am. Northline invoices: NR-1041 deposit $9,600 paid, NR-1067 demolition $6,200 paid, NR-1088 rough-in $8,450 paid, NR-1102 drywall $4,180 paid, NR-1115 change order #2 (pot lights) $1,320 unpaid due 2025-11-19; total $29,750 + $3,867.50 HST; budget $48,000.",
+     "entities": [
+      "Nate Kowalczyk",
+      "Northline Renovations",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2025-11-06 Electrician (Brightline Electric) coming next week for panel upgrade 100A to 200A; ESA notification #7104-2289 filed 2025-11-03, inspection not booked; Toronto Hydro disconnect not found. Question list prepared. Booked 'Onboarding flows walkthrough' Thu 2025-11-13 15:00-15:30 with Diego Fernandez and Aisha Rahman (evt_a117, agenda and Notion page linked).",
+     "entities": [
+      "Brightline Electric",
+      "Diego Fernandez",
+      "Aisha Rahman",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2025-11-06 Saree for mother Anjali: Kanchi Silks House pure Kanjeevaram temple border peacock blue with gold zari, Rs. 24,500 incl. GST, free Mumbai delivery 2-3 days, exchange within 7 days; fair vs comparisons (silkweave Rs. 26,900, Saree Mandir Rs. 22,000-27,000). Video viewing slots offered: Sun 2025-11-09 10:30 IST (Sat 11-08 23:00 Toronto) or 19:30 IST (Sun 09:00 Toronto). Not booked; waiting for Riya to pick.",
+     "entities": [
+      "Anjali",
+      "Kanchi Silks House",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2025-11-06 Sam relayed that Leo's winter boots are done (soles peeling); need new boots, kids size 13, that Leo can put on himself; assistant told Sam it would find options and asked Riya for a budget. Open thread: options not yet found or ordered.",
+     "entities": [
+      "Sam",
+      "Leo",
+      "Riya"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s027",
+   "episodes": [
+    {
+     "text": "2025-11-07 Toronto yard waste (green bin day Tuesday): remaining pickups Tue 2025-11-11, 11-25, 12-09 (last); paper bags; afterwards Commissioners St drop-off depot. Riya has about 12 bags. Moving the kitchen sink to the island needs a plumbing permit (Ontario Building Code; fee about $250-400, 10 business days review; loop vent or AAV).",
+     "entities": [
+      "Riya",
+      "Toronto",
+      "Nate"
+     ]
+    },
+    {
+     "text": "2025-11-07 Payouts v2 design review Fri 13:45-14:30 on Zoom with Diego, Aisha and Wen (Figma 'Payouts settings v2'; Aisha only 20 minutes). Carlos Mendez offered a winter intensive Jan-Apr: Tuesday 19:30 plus Thursday 19:30, 8 lessons/month for $340 CAD instead of $360 (3 spots, reply by 2025-11-21); about $160 more per month than current $180 for 4 lessons. No work conflicts on 17 Tuesdays (soft: 2026-02-17 parent council, 2026-03-10 Priya tentative). Riya has not decided.",
+     "entities": [
+      "Carlos Mendez",
+      "Riya",
+      "Diego Fernandez",
+      "Aisha Rahman",
+      "Wen Li"
+     ]
+    },
+    {
+     "text": "2025-11-07 Dog walkers for Biscuit: Jess M. via Rover, Mondays/Wednesdays/Fridays 12:00 from 2025-11-10, $25/walk + $2.75 fee, paid by Visa ending 4417; Jess asked for the lockbox code and whether Biscuit pulls (reply in Rover app, open). Pet budget $350/month vs estimated $512. Niagara Falls advice for Hannah's mother visiting from Busan next week.",
+     "entities": [
+      "Biscuit",
+      "Jess",
+      "Rover",
+      "Riya",
+      "Hannah Cho"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s028",
+   "episodes": [
+    {
+     "text": "2025-11-11 Added second dog walker: Felipe of Paws on Pape, Tuesdays/Thursdays noon, $25 a walk, from 2025-11-11 (evt_a288). Dog walking totals $125/week (~$542/month); pet spend ~$729/month vs $350 budget; Paws on Pape invoices monthly by e-transfer starting 2025-12-01. Riya will talk to Sam about it.",
+     "entities": [
+      "Felipe",
+      "Paws on Pape",
+      "Jess",
+      "Biscuit",
+      "Riya",
+      "Sam"
+     ]
+    },
+    {
+     "text": "2025-11-11 Payouts v2 launch risks doc 'Payouts v2 launch risks (2025-11-12)' created in Notion for standup: PAY-352 and PAY-355 blocked on Northbridge, PAY-344 negative-balance recovery (Mo, may slip to 2025-12-03), PAY-360, PAY-366 unestimated (needs estimate by 2025-11-14), PAY-371 reversal webhook retries. Launch-blocking per Linear: PAY-344, 352, 355, 360, 371, 379, 384, 385, 389, 391. Non-blocking unowned: PAY-387, PAY-390, PAY-394.",
+     "entities": [
+      "Riya",
+      "Aisha Rahman",
+      "Mo",
+      "Diego Fernandez",
+      "Payouts v2"
+     ]
+    },
+    {
+     "text": "2025-11-11 Grocery spend: August $1,108.42, September $1,346.29 (incl. Costco $312.44), October $972.55; 3-month average $1,142.42. Kabir asked about sleep-training daughter Ira (11 months, wakes 3x a night); resources saved in Notes / For Kabir. Winter tires for 2019 Mazda CX-5 stored at Downtown Mazda: openings Sat 2025-11-15 8:30, Mon 11-17 10:00, Wed 11-19 13:00, $129.95; Mr. Lube Thu 11-13 11:00 $89.99; nothing booked.",
+     "entities": [
+      "Kabir",
+      "Ira",
+      "Mazda CX-5",
+      "Downtown Mazda",
+      "Riya"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s029",
+   "episodes": [
+    {
+     "text": "2025-11-18 Riya stressed before Thu 2025-11-20 10:30 Q4 quarterly roadmap review with the exec team (stress also spikes with renovation costs; sleeps badly before big presentations; saved in note 'Wellbeing'). Plan: deck story in focus block, 13:00 deck review with Aisha, 14:00 Wed dry run with Tom Becker then deck freeze, screens off 21:30 Wednesday. Spanish with Carlos was moved to Tue 11-18 19:30 this week (under 24 hours, so charged if moved).",
+     "entities": [
+      "Riya",
+      "Aisha Rahman",
+      "Tom Becker",
+      "Carlos"
+     ]
+    },
+    {
+     "text": "2025-11-18 Nate's change order #3 (2025-11-17): move sink to island with loop vent and plumbing permit, $2,150 + HST ($2,429.50). Reno budget: invoiced plus approved change orders $36,047.00 incl. HST, remaining work $9,850.00, projected total $45,897.00 vs $48,000 budget, headroom $2,103; 3 change orders totalling $4,840 + HST. Assistant will hold reno questions to Nate until after Thursday.",
+     "entities": [
+      "Nate",
+      "Northline Renovations",
+      "Riya"
+     ]
+    }
+   ]
+  }
+ ]
+}
