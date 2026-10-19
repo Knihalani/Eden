@@ -28,6 +28,10 @@ PROMPT = (
     "Being on-topic is not enough. Compared with the earlier turns, ask whether this turn is special. Most rows "
     "should be ≤ 0.2; most turns have no row above 0.5.\n\n"
     'Reply with JSON only: {"scores": {"<candidate id>": <p>, ...}} (an empty object if there are no candidates).')
+SHORT = PROMPT.replace(  # F22c (C9-E1): only the kept rows, so the reply is a few dozen tokens
+    'Reply with JSON only: {"scores": {"<candidate id>": <p>, ...}} (an empty object if there are no candidates).',
+    'Report ONLY the candidates with p ≥ 0.5. Reply with JSON only: {"scores": {"<candidate id>": <p>, ...}} for '
+    'those (an empty object if none reaches 0.5).')
 
 
 def env():
@@ -80,8 +84,9 @@ def parse(text, ids):
     return out, ok
 
 
-def run(world, src, tag, limit=0):
+def run(world, src, tag, limit=0, model="", short=False):
     cfg = env()
+    cfg["NIM_MODEL"] = model or cfg["NIM_MODEL"]
     if not cfg["NVIDIA_API_KEY"] or not cfg["NIM_MODEL"]:
         sys.exit("NVIDIA_API_KEY and NIM_MODEL must be set (environment or .env)")
     d = os.path.join(HERE, "verify", f"{world}-{tag}")
@@ -101,12 +106,13 @@ def run(world, src, tag, limit=0):
                 cases.append({"event": c["event"], "scores": {}})
                 continue
             case = {k: v for k, v in c.items() if k != "output"}
-            reply, secs, attempts = chat(cfg, [{"role": "system", "content": PROMPT},
+            reply, secs, attempts = chat(cfg, [{"role": "system", "content": SHORT if short else PROMPT},
                                                {"role": "user", "content": json.dumps(case, ensure_ascii=False)}])
             choice = reply["choices"][0]
             scores, ok = parse(choice["message"].get("content", ""), ids)
             failed += not ok
-            cases.append({"event": c["event"], "scores": scores})
+            cases.append({"event": c["event"], "scores": scores if not short else {i: v for i, v in scores.items()
+                                                                                 if v >= 0.5}})
             log.write(json.dumps({"event": c["event"], "model": cfg["NIM_MODEL"], "latency_s": round(secs, 3),
                                   "attempts": attempts, "parsed": ok, "finish_reason": choice.get("finish_reason"),
                                   "usage": reply.get("usage", {}), "candidates": len(ids)}) + "\n")
@@ -133,6 +139,8 @@ if __name__ == "__main__":
     ap.add_argument("--src", default="cal", help="calibrated run whose inputs to reuse: verify/<world>-<src>/in")
     ap.add_argument("--tag", default="nim")
     ap.add_argument("--limit", type=int, default=0, help="first N input files only (a smoke run)")
+    ap.add_argument("--model", default="", help="NIM model id; overrides NIM_MODEL")
+    ap.add_argument("--short", action="store_true", help="F22c short-reply prompt (C9-E1)")
     ap.add_argument("--latency", action="store_true", help="print latency percentiles of the logged calls")
     a = ap.parse_args()
-    latency(a.world, a.tag) if a.latency else run(a.world, a.src, a.tag, a.limit)
+    latency(a.world, a.tag) if a.latency else run(a.world, a.src, a.tag, a.limit, a.model, a.short)
