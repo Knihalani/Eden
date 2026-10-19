@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s003-e000",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "All give tables; R2's table lacks markdown separator (broken) and defers the fuller list."
+  },
+  {
+   "event": "life-s003-e021",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Nut-free ideas all safe; Biscuit question not in available facts or history, so declining to guess is honest."
+  },
+  {
+   "event": "life-s005-e002",
+   "scores": [
+    1,
+    1,
+    1
+   ],
+   "why": "HR profile on file: Senior Product Manager, merchant payouts and onboarding; all fail to answer, R1 wrongly says not saved."
+  },
+  {
+   "event": "life-s007-e013",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "Restaurant handled; none apply known flight rules (WestJet, direct, aisle, no basic economy, CAD) to the search."
+  },
+  {
+   "event": "life-s013-e020",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Simple recurring add, short as requested; all correct."
+  },
+  {
+   "event": "life-s013-e023",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Simple to-do add; all correct."
+  },
+  {
+   "event": "life-s017-e008",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "Route not in available evidence; R1 pads with piano and Big Apple details that distract from the question."
+  },
+  {
+   "event": "life-s018-e010",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give sensible Toronto neighbourhoods matching Priya's profile."
+  },
+  {
+   "event": "life-s018-e017",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All accurately explain Bel\u00e9m/Jer\u00f3nimos origin with kid-friendly framing."
+  },
+  {
+   "event": "life-s022-e000",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "No Costco data on file; R1 at least gives the decision rule up front, others only defer."
+  }
+ ]
+}
