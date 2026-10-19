@@ -1,0 +1,78 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s080-e014",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "B covers lockfile, changeset, docs and Friday rule; A misses changeset/docs and only vaguely flags the weekday."
+  },
+  {
+   "event": "code-s080-e020",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "Pool max is 10 per pod (set with Priya); second response wrongly claims not to know."
+  },
+  {
+   "event": "code-s082-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both do a correct repo-wide rename with grep, typecheck and tests, kept separate from the clock-skew fix."
+  },
+  {
+   "event": "code-s082-e017",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both apply job-id idempotency rule and why-only comments; first adds a correct but unneeded BullMQ aside."
+  },
+  {
+   "event": "code-s083-e017",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both refactor to a handler map and leave billing code uncommitted for review."
+  },
+  {
+   "event": "code-s085-e014",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both claim ignorance; history shows Cloudflare proxied DNS and EKS ingress via AWS LB Controller. Searching infra is reasonable."
+  },
+  {
+   "event": "code-s087-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "First correctly uses Tailwind v4 CSS-first @custom-variant dark; second hedges on known Tailwind version."
+  },
+  {
+   "event": "code-s091-e007",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Second applies named exports, Vitest without jest-dom; first hedges on known test runner."
+  },
+  {
+   "event": "code-s097-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both keep the HMAC secret server-side with constant-time verify; first also applies env/1Password and review conventions."
+  }
+ ]
+}
