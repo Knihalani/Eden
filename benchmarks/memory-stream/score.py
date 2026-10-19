@@ -476,20 +476,23 @@ def main():
             if a.ci:
                 results[f"{name}@{a.store}"]["ci95"] = bootstrap(pev, pk, cov, items, stream)
             continue
-        if name == "judge":
-            import judge
-            jp = judge.packets(a.world, a.store)
+        if name.split(":")[0] == "judge":
+            import judge, methods as M
+            _, jkw = M.params(name)
+            jp = judge.packets(a.world, a.store, jkw.get("tag", ""))
             byid = {r["id"]: r for r in rows}
             for r in rows:
                 r.setdefault("covers", cov.covers(r["text"]))
             jev = [e for e in events if e["id"] in jp]
             vis = lambda r, e: r["t"] < e["_order"] and (r.get("invalid_at") is None or r["invalid_at"] > e["_order"])
+            acts = action_text(stream) if jkw.get("defer") else {}
+            ok = lambda e: not jkw.get("defer") or bool(acts.get(e["id"])) or e["t"] == "trigger"
             pk = {e["id"]: [(byid[i]["text"], byid[i]["covers"]) for i in jp[e["id"]] if i in byid and vis(byid[i], e)]
-                  for e in jev}
-            results[f"judge@{a.store}"] = score(jev, pk, cov, items, stream)
-            results[f"judge@{a.store}"]["bullet_classes"] = decompose(jev, pk, stream, items)
+                  if ok(e) else [] for e in jev}
+            results[f"{name}@{a.store}"] = score(jev, pk, cov, items, stream)
+            results[f"{name}@{a.store}"]["bullet_classes"] = decompose(jev, pk, stream, items)
             if a.ci:
-                results[f"judge@{a.store}"]["ci95"] = bootstrap(jev, pk, cov, items, stream)
+                results[f"{name}@{a.store}"]["ci95"] = bootstrap(jev, pk, cov, items, stream)
             continue
         m = methods.make(name, rows, stream, items, cov)
         acts = action_text(stream) if "act=1" in name else {}
