@@ -1,0 +1,153 @@
+{
+  "responder": "sonnet (claude-code subagent)",
+  "items": [
+    {
+      "id": "code-s106-e000#0",
+      "response": "I don't know from here which auth provider the sign-in page uses, so I'd rather not point you at the wrong dashboard. A button that vanished overnight is usually either the social connection getting toggled off at the provider, or a recent change to the sign-in component or its config.\nAction: find the sign-in page and auth config in the web app, then check yesterday's commits and deploys touching them to see which of the two it was."
+    },
+    {
+      "id": "code-s092-e012#0",
+      "response": "I don't know where the worker's metrics are exported to, and I won't guess a backend. I'd also need to confirm a billing-sync queue depth metric exists before building a panel on it.\nAction: search the worker for its metrics setup and any deploy or monitoring config that scrapes it, then tell you the endpoint, the metric name for billing-sync queue depth (or that it needs adding), and draft the panel."
+    },
+    {
+      "id": "code-s083-e008#0",
+      "response": "Makes sense: signature verification needs the exact raw bytes, and Fastify's default JSON parser consumes them before the route sees them. I'll register fastify-raw-body and verify against the raw body on /v1/webhooks/stripe only.\nAction: look at how the API's Fastify app and its plugins are set up, add fastify-raw-body scoped to that route, switch the Stripe verification to use request.rawBody, and add a test with a signed payload."
+    },
+    {
+      "id": "code-s046-e022#0",
+      "response": "Per the conventions I have, issues live in Linear under the ACME team, branches start with the lowercase Linear id (acme-123-short-slug), and commits use Conventional Commits. I don't know the Linear id for the paid-at ticket and won't invent one.\nAction: ask you for the ACME ticket number (or find it if it's in the branch list), create acme-<id>-paid-at-column, stage only the paid-at column files (the column, the en/fr/es header labels), commit as feat(web): add paid-at column to invoices table, and leave the CLI color and PDF changes uncommitted."
+    },
+    {
+      "id": "code-s022-e008#0",
+      "response": "I don't know which exception tracker or logger setup the PDF job should use, so I'll check rather than assume a vendor. The swallowed catch is the problem either way: it should log with job context and report the error before deciding whether to rethrow.\nAction: read the PDF render job's catch block and how other worker code reports errors, then add reporting plus a structured log with the job id, add a test that the error is reported, and commit."
+    },
+    {
+      "id": "code-s018-e016#0",
+      "response": "This matches a known sign-in redirect loop in the web app: it happens when /login is missing from publicRoutes in apps/web/middleware.ts, or when afterSignInUrl isn't /dashboard (both the login page and NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL). That note is from August, so I'll verify against the current code. Lena's auth route change this morning is the likely trigger.\nAction: check the recent commits to middleware.ts and the auth routes, confirm /login is in publicRoutes and the after-sign-in URL setting on staging is /dashboard, then fix whichever is off."
+    },
+    {
+      "id": "code-s086-e004#0",
+      "response": "The worker exposes Prometheus metrics on port 9464 at /metrics, and the helm chart has a ServiceMonitor so Grafana's Prometheus scrapes it, so the dashboard can use a Prometheus datasource. I don't know the exact metric names for the image pipeline, so I won't make them up.\nAction: grep the worker (processImage and the metrics setup) for existing counters and histograms, then write the dashboard JSON with throughput, failures and latency panels using those names; if some are missing, I'll tell you which to add first."
+    },
+    {
+      "id": "code-s105-e000#0",
+      "response": "Will do: an error boundary around the dashboard with a friendly fallback page and a try again button that resets it, so a render throw on the reports page no longer white-screens. I don't yet know which Next.js router the dashboard uses, which decides whether this is an error.tsx or a client boundary component.\nAction: inspect the dashboard app structure, check whether acme-447 already exists locally or on the remote, build the fallback with a test, and commit on that branch."
+    },
+    {
+      "id": "code-s063-e009#0",
+      "response": "Good to know about infra/: it needs platform team review and the plan output pasted into the PR. I'll draft the description around that, with a Summary, a Changes section, a Platform team review checklist item, and a clearly marked Plan output block.\nAction: read the diff on Priya's redis security group branch so the summary reflects what actually changes, then write the draft with a placeholder code block reading 'paste plan output here' and the platform team requested as reviewer."
+    },
+    {
+      "id": "code-s085-e010#0",
+      "response": "I don't know yet which queue library the email jobs run on, so I can't say which UI fits. Redis is already up in the compose stack, so if the queue is Redis-backed there's likely a matching dashboard we can mount locally.\nAction: check the worker for the queue library and where the email queue is defined, then suggest and wire up the matching UI (or use redis-cli to inspect the keys if there's no good one), and look at what the stuck jobs are waiting on."
+    },
+    {
+      "id": "code-s037-e000#0",
+      "response": "Understood: no major version bumps without asking you first, regardless of CI. I'll sort deps-bot's PRs into patch, minor and major, and only call the first two safe after checking CI and the changelog. One thing from my notes: the zod bump (PR #1312, 3.23.8 to 3.24.1) needed five type-error fixes committed locally as a8c4f31 and not pushed as of early September, so I won't call it safe until I confirm that's still true.\nAction: list the open deps-bot PRs with their version jump and CI status, check whether a8c4f31 was pushed, and report a safe, needs-your-call, and blocked list."
+    },
+    {
+      "id": "code-s107-e000#0",
+      "response": "Simple enough: return the currency of the first line item if there is one, otherwise the org currency. I don't know the line item field names or the Invoice type yet, so I'll read them instead of guessing.\nAction: look at the Invoice and line item types and where similar helpers live, write getPrimaryCurrency(invoice, orgCurrency) with the empty-items fallback, and add tests for items present, empty items, and a missing items array if the type allows it."
+    },
+    {
+      "id": "code-s098-e000#0",
+      "response": "The API is Fastify with drizzle and zod, so I'll do this as a plugin in apps/api/src/plugins with an onRequest hook, registered only on the org routes scope. Rejections go through the problem() helper in apps/api/src/lib/problem.ts so they come back as RFC 7807 problem+json: a 400 for a missing header and a 403 when the org isn't one of the session's memberships.\nAction: check how the session exposes its orgs and how the org routes are grouped, write the plugin, register it for that scope, and add tests for missing, mismatching and valid headers."
+    },
+    {
+      "id": "code-s057-e010#0",
+      "response": "The API goes through PgBouncer in transaction mode, so prepared statements must be off (prepare: false). My notes say that was added in pool.ts and the options type in driver.ts but the driver wasn't yet passing it to the raw pool, which could explain the post-deploy burst if it's still true.\nAction: check driver.ts and pool.ts now to see whether it reaches the raw pool."
+    },
+    {
+      "id": "code-s097-e005#0",
+      "response": "I'll follow the same shape as the outgoing webhook signing: HMAC SHA-256 over the invoice id plus the expiry, hex encoded, with a constant-time compare on verify. The signing secret can't be exposed to the browser, so the preview component should call a server-side route or action that uses share-link.ts rather than signing in client code. I don't know where the secret is configured, so I'll check.\nAction: read apps/api/src/webhooks/sign.ts for the conventions, write apps/web/lib/share-link.ts (sign and verify), and wire the copy share link button to a server call."
+    },
+    {
+      "id": "code-s087-e012#0",
+      "response": "The new field won't show up until the generated SQL is applied to the local database, so I'll apply it before starting the API. I don't know the exact dev command or port for the API here, so I'll check the scripts instead of assuming.\nAction: look at the API package scripts and how migrations are applied, run the new migration against the local db, start the API, and curl GET /v1/invoices to confirm paid_at is in the response."
+    },
+    {
+      "id": "code-s080-e020#0",
+      "response": "From my notes, the API pool max is 10 connections per pod (apps/api/src/db/client.ts), agreed by you and Priya, and the rule is to scale pods, not the pool. That note is from late September, so the current value needs checking. With 'too many clients already', pool size times the pod count under load may be exceeding the PgBouncer or Postgres limit.\nAction: confirm the value in client.ts, check how many pods staging runs and the connection limit, and work out whether the product is over."
+    },
+    {
+      "id": "code-s040-e008#0",
+      "response": "Swapping the three console.log calls (routes/invoices.ts:88, send-reminder.ts:41, plugins/auth.ts:57) to the pino logger, and dropping the full request body dump rather than just relabeling it. For apps/web .env.example, I'll make sure the NEXT_PUBLIC_ Stripe var holds only a publishable-key placeholder with a comment on where to get it, and that no secret keys sit in anything NEXT_PUBLIC_. Redis was started with db earlier, so the worker should come up.\nAction: make the logger swaps, inspect and fix apps/web/.env.example, then run pnpm --filter worker dev and confirm it connects to Redis."
+    },
+    {
+      "id": "code-s082-e025#0",
+      "response": "The API has GET /healthz, which returns 200 only when Postgres and Redis are both up, so it fits as the readiness probe. Using it for liveness is riskier, since a database blip would restart healthy pods; I'd want a lighter liveness check. The chart lives in infra/helm/api with values.yaml and values-prod.yaml.\nAction: read the api chart's deployment template and values, check the container port and whether a cheaper endpoint exists, then add readinessProbe on /healthz, a lenient livenessProbe, and a startupProbe, configurable in values."
+    },
+    {
+      "id": "code-s088-e023#0",
+      "response": "I'll write slugify to lowercase, strip accents, collapse any run of non-alphanumeric characters into a single hyphen, and trim leading and trailing hyphens, so 'Northwind Studio, Inc.' becomes 'northwind-studio-inc'.\nAction: check neighboring tests in packages/cli for the test runner and style, then create packages/cli/src/util/slug.ts with its test file covering your example plus a couple of edge cases like repeated punctuation and surrounding whitespace."
+    },
+    {
+      "id": "code-s061-e012#0",
+      "response": "Understood, holding off on the refactor and looking at CI instead. The report says it failed at install on 1 of 4 jobs, so lint, typecheck and test never ran, which means nothing is known about the code itself yet.\nAction: pull the install step log for run 11408837121 on acme-207-invoice-copy to find the actual error before guessing at a cause."
+    },
+    {
+      "id": "code-s015-e000#0",
+      "response": "I'll write the local setup section with the env step as you gave it: copy .env.example to .env.local and pull the secrets from the 1Password vault acme-dev. I'll also add a note that billing code changes need your review, and I won't touch billing code without it. I don't know the other setup steps, so I'll take them from the repo.\nAction: read the existing docs/onboarding.md, the root package.json scripts, and the compose file, then draft the section and show it to you."
+    },
+    {
+      "id": "code-s101-e013#0",
+      "response": "My notes say invoice attachments bypass the API for the file itself: the browser calls POST /v1/uploads for a presigned S3 PUT URL, PUTs to S3 directly (progress needs XMLHttpRequest, and Lena wants a progress bar), then calls POST /v1/uploads/:id/complete. Expenses should reuse that flow. Forms use react-hook-form with zodResolver, and a new attachments table would need a UUID v7 primary key via uuidv7() in $defaultFn, plus org_id, created_at, deleted_at and an org_id index, with the migration from pnpm --filter api db:generate.\nAction: read how invoice attachments are implemented and the expense form, confirm whether /v1/uploads can accept an expense target, then lay out the changes before editing."
+    },
+    {
+      "id": "code-s096-e000#0",
+      "response": "I'll write one query: a CTE that sums paid invoice totals per org per month over the last 12 months, then a window SUM ordered by month partitioned by org for the running total. I don't know the schema yet, so I'll check the table and column names, the SQL dialect, how paid is represented, the amount units, and whether deleted rows need excluding.\nAction: read schema.ts, then write the query to tools/sql/ with a header comment explaining assumptions."
+    },
+    {
+      "id": "code-s030-e013#0",
+      "response": "Noted on ESM and on keeping tokens out of logs. I'll use pino's built-in redact option with paths like req.headers.authorization and cookies, plus any token fields, and scrub bearer tokens that can appear inside error messages, using import syntax only.\nAction: find the api logger config, add redact paths with a censor value, add an error serializer that masks Bearer tokens in messages, and add tests proving a token in a header and in an error message both come out masked."
+    },
+    {
+      "id": "code-s078-e016#0",
+      "response": "I'll use the Skeleton component from components/ui/Skeleton, which my notes say is a default export (with SkeletonText alongside), sized to match each card so nothing shifts when data arrives. That note is from August, so I'll confirm the import against the file.\nAction: open the reports page, find the 4 summary cards and their loading state, add skeleton placeholders for each, and check the page's tests."
+    },
+    {
+      "id": "code-s021-e018#0",
+      "response": "It depends on what the reminder jobs spend their time on and how many database connections we have to spare. More concurrency per process is cheap if jobs are mostly waiting on I/O, while more replicas add connections and cost but isolate failures. I don't know the reminder job's profile or the connection limits yet.\nAction: read the reminder handler and the worker concurrency config, check typical job duration and the DB pool limits, then recommend one with numbers."
+    },
+    {
+      "id": "code-s028-e006#0",
+      "response": "I don't know which branch is your editor store refactor, so I'll check before pushing anything. The PR should describe moving editor state to a colocated zustand store, which is consistent with the ADR we discussed.\nAction: list local and remote branches and recent commits to identify it (and ask you if there are two candidates), push it, and open a PR against main with a summary based on the diff. I won't merge it."
+    },
+    {
+      "id": "code-s030-e000#0",
+      "response": "I don't have any notes from yesterday in this session, so I won't guess at where we left off.\nAction: check git status, the current branch and recent commits, any recent branches, and your open PRs to reconstruct what was in flight, then give you a short summary and ask what you want to pick up."
+    },
+    {
+      "id": "code-s085-e000#0",
+      "response": "On the fresh clone at ~/code/acme-platform: the repo pins Node 20.11 in .nvmrc and engines is >=20.11 <21, so install fails on an older Node (your laptop had 18.20.4). Then env files go to .env.local per app, secrets from the 1Password vault acme-dev.\nAction: run nvm install and nvm use, pnpm install, copy each app's .env.example to .env.local, run docker compose up -d db redis, pnpm --filter api db:migrate once, and then pnpm dev; I'll verify the details against the repo since my notes are a few weeks old."
+    },
+    {
+      "id": "code-s081-e017#0",
+      "response": "Great, but your standing rule is that I never merge PRs myself, so I'll leave the merge to you. What I can do is make sure #1189 is ready.\nAction: confirm the approval and green checks on #1189, push any final updates to the branch, and tell you it's ready for you to merge."
+    },
+    {
+      "id": "code-s103-e031#0",
+      "response": "Two separate problems. The production build error is the Clerk dev-key check: a pk_test_ key reaching a NODE_ENV=production build, so I'd look at which publishable key the Vercel Production env for the release branch uses; if the fix is in .github workflows, it needs platform team approval. For the hydration warning, dueDate is a plain YYYY-MM-DD, so it shouldn't show a time at all; I'd parse it as local with T00:00:00 and, following your preference, format on the client in useEffect instead of suppressHydrationWarning.\nAction: check the Vercel env and build config for the key first, then open the invoices due date column code and fix it."
+    },
+    {
+      "id": "code-s041-e000#0",
+      "response": "formatMoney takes integer cents, so a 2.005 coming out as 2.00 suggests a fractional-cent value is reaching it, for example from fractional quantities, rather than the formatter itself being wrong. The fix belongs where totals are computed: round each line to whole cents before summing, and not hard-code cents / 100 anywhere.\nAction: find where that CAD invoice's total is computed, reproduce it with a failing test, round per line, and check formatMoney's callers."
+    },
+    {
+      "id": "code-s061-e020#0",
+      "response": "I wouldn't put someone else's infrastructure change into prod without knowing it's been reviewed, and I don't know what approval this repo requires for infra. I also haven't seen what's on her branch.\nAction: read the diff on priya/acme-212-redis-sg and check its PR and review state, run a read-only plan to show exactly what would change in prod, and report back. I won't apply anything until you confirm the review is in place."
+    },
+    {
+      "id": "code-s055-e000#0",
+      "response": "The API is Fastify 5 now, so I'll add a plugin in apps/api/src/plugins with an onResponse hook that logs through request.log with method, route (the route pattern, not the raw URL), statusCode, and duration in ms. The request-id plugin already puts requestId on request logs, and no bodies get logged. I'll check whether Fastify's built-in request logging already emits something similar to avoid duplicate lines.\nAction: write the plugin using reply.elapsedTime (verifying it's available), register it, and add a test with app.inject that checks the logged fields."
+    },
+    {
+      "id": "code-s080-e014#0",
+      "response": "Before I commit, two gaps from the audit: org list, org switch and clients list still lack --json, and the new invoices command has no tests yet. I'll commit and open the PR for the invoices list work with cli-table3 and the stable --json shape, and flag those gaps in the description. I won't tag the release.\nAction: check the branch name and commit conventions from git log, commit including package.json and the lockfile change, open the PR, and ask whether you want --json added to the three commands in this PR or a follow-up."
+    },
+    {
+      "id": "code-s067-e000#0",
+      "response": "For the Slack message: nvm install and nvm use (Node 20.11 pinned in .nvmrc), copy each app's .env.example in apps/api, apps/web and services/worker to .env.local (not .env), get secrets from the 1Password vault acme-dev, then docker compose up -d db redis and pnpm dev. For the CSV fix, since it's customer facing we use Changesets and it needs a release note: the invoice export column is now amount_cents instead of amountCents, which breaks anyone parsing the old header.\nAction: verify those steps against the repo, post the draft Slack message to you, then add a changeset with pnpm changeset for the CSV fix and draft the release note."
+    }
+  ]
+}
