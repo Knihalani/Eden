@@ -1,8 +1,8 @@
 # R10 — Retrieval research: report (living document)
 
-**Headline (cycle 5):** a design that beats today's plugin, measured by its effect on the agent's replies. The hook picks up to 15 candidate memories with no model. A small model checks them off the hook. Each delivered memory carries its date ("as of Aug 30"). On fresh turns it improves replies by +0.11 (coding) and +0.13 (personal assistant) per turn on a 0–3 scale; today's plugin scores about 0. Where memory is needed it lifts replies by about +0.6, and where it isn't it does no measurable harm. The sample is still small: the 95% ranges include zero.
+**Headline (cycle 5):** a design that beats today's plugin, measured by its effect on the agent's replies. The hook picks up to 15 candidate memories with no model. A small model checks them off the hook. Each delivered memory carries its date ("as of Aug 30"). On fresh turns it improves replies by +0.11 (coding) and +0.13 (personal assistant) per turn on a 0–3 scale; today's plugin scores about 0. Where memory is needed it lifts replies by about +0.6, and where it isn't it does no measurable harm. This passed the test I set in advance, but the sample is still small: the 95% ranges include zero, so treat it as a strong lead, not a settled result.
 
-**Status:** end of cycle 3 of an open-ended programme (`research/R10/BRIEF.md`). Every number below comes from `research/R10/LEDGER.md`, which says where it came from. The current state, the hypothesis portfolio and the graveyard are in `research/R10/STATE.md`.
+**Status:** cycle 5 (2026-10-19).
 
 ## 1. The question
 
@@ -31,7 +31,7 @@ On realistic streams, lexical retrieval is far weaker than the pair fixtures sug
 
 ## 3. Where Eden is today (the plugin on `main`)
 
-**Measured by outcome (C5-E3):** the plugin's memories barely change the agent's replies. Where memory is needed, coding replies improve by +0.1 on a 0–3 scale (the right memories would give +1.2) and personal-assistant replies get slightly worse (−0.2). Where nothing is needed, they do no measurable harm. Overall the effect is near zero.
+**Measured by outcome (C5-E3):** the plugin's memories barely change the agent's replies. Where memory is needed, coding replies improve by +0.1 on a 0–3 scale (the right memories would give +1.2) and personal-assistant replies get slightly worse (−0.2). Where nothing is needed, they do no measurable harm. Overall: coding −0.04 per turn (slightly net-negative by the pre-set rule), personal assistant +0.03 (near zero).
 
 
 | World | Recall | Proactive | Bullet precision | Silence on no-need human turns | Non-human silence | Trigger recall |
@@ -89,12 +89,12 @@ On realistic streams, lexical retrieval is far weaker than the pair fixtures sug
    - So "stays quiet when nothing is needed" has been partly punishing correct behaviour on coding. The next step is labels checked by outcome: a memory counts as needed if adding it actually makes the reply better.
 11. **Even the strong model over-flags when it sees one turn at a time** (C4-E12), and a confidence cutoff tuned on the main set does not carry over to fresh, shorter prompts (C4-E11).
 
-12. **Dates on memories stop wrong memories from hurting** (C5-E6, C5-E7). Most damage from a wrong memory came from old state presented as current ("the branch is not pushed", "the repo uses yarn"). Showing each memory's date lets the agent treat it as history and check. That cut the cost of a wrong memory from −0.6 to −0.1 and made the off-hook checker clearly worth it.
-13. **A sleep-time bug:** the compiler could only mark a memory replaced within the same batch, so facts that changed later stayed live forever. A cross-batch pass fixes it (strongly on personal data; partly on coding data).
+12. **Dates on memories stop wrong memories from hurting** (C5-E6, C5-E7). Most damage from a wrong memory came from old state presented as current ("the branch is not pushed", "the repo uses yarn"). Showing each memory's date lets the agent treat it as history and check. That cut the cost of a wrong memory from −0.6 to −0.1 on a small sample (10 turns), and on fresh turns the dated checker beat today's plugin. Both passed their pre-set tests; neither is statistically firm yet.
+13. **A sleep-time bug:** the compiler could only mark a memory replaced within the same batch, so facts that changed later stayed live forever. A cross-batch pass fixes most of it on personal data, but on coding data it fell short of the bar I set (stale memories down 19–26%, bar 30%). It is worth doing as a bug fix, not as a measured win.
 
 ## 5. Open problems, ranked by size
 
-1. **Knowing what counts as needed.** The labels miss real needs on coding (C4-E13), so tuning for quietness is unsafe until there are outcome-checked labels. Calibrating the off-hook checker comes after that.
+1. **Making the lead firm.** The dated checker beats today's plugin, but on about 70 turns per world; it needs more turns, a second responder run, and real latency and cost numbers. Coding labels still miss real needs (C5-E1), so outcome-checked labels remain the right yardstick.
 2. **Triggers in the personal world** (calendar, location, messages). Uncalibrated systems are not quiet on routine triggers (trigger silence 0.0–0.36); the calibrated checker reaches 0.45 on fresh cases, on only 11 negatives.
 3. **The gap to a strong model.** opus with the same view finds +0.14 (code) and +0.21 (life) more of what is needed than haiku. Its ceiling numbers were also batched, so they need a one-at-a-time re-run.
 4. **Benchmark realism.** There is no sealed holdout yet and no non-Claude author; LongMemEval is blocked by the network policy.

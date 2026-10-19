@@ -1011,3 +1011,31 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - Latency and cost of the off-hook haiku call are not measured.
   - Delivery at the first tool call is simulated: the responder sees the packet as context, not mid-turn.
   - Eden was dated here too, so the comparison is fair, but eden as shipped is undated (C5-E3: about 0 too).
+
+## C5-R · 2026-10-19 · Review of the cycle 5 consolidation (slice-reviewer, round 1: REQUEST_CHANGES), and fixes
+- **C5-E5 depended on file order.**
+  - `supersede.pairs` read the outputs unsorted and kept the first replacement it saw. Fixed: it now reads in batch order, and `sleep.rows` ends the old row at the earliest replacement.
+  - Re-run (`score.py --strict --supersede --split dev --sample judge`):
+
+    | World | System | Stale | Recall | Silence |
+    |---|---|---|---|---|
+    | code | verify seq (unchanged) | 0.0727 | 0.5182 | 0.4364 |
+    | code | cal p 0.6 (unchanged) | 0.0617 | 0.5121 | 0.6545 |
+    | life | verify seq | 0.0833 (was 0.0825) | 0.2911 | 0.6296 |
+    | life | cal p 0.6 | 0.0548 (was 0.0541) | 0.2658 | 0.75 |
+
+    Life relative changes become −37% and −48%. The verdict is unchanged: dead by the code kill line.
+  - Also noted: `supersede.py prep` offered older rows without the pass applied, so a row already ended in an earlier batch could be offered again. This does not change `invalid_at`, because the earliest replacement wins. The pass was not re-run.
+- **Exact reweights** (C5-E4 used rounded group means): code verify three-way −0.0573 (written −0.0575); life eden three-way −0.0272 (−0.0273); life verify two-way −0.0060 (−0.0062). No verdict changes.
+- **C5-E7 fire counts, life:** verify 34/75, eden 74/75.
+  - "Fresh" means not in `downstream/<world>`: 12 code and 11 life h2h turns overlap the C4-E13/C5-E1 `*-picks` turns.
+  - The h2h turns are dev turns, and p 0.6 was chosen on the dev judge sample.
+- **CIs:** `h2h.py` now computes the paired bootstrap (stratified, 4000 draws, seed 1). It reproduces code [−0.0695, +0.2955] and life [−0.0441, +0.2893].
+- **Harness:**
+  - `utility.py` reformatted; it runs from any directory.
+  - `downstream.py prep-verify --fired-only` now does the C5-E6 filter. Regenerated keys are identical to the committed ones.
+  - The `--dated` help text says "date it became visible".
+- **Wording corrected** in STATE, R10-retrieval and DECISIONS R10-5:
+  - C5-E6 and C5-E7 are "confirmed by rule, not yet firm" (n = 10 fired no-need turns; CIs include 0).
+  - Eden-today on code is net-negative by the C5-E3 rule (−0.0433), not "near zero".
+  - The supersession pass is dead by its code kill line, and is recommended only as a bug fix.
