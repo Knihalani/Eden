@@ -1545,3 +1545,9 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
     on at least 3 of the 4 tests.
   - **Fast but weaker** if the latency holds and quality fails; **too slow** if p50 > 3 s.
 - `verify_nim.py` gains `--model` and `--short` (checked against a mock endpoint).
+- **Amendment before any result (2026-10-19):** the user amended D37 to allow the in-turn checker on TypeSafe Jev
+  or a fast NIM model. **Jev joins the candidates**, run by `verify_jev.py` (one request per turn; the turn, recent
+  context and earlier turns as `state`; one Noul yes/no question per candidate; the Noul value is the row's p;
+  `--tag jev`). Same two steps and the same rule as above (smoke on the first 30 code-rt1 inputs, then the four
+  quality tests at p ≥ 0.6; viable if p50 ≤ 3 s end to end and the C9-E1 quality rule holds). Jev's latency is
+  measured from this container, network included. Checked against a mock endpoint; no TypeSafe key is set yet.
