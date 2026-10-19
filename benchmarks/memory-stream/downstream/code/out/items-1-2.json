@@ -1,0 +1,45 @@
+{
+  "responder": "sonnet (claude-code subagent)",
+  "items": [
+    {
+      "id": "code-s087-e012#1",
+      "response": "The new paid_at column won't exist in the database until the generated SQL is applied, so I'll run the migration first and then start the API, which listens on port 4000 locally. I'll find the API's dev script in its package.json rather than guess it.\nAction: run `pnpm --filter api db:migrate`, start the API, then curl http://localhost:4000/v1/invoices and check that paid_at shows up in the response."
+    },
+    {
+      "id": "code-s086-e004#1",
+      "response": "Happy to, but I don't want to guess metric names for the image pipeline, because a dashboard built on wrong names would just show empty panels. I'll read the worker's instrumentation to see what throughput, failure and latency metrics it actually exports. This is separate from the read replica work, which is still waiting on your answers about the IaC stack and prod access.\nAction: grep the worker code for the image pipeline metrics, then write a Grafana dashboard JSON with throughput, failures and latency panels using those names."
+    },
+    {
+      "id": "code-s063-e009#1",
+      "response": "Welcome back to acme. Since Priya's branch touches infra/, the description should say it needs platform team review and include the plan output. I haven't looked at what her redis sg branch changes yet, so I'll base the summary on its actual diff rather than assume.\nAction: diff Priya's redis sg branch against main, then draft the PR description with a summary of the changes, a 'Platform team review requested' line, and a 'Plan output' section with a code block for you to paste into."
+    },
+    {
+      "id": "code-s035-e058#1",
+      "response": "Yes. Styling is Tailwind v4 with CSS-first config, so I'd load JetBrains Mono with next/font/google in app/layout.tsx next to Inter, expose it as a CSS variable, and map it to the mono font in the `@theme` block in app/globals.css. Then I'd apply `font-mono tabular-nums` to the invoice number and amount cells.\nAction: find the invoice table columns, add the font setup, and apply the classes to just those cells."
+    },
+    {
+      "id": "code-s106-e000#1",
+      "response": "The login page renders Clerk's SignIn component, so the Google button is controlled by the social connections in the Clerk dashboard, not by code in the repo. I can't see your dashboard from here, so you'd need to check there that Google is still enabled for the production instance and that its credentials haven't expired or been changed. That could explain a disappearance since yesterday.\nAction: check apps/web/app/login/page.tsx for any appearance or options overrides that could hide the social buttons, and tell you what I find. Then you can check the Clerk dashboard."
+    },
+    {
+      "id": "code-s041-e000#1",
+      "response": "formatMoney takes cents and uses Intl.NumberFormat, so a 2.005 result suggests the rounding is happening before the value reaches it, probably where line totals are computed from fractional quantities. 2.005 is also a classic floating-point case, since it's really stored as 2.00499999... I'll reproduce it before changing anything, and I won't hard-code cents / 100.\nAction: add a failing test for the CAD invoice case, trace where the line total is rounded to cents, and fix it there. I'll round each line to whole cents before summing, in a float-safe way."
+    },
+    {
+      "id": "code-s002-e013#1",
+      "response": "Understood: I'll leave the Marco item alone until you've asked him. For export, I'll report failures to Sentry using SENTRY_DSN, put the command behind a GrowthBook flag, and add a Vitest snapshot test of stdout for the csv output. I won't use git stash from now on and will commit WIP to the branch instead. I'll leave the existing stash entry untouched unless you tell me to drop it.\nAction: look at the export command and how other commands wire up Sentry and GrowthBook, then add the Sentry reporting, the flag and the snapshot test, committing WIP as I go."
+    },
+    {
+      "id": "code-s105-e000#1",
+      "response": "I'll add a Next.js error boundary with a 'Try again' button that calls `reset()`, so a render error no longer white-screens the dashboard. It belongs in the (dashboard) route group so it keeps the sidebar and header, and I'd add a `global-error.tsx` too for errors in the root layout. Your half-finished edits on the /reports page are in the working tree, so I'll keep them out of this commit.\nAction: create branch acme-447, add the error boundary files under apps/web/app/(dashboard)/, and commit only those files."
+    },
+    {
+      "id": "code-s035-e000#1",
+      "response": "I'll add cdn.acme.dev to images.remotePatterns in next.config.ts, using https as the protocol if the CDN serves over it. I'll check the existing config first so I don't overwrite any patterns already there.\nAction: open next.config.ts, add the remotePattern for hostname cdn.acme.dev, and check that the avatars on /settings/team load."
+    },
+    {
+      "id": "code-s066-e035#1",
+      "response": "Nice work today, a lot did get done: the pool max change passed the load test and the api suite, and the worker ServiceMonitor renders cleanly. One loose end for tomorrow: the worker servicemonitor change is under infra/, so when you open its PR it needs platform team review and the plan output.\nAction: nothing more tonight; I'll pick up from there whenever you're back."
+    }
+  ]
+}

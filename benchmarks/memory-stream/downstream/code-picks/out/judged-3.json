@@ -1,0 +1,78 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s080-e014",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "R1 catches lockfile (frozen-lockfile), changeset, docs, Friday 9th; R0 misses the new-dependency lockfile commit that breaks CI."
+  },
+  {
+   "event": "code-s080-e020",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Pool max is 10 per pod; R0 correct but invents a 12-pod HPA max; R1 fails to recall a known fact."
+  },
+  {
+   "event": "code-s082-e005",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "User's one-concern-per-PR rule favors separate branch; R1 fine but folds rename into clock-skew diff."
+  },
+  {
+   "event": "code-s082-e017",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both claim job id before delivery and test redelivery; R0's removeOnComplete note is accurate and relevant."
+  },
+  {
+   "event": "code-s083-e017",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "Billing code needs review; R1 keeps it uncommitted as agreed; R0's new branch/PR muddles the uncommitted raw-body work."
+  },
+  {
+   "event": "code-s085-e014",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "R0 recalls Cloudflare DNS but misses known ALB via AWS Load Balancer Controller; R1 recalls nothing."
+  },
+  {
+   "event": "code-s087-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 correctly names Tailwind v4 @custom-variant dark needed for class strategy; R1 generic."
+  },
+  {
+   "event": "code-s091-e007",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 applies named-export rule and vitest; R0 fine but omits named-export convention."
+  },
+  {
+   "event": "code-s097-e005",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Both keep secret server-side; R0 also applies 1Password, colocated tests, re-check; R1 hedges on known conventions."
+  }
+ ]
+}

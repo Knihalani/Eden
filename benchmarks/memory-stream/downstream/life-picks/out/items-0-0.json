@@ -1,0 +1,185 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s098-e004#0",
+   "response": "Sorry about the dehumidifier. Your receipts now get auto-labelled 'Receipts', so I'll search that label for a dehumidifier purchase from around last summer. I don't know the brand, store or warranty length yet, so I'll read those off the receipt and then check the manufacturer's terms before telling you whether it's covered.\n\nAction: search the Receipts label for the dehumidifier from summer 2025, then look up the warranty terms and report back."
+  },
+  {
+   "id": "life-s106-e005#0",
+   "response": "Holding the order. The charcoal bags are the right pick anyway, since Febreze plug-ins and Glade candles are out with Sam's fragrance migraines. The basement kitchen is a microwave, an induction hotplate and the old fridge, and the hotplate needs flat-bottom induction pans, so the cast iron works and the old aluminium pot does not. For this week I'd plan vegetarian meals (no fish or seafood for Sam) that work on one pan or in the microwave, and Leo is fine with almonds and walnuts, just no cashews or pistachios.\n\nAction: hold the charcoal order and draft five easy dinners for that setup, with a short shopping list for you to check."
+  },
+  {
+   "id": "life-s025-e032#0",
+   "response": "What a lovely thing to hear, and happy belated birthday to your mom. The nicest ones yet from the Mumbai florist is a good review to keep. I'll hold the book decision until tonight.\n\nAction: add your mom's birthday (Nov 3) to the calendar as a yearly event with a reminder a week before, and note the Mumbai florist so next year's order is easy."
+  },
+  {
+   "id": "life-s108-e000#0",
+   "response": "Good plan, the subjunctive really does need drilling on paper. I'll look for upper-intermediate Spanish grammar books with a strong subjunctive section, lots of exercises and a full answer key, and shortlist two or three with price and delivery time. I'll check the reviews and the edition before anything goes in a cart, and I won't order until you pick one.\n\nAction: search for upper-intermediate Spanish grammar workbooks with an answer key and send you a short comparison."
+  },
+  {
+   "id": "life-s082-e000#0",
+   "response": "Two things matter. The City is replacing the watermain on Queen St E between Leslie and Jones from May 19 for about 9 weeks, with eastbound lane restrictions on weekdays 7am-7pm and delays on the 501, so allow extra time on your Tuesday and Thursday office-day commute if you ride it. The Green P lot at Coxwell and Queen is closed June 1-14. Optional extras: the Leslieville Flea at Ashbridge Estate on May 24, June 28 and July 26, and the movie-night poll closes May 31; the rest you can skip.\n\nAction: add the May 19 watermain start and the June 1-14 lot closure to your calendar, and check whether your route to King St West uses the 501."
+  },
+  {
+   "id": "life-s087-e031#0",
+   "response": "Sending the Hannah text now. For Olivia's blurb I don't want to guess what is in Instant Payouts v1, so I'll pull the scope from the project docs first and keep the draft to 4-5 lines for her sales deck on Monday. I'll show it to you before it goes anywhere.\n\nAction: send the text to Hannah, then read the v1 scope in the docs and draft the blurb for your review."
+  },
+  {
+   "id": "life-s077-e007#0",
+   "response": "It opens Sun 10 May (Mother's Day) and runs Sundays 9:00 to 14:00 at Jonathan Ashbridge Park, 1515 Queen St E, through Sun 25 Oct. I'm also still on the fresh wall options for Nate so you have a link before Monday.\n\nAction: keep gathering backsplash options this afternoon, and say the word if you want opening day on the calendar."
+  },
+  {
+   "id": "life-s155-e022#0",
+   "response": "For Tom's calendar I'd block: Thu 10 Dec, leaving at 5:00 pm for Leo's winter concert (6:30 pm at the Morse Street gym, which you've already told Tom about), and out of office from Mon 21 Dec through Fri 1 Jan for Lisbon, since you fly Sun 20 Dec at 22:10 and are back Sat 2 Jan. I'll check which of those days are company holidays so we don't mark them as OOO. On Leo's 'that thing', I think it's the snow-day indoor games list from January, and he wants floor is lava again, plus sock skating relay, blanket fort with flashlight reading, painter's tape hopscotch, an indoor scavenger hunt and balloon keep-up.\n\nAction: draft the calendar entries for you to approve before Friday, and ask Leo to pick from the games list."
+  },
+  {
+   "id": "life-s053-e003#0",
+   "response": "Riya the godmother, congratulations! Ira on February 14 is the best kind of Valentine's baby, and I'm glad you're part of her life. Whenever you're ready, we'll pick the haber sentences back up.\n\nAction: add Ira's birthday (Feb 14) as a yearly calendar event with a reminder a week before, and ask you for Mei's birthday since I'm still missing it."
+  },
+  {
+   "id": "life-s038-e024#0",
+   "response": "Partly. Written Portuguese is fairly readable with Spanish, but spoken Portuguese, especially European Portuguese in Lisbon, sounds quite different, with swallowed vowels and lots of 'sh' sounds, so expect not to follow it at first. Speaking Spanish slowly will often get you understood, but there are false friends that can trip you up, and a few Portuguese basics go a long way (bom dia, obrigada, com licença).\n\nAction: put a one-page Portuguese cheat sheet in your notes with the most useful phrases and Spanish false friends for the Lisbon trip."
+  },
+  {
+   "id": "life-s046-e041#0",
+   "response": "Posting the congratulations to Wen in #product-team as drafted. For May, the only thing I have saved is an idea to go to the Canadian Tulip Festival in Ottawa with Sam's parents, with dates still to check in April, so that may be what you're remembering. For the drive, I'd keep your usual plan: the Mazda, leaving early Friday to beat 401 traffic, with the Big Apple stop in Colborne, about 4 h 35 min without traffic.\n\nAction: post the note to #product-team, set an April reminder to check the Tulip Festival dates against the long weekend, and look for Leo-friendly things on in Ottawa that weekend."
+  },
+  {
+   "id": "life-s141-e000#0",
+   "response": "Six bags already, nice work. What I have is last year's schedule (last pickup Tue 9 Dec 2025, then the Commissioners St drop-off depot), and my notes disagree on your collection day, so I won't guess this year's end date. Keep the leaves in paper bags only, no plastic, under 20 kg each, so they're ready.\n\nAction: look up the 2026 City of Toronto collection calendar for your address, confirm the last yard waste pickup, and put it on the calendar."
+  },
+  {
+   "id": "life-s068-e021#0",
+   "response": "I'll ask Dr. Lin's office at Queen East Dental for Apr 22 late morning. Heads up that Apr 22 is a Wednesday, and your 1:1 with Tom is Wednesdays 11:30-12:00, so a cleaning at 11:00 or later would collide with it. I'll ask for something that finishes before 11:30, around 9:30 or 10:00, or one after noon, and I won't confirm until the office gives me real slots.\n\nAction: contact Queen East Dental for Apr 22 slots that avoid the 11:30 1:1 and bring you the options."
+  },
+  {
+   "id": "life-s058-e010#0",
+   "response": "I don't have that result saved, and I don't want to guess times from memory. I'll look through our history and your notes for the Feb 27 search, and if it's not there I'll run a fresh VIA Rail search for a Friday evening Toronto to Ottawa and flag that schedules may have changed. For the comparison, the drive is about 4 h 35 min without traffic.\n\nAction: search chat history and notes for the Feb 27 VIA Rail times, otherwise re-run the search and send you the options."
+  },
+  {
+   "id": "life-s063-e009#0",
+   "response": "On it. I'll rename the March break photos by capture date and move the blurry ones into a separate 'Blurry' folder, moving rather than deleting so you can review them. Then I'll pull the 12 unopened newsletters into one short digest.\n\nAction: start with the Drive photos, then send the newsletter digest."
+  },
+  {
+   "id": "life-s047-e019#0",
+   "response": "Sending the school council reply now. Your Mazda policy is with Intact and renews each April, so I'd start collecting quotes around late February to early March, which leaves time to compare before renewal. On cancelling, I don't want to guess Intact's exact notice rules, so I'll read your policy documents and their cancellation terms before you switch.\n\nAction: send the school council draft, set a reminder for late February to start quotes, and look up Intact's cancellation and notice requirements."
+  },
+  {
+   "id": "life-s136-e000#0",
+   "response": "Got it, Leo's piano with Mrs. Greene is moving to Fridays at 4:15 pm from September 2026, so it stops clashing with your Roadmap review - Riya block on Mondays. I'll end the Monday series and start a weekly Friday series, and I'll check that Friday 4:15 doesn't collide with anything else.\n\nAction: update the family calendar, ending the Monday piano events and adding weekly Fridays at 4:15 pm from the first Friday in September, and confirm with you before saving if the start date is unclear."
+  },
+  {
+   "id": "life-s092-e000#0",
+   "response": "Your street's yard waste pickup resumed Thu 9 April and runs every other Thursday, so that's Apr 9, Apr 23, May 7, and then Fri 22 May because Victoria Day week pushes pickup back a day. Paper yard waste bags or labelled rigid containers only, no plastic, and branches under 7.5 cm, bundled, max 1.2 m long and 20 kg. Home Depot on Leslie St has 10-pack paper bags for $11.98 if you need more. Sam gets notifications from the 'Malhotra-Okafor family' calendar, so he'll see these.\n\nAction: add the next two pickups after today (starting with Apr 9 and Apr 23, or May 7 and May 22 if those have passed) to the family calendar."
+  },
+  {
+   "id": "life-s087-e016#0",
+   "response": "Will do. I'll go through this week's email and sort it into needs a reply, FYI and ignore, and for the ones that need you I'll note who it's from and how urgent it looks. I won't send anything without your okay.\n\nAction: scan this week's inbox now and bring you the needs-a-reply list, oldest first."
+  },
+  {
+   "id": "life-s105-e032#0",
+   "response": "Baking on weekend mornings with Leo is what you've told me helps you unwind, so I'd build tomorrow around that and keep everything else empty. While the basement kitchen is what you have, there's no oven, so I'd go with something Leo can stir on the induction hotplate in a flat-bottom pan (the cast iron works) or in the microwave, like stovetop pancakes or a mug cake. Then a slow afternoon with no plans.\n\nAction: pick two no-oven recipes Leo can help with, block a quiet morning for tomorrow, and send you the plan."
+  },
+  {
+   "id": "life-s140-e033#0",
+   "response": "First I'll read Sam's text so we're not planning against what he already has in mind. Then no hotplate tonight: I'd order delivery or pickup that's vegetarian with no fish or seafood for Sam, no cilantro for you, and nothing with cashews or pistachios for Leo, so I'll skip dishes where those are likely.\n\nAction: read Sam's text, then shortlist two or three vegetarian takeout options that fit those rules and confirm with you before ordering."
+  },
+  {
+   "id": "life-s087-e029#0",
+   "response": "Here's a draft: 'Hey Hannah! Leo and I are heading to Riverdale Park East tomorrow around 10:30 for the playground and the market. Want to come with Ellie and Jun? No pressure if you're wiped.' If we grab market snacks I'll keep them dairy-free for Ellie.\n\nAction: send the text to Hannah once you say it's good, or edit the wording first."
+  },
+  {
+   "id": "life-s022-e004#0",
+   "response": "That's kind of you, and I'll get it there for around 3:30. I need a few details first: how Sam takes his coffee, any snack he likes or can't eat, and the Riverdale school address, since schools often only accept deliveries at the front office. I'll label it for Sam in room 214 and ask the office to pass it on if the courier can't go up.\n\nAction: once you send those details, place a delivery order timed for 3:30 and confirm the cost with you before paying."
+  },
+  {
+   "id": "life-s105-e004#0",
+   "response": "Booking East End Plumbing for Monday morning, 29 Jun, at your home address. For the Lattice self-review due 2026-07-10, I'd set the first reminder for Tue 30 Jun, since Monday is plumber day, and the second for the week of the deadline, Mon 6 Jul.\n\nAction: book East End Plumbing for Mon 29 Jun, add the two Lattice reminders (Tue 30 Jun and Mon 6 Jul), and tell you the confirmed times."
+  },
+  {
+   "id": "life-s131-e022#0",
+   "response": "Here's a draft: 'Neha, you've been so sure of what you want your whole life, and it turns out what you wanted was [name]. [Name], welcome to the family, we promise the group chat sounds worse than it is. To the happy couple, may you always agree on where to eat and never on who's right.' It's warm and a little teasing without being cringe.\n\nAction: fill in the partner's name once you give it to me, and tweak the jokes if you'd like something more specific to Neha."
+  },
+  {
+   "id": "life-s011-e000#0",
+   "response": "Got all of it, and Biscuit's siren solos are officially a tradition. I'll update everything: Leo in grade 2 with Ms. Alvarez, contacted through Edsby; you doing Wednesday pickups for Leo and Jun with Hannah on Fridays; no meetings before 9:30 or after 16:30, and nothing after 15:00 on Fridays; Spanish with Carlos on Thursdays at 20:00 on Zoom with homework review from 19:30; and Canadian retailers first, skipping Amazon when a local option ships within a week. I'm replacing my old notes that had Spanish on Tuesdays at 19:00 and the 17:00 meeting cutoff, and I had Leo's birthday as Oct 21 but you gave July 17, 2019, so I'll correct that unless Oct 21 means something else. And noted on the personal one, I won't bring it up.\n\nAction: apply these updates, move the Spanish calendar series to Thursdays, and ask you to confirm Leo's birthday."
+  },
+  {
+   "id": "life-s076-e007#0",
+   "response": "It's about 452 km to Ottawa, roughly 4 h 35 min without traffic, and Alta Vista is a little past the Glebe figure I have. Leaving right at pickup puts you on the 401 in Friday rush hour, which is why you usually leave early Friday, and with your Big Apple stop in Colborne you'd realistically arrive about five to five and a half hours after pickup, more if traffic is bad. I don't have next Friday's pickup time in front of me, so I'll check.\n\nAction: check the pickup time on your calendar and a live traffic estimate for that afternoon, then give you an arrival window for Grace and Daniel's."
+  },
+  {
+   "id": "life-s077-e017#0",
+   "response": "Sending the reply to Jenna now: yes to the 2-4pm lemonade table slot, no to setup. For the drop-offs, paint and batteries usually count as household hazardous waste and the old printer as electronics, which can go to different places, and some retailers also take batteries and old electronics. I'll check the City of Toronto's drop-off finder for the closest options and hours, and flag whether one stop can take all three.\n\nAction: send the reply to Jenna, then look up the nearest drop-off locations and send you a short list."
+  },
+  {
+   "id": "life-s088-e038#0",
+   "response": "Draft, not posted: 'Team, the Instant Payouts beta passed 10,000 payouts this week. Every one of those was a merchant paid faster, and that comes from careful work across engineering, design and the launch. Thank you.' It's calm and concrete, with no exclamation marks.\n\nAction: ask you which people and what they did to credit by name, add that to the draft, and save it for you to post tomorrow."
+  },
+  {
+   "id": "life-s126-e005#0",
+   "response": "Sorry about the heel. Since you run with Marcus on Saturdays 7:30-8:45 and prefer appointments on weekdays after 5:30 pm, I'd look for a physio with a weekday evening slot at 5:30 or later next week, and use Saturday after about 9:30 as the fallback. I'll also check whether the physio counts toward your Lumen Pay wellness account, which goes up to $750 a year from July.\n\nAction: search for physio availability next week for weekday evenings at or after 5:30 pm and Saturday late morning, and bring you the options before booking."
+  },
+  {
+   "id": "life-s113-e000#0",
+   "response": "Here's the new message: 'Hi, thanks for your message. I'm back and catching up on email, so my replies may be a little slower than usual. Best, Riya'. I'll end the out-of-office tomorrow morning and put this text in place.\n\nAction: set the auto-reply to switch off tomorrow morning with the updated wording, and confirm the exact time with you."
+  },
+  {
+   "id": "life-s020-e016#0",
+   "response": "I'll build it as short role-play scenes, like ordering food, a work meeting and a doctor's visit, since that's how you learn best, using Mexican vocabulary like carro and computadora. Three sections: ser vs estar with emotions and locations, por vs para, and the subjunctive after cuando for future events, with 'Cuando llegue a casa, te llamo' as the model. There'll be an answer key at the end.\n\nAction: draft the sheet and save it to your notes before Thursday's 8:00 pm lesson with Carlos, then ask if you want preterite vs imperfect added."
+  },
+  {
+   "id": "life-s155-e013#0",
+   "response": "Draft, not sent: 'Hi Aisha, catching up on the readiness doc. On rollback, I'll add the exact flag name, and can you tell me who should be able to flip it on a weekend? On the error budget, I'll confirm per day or per week once I've checked the go/no-go criteria. Also PAY-1227, the on-call runbook update, has no owner; can someone on your side take it? Thanks, Riya'\n\nAction: wait for your edits or go-ahead before sending it to Aisha."
+  },
+  {
+   "id": "life-s060-e000#0",
+   "response": "That sounds exhausting, standing the whole way both directions with the bag strap cutting into your shoulder at the end of a long day. A packed streetcar twice in one day is a lot to carry.\n\nAction: nothing for now, I'm here and just listening."
+  },
+  {
+   "id": "life-s115-e000#0",
+   "response": "Yay, Lisbon is booked! I'll put the trip on the family calendar so Sam sees it: leaving Pearson on Dec 18 and returning Dec 30. I don't have the flight times or numbers yet, so I'll pull them from your TAP confirmation rather than guess.\n\nAction: add 'Lisbon trip (TAP from Toronto Pearson)' on the family calendar from Dec 18 to Dec 30, then search your email for the TAP confirmation and add flight times and the booking reference."
+  },
+  {
+   "id": "life-s028-e010#0",
+   "response": "I don't have those figures yet, and I won't guess. I'll pull the grocery category from your TD statement for October, then the same for August and September, and put the three months side by side with the difference. If some grocery spending went on another card, I'll tell you so the comparison isn't misleading.\n\nAction: pull the October grocery total from the TD statement, then August and September, and send the comparison."
+  },
+  {
+   "id": "life-s050-e007#0",
+   "response": "I'll check your TPL account for any holds that are ready, and note which branch they're at, Leslieville or Pape/Danforth. Your library card expires 2026-02-14, so I'd renew it soon before holds or loans are affected.\n\nAction: check your TPL holds now and tell you what's ready and where, then set a reminder to renew the card before Feb 14."
+  },
+  {
+   "id": "life-s152-e004#0",
+   "response": "Let's get you the real answer so you don't have to rely on memory. I'll search your sent mail to Tom Becker for what you wrote about roadmap timing and quote the exact lines. For reference, your Q4 payouts planning doc is due to Tom on Fri 30 Oct and your writing block is Tue 20 Oct 9:30-11:30, but I won't assume those are what you told him until I've read the email.\n\nAction: search sent mail to Tom for roadmap timing and send you the exact wording with dates."
+  },
+  {
+   "id": "life-s148-e000#0",
+   "response": "Adding the offsite for Thu 12 Nov, 9:00 am to 6:00 pm at the Gladstone House. Two things this touches: Aisha's Instant Payouts GA retro is Fri 13 Nov at 13:00 and clashes with the Ottawa trip, and the earlier idea of moving it to Thu 12 Nov no longer works because you'll be at the offsite. Also, Thursday is a Leo after-school-program day until 5:45 pm and the offsite runs to 6:00, so Sam or someone else would need to do pickup.\n\nAction: add the offsite to your calendar, suggest Aisha a different slot for the retro, and ask you or Sam about Thursday pickup."
+  },
+  {
+   "id": "life-s050-e016#0",
+   "response": "That's a great trip for a dinosaur-loving kid. I need the exact nights (March break starts the week of the 16th) and whether you're flying to Calgary or driving, then I'll find a 3-night hotel in Drumheller. For Tyrrell I'll check the current admission price for Leo's age group rather than guess.\n\nAction: ask you for the dates and travel mode, then search Drumheller hotels for three nights and look up Tyrrell child admission, and send you a short comparison."
+  },
+  {
+   "id": "life-s060-e002#0",
+   "response": "I'm sorry, Riya. Four years tomorrow is a lot to carry, and a quiet day with the diya in the evening sounds right. Tomorrow is Wednesday, so I can see the Payouts standup at 09:45 and your 1:1 with Tom at 11:30, and I'll look at what else is on the calendar before touching anything. I won't decline or move anything with other people without your okay.\n\nAction: review tomorrow's calendar, propose which items to move or drop (including the Tom 1:1 and the standup) and keep the evening clear, then wait for your yes."
+  },
+  {
+   "id": "life-s150-e004#0",
+   "response": "Here's a checklist for the two DES-341 copy variants (the schedule picker copy): 1) Is it accurate to what the product actually does? 2) Is it clear on first read, with no jargon? 3) Does it fit the space and read well in the Figma layout? 4) Is the tone consistent with the rest of the product and help content, and would a merchant know what happens next?\n\nAction: save this as a note linked to DES-341 and the Figma frames, and remind you after lunch."
+  },
+  {
+   "id": "life-s056-e000#0",
+   "response": "Sam's birthday is March 22 and he prefers a quiet dinner at home over a party, so I'd plan a relaxed vegetarian dinner with no fish or seafood, and skip anything scented for the gift because of his migraines. Think books, something for a hobby or an experience, and tell me what he's been into lately. For the anniversary on Tue 16 June, restaurant reservations open in April, and your shortlist is Edulis, Ascari Enoteca and Planta Queen, with Planta Queen the sure vegetarian-friendly one; I'd check the other two menus for non-fish options, and sitter candidates are Maya R. ($20/h), Josie T. ($22/h) and Ana P. ($17/h).\n\nAction: set an April reminder to book the anniversary reservation, ask the sitters about June 16, and draft a vegetarian menu for Sam's birthday dinner."
+  },
+  {
+   "id": "life-s068-e024#0",
+   "response": "I'll keep this dairy-free for Ellie and completely nut-free for Leo, no exceptions: fruit, cut veggies with hummus, popcorn, pretzels, rice crackers and dairy-free granola bars, and I'll check labels for milk and any tree nut or 'may contain' warnings. I'll use no-name brands where I can.\n\nAction: build a PC Express cart for three kids with those snacks, check whether a 3 pm pickup slot is available tomorrow at your usual Lakeshore store, and show you the cart before I check out."
+  },
+  {
+   "id": "life-s066-e010#0",
+   "response": "Appendix A, instant payout research. Public pricing checked 2026-04-08 shows Stripe at 1.5% (min $0.50), Square at 1.75% and Shopify Payments at 1.5%, while Helcim has no instant product, and none advertise a cap. All three that offer it make the net amount the most prominent number before confirmation: Stripe shows amount, fee and net in a modal, Square shows the fee under an Instant/Standard toggle, and Shopify puts the net in the confirm button. Across 148 public posts (Oct 2025 to Apr 2026), merchants most often report payouts marked sent but not received (41), fees charged on failed instant payouts (23), cards ruled ineligible without explanation (19) and instant disabled after a risk review without notice (15). Payments Canada's Real-Time Rail is in final testing with a limited phased launch targeted for 2026, so card-based instant payouts stay the practical rail through at least 2026.\n\nAction: put this into the PRD as the appendix and link the saved screenshots and complaint quotes in Drive."
+  }
+ ]
+}
