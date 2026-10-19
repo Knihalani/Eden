@@ -922,3 +922,10 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - So stale *facts* explain a minority of the harm. Most of the rest is stale *episodic state* ("where did we leave things" answered with 08-30 work; old in-flight branches) and plainly off-target rows.
   - Episodic state is not an item, so the stale metric does not see it. It needs its own handling: state rows that expire unless re-confirmed, or that are always shown with their date.
 - **Engineering note:** the cross-batch blind spot itself is a real bug in the sleep design. Any production sleep compiler that runs per batch needs this pass, whatever this kill line says. Logged for the plan.
+
+## C5-E6 · 2026-10-19 · Dated delivery: each delivered row carries "[as of <date>]" (pre-registration)
+- **Setup:** `downstream.py prep-verify --p 0.6 --dated`. The packets are the same as C5-E4's (calibrated verifier, deferred), but each row is prefixed with the date it became visible (its batch's last session date, the strict visibility time).
+  - Only turns where verify fired are re-run (code 37, life 27). Both conditions (none / dated verify) get fresh responses, with the same protocol as C5-E1.
+- **Comparison, set before running:** on the same fired turns, by group, compare C5-E4's undated verify − none with dated verify − none.
+  - **Dated helps** if the mean on fired plan-no-need turns rises by ≥ +0.25 (towards 0) on the pooled worlds, while the mean on fired plan-need turns does not fall by more than 0.15.
+  - **Dead** otherwise.
