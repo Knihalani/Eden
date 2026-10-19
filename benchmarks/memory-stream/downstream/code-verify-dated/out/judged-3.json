@@ -1,0 +1,62 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s097-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both keep HMAC secret server-side with constant-time verify; R1 adds NEXT_PUBLIC_ caution."
+  },
+  {
+   "event": "code-s098-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 knows Fastify plugins and problem() helper; R1 correct but generic."
+  },
+  {
+   "event": "code-s101-e013",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Uploads use presigned S3 via /v1/uploads; R0 knows it (wrong migration command); R1 doesn't."
+  },
+  {
+   "event": "code-s103-e031",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 names Clerk pk_test_ gotcha and user's useEffect preference; R1 suggests timeZone pinning instead."
+  },
+  {
+   "event": "code-s105-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "R1 knows App Router/(dashboard)/error.tsx but invents unfinished reports edits; R0 doesn't know router."
+  },
+  {
+   "event": "code-s106-e000",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "Auth is Clerk; R1 points to Clerk social connections; R0 doesn't know provider."
+  },
+  {
+   "event": "code-s107-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 knows lineItems is optional for drafts and guards it; R0 generic."
+  }
+ ]
+}

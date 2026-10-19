@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s015-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both follow the env and billing-review instructions and check the repo for the remaining setup steps."
+  },
+  {
+   "event": "code-s018-e016",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A recalls the known publicRoutes/afterSignInUrl gotcha and verifies it; B gives only a generic diagnosis."
+  },
+  {
+   "event": "code-s021-e018",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "B uses the known KEDA autoscaling setup to frame the question; A is generic and misses it."
+  },
+  {
+   "event": "code-s022-e008",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "B knows the project uses Sentry and pino and rethrows; A doesn't know the tracker, which is a known fact."
+  },
+  {
+   "event": "code-s028-e006",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither recalls that branch acme-412-invoice-editor-store was already pushed; both investigate reasonably. B digresses on naming."
+  },
+  {
+   "event": "code-s030-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "A is generic. B recalls the render-pdf work but misses later items and asks for the tracker, which is known to be Sentry."
+  },
+  {
+   "event": "code-s030-e013",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both handle ESM and pino redaction correctly, with tests."
+  },
+  {
+   "event": "code-s037-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "B is clean and correct. A raises an old zod note that likely doesn't bear on the current PRs, a distraction."
+  },
+  {
+   "event": "code-s040-e008",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both do the swaps, check that the NEXT_PUBLIC_ key is publishable, and start the worker with Redis."
+  },
+  {
+   "event": "code-s041-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "A knows formatMoney takes integer cents and that the fix is per-line rounding; B gives a generic float explanation."
+  }
+ ]
+}
