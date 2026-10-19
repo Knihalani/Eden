@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s075-e011",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All delete override on a branch and avoid apply; reasonable variants (PR, plan, ticket id)."
+  },
+  {
+   "event": "code-s030-e013",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "A and B use pino redact; C hedges on known pino logger."
+  },
+  {
+   "event": "code-s015-e000",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "B adds pnpm dev and billing note in doc; A and C fine but thinner."
+  },
+  {
+   "event": "code-s027-e025",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "B and C know Clerk is active via middleware; A hedges."
+  },
+  {
+   "event": "code-s056-e038",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "A routes copy through next-intl message files per known convention; B and C edit component strings."
+  },
+  {
+   "event": "code-s092-e012",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "A knows ServiceMonitor and dashboards dir but stale queue list; B and C miss known scrape path."
+  },
+  {
+   "event": "code-s042-e008",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly do items 1 and 3, extract to empty-state.tsx, skip tests."
+  },
+  {
+   "event": "code-s013-e004",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "B remembers docs update and changeset for public CLI change; A and C omit."
+  },
+  {
+   "event": "code-s088-e023",
+   "scores": [
+    2,
+    3,
+    3
+   ],
+   "why": "B reuses existing api slugify rules; C knows Vitest and named exports; A unsure of runner."
+  },
+  {
+   "event": "code-s003-e026",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "B uses known Vitest stdout snapshot convention; A and C generic tests."
+  }
+ ]
+}

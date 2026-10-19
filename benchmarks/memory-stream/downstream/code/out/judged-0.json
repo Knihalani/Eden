@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s087-e012",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "All apply migration first; only one names port 4000 and auth. Third hedges on dev command; first omits port."
+  },
+  {
+   "event": "code-s057-e010",
+   "scores": [
+    3,
+    1,
+    3
+   ],
+   "why": "PgBouncer transaction mode needs prepare: false. First also flags unwired passthrough. Second claims no record."
+  },
+  {
+   "event": "code-s103-e031",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "Clerk pk_test_ key gotcha; user chose useEffect fix for hydration. Third uses formatDate instead; first is generic."
+  },
+  {
+   "event": "code-s061-e020",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "Infra goes via PR, plan output, platform review, CI apply only. Third is vague about known process."
+  },
+  {
+   "event": "code-s106-e000",
+   "scores": [
+    1,
+    3,
+    3
+   ],
+   "why": "Auth provider is Clerk; first fails to know it."
+  },
+  {
+   "event": "code-s098-e000",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "Second invents problem.ts path and claims CORS in app.ts (cors is a plugin). First hedges on existing problem helper."
+  },
+  {
+   "event": "code-s107-e000",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "lineItems may be absent without expand; second indexes lineItems unguarded."
+  },
+  {
+   "event": "code-s096-e000",
+   "scores": [
+    1,
+    2,
+    3
+   ],
+   "why": "DB is Postgres 16 now; first uses stale MySQL. Second hedges on dialect."
+  },
+  {
+   "event": "code-s081-e017",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "Rule: never merge PRs yourself. Third hedges and offers to merge."
+  },
+  {
+   "event": "code-s013-e040",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "CLI tests are Vitest stdout snapshots; first and third do not recall."
+  }
+ ]
+}
