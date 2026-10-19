@@ -1,0 +1,125 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s107-e009#2",
+   "response": "I don't have the reno notes in front of me, so I won't guess at the reasons.\nAction: Search your notes and email for the contractor comparison and quotes, and send you a short summary of why you picked Nate that you can give Sam."
+  },
+  {
+   "id": "life-s050-e016#2",
+   "response": "Drumheller for the dinosaur museum with just Leo sounds great. I need the exact three nights and how you're getting there, and I don't have Leo's age to price his Tyrrell ticket.\nAction: Look up Drumheller hotels for 3 nights in the March break week of the 16th, check current Royal Tyrrell Museum admission for a child Leo's age, and send you a few options to choose from."
+  },
+  {
+   "id": "life-s036-e003#2",
+   "response": "From my last numbers (as of 17 Nov), the projected total was $45,897.00 against the $48,000 budget, $2,103 of headroom (4.4%), with 3 change orders totalling $4,840 plus HST so far. If the 10% contingency is about $4,364, your feeling looks right, but those figures are from November, so I want to check them against the new quote.\nAction: Open Nate's revised quote, put it next to the budget numbers, and send you the updated projected total and contingency remaining."
+  },
+  {
+   "id": "life-s140-e044#2",
+   "response": "I don't have tonight's Leafs schedule in front of me, so I'll look it up rather than guess.\nAction: Check tonight's game, puck drop time and broadcast, and tell you how it lines up with Leo's bedtime."
+  },
+  {
+   "id": "life-s105-e032#2",
+   "response": "I don't have what you said helps you unwind on weekends in front of me, so I won't make it up.\nAction: Search your notes and past chats for what you said, then build a low-effort plan for tomorrow around it."
+  },
+  {
+   "id": "life-s106-e005#2",
+   "response": "Holding the order until you've talked to Sam. I don't have a list of what's in the basement kitchen setup, so I'll check rather than guess.\nAction: Pause the charcoal bag reservation, look through your reno notes and recent threads for what the basement kitchen has, and suggest meals you can realistically cook this week."
+  },
+  {
+   "id": "life-s028-e014#2",
+   "response": "This morning: I added Felipe (Paws on Pape) to the pet budget, $50 a week, which brings dog walking to $125 a week and monthly pet spend to about $729 against the $350 budget. I also pulled the six open payouts launch risks from Linear into the Notion page 'Payouts v2 launch risks (2025-11-12)'. The October groceries comparison with August and September is still running.\nAction: Report back the grocery totals when they finish."
+  },
+  {
+   "id": "life-s088-e038#2",
+   "response": "Here's a draft: 'Team, the beta just passed 10,000 payouts this week. That's merchants getting paid on time because of the work you put in, and I'm really grateful. Thank you, and well done.'\nAction: Save it as a draft for you to post tomorrow, not posting anything."
+  },
+  {
+   "id": "life-s058-e000#2",
+   "response": "March really is a liar. One thing from my notes: you had 'renew passports' on your to-do list because yours expires in March, so it's worth checking where that stands.\nAction: Check whether the passport renewal to-do is done and tell you if it is still open."
+  },
+  {
+   "id": "life-s037-e004#2",
+   "response": "Noted that the three unmatched charges are all you. For the cake, I don't have the bakery or the order details from last time, so I won't guess.\nAction: Search your email for a bakery cake receipt or order from last year, then confirm the bakery, size and flavour with you before I place anything."
+  },
+  {
+   "id": "life-s022-e000#2",
+   "response": "I don't have your Costco spend or membership fee in front of me, so I'll check before giving a view.\nAction: Pull the last year of Costco charges from your card statements, compare the total with the renewal fee, and tell you whether it's worth renewing or downgrading."
+  },
+  {
+   "id": "life-s100-e017#2",
+   "response": "Blocking Sunday night from 8:30 to 10 for the spy series with Sam. For your mom's mithai, I don't have a shop in mind, so I'll look for well-reviewed Mumbai sweet shops that deliver.\nAction: Add the calendar block, research Mumbai mithai shops with delivery, and send you a shortlist; I'll need your mom's delivery address before ordering."
+  },
+  {
+   "id": "life-s026-e000#2",
+   "response": "Got it: Nate prefers texts, never calls, and starts work at 7:30 am. I'll text him now.\nAction: Text Nate: 'Hi Nate, are the cabinets still arriving Monday?', then pull his invoices into the reno sheet and note the text-only preference."
+  },
+  {
+   "id": "life-s096-e026#2",
+   "response": "That's a real milestone, and leading your first project end to end as a senior PM and watching it work is worth saying out loud. Congratulations.\nAction: Offer to save a short note of it for later, no further action unless you want it."
+  },
+  {
+   "id": "life-s068-e008#2",
+   "response": "I don't have what Leo's been obsessed with lately saved, so I'd rather check than guess for Grace. I'd also check for any food restrictions before replying to her.\nAction: Search your notes and recent messages for Leo's current interests and any food allergies, then draft a reply to Grace."
+  },
+  {
+   "id": "life-s052-e008#2",
+   "response": "I don't have your trouble spots saved here, so I'd check my notes from earlier lessons rather than guess.\nAction: Look for your past Spanish practice notes, and if there's nothing, ask which areas to target (tenses, gender or vocabulary), then send an 8 to 10 question quiz before class."
+  },
+  {
+   "id": "life-s005-e002#2",
+   "response": "I don't have your exact official job title in front of me, so I won't guess. From my notes you work on payouts, including the ledger reconciliation spec, but the form needs the official wording.\nAction: Check your HR records and email signature for the exact title, then draft the areas of responsibility for you to review."
+  },
+  {
+   "id": "life-s105-e004#2",
+   "response": "Booking East End Plumbing for Monday morning, and I'll set the Lattice reminders: your mid-year self-review is due 2026-07-10.\nAction: Book East End for Monday, add a reminder next week (Tue 30 Jun) to start the self-review, and another for the week of 6 Jul."
+  },
+  {
+   "id": "life-s076-e007#2",
+   "response": "I don't have Sam's parents' address or your pickup time in front of me, and Friday afternoon traffic is hard to estimate far ahead.\nAction: Find their address, ask whether you're driving or taking the train, pull a drive-time estimate for a Friday-afternoon departure after school pickup, and give you an arrival time."
+  },
+  {
+   "id": "life-s057-e015#2",
+   "response": "Posting the Slack draft to #payouts-launch now. I don't have Tom's favourite whisky saved, so I won't guess.\nAction: Post the draft in #payouts-launch, search your notes, email and past gifts for Tom's whisky, and if nothing turns up suggest asking someone who knows him."
+  },
+  {
+   "id": "life-s058-e002#2",
+   "response": "The August long weekend is Mon 3 Aug 2026, so I'd look at roughly Fri 31 Jul to Tue 4 Aug, for just you and for you plus Leo.\nAction: Pull Toronto to Vancouver fares for those dates for one adult and for an adult plus a child, and send you rough price ranges, without booking or setting a price watch."
+  },
+  {
+   "id": "life-s115-e008#2",
+   "response": "My notes are old: Leo's passport was due to expire in January and yours in March, so both should have been renewed by now, and I can't confirm they were. Portugal generally wants a passport valid for at least three months past your departure from Europe, which for a Dec 30 return is the safe benchmark to check against.\nAction: Check the expiry date on all three passports and your renewal to-do, and flag any that don't meet the rule before the Lisbon trip on Dec 18."
+  },
+  {
+   "id": "life-s131-e027#2",
+   "response": "I don't have what you said about how you learn Spanish best saved here, so I won't guess.\nAction: Search your notes and past chats for it, and if I can't find it, ask you two quick questions and then set up tonight's vocab practice."
+  },
+  {
+   "id": "life-s140-e033#2",
+   "response": "No more hotplate tonight. I haven't read Sam's text yet, so I'll check it before suggesting anything.\nAction: Open Sam's text and tell you what he said, then give you three takeout or no-cook options to choose from."
+  },
+  {
+   "id": "life-s123-e004#2",
+   "response": "On it. The note covers: 2026 guideline cap is 2.1%, a 2010 condo is covered by rent control, anything above needs LTB approval, 90 days' written notice on Form N1 only once every 12 months, and she can pay the guideline amount if a 9% N1 has no LTB application behind it.\nAction: Write that into a short note with links to the LTB and Ontario rent increase guideline pages, and send it to you to pass on to Tanvi."
+  },
+  {
+   "id": "life-s046-e029#2",
+   "response": "¡Claro! Elige el artículo: 1) ___ día, 2) ___ tema, 3) ___ foto, 4) ___ idioma, 5) ___ moto, 6) ___ sistema. Respuestas después de que contestes: el día, el tema, la foto, el idioma, la moto, el sistema. Recuerda que muchas palabras en -ma son masculinas.\nAction: Esperar tus respuestas, corregirlas, y apuntar las excepciones que fallas."
+  },
+  {
+   "id": "life-s087-e031#2",
+   "response": "Sending the Hannah text now. For Olivia, I don't have the Instant Payouts v1 scope in front of me, so I'll pull it from the PRD, and I'll leave out any GA date unless you've confirmed one.\nAction: Send the text to Hannah, then draft a 4 to 5 line v1 blurb for Olivia and show it to you before sending."
+  },
+  {
+   "id": "life-s083-e000#2",
+   "response": "Jun is Leo's best friend, so this is an easy yes. I'll text Hannah: yes to Leo staying over tonight, her picking both boys up at 3:30 for pizza and a movie, and bringing Leo back tomorrow morning so they walk in together.\nAction: Send Hannah the yes, add the sleepover to the family calendar from 15:30 to tomorrow morning, and remind you to pack Leo's overnight bag."
+  },
+  {
+   "id": "life-s003-e000#2",
+   "response": "Got it: from now on Spanish vocabulary comes as a table with Spanish, English and an example sentence, for Anki. Here's the start for the doctor's visit.\n\n| Spanish | English | Example |\n|---|---|---|\n| el dolor | pain | Tengo dolor de cabeza. |\n| la fiebre | fever | Tengo fiebre desde ayer. |\n| la receta | prescription | Necesito una receta. |\n| los síntomas | symptoms | ¿Cuáles son sus síntomas? |\n| la alergia | allergy | ¿Tiene alguna alergia? |\n\nAction: Save the table preference and send a longer table for Tuesday's role-play with Carlos."
+  },
+  {
+   "id": "life-s013-e020#2",
+   "response": "Added: Leo's swim lesson, every Tuesday at 5:30 pm, Pam McConnell Aquatic Centre, starting tomorrow.\nAction: None."
+  }
+ ]
+}

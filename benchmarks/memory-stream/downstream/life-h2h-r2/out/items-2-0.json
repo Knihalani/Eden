@@ -1,0 +1,185 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s027-e029#2",
+   "response": "Ha, a beagle snore that Diego mistook for drilling is quite the review, and with the real construction going on at home he's clearly keeping up. Enjoy the free sound effects.\nAction: Nothing needed, just carry on with your day."
+  },
+  {
+   "id": "life-s105-e028#2",
+   "response": "Beagles are excellent debt collectors, and I can't tell from here whether he wants a walk, a snack, or just attention. \nAction: Nothing to do unless you want me to set a quick reminder to feed or walk him."
+  },
+  {
+   "id": "life-s018-e010#2",
+   "response": "Glad you have a lead on the cousin, and I hope your mom picks up soon. For Priya, I'd shortlist Little Portugal / Trinity Bellwoods (Victorian rowhouses, Dundas and Ossington bike lanes), the Annex (big old houses, Bloor bike lane), and Cabbagetown (best preserved Victorian streets, quieter), with Corktown if she'd rather have a converted loft. Where her office ends up will decide which one wins on commute.\nAction: Hold the shortlist for you, and whenever you give me a relative or neighbour near your mom I'll draft the check-in texts so you only hit send."
+  },
+  {
+   "id": "life-s018-e017#2",
+   "response": "Pastel de nata comes from Lisbon, Portugal, specifically the Belém neighbourhood, where monks at the Jerónimos Monastery made them before it became a bakery tradition. For Leo: 'It's a custard tart invented by monks in Portugal who needed something to do with leftover egg yolks.'\nAction: Offer to pull a kid-friendly video or send you a one-line version for Leo, no further action unless you want it."
+  },
+  {
+   "id": "life-s126-e000#2",
+   "response": "Happy to help you tidy them. I don't have your notes open yet, so I'd pull them rather than guess what's in there.\nAction: Search your notes app for everything created or edited this month, list them by title grouped by topic, and change nothing until you tell me what to merge, rename or delete."
+  },
+  {
+   "id": "life-s051-e002#2",
+   "response": "I don't have next week's calendar in front of me, so I'd rather pull it than guess.\nAction: Check the family calendar for next week, list it day by day (work, Leo's school and activities, anything Sam has), flag any clashes, and send you the rundown."
+  },
+  {
+   "id": "life-s062-e000#2",
+   "response": "Noted for the record: no replacing the 2019 Mazda CX-5 in 2026, the money goes to the kitchen renovation, and you'll revisit buying an EV in 2028. I'll get you off the dealer's lists.\nAction: Use the unsubscribe link in the dealer's emails (or reply asking to be removed), add a filter that sends their mail to trash, and save the CX-5 / EV 2028 decision to your notes."
+  },
+  {
+   "id": "life-s058-e014#2",
+   "response": "I'll ask Olivia to move 'QBR prep' to 11:00 so it clears the roadmap check-in. For Ellie's dairy allergy I don't have a list of what's in your pantry, so I won't guess; I'd check your recent grocery orders and read ingredient labels, since dairy hides in crackers and bars.\nAction: Message Olivia asking for 11:00, then go through your grocery history and send you a short list of dairy-free snacks to check against the pantry before Ellie and Jun arrive."
+  },
+  {
+   "id": "life-s077-e028#2",
+   "response": "For the sync opener, you've saved clean, workplace-safe finance jokes (nothing cringey, nothing about crypto) as backups in your notes under 'standup openers', so I'd pick from there; something like 'Why did the accountant stay calm? Everything balanced out' is the right level. For the open evening at home, a cook-together night, a long board-game or movie night with good takeout, or a dessert you never have time to make would all suit a no-plans night.\nAction: Open your 'standup openers' note, pick two options for the sync, and send you those plus three evening ideas to choose from."
+  },
+  {
+   "id": "life-s148-e018#2",
+   "response": "The offsite is Thu 12 Nov, but I don't want to guess what 'tomorrow' is in business days, so I'd count it exactly. Counting Mon to Fri only, and skipping Thanksgiving Monday 12 Oct if it falls in the range.\nAction: Confirm today's date from your calendar, count the business days from tomorrow to Thu 12 Nov, and tell you the number plus how many are left before the Tom pre-read deadlines."
+  },
+  {
+   "id": "life-s140-e051#2",
+   "response": "That's a lot to absorb in one week, and being the one who always bends is exhausting; I'll make the day trip as painless as possible. I don't have the meeting time yet, so I'll build around it.\nAction: Pull the morning train and flight options Toronto to Montreal for Thu the 8th, plus return options that get you home for dinner, check the bank meeting time and your Tuesday Wavecrest block, and send you two options to pick from."
+  },
+  {
+   "id": "life-s007-e013#2",
+   "response": "Booking Ascari Enoteca for Sat 16 Aug at 19:00, party of 5 (it has the vegetarian pastas, kids' butter pasta, and it's quieter, better for the grandparents). I'll also look at flights to Vancouver for the three of you, Oct 10 to 13, for Kabir's Thanksgiving.\nAction: Book Ascari for 19:00 and send you the confirmation, then pull Toronto to Vancouver fares for 3 travellers on Oct 10 to 13 and bring options without booking anything."
+  },
+  {
+   "id": "life-s113-e000#2",
+   "response": "Done in principle, I just need to make sure it ends at the right moment. Proposed message: 'Hi, I'm back but still catching up on email, so replies may take a little longer than usual. Best, Riya.'\nAction: Turn the out-of-office off effective tomorrow morning and swap in that message; I'll confirm the exact end time with you since I don't have it in front of me."
+  },
+  {
+   "id": "life-s070-e002#2",
+   "response": "No problem, Tom's link request will wait until after dinner. I'll check your library account for holds that are ready and anything due this week.\nAction: Look up your holds and loans on the TPL account, list which holds are ready with pickup deadlines and what's due this week, and offer to renew what can be renewed."
+  },
+  {
+   "id": "life-s075-e000#2",
+   "response": "Dropping two calls in an afternoon is worth chasing before the weekend. I don't have your internet provider's name or account number in front of me, so I'd check that first.\nAction: Check your provider's outage page and status feed for your address, and if nothing is reported, draft a ticket with the details (repeated drops on calls this afternoon, wants it fixed before the weekend) and open it once you okay it."
+  },
+  {
+   "id": "life-s048-e000#2",
+   "response": "I'd rather look up the actual observations than guess, since I don't have Ottawa's weather for that day. \nAction: Pull Environment Canada's observed data for Ottawa for Sunday the 25th (high, low, wind chill, snowfall) and tell you whether 'most brutal day of the winter' holds up, so you can settle it with Grace."
+  },
+  {
+   "id": "life-s073-e002#2",
+   "response": "A COUNTIF is all you need: =COUNTIF(D:D,\">10000\"), which ignores the header text and counts only amounts above 10,000. Use \">=10000\" if exactly $10,000 should count. Also your library holds are at Pape/Danforth until 20:30 tonight, and held until Saturday.\nAction: Nothing further unless you want me to set a reminder for the pickup tomorrow."
+  },
+  {
+   "id": "life-s068-e021#2",
+   "response": "I'll try for Dr. Lin on Apr 22, late morning (around 10:30 to 11:30). I don't have the office's current openings, so I'll check them first and look at your calendar for that day.\nAction: Contact Dr. Lin's office or booking page for Apr 22 late morning, hold the slot on your calendar, and put the confirmation in your evening digest, since this is a personal item."
+  },
+  {
+   "id": "life-s085-e030#2",
+   "response": "Two is the right number, and no regrets is the right attitude; Portuguese custard tarts from that Dundas place are hard to stop at one.\nAction: Nothing needed, enjoy."
+  },
+  {
+   "id": "life-s105-e000#2",
+   "response": "I see this tap dripped before: you had a dripping outside tap last autumn, and a frost-free hose bib replacement was judged better than a washer fix. East End Plumbing Co. (4.8 stars, Queen St E, service call $129, frost-free hose bib from $285 installed) was one option and Coxwell Plumbing & Heating (4.6) another, but those openings were from last time, so I'll check availability for today and Monday.\nAction: Check East End Plumbing and Coxwell for today or Monday, send you the earliest options with prices to pick from, and meanwhile suggest shutting off the tap at the inside valve to stop the dripping."
+  },
+  {
+   "id": "life-s126-e021#2",
+   "response": "Twenty minutes in, classic Sam. Sleep well.\nAction: None, goodnight."
+  },
+  {
+   "id": "life-s003-e021#2",
+   "response": "Five nut-free lunch ideas (check labels for tree nuts every time): turkey and cheese pinwheels with cucumber, cold pasta salad with chopped veg and cheese, hummus with pita and carrot sticks, a cheese quesadilla with fruit, and fried rice with egg and peas. I'm not sure which he'd actually eat, so tell me his favourites and I'll adjust. I don't have a record of what you asked me about Biscuit and the ambulance, so I'd check the chat history rather than make something up.\nAction: Search past conversations for the Biscuit and ambulance question and send you exactly what you asked and what I found."
+  },
+  {
+   "id": "life-s111-e007#2",
+   "response": "Good news on the electrician. I don't have the kitchen crew's contact details or the lead's name here, so I'll check your contacts and recent threads first.\nAction: Find the crew lead's contact, text them asking what Monday window works for the electrician (and whether they'll be on site), and report back with a proposed time for your okay."
+  },
+  {
+   "id": "life-s027-e031#2",
+   "response": "Jess from Rover walking him at noon on Mondays, Wednesdays and Fridays at $25 a walk is $75 a week. Starts Monday, which from the thread is Mon 10 Nov, the same day the cabinets arrive with Nate on site from 7:30. I'll check whether Jess needs access to the house.\nAction: Add a recurring 'Jess (Rover) walks Biscuit' event, Mon/Wed/Fri 12:00 from Mon 10 Nov, and add $25 per walk ($75/week) to the pet budget."
+  },
+  {
+   "id": "life-s037-e009#2",
+   "response": "Here's a draft: 'Hannah, thank you so much for the shortbread! Leo ate four, so consider it a huge hit. We owe you one.'\nAction: Hold it as a draft and send it to Hannah once you say go."
+  },
+  {
+   "id": "life-s111-e027#2",
+   "response": "A 40 minute bag wait plus a forgotten swim shirt and stuffie is a rough way to learn it. I don't have your packing method saved anywhere I can see, so I won't guess how you want it.\nAction: Ask you how you want packing done (a list per person, who packs what, or a pre-departure check), look in your notes for earlier packing preferences, and meanwhile start a trip-home checklist with Leo's swim shirt and stuffie at the top."
+  },
+  {
+   "id": "life-s030-e000#2",
+   "response": "¡Hola! Here's the full one: 'Tres tristes tigres tragaban trigo en un trigal, en tres tristes trastos, tragaban trigo tres tristes tigres.' Say it slowly first, then speed up, and Carlos's face should be priceless. Dreading Sunday night before launch week is completely normal.\nAction: Offer to put together a short Sunday evening wind-down plan and a launch-week prep list, if you want it."
+  },
+  {
+   "id": "life-s017-e008#2",
+   "response": "I don't have yesterday's route or its estimated time in front of me, so I won't quote a number from memory.\nAction: Pull the route I gave you yesterday and your drive history, compare the estimated and actual time, and tell you how far off it ran."
+  },
+  {
+   "id": "life-s107-e005#2",
+   "response": "Store pickup it is, with Sam grabbing it at Queen & Logan. Slack draft: 'Quick reminder: release freeze runs Thu 12:00 to Mon 09:00. Please get anything you need merged before Thursday noon, and ping Aisha if something urgent comes up. Thanks all!'\nAction: Set up the in-store pickup in Sam's name and save the Slack draft in #payouts-launch without posting it."
+  },
+  {
+   "id": "life-s138-e007#2",
+   "response": "I can see two Lisbon notes ('Riya - Lisbon', now 6 items, and 'Lisbon Dec 2026'), but I don't have what's actually in them in front of me, so I can't quote them. In general, Lisbon in late December is mild but often wet, so layers and a rain jacket are the safe bet.\nAction: Open both notes, pull the NYE and weather items, and send you a packing summary for Leo, and check the forecast closer to the date."
+  },
+  {
+   "id": "life-s090-e000#2",
+   "response": "Here's a starter checklist for Riverdale Farm day camp (starts Mon 29 Jun): water bottle, sunscreen, hat, closed-toe shoes that can get muddy, a change of clothes, a labelled lunch bag and a backpack, plus labels on everything. I don't know the camp's own list, so I'll check it.\nAction: Find the Riverdale Farm day camp packing list in your registration email or their page, merge it with this one, and send you a labelling checklist for the weekend."
+  },
+  {
+   "id": "life-s150-e000#2",
+   "response": "Morning. Let me pull that up.\nAction: List your Linear tickets with a blocked status, show each one's blocker and owner, and flag which ones you can unblock yourself before standup next week."
+  },
+  {
+   "id": "life-s076-e012#2",
+   "response": "Family style for three from Pai on Duncan, delivered at 6, under $100. I'll pick a mix of dishes and keep one mild for Leo, and keep the total with delivery and tip under the cap.\nAction: Pull Pai's menu, build the order, check that the total stays under $100, and place it for 18:00 delivery, then send you the list and confirmation."
+  },
+  {
+   "id": "life-s150-e015#2",
+   "response": "Poor Leo, a chipped front tooth should be seen soon, so I'll ask for the earliest after-school slot this week. I don't have the office's address in front of me, so I'll find it before quoting travel time.\nAction: Find Dr. Lin's office details, request an after-school appointment this week and mention the chipped front tooth, then work out the travel time from home and send you the options."
+  },
+  {
+   "id": "life-s013-e023#2",
+   "response": "Added 'get passport photos for Leo' to your to-do list.\nAction: Keep it undated unless you give me a deadline."
+  },
+  {
+   "id": "life-s058-e007#2",
+   "response": "I'd pull his calendar rather than guess, since I don't have it in front of me.\nAction: Check Tom's calendar for the 24th, list his free slots and what filled the rest of the day, and draft a line for your write-up on why the pricing review slipped."
+  },
+  {
+   "id": "life-s057-e000#2",
+   "response": "Before this goes out: you've set a rule not to give Olivia or anyone in sales a feature date until Aisha has signed off, and drafts to Olivia should say 'target', not 'launch date'. I don't see that sign-off here, so I'll hold the date. Draft: 'Hi Olivia, I'll share our GA target for Instant Payouts as soon as Aisha has signed off, which I expect this week. Happy to send it the moment I have it.'\nAction: Ask Aisha for sign-off on the GA target, keep the draft unsent, and update it with 'target' wording once she approves. (Style notes applied: no em dashes, 'merchant' wording, short paragraphs.)"
+  },
+  {
+   "id": "life-s047-e019#2",
+   "response": "Sending the reply to the school council now. For the car insurance, start getting quotes about 4 to 6 weeks before the renewal date, and don't cancel until the new policy is confirmed so you aren't uninsured; the notice and any fee depend on your policy terms, so I'll read the letter rather than guess.\nAction: Send the school council email, pull the renewal date and cancellation terms from the insurance letter, and set up a quote comparison list."
+  },
+  {
+   "id": "life-s118-e000#2",
+   "response": "I can compare against last year, but I need the renewal documents to do it. Your earlier note has the current premium at $1,640 a year, so I'll use that as last year's baseline once I confirm it from the policy.\nAction: Find the renewal notice and last year's policy, compare premium, coverage limits, deductible and any added or removed items, and send you a short list of what changed."
+  },
+  {
+   "id": "life-s145-e020#2",
+   "response": "I'm here to talk, and wanting toast in your own kitchen is a completely reasonable thing to miss. For the floor, don't sweep dry (it spreads fine dust): vacuum with a soft brush attachment, then go over it with a barely damp microfibre mop and dry it right after, and repeat as the dust settles.\nAction: Stay here first, and tell me when you'd like me to look at easier meals and cleaning options for the next few weeks."
+  },
+  {
+   "id": "life-s100-e000#2",
+   "response": "Let me find it and pull out what matters.\nAction: Find this afternoon's all-hands email, read it, and send you the 4 things that actually matter, plus any deadlines or asks for you."
+  },
+  {
+   "id": "life-s122-e004#2",
+   "response": "Your usual green bin day is Tuesday, going by your bin-day reminders. A holiday last week may have shifted collection, so I'll confirm before telling you to roll it out.\nAction: Check the City of Toronto collection calendar for this week and tell you whether it's Tuesday or shifted."
+  },
+  {
+   "id": "life-s103-e007#2",
+   "response": "Sorry, that's annoying. I don't have your insurer or policy number in front of me, so I'll find it first, and a hit-and-run with no note is usually worth reporting.\nAction: Find your auto policy details and claims contact, draft the claim with the Loblaws lot, last night and the rear bumper damage, ask you for photos and the time, and check the deductible against the repair estimate."
+  },
+  {
+   "id": "life-s046-e021#2",
+   "response": "Booking it as a 25-minute sync with your agenda in the invite (empty-state copy, loading skeleton, who owns the Looker link), and I'll pick a morning that works for Aisha and Diego next week.\nAction: Find a shared morning slot next week, book 'Payouts dashboard: empty states' for 25 minutes with the three-item agenda, and send it."
+  },
+  {
+   "id": "life-s102-e009#2",
+   "response": "You usually order from PC Express for Saturday morning pickup at Loblaws Lakeshore, 9:00 to 10:00, and buy no-name for staples, so I'll build it that way. Everything on your list goes in the cart, with the no-name brand for staples like milk, eggs, bread, rice and pasta.\nAction: Build the PC Express cart, reserve the Saturday 9:00 to 10:00 pickup slot at Loblaws Lakeshore, and send you the cart to check before I check out."
+  }
+ ]
+}
