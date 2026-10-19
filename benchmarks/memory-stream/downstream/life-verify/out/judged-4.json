@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s097-e000",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Vancouver trip dates (2026-07-09 to 07-13) are known; both stall asking for dates instead of sending."
+  },
+  {
+   "event": "life-s097-e004",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Biscuit born around April 2022; food-motivated, steals bread, howls at sirens, chicken sensitivity known. Both claim nothing saved."
+  },
+  {
+   "event": "life-s098-e000",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "R0 uses King St W office and Wen's vegan need; R1 claims no office or dietary info."
+  },
+  {
+   "event": "life-s100-e006",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "R1 correct (2:04:37 Waterfront Half, TD joint PAD) but invents account ****4471 from an unrelated merchant; R0 knows nothing."
+  },
+  {
+   "event": "life-s101-e004",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "R0 flags Saturday 8:30 call with mum; both miss Saturday 7:30 run with Marcus. R1 misses the call clash."
+  },
+  {
+   "event": "life-s105-e030",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Tom's slots (10:00-10:30, 15:30-16:00) and 14 synced events are on record; both decline."
+  },
+  {
+   "event": "life-s107-e013",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Mom call is now Saturday 8:30 am Toronto; R1 uses stale Sunday 9 pm. R0 checks calendar, generic."
+  },
+  {
+   "event": "life-s108-e000",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Riya already owns Gram\u00e1tica de uso del espa\u00f1ol B1-B2 from Indigo; both would buy another without noting it."
+  },
+  {
+   "event": "life-s126-e005",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 recalls left-foot plantar fasciitis history and stretches; R0 generic but fine."
+  },
+  {
+   "event": "life-s130-e000",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "R0 correctly checks. R1 drags in stale July/March deadlines that are past and distracting."
+  }
+ ]
+}

@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s131-e012",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "They met in 2015 at a friend's board-game night; both claim not to know, missing the obvious callback."
+  },
+  {
+   "event": "life-s131-e015",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 reorders known Finish Quantum pods under staples rule, asks on Dyson over $150; R0 correct but vaguer."
+  },
+  {
+   "event": "life-s131-e029",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 simply complies. R1 repeats the miss: Riya's role-play and Mexican vocab preference is known."
+  },
+  {
+   "event": "life-s141-e023",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "History has 416-808-2222, tow up to $250, storage $55/day, Commissioners St lot; both decline to quote."
+  },
+  {
+   "event": "life-s143-e009",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "Thu 18 March is her father's death anniversary; R0 flags it, R1 misses."
+  },
+  {
+   "event": "life-s143-e013",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both comply briefly."
+  },
+  {
+   "event": "life-s145-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "No relevant constraints; both reasonable."
+  },
+  {
+   "event": "life-s155-e007",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 does the task. R1 front-loads stale May PAY-1390 speculation."
+  },
+  {
+   "event": "life-s155-e022",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "R1 correctly blocks Dec 10 early leave and Lisbon OOO Dec 21-Jan 1; R0 knows nothing."
+  },
+  {
+   "event": "life-s157-e000",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Leo's birthday is July 17 (turns 8 July 2027), and Saturday skate lessons 10:30 clash; neither flags."
+  }
+ ]
+}
