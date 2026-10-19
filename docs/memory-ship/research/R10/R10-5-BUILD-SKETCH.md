@@ -54,11 +54,11 @@ that delivery can use any later tool call of the turn.
 
 | Check latency | Turns still reachable | Coding gain kept | Personal-assistant gain kept |
 |---|---|---|---|
-| ≤ 2 s | 10 of 10 | +0.10 | +0.13 |
-| 3 s | 8 of 10 | +0.08 | +0.11 |
-| 5 s | 5 of 10 | +0.05 | +0.07 |
-| 10 s | 3 of 10 | +0.03 | +0.04 |
-| 20 s | 1 of 10 | +0.01 | +0.01 |
+| ≤ 2 s | 10 of 10 | +0.101 | +0.134 |
+| 3 s | 8 of 10 | +0.080 | +0.107 |
+| 5 s | 5 of 10 | +0.050 | +0.067 |
+| 10 s | 3 of 10 | +0.030 | +0.040 |
+| 20 s | 1 of 10 | +0.010 | +0.013 |
 
 ## What the user decides
 
