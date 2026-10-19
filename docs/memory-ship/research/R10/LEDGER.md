@@ -820,3 +820,12 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - Cheap hook-side matching is at about zero.
   - The off-hook verifier is the only push method clearly positive on every split, and best on code-rt1 when uncalibrated (seq).
   - On utility, a mid threshold (p 0.6) is a reasonable dev/fresh compromise on code. On life-rt1 every verifier variant is near zero.
+
+## C5-E3 · 2026-10-19 · The plugin as it ships today, downstream (pre-registration)
+- **Setup:** `downstream.py prep-eden`. The same 60 turns per world and groups as C5-E1 (30 plan-need, 15 labeler-only, 15 no-need).
+  - Conditions: none / eden, where eden is the bullets the real plugin injected at that turn's UserPromptSubmit (`runs/<world>-eden/packets.jsonl`). 59 of 60 turns per world got a packet.
+  - Protocol as in C5-E1: per-turn split, sonnet responder, blind opus judge with history evidence.
+- **Rule, set before running:**
+  - **Net-negative confirmed** if, on the 60-turn mix reweighted to the real need base rate (14%), the expected eden − none is < 0, that is 0.14 × (plan-need effect) + 0.86 × (no-need effect) < 0.
+  - **Net-positive** if > +0.05.
+  - In between: near zero.
