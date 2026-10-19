@@ -1941,3 +1941,10 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **Measure:** as C11-E6 for the restricted channel (slope, median share of N), and its recall of needed items
   with a covering row next to the full entity channel's.
 - **No verdict rule.**
+- **Result (2026-10-19, `python3 benchmarks/memory-stream/recall_funnel.py --rare`):**
+  - code: full entity channel 34/58 = 0.586, rare-entity channel 26/58 = 0.448; rare channel slope b 0.286, empty
+    0/54, median share of N 0.080, median / max size 17 / 34.
+  - life: full 43/69 = 0.623, rare 25/69 = 0.362; slope b 0.480, empty 1/76, median share 0.054, size 15 / 55.
+- **What this says:** dropping hub entities bounds the channel (slope 0.29–0.48, about 15–17 rows) but loses a
+  quarter (code) to almost half (life) of what it found: the hub entities carry real needs. So hubs need a bounded
+  form of their own, a dream-kept card per hub entity, rather than being dropped.
