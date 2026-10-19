@@ -16,9 +16,7 @@ sys.path.insert(0, HERE)
 
 def labels(world):
     out = {}
-    for d in sorted(glob.glob(os.path.join(HERE, "verify", f"{world}-cal*"))):
-        if os.path.basename(d).startswith(f"{world}-rt"):
-            continue
+    for d in sorted(glob.glob(os.path.join(HERE, "verify", f"{world}-cal*"))):  # never verify/<world>-rt*
         for p in sorted(glob.glob(os.path.join(d, "out", "*.json"))):
             for c in json.load(open(p))["cases"]:
                 if "scores" in c and c["event"] not in out:
@@ -50,7 +48,8 @@ def examples(world):
 
 def fit(X, y, l2=1e-3, steps=3000, lr=0.5):
     X, y = np.array(X), np.array(y)
-    mean, sd = X.mean(0), X.std(0) + 1e-9
+    mean, sd = X.mean(0), X.std(0)
+    sd[sd < 1e-6] = 1.0  # a feature constant in training (e.g. trigger) stays 0 after standardizing
     Z = (X - mean) / sd
     w, b = np.zeros(Z.shape[1]), 0.0
     for _ in range(steps):

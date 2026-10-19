@@ -38,9 +38,9 @@ class Distill(M.Base):
         q = dict(e, text_all=M.strip_paste(e["text_all"]))
         a = self.lex.scores(q, now)
         b = self.bank.scores(q, now)
+        cand = M.shortlist(a, b, n)
         la = sorted(a, key=lambda i: (-a[i], i))
         lb = sorted(b, key=lambda i: (-b[i], i))
-        cand = list(dict.fromkeys(la[: n // 2] + lb[:n]))[:n]
         new = self.situ.phrases(e["text_all"]) - self.situ._seen.get(e["id"], set())
         qt = content(q["text_all"])
         win = self.window.get(e["id"], set())

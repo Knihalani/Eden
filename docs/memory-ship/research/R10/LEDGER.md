@@ -1185,7 +1185,8 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - life plan-need +0.293 n 41 (+0.333 n 42), labeler-only −0.174 n 23 (−0.167 n 24), no-need +0.162 n 37 (−0.077 n 39).
   - The packets differ on only 39 code and 63 life turns, yet code's fired group means move by 0.25–0.5 between the two
     runs. At n ≈ 13–40 per group, one responder run cannot separate the k ≤ 2 / supersession change from run noise
-    on code. Life's fired no-need turns gain (+0.162 against −0.077), which is what supersession was meant to do.
+    on code. Life's fired no-need turns gain (+0.162 against −0.077), the direction supersession aimed at;
+    but that 0.24 shift is inside the code run-to-run range, and k ≤ 2 changed with it, so it is not attributable.
 - **What this says:** tightening the vote helps life a little and does nothing measurable on code. The model-free
   vote is still well below the verifier (+0.52 / +0.49 on need turns, C6). Its weakness is which rows it picks, not
   how they are delivered.
@@ -1263,3 +1264,20 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   excludes 0.
 - **Caveats unchanged:** every model is Claude (responder sonnet, judge opus, verifier haiku, sleep compiler sonnet);
   the verifier's model is not one D37 allows; the turns are synthetic StreamBench turns.
+
+## C7-R · 2026-10-19 · Review of the cycle 7 consolidation (round 1: REQUEST_CHANGES) and fixes
+- **DECISIONS R10-5:** "model-free alternatives about 0" replaced by each verdict as recorded: C6-E3 about 0; C7-E1
+  positive, not firm (code +0.013, life +0.063, both CIs include 0); C7-E2 dead on retrieval precision, no
+  downstream run.
+- **Headline:** "no model at all" → "no model in the turn" (C7-E1's store has a sleep-time supersession pass, and
+  both use sleep-compiled rows); C7-E1's small life result is stated.
+- **C7-E1 life fired no-need gain:** now labelled post hoc, between runs, and confounded with k ≤ 2 (STATE, LEDGER).
+- **Harness:** the verifier's shortlist is one helper (`methods.shortlist`) used by `verify.py prep` and
+  `methods_distill.py`; dead `-rt` check removed from `distill.py`; features constant in training standardise to
+  0 (sd floor). Retrained weights reproduce every C7-E2 number above unchanged.
+- **Process note (C7-E2):** the prereg was committed before the scorer code but did not freeze the feature list or
+  fit settings. Future preregs commit the method with the rule.
+- **Local CI on the cycle 7 tree:** format, typecheck, build pass. test:parallel has 3 failures: `switches.test.ts`
+  and `memory-purge.test.ts` fail identically on origin/main in this environment (root on Linux; chmod 000 does not
+  stop root), and `doctor.test.ts` "a hung wrap fetch" failed under load and passes alone on main and this branch.
+  No TypeScript changed in this cycle.
