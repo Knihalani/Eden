@@ -1359,3 +1359,31 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   session received every remaining prompt appended and later sessions got the leftovers (sessions answered "your
   message also had a list of earlier requests"). Its timings are discarded and not reported. Re-run with
   stdin closed (`< /dev/null`), one prompt per session.
+
+## C8-E4 · 2026-10-19 · Time from Submit to the first tool call: result
+- **Run 2** (stdin closed; 12 sessions, one prompt each; headless `claude -p`, the CLI's default model, read-only
+  tools). Per session (seconds after Submit):
+
+  | # | Prompt (short) | First tool | Calls | Last tool | Stop |
+  |---|---|---|---|---|---|
+  | 1 | hook exit 0 | 2.49 | 6 | 11.2 | 24.1 |
+  | 2 | test-parallel vs test | 4.21 | 2 | 4.8 | 13.1 |
+  | 3 | add a unit test (write denied) | 5.36 | 9 | 27.4 | 34.5 |
+  | 4 | rename (write denied) | 2.51 | 4 | 8.7 | 15.7 |
+  | 5 | EDEN_MEMORY_DIR in tests | 2.23 | 3 | 4.8 | 12.8 |
+  | 6 | fix long line (write denied) | 2.62 | 2 | 4.8 | 9.2 |
+  | 7 | PROGRESS next | 2.92 | 1 | 2.9 | 12.6 |
+  | 8 | purge command | 14.13 | 2 | 15.8 | 24.0 |
+  | 9 | explain h2h.py | 2.17 | 1 | 2.2 | 8.6 |
+  | 10 | last 3 commits | 2.96 | 2 | 6.2 | 16.8 |
+  | 11 | thanks | — | 0 | — | 5.3 |
+  | 12 | 17 × 23 | — | 0 | — | 7.9 |
+
+- **First tool call** (10 turns with a call; the pre-registered index method): p50 2.92 s, p90 14.13 s, max
+  14.13 s, min 2.17 s. 2 of 12 turns make no call.
+- **If delivery could use any later tool call in the turn** (post hoc): a checker answering in 3 s still finds a call
+  to come in 8 of 12 turns; 5 s: 5; 10 s: 3; 20 s: 1; 40 s and 70 s: 0.
+- **What this says:** the checker has about 3 seconds. D37's recorded NIM p95 (40–70 s) would reach no turn in this
+  sample, even at the last tool call; the check would have to run on something about as fast as a small hosted model
+  on a good day (≈ 1–3 s; not measured here). Caveats: one machine, one model, n = 12, and writes were denied, which
+  ends edit turns early (more calls would follow in a real edit turn, so the later-call counts are a floor).
