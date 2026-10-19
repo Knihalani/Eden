@@ -1,0 +1,566 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "protocol": "items",
+ "cases": [
+  {
+   "event": "code-s007-e006",
+   "responses": [
+    "Good, the team=payments tag guess stands then. For the trailmix double submit: disable the submit button while the request is in flight with `hx-disabled-elt=\"this\"` on the button or form, and add `hx-sync=\"this:drop\"` on the form so a second request is dropped while one is running. Since client-side guards can be bypassed, a unique constraint or dedupe check on the server is the robust fix.\nAction: Share the htmx snippet for the form, and if you point me at the add-hike template and view I can apply it and add the server-side check.",
+    "Good, the tag stays as team=payments. For the double submit, add `hx-disabled-elt=\"this\"` on the form's submit button or form, and `hx-sync=\"this:drop\"` on the form so a second request is dropped while the first is in flight. Depending on your htmx version, hx-disabled-elt may need a recent one. For real protection against duplicates, also guard server-side (for example, a unique constraint or idempotency check).\nAction: Check your htmx version and the form markup if you want me to apply it.",
+    "Noted, team=payments stays. For the htmx double submit, disable the button while the request is in flight and drop duplicate requests: put `hx-disabled-elt='find button'` and `hx-sync='this:drop'` on the form. For safety against duplicates server-side, you can also dedupe on a hidden token. Action: apply the two attributes to the add-hike form template in trailmix and test with a double click."
+   ]
+  },
+  {
+   "event": "code-s007-e027",
+   "responses": [
+    "I'll add retry with exponential backoff in the CLI api client, with up to 3 tries, only on 502, 503 and 504 responses, not on other errors like 4xx. One caution: retrying non-idempotent requests such as POST can create duplicates, so I'll flag how I handle those.\nAction: Find the api client in packages/cli, add the retry wrapper, and write tests using fake timers so they don't wait on real delays.",
+    "I'll add retry with exponential backoff to the CLI api client for 502, 503 and 504, with 3 attempts total, and surface the last error if all fail. I'd retry only idempotent requests unless you tell me otherwise, since replaying a POST after a 502 could double-submit. Tests will use fake timers so they don't actually sleep.\nAction: Find the CLI api client, implement the retry wrapper, add tests for retry-then-success, giving up after 3, and not retrying other statuses like 404.",
+    "I'll add retry to the cli api client for 502, 503 and 504 only, 3 attempts in total, with exponential backoff and a bit of jitter, and no retry on other statuses. Retrying non-idempotent requests like POST could duplicate writes, so I'll check how the client is used and flag that. Action: find the api client, implement the retry, and add tests with fake timers so they don't wait on real sleeps."
+   ]
+  },
+  {
+   "event": "code-s007-e039",
+   "responses": [
+    "The error means line 24 of InvoiceLineItems.tsx calls `.map` on something that is undefined at render, most likely a line-items array that is missing from the invoice data in some responses. The stack is truncated and I can't see the file, so I can't say yet where it goes missing in the data flow.\nAction: Open components/invoices/InvoiceLineItems.tsx and InvoiceDetail.tsx, trace where the items prop comes from, and fix it at the source with a defensive guard in the component if needed.",
+    "That error means `InvoiceLineItems` called `.map` on a value that was undefined at line 24, so some invoice reached it without its line items. The trace doesn't say why, and I wouldn't guess whether it's the api omitting the field or the component getting the wrong data. It would help to know which invoice Lena hit.\nAction: Open InvoiceLineItems.tsx and InvoiceDetail.tsx, trace where the prop comes from, and ask Lena for the invoice id.",
+    "The trace says `InvoiceLineItems` (components/invoices/InvoiceLineItems.tsx, line 24) calls `.map` on something that is undefined at render, and it's rendered under InvoiceDetail. That means a list prop, probably the line items, wasn't in the data it got, but the stack alone can't tell me why it only happens for some invoices in prod. Action: read InvoiceLineItems.tsx line 24 and InvoiceDetail to see where that data comes from, and check which responses can omit it."
+   ]
+  },
+  {
+   "event": "code-s008-e009",
+   "responses": [
+    "I'll cover the from/to filtering on GET /v1/invoices with tests for both bounds, each alone, a bad date, and from later than to, then check the coverage number against the 80% lines threshold. When I'm done the summary will be a short bullet list, not paragraphs.\nAction: Find the existing invoices route test file, add the from/to cases, and run the api tests with coverage.",
+    "I'll add route tests for the from/to filtering: from only, to only, both together, boundary dates, invalid date input, and no filter. I'll then run coverage to confirm the 80% line threshold is met and give you a short bullet list when done, not paragraphs. The from/to params are already in the generated OpenAPI spec.\nAction: Write the tests for GET /v1/invoices from/to, run them with coverage, and end with a bullet summary.",
+    "I'll cover the from/to filtering on GET /v1/invoices with tests for from only, to only, both, inclusive boundary dates, and invalid date formats. I'll check that line coverage stays at or above the 80% threshold so CI doesn't fail. Action: write the route tests, run the api tests with coverage, then send you a short bullet summary."
+   ]
+  },
+  {
+   "event": "code-s013-e000",
+   "responses": [
+    "There is a real difference: `structuredClone` keeps Dates as Dates, supports Map, Set, typed arrays, undefined values, circular references, NaN and Infinity, while the JSON round trip turns Dates into strings and drops undefined values and breaks on circular references. The JSON trick is only worth it when you deliberately want a JSON-safe copy, and `structuredClone` throws on functions and DOM nodes.\nAction: No action needed; tell me where you're using it if you want me to check a specific case.",
+    "There is a real difference. `structuredClone` keeps Dates as Dates and handles Map, Set, undefined values and circular references, while the JSON round trip turns Dates into strings, drops undefined and functions, and throws on circular references. The JSON trick only makes sense when you deliberately want a JSON-safe copy, and `structuredClone` throws on functions and DOM nodes.\nAction: No code change needed; I can swap any deep-copy spots in the repo to `structuredClone` if you want.",
+    "There's a real difference. structuredClone keeps Date, Map, Set, typed arrays, undefined values, BigInt and circular references, while the JSON trick turns Dates into strings, drops undefined, turns Map/Set into empty objects, and throws on cycles and BigInt. structuredClone throws on functions and DOM nodes and drops class prototypes. Action: none; default to structuredClone (Node 17+) unless you specifically want a JSON-safe copy."
+   ]
+  },
+  {
+   "event": "code-s018-e010",
+   "responses": [
+    "I'll add `.nvmrc` at the root and an `engines` field in the root package.json, but I won't guess the Node major. The version in use should be visible in CI config, a Dockerfile, or what the repo runs on now.\nAction: Check CI workflows, Dockerfiles and the current `node -v` for the version in use, then add `.nvmrc` and `engines` to match; if they disagree I'll ask you which one to standardize on.",
+    "The repo standard is Node 18 LTS, so I'll add a root `.nvmrc` containing 18 and an `engines` field in the root package.json of `>=18 <19`. I can also add `engine-strict` in `.npmrc` if you'd rather installs fail than warn. Worth knowing that there's a known leftover of `Object.groupBy` in apps/web/lib/group.ts, which is a Node 20+ API.\nAction: Create `.nvmrc`, add the engines field, and confirm install still works.",
+    "Going by your earlier note that the Node version is 18 LTS, I'll pin Node 18 in both places. If the team has moved off 18, tell me and I'll use that instead. Action: add `.nvmrc` at the repo root containing 18, add `\"engines\": { \"node\": \">=18 <19\" }` to the root package.json, and ask whether you want engine-strict in `.npmrc`."
+   ]
+  },
+  {
+   "event": "code-s018-e021",
+   "responses": [
+    "Understood, I'll leave the sign-in redirect issue with Lena. For the copy button, I'll add a small button next to the invoice number in the invoice header that copies it to the clipboard, using the existing UI components and giving it an accessible label.\nAction: Find the invoice header component, add the copy button with a brief 'copied' confirmation, and add a test.",
+    "Understood, I'll leave the redirect loop to Lena. For the copy button, I'll find the invoice header component and check whether the codebase already has a copy-to-clipboard button before adding a new one. It will be an icon button with an accessible label and brief 'copied' feedback.\nAction: Locate the invoice header, add the copy button next to the invoice number, and add a test.",
+    "Understood, leaving the redirect loop to Lena. I'll add a copy button next to the invoice number in the invoice header that copies the number to the clipboard. Action: find the invoice header component, reuse the existing button component and icons, give the icon-only button an aria-label, and add a test."
+   ]
+  },
+  {
+   "event": "code-s020-e014",
+   "responses": [
+    "On it. I'll set `display: 'swap'` on the Inter font in apps/web/app/layout.tsx and expose it as a `--font-sans` CSS variable so Tailwind uses the same stack. I'm taking 'ok do it' to mean the Safari font fix, and the `expand=lineItems` detail query question is still open.\nAction: Edit layout.tsx and the Tailwind theme to use the variable, then run the web typecheck.",
+    "Taking that as the Safari font fix: I'll set `display: 'swap'` on the Inter font and expose it as a `--font-sans` variable so Tailwind and the body use the same stack. The other open item is the detail query always asking for `expand=lineItems`, which is separate and I'll hold until you say go.\nAction: Edit apps/web/app/layout.tsx and the global CSS mapping, run the web build or tests, and ask you to eyeball it in Safari.",
+    "Doing the font change: `display: 'swap'` plus a `--font-sans` CSS variable on the Inter config in apps/web/app/layout.tsx, so Tailwind uses the same stack everywhere. The lineItems expand=lineItems question is still open, I'll leave that until you say. Action: edit layout.tsx, make sure the variable is mapped into the Tailwind theme, switch body to `font-sans`, and run the web typecheck."
+   ]
+  },
+  {
+   "event": "code-s020-e019",
+   "responses": [
+    "Understood: from now on I'll test a change end to end before opening a PR, not just with unit tests, and I'll say what I ran. For the font change we just made, I'll load the app and check the font in a real browser rather than relying on the unit tests.\nAction: Start the dev server and verify the Inter font with `display: 'swap'` and the `--font-sans` variable renders correctly in a browser, and report what I could and couldn't check (I may not have Safari).",
+    "Understood. From now on I'll test changes end to end in the real browser before opening a PR, not just unit tests, and I'll tell you what flow I exercised. The date picker case is a good example of why.\nAction: Apply that to every PR from here, starting with the next one.",
+    "Understood: from now on I'll test changes end to end in a real browser before opening a PR, not only with unit tests. I can't check Safari from here, so I'll say plainly when something wasn't verified in a given browser. Action: before any PR, run the app locally and click through the affected flow, starting with the font change on the dashboard."
+   ]
+  },
+  {
+   "event": "code-s020-e034",
+   "responses": [
+    "You're welcome. The full web unit suite and the web typecheck are still running; I'll post the results when they finish.\nAction: Wait for both to finish and report the results.",
+    "You're welcome. The full web unit suite and the typecheck are still running, so I have nothing to report on them yet.\nAction: Check the results and post them when they finish.",
+    "You're welcome. The full web unit suite and the typecheck are still running, so I haven't got results yet. Action: check on both and post the results."
+   ]
+  },
+  {
+   "event": "code-s021-e035",
+   "responses": [
+    "I'll model it on how the repo already defines buckets, since I don't yet know the provider, region, naming pattern or required tags. The bucket will be private (public access fully blocked), encrypted, with a lifecycle rule that expires objects after 90 days.\nAction: Look through the infra code for existing bucket definitions, add the new monthly-invoice-exports bucket in the same style, and run a plan only (no apply) so you can review it.",
+    "I'll add the monthly invoice export bucket in infra as private with a 90 day expiry on objects, and put the `team` and `env` cost tags on it since Priya's script flags anything without them. I'll copy the team value from existing resources rather than guess it. One thing to confirm: an earlier note describes an exports bucket with a 30 day expiry, so is this a new bucket or the same one with a different retention?\nAction: Look at the infra code for how buckets are defined, then draft the bucket and check it with a plan without applying it.",
+    "I'll check how existing buckets are defined in infra (tool, region, naming, tags, encryption) and copy that pattern: private with public access blocked, plus a lifecycle rule expiring objects after 90 days. I won't apply anything, only produce a plan for you to review. Action: read the infra bucket definitions, add the exports bucket with the 90-day expiry, and run a plan."
+   ]
+  },
+  {
+   "event": "code-s022-e017",
+   "responses": [
+    "I'll add a test that makes the render fail and asserts the job rethrows and logs the crash with the invoice id, since no test covers the rethrow yet. I'll also remove the rocket emoji from the worker CHANGELOG and keep emojis out of code, commits and docs from now on. Commit messages will follow Conventional Commits (for example `test:` for this one).\nAction: Add the rethrow test in the worker's render job test file, find and strip the emoji from the CHANGELOG, then run the worker tests.",
+    "I'll add a test in jobs/renderPdf.test.ts that forces the render to fail and asserts the catch logs the crash and rethrows, since nothing covers that yet. I'll also clean up the unused `e` parameter in report.ts while I'm in there. And I'll remove the rocket emoji from the worker CHANGELOG, grep for other emoji in code and docs, and keep them out of commit messages from now on.\nAction: Write the rethrow test, strip the emoji, then rerun the worker tests and typecheck.",
+    "I'll add a test in the renderPdf job tests where the render throws and the job logs the crash with the invoice id and rethrows, which nothing covers yet. Noted on emojis: none in code, commits or docs, so I'll remove the rocket from the worker CHANGELOG. Action: write the rethrow test, run `pnpm --filter worker test`, remove the emoji from the CHANGELOG, and commit both on the current branch with a plain commit message."
+   ]
+  },
+  {
+   "event": "code-s027-e049",
+   "responses": [
+    "Committing the five zod 3.24.1 fixes to deps/zod-3.24.1 now, since the web tests passed (61 files, 214 tests) and the full typecheck came back with 0 errors in api, web, cli and worker. I'll commit only, not push, because you didn't ask for that. Then I'll add `--json` to `acme invoices list` so it prints machine-readable output with no table or colors for jq.\nAction: Commit on deps/zod-3.24.1, then open the invoices list command in packages/cli and add the `--json` flag plus a test for it.",
+    "I'll commit the zod fixes to `deps/zod-3.24.1` first (web tests and the full typecheck came back clean), without pushing. The `--json` flag is a different concern, so I'd put it on its own branch. For jq piping, it will print plain JSON on stdout with no colors or table, and errors will go to stderr.\nAction: Commit on the zod branch, then look at the `invoices list` command and add `--json` with a test.",
+    "Committing the zod fixes to `deps/zod-3.24.1`, since web tests (214 passed) and typecheck (0 errors) are green. The --json flag is a separate feature, so I'll do it on its own branch. It will print stable JSON, add a Vitest snapshot test of stdout, and update docs/cli.md. Action: commit on the zod branch, then branch off for `acme invoices list --json`."
+   ]
+  },
+  {
+   "event": "code-s028-e017",
+   "responses": [
+    "I'll add the duplicate button using the shadcn/ui Button from apps/web/components/ui with a lucide-react icon, not the hand-rolled icons. Since it's icon-only, it gets an aria-label like the trash button does (for example 'Duplicate line item <description>'), and the icon is aria-hidden.\nAction: Open the line item row component, add the button next to the trash one with a handler that inserts a copy of the line, and add a test for it.",
+    "I'll add a duplicate button next to the trash button in the line item row using the shadcn Button from apps/web/components/ui and the Copy icon from lucide-react, not the hand-rolled icons. Since icon-only buttons must have an aria-label, it will get `aria-label=\"Duplicate line item <description>\"` with the icon marked aria-hidden. The duplicate will copy the row with a fresh id.\nAction: Find the line item row component, add the button and the duplicate handler, and add a test.",
+    "I'll add a duplicate-line button next to the trash button using the shadcn components in apps/web/components/ui and a lucide-react icon. As icon-only buttons need an aria-label, it gets a label like 'Duplicate line item <description>' and the icon is aria-hidden. Action: find the line item row, add the button and handler that copies the line with a new id right after the original, and add a test."
+   ]
+  },
+  {
+   "event": "code-s033-e016",
+   "responses": [
+    "Collisions only under parallel runs usually mean shared state between test workers, but I want to read the code first.\nAction: Read apps/api/src/lib/invoice-number.ts and how the tests use it, reproduce the collision with a parallel run, and fix it.",
+    "Parking the bucket. Looking at invoice-number.ts now.\nAction: Read the file and the test setup, reproduce the collision with parallel runs, then fix it.",
+    "Parking the bucket. Collisions only under parallel runs suggest the number generation isn't atomic or shares state across workers. Action: read apps/api/src/lib/invoice-number.ts and reproduce with a parallel run."
+   ]
+  },
+  {
+   "event": "code-s035-e008",
+   "responses": [
+    "Most likely the htmx request from the partial isn't carrying the CSRF token: Django needs it either as a hidden `csrfmiddlewaretoken` field in the posted form or in the `X-CSRFToken` header, and a token that only sits in the base template isn't sent with requests from inside the partial. The usual fixes are putting `{% csrf_token %}` inside the form in the partial, or setting `hx-headers='{\"X-CSRFToken\": \"{{ csrf_token }}\"}'` on `<body>` in the base template so every htmx request gets it. I'd also confirm the CSRF cookie is actually set on that page.\nAction: Ask you to paste the partial and the base template's body tag (or point me at them) so I can see which of these applies, then make the change.",
+    "A 403 CSRF failure after moving a form into a partial usually means the token is not reaching the htmx request. Common causes: the partial is rendered without the request (so `{% csrf_token %}` outputs nothing), the `{% csrf_token %}` tag was left outside the moved form, or the token was sent via an `hx-headers` attribute on an element that is no longer an ancestor of the form. A token in the base template only helps if the form or one of its parents carries it.\nAction: Ask you to share the partial and the view that renders it, so I can check where the token ends up.",
+    "A CSRF token in the base template only helps if the htmx request actually sends it, and moving the form into a partial often loses that. Common fixes: put `{% csrf_token %}` inside the partial's form, or send it for all requests with an `hx-headers` attribute on body that sets X-CSRFToken; also make sure the partial is rendered with the request so the token is in the context. Action: look at the partial template and the view that renders it, and tell you which of these applies."
+   ]
+  },
+  {
+   "event": "code-s036-e010",
+   "responses": [
+    "I'll add `--since <date>` to `acme invoices export` and pass it through as the `since` query parameter, validating the YYYY-MM-DD format so a bad value fails with a clear message. Since this is a new CLI option, I'll also update docs/cli.md.\nAction: Open the export command in packages/cli, add the option and validation, add a test, and update docs/cli.md.",
+    "I'll add a `--since <date>` option to `acme invoices export` that validates the YYYY-MM-DD format and passes it to the api as the `since` query param on each paginated request. Invalid dates will give a clear error before any request goes out. I'll update the command's help text too.\nAction: Find the export command in the CLI, add the option and validation, and add tests.",
+    "I'll add `--since <date>` to `acme invoices export`, validate that it's YYYY-MM-DD, and pass it through as the api's `?since=` parameter, with a clear error for bad dates. Action: read the export command, add the option and help text, add tests (valid date, invalid date, no flag), and update docs if the CLI is documented."
+   ]
+  },
+  {
+   "event": "code-s043-e000",
+   "responses": [
+    "I'll add Storybook stories covering each Badge size, and run Storybook on port 6006 to check them. For Sam's question, I haven't looked, so I don't know yet whether clicks on the status filter are tracked, and I'll search instead of guessing.\nAction: Find the Badge component and its size variants, add the stories, start `pnpm --filter web storybook`, and grep for analytics or tracking calls around the status filter to answer Sam.",
+    "On the click tracking: PostHog is initialised in apps/web/app/providers.tsx with pageview capture off, and the only event I know of is invoice_sent from the send button, so I can't say the status filter is tracked until I grep for capture calls in the filter component. For the stories, I'll cover each size the badge supports.\nAction: Search for posthog capture calls near the status filter and tell you what I find, then add the badge size stories and check they load at port 6006 with `pnpm --filter web storybook`.",
+    "I'll add stories for each badge size. For Sam's question, I don't know yet whether clicks on the status filter are tracked, so I'll search for analytics or event calls there rather than guess. Action: write the badge size stories, check them with `pnpm --filter web storybook` on port 6006, and grep the status filter for tracking calls so I can answer Sam."
+   ]
+  },
+  {
+   "event": "code-s045-e000",
+   "responses": [
+    "I'll add a worker job that loads the org (scoped by orgId), skips it when callback_url is empty, and POSTs an invoice.paid event with a timeout, throwing on a non-2xx so the queue retries. Because queue redeliveries caused duplicate reminder emails before, I'll include a stable event id and make the delivery safe to repeat. Since callback_url is customer-controlled, I'll require https and avoid following redirects to internal addresses.\nAction: Read the existing invoice-reminder job for the job and queue registration pattern, then write the new job with tests for the empty URL, success, and non-2xx cases.",
+    "I'll look at how existing worker jobs are structured and registered, plus the orgs schema for `callback_url`, before writing the new job. The job will load the org, skip quietly if no callback URL is set, POST an invoice.paid event with a timeout, and throw on non-2xx so the queue retries. I need to find where the payment-succeeded event lives to enqueue it, and since that is likely billing code I'd flag it for your review.\nAction: Inspect the worker jobs directory and the orgs schema, then write the job with tests.",
+    "I'll add a worker job that POSTs an `invoice.paid` event to the org's callback_url: skip orgs without one, use a request timeout, and throw on a non-2xx so the queue retries, without putting the URL in failure messages. Where it gets enqueued is likely in the payments flow, which is sensitive, so I'll find that spot and tell you before changing it. Action: read how the worker defines jobs and how orgs.callback_url is modeled, then write the job and tests."
+   ]
+  },
+  {
+   "event": "code-s045-e012",
+   "responses": [
+    "Recap for the ticket: added the worker job services/worker/src/jobs/deliver-invoice-paid.ts (registered as events.invoice-paid) that loads the org by orgId, skips if callback_url is empty, POSTs the invoice.paid event with a 10s timeout, and throws on non-2xx so the queue retries; the failure message has the status code only. Not done: the enqueue call in the api's payment-succeeded handler, which is billing code and left to you. Also answered that DNS is on Cloudflare in infra/dns/records.yaml and that a hooks-test CNAME needs Priya's approval and a target that doesn't exist yet; nothing was changed there. I haven't seen the worker test results yet.\nAction: Check the worker test run and add the result to the recap before you paste it.",
+    "Recap: I added the worker job `services/worker/src/jobs/deliver-invoice-paid.ts`, registered as `events.invoice-paid`. It loads the org (scoped by orgId), skips if `callback_url` is empty, POSTs a JSON invoice.paid event with a 10s timeout, and throws on non-2xx so the queue retries. Still open: the enqueue call in the api payment-succeeded handler (billing code, left to you), the worker test results, which I haven't reported yet, and the hooks-test DNS entry, where I only described the change to `infra/dns/records.yaml` (`hooks-test.acme.dev`) and did not make it; it needs Priya's approval and a receiver target.\nAction: Paste that into the ticket, and I'll report the worker test results once they're in.",
+    "Recap for the ticket: I added the worker job `services/worker/src/jobs/deliver-invoice-paid.ts` (registered as `events.invoice-paid`), which skips orgs with no callback_url, POSTs the invoice.paid event with a 10s timeout, and throws on non-2xx so the queue retries. The enqueue call in the api's payment-succeeded handler is not added; that one line is left for you since it's billing code. For the hosted test receiver, DNS is Cloudflare via `infra/dns/records.yaml` (hooks-test CNAME, needs Priya's approval), and nothing was changed there. Action: check the result of the worker test run, since I haven't seen it finish, and add it to the recap before you paste."
+   ]
+  },
+  {
+   "event": "code-s046-e008",
+   "responses": [
+    "I'll add a 'Paid at' column to the invoices table, rendering the stored UTC timestamp in the viewer's local time in the UI only, with no timezone math in the api. I don't know yet whether the invoice payload already includes a paid timestamp, so I'll check the DTO first, and unpaid invoices will show an empty cell.\nAction: Look at the invoice API response type and the web table columns, add the column using the web date formatting helper, and add a test.",
+    "Understood: the api returns paid_at as the raw UTC timestamp with no timezone math, and the conversion to local time happens only in the web UI when rendering the column. I'll check that invoices already expose a paid-at value, and if not, add it to the api response as UTC.\nAction: Check the invoices schema and api response for paid_at, add the field if missing, then add the 'Paid at' column to the web invoices table with local formatting in the component, plus a test.",
+    "I'll add a Paid at column to the invoices table in web, and keep the api returning the UTC timestamp untouched, with no timezone math there. In the UI I'll format it like the other dates using formatDate(iso, org.timeZone), so it shows in the org's time zone rather than UTC. Action: check that the api returns the paid timestamp, add the column with an empty cell for unpaid invoices, and add a test for a UTC timestamp near midnight."
+   ]
+  },
+  {
+   "event": "code-s048-e005",
+   "responses": [
+    "You hit an engines error installing on your own new laptop on 2026-08-29, so a too-old Node on their machine is a plausible cause, but with no output pasted I can't be sure, so the reply will ask for `node -v` and the error text. I won't state a required version until I've read it from the CLI package's `engines` field. The startup check will compare the running version against that field and print a clear colored warning with the needed version, instead of crashing.\nAction: Read packages/cli/package.json for the supported runtime range, add the startup check, and draft the support reply with install steps and a request for their `node -v` and the exact error.",
+    "There's no error output in the ticket, so the reply should say that we can't tell yet: it will give the install steps and ask them to send the output of `node -v` and the exact crash message. For the startup check, I'd look for the minimum supported runtime in the repo before choosing a number rather than guess one. The check has to live in a tiny entry shim written in old-safe syntax so it runs before anything that would crash on an old runtime, and it should print a clear colored warning (respecting NO_COLOR and non-TTY output) and exit non-zero.\nAction: Check the CLI package's entry, engines and install docs, then draft the reply and implement the shim.",
+    "With no output pasted, I can't be sure of the cause, but the likely one is an old Node: the @acme/cli package is ESM-only since PR #702, which shows up as ERR_REQUIRE_ESM on older runtimes. Draft reply: 'Thanks for reporting this. Please upgrade to Node 18 or newer, then reinstall with `npm i -g @acme/cli`. If it still crashes, send us the output of `node -v` and the full error message.' For the startup check, it has to live in a tiny entry that runs before the ESM modules load, otherwise it crashes before it can print anything. Action: add a small guard that prints a colored warning with the minimum version and exits cleanly, add the missing `engines` field to the CLI package.json, and check how the CLI already does colors."
+   ]
+  },
+  {
+   "event": "code-s050-e000",
+   "responses": [
+    "Will do. `acme status` will print telemetry as on unless ACME_TELEMETRY=0 (opt-out), and the queue section will describe BullMQ on Redis 7 and link the Bull Board at /admin/queues on the worker instead of the RabbitMQ management UI. The link will not include the basic-auth credentials. I need to see how the command gets the worker's base URL.\nAction: Open the status command, update the telemetry line and the queue section, and update its tests.",
+    "I'll make `acme status` print telemetry as on, or off when `ACME_TELEMETRY=0`. For the queue section, I'll replace the RabbitMQ management UI with BullMQ on Redis 7 and link to Bull Board at /admin/queues on the worker, noting it sits behind basic auth, with no credentials printed. I need to check how the status command knows the worker's base URL instead of inventing a host.\nAction: Read the status command, make both changes, update its tests or snapshot, and run them.",
+    "For `acme status`, I'll print telemetry as off when ACME_TELEMETRY=0 and on otherwise, since it's opt-out. I'll replace the RabbitMQ section with BullMQ on Redis 7 and link the Bull Board at /admin/queues on the worker, noting that it's behind basic auth. I'll take the worker base URL from existing config instead of inventing a host. Action: edit the status command, update its snapshot tests, and run the cli tests."
+   ]
+  },
+  {
+   "event": "code-s055-e005",
+   "responses": [
+    "Parking the timing work; I haven't written anything for it, and I'm still waiting on which framework the api uses. For the seed, random data with no uniqueness guarantee is the likely cause of duplicate emails, but I want to read the script before saying so.\nAction: Read the seed script, find how customer emails are generated, and make them unique (for example by deriving them from a counter or index) with a re-run to confirm.",
+    "Parking the timing work. For the seed, duplicate emails most likely come from randomly generated values that sometimes collide, so I'll look at how emails are generated and make them unique by construction (for example, include the index or use a seeded unique generator). I'll confirm against the unique index that the fix removes the collision.\nAction: Read the seed script, fix the email generation, and run the seed repeatedly to confirm no more collisions.",
+    "Parking the request timing work; I'm still waiting on which HTTP framework the api uses. For the seed, random data is producing two customers with the same email, so the fix is to make emails unique by construction (for example by including the loop index) instead of relying on random generation. Action: read the seed script, change the email generation to be unique, and run it several times to confirm the unique index no longer fails."
+   ]
+  },
+  {
+   "event": "code-s056-e000",
+   "responses": [
+    "For errors caught by global-error.tsx, Next attaches a `digest` to the error object, so the likely fix is to include `error.digest` as a tag or extra when reporting to Sentry, which lets you search by it and match server logs. I'll keep it ESM-only with no require(), and make sure nothing sensitive is added to the event.\nAction: Open app/global-error.tsx, see how it currently calls Sentry, add the digest, and add a test if there is a harness for it.",
+    "Next passes a `digest` on the error object given to global-error.tsx, so the fix is to attach `error.digest` as a tag when we call Sentry's captureException. That lets you search Sentry by digest and match the server logs. The request id idea (x-request-id from the web client) was proposed but not approved, so I'll leave it out of this change.\nAction: Read global-error.tsx, add the digest as a Sentry tag, and add a test.",
+    "In Next.js, the error passed to global-error.tsx can carry a `digest`, which is the id that matches the server log entry (it's only set for errors that originated on the server). The Sentry capture there probably only sends the error, so I'll attach the digest as a tag or extra on the event. Action: read app/global-error.tsx and the Sentry setup, add `error.digest` to the captured event, and add a test that asserts it's included."
+   ]
+  },
+  {
+   "event": "code-s057-e030",
+   "responses": [
+    "I'll add the invoice-reminders queue with a daily per-org job that selects only open invoices due in 3 days (drafts and voided never count) and enqueues one reminder email each. The existing reminder job guards against duplicates with db.reminderLog.claim(invoiceId, kind, sentOn), because redeliveries caused duplicate emails before, so I'll reuse that. The existing subject logic counts UTC calendar days while the web app shows org time zone, so I'll match the existing job and flag it. The notes say RabbitMQ, which may be out of date, so I'll check the worker's current queue setup.\nAction: Read services/worker/src/jobs/invoice-reminder.ts and the queue registration, then implement the daily job with tests for open vs draft/voided and for no duplicates.",
+    "I'll look at how the existing worker queues and jobs are set up, then add `invoice-reminders` with a once-a-day schedule that fans out per org, finds invoices due in 3 days, and enqueues one reminder email each. I'll give each email job a deterministic job id built from the invoice and date so a rerun can't send duplicates, and use the subject format 'Reminder: <invoice number> is due in 3 days'. I need to check how org timezone is handled for the 'due in 3 days' calculation instead of assuming it.\nAction: Read the existing worker queue setup, write the queue and job with tests, and report the open questions.",
+    "Plan: a daily job per org that finds invoices due exactly 3 days from today and enqueues one reminder email per invoice, using a deterministic job id so reruns don't send duplicates. I don't know yet how queues and schedules are defined in the worker, so I'll follow the existing pattern instead of picking a library. Action: read how existing worker queues and repeatable jobs are registered, then scaffold invoice-reminders with the query, the enqueue step, and tests (including the day boundary and per-org timezone question, which I'll flag)."
+   ]
+  },
+  {
+   "event": "code-s058-e000",
+   "responses": [
+    "That pattern fits rounding once on the fractional total while each line is shown rounded. Unit prices are integer cents and quantities can be fractional (like 2.5 hours), so each line should be rounded to whole cents first and then summed. Display should go through formatMoney(cents, currency) rather than dividing by 100 by hand. I haven't looked at the code yet, so this is the probable cause.\nAction: Find where invoice totals are computed in the api and web, switch to per-line rounding then integer sums, add a regression test with several fractional-quantity lines, and check whether already-issued invoices store totals that would differ.",
+    "A one-cent mismatch like this usually means the total is rounded differently from the line amounts that are displayed, for example rounding once at the end instead of per line. I haven't looked at the code yet, so I'd confirm that rather than assume. Also, invoices already issued may have stored totals that a fix won't change.\nAction: Find the totals calculation, write a failing test with a multi-line case that reproduces the off-by-one, then fix it so the shown lines sum to the total.",
+    "My first guess is rounding: the total is computed over unrounded fractional cents while each line is displayed rounded, so the shown lines can differ from the total by a cent. The fix would be to round each line to whole cents first and then sum. Action: find the totals computation, write a failing test with a multi-line invoice that reproduces the cent difference, fix it, run the suite, and check how already-issued invoices' stored totals should be treated."
+   ]
+  },
+  {
+   "event": "code-s058-e007",
+   "responses": [
+    "The form and its `saveCompany` server action are written, with name and sender email required and a PATCH to /v1/org/profile. What's missing is the `settings/company/page.tsx` that loads the current profile and renders the form with those values.\nAction: Create that page, check how the current org profile is fetched (I don't know if there's a GET on /v1/org/profile), render the form pre-filled, and add tests for the required-field validation.",
+    "I'll build the company profile form the way the other forms in apps/web do it, with react-hook-form and a zod schema through zodResolver, looking at settings/org-form.tsx as the example. Name and the sender email are required (email validated), and tax id is optional. I need to check which api endpoint saves it rather than assume.\nAction: Read org-form.tsx, create the company profile form and schema, wire it to the existing settings endpoint, and add tests.",
+    "I'll build a company profile form on the settings page with company name (required), tax id, and sender email (required, valid email format), validated on both the client and the server. I don't know the endpoint or storage for the company profile yet, so I'll check whether one exists before adding anything. Action: look at the settings page, an existing form, and the api for org profile endpoints, then build the form and add tests for the required fields."
+   ]
+  },
+  {
+   "event": "code-s058-e012",
+   "responses": [
+    "I'll add an optional `memo` string with a max of 500 characters to the POST /v1/invoices request schema, using zod like the rest of runtime validation here. It also has to be stored and returned, so I'll check whether the invoices table already has a place for it, and add a column and migration if not. I don't know yet how the API docs are produced, so I'll check that to make sure memo shows up there.\nAction: Find the invoice create schema and route, add the field with validation, the column and migration if needed, the response DTO, and the docs, with tests for 500 vs 501 characters.",
+    "I'll add `memo: z.string().max(500).optional()` to the request schema in apps/api/src/schemas and wire it through to storage, checking whether a column and migration are needed. The OpenAPI spec is generated from the zod schemas, so I'll regenerate it with `pnpm turbo run openapi --filter api` and never hand-edit the YAML. Since this is public behavior, I'll also update the relevant docs/ page.\nAction: Update the schema, regenerate the spec, update the docs, and add tests for the length limit.",
+    "I'll add an optional `memo` string (max 500 chars) to the create-invoice request schema and carry it through to storage, with tests for exactly 500 and 501 characters. I don't know yet how the api docs are produced, so I'll find the source and regenerate instead of hand-editing the output. Action: read the POST /v1/invoices route, schema and DB model, add the field (plus a migration if needed), then update or regenerate the api docs so memo shows up for the integrations folks."
+   ]
+  },
+  {
+   "event": "code-s060-e000",
+   "responses": [
+    "An invoice should only show as Overdue if it's unpaid and past due, so a paid invoice should never get that badge. Your earlier note that the dashboard overdue badge counted drafts suggests the overdue rule isn't being applied by status consistently, so I'll use one shared rule for both. I'll check the real status values in the code first.\nAction: Find the badge logic, restrict overdue to unpaid non-draft statuses, test paid, draft and voided with past due dates, and check the dashboard count uses the same rule.",
+    "Only open invoices can be overdue; paid, draft and void invoices never count, so the badge logic should check the status first and only then compare the due date. The badge takes a `status` prop (draft|sent|paid|overdue|void), so I'll find where the overdue status is derived and make a paid invoice with a past due date keep showing paid. I'll check how the 'open' rule maps onto those status values so I don't mislabel sent invoices.\nAction: Find the overdue derivation, fix it, and add tests for paid, draft and void invoices with past due dates.",
+    "My guess is the badge derives Overdue from the due date alone without checking whether the invoice is paid. The fix is to show Overdue only when the invoice is unpaid and past due, and otherwise show the paid state. Action: find the status badge component, add the paid check, and add a test for a paid invoice with a past due date."
+   ]
+  },
+  {
+   "event": "code-s060-e021",
+   "responses": [
+    "I'll install from the lockfile in ~/code/acme-platform so versions match what's committed. I haven't confirmed which package manager the root pins, so I'll check that first rather than assume.\nAction: Read the root package.json and lockfile in ~/code/acme-platform to find the package manager and Node version, run a frozen-lockfile install with it, and report anything that fails before you run the seed.",
+    "I'll check which lockfile the fresh clone has to pick the right package manager, install from it, and confirm the seed package builds. One thing to watch: scripts/seed-demo is new and the ESM fixes were made in your other checkout, so the clone won't have them unless they're committed and pushed. The seed also needs a running Postgres and its connection string.\nAction: Run the install in ~/code/acme-platform, then verify seed-demo is present and builds there.",
+    "Your notes say the repo pins Node 20.11 in .nvmrc and fresh installs fail with an engines error on older Node, so I'll switch Node first. I won't run the seed or anything that resets the database; that's for you to do. Action: in ~/code/acme-platform run `nvm install` then `nvm use`, confirm `node -v` shows 20.11, run the dependency install, and tell you the result."
+   ]
+  },
+  {
+   "event": "code-s060-e026",
+   "responses": [
+    "Yeah, new laptop setup always drags. The full test suite I kicked off on the new clone is still running, and I'll tell you if it turns anything up. Remember you still need Postgres running and DATABASE_URL set before you start the seed.\nAction: Wait for the test run on the new clone and report the result.",
+    "That sounds like a slog, new laptop setups always are. The deps are installed in the new clone, and the full test suite I kicked off there is still running, so I don't have a result to share yet.\nAction: Check on the test run and report the result, and remind you that Postgres and DATABASE_URL are still needed for the seed.",
+    "Yeah, laptop setup is a slog. The full test suite is still running on the new clone and I'll tell you how it went. Action: wait for the test results and report them."
+   ]
+  },
+  {
+   "event": "code-s066-e013",
+   "responses": [
+    "The download name is built in apps/api/src/exports/csv-filename.ts, which currently produces 'Export <org> <date>.csv' with spaces. I'll change it to `invoices-<org slug>.csv`, and slugify the org name the same way the PDF filenames now are (accents stripped, symbols collapsed to dashes), preferably through a shared slugify util, unless the org already has a stored slug I should use instead.\nAction: Open csv-filename.ts and see what org data is available, make the change, update the tests that expect the old filename, and run the api suite.",
+    "I'll find where the export sets its download filename (the Content-Disposition header) and build it from the org slug, so you get `invoices-northwind.csv`. I'll check whether orgs already have a slug field before generating one, and make sure it is filename-safe. The export test that checks the header will need updating too, and the CRLF output stays as is.\nAction: Locate the filename code and the org slug source, make the change, update the export test, and run the api tests.",
+    "I'll change the download filename in the api's csv export response to `invoices-<org slug>.csv`. I need to check whether orgs have a stored slug; if not, I'll slugify the org name and flag that. Action: find the csv export route and its Content-Disposition header, build the filename from the org slug (sanitized so it's header-safe), keep the CRLF output as is, and update the export test."
+   ]
+  },
+  {
+   "event": "code-s066-e028",
+   "responses": [
+    "I'll add a ServiceMonitor template to the worker chart in infra/helm/worker that scrapes the metrics port 9464 at /metrics, behind a values toggle so values.yaml and values-prod.yaml can control it. I need to check that the worker Service exposes a named port for 9464 and what labels your Prometheus uses to select ServiceMonitors, so Grafana really picks it up.\nAction: Read the worker chart's service and values files, add templates/servicemonitor.yaml, and validate it with `helm template` and lint locally without applying anything.",
+    "I'll add a ServiceMonitor template to the worker helm chart that scrapes port 9464 at /metrics, gated by a values flag. I need to check that the worker Service actually exposes that port with a name the monitor can reference, and whether your Prometheus setup needs a particular label on the monitor to select it. This is separate from the pool max change, so I'd put it on its own branch.\nAction: Look at the worker chart's templates and values, add the ServiceMonitor, and render it with `helm template` to check.",
+    "I'll add a ServiceMonitor template to the worker helm chart that scrapes the metrics port 9464 at `/metrics`, selecting the worker Service by its labels. The Service must expose that port by name for the ServiceMonitor to reference. Action: read the worker chart's Service and templates, add the servicemonitor (checking how Prometheus selects monitors), and validate it with `helm template`."
+   ]
+  },
+  {
+   "event": "code-s067-e006",
+   "responses": [
+    "`docker compose up -d` creates the containers, networks and volumes if they don't exist (recreating containers whose config changed) and starts them in the background. `docker compose start` only starts existing stopped containers, and doesn't create anything or pick up changes to the compose file. For first-time setup, like the contractor's, you want `up -d`.\nAction: No action needed unless you want me to adjust the Slack message.",
+    "`docker compose up -d` creates any missing containers, networks and volumes, recreates containers whose config or image changed, and starts everything detached. `docker compose start` only starts containers that already exist and are stopped, with no creation and no picking up of compose file changes. So use `up -d` normally, and `start` to resume stopped containers as they were.\nAction: No change needed.",
+    "`docker compose up -d` creates the containers, networks and volumes if they don't exist (and recreates containers whose config or image changed), then starts them in the background. `docker compose start` only starts containers that already exist and are stopped, creates nothing, and won't pick up compose file changes. Action: none needed; use `up -d` after changing config and `start` to resume stopped ones."
+   ]
+  },
+  {
+   "event": "code-s068-e000",
+   "responses": [
+    "I'll split the pool max commit and the worker servicemonitor commit onto their own branches from main, one concern per PR, and leave the csv branch with only the csv work. Since these are local commits I'll first confirm they haven't been pushed before rewriting the branch. Before pushing each branch I'll run the full test suite (`pnpm test` across all packages), not just the changed tests, as you require.\nAction: Run `git log` on the csv branch to identify the two commits, cherry-pick them onto new branches off main, remove them from the csv branch, then run `pnpm test` on each before pushing.",
+    "I'll check `git log` on the csv branch to find the pool max and worker servicemonitor commits, and confirm they're local only and unpushed before touching anything. Then each gets its own branch cut from origin/main with the commit cherry-picked, so each PR is one concern, and the csv branch is left with only the csv work. I'll push those branches and open the PRs but not merge them; you do the merging.\nAction: Inspect the branch history, show you the plan, then split the commits onto separate branches.",
+    "I'll split the pool max and worker servicemonitor commits out of the csv branch into their own branches, one concern per PR, and leave csv alone. Since the commits are local only, I can rewrite the local branch safely, but I'll check that first. Action: run git log and git status to identify the commits, branch each off the main branch with a cherry-pick, drop them from the csv branch, and verify each diff is only its own concern before pushing anything."
+   ]
+  },
+  {
+   "event": "code-s068-e023",
+   "responses": [
+    "I won't touch your half-finished reports edits: I'll do the upgrade in a separate git worktree off your current branch so the working tree stays exactly as is. 'Latest' for everything will include major version bumps, so I'll upgrade in one pass, run typecheck and tests, and call out the majors that break. I haven't seen deps-bot's list yet.\nAction: Check git status, create a worktree, find the deps-bot list from last night, update web's dependencies to latest, and run the web typecheck and tests.",
+    "First I'll commit your half-finished reports page edits as a work-in-progress commit on your current branch, since stash is off the table in this repo. Then I'll bump patch and minor versions in web, but I won't bump any major versions without asking you first, even if CI is green. I'll check the deps-bot list myself to see what's in it.\nAction: Commit the reports WIP, read the deps-bot list, update patch and minor deps, and come back with the list of major bumps for you to approve.",
+    "Your half-finished reports page edits are the risk here, so I'll protect them first by committing them as a WIP commit on your current branch (nothing destroyed), then do the dependency work on a separate branch. I don't have deps-bot's list from last night in front of me, so I'll find that PR or report and work from it. Since 'latest' includes major versions, I'll bump everything, then run typecheck and tests and tell you which bumps break. Action: run git status, make the WIP commit, branch off, locate deps-bot's list, and update the web dependencies."
+   ]
+  },
+  {
+   "event": "code-s070-e000",
+   "responses": [
+    "Two hours of roadmap slides will do that. Nothing is queued on my side, so take a break.\nAction: Wait for what you'd like to pick up next, and I can start with something small.",
+    "Two hours of roadmap slides will do that, no wonder you're fried. Take a breather, and when you're ready just tell me what you want to pick up next.\nAction: Wait for your next task.",
+    "Two hours of roadmap slides will do that to anyone. Take a breather; nothing is waiting on you from my side. Action: stand by until you tell me what to pick up."
+   ]
+  },
+  {
+   "event": "code-s071-e014",
+   "responses": [
+    "I'll add one structured log line per org in the overdue reminder job showing what it decided (send or skip) and the reason for each skip, using the existing logger. I'll log org ids, not emails or other personal data.\nAction: Read the overdue reminder job in the worker, add the per-org decision logging at each early return and skip, and add a test that checks the skip reasons are logged.",
+    "I'll add structured pino logging to the overdue reminder job, one line per org with the org id, the decision (processed or skipped), the reason, and counts. Not console.log, and never whole request bodies. Some skips may be intentional, since only open invoices can be overdue and drafts and void ones are ignored, so the reason field will separate by design from unexpected. I'll commit this separately from the uncommitted csv changes on your branch.\nAction: Read the job, add the per-org decision logs, run the worker tests, and tell you how to see the skips.",
+    "I'll add structured logging in the overdue reminder job that records, per org, the org id, the decision (send or skip) and the reason for each skip, plus a summary at the end. I'll use the existing logger and keep emails and other personal data out of the logs. Action: read the job to find each place it can skip an org, add a log line for each branch, and add a test that asserts the skip reasons."
+   ]
+  },
+  {
+   "event": "code-s072-e000",
+   "responses": [
+    "The primary database is Postgres 16 since ADR 0014 and MySQL is retired, so a stale local setup pointing at MySQL after your pull is my first suspect. Locally it should be the postgres:16.4 container from docker-compose.yml on port 5432, with DATABASE_URL set to a postgres:// URL, in each app's .env.local (not .env). I'll also remove any leftover .husky references, since lefthook runs the git hooks now.\nAction: Check `docker compose ps` for the db container, check the DATABASE_URL shape in apps/api/.env.local without printing secrets, bring up `db redis` if needed, and grep for .husky references.",
+    "Noted on lefthook replacing husky. I'll grep for leftover husky references (the .husky directory, a prepare script, package.json entries, docs and CI) and remove them. For the db, I'll start with the basics before changing anything: is the database container or service running, what the api's DATABASE_URL points at, and whether your pull brought in new env vars or migrations.\nAction: Run the husky grep and clean up, then check the api's db config and startup error to find why it can't connect.",
+    "I'll search for leftover husky references (package.json scripts, docs, CI, ignore files, the .husky directory) and remove them, keeping lefthook as the only git hooks setup. For the local db, I'll read the actual connection error and check what changed in the env example, compose file and migrations since you pulled. Action: grep for husky, run the api to capture the error, and diff the env and compose config, without running any destructive db commands."
+   ]
+  },
+  {
+   "event": "code-s073-e000",
+   "responses": [
+    "I'll add payment_reminders to apps/api/src/db/schema.ts (the source of truth for tables) with a UUID v7 primary key, an invoice id foreign key, sent_at, a channel enum of email|sms, and status. You didn't list the allowed status values, so I'll check how similar tables model status and ask if there's no precedent. I'll check how existing tables generate ids so the v7 default fits the Postgres 16 setup.\nAction: Edit the schema, run `pnpm --filter api db:generate` to create the migration, and review the generated SQL before showing it to you.",
+    "I'll check the existing schema for conventions and for a UUID v7 generator already in use, so the new primary key is v7, not serial or v4. The table has the invoice id as a foreign key, sent_at, channel as an enum of email and sms, and status. You haven't said what the allowed status values are, so I'd ask rather than invent them.\nAction: Look at the existing drizzle schema, then add the payment_reminders table, generate the migration, and ask for the status values.",
+    "I'll add a payment_reminders table to the drizzle schema with a UUID v7 primary key, an invoice id foreign key, sent_at, channel as an enum of email and sms, and status. You didn't list the status values, so I'll check existing status conventions and flag the values I pick. Action: look at the schema directory and how other tables generate v7 ids, add the table, run drizzle-kit generate, and review the migration SQL."
+   ]
+  },
+  {
+   "event": "code-s075-e000",
+   "responses": [
+    "I'll run the repo's own formatter or linter on just that file rather than editing by hand, so the changes are only indentation, semicolons and quote style. Then I'll check the diff ignoring whitespace to confirm there are no logic changes.\nAction: Find the formatter config the repo uses, format apps/api/src/routes/payments.ts only, and run the typecheck and the payments tests to confirm nothing changed in behavior.",
+    "This is a formatting-only job, and the repo uses Biome with a 120 column max, so I'll let the tool do it rather than hand-edit. I'll run `pnpm biome check --write apps/api/src/routes/payments.ts` and then review the diff to confirm nothing but whitespace, quotes and semicolons moved. I'll commit it as a new commit on top, without rewriting or squashing anything already pushed, since Marco branches off your branches.\nAction: Run Biome on payments.ts, inspect the diff for zero logic changes, run the api tests, and add a new commit.",
+    "This is formatting only, so I'll apply the repo's own formatter and lint config to payments.ts and nothing else, then confirm the diff has no logic changes. Action: check which formatter and config the repo uses, run it on apps/api/src/routes/payments.ts only, and compare the diff (ignoring whitespace) plus the existing tests to make sure behavior is unchanged."
+   ]
+  },
+  {
+   "event": "code-s076-e000",
+   "responses": [
+    "I'll do it as a proper rename so history follows the file, and update every import and usage in apps/web.\nAction: Grep apps/web for `useOrgSwitcher`, `git mv` the hook's file to match the new name, rename the export and all references, then run the web typecheck and tests to confirm nothing is left behind.",
+    "I'll rename the file with `git mv` to `useActiveOrg` and update the hook name and every import across apps/web. Import paths have to match the file name case exactly, since macOS won't catch a wrong-case import but the Linux CI runner will fail with 'Module not found'.\nAction: Do the rename, grep for any leftover useOrgSwitcher or wrong-case paths, then run typecheck and the web tests.",
+    "I'll rename useOrgSwitcher to useActiveOrg across apps/web and rename the file to match, using a git move so history follows. Action: grep for useOrgSwitcher in code, tests, mocks and docs, rename the file to match the existing hook file naming, update all imports and usages, then run typecheck and the web tests."
+   ]
+  },
+  {
+   "event": "code-s076-e017",
+   "responses": [
+    "I'll fix the 'recieve' typo in the reports page empty state and grep the whole repo for other misspellings of recieve (recieve, recieved, recieving). There are earlier notes about the invoices empty state having a 'recieve' typo too, which the grep will catch. I'll only change user-facing text and comments, and list anything that's an identifier or a value other code might depend on instead of changing it.\nAction: Run a case-insensitive grep for 'recie' across the repo excluding node_modules, fix the text occurrences, and report what I left.",
+    "Will do. I'll fix the empty state copy to 'receive' and then grep the repo case-insensitively for recieve, recieved, recieving and recieves. If any hit is an identifier, API value or something external that other code might match on, I'll flag it instead of silently changing it.\nAction: Fix the reports page string, run the grep, fix the safe hits, and list anything I left alone.",
+    "I'll fix 'recieve' to 'receive' in the reports page empty state, then grep the repo (excluding node_modules and build output) for other recieve variants. If a match is an identifier or a value that other code compares against, I'll flag it instead of renaming it. Action: run the grep, fix user-facing text, comments and docs, then run the web tests."
+   ]
+  },
+  {
+   "event": "code-s077-e005",
+   "responses": [
+    "I'll add tsx as a devDependency to @acme/cli with pnpm so the lockfile updates too, and point the scripts in scripts/ at the TypeScript sources. The CLI already runs locally without a build via `pnpm --filter @acme/cli dev -- <args>`, so I'll keep that. Since you've hit ERR_REQUIRE_ESM before, I'll check how the cli package is configured for ESM.\nAction: Run `pnpm --filter @acme/cli add -D tsx`, update the script entries, and run one of the scripts to confirm it works without a build.",
+    "I'll add tsx as a devDependency of packages/cli with pnpm so the lockfile updates with it, and point the scripts in packages/cli/scripts at the TypeScript sources directly. I'll check what the existing package.json scripts call so they no longer need a build first.\nAction: Run the install in packages/cli, update the scripts, run one of them to confirm it works, and tell you which files changed including the lockfile.",
+    "I'll add tsx to packages/cli devDependencies with the package manager rather than editing package.json by hand, so the lockfile updates too. CI installs with a frozen lockfile, so pnpm-lock.yaml has to be committed together with the change or the install job fails. Action: run `pnpm --filter @acme/cli add -D tsx`, point the scripts in packages/cli/scripts at the TypeScript sources, confirm one runs without a build, and check the lockfile diff is included."
+   ]
+  },
+  {
+   "event": "code-s077-e011",
+   "responses": [
+    "The main difference is that tsx transpiles with esbuild and does not type-check, while ts-node uses the TypeScript compiler and type-checks by default unless you run it in transpile-only mode. tsx also hooks Node's module loading so ESM and CJS TypeScript files work together without extra flags, which is usually the pain point with ts-node. The trade-off is that type errors only show up if you run `tsc --noEmit` separately. Also, the lockfile from the tsx addition in packages/cli still hasn't been updated.\nAction: Run the install from the repo root to refresh the lockfile, if you tell me which command you use, and keep `tsc --noEmit` as the type check.",
+    "Both run TypeScript without a separate build step, but tsx transpiles with esbuild and does no type checking, which makes it fast and much better with ESM and mixed module setups. ts-node uses the TypeScript compiler and type-checks by default unless you turn on transpile-only, which is slower and often needs more config for ESM. So with tsx you still want `tsc --noEmit` somewhere to catch type errors.\nAction: Nothing to change; just keep a typecheck step in place for the scripts.",
+    "ts-node type-checks by default using the TypeScript compiler, which makes it slow, and ESM support needs extra loader setup. tsx uses esbuild to strip types, so it's much faster and handles ESM/CJS interop out of the box, but it does no type checking, so keep `tsc --noEmit` for that. It also doesn't support things like decorator metadata. Action: nothing to change; I can add a typecheck script if you want type errors surfaced separately."
+   ]
+  },
+  {
+   "event": "code-s080-e000",
+   "responses": [
+    "I'll scaffold `acme invoices list` next to the clients command, calling GET /v1/invoices and printing a table, with `--json` from the start. The CLI is now on commander, not yargs: each command group exports registerX(program), the invoices group registers its subcommands in commands/invoices/index.ts, it's ESM, and TypeScript is strict with noUncheckedIndexedAccess so indexed access needs a check. Tests use vitest, and the new command goes in docs/cli.md.\nAction: Read the clients command and commands/invoices/index.ts, add the list command with `--json` (raw array as pretty JSON), add a vitest test, and update docs/cli.md.",
+    "I'll scaffold `acme invoices list` next to the clients command, following its structure: it calls GET /v1/invoices and prints a table. Per your rule, it supports `--json`, printing plain JSON to stdout with no table or colors, so people can pipe it into jq.\nAction: Read the clients command, create the invoices list command with table and --json output, and add tests for both.",
+    "I'll scaffold `acme invoices list` next to the clients command, calling GET /v1/invoices and printing a table. Following your ground rule, it supports `--json`, which prints plain objects with fixed keys, no colors and no table. Action: read the clients command and mirror its structure and options, add the invoices list command with `--json`, and add tests for both output modes."
+   ]
+  },
+  {
+   "event": "code-s080-e024",
+   "responses": [
+    "I'll add msw as a devDependency in packages/cli, so the lockfile updates as well, and move the http mocking in the invoices tests onto its node server. Because #1192 is already open, I'll put this in a separate commit on the branch so the diff is easy to review.\nAction: Run `pnpm --filter @acme/cli add -D msw`, convert the invoices tests to msw handlers, and run the CLI tests.",
+    "I'll add msw as a devDependency in packages/cli with pnpm so the manifest and lockfile change together. CI installs with `--frozen-lockfile`, so pnpm-lock.yaml has to be committed with it or the install job fails with ERR_PNPM_OUTDATED_LOCKFILE. It belongs on the acme-412 branch since the invoices tests need it, as a new commit on top of the open PR.\nAction: Add msw with pnpm in packages/cli, confirm the lockfile includes it (and cli-table3), run the cli tests, and commit both files.",
+    "I'll add msw as a dev dependency in packages/cli using the package manager so the lockfile updates with it, instead of hand-editing package.json. Then it can be used in the invoices tests to mock the http calls. Action: install msw into packages/cli devDependencies, confirm the lockfile changed, and set up a minimal msw server in the invoices tests."
+   ]
+  },
+  {
+   "event": "code-s081-e007",
+   "responses": [
+    "Everything timing out in beforeAll usually means the test setup can't reach what it needs, most often the database or a container that isn't running or is slow to start, but I'd rather see the actual failure than guess.\nAction: Run the orders route tests, read the first beforeAll error and what the setup connects to, check that the dependency is up on your machine, and fix the cause rather than raising the timeout.",
+    "Everything timing out in beforeAll usually means the setup is waiting on something it can't reach, like a database or container that isn't running or a bad connection setting, rather than the tests themselves. I'll run the orders route tests, read the first error, and check what beforeAll connects to.\nAction: Run the orders route tests, capture the first failure, check the services they depend on locally, and fix the setup so they pass.",
+    "Timeouts in beforeAll usually mean the test setup is waiting on something that isn't reachable on your machine, such as a database or container, so I'll find out what the orders tests start. I won't guess the cause until I see the failure output. Action: run the orders route tests, read the beforeAll setup and the first error, check what it depends on locally (for example whether Docker or a database is running), and fix the setup or tell you what to start."
+   ]
+  },
+  {
+   "event": "code-s082-e000",
+   "responses": [
+    "The API is Express 4 and verifies Clerk session JWTs with @clerk/backend in requireAuth (apps/api/src/plugins/auth.ts), returning 401 with either token_expired or invalid_token. About 1 in 200 with no pattern by user or route points at something like clock skew between servers and Clerk, or tokens expiring right at the edge, but that's a hypothesis to test, not a finding.\nAction: Read requireAuth, check which error code the random 401s carry in the api logs, and look at the clock-skew tolerance setting in the verification call.",
+    "With no pattern by user or route, I'd look for something cross-cutting: token verification (clock skew, key rotation or cache), a single bad pod, or timing around deploys. I'll pull the 401 responses from the logs with their request ids and compare pod, time, and token age and expiry to find what the failing ones share.\nAction: Read the auth middleware, then collect a sample of the 401s from the logs and look for the common factor.",
+    "A pattern-free rate near 0.5% points at something intermittent rather than a bad user or route: a stale cached key or token check on one instance, clock skew between instances, or one unhealthy pod. I haven't seen the auth setup yet, so these are hypotheses. Action: read the auth middleware, find the reason logged with the 401s, and check whether they cluster by pod or instance and by timing."
+   ]
+  },
+  {
+   "event": "code-s082-e052",
+   "responses": [
+    "- Converted the default export in packages/cli/src/format.ts to a named `formatAmount` export and updated both importers; typecheck on packages/cli shows 0 errors.\n- Gave tools/backfill_org_ids.py an inline uv script header (Python 3.12+, psycopg) so `uv run tools/backfill_org_ids.py` works.\n- Repo-wide lint: 0 errors, 2 warnings, one of which is the remaining default export in packages/cli/src/version.ts (I left it alone).\nAction: Ask whether you want version.ts converted to a named export too, since it is the one thing lint still flags against your named-exports rule.",
+    "- format.ts now has a named `formatAmount` export, with both importers (invoices.ts, clients.ts) updated.\n- backfill_org_ids.py runs with uv on Python 3.12 via an inline script header.\n- The cli typecheck passes with 0 errors, and lint reports 0 errors but a noDefaultExport warning on the `export default version` in packages/cli/src/version.ts, which I left untouched.\nAction: Offer to convert version.ts to a named export too, if you want.",
+    "- `packages/cli/src/format.ts` now uses a named `formatAmount` export, and both importers (invoices.ts, clients.ts) are updated.\n- `tools/backfill_org_ids.py` runs with `uv run`, with an inline script header pinned to Python 3.12+.\n- Typecheck had 0 errors; lint had 0 errors and 2 warnings, one being the default export in `packages/cli/src/version.ts`, which I left alone. Action: offer to convert that `version.ts` default export to a named export, if you want."
+   ]
+  },
+  {
+   "event": "code-s083-e017",
+   "responses": [
+    "I'll replace the switch with an object keyed by event type that maps to the handler functions, with identical behavior and an explicit path for unknown event types. This is billing code and sits on top of the uncommitted raw-body change, so I'll leave it uncommitted for your review.\nAction: Refactor the switch in the Stripe handler into a handler map, then rerun the api tests and the staging event replay.",
+    "I'll replace the switch with a typed map from event type to handler, keeping behavior identical: unknown event types fall through the same way the switch default does, and the idempotent stripe_events storage path stays untouched. This is billing code and your raw-body change is still uncommitted, so I'd keep this refactor separate and leave both for your review before any commit.\nAction: Do the refactor, run the api tests and the replayed Stripe events, and show you the diff.",
+    "I'll replace the event-type switch with a map from event type to handler, keeping the behavior identical, including whatever the current default case does for unknown types. It's billing code and the raw-body change is still waiting for your review, so I'll leave this uncommitted for you to review as well. Action: refactor the stripe handler into a handler map, run the api tests and the stripe replay, and keep the diff separate from the raw-body change."
+   ]
+  },
+  {
+   "event": "code-s086-e000",
+   "responses": [
+    "Prod already has a reader endpoint (RDS reader at acme-prod.cluster-ro.internal), so I'll first look at how the cluster is defined in the infra code to see what a separate replica would add, and I'll only plan, not apply. For the lag check, prod access is Tailscale-only with the read-only creds in the `prod/db/readonly` Secrets Manager secret, and you need to be in the eng-prod-readers group (Priya Shah grants it); sessions are logged, so I'll set application_name and run only a read-only query.\nAction: Read the infra code for the prod database, draft the replica change as a plan for review, and confirm with you that you're on Tailscale and in eng-prod-readers before I run the lag query.",
+    "I don't know yet how the prod database is provisioned or how to reach it, so I'll look at the infra code first and not guess a tool. I'd draft the replica as a reviewable change and not apply it to prod without your go-ahead. Replication lag only exists once the replica is up, so I'll check it after the replica is created, and I'll need to know how you want me to get read access to prod.\nAction: Inspect the infra definition of the prod db, draft the replica change for your review, and ask how to reach prod for the lag check.",
+    "I'll look at how the prod database is defined in infra and add the read replica there as code, then produce a plan for your review. I won't apply anything against prod without your OK. For replication lag, a replica has to exist before it has lag, and I don't know yet what read access to prod metrics I have here. Action: read the infra db definition, write the replica change, show the plan, and check what monitoring access I have for lag."
+   ]
+  },
+  {
+   "event": "code-s088-e000",
+   "responses": [
+    "Put the trigger on the last card of each page: give it `hx-get` pointing at the next page URL, `hx-trigger=\"revealed\"` and `hx-swap=\"afterend\"`, and only render those attributes when there is a next page. `revealed` fires once when the element scrolls into view, and `afterend` appends the new cards after it. Your view should return just the cards for htmx requests.\nAction: Point me at the trail list template and view if you'd like me to wire it in directly.",
+    "Put the trigger on the last card of each page: give it `hx-get` pointing at the list URL with `?page=<next>`, `hx-trigger=\"revealed\"` and `hx-swap=\"afterend\"`, and only render those attributes when there is a next page. `revealed` fires once when the element scrolls into view, and if the list is inside its own scrolling container you would use `intersect once` instead. The view needs to return just the cards (not the full page) for htmx requests.\nAction: Share the template snippet, and look at your trail list view and template if you want me to wire it in.",
+    "Put the trigger on the last card of each page: `hx-get` the next page URL, `hx-trigger='revealed'`, and `hx-swap='afterend'`, only when the page has a next one. The trail list view should return just the cards for HX-Request, like your hike_create view does with its partial. If the list is in its own scroll container, use `hx-trigger='intersect once'` instead. Action: look at the trail list view and template in trailmix and add the paginated partial."
+   ]
+  },
+  {
+   "event": "code-s088-e008",
+   "responses": [
+    "The common thread is that each of these imports is a type, written as a regular import, and with `verbatimModuleSyntax` on, TypeScript requires type-only imports to be written with `import type { ... }` or inline `type` modifiers. The list is cut off after the api routes, but the pattern in everything I can see is the same.\nAction: Run the linter's autofix for consistent type imports if it has that rule, otherwise convert them in bulk, then rerun the typecheck across the monorepo.",
+    "The common thread is TS1484: with `verbatimModuleSyntax` on, anything that is only a type has to be imported as a type, so `import { ClientRow }` must become `import type { ClientRow }` (or `import { type ClientRow }`). Your paste is cut off after apps/api clients.ts, so I can't see the full list. I'd also check whether the setting was already in your tsconfig or only started applying after the upgrade.\nAction: Run the typecheck on the branch to get the full list, then convert the offending imports to type-only imports and recheck.",
+    "The common thread: with `verbatimModuleSyntax` on, an import that is only used as a type must be written as `import type { X }` or `import { type X }`, and these files import types (ClientRow, SortKey, Invoice, FastifyPluginAsync and others) with plain imports. It's mechanical, and an autofix can do it in bulk. Action: run the typecheck to count every TS1484 site across web and api, apply the autofix (a lint rule like useImportType if the repo has one, or tsc-guided edits), and re-run the typecheck."
+   ]
+  },
+  {
+   "event": "code-s088-e021",
+   "responses": [
+    "Glad that summary matched what you needed. Nothing further to change on my side for that thread, and if the export work becomes a ticket I'll keep it in its own branch and PR, separate from #1192, as the heads-up asked.\nAction: Hold until you say whether to start on the invoice export or go back to the TS1484 fixes on ts-verbatim-imports.",
+    "Glad it helps. If this becomes a ticket, I'll keep it out of #1192 and do it on a separate branch and PR, as asked. It would be a server-side export covering all invoices including voided ones, with the fixed columns they listed.\nAction: Wait for your go-ahead before starting.",
+    "Glad that summary works. The export is a separate piece of work and the request is to keep it out of #1192. Action: nothing further right now; tell me if you want me to draft the export ticket or start a separate branch for it."
+   ]
+  },
+  {
+   "event": "code-s092-e000",
+   "responses": [
+    "I'll change the clients page empty state to 'No clients yet' with an 'Add client' button. There is an InvoicesEmptyState with overridable title, body and CTA that can be reused, but a shared EmptyState primitive is a separate effort that isn't part of PR #479, so I won't build that now. Lena owns the apps/web/messages files and is mid-refactor on them, so I won't edit en.json.\nAction: Find where the clients page 'no data' copy lives; if it's inline in the component I'll change it there, and if it comes from the messages files I'll leave them alone and tell you what Lena needs to change.",
+    "I'll find the clients page empty state and change the copy to 'No clients yet' with an 'Add client' button. I'll check whether the strings live in a shared messages/translations file or inline in the component, and make sure the button goes to the same add-client flow as the existing one.\nAction: Locate the empty state, update the copy and button label, fix any test that asserts the old text, and run the web tests.",
+    "I'll change the clients page empty state to say 'No clients yet' with the button labeled 'Add client'. Action: find the clients empty state component, update the heading and button label, and update any test that asserts the old 'no data' text."
+   ]
+  },
+  {
+   "event": "code-s093-e000",
+   "responses": [
+    "I'll add the button to the invoice detail page, wired to the resend endpoint, with success and error toasts. I don't know the endpoint path or which toast helper the app uses yet, so I'll look those up instead of guessing.\nAction: Find the resend endpoint in the api and the existing toast usage in apps/web, add the button with a disabled/loading state while the request runs, and add a test.",
+    "I'll find the resend endpoint in the api to confirm its route, method and response, then add the button to the invoice detail page. It will call the endpoint with a pending state (disabled while the request is in flight) and show a success or failure toast using whatever toast helper the web app already uses.\nAction: Look at the api route and the existing detail page and toast patterns, build the button, and add a test for success and failure.",
+    "I'll add a Resend invoice button to the invoice detail page that POSTs to the resend endpoint, disables itself while pending, and shows a success or failure toast. All new UI strings go through next-intl with keys in en, fr and es. I'll flag the es strings for a Spanish speaker. Action: find the resend endpoint and existing toast helper, add the button, the three message keys, and tests."
+   ]
+  },
+  {
+   "event": "code-s097-e000",
+   "responses": [
+    "I'll start read-only: point kubectl at prod, list the worker pods, and read the previous-container logs and pod events to see why they restart. For who gets woken: the only paging route I have on record is the api-stripe-webhook-5xx CloudWatch alarm going to the pagerduty-oncall SNS topic, and that covers Stripe webhook failures, not worker crashloops. So I can't yet say who gets paged for this.\nAction: Run `aws eks update-kubeconfig --name acme-prod --region us-east-1`, then `kubectl get pods`, `describe` and `logs --previous` on the worker pods, and look in the infra code for an alarm that covers worker crashes before telling you who to warn.",
+    "I'll start with read-only checks on the worker pods in prod: pod status, restart counts, events, and the logs from the previous crashed container. Those usually show whether it's an OOM kill, a bad config or secret, or an app crash on startup. I don't know who is on call from here and won't guess, so I'd look for an on-call schedule or runbook in the repo or docs, otherwise you'd need to check the pager tool.\nAction: Run the read-only kubectl checks and report the crash reason, then look for the on-call info.",
+    "I'll start with read-only checks on the worker pods in prod: status, restart counts, events, and the previous container's logs. Your notes say traffic hit pods before they were ready during the last deploy, so I'll check readiness and liveness probes as a possible cause. I don't know who is on call from here, so I'll look in the paging config for the rotation rather than guess a name. Action: run kubectl get/describe/logs --previous on the prod worker pods, then search infra for the oncall schedule and report back."
+   ]
+  },
+  {
+   "event": "code-s098-e007",
+   "responses": [
+    "I still need to know which HTTP framework and major version the API is on, but I can find that myself instead of waiting on you.\nAction: Read apps/api/package.json and the server bootstrap to determine the framework and version, then write the global x-org-id guard in that style, registered only on the org-scoped routes and returning problem+json on a missing or mismatched header.",
+    "An 'ok' doesn't tell me which framework the API is on, so I'll read it from apps/api/package.json instead of waiting. The tests and the typecheck both came back green, with no failures.\nAction: Find the framework and major version, then write the x-org-id guard in that framework's style and register it on the org-scoped routes only.",
+    "I still need to know which HTTP framework and major version the API is on before writing the guard, since how it's registered depends on that, and I'd rather check than guess. I don't need you to answer: I can read it from the repo. Action: read apps/api/package.json and the server bootstrap, then write the x-org-id guard in that framework's style and register it on the org-scoped routes only."
+   ]
+  },
+  {
+   "event": "code-s100-e000",
+   "responses": [
+    "I don't know what we use for feature flags and I won't guess; the repo should tell us.\nAction: Search the repo for existing flag usage (a flag library or client, env-based toggles, or an org-level setting), then report what's there and how a per-org beta flag would fit before touching the export work.",
+    "Feature flags are managed in GrowthBook. The invoices export command is already planned behind the flag `cli-invoices-export`, which as of my last note still needed to be created in GrowthBook. For beta orgs only, you'd target on an org attribute, so I need to check what attributes the code passes to the flag evaluation.\nAction: Check how flags are read in the code, see whether the flag has been created yet, and ask if you want this same flag or a new one for the beta orgs.",
+    "Per your notes, feature flags are managed in GrowthBook, so the export goes behind a GrowthBook flag that targets the beta orgs. I'll look at how the repo already evaluates flags and reuse that wrapper, then check what org attribute the targeting can use instead of guessing ids. Action: grep for existing GrowthBook usage, add the flag check on the export command, and tell you what beta-org targeting you need to set up in GrowthBook."
+   ]
+  },
+  {
+   "event": "code-s105-e008",
+   "responses": [
+    "The date range picker already keeps its selection in the URL (?range=<preset>) and uses router.replace so back isn't flooded, and the invoices filter hook is now useInvoiceQueryState, so I'll follow that same pattern for status, client and date range. First I need to see which of the filters live only in component state, since those are the ones that reset.\nAction: Read useInvoiceQueryState and the invoices list page, move any filter not in the URL into it, and test that opening an invoice and going back restores the filters.",
+    "The fix is to keep the filters in the URL search params instead of component state, so Back restores them and filtered views can be shared. I'd use `router.replace` so each filter change doesn't add a history entry, and parse the params defensively for bad values. This is separate from the error-boundary work on acme-447, so I'd put it on its own branch rather than stack it on that one.\nAction: Find the invoice list filter state, move it to URL params, and add tests for restore on back navigation.",
+    "To make the filters stick, the simplest durable fix is to keep status, client and date range in the URL search params, so Back restores them and filtered views are shareable. The acme-447 error-page commit is unpushed, so I'll keep this work separate from it. Action: cut a new branch, find where the invoice list holds its filter state, move it to URL params (using replace so filter changes don't pile up history entries), and add tests."
+   ]
+  },
+  {
+   "event": "code-s105-e015",
+   "responses": [
+    "I'll normalize the string to NFKD, strip the combining accent marks, lowercase it, replace each run of non-alphanumerics with a single dash, trim dashes from both ends, and cut to 64 characters without leaving a trailing dash. 'Café Müller' becomes 'cafe-muller'. I'll check whether the repo already has a slugify helper before adding one.\nAction: Search for an existing slugify, otherwise add it in the shared lib folder with tests for accents, repeated separators, leading/trailing dashes and the 64-char cut.",
+    "I'll first check whether the repo already has a slug helper so I don't duplicate it. The slugify will normalize to NFD, strip the accent marks, lowercase, turn any run of non-alphanumeric characters into one dash, trim leading and trailing dashes, and cap at 64 chars without leaving a trailing dash. `Café Müller` becomes `cafe-muller`.\nAction: Write `slugify` plus tests for accents, collapsed dashes, the 64 char cap and an all-symbols name.",
+    "Your notes say a slugify already exists in apps/api/src/lib/slug.ts (used for PDF filenames), so I'll check it before writing a duplicate. The behavior needed: strip accents (Café Müller -> cafe-muller), turn non-alphanumerics into dashes, collapse repeats, trim edge dashes, and cap at 64 chars without leaving a trailing dash. Action: read slug.ts; if it fits, extend it with a configurable max length (keeping the 60 cap the PDF filenames use), otherwise write the new function, and add tests."
+   ]
+  },
+  {
+   "event": "code-s106-e004",
+   "responses": [
+    "I'll add the YouTube embed with id `aB3xK9qLm2Q` as a responsive 16:9 iframe (an aspect-ratio wrapper so it scales with width), with a title and lazy loading. If the app sets a Content-Security-Policy, the YouTube frame source may need allowing, so I'll check.\nAction: Find the getting started page, add the iframe, check for a CSP or similar config that could block it, and verify it renders at mobile and desktop widths.",
+    "I'll add a responsive 16:9 wrapper on the getting started page with an iframe pointing at the YouTube embed URL for `aB3xK9qLm2Q`. I'll give the iframe a title, lazy loading and allowfullscreen, and use the privacy-friendly youtube-nocookie domain. If the site has a content security policy, I'd check that it allows framing YouTube.\nAction: Find the getting started page, add the embed, and check it renders in the dev server.",
+    "I'll add a responsive 16:9 YouTube embed for video id `aB3xK9qLm2Q` to the getting started page, as an iframe with a descriptive title and lazy loading inside an aspect-video wrapper. I don't know the CSP setup yet, so I'll check it allows YouTube frames. Action: find the getting started page, add the embed, and check the page loads it at phone width."
+   ]
+  },
+  {
+   "event": "code-s107-e006",
+   "responses": [
+    "Two pages with different access: /pricing is public with plan content in a typed ts file, and /settings/team requires sign-in and lists org members. I'll check how routes are currently protected so the pricing page stays public and the team page gets the right guard.\nAction: Look at the app's routing and auth/route-protection setup and how org members are fetched, then add both pages with a plans data file and tests.",
+    "My notes say a /pricing page already exists under app/(marketing)/pricing with placeholder prices that marketing still has to confirm, so I'd verify what's there before building a new one. It must be listed as public in the Clerk middleware, and colors should use theme tokens. /settings/team is for signed-in users, so it goes under app/(dashboard)/settings/team/page.tsx.\nAction: Check the existing pricing page and middleware, then build the team members page.",
+    "/pricing has to be public, so I'll add it to the public routes in the Clerk middleware (apps/web/middleware.ts), and verify that against how the middleware is written now. /settings/team stays protected as signed-in only. Action: add the pricing page with plans content from a ts file, whitelist the route in the middleware, build /settings/team listing org members (checking for an existing members endpoint first), and add tests."
+   ]
+  },
+  {
+   "event": "code-s108-e000",
+   "responses": [
+    "I'll write an end-to-end test that drives a real browser through the full flow: new invoice, pick client, add a line, save, send. I don't know yet what e2e tooling the repo has, and I'd make sure the send step doesn't actually email a real customer.\nAction: Check for existing e2e setup (Playwright or similar config and the dev server port), then write the test in that setup, with the send going to a local or mocked mail path.",
+    "I'll write a Playwright spec that goes through the full flow (new invoice, pick client, add a line, save, send) against the local dev server. The web dev server needs to be up on port 3000 first, with the database and Redis containers running, and then `pnpm --filter web e2e` runs it. There is a known unrelated failure in invoices/detail.spec.ts ('downloads pdf' 404s because the seed invoice has no pdfKey), so I won't mistake that for mine.\nAction: Bring up the dev environment, write the spec in the e2e folder, and run it.",
+    "I'll write the browser test for the full flow: new invoice, pick client, add a line, save, send, against the local dev server. It's test-only, so no billing code gets touched, and I'll make sure 'send' can't email real addresses from dev. Action: check which e2e framework the repo already uses, write the spec with it, and run it against the local dev server with seeded data."
+   ]
+  },
+  {
+   "event": "code-s108-e018",
+   "responses": [
+    "I'll look at how the expenses export button builds its CSV, because a doubled header usually means the header is written once by the CSV helper and again by the button. I haven't looked at that code yet, so I won't assume.\nAction: Open the expenses export CSV button and the CSV helper it uses, remove the duplicate header write, and add a test asserting exactly one header line.",
+    "Duplicate header rows usually mean the CSV helper already writes the header and the button adds its own on top. I'll look at the expenses export button and the helper it calls and remove the extra header. I'll also add a regression test that asserts exactly one header line.\nAction: Read the export button and CSV helper, fix it, add the test, and run the expenses tests.",
+    "My guess is that the button writes its own header row on top of the one the CSV builder already writes, but I'll confirm that in the code. Action: read ExportCsvButton and the csv helper on the expenses page, write a test asserting exactly one header line, then fix the duplication and run the expenses tests."
+   ]
+  },
+  {
+   "event": "code-s108-e027",
+   "responses": [
+    "I'll grep for 'recieved' in apps/api and services/worker and fix the spelling in comments, logs and strings. If one is a value in an API response, clients might compare against the exact string, so I'll list those for you instead of changing them.\nAction: Run the grep across both directories, fix the text-only occurrences, run the worker and api tests, and report what I left.",
+    "I'll grep case-insensitively for 'recieved' in apps/api and services/worker and fix the spelling in comments, logs and strings. If any hit is a public response value or an identifier that clients might depend on, I'll leave it and flag it, since changing it could be an API change.\nAction: Run the grep, fix the safe ones, run the worker and api tests, and list anything I left alone.",
+    "I'll grep apps/api and services/worker for recieve variants (recieved, recieve, recieving) and fix the spelling. If one of them is a value clients might compare against, such as an API response string, I'll flag it instead of changing it. Action: run the grep, fix the comments, log messages and help text, then run the worker and api tests."
+   ]
+  },
+  {
+   "event": "code-s108-e032",
+   "responses": [
+    "Got it, the api one stays as is. The worker spelling fixes are in and the worker tests passed (21 files, 133 tests); I haven't seen the api test results yet.\nAction: Leave apps/api alone and note the response value as a possible API cleanup for later.",
+    "Leaving the api one as is. The worker spelling fixes stay, and the worker tests passed. The api test run is still going.\nAction: Wait for the api tests and report the result.",
+    "Leaving apps/api/src/routes/v1/payments.ts alone, so the 'recieved' response value stays. The worker fixes remain, and the api test run is still in progress. Action: wait for the api tests to finish and report the result, with no changes to the api file."
+   ]
+  },
+  {
+   "event": "code-s108-e036",
+   "responses": [
+    "Anytime. The worker spelling fixes are in and the api one is left as is; I'll note it as a possible API cleanup for later.\nAction: Nothing further to do on this.",
+    "You're welcome. The worker spelling fixes are in, the worker and api tests both pass, and the api response value stays as it is.\nAction: Nothing further; I'll keep the api one noted as a possible cleanup for later.",
+    "You're welcome. The worker spelling fixes are in and both test suites pass, and the 'recieved' response value in apps/api/src/routes/v1/payments.ts stays as it is. Action: nothing further now; I'll keep the api cleanup noted as a possible later change."
+   ]
+  }
+ ]
+}
