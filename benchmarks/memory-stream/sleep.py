@@ -70,10 +70,11 @@ def rows(stream, world, tag="out", strict=False, supersede=False):
                         out[rid]["invalid_at"] = t + 0.5
     if supersede:  # cross-batch supersession pass (supersede.py, C5-E5): the old row ends when its replacement appears
         import supersede as sp
-        for old, new in sp.pairs(world).items():
-            if old in out and new in out and out[new]["t"] > out[old]["t"]:
+        for old, news in sp.pairs(world).items():
+            ts = [out[n]["t"] for n in news if n in out and old in out and out[n]["t"] > out[old]["t"]]
+            if ts:
                 end = out[old]["invalid_at"]
-                out[old]["invalid_at"] = out[new]["t"] if end is None else min(end, out[new]["t"])
+                out[old]["invalid_at"] = min(ts) if end is None else min(end, min(ts))
     return list(out.values())
 
 

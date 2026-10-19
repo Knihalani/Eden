@@ -38,11 +38,12 @@ def prep(world):
 
 
 def pairs(world):
-    """{old row id: new row id} from the pass's outputs."""
+    """{old row id: [new row ids]} from the pass's outputs, read in batch order. sleep.rows ends the old row at the
+    earliest replacement (an old row can be named by more than one later batch)."""
     out = {}
-    for p in glob.glob(os.path.join(HERE, "sleep", world, "supersede", "out", "*.json")):
+    for p in sorted(glob.glob(os.path.join(HERE, "sleep", world, "supersede", "out", "*.json"))):
         for x in json.load(open(p)).get("superseded", []):
-            out.setdefault(x["old"], x["new"])
+            out.setdefault(x["old"], []).append(x["new"])
     return out
 
 
