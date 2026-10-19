@@ -1,0 +1,301 @@
+{
+ "batch": "life-sleep-b15",
+ "sessions": [
+  {
+   "id": "life-s150",
+   "episodes": [
+    {
+     "text": "2026-10-09 Riya's blocked Linear tickets: PAY-1182 payout schedule picker copy (blocked by DES-341, Diego), PAY-1197 merchant CSV export fee column (DATA-88, Wen; depends on ledger backfill sprint 22), PAY-1203 onboarding re-verify bank account flow, High (ENG-2290, Aisha; needs Plaid micro-deposit endpoint ETA Wed 14 Oct), PAY-1210 help centre article payout statuses (waiting on Riya). DES-341 needs Riya to pick between two copy variants in Figma; saved note 'DES-341 copy review checklist' (n_88213) for after lunch.",
+     "entities": [
+      "Riya",
+      "PAY-1182",
+      "PAY-1197",
+      "PAY-1203",
+      "PAY-1210",
+      "DES-341",
+      "ENG-2290",
+      "DATA-88",
+      "Diego",
+      "Aisha",
+      "Wen"
+     ]
+    },
+    {
+     "text": "2026-10-09 Nate (Northline Renovations): 14 flat-packed Barzotti cabinet boxes arrive Fri 9 Oct around noon; need dry spot off the floor on crew pallets, not the garage. Riya had not chosen a spot; assistant offered to text Nate (open).",
+     "entities": [
+      "Nate",
+      "Northline Renovations",
+      "Barzotti",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2026-10-09 Q4 planning doc 'Payouts Q4 2026 planning' (Notion): added north-star metric MAPM (monthly active paying merchants) baseline 18,400 at end of Q3 2026. Looker trend: Jul 16,950, Aug 17,720 (incl. 310 reactivated), Sep 18,400; +8.6%; chart 'MAPM Q3 trend' in appendix. Tom liked the chart.",
+     "entities": [
+      "Riya",
+      "MAPM",
+      "Lumen Pay",
+      "Looker",
+      "Tom"
+     ]
+    },
+    {
+     "text": "2026-10-09 Leo chipped his front tooth on the monkey bars (Oct 8). Dr. Lin contact has phone (416) 555-0148 but no address. Online booking openings Wed 14 Oct 16:10 or Thu 15 Oct 15:50 (30 min), needs DOB and health card number; injuries should call; nothing booked. Riya asked which office and drive time (open).",
+     "entities": [
+      "Leo",
+      "Dr. Lin",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2026-10-09 Riya confirmed as volunteer for Leo's Grade 2 Royal Ontario Museum trip Thu 2026-11-26: bus leaves school 9:15 am, volunteers at Room 104 by 9:00, back 2:30 pm, group of four students, photo ID. Conflicts that office day: Payouts design crit 10:30, Merchant advisory call prep 13:00, Wavecrest partner sync 14:30. Set Slack status heads down till 15:00; draft for #payouts-team saved (d_5521), not posted. Unread DMs: Olivia wants QBR call next week.",
+     "entities": [
+      "Riya",
+      "Leo",
+      "Ms. Alvarez",
+      "Royal Ontario Museum",
+      "Morse Street PS",
+      "Olivia"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s151",
+   "episodes": [
+    {
+     "text": "2026-10-09 Calendar: 'QBR with Sales: present payouts roadmap' Thu 2026-11-12 all day with Olivia Grant (ev_77310, time TBC) collides with Lumen Pay planning offsite 09:00-18:00 and Leo's parent-teacher interview 16:00. Also Sintra private-driver day trip Wed 2026-12-23, pickup 9:00 am Lisbon time at hotel (Pena Palace, Quinta da Regaleira), EUR 260 = 386.62 CAD (ev_77311). Open: ask Olivia whether QBR can fit.",
+     "entities": [
+      "Riya",
+      "Olivia Grant",
+      "Sintra",
+      "Pena Palace",
+      "Quinta da Regaleira",
+      "Gladstone House"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s152",
+   "episodes": [
+    {
+     "text": "2026-10-10 Riya's sent mail to Tom Becker on 2026-10-06 ('Re: 2027 roadmap timing'): committed to deliver the 2027 roadmap draft for Lumen Pay payouts and onboarding by 2026-11-06, covering three bets with rough sizing from Aisha, outline shared the week before (about Fri 30 Oct). Hannah will return the pie dish Sunday morning, leaving it on the porch.",
+     "entities": [
+      "Riya",
+      "Tom Becker",
+      "Aisha",
+      "Hannah",
+      "2027 roadmap"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s153",
+   "episodes": [
+    {
+     "text": "2026-10-14 Catch-up findings: Canadian Tire Leslie St winter tire swap for 2019 Mazda CX-5 confirmed Sunday 2026-11-08 9:00 am (email 13 Oct; earlier booking was Sat 7 Nov). Prado, Lisbon confirmed Christmas Eve dinner 2026-12-24 7:30 pm for three, window table requested, set menu only. Tom Becker accepted Riya's promise of the Instant Payouts launch readiness review doc by 2026-10-28, two pages max. Priya Nair: Riya promised to help her pack for the move to the Junction Sat 2026-10-31 morning (coffee and bagels). Ottawa weather Sun 2026-10-11 sunny, high 9C, low 1C (for Sam's photo captions).",
+     "entities": [
+      "Canadian Tire Leslie St",
+      "Mazda CX-5",
+      "Prado",
+      "Tom Becker",
+      "Priya Nair",
+      "Sam",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2026-10-14 Riya noted: promised Kabir to send Ira a hand-knit blanket from the Leslieville Christmas market before 2026-12-10 so it arrives in Vancouver by Christmas; bought Lisbon Oceanarium tickets for 2026-12-27 10:00 am because Leo loves sea otters. Assistant offered to add both to the calendar (open).",
+     "entities": [
+      "Kabir",
+      "Ira",
+      "Vancouver",
+      "Lisbon Oceanarium",
+      "Leo",
+      "Riya"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s154",
+   "episodes": [
+    {
+     "text": "2026-10-16 Pape/Danforth library branch hours: Sat 9:00-17:00, Mon-Fri 9:00-20:30; book drop 24/7. Leo has 3 library books due 2026-10-17. Riya added 'Renew Leo's library card (Pape/Danforth, Sat)' to Errands note.",
+     "entities": [
+      "Leo",
+      "Pape/Danforth Branch",
+      "Toronto Public Library",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2026-10-16 Riya's commitments found: Diego Fernández promo packet - Riya promised written feedback on his senior designer promotion packet by Fri 2026-10-23 (focus on 'scope and impact'); reply sent to Diego 22:41. Olivia Grant 'QBR deck owners' asks Riya to own slides 6-9 (no deadline). Leo's parent-teacher interview with Ms. Alvarez rebooked to Fri 2026-11-13 5:15 pm, Room 104, Sam joining, because of the 12 Nov offsite.",
+     "entities": [
+      "Diego Fernández",
+      "Olivia Grant",
+      "Ms. Alvarez",
+      "Leo",
+      "Sam",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2026-10-16 Halloween 2026: Hannah Cho's plan, confirmed by Riya: Leo goes trick-or-treating as an astronaut with Ellie and Jun, leaving Hannah's house at 5:45 pm, Hannah walks, Sam stays home with candy. Reminder 'Put green bin out' Sun 2026-10-18 20:30 (ev_77562). Riya asked to stop ending messages with a question.",
+     "entities": [
+      "Hannah Cho",
+      "Leo",
+      "Ellie",
+      "Jun",
+      "Sam",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2026-10-16 Riya promised Hannah Cho two dozen nut-free oatmeal chocolate-chip cookies for the Morse Street PS bake sale on 2026-10-30, but has no oven. Options: borrow an oven, toaster oven (6 per tray), or labelled no-bake. School rules: nut-free, individually wrapped with ingredient labels, drop-off gym 8:30-8:50 am, volunteers for 12:00-13:00 table. Recipe scaled to 24 given (175C, 11-13 min).",
+     "entities": [
+      "Hannah Cho",
+      "Morse Street PS",
+      "Riya",
+      "bake sale"
+     ]
+    },
+    {
+     "text": "2026-10-16 Riya hosted Thanksgiving dinner on 2026-10-11 for Priya, Hannah's family and Marcus, cooking on a hot plate; assistant texted Hannah thanks for lending folding chairs, promising to return them this weekend. Holiday photo card: pick a photo and send order by Oct 25; candidates from Favourites: Family at Kitsilano Beach (2026-07-11) or Leo and Biscuit at Woodbine Beach (2026-08-16).",
+     "entities": [
+      "Hannah Cho",
+      "Priya",
+      "Marcus",
+      "Leo",
+      "Biscuit",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2026-10-16 Spanish homework for the lesson Thu 2026-10-22 with Carlos Méndez: two 300-word essays, 'mi trabajo' (present subjunctive, assigned) and Lisbon trip plans (Riya volunteered). Plan in note n_88510: outline Sat, draft Sun, polish Tue. Priya's old landlord withholding last month's rent deposit over scuff marks: Ontario rent deposit applies only to last month's rent, interest at guideline rate, tenant remedy form T1 within one year, $53 online fee.",
+     "entities": [
+      "Carlos Méndez",
+      "Riya",
+      "Priya",
+      "Landlord and Tenant Board"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s155",
+   "episodes": [
+    {
+     "text": "2026-10-18 Notion 'Riya to-do': 6 checked items archived; 4 open: Promo feedback for Diego, Readiness review doc, Review Priya's website copy, Spanish essays x2. Weekly money check: Visa statement $2,036.55 due Nov 7 (autopay on); Northline Renovations invoice #4 paid Oct 14; takeout this month $612 (up 22%).",
+     "entities": [
+      "Riya",
+      "Diego",
+      "Priya",
+      "Northline Renovations",
+      "Visa"
+     ]
+    },
+    {
+     "text": "2026-10-18 'Instant Payouts launch readiness review' (Notion): 4 unresolved comments (Aisha: rollback flag name and weekend owner; Aisha: error budget per day or week; Support lead: delayed-payout macro not approved; Diego: banner copy v2 needs PM sign-off), 7 linked issues (PAY-1222 idempotency keys, PAY-1224 email template In Review, PAY-1227 on-call runbook unassigned, PAY-1230 GA dashboard filters for Wen). Carried over: legal review of updated merchant terms still on Riya. Riya's Slack to Aisha sent 17:51; Aisha replied: she owns weekend flips, flag is instant_payouts_ga, error budget per day, PAY-1227 assigned to Marco Ruiz. Load test at 3x passed Oct 15.",
+     "entities": [
+      "Riya",
+      "Aisha",
+      "Diego",
+      "Marco Ruiz",
+      "PAY-1227",
+      "PAY-1222",
+      "PAY-1224",
+      "instant_payouts_ga"
+     ]
+    },
+    {
+     "text": "2026-10-18 December calendar: Lisbon trip OOO Mon 2026-12-21 to Fri 2027-01-01 for Tom's team calendar request (due Friday); flights Sun 20 Dec 22:10 TAP TP260; Leo's last school day Fri 18 Dec; Sintra Dec 23, Prado Dec 24 19:30, Oceanarium Dec 27 10:00. Leo wants to repeat 'that thing' from last winter when school was shut; Riya to ask Sam (open). Added wrapping paper and clear tape to shopping list. Picture day retakes 2026-11-04; hot lunch orders close 2026-10-23. Clocks: Toronto-Lisbon gap is 4 hours from 25 Oct to 1 Nov.",
+     "entities": [
+      "Riya",
+      "Tom",
+      "Leo",
+      "Sam",
+      "Lisbon",
+      "Morse Street PS"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s156",
+   "episodes": [
+    {
+     "text": "2026-10-20 Halloween (Sat 2026-10-31) prep: calendar only shows 09:00-12:00 helping Priya pack; Leo's costume still undecided (cardboard box); assistant listed safety, allergy (EpiPen Jr.) and logistics items; Riya said later (open).",
+     "entities": [
+      "Riya",
+      "Leo",
+      "Priya"
+     ]
+    },
+    {
+     "text": "2026-10-20 Booked 'Onboarding design review' Thu 2026-11-26 10:00-10:25 Toronto time (ev_78044) with Aisha Rahman and Diego Fernández, King St W office Room Fraser + Zoom; agenda KYC retry screens, empty states, open questions; invites sent.",
+     "entities": [
+      "Riya",
+      "Aisha Rahman",
+      "Diego Fernández"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s157",
+   "episodes": [
+    {
+     "text": "2026-10-22 Leo turns 8 on 2027-01-22; Riya is planning a party at Wonder Workshop on Queen East on Sat 2027-01-23 for twelve kids. Master Builder package fits: $495 + HST, up to 14 kids, 2 hours, Lego robotics or stop-motion; Builder up to 10 kids $395; Saturday slots 11:00, 13:30, 16:00; nut-free facility, outside food allowed; $100 deposit refundable up to 30 days before. Leo's skate lesson is 10:30-11:15 that Saturday, so 11:00 clashes; 13:30 or 16:00 clear. Not booked.",
+     "entities": [
+      "Leo",
+      "Riya",
+      "Wonder Workshop",
+      "Master Builder"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s158",
+   "episodes": [
+    {
+     "text": "2026-10-22 PAY-1224 merchant email template for delayed payouts is In Review waiting on Riya (reviewer); Priyanka S. updated copy Oct 21 per Diego's banner wording; support keeps asking.",
+     "entities": [
+      "PAY-1224",
+      "Riya",
+      "Priyanka S.",
+      "Diego"
+     ]
+    },
+    {
+     "text": "2026-10-22 October 2026 payouts incidents for readiness doc: INC-311 (Oct 6) webhook lag up to 22 min for 4% of beta merchants, fixed; INC-318 (Oct 19) duplicate payout notification emails to 37 merchants, no duplicate money movement, fixed Oct 20. Open bugs: 9 total, 2 High: PAY-1241 mobile status stuck on processing (Aisha's team, In Progress), PAY-1244 CSV export timezone off by one hour for Atlantic merchants (unassigned; suggest assign before GA).",
+     "entities": [
+      "INC-311",
+      "INC-318",
+      "PAY-1241",
+      "PAY-1244",
+      "Aisha"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s159",
+   "episodes": [
+    {
+     "text": "2026-10-25 Riya's early mornings week of 2026-10-26 from calendar: Mon standup 9:45; Tue 27 Oct fasting from midnight, physical with Dr. Patel 10:30 (bloodwork first); Wed 28 Oct run with Marcus 06:15 at Ashbridges Bay; Thu 29 none; Fri 30 Oct bake sale drop-off 8:30-8:50 at Morse Street gym. Assistant asked for other early commitments (class, gym) to add for Sam.",
+     "entities": [
+      "Riya",
+      "Dr. Patel",
+      "Marcus",
+      "Sam",
+      "Morse Street PS"
+     ]
+    }
+   ]
+  }
+ ]
+}

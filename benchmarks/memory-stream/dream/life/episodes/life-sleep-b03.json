@@ -1,0 +1,270 @@
+{
+ "batch": "life-sleep-b03",
+ "sessions": [
+  {
+   "id": "life-s030",
+   "episodes": [
+    {
+     "text": "2025-11-27 Riya asked for a full Spanish tongue twister for her lesson with Carlos tonight (19:30 on Zoom): 'Tres tristes tigres...' provided. Calendar that day: 09:45 Payouts v2 sprint check-in, 14:00 Tom / Riya 1:1 (King St W, Room 4B). Payouts launch tracking: instant payouts API 14/16 done (PAY-412, PAY-419 in review), merchant dashboard 9/12 (PAY-388 payout history export blocked on design sign-off), risk rules 6/6 with QA Mon 2025-12-01; PAY-421 and PAY-423 unassigned; next release Tue 2025-12-02 10:00.",
+     "entities": [
+      "Riya",
+      "Carlos",
+      "Tom Becker",
+      "Payouts v2"
+     ]
+    },
+    {
+     "text": "2025-11-27 Riya told Tom Becker that Onboarding 2.0 (launched 2025-10-07) cut KYC drop-off for new merchants from 38% to 24% in its first month; Tom replied asking for under 20% by Q1. Riya felt deflated and set a rule: when she vents about work stress, listen and reflect first and offer fixes only if she asks. Sunday reset calendar nudge added for Sun 2025-11-30 18:30 (three things for Monday, then walk Biscuit; evt_8f21c0) because she gets anxious on Sunday evenings before launch weeks.",
+     "entities": [
+      "Riya",
+      "Tom Becker",
+      "Onboarding 2.0",
+      "Biscuit"
+     ]
+    },
+    {
+     "text": "2025-11-27 Lisbon hotel shortlist for next December (must have elevator, separate sleeping space for Leo, walkable; Riya dislikes all-inclusive resorts; Algarve Sun All-Inclusive dropped): Casa do Principe Apartments, Principe Real, from EUR160 (CA$258) per night; Lisbon Family Suites, Chiado, from EUR185 (CA$298); Hotel Avenida Lofts from EUR210 (CA$338); 1 EUR = 1.61 CAD on 2025-11-27. Open: assistant offered to save to a 'Lisbon' note.",
+     "entities": [
+      "Riya",
+      "Leo",
+      "Lisbon",
+      "Casa do Principe Apartments",
+      "Lisbon Family Suites",
+      "Hotel Avenida Lofts"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s031",
+   "episodes": [
+    {
+     "text": "2025-11-30 Leslieville BIA 'Holiday on Queen East' newsletter: Santa at Jimmie Simpson Park Sat 2025-12-06 10:00-13:00 (bring non-perishable for Riverdale food bank); Greenwood Park skating party Sun 2025-12-14 14:00-16:30 (free skate rental under 12); Makers Market Dec 13-14 at Riverdale Hub, 1324 Queen St E; late-night shopping Thursdays Dec 4, 11, 18; giving tree at Queen/Logan until Dec 15; Green P at Queen/Leslie closed Dec 8-10. Riya's calendar and Sam's: no conflicts on Dec 6 and Dec 14; Leo has Max's birthday party Sat 2025-12-13 10:00-12:00 at Playground Paradise; Lumen Pay holiday party Thu 2025-12-11 18:30 at The Broadview Hotel. Open: assistant asked whether to add Santa (Dec 6) and skating (Dec 14) to the family calendar.",
+     "entities": [
+      "Riya",
+      "Leo",
+      "Sam",
+      "Leslieville BIA",
+      "Max"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s032",
+   "episodes": [
+    {
+     "text": "2025-12-05 Riya vented that Tom Becker moved the payouts review up a full week in the leadership sync without asking her (six days instead of thirteen; she learned at the same time as Olivia Grant). Rule restated: when Riya says she just needs to vent, listen and reflect, no fixes or productivity tips unless she asks, and ask before offering advice.",
+     "entities": [
+      "Riya",
+      "Tom Becker",
+      "Olivia Grant"
+     ]
+    },
+    {
+     "text": "2025-12-05 Christmas for Leo (loves dinosaurs and Lego Jurassic World): options in stock before 2025-12-20: Allosaurus Transport Truck 76966 (ages 6+) $49.99 at Mastermind Toys; T. rex Dinosaur Fossil Exhibition 76940 (9+) $49.99 at Indigo; Baby Bumpy Ankylosaurus 76962 $19.99 at Mastermind Queen & Pape; Indominus Rex vs. Ankylosaurus 76972 $119.99 at Indigo. Nothing ordered. Riya texted Sam: no mushrooms in the Christmas Eve gravy (Leo hates mushrooms; Sam cooks Christmas Eve dinner).",
+     "entities": [
+      "Leo",
+      "Sam",
+      "Riya",
+      "Mastermind Toys",
+      "Indigo"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s033",
+   "episodes": [
+    {
+     "text": "2025-12-07 Hannah Cho texted that Ellie left purple mittens at Riya's; Riya replied (sent 09:23) they will be by the front door and Jun can pick them up on the walk to school Monday. Riya missed best friend Priya Nair's birthday (December 1); Priya is celiac (strictly gluten-free) and loves Sichuan food; budget under $80. Rule: temperatures in Celsius only and all measurements metric from now on.",
+     "entities": [
+      "Hannah Cho",
+      "Ellie",
+      "Jun",
+      "Priya Nair",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2025-12-07 Gift options for Priya in Montreal: 'Gluten-Free Asian Kitchen' by Laura B. Russell paperback $32.99 at Indigo (recommended, $38.98 with shipping, $43.98 gift-wrapped), 'The Food of Sichuan' by Fuchsia Dunlop $55.00 (many recipes use soy sauce/wheat), Mala Market pantry box skipped (not certified gluten-free, $68 USD about $110 CAD). Arrives Thu 2025-12-11 to Fri 12-12. Open: asked Riya to confirm ordering with a gift note.",
+     "entities": [
+      "Priya Nair",
+      "Indigo",
+      "Riya"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s034",
+   "episodes": [
+    {
+     "text": "2025-12-08 Dinner for two with Priya Nair (in Toronto for client work, Wed 2025-12-10) near King West: Buca Osteria & Bar (604 King St W) tables 18:00, 18:15, 20:45; Lee (601 King St W) 18:30, 19:15, 21:00. Riya clear after 16:00. Open: Riya to choose; assistant to check dietary needs (Priya is gluten-free from earlier). Not booked.",
+     "entities": [
+      "Priya Nair",
+      "Riya",
+      "Buca Osteria & Bar",
+      "Lee"
+     ]
+    },
+    {
+     "text": "2025-12-08 Team lunch Thu 2025-12-11 at 12:30 at Lumen Pay King St W for 8 people; Wen Li is vegan, so a proper vegan option is required. Cart ct_77120 at Mezze & Co. (mixed grill platter $96, vegan falafel $58, mujadara $42, hummus trio $38, fattoush $32, delivery $15) total $317.53 incl. HST, not placed (waiting on headcount; order cutoff 17:00 Wed). Calendar conflict: Room 4B has Merchant advisory call 12:00-12:30 with Olivia Grant.",
+     "entities": [
+      "Wen Li",
+      "Mezze & Co.",
+      "Lumen Pay",
+      "Olivia Grant",
+      "Riya"
+     ]
+    },
+    {
+     "text": "2025-12-08 November payouts fee table for the update: instant 1.5% avg ticket $412 volume 18,240; same-day 0.9% $780 9,310; standard next-day 0.25% $1,130 52,900; total volume 80,450, estimated fee revenue $327,522. October volumes (Looker): instant 15,870, same-day 9,020, standard 51,480, total 76,370; month-over-month instant +14.9%, same-day +3.2%, standard +2.8%, total +5.3%.",
+     "entities": [
+      "Riya",
+      "Looker",
+      "Payouts"
+     ]
+    },
+    {
+     "text": "2025-12-08 Leslieville Farmers' Market in winter: Sundays 10:00-14:00 at Jimmie Simpson Rec Centre (870 Queen St E), holiday edition Sun 2025-12-14 until 15:00; added to family calendar 10:30-12:30 with Leo (evt_9a4417). Reminder rem_5120 for Tue 2025-12-09 09:30: send processor contract redlines to legal. Morse Street PS Primary Winter Concert Thu 2025-12-18 18:30 in the gym (arrive 18:00, white top, non-perishable donation); open: add to family calendar?",
+     "entities": [
+      "Leo",
+      "Riya",
+      "Morse Street PS",
+      "Jimmie Simpson Rec Centre"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s035",
+   "episodes": [
+    {
+     "text": "2025-12-09 Draft Slack post for #payouts-team about the holiday code freeze: begins Fri 2025-12-19 17:00, ends Mon 2026-01-05 09:00, hotfixes only via Aisha Rahman, deploy 10:00-14:00 weekdays; last regular release v4.18 on Tue 2025-12-16. Conflict found in launch tracker: 'Instant payouts limit increase (tier 2)' targeted 2025-12-22 (not started); year-end merchant statements job 2025-12-31 23:00 (Aisha) may need hotfix approval. Riya said she will deal tomorrow.",
+     "entities": [
+      "Aisha Rahman",
+      "Riya",
+      "Notion launch tracker"
+     ]
+    },
+    {
+     "text": "2025-12-09 Riya added 'Renew passports' to To-do (her passport expires March 2026). Passport photo places: Shoppers Drug Mart 1014 Queen St E $16.99 until 22:00; Gerrard Square Photo $14.95; Costco Photo Centre $9.99. Pending items: Olivia Grant asks Riya to present 15 min at Q1 merchant webinar late January; Nate's revised quote v3 unanswered 2 days; January pizza lunch form due Fri 2025-12-12; Leo's 2026-01-21 science trip permission form; Diego's question whether micro-deposit fallback is in scope for v2. Leo says he will be a paleontologist and a pizza chef. Toronto Hydro $142.18 due 2025-12-22 on autopay. Daycare tour questions given for Marcus Bell's sister.",
+     "entities": [
+      "Riya",
+      "Olivia Grant",
+      "Nate",
+      "Leo",
+      "Diego Fernandez",
+      "Marcus Bell"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s036",
+   "episodes": [
+    {
+     "text": "2025-12-10 Payouts v2 design review at 14:15 (Google Meet, Diego, Aisha). PRD open questions: Is micro-deposit fallback in scope for v2 (owner Riya, due 2025-12-10); estimated arrival time for same-day payouts (Diego, 2025-12-12); max instant payout per day for new merchants (Aisha, 2025-12-15).",
+     "entities": [
+      "Riya",
+      "Diego Fernandez",
+      "Aisha Rahman",
+      "Payouts v2 PRD"
+     ]
+    },
+    {
+     "text": "2025-12-10 Northline Renovations quote v3 (2025-12-08) $45,890 incl. HST: demolition $3,200, electrical incl. 200A panel $7,850, plumbing $4,100, cabinets $14,600, quartz counters $6,900, backsplash porcelain $1,640, flooring $3,400, drywall/paint/trim $2,750, permits $1,450; start Mon 2026-01-12, about 8 weeks. Versus v2 (2025-11-14, $43,030): electrical +$2,250, backsplash +$360, permits +$250. Budget $48,000 includes 10% contingency (planned work about $43,636); v3 uses about $2,254 of contingency, about $2,110 left. Finance: $9,600 deposit paid 2025-11-20; next payment $13,767 (30%) on 2026-01-12, joint account covers with about $4,210 to spare.",
+     "entities": [
+      "Nate",
+      "Northline Renovations",
+      "Riya",
+      "TD Joint Chequing"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s037",
+   "episodes": [
+    {
+     "text": "2025-12-26 Overnight reports: Visa reconciliation for December 41 transactions, 3 unmatched (Mastermind Toys $56.49 Dec 20, Pusateri's $87.12 Dec 23, LCBO $64.85 Dec 24), Riya confirmed all hers; December total $3,284.16. Toronto forecast Fri 12-26 -4C, Sat -7C flurries, Sun -2C.",
+     "entities": [
+      "Riya",
+      "Mastermind Toys"
+     ]
+    },
+    {
+     "text": "2025-12-26 New Year's Eve plan: Grace and Daniel Okafor arrive Wed 2025-12-31 about 15:00, stay until Fri 2026-01-02; dinner for 5; Grace is allergic to shellfish and does not drink alcohol. Menu: baked brie, crudites, mushroom-spinach Wellington, roast potatoes, maple carrots, Pomegranate Rosemary Fizz mocktail with non-alcoholic sparkling wine (Noughty $12.95 at Loblaws Queen & Carlaw; Freixenet 0.0% $11.95 at Metro Gerrard Square). Holiday hours: Loblaws and Metro 31 Dec until 18:00, closed 1 Jan. Riya and Leo to bake chocolate yogurt loaf Wednesday morning. Open: Riya to find which bakery made the cake last time (size and flavour) to reorder for Wed 31 Dec.",
+     "entities": [
+      "Grace Okafor",
+      "Daniel Okafor",
+      "Riya",
+      "Leo",
+      "Sam"
+     ]
+    },
+    {
+     "text": "2025-12-26 Riya had Hannah Cho thanked by text (sent 11:24) for shortbread; Leo ate four. Kabir asks whether Mei can extend parental leave in BC (Ira is 5 months): EI standard 35 weeks at 55% or extended 61 weeks at 33%; BC job-protected leave up to 62 weeks; switching generally not allowed. Sam asked for Ottawa flights seen earlier: saved search Fri 2025-12-19: Air Canada AC452 YYZ 17:00 to YOW 18:05 $219 per person, Porter PD471 YTZ 18:15 to YOW 19:15 $189. Podcast picks: Fintech Business Weekly open banking (41 min), Payments on Fire instant payouts economics (44 min), Lenny's roadmap review (32 min). Riya likes baking on weekend mornings with Leo, wants more in January.",
+     "entities": [
+      "Hannah Cho",
+      "Kabir",
+      "Mei",
+      "Ira",
+      "Sam",
+      "Riya",
+      "Leo"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s038",
+   "episodes": [
+    {
+     "text": "2025-12-29 Riya asked whether she had picked up the furnace filters; assistant had no record (earlier Home Depot order #W512339870 was a 4-pack of 16x25x1 furnace filters for pickup 2025-09-27). Open: unresolved. January subscriptions: Spotify Family $21.99 Jan 3, iCloud+ $3.99 Jan 7, Netflix $18.99 Jan 11, New York Times $25.00 Jan 15 (promo ended, was $8.00); total $69.97. Photos backed up, album 'Christmas 2025' (86 items). School resumes Mon 2026-01-05.",
+     "entities": [
+      "Riya",
+      "Home Depot",
+      "New York Times"
+     ]
+    },
+    {
+     "text": "2025-12-29 Riya's 2026 goals draft saved as note '2026 goals (draft)': launch Payouts v2, KYC drop-off below 20%, Spanish B2 exam prep and a full hour with Carlos, run 3x a week and maybe a spring 10K, finish the kitchen, Lisbon, weekend baking with Leo, Sunday calls with mom, monthly date night with Sam. Lisbon preference: one main activity per day and a quiet afternoon break (14:00-16:00); 5-day plan saved in 'Lisbon' note (Oceanario, Tram 28/Sao Jorge, Belem, Jardim da Estrela, Pavilhao do Conhecimento).",
+     "entities": [
+      "Riya",
+      "Leo",
+      "Lisbon",
+      "Carlos",
+      "Sam"
+     ]
+    },
+    {
+     "text": "2025-12-29 Out-of-office draft ooo_draft_118 (until Mon 2026-01-05 08:00) naming Aisha Rahman for payouts and Tom Becker for urgent matters; not yet activated (Riya hasn't said go). Aisha off Dec 31-Jan 1 and approved the year-end statements job for Dec 31; Tom off Dec 29-Jan 2, reachable for P1 only. Hannah Cho is choosing between a 2020 Toyota Sienna (reliability 4.5/5, $34,000-39,000) and a 2021 Honda Odyssey (3.5/5, $36,000-41,000). Sam took Leo to the ROM. Biscuit stole a baguette.",
+     "entities": [
+      "Aisha Rahman",
+      "Tom Becker",
+      "Hannah Cho",
+      "Sam",
+      "Leo",
+      "Biscuit"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "life-s039",
+   "episodes": [
+    {
+     "text": "2026-01-04 Grace Okafor asked for Ottawa hotels Riya had looked at (for Grace's cousin visiting in February). Saved search 2025-12-20: Lord Elgin Hotel (100 Elgin St) $219/night, Delta Hotels Ottawa City Centre (101 Lyon St N) $189/night. February 2026 weekend rates: Delta Feb 6-8 $169, Feb 13-15 $215; Lord Elgin Feb 6-8 $199, Feb 13-15 $249 (Winterlude Jan 30-Feb 16). Open: assistant asked whether to text Grace both names with prices.",
+     "entities": [
+      "Grace Okafor",
+      "Lord Elgin Hotel",
+      "Delta Hotels Ottawa City Centre",
+      "Riya"
+     ]
+    }
+   ]
+  }
+ ]
+}
