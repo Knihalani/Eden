@@ -1165,3 +1165,47 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - **Model-free path pays** if per-turn utility is > +0.05 on both worlds, with CI lower bound > 0.
   - **Positive, not firm** if > 0 on both.
   - **Not enough** otherwise.
+
+## C7-E1 · 2026-10-19 · A model-free hook path, tightened: result
+- **Run:** all judged (code 145, life 169); `h2h.py --single <world> <world>-vote-k2-sup`.
+
+  | World | Group | n | Vote (k ≤ 2, superseded, dated) − none | Better / worse |
+  |---|---|---|---|---|
+  | code | plan-need | 25 | +0.08 | 11 / 7 |
+  | code | labeler-only | 30 | +0.1 | 5 / 3 |
+  | code | no-need | 90 | −0.022 | 10 / 11 |
+  | life | plan-need | 49 | +0.245 | 15 / 6 |
+  | life | labeler-only | 30 | −0.133 | 5 / 6 |
+  | life | no-need | 90 | +0.089 | 12 / 5 |
+
+  Per-turn utility: **code +0.0131 [−0.0947, +0.1174]; life +0.0625 [−0.0276, +0.153]**.
+- **Verdict, by the rule: positive, not firm.** Both worlds are above 0; neither CI excludes 0, and code is about 0.
+- **Fired turns only (post hoc; vote − none, C6-E3's dated vote on the same turns in brackets):**
+  - code plan-need +0.087 n 23 (+0.333 n 24), labeler-only +0.308 n 13 (−0.214 n 14), no-need −0.054 n 37 (+0.053 n 38);
+  - life plan-need +0.293 n 41 (+0.333 n 42), labeler-only −0.174 n 23 (−0.167 n 24), no-need +0.162 n 37 (−0.077 n 39).
+  - The packets differ on only 39 code and 63 life turns, yet code's fired group means move by 0.25–0.5 between the two
+    runs. At n ≈ 13–40 per group, one responder run cannot separate the k ≤ 2 / supersession change from run noise
+    on code. Life's fired no-need turns gain (+0.162 against −0.077), which is what supersession was meant to do.
+- **What this says:** tightening the vote helps life a little and does nothing measurable on code. The model-free
+  vote is still well below the verifier (+0.52 / +0.49 on need turns, C6). Its weakness is which rows it picks, not
+  how they are delivered.
+
+## C7-E2 · 2026-10-19 · Distil the verifier into a model-free scorer (pre-registration)
+- **Question:** can a model-free scorer, trained offline on the calibrated verifier's scores, pick rows at the hook
+  nearly as well as the verifier does? It would be a small logistic model over lexical, self-play, situation and
+  recency features of each candidate: no LLM or embedding call at hook time, and its weights are learned offline.
+- **Setup:** `methods_distill.py` (`distill:train=<worlds>,k=2`), `distill.py train`.
+  - Candidates: the verifier's own shortlist (lex top 7 + bank top 15, first 15 unique; `verify.py prep`).
+  - Target: the verifier's calibrated p for each candidate, from all dev-world calibrated runs (`verify/<world>-cal*`).
+  - Threshold: set on the training events alone, so that the scorer fires on the same share of human turns as the
+    verifier at p ≥ 0.6. Fixed before any test.
+  - Tests (retrieval, `score.py --strict`, human turns):
+    - (a) leave one world out on dev (train code → test life `--split dev --sample judge`, and the reverse);
+    - (b) train on both dev worlds → test on the red-team worlds `code-rt1`, `life-rt1` (`--split fresh`).
+  - Baseline: `vote:need=2,bt=0.25,lt=6,st=4,strip=1,k=2` on the same events. Reference: `verify:tag=cal,p=0.6`.
+    - Measured now on (b): vote k2 recall / precision / silence: code-rt1 0.1276 / 0.1569 / 0.6444; life-rt1
+      0.1739 / 0.1489 / 0.6176. Verifier: code-rt1 0.3414 / 0.3673 / 0.7778; life-rt1 0.0688 / 0.1667 / 0.8529.
+- **Rule, set before running** (on all four tests):
+  - **Worth a downstream run** if precision ≥ vote k2 + 0.10 and recall ≥ vote k2 − 0.02, on at least 3 of the 4.
+  - **Dead** if precision is not above vote k2 on at least 3 of the 4.
+  - **Unclear** otherwise (report, no downstream run).

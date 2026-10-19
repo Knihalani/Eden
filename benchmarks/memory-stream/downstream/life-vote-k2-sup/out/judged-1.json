@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s017-e008",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither recalls route; not in evidence at this point, both defer."
+  },
+  {
+   "event": "life-s017-e012",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly report nothing running and offer to verify."
+  },
+  {
+   "event": "life-s018-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both fine light replies."
+  },
+  {
+   "event": "life-s018-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give a sound rule of thumb."
+  },
+  {
+   "event": "life-s018-e010",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both suggest suitable old-building, bikeable neighbourhoods."
+  },
+  {
+   "event": "life-s018-e017",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correct on Belem origin."
+  },
+  {
+   "event": "life-s020-e016",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both correct cuando llegue but only promise the sheet rather than produce it."
+  },
+  {
+   "event": "life-s021-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both handle reminder, Friday block, and congratulate."
+  },
+  {
+   "event": "life-s022-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both reasonable; no fee data available."
+  },
+  {
+   "event": "life-s022-e016",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both log the result and set December recap."
+  },
+  {
+   "event": "life-s023-e017",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both reference Aisha's edge-case doc and set agenda."
+  },
+  {
+   "event": "life-s025-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 uses known Q4 workstreams and risks; R0 generic."
+  },
+  {
+   "event": "life-s025-e036",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 gives a reasonable estimate; R1 hedges with no number."
+  },
+  {
+   "event": "life-s026-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both text Nate, not call, and pull invoices."
+  },
+  {
+   "event": "life-s026-e012",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both book 30 min with agenda; R1 notes 25-min default override."
+  }
+ ]
+}

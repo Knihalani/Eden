@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s045-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 uses known fact Old Navy needs login and filters it; R0 fine but misses that."
+  },
+  {
+   "event": "life-s046-e013",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly look up the score rather than guess."
+  },
+  {
+   "event": "life-s046-e016",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both accurately distinguish batched EFT from individual real-time wire."
+  },
+  {
+   "event": "life-s046-e021",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both book 'first morning slot' without guarding Tuesday no-meeting focus block or standup times."
+  },
+  {
+   "event": "life-s046-e029",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither corrects 'Soy en la oficina' (estar) per inline-correction rule; quizzes otherwise good."
+  },
+  {
+   "event": "life-s046-e041",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "R0 recalls Tulip Festival (asked 2025-05-12) though hedged with odd aside; R1 misses it."
+  },
+  {
+   "event": "life-s047-e006",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correct on Ontario deposit rules and LTB process."
+  },
+  {
+   "event": "life-s047-e013",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both warm, brief, appropriate."
+  },
+  {
+   "event": "life-s047-e019",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 uses known Intact April renewal to time quotes; R1 misses it, though general advice is correct."
+  },
+  {
+   "event": "life-s047-e025",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "R1 questions Saturday swim using stale Tuesday schedule; Leo now swims Saturdays at Pape."
+  },
+  {
+   "event": "life-s048-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Readings not yet known; both appropriately look them up."
+  },
+  {
+   "event": "life-s048-e006",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 names suitable candidates (ChessKid, Lichess) while verifying; R1 offers nothing concrete yet."
+  },
+  {
+   "event": "life-s050-e011",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both accept and add to family calendar with a conflict check."
+  },
+  {
+   "event": "life-s050-e016",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither applies refundable-rate/hotel preferences; R0 notes purchase approval, R1 flight-plus-car logistics."
+  },
+  {
+   "event": "life-s051-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correct; R1 adds accurate 2002 detail."
+  }
+ ]
+}

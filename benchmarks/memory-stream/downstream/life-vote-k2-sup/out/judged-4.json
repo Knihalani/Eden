@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s051-e002",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both sensibly pull work and family calendars for next week rather than guessing."
+  },
+  {
+   "event": "life-s051-e006",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give correct jammy egg timing, ice bath and overnight marinade, with a reminder for tonight."
+  },
+  {
+   "event": "life-s052-e008",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "R0 quizzes noun-gender exceptions but skips ser/estar, por/para, subjunctive; R1 wrongly claims no record of her mistakes."
+  },
+  {
+   "event": "life-s057-e000",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Neither cites Aisha sign-off rule; R0 at least keeps 'target' wording, R1 would fill in a date."
+  },
+  {
+   "event": "life-s057-e015",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "R0 correctly recalls Lagavulin but ignores the 'post' instruction; R1 posts but wrongly says whisky unknown."
+  },
+  {
+   "event": "life-s058-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Light small talk; both fine."
+  },
+  {
+   "event": "life-s058-e002",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both reasonably offer rough fares for one and two travellers."
+  },
+  {
+   "event": "life-s058-e007",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both pull Tom's calendar for the 24th appropriately."
+  },
+  {
+   "event": "life-s058-e014",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both handle the Olivia 11:00 request and check actual pantry for dairy-free snacks."
+  },
+  {
+   "event": "life-s060-e019",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both schedule the Slack post for 9:00 and give useful transfer questions."
+  },
+  {
+   "event": "life-s060-e022",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both format the Priya message and check Disney+ cancellation and later charges."
+  },
+  {
+   "event": "life-s062-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both record the decision and unsubscribe from dealer marketing while keeping service mail."
+  },
+  {
+   "event": "life-s062-e003",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both give a clean, non-crypto finance joke."
+  },
+  {
+   "event": "life-s063-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both weigh commute time against after-tax raise plus growth factors; sensible."
+  },
+  {
+   "event": "life-s063-e007",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 correctly parks the career-day talk; R1 misattributes 'later' to the already-answered Marcus question."
+  }
+ ]
+}

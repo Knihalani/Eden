@@ -1,0 +1,126 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s115-e008",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "R0 uses history on Leo renewal but misses Riya's March 2026 expiry; R1 generic but correct 3-month rule."
+  },
+  {
+   "event": "life-s118-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "No policy details on file; both correctly offer to find and compare."
+  },
+  {
+   "event": "life-s120-e003",
+   "scores": [
+    1,
+    3
+   ],
+   "why": "Data requests must go to Wen via #data-requests with 3 days notice and a definition; R0 ignores it."
+  },
+  {
+   "event": "life-s121-e000",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither suggests her usual oat milk cortado at Te Aro; both just ask."
+  },
+  {
+   "event": "life-s122-e004",
+   "scores": [
+    3,
+    1
+   ],
+   "why": "Schedule shows Thursday Day 2 green bin (13 Aug); R1 claims nothing saved."
+  },
+  {
+   "event": "life-s123-e004",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly summarize the note contents."
+  },
+  {
+   "event": "life-s123-e011",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both propose a safe dry-run rename."
+  },
+  {
+   "event": "life-s126-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both reasonable plans to list and tidy notes."
+  },
+  {
+   "event": "life-s126-e021",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Short, matching her request for brevity."
+  },
+  {
+   "event": "life-s128-e000",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "No confirmation in evidence yet; R0 correctly uses Danforth Smiles (Dr. Lin moved)."
+  },
+  {
+   "event": "life-s131-e020",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 delivers a usable draft; R1 only describes it."
+  },
+  {
+   "event": "life-s131-e022",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both deliver a fitting short toast."
+  },
+  {
+   "event": "life-s131-e027",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss role-play learning and Mexican (not Castilian) vocab preference."
+  },
+  {
+   "event": "life-s132-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R0 adds unsupported claim that Grace bakes; otherwise both correct."
+  },
+  {
+   "event": "life-s133-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both set the 25-min call with agenda correctly."
+  }
+ ]
+}
