@@ -592,3 +592,25 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
     - life: 0.30 recall at 0.62 silence.
   - On the red-team cases it still clearly beats lex on both worlds: silence +0.38 / +0.53, precision 3–5×.
   - The verifier's *calibration* is the open problem. A causal fix must give it the contrast it had in the batch, for example few-shot examples of the user's own past no-need turns, or a probability with a threshold tuned on dev.
+
+## C4-E8 · 2026-10-19 · Draft check: result
+- **Fires** (`draftcheck.py fires`): plan 8/30 (0.2667, need recall 0.1778); labeler-only 3/15 (0.2, need recall 0.1667); no-need 4/15 (0.2667). Firing does not separate need from no-need turns.
+- **Outcome** (`draftcheck.py report`: blind opus judge on the 15 blocked turns; unblocked turns count 0):
+
+  | Judge | plan: revised − none (30 turns) | labeler-only (15) | no-need (15) |
+  |---|---|---|---|
+  | reference facts only | −0.1 | −0.133 | −0.467 |
+  | with history evidence (`evidence.py`) | +0.1 | +0.133 | +0.067 |
+
+- **Verdict: dead by kill lines 1 and 2.**
+  - Kill line 1: 4 of 15 no-need turns fire (more than 12%).
+  - Kill line 2: +0.1 is below +0.48.
+  - Kill line 3 (life) was not run.
+- **Finding about the benchmark (more important than the verdict):**
+  - The downstream judge's `reference_facts` hold only planned items. A response that recalled true episodic history was marked as fabricating: zod PR #1312, the unpushed a8c4f31, the billing_sync enqueue bug, branch 4f2a9c1. All of these occur in earlier stream events.
+  - With history evidence (a greedy idf cover of the earlier events matching the rare tokens the responses add), the revisions go from net harm to a small net gain on every group. The "no-need" blocks were mostly helpful (+0.067), so the plan labels miss some real episodic needs.
+  - Every downstream number judged without evidence (C3-E4, and the first draft-check pass) under-credits memory. C4-E10 re-measures the effect.
+- **Caveats:**
+  - The checker for c00–c19 grepped other checkers' output files at the end (after writing its own), so it saw no inputs ahead of time.
+  - 4 of the 45 C3-E4 code cases had the responder's order swapped (C4-E10), so a few drafts may not be true no-memory drafts.
+  - One responder run per condition.
