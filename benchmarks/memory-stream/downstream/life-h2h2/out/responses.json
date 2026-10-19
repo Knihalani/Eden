@@ -1,0 +1,758 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "protocol": "items",
+ "cases": [
+  {
+   "event": "life-s002-e000",
+   "responses": [
+    "Done on the call: a recurring Sunday 9:00 am Toronto time (6:30 pm in Mumbai) block with your mother Anjali, kept clear permanently. I'll also make sure your Tuesday 19:00 lesson with Carlos is on the calendar. For Spanish between lessons, I'd do short daily sessions of 10-15 minutes: real-life conversation role-play with me, then a quick review of whatever tripped you up in the last lesson with Carlos. What I don't know is your current level, so I'll start with a quick check.\nAction: Create the recurring Sunday 9:00 am block, confirm the Tuesday 19:00 Carlos lesson is on the calendar, and start with a short level check.",
+    "Your call with Anjali is Sunday 9:00 am Toronto time (6:30 pm Mumbai), and I'll keep it clear for good. For Spanish between lessons with Carlos, I'd do 10 to 15 minutes on weekdays: a short role-play chat in Spanish where I correct you gently, 5 words or phrases from the last lesson, and one small writing prompt. Carlos's homework gets priority.\nAction: Create a recurring Sunday 9:00 am hold labelled as your call with your mom, and set up a daily Spanish practice routine to start with once you tell me your level and what Carlos has you working on.",
+    "Done: I'll block Sundays at 9:00 for the call with your mother Anjali as a recurring event and mark it busy so nothing gets booked there. One note: that's 6:30 pm in Mumbai now, but when Toronto's clocks go back it becomes 7:30 pm. For Spanish, I'd suggest 10 to 15 minutes a day of a short chat with me in Spanish where I correct your mistakes, plus a weekly mini-quiz on whatever Carlos covered; tell me your lesson days and I'll shape it around them.\nAction: Create the recurring Sunday 9:00 call block and start a short Spanish practice routine once you tell me your lesson days."
+   ]
+  },
+  {
+   "event": "life-s002-e020",
+   "responses": [
+    "I can't give you an honest grade yet, since I have no lesson log or sample of your speaking to base it on.\n- Calendar rule saved: no meetings before 9:30 or after 17:00.\n- To assess your Spanish, send me a short voice note or your last lesson notes.\nAction: Save the calendar rule and check it against anything already booked.",
+    "I can't give you an honest read on your Spanish from here, because I don't have your lesson notes or any scores in front of me and I'd be guessing. Calendar rule saved: no meetings before 9:30 or after 17:00, ever.\nAction: Save the calendar rule, then look for Carlos's lesson notes so I can give you a real assessment, or give you a short quick-check quiz.",
+    "Honest answer: I can't grade your Spanish yet, because I have no lesson feedback or practice results saved to judge from.\n- A 10-minute level check (a short conversation plus a few drills) would give me real evidence.\n- Calendar rule saved: no meetings before 9:30 or after 17:00, ever.\nAction: Save the calendar rule, and start tracking your Spanish mistakes so I can give you a real assessment."
+   ]
+  },
+  {
+   "event": "life-s002-e023",
+   "responses": [
+    "Saved: penicillin allergy (hives) and seasonal allergies in May, managed with Reactine. I'll keep it in a private medical note so it's easy to find when a form or clinic asks.\nAction: Create a medical note with those two items.",
+    "Saved. Penicillin allergy (hives) and seasonal allergies in May managed with Reactine go in a private health note, not shared with anyone.\nAction: Create the private health note with those two items and a date-of-entry, and check that it isn't synced to any shared folder.",
+    "Saved: penicillin allergy (hives) and seasonal allergies in May, managed with Reactine. I've put it in a private health note rather than mixing it in with general notes.\nAction: Save the medical note and only bring it up when it's relevant to a medical or booking task."
+   ]
+  },
+  {
+   "event": "life-s006-e000",
+   "responses": [
+    "Three days late is fine for a silly-mug tradition. I'll search for absurd novelty mugs, ranked by ridiculousness and reviews, and check which ones can get to Vancouver in about 3 days or less.\nAction: Run the search and delivery check, then show you the top few with prices and delivery times so you can pick.",
+    "Three days late is still well within silly-mug tradition. I'll look for the most absurd novelty mugs that can reach Vancouver within a few days and show you the strongest options with prices and delivery dates.\nAction: Search for novelty mugs that ship to Vancouver quickly, rank them by ridiculousness and reviews, and draft a short belated-birthday text to Kabir for you to send.",
+    "Three days late is fine when the tradition is silly mugs, the mug is the apology. I'll look for the most ridiculous ones that can reach Vancouver quickly and show you the best.\nAction: Search novelty mugs, filter by fast delivery to Vancouver, and send you the best pick with price and arrival date."
+   ]
+  },
+  {
+   "event": "life-s006-e011",
+   "responses": [
+    "Jess should weigh these:\n- Cash flow: would rent cover mortgage, condo fees, property tax and insurance, with a buffer for vacancies?\n- Taxes: renting can affect the principal-residence exemption for those years, and rental income is taxable.\n- Market view and plans: selling locks in today's price; holding is a bet on appreciation, and renting keeps the option to move back.\n- Landlord effort: tenants, repairs, and what happens if things go wrong.\nAn hour with an accountant or planner would help.\nAction: None.",
+    "The main things for Jess: whether rent would cover the mortgage, condo fees, property tax and insurance with a buffer for vacancies; the tax side, since renting can mean losing the principal-residence exemption for those years and rental income is taxable; her market view, because selling locks in today's price; how much landlord effort she wants; and whether she might move back. A one-hour session with a fee-only planner or accountant would settle the numbers.\nAction: Write this up as a short note you can pass to Jess.",
+    "Jess should weigh four things: cash flow (whether rent covers mortgage, condo fees, property tax and insurance with a buffer for vacancies), taxes (renting can cost her the principal-residence exemption for those years and rental income is taxable), her market view (selling locks in today's price, holding is a bet on appreciation), and landlord effort plus whether she might move back.\nAction: None; a one-hour session with a fee-only planner or accountant is worth suggesting before she decides."
+   ]
+  },
+  {
+   "event": "life-s006-e015",
+   "responses": [
+    "You're welcome. Enjoy the rest of your evening with Biscuit.\nAction: Nothing further.",
+    "Anytime. Enjoy the evening, and don't disturb Biscuit.\nAction: None.",
+    "Sounds good, enjoy the snoring Biscuit. Tomorrow's errand order is dry cleaner first, then Home Depot, then the library, leaving at 10:00 to be home well before 1. The mug decision is waiting for Sam's vote.\nAction: None tonight."
+   ]
+  },
+  {
+   "event": "life-s008-e000",
+   "responses": [
+    "I'll reorder the Purina Pro Plan Sensitive Skin & Stomach in salmon, and I'll check the listing carefully so it isn't a chicken-based or other flavour. Enjoy the Anki cards.\nAction: Find the listing, confirm 'salmon' in the title and ingredients, match the bag size from your last order, place the order, and send you the confirmation.",
+    "Got it, Biscuit gets the salmon formula only. Enjoy the Anki cards. I'll check the listing text carefully so it isn't chicken or any other flavour.\nAction: Find the Purina Pro Plan Sensitive Skin & Stomach salmon listing, confirm the flavour on the listing and ingredients, match the bag size you usually order, then place the order and send you the confirmation.",
+    "Will do: Purina Pro Plan Sensitive Skin & Stomach, salmon, and nothing chicken-based since that gave Biscuit itchy skin. I'll check the listing name and ingredients before ordering so it isn't another flavour.\nAction: Find the exact salmon listing, confirm the flavour and ingredients, match the bag size to your last order if I can find it, and place the order only if it checks out."
+   ]
+  },
+  {
+   "event": "life-s012-e018",
+   "responses": [
+    "Draft: 'Hi neighbours! Street yard sale this Sat 4 Oct, 9 am to 1 pm (rain date: Sun 5 Oct). Please set up tables on your own driveways, and no early birds before 9, please!'\nAction: Save it as a draft and post it to the group chat when you say go.",
+    "Here you go: \"Hi neighbours! We're doing a street yard sale on Sat Oct 4 from 9 to 1, with Sun Oct 5 as the rain date. Please set up tables on your own driveways, and no early birds before 9, we mean it :) Happy selling!\"\nAction: Send it to the group chat once you approve it.",
+    "Here's a draft: 'Street yard sale! Sat Oct 4, 9am to 1pm (rain date Sun Oct 5). Set up tables on your own driveway, and no early birds before 9, please. See you there!'\nAction: Hold for your OK, then post it to the street group chat."
+   ]
+  },
+  {
+   "event": "life-s016-e002",
+   "responses": [
+    "EFT is the broad term for any electronic bank-to-bank transfer. In Canada, what people call EFT is mostly batch payments like direct deposit and pre-authorized debit, cleared through Payments Canada's batch system. ACH is the US term for similar batch rails, so people use it loosely for the Canadian equivalent. Wires are a separate, faster system for large payments.\nAction: None.",
+    "There's no strict difference in how it's used in Canada: EFT is the broader Canadian term for electronic bank-to-bank transfers, and ACH is the U.S. name for the same kind of batch network. Some people use ACH loosely for Canadian EFTs, so your colleague was probably just mixing the terms.\nAction: None needed.",
+    "In Canada, EFT is the general term for electronic funds transfers like direct deposits and pre-authorized debits, which clear in batches through the national clearing system. ACH is the US network name, and the closest Canadian equivalent is EFT, so people often use them as shorthand for the same kind of rail. Just keep in mind they're separate systems with different rules and cutoffs.\nAction: None."
+   ]
+  },
+  {
+   "event": "life-s017-e012",
+   "responses": [
+    "From what I can see, nothing is still running: the Big Apple hours check finished (open 8:00-20:00 on Thanksgiving Monday, 13 Oct). The only open item is waiting on you: Leo's piano on Monday at 16:30, cancel or keep?\nAction: Check the full task list for anything else active and report back.",
+    "From what I can see, nothing is still running: the Big Apple hours check finished (open 8:00 to 20:00 on Thanksgiving Monday, pie counter closes at 19:00). The one open item is waiting on you: Leo's piano with Mrs. Greene at 16:30 on Monday, cancel or keep?\nAction: Wait for your call on the piano lesson and update the calendar accordingly.",
+    "From what I can see in this conversation, nothing is still running: the Big Apple hours check finished (open 8:00-20:00 on Thanksgiving Monday, pie counter closes at 19:00). One thing is open and needs you: Leo's 16:30 Monday piano with Mrs. Greene, cancel or keep? I can only see tasks from this conversation, so I'll confirm against the live task list.\nAction: Check the live background task list, confirm none are running, and wait on your cancel-or-keep answer for Monday's piano."
+   ]
+  },
+  {
+   "event": "life-s018-e000",
+   "responses": [
+    "Welcome back, glad the drive was fine. After travel, a Tuesday feels like a Thursday, so I'll keep today light and flag only what's urgent.\nAction: Check your inbox and calendar for anything urgent today and send you a short heads-up.",
+    "Welcome home. Driving back on the Monday of a long weekend will wreck anyone, so a Tuesday that feels like a Wednesday is fair. Coffee first.\nAction: Nothing to deal with yet; I'll keep the to-do list light and flag only what's due today when you're ready.",
+    "Morning, welcome home. A drive plus a Tuesday start will wreck anyone. I'll keep today light.\nAction: Check your calendar for anything you can't skip today and flag only those."
+   ]
+  },
+  {
+   "event": "life-s018-e005",
+   "responses": [
+    "Rule of thumb: a retention curve has flattened when the drop from one period to the next is tiny and stays tiny, for example under about 1-2 percentage points per period (or a few percent relative) for several periods in a row. It should be levelling out at a non-zero floor, and you want it in every recent cohort, not just one. Check that the cohorts are big enough that the noise isn't hiding a slow decline.\nAction: None.",
+    "Rough rule of thumb: a retention curve has flattened when the period-over-period drop stays small, for example under 1 to 2 percentage points for three or more consecutive periods, so the line runs almost parallel to the x-axis. It's more convincing if the plateau holds across several cohorts and the cohorts are big enough that it isn't noise. The exact threshold depends on your cadence, so define it up front (less than X points per week for N weeks) and use it consistently.\nAction: If you share the curve or the numbers, I'll check it against that rule.",
+    "There's no universal rule, but a common one is that the curve has flattened when period-over-period change drops below about 1-2 percentage points (or a few percent relative) for several periods in a row. I'd also check that it holds across cohorts and that the sample is big enough to trust.\nAction: None, though I can apply this to a specific curve if you send the data."
+   ]
+  },
+  {
+   "event": "life-s020-e016",
+   "responses": [
+    "Here's the drill sheet plan, in role-play scenes (ordering food, a work meeting, a doctor's visit) with Mexican vocabulary like carro and computadora. Section 1: ser vs estar with emotions and locations. Section 2: por vs para. Section 3: the subjunctive after cuando for the future, so 'cuando llegue a casa, te llamo', not 'llego'.\nAction: Build the one-page sheet with exercises and an answer key and save it to your notes before your next lesson with Carlos.",
+    "Here's the plan for the drill sheet: three sections with an answer key at the end. 1) Ser vs estar with emotions and locations, fill-in-the-blank like \"Ella ___ cansada\" and \"La fiesta ___ en mi casa\". 2) Por vs para. 3) The subjunctive after cuando for future events, like \"Cuando llegue a casa, te llamo\", not \"llego\".\nAction: Build the full one-page sheet with a handful of questions per section and save it to your notes before your next lesson.",
+    "On it. The sheet will have three sections: ser vs estar (estar for emotions and where things are, ser for what something is), por vs para, and the future subjunctive after cuando, starting from your own example, 'cuando llego a casa te llamo' becoming 'cuando llegue a casa te llamo'. Each section gets about ten short fill-in-the-blank items, with an answer key at the bottom.\nAction: Write the drill sheet and save it to your notes so it's ready before your next lesson."
+   ]
+  },
+  {
+   "event": "life-s021-e000",
+   "responses": [
+    "Congratulations on the half marathon, 2:04:37 on the Toronto waterfront is a huge first, and good on Marcus for dragging you through it. I'll set a Friday 15:00 reminder for the #payouts-launch status update (due by 16:00) and pre-draft the five red/amber/green bullets from Linear, and keep Friday evenings clear for pizza and movie night.\nAction: Create the recurring Friday 15:00 reminder, block Friday evenings, and save your race result (2025-10-19, 2:04:37) to your notes.",
+    "Congratulations on your first half marathon! 21K at the Toronto waterfront in 2:04:37 is a big deal, and Marcus earned his credit for dragging you through it. All three are set: a Friday 15:00 reminder for the payouts status update, pre-drafted from Linear as five bullets with red/amber/green per workstream so it's ready before your 16:00 post, and Friday evenings kept clear for pizza and movie night.\nAction: Create the recurring Friday 15:00 reminder with the Linear pre-draft, block Friday evenings on your calendar, and log the race (2025-10-19, 2:04:37) in your notes.",
+    "Huge congratulations on the half marathon, 2:04:37 on the Toronto waterfront 21K is a great first one, and it sounds like Marcus earned his credit. Got all three: the Friday 16:00 status post in #payouts-launch (five bullets, red/amber/green per workstream) with a 15:00 reminder and a Linear pre-draft, and Friday evenings kept clear for pizza and movie night with Leo picking and Sam on dough.\nAction: Set a recurring Friday 15:00 reminder that pre-drafts the status update from Linear, block Friday evenings on the calendar, and save the race result (Toronto waterfront 21K, 2025-10-19, 2:04:37, trained with Marcus) to your notes."
+   ]
+  },
+  {
+   "event": "life-s022-e016",
+   "responses": [
+    "I'll log it as the Toronto Waterfront Half Marathon, October 19, 2025, 2:04:37, as the official result. I'll also set up the yearly recap so it's ready in December.\nAction: Add the entry to your running stats and set a December reminder to build the yearly recap.",
+    "Adding it: Toronto Waterfront Half Marathon, October 19, 2025, 2:04:37, which works out to about 5:54 per km over 21.1 km. I'll set a reminder to put together your yearly recap in December.\nAction: Add the race to your running stats and set a reminder in early December to build the yearly recap.",
+    "Added: Toronto Waterfront Half Marathon, 19 Oct 2025, chip time 2:04:37, which works out to about 5:54 per km, and it's your first half marathon. I'll keep it flagged for a proper yearly recap in December.\nAction: Add the race to your running stats and set a December task to compile the yearly recap."
+   ]
+  },
+  {
+   "event": "life-s023-e017",
+   "responses": [
+    "I'll find a half-hour window Monday to Wednesday that works for you, Aisha and Diego. Following your rule, the meeting will be 25 minutes inside that window, with an agenda in the invite: 1) negative balances, 2) reversed transfers, 3) what to size first. Aisha prefers async Slack to meetings, so I'll also post the agenda in a Slack thread to her so she can pre-read.\nAction: Check all three calendars for a Mon-Wed slot, send the 25-minute invite with the agenda, and post the agenda to Aisha on Slack.",
+    "Will do. Aisha's edge-case list for negative balances and reversed transfers is already in the doc, and she wants PM eyes before sizing, so I'll suggest skimming it before the call.\nAction: Check your, Aisha's and Diego's calendars Monday to Wednesday, pick a shared 30-minute slot, and send the invite with an agenda of negative balances, reversed transfers and sizing.",
+    "I'll find a half hour Monday to Wednesday where you, Aisha and Diego are all free and book it with an agenda: 1) negative balances, 2) reversed transfers, 3) what we size and next steps. Aisha has the edge-case list in a doc and wants PM eyes before sizing, so I'll link it in the invite.\nAction: Check all three calendars for Mon-Wed, create the invite with that agenda and the doc link, and tell you the slot I picked."
+   ]
+  },
+  {
+   "event": "life-s025-e000",
+   "responses": [
+    "I'll pull every open payouts ticket from Linear and group them by workstream. For December launch risk, I'll flag tickets that are blocked, unassigned, overdue or have no estimate, and anything with dependencies on outside teams.\nAction: Query Linear for open payouts tickets, group by workstream, and send the list with at-risk items called out and the reason for each.",
+    "I'll pull every open payouts ticket and group them by workstream. From what I have, the workstreams to expect are reconciliation CSV export v2, payout status webhooks and the instant payout fee experiment, with about 2.5 engineers on it. The known risk is the bank partner API migration in November, so I'll check which tickets depend on it.\nAction: Pull the open payouts tickets from Linear, group by workstream, and send you a list with the December launch risks ranked.",
+    "I'll pull every open payouts ticket from Linear and group them by workstream, using the labels or projects on the tickets and listing anything unlabeled separately. For December risk, I'll flag tickets that are blocked, high priority without an owner, overdue, or still unstarted as the launch gets close, and say why for each.\nAction: Query Linear for open payouts tickets, build the grouped list with at-risk flags and reasons, and send it to you."
+   ]
+  },
+  {
+   "event": "life-s025-e036",
+   "responses": [
+    "I don't have today's Canada Post estimate, but regular international letter mail to India usually takes a couple of weeks or more, so I'd send it early. For your mom's address in Bandra, I'll use what's in your contacts.\nAction: Look up Canada Post's current delivery estimate from Toronto to Mumbai and tell you the latest date to mail the card.",
+    "I don't want to guess a number, since international letter mail times vary a lot and I don't have Canada Post's current estimate.\nAction: Look up Canada Post's current delivery estimate for a letter to Mumbai and tell you whether a tracked option is worth it for a card.",
+    "I don't have a reliable current figure, so I'd check Canada Post's estimate for a letter to India rather than quote you one. In general international mail can take a couple of weeks or more, so for something tied to a date I'd allow plenty of margin or use a tracked option.\nAction: Look up Canada Post's current delivery estimate and tracked options for a card to Mumbai, then tell you what to allow, including for your mom's birthday on 3 Nov."
+   ]
+  },
+  {
+   "event": "life-s026-e012",
+   "responses": [
+    "I'll find a half-hour window on the 13th in the afternoon that works for you, Diego and Aisha. Following your rule, the meeting is 25 minutes inside that window, with an agenda in the invite: 1) walk through the new onboarding flows, 2) open design questions, 3) decisions and next steps.\nAction: Check all three calendars for the afternoon of the 13th, send the 25-minute invite with the agenda, and flag any conflict.",
+    "On it. I'll aim for a 30-minute slot on the 13th in the afternoon when Diego and Aisha are both free, with this agenda: 1) walk through the new onboarding flows, 2) open questions and feedback, 3) decisions and next steps.\nAction: Check Diego's and Aisha's calendars for an afternoon opening on the 13th and send the invite with that agenda once I find a time that works for all three.",
+    "I'll book a half hour with Diego and Aisha on the 13th in the afternoon and include an agenda: 1) walk through the new onboarding flows, 2) engineering questions and feasibility, 3) open decisions and next steps. The 13th falls on a Thursday, and your 1:1 with Tom is Thursdays at 14:00, so I'll steer clear of that slot.\nAction: Find an afternoon slot on the 13th that works for all three of you and avoids 14:00, send the invite with the agenda, and tell you the time."
+   ]
+  },
+  {
+   "event": "life-s035-e008",
+   "responses": [
+    "On the tours, Marcus's sister should ask: the staff-to-child ratio and how long staff have been there, what a typical day and nap routine looks like, how illness and sick days are handled, and how parents get updates. Also: fees and whether they're in the $10/day program, food and allergy policy, and how they handle settling-in for a one-year-old.\nAction: Save that as a checklist in your notes so you can forward it to Marcus.",
+    "The questions I'd bring on the tours: what's the staff-to-child ratio for infants and how long have the staff been there, what does a typical day look like (naps, feeds, outdoor time), what's the sick policy and the plan for emergencies, how do they communicate with parents day to day, and what are the fees and are they in the $10-a-day program. I'd also ask whether she can drop in unannounced or sit in for a visit, since how the staff greet the kids tells you a lot.\nAction: Put this into a one-page tour checklist you can forward to Marcus.",
+    "Good tour questions: the staff-to-child ratio and how long the staff have been there (turnover is the red flag), what a typical day looks like including naps and outdoor time, and how they handle separation and illness. Also ask about daily communication with parents, how meals and allergies are handled, the fees, and when a spot would actually start.\nAction: Put those into a one-page checklist you can text to Marcus for his sister."
+   ]
+  },
+  {
+   "event": "life-s037-e000",
+   "responses": [
+    "Merry belated Christmas! Pyjamas at 11, a Lego truck on its third build and Sam asleep on the couch with Biscuit is peak boxing day. Hope it stays this slow.\nAction: Nothing needed, enjoy the day.",
+    "Merry belated Christmas! Pyjamas at 11, a Lego truck built three times and Sam and Biscuit asleep on the couch sounds like a perfect Boxing Day.\nAction: Nothing on the list today; I'll leave you in peace.",
+    "Merry belated Christmas! Pyjamas at 11, a Lego truck built three times and Sam asleep on the couch with Biscuit sounds like peak Boxing Day.\nAction: None, enjoy the quiet."
+   ]
+  },
+  {
+   "event": "life-s037-e011",
+   "responses": [
+    "Here's a menu for 5 with no shellfish anywhere: baked brie with cranberry and thyme to start, a mushroom and spinach Wellington with roast potatoes and maple carrots as the main, and a dessert that can be made ahead. For Grace, a Pomegranate Rosemary Fizz: pomegranate juice, a squeeze of lime, rosemary syrup, topped with non-alcoholic sparkling wine, so she has a real toast drink. It's all make-ahead friendly and not fussy.\nAction: Save the menu to your notes and look up where to buy non-alcoholic sparkling wine nearby.",
+    "Sent to Hannah. For NYE for 5, no shellfish anywhere: baked brie and crudites to start, a wild mushroom and spinach Wellington with roast potatoes and maple-glazed carrots, and a dessert you and Leo bake that morning. For Grace, a Pomegranate Rosemary Fizz: pomegranate juice, lime, rosemary syrup and non-alcoholic sparkling wine, so she has a real toast drink. I'd also ask Daniel about any dietary needs.\nAction: Send the thank-you to Hannah, save the menu to your notes and make the shopping list.",
+    "Sending the thank-you to Hannah now. For the NYE dinner for 5 I'd make the whole menu vegetarian with no shellfish, so Sam and Grace can both eat everything: baked brie with cranberry, a mushroom and spinach Wellington with roast potatoes and carrots, and a make-ahead dessert. For the mocktail, a pomegranate-rosemary fizz with lime, rosemary syrup and alcohol-free sparkling wine in a flute, so Grace has a proper toast.\nAction: Send the thank-you text to Hannah, then save the menu with a make-ahead plan and shopping list to your notes."
+   ]
+  },
+  {
+   "event": "life-s037-e017",
+   "responses": [
+    "I'd make a chocolate yogurt loaf with sprinkles: one bowl, Leo can measure, stir and add the sprinkles, and it's in the oven 50 minutes later. While it bakes he can make a paper 'Happy New Year' topper, and it tastes better after a few hours, so Wednesday morning is perfect. Stores close at 18:00 on Wed 31 Dec, so get ingredients earlier.\nAction: Save the recipe to your notes, add the ingredients to the shopping list, and start a list of weekend-morning baking projects for January.",
+    "Glad the Wellington landed. My pick is one-bowl brownies: Leo can measure and stir, the bake is short, and while it's in the oven he can dust them with icing sugar and pick the berries for the top, which keeps him busy during the wait. I'd keep them nut-free to be safe. Wednesday morning is perfect for an evening dessert.\nAction: Send you the recipe and a shopping list, and pencil in a baking morning for the first January weekends once you pick days.",
+    "Glad the Wellington works. For Leo I'd go with one-bowl chocolate chip muffins: he gets to measure and stir, and they bake in about 20 minutes, so there's not much waiting. While they bake he can make a 'Happy New Year' paper topper for the table.\nAction: Save the muffin recipe to your notes, and put together a list of weekend-morning baking projects for January that get gradually harder."
+   ]
+  },
+  {
+   "event": "life-s037-e020",
+   "responses": [
+    "I don't have the earlier Ottawa flight search saved here, so I'll dig back through your email and our earlier chats for it, and if I can't find it I'll rerun it for Sam's February PD day. I'll also open your podcast note and suggest new commute picks based on what you like.\nAction: Find the Ottawa flight options and send them to Sam for comparison, then read your podcast note and send a short list of new podcasts.",
+    "I don't have a saved Ottawa flight search or your podcast note in front of me, so I'd rather find them than guess at fares or your tastes. I'd also need the date of Sam's February PD day to compare.\nAction: Search your notes and email for the Ottawa flight search and for the podcast note, then send Sam the fares for his PD day and give you a short list of new podcasts.",
+    "I don't have the Ottawa flight comparison saved here, so I'll look for it in our history and notes, and if it's gone I'll re-run it for Sam's February PD day (I'll need the date). I'll also open your podcast note first and base the new commute picks on what's in it.\nAction: Search for the earlier Ottawa flights, open your podcast note, and send you a few new podcast suggestions that match it."
+   ]
+  },
+  {
+   "event": "life-s040-e009",
+   "responses": [
+    "Reminder set for 17:15. For the 1:1, Tom owns the series, so I can't edit it, but I'll accept his new Wednesday 11:30 series starting in January and remove the old Thursday copy from your calendar.\nAction: Add the 17:15 reminder, accept the new Wednesday series, delete the Thursday copy, and check Wednesday late mornings for clashes.",
+    "Reminder set for 17:15. Tom owns the 1:1 series, so I'll accept his updated invite for Wednesdays at 11:30 starting in January 2026 and remove the old Thursday copy.\nAction: Set the 17:15 reminder, update your copy of the Tom 1:1 to Wednesdays 11:30 (accept his new invite or make my own if it hasn't arrived), and remove the Thursday event.",
+    "Reminder is set for 17:15 for the Shoppers pickup. I'll accept Tom's new Wednesday 11:30 series for the 1:1 and remove your old Thursday copy, since you can't edit his event. I'll check which Wednesday the series starts from his invite.\nAction: Set the 17:15 reminder, accept the new Wednesday 11:30 series, delete the Thursday copy, and check the rest of the quarter for clashes."
+   ]
+  },
+  {
+   "event": "life-s040-e018",
+   "responses": [
+    "I don't have the numbers from 13 Dec saved here, and I'd rather not guess at the bag's exact amounts. Scaling one dozen to three dozen is just multiplying every ingredient by 3, and you'd bake in batches rather than adjust the time.\nAction: Look back through our 2025-12-13 chat and your notes for the recipe; if I can't find it, send me the amounts off the bag and I'll triple them right away.",
+    "Scaling from one dozen to three dozen means multiplying every ingredient by 3, and the baking temperature and time stay the same, just bake in batches. I don't have the quantities from that earlier conversation, so I won't guess at them. I'll give them in metric and Celsius, and I'd check the chocolate chips for tree nut warnings because of Leo.\nAction: Look for the 2025-12-13 conversation or your recipe notes and triple the quantities; if I can't find it, I'll ask you for the dozen-size quantities.",
+    "Scaling is tripling every ingredient, but I don't have the quantities from the bag recipe and I don't want to guess them. I'll look for the 2025-12-13 conversation where we did this first; if it isn't there, send me the ingredient list from the bag.\nAction: Search my notes and chat history from 2025-12-13 for the cookie scaling, and if nothing is saved ask you for the original ingredient list."
+   ]
+  },
+  {
+   "event": "life-s042-e008",
+   "responses": [
+    "Swapping it now: the Wednesday 6:00 spin class at Spin Society comes off, and strength training at the Leslieville YMCA goes on Tuesdays and Thursdays at 6:15 am, with a leave-by alert so you're home by 7:15 for Sam. I'm building tomorrow's focus playlist from Khruangbin and A. R. Rahman instrumentals.\nAction: Delete the recurring spin event, create the two YMCA events with the 7:15 home deadline, and send you the playlist link.",
+    "Both done. Tomorrow is Tue 13 Jan, so your first YMCA morning is coming up at 6:15 am, and the focus playlist will be ready for the day with Khruangbin and A. R. Rahman instrumentals. Spin comes off the calendar, and I'll set the new strength training block to leave you time to be home by 7:15 so Sam can leave for school.\nAction: Remove the spin events, add a recurring Tue/Thu 6:15 am strength training block at the Leslieville YMCA with a leave-by reminder for 7:15 home, and build the playlist.",
+    "Making the Khruangbin and A. R. Rahman instrumentals focus playlist for tomorrow. For the calendar, I'll remove spin and add strength training at the Leslieville YMCA on Tuesdays and Thursdays at 6:15, wrapping up in time for you to be home by 7:15 so Sam can leave for school. One catch: my notes have your run with Marcus on Tuesday and Thursday at 6:30, so I need to know whether that run has moved before I leave both on the calendar.\nAction: Build the playlist, remove the spin events, add the YMCA sessions, and hold off on the Marcus run until you tell me what happened to it."
+   ]
+  },
+  {
+   "event": "life-s045-e000",
+   "responses": [
+    "I'll unsubscribe you from Wayfair, Uber Eats promos, Lululemon and Dyson, and archive their existing promo mail. Old Navy is one of the three senders that needed a login, and those are saved in Notes under Inbox cleanup, so I'll handle that one separately. I'll leave Uber receipts and other transactional mail alone.\nAction: Unsubscribe from the four senders, archive their promo mail, and for Old Navy open the saved login note and ask you to sign in or confirm.",
+    "On it. I'll unsubscribe you from Old Navy, Wayfair, Uber Eats promos, Lululemon and the Dyson mailings and archive what's already there from them. I'll leave order confirmations and receipts alone so nothing important gets buried.\nAction: Unsubscribe from all five (using their preferences page where there's no unsubscribe link), archive their promo emails, add a filter to skip the inbox for future mail, and send you a short summary.",
+    "I'll unsubscribe from Old Navy, Wayfair, Uber Eats promos, Lululemon and the Dyson emails, and archive what's already in the inbox from them. The Dyson one you never signed up for I'll treat carefully: if the unsubscribe link looks sketchy I'll mark it as spam instead of clicking it.\nAction: Unsubscribe from all five, archive their existing mail, and tell you the counts and anything that didn't go through."
+   ]
+  },
+  {
+   "event": "life-s046-e013",
+   "responses": [
+    "I don't have last night's result in front of me and I'd rather not guess a score.\nAction: Look up last night's Raptors final score and send you a one-line answer for Sam.",
+    "I don't have last night's Raptors score yet.\nAction: Look up the final score and text it to Sam.",
+    "I'm checking last night's Raptors score now.\nAction: Look up last night's Raptors game result and send you the score for Sam."
+   ]
+  },
+  {
+   "event": "life-s046-e016",
+   "responses": [
+    "EFT is a batch bank-to-bank transfer: cheap, typically 1-3 business days, and can be reversed within return windows. A wire is a same-day, high-value transfer, costs more, and is effectively final once sent. Suggested wording for the decks: 'EFT: batch bank transfer, 1-3 business days. Wire: same-day high-value transfer, final once sent.'\nAction: Put those definitions in a short note you can drop into the decks.",
+    "EFT is the broad term for electronic bank-to-bank transfers in Canada, typically batched, low cost and settling in a day or two (payroll deposits, pre-authorized debits). A wire is a single, individually sent, usually higher-value payment, often same day, with a higher fee and much harder to reverse. A wire is technically a kind of electronic transfer, but for merchant payouts they differ in speed, cost and reversibility, so sales shouldn't swap them.\nAction: I can draft a one-line definition of each for the deck so the wording stays consistent.",
+    "EFT is the broad term for electronic funds transfers that clear in batches, like direct deposits and pre-authorized debits: cheap, usually a few business days, and they can be returned. A wire is a one-off, same-day payment that is effectively final and costs much more. So for merchant payouts EFT is the normal rail, and a wire is for when you need speed and certainty on a large amount.\nAction: Draft a one-line definition of each for you to drop into the deck so sales stops mixing them up."
+   ]
+  },
+  {
+   "event": "life-s046-e041",
+   "responses": [
+    "Added both to Thursday's to-do list: the backsplash decision for Nate and the Morse Street pizza lunch and field trip forms, all due Fri 30 Jan. I don't have a note of what you looked at last spring for Ottawa, so I won't guess, but the Canadian Tulip Festival typically runs in May and may be what you saw. I'll confirm the dates and look for other family events that weekend.\nAction: Add the two items to Thursday's list, search your notes and email for what you saved last spring, and look up what's on in Ottawa the May long weekend.",
+    "Yes, I have a note about that: the Canadian Tulip Festival in Ottawa in May with Sam's parents, Grace and Daniel, which you wanted to check dates on in April. The two Thursday items go on the list: Nate's backsplash decision, zellige install at $3,860 or ceramic lookalike at $1,420, due Fri 30 Jan, and the February pizza lunch order and Leo's Riverdale Farm trip form.\nAction: Add both to Thursday's to-do list and look up this year's Tulip Festival dates against the May long weekend.",
+    "Adding both Friday 30 Jan items to Thursday's to-do list: Nate's backsplash decision (zellige $3,860 or ceramic lookalike $1,420) and the Morse Street pizza lunch orders plus Leo's Riverdale Farm trip form. For Ottawa in May, I don't have the notes from what you looked into last spring, so I'll dig for that and check what's on over the May long weekend rather than guess.\nAction: Add both to Thursday's list, then search my notes and history for last spring's Ottawa research and look up events for the May long weekend."
+   ]
+  },
+  {
+   "event": "life-s047-e006",
+   "responses": [
+    "No, damage deposits aren't allowed in Ontario. Under the Residential Tenancies Act a landlord can only take a last month's rent deposit, and for real damage beyond normal wear and tear they must apply to the Landlord and Tenant Board themselves and can't just deduct it. Scuffed walls are often normal wear. If Diego paid a separate damage deposit, he can ask for it back and file a T1 application with the LTB within a year of moving out.\nAction: None.",
+    "Short answer: no, damage deposits aren't allowed in Ontario. A landlord can only take a last month's rent deposit, and for damage beyond normal wear the landlord has to apply to the Landlord and Tenant Board, not deduct it. Scuffed walls are usually normal wear, and if Diego paid a separate deposit he can ask for it back, or file a T1 application with the LTB within a year of moving out.\nAction: Pull together a plain-language summary and the CLEO page for you to send Diego.",
+    "Not allowed: in Ontario a landlord can only collect a last month's rent deposit, not a damage deposit. If Diego paid one, he can ask for it back, and the landlord can't just deduct for scuffs; damage beyond normal wear and tear has to go through the Landlord and Tenant Board, and scuffed walls are usually wear and tear. If the landlord refuses, he can apply to the LTB (form T1) within a year of moving out.\nAction: Draft a short message you can forward to Diego with those points, and suggest he keep move-out photos."
+   ]
+  },
+  {
+   "event": "life-s047-e013",
+   "responses": [
+    "Ha, that's a great question, and it deserves a very serious answer. Hope you can put your feet up soon. The T-Rex costume arrives Tue 27 Jan.\nAction: Nothing needed.",
+    "Ha, I'd say the answer is yes, with cake shaped like a meteor. Hope the T-rex costume arriving Tue 27 Jan is a hit.\nAction: Nothing needed tonight, get some rest.",
+    "Ha, that's a very Leo question, and a long day on top of it would wipe anyone out. At least one dinosaur thing is handled: the T-Rex costume arrives Tue 27 Jan.\nAction: Nothing for tonight; I'll leave the rest of the to-do list alone."
+   ]
+  },
+  {
+   "event": "life-s047-e025",
+   "responses": [
+    "I don't have a live rink status or Saturday's forecast in front of me, so I won't promise it. Outdoor rinks often close when it's mild or raining, so I'll check the city's page for Withrow and the forecast for Saturday afternoon.\nAction: Look up the Withrow rink status, hours and Saturday afternoon forecast, and tell you if skating after swim is a go.",
+    "I don't know yet: I don't have the Withrow rink's current status or Saturday's forecast. Outdoor rinks depend on the temperature and ice conditions, and they can close the same day.\nAction: Check the City of Toronto page for Withrow Park rink status and hours plus the Saturday afternoon forecast, then suggest a time after Leo's swim.",
+    "I don't have a rink status for Withrow yet, and conditions can change day to day, so I'll check rather than guess. I'll look at the City's rink listing and Saturday afternoon's forecast.\nAction: Check the City of Toronto rink status for Withrow Park and Saturday afternoon's forecast, and tell you whether skating after swim looks good."
+   ]
+  },
+  {
+   "event": "life-s048-e006",
+   "responses": [
+    "I'd start with ChessKid: it's built for kids around 6 to 12, moderated, with lessons and puzzles, and the paid tier is the main upsell rather than ads. Lichess is a free no-ads fallback, though it's less kid-oriented. Listings change, so I'll check the current app store pages for ads and in-app purchases before you install.\nAction: Check the current listings and reviews for ads, loot-box-style purchases and age fit, and send you the final pick.",
+    "I don't want to recommend one before I check the details, because ads and in-app purchases change often. Lichess is free and ad-free but not built for a 6-year-old, and ChessKid is made for kids but I'd need to check what's free and what's upsold.\nAction: Look at the current app store listings for kid-friendly chess apps, check each for ads and in-app purchases, and send you one pick.",
+    "Two worth looking at are ChessKid, which is built for children, and Lichess, which is free with no ads but isn't kid-specific. I'd confirm current ad and in-app-purchase policies in the app stores before you install either, since those change.\nAction: Check the app store listings for ads and purchases on both and any other kid-focused chess apps, then send you a short list."
+   ]
+  },
+  {
+   "event": "life-s050-e011",
+   "responses": [
+    "I'll text Hannah that we'd love to come for pancakes on Sunday at 9. Since she has some night shifts, I'll text rather than call. I'll add it to the 'Okafor-Malhotra family' calendar after checking for conflicts.\nAction: Text Hannah yes, check Sunday 9:00 for conflicts, and add 'Pancakes at Hannah's' to the family calendar.",
+    "Yes to pancakes at Hannah's on Sunday at 9, kids included.\nAction: Text Hannah yes and add pancakes at Hannah's to the family calendar for Sun 8 Feb at 9:00.",
+    "Yes to pancakes at Hannah's, Sunday at 9 with the kids. I'll text her back and put it on the family calendar, and check it doesn't collide with anything else that morning.\nAction: Text Hannah a yes, add 'Pancakes at Hannah's, Sun 9:00' to the family calendar, and flag any conflict I find."
+   ]
+  },
+  {
+   "event": "life-s051-e000",
+   "responses": [
+    "Yes, it used to be January. The league's longer season moved it later: the 2002 game slid into February after the 9/11 postponement, and the move to a 17-game schedule in 2021 locked it into the second Sunday of February. Sunday is the TV choice, since it's the biggest audience of the week.\nAction: None.",
+    "Yes, it used to be in late January. The 9/11 postponement pushed the 2002 game into February, and the later 17-game regular season, which the NFL began in 2021, locked in a second Sunday in February slot. Sunday is the TV choice, since it's the biggest audience night of the week.\nAction: None needed.",
+    "It used to be late January, and yes, it moved because the NFL season got longer. The 2002 game slipped into February after the 9/11 postponement, and the move to a 17-game regular season in 2021 keeps it in the second week of February. Sunday is just TV: it's the biggest audience night of the week.\nAction: None, just trivia."
+   ]
+  },
+  {
+   "event": "life-s051-e006",
+   "responses": [
+    "For jammy yolks, lower eggs straight from the fridge into gently boiling water for 6.5 to 7 minutes, then straight into an ice bath for at least 5 minutes before peeling. For ramen eggs, marinate the peeled eggs in a soy, mirin and water mixture for at least 6 hours or overnight, so they need to be made tonight to be ready tomorrow.\nAction: Set an evening reminder to boil and marinate the eggs.",
+    "Boil the water first, then lower the eggs straight from the fridge and cook for 6 to 7 minutes for jammy yolks, then straight into ice water for about 5 minutes. For ramen eggs, peel them and marinate in a soy and mirin mix overnight, so tonight's the time.\nAction: Set a reminder for this evening to boil and marinate the eggs so they're ready tomorrow.",
+    "For jammy ramen eggs, lower fridge-cold eggs into boiling water and cook for 6.5 to 7 minutes, then move them straight into ice water for 5 minutes. Peel them and, for that ramen shop look, marinate overnight in soy sauce, mirin and water so they're ready tomorrow.\nAction: Set a 7-minute timer for you when you start boiling."
+   ]
+  },
+  {
+   "event": "life-s060-e019",
+   "responses": [
+    "Scheduled for 9:00. For Priya, questions that cut through: is Toronto a step up (bigger projects, a path to partner) or a sideways move, and who would she work for there? What does she lose in Montreal (friends, partner, lease, French daily life), and is there a cost to saying no? Could she try it first with a 3-month secondment, and which city does she picture herself in five years out? Toronto has plenty of old buildings and is bikeable, which suits her.\nAction: Schedule the Slack message for 9:00 tomorrow and put Priya's questions in a note you can forward.",
+    "Scheduled for 9:00. For Priya, questions that cut through: is the Toronto move a step up or a sideways shuffle, who would she work for and does she rate them more than her current lead, what does she lose by leaving (friends, a partner's job, a lease), is there a cost to saying no, and could she try it first with a secondment or a guaranteed way back. A good closer: five years out, which city does she picture herself in?\nAction: Schedule the Slack message for 9:00 tomorrow and tidy these into a short note you can send Priya.",
+    "Scheduled for 9:00 tomorrow. For Priya the questions that cut through are: is Toronto a real step up (bigger architecture projects, a path to partner) or a sideways move; who would she work for there compared with now; what does she give up in Montreal (friends, a lease, French in daily life); could she trial it first with a guaranteed way back; and which city does she picture herself in five years out.\nAction: Schedule the Slack message for 9:00 tomorrow in #payouts-team, and turn the questions into a short message you can forward to Priya."
+   ]
+  },
+  {
+   "event": "life-s060-e022",
+   "responses": [
+    "I'll check that the Disney+ charge stopped after you cancelled in March 2026, using your cancellation confirmation and your statements. I'll also record your current subscriptions: Netflix (standard), Spotify Family, Crave and The Globe and Mail digital.\nAction: Search email for the Disney+ cancellation confirmation, check statements for any Disney+ charge after it, and save the subscription list to a note.",
+    "I'll send Priya's questions as a clean message you can forward. For the money cleanup, I'll check your statements and email for any Disney+ charge after your March 2026 cancellation. The four you're keeping are Netflix (standard), Spotify Family, Crave and The Globe and Mail digital.\nAction: Search your card and bank statements and email for Disney+ charges since the cancellation and confirm the cancellation email, then send you the four remaining subscriptions with amounts and renewal dates.",
+    "Yes, I'll turn the Priya questions into a short message you can forward. Your active subscriptions are Netflix (standard), Spotify Family, Crave and The Globe and Mail digital. For Disney+, I'll check for any charge after your March 2026 cancellation and confirm the account shows it ending.\nAction: Check your card statements and the Disney+ account for charges after the cancellation, and save the four active subscriptions to a note."
+   ]
+  },
+  {
+   "event": "life-s062-e003",
+   "responses": [
+    "Try this one: 'Why do accountants make terrible comedians? Their punchlines always have to be reconciled by Friday.' Clean, finance-themed, and no crypto.\nAction: Save it to your notes for Friday's standup.",
+    "Try this: \"I'd tell you a joke about compound interest, but you'd have to wait for it to grow.\" A backup: \"Why don't accountants ever get lost? They always know where to find the bottom line.\" Both are clean and nobody has to know what a basis point is.\nAction: Pick whichever fits your standup tone and I'll tweak it toward payouts if you want.",
+    "Here's a clean one: 'I asked the bank for a loan, and they said sure, as soon as I can prove I don't need it.' Or a shorter one: 'The only thing growing faster than our backlog is the number of tabs in the budget spreadsheet.'\nAction: None."
+   ]
+  },
+  {
+   "event": "life-s063-e000",
+   "responses": [
+    "I'd tell Marcus to put numbers on both: the extra 10% in after-tax dollars against about 35 minutes saved each way, roughly 70 minutes a day and around 6 hours a week. Then compare what money doesn't show: caseload, mentorship, hours and a path to grow. If the raise is only a few thousand after tax, the short commute usually wins.\nAction: Draft a short text for you to send Marcus.",
+    "The commute gap is bigger than the pay gap looks: 35 minutes each way is about 6 hours a week. I'd tell Marcus to turn the 10% into after-tax dollars per month and compare it to the hours he'd get back, then weigh caseload, mentorship and room to grow at each clinic. If all that is equal, I'd lean toward the 10-minute bike ride.\nAction: Draft a short message to Marcus with those points for you to send.",
+    "The two numbers to pin down first are what the 10% is in actual dollars after tax, and what the commute costs him: 45 minutes on the subway versus a 10 minute bike ride is about 70 minutes back every working day. If the jobs are otherwise similar I'd lean toward the short commute, but he should settle it on caseload, mentorship and room to grow first, and use pay and commute as the tiebreaker. A good question for you to put to him: 'If they paid the same, which one would you pick?'\nAction: Draft a short text you can send Marcus with those questions."
+   ]
+  },
+  {
+   "event": "life-s063-e007",
+   "responses": [
+    "That sounds like a perfect porch morning, enjoy the coffee and sun. I'll push the career day prep to later.\nAction: Snooze the career day prep reminder until later today.",
+    "Enjoy it, a sunny porch and a coffee is a good way to mark the first spring day. We can pick up the Marcus clinic question and the career day talk whenever you're ready.\nAction: Park both for now; the career day prep block on your calendar starts in about 30 minutes.",
+    "Enjoy it, sun on the porch with a coffee is the right way to meet spring. The career day talk can wait until you want it; it's Tue 31 Mar at 9:15 in Room 104 per Ms. Alvarez.\nAction: None for now."
+   ]
+  },
+  {
+   "event": "life-s066-e016",
+   "responses": [
+    "I'll scan your docs for links to the old pricing page. I don't have either URL saved, so I'll get the old and new addresses from marketing's announcement or from a link already in the beta materials, then search Drive and Notion for matches.\nAction: Find the old and new pricing URLs, search your beta materials and other docs for the old link, and send you a list of where it appears; I won't edit anything without your OK.",
+    "I can do that, but I need the old pricing page URL to search for it. If marketing announced the move, that message should have both the old and new links.\nAction: Find the old and new URLs from marketing's announcement, scan the beta materials and your other docs for the old link, and send you a list of the docs and locations to fix without editing anything.",
+    "Yes, I can scan your docs for it, but I don't have the old pricing page URL, so I need that link first (and the new one if marketing has it, so each hit can point to the right replacement). Once I have it I'll search the beta materials and report every doc that still links to the old page.\nAction: Ask you for the old pricing page URL, then scan the beta docs for it and list each hit with the doc name."
+   ]
+  },
+  {
+   "event": "life-s068-e014",
+   "responses": [
+    "I only have the winter schedule: the indoor Leslieville Farmers' Market runs Sundays 10:00-14:00 at Jimmie Simpson Rec Centre until Apr 26 2026, with no Saturday winter market. I don't have the date the summer market starts back up, so I'd rather check than guess.\nAction: Look up the market's outdoor season start date and hours, and tell you.",
+    "I don't have this year's opening date for the Leslieville farmers market, so I'll check rather than guess.\nAction: Look up the market's season page and tell you the start date and hours.",
+    "I don't have this year's opening date saved, so I'll check the market's own listing rather than guess. When I have it I'll tell you the date and hours.\nAction: Look up the Leslieville farmers market opening day and hours for this year, report back, and add it to the calendar if you want it there."
+   ]
+  },
+  {
+   "event": "life-s070-e006",
+   "responses": [
+    "You're welcome. Two things are still waiting: the two holds at Pape/Danforth are ready until Sat 25 Apr, and Tom still needs the link to the beta merchant numbers before his exec sync tomorrow morning.\nAction: Keep Tom's request flagged for after dinner.",
+    "You're welcome. The two holds at Pape/Danforth are for pickup by Sat 25 Apr, and I've started renewing the three books due Wed 22 and Thu 23 Apr. Tom's link request is still waiting for after dinner.\nAction: Check back with you after dinner on what to send Tom.",
+    "You're welcome. Tom's request for the link to the beta merchant numbers is still waiting on you for after dinner.\nAction: Nudge you about Tom once dinner is done, and keep renewing the three library books."
+   ]
+  },
+  {
+   "event": "life-s071-e002",
+   "responses": [
+    "On it. I'll tell your mom the new time kindly: starting this week, Saturdays at 8:30 am Toronto time, which is 6:00 pm for her, and let Kabir know too. I'll update the recurring event with both Toronto time and IST. One thing to check first: my note has Leo's soccer on Saturdays at 9:00 with arrival at 8:45, which could clash with an 8:30 call, so I'll confirm his schedule.\nAction: Reply to Mummy with the new time, update the recurring calendar event (8:30 am Toronto / 6:00 pm IST), message Kabir, and check Leo's soccer schedule against the Saturday slot.",
+    "Draft for your mum: \"Hi Mummy, we're moving our call to Saturdays at 8:30 am my time, which is 6:00 pm for you, starting this week. Sunday mornings are taken by Leo's soccer now. Talk soon, and Kabir, same time for you.\"\nAction: Send that to your mum, change the recurring calendar event to Saturdays 8:30 am Toronto time, and text Kabir the new time.",
+    "Done, I'll tell her kindly: the call moves to Saturdays at 8:30 am Toronto time (6:00 pm for her) because Sundays are now Leo's soccer. I'll swap the recurring event from Sunday 9:00 to Saturday 8:30 and let Kabir know too. One note: when Toronto's clocks go back, 8:30 will be 7:00 pm in Mumbai.\nAction: Reply to Mummy with the new time, replace the Sunday 9:00 recurring event with Saturday 8:30, and text Kabir the new time."
+   ]
+  },
+  {
+   "event": "life-s072-e000",
+   "responses": [
+    "I'll update Biscuit's vet to Dr. Kaur at Riverside Veterinary Clinic on Broadview Ave, replacing Dr. Moreau. Then I'll look for an appointment for his annual shots and rabies booster next week, on a weekday after 5:30 pm. I don't have the clinic's phone or booking link yet, so I'll find those.\nAction: Update Biscuit's vet contact, check Riverside's availability next week after 17:30, check your calendar, and book the best slot.",
+    "Noted: Dr. Moreau retired in April 2026, and Biscuit's vet is now Dr. Kaur at Riverside Veterinary Clinic on Broadview Ave. I also have a Riverside Veterinary Clinic on file at 690 Queen St E, so I'll confirm that's the same clinic before I save the address.\nAction: Update Biscuit's vet contact, then find weekday appointments next week after 5:30 for annual shots and the rabies booster, book the earliest one, and tell you the time.",
+    "Got it. I'll update Biscuit's vet to Dr. Kaur at Riverside Veterinary Clinic on Broadview Ave, replacing Dr. Moreau who retired in April, and look for an annual shots plus rabies booster appointment next week on a weekday after 5:30.\nAction: Update the vet contact, book the earliest weekday slot after 17:30 next week that fits your calendar, and send you the confirmation."
+   ]
+  },
+  {
+   "event": "life-s077-e000",
+   "responses": [
+    "I don't have anything saved from that browsing, so I'll search rather than guess. I'll check your notes, email, photos and saved links for the backsplash or wall inspiration, and if nothing turns up, pull a fresh shortlist so you can answer Nate before Monday.\nAction: Search your notes, email and photos for the wall inspiration, and build a fresh shortlist if I find nothing.",
+    "I'll look in your 'kitchen reno' note and anything saved from your earlier browsing for backsplash and wall inspiration. I can't promise there's a saved set, and the tile quote (rev 2, $3,140) covers backsplash plus floor, so it's useful context for the choice. Nate prefers texts, so I'll send him a link rather than call.\nAction: Search your kitchen reno note and saved items for wall inspiration; if there's little, gather fresh options for you to pick from before Monday.",
+    "From what I have, you asked me on 17 Jan for zellige tile backsplash photos and didn't pick one, then asked for more in white or sage green. I'll gather those into one place so you can choose before Monday. Nate prefers texts, so I'll send him the pick by text rather than calling.\nAction: Find the saved zellige, white and sage backsplash photos and put them in one short list for you to choose from; once you pick, text Nate."
+   ]
+  },
+  {
+   "event": "life-s077-e010",
+   "responses": [
+    "Great. Nate still needs the wall choice by Monday, so I'll gather fresh options for the wall behind the range and sink this afternoon.\nAction: Put together a shortlist of options this afternoon so you can send Nate a link before Monday.",
+    "Sounds good. The kitchen wall choice for Nate is still due Monday, and he has a 3-week lead time.\nAction: Gather fresh options for the wall behind the range and sink this afternoon and send you a short list to choose from.",
+    "Nate's kitchen wall choice is still the open item for Monday, and he needs it to order given the 3-week lead time. I'll pull together some fresh options this afternoon so you can pick one and send him a link.\nAction: Gather a handful of backsplash options for behind the range and sink, and send you the link list this afternoon."
+   ]
+  },
+  {
+   "event": "life-s077-e012",
+   "responses": [
+    "Here's a draft: 'Hi, thanks for organizing the street party! I can take the 2-4pm volunteer slot at the lemonade table, but I won't be able to help with setup. Looking forward to it. Riya'\nAction: Save it as a draft for you to look over, and send it on your go-ahead.",
+    "Draft: \"Hi, thanks for organizing the street party. I can take the 2 to 4pm volunteer slot at the lemonade table, but I won't be able to help with setup. Best, Riya\"\nAction: Send it once you approve it; I'll fill in the organizer's name if you give me one.",
+    "Draft: 'Hi, thanks for organizing the street party. I can take the 2-4pm volunteer slot at the lemonade table, but I won't be able to help with setup. Looking forward to it! Riya'\nAction: Save as a draft for your review; I won't send it until you say."
+   ]
+  },
+  {
+   "event": "life-s077-e044",
+   "responses": [
+    "25-minute timer started for the garden beds.\nAction: Start a 25-minute timer and alert you when it ends.",
+    "Timer set for 25 minutes. Have fun with the garden beds.\nAction: Start the 25-minute timer now and ping you when it's done.",
+    "A 25 minute timer for the garden beds, starting now.\nAction: Start a 25-minute timer and ping you when it's up."
+   ]
+  },
+  {
+   "event": "life-s085-e010",
+   "responses": [
+    "A few things to pass on: get on several waitlists at once, including licensed home daycare agencies, which often move faster than centres. Ask each place whether it's in the $10/day program, and about infant spots that open as kids move up.\nAction: Look up Roncesvalles-area home daycare agencies and send you a short list for Diego's partner.",
+    "Ideas for Diego's partner: join several waitlists at once, including licensed home-daycare agencies, which often have openings sooner than centres. Ask each place whether they're in the $10-a-day program, and call to ask about cancellations.\nAction: Look up licensed home-daycare agencies that serve Roncesvalles and send you a short list to pass on.",
+    "A few things to pass on: get on every licensed waitlist now, including any central one the city offers, and ask each centre how often infant spots turn over. Licensed home daycare agencies often move faster than centres, and co-ops can be shorter too.\nAction: Put those in a short note you can forward to Diego."
+   ]
+  },
+  {
+   "event": "life-s085-e017",
+   "responses": [
+    "Posting the beta retro reminder to #payouts-launch now. Here is the table (fee = rate x amount + fixed fee):\n\n| Plan | Rate | $100 payment | $1,000 payment |\n|---|---|---|---|\n| Starter | 2.9% + 30c | $3.20 | $29.30 |\n| Growth | 2.6% + 25c | $2.85 | $26.25 |\n| Scale | 2.2% + 20c | $2.40 | $22.20 |\n| Enterprise | custom | n/a | n/a |\nAction: Post the retro reminder to #payouts-launch and confirm once it's up.",
+    "Posting the retro reminder to #payouts-launch now. Fees on a $100 / $1,000 payment, treating amounts as CAD: Starter $3.20 / $29.30; Growth $2.85 / $26.25; Scale $2.40 / $22.20; Enterprise is custom so no figure.\nAction: Post the Slack message and send you the table.",
+    "Posting the beta retro reminder to #payouts-launch now. On a $100 / $1,000 payment: Starter costs $3.20 / $29.30, Growth $2.85 / $26.25, Scale $2.40 / $22.20, and Enterprise is custom so there's no number to show.\nAction: Post the Slack reminder, then send you the table formatted for pasting."
+   ]
+  },
+  {
+   "event": "life-s085-e023",
+   "responses": [
+    "Ha, a coat at your desk is the clearest possible sign. Hope facilities sorts it out soon.\nAction: Nothing needed unless you want me to send facilities a quick note about the thermostat.",
+    "Arctic AC again. Keep the coat on, you're not wrong.\nAction: Nothing needed; the OOO draft for Fri 22 May is still waiting on your OK.",
+    "Arctic AC is a classic; the coat at the desk says it all. If it keeps up, a facilities request usually gets it nudged a few degrees. The pricing-page check on the plan table is still running and I'll tell you only if something changed.\nAction: None unless you want me to file a facilities ticket."
+   ]
+  },
+  {
+   "event": "life-s085-e027",
+   "responses": [
+    "From what I can see: the out-of-office for Fri 22 May is drafted (back Mon 25 May, Aisha covering payouts), and the retro RSVPs are in, with 9 accepted, Olivia tentative and Jonah not replied. The Miro board has 14 stickies so far, and the top theme is webhook retries.\nAction: Check today's full activity log before I list anything else.",
+    "From what I can see here: I drafted your out-of-office for Fri 22 May (back Mon 25 May, Aisha Rahman covering payouts), not sent yet. I also pulled the beta retro status for Thu 14 May at 14:00: 9 accepted, Olivia tentative, Jonah no reply, 14 stickies on the Miro board with retry and webhook confusion the top theme.\nAction: Check your calendar for anything on the 22nd that needs moving, and hold the OOO until you approve it.",
+    "Today so far: I drafted your out-of-office for Fri 22 May (back Mon 25 May, Aisha covering payouts), which is not sent yet. I also pulled the beta retro numbers: 9 accepted, Olivia tentative, Jonah no reply, and 14 stickies with webhook retries as the top theme. The calendar check for the 22nd is the last thing in progress.\nAction: Nothing is waiting on you except sending the OOO."
+   ]
+  },
+  {
+   "event": "life-s087-e029",
+   "responses": [
+    "Draft: 'Hi Hannah! We're heading to the playground and the market at Riverdale Park East tomorrow around 10:30. Would you and the kids like to come along?'\nAction: Hold it as a draft until you say send.",
+    "Draft: \"Hi Hannah, Leo and I are heading to the playground and the market at Riverdale Park East tomorrow around 10:30. Would you and the kids like to join us?\"\nAction: Send it to Hannah once you say go.",
+    "Draft: 'Hi Hannah! We're heading to the playground and market at Riverdale Park East tomorrow around 10:30. Want to come with the kids?' She works shifts, so a text is the right way to reach her.\nAction: Hold the text for your OK, then send it to Hannah."
+   ]
+  },
+  {
+   "event": "life-s088-e015",
+   "responses": [
+    "Here's a simple Saturday: skate the Rideau Canal Skateway in the morning, with a BeaverTail snack on the ice, then lunch back at Grace and Daniel's. In the afternoon, see the ice sculptures in Confederation Park and the snow slides at Jacques-Cartier Park in Gatineau, then an early dinner so Leo's in bed on time.\nAction: Save it to your notes as 'Winterlude Saturday idea' and check the 2027 Winterlude dates once they are announced.",
+    "Happy to. A Winterlude Saturday with Leo could be a morning skate on the Rideau Canal Skateway (he already likes skating from what you've said), a BeaverTails stop, a warm lunch break, then something low-key indoors in the afternoon so he doesn't run out of steam. I don't have the Winterlude dates for next February, so I'd confirm those before pinning times.\nAction: Check the Winterlude dates and canal skateway conditions and rentals, then save a draft Saturday plan to your notes for you to react to.",
+    "Here's a simple Saturday with Leo: skate the Rideau Canal Skateway in the morning (rent skates and a sled chair for him), BeaverTails as the snack, lunch back at Grace's, then ice sculptures and a snow slide or playground in the afternoon. Winterlude usually runs over the first few weekends of February, so I'll confirm the dates and the skateway conditions once they're announced.\nAction: Save this as a note and add a placeholder for Winterlude weekend until the dates are confirmed."
+   ]
+  },
+  {
+   "event": "life-s088-e023",
+   "responses": [
+    "Glad Biscuit is okay. Aisha prefers async Slack threads to meetings, so I'd take this to her in a Slack thread: propose cutting payout nicknames and the scheduled-payouts calendar view from Monday the 25th's sprint, and ask her to reply by Thursday.\nAction: Draft the Slack message to Aisha for your OK, then set a Thursday reminder to check her answer.",
+    "Glad Biscuit is okay, chicken skin and all. Since you always pair with Aisha on scope cuts before sprint planning and she pushes back on any cut without numbers, I'll pull adoption numbers for payout nicknames and the scheduled-payouts calendar view, plus the data Wen Li usually gives you. Planning is Mon 25th, so Thursday works as the deadline.\nAction: Pull the adoption numbers for both features and propose a 30-minute slot with Aisha on or before Thursday.",
+    "Glad Biscuit is okay. Here's a draft Slack to Aisha: 'Hi Aisha, I'd like to cut payout nicknames and the scheduled-payouts calendar view from the Mon 25th sprint. Can we agree on that by Thursday, and tell me if either is further along than I think?'\nAction: Hold the Slack draft for your OK, then send it to Aisha."
+   ]
+  },
+  {
+   "event": "life-s090-e005",
+   "responses": [
+    "You're welcome. One thing to remember: the camper health form and the authorized pickup list still aren't marked complete in the City's camp portal, and both are needed before day 1.\nAction: Set a reminder to complete those forms before camp starts on Mon 29 Jun.",
+    "You're welcome. Camp details so far: drop-off at the Winchester St gate 8:45 to 9:15, pickup 15:45 to 16:15 at the same gate. The camper health form and the authorized pickup list still aren't completed on your account, and they're needed before day 1 on Mon 29 Jun.\nAction: Wait for the name-label results, then remind you this weekend to finish the forms and order labels.",
+    "You're welcome. One thing before camp starts: none of the required forms are marked complete yet (camper health form, authorized pickup list, optional photo consent), and they go through the City's camp portal before day 1 on Mon 29 Jun. Drop-off is at the Winchester St gate, 8:45-9:15, and the name-label search is still running.\nAction: Add a to-do to finish the health form and pickup list before Mon 29 Jun, and send you the label options when they're in."
+   ]
+  },
+  {
+   "event": "life-s091-e012",
+   "responses": [
+    "Ugh, standing the whole way with someone's backpack in your face is a rough start to the day.\nAction: Nothing needed.",
+    "Ugh, that sounds miserable, standing the whole way with a backpack in your face, and not the first packed streetcar ride you've had to endure. Hope the ride home is kinder.\nAction: Nothing to do here; I'll leave the bike-shop slot and the feedback-log location question open until you want them.",
+    "Standing the whole way with a backpack in your face is a rough way to start the day. Two things are waiting on you whenever you have a minute: the Gears on Gerrard tune-up for Leo's bike (Sat 23 May at 10:30 is the slot I found) and where the team wants the beta feedback log to live.\nAction: Nothing booked or moved until you say; the feedback emails keep going into the log in the background."
+   ]
+  },
+  {
+   "event": "life-s092-e000",
+   "responses": [
+    "I don't have your street's yard waste schedule saved, so I won't guess dates. I'll look up the City of Toronto collection calendar for your address and add the next two pickups with a reminder the evening before.\nAction: Look up the yard waste schedule for your address, add the next two pickups to the calendar, and ask you for the address if it isn't on file.",
+    "Your street's yard waste is Thursday collection, every other Thursday, with Victoria Day week having shifted by a day. If we're past 22 May, the next ones on that cycle are Thu 4 Jun and Thu 18 Jun, but holiday weeks can shift them, so I'll confirm against the city calendar. Paper yard waste bags or labelled rigid containers only, no plastic, and branches under 7.5 cm, bundled, max 1.2 m long and 20 kg.\nAction: Verify the next two dates on the City of Toronto collection calendar, add them with a reminder the evening before, and add paper bags to your shopping list.",
+    "I don't have the pickup schedule for your street yet, so I'll look it up from the City's waste calendar for your address rather than guess dates. Once I have it, I'll add the next two yard waste pickups to the calendar.\nAction: Look up the next two yard waste pickup dates for your address and add them to the calendar, and tell you when they are."
+   ]
+  },
+  {
+   "event": "life-s096-e031",
+   "responses": [
+    "Night, Riya. Congrats again on shipping Instant Payouts.\nAction: Nothing further tonight.",
+    "Night, Riya. Proud of you for Instant Payouts.\nAction: None tonight; the launch wins record is saved in your notes.",
+    "Night, Riya. Congrats again on the launch.\nAction: None tonight; the wins record note is saved for your review."
+   ]
+  },
+  {
+   "event": "life-s097-e013",
+   "responses": [
+    "Try this: 'Thirty-one years of keeping Riverdale running, and you made it look easy. Thank you, and enjoy the time that is finally yours.' It's warm without any greeting-card phrases, and Sam can swap in one specific memory of her to make it his.\nAction: Send Sam the line, and rework it if he wants it drier or funnier.",
+    "Two lines for Sam to choose from: \"Thirty-one years of making the rest of us look organized. The department won't be the same, and it shouldn't be.\" Or: \"Thank you for every timetable you untangled and every new teacher you quietly rescued. Enjoy the time that's finally yours.\"\nAction: Send these to Sam so he can pick one.",
+    "Here are two that stay out of Hallmark territory: 'Thirty-one years of quietly holding this place together. Thank you, and enjoy the time that's finally yours.' Or shorter: 'You made Riverdale run better for 31 years. Go enjoy a very long, very unscheduled morning.'\nAction: Send Sam both options so he can pick one and tweak the wording."
+   ]
+  },
+  {
+   "event": "life-s097-e019",
+   "responses": [
+    "Boxes you have. For the fort you'll want packing or duct tape, a box cutter for you and safety scissors for Leo, markers or paint, clothespins or binder clips to hold flaps, blankets and pillows for inside, and a flashlight or string lights.\nAction: Save that as a checklist in your notes so you can check what's already at home.",
+    "Great pick for a rainy afternoon. For a fort you'll want tape (packing or duct), safety scissors for Leo and a box cutter for you, markers to decorate, some blankets and clothespins for a roof, and a flashlight or string lights for the inside. The boxes you already have in the basement cover the main part.\nAction: Check what you have and add anything missing, like tape and markers, to your shopping list before tomorrow.",
+    "For tomorrow's fort you'll want packing or duct tape, scissors or a box cutter for you to handle, markers, blankets or sheets, and clothespins or binder clips to hold fabric to the boxes, plus a flashlight or string lights to make it a real hideout. Last time he built one with a door and a 'no grownups' sign, so asking him for one new feature keeps it fresh. Storms are forecast all day, so it's a good indoor plan.\nAction: Check which of those you already have at home and add anything missing to the shopping list."
+   ]
+  },
+  {
+   "event": "life-s100-e025",
+   "responses": [
+    "You're welcome. For your mom's mithai I'd go with Brijwasi Sweets: Rs 1,450 plus Rs 120 delivery, the best freshness reviews, and same day if it's ordered before 14:00 IST. I just need her delivery address.\nAction: Hold the Brijwasi order until you send her address.",
+    "You're welcome. My pick for the mithai is Brijwasi Sweets: Rs 1,450 plus Rs 120 delivery, same day if it's ordered before 14:00 IST, and the best freshness reviews at 4.6. I need your mom's delivery address to order.\nAction: Hold the order until you send her address, then place it and send you the confirmation.",
+    "My one pick for your mom is Brijwasi Sweets: Rs 1,450 plus Rs 120 delivery, the best freshness reviews (4.6 from 2,300 ratings), and same day if ordered before 14:00 IST. I just need her delivery address before I order.\nAction: Hold the order until you send her address and say go."
+   ]
+  },
+  {
+   "event": "life-s102-e002",
+   "responses": [
+    "I'll tell Hannah yes, Jun can come over Saturday from 1 to 4. For a rainy afternoon: a blanket and cardboard fort, a LEGO build-off with a timer, an indoor scavenger hunt, then a movie for the last hour so nobody needs refereeing.\nAction: Text Hannah that Saturday 1-4 works, put it on the calendar, and put the activity plan in a note for you.",
+    "I'll tell Hannah yes, Jun can come Saturday from 1 to 4. A plan so you're not refereeing: snack first, then a blanket and pillow fort, a building-toys hour, a short movie break with popcorn, and a scavenger hunt around the house to finish.\nAction: Text Hannah yes and save the three-hour plan to your notes for Saturday.",
+    "Yes to Jun coming over Saturday from 1 to 4; Hannah is on shift, so I'll text her rather than call. For the rain, I'd split the three hours into three blocks: a building challenge (Lego or a cardboard fort), a simple baking project, then a movie with snacks.\nAction: Text Hannah a yes for Sat 1-4 and add it to the calendar; the Spanish warm-up can wait."
+   ]
+  },
+  {
+   "event": "life-s105-e019",
+   "responses": [
+    "Got it: the Lattice mid-year self-review is due 2026-07-10, and it's already on my list from your earlier note. I'll remind you to start it next week and again the week it's due.\nAction: Set a start reminder for next week and a second one for the week of 2026-07-10.",
+    "Noted: your mid-year performance self-review in Lattice is due 2026-07-10, which is a Friday. Enjoy the report card tonight.\nAction: Add the due date to your calendar and set a reminder a few days ahead so it doesn't become a Friday scramble.",
+    "Noted: the mid-year self-review in Lattice is due 2026-07-10. I'll put the due date on your calendar with a reminder ahead of it so it's not a last-minute scramble.\nAction: Add the Lattice self-review due date, 10 Jul, to your calendar, plus a drafting block and a reminder a couple of days before."
+   ]
+  },
+  {
+   "event": "life-s106-e000",
+   "responses": [
+    "I'll skip anything scented, since Sam gets migraines from strong fragrances. For drywall dust and old curry I'd go with unscented activated charcoal odour absorbers, plus open windows, bowls of baking soda overnight and a wet wipe-down of dusty surfaces.\nAction: Find in-stock unscented charcoal absorbers that can arrive before the week starts and show you the pick before I buy.",
+    "Activated charcoal bags are the best pick: they absorb the odour rather than covering it, and drywall dust won't go away by itself. A fast-acting extra would be wiping surfaces down and using a HEPA vacuum for the dust.\nAction: Find charcoal bags that can arrive or be picked up before the week starts, and show you one pick with price and timing for your OK before I order.",
+    "Drywall dust and old curry are two different problems: the dust is fine particles on every surface, and the curry smell sits in fabrics and air. I'd pair a HEPA air purifier (and a fresh furnace filter) with charcoal odour absorbers, plus a damp wipe of hard surfaces. I'll look for what's in stock for pickup this weekend so it's done before Monday.\nAction: Check local stores for in-stock HEPA purifiers and charcoal odour bags with weekend pickup, and send you one recommendation with price before I order."
+   ]
+  },
+  {
+   "event": "life-s106-e007",
+   "responses": [
+    "Okay, the charcoal bag order stays on hold until you've talked to Sam. Whenever you're ready, tell me which appliances are set up in the basement and I'll put together five easy dinners and a short shopping list.\nAction: Keep the order on hold and wait for your word.",
+    "Got it, the charcoal bags stay on hold until you've talked to Sam.\nAction: Nothing ordered; I'm waiting on Sam's input and on your list of what's set up in the basement kitchen so I can plan the dinners.",
+    "OK, the charcoal bag order stays on hold until you've talked to Sam. Also, East End Plumbing confirmed technician Raj for Mon 29 Jun, 09:00-12:00, and asked that the inside shut-off valve be accessible.\nAction: No order placed; I'll remind you about the shut-off valve the evening before the plumber comes."
+   ]
+  },
+  {
+   "event": "life-s107-e022",
+   "responses": [
+    "Try: 'If a payout fails because of a bank-side error, the system shall automatically retry it without merchant action.' It keeps the requirement intact and drops the nested clauses.\nAction: Swap it into the PRD once you OK it.",
+    "Tighter version: \"If a payout fails because of a bank-side error, the system shall automatically retry it without merchant intervention.\" It drops the passive \"is caused by\" and the clunky \"intervention being required\". If you need the retry timing or attempt limit, I'd put that in a separate requirement.\nAction: Swap this into the PRD once you're happy with it.",
+    "Here's a tighter version: 'If a payout fails because of a bank-side error, the system shall automatically retry it without merchant action.' It drops the nested clauses and keeps the requirement testable.\nAction: None, paste it in."
+   ]
+  },
+  {
+   "event": "life-s110-e007",
+   "responses": [
+    "A heat warning means two or more days of very hot weather are expected, and an extended heat warning means three or more days, so it's the same threshold lasting longer. In southern Ontario the trigger is roughly daytime highs around 31 with overnight lows of 20 or more, or a humidex of 40 or higher. The precautions are the same, but plan for several hot nights in a row.\nAction: None.",
+    "A heat warning means two or more days of very high heat are expected, and an extended heat warning means three or more days. In southern Ontario the trigger is roughly daytime highs of 31, overnight lows of 20 or more, or a humidex of 40 or higher. Same precautions either way, just plan for more hot nights in a row with an extended one.\nAction: No action needed; the evening digest has nothing waiting on you.",
+    "A heat warning means two or more days of very high heat are expected; an extended heat warning means the heat is forecast to last three or more days. In southern Ontario the rough trigger is daytime highs around 31 and overnight lows around 20, or a humidex near 40. The precautions are the same, but with an extended one plan for several hot nights in a row.\nAction: None, though I can silence the alerts for tonight if the buzzing is too much."
+   ]
+  },
+  {
+   "event": "life-s110-e009",
+   "responses": [
+    "Tell him the siren sounds to the dog like another dog howling, so he's singing back to say 'I hear you!' Dogs have super hearing, and howling is how they talk to each other from far away.\nAction: None.",
+    "You can tell him the siren sounds like another dog howling, so your dog is just answering back, like saying \"I hear you!\" Dogs' wolf ancestors howled to talk to each other across long distances, so it's a very old habit, and it doesn't hurt his ears or mean he's sad.\nAction: None needed.",
+    "Here's the 7-year-old version: dogs hear sirens as the sound of another dog howling, so Biscuit is singing back to say 'I'm here!' It's usually not hurting or scaring him, it's more like joining a choir.\nAction: None; once the truck leaves he should settle down."
+   ]
+  },
+  {
+   "event": "life-s111-e000",
+   "responses": [
+    "Welcome to Vancouver. What you booked is Air Canada ref QX7L2P for you, Sam and Leo, $1,947.66 CAD total. The earlier fares I have noted (WestJet $642, Air Canada $689 return) were for the August long weekend dates, before the trip moved to 9-13 July, so they're not a like-for-like comparison. I don't have a record of what the Lafourcade song thing was, so I'd rather check than guess.\nAction: Search our earlier chats for the original flight search and the Lafourcade request, then send Kabir a comparison with the right dates and ask you to remind me about the song thing if I can't find it.",
+    "Welcome to Kabir's! I don't have the earlier flight search or the Lafourcade song piece in front of me, so I'd rather look than guess at the fare or the song.\nAction: Search your notes, email and past searches for the flight search from before you booked and for the Lafourcade piece; if either isn't there, I'll ask you to describe it and redo it.",
+    "Welcome to Vancouver! I don't have the earlier flight search or the Lafourcade song thing in front of me, so I'd rather find them than guess. I do have that in March you were looking at flights for the August long weekend, so that's likely the search.\nAction: Search my history and notes for that flight search and the Lafourcade song thing, and send you both for Kabir and Mei."
+   ]
+  },
+  {
+   "event": "life-s111-e035",
+   "responses": [
+    "Have a great dinner. The Kitsilano pool is open tomorrow 7:00-20:45, with lanes closed until 9:00 for swim club, so go after 9. Since Leo's swim shirt didn't make the trip, a regular T-shirt and sunscreen will do for the day.\nAction: Nothing needed tonight.",
+    "Have a great dinner. Kitsilano pool is open tomorrow from 7:00 to 20:45, with lanes closed 7:00 to 9:00 for swim club, so go after 9. Leo's packing checklist for Monday is already shared with Sam.\nAction: Nothing needed tonight.",
+    "Have a great dinner! Kitsilano pool is open tomorrow from 7:00, but lanes are closed 7:00-9:00 for swim club, so after 9 is the move. Leo's checklist for Monday's flight home is already shared with Sam.\nAction: None tonight."
+   ]
+  },
+  {
+   "event": "life-s120-e003",
+   "responses": [
+    "Wen Li handles data requests through #data-requests, and she needs at least three business days of notice and a written metric definition, otherwise she bounces them. So it needs to go in as soon as possible to land before Wednesday. The Payouts Health dashboard shows failed-payout reasons, but I'm not sure it splits by receiving bank.\nAction: Draft the #data-requests post for your OK: failed payouts by receiving bank, count and rate, last 30 days, needed for Wednesday's roadmap prep, with the metric definition written out.",
+    "On it. I'll pull the last 30 days of failed payouts grouped by receiving bank, with failure counts and rates, and flag any bank that's above the overall rate.\nAction: Pull the failed payout data by receiving bank for the last 30 days and send you a table before Wednesday's roadmap prep.",
+    "Yes, I'll build the failed payout breakdown by receiving bank for the last 30 days, with failure reason alongside if the data has it, ready for Wednesday's roadmap prep. One thing to handle in the numbers: my notes say bank-side failures are retried automatically (that note is five weeks old), so I'll separate payouts that failed and later succeeded on retry from those that ended failed.\nAction: Pull the last 30 days of failed payouts grouped by receiving bank and send you the table, noting which data source I used."
+   ]
+  },
+  {
+   "event": "life-s121-e000",
+   "responses": [
+    "I'll put in the pickup order, but I don't have your list yet and I don't know which store is near Te Aro. Grocery pickup orders need to be in by 14:00, so I'll check the time and that store's earliest slot before I promise 15 minutes.\nAction: Check the time and the nearest store's pickup availability, then ask what goes in the order (or reorder your usual) before I submit it.",
+    "I can do that, but I don't know which shop you mean or what you want to order, and I won't guess at a pickup order near Te Aro when it needs to be ready in 15 minutes.\nAction: Tell me the shop and the items, or I can check your recent orders for a usual place and show you one suggestion.",
+    "Happy to, but I don't have what you want or where from, and with a 15-minute window I'd rather not guess. What should I order, and from which shop?\nAction: Place the pickup order as soon as you tell me the shop and items."
+   ]
+  },
+  {
+   "event": "life-s123-e011",
+   "responses": [
+    "I'll rename the Scan_*.pdf files in Downloads by the date each was scanned, in the format YYYY-MM-DD, with a number added if two share a day.\nAction: List the Scan_*.pdf files, read each one's scan date from its metadata (falling back to the modified date), rename them, and show you the before and after list.",
+    "Yes. I'll rename each Scan_*.pdf in Downloads using the file's scan date (its creation date) in the form YYYY-MM-DD, adding a number if two have the same date.\nAction: Make a preview list of the old and new names first, and only apply the renames once you say go.",
+    "Yes, I can do that. I'll use the scan date from each PDF's metadata and fall back to the file's modified date if there isn't one, naming them YYYY-MM-DD_Scan.pdf and adding a number when two share a date. I'll show you the full list of old and new names first so nothing gets renamed by surprise.\nAction: List the Scan_*.pdf files in Downloads, prepare the old-to-new rename list, and show it to you before renaming anything."
+   ]
+  },
+  {
+   "event": "life-s128-e000",
+   "responses": [
+    "I don't see a confirmation yet. Note that Dr. Lin moved in March 2026 to Danforth Smiles, 822 Danforth Ave near Pape station (416-555-0144), so I'll look for confirmations from them, not from the old Queen East Dental.\nAction: Search your email and calendar for November confirmations from Danforth Smiles for you and Leo, and if there's nothing, contact them to confirm.",
+    "I don't see a dentist confirmation for November in front of me, so I can't say yes yet.\nAction: Search your email and calendar for the dentist's November confirmations for you and Leo; if nothing is there, I'll tell you and give you the number to call.",
+    "I don't have anything on file about the dentist confirming the November appointments for you and Leo, so I'd rather check than guess. I'll look through your email and texts for a confirmation from the dental office.\nAction: Search your email and messages for the dentist's November confirmations for you and Leo, and tell you what I find (or draft a request to the office if nothing is there)."
+   ]
+  },
+  {
+   "event": "life-s131-e020",
+   "responses": [
+    "Here's a draft for Priya: 'Hi [client name], thanks for the updated direction on the facade. Because this is the second change to the brief since the design was approved, the revised drawings fall outside our original scope. We'd be glad to take them on under a short change order covering the additional hours, which I'll send over, and once it's signed we can start right away.'\nAction: Send Priya the draft, with [client name] and the hours estimate left for her to fill in.",
+    "Draft for Priya: \"Hi [client name], thanks for the updated direction on the facade. Because the brief has changed twice since the design was approved, the revised drawings fall outside our original scope. We're glad to take them on under a short change order covering the additional hours, and can turn the revised set around once it's signed. Best, Priya\"\nAction: Fill in the client name and add the hours estimate; I can make it softer or firmer if you want.",
+    "Here's a draft: 'Hi [client name], thanks for the updated direction on the facade. Since the brief has changed twice since the design was approved, the revised drawings fall outside our original scope, so we'll send a change order covering the additional hours. Once it's signed we can start on the revision and share a timeline.' It's polite, names the reason and offers a clear path forward.\nAction: Send you the draft to forward to Priya; if she has contract terms or an hourly rate to cite, I'll tighten it."
+   ]
+  },
+  {
+   "event": "life-s131-e022",
+   "responses": [
+    "Here's a draft: 'To Neha and her person: they say love is finding someone who laughs at your jokes, and Neha, you found someone who laughs at them on purpose. May you always share the blanket, the remote and the last samosa. Cheers!' I don't have the partner's name, so that's a placeholder for now.\nAction: Fill in the partner's name once you send it, and trim or sharpen the jokes to taste.",
+    "Here's a toast: \"To Neha and [partner]: Neha has finally found someone who will let her pick the restaurant, the playlist and the thermostat. [Partner], you're brave, and we're all very impressed. Here's to love, to laughter, and to Neha being right about almost everything. Cheers!\"\nAction: Fill in the partner's name, and tell me a detail about the two of them if you want it more personal.",
+    "Here's a draft: 'To Neha and [partner's name]: they say the best relationships start with someone who laughs at your jokes, and Neha, you finally found someone who does it on purpose. May your life together be full of great food, long conversations, and arguments only about who gets the last slice of cake. Cheers!'\nAction: Fill in the partner's name and add a personal detail if you give me one, then finalize it before Saturday."
+   ]
+  },
+  {
+   "event": "life-s132-e000",
+   "responses": [
+    "Added Grace's 68th birthday on Thu 19 Nov 2026 to the calendar, with a gift reminder two weeks ahead on Thu 5 Nov. Since you're at Grace and Daniel's in Ottawa Fri 13 to Sun 15 Nov, the gift should be in hand by Fri 13 Nov.\nAction: Create the birthday event, set the 5 Nov gift reminder, and add a note that the gift needs to come with you on the 13th.",
+    "Got it: Grace turns 68 on Thursday 2026-11-19, a bit after the Ottawa weekend.\nAction: Add Grace's birthday to your calendar as a yearly event on Nov 19, and set a reminder for Thu 5 Nov to sort out a gift.",
+    "Adding Grace's birthday to the calendar for Thu 19 Nov, turning 68, repeating every year. I'll set the reminder for two weeks ahead, Thu 5 Nov, to sort the gift, since her real day falls after the Ottawa weekend.\nAction: Create a yearly Grace birthday event on 19 Nov and a reminder on Thu 5 Nov to sort her gift."
+   ]
+  },
+  {
+   "event": "life-s133-e000",
+   "responses": [
+    "Booking a 25-minute call with Olivia and Aisha on the 9th at 3:30 pm, with your three-point agenda in the invite: 1) where certification stands, 2) what sales can and can't say, 3) next checkpoint. I'll word the title as GA target wording, since nothing gets shared with sales as a date until Aisha signs off.\nAction: Check all three calendars for the 9th at 3:30 pm, send the invite for 15:30 to 15:55 Toronto time with the agenda, and flag any conflict.",
+    "Setting it up: 25 minutes with Olivia and Aisha on the 9th at 3:30pm, with your agenda: 1) where certification stands, 2) what sales can and can't say, 3) next checkpoint.\nAction: Create the invite for 3:30 to 3:55pm on the 9th, check for conflicts first, and tell you if anyone is busy.",
+    "Booking 25 minutes with Olivia and Aisha on the 9th at 3:30pm, 15:30-15:55, with your agenda: 1) where certification stands, 2) what sales can and can't say, 3) next checkpoint. I won't put a GA date in the invite, so nothing goes to sales ahead of that conversation.\nAction: Check Olivia's and Aisha's calendars for 15:30 on the next 9th, send the invite with the agenda, and tell you if anyone has a conflict."
+   ]
+  },
+  {
+   "event": "life-s136-e017",
+   "responses": [
+    "Anytime. The 7:50 car-move reminder is set, and the street-cleaning schedule lookup for your block is still running.\nAction: None.",
+    "Anytime. Your 7:50 reminder to move the car is set, and the street-cleaning schedule lookup for your block is still running.\nAction: Send you the full street-cleaning schedule when the lookup comes back.",
+    "You're welcome. The 7:50 reminder to move the car is set, and I'm still pulling the street-cleaning schedule for your block.\nAction: None right now; I'll send the schedule once it's in."
+   ]
+  },
+  {
+   "event": "life-s136-e021",
+   "responses": [
+    "RRSP: you get a tax deduction now and pay tax when you withdraw, so it's best when your income today is higher than it will be in retirement. TFSA: you contribute after-tax money, growth and withdrawals are tax-free, and the room comes back, so it's more flexible.\nAction: None.",
+    "TFSA: contribute after-tax money and the growth and withdrawals are tax-free, so it's flexible and good for shorter goals or a lower tax bracket. RRSP: contributions are deductible now and you pay tax on withdrawal, which usually wins when your current tax rate is higher than it will be in retirement.\nAction: None needed.",
+    "RRSP: you get a tax deduction now and pay tax when you withdraw, so it's best when you expect a lower tax rate in retirement. TFSA: no deduction now, but growth and withdrawals are tax-free and the room comes back, so it's the flexible one.\nAction: None, forward as is."
+   ]
+  },
+  {
+   "event": "life-s136-e034",
+   "responses": [
+    "I don't have your travel dates in front of me, so I won't guess when you're arriving. I'll check your calendar and email for the booked trip before answering her. I'll also check the current local time where she is, so you know whether it's too late to call.\nAction: Find your trip dates, check the local time and the usual weather for those dates, and draft a reply to your mom.",
+    "I don't have your travel dates or the time difference to your mom's place in front of me, so I won't guess when you're arriving or whether it's too late to call. I'd check the dates first, then see what the forecast says about rain for that week.\nAction: Check your calendar and email for the trip dates, look up the rain outlook for her area for those days, and tell you whether it's a reasonable time to call right now.",
+    "I don't have the dates of your visit saved, so I can't tell her yet; I'll look at your calendar and bookings. For the time, I need to confirm which city she's in before saying whether it's too late to call.\nAction: Find your trip dates, check the forecast for those dates where she lives, and confirm her local time before you call."
+   ]
+  },
+  {
+   "event": "life-s137-e018",
+   "responses": [
+    "You made it to Friday. One item is still open: the talk title for the Toronto Fintech Meetup is due 18 Sep.\nAction: Nothing else needed tonight.",
+    "It was a big week, and you still got swim lessons registered, a speaker bio written and a chore chart comparison done. The one date coming up is the Toronto Fintech Meetup talk title, due 2026-09-18, along with the headshot.\nAction: Nothing needed tonight; I'll remind you early next week about the talk title and headshot.",
+    "You made it, and it was a lot of threads in one week: the bio, the meetup details and Leo's swim registration all landed. Nothing urgent from my side for tonight. The next meetup deadline is the talk title, due by 18 Sep.\nAction: None tonight; I'll keep the weekend light and put the talk title deadline on next week's list."
+   ]
+  },
+  {
+   "event": "life-s140-e029",
+   "responses": [
+    "The hour before bed matters more than total screen time: in a 2025 study of 1,200 kids aged 6 to 9, those using screens in the last 60 minutes fell asleep about 19 minutes later. Three causes: light delays melatonin, games and short video keep kids alert, and screens crowd out wind-down routines. What helped: a fixed screens-off time an hour before bed (weekends too), devices charged outside bedrooms, TV in a shared room, and reading for the last half hour, which fixed sleep onset within two weeks. Bottom line: it's about when, not whether.\nAction: None.",
+    "TL;DR: the hour before bed matters more than total screen time. In a 2025 study of 1,200 kids aged 6 to 9, those on a screen in the last 60 minutes fell asleep about 19 minutes later, worst with handhelds held close to the face and games, mildest with a shared TV or a calm documentary. What helped: a fixed screens-off time an hour before bed every night including weekends, devices charging in the kitchen, and a choice of two books instead of haggling over minutes, with sleep onset back to normal within two weeks.\nAction: Nothing else needed; copy this straight into the group chat if you want.",
+    "Screens in the hour before bed matter more than total daily screen time: in a 2025 study of 1,200 kids aged 6-9, those on a screen in the last hour fell asleep about 19 minutes later. The causes are screen light, stimulating games, and screens crowding out the wind-down routine. The fix is a fixed screens-off time an hour before bed, including weekends, with devices charged in the kitchen and the last half hour spent reading.\nAction: None unless you want a one-line reply for the group chat."
+   ]
+  },
+  {
+   "event": "life-s141-e017",
+   "responses": [
+    "I don't have your lesson day or time, or your latest notes from Carlos, in front of me. A good default for the week is to review the mistakes from your last lesson, do 15 minutes of speaking practice, and drill new vocabulary from the current topic.\nAction: Find the class on your calendar, block two 30-minute study slots before it, and ask you which topics tripped you up last time.",
+    "I don't have this week's class time or what Carlos covered last lesson in front of me, so I can't say yet what to focus on. I'd check your calendar and any lesson notes, then put two study blocks before the class.\nAction: Look up your Spanish class time and your last lesson notes, then block two 30-minute study sessions before the class and send you a short list of focus areas.",
+    "This week I'd focus on the subjunctive and the noun-gender exceptions you keep missing (el problema, el mapa, el tema, la mano), plus Carlos's emailed homework, with the DELE B2 on Sat 21 Nov in the background. Your lesson with Carlos is Thursday at 19:30, so I'd block two short study sessions earlier in the week and a 20-minute warm-up before class on Thursday. I'll check those slots against your calendar first.\nAction: Check your calendar, block the two study sessions and the Thursday pre-class warm-up, and pull Carlos's latest homework email into your Spanish notes."
+   ]
+  },
+  {
+   "event": "life-s141-e032",
+   "responses": [
+    "Pulling your open Linear tickets tagged payouts-ga, titles and status only.\nAction: Query Linear for open tickets with the payouts-ga label and list them as ID, title, status.",
+    "Pulling them now: open tickets tagged payouts-ga assigned to you, titles and status only.\nAction: Query Linear for your open payouts-ga tickets and send back a plain list of title and status.",
+    "Pulling these live from Linear. What I have for payouts-ga is only a snapshot from 26 Aug (PAY-1182 GA readiness checklist, PAY-1190 GA announcement email copy, PAY-1216 support macro review, plus PAY-1203 and PAY-1211), so I won't trust those statuses until I've checked.\nAction: Query Linear for your open tickets tagged payouts-ga and reply with just titles and current status."
+   ]
+  },
+  {
+   "event": "life-s148-e012",
+   "responses": [
+    "Both set: a reminder to send Tom your comments on the strategy memo by Friday, and one to pick up Leo's library books from the Pape branch on Saturday morning. I don't have the branch's Saturday hours, so I'll check them so the reminder lands at the right time.\nAction: Create the Friday reminder for Tom's memo comments, check the Pape branch's Saturday opening hours, and set the Saturday-morning pickup reminder.",
+    "Both are set. Tom's comments on the strategy memo are due Friday, and Leo's library books are at the Pape branch, where you can pick them up Saturday morning with your library card.\nAction: Add a Thursday afternoon reminder and a Friday morning reminder for the memo comments to Tom, and a Saturday morning reminder for the Pape/Danforth library pickup.",
+    "Both are set: a reminder to send Tom your strategy memo comments before Friday's deadline, and one for Saturday morning to pick up Leo's library books at the Pape branch. Separately, the Q1 bets page for Tom is due Fri 6 Nov, and the Edsby interview switch to Wed 11 Nov is still undecided.\nAction: Set a Thursday reminder for the memo comments and a Saturday morning reminder for the Pape library pickup."
+   ]
+  },
+  {
+   "event": "life-s150-e028",
+   "responses": [
+    "Status set to heads down until 3:00 pm. Note for #payouts-team: 'Heads down on focus time until 3:00 pm. I'll catch up on messages after that; ping me directly if it's truly urgent.'\nAction: Set your Slack status with a 15:00 expiry, and post the note to #payouts-team once you OK it.",
+    "Setting you to heads down until 3. Note for #payouts-team: \"Heads down on focus time until 3pm. I'll catch up on messages after, so ping me only if it's urgent.\"\nAction: Set your Slack status to heads down until 3:00 and post the note to #payouts-team; the dentist slots stay unbooked until you're ready.",
+    "I'll set your Slack status to heads down until 3. Here's the note for #payouts-team:\nFocus time until 3pm, heads down.\nIf it's urgent, ping me and I'll see it between blocks.\nAction: Set Slack status to heads down until 15:00 and hold the #payouts-team note for your go-ahead before I post it."
+   ]
+  },
+  {
+   "event": "life-s156-e000",
+   "responses": [
+    "For Halloween you still need to sort: the costume (tell me what he's going as and I'll make a parts list), the evening logistics (who's walking with him and when you head out), and safety gear like reflective tape, a flashlight and a pillowcase. Add treats for the door if you're giving them out.\nAction: Check your calendar for Halloween night, and build the parts list once you tell me the costume idea.",
+    "Here's what's left for Halloween: Leo's costume (tell me what he's going as and I'll make a parts list), who's walking with him and when you're heading out, reflective tape or a glow stick plus a flashlight and a bucket, and an allergy plan. His allergy is cashews and pistachios only, so a trade pile for those and his EpiPen Jr. on him.\nAction: Wait for the costume idea, then make a parts list and shopping plan you can finish this weekend.",
+    "Last year's cardboard robot was a hit and survived until about 8pm, and there are cardboard boxes in the basement, so that box doesn't have to stay a dream. To sort for the night: what he's going as, who walks the route with him and when you leave, candy for the door, and warm layers or something reflective to wear with the costume.\nAction: Ask what Leo wants to be, then turn the answer into a parts list and a short Halloween-night checklist."
+   ]
+  },
+  {
+   "event": "life-s156-e004",
+   "responses": [
+    "Booking a 25-minute onboarding design review with Aisha and Diego on Thursday 26 Nov at 10:00. Agenda: 1) KYC retry screens, 2) empty states, 3) open questions.\nAction: Check all three calendars for Thu 26 Nov at 10:00, send the invite with the agenda, and flag any conflict instead of double booking.",
+    "Setting it up: 25 minutes with Aisha and Diego on Thursday 26 Nov at 10:00, with the agenda: 1) KYC retry screens, 2) empty states, 3) open questions.\nAction: Create the invite for 10:00 to 10:25, check everyone's calendar for conflicts first, and tell you if anything clashes.",
+    "Booking a 25-minute onboarding design review with Aisha and Diego on Thursday 26 Nov, 10:00 to 10:25, with the agenda: 1) KYC retry screens, 2) empty states, 3) open questions. I'll check that slot against all three calendars before sending.\nAction: Create the invite with the agenda and tell you if anyone has a conflict at 10:00."
+   ]
+  }
+ ]
+}

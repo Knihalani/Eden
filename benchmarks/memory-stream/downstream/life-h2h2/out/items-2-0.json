@@ -1,0 +1,185 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "life-s066-e016#2",
+   "response": "Yes, I can scan your docs for it, but I don't have the old pricing page URL, so I need that link first (and the new one if marketing has it, so each hit can point to the right replacement). Once I have it I'll search the beta materials and report every doc that still links to the old page.\nAction: Ask you for the old pricing page URL, then scan the beta docs for it and list each hit with the doc name."
+  },
+  {
+   "id": "life-s021-e000#2",
+   "response": "Huge congratulations on the half marathon, 2:04:37 on the Toronto waterfront 21K is a great first one, and it sounds like Marcus earned his credit. Got all three: the Friday 16:00 status post in #payouts-launch (five bullets, red/amber/green per workstream) with a 15:00 reminder and a Linear pre-draft, and Friday evenings kept clear for pizza and movie night with Leo picking and Sam on dough.\nAction: Set a recurring Friday 15:00 reminder that pre-drafts the status update from Linear, block Friday evenings on the calendar, and save the race result (Toronto waterfront 21K, 2025-10-19, 2:04:37, trained with Marcus) to your notes."
+  },
+  {
+   "id": "life-s128-e000#2",
+   "response": "I don't have anything on file about the dentist confirming the November appointments for you and Leo, so I'd rather check than guess. I'll look through your email and texts for a confirmation from the dental office.\nAction: Search your email and messages for the dentist's November confirmations for you and Leo, and tell you what I find (or draft a request to the office if nothing is there)."
+  },
+  {
+   "id": "life-s063-e000#2",
+   "response": "The two numbers to pin down first are what the 10% is in actual dollars after tax, and what the commute costs him: 45 minutes on the subway versus a 10 minute bike ride is about 70 minutes back every working day. If the jobs are otherwise similar I'd lean toward the short commute, but he should settle it on caseload, mentorship and room to grow first, and use pay and commute as the tiebreaker. A good question for you to put to him: 'If they paid the same, which one would you pick?'\nAction: Draft a short text you can send Marcus with those questions."
+  },
+  {
+   "id": "life-s123-e011#2",
+   "response": "Yes, I can do that. I'll use the scan date from each PDF's metadata and fall back to the file's modified date if there isn't one, naming them YYYY-MM-DD_Scan.pdf and adding a number when two share a date. I'll show you the full list of old and new names first so nothing gets renamed by surprise.\nAction: List the Scan_*.pdf files in Downloads, prepare the old-to-new rename list, and show it to you before renaming anything."
+  },
+  {
+   "id": "life-s046-e016#2",
+   "response": "EFT is the broad term for electronic funds transfers that clear in batches, like direct deposits and pre-authorized debits: cheap, usually a few business days, and they can be returned. A wire is a one-off, same-day payment that is effectively final and costs much more. So for merchant payouts EFT is the normal rail, and a wire is for when you need speed and certainty on a large amount.\nAction: Draft a one-line definition of each for you to drop into the deck so sales stops mixing them up."
+  },
+  {
+   "id": "life-s120-e003#2",
+   "response": "Yes, I'll build the failed payout breakdown by receiving bank for the last 30 days, with failure reason alongside if the data has it, ready for Wednesday's roadmap prep. One thing to handle in the numbers: my notes say bank-side failures are retried automatically (that note is five weeks old), so I'll separate payouts that failed and later succeeded on retry from those that ended failed.\nAction: Pull the last 30 days of failed payouts grouped by receiving bank and send you the table, noting which data source I used."
+  },
+  {
+   "id": "life-s047-e013#2",
+   "response": "Ha, that's a very Leo question, and a long day on top of it would wipe anyone out. At least one dinosaur thing is handled: the T-Rex costume arrives Tue 27 Jan.\nAction: Nothing for tonight; I'll leave the rest of the to-do list alone."
+  },
+  {
+   "id": "life-s096-e031#2",
+   "response": "Night, Riya. Congrats again on the launch.\nAction: None tonight; the wins record note is saved for your review."
+  },
+  {
+   "id": "life-s137-e018#2",
+   "response": "You made it, and it was a lot of threads in one week: the bio, the meetup details and Leo's swim registration all landed. Nothing urgent from my side for tonight. The next meetup deadline is the talk title, due by 18 Sep.\nAction: None tonight; I'll keep the weekend light and put the talk title deadline on next week's list."
+  },
+  {
+   "id": "life-s050-e011#2",
+   "response": "Yes to pancakes at Hannah's, Sunday at 9 with the kids. I'll text her back and put it on the family calendar, and check it doesn't collide with anything else that morning.\nAction: Text Hannah a yes, add 'Pancakes at Hannah's, Sun 9:00' to the family calendar, and flag any conflict I find."
+  },
+  {
+   "id": "life-s141-e032#2",
+   "response": "Pulling these live from Linear. What I have for payouts-ga is only a snapshot from 26 Aug (PAY-1182 GA readiness checklist, PAY-1190 GA announcement email copy, PAY-1216 support macro review, plus PAY-1203 and PAY-1211), so I won't trust those statuses until I've checked.\nAction: Query Linear for your open tickets tagged payouts-ga and reply with just titles and current status."
+  },
+  {
+   "id": "life-s077-e000#2",
+   "response": "From what I have, you asked me on 17 Jan for zellige tile backsplash photos and didn't pick one, then asked for more in white or sage green. I'll gather those into one place so you can choose before Monday. Nate prefers texts, so I'll send him the pick by text rather than calling.\nAction: Find the saved zellige, white and sage backsplash photos and put them in one short list for you to choose from; once you pick, text Nate."
+  },
+  {
+   "id": "life-s051-e000#2",
+   "response": "It used to be late January, and yes, it moved because the NFL season got longer. The 2002 game slipped into February after the 9/11 postponement, and the move to a 17-game regular season in 2021 keeps it in the second week of February. Sunday is just TV: it's the biggest audience night of the week.\nAction: None, just trivia."
+  },
+  {
+   "id": "life-s141-e017#2",
+   "response": "This week I'd focus on the subjunctive and the noun-gender exceptions you keep missing (el problema, el mapa, el tema, la mano), plus Carlos's emailed homework, with the DELE B2 on Sat 21 Nov in the background. Your lesson with Carlos is Thursday at 19:30, so I'd block two short study sessions earlier in the week and a 20-minute warm-up before class on Thursday. I'll check those slots against your calendar first.\nAction: Check your calendar, block the two study sessions and the Thursday pre-class warm-up, and pull Carlos's latest homework email into your Spanish notes."
+  },
+  {
+   "id": "life-s047-e025#2",
+   "response": "I don't have a rink status for Withrow yet, and conditions can change day to day, so I'll check rather than guess. I'll look at the City's rink listing and Saturday afternoon's forecast.\nAction: Check the City of Toronto rink status for Withrow Park and Saturday afternoon's forecast, and tell you whether skating after swim looks good."
+  },
+  {
+   "id": "life-s085-e010#2",
+   "response": "A few things to pass on: get on every licensed waitlist now, including any central one the city offers, and ask each centre how often infant spots turn over. Licensed home daycare agencies often move faster than centres, and co-ops can be shorter too.\nAction: Put those in a short note you can forward to Diego."
+  },
+  {
+   "id": "life-s020-e016#2",
+   "response": "On it. The sheet will have three sections: ser vs estar (estar for emotions and where things are, ser for what something is), por vs para, and the future subjunctive after cuando, starting from your own example, 'cuando llego a casa te llamo' becoming 'cuando llegue a casa te llamo'. Each section gets about ten short fill-in-the-blank items, with an answer key at the bottom.\nAction: Write the drill sheet and save it to your notes so it's ready before your next lesson."
+  },
+  {
+   "id": "life-s070-e006#2",
+   "response": "You're welcome. Tom's request for the link to the beta merchant numbers is still waiting on you for after dinner.\nAction: Nudge you about Tom once dinner is done, and keep renewing the three library books."
+  },
+  {
+   "id": "life-s136-e017#2",
+   "response": "You're welcome. The 7:50 reminder to move the car is set, and I'm still pulling the street-cleaning schedule for your block.\nAction: None right now; I'll send the schedule once it's in."
+  },
+  {
+   "id": "life-s110-e009#2",
+   "response": "Here's the 7-year-old version: dogs hear sirens as the sound of another dog howling, so Biscuit is singing back to say 'I'm here!' It's usually not hurting or scaring him, it's more like joining a choir.\nAction: None; once the truck leaves he should settle down."
+  },
+  {
+   "id": "life-s025-e000#2",
+   "response": "I'll pull every open payouts ticket from Linear and group them by workstream, using the labels or projects on the tickets and listing anything unlabeled separately. For December risk, I'll flag tickets that are blocked, high priority without an owner, overdue, or still unstarted as the launch gets close, and say why for each.\nAction: Query Linear for open payouts tickets, build the grouped list with at-risk flags and reasons, and send it to you."
+  },
+  {
+   "id": "life-s091-e012#2",
+   "response": "Standing the whole way with a backpack in your face is a rough way to start the day. Two things are waiting on you whenever you have a minute: the Gears on Gerrard tune-up for Leo's bike (Sat 23 May at 10:30 is the slot I found) and where the team wants the beta feedback log to live.\nAction: Nothing booked or moved until you say; the feedback emails keep going into the log in the background."
+  },
+  {
+   "id": "life-s037-e011#2",
+   "response": "Sending the thank-you to Hannah now. For the NYE dinner for 5 I'd make the whole menu vegetarian with no shellfish, so Sam and Grace can both eat everything: baked brie with cranberry, a mushroom and spinach Wellington with roast potatoes and carrots, and a make-ahead dessert. For the mocktail, a pomegranate-rosemary fizz with lime, rosemary syrup and alcohol-free sparkling wine in a flute, so Grace has a proper toast.\nAction: Send the thank-you text to Hannah, then save the menu with a make-ahead plan and shopping list to your notes."
+  },
+  {
+   "id": "life-s111-e035#2",
+   "response": "Have a great dinner! Kitsilano pool is open tomorrow from 7:00, but lanes are closed 7:00-9:00 for swim club, so after 9 is the move. Leo's checklist for Monday's flight home is already shared with Sam.\nAction: None tonight."
+  },
+  {
+   "id": "life-s085-e017#2",
+   "response": "Posting the beta retro reminder to #payouts-launch now. On a $100 / $1,000 payment: Starter costs $3.20 / $29.30, Growth $2.85 / $26.25, Scale $2.40 / $22.20, and Enterprise is custom so there's no number to show.\nAction: Post the Slack reminder, then send you the table formatted for pasting."
+  },
+  {
+   "id": "life-s002-e020#2",
+   "response": "Honest answer: I can't grade your Spanish yet, because I have no lesson feedback or practice results saved to judge from.\n- A 10-minute level check (a short conversation plus a few drills) would give me real evidence.\n- Calendar rule saved: no meetings before 9:30 or after 17:00, ever.\nAction: Save the calendar rule, and start tracking your Spanish mistakes so I can give you a real assessment."
+  },
+  {
+   "id": "life-s110-e007#2",
+   "response": "A heat warning means two or more days of very high heat are expected; an extended heat warning means the heat is forecast to last three or more days. In southern Ontario the rough trigger is daytime highs around 31 and overnight lows around 20, or a humidex near 40. The precautions are the same, but with an extended one plan for several hot nights in a row.\nAction: None, though I can silence the alerts for tonight if the buzzing is too much."
+  },
+  {
+   "id": "life-s042-e008#2",
+   "response": "Making the Khruangbin and A. R. Rahman instrumentals focus playlist for tomorrow. For the calendar, I'll remove spin and add strength training at the Leslieville YMCA on Tuesdays and Thursdays at 6:15, wrapping up in time for you to be home by 7:15 so Sam can leave for school. One catch: my notes have your run with Marcus on Tuesday and Thursday at 6:30, so I need to know whether that run has moved before I leave both on the calendar.\nAction: Build the playlist, remove the spin events, add the YMCA sessions, and hold off on the Marcus run until you tell me what happened to it."
+  },
+  {
+   "id": "life-s040-e018#2",
+   "response": "Scaling is tripling every ingredient, but I don't have the quantities from the bag recipe and I don't want to guess them. I'll look for the 2025-12-13 conversation where we did this first; if it isn't there, send me the ingredient list from the bag.\nAction: Search my notes and chat history from 2025-12-13 for the cookie scaling, and if nothing is saved ask you for the original ingredient list."
+  },
+  {
+   "id": "life-s097-e013#2",
+   "response": "Here are two that stay out of Hallmark territory: 'Thirty-one years of quietly holding this place together. Thank you, and enjoy the time that's finally yours.' Or shorter: 'You made Riverdale run better for 31 years. Go enjoy a very long, very unscheduled morning.'\nAction: Send Sam both options so he can pick one and tweak the wording."
+  },
+  {
+   "id": "life-s102-e002#2",
+   "response": "Yes to Jun coming over Saturday from 1 to 4; Hannah is on shift, so I'll text her rather than call. For the rain, I'd split the three hours into three blocks: a building challenge (Lego or a cardboard fort), a simple baking project, then a movie with snacks.\nAction: Text Hannah a yes for Sat 1-4 and add it to the calendar; the Spanish warm-up can wait."
+  },
+  {
+   "id": "life-s148-e012#2",
+   "response": "Both are set: a reminder to send Tom your strategy memo comments before Friday's deadline, and one for Saturday morning to pick up Leo's library books at the Pape branch. Separately, the Q1 bets page for Tom is due Fri 6 Nov, and the Edsby interview switch to Wed 11 Nov is still undecided.\nAction: Set a Thursday reminder for the memo comments and a Saturday morning reminder for the Pape library pickup."
+  },
+  {
+   "id": "life-s150-e028#2",
+   "response": "I'll set your Slack status to heads down until 3. Here's the note for #payouts-team:\nFocus time until 3pm, heads down.\nIf it's urgent, ping me and I'll see it between blocks.\nAction: Set Slack status to heads down until 15:00 and hold the #payouts-team note for your go-ahead before I post it."
+  },
+  {
+   "id": "life-s046-e041#2",
+   "response": "Adding both Friday 30 Jan items to Thursday's to-do list: Nate's backsplash decision (zellige $3,860 or ceramic lookalike $1,420) and the Morse Street pizza lunch orders plus Leo's Riverdale Farm trip form. For Ottawa in May, I don't have the notes from what you looked into last spring, so I'll dig for that and check what's on over the May long weekend rather than guess.\nAction: Add both to Thursday's list, then search my notes and history for last spring's Ottawa research and look up events for the May long weekend."
+  },
+  {
+   "id": "life-s136-e021#2",
+   "response": "RRSP: you get a tax deduction now and pay tax when you withdraw, so it's best when you expect a lower tax rate in retirement. TFSA: no deduction now, but growth and withdrawals are tax-free and the room comes back, so it's the flexible one.\nAction: None, forward as is."
+  },
+  {
+   "id": "life-s017-e012#2",
+   "response": "From what I can see in this conversation, nothing is still running: the Big Apple hours check finished (open 8:00-20:00 on Thanksgiving Monday, pie counter closes at 19:00). One thing is open and needs you: Leo's 16:30 Monday piano with Mrs. Greene, cancel or keep? I can only see tasks from this conversation, so I'll confirm against the live task list.\nAction: Check the live background task list, confirm none are running, and wait on your cancel-or-keep answer for Monday's piano."
+  },
+  {
+   "id": "life-s023-e017#2",
+   "response": "I'll find a half hour Monday to Wednesday where you, Aisha and Diego are all free and book it with an agenda: 1) negative balances, 2) reversed transfers, 3) what we size and next steps. Aisha has the edge-case list in a doc and wants PM eyes before sizing, so I'll link it in the invite.\nAction: Check all three calendars for Mon-Wed, create the invite with that agenda and the doc link, and tell you the slot I picked."
+  },
+  {
+   "id": "life-s156-e004#2",
+   "response": "Booking a 25-minute onboarding design review with Aisha and Diego on Thursday 26 Nov, 10:00 to 10:25, with the agenda: 1) KYC retry screens, 2) empty states, 3) open questions. I'll check that slot against all three calendars before sending.\nAction: Create the invite with the agenda and tell you if anyone has a conflict at 10:00."
+  },
+  {
+   "id": "life-s156-e000#2",
+   "response": "Last year's cardboard robot was a hit and survived until about 8pm, and there are cardboard boxes in the basement, so that box doesn't have to stay a dream. To sort for the night: what he's going as, who walks the route with him and when you leave, candy for the door, and warm layers or something reflective to wear with the costume.\nAction: Ask what Leo wants to be, then turn the answer into a parts list and a short Halloween-night checklist."
+  },
+  {
+   "id": "life-s071-e002#2",
+   "response": "Done, I'll tell her kindly: the call moves to Saturdays at 8:30 am Toronto time (6:00 pm for her) because Sundays are now Leo's soccer. I'll swap the recurring event from Sunday 9:00 to Saturday 8:30 and let Kabir know too. One note: when Toronto's clocks go back, 8:30 will be 7:00 pm in Mumbai.\nAction: Reply to Mummy with the new time, replace the Sunday 9:00 recurring event with Saturday 8:30, and text Kabir the new time."
+  },
+  {
+   "id": "life-s018-e000#2",
+   "response": "Morning, welcome home. A drive plus a Tuesday start will wreck anyone. I'll keep today light.\nAction: Check your calendar for anything you can't skip today and flag only those."
+  },
+  {
+   "id": "life-s100-e025#2",
+   "response": "My one pick for your mom is Brijwasi Sweets: Rs 1,450 plus Rs 120 delivery, the best freshness reviews (4.6 from 2,300 ratings), and same day if ordered before 14:00 IST. I just need her delivery address before I order.\nAction: Hold the order until you send her address and say go."
+  },
+  {
+   "id": "life-s006-e000#2",
+   "response": "Three days late is fine when the tradition is silly mugs, the mug is the apology. I'll look for the most ridiculous ones that can reach Vancouver quickly and show you the best.\nAction: Search novelty mugs, filter by fast delivery to Vancouver, and send you the best pick with price and arrival date."
+  },
+  {
+   "id": "life-s087-e029#2",
+   "response": "Draft: 'Hi Hannah! We're heading to the playground and market at Riverdale Park East tomorrow around 10:30. Want to come with the kids?' She works shifts, so a text is the right way to reach her.\nAction: Hold the text for your OK, then send it to Hannah."
+  }
+ ]
+}
