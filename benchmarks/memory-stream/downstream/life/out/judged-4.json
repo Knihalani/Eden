@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s038-e024",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correct; R1 rightly notes European Portuguese pronunciation in Lisbon. R1 restates trip pacing, harmless."
+  },
+  {
+   "event": "life-s041-e003",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both warm, short card notes from all three, no emoji; Marcus reply handled."
+  },
+  {
+   "event": "life-s157-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 catches Saturday 10:30 skating clash and cashew/pistachio allergy; R0 generic but fine."
+  },
+  {
+   "event": "life-s028-e005",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both acknowledge and plan the Linear-to-Notion risk doc; R1 applies ISO dates for work docs."
+  },
+  {
+   "event": "life-s077-e034",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 personalizes: fragrance-free for Sam migraines, sump/back wall, furnace filter, sticking door. R1 generic."
+  },
+  {
+   "event": "life-s141-e023",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both hedge on fees; prior answer had police tow line 416-808-2222, $250 tow plus $55/day storage."
+  },
+  {
+   "event": "life-s131-e029",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both acknowledge brevity but leave the wrong \"not saved\" Spanish answer uncorrected (role-play, Mexican vocab)."
+  },
+  {
+   "event": "life-s035-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Light chit-chat handled warmly by both."
+  },
+  {
+   "event": "life-s027-e020",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Same correct conversions; R1 bullets fit her format preference."
+  },
+  {
+   "event": "life-s143-e013",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both acknowledge short replies appropriately."
+  }
+ ]
+}
