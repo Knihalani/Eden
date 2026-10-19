@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s001-e020",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "All read before answering and note changeset; third invents a check-before-commit rule not in facts."
+  },
+  {
+   "event": "code-s001-e037",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "All plan to verify docs; second pads with CLI details irrelevant to onboarding review."
+  },
+  {
+   "event": "code-s002-e008",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All acknowledge Turborepo dev and dist rule, plan git log check without changes."
+  },
+  {
+   "event": "code-s003-e015",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All accurate on structuredClone vs JSON and Node 18 availability."
+  },
+  {
+   "event": "code-s003-e021",
+   "scores": [
+    2,
+    1,
+    2
+   ],
+   "why": "None notes the GrowthBook flag gate; second invents ACME_API_URL though config comes from loadConfig."
+  },
+  {
+   "event": "code-s006-e007",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All commit the four files on the export branch and debounce separately."
+  },
+  {
+   "event": "code-s007-e019",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All plan an empty state with test and branch awareness."
+  },
+  {
+   "event": "code-s007-e025",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "Third lists trailmix fix, pagination, empty state, bucket; others omit the htmx fix and hedge."
+  },
+  {
+   "event": "code-s007-e036",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly explain useLayoutEffect vs useEffect."
+  },
+  {
+   "event": "code-s010-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All propose deadline from expiry, interval/slow_down handling, clear messages, tests."
+  }
+ ]
+}
