@@ -1,0 +1,12 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "code-s046-e008", "scores": [2, 2, 3], "why": "Third reuses the established formatDate(iso, org.timeZone) convention; others are sound but generic."},
+{"event": "code-s048-e005", "scores": [1, 2, 3], "why": "Third applies ESM-only/Node 18 fact and pre-ESM shim; first invents an earlier laptop engines error; second generic."},
+{"event": "code-s050-e000", "scores": [3, 3, 3], "why": "All correctly apply opt-out telemetry and BullMQ/Bull Board update without leaking credentials."},
+{"event": "code-s055-e005", "scores": [2, 3, 2], "why": "API is Fastify 5 per facts; first and third keep the unnecessary framework question pending."},
+{"event": "code-s056-e000", "scores": [3, 2, 3], "why": "Digest-as-tag fix is right; second drags in the unrelated request-id proposal."},
+{"event": "code-s057-e030", "scores": [2, 2, 3], "why": "Worker is BullMQ; first hedges on stale RabbitMQ and adds unsupported subject/file claims; second adds unrequested subject change."},
+{"event": "code-s058-e000", "scores": [3, 2, 3], "why": "Per-line rounding then integer sum is correct; second hedges, asking for customer numbers first."},
+{"event": "code-s058-e007", "scores": [2, 2, 2], "why": "None cites server-actions decision; second knows rhf+zod/org-form but posts to api endpoint; others generic."},
+{"event": "code-s058-e012", "scores": [2, 3, 2], "why": "OpenAPI is generated from zod schemas; second knows and regenerates; others hedge on how docs are produced."},
+{"event": "code-s060-e000", "scores": [1, 2, 3], "why": "First adds unsupported dashboard/drafts and sort-toggle notes; second's 'open status' is muddled; third is clean."}
+]}
