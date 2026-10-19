@@ -1289,11 +1289,15 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   calibrated scores):
   - no tool call in the turn, so the deferred delivery point never comes: code 2, life 11 (for example "remind me what
     I said actually helps me unwind on weekends", "remind me how I said I learn spanish best");
-  - the turn had a tool call but the verifier gave every candidate < 0.6: code 3, life 7.
+  - the turn had a tool call but nothing passed: the verifier gave every candidate < 0.6 (code 3, life 5), or the
+    hook's shortlist was empty (life 2: life-s005-e002, life-s007-e013).
 - **If no-tool turns were delivered too** (for example, by a pickup call the hook asks for): packets would be added on
-  code 2 plan / 1 labeler-only / 2 no-need turns and life 11 / 3 / 8. At C6's need-turn gain (≈ +0.47 on life
-  plan-need) that is at most about +0.015 per turn on life (0.137 × 11/49 × 0.47) and less on code: too few turns for
-  a downstream run to resolve, so none is pre-registered.
+  code 2 plan / 1 labeler-only / 2 no-need turns and life 11 / 3 / 8. Rough ceiling: plan share × the share of plan
+  turns that would gain a packet × the two-run gain on plan turns that did get one (C7-E3 data; life +0.726, n 31;
+  code +0.625, n 20): life 0.137 × 11/49 × 0.726 ≈ +0.022 per turn, code 0.141 × 2/25 × 0.625 ≈ +0.007. It assumes
+  the added packets help as much as the delivered ones and ignores the 8 / 2 added no-need packets. An effect of
+  that size is well inside the ±0.1 per-turn CIs, so no downstream run is pre-registered. (Corrected in C8-R; it first
+  read "at most +0.015", using the all-plan-turn mean +0.469 from C7-E3, which includes the 18 empty-packet turns.)
 - **Empty-packet turns are an A/A check:** where verify's packet is empty, both conditions are "no memory", so their
   differences are pure responder + judge noise: code no-need 4 better / 10 worse / 54 equal, life 6 / 3 / 66.
 
@@ -1379,13 +1383,19 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   | 11 | thanks | — | 0 | — | 5.3 |
   | 12 | 17 × 23 | — | 0 | — | 7.9 |
 
-- **First tool call** (10 turns with a call; the pre-registered index method): p50 2.92 s, p90 14.13 s, max
+- **First tool call** (10 turns with a call; index method int(f·n), not pre-specified; the conventional median is
+  2.77 s): p50 2.92 s, p90 14.13 s, max
   14.13 s, min 2.17 s. 2 of 12 turns make no call.
 - **If delivery could use any later tool call in the turn** (post hoc): a checker answering in 3 s still finds a call
   to come in 8 of 12 turns; 5 s: 5; 10 s: 3; 20 s: 1; 40 s and 70 s: 0.
-- **What this says:** the checker has about 3 seconds. D37's recorded NIM p95 (40–70 s) would reach no turn in this
-  sample, even at the last tool call; the check would have to run on something about as fast as a small hosted model
-  on a good day (≈ 1–3 s; not measured here). Caveats: one machine, one model, n = 12, and writes were denied, which
+- **What this says:** the checker has about 3 seconds. For hosted NIM the repo records p50 1–20 s and p95 40–70 s
+  (EXECUTION.md, R8): at best it would reach some turns (calls near the low end of its median), and it would miss
+  at least the slowest 5% of calls entirely. Real numbers wait on the `verify_nim.py` re-measure.
+- **Correction to the prereg's inference (C8-R):** "a checker whose p95 latency is above the p50 of this gap misses
+  more than half of the turns" does not follow; missing more than half needs the checker's *median* above the gap's
+  median. The prereg text above stands as written.
+- **Model and setup:** the sessions ran on the CLI's default model (sonnet), with haiku for the CLI's auxiliary
+  calls. The committed `ttft/settings.json` is the hooks that ran, with the scratch log path replaced by `$TTFT_LOG`. Caveats: one machine, one model, n = 12, and writes were denied, which
   ends edit turns early (more calls would follow in a real edit turn, so the later-call counts are a floor).
 
 ## C8-E5 · 2026-10-19 · Could the check run late and deliver at the next turn? (post hoc label check)
@@ -1415,5 +1425,32 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   the lever: about 900 tokens (thinking plus 15 scores) at roughly 6 ms a token. A direct API call with thinking off
   and a reply that lists only the rows it keeps would be a few dozen output tokens; that variant's latency and
   quality are not measured (its quality would need the C6-style downstream re-run, since it changes the prompt).
-- **Probe (one call):** `--effort low` does not turn thinking off either (454 thinking tokens, 5230 ms). The
-  no-thinking variant cannot be timed from this environment.
+- **Probes (unverified: one call each, no saved artifact):** `MAX_THINKING_TOKENS=0` and `--effort low` did not turn
+  thinking off (514 and 454 thinking tokens; 4792 and 5230 ms). The no-thinking variant cannot be timed from here.
+- **Correction (C8-R):** "roughly 6 ms a token" is an average. A linear fit over the 20 calls gives about 3.9 ms per
+  output token plus about 2.4 s fixed; the one no-thinking call (294 output tokens) took 3525 ms, already above
+  C8-E4's 2.92 s. So even a short, no-thinking reply may sit at or above the budget through this route. The calls
+  carried 3.3k–4.2k input tokens (CLI overhead on top of the ~1.7k-token case).
+
+## C8-R · 2026-10-19 · Review of the cycle 8 consolidation (round 1: REQUEST_CHANGES) and fixes
+- **NIM latency claim corrected:** "would reach no turn" used only the p95. The repo records hosted NIM at p50 1–20 s
+  and p95 40–70 s (EXECUTION.md, R8), so it would reach some turns at best and miss at least the slowest 5% of calls.
+  Corrected in the C8-E4 result (with a note that the prereg's inference does not follow), STATE, the sketch and
+  the headline.
+- **C8-E1 ceiling recomputed** with the gain on plan turns that did get a packet (C7-E3 two-run data: life +0.726,
+  n 31; code +0.625, n 20): about +0.022 (life) and +0.007 (code) per turn, not "at most +0.015"; still far inside
+  the ±0.1 per-turn CIs.
+- **C8-E1 cause split:** life's 7 "below 0.6" turns are 5 below 0.6 plus 2 with an empty shortlist.
+- **C8-E4:** the percentile index method is labelled as not pre-specified (conventional median 2.77 s); the model
+  (sonnet; haiku for auxiliary calls) and the settings file's `$TTFT_LOG` substitution are stated.
+- **C8-E6:** the thinking-off probes are labelled unverified (no saved artifact); the per-token figure is replaced by
+  a linear fit (≈ 3.9 ms per output token + ≈ 2.4 s fixed), which says a short reply may still miss through the CLI.
+- **Build sketch:** both effects labelled "over today's plugin"; the CLI calls' input size (3.3k–4.2k) noted.
+- **verify_nim.py:** an unparseable reply is logged (`parsed`, `finish_reason`) and counted at the end; latency now
+  covers the whole call with retries and backoff, with `attempts` logged; dropped connections are retried; the
+  docstring no longer claims a NIM_MODEL default and says which preps read a NIM tag. Re-checked against mock
+  endpoints (normal, garbage, one 500, one dropped connection): 0 / 6 / 0 / 0 unparsed replies, 1 / 1 / 2 / 2
+  attempts, and the test key in no output.
+- **Local CI on 4feb48ce** (outside the repo): format, typecheck, build pass; test:parallel 5320 pass, 32 skip,
+  2 fail (`switches.test.ts`, `memory-purge.test.ts`, the root-on-Linux failures that also fail on origin/main), and
+  the serial latency-gated files pass alone. Only Python and Markdown changed after it.
