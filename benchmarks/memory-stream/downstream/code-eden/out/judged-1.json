@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s027-e025",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "History shows Auth0 real, next-auth leftover spike; both just investigate without recalling."
+  },
+  {
+   "event": "code-s028-e006",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 checks tests before PR per rule; R1 uses gh but skips testing."
+  },
+  {
+   "event": "code-s030-e000",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "R1 recalls stale 08-26 SQS topic as yesterday; R0 reconstructs from git without recalled open items."
+  },
+  {
+   "event": "code-s030-e013",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add redaction with ESM imports and a bearer-token test."
+  },
+  {
+   "event": "code-s035-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both add cdn.acme.dev remotePattern and verify."
+  },
+  {
+   "event": "code-s035-e006",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both correctly explain /_next/image optimization and caching."
+  },
+  {
+   "event": "code-s035-e058",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both propose tabular-nums/mono via existing font setup."
+  },
+  {
+   "event": "code-s037-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both record no-major-bump rule and triage without merging."
+  },
+  {
+   "event": "code-s038-e007",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Neither leverages Turborepo/turbo.json affected filtering and remote cache; R0 distracts with bench rule."
+  },
+  {
+   "event": "code-s040-e008",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both swap console.log, check publishable key, run worker with redis."
+  }
+ ]
+}

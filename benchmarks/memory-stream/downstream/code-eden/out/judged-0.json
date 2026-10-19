@@ -1,0 +1,86 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s002-e013",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both honor Marco/stash, Sentry via SENTRY_DSN, GrowthBook flag, Vitest stdout snapshot."
+  },
+  {
+   "event": "code-s003-e000",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 uses Redis dedupe and known ioredis-mock worker test command; R0 generic."
+  },
+  {
+   "event": "code-s003-e026",
+   "scores": [
+    2,
+    3
+   ],
+   "why": "R1 follows Vitest stdout snapshot convention, csv-only BOM; R0 fine but generic test."
+  },
+  {
+   "event": "code-s013-e004",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both reasonable; neither mentions Vitest snapshot, docs/cli.md update or changeset."
+  },
+  {
+   "event": "code-s013-e040",
+   "scores": [
+    2,
+    2
+   ],
+   "why": "Both claim not to know CLI test setup though Vitest stdout snapshots is a known fact; will read."
+  },
+  {
+   "event": "code-s015-e000",
+   "scores": [
+    3,
+    3
+   ],
+   "why": "Both capture env setup and billing review rule and verify steps."
+  },
+  {
+   "event": "code-s018-e016",
+   "scores": [
+    3,
+    2
+   ],
+   "why": "R0 cites known publicRoutes/afterSignInUrl gotcha; R1 generic debugging."
+  },
+  {
+   "event": "code-s021-e018",
+   "scores": [
+    1,
+    2
+   ],
+   "why": "R0 claims duplicate reminders still unfixed (already idempotent); neither uses KEDA queue-length scaling fact."
+  },
+  {
+   "event": "code-s022-e000",
+   "scores": [
+    1,
+    1
+   ],
+   "why": "Both miss known fact: Clerk JWTs verified with @clerk/backend in src/plugins/auth.ts."
+  },
+  {
+   "event": "code-s022-e008",
+   "scores": [
+    2,
+    1
+   ],
+   "why": "Should use Sentry and pino; R1 hedges on tracker and adds unsupported staging timeout claim."
+  }
+ ]
+}
