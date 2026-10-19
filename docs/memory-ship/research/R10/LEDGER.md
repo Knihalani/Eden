@@ -1682,3 +1682,12 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   is not an unusually weak one for the checker.
 - **What this says:** Jev, posed well, gives the agent's replies about the same lift as the haiku checker, at about a
   tenth of the time budget. A second independent run (as C6-E2, C7-E3) is the way to firm "beats today's plugin".
+
+## C10-E4 · 2026-10-19 · Jev four-way, second independent run (pre-registration)
+- **Setup:** as C6-E2 / C7-E3: the same turns and packets as C10-E3 (`downstream/<w>-h2h-jev-r2`, copies of its
+  inputs and keys), a new sonnet responder run and new blind opus judges (private temp directories). Each turn's
+  condition − none is averaged over the two runs.
+- **Rule, set before running (the averaged result decides):**
+  - **Jev beats today's plugin (two runs)** if jev − eden has a CI lower bound > 0 on both worlds.
+  - **Jev matches the haiku checker (two runs)** if jev − verify ≥ −0.03 on both worlds.
+  - Run 2 alone is reported too.
