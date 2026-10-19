@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s003-e000", "scores": [1, 2, 3, 3], "why": "R0 gives no vocab at all; R1 thin list; R2/R3 full tables, R3 personalizes with penicillin allergy."},
+{"event": "life-s003-e021", "scores": [3, 3, 3, 3], "why": "Ambulance question not in available evidence; all give nut-free lunches and honestly offer to search."},
+{"event": "life-s005-e002", "scores": [1, 1, 1, 1], "why": "HR profile on record: Senior Product Manager, merchant payouts and onboarding; all claim not to know it."},
+{"event": "life-s007-e013", "scores": [2, 2, 2, 2], "why": "Booking correct; none applies known flight rules (WestJet, direct, aisle, no basic economy, CAD)."},
+{"event": "life-s013-e020", "scores": [3, 3, 3, 3], "why": "All add the recurring swim lesson concisely as requested."},
+{"event": "life-s013-e023", "scores": [3, 3, 3, 3], "why": "Simple to-do add; all handle it briefly."},
+{"event": "life-s017-e008", "scores": [2, 2, 2, 2], "why": "Route not in available evidence; R2 gives ~4.5h estimate but wrongly says Monday; others just defer."},
+{"event": "life-s018-e010", "scores": [3, 3, 3, 2], "why": "Reasonable neighbourhood picks; R3 asks about mom right after she asked for distraction."},
+{"event": "life-s018-e017", "scores": [3, 3, 3, 3], "why": "All correctly place it in Belém, Lisbon, Jerónimos monks."},
+{"event": "life-s022-e000", "scores": [3, 3, 3, 3], "why": "No Costco data on record; all frame break-even test and offer to pull charges."},
+{"event": "life-s026-e000", "scores": [2, 3, 3, 3], "why": "R0 puts stale 16 Oct delivery date into text to Nate; others text correctly and pull invoices."},
+{"event": "life-s027-e029", "scores": [3, 3, 3, 2], "why": "Light banter fits; R3 tacks on unrelated reminders, Nate's already forwarded."},
+{"event": "life-s027-e031", "scores": [3, 3, 3, 3], "why": "All compute $75/week, note Monday cabinet delivery and access; correct."},
+{"event": "life-s028-e014", "scores": [3, 3, 3, 3], "why": "All accurately recap pet budget, Notion risks doc and pending grocery pull."},
+{"event": "life-s030-e000", "scores": [3, 3, 3, 3], "why": "All give a correct full tres tristes tigres and address launch dread reasonably."}
+]}

@@ -1,0 +1,17 @@
+{"judge": "opus (claude-code subagent)", "evidence": true, "cases": [
+{"event": "life-s023-e017", "scores": [3, 3, 3, 3], "why": "All book 30 min with agenda across three calendars; #4 also respects Wednesday pickup. None wrong."},
+{"event": "life-s025-e000", "scores": [3, 3, 3, 3], "why": "All plan the Linear pull sensibly; #4 uses history-supported Q4 workstreams and November bank migration risk, hedged appropriately."},
+{"event": "life-s025-e036", "scores": [3, 3, 3, 3], "why": "All give reasonable one-to-three week estimate and offer to confirm Canada Post timing and tracked options."},
+{"event": "life-s026-e012", "scores": [3, 2, 3, 3], "why": "13th is Thursday; #3 flags Tom 1:1 at 14:00. #2 checks only Diego and Aisha calendars, omitting Riya's."},
+{"event": "life-s035-e008", "scores": [3, 3, 3, 3], "why": "All give solid, accurate daycare tour questions including ratios, turnover, fees and $10-a-day program."},
+{"event": "life-s037-e000", "scores": [3, 3, 3, 3], "why": "Simple warm acknowledgement; all appropriate with nothing needed."},
+{"event": "life-s037-e011", "scores": [3, 1, 3, 3], "why": "Sam is vegetarian; #2's roast chicken main fails him. Others vegetarian, shellfish-free, with a good mocktail."},
+{"event": "life-s037-e017", "scores": [2, 3, 2, 2], "why": "Leo has tree nut allergy; only #2 explicitly keeps dessert nut-free. Others fine but omit it."},
+{"event": "life-s037-e020", "scores": [3, 3, 2, 3], "why": "All honestly look up prior search and podcast note; #3 sends fares directly to Sam rather than Riya."},
+{"event": "life-s040-e009", "scores": [3, 2, 3, 3], "why": "#2 leaves Thursday copy in place and adds extra note to Tom, not really fixing her copy as asked."},
+{"event": "life-s040-e018", "scores": [2, 3, 2, 3], "why": "Riya wants metric only; #2 and #4 honour it, #2 also flags nut check. #1 and #3 omit metric."},
+{"event": "life-s042-e008", "scores": [2, 2, 3, 2], "why": "New 6:15 Tue/Thu YMCA clashes with 6:30 Marcus runs; only #3 flags it."},
+{"event": "life-s045-e000", "scores": [2, 3, 3, 2], "why": "History shows Old Navy needs login to unsubscribe; #2 and #3 recall it, #1 and #4 miss it."},
+{"event": "life-s046-e013", "scores": [3, 3, 3, 3], "why": "All correctly decline to guess and look up the score."},
+{"event": "life-s046-e016", "scores": [3, 3, 3, 3], "why": "All accurately distinguish batched cheap EFT from fast, costly, final wires for payouts."}
+]}
