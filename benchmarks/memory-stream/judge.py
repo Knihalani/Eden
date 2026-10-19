@@ -53,6 +53,29 @@ def prep(a):
         print(name, len(cases), "cases", len(store), "rows")
 
 
+def prep_seq(a):
+    """One case per file, each with the store visible at its own moment (C4-E9: batching flatters a verifier).
+    A seeded subsample of the existing judge sample's human events."""
+    src = os.path.join(HERE, "judge", f"{a.world}-sleep", "in")
+    rows, cases = {}, []
+    for p in sorted(glob.glob(os.path.join(src, "*.json"))):
+        j = json.load(open(p))
+        rows.update({r["id"]: r for r in j["store"]})
+        cases += [c for c in j["cases"] if c["type"] == "human"]
+    rng = random.Random(21)
+    pick = sorted(rng.sample(cases, min(a.n, len(cases))), key=lambda c: c["at"])
+    d = os.path.join(HERE, "judge", f"{a.world}-sleep-seq")
+    os.makedirs(os.path.join(d, "in"), exist_ok=True)
+    os.makedirs(os.path.join(d, "out"), exist_ok=True)
+    for n, c in enumerate(pick):
+        store = [r for r in rows.values() if r["from"] < c["at"] and (r["until"] is None or r["until"] > c["at"])]
+        name = f"s{n:03d}"
+        json.dump({"batch": name, "store": sorted(store, key=lambda r: r["from"]), "cases": [c],
+                   "output": f"benchmarks/memory-stream/judge/{a.world}-sleep-seq/out/{name}.json"},
+                  open(os.path.join(d, "in", f"{name}.json"), "w"), ensure_ascii=False, indent=1)
+    print(len(pick), "cases")
+
+
 def packets(world, store, tag=""):
     out = {}
     sub = f"{world}-{store}" + (f"-{tag}" if tag else "")
@@ -64,11 +87,13 @@ def packets(world, store, tag=""):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["prep"])
+    ap.add_argument("cmd", choices=["prep", "prep-seq"])
+    ap.add_argument("--n", type=int, default=60)
     ap.add_argument("--world", required=True)
     ap.add_argument("--store", default="sleep")
     ap.add_argument("--per", type=int, default=15)
     ap.add_argument("--neg", type=int, default=110)
     ap.add_argument("--nonhuman", type=int, default=30)
     ap.add_argument("--strict", action="store_true")
-    prep(ap.parse_args())
+    a = ap.parse_args()
+    prep_seq(a) if a.cmd == "prep-seq" else prep(a)
