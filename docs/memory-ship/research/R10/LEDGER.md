@@ -549,3 +549,14 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - Deferred, it ties F22 on both worlds: recall +0.02 / +0.004, silence −0.03 / −0.02.
   - So the lexical shortlist barely limits F22. The small model's understanding is the limit: opus with the same view gets +0.14 / +0.21 recall.
   - Next: a bigger verifier off the hook (cost and latency), or the draft check (direction B), which also fixes no-tool turns.
+
+## C4-E8 · 2026-10-19 · Critic direction B: the draft check (pre-registration)
+- **Setup:** `draftcheck.py`.
+  - The turns and drafts are C3-E4's 60 code downstream turns: 30 plan-need, 15 labeler-only, 15 no-need. Each draft is the `none` response, written with no memory.
+  - The checker (haiku; prompt in PROMPTS.md) sees the turn, the recent context, the draft and F22's shortlist (≤ 15 rows, strict sleep store). It reads one case per file, in stream order.
+  - A blocked draft is revised by sonnet with the note and rows. The opus judge scores none / oracle / revised blind, on the blocked turns. An unblocked turn counts revised − none = 0.
+- **Candidate ceiling:** plan 0.6156 (30 turns), labeler-only 0.4889 (15).
+- **Kill lines (critic C4, set before running):**
+  1. Fires on > 12% of no-need turns (more than 1 of 15).
+  2. Mean revised − none over the 30 plan turns < 0.48 (half of C3-E4's oracle gain, +0.967).
+  3. Life direct recall < 0.45. This needs a life downstream sample, so it is not run yet.
