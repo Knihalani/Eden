@@ -1,0 +1,56 @@
+{
+ "batch": "life-sleep-b02",
+ "model": "sonnet",
+ "superseded": [
+  {
+   "old": "life-sleep-b01:m0005",
+   "new": "life-sleep-b02:m0006",
+   "why": "Thursday lesson time now 19:30, not 20:00"
+  },
+  {
+   "old": "life-sleep-b00:m0009",
+   "new": "life-sleep-b02:m0006",
+   "why": "Lesson is Thursday 19:30, not Tuesday 19:00"
+  },
+  {
+   "old": "life-sleep-b00:m0010",
+   "new": "life-sleep-b02:m0004",
+   "why": "Leo is six, not turning 7 in fall"
+  },
+  {
+   "old": "life-sleep-b00:m0048",
+   "new": "life-sleep-b02:m0031",
+   "why": "Marcus finished Chicago marathon; no longer training"
+  },
+  {
+   "old": "life-sleep-b00:m0083",
+   "new": "life-sleep-b02:m0024",
+   "why": "Bin day is Monday night/Tuesday, not Wednesday"
+  },
+  {
+   "old": "life-sleep-b00:m0006",
+   "new": "life-sleep-b02:m0027",
+   "why": "Standup now daily, not just Mon/Wed/Fri"
+  },
+  {
+   "old": "life-sleep-b00:m0022",
+   "new": "life-sleep-b02:m0034",
+   "why": "Nate prefers texts, not email; never call"
+  },
+  {
+   "old": "life-sleep-b01:m0030",
+   "new": "life-sleep-b02:m0035",
+   "why": "Cabinet delivery moved to Mon 2025-11-10"
+  },
+  {
+   "old": "life-sleep-b01:m0028",
+   "new": "life-sleep-b02:m0049",
+   "why": "New tire swap slots in November, none booked"
+  },
+  {
+   "old": "life-sleep-b00:m0084",
+   "new": "life-sleep-b02:m0032",
+   "why": "Anjali birthday date now known: November 3"
+  }
+ ]
+}
