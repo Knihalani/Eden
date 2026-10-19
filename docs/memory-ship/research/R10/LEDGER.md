@@ -1992,3 +1992,12 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   replaced lines on supersession (MySQL 8 → Postgres 16, Node 18 → 20.11, Express 4 → Fastify 5).
 - **What this says:** a fixed-size card per action type recovers what the action set found (0.97 in a pool whose
   size depends on how many action types a turn touches, not on the store). Life is still running.
+
+## C11-E9 · 2026-10-19 · A second, narrow checker pass (pre-registration; exploratory)
+- **Idea (BUILD-PLAN §8 lever 2):** the wide pass (C11-E8) keeps its candidates at p ≥ 0.5, top 15; a second Jev
+  request asks the same `list` question over only those, with them as the state's candidate list. Picks: second-pass
+  p ≥ 0.7, top 8.
+- **Measure:** on C11-E8's turns, recall of needed items with a covering row in the wide pool, turns with any pick
+  (need / no-need), picks per turn, and the second call's latency; next to the one-pass p ≥ 0.7 top 8 numbers of
+  C11-E8's post hoc table (code 0.793 / 29 no-need turns; life 0.714 / 38).
+- **No verdict rule.**
