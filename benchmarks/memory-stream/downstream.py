@@ -141,7 +141,7 @@ def prep_verify(a):
            ["cases"]}
     base = json.load(open(os.path.join(HERE, "downstream", a.world, "key.json")))["key"]
     vis = lambda r, e: r["t"] < e["_order"] and (r.get("invalid_at") is None or r["invalid_at"] > e["_order"])
-    day = {}  # event order → its session's date, to date a row by when it was written (C5-E6)
+    day = {}  # event order → its session's date, to date a row by when it became visible (C5-E6)
     for sess in stream["sessions"]:
         for ev in sess["events"]:
             day[ev["_order"]] = sess["ts"][:10]
@@ -162,6 +162,9 @@ def prep_verify(a):
         key[eid] = {"group": base[eid]["group"], "order": order, "needs": base[eid]["needs"]}
         cases.append({"event": eid, "text": src[eid]["text"], "recent": src[eid]["recent"],
                       "packets": [conds[c] for c in order]})
+    if a.fired_only:  # C5-E6 re-ran only the turns where verify fired
+        cases = [c for c in cases if any(c["packets"])]
+        key = {c["event"]: key[c["event"]] for c in cases}
     json.dump({"cases": cases}, open(os.path.join(d, "in", "responses-in.json"), "w"), indent=1, ensure_ascii=False)
     json.dump({"system": f"verify:cal,p={a.p} (deferred)", "key": key}, open(os.path.join(d, "key.json"), "w"),
               indent=1)
@@ -331,7 +334,9 @@ if __name__ == "__main__":
     ap.add_argument("--system", default="")
     ap.add_argument("--per", type=int, default=45)
     ap.add_argument("--p", type=float, default=0.6, help="prep-verify: verifier threshold")
-    ap.add_argument("--dated", action="store_true", help="prep-verify: prefix each row with the date it was written")
+    ap.add_argument("--dated", action="store_true",
+                    help="prep-verify: prefix each row with the date it became visible (its batch's last session)")
+    ap.add_argument("--fired-only", action="store_true", help="prep-verify: keep only turns where verify fires")
     a = ap.parse_args()
     cmds = {"prep": prep, "prep-picks": prep_picks, "prep-eden": prep_eden, "prep-verify": prep_verify,
             "prep-h2h": prep_h2h, "items": items, "collect": collect, "judge-prep": judge_prep, "report": report}

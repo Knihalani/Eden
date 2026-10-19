@@ -112,12 +112,12 @@ Families differ in mechanism. Every kill criterion was written before its run.
 
 ## Cycle 5 findings (LEDGER C5-E1…E7)
 
-- **Dated delivery is the unlock (C5-E6, C5-E7).** Wrong packets hurt mostly by passing off old state as current; prefixing each row with "[as of <date>]" cut the cost of a wrong fire from −0.6 to −0.1 and turned the verifier net-positive. On fresh turns it beats today's plugin on both worlds.
-- **The plugin today barely changes replies (C5-E3).**
-- **Cross-batch supersession (C5-E5)** fixes a real sleep bug (supersede only within a batch) but explains a minority of the harm; dead by its code kill line, strong on life.
+- **Dated delivery is the strongest lead (C5-E6, C5-E7), confirmed by rule but not yet firm.** Wrong packets hurt mostly by passing off old state as current. Prefixing each row with "[as of <date>]" cut the cost of a wrong fire from −0.6 to −0.1 (n = 10 fired no-need turns, one responder run). On fresh turns the dated verifier beats today's plugin on both worlds (+0.113 / +0.129), but the 95% CIs include 0.
+- **The plugin today barely changes replies (C5-E3):** code −0.0433 per turn (net-negative by the rule), life +0.0293 (near zero).
+- **Cross-batch supersession (C5-E5)** is dead by its code kill line (stale share −19/−26% vs the 30% line; life −37/−48%). It still fixes a real sleep bug (supersede only reached the same batch) and explains a minority of the harm.
 
 - **Clean downstream re-run (C5-E1):** the right packet lifts the outcome by +1.23 (code) and +1.1 (life) on 97% / 87% of plan-need turns. A wrong packet costs −0.47 on code no-need turns (noise floor −0.07), so wrong bullets do hurt and R10-3's evidence is restored. The hook vote keeps about half of the code benefit (+0.63).
-- **The plugin as it ships today barely changes replies** (C5-E3): +0.1 on code need turns (about 8% of the available +1.23), −0.2 on life need turns. Reweighted to real use, code −0.04 and life +0.03: near zero. Its bullets (mostly past prompts) rarely mislead, but rarely help.
+- **The plugin as it ships today barely changes replies** (C5-E3): +0.1 on code need turns (about 8% of the available +1.23), −0.2 on life need turns. Reweighted to real use, code −0.04 (net-negative by the pre-registered rule) and life +0.03 (near zero). Its bullets (mostly past prompts) rarely mislead, but rarely help.
 - So a packet is worth sending when P(needed) > about 0.3 (+1.2 gain vs −0.47 cost): a value-of-information firing rule (F6) is now measurable.
 
 ## Cycle 4 findings (LEDGER C4-E1…E13)
@@ -125,7 +125,7 @@ Families differ in mechanism. Every kill criterion was written before its run.
 - Batching flatters model verifiers: one-case-per-call F22 loses 0.24 silence on code (C4-E9). Every model-in-the-loop number must be one case per call.
 - The downstream harness had two bugs: responder order swaps, and a judge blind to episodic history. A third (two conditions of one turn in one responder prompt) was found in review; the clean numbers are in C5-E1 and supersede C4-E10.
 - Even opus fed one case at a time loses 0.14–0.21 silence (C4-E12). The "judge ceiling" rows overstate silence.
-- **The plan labels miss real needs on code, not on life** (C4-E13, confirmed by the clean re-run C5-E1: code +0.467, 60% helped; life −0.033, the judge over-fires). Where the judge fired on plan-no-need turns, its picks raised the outcome by +0.4 (47% helped, 7% hurt). On life the result is mixed (+0.13; 27% helped, 13% hurt).
+- **The plan labels miss real needs on code, not on life** (C4-E13 re-measured cleanly in C5-E1: code +0.467, 60% helped, 17% hurt; life −0.033, the judge over-fires). C4-E13's original numbers are superseded.
 - A calibrated verifier (causal contrast plus probabilities) is tunable on dev but its threshold does not transfer to fresh short prompts (C4-E11).
 - Agent-pull (F13) is secondary by the user's direction: Eden stays in charge of surfacing what the agent does not know to ask.
 

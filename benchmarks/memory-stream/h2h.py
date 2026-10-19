@@ -1,36 +1,52 @@
-"""C5-E7 head-to-head report: per-group mean (condition − none) and the per-turn utility with dev's real group shares."""
-import glob, json, os, sys
+"""C5-E7 head-to-head report: per-group mean (condition − none), the per-turn utility with dev's real group shares,
+and a paired bootstrap 95% CI of verify − eden (turns resampled within each group; 4000 draws, seed 1).
+
+    python3 benchmarks/memory-stream/h2h.py code life
+"""
+import glob, json, os, random, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SHARES = {"code": {"plan": 0.141, "labeler-only": 0.171, "no-need": 0.688},
           "life": {"plan": 0.137, "labeler-only": 0.215, "no-need": 0.648}}
 
 
-def report(world, sub):
+def deltas(sub):
+    """{group: [(verify − none, eden − none) per turn]}"""
     d = os.path.join(HERE, "downstream", sub)
     key = json.load(open(os.path.join(d, "key.json")))["key"]
     judged = {}
     for p in glob.glob(os.path.join(d, "out", "judged-*.json")):
         judged.update({c["event"]: c["scores"] for c in json.load(open(p))["cases"]})
-    by = {}
-    for eid, k in key.items():
-        if eid not in judged:
-            continue
-        s = dict(zip(k["order"], judged[eid]))
-        g = by.setdefault(k["group"], {"n": 0})
-        g["n"] += 1
-        for c in s:
-            if c != "none":
-                g[c] = g.get(c, 0) + s[c] - s["none"]
-                g[c + "+"] = g.get(c + "+", 0) + (s[c] > s["none"])
-                g[c + "-"] = g.get(c + "-", 0) + (s[c] < s["none"])
     out = {}
-    for c in ("eden", "verify"):
-        out[c] = round(sum(SHARES[world][g] * by[g][c] / by[g]["n"] for g in by), 4)
-    for g, v in by.items():
-        print(world, g, {"n": v["n"], **{c: round(v[c] / v["n"], 3) for c in ("eden", "verify")},
-                         "better/worse eden": (v["eden+"], v["eden-"]), "better/worse verify": (v["verify+"], v["verify-"])})
-    print(world, "utility per turn:", out, "verify − eden:", round(out["verify"] - out["eden"], 4))
+    for eid, k in key.items():
+        if eid in judged:
+            s = dict(zip(k["order"], judged[eid]))
+            out.setdefault(k["group"], []).append((s["verify"] - s["none"], s["eden"] - s["none"]))
+    return out
+
+
+def report(world, sub):
+    by = deltas(sub)
+    util = {}
+    for j, c in enumerate(("verify", "eden")):
+        util[c] = round(sum(SHARES[world][g] * sum(x[j] for x in xs) / len(xs) for g, xs in by.items()), 4)
+    for g, xs in by.items():
+        row = {"n": len(xs)}
+        for j, c in enumerate(("verify", "eden")):
+            row[c] = round(sum(x[j] for x in xs) / len(xs), 3)
+            row[c + " better/worse"] = (sum(x[j] > 0 for x in xs), sum(x[j] < 0 for x in xs))
+        print(world, g, row)
+    rng = random.Random(1)
+    draws = []
+    for _ in range(4000):
+        u = 0.0
+        for g, xs in by.items():
+            sample = [rng.choice(xs) for _ in xs]
+            u += SHARES[world][g] * sum(a - b for a, b in sample) / len(sample)
+        draws.append(u)
+    draws.sort()
+    print(world, "utility per turn:", util, "verify − eden:", round(util["verify"] - util["eden"], 4),
+          "95% CI:", (round(draws[100], 4), round(draws[3899], 4)))
 
 
 if __name__ == "__main__":
