@@ -1527,3 +1527,21 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   3 s: 8 (+0.0809 / +0.1074); 5 s: 5 (+0.0505 / +0.0671); 10 s: 3 (+0.0303 / +0.0403); 20 s: 1 (+0.0101 / +0.0134).
 - Assumes an even spread of the gain over turns and delivery at any later tool call; n = 10. Added to the build
   sketch as an estimate.
+
+## C10-E1 · 2026-10-19 · Fast non-thinking NIM models as the checker (pre-registration; waits on the key)
+- **Why:** the checker's latency is mostly thinking (C8-E6, C9-E2). A fast model that answers directly, with the
+  short reply (F22c), may fit the ~3 s budget, and NIM is the D37 provider. The user connected NIM; the key is not
+  visible in this session yet (a NIM call returned 401, "authorization missing").
+- **Candidates** (on the NIM list today, non-reasoning, small or fast): `google/gemma-3-4b-it`,
+  `google/gemma-3-12b-it`, `nvidia/nemotron-3.5-lightning-30b-a3b`, `z-ai/glm-5.3-flash`,
+  `nv-mistralai/mistral-nemo-12b-instruct`.
+- **Step 1, smoke (per model):** `verify_nim.py --world code-rt1 --src cal --tag nim-<m> --short --model <id>`
+  on the first 30 code-rt1 inputs. Read end-to-end latency (retries and queueing included) and the parse rate.
+  Models with p50 ≤ 3 s and ≥ 95% parsed go to step 2 (at most the two fastest).
+- **Step 2, quality:** the same model on all four C9-E1 test inputs (code and life dev `cal`, code-rt1 and life-rt1
+  `cal`), scored with `score.py --strict --systems verify:tag=nim-<m>,p=0.6` against `verify:tag=cal,p=0.6`.
+- **Rule, set before running:**
+  - **Viable checker** if p50 latency ≤ 3 s over all its calls AND recall ≥ cal − 0.03 and precision ≥ cal − 0.03
+    on at least 3 of the 4 tests.
+  - **Fast but weaker** if the latency holds and quality fails; **too slow** if p50 > 3 s.
+- `verify_nim.py` gains `--model` and `--short` (checked against a mock endpoint).
