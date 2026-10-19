@@ -2031,3 +2031,11 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   on turns that need nothing (code +8 turns, picks per turn up by half). The checker's recall over a wide pool
   plateaus near 0.75–0.81 with these question designs; the remaining misses are rows Jev scores low (0.1–0.4) whose
   link to the turn takes a step of reasoning (a YouTube embed → the CSP headers).
+
+## C11-E11 · 2026-10-19 · Show the checker each row's "applies when" (pre-registration; exploratory)
+- **Idea:** dreaming already writes, per row, the activities in which it applies (`when.activities`, e.g. "git
+  commit", "add third-party script"). The checker sees only the row text. Append them: "<row> (Applies when: a; b;
+  c.)", in both the candidate list and the question's `row`. Same pool, question, threshold and cap as C11-E8
+  (p ≥ 0.7, top 8 in the comparison).
+- **Measure:** as C11-E9, next to C11-E8's one pass at p ≥ 0.7 top 8 (code 0.793 / 29; life 0.714 / 38).
+- **No verdict rule.**
