@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s047-e019",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "R0 uses known Intact/April renewal to time quotes; others generic but sound."
+  },
+  {
+   "event": "life-s048-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "No prior lookup existed yet; all correctly offer to fetch observed data; R0 honours Celsius/metric."
+  },
+  {
+   "event": "life-s050-e016",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "None use known Mar 15-19 flight dates, Leo age (free under 7), or refundable/hotel prefs; R2 asks about flying already priced."
+  },
+  {
+   "event": "life-s051-e002",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Nothing on record for next week; pulling calendars is the right move for all."
+  },
+  {
+   "event": "life-s052-e008",
+   "scores": [
+    1,
+    2,
+    2
+   ],
+   "why": "Weak spots known (ser/estar, por/para, cuando subjunctive, gender); R0 claims no record; R2 fallback close."
+  },
+  {
+   "event": "life-s057-e000",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "R2 applies Aisha sign-off and target wording rule; others miss it but hold draft for review."
+  },
+  {
+   "event": "life-s057-e015",
+   "scores": [
+    3,
+    1,
+    1
+   ],
+   "why": "Tom likes Lagavulin (noted Feb 4); R0 recalls it with price; others wrongly say unknown."
+  },
+  {
+   "event": "life-s058-e000",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "Chit-chat; R2 adds dubious no-commute claim on office Tuesday and an unsolicited passport detour."
+  },
+  {
+   "event": "life-s058-e002",
+   "scores": [
+    3,
+    2,
+    2
+   ],
+   "why": "R0 applies current Air Canada/aisle/no basic prefs; R1 and R2 miss airline preference."
+  },
+  {
+   "event": "life-s058-e007",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All pull Tom calendar for Feb 24 appropriately."
+  }
+ ]
+}

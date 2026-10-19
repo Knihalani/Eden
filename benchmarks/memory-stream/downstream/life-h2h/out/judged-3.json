@@ -1,0 +1,87 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "life-s058-e014",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Olivia ask handled; no pantry inventory known, all check orders for dairy-free snacks."
+  },
+  {
+   "event": "life-s062-e000",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All record decision and unsubscribe correctly."
+  },
+  {
+   "event": "life-s068-e008",
+   "scores": [
+    1,
+    1,
+    1
+   ],
+   "why": "All miss known dinosaur/Lego Jurassic World obsession, tree-nut allergy and mushroom dislike."
+  },
+  {
+   "event": "life-s068-e021",
+   "scores": [
+    3,
+    1,
+    2
+   ],
+   "why": "R1 uses stale Queen East Dental address (moved to Danforth Smiles); R2 needlessly asks whose cleaning."
+  },
+  {
+   "event": "life-s070-e002",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All check library holds appropriately; Tom deferred as asked."
+  },
+  {
+   "event": "life-s073-e002",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give correct COUNTIF answer first with useful caveat."
+  },
+  {
+   "event": "life-s076-e007",
+   "scores": [
+    1,
+    3,
+    1
+   ],
+   "why": "Drive to Alta Vista known (~4.5h); only R1 gives rough window; others decline to estimate."
+  },
+  {
+   "event": "life-s076-e012",
+   "scores": [
+    1,
+    2,
+    0
+   ],
+   "why": "Leo tree-nut allergy, cilantro, Sam vegetarian; R1 misses vegetarian; R0 claims no notes; R2 places order ignoring allergy."
+  },
+  {
+   "event": "life-s077-e028",
+   "scores": [
+    2,
+    2,
+    3
+   ],
+   "why": "R2 uses clean finance joke preference and saved standup openers; others generic, ask which day."
+  }
+ ]
+}
