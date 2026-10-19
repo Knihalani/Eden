@@ -1495,3 +1495,12 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   system prompt (C9-E1's output rule). Read `duration_api_ms` and token usage.
 - **Measure:** p50 / p90 / max API time and output tokens, beside C8-E6's (p50 5645 ms). Thinking stays on (the CLI
   does not let it be turned off), so this times the short reply plus thinking.
+
+## C9-E2 · 2026-10-19 · Latency of the short-reply checker through the CLI: result
+- **20 calls:** API time **p50 4994 ms, p90 7727 ms, max 10045 ms, min 2491 ms** (C8-E6 full-score: p50 5645 ms).
+  Output tokens median 591, of which thinking median 563, so the visible reply is now about 30 tokens and thinking is
+  almost all of the output (`ttft/checker-latency-c9e2.json`).
+- **What this says:** the short reply removes the scoring text, but through the CLI thinking dominates and the call
+  is still about 5 s at p50. The remaining lever is turning thinking off, which this environment cannot do. By
+  C8-E6's fit (≈ 3.9 ms per output token, ≈ 2.4 s fixed), dropping ~560 thinking tokens would land near 2.5–3 s, at
+  the edge of the ~3 s budget; that is an extrapolation, not a measurement.
