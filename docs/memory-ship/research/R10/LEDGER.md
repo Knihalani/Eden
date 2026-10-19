@@ -1933,3 +1933,11 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   hub entities need their own fixed-size cards, and the entity channel should use only rarer entities. The time
   channel stays small. Over this range (tens to hundreds of rows) G0's top-15 recall does not fall with N; whether
   it holds at 10^5 rows is untested. The projections extrapolate 2–4 orders of magnitude past the data.
+
+## C11-E7 · 2026-10-19 · Entity channel without hub entities (pre-registration; exploratory)
+- **Idea (from C11-E6):** hub entities (on many rows) make the entity channel grow with the store. Restrict the
+  channel to entities on at most H rows of the visible store, H = max(5, 0.02 · N); hub entities are left to
+  dream-kept entity cards (not tested here).
+- **Measure:** as C11-E6 for the restricted channel (slope, median share of N), and its recall of needed items
+  with a covering row next to the full entity channel's.
+- **No verdict rule.**
