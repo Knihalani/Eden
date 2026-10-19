@@ -1,0 +1,105 @@
+{
+ "responder": "sonnet (claude-code subagent)",
+ "items": [
+  {
+   "id": "code-s107-e006#0",
+   "response": "I'll add a public /pricing page with the plans rendered from a typed data file, and a /settings/team page that lists org members for signed-in users only. I'll check how route protection is set up so pricing is reachable signed out and the team page is protected and scoped to the user's current org. I don't have the real plan names or prices, so I'll use clearly marked placeholders for you to fill in.\nAction: read the app's routing and auth middleware, then add the pricing page with its plans data file and the team page with a members fetch, plus tests."
+  },
+  {
+   "id": "code-s036-e010#0",
+   "response": "I'll add `--since <date>` to `acme invoices export` and pass it through as the `since` query param, validating the YYYY-MM-DD format so a bad value fails with a clear message. Since it's public CLI behavior I'll also update the CLI docs (docs/cli.md).\nAction: open the export command, add the option and validation, add tests, and update docs/cli.md."
+  },
+  {
+   "id": "code-s018-e010#0",
+   "response": "I don't know which Node major the team uses, and I won't guess it. I'll infer it from the repo (CI config, Dockerfile, lockfile or the version currently in use) and ask you if those disagree. Then `.nvmrc` and an `engines` range in the root package.json will match.\nAction: check the repo for the Node version in use, report it, and add .nvmrc at the root plus the engines field in the root package.json."
+  },
+  {
+   "id": "code-s020-e034#0",
+   "response": "You're welcome. The full web unit suite and the typecheck are still running, so I don't have results yet.\nAction: wait for both to finish and post the results."
+  },
+  {
+   "id": "code-s043-e000#0",
+   "response": "I'll add Storybook stories for the badge sizes (checking at port 6006 via `pnpm --filter web storybook`). For Sam's question I won't answer from memory: I need to look at whether the status filter fires any analytics or tracking events.\nAction: find the Badge component and its size variants, write the stories, run Storybook to verify, and search the status filter code for tracking calls and tell you what I find."
+  },
+  {
+   "id": "code-s007-e006#0",
+   "response": "Good, team=payments stays. For trailmix: disable the save button while the request is in flight (`hx-disabled-elt=\"this\"`) and add `hx-sync=\"this:drop\"` on the form so the second click is dropped. Also make the server tolerate a duplicate (a unique constraint or a check) since a client-side guard alone can't prevent every double post.\nAction: if you share the add-hike template and view, I'll apply the htmx attributes and add the server-side duplicate check."
+  },
+  {
+   "id": "code-s071-e014#0",
+   "response": "I'll add one structured log line per org in the overdue reminder job saying what it decided (processed or skipped), the reason, and how many candidate invoices it saw, so the silent skips become visible. I'll log org ids and counts only, no emails or other personal data. Your uncommitted csv changes stay untouched.\nAction: read the job, add the per-org decision logging through the existing logger, add a test that the skip reasons are logged, and run the worker tests."
+  },
+  {
+   "id": "code-s076-e017#0",
+   "response": "I'll fix the \"recieve\" on the reports page and grep the repo case-insensitively for other misspellings (recieve, recieved, recieving). My notes say the invoices empty state also has a \"recieve\" typo, so that one should turn up. Anything that is an API-visible value or identifier I'll report instead of changing, since changing it could break consumers.\nAction: grep for the variants outside node_modules, fix UI copy and comments, and send you a list of any remaining occurrences I left alone."
+  },
+  {
+   "id": "code-s105-e015#0",
+   "response": "I'll write a slugify that normalizes accents (NFKD, strip combining marks), lowercases, turns non-alphanumerics into dashes, collapses repeats, trims leading and trailing dashes, and cuts at 64 chars without leaving a trailing dash. \"Café Müller\" becomes \"cafe-muller\", and I'll decide what an all-symbol name returns (empty string) in the tests.\nAction: check if the repo already has a slugify helper, otherwise add one in the shared lib with tests for accents, dash collapsing, the 64-char limit and empty input."
+  },
+  {
+   "id": "code-s058-e007#0",
+   "response": "I'll build the company profile form with company name, tax id and sender email, requiring name and email on both client and server (with an email format check), and tax id optional. I'll follow how existing settings forms are built, and check what endpoint or action the profile saves to instead of assuming one.\nAction: look at the existing settings pages, add the form and its save action, add validation tests, and run the web tests."
+  },
+  {
+   "id": "code-s007-e027#0",
+   "response": "I'll add retry with exponential backoff in the CLI api client for 502, 503 and 504, 3 tries total, with a bit of jitter and no retries on other statuses. I'll only retry idempotent requests (like GET) so a retried POST can't create duplicates. This goes on its own branch, separate from the uncommitted bucket and exports empty-state work.\nAction: find the CLI api client, implement the retry with an injectable sleep, add tests for success after a 502 and for giving up after 3 tries, and run the CLI tests."
+  },
+  {
+   "id": "code-s108-e000#0",
+   "response": "I'll write the browser test for the full flow: new invoice, pick client, add a line, save, send. I don't know which browser test framework is set up here, so I'll check and follow its patterns. I'll also check how the existing tests handle sign-in and seeded data so it runs against the local dev server reliably.\nAction: look for the existing e2e config and specs, write the flow test with stable selectors, run it against the local dev server, and report the result."
+  },
+  {
+   "id": "code-s080-e024#0",
+   "response": "I'll add msw as a devDependency in packages/cli using the package manager's add command so the lockfile updates with it, then use it in the invoices tests to mock the http calls. Since PR #1192 is already open, I'll ask whether this should go onto that branch or a separate one before I push anything.\nAction: run the add for packages/cli, set up an msw server in the invoices tests, run the CLI tests, and check with you on where to commit it."
+  },
+  {
+   "id": "code-s028-e017#0",
+   "response": "I'll add the duplicate button next to the trash button using the shadcn/ui Button from apps/web/components/ui and a lucide-react icon, not the hand-rolled icons. Since it is icon-only it gets an aria-label (like \"Duplicate line item <description>\") with the icon aria-hidden, same as the trash button.\nAction: open the line item row, add the button and a handler that clones the line with a new id, add a test, and run the web tests."
+  },
+  {
+   "id": "code-s088-e008#0",
+   "response": "The common thread: every error is TS1484, where a name that is only a type (ClientRow, Invoice, InvoiceFilters, FastifyPluginAsync and so on) is imported with a regular import while `verbatimModuleSyntax` is on. The fix is `import type { ... }` or an inline `type` modifier on those names. This can be done mechanically with an import-type autofix if the linter is set up for it.\nAction: check whether verbatimModuleSyntax is newly enabled in the tsconfig, run the autofix across the affected files, and re-run the typecheck to confirm the list is empty."
+  },
+  {
+   "id": "code-s067-e006#0",
+   "response": "`docker compose up -d` creates (or recreates) the containers, networks and volumes from the compose file, applies any config changes, and starts them in the background. `docker compose start` only starts containers that already exist and are stopped, with no creation and no config changes, and it errors if they were never created. For setup like the contractor's, use `up -d`.\nAction: nothing to change; ready to pick the CSV fix release prep back up whenever you are."
+  },
+  {
+   "id": "code-s013-e000#0",
+   "response": "There are real differences. `structuredClone` keeps Dates as Dates and handles Map, Set, typed arrays, undefined values, BigInt and circular references, while the JSON round trip turns Dates into strings, drops undefined and functions, and throws on cycles and BigInt. `structuredClone` throws on functions and loses class prototypes, so the JSON trick is only useful when you want a JSON-safe copy. Otherwise prefer `structuredClone`.\nAction: none needed; I can grep the repo for JSON.parse(JSON.stringify(...)) copies and review them if you want."
+  },
+  {
+   "id": "code-s020-e019#0",
+   "response": "Understood: from now on I'll run the change end to end in the real app (browser or CLI flow) before opening a PR, not just unit tests, and say what I ran and what I couldn't. The date picker case is a good example of why. I won't open a PR on anything until I've done that.\nAction: apply this to the next change; ping me with what you find in Safari on the font change."
+  },
+  {
+   "id": "code-s108-e027#0",
+   "response": "I'll grep apps/api and services/worker case-insensitively for the recieve variants and fix comments, log messages and other internal text. If a misspelling is in an API response value or a public identifier, I'll flag it instead of changing it, since clients may depend on that exact string.\nAction: grep for the variants in both directories, fix the safe ones, list anything API-visible that I left, and run the worker and api tests."
+  },
+  {
+   "id": "code-s058-e012#0",
+   "response": "I'll add `memo` as an optional string with a max of 500 chars to the POST /v1/invoices zod schema, since runtime validation uses zod, and carry it through the handler and storage. I don't know yet whether a database column exists for it, so I'll check and create a migration if needed. For the docs, I'll see whether the API docs are generated from the schemas and regenerate, or edit the docs source.\nAction: find the create-invoice schema and handler, add the field through each layer with tests for exactly 500 and 501 chars, and update the API docs."
+  },
+  {
+   "id": "code-s045-e000#0",
+   "response": "I'll add a worker job that loads the org, skips if callback_url is empty, and POSTs an invoice.paid event with a stable event id and a timeout, throwing on non-2xx so the queue retries. Because redeliveries caused duplicate reminders before, I'll make delivery idempotent per invoice and event so a redelivery doesn't send twice. I'll validate the callback URL (https, no internal addresses) and keep the URL out of logs and errors.\nAction: read an existing job in services/worker/src/jobs for the conventions, write the job and tests, and find where invoices become paid to show where it should be enqueued."
+  },
+  {
+   "id": "code-s060-e000#0",
+   "response": "The badge is probably checking only the due date, so paid invoices past their due date show Overdue; it should require a status where the invoice is still owed. My notes also mention the dashboard overdue count including drafts, so I'll check whether it shares this logic, but won't change it without telling you. I'll leave the due-date helper and sort toggle for later.\nAction: find the badge component and the status type, fix the condition in one shared place, add tests for paid, draft and unpaid past-due, and tell you if the dashboard count uses the same code."
+  },
+  {
+   "id": "code-s055-e005#0",
+   "response": "Parking the timing work (I still need the framework answer). Duplicate emails in the seed likely come from random generation colliding, so the unique index fails now and then. I'll make emails unique by construction instead of hoping for no collisions.\nAction: read the seed script, change email generation to be unique (for example, include the index or dedupe with a set), and run the seed repeatedly to confirm it no longer fails."
+  },
+  {
+   "id": "code-s070-e000#0",
+   "response": "That sounds draining. Two hours of roadmap slides will do it. Take a minute, and tell me whenever you're ready to get into something.\nAction: wait for your next task."
+  },
+  {
+   "id": "code-s066-e028#0",
+   "response": "I'll add a ServiceMonitor template to the worker chart in infra/helm/worker that scrapes port 9464 at /metrics, with an enable flag in values.yaml and turned on in values-prod.yaml. I'll check the worker Service exposes a named metrics port and what labels your Prometheus selects ServiceMonitors by, so Grafana actually sees it.\nAction: read the worker chart's templates and values, add the ServiceMonitor with the flag, and render it with `helm template` and lint to verify, without deploying."
+  }
+ ]
+}
