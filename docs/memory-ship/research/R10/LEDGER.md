@@ -792,3 +792,31 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - n = 15 in the small groups.
   - All models are Claude.
   - The judge reported that some reference facts contradict each other (for example Express 4 vs Fastify 5), and scored against the later fact. The world's superseded links may be incomplete; to check.
+
+## C5-E2 · 2026-10-19 · Outcome utility per turn (descriptive, post hoc; no kill line)
+- **Method** (`utility.py`): utility = (need events × recall × G − no-need events × (1 − silence) × C) / human events.
+  - G = +1.233 and C = 0.467 come from C5-E1, code.
+  - Assumptions:
+    - every system's wrong packet costs what the vote's did;
+    - life uses code's C;
+    - code plan labels undercount needs (C4-E13), so firing systems are under-credited on code.
+  - It is the same judge sample as the frontier (dev) and the rt1 fresh split.
+- **Numbers (utility per human turn; recall / silence from score.py):**
+
+  | System | code dev | life dev | code-rt1 | life-rt1 |
+  |---|---|---|---|---|
+  | eden (plugin today) | **−0.2202** (0.091 / 0.173) | **−0.2316** (0.044 / 0.056) | — | — |
+  | hook vote | −0.0104 | −0.0174 | — | — |
+  | lex tau=4,when=1,gate=1 | — | — | −0.0723 | −0.1554 |
+  | F22 verify seq | +0.0347 | +0.0559 | **+0.1155** | +0.0138 |
+  | F22b cal p=0.5 | +0.0690 | +0.0651 | +0.0948 | +0.0112 |
+  | F22b cal p=0.6 | +0.0973 | +0.0751 | +0.1019 | −0.0067 |
+  | F22b cal p=0.7 | +0.1232 | +0.0795 | +0.0708 | +0.0179 |
+  | pull k=2 (agent asks) | +0.1097 | +0.1070 | — | — |
+  | judge (opus, batched; optimistic) | +0.1708 | +0.2018 | — | — |
+
+- **Reading:**
+  - **The plugin as it ships today likely makes the agent's replies worse on average** (−0.22 per turn on both worlds): it fires on 83–94% of no-need turns and finds under 10% of needs. This rests on the assumption that its wrong packets cost what the vote's did. Its bullets are mostly the user's own past prompts, which may cost less; a direct downstream run of eden's packets is needed to confirm. **This is the most important open measurement.**
+  - Cheap hook-side matching is at about zero.
+  - The off-hook verifier is the only push method clearly positive on every split, and best on code-rt1 when uncalibrated (seq).
+  - On utility, a mid threshold (p 0.6) is a reasonable dev/fresh compromise on code. On life-rt1 every verifier variant is near zero.
