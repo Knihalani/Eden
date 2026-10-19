@@ -1,0 +1,96 @@
+{
+ "judge": "opus (claude-code subagent)",
+ "evidence": true,
+ "cases": [
+  {
+   "event": "code-s070-e002",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All give accurate structuredClone vs JSON round-trip differences concisely."
+  },
+  {
+   "event": "code-s070-e004",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Brief acknowledgment, nothing pending; all fine."
+  },
+  {
+   "event": "code-s070-e012",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All leave yarn.lock alone and fix single-name initials with tests."
+  },
+  {
+   "event": "code-s071-e012",
+   "scores": [
+    2,
+    3,
+    2
+   ],
+   "why": "R1 offers commit; R0 and R2 bring up Lena's #479 nits unprompted, a distraction."
+  },
+  {
+   "event": "code-s076-e005",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "Light reply, rename status accurate in all."
+  },
+  {
+   "event": "code-s076-e014",
+   "scores": [
+    3,
+    2,
+    3
+   ],
+   "why": "R1 wrongly says test runs are done; web e2e was still running."
+  },
+  {
+   "event": "code-s076-e025",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All correctly distinguish keep-alive sequential reuse from HTTP/2 multiplexing."
+  },
+  {
+   "event": "code-s077-e013",
+   "scores": [
+    2,
+    2,
+    2
+   ],
+   "why": "All raise the lockfile but ask which install command, though repo is known to be pnpm 9."
+  },
+  {
+   "event": "code-s080-e036",
+   "scores": [
+    3,
+    3,
+    2
+   ],
+   "why": "R0/R1 correct; R2 distracts with overdue status and defers tests over install question despite known pnpm."
+  },
+  {
+   "event": "code-s080-e046",
+   "scores": [
+    3,
+    3,
+    3
+   ],
+   "why": "All grep for typo, fix help text and clients.ts, handle tests/snapshots, run CLI tests."
+  }
+ ]
+}
