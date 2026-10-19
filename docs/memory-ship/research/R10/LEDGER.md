@@ -648,3 +648,23 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   - C3-E4's "a wrong packet hurts" (vote −0.40 on no-need) does not reproduce with the fixes (vote − none = 0.0). That claim is withdrawn: wrong bullets cost tokens but showed no measured outcome harm at n = 15.
   - The vote keeps about 21% of the available benefit on code plan turns (0.167 of 0.8).
 - **Caveats:** one responder run per condition; n = 15 in the small groups; all models are Claude; life has no system condition yet.
+
+## C4-E12 · 2026-10-19 · Judge ceiling, one case per call
+- **Setup:** `judge.py prep-seq --n 30` takes a seeded subsample (seed 21) of the judge sample's dev human events. Each case gets its own file with the store visible at its own moment, in stream order. Judge: opus, same prompt as the ceiling.
+  - Compared on the same 30 events (`score.py --only seq`) with the batched judge (15 cases per call) and F22 seq.
+  - The judges reused rows already read from earlier files and read only new rows, from past files only.
+- **Numbers (human; plan labels):**
+
+  | World | System | Need / neg events | Recall | Precision | Silence |
+  |---|---|---|---|---|---|
+  | code | judge, one per call | 9 / 21 | 0.6111 | 0.2439 | 0.6667 |
+  | code | judge, batched | 9 / 21 | 0.5556 | 0.3448 | 0.8095 |
+  | code | F22 seq | 9 / 21 | 0.5741 | 0.1915 | 0.5714 |
+  | life | judge, one per call | 11 / 19 | 0.5 | 0.1364 | 0.3684 |
+  | life | judge, batched | 11 / 19 | 0.4091 | 0.186 | 0.5789 |
+  | life | F22 seq | 11 / 19 | 0.0909 | 0.05 | 0.4737 |
+
+- **Verdict:** batching flatters the strong judge too: silence −0.14 on code and −0.21 on life when it sees one case at a time (n = 21 and 19 negatives, so wide error).
+  - The judge "ceiling" rows in STATE overstate silence.
+  - Even opus, honestly fed, fires on about a third (code) to two thirds (life) of plan-no-need turns.
+- **Open question this raises:** are those fires wrong, or are the plan labels missing real needs? The C4-E8 draft check suggested some "no-need" turns do benefit from episodic memory. C4-E13 runs opus's no-need-turn picks through the fixed downstream harness to decide.
