@@ -8,6 +8,7 @@ hold the row, then lexical score, cut at 150; one Jev request per turn with the 
     python3 benchmarks/memory-stream/wide_check.py --world code --implied [--report]  (C11-E10: implied steps)
     python3 benchmarks/memory-stream/wide_check.py --world code --applies [--report]  (C11-E11: applies-when)
     python3 benchmarks/memory-stream/wide_check.py --world code --repeat [--report]   (C11-E12: average two calls)
+    python3 benchmarks/memory-stream/wide_check.py --world code --bank [--report]     (C11-E13: self-play examples)
 → dream/<world>/wide/out.json: {event: {"need": [...], "pool": [...], "scores": {row: p}, "latency_s": s}}
 """
 import argparse, glob, json, os, random, sys
@@ -270,13 +271,25 @@ def with_when(row):
     return row["text"] + (f" (Applies when: {'; '.join(acts)}.)" if acts else "")
 
 
-def applies(world, rep=False):
-    """C11-E11: C11-E8's request with each row's `when.activities` appended to its text."""
-    import judge
+def with_bank(ex):
+    def f(row):
+        e = ex.get(row["id"])
+        if not e:
+            return row["text"]
+        return (row["text"] + " Requests this helps with: " + "; ".join(e.get("pos", [])[:3]) + ". Not for: "
+                + "; ".join(e.get("neg", [])[:2]) + ".")
+    return f
+
+
+def applies(world, rep=False, variant="applies"):
+    """C11-E11: C11-E8's request with each row's `when.activities` appended to its text. C11-E13 (`bank`): the
+    row's first three self-play `pos` requests and first two `neg` appended in the questions only."""
+    import judge, selfplay
     g = Generators(world)
     d = os.path.join(HERE, "dream", world, "wide")
     wide = json.load(open(os.path.join(d, "out.json")))
-    path = os.path.join(d, "applies.json")
+    path = os.path.join(d, f"{variant}.json")
+    bank = with_bank(selfplay.exemplars(world)) if variant == "bank" else None
     out = json.load(open(path)) if os.path.exists(path) else {}
     if not rep:
         cfg = env()
@@ -288,9 +301,12 @@ def applies(world, rep=False):
                 continue
             rec = {"scores": {}, "latency_s": None}
             if r["pool"]:
+                text = bank if bank else with_when
                 case = {"text": M.strip_paste(ev[eid]["text_all"])[:3000], "recent": judge.context(g.stream, eid, 4),
-                        "candidates": [{"id": i, "text": with_when(g.by_id[i])} for i in r["pool"]]}
+                        "candidates": [{"id": i, "text": text(g.by_id[i])} for i in r["pool"]]}
                 state, qs = request(case, "list")
+                if bank:
+                    state["memory_candidates"] = [g.by_id[i]["text"] for i in r["pool"]]
                 ans, secs, attempts = {}, 0.0, 0
                 for part in chunks(state, qs):  # over Jev's 64k-token limit: same state, questions split
                     reply, t, n_try = call(cfg, state, part, timeout=120)
@@ -394,8 +410,11 @@ if __name__ == "__main__":
     ap.add_argument("--implied", action="store_true", help="C11-E10 implied-step question")
     ap.add_argument("--applies", action="store_true", help="C11-E11 applies-when in the rows")
     ap.add_argument("--repeat", action="store_true", help="C11-E12 average two calls")
+    ap.add_argument("--bank", action="store_true", help="C11-E13 self-play examples in the rows")
     a = ap.parse_args()
-    if a.repeat:
+    if a.bank:
+        applies(a.world, rep=a.report, variant="bank")
+    elif a.repeat:
         repeat(a.world, rep=a.report)
     elif a.applies:
         applies(a.world, rep=a.report)
