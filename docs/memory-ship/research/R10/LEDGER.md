@@ -2101,3 +2101,34 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **What this says:** cards keep almost all of what the unbounded action set found in life (0.80 vs 0.88) inside a
   bounded pool, and lift the bounded union from 0.71 to 0.88. The gap to the uncapped union (0.97) is what hub
   entity cards and the episode layer are for (C11-E5, C11-E7).
+
+## C11-R · 2026-10-20 · Review round 1 corrections to C11 entries
+Written after every result was read. It corrects the entries above without editing them.
+- **Rounded figures, now exact** (`recall_funnel.py` now prints k/n = .3f in `channels`, `actions` and `cards`):
+  - C11-E2, thr 0.5: action 56/58 = 0.966 (written 0.97) / 61/69 = 0.884; union 58/58 = 1.000 / 67/69 = 0.971;
+    capped union 48/58 = 0.828 (written 0.83) / 49/69 = 0.710.
+  - C11-E2, thr 0.3: action 57/58 = 0.983 / 63/69 = 0.913; capped 47/58 = 0.810 / 48/69 = 0.696 (written 0.70).
+  - C11-E4 code: cards 49/58 = 0.845; G0 + entity + time capped 45/58 = 0.776 (written 0.78); union with cards
+    56/58 = 0.966 (written 0.97; also in a commit title).
+  - C11-E4 life: cards 55/69 = 0.797 (written 0.80); capped 45/69 = 0.652; union with cards 61/69 = 0.884.
+  - C11-E1 channel union: 47/58 = 0.810 / 52/69 = 0.754.
+  - C11-E8 "a cap of 8 instead of 4 buys 5–8 points": 5.2 (code) and 7.9 (life) points.
+- **C11-E4 scorer:** a dead clause in `cards()` (a cited row counted if it covers the item, already implied by the
+  set intersection) is removed; the counts are unchanged (49/58, 55/69).
+- **C11-E6 wording:** "hub entities sit on a fifth of all rows" restated a different measure: 0.195 is the life
+  entity channel's median share of the store per turn.
+- **C11-E8 table:** pool size and latency rows cover only turns with a non-empty pool (code 102 of 110, life 145 of
+  158). Measured input tokens per request (`usage`): median 38,176 (code) and 58,703 (life), max 63,253 / 65,503;
+  about 62k at pools ≥ 140, so a 150-row request is already at Jev's 64k-token limit.
+- **C11-E11 amendment:** it was committed together with the result, so git cannot show it preceded the result, and
+  it was incomplete.
+  - Life's first 60 turns also ran before the split existed (13 with an empty pool, 47 sent whole). In code, 43
+    non-empty turns were sent whole (51 with the 8 empty ones).
+  - "Split turns 36 / 78" counts turns actually split; applying the 200k-character rule to every turn gives 39 /
+    87. Of the turns sent whole, 3 (code) and 9 (life) were over that threshold and Jev accepted them.
+  - The latency figures mix whole requests with slowest parts, and the parts were sent one after another; parallel
+    parts are unmeasured. The recall and firing numbers stand as measured on this mixed run.
+- **C11-E12 wording:** the cause of C10-R's packet-level disagreement (small differences compounding over a packet's
+  rows) is a likely explanation, untested.
+- **`wide_post.py` and `wide_misses.py`** used paths relative to their own directory; they now run from the repo
+  root, and print the same numbers.
