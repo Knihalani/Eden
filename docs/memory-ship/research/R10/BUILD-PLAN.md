@@ -34,8 +34,8 @@ What the research found (cycle 11):
   Dropping hub entities bounds the entity channel but loses a quarter to a half of what it found (C11-E7).
 - **Dreaming can compress them into fixed-size cards** (C11-E4, code): a card per action type, at most 20 lines, kept
   up to date batch by batch, each line citing the rows behind it. Cards alone reach 84%; with the other bounded
-  channels, 97%, in a pool of 77 lines and rows at the median (138 max) that does not grow with the store. Personal
-  world: running.
+  channels, 97% (code) and 88% (personal), in a pool of 77 / 82 lines and rows at the median (138 / 153 max) that
+  does not grow with the store. The personal world's bounded union without cards was 71%.
 - **Dreaming drops episodes and tool results** (C11-E3): what happened in a session (an order placed, a route
   looked up, a booking made) mostly never becomes a row. A per-session episode layer raises the personal world's
   ceiling from 67% to 81% (C11-E5): episodes 4 → 11 of 15, tool results 1 → 7 of 8.
@@ -214,7 +214,7 @@ about $0.001–0.0015 per turn. 10^6 users × 50 turns a day ≈ $50–75k a day
 | Step | Today | Lever | Evidence | Target |
 |---|---|---|---|---|
 | Fact in the store | 84 / 67% | episode layer, kept tool results, instant capture | C11-E5: 67 → 81% (life) | ≥ 95% |
-| In the bounded pool | 61 / 40% at 15 rows | typed channels + action cards + hub cards | C11-E4: 97% (code) at pool ≤ 138 | ≥ 97% |
+| In the bounded pool | 61 / 40% at 15 rows | typed channels + action cards + hub cards | C11-E4: 97 / 88% at pool ≤ 153 | ≥ 97% |
 | Checker keeps it | 0.64–0.74 of what it is shown at ~150 (0.76–0.89 of G0's rows) | see below | C11-E8 | ≥ 95% |
 | Delivered in time | most | delivery at Submit for no-tool turns | C8-E1 | ≥ 98% |
 
@@ -232,14 +232,16 @@ The checker is now the weakest step. Work on it, in order of expected value:
    check. Worth keeping (it costs nothing but tokens); requests over 64k tokens must be split.
 5. **Average two calls: tested, no gain** (C11-E12). Under 0.4% of row decisions flip between calls; recall is
    the same.
-6. **Learn from feedback.** Per-user calibration of the threshold from what the agent used.
-7. **Deliver more when it is cheap.** Up to 8 lines; no measured harm on turns that needed nothing (C6/C10 outcome
+6. **Show the bank's example requests: tested, a trade** (C11-E13). Jev fires on far fewer no-need turns (life
+   38 → 20 of 79) and finds fewer needed rows (life 0.714 → 0.667 at top 8). Useful if precision matters more.
+7. **Learn from feedback.** Per-user calibration of the threshold from what the agent used.
+8. **Deliver more when it is cheap.** Up to 8 lines; no measured harm on turns that needed nothing (C6/C10 outcome
    tests). The cost to watch is context bloat, which A5's counter-metrics already track.
 
 Honest status: no configuration measured so far reaches 95% end to end. The pieces measured give, multiplied, about
 0.95 × 0.97 × 0.8 ≈ 0.74 if the store, pool and checker targets for steps 1–2 are met and the checker improves to
-0.8. Getting the checker from 0.7 to 0.95 is the open research problem of this plan. The four designs
-tried (C11-E9 to E12) all land at 0.75–0.81 on code and 0.71–0.75 on life: the misses left are rows whose link
+0.8. Getting the checker from 0.7 to 0.95 is the open research problem of this plan. The five designs
+tried (C11-E9 to E13) all land at 0.75–0.81 on code and 0.71–0.75 on life: the misses left are rows whose link
 to the turn takes a step of reasoning (a YouTube embed → the site's CSP headers). Two routes remain: have dreaming
 write those links ahead of time (concrete situations per row, as the self-play bank does for prompts), or send
 only the hard cases to a slower reasoning model and deliver at a later tool call.
@@ -313,7 +315,6 @@ B1–B3 are dreaming and can proceed without the checker decision. B4–B5 depen
 ## 15. What is not known yet
 
 - Everything here is measured on synthetic worlds of hundreds of rows; the scale numbers are projections until B6.
-- Action cards in the personal world (C11-E4 life) are still being written.
 - Whether a dream model can keep cards accurate over years (drift, stale lines) is untested; the card run covers 11
   and 16 batches.
 - The checker's accuracy is the main open problem (section 8).

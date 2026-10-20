@@ -2083,3 +2083,21 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   pool, question, threshold (p ≥ 0.7) and caps as C11-E8; requests over the size limit are split as in C11-E11.
 - **Measure:** as C11-E11 (top 4 and top 8), next to C11-E8's run 1.
 - **No verdict rule.**
+- **Result (2026-10-20, `python3 benchmarks/memory-stream/wide_check.py --world <w> --bank`):**
+  - code: top 4 40/58 = 0.690, top 8 43/58 = 0.741 (C11-E8: 0.741, 0.793); no-need turns with a pick 22/55 (was
+    29); picks per turn 1.88 / 2.25; p50 0.407 s, p90 0.486 s.
+  - life: top 4 40/63 = 0.635, top 8 42/63 = 0.667 (C11-E8: 0.635, 0.714); no-need 20/79 (was 38); need turns with
+    a pick 61/79 (was 71); picks 1.08 / 1.25; p50 0.447 s, p90 0.523 s.
+- **What this says:** the examples make Jev stricter, not sharper: it fires on far fewer no-need turns (life
+  38 → 20) and also finds fewer needed rows. A trade along the same curve, not a better checker.
+
+## C11-E4 result (life) · 2026-10-20
+- **Result (`python3 benchmarks/memory-stream/recall_funnel.py --worlds life --cards`):** 16 incremental batches
+  (the card agent stopped once on a usage limit after b13 and was resumed; it checked b13 before writing b14–b15).
+  Every card ≤ 20 lines, every line cites rows, none from a later batch (agent's check). Needed items with a covering
+  row: 69. Cards alone 0.80; G0 + entity + time capped 0.65; union with cards 0.88. Card lines per turn median / max
+  51 / 114; pool (rows + card lines) median / max 82 / 153.
+  Compare C11-E2 (life): capped union 0.71 at a pool of 36; uncapped action channel 0.88, uncapped union 0.97.
+- **What this says:** cards keep almost all of what the unbounded action set found in life (0.80 vs 0.88) inside a
+  bounded pool, and lift the bounded union from 0.71 to 0.88. The gap to the uncapped union (0.97) is what hub
+  entity cards and the episode layer are for (C11-E5, C11-E7).
