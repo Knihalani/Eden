@@ -2075,3 +2075,11 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **What this says:** at the row level Jev is nearly deterministic (under 0.4% of decisions flip), so averaging
   two calls buys nothing. C10-R's ~10% packet-level disagreement comes from small differences compounding over a
   packet's rows, not from noisy rows.
+
+## C11-E13 · 2026-10-20 · Show the checker each row's self-play examples (pre-registration; exploratory)
+- **Idea (BUILD-PLAN §8, "dream writes the links ahead of time"):** the self-play bank (F4) already holds, per row,
+  six requests that need it and six near misses, written at sleep time. In each question's `row`, append "Requests
+  this helps with: <first 3 pos>. Not for: <first 2 neg>." The candidate list in the state stays plain text. Same
+  pool, question, threshold (p ≥ 0.7) and caps as C11-E8; requests over the size limit are split as in C11-E11.
+- **Measure:** as C11-E11 (top 4 and top 8), next to C11-E8's run 1.
+- **No verdict rule.**
