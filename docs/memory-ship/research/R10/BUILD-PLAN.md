@@ -230,16 +230,16 @@ The checker is now the weakest step. Work on it, in order of expected value:
 4. **Show the dream's "applies when": tested, small mixed gain** (C11-E11). Best where the cap is tight (life,
    top 4: 0.635 → 0.714) and fewer no-need fires on code (29 → 23); at top 8 within an item or two of the plain
    check. Worth keeping (it costs nothing but tokens); requests over 64k tokens must be split.
-5. **Average two calls.** Repeat calls disagree on about 10% of packets (C10-R); averaging two parallel calls costs
-   no time.
+5. **Average two calls: tested, no gain** (C11-E12). Under 0.4% of row decisions flip between calls; recall is
+   the same.
 6. **Learn from feedback.** Per-user calibration of the threshold from what the agent used.
 7. **Deliver more when it is cheap.** Up to 8 lines; no measured harm on turns that needed nothing (C6/C10 outcome
    tests). The cost to watch is context bloat, which A5's counter-metrics already track.
 
 Honest status: no configuration measured so far reaches 95% end to end. The pieces measured give, multiplied, about
 0.95 × 0.97 × 0.8 ≈ 0.74 if the store, pool and checker targets for steps 1–2 are met and the checker improves to
-0.8. Getting the checker from 0.7 to 0.95 is the open research problem of this plan. The three question designs
-tried (C11-E9 to E11) all land at 0.75–0.81 on code and 0.71–0.75 on life: the misses left are rows whose link
+0.8. Getting the checker from 0.7 to 0.95 is the open research problem of this plan. The four designs
+tried (C11-E9 to E12) all land at 0.75–0.81 on code and 0.71–0.75 on life: the misses left are rows whose link
 to the turn takes a step of reasoning (a YouTube embed → the site's CSP headers). Two routes remain: have dreaming
 write those links ahead of time (concrete situations per row, as the self-play bank does for prompts), or send
 only the hard cases to a slower reasoning model and deliver at a later tool call.
