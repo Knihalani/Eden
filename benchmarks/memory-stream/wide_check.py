@@ -6,6 +6,7 @@ hold the row, then lexical score, cut at 150; one Jev request per turn with the 
     python3 benchmarks/memory-stream/wide_check.py --world code --report
     python3 benchmarks/memory-stream/wide_check.py --world code --second [--report]   (C11-E9: narrow second pass)
     python3 benchmarks/memory-stream/wide_check.py --world code --implied [--report]  (C11-E10: implied steps)
+    python3 benchmarks/memory-stream/wide_check.py --world code --applies [--report]  (C11-E11: applies-when)
 → dream/<world>/wide/out.json: {event: {"need": [...], "pool": [...], "scores": {row: p}, "latency_s": s}}
 """
 import argparse, glob, json, os, random, sys
@@ -248,14 +249,92 @@ def implied(world, rep=False):
           f"; implied call p50 {lat[len(lat) // 2]:.3f} s, p90 {lat[int(0.9 * len(lat))]:.3f} s")
 
 
+def chunks(state, qs, limit=200_000):
+    """Split the questions so each request (state + its questions) stays under `limit` JSON characters (≈ 50k
+    tokens at 4 characters a token; a 270k-character body was refused as over 64k tokens)."""
+    base = len(json.dumps(state)) + 200
+    out, cur, size = [], {}, base
+    for k, q in qs.items():
+        n = len(json.dumps({k: q}))
+        if cur and size + n > limit:
+            out.append(cur)
+            cur, size = {}, base
+        cur[k] = q
+        size += n
+    return out + [cur] if cur else out
+
+
+def with_when(row):
+    acts = [a for a in (row.get("when") or {}).get("activities") or [] if a]
+    return row["text"] + (f" (Applies when: {'; '.join(acts)}.)" if acts else "")
+
+
+def applies(world, rep=False):
+    """C11-E11: C11-E8's request with each row's `when.activities` appended to its text."""
+    import judge
+    g = Generators(world)
+    d = os.path.join(HERE, "dream", world, "wide")
+    wide = json.load(open(os.path.join(d, "out.json")))
+    path = os.path.join(d, "applies.json")
+    out = json.load(open(path)) if os.path.exists(path) else {}
+    if not rep:
+        cfg = env()
+        if not cfg["TYPESAFE_API_KEY"]:
+            sys.exit("TYPESAFE_API_KEY must be set (environment or .env)")
+        ev = {e["id"]: e for s in g.stream["sessions"] for e in s["events"]}
+        for eid, r in wide.items():
+            if eid in out:
+                continue
+            rec = {"scores": {}, "latency_s": None}
+            if r["pool"]:
+                case = {"text": M.strip_paste(ev[eid]["text_all"])[:3000], "recent": judge.context(g.stream, eid, 4),
+                        "candidates": [{"id": i, "text": with_when(g.by_id[i])} for i in r["pool"]]}
+                state, qs = request(case, "list")
+                ans, secs, attempts = {}, 0.0, 0
+                for part in chunks(state, qs):  # over Jev's 64k-token limit: same state, questions split
+                    reply, t, n_try = call(cfg, state, part, timeout=120)
+                    ans.update(reply.get("answers", {}))
+                    secs, attempts = max(secs, t), attempts + n_try  # parallel in production: the slowest part
+                rec["scores"] = {i: combine(ans, n, "list") for n, i in enumerate(r["pool"])}
+                rec.update(latency_s=round(secs, 3), attempts=attempts, parts=len(chunks(state, qs)))
+            out[eid] = rec
+            json.dump(out, open(path, "w"), indent=1)
+    for top_n in (4, 8):
+        tot = hit = 0
+        fired = {"need": [0, 0], "no-need": [0, 0]}
+        npk, lat = [], []
+        for eid, r in wide.items():
+            sc = {i: p for i, p in out[eid]["scores"].items() if p is not None}
+            picks = sorted((i for i in sc if sc[i] >= THR), key=lambda i: (-sc[i], i))[:top_n]
+            npk.append(len(picks))
+            if out[eid]["latency_s"] is not None:
+                lat.append(out[eid]["latency_s"])
+            k = "need" if r["need"] else "no-need"
+            fired[k][0] += 1
+            fired[k][1] += bool(picks)
+            for item in r["need"]:
+                cover = [i for i in r["pool"] if item in g.by_id[i]["covers"]]
+                if cover:
+                    tot += 1
+                    hit += any(i in picks for i in cover)
+        lat.sort()
+        print(world, len(out), f"turns; top {top_n}: recall {hit}/{tot} = {hit / tot:.3f};",
+              "turns with any pick", {k: f"{v[1]}/{v[0]}" for k, v in fired.items()},
+              "; picks per turn mean", round(sum(npk) / len(npk), 2),
+              f"; call p50 {lat[len(lat) // 2]:.3f} s, p90 {lat[int(0.9 * len(lat))]:.3f} s")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--world", required=True)
     ap.add_argument("--report", action="store_true")
     ap.add_argument("--second", action="store_true", help="C11-E9 narrow second pass")
     ap.add_argument("--implied", action="store_true", help="C11-E10 implied-step question")
+    ap.add_argument("--applies", action="store_true", help="C11-E11 applies-when in the rows")
     a = ap.parse_args()
-    if a.implied:
+    if a.applies:
+        applies(a.world, rep=a.report)
+    elif a.implied:
         implied(a.world, rep=a.report)
     elif a.second:
         second(a.world, rep=a.report)
