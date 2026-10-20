@@ -43,7 +43,7 @@ What the research found (cycle 11):
   ceiling from 67.0% to 80.6% (C11-E5): episodes 4 → 11 of 15, tool results 1 → 7 of 8.
 - **The checker is fast enough for a wide pool, not yet accurate enough** (C11-E8): Jev checks 150 candidates in
   about half a second (p90 0.556 / 0.624 s), but finds 63.5–74.1% of the needed rows it is shown (top 4 picks) and
-  fires on about half the turns that need nothing. Its requests at 150 rows already use 58–65k input tokens, at
+  fires on about half the turns that need nothing. Its requests at 150 rows already use 57–65k input tokens, at
   Jev's 64k-token limit.
 
 So the design below is: dreaming does the hard work offline and writes bounded structures; the hook reads them
@@ -202,7 +202,7 @@ inverted index stays in milliseconds; the entity and time lookups are key lookup
    - which action types the turn involves (one yes/no per type, 28 today; C11-E2 used this);
    - for the pool plus the lines of those action cards (≤ ~150 items): does the assistant need this now? Measured:
      about 0.25 s and 0.5 s (C10-E1, C11-E8), so both fit in the ~3 s before the first tool call (C8-E4).
-   - A request of 150 rows is already at Jev's 64k-token limit (C11-E8: 58–65k input tokens at pools ≥ 140). Any
+   - A request of 150 rows is already at Jev's 64k-token limit (C11-E8: 57–65k input tokens at pools ≥ 140). Any
      added context (card lines, "applies when") means splitting the questions into parallel requests that each
      carry the state (C11-E11); each part pays for the state again, and parallel parts are unmeasured.
 3. **Delivery** at the turn's first tool call: up to 8 lines (C11-E8: 8 instead of 4 adds 5.2–7.9 points of recall),
