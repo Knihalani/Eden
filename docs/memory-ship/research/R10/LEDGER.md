@@ -2066,3 +2066,12 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   alone and for the average, next to C11-E8's first run; plus the share of (turn, row) pairs whose pick decision
   differs between the two runs.
 - **No verdict rule.**
+- **Result (2026-10-20, `python3 benchmarks/memory-stream/wide_check.py --world <w> --repeat`):**
+  - Pick decisions that differ between the two runs: code 32/9603 = 0.0033 of (turn, row) pairs; life 43/16356 =
+    0.0026.
+  - code top 8: run 1 46/58 = 0.793, run 2 0.793, average 0.793; no-need turns with a pick 29, 27, 27. Top 4:
+    0.741 in all three.
+  - life top 8: 45/63 = 0.714 in all three; no-need 38 in all. Top 4: run 1 0.635, run 2 0.651, average 0.651.
+- **What this says:** at the row level Jev is nearly deterministic (under 0.4% of decisions flip), so averaging
+  two calls buys nothing. C10-R's ~10% packet-level disagreement comes from small differences compounding over a
+  packet's rows, not from noisy rows.
