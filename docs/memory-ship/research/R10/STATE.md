@@ -118,15 +118,16 @@ Families differ in mechanism. Every kill criterion was written before its run.
 
 ## Cycle 11 findings (LEDGER C11-…)
 
-- **Ranked lists fail at scale; typed channels as sets find almost everything** (C11-E1/E2): union 100% / 97% of
+- **Ranked lists fail at scale; typed channels as sets find almost everything** (C11-E1/E2): union 100% / 97.1% of
   needed rows that exist, but the action and hub-entity channels grow in proportion to the store (C11-E6: slope
-  ≈ 1.17) and no cheap cap keeps them (C11-E2: 83% / 71% at 36; C11-E7: dropping hubs loses a quarter to a half).
-- **Dream-kept action cards bound the action channel** (C11-E4): cards alone 0.84 / 0.80, bounded union 0.97 /
-  0.88 (was 0.83 / 0.71 without cards), pool median 77 / 82.
+  ≈ 1.17) and no cheap cap keeps them (C11-E2: 82.8% / 71.0% at 36; C11-E7: dropping hubs loses 24% / 42% of
+  what they find).
+- **Dream-kept action cards bound the action channel** (C11-E4): cards alone 0.845 / 0.797, bounded union 0.966
+  / 0.884 (was 0.828 / 0.710 without cards), pool median 77 / 82.
 - **Dreaming drops episodes and tool results** (C11-E3); a per-session episode layer lifts the life store ceiling
   0.67 → 0.806 (C11-E5).
 - **Jev is fast over a wide pool and plateaus on accuracy** (C11-E8 to E12): 150 candidates in ~0.5 s; recall of
-  shown needed rows 0.74–0.81 (code), 0.64–0.75 (life); a second pass, an implied-step question, "applies when"
+  shown needed rows 0.741–0.810 (code), 0.635–0.746 (life); a second pass, an implied-step question, "applies when"
   context and averaging two calls move it by at most a few items; self-play examples trade recall for fewer
   no-need fires (C11-E13). Row decisions are nearly deterministic (< 0.4%
   flip).
