@@ -2038,4 +2038,23 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
   c.)", in both the candidate list and the question's `row`. Same pool, question, threshold and cap as C11-E8
   (p ≥ 0.7, top 8 in the comparison).
 - **Measure:** as C11-E9, next to C11-E8's one pass at p ≥ 0.7 top 8 (code 0.793 / 29; life 0.714 / 38).
+- **Amendment (2026-10-20, before any result was read):** with the activities appended, some requests exceed Jev's
+  64k-token limit (HTTP 400 `max_tokens_exceeded` on code-s061-e000, 150 rows, 270k characters). Such turns send
+  the same state with the questions split into parts of at most 200k characters; latency is the slowest part (the
+  parts would run in parallel). The first 51 code turns were run whole and are kept.
 - **No verdict rule.**
+- **Result (2026-10-20, `python3 benchmarks/memory-stream/wide_check.py --world <w> --applies`):** split turns:
+  code 36 of 110, life 78 of 158.
+
+  | | code top 4 | code top 8 | life top 4 | life top 8 |
+  |---|---|---|---|---|
+  | applies-when: recall | 44/58 = 0.759 | 45/58 = 0.776 | 45/63 = 0.714 | 47/63 = 0.746 |
+  | C11-E8 one pass: recall | 43/58 = 0.741 | 46/58 = 0.793 | 40/63 = 0.635 | 45/63 = 0.714 |
+  | applies-when: no-need turns with a pick | 23/55 | 23/55 | 39/79 | 39/79 |
+  | C11-E8: no-need turns with a pick | 29/55 | 29/55 | 38/79 | 38/79 |
+  | applies-when: picks per turn | 2.02 | 2.78 | 1.84 | 2.33 |
+
+  Latency p50 / p90: code 0.409 / 0.512 s, life 0.455 / 0.555 s (slowest part for split turns).
+- **What this says:** showing the dream's "applies when" helps most where the cap is tight (life top 4: 0.635 →
+  0.714) and fires on fewer no-need code turns (29 → 23), but at top 8 it is within one or two items of the plain
+  check. Small, mixed gains: another sign the checker plateaus near 0.75–0.8 recall on these worlds.
