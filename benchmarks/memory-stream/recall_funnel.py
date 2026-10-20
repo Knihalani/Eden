@@ -179,7 +179,7 @@ def channels(world):
             for name, S in (("G0@15", g0), ("entity", ent), ("time", tm), ("union", pool)):
                 hits[name] += any(i in S for i in cover)
     pools.sort()
-    print(world, "needed items with a covering row", tot, {k: round(v / tot, 2) for k, v in hits.items()},
+    print(world, "needed items with a covering row", tot, {k: f"{v}/{tot} = {v / tot:.3f}" for k, v in hits.items()},
           "union pool median", pools[len(pools) // 2], "p90", pools[int(0.9 * len(pools))])
 
 
@@ -230,7 +230,7 @@ def actions(world, thr=0.5, caps=(15, 20, 10, 20)):
     pools.sort()
     capped.sort()
     print(world, f"thr {thr}, caps {caps}; needed items with a covering row", tot,
-          {k: round(v / tot, 2) for k, v in hits.items()})
+          {k: f"{v}/{tot} = {v / tot:.3f}" for k, v in hits.items()})
     print("   union pool median / p90", pools[len(pools) // 2], pools[int(0.9 * len(pools))],
           "| capped median / max", capped[len(capped) // 2], capped[-1])
 
@@ -280,13 +280,13 @@ def cards(world, thr=0.5):
             if not cover:
                 continue
             tot += 1
-            in_cards = bool(cover & cited) or any(item in g.by_id[i]["covers"] for i in cited)
+            in_cards = bool(cover & cited)
             hits["cards"] += in_cards
             hits["G0+entity+time capped"] += bool(cover & base)
             hits["union with cards"] += in_cards or bool(cover & base)
     pools.sort()
     lines.sort()
-    print(world, "needed items with a covering row", tot, {k: round(v / tot, 2) for k, v in hits.items()})
+    print(world, "needed items with a covering row", tot, {k: f"{v}/{tot} = {v / tot:.3f}" for k, v in hits.items()})
     print("   card lines per turn median / max", lines[len(lines) // 2], lines[-1],
           "| pool (rows + card lines) median / max", pools[len(pools) // 2], pools[-1])
 

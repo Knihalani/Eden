@@ -8,7 +8,7 @@ experiment id is next to it. Numbers marked **estimate** are arithmetic, not mea
 ## 1. Where we are
 
 The share of needed memories that reach the agent, step by step (dev turns, synthetic worlds, today's design with
-the checker; C11-E3 funnel):
+the checker; C11-E1 pre-registration):
 
 | Step | Code | Personal assistant |
 |---|---|---|
@@ -25,23 +25,26 @@ What the research found (cycle 11):
 - **Ranked lists fail at scale.** One ranked list of the store's rows (the hook's lexical + bank ranking) reaches
   61% / 40% at 15 rows and needs far more rows to reach the rest (C11-E1).
 - **Typed channels find almost everything** (C11-E2): rows tagged with the action the turn involves (booking, deploy,
-  purchase …), rows naming an entity the turn names, and rows dated near the turn. Together they hold 100% / 97% of
+  purchase …), rows naming an entity the turn names, and rows dated near the turn. Together they hold 100% / 97.1% of
   the needed rows that exist.
 - **But two of those channels grow with the store** (C11-E6). The action channel is about 42–48% of the store at
-  every size (slope 1.17); the entity channel grows in proportion in the personal world, because a few hub entities
-  (partner, children, home) sit on a fifth of all rows. Projected to a million rows, they would hand over hundreds of
-  thousands of candidates per turn. Capping them by any cheap order loses a fifth of recall (C11-E2: 83% / 71%).
-  Dropping hub entities bounds the entity channel but loses a quarter to a half of what it found (C11-E7).
-- **Dreaming can compress them into fixed-size cards** (C11-E4, code): a card per action type, at most 20 lines, kept
-  up to date batch by batch, each line citing the rows behind it. Cards alone reach 84%; with the other bounded
-  channels, 97% (code) and 88% (personal), in a pool of 77 / 82 lines and rows at the median (138 / 153 max) that
-  does not grow with the store. The personal world's bounded union without cards was 71%.
+  every size (slope 1.17); the entity channel grows in proportion in the personal world (slope 1.18; median 19.5%
+  of the store per turn), where a few hub entities (partner, children, home) appear on many rows. Extrapolated to a
+  million rows, they would hand over hundreds of thousands of candidates per turn. Capping them by any cheap order
+  loses 17 points of recall on code and 26 on the personal world (C11-E2: 82.8% / 71.0%, from 100% / 97.1%).
+  Dropping hub entities bounds the entity channel but loses 24% (code) and 42% (personal) of what it found (C11-E7).
+- **Dreaming can compress them into fixed-size cards** (C11-E4): a card per action type, at most 20 lines, kept
+  up to date batch by batch, each line citing the rows behind it. Cards alone reach 84.5% (code) / 79.7%
+  (personal); with the other bounded channels, 96.6% / 88.4%, in a pool of 77 / 82 lines and rows at the median
+  (138 / 153 max) whose size depends on the turn's action types, not on the store. The bounded union without cards
+  was 82.8% / 71.0%.
 - **Dreaming drops episodes and tool results** (C11-E3): what happened in a session (an order placed, a route
   looked up, a booking made) mostly never becomes a row. A per-session episode layer raises the personal world's
-  ceiling from 67% to 81% (C11-E5): episodes 4 → 11 of 15, tool results 1 → 7 of 8.
+  ceiling from 67.0% to 80.6% (C11-E5): episodes 4 → 11 of 15, tool results 1 → 7 of 8.
 - **The checker is fast enough for a wide pool, not yet accurate enough** (C11-E8): Jev checks 150 candidates in
-  about half a second (p90 0.56–0.62 s), but finds 64–74% of the needed rows it is shown and fires on about half the
-  turns that need nothing.
+  about half a second (p90 0.556 / 0.624 s), but finds 63.5–74.1% of the needed rows it is shown (top 4 picks) and
+  fires on about half the turns that need nothing. Its requests at 150 rows already use 58–65k input tokens, at
+  Jev's 64k-token limit.
 
 So the design below is: dreaming does the hard work offline and writes bounded structures; the hook reads them
 cheaply; one fast decision model picks from a bounded pool; delivery stays push-based and fail-open.
@@ -199,23 +202,28 @@ inverted index stays in milliseconds; the entity and time lookups are key lookup
    - which action types the turn involves (one yes/no per type, 28 today; C11-E2 used this);
    - for the pool plus the lines of those action cards (≤ ~150 items): does the assistant need this now? Measured:
      about 0.25 s and 0.5 s (C10-E1, C11-E8), so both fit in the ~3 s before the first tool call (C8-E4).
-3. **Delivery** at the turn's first tool call: up to 8 lines (C11-E8: 8 instead of 4 adds 5–8 points of recall),
+   - A request of 150 rows is already at Jev's 64k-token limit (C11-E8: 58–65k input tokens at pools ≥ 140). Any
+     added context (card lines, "applies when") means splitting the questions into parallel requests that each
+     carry the state (C11-E11); each part pays for the state again, and parallel parts are unmeasured.
+3. **Delivery** at the turn's first tool call: up to 8 lines (C11-E8: 8 instead of 4 adds 5.2–7.9 points of recall),
    each dated. Turns with no tool call: the picks wait for the next turn's Submit only if still relevant (a turn
    rarely shares needs with the one before, C8-E5, so this is a small gain; the open gap is 11 of 49 personal need
    turns).
 4. **Fail-open.** No pool, no checker answer in time, any error: nothing is delivered.
 
-**Cost at scale (estimate):** a checker call of ~150 items is ~25–35k tokens; at $0.042 per million input tokens,
-about $0.001–0.0015 per turn. 10^6 users × 50 turns a day ≈ $50–75k a day; that is the number to bring down
-(smaller pools on easy turns, caching card text, skipping turns the hook scores as small talk).
+**Cost at scale (estimate):** measured input per checker call (C11-E8 `usage`): median 38,176 tokens on code and
+58,703 on the personal world, about 62k at pools ≥ 140. At $0.042 per million input tokens (TypeSafe's list price
+as read on 2026-10-19; not re-checked in R10), that is about $0.0016–0.0026 per turn. 10^6 users × 50 turns a day
+≈ $80–130k a day; that is the number to bring down (smaller pools on easy turns, skipping turns the hook scores as
+small talk).
 
 ## 8. Getting recall to 95%
 
 | Step | Today | Lever | Evidence | Target |
 |---|---|---|---|---|
-| Fact in the store | 84 / 67% | episode layer, kept tool results, instant capture | C11-E5: 67 → 81% (life) | ≥ 95% |
-| In the bounded pool | 61 / 40% at 15 rows | typed channels + action cards + hub cards | C11-E4: 97 / 88% at pool ≤ 153 | ≥ 97% |
-| Checker keeps it | 0.64–0.74 of what it is shown at ~150 (0.76–0.89 of G0's rows) | see below | C11-E8 | ≥ 95% |
+| Fact in the store | 84 / 67% | episode layer, kept tool results, instant capture | C11-E5: 67.0 → 80.6% (life) | ≥ 95% |
+| In the bounded pool | 61 / 40% at 15 rows | typed channels + action cards + hub cards | C11-E4: 96.6 / 88.4% at pool ≤ 153 | ≥ 97% |
+| Checker keeps it | 0.635–0.741 of what it is shown at ~150 (0.758–0.892 of G0's rows) | see below | C11-E8 | ≥ 95% |
 | Delivered in time | most | delivery at Submit for no-tool turns | C8-E1 | ≥ 98% |
 
 The checker is now the weakest step. Work on it, in order of expected value:
@@ -238,13 +246,15 @@ The checker is now the weakest step. Work on it, in order of expected value:
 8. **Deliver more when it is cheap.** Up to 8 lines; no measured harm on turns that needed nothing (C6/C10 outcome
    tests). The cost to watch is context bloat, which A5's counter-metrics already track.
 
-Honest status: no configuration measured so far reaches 95% end to end. The pieces measured give, multiplied, about
-0.95 × 0.97 × 0.8 ≈ 0.74 if the store, pool and checker targets for steps 1–2 are met and the checker improves to
-0.8. Getting the checker from 0.7 to 0.95 is the open research problem of this plan. The five designs
-tried (C11-E9 to E13) all land at 0.75–0.81 on code and 0.71–0.75 on life: the misses left are rows whose link
-to the turn takes a step of reasoning (a YouTube embed → the site's CSP headers). Two routes remain: have dreaming
-write those links ahead of time (concrete situations per row, as the self-play bank does for prompts), or send
-only the hard cases to a slower reasoning model and deliver at a later tool call.
+Honest status: no configuration measured so far reaches 95% end to end. A rough **estimate** from the measured steps
+(rough because each factor comes from a different pool, and delivery is left out): code 0.84 × 0.966 × 0.793 ≈ 0.64;
+personal 0.806 × 0.884 × 0.714 ≈ 0.51. Even with the store at 0.95 and the pool at 0.97, a checker at 0.8 gives about
+0.74 (**estimate**, targets not measurements). Getting the checker from 0.7 to 0.95 is the open research problem of this
+plan. Four of the designs tried (C11-E9 to E12) land at 0.776–0.810 on code and 0.714–0.746 on life (top 8); the fifth
+(C11-E13) is stricter and lower (0.741 / 0.667). The misses left are rows whose link to the turn takes a step of
+reasoning (a YouTube embed → the site's CSP headers). Two routes remain: have dreaming write those links ahead of time
+(concrete situations per row, as the self-play bank does for prompts), or send only the hard cases to a slower reasoning
+model and deliver at a later tool call.
 
 ## 9. Feedback
 
@@ -258,10 +268,10 @@ only the hard cases to a slower reasoning model and deliver at a later tool call
 | Store size (rows) | 10^3 | 10^4 | 10^5 | 10^6 |
 |---|---|---|---|---|
 | Pool per turn | ≤ 150 | ≤ 150 | ≤ 150 | ≤ 150 |
-| Unbounded action channel (C11-E6 projection) | ~420–480 | ~7,600 | ~111,000 | ~1.6M |
+| Unbounded action channel (C11-E6, extrapolation; code / personal) | ~420–480 | ~7,600 / 8,300 | ~111,000 / 127,000 | ~1.6M / 1.9M |
 | Card count (estimate) | ~30 | ~100 | ~300 | ≤ 530 (cap) |
 | Hook latency (target) | ms | ms | ms | ≤ 50 ms |
-| Checker latency (measured at ≤ 150 items) | ≤ 0.8 s | same | same | same |
+| Checker latency (measured at ≤ 150 items; same pool size, so expected the same, unmeasured beyond 10^3) | ≤ 0.8 s | same | same | same |
 
 - **Many devices:** the event log is the sync unit (append-only, merge by timestamp); dreams run where the log is
   complete (a home machine or hosted Eden), and indexes and cards sync down as files.
@@ -299,7 +309,7 @@ only the hard cases to a slower reasoning model and deliver at a later tool call
 | B1 | Event log; tool results kept; instant capture; episode records in the dream | store ceiling ≥ 90% on both worlds |
 | B2 | Entity table and resolution; entity-scoped supersession; time index | no regression in C5-E5 supersession; pool recall ≥ C11-E1 |
 | B3 | Action tagging; action cards; hub cards; now card; card validators | pool recall ≥ 95% at pool ≤ 150, both worlds |
-| B4 | Checker v2 (cards as context, two passes, two-call average) | checker recall ≥ 0.85 at no more no-need firing than today |
+| B4 | Checker v2 (cards as context, "applies when", split requests; two passes and two-call averages are dropped, C11-E9/E12) | checker recall ≥ 0.85 at no more no-need firing than today |
 | B5 | Delivery v2 (≤ 8 lines, Submit for no-tool turns); feedback signals | outcome test beats today's plugin, CI lower bound > 0, both worlds |
 | B6 | Roll-ups, forgetting, compaction; scale stress harness at 10^5–10^6 | every funnel step within 3 points of its small-store value |
 | B7 | A6 review; shadow mode on real sessions; opt-in rollout | A6 sign-off; shadow false-fire rate within A5 tolerance |
