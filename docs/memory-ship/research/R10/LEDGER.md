@@ -2058,3 +2058,11 @@ Each entry: id, date, hypothesis, setup (command, data, commit), numbers as prin
 - **What this says:** showing the dream's "applies when" helps most where the cap is tight (life top 4: 0.635 →
   0.714) and fires on fewer no-need code turns (29 → 23), but at top 8 it is within one or two items of the plain
   check. Small, mixed gains: another sign the checker plateaus near 0.75–0.8 recall on these worlds.
+
+## C11-E12 · 2026-10-20 · Average two checker calls (pre-registration; exploratory)
+- **Idea (BUILD-PLAN §8):** repeat calls disagree on about 10% of packets (C10-R). Run C11-E8's exact requests a
+  second time and average each row's p over the two calls.
+- **Measure:** at p ≥ 0.7 top 4 and top 8: recall, no-need turns with a pick, picks per turn, for the second run
+  alone and for the average, next to C11-E8's first run; plus the share of (turn, row) pairs whose pick decision
+  differs between the two runs.
+- **No verdict rule.**
