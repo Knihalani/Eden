@@ -106,15 +106,30 @@ Families differ in mechanism. Every kill criterion was written before its run.
 
 ## Next three experiments
 
-1. **Recall at scale (cycle 11, under way):** typed candidate channels built while dreaming (entities, times, action
-   registry), each capped so the hook's candidate set stays bounded as the store grows; then the checker on the
-   union. C11-E1 (channels), C11-E2 (action registry), next: per-channel caps.
-2. **Dreaming:** an episodic layer (what happened, what tools returned), dated and rolled up (C11-E3), and a
-   per-session dream cycle.
-3. **Jev's selection criterion:** Jev fails D37's named retrieval rule and passes on the outcome measure; the user
-   decides whether D37 names the outcome measure. Before shipping: an A6 security review (prompt injection).
-- Done: checker latency (C8-E4/E6, C9-E2, C10), the R10-5 decision (D37 amended), model-free selection (dead),
-  next-turn delivery (dead).
+1. **The checker's reasoning gap (BUILD-PLAN §8):** four question designs plateau at 0.75–0.81 (code) and
+   0.71–0.75 (life) recall over a wide pool (C11-E8 to E12). Next: dream-written situations per row (what future
+   requests a row governs), and a slower reasoning model for hard cases only, delivered at a later tool call.
+2. **Scale stress harness (BUILD-PLAN §12):** inflate the worlds to 10^4–10^6 rows of same-user history and
+   re-measure every funnel step; replaces C11-E6's extrapolation.
+3. **Hub entity cards and the now card** (C11-E7): the bounded form for hub entities; then the pool recall of all
+   cards together, both worlds.
+- Waiting on the user: whether D37 names the outcome measure for the checker; hosted vs local dreaming; dream model
+  and budget (BUILD-PLAN §14).
+
+## Cycle 11 findings (LEDGER C11-…)
+
+- **Ranked lists fail at scale; typed channels as sets find almost everything** (C11-E1/E2): union 100% / 97% of
+  needed rows that exist, but the action and hub-entity channels grow in proportion to the store (C11-E6: slope
+  ≈ 1.17) and no cheap cap keeps them (C11-E2: 83% / 71% at 36; C11-E7: dropping hubs loses a quarter to a half).
+- **Dream-kept action cards bound the action channel** (C11-E4, code): cards alone 0.84, union 0.97, pool median
+  77. Life: being written.
+- **Dreaming drops episodes and tool results** (C11-E3); a per-session episode layer lifts the life store ceiling
+  0.67 → 0.806 (C11-E5).
+- **Jev is fast over a wide pool and plateaus on accuracy** (C11-E8 to E12): 150 candidates in ~0.5 s; recall of
+  shown needed rows 0.74–0.81 (code), 0.64–0.75 (life); a second pass, an implied-step question, "applies when"
+  context and averaging two calls move it by at most a few items. Row decisions are nearly deterministic (< 0.4%
+  flip).
+- The full plan: `BUILD-PLAN.md`.
 
 ## Cycle 10 findings (LEDGER C10-…)
 
