@@ -42,4 +42,17 @@ describe("ItemCache bounds (branch review)", () => {
     expect(cache.search(alice, [1], 1, 5)).toEqual([]);
     expect(cache.userCount).toBe(0);
   });
+
+  test("re-putting an unchanged item only refreshes it; a changed one is re-indexed and reported", () => {
+    const cache = new ItemCache({ ttlMs: 1_000 });
+    const a = item("crm", "1", "Globex renewal notes");
+    expect(cache.put(alice, [a], 0).map((i) => i.id)).toEqual(["crm:1"]);
+    expect(cache.put(alice, [{ ...a, url: "https://crm.example/1?v=2" }], 900)).toEqual([]); // Same words: refreshed.
+    expect(cache.get(alice, "crm:1", 900)?.url).toBe("https://crm.example/1?v=2"); // With the new url (review).
+    expect(cache.get(alice, "crm:1", 1_800)).not.toBeNull(); // The refresh moved its TTL.
+    const changed = { ...a, text: "Globex renewal moved to December" };
+    expect(cache.put(alice, [changed], 1_800).map((i) => i.text)).toEqual([changed.text]);
+    const q = termIds("december", cache.peekVocab(alice)!, false);
+    expect(cache.search(alice, q.ids, q.n, 5, 1_800).map((h) => h.item.id)).toEqual(["crm:1"]);
+  });
 });

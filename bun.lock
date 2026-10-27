@@ -89,6 +89,21 @@
         "zod": "^4.0.0",
       },
     },
+    "packages/sim": {
+      "name": "@eden/sim",
+      "version": "0.0.0",
+      "dependencies": {
+        "@eden/client": "workspace:*",
+        "@eden/engine": "workspace:*",
+        "@eden/graph": "workspace:*",
+        "@eden/llm": "workspace:*",
+        "@eden/primitives": "workspace:*",
+        "@eden/protocol": "workspace:*",
+        "@eden/redact": "workspace:*",
+        "@eden/server": "workspace:*",
+        "@eden/sources": "workspace:*",
+      },
+    },
     "packages/sources": {
       "name": "@eden/sources",
       "version": "0.0.0",
@@ -120,6 +135,8 @@
     "@eden/redact": ["@eden/redact@workspace:packages/redact"],
 
     "@eden/server": ["@eden/server@workspace:packages/server"],
+
+    "@eden/sim": ["@eden/sim@workspace:packages/sim"],
 
     "@eden/sources": ["@eden/sources@workspace:packages/sources"],
 
