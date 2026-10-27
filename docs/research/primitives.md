@@ -39,8 +39,8 @@ normalization are native and nearly free. (`extractEntities` is retrieval-specif
 
 A default parameter cost 5x; ropes cost nothing measurable once read (JavaScriptCore flattens them). Two more, from
 the benchmarks below: a per-candidate `TopK.push` is not inlined into the caller's loop (bulk `pushDense` is 3.4x
-faster on Bun), and returning a `{ value, stale }` object per cache hit gave 4.6 µs p99 GC spikes that the
-allocation-free version does not have.
+faster on Bun), and allocating per cache entry and per hit showed up as multi-microsecond p99 spikes that the
+allocation-free version does not have (cache section below; not isolated by its own benchmark).
 
 ## Hashing (`hash.ts`)
 
@@ -77,6 +77,9 @@ FNV-1a computed inline while scanning, since a native call would need a `slice` 
 | + intern, comparing against string objects | 17.15 µs |
 | + intern, comparing against a character arena | 15.31 µs |
 | + intern, two-lane fingerprint, no comparison (`Vocab`) | 6.30 µs |
+
+Across three independent re-runs the fingerprint was always fastest (6.5–8.6 µs), but only 1.3–1.7x faster than the
+other two, which came out about equal: treat the table's 2.7x as one run's figure.
 
 Accented terms first went through `normalize` + regex per term (29.95 µs for the 10% non-ASCII text, an earlier run);
 a lazily filled per-character fold table (NFKD, marks dropped, lowercased, cached per code unit) brought that to the

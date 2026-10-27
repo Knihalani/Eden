@@ -51,6 +51,12 @@ function learn(c: number): void {
     // Word-final sigma folds like sigma: "ΟΔΟΣ" and "οδος" are one term.
     const folded = c === 0x3c2 ? "σ" : ch.normalize("NFKD").replace(MARKS, "").toLowerCase();
     f = folded.length === 1 ? folded.charCodeAt(0) : folded.length === 0 ? FOLD_DROP : FOLD_EXPAND;
+    // Folding must be idempotent: a character can fold to one that folds further (lunate sigma ϲ → ς → σ). Follow
+    // the chain so a stored term always looks up to itself.
+    if (f >= 128 && f !== c && f !== FOLD_DROP && f !== FOLD_EXPAND) {
+      const next = foldOf(f);
+      if (next !== FOLD_DROP && next !== FOLD_EXPAND) f = next;
+    }
   }
   CLASS[c] = k;
   FOLD[c] = f;
