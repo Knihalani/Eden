@@ -244,6 +244,7 @@ export class ContextPartner {
         const res = await this.deps.model.chat({
           messages: answerMessages(question, s.window.join("\n"), items),
           maxTokens: 300,
+          cacheKey: userCacheKey(s.scope),
           signal: s.abort.signal,
         });
         this.settle(s, res.costUsd);
@@ -569,6 +570,7 @@ export class ContextPartner {
       try {
         const res = await this.deps.model.chat({
           messages: judgeMessages(s.window.join("\n"), candidates),
+          cacheKey: userCacheKey(s.scope),
           maxTokens: 60,
           json: true,
           signal: s.abort.signal,
@@ -648,6 +650,10 @@ export class ContextPartner {
 }
 
 const sessionKey = (e: Scope & { sessionId: string }) => `${scopeKey(e)}#${e.sessionId}`;
+
+/** An opaque per-user key for provider sticky routing (prompt-cache reuse): a hash, never the ids themselves. */
+const userCacheKey = (scope: Scope) =>
+  `eden-${createHash("sha256").update(scopeKey(scope)).digest("hex").slice(0, 24)}`;
 
 function eventText(e: AgentEvent): string {
   switch (e.kind) {

@@ -80,6 +80,7 @@
         "@eden/engine": "workspace:*",
         "@eden/graph": "workspace:*",
         "@eden/llm": "workspace:*",
+        "@eden/primitives": "workspace:*",
         "@eden/protocol": "workspace:*",
         "@eden/sources": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.29.0",
