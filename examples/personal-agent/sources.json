@@ -1,0 +1,17 @@
+{
+  "sources": [
+    {
+      "id": "calendar",
+      "description": "The user's calendar",
+      "docs": [
+        { "ref": "evt-priya", "title": "Lunch with Priya Raman", "text": "Thursday 12:30 at Dishoom, confirmed" },
+        { "ref": "evt-dentist", "title": "Dentist", "text": "Dr. Okafor, Friday 9:00-10:00" }
+      ]
+    },
+    {
+      "id": "gmail",
+      "description": "The user's email",
+      "docs": [{ "ref": "m-priya", "title": "Re: lunch", "text": "Priya Raman: I can't do anything before 12:15" }]
+    }
+  ]
+}

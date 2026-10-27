@@ -1,0 +1,15 @@
+{
+  "name": "@eden/eval",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@eden/engine": "workspace:*",
+    "@eden/graph": "workspace:*",
+    "@eden/llm": "workspace:*",
+    "@eden/protocol": "workspace:*",
+    "@eden/sources": "workspace:*"
+  }
+}
