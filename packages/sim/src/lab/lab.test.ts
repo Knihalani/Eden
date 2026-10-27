@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import { Vocab } from "@eden/primitives";
+import { z } from "zod";
 import { buildWorld } from "../world";
 import { eventTimes, mailParts, numbersIn } from "./connectors";
-import { keysIn, labCases, tap, variantQueries, worldKey } from "./lab";
+import { keysIn, labCases, runConnector, tap, variantQueries, worldKey, type LabConnector } from "./lab";
 
 // The lab itself needs Docker (lab-cli.ts); these cover the parts that decide its numbers.
 describe("connector lab", () => {
@@ -86,5 +89,76 @@ describe("connector lab", () => {
     expect(headers.Date).toBeTruthy();
     expect(body.length).toBeGreaterThan(0);
     expect(body).not.toContain("From: ");
+  });
+
+  /**
+   * A whole-string-substring connector in process: "Jamie Fox" finds the event the cases need, "dinner" finds twelve
+   * noise items, "boom" is a tool error. Every number runConnector reports is then known in advance.
+   */
+  function fakeConnector(log: string[], failSetup = false): LabConnector {
+    const event = world.items.find((i) => i.facts.includes("meet-p-jamie-fox:event"))!;
+    const noise = world.items
+      .filter((i) => i.facts.length === 0)
+      .slice(0, 12)
+      .map(worldKey);
+    return {
+      name: "fake",
+      semantics: "whole query as one substring",
+      accepts: () => true,
+      async setup() {
+        log.push("setup");
+        if (failSetup) throw new Error("backend did not start");
+      },
+      transport() {
+        const server = new McpServer({ name: "fake", version: "1" });
+        server.registerTool(
+          "search",
+          { inputSchema: { query: z.string() }, annotations: { readOnlyHint: true } },
+          async ({ query }) => {
+            if (query.includes("boom")) return { content: [{ type: "text", text: "boom" }], isError: true };
+            const keys = query.includes("Jamie Fox") ? [worldKey(event)] : query.includes("dinner") ? noise : [];
+            return { content: [{ type: "text", text: JSON.stringify(keys.map((id) => ({ id }))) }] };
+          },
+        );
+        const [client, serverSide] = InMemoryTransport.createLinkedPair();
+        void server.connect(serverSide);
+        return client;
+      },
+      searchTool: { name: "search", args: (text) => ({ query: text }) },
+      async teardown() {
+        log.push("teardown");
+      },
+    };
+  }
+
+  test("runConnector: reach, reachAll, empty, result cap and errors on a connector with known answers", async () => {
+    const must = ["meet-p-jamie-fox:event"];
+    const cases = [
+      { text: "When is my dinner with Jamie Fox?", must, ok: [] },
+      { text: "what's for dinner tonight", must, ok: [] },
+      { text: "boom", must, ok: [] },
+      { text: "Something about Jamie", must: ["no-such-fact"], ok: [] }, // not answerable here: not counted
+    ];
+    const log: string[] = [];
+    const r = await runConnector(fakeConnector(log), world, cases, { limit: 10 });
+    expect(log).toEqual(["setup", "teardown"]);
+    expect(r.cases).toBe(3);
+    const q = r.variants.question!;
+    // Case 1 hits; case 2 returns 12 noise items, capped at 10; case 3 is a tool error.
+    expect([q.cases, q.calls, q.hits, q.reach, q.reachAll, q.errors]).toEqual([3, 3, 1, 0.333, 0.333, 1]);
+    expect([q.empty, q.returned, q.returnedRaw]).toEqual([0.333, 3.7, 4.3]);
+    expect(q.relevantShare).toBe(0.091); // 1 of 11 kept items holds the fact
+    // Terms are lower-cased ("dinner jamie fox"), so the substring "Jamie Fox" is never sent.
+    expect(r.variants.terms!.hits).toBe(0);
+    const e = r.variants.entities!; // only case 1 has an entity
+    expect([e.cases, e.hits, e.reach, e.reachAll]).toEqual([1, 1, 1, 0.333]);
+    expect(r.refFallback).toBe(0); // Rows with an `id` keep it in toItems.
+  });
+
+  test("runConnector tears the connector down when setup fails", async () => {
+    const log: string[] = [];
+    const cases = [{ text: "When is my dinner with Jamie Fox?", must: ["meet-p-jamie-fox:event"], ok: [] }];
+    await expect(runConnector(fakeConnector(log, true), world, cases)).rejects.toThrow("backend did not start");
+    expect(log).toEqual(["setup", "teardown"]);
   });
 });

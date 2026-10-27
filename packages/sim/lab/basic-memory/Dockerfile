@@ -1,4 +1,5 @@
-# Basic Memory over a folder of Markdown notes, mounted at /notes; it indexes them into SQLite FTS5 on start.
+# Basic Memory over a folder of Markdown notes: HOME is /state, so its default project is /state/basic-memory. The lab
+# indexes the notes into SQLite FTS5 (`basic-memory reindex`) before starting the server.
 FROM mirror.gcr.io/library/python:3.12-slim
 ARG HTTPS_PROXY
 COPY ca.crt /ca.crt
