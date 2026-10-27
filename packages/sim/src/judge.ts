@@ -67,7 +67,9 @@ export class OracleJudge implements Model {
       const picks: number[] = [];
       // Candidates are "[i] (source) title — text", and text keeps its newlines: split on the "[i] (source) " heads.
       const list = userMsg.split("\nCandidates:\n")[1] ?? "";
-      const heads = [...list.matchAll(/^\[(\d+)\] \(([^)\n]+)\) /gm)];
+      // A head counts only if it is the next index: a line inside an item's text that looks like one is text.
+      const heads: RegExpExecArray[] = [];
+      for (const m of list.matchAll(/^\[(\d+)\] \(([^)\n]+)\) /gm)) if (Number(m[1]) === heads.length) heads.push(m);
       heads.forEach((m, k) => {
         const block = list.slice(m.index + m[0].length, heads[k + 1]?.index ?? list.length);
         this.stats.candidates++;
@@ -104,9 +106,25 @@ export class OracleJudge implements Model {
       const list = this.byTitle.get(`${sourceId}|${title}`);
       if (!list) continue;
       if (list.length === 1) return list[0];
-      // Several items share a title (a thread's replies): pick the one whose text the candidate starts with.
-      const body = block.slice(at + 3, at + 63).replace(/\s+/g, " ");
-      return list.find((it) => it.text.replace(/\s+/g, " ").startsWith(body.slice(0, 40))) ?? list[0];
+      // Several items share a title (a thread's replies, whose bodies start with the same headers): the one sharing
+      // the longest prefix with the candidate's clipped text.
+      const body = block
+        .slice(at + 3)
+        .replace(/…\s*$/, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      let best = list[0]!;
+      let bestLen = -1;
+      for (const it of list) {
+        const text = it.text.replace(/\s+/g, " ");
+        let n = 0;
+        while (n < body.length && n < text.length && body.charCodeAt(n) === text.charCodeAt(n)) n++;
+        if (n > bestLen) {
+          best = it;
+          bestLen = n;
+        }
+      }
+      return best;
     }
     return undefined;
   }

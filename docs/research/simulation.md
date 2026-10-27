@@ -5,9 +5,9 @@ command run on 2026-10-27 on this repository (4 vCPU Intel Xeon @ 2.10 GHz share
 under [Reproduce](#reproduce). Modelled or assumed inputs are labelled where they appear.
 
 **In one paragraph.** With connectors that behave like real ones (Gmail-style AND search, snippets), Eden gets
-**13–19% of needed facts** to the agent before it answers, never more than the 21% the connectors return at all.
+**13–20% of needed facts** to the agent before it answers, never more than the 21% the connectors return at all.
 With ideal connectors (ranked full-text search) 74% of facts are within reach, and the same engine delivers **24%
-without a model and 57–62% with a judge** (modelled: an imperfect one and a perfect one). The judge's own mistakes
+without a model and 58–63% with a judge** (modelled: an imperfect one and a perfect one). The judge's own mistakes
 then set the false-fire rate: hard false fires are **0.1–0.4%** without a judge or with a perfect one and **2–7%**
 with a judge that wrongly picks 5% of candidates. No planted secret ever reached the agent (**0 of 2,160**). Over
 HTTP the fast path answers in **under 1 ms at the median, under 5 ms at p99** at production-like load, and under 50 ms
@@ -90,16 +90,19 @@ to the judge or delivered without it. Judges are modelled (see above).
 | Connectors | Judge | Precision | Recall (in time) | Hard false fires | Available | Judged |
 |---|---|---|---|---|---:|---:|
 | ideal | none | 0.543 [0.518–0.567] | 0.236 [0.220–0.253] | 0.004 [0.002–0.008] | 0.74 | 0.24 |
-| ideal | noisy | 0.675 [0.659–0.690] | 0.573 [0.554–0.593] | 0.067 [0.056–0.079] | 0.73 | 0.61 |
-| ideal | perfect | 0.785 [0.771–0.799] | 0.616 [0.597–0.635] | 0.004 [0.002–0.008] | 0.74 | 0.62 |
+| ideal | noisy | 0.685 [0.669–0.700] | 0.584 [0.564–0.603] | 0.069 [0.058–0.081] | 0.73 | 0.62 |
+| ideal | perfect | 0.794 [0.780–0.808] | 0.633 [0.614–0.652] | 0.004 [0.002–0.008] | 0.74 | 0.63 |
 | realistic | none | 0.585 [0.550–0.620] | 0.128 [0.116–0.142] | 0.001 [0.000–0.003] | 0.21 | 0.13 |
-| realistic | noisy | 0.621 [0.595–0.647] | 0.186 [0.172–0.202] | 0.020 [0.014–0.027] | 0.21 | 0.19 |
-| realistic | perfect | 0.738 [0.712–0.762] | 0.192 [0.177–0.208] | 0.001 [0.000–0.003] | 0.21 | 0.19 |
+| realistic | noisy | 0.626 [0.599–0.652] | 0.191 [0.176–0.207] | 0.020 [0.014–0.027] | 0.21 | 0.20 |
+| realistic | perfect | 0.746 [0.721–0.770] | 0.201 [0.186–0.217] | 0.001 [0.000–0.003] | 0.21 | 0.20 |
 | realistic, entity queries | none | 0.549 [0.520–0.578] | 0.168 [0.154–0.183] | 0.001 [0.000–0.003] | 0.40 | 0.17 |
-| realistic, entity queries | noisy | 0.641 [0.620–0.661] | 0.311 [0.293–0.329] | 0.031 [0.024–0.040] | 0.40 | 0.33 |
-| realistic, entity queries | perfect | 0.740 [0.720–0.759] | 0.328 [0.310–0.346] | 0.001 [0.000–0.003] | 0.40 | 0.33 |
+| realistic, entity queries | noisy | 0.651 [0.630–0.671] | 0.324 [0.306–0.343] | 0.032 [0.025–0.041] | 0.40 | 0.34 |
+| realistic, entity queries | perfect | 0.751 [0.731–0.769] | 0.341 [0.323–0.360] | 0.001 [0.000–0.003] | 0.40 | 0.34 |
 
 Recall equals in-time recall in instant runs; with real-time pacing they differ by under a point (Timeliness below).
+The tables below this one (breakdowns, lenient precision, timeliness, sensitivity) come from runs made before a final
+fix to the oracle's matching of same-titled replies, which moved the judge rows above by 1–2 points; read them to that
+precision.
 
 | Connectors | Judge | Lenient precision | Soft fires (passing mentions) | `ask` recall@5 | `ask` MRR | `ask` empty | Judge cost per 1k turns |
 |---|---|---:|---:|---:|---:|---:|---:|
@@ -118,10 +121,10 @@ the data-not-instructions envelope.
 - *Retrieval, with real connectors.* AND-semantics search over Eden's multi-term cue mostly returns nothing: only 21%
   of needed facts are returned or cached, against 74% with ranked search; searching by entities alone recovers to
   40%. No judge can deliver what never arrived: on realistic connectors a perfect judge lifts recall from 0.128 to
-  0.192, on ideal ones from 0.236 to 0.616.
+  0.201, on ideal ones from 0.236 to 0.633.
 - *The judge*, once retrieval works. Without a model the engine delivers only what clears the confident threshold
   (24% of facts with ideal connectors); a judge more than doubles that. Its false picks are the false fires: a judge
-  that picks 5% of irrelevant candidates gives 6.7% hard false fires, concentrated where a turn has a cue but needs
+  that picks 5% of irrelevant candidates gives 6.9% hard false fires, concentrated where a turn has a cue but needs
   nothing (new people and places 43 of 380 turns, requests the data cannot help with 49 of 670). Judge precision
   matters as much as recall.
 - *Vocabulary mismatch*, with any connector. Recall by task (ideal, noisy judge): "anything for Maya's school
