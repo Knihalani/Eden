@@ -15,6 +15,16 @@ Agents.* arXiv:2607.08716, 9 July 2026. https://arxiv.org/abs/2607.08716
   and general retrieval. The numbers for those ablations were not read yet: read the PDF.
 - Open-weight: Qwen3.5-27B trained with SFT + GRPO on SETA as a memory policy, with partial transfer.
 
+From the full paper (read 2026-10-27; details in [research/fast-primitives-notes/proactive_decision_and_routing.md](research/fast-primitives-notes/proactive_decision_and_routing.md)):
+- Bank: a private status the action agent never sees, knowledge memories, procedural memories (attempts, failures,
+  fixes). Phase 1 edits the bank with four tool calls; phase 2 emits a reminder or an explicit no-intervention.
+  A reminder goes into the next call only and is never kept in history.
+- It ran every step with an 8-message window. No cost or intervention-rate figures are reported.
+- τ²-Bench ablation (macro / micro): selective 64.3 / 61.2, always inject 63.5 / 61.5, full-bank exposure
+  61.5 / 58.6, Mem0 top-10 62.1 / 60.8, no bank 61.0 / 60.8. Always-inject ties on micro; silence buys balance
+  across domains, and (for Eden) fewer tokens.
+- An untrained Qwen3.5-27B memory agent hurt (reward 0.709 → 0.693); SFT then GRPO lifted it to 0.734.
+
 What it means for Eden:
 - Supports D2/D3: selective injection beats both silence and always-on.
 - Their partner sees only the trajectory. Eden's also reads external sources, which is a harder routing problem and
@@ -22,8 +32,8 @@ What it means for Eden:
 - Their memory agent calls a model at each interval. Eden's design bets that most turns can be decided without one
   (D5). The eval must test that bet against a model-every-turn baseline.
 
-To do: read the full paper (bank schema, intervention frequency, cost and latency, ablation table) and add an
-"always call the model" arm to `packages/eval` for a direct comparison.
+To do: add an "always call the model" arm to `packages/eval` for a direct comparison. The paper's code repo (for the
+verbatim prompts) was not reachable from the research session.
 
 ## Questions to answer with the eval
 

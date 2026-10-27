@@ -9,4 +9,5 @@
 | [COST-MODEL.md](COST-MODEL.md) | Prices, per-call bounds, measured costs, levers |
 | [PRIVACY.md](PRIVACY.md) | Data flow, subprocessors, ZDR, controls, open items |
 | [RESEARCH.md](RESEARCH.md) | The Meta PMA paper and open questions |
+| [research/fast-primitives.md](research/fast-primitives.md) | Deep research: the fastest primitives for each stage, with parameters and costs ([notes](research/fast-primitives-notes/)) |
 | [SALVAGE.md](SALVAGE.md) | What was kept from the archived memory product, and what is worth mining |
