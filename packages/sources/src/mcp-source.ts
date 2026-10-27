@@ -2,8 +2,10 @@
  * A source backed by an MCP server's read tools: the way the partner reaches every connector the customer's agent
  * already has (mail, calendar, docs, CRM, a memory product). One instance per user and server.
  *
- * Read-only is enforced, not assumed: a tool is callable only if the server annotates it `readOnlyHint: true`, or
- * the operator lists it in `trustedReadTools` after checking it by hand. Any other tool is refused at connect time.
+ * Read-only, as far as a client can check: the partner only ever calls the one configured search tool, and only if
+ * the server declares it `readOnlyHint: true` or the operator lists it in `trustedReadTools` after checking it by
+ * hand. The MCP spec says annotations are untrusted, so a server that lies passes this check: connect only servers
+ * the operator trusts (D7). A failed connect is retried after RETRY_AFTER_MS, not on every lookup.
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
@@ -23,12 +25,17 @@ export interface McpSourceOptions {
 
 export class ReadOnlyViolation extends Error {}
 
+const RETRY_AFTER_MS = 30_000;
+
 export class McpSource implements Source {
   readonly kind = "mcp";
   readonly id: string;
   readonly description: string;
   private client: Client | null = null;
   private connecting: Promise<Client> | null = null;
+  /** After a failed connect, no retry until this time: a broken server must not cost a reconnect per lookup. */
+  private retryAt = 0;
+  private lastError: unknown = null;
 
   constructor(private readonly options: McpSourceOptions) {
     this.id = options.id;
@@ -37,19 +44,27 @@ export class McpSource implements Source {
 
   private async connect(): Promise<Client> {
     if (this.client) return this.client;
+    if (Date.now() < this.retryAt) throw this.lastError;
     this.connecting ??= (async () => {
       const client = new Client({ name: "eden-partner", version: "0.0.0" });
-      await client.connect(this.options.transport());
-      const { tools } = await client.listTools();
-      const tool = tools.find((t) => t.name === this.options.searchTool.name);
-      if (!tool) throw new Error(`${this.id}: server has no tool ${this.options.searchTool.name}`);
-      const trusted = this.options.trustedReadTools?.includes(tool.name) ?? false;
-      if (tool.annotations?.readOnlyHint !== true && !trusted) {
-        await client.close();
-        throw new ReadOnlyViolation(`${this.id}: ${tool.name} is not annotated read-only and is not trusted`);
+      try {
+        await client.connect(this.options.transport());
+        const { tools } = await client.listTools();
+        const tool = tools.find((t) => t.name === this.options.searchTool.name);
+        if (!tool) throw new Error(`${this.id}: server has no tool ${this.options.searchTool.name}`);
+        const trusted = this.options.trustedReadTools?.includes(tool.name) ?? false;
+        if (tool.annotations?.readOnlyHint !== true && !trusted) {
+          throw new ReadOnlyViolation(`${this.id}: ${tool.name} is not declared read-only and is not trusted`);
+        }
+        this.client = client;
+        return client;
+      } catch (e) {
+        // Close on every failure, or a stdio server process leaks per attempt.
+        await client.close().catch(() => {});
+        this.lastError = e;
+        this.retryAt = Date.now() + RETRY_AFTER_MS;
+        throw e;
       }
-      this.client = client;
-      return client;
     })();
     try {
       return await this.connecting;

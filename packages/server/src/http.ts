@@ -4,7 +4,7 @@
  *   POST /v1/events    an AgentEvent              → ObserveResult  (?waitMs= to wait for the slow path)
  *   POST /v1/ask       an AskRequest              → AskResponse
  *   POST /v1/pending   {tenantId,userId,sessionId} → {injections}
- *   POST /v1/feedback  a Feedback                 → {ok}
+ *   POST /v1/feedback  a Feedback (used: boolean)  → {ok, applied}
  *   POST /v1/forget    {tenantId,userId,sourceId?} → {ok}
  *   GET  /healthz
  *
@@ -12,7 +12,7 @@
  * Errors are `{error}` with a 4xx for the caller's mistakes; nothing the caller sends can produce a 500.
  */
 import type { ContextPartner } from "@eden/engine";
-import { checkAsk, checkEvent, type Feedback } from "@eden/protocol";
+import { checkAsk, checkEvent, isId } from "@eden/protocol";
 import type { ServerConfig } from "./config";
 
 type Json = Record<string, unknown>;
@@ -23,8 +23,10 @@ export function createHandler(partner: ContextPartner, config: Pick<ServerConfig
   const tenantOf = (req: Request): string | null => {
     const key = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
     if (key && config.keys.has(key)) return config.keys.get(key)!;
-    return config.dev ? "dev" : null;
+    // Dev mode accepts a missing key, never a wrong one: a typo'd production key must not land in tenant "dev".
+    return config.dev && !key ? "dev" : null;
   };
+  const badId = (body: Json, fields: string[]) => fields.find((f) => !isId(body[f]));
 
   return async function handle(req: Request): Promise<Response> {
     const url = new URL(req.url);
@@ -57,25 +59,29 @@ export function createHandler(partner: ContextPartner, config: Pick<ServerConfig
           return json(await partner.ask(checked.value));
         }
         case "/v1/pending": {
-          if (typeof body.userId !== "string" || typeof body.sessionId !== "string") {
-            return fail(400, "userId and sessionId are required");
-          }
-          return json({
-            injections: partner.takePending({ tenantId: tenant, userId: body.userId, sessionId: body.sessionId }),
-          });
+          const bad = badId(body, ["userId", "sessionId"]);
+          if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
+          const who = { tenantId: tenant, userId: body.userId as string, sessionId: body.sessionId as string };
+          return json({ injections: partner.takePending(who) });
         }
         case "/v1/feedback": {
-          const f = body as unknown as Feedback;
-          if (typeof f.userId !== "string" || typeof f.sessionId !== "string" || typeof f.injectionId !== "string") {
-            return fail(400, "userId, sessionId and injectionId are required");
-          }
-          partner.feedback({ ...f, tenantId: tenant, used: !!f.used, how: "explicit" });
-          return json({ ok: true });
+          const bad = badId(body, ["userId", "sessionId", "injectionId"]);
+          if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
+          if (typeof body.used !== "boolean") return fail(400, "used must be true or false");
+          const applied = partner.feedback({
+            tenantId: tenant,
+            userId: body.userId as string,
+            sessionId: body.sessionId as string,
+            injectionId: body.injectionId as string,
+            used: body.used,
+            how: "explicit",
+          });
+          return json({ ok: true, applied });
         }
         case "/v1/forget": {
-          if (typeof body.userId !== "string") return fail(400, "userId is required");
-          const sourceId = typeof body.sourceId === "string" ? body.sourceId : undefined;
-          partner.forget({ tenantId: tenant, userId: body.userId }, sourceId);
+          if (badId(body, ["userId"])) return fail(400, "userId must be 1-128 characters of [A-Za-z0-9._:@-]");
+          if (body.sourceId !== undefined && !isId(body.sourceId)) return fail(400, "sourceId is malformed");
+          partner.forget({ tenantId: tenant, userId: body.userId as string }, body.sourceId as string | undefined);
           return json({ ok: true });
         }
         default:

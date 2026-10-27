@@ -129,13 +129,28 @@ describe("observe", () => {
 });
 
 describe("sessions", () => {
-  test("past maxSessions the least recently active session is closed, and its unused injections are learned", async () => {
+  test("one tenant filling its session cap evicts only its own sessions, and eviction learns nothing", async () => {
     const sourceMap = new SourceMap();
-    const { p } = partner({ sourceMap, config: { maxSessions: 1 } });
-    await p.observe(ev({ kind: "user_message", text: "Globex renewal for Dana Lee" }), { waitMs: 1_000 });
-    await p.observe({ ...scope, sessionId: "s-other", at: clock++, kind: "user_message", text: "thanks" });
-    expect(p.takePending(scope)).toEqual([]);
-    expect(sourceMap.utility(scope, "general", "crm")).toBeLessThan(0.5);
+    const { p } = partner({ sourceMap, config: { maxSessionsPerTenant: 2 } });
+    const victim = { tenantId: "victim", userId: "u", sessionId: "v1" };
+    await p.observe(
+      { ...victim, at: clock++, kind: "user_message", text: "Globex renewal for Dana Lee" },
+      { waitMs: 1_000 },
+    );
+    for (const sessionId of ["a1", "a2", "a3"]) {
+      await p.observe({ tenantId: "attacker", userId: "u", sessionId, at: clock++, kind: "user_message", text: "hi" });
+    }
+    expect(p.sessionCount).toBe(3); // victim's v1 plus attacker's newest two
+    expect(sourceMap.utility(victim, "general", "crm")).toBe(0.5);
+  });
+
+  test("an idle session is dropped when the next session starts", async () => {
+    let now = 0;
+    const { p } = partner({ now: () => now, config: { sessionIdleMs: 1_000 } });
+    await p.observe({ ...scope, at: 0, kind: "user_message", text: "hello there friend" });
+    now = 5_000;
+    await p.observe({ ...scope, sessionId: "s-new", at: now, kind: "user_message", text: "hello again friend" });
+    expect(p.sessionCount).toBe(1);
   });
 });
 
@@ -151,6 +166,8 @@ describe("ask", () => {
     const model = new FakeModel(() => "Thursday 3pm [0]");
     const { p } = partner({ model });
     const res = await p.ask({ ...scope, question: "When is the call with Dana Lee?" });
-    expect(res).toMatchObject({ answer: "Thursday 3pm [0]", usedModel: true });
+    expect(res.usedModel).toBe(true);
+    expect(res.answer).toContain("Thursday 3pm [0]");
+    expect(res.answer).toStartWith("<context"); // Model text derived from sources is wrapped as data, too.
   });
 });

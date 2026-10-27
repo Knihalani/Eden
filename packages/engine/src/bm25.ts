@@ -13,6 +13,8 @@ export interface Hit {
    * comparable across queries where raw BM25 is not. Ranking uses `score`; confidence uses `coverage`.
    */
   coverage: number;
+  /** How many distinct query terms the document holds. One shared word is never evidence on its own. */
+  matched: number;
 }
 
 /** A small in-memory BM25 index. One per user; sized for a cache of a few thousand items. */
@@ -69,14 +71,16 @@ export class Bm25Index {
     for (const [id, doc] of this.docs) {
       let score = 0;
       let covered = 0;
+      let matched = 0;
       for (const t of known) {
         const f = doc.terms.get(t);
         if (!f) continue;
         const idf = this.idf(t);
         covered += idf;
+        matched++;
         score += (idf * f * (this.k1 + 1)) / (f + this.k1 * (1 - this.b + (this.b * doc.length) / avg));
       }
-      if (score > 0) hits.push({ id, score, coverage: covered / totalIdf });
+      if (score > 0) hits.push({ id, score, coverage: covered / totalIdf, matched });
     }
     return hits.sort((a, b) => b.score - a.score).slice(0, limit);
   }

@@ -38,7 +38,7 @@ export class SourceMap {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS mention (
         scope TEXT NOT NULL, entity TEXT NOT NULL, source_id TEXT NOT NULL,
-        count INTEGER NOT NULL DEFAULT 0, last_ref TEXT, last_seen INTEGER NOT NULL,
+        count INTEGER NOT NULL DEFAULT 0, last_seen INTEGER NOT NULL,
         PRIMARY KEY (scope, entity, source_id)
       );
       CREATE TABLE IF NOT EXISTS utility (
@@ -49,16 +49,18 @@ export class SourceMap {
     `);
   }
 
-  /** Records that `sourceId` returned an item mentioning these entities. */
-  recordMentions(scope: Scope, sourceId: string, ref: string, entities: string[], now = Date.now()): void {
+  /**
+   * Records that `sourceId` returned an item mentioning these entities. The caller passes typed entities only
+   * (names, handles, ids): never quoted phrases, URLs or item refs, which can carry content.
+   */
+  recordMentions(scope: Scope, sourceId: string, entities: string[], now = Date.now()): void {
     const upsert = this.db.prepare(`
-      INSERT INTO mention (scope, entity, source_id, count, last_ref, last_seen) VALUES (?, ?, ?, 1, ?, ?)
-      ON CONFLICT (scope, entity, source_id) DO UPDATE SET
-        count = count + 1, last_ref = excluded.last_ref, last_seen = excluded.last_seen
+      INSERT INTO mention (scope, entity, source_id, count, last_seen) VALUES (?, ?, ?, 1, ?)
+      ON CONFLICT (scope, entity, source_id) DO UPDATE SET count = count + 1, last_seen = excluded.last_seen
     `);
     const key = scopeKey(scope);
     this.db.transaction(() => {
-      for (const e of new Set(entities.map(normalizeEntity))) if (e) upsert.run(key, e, sourceId, ref, now);
+      for (const e of new Set(entities.map(normalizeEntity))) if (e) upsert.run(key, e, sourceId, now);
     })();
   }
 
@@ -70,6 +72,16 @@ export class SourceMap {
          ON CONFLICT (scope, situation, source_id) DO UPDATE SET shown = shown + 1, used = used + excluded.used`,
       )
       .run(scopeKey(scope), situation, sourceId, used ? 1 : 0);
+  }
+
+  /** Corrects an outcome recorded earlier (explicit feedback overriding an inferred one). Counts never go negative. */
+  correctOutcome(scope: Scope, situation: string, sourceId: string, used: boolean): void {
+    const delta = used ? 1 : -1;
+    this.db
+      .prepare(
+        `UPDATE utility SET used = MAX(0, MIN(shown, used + ?)) WHERE scope = ? AND situation = ? AND source_id = ?`,
+      )
+      .run(delta, scopeKey(scope), situation, sourceId);
   }
 
   /** The learned usefulness of a source in a situation: the Beta(1,1) posterior mean. */

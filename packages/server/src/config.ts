@@ -10,7 +10,7 @@
  * EDEN_MODEL         default z-ai/glm-5.3-flash.
  */
 import { join } from "node:path";
-import { edenHome } from "@eden/protocol";
+import { edenHome, isId } from "@eden/protocol";
 
 export interface ServerConfig {
   port: number;
@@ -30,6 +30,8 @@ export function loadConfig(env = process.env): ServerConfig {
   for (const pair of (env.EDEN_API_KEYS ?? "").split(",").filter(Boolean)) {
     const [tenant, key] = pair.split(":");
     if (!tenant || !key || key.length < 16) throw new Error("EDEN_API_KEYS entries must be tenant:key, keys 16+ chars");
+    // Scope keys join tenant and user with "/": a tenant id holding one could alias another tenant's users.
+    if (!isId(tenant)) throw new Error(`EDEN_API_KEYS tenant "${tenant}" must be 1-128 characters of [A-Za-z0-9._:@-]`);
     keys.set(key, tenant);
   }
   if (!dev && keys.size === 0) throw new Error("set EDEN_API_KEYS (or EDEN_DEV=1 for local development)");
