@@ -180,8 +180,8 @@ The key idea: **put a simulated world into real services**, so real search seman
    Chroma, file-backed stores), seeded with a simulated world and run with no secrets and no network beyond their
    backend. It measures each query variant's reach, empty rate, result size and latency against world labels. First
    runs (10 configurations, one world): Eden's current query reaches 0% on the 6 whole-string-substring connectors,
-   where one call per entity reaches 33–100%; the best variant differs by connector (per entity on most, the cue's
-   terms on OR search, the raw question on vector search). Next: more connectors (CRM, wiki, chat), more seeds,
+   where one call per entity reaches 27–77% of the same cases; the best variant differs by connector (per entity on
+   most, the cue's terms on OR and FTS search, the raw question on vector search). Next: more connectors (CRM, wiki, chat), more seeds,
    and the per-connector baselines phase 0 needs.
 1. **Sandbox accounts**, never personal ones, for hosted services with no open-source backend: a Google Workspace
    test domain (Gmail, Calendar, Drive), a Notion test
