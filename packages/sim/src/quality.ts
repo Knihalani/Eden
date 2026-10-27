@@ -83,6 +83,15 @@ export interface Rates {
   softFireRate: number;
   needTurns: number;
   delivered: number;
+  /** Counts behind the rates, for confidence intervals. */
+  counts: {
+    relevant: number;
+    mustFacts: number;
+    mustDelivered: number;
+    mustInTime: number;
+    silentTurns: number;
+    falseFires: number;
+  };
 }
 
 function rates(c: Counter): Rates {
@@ -97,6 +106,14 @@ function rates(c: Counter): Rates {
     softFireRate: r(c.softFires, c.softTurns),
     needTurns: c.needTurns,
     delivered: c.delivered,
+    counts: {
+      relevant: c.relevant,
+      mustFacts: c.mustFacts,
+      mustDelivered: c.mustDelivered,
+      mustInTime: c.mustInTime,
+      silentTurns: c.silentTurns,
+      falseFires: c.falseFires,
+    },
   };
 }
 
@@ -203,17 +220,24 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
   const funnel = { mustFacts: 0, inCacheBefore: 0, retrieved: 0, retrievedOrCached: 0, judged: 0, delivered: 0 };
   const needDecisions: Record<string, number> = {};
 
-  for (let u = 0; u < o.users; u++) {
+  // Users are independent (each has its own engine, connectors and clock), so in real-time runs they play
+  // concurrently; at timeScale 0 one at a time, which keeps instant runs simple to profile.
+  // Worlds, sessions and connector indexes are built before any user plays: building them is the harness's work,
+  // and doing it as concurrent users start would stall the others' calls and show up as engine latency.
+  const prepared = Array.from({ length: o.users }, (_, u) => {
     const world = buildWorld({ seed: o.seed * 1_000 + u, noiseScale: o.noiseScale });
     const { sessions, asks } = buildSessions(world, {
       seed: o.seed * 7_919 + u,
       sessions: o.sessionsPerUser,
       agentToolRate: o.agentToolRate,
     });
+    return { world, sessions, asks, sources: simSources(world, o.profiles, o.timeScale, o.seed + u) };
+  });
+  const runUser = async (u: number) => {
+    const { world, sessions, asks, sources } = prepared[u]!;
     const byId = new Map(world.items.map((i) => [i.id, i]));
     const secrets = world.items.filter((i) => i.secret).map((i) => i.secret!);
     secretsPlanted += secrets.length;
-    const sources = simSources(world, o.profiles, o.timeScale, o.seed + u);
     let clock = world.now;
     const userTraces: Trace[] = [];
     const judgeKind = o.model ? "none" : (o.judge ?? "none");
@@ -355,7 +379,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
           if (item.noise) noise++;
           if (item.injection) injectionItems++;
           if (item.facts.length > 0 && item.facts.every((f) => known.has(f))) redundant++;
-          for (const f of item.facts) addKnown(f, Math.ceil(at));
+          for (const f of item.facts) addKnown(f, at); // Fractional: arrived during the wait after turn floor(at).
         }
       }
 
@@ -462,7 +486,14 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       judged.relevantCandidates += oracle.stats.relevantCandidates;
       judged.unmatched += oracle.stats.unmatched;
     }
-  }
+  };
+  const lanes = o.timeScale > 0 ? o.users : 1;
+  let nextUser = 0;
+  await Promise.all(
+    Array.from({ length: lanes }, async () => {
+      while (nextUser < o.users) await runUser(nextUser++);
+    }),
+  );
 
   async function scoreAsk(
     partner: ContextPartner,
