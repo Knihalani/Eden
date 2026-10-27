@@ -1,7 +1,7 @@
 # What real MCP connectors do with a query
 
-Status: research for the query planner (docs/plans/query-planner.md), 2026-10-27. Source-level reading only: none of
-these servers was run (see [Running them](#running-them)).
+Status: research for the query planner (docs/plans/query-planner.md), 2026-10-27. Source-level reading; eight of
+these servers were then run against seeded backends (see [Running them](#running-them)).
 
 ## Why
 
@@ -96,20 +96,14 @@ guarantee, so it may inform defaults but never replace the operator's choice.
 
 ## Running them
 
-The plan's tier 3 needs these servers running against seeded backends. In this session:
-
-- Backends run: official images pulled from mirrors (Docker Hub's anonymous pulls are rate limited here):
-  `mirror.gcr.io/library/postgres:16-alpine`, `mirror.gcr.io/getmeili/meilisearch:v1.12`, `docker.gitea.com/gitea:1.22`.
-  Meilisearch was started and answered its health check.
-- The MCP servers themselves were **not** run: installing a cloned third-party repository was refused by this
-  session's safety policy, because it executes code from outside the repository. Running them needs the owner's
-  explicit permission (for example a permission rule for the lab's install commands), or pinned, published packages
-  run in containers with no access to secrets. Containers here also lack the proxy's CA, so they cannot install
-  packages from the network without it being mounted.
+With the owner's permission, eight of these servers now run in the connector lab, built from pinned commits inside
+containers with no secrets and no network beyond their backend: the reference memory server, mcpvault, Basic Memory,
+Meilisearch, CalDAV (Radicale), IMAP (Dovecot), Chroma and Gitea. The measurements confirmed the code reading above,
+for example 0% reach for multi-term queries on every whole-string-substring connector. Results and method are in
+docs/research/connector-lab.md.
 
 ## Next
 
 - A schema corpus: every search tool's `inputSchema` from these clones, with the hand-labelled correct argument
   mapping, as the test set for the schema mapper (plan phase 0).
-- The lab, once running servers is allowed: seed one simulated world per backend through its write API and measure
-  each query shape's reachability, empty rate and latency per connector (plan tier 3).
+- More lab connectors: a CRM, a wiki, notmuch, chat with a required channel, JMAP (docs/research/connector-lab.md).

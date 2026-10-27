@@ -175,15 +175,14 @@ not overlapping in the right direction).
 
 The key idea: **put a simulated world into real services**, so real search semantics meet known ground truth.
 
-0. **A local lab first**, no accounts needed: open-source backends in containers (Postgres, Meilisearch, Gitea,
-   and next Stalwart or Dovecot for IMAP/JMAP, Radicale for CalDAV, BookStack or Wiki.js, Twenty or EspoCRM, Redmine,
-   Rocket.Chat or Zulip, Chroma or Qdrant), each fronted by the open-source MCP server surveyed in
-   docs/research/connectors.md, pinned by commit. Official backend images run here from registry mirrors; the MCP
-   servers need the owner's permission to install and run third-party code, inside containers with no secrets. One
-   spec per connector in `packages/sim/src/lab/`: backend image, MCP command, search tool, argument mapping, a
-   `seed(world)` through the backend's write API, and a result → world-id mapping. The lab measures each shape's
-   reachability, empty rate and latency against world labels before any planner exists, which also gives the
-   per-connector baselines phase 0 needs.
+0. **A local lab first**, no accounts needed, **built** (docs/research/connector-lab.md): open-source MCP servers
+   from pinned commits, each in front of a real backend in a container (Meilisearch, Dovecot, Radicale, Gitea,
+   Chroma, file-backed stores), seeded with a simulated world and run with no secrets and no network beyond their
+   backend. It measures each query variant's reach, empty rate, result size and latency against world labels. First
+   runs (10 configurations, one world): Eden's current query reaches 0% on the 6 whole-string-substring connectors,
+   where one call per entity reaches 33–100%; the best variant differs by connector (per entity on most, the cue's
+   terms on OR search, the raw question on vector search). Next: more connectors (CRM, wiki, chat), more seeds,
+   and the per-connector baselines phase 0 needs.
 1. **Sandbox accounts**, never personal ones, for hosted services with no open-source backend: a Google Workspace
    test domain (Gmail, Calendar, Drive), a Notion test
    workspace, a Slack test workspace, a HubSpot developer sandbox, a Linear or Jira free workspace, a GitHub test
@@ -289,7 +288,7 @@ Needed before or during the work; each becomes a numbered entry in DECISIONS.md.
 3. **Tenant-level priors** (D9): opt-in content-free counts per connector kind, or per-user learning only.
 4. **A model budget** for the judge in live tier-3 runs (the current OpenRouter key's $0.01 limit is spent).
 5. **Default-on criteria** for phase 6.
-6. **Running third-party MCP servers in the lab**: permission to install and run pinned open-source servers, in
-   containers without secrets or network beyond their backend.
+6. **Running third-party MCP servers in the lab**: granted by the owner on 2026-10-27, for pinned open-source
+   servers in containers without secrets or network beyond their backend.
 7. **Multi-tool connectors** (D7): keep one Eden source per search tool, or allow a connector with an operator-listed
    set of read-only search tools and a router.
