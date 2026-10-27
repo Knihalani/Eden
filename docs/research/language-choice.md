@@ -6,6 +6,26 @@ native built-ins, or move to Rust through `bun:ffi`, WebAssembly or Node-API? Th
 Every number below was printed by a command run in the session that wrote this note; anything not measured is
 labelled **unmeasured**.
 
+## Update after the TypeScript prefilter (read first)
+
+The experiment above compared Rust against the secret gate as it was on its base commit (f8f036d): one `includes`
+per keyword. The same branch later replaced that with one Aho–Corasick pass (`@eden/primitives`, D21). Re-running
+`bun native/bench/secrets.ts` on the merged tree (same machine, same Rust build, one run, 2026-10-27):
+
+| Input | TS `secretHits` today (all rules, incl. `eden-*`) | Rust FFI (gitleaks rules only) | Rust lead |
+|---|---:|---:|---:|
+| benign 256 B | 3.468 µs | 1.267 µs | 2.7x |
+| benign 2 KiB | 26.549 µs | 8.058 µs | 3.3x |
+| benign non-ASCII 2 KiB | 13.496 µs | 11.824 µs | 1.1x |
+| benign 16 KiB | 259.725 µs | 120.741 µs | 2.2x |
+| 3 secrets, ~2 KiB | 34.195 µs | 15.416 µs | 2.2x |
+
+The Rust column still runs fewer rules (the `eden-*` rules were not ported). The lead fell from ~10x to 1.1–3.3x, an
+absolute saving of under ~20 µs per 2 KiB text, against MCP round trips in the hundreds of milliseconds. So the
+recommendation below for the secret gate is **superseded: stay in TypeScript** (D22). Revisit with napi-rs only if
+production profiles show redaction as a material share of CPU; this note's harness and crates are kept for that.
+The tokenizer recommendation (stay TS) stands; `@eden/primitives`' `tokenizeInto` is the TS implementation in use.
+
 ## Summary
 
 | Kernel | Recommendation | Why (median of 3 runs, 2 KiB email) | Break-even input size |

@@ -16,7 +16,8 @@ Bun/TypeScript monorepo, no build step (packages export `src/*.ts`). Repo `Kaiav
 Packages: `protocol`, `primitives`, `redact`, `sources`, `graph`, `llm`, `engine`, `server`, `client`, `eval`;
 examples in `examples/`. Hot-path code uses `@eden/primitives` (one tokenizer, typed-array structures) and follows its
 README's measured rules; a change to a primitive re-runs its benchmark and reports before/after numbers.
-Dependencies are deliberately few (the MCP SDK and zod); justify any new one in the PR.
+Dependencies are deliberately few (the MCP SDK and zod); justify any new one in the PR. `native/` is the measured
+Rust experiment behind D22 (hot kernels stay TypeScript), not product code: nothing in `packages/` imports it.
 
 ## CI is local
 
