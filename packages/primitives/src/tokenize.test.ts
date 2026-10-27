@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { FOLD_DROP, FOLD_EXPAND, foldOf } from "./charclass";
 import { murmur3, fnv1a, mix32 } from "./hash";
 import { tokenize, tokenizeInto } from "./tokenize";
 import { Vocab } from "./vocab";
@@ -55,6 +56,20 @@ describe("tokenize", () => {
     const v = new Vocab();
     const out = new Uint32Array(2);
     expect(tokenizeInto("one two three four", v, true, out, null)).toBe(2);
+  });
+});
+
+describe("folding is idempotent (review round 2)", () => {
+  test("for every BMP code unit, folding the fold changes nothing", () => {
+    for (let c = 128; c < 0x10000; c++) {
+      const f = foldOf(c);
+      if (f === FOLD_DROP || f === FOLD_EXPAND || f < 128) continue;
+      expect(foldOf(f)).toBe(f);
+    }
+    const v = new Vocab();
+    const [term] = tokenize("ΚΟϲΜΟϲ", v);
+    expect(term).toBe("κοσμοσ");
+    expect(v.lookup(term!)).toBe(v.lookup("κοσμος"));
   });
 });
 
