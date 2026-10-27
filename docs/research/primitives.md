@@ -162,6 +162,57 @@ Neither runtime wins across the board; differences are within 1.5x except top-k.
 algorithms and data layout are. Bun stays (native hashing, `bun:sqlite`, test runner, no build step). Native code
 (Rust) is evaluated separately in [language-choice.md](language-choice.md).
 
+## Engine integration: measured end to end
+
+Primitives are judged by what they do to the engine, not by their own microbenchmarks. Two anchors in
+`packages/engine/bench/`: `pipeline.bench.ts` (one user, 6,000 items across 4 sources, 2,000 events, instant sources,
+sequential) and `concurrent.bench.ts` (200 users with cold caches, events open-loop at 400/s, sources answering in
+50–250 ms, so lookups overlap the way they do in production). Both use the real `ContextPartner` with no model.
+
+**Item cache on `SparseIndex`** (`sparse-index.ts`; `bench/sparse-index.bench.ts`, 2,000 docs, one user's cap):
+
+| Corpus | `SparseIndex.search` top 24 | Map BM25 + sort | `SparseIndex` remove + add | Map remove + add |
+|---|---:|---:|---:|---:|
+| Zipf, 30,000 term types | 14.55 µs | 153.82 µs | 19.27 µs (p50 9.28) | 63.68 µs |
+| Dense, 186 term types (worst case) | 147.96 µs | 1082.32 µs | 10.39 µs (p50 4.60) | 28.05 µs |
+
+Top scores are checked equal before timing. The churn p99 (~100–150 µs) is compaction, amortized over ~10% of
+postings. Term-at-a-time with a dense accumulator and stamp-tagged scratch beats a `Map` accumulator for the reason
+fast-primitives.md gives (one object per matched doc); MiniSearch accumulates that way.
+
+**Per-event path.** Profiling `concurrent.bench.ts` (`bun --cpu-prof`) put the usage check and session memory at 37%
+of CPU: the same event text was tokenized up to four times (usage check, memory, chatter test, cue), and memory did
+a `Set` delete and add per token occurrence. `distinctTermIds` tokenizes once and dedupes with a stamp array; every
+consumer shares the result. `pipeline.bench.ts` fast-path `observe` p50 went from 72.0–81.2 µs to 48.0–50.0 µs,
+0.311–0.371 to 0.281–0.287 ms per event, with eval metrics unchanged (precision 0.667, recall 0.667, false-fire
+rate 0). Earlier in this round the same bench went from 1.218 to ~0.30 ms per event (SparseIndex cache, item terms
+tokenized once at write, prepared-statement reuse, one transaction per lookup's mentions).
+
+**Source-map writes** (scratch `sq.ts`, 4,000 upserts into `utility`):
+
+| Store | 1 per transaction | 16 per transaction |
+|---|---:|---:|
+| `:memory:` | 3.0 µs | 2.4 µs |
+| file, WAL, synchronous=FULL (SQLite's default) | 190.0 µs | 21.1 µs |
+| file, WAL, synchronous=NORMAL | 17.9 µs | 2.1 µs |
+
+Production uses a file, so every inferred outcome cost ~190 µs on the event loop. `SourceMap` now sets
+synchronous=NORMAL and writes outcomes behind (buffered, one transaction within 10 ms or at 256 rows; every read
+flushes first).
+
+**Bounded state.** A session's vocabulary is its own (rebuilt past `maxSessionTerms`, keeping seen terms and the terms
+of injections awaiting use): before, event text was interned into the user's cache vocabulary, which never shrinks,
+so tool output full of ids grew it for as long as the user stayed cached (`partner.test.ts` pins it: 19 terms, not
+521). The engine reads the first `maxEventChars` (32,000) of an event, cut at whitespace so half a secret is never
+stored (a JWT cut before its signature escapes the redactor).
+
+**Worker pool (D26).** With the pool wired in (`pooledSanitizer`), `concurrent.bench.ts` showed no steady-state gain:
+observe p99 0.53–0.77 ms with 3 workers against 0.68–0.71 ms inline, CPU 3–8 points higher; through the cold-start
+burst (every user's first lookup at once) 7.0–7.5 ms against 9.4–9.7 ms. Redacting items was ~9% of lookup CPU;
+tokenizing, indexing and sketching stay on the loop because the index does. Yielding to the loop between one
+lookup's sources gave a small gain in steady-state observe p99 (0.64–0.83 against 0.77–1.18 ms over three runs
+each) and none in lag. Run-to-run noise on this VM is about the size of these differences.
+
 ## Library choices
 
 | Need | Considered | Chosen | Why |
