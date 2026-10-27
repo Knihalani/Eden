@@ -298,3 +298,39 @@ describe("isolation: the same user id in two tenants shares nothing", () => {
 function item(ref: string): ContextItem {
   return { id: `crm:${ref}`, sourceId: "crm", ref, title: ref, text: ref };
 }
+
+describe("near-duplicates (dedup integration)", () => {
+  const original =
+    "Hi Sam, the Globex renewal is due 2026-11-30 and Dana Lee wants a 12% discount on the three year term. " +
+    "Can you confirm the pricing before Thursday?";
+  const mail = new StaticSource("gmail", "mail", [
+    { ref: "m1", title: "Globex renewal", text: original },
+    {
+      ref: "m2",
+      title: "Re: Globex renewal",
+      text: `Thanks!\n\nOn Tue, Oct 27, 2026 at 9:14 AM Dana Lee <dana@globex.example> wrote:\n> ${original}`,
+    },
+  ]);
+  const synced = new StaticSource("drive", "docs", [{ ref: "d1", title: "Globex renewal", text: original }]);
+
+  test("one packet never carries an email and the reply that only quotes it", async () => {
+    const { p } = make({}, [mail]);
+    const r = await p.observe(ev({ kind: "user_message", text: "Globex renewal for Dana Lee?" }), { waitMs: 1_000 });
+    expect(r.injection?.citations).toHaveLength(1);
+  });
+
+  test("a synced copy of a delivered item is not delivered again in the session", async () => {
+    const only = new StaticSource("gmail", "mail", [{ ref: "m1", title: "Globex renewal", text: original }]);
+    let available: Source[] = [only];
+    const { p } = make({ sources: async () => available, config: { cueCooldownTurns: 0 } });
+    const first = await p.observe(ev({ kind: "user_message", text: "Globex renewal for Dana Lee?" }), {
+      waitMs: 1_000,
+    });
+    expect(first.injection?.citations.map((c) => c.itemId)).toEqual(["gmail:m1"]);
+    available = [only, synced]; // the copy only becomes reachable after the original was delivered
+    const again = await p.observe(ev({ kind: "user_message", text: "the Globex renewal terms from Dana Lee" }), {
+      waitMs: 1_000,
+    });
+    expect(again.injection?.citations.map((c) => c.itemId) ?? []).not.toContain("drive:d1");
+  });
+});

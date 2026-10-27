@@ -34,7 +34,7 @@ import {
 import { sanitizeForStore } from "@eden/redact";
 import type { Vocab } from "@eden/primitives";
 import { SourceFanout, type Source, type SourceResolver } from "@eden/sources";
-import { sanitizeItem, type ItemCache } from "./cache";
+import { nearDuplicate, sanitizeItem, type ItemCache, type Sketch } from "./cache";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { answerMessages, judgeMessages, parseJudge } from "./judge";
 import { Ledger } from "./ledger";
@@ -86,6 +86,8 @@ interface Session {
   /** Term ids the session has seen (bounded, least recently seen first). */
   seen: Set<number>;
   ledger: Ledger;
+  /** Sketches of items delivered in this session (bounded): a near-duplicate of one is not delivered again. */
+  delivered: Sketch[];
   /** Injections handed to the agent and not yet judged used or unused. */
   outstanding: Map<string, Outstanding>;
   pending: Injection[];
@@ -108,6 +110,7 @@ interface Scored {
   item: ContextItem;
   score: number;
   matched: number;
+  sketch: Sketch | null;
 }
 
 /** What an injection was built from, kept until it is handed out and usage tracking starts. */
@@ -258,7 +261,7 @@ export class ContextPartner {
     if (items.length && !s.closed) {
       const injection = this.deliver(
         s,
-        items.map((item) => ({ item, score: 1, matched: 0 })),
+        items.map((item) => ({ item, score: 1, matched: 0, sketch: null })),
         "answer",
         "ask",
       );
@@ -358,6 +361,7 @@ export class ContextPartner {
       vocab: this.deps.cache.vocabOf({ tenantId: e.tenantId, userId: e.userId }),
       seen: new Set(),
       ledger: new Ledger(this.config.ledgerCooldownTurns),
+      delivered: [],
       outstanding: new Map(),
       pending: [],
       cues: new Map(),
@@ -471,14 +475,23 @@ export class ContextPartner {
       const t = termIds(e, vocab, true);
       return Array.from(t.ids.subarray(0, t.n));
     });
-    return cache
-      .search(s.scope, query, query.length, 12, this.now())
-      .filter((h) => options.ignoreLedger || s.ledger.isFresh(h.item.id, s.turn))
-      .map((h) => {
-        const entityHit = entities.some((ids) => ids.length > 0 && cache.containsAll(s.scope, h.doc, ids, ids.length));
-        return { item: h.item, matched: h.matched, score: h.coverage + (entityHit ? this.config.entityBonus : 0) };
-      })
-      .sort((a, b) => b.score - a.score);
+    return (
+      cache
+        .search(s.scope, query, query.length, 12, this.now())
+        .filter((h) => options.ignoreLedger || s.ledger.isFresh(h.item.id, s.turn))
+        // A near-duplicate of something already delivered this session (a reply quoting it, a synced copy) is old news.
+        .filter((h) => options.ignoreLedger || !s.delivered.some((d) => nearDuplicate(d, h.sketch)))
+        .map((h) => {
+          const entityHit = entities.some(
+            (ids) => ids.length > 0 && cache.containsAll(s.scope, h.doc, ids, ids.length),
+          );
+          const score = h.coverage + (entityHit ? this.config.entityBonus : 0);
+          return { item: h.item, matched: h.matched, score, sketch: h.sketch };
+        })
+        .sort((a, b) => b.score - a.score)
+        // Of near-duplicates among the candidates, keep the best scored: one packet never says the same thing twice.
+        .filter((x, i, all) => !all.slice(0, i).some((y) => nearDuplicate(x.sketch, y.sketch)))
+    );
   }
 
   private confident(scored: Scored[]): Scored[] {
@@ -618,6 +631,8 @@ export class ContextPartner {
 
   private deliver(s: Session, scored: Scored[], mode: InjectionMode, reason: string): Injection {
     const items = scored.map((x) => x.item);
+    for (const x of scored) if (x.sketch) s.delivered.push(x.sketch);
+    if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
     s.ledger.mark(
       items.map((i) => i.id),
       s.turn,
