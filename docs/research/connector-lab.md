@@ -106,8 +106,9 @@ Latency is the server and backend on this machine with no network between them, 
 7. **Fresh installs break.** Two of eight servers failed on a clean install from their own pinned commit, because
    of dependency drift. The CalDAV server's unpinned `mcp>=1.3` resolved to mcp 2.3.0, which removed the API it
    uses. Chroma's pinned `mcp==1.6.0` imports a pydantic internal that newer pydantic removed. Pinning a server's
-   commit is not enough: the lab pins its resolved dependencies, and tenants' connectors will fail this way in the
-   wild, which `McpSource`'s retry-after-failure handles.
+   commit is not enough: the lab holds back the two breaking packages (`mcp<2`, `pydantic<2.11`) but does not yet
+   lock every resolved dependency, so a rebuild can drift. Tenants' connectors will fail this way in the wild, which
+   `McpSource`'s retry-after-failure handles.
 8. **Result size is unbounded on some servers.** The reference memory server has no limit argument and returned 38
    items per `each-entity` case on average. A planner has to bound what it keeps per call, not trust the server.
 9. **Indexing costs differ by orders of magnitude.** Basic Memory took 207 s to index 1,499 notes and had a 2 s
