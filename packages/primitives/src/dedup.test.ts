@@ -328,3 +328,19 @@ describe("MinHashIndex", () => {
     expect(lshCandidateProbability(1, 16, 8)).toBe(1);
   });
 });
+
+describe("TextSketcher shared scratch", () => {
+  test("results read after another sketcher's load throw; reloading restores them exactly", () => {
+    const a = new TextSketcher(new Vocab(), 4_096, 3);
+    const b = new TextSketcher(new Vocab(), 8_192, 3);
+    const outA = new Uint32Array(2);
+    const again = new Uint32Array(2);
+    a.load("the quarterly renewal call with Globex moved to Thursday at 3pm");
+    a.simhash(outA);
+    b.load("an entirely different text about hotel bookings in Lisbon");
+    expect(() => a.simhash(again)).toThrow(/load\(\) again/);
+    a.load("the quarterly renewal call with Globex moved to Thursday at 3pm");
+    a.simhash(again);
+    expect([...again]).toEqual([...outA]);
+  });
+});

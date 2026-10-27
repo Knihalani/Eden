@@ -538,13 +538,16 @@ export class ContextPartner {
     );
     if (s.closed) return chosen.length; // Forgotten or ended mid-search: keep nothing.
     const mentions: { sourceId: string; entities: string[] }[] = [];
-    for (const o of outcomes) {
+    for (let k = 0; k < outcomes.length; k++) {
+      const o = outcomes[k]!;
       // One source's items at a time, yielding between: storing a lookup's items (tokenizing, indexing, sketching) is
       // ~80 µs each, and other users' events should not wait behind all of them at once.
-      if (mentions.length > 0) await yieldToLoop();
+      if (k > 0) await yieldToLoop();
       if (s.closed) return chosen.length;
-      const stored = this.deps.cache.put(s.scope, o.items, this.now(), true);
-      for (const item of stored) {
+      // Mentions count the items that mention an entity, so only items new to the cache (or changed) are recorded:
+      // an item a dozen lookups return is still one mention, and re-recording it was ~10% of server CPU.
+      const added = this.deps.cache.put(s.scope, o.items, this.now(), true);
+      for (const item of added) {
         const entities = extractTypedEntities(`${item.title}. ${item.text}`)
           .filter((e) => PERSISTABLE_KINDS.has(e.kind))
           .slice(0, 20)

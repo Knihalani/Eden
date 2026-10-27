@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildSessions } from "./sessions";
-import { IDEAL, REALISTIC, SimSource } from "./sources";
+import { IDEAL, REALISTIC, SimIndex, SimSource } from "./sources";
 import { runQuality } from "./quality";
 import { buildWorld } from "./world";
 
@@ -49,7 +49,7 @@ describe("simulated sources", () => {
   const arc = w.arcs.find((a) => a.kind === "meeting")!;
 
   test("AND search returns only items with every term; snippets cut the body", async () => {
-    const gmail = new SimSource("gmail", w, REALISTIC.gmail!, 0, 1);
+    const gmail = new SimSource(new SimIndex("gmail", w), REALISTIC.gmail!, 0, 1);
     const terms = [arc.slots.activity!, arc.person!.first];
     const hits = await gmail.search({ scope, text: terms.join(" "), entities: [], limit: 20 }, signal);
     for (const h of hits)
@@ -66,7 +66,7 @@ describe("simulated sources", () => {
   });
 
   test("ranked search finds the arc's event by its terms", async () => {
-    const cal = new SimSource("calendar", w, IDEAL.calendar!, 0, 1);
+    const cal = new SimSource(new SimIndex("calendar", w), IDEAL.calendar!, 0, 1);
     const hits = await cal.search(
       { scope, text: `${arc.slots.activity} ${arc.person!.full}`, entities: [], limit: 5 },
       signal,
@@ -75,8 +75,8 @@ describe("simulated sources", () => {
   });
 
   test("an outage fails every call; errors are counted", async () => {
-    const s = new SimSource("drive", w, IDEAL.drive!, 0, 1);
-    s.fault = { outage: [0, 60_000] };
+    const s = new SimSource(new SimIndex("drive", w), IDEAL.drive!, 0, 1);
+    s.fault = { outageUntil: performance.now() + 60_000 };
     await expect(s.search({ scope, text: "notes", entities: [], limit: 5 }, signal)).rejects.toThrow(/503/);
     expect(s.stats.errors).toBe(1);
   });
