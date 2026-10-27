@@ -492,13 +492,16 @@ export class ContextPartner {
   }
 
   private async slowPath(s: Session, cue: Cue, t0: number, eventKind: string): Promise<Injection | null> {
+    // The turn that triggered the lookup. Traces report it, not the turn current when the lookup finishes: later
+    // events may arrive meanwhile, and evals attribute deliveries by this field.
+    const turn = s.turn;
     let modelCalls = 0;
     let costUsd = 0;
     let sourceCalls = 0;
     const done = (decision: Trace["decision"], reason: string, items: ContextItem[] = []) =>
       this.trace({
         sessionId: s.id,
-        turn: s.turn,
+        turn,
         event: eventKind,
         decision,
         reason,
