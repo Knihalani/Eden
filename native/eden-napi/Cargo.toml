@@ -1,0 +1,23 @@
+[package]
+name = "eden-napi"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Language-choice experiment: the eden-native tokenizer behind Node-API (napi-rs), loadable by Node and Bun"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+eden-native = { path = "../eden-native" }
+napi = { version = "3", default-features = false, features = ["napi4"] }
+napi-derive = "3"
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"

@@ -24,6 +24,7 @@
  * - (e) the redaction memory had before P0.4 (a password, passphrase or API key of any length; short token
  *   prefixes), so the gate is never looser than it was.
  */
+import { MultiMatcher } from "@eden/primitives";
 import { redact, REDACTED } from "./redact";
 import gitleaks from "./vendor/gitleaks/gitleaks.toml";
 
@@ -65,6 +66,11 @@ export interface SecretRule {
   id: string;
   /** Lower-case words of which at least one must occur in the text for the rule to run; none: always runs. */
   keywords: string[];
+  /**
+   * Words of which at least one occurs in every text the rule can match: for rules without keywords, a literal every
+   * match contains ("sk-" for an OpenAI key). Used only to skip a rule cheaply, so it never changes what a rule finds.
+   */
+  prefilter: string[];
   /** Where the rule's secrets sit in `text`; none when it finds none. */
   spans(text: string): Span[];
 }
@@ -255,6 +261,7 @@ function gitleaksRule(rule: GitleaksRule & { regex: string }, global: CompiledAl
   return {
     id: rule.id,
     keywords: (rule.keywords ?? []).map((word) => word.toLowerCase()),
+    prefilter: (rule.keywords ?? []).map((word) => word.toLowerCase()),
     spans(text) {
       const { regex, scan, own } = (compiled ??= compile());
       const out: Span[] = [];
@@ -292,7 +299,26 @@ function matchSpans(regex: RegExp, text: string): Span[] {
   return [...text.matchAll(regex)].map((found) => found.indices?.[1] ?? [found.index, found.index + found[0].length]);
 }
 
-const plain = (id: string, spans: (text: string) => Span[]): SecretRule => ({ id, keywords: [], spans });
+const plain = (id: string, prefilter: string[], spans: (text: string) => Span[]): SecretRule => ({
+  id,
+  keywords: [],
+  prefilter,
+  spans,
+});
+
+/**
+ * The secret words of KEYWORD_RULE and SECRET_WORD, as literals every match contains: `api[_-]?key` always holds
+ * "api", `private[_-]?key` "private".
+ */
+const SECRET_WORDS = ["password", "passwd", "pwd", "secret", "token", "api", "private", "credential"];
+/** Literals every match of each keyword-less shape contains (case-folded; a superset is safe, a miss is not). */
+const SHAPE_LITERALS: Record<string, string[]> = {
+  "eden-cfat": ["cfat_"],
+  "eden-openai": ["sk-"],
+  "eden-mailgun": ["key-"],
+  "eden-telegram": [":aa"],
+  "eden-aws-key-id": ["a3t", "akia", "asia", "abia", "acca"],
+};
 
 let compiled: SecretRule[] | undefined;
 
@@ -304,21 +330,55 @@ export function secretRules(): SecretRule[] {
   const withRegex = config.rules.filter((rule): rule is GitleaksRule & { regex: string } => Boolean(rule.regex));
   compiled = [
     ...withRegex.map((rule) => gitleaksRule(rule, global)),
-    ...PROVIDER_SHAPES.map(([id, shape]) => plain(id, (text) => matchSpans(shape, text))),
-    plain("eden-keyword", (text) => matchSpans(KEYWORD_RULE, text)),
-    plain("eden-url-userinfo", (text) => matchSpans(URL_USERINFO, text)),
-    plain("eden-entropy-keyword", entropyWithKeyword),
-    plain("eden-legacy-keyword", (text) => matchSpans(LEGACY_KEYWORD, text)),
-    plain("eden-legacy-token", (text) => matchSpans(LEGACY_TOKEN, text)),
+    // A shape without literals gets none: an empty prefilter means the rule always runs (safe, only slower).
+    ...PROVIDER_SHAPES.map(([id, shape]) => plain(id, SHAPE_LITERALS[id] ?? [], (text) => matchSpans(shape, text))),
+    plain("eden-keyword", SECRET_WORDS, (text) => matchSpans(KEYWORD_RULE, text)),
+    plain("eden-url-userinfo", ["://"], (text) => matchSpans(URL_USERINFO, text)),
+    plain("eden-entropy-keyword", SECRET_WORDS, entropyWithKeyword),
+    plain("eden-legacy-keyword", ["passw", "passphrase", "api"], (text) => matchSpans(LEGACY_KEYWORD, text)),
+    plain("eden-legacy-token", ["sk-", "ghp_", "gho_", "github_pat_", "akia"], (text) =>
+      matchSpans(LEGACY_TOKEN, text),
+    ),
   ];
   return compiled;
 }
 
-/** The rules whose keywords `text` holds, each with the spans it finds there. */
+/**
+ * One multi-pattern pass over the text for every rule's prefilter words (Aho–Corasick, `@eden/primitives`), instead
+ * of an `includes` scan per word: the whole gate runs 5–8x faster on a 2 KB email across measured runs
+ * (bench/gate.bench.ts in @eden/primitives; docs/research/primitives.md). The matcher folds case and accents, so it
+ * reports a superset of `text.toLowerCase().includes(word)`: a rule it lets through still applies its own regex, so
+ * results are unchanged (prefilter.test.ts checks this against the per-word scan).
+ */
+let prefilter: { matcher: MultiMatcher; rulesOf: number[][]; always: number[] } | undefined;
+
+function candidates(text: string): SecretRule[] {
+  const rules = secretRules();
+  if (!prefilter) {
+    const words = [...new Set(rules.flatMap((rule) => rule.prefilter))];
+    const index = new Map(words.map((word, i) => [word, i]));
+    const rulesOf: number[][] = words.map(() => []);
+    const always: number[] = [];
+    rules.forEach((rule, r) => {
+      // No words, or an empty word (which `includes` would always find): the rule always runs.
+      if (rule.prefilter.length === 0 || rule.prefilter.some((word) => word.length === 0)) always.push(r);
+      for (const word of new Set(rule.prefilter)) rulesOf[index.get(word)!]!.push(r);
+    });
+    prefilter = { matcher: new MultiMatcher(words), rulesOf, always };
+  }
+  const { matcher, rulesOf, always } = prefilter;
+  const hits = new Uint8Array(rulesOf.length);
+  const chosen = new Uint8Array(rules.length);
+  for (const r of always) chosen[r] = 1;
+  if (matcher.markHits(text, hits) > 0) {
+    for (let w = 0; w < hits.length; w++) if (hits[w] === 1) for (const r of rulesOf[w]!) chosen[r] = 1;
+  }
+  return rules.filter((_, r) => chosen[r] === 1);
+}
+
+/** The rules whose prefilter words `text` holds, each with the spans it finds there. */
 function findings(text: string): { id: string; spans: Span[] }[] {
-  const lower = text.toLowerCase();
-  return secretRules()
-    .filter((rule) => !rule.keywords.length || rule.keywords.some((word) => lower.includes(word)))
+  return candidates(text)
     .map((rule) => ({ id: rule.id, spans: rule.spans(text) }))
     .filter((found) => found.spans.length > 0);
 }
