@@ -11,7 +11,7 @@
  * never evicts another's), and item text length. Expired items are swept on write, so they stop shaping idf.
  */
 import { createHash } from "node:crypto";
-import { SparseIndex, Vocab } from "@eden/primitives";
+import { dedupText, hamming64, SparseIndex, TextSketcher, Vocab } from "@eden/primitives";
 import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import { termIds } from "./text";
@@ -20,6 +20,26 @@ interface Entry {
   item: ContextItem;
   fetchedAt: number;
   doc: number;
+  sketch: Sketch | null;
+}
+
+/**
+ * A near-duplicate sketch of an item's own words (quotes, signatures and greetings stripped; for an acknowledgement
+ * or bare forward, the message it carries): 64-bit SimHash plus a key of its numbers. Two items are near-duplicates
+ * when their SimHashes differ in ≤ 8 bits and their numbers agree (docs/research/primitives-dedup.md: F1 0.963, and
+ * stripping quotes first lifts precision from 0.580 to 0.983; the numbers guard keeps "3pm" and "4pm" apart).
+ */
+export interface Sketch {
+  lo: number;
+  hi: number;
+  numbers: number;
+}
+
+const NEAR_DUP_BITS = 8;
+
+/** True when two items are near-duplicates (see `Sketch`). Null sketches (no own words) are never duplicates. */
+export function nearDuplicate(a: Sketch | null, b: Sketch | null): boolean {
+  return a !== null && b !== null && a.numbers === b.numbers && hamming64(a.lo, a.hi, b.lo, b.hi) <= NEAR_DUP_BITS;
 }
 
 class UserCache {
@@ -27,10 +47,15 @@ class UserCache {
   readonly byDoc: (Entry | undefined)[] = [];
   readonly vocab = new Vocab(4_096);
   readonly index = new SparseIndex({ fields: 2, weights: [2, 1] });
+  readonly sketcher = new TextSketcher(this.vocab, 8_192, 3);
 }
+
+const simScratch = new Uint32Array(2);
 
 export interface CacheHit {
   item: ContextItem;
+  /** Near-duplicate sketch of the item (null when it has no own words). */
+  sketch: Sketch | null;
   /** The item's doc number in the user's index, for `containsAll`. */
   doc: number;
   score: number;
@@ -139,7 +164,7 @@ export class ItemCache {
       const old = u.items.get(item.id);
       if (old) this.drop(u, old);
       const doc = this.index(u, item);
-      const entry = { item, fetchedAt: now, doc };
+      const entry = { item, fetchedAt: now, doc, sketch: sketchOf(u, item) };
       u.items.set(item.id, entry); // Map order stays oldest-first for eviction (old entry was removed above).
       u.byDoc[doc] = entry;
       return item;
@@ -188,6 +213,7 @@ export class ItemCache {
       if (!e || now - e.fetchedAt > this.limits.ttlMs) continue;
       out.push({
         item: e.item,
+        sketch: e.sketch,
         doc: e.doc,
         score: res.scores[j]!,
         coverage: res.coverage[j]!,
@@ -215,4 +241,11 @@ export class ItemCache {
   get userCount(): number {
     return this.users.size;
   }
+}
+
+function sketchOf(u: UserCache, item: ContextItem): Sketch | null {
+  const own = dedupText(item.text, 6);
+  if (u.sketcher.load(`${item.title}\n${own}`) === 0) return null;
+  u.sketcher.simhash(simScratch);
+  return { lo: simScratch[0]!, hi: simScratch[1]!, numbers: u.sketcher.numberKey };
 }
