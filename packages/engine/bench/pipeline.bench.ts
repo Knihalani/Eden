@@ -5,16 +5,34 @@
  * complexity. Reports per-event latency of `observe` (fast path, waitMs 0), the CPU cost of slow-path lookups, and
  * event-loop lag while the stream runs.
  *
- *   bun packages/engine/bench/pipeline.bench.ts [itemsPerSource=1500] [events=2000]
+ *   bun packages/engine/bench/pipeline.bench.ts [itemsPerSource=1500] [events=2000] [gateWorkers=0]
+ *
+ * With gateWorkers > 0, lookup results are redacted in a WorkerPool (D25) and each event waits for the pool to drain.
+ * The stream is sequential, so this shows the pool's overhead and that decisions do not change, not the tail latency
+ * it buys other users under concurrent load (primitives/bench/offload.bench.ts measures that).
  */
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
-import { ContextPartner, ItemCache, type Trace } from "../src/index";
+import { WorkerPool } from "@eden/primitives";
+import { SourceFanout } from "@eden/sources";
+import { ContextPartner, GATE_MODULE, ItemCache, pooledSanitizer, type Trace } from "../src/index";
 import { buildWorkload } from "./workload";
 
 const itemsPerSource = Number(process.argv[2] ?? 1_500);
 const eventCount = Number(process.argv[3] ?? 2_000);
+const gateWorkers = Number(process.argv[4] ?? 0);
 const w = buildWorkload({ itemsPerSource, events: eventCount, seed: 7 });
+const pool =
+  gateWorkers > 0
+    ? await WorkerPool.start({
+        module: GATE_MODULE,
+        size: gateWorkers,
+        maxQueue: 4_096,
+        maxBatch: 32,
+        taskTimeoutMs: 500,
+        inlineBelow: 1_024,
+      })
+    : undefined;
 
 const traces: Trace[] = [];
 const partner = new ContextPartner({
@@ -24,6 +42,7 @@ const partner = new ContextPartner({
   budget: new Budget(),
   model: null,
   onTrace: (t) => traces.push(t),
+  fanout: pool && new SourceFanout({ sanitize: pooledSanitizer(pool) }),
 });
 
 // Event-loop lag probe: a 1 ms interval; lag = how late it fires.
@@ -45,10 +64,14 @@ for (const event of w.events) {
   // Let the slow path run to completion (sources are instant), and time it as CPU spent before the next event.
   const s2 = performance.now();
   await Bun.sleep(0);
+  while (pool && (pool.stats().busy > 0 || pool.stats().queued > 0)) await Bun.sleep(0);
+  if (pool) await Bun.sleep(0);
   slowMs.push(performance.now() - s2);
 }
 const total = performance.now() - t0;
 clearInterval(probe);
+const poolStats = pool?.stats();
+pool?.close();
 
 const pct = (xs: number[], p: number) =>
   [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))]!;
@@ -67,3 +90,4 @@ console.log(
 );
 console.log(`total ${total.toFixed(0)} ms, ${(total / w.events.length).toFixed(3)} ms/event`);
 console.log("decisions", JSON.stringify(decisions));
+if (poolStats) console.log("pool", JSON.stringify(poolStats));

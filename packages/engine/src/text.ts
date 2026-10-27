@@ -32,15 +32,45 @@ export function termIds(text: string, vocab: Vocab, intern: boolean): { ids: Uin
   return { ids: scratch, n };
 }
 
-/** Content terms of `text` (stopwords removed), as strings, in order. Interns new terms into `vocab`. */
-export function contentTerms(text: string, vocab: Vocab): string[] {
+let stamps = new Uint32Array(4_096);
+let tick = 0;
+
+/**
+ * Distinct term ids of `text` in `vocab`, in first-occurrence order, interning new terms; a fresh array. An event is
+ * tokenized once and its usage check, memory, chatter test and cue share the result (each tokenized it again before:
+ * concurrent.bench.ts profile, checkUsage and remember were 37% of CPU).
+ */
+export function distinctTermIds(text: string, vocab: Vocab): Uint32Array {
   const { ids, n } = termIds(text, vocab, true);
-  const out: string[] = [];
+  if (stamps.length < vocab.size) stamps = new Uint32Array(Math.max(vocab.size, stamps.length * 2));
+  if (++tick === 0xffffffff) {
+    stamps.fill(0);
+    tick = 1;
+  }
+  let m = 0;
   for (let i = 0; i < n; i++) {
+    const id = ids[i]!;
+    if (stamps[id] === tick) continue;
+    stamps[id] = tick;
+    ids[m++] = id;
+  }
+  return ids.slice(0, m);
+}
+
+/** The terms of `ids` that are not stopwords, as strings, in order. */
+export function contentTermsOf(ids: ArrayLike<number>, vocab: Vocab): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < ids.length; i++) {
     const t = vocab.term(ids[i]!);
     if (!STOPWORDS.has(t)) out.push(t);
   }
   return out;
+}
+
+/** Content terms of `text` (stopwords removed), as strings, in order. Interns new terms into `vocab`. */
+export function contentTerms(text: string, vocab: Vocab): string[] {
+  const { ids, n } = termIds(text, vocab, true);
+  return contentTermsOf(ids.subarray(0, n), vocab);
 }
 
 /**
@@ -93,5 +123,13 @@ const CHATTER =
 
 /** A message that carries no information need: an acknowledgement or a bare yes/no. */
 export function isChatter(text: string, vocab: Vocab): boolean {
-  return CHATTER.test(text.trim()) || contentTerms(text, vocab).length === 0;
+  const { ids, n } = termIds(text, vocab, true);
+  return isChatterTerms(text, ids.subarray(0, n), vocab);
+}
+
+/** As `isChatter`, given the text's term ids. */
+export function isChatterTerms(text: string, ids: ArrayLike<number>, vocab: Vocab): boolean {
+  if (CHATTER.test(text.trim())) return true;
+  for (let i = 0; i < ids.length; i++) if (!STOPWORDS.has(vocab.term(ids[i]!))) return false;
+  return true;
 }

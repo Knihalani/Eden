@@ -32,7 +32,7 @@ import {
   type Scope,
 } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
-import type { Vocab } from "@eden/primitives";
+import { Vocab } from "@eden/primitives";
 import { SourceFanout, type Source, type SourceResolver } from "@eden/sources";
 import { nearDuplicate, sanitizeItem, type ItemCache, type Sketch } from "./cache";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
@@ -41,10 +41,11 @@ import { Ledger } from "./ledger";
 import { citationsOf, renderAnswer, renderPacket } from "./render";
 import { classifySituation } from "./situation";
 import {
-  contentTerms,
+  contentTermsOf,
+  distinctTermIds,
   extractEntities,
   extractTypedEntities,
-  isChatter,
+  isChatterTerms,
   isStopword,
   PERSISTABLE_KINDS,
   termIds,
@@ -81,7 +82,10 @@ interface Session {
   turn: number;
   lastActive: number;
   window: string[];
-  /** The user's vocabulary, captured at session start: all of this session's term ids are in it. */
+  /**
+   * The session's own vocabulary: all of its term ids (seen, usage, cues) are in it. Rebuilt past
+   * `maxSessionTerms`; the cache's per-user vocabulary holds item terms only.
+   */
   vocab: Vocab;
   /** Term ids the session has seen (bounded, least recently seen first). */
   seen: Set<number>;
@@ -147,9 +151,11 @@ export class ContextPartner {
     }
     const s = this.session(event);
     s.turn++;
+    if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s);
     const text = sanitizeForStore(head(eventText(event), this.config.maxEventChars));
-    this.checkUsage(s, event, text);
-    this.remember(s, event, text);
+    const terms = text ? distinctTermIds(text, s.vocab) : NO_TERMS;
+    this.checkUsage(s, event, terms);
+    this.remember(s, event, text, terms);
 
     const trace = (decision: Trace["decision"], reason: string, extra: Partial<Trace> = {}) =>
       this.trace({
@@ -171,12 +177,12 @@ export class ContextPartner {
     };
 
     const queued = s.pending.shift() ?? null;
-    if (!wantsLookup(event, text, s.vocab)) {
+    if (!wantsLookup(event, text, terms, s.vocab)) {
       trace("skipped", event.kind);
       return reply(queued);
     }
     if (event.kind === "user_message") s.situation = classifySituation(text);
-    const cue = buildCue(text, s.vocab);
+    const cue = buildCue(text, terms, s.vocab);
     const last = s.cues.get(cue.key);
     if (last !== undefined && s.turn - last < this.config.cueCooldownTurns) {
       trace("repeat", cue.id);
@@ -232,7 +238,7 @@ export class ContextPartner {
     const t0 = performance.now();
     const s = this.session(request);
     const question = sanitizeForStore(request.question);
-    const cue = buildCue(question, s.vocab);
+    const cue = buildCue(question, distinctTermIds(question, s.vocab), s.vocab);
     const limit = request.maxItems ?? 5;
     const sourceCalls = await this.searchLive(s, cue, this.config.askSources);
     const items = this.rank(s, cue, { ignoreLedger: true })
@@ -358,7 +364,7 @@ export class ContextPartner {
       turn: 0,
       lastActive: now,
       window: [],
-      vocab: this.deps.cache.vocabOf({ tenantId: e.tenantId, userId: e.userId }),
+      vocab: new Vocab(256),
       seen: new Set(),
       ledger: new Ledger(this.config.ledgerCooldownTurns),
       delivered: [],
@@ -396,13 +402,12 @@ export class ContextPartner {
     else this.perTenant.set(s.scope.tenantId, n);
   }
 
-  private remember(s: Session, event: AgentEvent, text: string): void {
+  private remember(s: Session, event: AgentEvent, text: string, terms: Uint32Array): void {
     if (!text) return;
     s.window.push(`${event.kind}: ${text.slice(0, 1_000)}`);
     if (s.window.length > this.config.windowEvents) s.window.shift();
-    const { ids, n } = termIds(text, s.vocab, true);
-    for (let i = 0; i < n; i++) {
-      const id = ids[i]!;
+    for (let i = 0; i < terms.length; i++) {
+      const id = terms[i]!;
       s.seen.delete(id); // Re-insert so Set order is least recently seen first.
       s.seen.add(id);
     }
@@ -434,12 +439,11 @@ export class ContextPartner {
     });
   }
 
-  private checkUsage(s: Session, event: AgentEvent, text: string): void {
+  private checkUsage(s: Session, event: AgentEvent, terms: Uint32Array): void {
     const actsOnIt = event.kind === "agent_message" || event.kind === "tool_call";
     if (s.outstanding.size === 0) return;
-    const said = actsOnIt ? termIds(text, s.vocab, false) : { ids: new Uint32Array(0), n: 0 };
     for (const [id, o] of s.outstanding) {
-      const used = actsOnIt && showsUse(said.ids, said.n, o.tokens, s.vocab);
+      const used = actsOnIt && showsUse(terms, o.tokens, s.vocab);
       const expired = s.turn - o.deliveredTurn > this.config.usageWindowTurns;
       if (!used && !expired) continue;
       s.outstanding.delete(id);
@@ -472,8 +476,10 @@ export class ContextPartner {
     for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
     if (query.length === 0) return [];
     const entities = cue.entities.map((e) => {
-      const t = termIds(e, vocab, true);
-      return Array.from(t.ids.subarray(0, t.n));
+      // An entity with a term no cached item holds matches nothing (never intern it: that grows the cache's vocab).
+      const all = termIds(e, s.vocab, true).n;
+      const t = termIds(e, vocab, false);
+      return t.n === all ? Array.from(t.ids.subarray(0, t.n)) : [];
     });
     return (
       cache
@@ -520,6 +526,10 @@ export class ContextPartner {
     if (s.closed) return chosen.length; // Forgotten or ended mid-search: keep nothing.
     const mentions: { sourceId: string; entities: string[] }[] = [];
     for (const o of outcomes) {
+      // One source's items at a time, yielding between: storing a lookup's items (tokenizing, indexing, sketching) is
+      // ~80 µs each, and other users' events should not wait behind all of them at once.
+      if (mentions.length > 0) await yieldToLoop();
+      if (s.closed) return chosen.length;
       const stored = this.deps.cache.put(s.scope, o.items, this.now(), true);
       for (const item of stored) {
         const entities = extractTypedEntities(`${item.title}. ${item.text}`)
@@ -664,6 +674,28 @@ export class ContextPartner {
   }
 }
 
+const NO_TERMS = new Uint32Array(0);
+
+const yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+/**
+ * Replaces a session's vocabulary with one holding only the terms it still refers to: seen terms (in the same order)
+ * and the distinctive terms of injections awaiting use. Ids change; nothing else holds them.
+ */
+function rebuildVocab(s: Session): void {
+  const old = s.vocab;
+  const vocab = new Vocab(Math.max(256, s.seen.size * 2));
+  const seen = new Set<number>();
+  for (const id of s.seen) seen.add(vocab.intern(old.term(id)));
+  for (const o of s.outstanding.values()) {
+    const tokens = new Set<number>();
+    for (const id of o.tokens) tokens.add(vocab.intern(old.term(id)));
+    o.tokens = tokens;
+  }
+  s.vocab = vocab;
+  s.seen = seen;
+}
+
 const sessionKey = (e: Scope & { sessionId: string }) => `${scopeKey(e)}#${e.sessionId}`;
 
 /** An opaque per-user key for provider sticky routing (prompt-cache reuse): a hash, never the ids themselves. */
@@ -696,14 +728,14 @@ function head(s: string, max: number): string {
 }
 
 /** Proactive lookups start from what the user or the world says, not from the agent's own words. */
-function wantsLookup(e: AgentEvent, text: string, vocab: Vocab): boolean {
+function wantsLookup(e: AgentEvent, text: string, terms: Uint32Array, vocab: Vocab): boolean {
   if (e.kind !== "user_message" && e.kind !== "external") return false;
-  return !isChatter(text, vocab);
+  return !isChatterTerms(text, terms, vocab);
 }
 
-function buildCue(text: string, vocab: Vocab): Cue {
+function buildCue(text: string, ids: Uint32Array, vocab: Vocab): Cue {
   const entities = extractEntities(text).slice(0, 8);
-  const terms = [...new Set(contentTerms(text, vocab))].slice(0, 16);
+  const terms = contentTermsOf(ids, vocab).slice(0, 16); // Distinct already.
   const key = (entities.length ? entities.map((e) => e.toLowerCase()) : terms).slice().sort().join("|").slice(0, 200);
   // Traces and reasons carry this id, never the cue itself: the cue is the user's words.
   const id = `cue:${createHash("sha256").update(key).digest("hex").slice(0, 10)}`;
