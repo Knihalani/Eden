@@ -101,6 +101,15 @@ describe("edge cases (finding 7)", () => {
     await waiting;
     expect(order).toEqual(["waiter"]);
   });
+
+  test("an ignored outcome returns the permit and leaves the limit alone", () => {
+    const l = new AimdLimiter({ initial: 4, min: 1, max: 8 });
+    expect(l.tryAcquire()).toBe(true);
+    const before = l.limit;
+    l.release("ignored");
+    expect(l.limit).toBe(before);
+    expect(l.tryAcquire()).toBe(true);
+  });
 });
 
 describe("CircuitBreaker", () => {
