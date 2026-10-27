@@ -86,8 +86,8 @@ the tool's JSON schema, deterministic and overridable by the operator:
 
 - **text argument**: by name (`query`, `q`, `search`, `text`, `keywords`, `search_text`…), type and description;
 - **field arguments**: typed cue entities go to matching fields (person → `from`/`to`/attendee/assignee,
-  organisation → company/account/name, id → id field); each extra field narrows (AND), so fields are a shape of their
-  own, learned like the others, never all filled at once;
+  organisation → company/account/name, id → id field); each extra field narrows (AND), so fields are a shape of
+  their own, learned like the others, never all filled at once;
 - **required context**: collection, index, channel or `query_by` come from operator config; a time window comes from
   the cue (the event's time ± a range, per connector kind). If a required argument has no value, the call is not made
   and the connector is marked misconfigured, rather than guessing;
@@ -181,8 +181,8 @@ The key idea: **put a simulated world into real services**, so real search seman
    backend. It measures each query variant's reach, empty rate, result size and latency against world labels. First
    runs (10 configurations, one world): Eden's current query reaches 0% on the 6 whole-string-substring connectors,
    where one call per entity reaches 27–77% of the same cases; the best variant differs by connector (per entity on
-   most, the cue's terms on OR and FTS search, the raw question on vector search). Next: more connectors (CRM, wiki, chat), more seeds,
-   and the per-connector baselines phase 0 needs.
+   most, the cue's terms on OR and FTS search, the raw question on vector search). Next: more connectors (CRM,
+   wiki, chat), more seeds, and the per-connector baselines phase 0 needs.
 1. **Sandbox accounts**, never personal ones, for hosted services with no open-source backend: a Google Workspace
    test domain (Gmail, Calendar, Drive), a Notion test
    workspace, a Slack test workspace, a HubSpot developer sandbox, a Linear or Jira free workspace, a GitHub test

@@ -114,7 +114,10 @@ export interface VariantStats {
   errors: number;
   /** Mean distinct world items a case's calls returned, counting at most `limit` per call, as a client would keep. */
   returned: number;
-  /** The same before the cap, for servers that ignore or lack a limit. */
+  /**
+   * Mean results the servers sent per case before the cap, summed over the case's calls (an item two calls both
+   * return counts twice): what servers that ignore or lack a limit send.
+   */
   returnedRaw: number;
   /** Of returned items, the share holding a fact the case needs or may use. */
   relevantShare: number;

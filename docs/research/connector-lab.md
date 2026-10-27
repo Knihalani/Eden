@@ -111,9 +111,9 @@ Latency is the server and backend on this machine with no network between them, 
    OR ones 0–41%, and vector ones 0%. One probe query tells a planner which family it is talking to, except for
    vector search, which never returns empty (Chroma: 0% empty on every variant).
 4. **Truncation, not matching, limits some connectors.** On Gitea, `each-entity` came back empty in 6% of the cases
-   it applies to but reached only 33% of them. A name like the user's own matches hundreds of issues, and the needed one is not in the first
-   10. The deployment's indexer (database vs Bleve) made no measurable difference for these queries. Gitea also
-   searches issue bodies, checked by a body-only word.
+   it applies to but reached only 33% of them. A name like the user's own matches hundreds of issues, and the
+   needed one is not in the first 10. The deployment's indexer (database vs Bleve) made no measurable difference
+   for these queries. Gitea also searches issue bodies, checked by a body-only word.
 5. **Eden's `toItems` loses item identity on 8 of 10 configurations.** `toItems` reads a text block as JSON rows
    (an array or `{results: […]}`) and takes a row's ref from `id`, `ref` or `url`. The servers' shapes miss that:
    `{entities: […]}` (memory), an array of `{path…}` rows (mcpvault), `{results: [{permalink…}]}` (Basic Memory),
