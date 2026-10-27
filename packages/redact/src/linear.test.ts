@@ -146,9 +146,14 @@ describe("rules left on JavaScript's engine stay cheap on crafted input", () => 
         const run = unit.repeat(Math.ceil(SIZE / unit.length)).slice(0, SIZE);
         const pairs = `${word}${unit}`.repeat(Math.ceil(SIZE / (word.length + unit.length)));
         for (const text of [`${word}=${run}!`, pairs, run + word]) {
-          const t0 = performance.now();
-          rule.spans(text);
-          const ms = performance.now() - t0;
+          // Best of up to three: a backtracking rule is slow every time, a GC pause only once (the suite shares a
+          // process with tests that build large heaps).
+          let ms = Infinity;
+          for (let attempt = 0; attempt < 3 && ms > CEILING_MS; attempt++) {
+            const t0 = performance.now();
+            rule.spans(text);
+            ms = Math.min(ms, performance.now() - t0);
+          }
           if (ms > CEILING_MS) slow.push(`${rule.id} on ${JSON.stringify(text.slice(0, 24))}…: ${ms.toFixed(0)} ms`);
         }
       }
