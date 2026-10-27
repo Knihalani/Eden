@@ -137,6 +137,21 @@ describe("finding 4: a queued injection does not swallow a new cue", () => {
   });
 });
 
+describe("round 3: slow-path traces carry the turn that triggered them", () => {
+  test("a lookup that finishes after later events is attributed to its own turn", async () => {
+    const g = gated([
+      { id: "slow:1", sourceId: "slow", ref: "1", title: "Globex renewal", text: "Dana Lee Globex renewal terms" },
+    ]);
+    const { p, traces } = make({}, [g.source]);
+    await p.observe(ev({ kind: "user_message", text: "Globex renewal for Dana Lee" }));
+    await p.observe(ev({ kind: "agent_message", text: "checking" }));
+    await p.observe(ev({ kind: "agent_message", text: "still checking" }));
+    g.release();
+    await Bun.sleep(10);
+    expect(traces.find((t) => t.decision === "sources")?.turn).toBe(1);
+  });
+});
+
 describe("finding 6: a failing slow path is silent, not an unhandled rejection", () => {
   test("a throwing source map ends the lookup with an 'error' trace", async () => {
     const sourceMap = new SourceMap();
@@ -173,6 +188,17 @@ describe("finding 7 and 8: bounded, redacted, content-free state", () => {
       { ...item("x"), ref: `https://x.example/?t=${token}` },
     ]);
     expect(stored!.id).not.toContain(token);
+  });
+
+  test("two refs that redact alike keep distinct ids (round 3)", () => {
+    const cache = new ItemCache();
+    const tok = (c: string) => ["ghp", c.repeat(36)].join("_");
+    const refs = [`https://x/doc1?t=${tok("a")}`, `https://x/doc1?t=${tok("b")}`];
+    const stored = cache.put(
+      { tenantId: "t", userId: "u" },
+      refs.map((ref, i) => ({ ...item(`renewal${i}`), ref })),
+    );
+    expect(new Set(stored.map((s) => s.id)).size).toBe(2);
   });
 
   test("traces carry a cue id, never the user's words", async () => {
