@@ -8,7 +8,8 @@ export type Checked<T> = { ok: true; value: T } | { ok: false; error: string };
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const isText = (v: unknown, max = 1_000_000): v is string => typeof v === "string" && v.length <= max;
-const isId = (v: unknown): v is string => typeof v === "string" && /^[A-Za-z0-9._:@-]{1,128}$/.test(v);
+/** The id shape for tenants, users, sessions and injections: no `/` or `#`, which scope keys use as separators. */
+export const isId = (v: unknown): v is string => typeof v === "string" && /^[A-Za-z0-9._:@-]{1,128}$/.test(v);
 
 function scopeError(r: Record<string, unknown>): string | null {
   if (!isId(r.tenantId)) return "tenantId must be 1-128 characters of [A-Za-z0-9._:@-]";

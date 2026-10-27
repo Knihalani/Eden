@@ -46,8 +46,28 @@ describe("McpSource", () => {
     await s.close();
   });
 
-  test("refuses a tool the server does not mark read-only", async () => {
-    const s = source("delete_note");
+  test("refuses a tool the server does not mark read-only, and does not reconnect on every lookup", async () => {
+    let connects = 0;
+    const server = connector();
+    const s = new McpSource({
+      id: "notes",
+      description: "",
+      transport: () => {
+        connects++;
+        const [client, serverSide] = InMemoryTransport.createLinkedPair();
+        void server.connect(serverSide);
+        return client;
+      },
+      searchTool: { name: "delete_note", args: () => ({ id: "x" }) },
+    });
     await expect(s.search(query, AbortSignal.timeout(2_000))).rejects.toBeInstanceOf(ReadOnlyViolation);
+    await expect(s.search(query, AbortSignal.timeout(2_000))).rejects.toBeInstanceOf(ReadOnlyViolation);
+    expect(connects).toBe(1);
+  });
+
+  test("an operator can trust a tool the server did not annotate", async () => {
+    const s = source("search_notes", ["search_notes"]);
+    expect(await s.search(query, AbortSignal.timeout(2_000))).toHaveLength(1);
+    await s.close();
   });
 });

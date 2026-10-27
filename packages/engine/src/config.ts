@@ -10,6 +10,8 @@ export interface EngineConfig {
   candidateScore: number;
   /** Weight of an exact entity match in an item, on top of its query coverage (0..1). */
   entityBonus: number;
+  /** Distinct query terms an item must hold to be delivered without the model. One shared word is not evidence. */
+  minMatchedTerms: number;
   maxItemsPerInjection: number;
   maxInjectionBytes: number;
   /** Sources asked per proactive lookup (routing picks them). An ask uses `askSources`. */
@@ -26,8 +28,16 @@ export interface EngineConfig {
   cueCooldownTurns: number;
   /** Turns an injection has to show use before it counts as unused. */
   usageWindowTurns: number;
-  /** Live sessions held in memory. Past this, the least recently active one is closed as if it had ended. */
-  maxSessions: number;
+  /**
+   * Live sessions per tenant. Past this, that tenant's least recently active session is dropped (with no learning):
+   * one tenant can never push out another's sessions.
+   */
+  maxSessionsPerTenant: number;
+  /** A session idle this long is dropped, with no learning, the next time any session starts. */
+  sessionIdleMs: number;
+  /** Per-session bounds on the tokens seen and the cues remembered. */
+  maxSeenTokens: number;
+  maxCues: number;
   /** Rough cost reserved per model call before the real cost is known. */
   estimatedCallUsd: number;
 }
@@ -36,6 +46,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   confidentScore: 1.1,
   candidateScore: 0.3,
   entityBonus: 0.35,
+  minMatchedTerms: 2,
   maxItemsPerInjection: 3,
   maxInjectionBytes: 1_200,
   lookupSources: 3,
@@ -46,6 +57,9 @@ export const DEFAULT_CONFIG: EngineConfig = {
   ledgerCooldownTurns: 40,
   cueCooldownTurns: 6,
   usageWindowTurns: 6,
-  maxSessions: 10_000,
+  maxSessionsPerTenant: 5_000,
+  sessionIdleMs: 2 * 3_600_000,
+  maxSeenTokens: 5_000,
+  maxCues: 200,
   estimatedCallUsd: 0.0005,
 };

@@ -45,9 +45,10 @@ crosses a user boundary. Cross-user learning, if ever added, may share only cont
 
 ## The two speeds
 
-**Fast path** (every event, no I/O beyond memory, a few ms): build a cue (entities, content terms, situation), look
-it up in the user's item cache, and deliver only if an item both names a cue entity and covers most of the query
-(`confidentScore` > 1 by construction: idf-weighted coverage of at most 1, plus an entity bonus).
+**Fast path** (every event, no network call and no model call, a few ms; it may write learning outcomes to the local
+SQLite source map): build a cue (entities, content terms, situation), look it up in the user's item cache, and
+deliver only if an item names a cue entity as whole words, covers most of the query, and holds at least two of its
+terms (D6: `confidentScore` > 1 by construction, since idf-weighted coverage is at most 1, plus an entity bonus).
 
 **Slow path** (background; at most one per session at a time): rank the user's sources with the source map, search
 the top few live (each under its own deadline), cache the redacted results, record entity mentions, and re-score.
@@ -60,13 +61,19 @@ to compose a cited answer when a model and budget are available; otherwise it re
 
 ## Learning loop
 
-Every injection records its distinctive tokens (tokens the session had not seen). A later agent message or tool call
+When an injection is handed to the agent, it records its distinctive tokens (tokens the session had not seen). A later agent message or tool call
 that repeats them marks the injection *used*; an injection with no sign of use within `usageWindowTurns` is *unused*.
 Each outcome updates a Beta posterior per (user, situation, source) in the source map, which routing reads. Explicit
-feedback from the integration (`/v1/feedback`) overrides the inference.
+feedback from the integration (`/v1/feedback`) overrides the inference, correcting an outcome already recorded (D18).
+
+## Session lifecycle
+
+Sessions live in memory, capped per tenant and dropped when idle. Each owns an AbortController: session_end,
+eviction and `forget` abort in-flight lookups and model calls, and nothing is cached, learned, charged or queued for a
+closed session afterwards (D17).
 
 ## What is deliberately missing (see ROADMAP.md)
 
-Per-user MCP connections with OAuth and a token vault; persistent session state (sessions are in memory);
+Per-user MCP connections with OAuth and a token vault; persistent session state;
 streaming delivery; the OpenAI-compatible injecting proxy; a richer graph (entity resolution, relations, freshness);
 learned situation classification; per-agent (not just per-user) learning; multi-instance deployment.

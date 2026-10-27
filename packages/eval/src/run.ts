@@ -11,7 +11,10 @@ import type { Scenario } from "./scenario";
 
 export interface RunOptions {
   model: Model | null;
-  /** How long each event waits for the slow path. 0 measures the pure fast path plus next-turn delivery. */
+  /**
+   * How long each event waits for the slow path. 0 measures the fast path plus next-event delivery: the runner
+   * yields between events (as real traffic would), so a slow path started at one event can land by the next.
+   */
   waitMs: number;
   config?: Partial<EngineConfig>;
 }
@@ -77,6 +80,7 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
           ...partner.takePending({ ...who, sessionId: session.id }),
         ];
         deliveries.push(got.flatMap((i) => i.citations.map((c) => c.itemId)));
+        await Bun.sleep(1);
       }
       // Let a trailing slow path land, so the last turn's late delivery counts.
       await Bun.sleep(5);
@@ -84,21 +88,32 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
         partner.takePending({ ...who, sessionId: session.id }).flatMap((i) => i.citations.map((c) => c.itemId)),
       );
 
+      // A delivery may land one event late (the slow path), so an item delivered at turn i is explained by the
+      // labels of turn i or i-1. Precision and false fires judge each delivery against both; recall looks for each
+      // expected item at its own turn or the next.
+      const expectedAt = (i: number): string[] => {
+        const e = session.turns[i]?.expect;
+        return e && e !== "silent" ? e.items : [];
+      };
+      deliveries.forEach((ids, i) => {
+        const explained = new Set([...expectedAt(i), ...expectedAt(i - 1)]);
+        const scored = session.turns[i]?.expect !== undefined || session.turns[i - 1]?.expect !== undefined;
+        if (!scored) return;
+        delivered += ids.length;
+        deliveredExpected += ids.filter((id) => explained.has(id)).length;
+      });
       session.turns.forEach((turn, i) => {
         if (!turn.expect) return;
         scoredTurns++;
-        const now = deliveries[i]!;
         if (turn.expect === "silent") {
           silentTurns++;
-          if (now.length > 0) falseFires++;
-          delivered += now.length;
+          const lateForPrevious = new Set(expectedAt(i - 1));
+          if (deliveries[i]!.some((id) => !lateForPrevious.has(id))) falseFires++;
           return;
         }
-        const window = new Set([...now, ...deliveries[i + 1]!]);
+        const window = new Set([...deliveries[i]!, ...deliveries[i + 1]!]);
         expected += turn.expect.items.length;
         expectedFound += turn.expect.items.filter((id) => window.has(id)).length;
-        delivered += now.length;
-        deliveredExpected += now.filter((id) => turn.expect !== "silent" && turn.expect!.items.includes(id)).length;
       });
       await partner.observe({ ...who, sessionId: session.id, at: clock++, kind: "session_end" });
     }

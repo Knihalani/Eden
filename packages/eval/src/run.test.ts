@@ -11,7 +11,7 @@ const scenario = JSON.parse(
 describe("eval harness", () => {
   test("scores the seed scenario with no model: deterministic, free, and never fires on small talk", async () => {
     const m = await runScenarios([scenario], { model: null, waitMs: 1_000 });
-    expect(m.scoredTurns).toBe(6);
+    expect(m.scoredTurns).toBe(7);
     expect(m.falseFireRate).toBe(0);
     expect(m.modelCallsPerTurn).toBe(0);
     expect(m.recall).toBeGreaterThan(0);

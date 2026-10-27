@@ -19,18 +19,32 @@ interface Tally {
 export class Budget {
   private readonly sessions = new Map<string, Tally>();
   private readonly userDays = new Map<string, Tally>();
+  private prunedDay = "";
 
   constructor(
     readonly limits: BudgetLimits = DEFAULT_LIMITS,
     private readonly now = () => Date.now(),
   ) {}
 
+  private today(): string {
+    return new Date(this.now()).toISOString().slice(0, 10);
+  }
+
   private dayKey(user: string) {
-    return `${user}@${new Date(this.now()).toISOString().slice(0, 10)}`;
+    return `${user}@${this.today()}`;
+  }
+
+  /** Drops earlier days' tallies once per day, so the map holds only today's users. */
+  private prune(): void {
+    const today = this.today();
+    if (today === this.prunedDay) return;
+    for (const key of this.userDays.keys()) if (!key.endsWith(`@${today}`)) this.userDays.delete(key);
+    this.prunedDay = today;
   }
 
   /** Reserves one call of at most `estimateUsd`. False means: do not call the model. */
   charge(user: string, session: string, estimateUsd: number): boolean {
+    this.prune();
     const s = this.sessions.get(session) ?? { calls: 0, usd: 0 };
     const d = this.userDays.get(this.dayKey(user)) ?? { calls: 0, usd: 0 };
     if (s.calls + 1 > this.limits.callsPerSession) return false;
@@ -59,5 +73,10 @@ export class Budget {
 
   endSession(session: string): void {
     this.sessions.delete(session);
+  }
+
+  /** Tracked sessions and user-days, for leak tests and metrics. */
+  get size(): { sessions: number; userDays: number } {
+    return { sessions: this.sessions.size, userDays: this.userDays.size };
   }
 }
