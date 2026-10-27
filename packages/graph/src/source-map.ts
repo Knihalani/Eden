@@ -6,6 +6,9 @@
  * It holds no content: entity names, source ids, item refs and counts. Content stays at the source or in the
  * short-lived item cache. Everything is partitioned by scope key (tenant/user); no query crosses it.
  *
+ * Statements go through `db.query`, which caches the prepared statement (re-preparing per call was 5% of end-to-end
+ * CPU; packages/engine/bench/pipeline.bench.ts).
+ *
  * Learning is a Beta-Bernoulli estimate per (user, situation, source): `shown` counts injections that cited the
  * source, `used` those the agent then used. The mean (used+1)/(shown+2) starts at 0.5 and moves with evidence.
  */
@@ -54,7 +57,7 @@ export class SourceMap {
    * (names, handles, ids): never quoted phrases, URLs or item refs, which can carry content.
    */
   recordMentions(scope: Scope, sourceId: string, entities: string[], now = Date.now()): void {
-    const upsert = this.db.prepare(`
+    const upsert = this.db.query(`
       INSERT INTO mention (scope, entity, source_id, count, last_seen) VALUES (?, ?, ?, 1, ?)
       ON CONFLICT (scope, entity, source_id) DO UPDATE SET count = count + 1, last_seen = excluded.last_seen
     `);
@@ -67,7 +70,7 @@ export class SourceMap {
   /** Records whether an injection citing `sourceId` was used, in this situation. */
   recordOutcome(scope: Scope, situation: string, sourceId: string, used: boolean): void {
     this.db
-      .prepare(
+      .query(
         `INSERT INTO utility (scope, situation, source_id, shown, used) VALUES (?, ?, ?, 1, ?)
          ON CONFLICT (scope, situation, source_id) DO UPDATE SET shown = shown + 1, used = used + excluded.used`,
       )
@@ -78,7 +81,7 @@ export class SourceMap {
   correctOutcome(scope: Scope, situation: string, sourceId: string, used: boolean): void {
     const delta = used ? 1 : -1;
     this.db
-      .prepare(
+      .query(
         `UPDATE utility SET used = MAX(0, MIN(shown, used + ?)) WHERE scope = ? AND situation = ? AND source_id = ?`,
       )
       .run(delta, scopeKey(scope), situation, sourceId);
@@ -87,7 +90,7 @@ export class SourceMap {
   /** The learned usefulness of a source in a situation: the Beta(1,1) posterior mean. */
   utility(scope: Scope, situation: string, sourceId: string): number {
     const row = this.db
-      .prepare("SELECT shown, used FROM utility WHERE scope = ? AND situation = ? AND source_id = ?")
+      .query("SELECT shown, used FROM utility WHERE scope = ? AND situation = ? AND source_id = ?")
       .get(scopeKey(scope), situation, sourceId) as { shown: number; used: number } | null;
     return ((row?.used ?? 0) + 1) / ((row?.shown ?? 0) + 2);
   }
@@ -95,7 +98,7 @@ export class SourceMap {
   /** Which sources have mentioned an entity, most often first. */
   sourcesFor(scope: Scope, entity: string): { sourceId: string; count: number }[] {
     return this.db
-      .prepare("SELECT source_id AS sourceId, count FROM mention WHERE scope = ? AND entity = ? ORDER BY count DESC")
+      .query("SELECT source_id AS sourceId, count FROM mention WHERE scope = ? AND entity = ? ORDER BY count DESC")
       .all(scopeKey(scope), normalizeEntity(entity)) as { sourceId: string; count: number }[];
   }
 
@@ -125,8 +128,8 @@ export class SourceMap {
   forget(scope: Scope, sourceId?: string): void {
     const key = scopeKey(scope);
     for (const table of ["mention", "utility"]) {
-      if (sourceId) this.db.prepare(`DELETE FROM ${table} WHERE scope = ? AND source_id = ?`).run(key, sourceId);
-      else this.db.prepare(`DELETE FROM ${table} WHERE scope = ?`).run(key);
+      if (sourceId) this.db.query(`DELETE FROM ${table} WHERE scope = ? AND source_id = ?`).run(key, sourceId);
+      else this.db.query(`DELETE FROM ${table} WHERE scope = ?`).run(key);
     }
   }
 

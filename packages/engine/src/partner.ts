@@ -32,6 +32,7 @@ import {
   type Scope,
 } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
+import type { Vocab } from "@eden/primitives";
 import { searchSources, type Source, type SourceResolver } from "@eden/sources";
 import type { ItemCache } from "./cache";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
@@ -44,9 +45,9 @@ import {
   extractEntities,
   extractTypedEntities,
   isChatter,
-  mentions,
+  isStopword,
   PERSISTABLE_KINDS,
-  wordSet,
+  termIds,
 } from "./text";
 import type { Trace, TraceSink } from "./trace";
 import { distinctiveTokens, showsUse, type Outstanding } from "./usage";
@@ -78,7 +79,10 @@ interface Session {
   turn: number;
   lastActive: number;
   window: string[];
-  seen: Set<string>;
+  /** The user's vocabulary, captured at session start: all of this session's term ids are in it. */
+  vocab: Vocab;
+  /** Term ids the session has seen (bounded, least recently seen first). */
+  seen: Set<number>;
   ledger: Ledger;
   /** Injections handed to the agent and not yet judged used or unused. */
   outstanding: Map<string, Outstanding>;
@@ -160,12 +164,12 @@ export class ContextPartner {
     };
 
     const queued = s.pending.shift() ?? null;
-    if (!wantsLookup(event, text)) {
+    if (!wantsLookup(event, text, s.vocab)) {
       trace("skipped", event.kind);
       return reply(queued);
     }
     if (event.kind === "user_message") s.situation = classifySituation(text);
-    const cue = buildCue(text);
+    const cue = buildCue(text, s.vocab);
     const last = s.cues.get(cue.key);
     if (last !== undefined && s.turn - last < this.config.cueCooldownTurns) {
       trace("repeat", cue.id);
@@ -221,7 +225,7 @@ export class ContextPartner {
     const t0 = performance.now();
     const s = this.session(request);
     const question = sanitizeForStore(request.question);
-    const cue = buildCue(question);
+    const cue = buildCue(question, s.vocab);
     const limit = request.maxItems ?? 5;
     const sourceCalls = await this.searchLive(s, cue, this.config.askSources);
     const items = this.rank(s, cue, { ignoreLedger: true })
@@ -345,6 +349,7 @@ export class ContextPartner {
       turn: 0,
       lastActive: now,
       window: [],
+      vocab: this.deps.cache.vocabOf({ tenantId: e.tenantId, userId: e.userId }),
       seen: new Set(),
       ledger: new Ledger(this.config.ledgerCooldownTurns),
       outstanding: new Map(),
@@ -385,11 +390,13 @@ export class ContextPartner {
     if (!text) return;
     s.window.push(`${event.kind}: ${text.slice(0, 1_000)}`);
     if (s.window.length > this.config.windowEvents) s.window.shift();
-    for (const t of contentTerms(text)) {
-      s.seen.delete(t); // Re-insert so Set order is least recently seen first.
-      s.seen.add(t);
+    const { ids, n } = termIds(text, s.vocab, true);
+    for (let i = 0; i < n; i++) {
+      const id = ids[i]!;
+      s.seen.delete(id); // Re-insert so Set order is least recently seen first.
+      s.seen.add(id);
     }
-    while (s.seen.size > this.config.maxSeenTokens) s.seen.delete(s.seen.values().next().value as string);
+    while (s.seen.size > this.config.maxSeenTokens) s.seen.delete(s.seen.values().next().value as number);
   }
 
   private markCue(s: Session, cue: Cue): void {
@@ -409,15 +416,20 @@ export class ContextPartner {
       injectionId: injection.id,
       sourceIds: built.sourceIds,
       situation: s.situation,
-      tokens: distinctiveTokens(built.text, s.seen),
+      tokens: (() => {
+        const { ids, n } = termIds(built.text, s.vocab, true);
+        return distinctiveTokens(ids, n, s.seen, s.vocab);
+      })(),
       deliveredTurn: s.turn,
     });
   }
 
   private checkUsage(s: Session, event: AgentEvent, text: string): void {
     const actsOnIt = event.kind === "agent_message" || event.kind === "tool_call";
+    if (s.outstanding.size === 0) return;
+    const said = actsOnIt ? termIds(text, s.vocab, false) : { ids: new Uint32Array(0), n: 0 };
     for (const [id, o] of s.outstanding) {
-      const used = actsOnIt && showsUse(text, o.tokens);
+      const used = actsOnIt && showsUse(said.ids, said.n, o.tokens, s.vocab);
       const expired = s.turn - o.deliveredTurn > this.config.usageWindowTurns;
       if (!used && !expired) continue;
       s.outstanding.delete(id);
@@ -440,15 +452,24 @@ export class ContextPartner {
 
   /**
    * Scores cached items for a cue: idf-weighted query coverage, plus a bonus when the item names a cue entity as
-   * whole words ("Al" never matches "also").
+   * whole terms ("Al" never matches "also"). Both come from the cache's index: the item's text is never rescanned.
    */
   private rank(s: Session, cue: Cue, options: { ignoreLedger?: boolean } = {}): Scored[] {
-    return this.deps.cache
-      .search(s.scope, `${cue.text} ${cue.entities.join(" ")}`, 12, this.now())
+    const cache = this.deps.cache;
+    const vocab = cache.vocabOf(s.scope);
+    const q = termIds(`${cue.text} ${cue.entities.join(" ")}`, vocab, false);
+    const query: number[] = [];
+    for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
+    if (query.length === 0) return [];
+    const entities = cue.entities.map((e) => {
+      const t = termIds(e, vocab, true);
+      return Array.from(t.ids.subarray(0, t.n));
+    });
+    return cache
+      .search(s.scope, query, query.length, 12, this.now())
       .filter((h) => options.ignoreLedger || s.ledger.isFresh(h.item.id, s.turn))
       .map((h) => {
-        const words = wordSet(`${h.item.title} ${h.item.text}`);
-        const entityHit = cue.entities.some((e) => mentions(words, e));
+        const entityHit = entities.some((ids) => ids.length > 0 && cache.containsAll(s.scope, h.doc, ids, ids.length));
         return { item: h.item, matched: h.matched, score: h.coverage + (entityHit ? this.config.entityBonus : 0) };
       })
       .sort((a, b) => b.score - a.score);
@@ -637,14 +658,14 @@ function eventText(e: AgentEvent): string {
 }
 
 /** Proactive lookups start from what the user or the world says, not from the agent's own words. */
-function wantsLookup(e: AgentEvent, text: string): boolean {
+function wantsLookup(e: AgentEvent, text: string, vocab: Vocab): boolean {
   if (e.kind !== "user_message" && e.kind !== "external") return false;
-  return !isChatter(text);
+  return !isChatter(text, vocab);
 }
 
-function buildCue(text: string): Cue {
+function buildCue(text: string, vocab: Vocab): Cue {
   const entities = extractEntities(text).slice(0, 8);
-  const terms = [...new Set(contentTerms(text))].slice(0, 16);
+  const terms = [...new Set(contentTerms(text, vocab))].slice(0, 16);
   const key = (entities.length ? entities.map((e) => e.toLowerCase()) : terms).slice().sort().join("|").slice(0, 200);
   // Traces and reasons carry this id, never the cue itself: the cue is the user's words.
   const id = `cue:${createHash("sha256").update(key).digest("hex").slice(0, 10)}`;

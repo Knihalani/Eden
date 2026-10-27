@@ -1,3 +1,4 @@
+import { truncateUtf8, utf8Length } from "@eden/primitives";
 import type { Citation, ContextItem } from "@eden/protocol";
 
 /**
@@ -9,15 +10,20 @@ const HEADER = '<context source="eden" note="Background from the user\'s connect
 export function renderPacket(items: ContextItem[], options: { maxBytes: number }): string {
   const lines = [HEADER];
   const footer = "</context>";
-  let bytes = byteLength(lines.join("\n")) + byteLength(footer) + 2;
+  let bytes = utf8Length(lines.join("\n")) + utf8Length(footer) + 2;
   for (const item of items) {
-    const title = item.title ? `${inert(item.title)}: ` : "";
-    let line = `- [${item.sourceId}] ${title}${inert(oneLine(item.text))}`;
     const room = options.maxBytes - bytes - 1;
     if (room < 40) break;
-    if (byteLength(line) > room) line = truncateBytes(line, room - 1) + "…";
+    const title = item.title ? `${inert(item.title)}: ` : "";
+    // Collapse whitespace only in a prefix that can fill the room (a char is at least one byte once collapsed), not
+    // across an 8 KB item that is then cut to a few hundred bytes (9% of end-to-end CPU; pipeline.bench.ts).
+    const prefix = item.text.length > room * 2 + 64 ? item.text.slice(0, room * 2 + 64) : item.text;
+    const cut = prefix.length < item.text.length;
+    let line = `- [${item.sourceId}] ${title}${inert(oneLine(prefix))}`;
+    const size = utf8Length(line);
+    if (size > room || cut) line = truncateUtf8(line, room - 3) + "…"; // "…" is 3 bytes
     lines.push(line);
-    bytes += byteLength(line) + 1;
+    bytes += (size > room ? utf8Length(line) : size) + 1;
   }
   lines.push(footer);
   return lines.join("\n");
@@ -41,13 +47,3 @@ export function citationsOf(items: ContextItem[]): Citation[] {
 }
 
 const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
-const byteLength = (s: string) => Buffer.byteLength(s, "utf8");
-
-function truncateBytes(s: string, max: number): string {
-  let out = "";
-  for (const ch of s) {
-    if (byteLength(out + ch) > max) break;
-    out += ch;
-  }
-  return out;
-}
