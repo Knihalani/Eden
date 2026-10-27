@@ -63,6 +63,11 @@ user's *own* recent results contain (so they can only match that user's data):
 - a term present only in titles vs only in bodies: does body text match?
 - `A OR B`, `"A B"`: is there operator syntax? (Literal-only connectors return nothing or match the word "OR".)
 - result count vs the requested limit: is there pagination or a hard cap?
+- two co-occurring but non-adjacent terms vs the same terms as they appear in the item: is the whole string matched
+  as one substring (CalDAV, Twenty, the reference memory server do this)?
+- a nonsense term: does the connector ever return nothing? Vector connectors (mem0, Chroma, HubSpot's FAISS cache)
+  return their nearest items for any query, so an empty result cannot be the miss signal there and a score
+  threshold is needed.
 
 The probe sets priors and a capability record (`and | or | ranked | titles | phrase`, `operators: OR, quotes`). It
 runs within the connector's rate budget, at most once per connector per user per day, and is skipped for connectors
@@ -70,20 +75,44 @@ the operator marks as expensive.
 
 ### Calling the tool: schema-driven arguments
 
-Today `McpSource` takes an `args(query)` function per connector. The planner needs a generic mapping from a tool's
-JSON schema: which argument takes free text (`query`, `q`, `search`, `text`, `keywords`…), which take filters
-(`from`, `assignee`, `owner`, `after`/`before`, `status`), and which bound the result size. A deterministic scorer
-(name, type, description keywords) picks them; an operator override always wins. Results are read by the existing
-`toItems`, extended to find title / body / url / time / id fields in arbitrary JSON.
+A survey of real MCP servers' code (docs/research/connectors.md) found that a query string covers only one of eight
+shapes of call. Others take field criteria and no free text (IMAP), text plus *required* non-text arguments (CalDAV's
+date window, Typesense's collection and `query_by`, Rocket.Chat's channel), a DSL object (Elasticsearch), an array of
+queries (Chroma), or one tool per entity type (EspoCRM). So the argument mapper is the core of the planner, not an
+add-on.
 
-D7 does not change: the planner only ever calls the one search tool the connector exposes as read-only.
+Today `McpSource` takes an `args(query)` function per connector. The planner replaces it with a mapping derived from
+the tool's JSON schema, deterministic and overridable by the operator:
+
+- **text argument**: by name (`query`, `q`, `search`, `text`, `keywords`, `search_text`…), type and description;
+- **field arguments**: typed cue entities go to matching fields (person → `from`/`to`/attendee/assignee,
+  organisation → company/account/name, id → id field); each extra field narrows (AND), so fields are a shape of their
+  own, learned like the others, never all filled at once;
+- **required context**: collection, index, channel or `query_by` come from operator config; a time window comes from
+  the cue (the event's time ± a range, per connector kind). If a required argument has no value, the call is not made
+  and the connector is marked misconfigured, rather than guessing;
+- **DSL backends**: one fixed template per backend (Elasticsearch `multi_match`, never `query_string`), filled with
+  escaped terms;
+- **arrays of queries**: several shapes in one call, credited per shape when the backend says which query matched;
+- **result size**: the limit argument, capped by the lookup's budget.
+
+Results are read by the existing `toItems`, extended to find title / body / url / time / id fields in arbitrary JSON.
+
+SQL-only and path-glob connectors (postgres-mcp's `execute_sql`, the filesystem server's `search_files`) are not
+targets for generated queries; they stay usable through operator-written templates only.
+
+D7 does not change for a connector with one search tool. Connectors that expose one search tool per entity type (CRMs)
+are configured as one Eden source per tool for now; a connector with a small operator-listed set of read-only tools
+and a router would need a new decision (see [Decisions](#decisions)).
 
 ### Security
 
 - **Query injection**: cue terms come from untrusted text (user and tool messages, item text). A term such as
   `in:trash`, `from:`, `OR`, a leading `-`, `*`, a quote, a JQL or SQL fragment must never become syntax. Every shape
   builder escapes or drops operator characters per the connector's probed capabilities; operators are emitted only by
-  the shape builder, never copied from input. Fuzz-tested.
+  the shape builder, never copied from input. Fuzz-tested. Real servers pass syntax through by design (Gmail, notmuch,
+  GitHub, Zulip, Basic Memory's AND/OR/NOT) and at least one interpolates the query unescaped into a GraphQL document
+  (a Wiki.js server), so until a connector is probed, quotes and operator characters are dropped, not escaped.
 - **Read-only**: unchanged (D7); the schema mapper may only fill arguments of the configured read-only search tool.
 - **Isolation**: arms, probes and capability records are keyed by tenant/user/connector; a test asserts no cross-user
   reads. Probe terms come only from that user's own cached items.
@@ -126,7 +155,11 @@ Extend `packages/sim/src/sources.ts` with connectors nobody tunes the planner fo
 | title / record-name only | CRMs, Notion's quick search |
 | phrase-only, prefix-only | autocomplete-style endpoints |
 | id lookup only | ticket and order systems |
-| vector (semantic) search | memory products (Mem0, Supermemory), vector-DB MCPs |
+| whole string as one substring | CalDAV, Twenty CRM, the reference memory server (read in their code) |
+| field criteria only, no free text | IMAP servers |
+| required non-text arguments (time window, collection) | CalDAV, Typesense, Rocket.Chat, Chroma |
+| one search tool per entity type | EspoCRM, SuiteCRM |
+| vector (semantic) search, never empty | memory products (Mem0, Supermemory), vector-DB MCPs |
 | small page size with pagination | many APIs |
 | odd argument names and nested result JSON | community MCP servers |
 | behaviour changes mid-run | drift, for the decay |
@@ -142,7 +175,17 @@ not overlapping in the right direction).
 
 The key idea: **put a simulated world into real services**, so real search semantics meet known ground truth.
 
-1. **Sandbox accounts**, never personal ones: a Google Workspace test domain (Gmail, Calendar, Drive), a Notion test
+0. **A local lab first**, no accounts needed: open-source backends in containers (Postgres, Meilisearch, Gitea,
+   and next Stalwart or Dovecot for IMAP/JMAP, Radicale for CalDAV, BookStack or Wiki.js, Twenty or EspoCRM, Redmine,
+   Rocket.Chat or Zulip, Chroma or Qdrant), each fronted by the open-source MCP server surveyed in
+   docs/research/connectors.md, pinned by commit. Official backend images run here from registry mirrors; the MCP
+   servers need the owner's permission to install and run third-party code, inside containers with no secrets. One
+   spec per connector in `packages/sim/src/lab/`: backend image, MCP command, search tool, argument mapping, a
+   `seed(world)` through the backend's write API, and a result → world-id mapping. The lab measures each shape's
+   reachability, empty rate and latency against world labels before any planner exists, which also gives the
+   per-connector baselines phase 0 needs.
+1. **Sandbox accounts**, never personal ones, for hosted services with no open-source backend: a Google Workspace
+   test domain (Gmail, Calendar, Drive), a Notion test
    workspace, a Slack test workspace, a HubSpot developer sandbox, a Linear or Jira free workspace, a GitHub test
    organisation (issues), a Postgres database behind an SQL MCP server, a filesystem MCP over a seeded folder, and a
    memory product's free tier.
@@ -178,11 +221,27 @@ Only with an account owner's explicit consent, and read-only. On real data there
 This session already has Gmail and Google Calendar connectors on the owner's account; using them for shadow runs
 needs the owner's explicit yes, and seeding them is out of the question.
 
+## Prior work it draws on
+
+From the literature, cited by name; nothing here was re-measured in this repository.
+
+- **Uncooperative federated search**: Callan and Connell's query-based sampling (2001) learns a remote collection's
+  vocabulary by sending queries and reading results; the capability probe is a narrow form of it, restricted to terms
+  from the user's own data.
+- **Verbose query reduction**: Bendersky and Croft (2008) and Kumaran and Carvalho (2009) select key concepts from
+  long queries, which is what `entities` and `entity+term` approximate without a model.
+- **Query performance prediction**: pre-retrieval predictors (idf of the terms, query clarity, Cronen-Townsend et al.
+  2002) and post-retrieval ones (score spread, Shtok et al.'s NQC 2012) give a cheap confidence per shape; useful as
+  bandit context and as the miss signal for vector connectors.
+- **Bandits**: Thompson sampling with Beta posteriors (Chapelle and Li 2011, which also covers delayed feedback);
+  discounting for non-stationary arms; off-policy evaluation by inverse propensity scoring, self-normalised (SNIPS,
+  Swaminathan and Joachims 2015) to keep variance down with few lookups per user.
+
 ## Building it: phases
 
 | Phase | Work | Exit |
 |---|---|---|
-| 0 | Decisions below; collect ~50 real MCP tool schemas; sim connector zoo with tune/held-out splits; baselines (single query, each fixed shape) | baselines reported with intervals |
+| 0 | Decisions below; a labelled schema corpus from the surveyed servers (each search tool's `inputSchema` with its correct argument mapping); sim connector zoo with tune/held-out splits; the local lab; baselines (single query, each fixed shape) in sim and lab | baselines reported with intervals |
 | 1 | `ContextualBandit` primitive (tests, benchmark); shape builders and escaping (fuzzed) | tier 1 green |
 | 2 | `QueryPlanner` + engine wiring, behind `EngineConfig.queryPlanner` (off by default); content-free traces | tier 2 gate met |
 | 3 | probe; schema-driven arguments; `toItems` extension | tier 2 gains hold on zoo variants with unknown argument names |
@@ -230,3 +289,7 @@ Needed before or during the work; each becomes a numbered entry in DECISIONS.md.
 3. **Tenant-level priors** (D9): opt-in content-free counts per connector kind, or per-user learning only.
 4. **A model budget** for the judge in live tier-3 runs (the current OpenRouter key's $0.01 limit is spent).
 5. **Default-on criteria** for phase 6.
+6. **Running third-party MCP servers in the lab**: permission to install and run pinned open-source servers, in
+   containers without secrets or network beyond their backend.
+7. **Multi-tool connectors** (D7): keep one Eden source per search tool, or allow a connector with an operator-listed
+   set of read-only search tools and a router.
