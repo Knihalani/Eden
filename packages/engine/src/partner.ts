@@ -729,19 +729,23 @@ function eventText(e: AgentEvent): string {
 
 /**
  * The first `max` characters of `s`, cut so that redaction (which runs after the cut) still sees every secret whole:
- * the cut drops the whole whitespace-free run it would split (half a JWT no longer looks like one), and a private key
- * whose END line falls past the cut is dropped from its BEGIN line (alone, the banner is all `redactPem` redacts).
+ * the cut drops the whole run it would split, back to whitespace or JSON punctuation (" , { } [ ], which no token or
+ * base64 body contains, so minified JSON keeps its head: half a JWT no longer looks like one), and a private key whose
+ * END line falls past the cut is dropped from its BEGIN line (alone, the banner is all `redactPem` redacts).
  */
 function head(s: string, max: number): string {
   if (s.length <= max) return s;
   let end = max;
-  while (end > 0 && s.charCodeAt(end - 1) > 32) end--;
+  while (end > 0 && !isCutPoint(s.charCodeAt(end - 1))) end--;
   let out = s.slice(0, end);
   let begin = -1;
   for (const m of out.matchAll(PEM_BEGIN)) begin = m.index;
   if (begin >= 0 && !PEM_END.test(out.slice(begin))) out = out.slice(0, begin);
   return out;
 }
+
+/** Whitespace and the JSON punctuation " , [ ] { }. */
+const isCutPoint = (c: number) => c <= 32 || c === 34 || c === 44 || c === 91 || c === 93 || c === 123 || c === 125;
 
 const PEM_BEGIN = /-----BEGIN [A-Z ]*PRIVATE KEY-----/gi;
 const PEM_END = /-----END [A-Z ]*PRIVATE KEY-----/i;

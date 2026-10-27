@@ -191,6 +191,12 @@ export class SourceFanout {
     } catch (e) {
       const message = String(e);
       const timedOut = timeout.aborted;
+      if (deadline.aborted && !timedOut) {
+        // The caller gave up (session ended, user forgotten): no evidence against the source. The breaker forgets
+        // a half-open probe that never reports.
+        s.limiter.release("ignored");
+        return fallback("error", message);
+      }
       s.latency.record(performance.now() - started);
       s.limiter.release("dropped");
       s.breaker.failure();

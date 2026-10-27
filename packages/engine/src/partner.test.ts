@@ -84,6 +84,17 @@ describe("observe", () => {
     expect(kept).not.toContain("qufbqufbqufbqufbqufbqufbqufbqufb");
   });
 
+  test("minified JSON past maxEventChars keeps its head, still cut before a token (branch review)", async () => {
+    const jwt = `eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkYW5h${"QGdsb2JleC5jb20i".repeat(30)}.c2lnbmF0dXJl`;
+    const rows = Array.from({ length: 1_500 }, (_, i) => `{"name":"Dana Lee","order":"OPS-${i}"}`).join(",");
+    const output = `[${rows},{"token":"${jwt}"}]`;
+    const { p } = partner({ config: { maxEventChars: rows.length + 40 } });
+    await p.observe(ev({ kind: "tool_result", tool: "db.query", output }));
+    const kept = JSON.stringify([...(p as unknown as { sessions: Map<string, unknown> }).sessions]);
+    expect(kept).toContain("ops-1499");
+    expect(kept).not.toContain("qgdsb2jlec5jb20i");
+  });
+
   test("chatter and the agent's own messages never trigger a lookup", async () => {
     const { p, traces } = partner();
     expect((await p.observe(ev({ kind: "user_message", text: "thanks!" }))).injection).toBeNull();

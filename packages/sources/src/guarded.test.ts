@@ -70,6 +70,26 @@ describe("SourceFanout", () => {
     expect(src.calls).toBe(3);
   });
 
+  test("a caller giving up (session end, forget) is no evidence against the source (branch review)", async () => {
+    const src = source(
+      (call, signal) =>
+        new Promise((resolve, reject) => {
+          if (call > 3) resolve([item("ok")]);
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        }),
+    );
+    const f = new SourceFanout({ sanitize: (x) => x, cacheBytes: 0, breaker: { minCalls: 3, failureRate: 0.5 } });
+    for (let i = 0; i < 3; i++) {
+      const ac = new AbortController();
+      const pending = f.search([src], query(`q${i}`), { timeoutMs: 5_000, signal: ac.signal });
+      ac.abort(new Error("session ended"));
+      await pending;
+    }
+    const [out] = await f.search([src], query("next"), { timeoutMs: 1_000 });
+    expect(out!.status).toBe("ok"); // Not "open": three abandoned calls did not trip the breaker.
+    expect(src.calls).toBe(4);
+  });
+
   test("a 429 with Retry-After pushes the rate limit back", async () => {
     const src = source(async () => {
       throw new Error("429 Too Many Requests, retry after 60");
