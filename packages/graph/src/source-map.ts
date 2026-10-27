@@ -13,6 +13,7 @@
  * source, `used` those the agent then used. The mean (used+1)/(shown+2) starts at 0.5 and moves with evidence.
  */
 import { Database } from "bun:sqlite";
+import { Xoshiro128 } from "@eden/primitives";
 import { scopeKey, type Scope } from "@eden/protocol";
 
 export interface RouteRequest {
@@ -27,15 +28,33 @@ export interface RouteRequest {
 export interface RankedSource {
   sourceId: string;
   score: number;
-  /** Why it ranked: entity hits and the learned usefulness. */
+  /** Why it ranked: entity hits, the learned usefulness (posterior mean) and the value routing drew for it. */
   entityHits: number;
   utility: number;
+  sampled: number;
+}
+
+export interface SourceMapOptions {
+  /**
+   * Thompson sampling in routing (default true): each source's usefulness is drawn from its Beta posterior instead of
+   * taken as the mean, so a source that has been unlucky (or is new) still gets queried sometimes and can recover.
+   * Exploration only decides which sources to *query*; it never lowers the bar for *injecting* anything.
+   * Simulated regret per decision with 30 sources, 3 queried: 0.0467 vs 0.1538 for the posterior mean
+   * (docs/research/primitives-decision.md). Pass false for deterministic routing, or a seed.
+   */
+  explore?: boolean;
+  seed?: number;
 }
 
 export class SourceMap {
   private readonly db: Database;
 
-  constructor(path = ":memory:") {
+  private readonly explore: boolean;
+  private readonly rng: Xoshiro128;
+
+  constructor(path = ":memory:", options: SourceMapOptions = {}) {
+    this.explore = options.explore ?? true;
+    this.rng = new Xoshiro128(options.seed ?? (Math.random() * 2 ** 32) >>> 0);
     this.db = new Database(path, { create: true });
     this.db.exec("PRAGMA journal_mode = WAL");
     this.db.exec(`
@@ -99,10 +118,15 @@ export class SourceMap {
 
   /** The learned usefulness of a source in a situation: the Beta(1,1) posterior mean. */
   utility(scope: Scope, situation: string, sourceId: string): number {
+    const { shown, used } = this.outcomes(scope, situation, sourceId);
+    return (used + 1) / (shown + 2);
+  }
+
+  private outcomes(scope: Scope, situation: string, sourceId: string): { shown: number; used: number } {
     const row = this.db
       .query("SELECT shown, used FROM utility WHERE scope = ? AND situation = ? AND source_id = ?")
       .get(scopeKey(scope), situation, sourceId) as { shown: number; used: number } | null;
-    return ((row?.used ?? 0) + 1) / ((row?.shown ?? 0) + 2);
+    return { shown: row?.shown ?? 0, used: row?.used ?? 0 };
   }
 
   /** Which sources have mentioned an entity, most often first. */
@@ -127,8 +151,10 @@ export class SourceMap {
     return request.sourceIds
       .map((sourceId) => {
         const entityHits = hits.get(sourceId) ?? 0;
-        const utility = this.utility(request.scope, request.situation, sourceId);
-        return { sourceId, entityHits, utility, score: entityHits + 2 * utility };
+        const { shown, used } = this.outcomes(request.scope, request.situation, sourceId);
+        const utility = (used + 1) / (shown + 2);
+        const sampled = this.explore ? this.rng.beta(used + 1, shown - used + 1) : utility;
+        return { sourceId, entityHits, utility, sampled, score: entityHits + 2 * sampled };
       })
       .sort((a, b) => b.score - a.score || a.sourceId.localeCompare(b.sourceId))
       .slice(0, request.limit);
