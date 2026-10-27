@@ -38,6 +38,12 @@ export interface EngineConfig {
   /** Per-session bounds on the tokens seen and the cues remembered. */
   maxSeenTokens: number;
   maxCues: number;
+  /**
+   * Terms in a session's vocabulary before it is rebuilt from what the session still holds (seen terms, terms of
+   * injections awaiting use). Event text is interned there, not in the user's cache vocabulary, which would grow
+   * with every id and hash in every tool result for as long as the user is cached.
+   */
+  maxSessionTerms: number;
   /** Rough cost reserved per model call before the real cost is known. */
   estimatedCallUsd: number;
   /**
@@ -67,6 +73,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   sessionIdleMs: 2 * 3_600_000,
   maxSeenTokens: 5_000,
   maxCues: 200,
+  maxSessionTerms: 20_000,
   estimatedCallUsd: 0.0005,
   maxEventChars: 32_000,
 };

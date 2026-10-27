@@ -38,8 +38,12 @@ export interface FanoutOutcome {
 }
 
 export interface FanoutOptions {
-  /** Redacts items before they are cached or returned. Required: nothing unredacted is held. */
-  sanitize: (items: ContextItem[]) => ContextItem[];
+  /**
+   * Redacts items before they are cached or returned. Required: nothing unredacted is held. It may be asynchronous
+   * (gating in a worker pool) and runs inside the call's deadline; `signal` aborts with the call. Items it leaves out
+   * are dropped.
+   */
+  sanitize: (items: ContextItem[], signal: AbortSignal) => ContextItem[] | Promise<ContextItem[]>;
   /** Result cache budget in bytes of item text (default 32 MB); 0 disables caching. */
   cacheBytes?: number;
   /** A cached result is fresh for this long (default 60 s), then stale (servable on failure) until `staleMs`. */
@@ -169,7 +173,7 @@ export class SourceFanout {
     try {
       const items = await this.flights.run(
         cacheKey,
-        async (signal) => this.options.sanitize(await source.search(query, signal)),
+        async (signal) => this.options.sanitize(await source.search(query, signal), signal),
         deadline,
       );
       s.latency.record(performance.now() - started);

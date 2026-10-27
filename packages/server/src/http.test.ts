@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { StaticSource } from "@eden/sources";
-import { buildPartner } from "./build";
+import { buildPartner, startGatePool } from "./build";
 import { loadConfig } from "./config";
 import { createHandler } from "./http";
 
@@ -110,5 +110,39 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ EDEN_API_KEYS: "acme:short" })).toThrow(/16\+/);
     expect(loadConfig({ EDEN_DEV: "1" }).dev).toBe(true);
     expect(() => loadConfig({ EDEN_API_KEYS: "a/b:0123456789abcdef" })).toThrow(/tenant/);
+  });
+});
+
+describe("gate pool", () => {
+  test("EDEN_GATE_WORKERS: default 0 (gate on the loop), a count, junk refused", async () => {
+    expect(loadConfig({ EDEN_DEV: "1" }).gateWorkers).toBe(0);
+    expect(loadConfig({ EDEN_DEV: "1", EDEN_GATE_WORKERS: "2" }).gateWorkers).toBe(2);
+    expect(() => loadConfig({ EDEN_DEV: "1", EDEN_GATE_WORKERS: "-1" })).toThrow(/EDEN_GATE_WORKERS/);
+    expect(await startGatePool(0)).toBeUndefined();
+  });
+
+  test("a partner built with a pool redacts lookup results in it", async () => {
+    const pool = (await startGatePool(1))!;
+    try {
+      const secret = "ghp_" + "Z9y8X7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2";
+      const big = new StaticSource("crm", "Deals", [
+        { ref: "d1", title: "Globex renewal", text: `Globex renewal, Dana Lee, ${secret} ${"terms ".repeat(400)}` },
+      ]);
+      const pooled = buildPartner({ sources: async () => [big], model: null, gatePool: pool });
+      const handle = createHandler(pooled, { keys: new Map(), dev: true });
+      const res = await handle(
+        new Request("http://x/v1/ask", {
+          method: "POST",
+          body: JSON.stringify({ userId: "u", sessionId: "s", question: "Globex renewal with Dana Lee?" }),
+        }),
+      );
+      const body = await res.text();
+      expect(res.status).toBe(200);
+      expect(body).toContain("Globex renewal");
+      expect(body).not.toContain(secret);
+      expect(pool.stats().completed).toBeGreaterThan(0); // Over 1 KB: gated in the worker, not inline.
+    } finally {
+      pool.close();
+    }
   });
 });

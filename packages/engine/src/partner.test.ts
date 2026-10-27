@@ -146,6 +146,27 @@ describe("observe", () => {
     expect(sourceMap.utility(scope, "communication", "crm")).toBeGreaterThan(0.5);
   });
 
+  test("event text never grows the user's cache vocabulary; a session's is rebuilt past its cap", async () => {
+    const sourceMap = new SourceMap();
+    const cache = new ItemCache();
+    const { p } = partner({ sourceMap, cache, config: { maxSessionTerms: 300, maxSeenTokens: 200 } });
+    await p.observe(ev({ kind: "user_message", text: "Email Dana Lee about the Globex renewal" }), { waitMs: 1_000 });
+    const cached = cache.vocabOf(scope).size;
+    // Tool output full of ids: every one a new term.
+    for (let i = 0; i < 4; i++) {
+      const ids = Array.from({ length: 250 }, (_, j) => `id${i}x${j}q`).join(" ");
+      await p.observe(ev({ kind: "tool_result", tool: "db.query", output: ids }));
+    }
+    expect(cache.vocabOf(scope).size).toBe(cached);
+    const session = (p as unknown as { sessions: Map<string, { vocab: { size: number } }> }).sessions;
+    expect([...session.values()][0]!.vocab.size).toBeLessThan(300 + 250 + 50); // Cap, one event, the injection.
+    // The injection is still awaiting use across rebuilds, and its use is still recognised.
+    await p.observe(
+      ev({ kind: "tool_call", tool: "gmail.send", input: { body: "Hi Dana, re 12% off by 2026-11-30" } }),
+    );
+    expect(sourceMap.utility(scope, "communication", "crm")).toBeGreaterThan(0.5);
+  });
+
   test("users are isolated: one user's cached items never reach another", async () => {
     const { p } = partner();
     await p.observe(ev({ kind: "user_message", text: "Globex renewal for Dana Lee" }), { waitMs: 1_000 });

@@ -33,17 +33,16 @@ export function distinctiveTokens(ids: Uint32Array, n: number, seen: Set<number>
 }
 
 /**
- * True when the text (`ids[0..n)`) repeats at least two distinctive terms, or one long term that holds a digit (a date,
- * an amount with its unit, an id). Short numbers ("30", "12") are too common to count alone.
+ * True when the text's distinct term ids (`distinctTermIds`) repeat at least two distinctive terms, or one long
+ * term that holds a digit (a date, an amount with its unit, an id). Short numbers ("30", "12") are too common to
+ * count alone.
  */
-export function showsUse(ids: Uint32Array, n: number, tokens: Set<number>, vocab: Vocab): boolean {
+export function showsUse(ids: ArrayLike<number>, tokens: Set<number>, vocab: Vocab): boolean {
   if (tokens.size === 0) return false;
   let hits = 0;
-  const counted = new Set<number>();
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < ids.length; i++) {
     const id = ids[i]!;
-    if (!tokens.has(id) || counted.has(id)) continue;
-    counted.add(id);
+    if (!tokens.has(id)) continue;
     const t = vocab.term(id);
     if (hasDigit(t) && t.length >= 4) return true;
     if (++hits >= 2) return true;

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Vocab } from "@eden/primitives";
 import { ItemCache } from "./cache";
 import { classifySituation } from "./situation";
-import { contentTerms, extractEntities, isChatter } from "./text";
+import { contentTerms, distinctTermIds, extractEntities, isChatter, isChatterTerms } from "./text";
 
 describe("extractEntities", () => {
   test("finds names, emails, handles, ids and quoted titles", () => {
@@ -58,5 +58,18 @@ describe("ItemCache search", () => {
     expect(cache.containsAll(scope, hits[0]!.doc, [vocab.lookup("acme")], 1)).toBe(true);
     cache.forget(scope, "crm");
     expect(cache.search(scope, q, q.length, 3)).toEqual([]);
+  });
+});
+
+describe("distinctTermIds", () => {
+  test("one id per term, in first-occurrence order, across calls and vocabularies", () => {
+    const a = new Vocab();
+    const b = new Vocab();
+    const ids = distinctTermIds("Dana's flight, dana FLIGHT to Berlin; Berlin", a);
+    expect([...ids].map((id) => a.term(id))).toEqual(["dana", "flight", "to", "berlin"]);
+    expect([...distinctTermIds("berlin berlin dana", a)]).toEqual([ids[3]!, ids[0]!]);
+    expect([...distinctTermIds("zeta zeta alpha", b)].map((id) => b.term(id))).toEqual(["zeta", "alpha"]);
+    expect(isChatterTerms("ok then", distinctTermIds("ok then", a), a)).toBe(true);
+    expect(isChatterTerms("ok, Berlin", distinctTermIds("ok, Berlin", a), a)).toBe(false);
   });
 });
