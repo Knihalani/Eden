@@ -1,7 +1,9 @@
 /**
  * Deterministic text analysis: the cue the partner builds from a session without a model. Everything here runs on
- * every event, so it must stay cheap (no I/O, linear in the text).
+ * every event, so it must stay cheap (no I/O, linear in the text). Terms come from the shared tokenizer
+ * (`@eden/primitives`), so cue terms, cached items and usage tracking all agree on what a term is.
  */
+import { tokenizeInto, type Vocab } from "@eden/primitives";
 
 const STOPWORDS = new Set(
   (
@@ -13,14 +15,62 @@ const STOPWORDS = new Set(
   ).split(" "),
 );
 
-/** Lowercased word tokens, stopwords and one-character tokens removed. */
-export function contentTerms(text: string): string[] {
+export function isStopword(term: string): boolean {
+  return STOPWORDS.has(term);
+}
+
+let scratch = new Uint32Array(1_024);
+
+/**
+ * Term ids of `text` in `vocab` (shared tokenizer: folded, possessives and trailing punctuation trimmed, one-character
+ * terms dropped), written to a reused buffer: valid until the next call. With `intern` false, unknown terms are
+ * skipped. Returns the buffer and the count.
+ */
+export function termIds(text: string, vocab: Vocab, intern: boolean): { ids: Uint32Array; n: number } {
+  if (scratch.length < text.length) scratch = new Uint32Array(Math.max(text.length, scratch.length * 2));
+  const n = tokenizeInto(text, vocab, intern, scratch, null);
+  return { ids: scratch, n };
+}
+
+let stamps = new Uint32Array(4_096);
+let tick = 0;
+
+/**
+ * Distinct term ids of `text` in `vocab`, in first-occurrence order, interning new terms; a fresh array. An event is
+ * tokenized once and its usage check, memory, chatter test and cue share the result (each tokenized it again before:
+ * concurrent.bench.ts profile, checkUsage and remember were 37% of CPU).
+ */
+export function distinctTermIds(text: string, vocab: Vocab): Uint32Array {
+  const { ids, n } = termIds(text, vocab, true);
+  if (stamps.length < vocab.size) stamps = new Uint32Array(Math.max(vocab.size, stamps.length * 2));
+  if (++tick === 0xffffffff) {
+    stamps.fill(0);
+    tick = 1;
+  }
+  let m = 0;
+  for (let i = 0; i < n; i++) {
+    const id = ids[i]!;
+    if (stamps[id] === tick) continue;
+    stamps[id] = tick;
+    ids[m++] = id;
+  }
+  return ids.slice(0, m);
+}
+
+/** The terms of `ids` that are not stopwords, as strings, in order. */
+export function contentTermsOf(ids: ArrayLike<number>, vocab: Vocab): string[] {
   const out: string[] = [];
-  for (const raw of text.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}'_-]*/gu) ?? []) {
-    const t = raw.replace(/'s$/, "");
-    if (t.length > 1 && !STOPWORDS.has(t)) out.push(t);
+  for (let i = 0; i < ids.length; i++) {
+    const t = vocab.term(ids[i]!);
+    if (!STOPWORDS.has(t)) out.push(t);
   }
   return out;
+}
+
+/** Content terms of `text` (stopwords removed), as strings, in order. Interns new terms into `vocab`. */
+export function contentTerms(text: string, vocab: Vocab): string[] {
+  const { ids, n } = termIds(text, vocab, true);
+  return contentTermsOf(ids.subarray(0, n), vocab);
 }
 
 /**
@@ -68,26 +118,18 @@ export function extractEntities(text: string): string[] {
   return extractTypedEntities(text).map((e) => e.text);
 }
 
-/** The set of word tokens in a text, lowercased, stopwords kept: for whole-word entity matching. */
-export function wordSet(text: string): Set<string> {
-  return new Set(
-    text
-      .toLowerCase()
-      .match(/[\p{L}\p{N}][\p{L}\p{N}'_-]*/gu)
-      ?.map((t) => t.replace(/'s$/, "")) ?? [],
-  );
-}
-
-/** True when every word of `entity` is a whole word of the text. Never a substring: "Al" is not in "also". */
-export function mentions(words: Set<string>, entity: string): boolean {
-  const parts = entity.toLowerCase().split(/\s+/).filter(Boolean);
-  return parts.length > 0 && parts.every((p) => words.has(p.replace(/'s$/, "")));
-}
-
 const CHATTER =
   /^(?:ok(?:ay)?|k|thanks?(?: you)?|thx|ty|cool|great|nice|perfect|got it|sounds good|yes|yep|no|nope|sure|lol|👍)[.! ]*$/i;
 
 /** A message that carries no information need: an acknowledgement or a bare yes/no. */
-export function isChatter(text: string): boolean {
-  return CHATTER.test(text.trim()) || contentTerms(text).length === 0;
+export function isChatter(text: string, vocab: Vocab): boolean {
+  const { ids, n } = termIds(text, vocab, true);
+  return isChatterTerms(text, ids.subarray(0, n), vocab);
+}
+
+/** As `isChatter`, given the text's term ids. */
+export function isChatterTerms(text: string, ids: ArrayLike<number>, vocab: Vocab): boolean {
+  if (CHATTER.test(text.trim())) return true;
+  for (let i = 0; i < ids.length; i++) if (!STOPWORDS.has(vocab.term(ids[i]!))) return false;
+  return true;
 }

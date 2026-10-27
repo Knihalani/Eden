@@ -26,13 +26,13 @@
 | Package | Role |
 |---|---|
 | `packages/protocol` | Wire types (`AgentEvent`, `ContextItem`, `Injection`, `AskRequest`…), ids, input validation. |
-| `packages/primitives` | Benchmarked building blocks: hashing, tokenizer + interner, multi-pattern matcher, top-k, S3-FIFO cache, deadline, singleflight, GCRA, circuit breaker, AIMD limiter, histogram ([research/primitives.md](research/primitives.md)). |
-| `packages/redact` | The secret gate (salvaged): gitleaks rules plus extras, prefiltered by one Aho–Corasick pass. Runs on everything stored, indexed or sent to a model. |
-| `packages/sources` | `Source` interface; `McpSource` (any MCP server's read tools, read-only enforced); `StaticSource`; fan-out with per-source deadlines. |
+| `packages/primitives` | Benchmarked building blocks: hashing, tokenizer + interner, multi-pattern matcher, top-k, BM25F sparse index, S3-FIFO cache, deadline, singleflight, GCRA, circuit breaker, AIMD limiter, histogram, reply stripping and near-duplicate sketches, calibration and certification statistics, Thompson sampling, budgeted packing, worker pool (D25, D26) ([research/primitives.md](research/primitives.md)). |
+| `packages/redact` | The secret gate (salvaged): gitleaks rules plus extras, prefiltered by one Aho–Corasick pass; the rules that backtrack in JavaScript and every allowlist run on RE2 (re2js, D24). Runs on everything stored, indexed or sent to a model. |
+| `packages/sources` | `Source` interface; `McpSource` (any MCP server's read tools, read-only enforced); `StaticSource`; `SourceFanout`: per-source deadlines, coalescing, a result cache that serves stale on failure, rate limits, circuit breakers and adaptive concurrency, redacting before anything is held. |
 | `packages/graph` | The source map (knowledge graph layer 1): which sources mention which entities, and learned usefulness per situation. SQLite. |
 | `packages/llm` | `Model` interface, OpenRouter client (ZDR, no data collection), pricing, `Budget`, `FakeModel`. |
-| `packages/engine` | `ContextPartner`: cues, BM25 item cache, ledger, two-speed pipeline, model judge, usage inference, traces. |
-| `packages/server` | HTTP API (tenant API keys), MCP server exposing `ask_context`, config, wiring. |
+| `packages/engine` | `ContextPartner`: cues, a per-user BM25F item cache (title, body), near-duplicate suppression, ledger, two-speed pipeline, model judge, usage inference, traces. Each event is tokenized once, into a per-session vocabulary. |
+| `packages/server` | HTTP API (tenant API keys, per-tenant rate limit: `EDEN_TENANT_RPS`, `EDEN_TENANT_BURST`), MCP server exposing `ask_context`, config, wiring; an optional worker pool that redacts lookup results (`EDEN_GATE_WORKERS`, D26). |
 | `packages/client` | SDK for agent builders: `EdenClient` (fail-open) and `withContext` for message lists. |
 | `packages/eval` | Scenario harness: precision, recall, false-fire rate, model calls and cost per turn, latency. |
 | `examples/personal-agent` | A minimal agent loop wired to Eden. |

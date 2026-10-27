@@ -8,6 +8,9 @@
  * EDEN_SOURCE_MAP    path of the source-map database; default $EDEN_HOME/source-map.db.
  * OPENROUTER_API_KEY enables the model; without it the engine runs with no model at all.
  * EDEN_MODEL         default z-ai/glm-5.3-flash.
+ * EDEN_TENANT_RPS    requests per second per tenant on the HTTP API (GCRA), default 200; EDEN_TENANT_BURST, 400.
+ *                    The stdio MCP server (mcp-stdio.ts) serves one local user and is not limited.
+ * EDEN_GATE_WORKERS  workers that redact lookup results off the event loop (D25, D26); default 0, on the loop.
  */
 import { join } from "node:path";
 import { edenHome, isId } from "@eden/protocol";
@@ -19,6 +22,11 @@ export interface ServerConfig {
   keys: Map<string, string>;
   dev: boolean;
   sourceMapPath: string;
+  /** Requests per second per tenant, sustained and burst (EDEN_TENANT_RPS, EDEN_TENANT_BURST). */
+  tenantRatePerSec: number;
+  tenantBurst: number;
+  /** Workers in the gate pool (EDEN_GATE_WORKERS); 0 gates on the event loop. */
+  gateWorkers: number;
 }
 
 export function loadConfig(env = process.env): ServerConfig {
@@ -41,5 +49,26 @@ export function loadConfig(env = process.env): ServerConfig {
     keys,
     dev,
     sourceMapPath: env.EDEN_SOURCE_MAP ?? join(edenHome(), "source-map.db"),
+    tenantRatePerSec: positive(env.EDEN_TENANT_RPS, 200, "EDEN_TENANT_RPS"),
+    tenantBurst: positive(env.EDEN_TENANT_BURST, 400, "EDEN_TENANT_BURST"),
+    gateWorkers: workers(env.EDEN_GATE_WORKERS),
   };
+}
+
+function positive(raw: string | undefined, fallback: number, name: string): number {
+  if (raw === undefined || raw === "") return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) throw new Error(`${name} must be a positive number, got ${raw}`);
+  return n;
+}
+
+/**
+ * Default 0 (D26): on the real engine with realistic source latency the pool was neutral in steady state and cost
+ * more CPU. Deployments whose sources return large or keyword-dense items may gain; more than cores − 1 never helps.
+ */
+function workers(raw: string | undefined): number {
+  if (raw === undefined || raw === "") return 0;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0 || n > 64) throw new Error(`EDEN_GATE_WORKERS must be 0-64, got ${raw}`);
+  return n;
 }

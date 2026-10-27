@@ -15,7 +15,8 @@ export interface LimiterOptions {
   backoff?: number;
 }
 
-export type Outcome = "ok" | "dropped";
+/** "ignored": the call says nothing about the upstream (its caller gave up): the permit returns, the limit stays. */
+export type Outcome = "ok" | "dropped" | "ignored";
 
 export class AimdLimiter {
   private value: number;
@@ -70,7 +71,7 @@ export class AimdLimiter {
   release(outcome: Outcome): void {
     this.active = Math.max(0, this.active - 1);
     if (outcome === "ok") this.value = Math.min(this.max, this.value + 1 / this.value);
-    else this.value = Math.max(this.min, this.value * this.backoff);
+    else if (outcome === "dropped") this.value = Math.max(this.min, this.value * this.backoff);
     while (this.waiters.length > 0 && this.active < this.limit) this.waiters.shift()!();
   }
 }

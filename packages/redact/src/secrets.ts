@@ -25,6 +25,7 @@
  *   prefixes), so the gate is never looser than it was.
  */
 import { MultiMatcher } from "@eden/primitives";
+import { RE2JS } from "re2js";
 import { redact, REDACTED } from "./redact";
 import gitleaks from "./vendor/gitleaks/gitleaks.toml";
 
@@ -53,7 +54,7 @@ interface GitleaksConfig {
 interface CompiledAllowlist {
   target: "secret" | "match" | "line";
   and: boolean;
-  regexes: RegExp[];
+  regexes: Pattern[];
   stopwords: string[];
   /** Path conditions never hold for text, so they only matter to an AND list (which they then fail). */
   hasPaths: boolean;
@@ -84,8 +85,16 @@ const KEYWORD_RULE = new RegExp(
   "dgi",
 );
 const SECRET_WORD = /(password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)/i;
-/** URL userinfo, with the password in group 1: the user and host stay, as they say where the secret is for. */
-const URL_USERINFO = new RegExp(String.raw`\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:(?!\[REDACTED\]@)([^\s/@]+)@`, "dgi");
+/**
+ * URL userinfo, with the password in group 1: the user and host stay, as they say where the secret is for. The
+ * scheme is a lookbehind rather than the match's start: written as `\b[a-z][a-z0-9+.-]*:\/\/…`, every word start in
+ * a long run of scheme characters re-scanned the run to its `://`, quadratic (1 MB of `a-a-…://`: 200 s, D24). Each
+ * `://` now checks its own run once; group 1, and so every span, is unchanged (secrets.test.ts pins both forms).
+ */
+export const URL_USERINFO = new RegExp(
+  String.raw`(?<=\b[a-z][a-z0-9+.-]*):\/\/[^\s:/@]+:(?!\[REDACTED\]@)([^\s/@]+)@`,
+  "dgi",
+);
 /**
  * (e) The redaction memory had before P0.4, kept so the gate is never looser: a password, passphrase or API key
  * after `is`, `=` or `:`, of any length (D13's keyword rule wants 6 characters and has no "passphrase"), with the
@@ -201,25 +210,143 @@ function shannon(text: string): number {
   return entropy;
 }
 
-function compileAllowlist(list: Allowlist): CompiledAllowlist {
+/**
+ * A compiled rule or allowlist regex. Two engines implement it: `linearEngine` (RE2 semantics through re2js, linear
+ * in the text whatever the input) and `backtrackingEngine` (JavaScript's own RegExp via `goRegex`). The gate runs
+ * `RE2_RULES` and every allowlist on the first and the other rules on the second (`GATE_ENGINES`, D24).
+ */
+export interface Pattern {
+  /** Whether `text` holds a match. */
+  test(text: string): boolean;
+  /** Every match, leftmost-first and non-overlapping, as `[start, end)`. */
+  matches(text: string): Span[];
+  /** The group spans of the first match in `text` (0: the whole match), undefined for a group that took no part. */
+  groups(text: string): (Span | undefined)[] | null;
+}
+
+export type Engine = (goPattern: string) => Pattern;
+
+/** JavaScript's `\s` set (WhiteSpace and LineTerminator), in RE2 class syntax. */
+const JS_SPACE = String.raw`\t\n\x{0B}\f\r \x{A0}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}`;
+/** JavaScript's `.` without the `s` flag: anything but a line terminator. */
+const JS_DOT = String.raw`[^\n\r\x{2028}\x{2029}]`;
+
+/**
+ * A Go pattern rewritten so RE2 matches what its `goRegex` translation matches in JavaScript: Go's `\s` is ASCII
+ * and its `.` excludes only `\n`, JavaScript's `\s` adds Unicode spaces (NBSP, U+2028, …) and its `.` also excludes
+ * `\r`, U+2028 and U+2029. What remains different: RE2's `(?i)` folds by Unicode simple case folding (`s` also
+ * matches U+017F, `k` U+212A), and RE2 reads text by code point where JavaScript reads UTF-16 units. On 10,000
+ * texts sprinkled with such characters and lone surrogates, every rule on RE2 fired as often or more, and kept every
+ * character JavaScript's engine redacted (docs/research/architecture-alternatives.md); linear.test.ts pins equal
+ * spans on ordinary text.
+ */
+export function re2Source(pattern: string): string {
+  // `[\S]` is the only class with a lone `\S` in the rules; outside a class it becomes the complement below.
+  const source = pattern.replaceAll(String.raw`[\S]`, String.raw`\S`);
+  let out = "";
+  let inClass = false;
+  for (let at = 0; at < source.length; at++) {
+    const char = source[at]!;
+    if (char === "\\") {
+      const next = source[at + 1] ?? "";
+      if (next === "s") out += inClass ? JS_SPACE : `[${JS_SPACE}]`;
+      else if (next === "S") {
+        // In a class only `[\s\S…]` (any character, in both dialects) is exact; refuse anything else.
+        if (inClass && !/\\s/.test(source.slice(source.lastIndexOf("[", at), source.indexOf("]", at)))) {
+          throw new Error(`\\S alone in a class: ${pattern}`);
+        }
+        out += inClass ? char + next : `[^${JS_SPACE}]`;
+      } else out += char + next;
+      at++;
+    } else if (inClass) {
+      if (source.startsWith("[:", at)) {
+        const end = source.indexOf(":]", at) + 2;
+        out += source.slice(at, end);
+        at = end - 1;
+      } else {
+        if (char === "]") inClass = false;
+        out += char;
+      }
+    } else if (char === "[") {
+      inClass = true;
+      out += char;
+      if (source[at + 1] === "^") out += source[++at];
+      if (source[at + 1] === "]") out += source[++at];
+    } else out += char === "." ? JS_DOT : char;
+  }
+  return out;
+}
+
+/**
+ * RE2 through re2js: time linear in the text for every pattern, so no input can make a rule backtrack (D24). A
+ * capture-free DFA `test` runs first, since most candidate rules find nothing and the capturing search costs more.
+ */
+export const linearEngine: Engine = (goPattern) => {
+  const pattern = RE2JS.compile(re2Source(goPattern));
+  return {
+    test: (text) => pattern.test(text),
+    matches(text) {
+      const out: Span[] = [];
+      if (!pattern.test(text)) return out;
+      const matcher = pattern.matcher(text);
+      while (matcher.find()) out.push([matcher.start(), matcher.end()]);
+      return out;
+    },
+    groups(text) {
+      const matcher = pattern.matcher(text);
+      if (!matcher.find()) return null;
+      const out: (Span | undefined)[] = [];
+      for (let group = 0; group <= matcher.groupCount(); group++) {
+        const start = matcher.start(group);
+        out.push(start < 0 ? undefined : [start, matcher.end(group)]);
+      }
+      return out;
+    },
+  };
+};
+
+/** JavaScript's backtracking RegExp, via `goRegex`: the reference for tests and benchmarks. */
+export const backtrackingEngine: Engine = (goPattern) => {
+  const regex = goRegex(goPattern);
+  const indices = new RegExp(regex.source, regex.flags + "d");
+  const scan = new RegExp(regex.source, regex.flags + "g");
+  return {
+    test: (text) => regex.test(text),
+    matches: (text) => [...text.matchAll(scan)].map((found): Span => [found.index, found.index + found[0].length]),
+    groups: (text) => (indices.exec(text)?.indices as (Span | undefined)[] | undefined) ?? null,
+  };
+};
+
+function compileAllowlist(list: Allowlist, engine: Engine): CompiledAllowlist {
   return {
     target: list.regexTarget ?? "secret",
     and: list.condition === "AND",
-    regexes: (list.regexes ?? []).map(goRegex),
+    regexes: (list.regexes ?? []).map(engine),
     stopwords: (list.stopwords ?? []).map((word) => word.toLowerCase()),
     hasPaths: (list.paths ?? []).length > 0,
   };
 }
 
+/**
+ * One finding of a rule. `line` is read only by allowlists that target the line; `lines` caches it per line, so a
+ * long line with many findings is sliced once rather than once per finding.
+ */
 interface Finding {
   match: string;
   secret: string;
-  line: string;
+  text: string;
+  index: number;
+  lines: Map<number, string>;
 }
 
 /** Whether an allowlist excuses a finding (gitleaks `checkFindingAllowed`, with no file path or commit). */
 function allows(list: CompiledAllowlist, finding: Finding): boolean {
-  const target = list.target === "match" ? finding.match : list.target === "line" ? finding.line : finding.secret;
+  const target =
+    list.target === "match"
+      ? finding.match
+      : list.target === "line"
+        ? lineAt(finding.text, finding.index, finding.lines)
+        : finding.secret;
   const regexAllowed = list.regexes.some((regex) => regex.test(target));
   const lower = finding.secret.toLowerCase();
   const stopword = list.stopwords.some((word) => lower.includes(word));
@@ -229,31 +356,39 @@ function allows(list: CompiledAllowlist, finding: Finding): boolean {
   return (!list.regexes.length || regexAllowed) && (!list.stopwords.length || stopword);
 }
 
-/** The line of `text` that holds `index`. */
-function lineAt(text: string, index: number): string {
+/** The line of `text` that holds `index`, cached by the line's start. */
+function lineAt(text: string, index: number, lines: Map<number, string>): string {
   const start = text.lastIndexOf("\n", index - 1) + 1;
-  const end = text.indexOf("\n", index);
-  return text.slice(start, end < 0 ? text.length : end);
+  let line = lines.get(start);
+  if (line === undefined) {
+    const end = text.indexOf("\n", index);
+    line = text.slice(start, end < 0 ? text.length : end);
+    lines.set(start, line);
+  }
+  return line;
 }
+
+const NEWLINE = 10;
 
 /**
  * A gitleaks rule. As gitleaks does, each match (its ends' line breaks trimmed) is matched again on its own to find
  * the secret: the rule's group, else the first non-empty group, else the whole match. Compiled on first use, since
  * most rules never run (their keywords are absent).
  */
-function gitleaksRule(rule: GitleaksRule & { regex: string }, global: CompiledAllowlist): SecretRule {
-  let compiled: { regex: RegExp; scan: RegExp; own: CompiledAllowlist[] } | undefined;
-  const compile = () => {
-    const regex = goRegex(rule.regex);
-    return {
-      regex: new RegExp(regex.source, regex.flags + "d"),
-      scan: new RegExp(regex.source, regex.flags + "g"),
-      own: (rule.allowlists ?? []).map(compileAllowlist),
-    };
-  };
+function gitleaksRule(
+  rule: GitleaksRule & { regex: string },
+  global: CompiledAllowlist,
+  engine: Engine,
+  allowlistEngine: Engine,
+): SecretRule {
+  let compiled: { pattern: Pattern; own: CompiledAllowlist[] } | undefined;
+  const compile = () => ({
+    pattern: engine(rule.regex),
+    own: (rule.allowlists ?? []).map((list) => compileAllowlist(list, allowlistEngine)),
+  });
   /** The secret's span within `match`; undefined when the rule's group did not take part. */
-  const secretIn = (regex: RegExp, match: string): Span | undefined => {
-    const indices = regex.exec(match)?.indices;
+  const secretIn = (pattern: Pattern, match: string): Span | undefined => {
+    const indices = pattern.groups(match);
     if (!indices || indices.length < 2) return [0, match.length];
     if (rule.secretGroup) return indices[rule.secretGroup];
     return indices.slice(1).find((span) => span && span[1] > span[0]) ?? [0, match.length];
@@ -263,16 +398,22 @@ function gitleaksRule(rule: GitleaksRule & { regex: string }, global: CompiledAl
     keywords: (rule.keywords ?? []).map((word) => word.toLowerCase()),
     prefilter: (rule.keywords ?? []).map((word) => word.toLowerCase()),
     spans(text) {
-      const { regex, scan, own } = (compiled ??= compile());
+      const { pattern, own } = (compiled ??= compile());
       const out: Span[] = [];
-      for (const found of text.matchAll(scan)) {
-        const match = found[0].replace(/^\n+|\n+$/g, "");
-        const at = found.index + found[0].indexOf(match);
-        const span = secretIn(regex, match);
+      const lines = new Map<number, string>();
+      for (const [start, end] of pattern.matches(text)) {
+        // Trim the match's line breaks by index: `/\n+$/` retries from every break in an inner run (quadratic).
+        let from = start;
+        let to = end;
+        while (from < to && text.charCodeAt(from) === NEWLINE) from++;
+        while (to > from && text.charCodeAt(to - 1) === NEWLINE) to--;
+        const match = text.slice(from, to);
+        const at = from === to ? start : from;
+        const span = secretIn(pattern, match);
         if (!span) continue;
         const secret = match.slice(span[0], span[1]);
         if (rule.entropy && shannon(secret) <= rule.entropy) continue;
-        const finding = { match, secret, line: lineAt(text, found.index) };
+        const finding = { match, secret, text, index: start, lines };
         if (allows(global, finding) || own.some((list) => allows(list, finding))) continue;
         out.push([at + span[0], at + span[1]]);
       }
@@ -320,16 +461,63 @@ const SHAPE_LITERALS: Record<string, string[]> = {
   "eden-aws-key-id": ["a3t", "akia", "asia", "abia", "acca"],
 };
 
+/**
+ * The gitleaks rules whose regexes backtrack badly in JavaScript, found by searching every rule for super-linear
+ * inputs (bench/redos.scan.ts in @eden/primitives; docs/research/architecture-alternatives.md): quadratic
+ * (`curl-*`: a lazy `.*?` before a required option) or ~60 µs a character (`[\w.-]{0,50}?(?i:[\w.-]{0,50}?…)`: two
+ * nested optional runs). On RE2 their worst measured input costs ~2 µs a character (re2js pays per match for the
+ * capture groups), against up to ~60 µs and growing on JavaScript's engine.
+ *
+ * Every other rule stays on JavaScript's engine, which is as fast or faster on typical text, keeps no per-pattern DFA
+ * cache (with every rule on RE2, re2js's caches held ~240 MB after crafted input) and is cheaper per match
+ * (generic-api-key: ~1 µs a character at worst on JavaScript, ~5 on RE2, whose program for it is large).
+ * linear.test.ts keeps those rules under a cost ceiling on crafted input, so a gitleaks update that adds a
+ * backtracking rule fails a test rather than shipping.
+ */
+export const RE2_RULES: ReadonlySet<string> = new Set([
+  "cisco-meraki-api-key",
+  "cohere-api-token",
+  "curl-auth-header",
+  "curl-auth-user",
+  "okta-access-token",
+  "privateai-api-token",
+  "sumologic-access-id",
+]);
+
+/** Which engine runs a gitleaks rule's regex, and which runs allowlist regexes. */
+export interface EngineChoice {
+  rule(id: string): Engine;
+  allowlist: Engine;
+}
+
+/**
+ * The gate's choice (D24): RE2 for `RE2_RULES` and for every allowlist regex (they run only on findings, but on
+ * a whole line or match, and several are quadratic there in JavaScript: `.+EXAMPLE$`, `[^:]+:…`), JavaScript for
+ * the rest.
+ */
+export const GATE_ENGINES: EngineChoice = {
+  rule: (id) => (RE2_RULES.has(id) ? linearEngine : backtrackingEngine),
+  allowlist: linearEngine,
+};
+
 let compiled: SecretRule[] | undefined;
 
-/** Every rule: gitleaks' (those with a regex) and Eden's (`eden-…`). */
+/** Every rule: gitleaks' (those with a regex) and Eden's (`eden-…`), engines as `GATE_ENGINES` chooses. */
 export function secretRules(): SecretRule[] {
-  if (compiled) return compiled;
+  compiled ??= rulesWith(GATE_ENGINES);
+  return compiled;
+}
+
+/**
+ * The same rules with gitleaks' regexes and allowlists run by the engines `choice` picks; Eden's own rules are
+ * JavaScript either way. Uncached: for tests and benchmarks that compare engines.
+ */
+export function rulesWith(choice: EngineChoice): SecretRule[] {
   const config = gitleaks as GitleaksConfig;
-  const global = compileAllowlist(config.allowlist);
+  const global = compileAllowlist(config.allowlist, choice.allowlist);
   const withRegex = config.rules.filter((rule): rule is GitleaksRule & { regex: string } => Boolean(rule.regex));
-  compiled = [
-    ...withRegex.map((rule) => gitleaksRule(rule, global)),
+  return [
+    ...withRegex.map((rule) => gitleaksRule(rule, global, choice.rule(rule.id), choice.allowlist)),
     // A shape without literals gets none: an empty prefilter means the rule always runs (safe, only slower).
     ...PROVIDER_SHAPES.map(([id, shape]) => plain(id, SHAPE_LITERALS[id] ?? [], (text) => matchSpans(shape, text))),
     plain("eden-keyword", SECRET_WORDS, (text) => matchSpans(KEYWORD_RULE, text)),
@@ -340,7 +528,17 @@ export function secretRules(): SecretRule[] {
       matchSpans(LEGACY_TOKEN, text),
     ),
   ];
-  return compiled;
+}
+
+/** One engine for every rule and allowlist: the all-RE2 and all-JavaScript gates the tests and benchmarks compare. */
+export const everywhere = (engine: Engine): EngineChoice => ({ rule: () => engine, allowlist: engine });
+
+/** A secret gate over a set of rules. */
+export interface Gate {
+  /** The ids of the rules `text` hits, sorted. */
+  secretHits(text: string): string[];
+  /** `text` with every secret the rules find replaced, then the structural redactor applied. */
+  sanitizeForStore(text: string): string;
 }
 
 /**
@@ -349,45 +547,65 @@ export function secretRules(): SecretRule[] {
  * (bench/gate.bench.ts in @eden/primitives; docs/research/primitives.md). The matcher folds case and accents, so it
  * reports a superset of `text.toLowerCase().includes(word)`: a rule it lets through still applies its own regex, so
  * results are unchanged (prefilter.test.ts checks this against the per-word scan).
+ *
+ * `gateOf` builds the gate over any rules: tests and benchmarks build reference gates with it.
  */
-let prefilter: { matcher: MultiMatcher; rulesOf: number[][]; always: number[] } | undefined;
+export function gateOf(rules: SecretRule[]): Gate {
+  const words = [...new Set(rules.flatMap((rule) => rule.prefilter))];
+  const index = new Map(words.map((word, i) => [word, i]));
+  const rulesOf: number[][] = words.map(() => []);
+  const always: number[] = [];
+  rules.forEach((rule, r) => {
+    // No words, or an empty word (which `includes` would always find): the rule always runs.
+    if (rule.prefilter.length === 0 || rule.prefilter.some((word) => word.length === 0)) always.push(r);
+    for (const word of new Set(rule.prefilter)) rulesOf[index.get(word)!]!.push(r);
+  });
+  const matcher = new MultiMatcher(words);
 
-function candidates(text: string): SecretRule[] {
-  const rules = secretRules();
-  if (!prefilter) {
-    const words = [...new Set(rules.flatMap((rule) => rule.prefilter))];
-    const index = new Map(words.map((word, i) => [word, i]));
-    const rulesOf: number[][] = words.map(() => []);
-    const always: number[] = [];
-    rules.forEach((rule, r) => {
-      // No words, or an empty word (which `includes` would always find): the rule always runs.
-      if (rule.prefilter.length === 0 || rule.prefilter.some((word) => word.length === 0)) always.push(r);
-      for (const word of new Set(rule.prefilter)) rulesOf[index.get(word)!]!.push(r);
-    });
-    prefilter = { matcher: new MultiMatcher(words), rulesOf, always };
-  }
-  const { matcher, rulesOf, always } = prefilter;
-  const hits = new Uint8Array(rulesOf.length);
-  const chosen = new Uint8Array(rules.length);
-  for (const r of always) chosen[r] = 1;
-  if (matcher.markHits(text, hits) > 0) {
-    for (let w = 0; w < hits.length; w++) if (hits[w] === 1) for (const r of rulesOf[w]!) chosen[r] = 1;
-  }
-  return rules.filter((_, r) => chosen[r] === 1);
+  const candidates = (text: string): SecretRule[] => {
+    const hits = new Uint8Array(rulesOf.length);
+    const chosen = new Uint8Array(rules.length);
+    for (const r of always) chosen[r] = 1;
+    if (matcher.markHits(text, hits) > 0) {
+      for (let w = 0; w < hits.length; w++) if (hits[w] === 1) for (const r of rulesOf[w]!) chosen[r] = 1;
+    }
+    return rules.filter((_, r) => chosen[r] === 1);
+  };
+  /** The rules whose prefilter words `text` holds, each with the spans it finds there. */
+  const findings = (text: string): { id: string; spans: Span[] }[] =>
+    candidates(text)
+      .map((rule) => ({ id: rule.id, spans: rule.spans(text) }))
+      .filter((found) => found.spans.length > 0);
+
+  return {
+    secretHits: (text) =>
+      findings(text)
+        .map((found) => found.id)
+        .sort(),
+    sanitizeForStore(text) {
+      const spans = findings(text)
+        .flatMap((found) => found.spans)
+        .sort((a, b) => a[0] - b[0]);
+      let out = "";
+      let at = 0;
+      for (const [start, end] of spans) {
+        if (end <= at) continue;
+        out += text.slice(at, Math.max(start, at)) + (start >= at ? REDACTED : "");
+        at = end;
+      }
+      const gated = out + text.slice(at);
+      const redacted = redact(gated);
+      return typeof redacted === "string" ? redacted : gated;
+    },
+  };
 }
 
-/** The rules whose prefilter words `text` holds, each with the spans it finds there. */
-function findings(text: string): { id: string; spans: Span[] }[] {
-  return candidates(text)
-    .map((rule) => ({ id: rule.id, spans: rule.spans(text) }))
-    .filter((found) => found.spans.length > 0);
-}
+let gate: Gate | undefined;
 
 /** The ids of the rules `text` hits, sorted; empty when it carries no secret D13 knows. */
 export function secretHits(text: string): string[] {
-  return findings(text)
-    .map((found) => found.id)
-    .sort();
+  gate ??= gateOf(secretRules());
+  return gate.secretHits(text);
 }
 
 /**
@@ -397,17 +615,6 @@ export function secretHits(text: string): string[] {
  * gate is never looser than the redaction memory had before. A text with no secret is returned as it is.
  */
 export function sanitizeForStore(text: string): string {
-  const spans = findings(text)
-    .flatMap((found) => found.spans)
-    .sort((a, b) => a[0] - b[0]);
-  let out = "";
-  let at = 0;
-  for (const [start, end] of spans) {
-    if (end <= at) continue;
-    out += text.slice(at, Math.max(start, at)) + (start >= at ? REDACTED : "");
-    at = end;
-  }
-  const gated = out + text.slice(at);
-  const redacted = redact(gated);
-  return typeof redacted === "string" ? redacted : gated;
+  gate ??= gateOf(secretRules());
+  return gate.sanitizeForStore(text);
 }

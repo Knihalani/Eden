@@ -4,10 +4,13 @@
   "private": true,
   "type": "module",
   "main": "src/index.ts",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "dependencies": {
     "@eden/graph": "workspace:*",
     "@eden/llm": "workspace:*",
+    "@eden/primitives": "workspace:*",
     "@eden/protocol": "workspace:*",
     "@eden/redact": "workspace:*",
     "@eden/sources": "workspace:*"

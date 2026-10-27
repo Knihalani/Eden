@@ -11,3 +11,60 @@ export { Gcra, type GcraOptions } from "./gcra";
 export { CircuitBreaker, type BreakerOptions, type BreakerState } from "./breaker";
 export { AimdLimiter, type LimiterOptions, type Outcome } from "./limiter";
 export { Histogram, RollingHistogram } from "./histogram";
+export { SparseIndex, type SearchResults, type SparseIndexOptions } from "./sparse-index";
+export { truncateUtf8, utf8Length } from "./utf8";
+export {
+  betaInc,
+  betaIncInv,
+  binomCdf,
+  clopperPearsonLower,
+  clopperPearsonUpper,
+  log1pExp,
+  logBeta,
+  logGamma,
+  minTrialsToCertify,
+  sigmoid,
+} from "./stats";
+export { Xoshiro128 } from "./random";
+export {
+  expectedCalibrationError,
+  fires,
+  fitPlatt,
+  ISOTONIC,
+  Isotonic,
+  Logistic,
+  logLoss,
+  PLATT,
+  selectCalibrator,
+  thresholdForFalseFireRate,
+  thresholdForPrecision,
+  type CalibratorChoice,
+  type Threshold,
+} from "./calibrate";
+export { BetaBandit, ipsValue } from "./bandit";
+export { jaccardMatrix, Packer } from "./pack";
+export {
+  countTerms,
+  dedupText,
+  PART_FORWARD,
+  PART_GREETING,
+  PART_HEADER,
+  PART_OWN,
+  PART_QUOTE,
+  PART_SIGNATURE,
+  ReplyLines,
+  splitReply,
+  stripReply,
+} from "./reply";
+export {
+  hamming64,
+  isUnsegmented,
+  lshCandidateProbability,
+  MAX_PERMUTATIONS,
+  minhashSimilarity,
+  MinHashIndex,
+  popcount32,
+  TextSketcher,
+} from "./dedup";
+export { ExpiringSet } from "./sketch";
+export { PoolClosedError, PoolFullError, PoolTimeoutError, WorkerPool, type PoolOptions, type PoolStats } from "./pool";
