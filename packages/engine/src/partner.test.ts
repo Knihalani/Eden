@@ -204,6 +204,56 @@ describe("observe", () => {
     expect(cache.userCount).toBe(0);
   });
 
+  test("the fan-out runs on the partner's clock: rate limits follow injected time (simulation finding)", async () => {
+    let calls = 0;
+    const counting: Source = {
+      id: "crm",
+      kind: "test",
+      description: "deals",
+      search: async () => {
+        calls++;
+        return [];
+      },
+    };
+    let now = 1_700_000_000_000;
+    const { p } = partner({ now: () => (now += 60_000) }, [counting]);
+    const topics = "pricing contract invoice renewal roadmap budget hiring offsite launch audit migration billing";
+    for (const topic of topics.split(" ")) {
+      await p.ask({ ...scope, sessionId: "ask", question: `What about the ${topic} with Dana Lee?` });
+    }
+    expect(calls).toBe(12); // On the real clock, the 11th and 12th were rate limited (burst 10 at 5/s).
+  });
+
+  test("an item returned by several lookups counts as one mention (simulation finding)", async () => {
+    const sourceMap = new SourceMap();
+    const { p } = partner({ sourceMap });
+    // ask() always searches live, so both calls get deal-9 back from the CRM.
+    await p.ask({ ...scope, sessionId: "a1", question: "What does Dana Lee want on the Globex renewal?" });
+    await p.ask({ ...scope, sessionId: "a2", question: "When is the Globex renewal due, per Dana Lee?" });
+    const crm = sourceMap.sourcesFor(scope, "Dana Lee").find((x) => x.sourceId === "crm");
+    expect(crm?.count).toBe(1);
+  });
+
+  test("a session closing between one source's items and the next loses no mentions (review finding)", async () => {
+    const sourceMap = new SourceMap();
+    let closeOnce: (() => void) | null = null;
+    class ClosingCache extends ItemCache {
+      override put(...args: Parameters<ItemCache["put"]>) {
+        const stored = super.put(...args);
+        closeOnce?.();
+        closeOnce = null;
+        return stored;
+      }
+    }
+    const { p } = partner({ sourceMap, cache: new ClosingCache() });
+    // The first session ends right after the first source's items are stored (session_end closes synchronously).
+    closeOnce = () => void p.observe({ ...scope, sessionId: "a1", at: clock++, kind: "session_end" });
+    await p.ask({ ...scope, sessionId: "a1", question: "What does Dana Lee want on the Globex renewal?" });
+    await p.ask({ ...scope, sessionId: "a2", question: "What does Dana Lee want on the Globex renewal call?" });
+    const sources = sourceMap.sourcesFor(scope, "Dana Lee").map((x) => x.sourceId);
+    expect(sources.sort()).toEqual(["calendar", "crm"]);
+  });
+
   test("users are isolated: one user's cached items never reach another", async () => {
     const { p } = partner();
     await p.observe(ev({ kind: "user_message", text: "Globex renewal for Dana Lee" }), { waitMs: 1_000 });

@@ -54,7 +54,7 @@ class UserCache {
   baseline = 0;
   readonly items = new Map<string, Entry>();
   readonly byDoc: (Entry | undefined)[] = [];
-  readonly vocab = new Vocab(4_096);
+  readonly vocab = new Vocab(256); // Grows by doubling: most users hold few terms.
   readonly index = new SparseIndex({ fields: 2, weights: [2, 1] });
   readonly sketcher = new TextSketcher(this.vocab, 8_192, 3);
 }
@@ -173,24 +173,36 @@ export class ItemCache {
 
   /**
    * Adds items, redacting every text field first (`sanitizeItem`) unless `sanitized` says the caller already did
-   * (results from `SourceFanout`, which sanitizes before caching). Returns the stored copies.
+   * (results from `SourceFanout`, which sanitizes before caching). Returns the stored copies of the items that were
+   * new or whose content changed. An item already cached with the same title and text is only refreshed (fetch time,
+   * recency): most lookups return items the cache already holds, and re-indexing them was ~12% of server CPU at
+   * saturation (packages/sim perf-cli, docs/research/simulation.md).
    */
   put(scope: Scope, items: ContextItem[], now = Date.now(), sanitized = false): ContextItem[] {
     const u = this.touch(scope);
     this.sweep(u, now);
-    const stored = items.map((raw) => {
+    const changed: ContextItem[] = [];
+    for (const raw of items) {
       const item = sanitized ? raw : sanitizeItem(raw, this.limits.maxTextChars);
       const old = u.items.get(item.id);
+      if (old && old.item.text === item.text && old.item.title === item.title) {
+        // Same words, so the index and sketch stand; the rest (url, meta, updatedAt) is taken from the new copy.
+        old.item = item;
+        old.fetchedAt = now;
+        u.items.delete(item.id); // Re-insert: Map order stays oldest-first for eviction.
+        u.items.set(item.id, old);
+        continue;
+      }
       if (old) this.drop(u, old);
       const doc = this.index(u, item);
       const entry = { item, fetchedAt: now, doc, sketch: sketchOf(u, item) };
       u.items.set(item.id, entry); // Map order stays oldest-first for eviction (old entry was removed above).
       u.byDoc[doc] = entry;
-      return item;
-    });
+      changed.push(item);
+    }
     while (u.items.size > this.limits.maxItemsPerUser) this.drop(u, u.items.values().next().value as Entry);
     if (u.vocab.size > Math.max(MIN_VOCAB_REBUILD, u.baseline * VOCAB_REBUILD_FACTOR)) this.rebuild(scope, u);
-    return stored;
+    return changed;
   }
 
   /**

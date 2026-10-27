@@ -6,6 +6,9 @@ Each milestone ends with an eval run whose numbers go in its PR. Order is a prop
 Packages, two-speed engine, source map, OpenRouter client, HTTP/MCP server, SDK, eval harness with one seed scenario.
 
 ## M1 — An eval worth tuning against
+In progress: `packages/sim` generates worlds and labelled sessions at scale and reports per-task and no-model /
+with-model (modelled judge) splits ([research/simulation.md](research/simulation.md)). Still to do: a live-model run, a
+train / held-out split for tuning, hand-written adversarial scenarios, and text not written by templates.
 - 20+ scenarios across personal-agent jobs: scheduling, inbox triage, follow-ups, travel, purchases, relationships,
   with gold `expect` labels, including many must-stay-silent turns and adversarial ones (prompt injection in mail).
 - Report per-situation metrics, and the no-model / with-model split.

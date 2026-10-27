@@ -37,11 +37,20 @@ const PERM_SEEDS = new Uint32Array(MAX_PERMUTATIONS);
   }
 }
 
+// Scratch shared by every sketcher: the term ids, unit sequence and shingle hashes of the text loaded last. Each
+// per-user cache held its own copy before (3 x maxTerms words: 96 KB at 8,192 terms, most of a user's fixed memory
+// in the simulation's memory scenario). JavaScript runs one load at a time, so one copy serves all.
+let scratchIds = new Uint32Array(0);
+let scratchSeq = new Uint32Array(0);
+let scratchShingles = new Uint32Array(0);
+let owner: TextSketcher | null = null;
+
 /**
- * Tokenizes a text once and derives its fingerprint, MinHash signature and SimHash from the same terms. One per
- * thread of work (it holds scratch buffers); share the Vocab with the index that tokenizes the same texts.
+ * Tokenizes a text once and derives its fingerprint, MinHash signature and SimHash from the same terms. Share the
+ * Vocab with the index that tokenizes the same texts.
  *
- * Usage: `load(text)`, then any of `fingerprint`, `minhash`, `simhash`.
+ * Usage: `load(text)`, then any of `fingerprint`, `minhash`, `simhash`, before any other sketcher loads: loaded
+ * terms live in scratch shared by all sketchers, and reading them after another sketcher's `load` throws.
  */
 export class TextSketcher {
   readonly vocab: Vocab;
@@ -49,9 +58,6 @@ export class TextSketcher {
   readonly maxTerms: number;
   /** Words per shingle. */
   readonly shingleSize: number;
-  private readonly ids: Uint32Array;
-  private readonly seq: Uint32Array;
-  private readonly shingleHashes: Uint32Array;
   // Per vocabulary id: the term's hash, or, for a term in a script written without spaces, a run of unit hashes in
   // `pool` (expLen > 0). Filled once per id.
   private termHashes: Uint32Array = new Uint32Array(1_024);
@@ -70,9 +76,11 @@ export class TextSketcher {
     this.vocab = vocab;
     this.maxTerms = maxTerms;
     this.shingleSize = shingleSize;
-    this.ids = new Uint32Array(maxTerms);
-    this.seq = new Uint32Array(maxTerms);
-    this.shingleHashes = new Uint32Array(maxTerms);
+  }
+
+  /** The shared scratch, checked to still hold this sketcher's text. */
+  private loaded(): void {
+    if (owner !== this) throw new Error("TextSketcher: another sketcher loaded since this one did; load() again");
   }
 
   /**
@@ -91,8 +99,9 @@ export class TextSketcher {
 
   /** Copies the loaded text's shingle hashes (with repeats, in text order) into `out`; returns how many. */
   copyShingles(out: Uint32Array): number {
+    this.loaded();
     const n = Math.min(this.shingleCount, out.length);
-    out.set(this.shingleHashes.subarray(0, n));
+    out.set(scratchShingles.subarray(0, n));
     return n;
   }
 
@@ -108,13 +117,19 @@ export class TextSketcher {
 
   /** Tokenizes `text` (interning new terms) and computes its shingles. Returns the unit count (`termCount`). */
   load(text: string): number {
-    const found = tokenizeInto(text, this.vocab, true, this.ids, null);
+    const cap = this.maxTerms;
+    if (scratchIds.length < cap) {
+      scratchIds = new Uint32Array(cap);
+      scratchSeq = new Uint32Array(cap);
+      scratchShingles = new Uint32Array(cap);
+    }
+    owner = this;
+    const ids = scratchIds.length === cap ? scratchIds : scratchIds.subarray(0, cap);
+    const found = tokenizeInto(text, this.vocab, true, ids, null);
     this.hashNewTerms();
     const th = this.termHashes;
     const expLen = this.expLen;
-    const ids = this.ids;
-    const seq = this.seq;
-    const cap = this.maxTerms;
+    const seq = scratchSeq;
     const numeric = this.numeric;
     let n = 0;
     let numbers = 0;
@@ -134,7 +149,7 @@ export class TextSketcher {
     this.numbers = numbers >>> 0;
 
     const w = this.shingleSize;
-    const sh = this.shingleHashes;
+    const sh = scratchShingles;
     if (n === 0) {
       this.shingleCount = 0;
     } else if (n < w) {
@@ -153,7 +168,8 @@ export class TextSketcher {
    * same terms in the same order. Lanes are independent hashes, so a collision needs both to collide.
    */
   fingerprint(out: Uint32Array): void {
-    const seq = this.seq;
+    this.loaded();
+    const seq = scratchSeq;
     const n = this.terms;
     let a = 0x811c9dc5 ^ n;
     let b = 0x2545f491 ^ n;
@@ -176,7 +192,8 @@ export class TextSketcher {
   minhash(sig: Uint32Array): void {
     const k = sig.length;
     if (k > MAX_PERMUTATIONS) throw new RangeError(`at most ${MAX_PERMUTATIONS} permutations`);
-    const sh = this.shingleHashes;
+    this.loaded();
+    const sh = scratchShingles;
     const n = this.shingleCount;
     for (let i = 0; i < k; i++) {
       const seed = PERM_SEEDS[i]!;
@@ -198,7 +215,8 @@ export class TextSketcher {
    * Similar texts differ in few bits (`hamming64`). An empty text gets 0.
    */
   simhash(out: Uint32Array): void {
-    const sh = this.shingleHashes;
+    this.loaded();
+    const sh = scratchShingles;
     const n = this.shingleCount;
     const counts = simCounts;
     counts.fill(0);
