@@ -204,6 +204,26 @@ describe("observe", () => {
     expect(cache.userCount).toBe(0);
   });
 
+  test("the fan-out runs on the partner's clock: rate limits follow injected time (simulation finding)", async () => {
+    let calls = 0;
+    const counting: Source = {
+      id: "crm",
+      kind: "test",
+      description: "deals",
+      search: async () => {
+        calls++;
+        return [];
+      },
+    };
+    let now = 1_700_000_000_000;
+    const { p } = partner({ now: () => (now += 60_000) }, [counting]);
+    const topics = "pricing contract invoice renewal roadmap budget hiring offsite launch audit migration billing";
+    for (const topic of topics.split(" ")) {
+      await p.ask({ ...scope, sessionId: "ask", question: `What about the ${topic} with Dana Lee?` });
+    }
+    expect(calls).toBe(12); // On the real clock, the 11th and 12th were rate limited (burst 10 at 5/s).
+  });
+
   test("users are isolated: one user's cached items never reach another", async () => {
     const { p } = partner();
     await p.observe(ev({ kind: "user_message", text: "Globex renewal for Dana Lee" }), { waitMs: 1_000 });
