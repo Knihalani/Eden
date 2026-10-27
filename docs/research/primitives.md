@@ -172,6 +172,7 @@ algorithms and data layout are. Bun stays (native hashing, `bun:sqlite`, test ru
 | Cache | `lru-cache`, `mnemonist` LRU, `Map` LRU | own S3-FIFO | hit ratio; equal throughput to `lru-cache` |
 | Resilience | `opossum` (breaker), `p-limit`, `bottleneck` | own, small | each is <150 lines; time-windowed breaker for low per-user volume; GCRA instead of timers |
 | Top-k | sort, `heap-js` | own typed-array heap | 115x over sort; bulk API for JavaScriptCore |
+| Worker pool | tinypool, piscina, workerpool | own `WorkerPool` | batching: 7–9x less main-thread CPU per task; workerpool does not run on Bun ([architecture-alternatives.md](architecture-alternatives.md)) |
 
 Not measured: `mnemonist` and the npm Aho–Corasick packages (installed, not benchmarked for lack of time), `heap-js`,
 `opossum`, `bottleneck`.

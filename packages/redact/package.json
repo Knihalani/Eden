@@ -8,6 +8,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@eden/primitives": "workspace:*"
+    "@eden/primitives": "workspace:*",
+    "re2js": "2.9.0"
   }
 }
