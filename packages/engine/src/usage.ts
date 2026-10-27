@@ -24,12 +24,15 @@ export function distinctiveTokens(injected: string, seen: Set<string>): Set<stri
   return out;
 }
 
-/** True when `text` repeats at least two distinctive tokens, or one that holds a digit (a date, an amount, an id). */
+/**
+ * True when `text` repeats at least two distinctive tokens, or one long token that holds a digit (a date, an amount
+ * with its unit, an id). Short numbers ("30", "12") are too common to count alone.
+ */
 export function showsUse(text: string, tokens: Set<string>): boolean {
   let hits = 0;
   for (const t of new Set(contentTerms(text))) {
     if (!tokens.has(t)) continue;
-    if (/\d/.test(t)) return true;
+    if (/\d/.test(t) && t.length >= 4) return true;
     if (++hits >= 2) return true;
   }
   return false;

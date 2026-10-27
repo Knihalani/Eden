@@ -5,20 +5,29 @@ input.
 
 ## Prices (verify before relying on them)
 
-| Model | Input $/M | Output $/M | Source |
-|---|---|---|---|
-| `z-ai/glm-5.3-flash` | 0.0513 | — | Founder's figure |
-| `z-ai/glm-5.3-flash` | 0.075 (cache read 0.015) | 0.25 | OpenRouter listing via web search, 2026-10-27, not checked on the live page |
+`z-ai/glm-5.3-flash` is served by 38 OpenRouter endpoints at different prices (OpenRouter endpoints API, queried
+2026-10-27 in the fast-primitives research; [docs/research/fast-primitives.md](research/fast-primitives.md)):
 
-`packages/llm/src/pricing.ts` budgets with the higher figure. OpenRouter returns the real cost per call
-(`usage.cost`), and the engine books that.
+| Endpoint | Input $/M | Output $/M | Cache read $/M | Note |
+|---|---|---|---|---|
+| Z.AI and most US hosts | 0.15 | 0.50 | 0.03 | Z.AI caches automatically |
+| Relace | 0.0513 | 0.0701 | 0.03 | The founder's figure; no `response_format` support |
+| Wafer | 0.054 | 0.20 | 0.053 | Almost no cache discount |
+| OpenInference (fp4) | 0.082 | 0.06 | 0.0064 | Quantized |
+
+Many endpoints are fp4/nvfp4 quantized; whether that hurts judge precision is unmeasured. With default load
+balancing, prompt-cache hits are unlikely: caching pays only with sticky routing (a per-user `session_id`, a
+byte-stable system prefix). `packages/llm/src/pricing.ts` budgets with the Z.AI list price, the conservative one.
+OpenRouter returns the real cost per call (`usage.cost`), and the engine books that.
 
 ## Per call (upper bounds from the engine's caps)
 
-| Call | Input bound | Output bound | Cost at $0.075 / $0.25 |
+| Call | Input bound | Output bound | Cost at $0.15 / $0.50, uncached |
 |---|---|---|---|
-| Judge | system ≈ 100 tok + window ≤ 4,000 chars (≈ 1,000 tok) + ≤ 6 candidates × ≈ 100 tok ≈ 1,700 tok | 60 tok | ≈ $0.00014 |
-| Ask answer | ≈ 100 + window ≤ 2,000 chars (≈ 500) + ≤ 20 items × ≈ 170 tok ≈ 4,000 tok | 300 tok | ≈ $0.00038 |
+| Judge | system ≈ 100 tok + window ≤ 4,000 chars (≈ 1,000 tok) + ≤ 6 candidates × ≈ 100 tok ≈ 1,700 tok | 60 tok | ≈ $0.00029 |
+| Ask answer | ≈ 100 + question ≤ 10,000 chars (≈ 2,500) + window ≤ 2,000 chars (≈ 500) + ≤ 20 items × ≈ 170 tok ≈ 6,500 tok | 300 tok | ≈ $0.0011 |
+
+These are arithmetic on list prices, not measurements.
 
 ## Measured so far (tiny samples, not statistics)
 

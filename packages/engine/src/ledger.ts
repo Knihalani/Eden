@@ -14,7 +14,15 @@ export class Ledger {
   }
 
   mark(itemIds: string[], turn: number): void {
-    for (const id of itemIds) this.delivered.set(id, turn);
+    for (const id of itemIds) {
+      this.delivered.delete(id); // Re-insert so Map order stays oldest-first.
+      this.delivered.set(id, turn);
+    }
+    // Entries past their cooldown no longer suppress anything; drop them so a long session stays bounded.
+    for (const [id, at] of this.delivered) {
+      if (turn - at < this.cooldownTurns) break;
+      this.delivered.delete(id);
+    }
   }
 
   get size(): number {

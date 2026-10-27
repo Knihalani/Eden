@@ -9,14 +9,15 @@ export interface Price {
 
 /**
  * Prices the partner budgets with. They are estimates for budgeting, not billing: OpenRouter reports the real cost
- * per call, and `OpenRouterModel` prefers that when present. Check https://openrouter.ai/<model> before relying on
- * these, and override with EDEN_MODEL_PRICE="<input>,<output>" (USD per million).
+ * per call, and `OpenRouterModel` prefers that when present. Override with EDEN_MODEL_PRICE="<input>,<output>"
+ * (USD per million).
  *
- * glm-5.3-flash: the founder's working figure is $0.0513/M input. OpenRouter's listing showed $0.075/M input and
- * $0.25/M output on 2026-10-27 (unverified against the live page; prices move). Budget with the higher figure.
+ * glm-5.3-flash has 38 OpenRouter endpoints, from $0.0513/M input (Relace) to $0.15/M (Z.AI and most US hosts),
+ * per the OpenRouter endpoints API on 2026-10-27 (docs/COST-MODEL.md). Budget with the Z.AI list price: routing
+ * decides which endpoint serves a call, so the conservative price keeps budgets safe.
  */
 export const PRICES: Record<string, Price> = {
-  "z-ai/glm-5.3-flash": { input: 0.075, output: 0.25, cachedInput: 0.015 },
+  "z-ai/glm-5.3-flash": { input: 0.15, output: 0.5, cachedInput: 0.03 },
 };
 
 export function priceFor(model: string, env = process.env): Price {
