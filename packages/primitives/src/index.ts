@@ -11,3 +11,5 @@ export { Gcra, type GcraOptions } from "./gcra";
 export { CircuitBreaker, type BreakerOptions, type BreakerState } from "./breaker";
 export { AimdLimiter, type LimiterOptions, type Outcome } from "./limiter";
 export { Histogram, RollingHistogram } from "./histogram";
+export { SparseIndex, type SearchResults, type SparseIndexOptions } from "./sparse-index";
+export { truncateUtf8, utf8Length } from "./utf8";

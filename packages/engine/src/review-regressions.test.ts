@@ -96,7 +96,9 @@ describe("finding 3: forget and session end stop in-flight work", () => {
     p.forget(scope);
     g.release();
     await Bun.sleep(10);
-    expect(cache.search(scope, "globex renewal", 5)).toEqual([]);
+    const v = cache.vocabOf(scope);
+    const q = ["globex", "renewal"].map((t) => v.lookup(t)).filter((id) => id >= 0);
+    expect(cache.search(scope, q, q.length, 5)).toEqual([]);
     expect(p.takePending(scope)).toEqual([]);
     expect(p.sessionCount).toBe(0);
   });
@@ -168,7 +170,7 @@ describe("finding 6: a failing slow path is silent, not an unhandled rejection",
 describe("finding 7 and 8: bounded, redacted, content-free state", () => {
   test("searching for an unknown user allocates nothing", () => {
     const cache = new ItemCache();
-    cache.search({ tenantId: "t", userId: "nobody" }, "x", 5);
+    cache.search({ tenantId: "t", userId: "nobody" }, [1], 1, 5);
     cache.forget({ tenantId: "t", userId: "nobody" }, "crm");
     expect(cache.userCount).toBe(0);
   });
@@ -178,7 +180,9 @@ describe("finding 7 and 8: bounded, redacted, content-free state", () => {
     cache.put({ tenantId: "victim", userId: "v" }, [item("renewal")]);
     for (const userId of ["a", "b", "c"]) cache.put({ tenantId: "other", userId }, [item("renewal")]);
     expect(cache.userCount).toBe(3);
-    expect(cache.search({ tenantId: "victim", userId: "v" }, "renewal", 1)).toHaveLength(1);
+    const victim = { tenantId: "victim", userId: "v" };
+    const id = cache.vocabOf(victim).lookup("renewal");
+    expect(cache.search(victim, [id], 1, 1)).toHaveLength(1);
   });
 
   test("an item id is rebuilt from the redacted ref (round 2, finding B)", () => {

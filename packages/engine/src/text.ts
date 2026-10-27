@@ -1,7 +1,9 @@
 /**
  * Deterministic text analysis: the cue the partner builds from a session without a model. Everything here runs on
- * every event, so it must stay cheap (no I/O, linear in the text).
+ * every event, so it must stay cheap (no I/O, linear in the text). Terms come from the shared tokenizer
+ * (`@eden/primitives`), so cue terms, cached items and usage tracking all agree on what a term is.
  */
+import { tokenizeInto, type Vocab } from "@eden/primitives";
 
 const STOPWORDS = new Set(
   (
@@ -13,12 +15,30 @@ const STOPWORDS = new Set(
   ).split(" "),
 );
 
-/** Lowercased word tokens, stopwords and one-character tokens removed. */
-export function contentTerms(text: string): string[] {
+export function isStopword(term: string): boolean {
+  return STOPWORDS.has(term);
+}
+
+let scratch = new Uint32Array(1_024);
+
+/**
+ * Term ids of `text` in `vocab` (shared tokenizer: folded, possessives and trailing punctuation trimmed, one-character
+ * terms dropped), written to a reused buffer: valid until the next call. With `intern` false, unknown terms are
+ * skipped. Returns the buffer and the count.
+ */
+export function termIds(text: string, vocab: Vocab, intern: boolean): { ids: Uint32Array; n: number } {
+  if (scratch.length < text.length) scratch = new Uint32Array(Math.max(text.length, scratch.length * 2));
+  const n = tokenizeInto(text, vocab, intern, scratch, null);
+  return { ids: scratch, n };
+}
+
+/** Content terms of `text` (stopwords removed), as strings, in order. Interns new terms into `vocab`. */
+export function contentTerms(text: string, vocab: Vocab): string[] {
+  const { ids, n } = termIds(text, vocab, true);
   const out: string[] = [];
-  for (const raw of text.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}'_-]*/gu) ?? []) {
-    const t = raw.replace(/'s$/, "");
-    if (t.length > 1 && !STOPWORDS.has(t)) out.push(t);
+  for (let i = 0; i < n; i++) {
+    const t = vocab.term(ids[i]!);
+    if (!STOPWORDS.has(t)) out.push(t);
   }
   return out;
 }
@@ -68,26 +88,10 @@ export function extractEntities(text: string): string[] {
   return extractTypedEntities(text).map((e) => e.text);
 }
 
-/** The set of word tokens in a text, lowercased, stopwords kept: for whole-word entity matching. */
-export function wordSet(text: string): Set<string> {
-  return new Set(
-    text
-      .toLowerCase()
-      .match(/[\p{L}\p{N}][\p{L}\p{N}'_-]*/gu)
-      ?.map((t) => t.replace(/'s$/, "")) ?? [],
-  );
-}
-
-/** True when every word of `entity` is a whole word of the text. Never a substring: "Al" is not in "also". */
-export function mentions(words: Set<string>, entity: string): boolean {
-  const parts = entity.toLowerCase().split(/\s+/).filter(Boolean);
-  return parts.length > 0 && parts.every((p) => words.has(p.replace(/'s$/, "")));
-}
-
 const CHATTER =
   /^(?:ok(?:ay)?|k|thanks?(?: you)?|thx|ty|cool|great|nice|perfect|got it|sounds good|yes|yep|no|nope|sure|lol|👍)[.! ]*$/i;
 
 /** A message that carries no information need: an acknowledgement or a bare yes/no. */
-export function isChatter(text: string): boolean {
-  return CHATTER.test(text.trim()) || contentTerms(text).length === 0;
+export function isChatter(text: string, vocab: Vocab): boolean {
+  return CHATTER.test(text.trim()) || contentTerms(text, vocab).length === 0;
 }
