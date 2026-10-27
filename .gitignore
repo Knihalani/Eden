@@ -68,3 +68,6 @@ benchmarks/memory-cues/nim/cache/
 # Eden runtime data
 .eden/
 *.db
+
+# Agent worktrees
+.claude/worktrees/
