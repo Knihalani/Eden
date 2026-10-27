@@ -148,6 +148,9 @@ export class ContextPartner {
       sanitize: deps.gatePool
         ? pooledSanitizer(deps.gatePool, maxText)
         : (items) => items.map((i) => sanitizeItem(i, maxText)),
+      // One clock for the whole engine: rate limits, result freshness and breakers run on the same time as the
+      // cache and sessions (an injected clock that skipped the fan-out made simulated time hit real-time limits).
+      now: this.now,
     });
   }
 
