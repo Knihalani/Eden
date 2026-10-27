@@ -57,6 +57,10 @@
       "name": "@eden/llm",
       "version": "0.0.0",
     },
+    "packages/primitives": {
+      "name": "@eden/primitives",
+      "version": "0.0.0",
+    },
     "packages/protocol": {
       "name": "@eden/protocol",
       "version": "0.0.0",
@@ -64,6 +68,9 @@
     "packages/redact": {
       "name": "@eden/redact",
       "version": "0.0.0",
+      "dependencies": {
+        "@eden/primitives": "workspace:*",
+      },
     },
     "packages/server": {
       "name": "@eden/server",
@@ -100,6 +107,8 @@
     "@eden/graph": ["@eden/graph@workspace:packages/graph"],
 
     "@eden/llm": ["@eden/llm@workspace:packages/llm"],
+
+    "@eden/primitives": ["@eden/primitives@workspace:packages/primitives"],
 
     "@eden/protocol": ["@eden/protocol@workspace:packages/protocol"],
 
