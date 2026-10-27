@@ -1,0 +1,232 @@
+# Plan: an adaptive query planner, tested on real connectors
+
+Status: proposed, 2026-10-27. Owner: whoever picks it up; decisions it needs are listed under [Decisions](#decisions).
+
+## Why
+
+The simulation (docs/research/simulation.md) found that what a connector's search does with Eden's query decides
+most of recall. Through Gmail-style AND search only 21% of needed facts came back at all; through ranked search, 74%.
+Sending the cue's entities alone took that to 40%, and recall with a judge from 0.19 to 0.32. No judge or ranking
+recovers an item no query returned.
+
+Tenants will connect any MCP server: mail, calendars, docs, CRMs, ticketing, chat, databases, memory products, their
+own internal tools. Eden cannot hand-write a query mapping for each. It has to find out how each connector behaves,
+for each user, and adapt.
+
+## What gets built
+
+A `QueryPlanner` that, for every lookup and every chosen connector, decides *what to send*: which query shapes, how
+many, and in which argument. It learns per (user, connector) from outcomes, starts from a cheap capability probe, and
+stays inside the existing budgets (deadlines, rate limits, per-source concurrency).
+
+### Query shapes
+
+Built from the cue the engine already makes (content terms, typed entities, idf from the user's cache):
+
+| Shape | Example from "Prep me for the Globex call with Sam Ortiz" | Good for |
+|---|---|---|
+| `full` | `prep globex call sam ortiz` | ranked search (Drive, vector/memory products) |
+| `entities` | `Globex Sam Ortiz` | AND search, name-matching CRMs |
+| `entity+term` | `Globex call` (the cue's rarest term, by the user's idf) | AND search with a topic |
+| `each-entity` | `Globex`, then `Sam Ortiz` (two queries) | title or record-name search |
+| `or` | `Globex OR "Sam Ortiz" OR call` | connectors whose syntax has OR (probed, never assumed) |
+| `phrase` | `"Sam Ortiz"` | phrase-only or exact-match search |
+| `id` | `OPS-142` | ticket, invoice, order ids |
+
+Shapes are data (a small closed set with a builder each), not free text from a model.
+
+### Learning
+
+- **Arms**: shapes, per (tenant, user, connector). **Context**: a few cheap buckets (cue has an id; has 0 / 1 / 2+
+  entities; length). Thompson sampling over Beta posteriors, as `BetaBandit` does, extended with per-arm decay
+  (connectors change; a half-life in lookups, not days) and logged propensities, so a new policy can be evaluated
+  offline on old logs (inverse propensity scoring, `ipsValue` exists).
+- **Pulls per lookup**: one or two shapes per connector (the best draw, plus an exploration draw while the posterior is
+  wide), within the lookup's deadline and the connector's rate budget. Never more calls than today's single query
+  without a measured gain.
+- **Reward**, credited to the shape(s) that returned an item, in three stages because evidence arrives late:
+  1. *immediate*: the result holds a cue entity as whole terms (the cache's `containsAll` check) — weak, but at once;
+  2. *at decision*: the item was delivered on the fast or source path, or the judge picked it;
+  3. *later*: inferred or explicit usage of the injection that carried it (the existing usage tracker).
+  Weights are tuned in simulation and fixed by a decision. An empty result is a reward of 0 for that shape.
+- **Priors**: from the probe (below), else uniform. With tenant opt-in (D9), a tenant-level prior per connector *kind*
+  from content-free counts; never another user's queries or terms.
+- **Persistence**: arm counts in the source map's SQLite (content-free: connector id, shape, bucket, two counts,
+  updated-at), written behind like outcomes. No query text is ever stored.
+
+### Capability probe
+
+On a connector's first use for a user, and again when its results drift: a handful of searches built from terms the
+user's *own* recent results contain (so they can only match that user's data):
+
+- one term vs two terms that co-occur in one item: does adding a term shrink (AND) or grow (OR/ranked) the results?
+- a term present only in titles vs only in bodies: does body text match?
+- `A OR B`, `"A B"`: is there operator syntax? (Literal-only connectors return nothing or match the word "OR".)
+- result count vs the requested limit: is there pagination or a hard cap?
+
+The probe sets priors and a capability record (`and | or | ranked | titles | phrase`, `operators: OR, quotes`). It
+runs within the connector's rate budget, at most once per connector per user per day, and is skipped for connectors
+the operator marks as expensive.
+
+### Calling the tool: schema-driven arguments
+
+Today `McpSource` takes an `args(query)` function per connector. The planner needs a generic mapping from a tool's
+JSON schema: which argument takes free text (`query`, `q`, `search`, `text`, `keywords`…), which take filters
+(`from`, `assignee`, `owner`, `after`/`before`, `status`), and which bound the result size. A deterministic scorer
+(name, type, description keywords) picks them; an operator override always wins. Results are read by the existing
+`toItems`, extended to find title / body / url / time / id fields in arbitrary JSON.
+
+D7 does not change: the planner only ever calls the one search tool the connector exposes as read-only.
+
+### Security
+
+- **Query injection**: cue terms come from untrusted text (user and tool messages, item text). A term such as
+  `in:trash`, `from:`, `OR`, a leading `-`, `*`, a quote, a JQL or SQL fragment must never become syntax. Every shape
+  builder escapes or drops operator characters per the connector's probed capabilities; operators are emitted only by
+  the shape builder, never copied from input. Fuzz-tested.
+- **Read-only**: unchanged (D7); the schema mapper may only fill arguments of the configured read-only search tool.
+- **Isolation**: arms, probes and capability records are keyed by tenant/user/connector; a test asserts no cross-user
+  reads. Probe terms come only from that user's own cached items.
+- **Content-free traces** (D19): traces carry shape names and counts, never query text.
+- **Amplification**: more queries per lookup cannot exceed the connector's rate budget or the lookup deadline; the
+  circuit breaker and AIMD limiter already in `SourceFanout` apply per call.
+- **Budget**: no model call is added. (A model query rewrite is a later, separate decision with a cost estimate.)
+
+### Code layout
+
+| Where | What |
+|---|---|
+| `@eden/primitives` | `ContextualBandit`: Beta arms per context bucket, decay, propensity log, IPS evaluation. Benchmarked. |
+| `@eden/sources` | `QueryPlanner` (shapes, choose, credit), `probe.ts`, `schema-args.ts` (schema → call mapping), `escape.ts` (per-capability escaping), `toItems` extension |
+| `@eden/graph` | planner tables in the source map (arm counts, capability records) |
+| `@eden/engine` | `searchLive` asks the planner for calls per source; credits rewards at decision and usage time |
+| `@eden/sim` | the connector zoo and the real-connector harness (below) |
+
+## How it is tested
+
+Four tiers, each a gate for the next. The same metrics throughout: **reachability** (needed facts returned by any
+query), **recall** and **in-time recall**, **precision**, **hard / soft false fires**, **source calls per lookup**,
+**429s and timeouts**, **latency**.
+
+### Tier 1 — unit and property tests
+
+Shape builders on hostile input (operators, quotes, unicode, empty cues, 1,000-term cues); escaping round-trips per
+capability; bandit math (posterior updates, decay, propensities sum to 1); probe classification on scripted fake
+connectors; schema mapper on a corpus of real MCP tool schemas (collected from public servers' `tools/list`).
+
+### Tier 2 — the simulation's connector zoo
+
+Extend `packages/sim/src/sources.ts` with connectors nobody tunes the planner for:
+
+| Behaviour | Modelled on |
+|---|---|
+| AND, newest first, operators (`OR`, quotes, `from:`) | Gmail, Slack |
+| AND, no operators | many REST search endpoints |
+| ranked full text | Drive, Confluence, Elasticsearch-backed tools |
+| title / record-name only | CRMs, Notion's quick search |
+| phrase-only, prefix-only | autocomplete-style endpoints |
+| id lookup only | ticket and order systems |
+| vector (semantic) search | memory products (Mem0, Supermemory), vector-DB MCPs |
+| small page size with pagination | many APIs |
+| odd argument names and nested result JSON | community MCP servers |
+| behaviour changes mid-run | drift, for the decay |
+
+Splits against overfitting: connector variants and world seeds are divided into **tune** and **held-out**; every
+reported number is on held-out ones; held-out sets rotate when they have been looked at too often.
+
+**Gate to tier 3**: on held-out zoo connectors, reachability and recall beat both the current single-query behaviour
+and the best fixed shape per connector kind, with false fires and source calls per lookup no worse (95% intervals
+not overlapping in the right direction).
+
+### Tier 3 — real connectors, seeded with the simulated world
+
+The key idea: **put a simulated world into real services**, so real search semantics meet known ground truth.
+
+1. **Sandbox accounts**, never personal ones: a Google Workspace test domain (Gmail, Calendar, Drive), a Notion test
+   workspace, a Slack test workspace, a HubSpot developer sandbox, a Linear or Jira free workspace, a GitHub test
+   organisation (issues), a Postgres database behind an SQL MCP server, a filesystem MCP over a seeded folder, and a
+   memory product's free tier.
+2. **A seeding tool** (`packages/sim/src/seed/`), one adapter per service, that writes a world's items through each
+   service's *write* API: emails as messages (delivered or imported), events, documents, CRM records, tickets, chat
+   messages. It records the mapping from world item id to the service's id. Seeding is a test fixture, separate from
+   Eden, which stays read-only (D7). Rate-limited and idempotent; one world per sandbox, reseeded on schedule.
+3. **Real MCP servers** in front of each service: official ones where they exist, well-used community ones otherwise,
+   pinned by version.
+4. **A real-connector runner** that plays the simulation's sessions against `McpSource` instances on those servers,
+   with the planner on and off, and scores with the world's labels (mapping real ids back to world items).
+5. **Recording**: every request and response is recorded (redacted, synthetic content only) into fixtures, so tier 3
+   replays deterministically in CI without credentials, and live runs are needed only to refresh them and to catch
+   drift.
+
+Costs and limits: seeding writes are rate-limited by each service's API quotas (not yet looked up per service);
+a world of ~1,500 items per service is enough. Live runs use real latency, so they are smaller (a few users, tens of
+sessions) and run nightly, not per change.
+
+**Gate to tier 4**: on at least five real services with different search behaviour, the planner improves
+reachability and recall over the single-query baseline with no rise in false fires, 429s or timeouts, and the
+probe's capability record matches what each service documents.
+
+### Tier 4 — shadow mode on real accounts, with consent
+
+Only with an account owner's explicit consent, and read-only. On real data there are no labels, so:
+
+- run the planner in **shadow**: the current behaviour serves, the planner's queries run alongside within budget, and
+  only aggregates are kept: result counts per shape, entity-hit rates, how often the planner's results include the
+  item the served path delivered, latency, errors. No content, no query text, nothing per item leaves the process.
+- weekly, the owner may label a small sample in a local tool (relevant / not) to calibrate the proxies.
+
+This session already has Gmail and Google Calendar connectors on the owner's account; using them for shadow runs
+needs the owner's explicit yes, and seeding them is out of the question.
+
+## Building it: phases
+
+| Phase | Work | Exit |
+|---|---|---|
+| 0 | Decisions below; collect ~50 real MCP tool schemas; sim connector zoo with tune/held-out splits; baselines (single query, each fixed shape) | baselines reported with intervals |
+| 1 | `ContextualBandit` primitive (tests, benchmark); shape builders and escaping (fuzzed) | tier 1 green |
+| 2 | `QueryPlanner` + engine wiring, behind `EngineConfig.queryPlanner` (off by default); content-free traces | tier 2 gate met |
+| 3 | probe; schema-driven arguments; `toItems` extension | tier 2 gains hold on zoo variants with unknown argument names |
+| 4 | seeding tool + real-connector runner + recording; sandbox accounts | tier 3 gate met on 5+ services |
+| 5 | shadow mode, aggregates only | two weeks of shadow data on consenting accounts |
+| 6 | default on; D-number recording the change; docs | reviewer approval, eval and sim reports in the PR |
+
+Each phase is one or more PRs under CLAUDE.md's workflow: tests first, `bun run check`, `bun run eval`, the sim
+matrix (tune and held-out), the reviewer subagent, docs in the same PR.
+
+## After it ships: the iteration loop
+
+Until the owner says stop, every iteration is one small, measured change:
+
+1. **Pick** the top item from a ranked backlog, refreshed each iteration from: the funnel's biggest loss on held-out
+   sim; the worst real-connector service in the latest tier-3 run; failing or flaky tests; the reviewer's and the
+   security pass's open findings; the latest saturation profile; edge cases logged by shadow mode.
+2. **Change** one thing, test first.
+3. **Measure**: `bun run check`; `bun run eval`; the sim matrix on held-out splits (3 seeds, intervals); tier-3 replay
+   from fixtures; a 60-second perf ramp. Live tier 3 nightly, soak weekly.
+4. **Keep it only if** the target metric improves beyond its interval and no guardrail regresses: hard false-fire
+   rate, secrets leaked (must be 0), source calls per lookup, 429s, `observe` p99, heap per user. Otherwise revert
+   and record why.
+5. **Ship**: commit, PR with before/after numbers, merge; update the report and a changelog.
+6. **Every fifth iteration**: the reviewer subagent on everything since the last review; a security pass (query
+   injection fuzzing, isolation tests, a privacy check that no query text reaches traces or logs); rotate held-out
+   seeds; re-check that no number in the docs is stale.
+7. **Report** each iteration in one short message: what changed, the numbers, what is next.
+
+Iteration themes, in rough order once the basics hold: shape set and escaping per capability; reward weights and
+decay; probe accuracy and cost; pagination; vector connectors; query expansion from the user's co-occurrence table;
+cross-connector dedup of results; latency (parallel vs sequential shapes); memory of planner state; failure modes
+(connectors that return everything, nothing, errors, or the same item for every query).
+
+Guards against fooling ourselves: held-out connectors and seeds; real services as the final judge; no metric is
+optimised without its guardrails; every number comes from a command run in that session (CLAUDE.md).
+
+## Decisions
+
+Needed before or during the work; each becomes a numbered entry in DECISIONS.md.
+
+1. **Sandbox accounts** for tier 3: who creates them, and where their credentials live (environment secrets for this
+   cloud environment, never the repository).
+2. **Shadow mode on real accounts**: whose, with what consent, and what aggregates may be kept.
+3. **Tenant-level priors** (D9): opt-in content-free counts per connector kind, or per-user learning only.
+4. **A model budget** for the judge in live tier-3 runs (the current OpenRouter key's $0.01 limit is spent).
+5. **Default-on criteria** for phase 6.
