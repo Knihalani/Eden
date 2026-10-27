@@ -26,8 +26,8 @@
 | Package | Role |
 |---|---|
 | `packages/protocol` | Wire types (`AgentEvent`, `ContextItem`, `Injection`, `AskRequest`…), ids, input validation. |
-| `packages/primitives` | Benchmarked building blocks: hashing, tokenizer + interner, multi-pattern matcher, top-k, S3-FIFO cache, deadline, singleflight, GCRA, circuit breaker, AIMD limiter, histogram ([research/primitives.md](research/primitives.md)). |
-| `packages/redact` | The secret gate (salvaged): gitleaks rules plus extras, prefiltered by one Aho–Corasick pass. Runs on everything stored, indexed or sent to a model. |
+| `packages/primitives` | Benchmarked building blocks: hashing, tokenizer + interner, multi-pattern matcher, top-k, S3-FIFO cache, deadline, singleflight, GCRA, circuit breaker, AIMD limiter, histogram, worker pool (D25, not wired yet) ([research/primitives.md](research/primitives.md)). |
+| `packages/redact` | The secret gate (salvaged): gitleaks rules plus extras, prefiltered by one Aho–Corasick pass; the rules that backtrack in JavaScript and every allowlist run on RE2 (re2js, D24). Runs on everything stored, indexed or sent to a model. |
 | `packages/sources` | `Source` interface; `McpSource` (any MCP server's read tools, read-only enforced); `StaticSource`; fan-out with per-source deadlines. |
 | `packages/graph` | The source map (knowledge graph layer 1): which sources mention which entities, and learned usefulness per situation. SQLite. |
 | `packages/llm` | `Model` interface, OpenRouter client (ZDR, no data collection), pricing, `Budget`, `FakeModel`. |
