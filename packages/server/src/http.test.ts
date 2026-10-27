@@ -75,6 +75,35 @@ describe("input checks (review finding 12)", () => {
   });
 });
 
+describe("per-tenant rate limit", () => {
+  test("past the burst a tenant gets 429 with Retry-After; another tenant is unaffected", async () => {
+    const keyB = "k_other_0123456789abcd";
+    const limited = createHandler(partner, {
+      keys: new Map([
+        [key, "acme"],
+        [keyB, "other"],
+      ]),
+      dev: false,
+      tenantRatePerSec: 1,
+      tenantBurst: 2,
+    });
+    const call = (auth: string) =>
+      limited(
+        new Request("http://x/v1/pending", {
+          method: "POST",
+          headers: { authorization: `Bearer ${auth}` },
+          body: JSON.stringify(who),
+        }),
+      );
+    expect((await call(key)).status).toBe(200);
+    expect((await call(key)).status).toBe(200);
+    const third = await call(key);
+    expect(third.status).toBe(429);
+    expect(Number(third.headers.get("retry-after"))).toBeGreaterThanOrEqual(1);
+    expect((await call(keyB)).status).toBe(200);
+  });
+});
+
 describe("loadConfig", () => {
   test("refuses to start without keys outside dev, and rejects short keys", () => {
     expect(() => loadConfig({})).toThrow(/EDEN_API_KEYS/);

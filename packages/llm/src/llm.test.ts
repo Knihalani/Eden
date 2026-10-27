@@ -45,8 +45,14 @@ describe("OpenRouterModel", () => {
       });
     }) as unknown as typeof fetch;
     const model = new OpenRouterModel({ apiKey: "k", model: "z-ai/glm-5.3-flash", fetch: fake });
-    const out = await model.chat({ messages: [{ role: "user", content: "hi" }], maxTokens: 50, json: true });
+    const out = await model.chat({
+      messages: [{ role: "user", content: "hi" }],
+      maxTokens: 50,
+      json: true,
+      cacheKey: "u-3f9a",
+    });
     expect(sent.provider).toMatchObject({ data_collection: "deny", zdr: true });
+    expect(sent.session_id).toBe("u-3f9a");
     expect(sent.response_format).toEqual({ type: "json_object" });
     expect(out).toMatchObject({ text: "{}", costUsd: 0.0001 });
     expect(out.usage.inputTokens).toBe(1000);

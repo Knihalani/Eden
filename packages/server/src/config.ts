@@ -19,6 +19,9 @@ export interface ServerConfig {
   keys: Map<string, string>;
   dev: boolean;
   sourceMapPath: string;
+  /** Requests per second per tenant, sustained and burst (EDEN_TENANT_RPS, EDEN_TENANT_BURST). */
+  tenantRatePerSec: number;
+  tenantBurst: number;
 }
 
 export function loadConfig(env = process.env): ServerConfig {
@@ -41,5 +44,14 @@ export function loadConfig(env = process.env): ServerConfig {
     keys,
     dev,
     sourceMapPath: env.EDEN_SOURCE_MAP ?? join(edenHome(), "source-map.db"),
+    tenantRatePerSec: positive(env.EDEN_TENANT_RPS, 200, "EDEN_TENANT_RPS"),
+    tenantBurst: positive(env.EDEN_TENANT_BURST, 400, "EDEN_TENANT_BURST"),
   };
+}
+
+function positive(raw: string | undefined, fallback: number, name: string): number {
+  if (raw === undefined || raw === "") return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) throw new Error(`${name} must be a positive number, got ${raw}`);
+  return n;
 }
