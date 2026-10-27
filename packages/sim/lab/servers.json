@@ -1,0 +1,35 @@
+{
+  "memory": {
+    "repo": "https://github.com/modelcontextprotocol/servers",
+    "commit": "ef9808f71090d0db3eda99e2af2ba78f1086f4fb"
+  },
+  "mcpvault": {
+    "repo": "https://github.com/bitbonsai/mcpvault",
+    "commit": "adda8609be73fd5b3adaa14430b43c40c5cbfb18"
+  },
+  "meilisearch": {
+    "repo": "https://github.com/meilisearch/meilisearch-mcp",
+    "commit": "b764c9ff5fb98561b2f4dcaa6f793b82ea76ee5b"
+  },
+  "basic-memory": {
+    "repo": "https://github.com/basicmachines-co/basic-memory",
+    "commit": "72291e20a689ac425d88d779c3233236a490d969"
+  },
+  "caldav": {
+    "repo": "https://github.com/madbonez/caldav-mcp",
+    "commit": "6db4975d4efea49adb3222ded47964378fd21d1f"
+  },
+  "radicale": {},
+  "imap": {
+    "repo": "https://github.com/nikolausm/imap-mcp-server",
+    "commit": "3c295fa0991e57a4dce2b7b0f979334d9207fb71"
+  },
+  "chroma": {
+    "repo": "https://github.com/chroma-core/chroma-mcp",
+    "commit": "98ff67589bdcc31b730a5415ff9529433f949077"
+  },
+  "gitea": {
+    "repo": "https://gitea.com/gitea/gitea-mcp",
+    "commit": "2a5577b0b860512dfedbb4d827317daee159f7fb"
+  }
+}

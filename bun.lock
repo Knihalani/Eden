@@ -102,6 +102,8 @@
         "@eden/redact": "workspace:*",
         "@eden/server": "workspace:*",
         "@eden/sources": "workspace:*",
+        "@modelcontextprotocol/sdk": "^1.29.0",
+        "zod": "^4.0.0",
       },
     },
     "packages/sources": {
