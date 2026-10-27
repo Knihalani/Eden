@@ -4,8 +4,10 @@
  * 23.8 ms; a pool, 2–3 ms). `pooledSanitizer` runs `sanitizeItem` for each item through a `WorkerPool`, inline for
  * small items, where the message round trip costs more than the work.
  *
- * Fail closed: an item whose task fails (a batch past the pool's deadline, a crashed worker, an abort) is dropped,
- * never stored ungated. This module is also the pool's task module (`GATE_MODULE`): workers import it for `gateItem`.
+ * Fail closed: when any item's task fails (a batch past the pool's deadline, a crashed worker, an abort), the whole
+ * result is rejected: nothing ungated is stored, and `SourceFanout` treats the call as failed (no fresh cache entry,
+ * a breaker failure, a stale result served if it has one) rather than caching a result with items silently missing.
+ * This module is also the pool's task module (`GATE_MODULE`): workers import it for `gateItem`.
  */
 import type { WorkerPool } from "@eden/primitives";
 import type { ContextItem } from "@eden/protocol";
@@ -19,7 +21,7 @@ export function gateItem(input: { item: ContextItem; maxTextChars: number }): Co
   return sanitizeItem(input.item, input.maxTextChars);
 }
 
-/** A `SourceFanout` sanitize hook that gates items through `pool`, dropping any whose task fails. */
+/** A `SourceFanout` sanitize hook that gates items through `pool`; rejects if any item's task fails. */
 export function pooledSanitizer(
   pool: Pick<WorkerPool, "runOrInline">,
   maxTextChars = DEFAULT_CACHE_LIMITS.maxTextChars,
@@ -33,8 +35,8 @@ export function pooledSanitizer(
         return pool.runOrInline<ContextItem>("gateItem", { item, maxTextChars }, cost, signal);
       }),
     );
-    const out: ContextItem[] = [];
-    for (const g of gated) if (g.status === "fulfilled") out.push(g.value);
-    return out;
+    const failed = gated.filter((g) => g.status === "rejected").length;
+    if (failed > 0) throw new Error(`gate failed for ${failed} of ${items.length} items`);
+    return gated.map((g) => (g as PromiseFulfilledResult<ContextItem>).value);
   };
 }

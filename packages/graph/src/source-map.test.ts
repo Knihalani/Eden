@@ -102,4 +102,27 @@ describe("Thompson routing", () => {
     map.forget(alice);
     expect(map.utility(alice, "chat", "crm")).toBe(0.5);
   });
+
+  test("a write the timer cannot make is counted and logged, never thrown out of the timer", async () => {
+    const map = new SourceMap(":memory:", { explore: false });
+    const db = (map as unknown as { db: { transaction: (f: () => void) => () => void } }).db;
+    const real = db.transaction.bind(db);
+    db.transaction = () => () => {
+      throw new Error("SQLITE_BUSY");
+    };
+    const log = console.error;
+    const logged: unknown[][] = [];
+    console.error = (...args: unknown[]) => logged.push(args);
+    try {
+      map.recordOutcome(alice, "chat", "crm", true);
+      await Bun.sleep(30);
+    } finally {
+      console.error = log;
+      db.transaction = real;
+    }
+    expect(map.failedFlushes).toBe(1);
+    expect(JSON.stringify(logged)).not.toContain("alice");
+    map.recordOutcome(alice, "chat", "crm", true);
+    expect(map.utility(alice, "chat", "crm")).toBe(2 / 3); // Writes go on.
+  });
 });

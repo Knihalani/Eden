@@ -111,7 +111,21 @@ export class SourceMap {
   recordOutcome(scope: Scope, situation: string, sourceId: string, used: boolean): void {
     this.pending.push([scopeKey(scope), situation, sourceId, used ? 1 : 0]);
     if (this.pending.length >= OUTCOME_FLUSH_ROWS) this.flush();
-    else this.flushTimer ??= setTimeout(() => this.flush(), OUTCOME_FLUSH_MS);
+    else this.flushTimer ??= setTimeout(() => this.flushInBackground(), OUTCOME_FLUSH_MS);
+  }
+
+  /** Outcome batches the timer could not write (SQLITE_BUSY, a full disk); they are lost, learning goes on. */
+  failedFlushes = 0;
+
+  /** The timer's flush: nothing may throw out of a timer (it would take the process down). */
+  private flushInBackground(): void {
+    try {
+      this.flush();
+    } catch (e) {
+      this.failedFlushes++;
+      // The error only: never the rows, which hold user and source ids.
+      console.error("eden: source-map outcome write failed", e instanceof Error ? e.message : String(e));
+    }
   }
 
   /** Writes buffered outcomes now, in one transaction. Reads call it first. */

@@ -8,6 +8,8 @@
  * EDEN_SOURCE_MAP    path of the source-map database; default $EDEN_HOME/source-map.db.
  * OPENROUTER_API_KEY enables the model; without it the engine runs with no model at all.
  * EDEN_MODEL         default z-ai/glm-5.3-flash.
+ * EDEN_TENANT_RPS    requests per second per tenant on the HTTP API (GCRA), default 200; EDEN_TENANT_BURST, 400.
+ *                    The stdio MCP server (mcp-stdio.ts) serves one local user and is not limited.
  * EDEN_GATE_WORKERS  workers that redact lookup results off the event loop (D25, D26); default 0, on the loop.
  */
 import { join } from "node:path";

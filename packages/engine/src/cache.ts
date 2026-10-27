@@ -8,7 +8,10 @@
  * stored term ids (pipeline.bench.ts: these two rescans were ~30% of end-to-end CPU before).
  *
  * Bounded three ways: items per user (oldest evicted), users per tenant (least recently written dropped, so one tenant
- * never evicts another's), and item text length. Expired items are swept on write, so they stop shaping idf.
+ * never evicts another's), and item text length. Expired items are swept on write, so they stop shaping idf. A
+ * vocabulary never forgets a term, so a user's is rebuilt from the live items when a source is forgotten (no term of
+ * a revoked source's content survives) and when it outgrows `VOCAB_REBUILD_FACTOR` times its size after the last
+ * rebuild.
  */
 import { createHash } from "node:crypto";
 import { dedupText, hamming64, SparseIndex, TextSketcher, Vocab } from "@eden/primitives";
@@ -42,7 +45,13 @@ export function nearDuplicate(a: Sketch | null, b: Sketch | null): boolean {
   return a !== null && b !== null && a.numbers === b.numbers && hamming64(a.lo, a.hi, b.lo, b.hi) <= NEAR_DUP_BITS;
 }
 
+/** A user's vocabulary may grow to this many times its size after the last rebuild (at least `MIN_VOCAB_REBUILD`). */
+const VOCAB_REBUILD_FACTOR = 4;
+const MIN_VOCAB_REBUILD = 50_000;
+
 class UserCache {
+  /** Vocabulary size after the last rebuild. */
+  baseline = 0;
   readonly items = new Map<string, Entry>();
   readonly byDoc: (Entry | undefined)[] = [];
   readonly vocab = new Vocab(4_096);
@@ -147,9 +156,19 @@ export class ItemCache {
     else this.perTenant.set(tenantId, n);
   }
 
-  /** The user's vocabulary (creating the user's cache if needed): sessions tokenize with it so ids agree. */
+  /** The user's vocabulary (creating the user's cache if needed). */
   vocabOf(scope: Scope): Vocab {
     return this.touch(scope).vocab;
+  }
+
+  /** The user's vocabulary, or undefined when the user has no cache: reads never allocate one. */
+  peekVocab(scope: Scope): Vocab | undefined {
+    return this.peek(scope)?.vocab;
+  }
+
+  /** Characters of item text kept (`sanitizeItem`'s limit for this cache). */
+  get maxTextChars(): number {
+    return this.limits.maxTextChars;
   }
 
   /**
@@ -170,7 +189,24 @@ export class ItemCache {
       return item;
     });
     while (u.items.size > this.limits.maxItemsPerUser) this.drop(u, u.items.values().next().value as Entry);
+    if (u.vocab.size > Math.max(MIN_VOCAB_REBUILD, u.baseline * VOCAB_REBUILD_FACTOR)) this.rebuild(scope, u);
     return stored;
+  }
+
+  /**
+   * Replaces a user's vocabulary, index and sketcher with ones built from its live items, in the same order. Doc
+   * numbers change; nothing outside holds them across calls. Sketches are kept (they do not depend on term ids).
+   */
+  private rebuild(scope: Scope, old: UserCache): void {
+    const u = new UserCache();
+    for (const e of old.items.values()) {
+      const doc = this.index(u, e.item);
+      const entry = { ...e, doc };
+      u.items.set(e.item.id, entry);
+      u.byDoc[doc] = entry;
+    }
+    u.baseline = u.vocab.size;
+    this.users.set(scopeKey(scope), u); // Same key: the user's place in the eviction order is unchanged.
   }
 
   private index(u: UserCache, item: ContextItem): number {
@@ -236,6 +272,7 @@ export class ItemCache {
     const u = this.peek(scope);
     if (!u) return;
     for (const e of [...u.items.values()]) if (e.item.sourceId === sourceId) this.drop(u, e);
+    this.rebuild(scope, u);
   }
 
   get userCount(): number {
