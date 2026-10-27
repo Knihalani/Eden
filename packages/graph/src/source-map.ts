@@ -9,6 +9,11 @@
  * Statements go through `db.query`, which caches the prepared statement (re-preparing per call was 5% of end-to-end
  * CPU; packages/engine/bench/pipeline.bench.ts).
  *
+ * Outcomes are written behind: buffered, then written in one transaction within `OUTCOME_FLUSH_MS` (or at 256 rows),
+ * and every read flushes first, so reads always see them. With WAL and synchronous=NORMAL, a file-backed outcome costs
+ * ~2 µs instead of ~190 µs (an fsync per commit, on the event loop); a crash loses at most the last few milliseconds
+ * of counts, which learning shrugs off (docs/research/primitives.md).
+ *
  * Learning is a Beta-Bernoulli estimate per (user, situation, source): `shown` counts injections that cited the
  * source, `used` those the agent then used. The mean (used+1)/(shown+2) starts at 0.5 and moves with evidence.
  */
@@ -46,8 +51,13 @@ export interface SourceMapOptions {
   seed?: number;
 }
 
+const OUTCOME_FLUSH_MS = 10;
+const OUTCOME_FLUSH_ROWS = 256;
+
 export class SourceMap {
   private readonly db: Database;
+  private pending: [scope: string, situation: string, sourceId: string, used: number][] = [];
+  private flushTimer: ReturnType<typeof setTimeout> | undefined;
 
   private readonly explore: boolean;
   private readonly rng: Xoshiro128;
@@ -57,6 +67,7 @@ export class SourceMap {
     this.rng = new Xoshiro128(options.seed ?? (Math.random() * 2 ** 32) >>> 0);
     this.db = new Database(path, { create: true });
     this.db.exec("PRAGMA journal_mode = WAL");
+    this.db.exec("PRAGMA synchronous = NORMAL");
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS mention (
         scope TEXT NOT NULL, entity TEXT NOT NULL, source_id TEXT NOT NULL,
@@ -98,16 +109,30 @@ export class SourceMap {
 
   /** Records whether an injection citing `sourceId` was used, in this situation. */
   recordOutcome(scope: Scope, situation: string, sourceId: string, used: boolean): void {
-    this.db
-      .query(
-        `INSERT INTO utility (scope, situation, source_id, shown, used) VALUES (?, ?, ?, 1, ?)
-         ON CONFLICT (scope, situation, source_id) DO UPDATE SET shown = shown + 1, used = used + excluded.used`,
-      )
-      .run(scopeKey(scope), situation, sourceId, used ? 1 : 0);
+    this.pending.push([scopeKey(scope), situation, sourceId, used ? 1 : 0]);
+    if (this.pending.length >= OUTCOME_FLUSH_ROWS) this.flush();
+    else this.flushTimer ??= setTimeout(() => this.flush(), OUTCOME_FLUSH_MS);
+  }
+
+  /** Writes buffered outcomes now, in one transaction. Reads call it first. */
+  flush(): void {
+    if (this.flushTimer !== undefined) clearTimeout(this.flushTimer);
+    this.flushTimer = undefined;
+    if (this.pending.length === 0) return;
+    const rows = this.pending;
+    this.pending = [];
+    const upsert = this.db.query(
+      `INSERT INTO utility (scope, situation, source_id, shown, used) VALUES (?, ?, ?, 1, ?)
+       ON CONFLICT (scope, situation, source_id) DO UPDATE SET shown = shown + 1, used = used + excluded.used`,
+    );
+    this.db.transaction(() => {
+      for (const row of rows) upsert.run(...row);
+    })();
   }
 
   /** Corrects an outcome recorded earlier (explicit feedback overriding an inferred one). Counts never go negative. */
   correctOutcome(scope: Scope, situation: string, sourceId: string, used: boolean): void {
+    this.flush();
     const delta = used ? 1 : -1;
     this.db
       .query(
@@ -123,6 +148,7 @@ export class SourceMap {
   }
 
   private outcomes(scope: Scope, situation: string, sourceId: string): { shown: number; used: number } {
+    this.flush();
     const row = this.db
       .query("SELECT shown, used FROM utility WHERE scope = ? AND situation = ? AND source_id = ?")
       .get(scopeKey(scope), situation, sourceId) as { shown: number; used: number } | null;
@@ -162,6 +188,7 @@ export class SourceMap {
 
   /** Deletes everything held for a user (account deletion, connector revocation). */
   forget(scope: Scope, sourceId?: string): void {
+    this.flush();
     const key = scopeKey(scope);
     for (const table of ["mention", "utility"]) {
       if (sourceId) this.db.query(`DELETE FROM ${table} WHERE scope = ? AND source_id = ?`).run(key, sourceId);
@@ -170,6 +197,7 @@ export class SourceMap {
   }
 
   close(): void {
+    this.flush();
     this.db.close();
   }
 }
