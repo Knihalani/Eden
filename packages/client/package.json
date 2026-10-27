@@ -1,0 +1,9 @@
+{
+  "name": "@eden/client",
+  "version": "0.0.0",
+  "description": "SDK for agent builders: report session events to the Eden context partner, ask it questions, and put its injections into the agent's prompt.",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "@eden/protocol": "workspace:*" }
+}

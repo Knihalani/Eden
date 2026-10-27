@@ -1,0 +1,7 @@
+{
+  "name": "@eden/example-personal-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": { "@eden/client": "workspace:*" }
+}

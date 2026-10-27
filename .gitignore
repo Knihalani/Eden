@@ -64,3 +64,7 @@ benchmarks/lme-v2/debug-sample.jsonl
 
 # R8/R10 NIM response cache (model outputs; regenerable)
 benchmarks/memory-cues/nim/cache/
+
+# Eden runtime data
+.eden/
+*.db
