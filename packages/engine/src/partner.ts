@@ -33,8 +33,8 @@ import {
 } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import type { Vocab } from "@eden/primitives";
-import { searchSources, type Source, type SourceResolver } from "@eden/sources";
-import type { ItemCache } from "./cache";
+import { SourceFanout, type Source, type SourceResolver } from "@eden/sources";
+import { sanitizeItem, type ItemCache } from "./cache";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { answerMessages, judgeMessages, parseJudge } from "./judge";
 import { Ledger } from "./ledger";
@@ -62,6 +62,8 @@ export interface PartnerDeps {
   config?: Partial<EngineConfig>;
   onTrace?: TraceSink;
   now?: () => number;
+  /** Source fan-out with its resilience layer; defaults to one that sanitizes with `sanitizeItem`. */
+  fanout?: SourceFanout;
 }
 
 /** An outcome already written to the source map, kept so explicit feedback can correct it. */
@@ -125,10 +127,12 @@ export class ContextPartner {
   private readonly built = new WeakMap<Injection, Built>();
   private readonly recorded = new Map<string, Map<string, Recorded>>();
   private readonly now: () => number;
+  private readonly fanout: SourceFanout;
 
   constructor(private readonly deps: PartnerDeps) {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
     this.now = deps.now ?? Date.now;
+    this.fanout = deps.fanout ?? new SourceFanout({ sanitize: (items) => items.map((i) => sanitizeItem(i)) });
   }
 
   async observe(event: AgentEvent, options: { waitMs?: number } = {}): Promise<ObserveResult> {
@@ -310,6 +314,7 @@ export class ContextPartner {
     this.recorded.delete(key);
     this.deps.cache.forget(scope, sourceId);
     this.deps.sourceMap.forget(scope, sourceId);
+    this.fanout.forget(scope, sourceId);
   }
 
   get sessionCount(): number {
@@ -493,7 +498,7 @@ export class ContextPartner {
       limit,
     });
     const chosen = ranked.map((r) => all.find((x) => x.id === r.sourceId)!).filter(Boolean);
-    const outcomes = await searchSources(
+    const outcomes = await this.fanout.search(
       chosen,
       { scope: s.scope, text: cue.text, entities: cue.entities, limit: 8 },
       { timeoutMs: this.config.sourceTimeoutMs, signal: s.abort.signal },
@@ -501,7 +506,7 @@ export class ContextPartner {
     if (s.closed) return chosen.length; // Forgotten or ended mid-search: keep nothing.
     const mentions: { sourceId: string; entities: string[] }[] = [];
     for (const o of outcomes) {
-      const stored = this.deps.cache.put(s.scope, o.items, this.now());
+      const stored = this.deps.cache.put(s.scope, o.items, this.now(), true);
       for (const item of stored) {
         const entities = extractTypedEntities(`${item.title}. ${item.text}`)
           .filter((e) => PERSISTABLE_KINDS.has(e.kind))

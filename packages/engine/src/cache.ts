@@ -58,6 +58,24 @@ export const DEFAULT_CACHE_LIMITS: CacheLimits = {
   maxTextChars: 8_000,
 };
 
+/**
+ * A source item made safe to hold: every text field redacted, text clipped, and an id that never embeds a secret (a
+ * ref that held one gets an id from a hash of the raw ref, so two refs that redact alike stay distinct).
+ */
+export function sanitizeItem(raw: ContextItem, maxTextChars = DEFAULT_CACHE_LIMITS.maxTextChars): ContextItem {
+  const ref = sanitizeForStore(raw.ref);
+  const hashed = () => itemId(raw.sourceId, `h-${createHash("sha256").update(raw.ref).digest("hex").slice(0, 16)}`);
+  return {
+    ...raw,
+    id: ref === raw.ref ? raw.id : hashed(),
+    ref,
+    title: sanitizeForStore(raw.title.slice(0, 500)),
+    text: sanitizeForStore(raw.text.slice(0, maxTextChars)),
+    url: raw.url === undefined ? undefined : sanitizeForStore(raw.url),
+    meta: raw.meta && Object.fromEntries(Object.entries(raw.meta).map(([k, v]) => [k, sanitizeForStore(v)])),
+  };
+}
+
 let titleIds = new Uint32Array(256);
 let bodyIds = new Uint32Array(4_096);
 
@@ -109,26 +127,15 @@ export class ItemCache {
     return this.touch(scope).vocab;
   }
 
-  /** Adds items, redacting every text field first. Returns the stored (redacted) copies. */
-  put(scope: Scope, items: ContextItem[], now = Date.now()): ContextItem[] {
+  /**
+   * Adds items, redacting every text field first (`sanitizeItem`) unless `sanitized` says the caller already did
+   * (results from `SourceFanout`, which sanitizes before caching). Returns the stored copies.
+   */
+  put(scope: Scope, items: ContextItem[], now = Date.now(), sanitized = false): ContextItem[] {
     const u = this.touch(scope);
     this.sweep(u, now);
     const stored = items.map((raw) => {
-      const ref = sanitizeForStore(raw.ref);
-      const item: ContextItem = {
-        ...raw,
-        // The id embeds the ref and travels to traces, citations and the ledger. A ref that held a secret gets an id
-        // from a hash of the raw ref instead: never the secret, and two refs that redact alike stay distinct.
-        id:
-          ref === raw.ref
-            ? raw.id
-            : itemId(raw.sourceId, `h-${createHash("sha256").update(raw.ref).digest("hex").slice(0, 16)}`),
-        ref,
-        title: sanitizeForStore(raw.title.slice(0, 500)),
-        text: sanitizeForStore(raw.text.slice(0, this.limits.maxTextChars)),
-        url: raw.url === undefined ? undefined : sanitizeForStore(raw.url),
-        meta: raw.meta && Object.fromEntries(Object.entries(raw.meta).map(([k, v]) => [k, sanitizeForStore(v)])),
-      };
+      const item = sanitized ? raw : sanitizeItem(raw, this.limits.maxTextChars);
       const old = u.items.get(item.id);
       if (old) this.drop(u, old);
       const doc = this.index(u, item);
