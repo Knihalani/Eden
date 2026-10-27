@@ -76,6 +76,33 @@ describe("Gcra", () => {
   });
 });
 
+describe("Gcra validation (finding 6)", () => {
+  test("bad options throw; a cost above the burst never fits", () => {
+    expect(() => new Gcra({ ratePerSec: 0, burst: 1 })).toThrow();
+    expect(() => new Gcra({ ratePerSec: 1, burst: 0 })).toThrow();
+    expect(new Gcra({ ratePerSec: 10, burst: 2 }).take("k", 3)).toBe(Infinity);
+  });
+});
+
+describe("edge cases (finding 7)", () => {
+  test("an infinite deadline never fires", () => {
+    const d = Deadline.after(Infinity);
+    expect(d.expired).toBe(false);
+    expect(d.child(50).at).toBeLessThan(Infinity);
+  });
+
+  test("tryAcquire does not jump the queue", async () => {
+    const l = new AimdLimiter({ initial: 1, min: 1, max: 1 });
+    expect(l.tryAcquire()).toBe(true);
+    const order: string[] = [];
+    const waiting = l.acquire().then(() => order.push("waiter"));
+    l.release("ok");
+    expect(l.tryAcquire()).toBe(false);
+    await waiting;
+    expect(order).toEqual(["waiter"]);
+  });
+});
+
 describe("CircuitBreaker", () => {
   test("opens on the failure rate, probes once when half-open, closes on success", () => {
     let now = 0;
@@ -90,6 +117,17 @@ describe("CircuitBreaker", () => {
     expect([b.allow(), b.allow()]).toEqual([true, false]);
     b.success();
     expect(b.state).toBe("closed");
+  });
+
+  test("a probe that never reports does not hold the breaker half-open forever (finding 5)", () => {
+    let now = 0;
+    const b = new CircuitBreaker({ minCalls: 1, failureRate: 0.5, openMs: 1_000, now: () => now });
+    b.failure();
+    now = 1_000;
+    expect(b.allow()).toBe(true); // the probe, whose caller then vanishes
+    expect(b.allow()).toBe(false);
+    now = 2_500;
+    expect(b.allow()).toBe(true);
   });
 
   test("old failures fall out of the window", () => {

@@ -48,7 +48,8 @@ function learn(c: number): void {
     f = FOLD_DROP;
   } else if (LETTER_OR_DIGIT.test(ch)) {
     k |= WORD_START | WORD_PART;
-    const folded = ch.normalize("NFKD").replace(MARKS, "").toLowerCase();
+    // Word-final sigma folds like sigma: "ΟΔΟΣ" and "οδος" are one term.
+    const folded = c === 0x3c2 ? "σ" : ch.normalize("NFKD").replace(MARKS, "").toLowerCase();
     f = folded.length === 1 ? folded.charCodeAt(0) : folded.length === 0 ? FOLD_DROP : FOLD_EXPAND;
   }
   CLASS[c] = k;
@@ -67,7 +68,27 @@ export function foldOf(c: number): number {
   return FOLD[c]!;
 }
 
-/** Folds a whole string for matching, the slow but complete way: NFKD, drop marks, lowercase, ’ → '. */
+/**
+ * Folds a whole string for matching, per code unit with the same table the tokenizer uses, so both always agree.
+ * Characters that expand (ligatures) are decomposed one at a time. Context-free on purpose: whole-string
+ * `toLowerCase` turns a word-final Σ into ς, which the per-character fold maps to σ, and would give one word two ids.
+ */
 export function foldString(s: string): string {
-  return s.normalize("NFKD").replace(MARKS, "").toLowerCase().replace(/[‘’]/g, "'");
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    const f = c < 128 ? FOLD[c]! : foldOf(c);
+    if (f === FOLD_DROP) continue;
+    if (f === FOLD_EXPAND) {
+      const expanded = String.fromCharCode(c).normalize("NFKD").replace(MARKS, "").toLowerCase();
+      for (let j = 0; j < expanded.length; j++) {
+        const e = expanded.charCodeAt(j);
+        const g = e < 128 ? FOLD[e]! : foldOf(e);
+        if (g !== FOLD_DROP && g !== FOLD_EXPAND) out += String.fromCharCode(g);
+      }
+      continue;
+    }
+    out += String.fromCharCode(f);
+  }
+  return out;
 }

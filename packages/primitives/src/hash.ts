@@ -12,7 +12,7 @@
  * per char and no tail handling: the cheapest hash for short tokens.
  *
  * No default parameters, on purpose: on JavaScriptCore a default parameter in a hot loop function cost 5x
- * (measured: 14.1 µs vs 2.8 µs per 2 KB; docs/research/primitives.md). Every hot function here avoids them.
+ * (13.49 µs vs 2.72 µs per 2 KB; bench/jsc.bench.ts). Every hot function here avoids them.
  */
 export function fnv1a(s: string, start: number, end: number): number {
   let h = 0x811c9dc5 | 0;

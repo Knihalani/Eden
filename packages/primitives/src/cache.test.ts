@@ -66,6 +66,40 @@ describe("S3FifoCache", () => {
   });
 });
 
+describe("S3FifoCache review regressions", () => {
+  test("delete and TTL churn under budget keep memory proportional to live entries (finding 1)", () => {
+    const c = new S3FifoCache<number, number>({ maxBytes: 100 });
+    for (let i = 0; i < 200_000; i++) {
+      c.set(i, i);
+      c.delete(i);
+    }
+    expect(c.size).toBe(0);
+    expect(c.slotCount).toBeLessThan(1_000);
+    let now = 0;
+    const t = new S3FifoCache<number, number>({ maxBytes: 100, expireAfterMs: 1, now: () => now });
+    for (let i = 0; i < 100_000; i++) {
+      t.set(i, i);
+      now += 2;
+      t.get(i);
+    }
+    expect(t.slotCount).toBeLessThan(1_000);
+  });
+
+  test("an oversized overwrite removes the old value instead of serving it (finding 2)", () => {
+    const c = new S3FifoCache<string, string>({ maxBytes: 10 });
+    c.set("a", "old", 5);
+    c.set("a", "new", 50);
+    expect(c.get("a")).toBeUndefined();
+    expect(c.bytes).toBe(0);
+  });
+
+  test("huge byte costs do not wrap around", () => {
+    const c = new S3FifoCache<string, string>({ maxBytes: 1_000 });
+    c.set("big", "v", 3e9);
+    expect(c.get("big")).toBeUndefined();
+  });
+});
+
 describe("TopK", () => {
   test("keeps the k best, drains best first, and exposes the entry floor", () => {
     const t = new TopK(3);
@@ -85,6 +119,17 @@ describe("TopK", () => {
     expect([...ids]).toEqual([5, 2, 4]);
     expect([...scores]).toEqual([0.95, 0.9, 0.7]);
     expect(t.size).toBe(0);
+  });
+
+  test("NaN scores never enter", () => {
+    const t = new TopK(2);
+    t.push(1, NaN);
+    t.push(2, 1);
+    t.push(3, 2);
+    t.push(4, NaN);
+    const ids: number[] = [];
+    t.drain(ids, null);
+    expect(ids).toEqual([3, 2]);
   });
 
   test("matches a full sort on random input", () => {

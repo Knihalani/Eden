@@ -1,8 +1,10 @@
 /**
  * An adaptive concurrency limit (AIMD), as Netflix's concurrency-limits recommends for clients: the limit grows by
  * 1/limit per success (about +1 per round trip at full use) and shrinks ×`backoff` on a drop, timeout or rate-limit
- * signal. It finds how much parallelism an upstream tolerates without a configured number. Defaults from
- * docs/research/fast-primitives.md: start 8, bounds [1, 32], backoff 0.9.
+ * signal. It finds how much parallelism an upstream tolerates without a configured number. Start 8 and bounds [1, 32]
+ * follow docs/research/fast-primitives.md; backoff 0.9 is this package's choice (the research note suggests halving
+ * on a timeout; 0.9 is gentler on one-off drops). Waiters are served first-come: `tryAcquire` never takes a permit
+ * while others are queued.
  *
  * `tryAcquire` never waits (the fast path skips a saturated source); `acquire` queues up to an AbortSignal.
  */
@@ -39,7 +41,7 @@ export class AimdLimiter {
   }
 
   tryAcquire(): boolean {
-    if (this.active >= this.limit) return false;
+    if (this.active >= this.limit || this.waiters.length > 0) return false;
     this.active++;
     return true;
   }

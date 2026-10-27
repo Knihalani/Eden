@@ -57,6 +57,13 @@ describe("prefilter equivalence", () => {
     for (const text of texts) expect(secretHits(text)).toEqual(referenceHits(text));
   });
 
+  test("every prefilter word is non-empty, and every keyword-less rule has words (a new shape must add literals)", () => {
+    for (const rule of secretRules()) {
+      for (const word of rule.prefilter) expect(word.length).toBeGreaterThan(0);
+      if (rule.id.startsWith("eden-")) expect(rule.prefilter.length).toBeGreaterThan(0);
+    }
+  });
+
   test("the secrets above are all redacted", () => {
     for (const secret of SECRETS) {
       // A bare `Authorization: Bearer …` is no rule hit (secretHits); the structural redactor that sanitizeForStore

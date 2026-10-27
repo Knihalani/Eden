@@ -29,6 +29,7 @@ export class TopK {
   }
 
   push(id: number, score: number): void {
+    if (score !== score) return; // NaN never enters: it would compare false everywhere and corrupt the heap.
     const scores = this.scores;
     // The common case first: a full heap and a candidate that cannot enter.
     if (this.n === this.k) {

@@ -57,6 +57,7 @@ export function tokenizeInto(
       }
       h = Math.imul(h ^ f, 0x01000193);
       g = Math.imul(g ^ f, 0x5bd1e995);
+      g = (g << 15) | (g >>> 17);
       len++;
     }
     // Trim a trailing possessive and trailing punctuation; rehash only when something was trimmed (rare).

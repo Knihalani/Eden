@@ -58,6 +58,17 @@ describe("tokenize", () => {
   });
 });
 
+describe("Vocab round trips (review finding 4)", () => {
+  test("every stored term looks up to its own id, including final sigma, ligatures and marks", () => {
+    const v = new Vocab();
+    tokenize("ΟΔΟΣ οδος ﬁnalΣ finalσ cafe\u0301 café Straße STRASSE İstanbul", v);
+    for (let id = 0; id < v.size; id++) expect(v.lookup(v.term(id))).toBe(id);
+    expect(v.lookup("οδος")).toBe(v.lookup("ΟΔΟΣ"));
+    expect(v.lookup("ﬁnalΣ")).toBe(v.lookup("finalσ"));
+    expect(v.lookup("café")).toBe(v.lookup("cafe\u0301"));
+  });
+});
+
 describe("Vocab", () => {
   test("ids are dense and stable through growth; range and string paths agree", () => {
     const v = new Vocab(4);

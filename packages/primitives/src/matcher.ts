@@ -10,7 +10,9 @@
  * cue lists); a per-user gazetteer of 100k names belongs in a token-level trie instead.
  *
  * `wholeWord` reports only matches not flanked by letters or digits: "al" does not match inside "also", while "dana"
- * matches in "Dana's" and "bring" in "bring-it" (apostrophes, hyphens and underscores are boundaries here).
+ * matches in "Dana's" and "bring" in "bring-it" (apostrophes, hyphens and underscores are boundaries here). Combining
+ * marks belong to the letter before them: they are skipped when looking for a boundary, and a match's end extends
+ * over trailing marks ("café" spelled with a combining accent is matched whole, and "danáx" holds no "dana").
  */
 import { CLASS, classOf, FOLD, FOLD_DROP, FOLD_EXPAND, foldOf, foldString, WORD_START } from "./charclass";
 
@@ -183,8 +185,8 @@ export class MultiMatcher {
       for (let j = from; j < to; j++) {
         const p = this.outList[j]!;
         const start = ring[(k - this.lens[p]!) & ringMask]!;
-        const end = i + 1;
-        if (wholeWord && !(isBoundary(text, start - 1) && isBoundary(text, end))) continue;
+        const end = afterMarks(text, i + 1);
+        if (wholeWord && !(boundaryBefore(text, start) && boundaryAt(text, end))) continue;
         if (stop !== null && stop()) return;
         if (onMatch !== null) onMatch(p, start, end);
       }
@@ -192,10 +194,25 @@ export class MultiMatcher {
   }
 }
 
-function isBoundary(text: string, at: number): boolean {
-  if (at < 0 || at >= text.length) return true;
-  const c = text.charCodeAt(at);
-  return ((c < 128 ? CLASS[c]! : classOf(c)) & WORD_START) === 0;
+const isDropped = (c: number) => c >= 128 && foldOf(c) === FOLD_DROP && (classOf(c) & WORD_START) === 0;
+const isWordStart = (c: number) => ((c < 128 ? CLASS[c]! : classOf(c)) & WORD_START) !== 0;
+
+/** The first index at or after `at` that is not a combining mark (marks belong to the letter before them). */
+function afterMarks(text: string, at: number): number {
+  while (at < text.length && isDropped(text.charCodeAt(at))) at++;
+  return at;
+}
+
+/** True if no letter or digit sits at `at` (the end of the text counts as a boundary). */
+function boundaryAt(text: string, at: number): boolean {
+  return at >= text.length || !isWordStart(text.charCodeAt(at));
+}
+
+/** True if no letter or digit precedes `start`, skipping combining marks (which belong to a letter). */
+function boundaryBefore(text: string, start: number): boolean {
+  let at = start - 1;
+  while (at >= 0 && isDropped(text.charCodeAt(at))) at--;
+  return at < 0 || !isWordStart(text.charCodeAt(at));
 }
 
 /** A pattern folded as the scanner folds text: per character, dropping marks; ligatures expanded. */

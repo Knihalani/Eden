@@ -1,11 +1,13 @@
 /**
  * A string interner: term ↔ dense integer id, so indexes, sets and counters work on Uint32Arrays instead of strings.
  *
- * Identity is a 64-bit fingerprint, two independent 32-bit FNV-style lanes (`termHash`) plus the folded length, with
- * no character comparison. Measured on a 2 KB email (298 terms), scan plus intern took 13.4 µs comparing against
- * string objects, 12.1 µs comparing against a character arena, and 8.6 µs with the fingerprint (Bun 1.4.4;
- * docs/research/primitives.md). The chance that any two of n distinct terms collide is about n²/2^65 (3e-8 for a
- * million terms); a collision would merge two terms' postings, never crash.
+ * Identity is a fingerprint, two 32-bit lanes (`termHash`) plus the folded length, with no character comparison.
+ * Lane one is FNV-1a; lane two is an xor-multiply with a different multiplier and a rotation each step, so its low
+ * bits depend on every input bit (without the rotation, the low k bits of both lanes depend only on the low k bits of
+ * the characters, and the pair is weaker than 64 bits). Not a proven 64-bit hash: collisions are very unlikely but
+ * not quantified here; one would merge two terms' postings, never crash. Measured on a 2 KB email (298 terms), scan
+ * plus intern took 17.15 µs comparing against string objects, 15.31 µs against a character arena, and 6.30 µs with
+ * the fingerprint (bench/vocab.bench.ts; docs/research/primitives.md).
  *
  * The *Range methods take a range of a larger string whose hash the caller computed while scanning (the tokenizer
  * does), so a known term allocates nothing. Keys are folded (lowercase, accents dropped: "Zoë" and "zoe" are one
@@ -28,6 +30,7 @@ export function termHash(s: string, start: number, end: number, out: Uint32Array
     if (f === FOLD_EXPAND) return false;
     h = Math.imul(h ^ f, 0x01000193);
     g = Math.imul(g ^ f, 0x5bd1e995);
+    g = (g << 15) | (g >>> 17);
   }
   out[0] = h;
   out[1] = g;

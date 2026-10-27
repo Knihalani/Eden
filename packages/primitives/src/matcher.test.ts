@@ -19,9 +19,9 @@ describe("MultiMatcher", () => {
 
   test("folds case and accents in both patterns and text, keeping original offsets", () => {
     const m = new MultiMatcher(["Zoë", "TOKEN"]);
-    const text = "zoé said ZOË has a Token";
+    const text = "zoe\u0301 said ZOË has a Token";
     expect(all(m, text).map(([p, s, e]) => [p, text.slice(s, e)])).toEqual([
-      ["zoe", "zoé".slice(0, 3)],
+      ["zoe", "zoe\u0301"], // the match extends over the trailing combining accent
       ["zoe", "ZOË"],
       ["token", "Token"],
     ]);
@@ -34,6 +34,13 @@ describe("MultiMatcher", () => {
       ["bring", 15, 20],
       ["dana", 34, 38],
     ]);
+  });
+
+  test("combining marks are part of the letter before them (review finding 3)", () => {
+    const m = new MultiMatcher(["dana", "cafe"], { wholeWord: true });
+    expect(all(m, "danáx édana")).toEqual([]);
+    const text = "the cafe\u0301 is open";
+    expect(all(m, text).map(([p, s, e]) => [p, text.slice(s, e)])).toEqual([["cafe", "cafe\u0301"]]);
   });
 
   test("any stops early; markHits counts distinct patterns", () => {
