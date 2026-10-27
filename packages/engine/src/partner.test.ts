@@ -224,6 +224,16 @@ describe("observe", () => {
     expect(calls).toBe(12); // On the real clock, the 11th and 12th were rate limited (burst 10 at 5/s).
   });
 
+  test("an item returned by several lookups counts as one mention (simulation finding)", async () => {
+    const sourceMap = new SourceMap();
+    const { p } = partner({ sourceMap });
+    // ask() always searches live, so both calls get deal-9 back from the CRM.
+    await p.ask({ ...scope, sessionId: "a1", question: "What does Dana Lee want on the Globex renewal?" });
+    await p.ask({ ...scope, sessionId: "a2", question: "When is the Globex renewal due, per Dana Lee?" });
+    const crm = sourceMap.sourcesFor(scope, "Dana Lee").find((x) => x.sourceId === "crm");
+    expect(crm?.count).toBe(1);
+  });
+
   test("users are isolated: one user's cached items never reach another", async () => {
     const { p } = partner();
     await p.observe(ev({ kind: "user_message", text: "Globex renewal for Dana Lee" }), { waitMs: 1_000 });

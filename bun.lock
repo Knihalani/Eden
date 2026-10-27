@@ -93,6 +93,7 @@
       "name": "@eden/sim",
       "version": "0.0.0",
       "dependencies": {
+        "@eden/client": "workspace:*",
         "@eden/engine": "workspace:*",
         "@eden/graph": "workspace:*",
         "@eden/llm": "workspace:*",

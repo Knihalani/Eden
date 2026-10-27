@@ -120,48 +120,37 @@ export interface SourceStats {
 }
 
 export interface Fault {
-  /** Wall-clock window, ms since the source was created, during which every call fails (an outage). */
-  outage?: [number, number];
-  /** Multiplies latency. */
+  /** Until this performance.now() time, every call fails with 503 (an outage). */
+  outageUntil?: number;
+  /** Until `slowUntil`, latency is multiplied by `slow`. */
   slow?: number;
+  slowUntil?: number;
+  /** Until `ratePerSecUntil`, the request budget is `ratePerSec` (a 429 storm when low). */
+  ratePerSec?: number;
+  ratePerSecUntil?: number;
 }
 
 /**
- * One simulated connector over a world's items for one source id. `timeScale` scales latency (0 for instant runs
- * that only measure quality; 1 for real time).
+ * One source's items in one world, indexed once and shared by every simulated user given that world: the term
+ * sets and BM25 statistics are the expensive part, and per-user state (quota, errors, stats) lives in `SimSource`.
  */
-export class SimSource implements Source {
-  readonly kind = "sim";
-  readonly description: string;
-  readonly stats: SourceStats = { calls: 0, errors: 0, limited: 0, results: 0, usefulResults: 0, bytes: 0 };
-  fault: Fault = {};
-  /** Ids of every item returned, in order (a runner reads the slice for one event). */
-  readonly returned: string[] = [];
-  private readonly items: WorldItem[];
-  private readonly terms: Set<string>[];
-  private readonly titleTerms: Set<string>[];
+export class SimIndex {
+  readonly items: WorldItem[];
+  private readonly terms: Set<string>[] = [];
+  private readonly titleTerms: Set<string>[] = [];
   private readonly df = new Map<string, number>();
-  private readonly tf: Map<string, number>[];
-  private readonly lens: number[];
+  private readonly tf: Map<string, number>[] = [];
+  private readonly lens: number[] = [];
   private readonly avgLen: number;
-  private readonly rng: Rng;
-  private readonly born = performance.now();
-  private tokens: number;
-  private lastRefill = performance.now();
+  /** Term → indexes of items holding it (ascending): searches touch postings, not every item. */
+  private readonly postings = new Map<string, number[]>();
+  private readonly titlePostings = new Map<string, number[]>();
 
   constructor(
     readonly id: string,
-    world: World,
-    private readonly profile: SourceProfile,
-    private readonly timeScale: number,
-    seed: number,
+    readonly world: World,
   ) {
-    this.description = world.sources[id] ?? id;
     this.items = world.items.filter((i) => i.sourceId === id);
-    this.terms = [];
-    this.titleTerms = [];
-    this.tf = [];
-    this.lens = [];
     for (const it of this.items) {
       const ws = words(`${it.title}\n${it.text}`);
       const tf = new Map<string, number>();
@@ -170,10 +159,117 @@ export class SimSource implements Source {
       for (const w of tf.keys()) this.df.set(w, (this.df.get(w) ?? 0) + 1);
       this.tf.push(tf);
       this.lens.push(ws.length);
-      this.terms.push(new Set(ws));
-      this.titleTerms.push(new Set(words(it.title)));
+      const termSet = new Set(ws);
+      const titleSet = new Set(words(it.title));
+      const i = this.terms.length;
+      for (const w of termSet) push(this.postings, w, i);
+      for (const w of titleSet) push(this.titlePostings, w, i);
+      this.terms.push(termSet);
+      this.titleTerms.push(titleSet);
     }
     this.avgLen = this.lens.reduce((s, x) => s + x, 0) / Math.max(1, this.lens.length);
+  }
+
+  queryTerms(q: SearchQuery, adapter: Adapter): string[] {
+    const fromText = words(q.text).filter((w) => !STOP.has(w));
+    const fromEntities = q.entities.flatMap(words).filter((w) => !STOP.has(w));
+    const chosen =
+      adapter === "text"
+        ? fromText
+        : adapter === "entities"
+          ? fromEntities
+          : fromEntities.length
+            ? fromEntities
+            : fromText;
+    return [...new Set(chosen)];
+  }
+
+  match(terms: string[], limit: number, p: SourceProfile): WorldItem[] {
+    if (terms.length === 0) return [];
+    if (p.semantics === "and") {
+      const [lo, hi] = p.windowDays ?? [Infinity, Infinity];
+      // Walk the rarest term's postings; check the other terms on each candidate.
+      const rarest = terms.map((t) => this.postings.get(t) ?? []).sort((a, b) => a.length - b.length)[0]!;
+      const out: WorldItem[] = [];
+      for (const i of rarest) {
+        if (!terms.every((t) => this.terms[i]!.has(t))) continue;
+        const it = this.items[i]!;
+        if (p.windowDays && !inWindow(it, this.world.now, lo, hi)) continue;
+        out.push(it);
+      }
+      return out.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, limit);
+    }
+    if (p.semantics === "names") {
+      const count = new Map<number, number>();
+      for (const t of terms) for (const i of this.titlePostings.get(t) ?? []) count.set(i, (count.get(i) ?? 0) + 1);
+      return [...count]
+        .map(([i, n]) => [this.items[i]!, n] as const)
+        .sort((a, b) => b[1] - a[1] || b[0].updatedAt - a[0].updatedAt)
+        .slice(0, limit)
+        .map(([it]) => it);
+    }
+    // Ranked: BM25 over title (weighted) and body, any term, accumulated over postings.
+    const n = this.items.length;
+    const acc = new Map<number, number>();
+    for (const t of terms) {
+      const list = this.postings.get(t);
+      if (!list) continue;
+      const df = this.df.get(t)!;
+      const idf = Math.log(1 + (n - df + 0.5) / (df + 0.5));
+      for (const i of list) {
+        const f = this.tf[i]!.get(t)!;
+        const s = (idf * f * 2.2) / (f + 1.2 * (0.25 + (0.75 * this.lens[i]!) / this.avgLen));
+        acc.set(i, (acc.get(i) ?? 0) + s);
+      }
+    }
+    return [...acc]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([i]) => this.items[i]!);
+  }
+}
+
+function push(m: Map<string, number[]>, k: string, v: number): void {
+  const list = m.get(k);
+  if (list) list.push(v);
+  else m.set(k, [v]);
+}
+
+function inWindow(it: WorldItem, now: number, before: number, after: number): boolean {
+  // Calendar items carry their start in the text ("When: Thursday 23 Oct 2026, 12:30"); updatedAt is creation.
+  const m = /When: \w+ (\d+) (\w{3}) (\d{4}), (\d\d):(\d\d)/.exec(it.text);
+  if (!m) return true;
+  const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].indexOf(m[2]!);
+  const t = Date.UTC(Number(m[3]), month, Number(m[1]), Number(m[4]), Number(m[5]));
+  return t >= now - before * DAY && t <= now + after * DAY;
+}
+
+/**
+ * One user's connector to one source: their own quota, error draws, faults and stats over a shared `SimIndex`.
+ * `timeScale` scales latency (0 for instant runs that only measure quality; 1 for real time).
+ */
+export class SimSource implements Source {
+  readonly kind = "sim";
+  readonly id: string;
+  readonly description: string;
+  readonly stats: SourceStats = { calls: 0, errors: 0, limited: 0, results: 0, usefulResults: 0, bytes: 0 };
+  fault: Fault = {};
+  /** Ids of every item returned, in order (a runner reads the slice for one event). */
+  readonly returned: string[] = [];
+  private readonly rng: Rng;
+  private tokens: number;
+  private lastRefill = performance.now();
+
+  constructor(
+    private readonly index: SimIndex,
+    private readonly profile: SourceProfile,
+    private readonly timeScale: number,
+    seed: number,
+    /** Keep the ids of returned items (`returned`); off for long load runs, where it would only grow. */
+    private readonly track = true,
+  ) {
+    this.id = index.id;
+    this.description = index.world.sources[index.id] ?? index.id;
     this.rng = new Rng(seed);
     this.tokens = profile.ratePerSec ?? Infinity;
   }
@@ -181,122 +277,57 @@ export class SimSource implements Source {
   async search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]> {
     this.stats.calls++;
     const p = this.profile;
+    const now = performance.now();
+    const f = this.fault;
+    const slow = f.slow && (f.slowUntil ?? Infinity) > now ? f.slow : 1;
     const delay = p.latency.medianMs > 0 ? this.rng.lognormal(p.latency.medianMs, p.latency.sigma) : 0;
-    const scaled = delay * this.timeScale * (this.fault.slow ?? 1);
+    const scaled = delay * this.timeScale * slow;
     if (scaled > 0) await sleep(scaled, signal);
     else if (signal.aborted) throw signal.reason;
-    if (p.ratePerSec !== undefined && !this.take(p.ratePerSec)) {
+    const rate = f.ratePerSec !== undefined && (f.ratePerSecUntil ?? Infinity) > now ? f.ratePerSec : p.ratePerSec;
+    if (rate !== undefined && !this.take(rate)) {
       this.stats.limited++;
       throw new Error("429 Too Many Requests: rate limit exceeded, retry after 2");
     }
-    const since = performance.now() - this.born;
-    const out = this.fault.outage && since >= this.fault.outage[0] && since < this.fault.outage[1];
-    if (out || this.rng.chance(p.errorRate)) {
+    if ((f.outageUntil ?? -Infinity) > performance.now() || this.rng.chance(p.errorRate)) {
       this.stats.errors++;
-      throw new Error(out ? "503 Service Unavailable" : "500 Internal Server Error");
+      throw new Error(
+        (f.outageUntil ?? -Infinity) > performance.now() ? "503 Service Unavailable" : "500 Internal Server Error",
+      );
     }
-    const hits = this.match(this.queryTerms(query), query.limit);
+    const hits = this.index.match(this.index.queryTerms(query, p.adapter), query.limit, p);
     this.stats.results += hits.length;
-    for (const it of hits) {
-      if (it.facts.length) this.stats.usefulResults++;
-    }
-    for (const it of hits) this.returned.push(it.id);
-    const items = hits.map((it) => this.render(it));
+    for (const it of hits) if (it.facts.length) this.stats.usefulResults++;
+    if (this.track) for (const it of hits) this.returned.push(it.id);
+    const items = hits.map((it) => render(it, p.snippetChars));
     for (const i of items) this.stats.bytes += i.title.length + i.text.length;
     return items;
   }
 
+  /** A token bucket in simulated time: real elapsed time divided by the time scale. */
   private take(rate: number): boolean {
-    const now = performance.now();
-    this.tokens = Math.min(
-      rate,
-      this.tokens + ((now - this.lastRefill) / 1_000) * rate * Math.max(this.timeScale, 1e-9),
-    );
-    this.lastRefill = now;
     if (this.timeScale === 0) return true; // Instant runs have no real time to rate-limit over.
+    const now = performance.now();
+    const simSeconds = (now - this.lastRefill) / 1_000 / this.timeScale;
+    this.tokens = Math.min(rate, this.tokens + simSeconds * rate);
+    this.lastRefill = now;
     if (this.tokens < 1) return false;
     this.tokens--;
     return true;
   }
+}
 
-  private queryTerms(q: SearchQuery): string[] {
-    const fromText = words(q.text).filter((w) => !STOP.has(w));
-    const fromEntities = q.entities.flatMap(words).filter((w) => !STOP.has(w));
-    const a = this.profile.adapter;
-    const chosen =
-      a === "text" ? fromText : a === "entities" ? fromEntities : fromEntities.length ? fromEntities : fromText;
-    return [...new Set(chosen)];
+/** The item as a connector returns it: headers kept, body cut to the snippet length. */
+function render(it: WorldItem, n: number): ContextItem {
+  let text = it.text;
+  if (n > 0) {
+    const split = text.indexOf("\n\n");
+    const head = split >= 0 && /^From: /.test(text) ? text.slice(0, split + 2) : "";
+    const body = head ? text.slice(split + 2) : text;
+    const flat = body.replace(/\s+/g, " ").trim();
+    text = head + (flat.length > n ? `${flat.slice(0, n)}…` : flat);
   }
-
-  private match(terms: string[], limit: number): WorldItem[] {
-    if (terms.length === 0) return [];
-    const p = this.profile;
-    if (p.semantics === "and") {
-      const [lo, hi] = p.windowDays ?? [Infinity, Infinity];
-      const now = Date.UTC(2026, 9, 27, 9, 0);
-      const out: WorldItem[] = [];
-      this.items.forEach((it, i) => {
-        if (!terms.every((t) => this.terms[i]!.has(t))) return;
-        if (p.windowDays && !this.inWindow(it, now, lo, hi)) return;
-        out.push(it);
-      });
-      return out.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, limit);
-    }
-    if (p.semantics === "names") {
-      const scored: [WorldItem, number][] = [];
-      this.items.forEach((it, i) => {
-        let n = 0;
-        for (const t of terms) if (this.titleTerms[i]!.has(t)) n++;
-        if (n > 0) scored.push([it, n]);
-      });
-      return scored
-        .sort((a, b) => b[1] - a[1] || b[0].updatedAt - a[0].updatedAt)
-        .slice(0, limit)
-        .map(([it]) => it);
-    }
-    // Ranked: BM25 over title (weighted) and body, any term.
-    const n = this.items.length;
-    const scored: [WorldItem, number][] = [];
-    this.items.forEach((it, i) => {
-      let s = 0;
-      const tf = this.tf[i]!;
-      for (const t of terms) {
-        const f = tf.get(t);
-        if (!f) continue;
-        const df = this.df.get(t)!;
-        const idf = Math.log(1 + (n - df + 0.5) / (df + 0.5));
-        s += (idf * f * 2.2) / (f + 1.2 * (0.25 + (0.75 * this.lens[i]!) / this.avgLen));
-      }
-      if (s > 0) scored.push([it, s]);
-    });
-    return scored
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, limit)
-      .map(([it]) => it);
-  }
-
-  private inWindow(it: WorldItem, now: number, before: number, after: number): boolean {
-    // Calendar items carry their start in the text ("When: Thursday 23 Oct 2026, 12:30"); updatedAt is creation.
-    const m = /When: \w+ (\d+) (\w{3}) (\d{4}), (\d\d):(\d\d)/.exec(it.text);
-    if (!m) return true;
-    const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].indexOf(m[2]!);
-    const t = Date.UTC(Number(m[3]), month, Number(m[1]), Number(m[4]), Number(m[5]));
-    return t >= now - before * DAY && t <= now + after * DAY;
-  }
-
-  /** The item as the connector returns it: headers kept, body cut to the snippet length. */
-  private render(it: WorldItem): ContextItem {
-    let text = it.text;
-    const n = this.profile.snippetChars;
-    if (n > 0) {
-      const split = text.indexOf("\n\n");
-      const head = split >= 0 && /^From: /.test(text) ? text.slice(0, split + 2) : "";
-      const body = head ? text.slice(split + 2) : text;
-      const flat = body.replace(/\s+/g, " ").trim();
-      text = head + (flat.length > n ? `${flat.slice(0, n)}…` : flat);
-    }
-    return { id: it.id, sourceId: it.sourceId, ref: it.ref, title: it.title, text, updatedAt: it.updatedAt };
-  }
+  return { id: it.id, sourceId: it.sourceId, ref: it.ref, title: it.title, text, updatedAt: it.updatedAt };
 }
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -314,7 +345,17 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+/** Indexes for every source of a world (build once per world, share across users). */
+export function simIndexes(world: World): SimIndex[] {
+  return Object.keys(world.sources).map((id) => new SimIndex(id, world));
+}
+
+/** One user's connectors over shared indexes. */
+export function sourcesFor(indexes: SimIndex[], profiles: ProfileSet, timeScale: number, seed: number, track = true) {
+  return indexes.map((ix, i) => new SimSource(ix, profiles[ix.id]!, timeScale, seed * 31 + i, track));
+}
+
 /** One SimSource per source id in the world, all with the same profile set. */
 export function simSources(world: World, profiles: ProfileSet, timeScale: number, seed = 1): SimSource[] {
-  return Object.keys(world.sources).map((id, i) => new SimSource(id, world, profiles[id]!, timeScale, seed * 31 + i));
+  return sourcesFor(simIndexes(world), profiles, timeScale, seed);
 }
