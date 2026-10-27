@@ -98,13 +98,24 @@ export function variantQueries(v: VariantName, text: string, df: Map<string, num
 }
 
 export interface VariantStats {
+  /** Cases the variant applies to (entity variants need an entity in the cue). */
   cases: number;
   calls: number;
+  /** Cases where the variant reached a needed item. */
+  hits: number;
+  /** hits / cases: how well the variant does where it applies. */
   reach: number;
+  /**
+   * hits / every case the connector can answer, counting a case the variant does not apply to as a miss: the figure
+   * to compare variants by, since they are then scored on the same cases.
+   */
+  reachAll: number;
   empty: number;
   errors: number;
-  /** Mean distinct world items a case's calls returned. */
+  /** Mean distinct world items a case's calls returned, counting at most `limit` per call, as a client would keep. */
   returned: number;
+  /** The same before the cap, for servers that ignore or lack a limit. */
+  returnedRaw: number;
   /** Of returned items, the share holding a fact the case needs or may use. */
   relevantShare: number;
   latencyMs: { p50: number; p95: number };
@@ -174,9 +185,7 @@ export async function runConnector(
   let rawError = false;
   let made = 0;
   let fallback = 0;
-  const t0 = performance.now();
-  await c.setup(items, world);
-  const seedMs = Math.round(performance.now() - t0);
+  let seedMs = 0;
   const source = new McpSource({
     id: c.name,
     description: c.semantics,
@@ -192,24 +201,23 @@ export async function runConnector(
   const applicable = cases.filter((k) => k.must.some((f) => holders.has(f)));
   const variants: Record<string, VariantStats> = {};
   const errorSamples: string[] = [];
+  const r = (x: number) => Math.round(x * 1_000) / 1_000;
   try {
+    // Inside the try: a setup that fails half-way still has its containers and seeded files removed.
+    const t0 = performance.now();
+    await c.setup(items, world);
+    seedMs = Math.round(performance.now() - t0);
     for (const v of VARIANTS) {
       const lat: number[] = [];
-      let n = 0,
-        calls = 0,
-        reach = 0,
-        empty = 0,
-        errors = 0,
-        returned = 0,
-        rel = 0,
-        ret = 0;
+      const t = { n: 0, calls: 0, hits: 0, empty: 0, errors: 0, returned: 0, returnedRaw: 0, rel: 0 };
       for (const k of applicable) {
         const queries = variantQueries(v, k.text, df, vocab);
         if (!queries.length) continue;
-        n++;
+        t.n++;
         const got = new Set<string>();
+        let gotRaw = 0;
         for (const text of queries) {
-          calls++;
+          t.calls++;
           const s = performance.now();
           raw = "";
           rawError = false;
@@ -220,37 +228,40 @@ export async function runConnector(
             );
             // McpSource turns a tool error into no items; count it as the error it is.
             if (rawError) {
-              errors++;
+              t.errors++;
               if (errorSamples.length < 5) errorSamples.push(`${v}: tool error: ${raw.slice(0, 300)}`);
             }
-            for (const key of c.identify ? c.identify(raw) : keysIn(raw)) got.add(key);
+            const keys = c.identify ? c.identify(raw) : keysIn(raw);
+            gotRaw += keys.length;
+            // A client keeps at most `limit` results per call, in the server's order, whatever the server sends.
+            for (const key of keys.slice(0, limit)) got.add(key);
             made += res.length;
             fallback += res.filter((it) => it.ref.startsWith("block-")).length;
           } catch (e) {
-            errors++;
+            t.errors++;
             if (errorSamples.length < 5) errorSamples.push(`${v}: ${String(e).slice(0, 300)}`);
           }
           lat.push(performance.now() - s);
         }
         const needed = new Set(k.must.flatMap((f) => [...(holders.get(f) ?? [])]));
         const useful = new Set([...k.must, ...k.ok]);
-        if ([...got].some((key) => needed.has(key))) reach++;
-        if (!got.size) empty++;
-        returned += got.size;
-        for (const key of got) {
-          ret++;
-          if ([...(factsOf.get(key) ?? [])].some((f) => useful.has(f))) rel++;
-        }
+        if ([...got].some((key) => needed.has(key))) t.hits++;
+        if (!got.size) t.empty++;
+        t.returned += got.size;
+        t.returnedRaw += gotRaw;
+        for (const key of got) if ([...(factsOf.get(key) ?? [])].some((f) => useful.has(f))) t.rel++;
       }
-      const r = (x: number) => Math.round(x * 1_000) / 1_000;
       variants[v] = {
-        cases: n,
-        calls,
-        reach: r(reach / Math.max(1, n)),
-        empty: r(empty / Math.max(1, n)),
-        errors,
-        returned: Math.round((returned / Math.max(1, n)) * 10) / 10,
-        relevantShare: r(rel / Math.max(1, ret)),
+        cases: t.n,
+        calls: t.calls,
+        hits: t.hits,
+        reach: r(t.hits / Math.max(1, t.n)),
+        reachAll: r(t.hits / Math.max(1, applicable.length)),
+        empty: r(t.empty / Math.max(1, t.n)),
+        errors: t.errors,
+        returned: Math.round((t.returned / Math.max(1, t.n)) * 10) / 10,
+        returnedRaw: Math.round((t.returnedRaw / Math.max(1, t.n)) * 10) / 10,
+        relevantShare: r(t.rel / Math.max(1, t.returned)),
         latencyMs: { p50: quantile(lat, 0.5), p95: quantile(lat, 0.95) },
       };
     }

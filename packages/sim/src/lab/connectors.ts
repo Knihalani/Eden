@@ -25,6 +25,10 @@ function docker(args: string[]): string {
 export function ensureNetwork(): void {
   const nets = docker(["network", "ls", "--format", "{{.Name}}"]).split("\n");
   if (!nets.includes(NET)) docker(["network", "create", "--internal", NET]);
+  // A network of that name made by someone else may have a route out; the lab's isolation depends on it not.
+  if (docker(["network", "inspect", "-f", "{{.Internal}}", NET]) !== "true") {
+    throw new Error(`docker network ${NET} exists but is not --internal; remove it and rerun`);
+  }
 }
 
 /** Removes every lab container still running (a server that ignored the end of its input, a killed run). */
@@ -50,8 +54,14 @@ function stdio(image: string, opts: { network?: string; mounts?: string[]; env?:
   const args = ["run", "-i", "--rm", "--label", LABEL, "--network", opts.network ?? "none"];
   for (const m of opts.mounts ?? []) args.push("-v", m);
   for (const [k, v] of Object.entries(opts.env ?? {})) args.push("-e", `${k}=${v}`);
-  // Only what the server needs reaches it: no host environment, so no key or token can leak into it.
-  return new StdioClientTransport({ command: "docker", args: [...args, image], env: { PATH: process.env.PATH ?? "" } });
+  // The Docker CLI gets only what locates the daemon; the container gets only the -e values above, so no key or token
+  // from this process's environment reaches a server.
+  const env: Record<string, string> = {};
+  for (const k of ["PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG"]) {
+    const v = process.env[k];
+    if (v !== undefined) env[k] = v;
+  }
+  return new StdioClientTransport({ command: "docker", args: [...args, image], env });
 }
 
 /** Plain HTTP to a lab backend, bypassing any HTTPS proxy (the backend is on a local bridge). */
@@ -195,6 +205,7 @@ export function meilisearch(): LabConnector {
         headers: auth,
         body: JSON.stringify(docs),
       });
+      if (!res.ok) throw new Error(`meilisearch documents ${res.status}: ${(await res.text()).slice(0, 200)}`);
       const { taskUid } = (await res.json()) as { taskUid: number };
       await waitFor(async () => {
         const t = (await (await http(`${base}/tasks/${taskUid}`, { headers: auth })).json()) as { status: string };
@@ -349,6 +360,9 @@ async function lmtp(host: string, port: number, rcpt: string, messages: string[]
     waiter?.resolve();
   });
   sock.on("error", (e) => waiter?.reject(e));
+  sock.on("close", () => waiter?.reject(new Error("LMTP: connection closed")));
+  // A peer that accepts and then goes silent must fail the setup, not hang it.
+  sock.setTimeout(15_000, () => sock.destroy(new Error("LMTP: no reply in 15 s")));
   // One reply: lines up to the one whose code is followed by a space.
   const reply = async (): Promise<string> => {
     for (;;) {
@@ -357,7 +371,10 @@ async function lmtp(host: string, port: number, rcpt: string, messages: string[]
         const end = m.index + m[0].length;
         const r = buf.slice(0, end);
         buf = buf.slice(end);
-        if (!/^[23]/.test(m[1]!)) throw new Error(`LMTP: ${r.trim()}`);
+        if (!/^[23]/.test(m[1]!)) {
+          sock.destroy();
+          throw new Error(`LMTP: ${r.trim()}`);
+        }
         return r;
       }
       await new Promise<void>((resolve, reject) => (waiter = { resolve, reject }));
@@ -536,6 +553,7 @@ export function gitea(indexer: "db" | "bleve"): LabConnector {
         headers: basic,
         body: JSON.stringify({ name: "lab", scopes: ["all"] }),
       });
+      if (!tok.ok) throw new Error(`gitea token ${tok.status}: ${(await tok.text()).slice(0, 200)}`);
       token = ((await tok.json()) as { sha1: string }).sha1;
       const auth = { Authorization: `token ${token}`, "Content-Type": "application/json" };
       const repo = await http(`${base}/user/repos`, {

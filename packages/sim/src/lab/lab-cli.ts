@@ -27,7 +27,12 @@ console.error(`world ${worldSeed}: ${world.items.length} items, ${cases.length} 
 for (const name of names) {
   const make = CONNECTORS[name];
   if (!make) throw new Error(`no connector ${name}; have ${Object.keys(CONNECTORS).join(", ")}`);
-  const report = await runConnector(make(), world, cases, { limit });
-  console.log(JSON.stringify({ world: worldSeed, ...report }));
+  // One connector failing (a backend that will not start, a server that will not install) does not stop the rest.
+  try {
+    const report = await runConnector(make(), world, cases, { limit });
+    console.log(JSON.stringify({ world: worldSeed, ...report }));
+  } catch (e) {
+    console.log(JSON.stringify({ world: worldSeed, connector: name, error: String(e).slice(0, 500) }));
+  }
   removeLabContainers();
 }
