@@ -10,7 +10,8 @@
  *   steady   production-like: 300 users at real pacing and real source latency for 90 s
  *   ramp     saturation: pacing compressed 10x, users doubling from 100 to 3,200, 20 s per step
  *   memory   server memory after warming 250, 500, 1,000 and 2,000 users (forced GC before each reading)
- *   soak     10 minutes with the server clock at 144x (a simulated day: TTLs, idle sessions, daily budgets)
+ *   soak     --minutes 10 with the server clock at 144x (10 minutes = a simulated day: TTLs, idle sessions,
+ *            daily budgets)
  *   faults   300 users; Gmail down for 30 s, then Drive 5x slower for 30 s, then a CRM 429 storm for 30 s
  *   cold     server start-up, first request, first lookup for a new user against a warm one
  */
@@ -104,7 +105,7 @@ async function steady() {
   const s = await startServer(["--time", "1"]);
   try {
     await sim(s.base, "reset");
-    const report = await load(s.base, { users: 300, durationS: 90, rampS: 10 });
+    const report = await load(s.base, { users: 300, durationS: Number(arg("seconds", "90")), rampS: 10 });
     return { scenario: "steady", client: brief(report), server: await sim(s.base, "stats") };
   } finally {
     s.stop();
@@ -161,22 +162,24 @@ async function memory() {
 }
 
 async function soak() {
+  const minutes = Number(arg("minutes", "10"));
   const s = await startServer(["--time", "1", "--accel", "144"]);
   try {
     const samples: Record<string, unknown>[] = [];
-    const run = load(s.base, { users: 300, durationS: 600, rampS: 10, sessionsPerUser: 400 });
+    const run = load(s.base, { users: 300, durationS: minutes * 60, rampS: 10, sessionsPerUser: 400 });
     const t0 = performance.now();
-    while (performance.now() - t0 < 600_000) {
+    while (performance.now() - t0 < minutes * 60_000) {
       await Bun.sleep(60_000);
       const st = await sim(s.base, "gc");
+      const elapsed = performance.now() - t0;
       samples.push({
-        minute: Math.round((performance.now() - t0) / 60_000),
-        simulatedHours: Math.round(((performance.now() - t0) * 144) / 3_600_000),
+        minute: Math.round(elapsed / 60_000),
+        simulatedHours: Math.round((elapsed * 144) / 3_600_000),
         ...st,
       });
     }
     const report = await run;
-    return { scenario: "soak", client: report, samples };
+    return { scenario: "soak", minutes, client: brief(report), samples };
   } finally {
     s.stop();
   }

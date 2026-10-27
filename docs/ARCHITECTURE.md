@@ -35,6 +35,7 @@
 | `packages/server` | HTTP API (tenant API keys, per-tenant rate limit: `EDEN_TENANT_RPS`, `EDEN_TENANT_BURST`), MCP server exposing `ask_context`, config, wiring; an optional worker pool that redacts lookup results (`EDEN_GATE_WORKERS`, D26). |
 | `packages/client` | SDK for agent builders: `EdenClient` (fail-open) and `withContext` for message lists. |
 | `packages/eval` | Scenario harness: precision, recall, false-fire rate, model calls and cost per turn, latency. |
+| `packages/sim` | Simulation: generated worlds and sessions with fact-level ground truth, connectors that behave like real ones, an oracle judge, and the real server under simulated agents over HTTP ([research/simulation.md](research/simulation.md)). Not product code. |
 | `examples/personal-agent` | A minimal agent loop wired to Eden. |
 
 ## Identity and isolation

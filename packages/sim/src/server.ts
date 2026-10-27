@@ -117,6 +117,7 @@ async function main() {
   let lags: number[] = [];
   // Time inside the server per API request (handler entry to response), to tell server time from client queueing.
   let handled: number[] = [];
+  let byKind: Record<string, number[]> = {};
   let expected = performance.now() + 5;
   setInterval(() => {
     const t = performance.now();
@@ -149,6 +150,7 @@ async function main() {
       heapUsedMb: Math.round(mem.heapUsed / 1e5) / 10,
       lagMs: { p50: q(0.5), p99: q(0.99), max: sorted.at(-1) ?? 0 },
       handlerMs: quantiles(handled),
+      handlerMsByKind: Object.fromEntries(Object.entries(byKind).map(([k, xs]) => [k, quantiles(xs)])),
       requests: handled.length,
       users: users.size,
       cachedUsers: cache.userCount,
@@ -169,6 +171,7 @@ async function main() {
         if (url.pathname === "/sim/reset") {
           lags = [];
           handled = [];
+          byKind = {};
           cpu0 = process.cpuUsage();
           since = performance.now();
           counters.decisions = {};
@@ -205,8 +208,13 @@ async function main() {
         return new Response("no such sim route", { status: 404 });
       }
       const t = performance.now();
+      // The event kind, for per-kind handler times (a clone: the handler reads the body itself).
+      const kind =
+        url.pathname === "/v1/events" ? (((await req.clone().json()) as { kind?: string }).kind ?? "?") : url.pathname;
       const res = await handle(req);
-      handled.push(performance.now() - t);
+      const ms = performance.now() - t;
+      handled.push(ms);
+      (byKind[kind] ??= []).push(ms);
       return res;
     },
   });
