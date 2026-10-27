@@ -14,8 +14,7 @@
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import { WorkerPool } from "@eden/primitives";
-import { SourceFanout } from "@eden/sources";
-import { ContextPartner, GATE_MODULE, ItemCache, pooledSanitizer, type Trace } from "../src/index";
+import { ContextPartner, GATE_MODULE, ItemCache, type Trace } from "../src/index";
 import { buildWorkload } from "./workload";
 
 const itemsPerSource = Number(process.argv[2] ?? 1_500);
@@ -42,7 +41,7 @@ const partner = new ContextPartner({
   budget: new Budget(),
   model: null,
   onTrace: (t) => traces.push(t),
-  fanout: pool && new SourceFanout({ sanitize: pooledSanitizer(pool) }),
+  gatePool: pool,
 });
 
 // Event-loop lag probe: a 1 ms interval; lag = how late it fires.

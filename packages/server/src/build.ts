@@ -1,8 +1,8 @@
-import { ContextPartner, GATE_MODULE, ItemCache, pooledSanitizer, type TraceSink } from "@eden/engine";
+import { ContextPartner, GATE_MODULE, ItemCache, type TraceSink } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, OpenRouterModel, type Model } from "@eden/llm";
 import { WorkerPool } from "@eden/primitives";
-import { SourceFanout, type SourceResolver } from "@eden/sources";
+import type { SourceResolver } from "@eden/sources";
 
 export interface BuildOptions {
   sources: SourceResolver;
@@ -22,7 +22,7 @@ export function buildPartner(options: BuildOptions): ContextPartner {
     budget: new Budget(),
     model: options.model === undefined ? OpenRouterModel.fromEnv() : options.model,
     onTrace: options.onTrace,
-    fanout: options.gatePool && new SourceFanout({ sanitize: pooledSanitizer(options.gatePool) }),
+    gatePool: options.gatePool,
   });
 }
 

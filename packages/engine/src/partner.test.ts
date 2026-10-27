@@ -65,6 +65,25 @@ describe("observe", () => {
     expect(kept).not.toContain("eyJzdWIi");
   });
 
+  test("a long token or a private key straddling maxEventChars is dropped whole (review finding 1)", async () => {
+    const sessionsOf = (p: unknown) => JSON.stringify([...(p as { sessions: Map<string, unknown> }).sessions]);
+    const filler = "Dana Lee notes ".repeat(2_000); // 30,000 characters
+    // A 600-character JWT: no whitespace for far more than 256 characters either side of the cut.
+    const payload = "eyJzdWIiOiJkYW5h" + "QGdsb2JleC5jb20i".repeat(30);
+    const jwt = `eyJhbGciOiJIUzI1NiJ9.${payload}.${"c2lnbmF0dXJl".repeat(10)}`;
+    const a = partner({ config: { maxEventChars: 32_000 } });
+    await a.p.observe(ev({ kind: "tool_result", tool: "x", output: `${filler}${"y ".repeat(800)} ${jwt} end` }));
+    expect(sessionsOf(a.p)).not.toContain("qgdsb2jlec5jb20i");
+    const body = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASC" + "\nQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFB".repeat(100);
+    const key = `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`;
+    const b = partner({ config: { maxEventChars: 32_000 } });
+    await b.p.observe(ev({ kind: "tool_result", tool: "x", output: `${filler}${"y ".repeat(500)}${key} end` }));
+    const kept = sessionsOf(b.p);
+    expect(kept).toContain("dana");
+    expect(kept).not.toContain("miievqibadanbgkqhkig9w0baqefaasc");
+    expect(kept).not.toContain("qufbqufbqufbqufbqufbqufbqufbqufb");
+  });
+
   test("chatter and the agent's own messages never trigger a lookup", async () => {
     const { p, traces } = partner();
     expect((await p.observe(ev({ kind: "user_message", text: "thanks!" }))).injection).toBeNull();
@@ -165,6 +184,13 @@ describe("observe", () => {
       ev({ kind: "tool_call", tool: "gmail.send", input: { body: "Hi Dana, re 12% off by 2026-11-30" } }),
     );
     expect(sourceMap.utility(scope, "communication", "crm")).toBeGreaterThan(0.5);
+  });
+
+  test("a message from a user with no cached items allocates no cache for them (branch review)", async () => {
+    const cache = new ItemCache();
+    const { p } = partner({ cache }, []);
+    await p.observe(ev({ kind: "user_message", text: "Globex renewal for Dana Lee" }), { waitMs: 1_000 });
+    expect(cache.userCount).toBe(0);
   });
 
   test("users are isolated: one user's cached items never reach another", async () => {

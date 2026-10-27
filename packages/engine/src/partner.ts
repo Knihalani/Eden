@@ -32,9 +32,10 @@ import {
   type Scope,
 } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
-import { Vocab } from "@eden/primitives";
+import { Vocab, type WorkerPool } from "@eden/primitives";
 import { SourceFanout, type Source, type SourceResolver } from "@eden/sources";
 import { nearDuplicate, sanitizeItem, type ItemCache, type Sketch } from "./cache";
+import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { answerMessages, judgeMessages, parseJudge } from "./judge";
 import { Ledger } from "./ledger";
@@ -63,8 +64,11 @@ export interface PartnerDeps {
   config?: Partial<EngineConfig>;
   onTrace?: TraceSink;
   now?: () => number;
-  /** Source fan-out with its resilience layer; defaults to one that sanitizes with `sanitizeItem`. */
-  fanout?: SourceFanout;
+  /**
+   * A worker pool (`WorkerPool` started on `GATE_MODULE`) that redacts lookup results off the event loop (D26). The
+   * partner builds its source fan-out itself, so redaction before anything is held can never be swapped out.
+   */
+  gatePool?: Pick<WorkerPool, "runOrInline">;
 }
 
 /** An outcome already written to the source map, kept so explicit feedback can correct it. */
@@ -139,7 +143,12 @@ export class ContextPartner {
   constructor(private readonly deps: PartnerDeps) {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
     this.now = deps.now ?? Date.now;
-    this.fanout = deps.fanout ?? new SourceFanout({ sanitize: (items) => items.map((i) => sanitizeItem(i)) });
+    const maxText = deps.cache.maxTextChars;
+    this.fanout = new SourceFanout({
+      sanitize: deps.gatePool
+        ? pooledSanitizer(deps.gatePool, maxText)
+        : (items) => items.map((i) => sanitizeItem(i, maxText)),
+    });
   }
 
   async observe(event: AgentEvent, options: { waitMs?: number } = {}): Promise<ObserveResult> {
@@ -470,7 +479,8 @@ export class ContextPartner {
    */
   private rank(s: Session, cue: Cue, options: { ignoreLedger?: boolean } = {}): Scored[] {
     const cache = this.deps.cache;
-    const vocab = cache.vocabOf(s.scope);
+    const vocab = cache.peekVocab(s.scope);
+    if (!vocab) return []; // No cache for this user: nothing to rank, and nothing allocated.
     const q = termIds(`${cue.text} ${cue.entities.join(" ")}`, vocab, false);
     const query: number[] = [];
     for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
@@ -718,14 +728,23 @@ function eventText(e: AgentEvent): string {
 }
 
 /**
- * The first `max` characters of `s`. A cut text ends at the last whitespace before the cut (or loses its last 256
- * characters): redaction runs after the cut, and half a secret no longer looks like one.
+ * The first `max` characters of `s`, cut so that redaction (which runs after the cut) still sees every secret whole:
+ * the cut drops the whole whitespace-free run it would split (half a JWT no longer looks like one), and a private key
+ * whose END line falls past the cut is dropped from its BEGIN line (alone, the banner is all `redactPem` redacts).
  */
 function head(s: string, max: number): string {
   if (s.length <= max) return s;
-  for (let i = max - 1; i >= 0 && i >= max - 256; i--) if (s.charCodeAt(i) <= 32) return s.slice(0, i);
-  return s.slice(0, Math.max(0, max - 256));
+  let end = max;
+  while (end > 0 && s.charCodeAt(end - 1) > 32) end--;
+  let out = s.slice(0, end);
+  let begin = -1;
+  for (const m of out.matchAll(PEM_BEGIN)) begin = m.index;
+  if (begin >= 0 && !PEM_END.test(out.slice(begin))) out = out.slice(0, begin);
+  return out;
 }
+
+const PEM_BEGIN = /-----BEGIN [A-Z ]*PRIVATE KEY-----/gi;
+const PEM_END = /-----END [A-Z ]*PRIVATE KEY-----/i;
 
 /** Proactive lookups start from what the user or the world says, not from the agent's own words. */
 function wantsLookup(e: AgentEvent, text: string, terms: Uint32Array, vocab: Vocab): boolean {

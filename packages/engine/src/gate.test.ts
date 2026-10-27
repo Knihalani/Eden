@@ -3,7 +3,7 @@ import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import { WorkerPool } from "@eden/primitives";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
-import { SourceFanout, StaticSource } from "@eden/sources";
+import { StaticSource } from "@eden/sources";
 import { ItemCache, sanitizeItem } from "./cache";
 import { GATE_MODULE, pooledSanitizer } from "./gate";
 import { ContextPartner } from "./partner";
@@ -42,7 +42,7 @@ describe("pooledSanitizer", () => {
     expect(pool.stats().completed).toBe(3);
   });
 
-  test("fails closed: an item whose task fails is dropped, never kept ungated", async () => {
+  test("fails closed: one failed task rejects the whole result, so nothing partial is cached", async () => {
     let n = 0;
     const flaky = {
       runOrInline: <T>(_fn: string, input: unknown) =>
@@ -50,8 +50,8 @@ describe("pooledSanitizer", () => {
           ? Promise.reject(new Error("deadline"))
           : Promise.resolve(sanitizeItem((input as { item: ContextItem }).item) as T),
     };
-    const gated = await pooledSanitizer(flaky)([item("a", "one"), item("b", `two ${KEY}`), item("c", "three")]);
-    expect(gated.map((i) => i.ref)).toEqual(["a", "c"]);
+    const gated = pooledSanitizer(flaky)([item("a", "one"), item("b", `two ${KEY}`), item("c", "three")]);
+    await expect(gated).rejects.toThrow(/gate failed/);
   });
 
   test("a partner whose fan-out gates through the pool delivers redacted context", async () => {
@@ -65,7 +65,7 @@ describe("pooledSanitizer", () => {
       cache: new ItemCache(),
       budget: new Budget(),
       model: null,
-      fanout: new SourceFanout({ sanitize: pooledSanitizer(pool) }),
+      gatePool: pool,
     });
     const event = { tenantId: "t", userId: "u", sessionId: "s", at: 1, kind: "user_message" } as const;
     const r = await p.observe({ ...event, text: "Draft a note to Dana Lee about the Globex renewal" } as AgentEvent, {
