@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { SourceMap } from "./source-map";
 
 const alice = { tenantId: "t", userId: "alice" };
@@ -74,5 +77,29 @@ describe("Thompson routing", () => {
       );
     };
     expect(route(3)).toEqual(route(3));
+  });
+
+  test("outcomes are written behind but every read sees them, and they reach the file", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "eden-map-")), "map.db");
+    const map = new SourceMap(path, { explore: false });
+    map.recordOutcome(alice, "chat", "crm", true);
+    expect(map.utility(alice, "chat", "crm")).toBe(2 / 3); // Read flushes first.
+    map.recordOutcome(alice, "chat", "crm", true);
+    map.recordOutcome(alice, "chat", "gmail", false);
+    await Bun.sleep(30); // The timer writes them.
+    const other = new SourceMap(path, { explore: false });
+    expect(other.utility(alice, "chat", "crm")).toBe(3 / 4);
+    expect(other.utility(alice, "chat", "gmail")).toBe(1 / 3);
+    map.recordOutcome(bob, "chat", "crm", true);
+    map.close(); // Close flushes.
+    expect(other.utility(bob, "chat", "crm")).toBe(2 / 3);
+    other.close();
+  });
+
+  test("forget drops outcomes still buffered", () => {
+    const map = new SourceMap(":memory:", { explore: false });
+    map.recordOutcome(alice, "chat", "crm", true);
+    map.forget(alice);
+    expect(map.utility(alice, "chat", "crm")).toBe(0.5);
   });
 });
