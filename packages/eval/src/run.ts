@@ -68,6 +68,7 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
     const who = { tenantId: "eval", userId: scenario.id };
     let clock = Date.UTC(2026, 9, 1);
     for (const session of scenario.sessions) {
+      const traceStart = traces.length;
       const deliveries: string[][] = [];
       for (const turn of session.turns) {
         turns++;
@@ -88,32 +89,32 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
         partner.takePending({ ...who, sessionId: session.id }).flatMap((i) => i.citations.map((c) => c.itemId)),
       );
 
-      // A delivery may land one event late (the slow path), so an item delivered at turn i is explained by the
-      // labels of turn i or i-1. Precision and false fires judge each delivery against both; recall looks for each
-      // expected item at its own turn or the next.
-      const expectedAt = (i: number): string[] => {
-        const e = session.turns[i]?.expect;
-        return e && e !== "silent" ? e.items : [];
-      };
-      deliveries.forEach((ids, i) => {
-        const explained = new Set([...expectedAt(i), ...expectedAt(i - 1)]);
-        const scored = session.turns[i]?.expect !== undefined || session.turns[i - 1]?.expect !== undefined;
-        if (!scored) return;
-        delivered += ids.length;
-        deliveredExpected += ids.filter((id) => explained.has(id)).length;
+      // Score each delivered item against the turn that caused it, not the turn it arrived at: the slow path
+      // may land one event late, and that must not change whether a delivery counts as a false fire. The engine's
+      // traces say which turn (1-based, one per event) chose each item.
+      const origin = new Map<string, number>();
+      for (const t of traces.slice(traceStart)) {
+        if (t.sessionId !== session.id || !["fast", "sources", "model"].includes(t.decision)) continue;
+        for (const id of t.itemIds) origin.set(id, t.turn - 1);
+      }
+      const byOrigin: string[][] = session.turns.map(() => []);
+      deliveries.forEach((ids, arrivedAt) => {
+        for (const id of ids) byOrigin[Math.min(origin.get(id) ?? arrivedAt, byOrigin.length - 1)]!.push(id);
       });
       session.turns.forEach((turn, i) => {
         if (!turn.expect) return;
         scoredTurns++;
+        const got = byOrigin[i]!;
+        delivered += got.length;
         if (turn.expect === "silent") {
           silentTurns++;
-          const lateForPrevious = new Set(expectedAt(i - 1));
-          if (deliveries[i]!.some((id) => !lateForPrevious.has(id))) falseFires++;
+          if (got.length > 0) falseFires++;
           return;
         }
-        const window = new Set([...deliveries[i]!, ...deliveries[i + 1]!]);
-        expected += turn.expect.items.length;
-        expectedFound += turn.expect.items.filter((id) => window.has(id)).length;
+        const want = new Set(turn.expect.items);
+        deliveredExpected += got.filter((id) => want.has(id)).length;
+        expected += want.size;
+        expectedFound += [...want].filter((id) => got.includes(id)).length;
       });
       await partner.observe({ ...who, sessionId: session.id, at: clock++, kind: "session_end" });
     }

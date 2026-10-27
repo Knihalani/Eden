@@ -11,8 +11,8 @@ export function renderPacket(items: ContextItem[], options: { maxBytes: number }
   const footer = "</context>";
   let bytes = byteLength(lines.join("\n")) + byteLength(footer) + 2;
   for (const item of items) {
-    const title = item.title ? `${item.title}: ` : "";
-    let line = `- [${item.sourceId}] ${title}${oneLine(item.text)}`;
+    const title = item.title ? `${inert(item.title)}: ` : "";
+    let line = `- [${item.sourceId}] ${title}${inert(oneLine(item.text))}`;
     const room = options.maxBytes - bytes - 1;
     if (room < 40) break;
     if (byteLength(line) > room) line = truncateBytes(line, room - 1) + "…";
@@ -25,7 +25,15 @@ export function renderPacket(items: ContextItem[], options: { maxBytes: number }
 
 /** An ask answer composed by the model, in the same envelope: it is derived from source text, so it is data too. */
 export function renderAnswer(answer: string): string {
-  return `${HEADER}\n${answer.trim()}\n</context>`;
+  return `${HEADER}\n${inert(answer.trim())}\n</context>`;
+}
+
+/**
+ * Makes wrapped text unable to open or close the envelope: every `<` becomes `&lt;`. Source text and model text are
+ * untrusted, and a literal `</context>` in an email would otherwise end the data envelope early (D19).
+ */
+export function inert(text: string): string {
+  return text.replace(/</g, "&lt;");
 }
 
 export function citationsOf(items: ContextItem[]): Citation[] {
