@@ -21,6 +21,11 @@ export class Singleflight<K, V> {
     return this.flights.size;
   }
 
+  /** True if a call for `key` is in flight (a new `run` would join it). */
+  has(key: K): boolean {
+    return this.flights.has(key);
+  }
+
   run(key: K, fn: (signal: AbortSignal) => Promise<V>, signal?: AbortSignal): Promise<V> {
     if (signal?.aborted) return Promise.reject(signal.reason);
     let flight = this.flights.get(key);

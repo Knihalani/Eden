@@ -49,6 +49,10 @@ export class OpenRouterModel implements Model {
       ...(request.json ? { response_format: { type: "json_object" } } : {}),
       provider: { data_collection: "deny", zdr: this.options.zdr ?? true, allow_fallbacks: true },
       usage: { include: true },
+      // Sticky routing: OpenRouter keeps a session_id on one provider endpoint (10 min idle), so a stable prompt
+      // prefix is served from that endpoint's cache
+      // (docs/research/fast-primitives-notes/latency_and_prompt_caching.md).
+      ...(request.cacheKey ? { session_id: request.cacheKey.slice(0, 256) } : {}),
     };
     const res = await (this.options.fetch ?? fetch)(
       `${this.options.baseUrl ?? "https://openrouter.ai/api/v1"}/chat/completions`,

@@ -83,11 +83,41 @@ const SECRET_TOKEN_PATTERNS = [
   // it is still a key after a word character, as in token%3Deden_local_… or x_eden_local_….
   String.raw`eden_local_[0-9a-f]{8,}`,
   String.raw`\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`,
-  // The whole block, banner to END line. Matching only the banner left the
-  // base64 body sitting in the clear right under a "[REDACTED]" hat.
-  String.raw`-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----`,
-  String.raw`-----BEGIN [A-Z ]*PRIVATE KEY-----`,
+  // Private-key blocks are redacted by `redactPem`, a linear pass: the lazy `BEGIN[\s\S]*?END` alternative that
+  // used to sit here rescanned to the end of the text from every BEGIN with no END after it (quadratic: 25 s at
+  // 1 MB; docs/research/architecture-alternatives.md).
 ] as const;
+
+const PEM_BEGIN = /-----BEGIN [A-Z ]*PRIVATE KEY-----/gi;
+const PEM_END = /-----END [A-Z ]*PRIVATE KEY-----/gi;
+const PEM_ANY = /-----BEGIN [A-Z ]*PRIVATE KEY-----/i;
+
+/**
+ * Redacts private-key blocks, banner to END line (matching only the banner left the base64 body in the clear under a
+ * "[REDACTED]" hat); a banner with no END after it is redacted alone. Same result as the old lazy regex, in one pass:
+ * each END search starts where the previous block ended, and once no END is left, later banners are not searched for
+ * one again.
+ */
+export function redactPem(s: string): string {
+  if (s.indexOf("-----") < 0) return s;
+  PEM_BEGIN.lastIndex = 0;
+  let out = "";
+  let cursor = 0;
+  let endsLeft = true;
+  for (let m = PEM_BEGIN.exec(s); m !== null; m = PEM_BEGIN.exec(s)) {
+    let stop = m.index + m[0].length;
+    if (endsLeft) {
+      PEM_END.lastIndex = stop;
+      const e = PEM_END.exec(s);
+      if (e === null) endsLeft = false;
+      else stop = e.index + e[0].length;
+    }
+    out += s.slice(cursor, m.index) + REDACTED;
+    cursor = stop;
+    PEM_BEGIN.lastIndex = stop;
+  }
+  return cursor === 0 ? s : out + s.slice(cursor);
+}
 
 /** Global, for replacing every occurrence. */
 const SECRET_INLINE = new RegExp(SECRET_TOKEN_PATTERNS.join("|"), "gi");
@@ -268,7 +298,7 @@ export function redactString(s: string): string {
   // second time — and a hand-written gate is exactly what drifted out of step
   // with the replacer.
   SECRET_INLINE.lastIndex = 0;
-  const t = redactDashedSk(s).replace(SECRET_INLINE, REDACTED);
+  const t = redactDashedSk(redactPem(s)).replace(SECRET_INLINE, REDACTED);
 
   let out = "";
   let cursor = 0;
@@ -287,7 +317,7 @@ function stringHasSecret(s: string): boolean {
   // Shortest token pattern is `Bearer a` (8). Assignment scan needs `=` or `:`.
   // Plain short strings (synth ids, tags) cannot match either.
   if (s.length < 8 && s.indexOf("=") < 0 && s.indexOf(":") < 0) return false;
-  return SECRET_ANY.test(s) || hasDashedSk(s) || scanAssignments(s, null);
+  return SECRET_ANY.test(s) || PEM_ANY.test(s) || hasDashedSk(s) || scanAssignments(s, null);
 }
 
 /**

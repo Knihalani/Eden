@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { Bm25Index } from "./bm25";
+import { Vocab } from "@eden/primitives";
+import { ItemCache } from "./cache";
 import { classifySituation } from "./situation";
-import { contentTerms, extractEntities, isChatter } from "./text";
+import { contentTerms, distinctTermIds, extractEntities, isChatter, isChatterTerms } from "./text";
 
 describe("extractEntities", () => {
   test("finds names, emails, handles, ids and quoted titles", () => {
@@ -17,12 +18,13 @@ describe("extractEntities", () => {
 
 describe("chatter and terms", () => {
   test("acknowledgements carry no information need", () => {
-    for (const t of ["ok", "Thanks!", "sounds good", "👍"]) expect(isChatter(t)).toBe(true);
-    expect(isChatter("ok, move it to Friday")).toBe(false);
+    const v = new Vocab();
+    for (const t of ["ok", "Thanks!", "sounds good", "👍"]) expect(isChatter(t, v)).toBe(true);
+    expect(isChatter("ok, move it to Friday", v)).toBe(false);
   });
 
   test("contentTerms drops stopwords and possessives", () => {
-    expect(contentTerms("What's Dana's flight to Berlin?")).toEqual(["dana", "flight", "berlin"]);
+    expect(contentTerms("What's Dana's flight to Berlin?", new Vocab())).toEqual(["dana", "flight", "berlin"]);
   });
 
   test("situations are coarse labels", () => {
@@ -32,16 +34,42 @@ describe("chatter and terms", () => {
   });
 });
 
-describe("Bm25Index", () => {
-  test("ranks the matching document first and normalizes scores", () => {
-    const idx = new Bm25Index();
-    idx.add("a", "Acme renewal: three year term, 12% discount");
-    idx.add("b", "Team offsite in Lisbon");
-    idx.add("c", "Acme support ticket about SSO");
-    const hits = idx.search("acme renewal discount", 3);
-    expect(hits[0]!.id).toBe("a");
+describe("ItemCache search", () => {
+  test("ranks the matching item first by coverage, and forgets removed items", () => {
+    const scope = { tenantId: "t", userId: "u" };
+    const cache = new ItemCache();
+    const item = (ref: string, title: string, text: string) => ({
+      id: `crm:${ref}`,
+      sourceId: "crm",
+      ref,
+      title,
+      text,
+    });
+    cache.put(scope, [
+      item("a", "Acme renewal", "three year term, 12% discount"),
+      item("b", "Offsite", "Team offsite in Lisbon"),
+      item("c", "Acme support", "ticket about SSO"),
+    ]);
+    const vocab = cache.vocabOf(scope);
+    const q = ["acme", "renewal", "discount"].map((t) => vocab.lookup(t));
+    const hits = cache.search(scope, q, q.length, 3);
+    expect(hits[0]!.item.id).toBe("crm:a");
     expect(hits[0]!.coverage).toBeGreaterThan(hits[1]!.coverage);
-    idx.remove("a");
-    expect(idx.search("renewal", 3)).toEqual([]);
+    expect(cache.containsAll(scope, hits[0]!.doc, [vocab.lookup("acme")], 1)).toBe(true);
+    cache.forget(scope, "crm");
+    expect(cache.search(scope, q, q.length, 3)).toEqual([]);
+  });
+});
+
+describe("distinctTermIds", () => {
+  test("one id per term, in first-occurrence order, across calls and vocabularies", () => {
+    const a = new Vocab();
+    const b = new Vocab();
+    const ids = distinctTermIds("Dana's flight, dana FLIGHT to Berlin; Berlin", a);
+    expect([...ids].map((id) => a.term(id))).toEqual(["dana", "flight", "to", "berlin"]);
+    expect([...distinctTermIds("berlin berlin dana", a)]).toEqual([ids[3]!, ids[0]!]);
+    expect([...distinctTermIds("zeta zeta alpha", b)].map((id) => b.term(id))).toEqual(["zeta", "alpha"]);
+    expect(isChatterTerms("ok then", distinctTermIds("ok then", a), a)).toBe(true);
+    expect(isChatterTerms("ok, Berlin", distinctTermIds("ok, Berlin", a), a)).toBe(false);
   });
 });

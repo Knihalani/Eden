@@ -38,6 +38,63 @@ function partner(extra: Partial<PartnerDeps> = {}, sources: Source[] = [crm, cal
 }
 
 describe("observe", () => {
+  test("only the head of a large event is read (maxEventChars)", async () => {
+    const filler = "lorem ipsum dolor ".repeat(55_000); // ~1 MB, the protocol's limit
+    const { p } = partner({ config: { maxEventChars: 32_000 } });
+    const late = await p.observe(ev({ kind: "user_message", text: `${filler} Dana Lee and the Globex renewal?` }), {
+      waitMs: 1_000,
+    });
+    expect(late.injection).toBeNull(); // The cue sits past the cap: never read.
+    const t0 = performance.now();
+    const early = await p.observe(
+      ev({ kind: "user_message", sessionId: "s9", text: `Dana Lee and the Globex renewal? ${filler}` }),
+      { waitMs: 1_000 },
+    );
+    expect(early.injection?.citations.map((c) => c.itemId)).toContain("crm:deal-9");
+    expect(performance.now() - t0).toBeLessThan(250);
+  });
+
+  test("a secret cut by maxEventChars is dropped, not stored in part", async () => {
+    // A JWT cut before its signature no longer looks like one to the redactor, and its payload is readable.
+    const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkYW5hQGdsb2JleC5jb20ifQ.c2lnbmF0dXJlc2lnbmF0dXJl";
+    const text = `note for Dana Lee: ${jwt} done`;
+    const { p } = partner({ config: { maxEventChars: text.indexOf(".c2ln") } });
+    await p.observe(ev({ kind: "user_message", text }));
+    const kept = JSON.stringify([...(p as unknown as { sessions: Map<string, { window: string[] }> }).sessions]);
+    expect(kept).toContain("Dana Lee");
+    expect(kept).not.toContain("eyJzdWIi");
+  });
+
+  test("a long token or a private key straddling maxEventChars is dropped whole (review finding 1)", async () => {
+    const sessionsOf = (p: unknown) => JSON.stringify([...(p as { sessions: Map<string, unknown> }).sessions]);
+    const filler = "Dana Lee notes ".repeat(2_000); // 30,000 characters
+    // A 600-character JWT: no whitespace for far more than 256 characters either side of the cut.
+    const payload = "eyJzdWIiOiJkYW5h" + "QGdsb2JleC5jb20i".repeat(30);
+    const jwt = `eyJhbGciOiJIUzI1NiJ9.${payload}.${"c2lnbmF0dXJl".repeat(10)}`;
+    const a = partner({ config: { maxEventChars: 32_000 } });
+    await a.p.observe(ev({ kind: "tool_result", tool: "x", output: `${filler}${"y ".repeat(800)} ${jwt} end` }));
+    expect(sessionsOf(a.p)).not.toContain("qgdsb2jlec5jb20i");
+    const body = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASC" + "\nQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFB".repeat(100);
+    const key = `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`;
+    const b = partner({ config: { maxEventChars: 32_000 } });
+    await b.p.observe(ev({ kind: "tool_result", tool: "x", output: `${filler}${"y ".repeat(500)}${key} end` }));
+    const kept = sessionsOf(b.p);
+    expect(kept).toContain("dana");
+    expect(kept).not.toContain("miievqibadanbgkqhkig9w0baqefaasc");
+    expect(kept).not.toContain("qufbqufbqufbqufbqufbqufbqufbqufb");
+  });
+
+  test("minified JSON past maxEventChars keeps its head, still cut before a token (branch review)", async () => {
+    const jwt = `eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkYW5h${"QGdsb2JleC5jb20i".repeat(30)}.c2lnbmF0dXJl`;
+    const rows = Array.from({ length: 1_500 }, (_, i) => `{"name":"Dana Lee","order":"OPS-${i}"}`).join(",");
+    const output = `[${rows},{"token":"${jwt}"}]`;
+    const { p } = partner({ config: { maxEventChars: rows.length + 40 } });
+    await p.observe(ev({ kind: "tool_result", tool: "db.query", output }));
+    const kept = JSON.stringify([...(p as unknown as { sessions: Map<string, unknown> }).sessions]);
+    expect(kept).toContain("ops-1499");
+    expect(kept).not.toContain("qgdsb2jlec5jb20i");
+  });
+
   test("chatter and the agent's own messages never trigger a lookup", async () => {
     const { p, traces } = partner();
     expect((await p.observe(ev({ kind: "user_message", text: "thanks!" }))).injection).toBeNull();
@@ -117,6 +174,34 @@ describe("observe", () => {
       ev({ kind: "tool_call", tool: "gmail.send", input: { body: "Hi Dana, re 12% off by 2026-11-30" } }),
     );
     expect(sourceMap.utility(scope, "communication", "crm")).toBeGreaterThan(0.5);
+  });
+
+  test("event text never grows the user's cache vocabulary; a session's is rebuilt past its cap", async () => {
+    const sourceMap = new SourceMap();
+    const cache = new ItemCache();
+    const { p } = partner({ sourceMap, cache, config: { maxSessionTerms: 300, maxSeenTokens: 200 } });
+    await p.observe(ev({ kind: "user_message", text: "Email Dana Lee about the Globex renewal" }), { waitMs: 1_000 });
+    const cached = cache.vocabOf(scope).size;
+    // Tool output full of ids: every one a new term.
+    for (let i = 0; i < 4; i++) {
+      const ids = Array.from({ length: 250 }, (_, j) => `id${i}x${j}q`).join(" ");
+      await p.observe(ev({ kind: "tool_result", tool: "db.query", output: ids }));
+    }
+    expect(cache.vocabOf(scope).size).toBe(cached);
+    const session = (p as unknown as { sessions: Map<string, { vocab: { size: number } }> }).sessions;
+    expect([...session.values()][0]!.vocab.size).toBeLessThan(300 + 250 + 50); // Cap, one event, the injection.
+    // The injection is still awaiting use across rebuilds, and its use is still recognised.
+    await p.observe(
+      ev({ kind: "tool_call", tool: "gmail.send", input: { body: "Hi Dana, re 12% off by 2026-11-30" } }),
+    );
+    expect(sourceMap.utility(scope, "communication", "crm")).toBeGreaterThan(0.5);
+  });
+
+  test("a message from a user with no cached items allocates no cache for them (branch review)", async () => {
+    const cache = new ItemCache();
+    const { p } = partner({ cache }, []);
+    await p.observe(ev({ kind: "user_message", text: "Globex renewal for Dana Lee" }), { waitMs: 1_000 });
+    expect(cache.userCount).toBe(0);
   });
 
   test("users are isolated: one user's cached items never reach another", async () => {

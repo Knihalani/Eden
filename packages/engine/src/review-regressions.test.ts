@@ -96,7 +96,9 @@ describe("finding 3: forget and session end stop in-flight work", () => {
     p.forget(scope);
     g.release();
     await Bun.sleep(10);
-    expect(cache.search(scope, "globex renewal", 5)).toEqual([]);
+    const v = cache.vocabOf(scope);
+    const q = ["globex", "renewal"].map((t) => v.lookup(t)).filter((id) => id >= 0);
+    expect(cache.search(scope, q, q.length, 5)).toEqual([]);
     expect(p.takePending(scope)).toEqual([]);
     expect(p.sessionCount).toBe(0);
   });
@@ -168,7 +170,7 @@ describe("finding 6: a failing slow path is silent, not an unhandled rejection",
 describe("finding 7 and 8: bounded, redacted, content-free state", () => {
   test("searching for an unknown user allocates nothing", () => {
     const cache = new ItemCache();
-    cache.search({ tenantId: "t", userId: "nobody" }, "x", 5);
+    cache.search({ tenantId: "t", userId: "nobody" }, [1], 1, 5);
     cache.forget({ tenantId: "t", userId: "nobody" }, "crm");
     expect(cache.userCount).toBe(0);
   });
@@ -178,7 +180,9 @@ describe("finding 7 and 8: bounded, redacted, content-free state", () => {
     cache.put({ tenantId: "victim", userId: "v" }, [item("renewal")]);
     for (const userId of ["a", "b", "c"]) cache.put({ tenantId: "other", userId }, [item("renewal")]);
     expect(cache.userCount).toBe(3);
-    expect(cache.search({ tenantId: "victim", userId: "v" }, "renewal", 1)).toHaveLength(1);
+    const victim = { tenantId: "victim", userId: "v" };
+    const id = cache.vocabOf(victim).lookup("renewal");
+    expect(cache.search(victim, [id], 1, 1)).toHaveLength(1);
   });
 
   test("an item id is rebuilt from the redacted ref (round 2, finding B)", () => {
@@ -294,3 +298,39 @@ describe("isolation: the same user id in two tenants shares nothing", () => {
 function item(ref: string): ContextItem {
   return { id: `crm:${ref}`, sourceId: "crm", ref, title: ref, text: ref };
 }
+
+describe("near-duplicates (dedup integration)", () => {
+  const original =
+    "Hi Sam, the Globex renewal is due 2026-11-30 and Dana Lee wants a 12% discount on the three year term. " +
+    "Can you confirm the pricing before Thursday?";
+  const mail = new StaticSource("gmail", "mail", [
+    { ref: "m1", title: "Globex renewal", text: original },
+    {
+      ref: "m2",
+      title: "Re: Globex renewal",
+      text: `Thanks!\n\nOn Tue, Oct 27, 2026 at 9:14 AM Dana Lee <dana@globex.example> wrote:\n> ${original}`,
+    },
+  ]);
+  const synced = new StaticSource("drive", "docs", [{ ref: "d1", title: "Globex renewal", text: original }]);
+
+  test("one packet never carries an email and the reply that only quotes it", async () => {
+    const { p } = make({}, [mail]);
+    const r = await p.observe(ev({ kind: "user_message", text: "Globex renewal for Dana Lee?" }), { waitMs: 1_000 });
+    expect(r.injection?.citations).toHaveLength(1);
+  });
+
+  test("a synced copy of a delivered item is not delivered again in the session", async () => {
+    const only = new StaticSource("gmail", "mail", [{ ref: "m1", title: "Globex renewal", text: original }]);
+    let available: Source[] = [only];
+    const { p } = make({ sources: async () => available, config: { cueCooldownTurns: 0 } });
+    const first = await p.observe(ev({ kind: "user_message", text: "Globex renewal for Dana Lee?" }), {
+      waitMs: 1_000,
+    });
+    expect(first.injection?.citations.map((c) => c.itemId)).toEqual(["gmail:m1"]);
+    available = [only, synced]; // the copy only becomes reachable after the original was delivered
+    const again = await p.observe(ev({ kind: "user_message", text: "the Globex renewal terms from Dana Lee" }), {
+      waitMs: 1_000,
+    });
+    expect(again.injection?.citations.map((c) => c.itemId) ?? []).not.toContain("drive:d1");
+  });
+});

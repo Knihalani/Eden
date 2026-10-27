@@ -9,9 +9,12 @@
  *   GET  /healthz
  *
  * Auth: `Authorization: Bearer <key>`; the key fixes the tenant, and a body naming another tenant is refused.
+ * Each tenant is rate limited (GCRA, `ServerConfig.tenantRatePerSec` / `tenantBurst`): past it, 429 with Retry-After,
+ * so one tenant cannot starve the others.
  * Errors are `{error}` with a 4xx for the caller's mistakes; nothing the caller sends can produce a 500.
  */
 import type { ContextPartner } from "@eden/engine";
+import { Gcra } from "@eden/primitives";
 import { checkAsk, checkEvent, isId } from "@eden/protocol";
 import type { ServerConfig } from "./config";
 
@@ -19,7 +22,11 @@ type Json = Record<string, unknown>;
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const fail = (status: number, error: string) => json({ error }, status);
 
-export function createHandler(partner: ContextPartner, config: Pick<ServerConfig, "keys" | "dev">) {
+export function createHandler(
+  partner: ContextPartner,
+  config: Pick<ServerConfig, "keys" | "dev"> & Partial<Pick<ServerConfig, "tenantRatePerSec" | "tenantBurst">>,
+) {
+  const limiter = new Gcra({ ratePerSec: config.tenantRatePerSec ?? 200, burst: config.tenantBurst ?? 400 });
   const tenantOf = (req: Request): string | null => {
     const key = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
     if (key && config.keys.has(key)) return config.keys.get(key)!;
@@ -34,6 +41,13 @@ export function createHandler(partner: ContextPartner, config: Pick<ServerConfig
     if (req.method !== "POST") return fail(405, "method not allowed");
     const tenant = tenantOf(req);
     if (!tenant) return fail(401, "missing or unknown API key");
+    const waitMs = limiter.take(tenant);
+    if (waitMs > 0) {
+      return Response.json(
+        { error: "rate limited" },
+        { status: 429, headers: { "retry-after": String(Math.ceil(waitMs / 1_000)) } },
+      );
+    }
     let body: Json;
     try {
       const parsed: unknown = await req.json();
