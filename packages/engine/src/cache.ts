@@ -5,6 +5,7 @@
  * Bounded three ways: items per user (oldest evicted), users held (least recently used dropped), and item text
  * length. Expired items are swept on write, so they stop shaping the index's idf.
  */
+import { createHash } from "node:crypto";
 import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import { Bm25Index, type Hit } from "./bm25";
@@ -88,8 +89,12 @@ export class ItemCache {
       const ref = sanitizeForStore(raw.ref);
       const item: ContextItem = {
         ...raw,
-        // The id embeds the ref, and travels to traces, citations and the ledger: rebuild it from the redacted ref.
-        id: itemId(raw.sourceId, ref),
+        // The id embeds the ref and travels to traces, citations and the ledger. A ref that held a secret gets an id
+        // from a hash of the raw ref instead: never the secret, and two refs that redact alike stay distinct.
+        id:
+          ref === raw.ref
+            ? raw.id
+            : itemId(raw.sourceId, `h-${createHash("sha256").update(raw.ref).digest("hex").slice(0, 16)}`),
         ref,
         title: sanitizeForStore(raw.title.slice(0, 500)),
         text: sanitizeForStore(raw.text.slice(0, this.limits.maxTextChars)),
