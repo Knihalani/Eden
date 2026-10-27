@@ -51,6 +51,7 @@
       "name": "@eden/graph",
       "version": "0.0.0",
       "dependencies": {
+        "@eden/primitives": "workspace:*",
         "@eden/protocol": "workspace:*",
       },
     },

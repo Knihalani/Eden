@@ -13,3 +13,33 @@ export { AimdLimiter, type LimiterOptions, type Outcome } from "./limiter";
 export { Histogram, RollingHistogram } from "./histogram";
 export { SparseIndex, type SearchResults, type SparseIndexOptions } from "./sparse-index";
 export { truncateUtf8, utf8Length } from "./utf8";
+export {
+  betaInc,
+  betaIncInv,
+  binomCdf,
+  clopperPearsonLower,
+  clopperPearsonUpper,
+  log1pExp,
+  logBeta,
+  logGamma,
+  minTrialsToCertify,
+  sigmoid,
+} from "./stats";
+export { Xoshiro128 } from "./random";
+export {
+  expectedCalibrationError,
+  fires,
+  fitPlatt,
+  ISOTONIC,
+  Isotonic,
+  Logistic,
+  logLoss,
+  PLATT,
+  selectCalibrator,
+  thresholdForFalseFireRate,
+  thresholdForPrecision,
+  type CalibratorChoice,
+  type Threshold,
+} from "./calibrate";
+export { BetaBandit, ipsValue } from "./bandit";
+export { jaccardMatrix, Packer } from "./pack";
