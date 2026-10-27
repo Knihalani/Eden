@@ -40,6 +40,12 @@ export interface EngineConfig {
   maxCues: number;
   /** Rough cost reserved per model call before the real cost is known. */
   estimatedCallUsd: number;
+  /**
+   * Characters of an event the engine reads (the head; the rest is ignored). The protocol accepts up to 1,000,000,
+   * and redaction, tokenizing and usage checks are linear in it: without this, one large tool result costs every
+   * session on the process milliseconds of CPU, and the cue it yields is no better than the head's.
+   */
+  maxEventChars: number;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -62,4 +68,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   maxSeenTokens: 5_000,
   maxCues: 200,
   estimatedCallUsd: 0.0005,
+  maxEventChars: 32_000,
 };

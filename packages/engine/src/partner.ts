@@ -147,7 +147,7 @@ export class ContextPartner {
     }
     const s = this.session(event);
     s.turn++;
-    const text = sanitizeForStore(eventText(event));
+    const text = sanitizeForStore(head(eventText(event), this.config.maxEventChars));
     this.checkUsage(s, event, text);
     this.remember(s, event, text);
 
@@ -683,6 +683,16 @@ function eventText(e: AgentEvent): string {
     default:
       return "";
   }
+}
+
+/**
+ * The first `max` characters of `s`. A cut text ends at the last whitespace before the cut (or loses its last 256
+ * characters): redaction runs after the cut, and half a secret no longer looks like one.
+ */
+function head(s: string, max: number): string {
+  if (s.length <= max) return s;
+  for (let i = max - 1; i >= 0 && i >= max - 256; i--) if (s.charCodeAt(i) <= 32) return s.slice(0, i);
+  return s.slice(0, Math.max(0, max - 256));
 }
 
 /** Proactive lookups start from what the user or the world says, not from the agent's own words. */

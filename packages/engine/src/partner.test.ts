@@ -38,6 +38,33 @@ function partner(extra: Partial<PartnerDeps> = {}, sources: Source[] = [crm, cal
 }
 
 describe("observe", () => {
+  test("only the head of a large event is read (maxEventChars)", async () => {
+    const filler = "lorem ipsum dolor ".repeat(55_000); // ~1 MB, the protocol's limit
+    const { p } = partner({ config: { maxEventChars: 32_000 } });
+    const late = await p.observe(ev({ kind: "user_message", text: `${filler} Dana Lee and the Globex renewal?` }), {
+      waitMs: 1_000,
+    });
+    expect(late.injection).toBeNull(); // The cue sits past the cap: never read.
+    const t0 = performance.now();
+    const early = await p.observe(
+      ev({ kind: "user_message", sessionId: "s9", text: `Dana Lee and the Globex renewal? ${filler}` }),
+      { waitMs: 1_000 },
+    );
+    expect(early.injection?.citations.map((c) => c.itemId)).toContain("crm:deal-9");
+    expect(performance.now() - t0).toBeLessThan(250);
+  });
+
+  test("a secret cut by maxEventChars is dropped, not stored in part", async () => {
+    // A JWT cut before its signature no longer looks like one to the redactor, and its payload is readable.
+    const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkYW5hQGdsb2JleC5jb20ifQ.c2lnbmF0dXJlc2lnbmF0dXJl";
+    const text = `note for Dana Lee: ${jwt} done`;
+    const { p } = partner({ config: { maxEventChars: text.indexOf(".c2ln") } });
+    await p.observe(ev({ kind: "user_message", text }));
+    const kept = JSON.stringify([...(p as unknown as { sessions: Map<string, { window: string[] }> }).sessions]);
+    expect(kept).toContain("Dana Lee");
+    expect(kept).not.toContain("eyJzdWIi");
+  });
+
   test("chatter and the agent's own messages never trigger a lookup", async () => {
     const { p, traces } = partner();
     expect((await p.observe(ev({ kind: "user_message", text: "thanks!" }))).injection).toBeNull();
