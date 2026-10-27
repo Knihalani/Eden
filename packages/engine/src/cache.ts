@@ -5,7 +5,7 @@
  * Bounded three ways: items per user (oldest evicted), users held (least recently used dropped), and item text
  * length. Expired items are swept on write, so they stop shaping the index's idf.
  */
-import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
+import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import { Bm25Index, type Hit } from "./bm25";
 
@@ -21,20 +21,25 @@ class UserCache {
 
 export interface CacheLimits {
   maxItemsPerUser: number;
-  maxUsers: number;
+  /**
+   * Users held per tenant. Past this, that tenant's least recently written user is dropped: one tenant's traffic
+   * never evicts another tenant's cache.
+   */
+  maxUsersPerTenant: number;
   ttlMs: number;
   maxTextChars: number;
 }
 
 export const DEFAULT_CACHE_LIMITS: CacheLimits = {
   maxItemsPerUser: 2_000,
-  maxUsers: 10_000,
+  maxUsersPerTenant: 10_000,
   ttlMs: 24 * 3_600_000,
   maxTextChars: 8_000,
 };
 
 export class ItemCache {
   private readonly users = new Map<string, UserCache>();
+  private readonly perTenant = new Map<string, number>();
   private readonly limits: CacheLimits;
 
   constructor(limits: Partial<CacheLimits> = {}) {
@@ -48,13 +53,31 @@ export class ItemCache {
 
   private touch(scope: Scope): UserCache {
     const key = scopeKey(scope);
-    let u = this.users.get(key);
-    if (u)
+    const existing = this.users.get(key);
+    if (existing) {
       this.users.delete(key); // Re-insert: Map order is least recently written first.
-    else u = new UserCache();
+      this.users.set(key, existing);
+      return existing;
+    }
+    if ((this.perTenant.get(scope.tenantId) ?? 0) >= this.limits.maxUsersPerTenant) {
+      const prefix = `${scope.tenantId}/`;
+      for (const k of this.users.keys()) {
+        if (!k.startsWith(prefix)) continue;
+        this.dropUser(k, scope.tenantId);
+        break;
+      }
+    }
+    const u = new UserCache();
     this.users.set(key, u);
-    while (this.users.size > this.limits.maxUsers) this.users.delete(this.users.keys().next().value as string);
+    this.perTenant.set(scope.tenantId, (this.perTenant.get(scope.tenantId) ?? 0) + 1);
     return u;
+  }
+
+  private dropUser(key: string, tenantId: string): void {
+    if (!this.users.delete(key)) return;
+    const n = (this.perTenant.get(tenantId) ?? 1) - 1;
+    if (n <= 0) this.perTenant.delete(tenantId);
+    else this.perTenant.set(tenantId, n);
   }
 
   /** Adds items, redacting every text field first. Returns the stored (redacted) copies. */
@@ -62,9 +85,12 @@ export class ItemCache {
     const u = this.touch(scope);
     this.sweep(u, now);
     const stored = items.map((raw) => {
+      const ref = sanitizeForStore(raw.ref);
       const item: ContextItem = {
         ...raw,
-        ref: sanitizeForStore(raw.ref),
+        // The id embeds the ref, and travels to traces, citations and the ledger: rebuild it from the redacted ref.
+        id: itemId(raw.sourceId, ref),
+        ref,
         title: sanitizeForStore(raw.title.slice(0, 500)),
         text: sanitizeForStore(raw.text.slice(0, this.limits.maxTextChars)),
         url: raw.url === undefined ? undefined : sanitizeForStore(raw.url),
@@ -111,7 +137,7 @@ export class ItemCache {
 
   forget(scope: Scope, sourceId?: string): void {
     if (!sourceId) {
-      this.users.delete(scopeKey(scope));
+      this.dropUser(scopeKey(scope), scope.tenantId);
       return;
     }
     const u = this.peek(scope);
