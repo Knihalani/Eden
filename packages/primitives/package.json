@@ -1,0 +1,11 @@
+{
+  "name": "@eden/primitives",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Direction-agnostic, benchmarked building blocks: hashing, text normalization and tokenization, interning, multi-pattern matching, top-k, bounded caches, and latency/resilience primitives.",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
