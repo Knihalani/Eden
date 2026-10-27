@@ -93,6 +93,19 @@ describe("SparseIndex", () => {
     expect(idx.containsAll(d, [9], 1)).toBe(false);
   });
 
+  test("term ids far past the scratch size, mid-document, keep exact counts", () => {
+    const idx = new SparseIndex();
+    const terms = Uint32Array.from([3, 3, 50_000, 3, 1_000_000, 50_000]);
+    const d = idx.add(terms, terms.length);
+    expect([...idx.termsOf(d)]).toEqual([3, 50_000, 1_000_000]);
+    const res = idx.search([3, 50_000, 1_000_000], 3, 1);
+    expect(res.matched[0]).toBe(3);
+    const ref = new SparseIndex();
+    const other = ref.add(Uint32Array.from([0, 0, 1, 0, 2, 1]), 6);
+    expect(res.scores[0]!).toBeCloseTo(ref.search([0, 1, 2], 3, 1).scores[0]!, 5);
+    void other;
+  });
+
   test("empty index, empty query and unknown terms return nothing", () => {
     const idx = new SparseIndex();
     expect(idx.search([1], 1, 5).count).toBe(0);

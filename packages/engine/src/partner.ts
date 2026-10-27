@@ -499,6 +499,7 @@ export class ContextPartner {
       { timeoutMs: this.config.sourceTimeoutMs, signal: s.abort.signal },
     );
     if (s.closed) return chosen.length; // Forgotten or ended mid-search: keep nothing.
+    const mentions: { sourceId: string; entities: string[] }[] = [];
     for (const o of outcomes) {
       const stored = this.deps.cache.put(s.scope, o.items, this.now());
       for (const item of stored) {
@@ -506,9 +507,10 @@ export class ContextPartner {
           .filter((e) => PERSISTABLE_KINDS.has(e.kind))
           .slice(0, 20)
           .map((e) => e.text);
-        this.deps.sourceMap.recordMentions(s.scope, item.sourceId, entities, this.now());
+        mentions.push({ sourceId: item.sourceId, entities });
       }
     }
+    if (mentions.length > 0) this.deps.sourceMap.recordMentionsMany(s.scope, mentions, this.now());
     return chosen.length;
   }
 

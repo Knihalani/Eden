@@ -76,8 +76,14 @@ export class SparseIndex {
   private stamp = new Int32Array(64);
   private touched = new Int32Array(64);
   private queryNo = 0;
-  private readonly counts = new Map<number, number>();
-  private readonly termSet = new Set<number>();
+  // Insert scratch, indexed by term id: per-field counts tagged with a stamp (no clearing, no hashing), the doc-level
+  // seen stamp, and the touched-term lists. Replaced a Map and a Set per insert (bench/index.bench.ts).
+  private tfCount = new Uint32Array(1_024);
+  private tfStamp = new Uint32Array(1_024);
+  private docStamp = new Uint32Array(1_024);
+  private stampNo = 0;
+  private fieldTouched = new Uint32Array(1_024);
+  private docTouched = new Uint32Array(1_024);
 
   constructor(options: SparseIndexOptions = {}) {
     this.k1 = options.k1 ?? 1.2;
@@ -103,30 +109,47 @@ export class SparseIndex {
   addFields(fieldTerms: Uint32Array[], counts: number[]): number {
     const F = this.fields;
     const doc = this.allocateDoc();
-    const termSet = this.termSet;
-    termSet.clear();
+    if (this.stampNo > 0xffff_fff0) {
+      // Stamps are Uint32: before the counter wraps, clear them so an old stamp can never equal a new one.
+      this.tfStamp.fill(0);
+      this.docStamp.fill(0);
+      this.stampNo = 0;
+    }
+    const docMark = ++this.stampNo;
+    let docUnique = 0;
     for (let f = 0; f < F; f++) {
       const terms = fieldTerms[f];
       const n = terms === undefined ? 0 : (counts[f] ?? 0);
-      const tf = this.counts;
-      tf.clear();
+      const fieldMark = ++this.stampNo;
+      let fieldUnique = 0;
       for (let i = 0; i < n; i++) {
         const t = terms![i]!;
-        tf.set(t, (tf.get(t) ?? 0) + 1);
+        if (t >= this.tfCount.length) this.growScratch(t);
+        if (this.tfStamp[t] !== fieldMark) {
+          this.tfStamp[t] = fieldMark;
+          this.tfCount[t] = 0;
+          this.fieldTouched[fieldUnique++] = t;
+        }
+        this.tfCount[t]!++;
+        if (this.docStamp[t] !== docMark) {
+          this.docStamp[t] = docMark;
+          this.docTouched[docUnique++] = t;
+        }
       }
-      for (const [t, c] of tf) {
-        termSet.add(t);
+      for (let j = 0; j < fieldUnique; j++) {
+        const t = this.fieldTouched[j]!;
+        const c = this.tfCount[t]!;
         const key = t * F + f;
         this.ensureKey(key);
         this.append(key, doc, c > 65_535 ? 65_535 : c);
       }
       this.lens[doc * F + f] = n;
       this.totalLens[f]! += n;
-      this.totalPostings += tf.size;
+      this.totalPostings += fieldUnique;
     }
-    const unique = Uint32Array.from(termSet);
+    const unique = this.docTouched.slice(0, docUnique);
     unique.sort();
-    for (let i = 0; i < unique.length; i++) {
+    for (let i = 0; i < docUnique; i++) {
       const t = unique[i]!;
       this.ensureTerm(t);
       this.df[t]!++;
@@ -135,6 +158,22 @@ export class SparseIndex {
     this.alive[doc] = 1;
     this.live++;
     return doc;
+  }
+
+  /** Grows the insert scratch so term id `t` fits; lists are sized like the arrays (a field has ≤ that many terms). */
+  private growScratch(t: number): void {
+    let size = this.tfCount.length;
+    while (size <= t) size *= 2;
+    const grow = (a: Uint32Array) => {
+      const b = new Uint32Array(size);
+      b.set(a);
+      return b;
+    };
+    this.tfCount = grow(this.tfCount);
+    this.tfStamp = grow(this.tfStamp);
+    this.docStamp = grow(this.docStamp);
+    this.fieldTouched = grow(this.fieldTouched); // may grow mid-field: keep what this field touched so far
+    this.docTouched = grow(this.docTouched);
   }
 
   remove(doc: number): void {

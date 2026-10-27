@@ -57,13 +57,23 @@ export class SourceMap {
    * (names, handles, ids): never quoted phrases, URLs or item refs, which can carry content.
    */
   recordMentions(scope: Scope, sourceId: string, entities: string[], now = Date.now()): void {
+    this.recordMentionsMany(scope, [{ sourceId, entities }], now);
+  }
+
+  /**
+   * As `recordMentions` for many items in one transaction: a lookup's results are recorded together (one transaction
+   * per item cost ~43 µs each; packages/engine/bench/pipeline.bench.ts).
+   */
+  recordMentionsMany(scope: Scope, rows: { sourceId: string; entities: string[] }[], now = Date.now()): void {
     const upsert = this.db.query(`
       INSERT INTO mention (scope, entity, source_id, count, last_seen) VALUES (?, ?, ?, 1, ?)
       ON CONFLICT (scope, entity, source_id) DO UPDATE SET count = count + 1, last_seen = excluded.last_seen
     `);
     const key = scopeKey(scope);
     this.db.transaction(() => {
-      for (const e of new Set(entities.map(normalizeEntity))) if (e) upsert.run(key, e, sourceId, now);
+      for (const row of rows) {
+        for (const e of new Set(row.entities.map(normalizeEntity))) if (e) upsert.run(key, e, row.sourceId, now);
+      }
     })();
   }
 
