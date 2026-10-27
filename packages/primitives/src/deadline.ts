@@ -14,6 +14,7 @@ export class Deadline {
 
   /** A deadline `ms` from now, also cancelled if `parent` aborts. */
   static after(ms: number, parent?: AbortSignal): Deadline {
+    if (!Number.isFinite(ms)) return new Deadline(Infinity, parent ?? new AbortController().signal); // no timeout
     const timeout = AbortSignal.timeout(Math.max(0, ms));
     return new Deadline(Date.now() + ms, parent ? AbortSignal.any([parent, timeout]) : timeout);
   }

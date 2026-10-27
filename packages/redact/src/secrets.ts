@@ -330,7 +330,8 @@ export function secretRules(): SecretRule[] {
   const withRegex = config.rules.filter((rule): rule is GitleaksRule & { regex: string } => Boolean(rule.regex));
   compiled = [
     ...withRegex.map((rule) => gitleaksRule(rule, global)),
-    ...PROVIDER_SHAPES.map(([id, shape]) => plain(id, SHAPE_LITERALS[id]!, (text) => matchSpans(shape, text))),
+    // A shape without literals gets none: an empty prefilter means the rule always runs (safe, only slower).
+    ...PROVIDER_SHAPES.map(([id, shape]) => plain(id, SHAPE_LITERALS[id] ?? [], (text) => matchSpans(shape, text))),
     plain("eden-keyword", SECRET_WORDS, (text) => matchSpans(KEYWORD_RULE, text)),
     plain("eden-url-userinfo", ["://"], (text) => matchSpans(URL_USERINFO, text)),
     plain("eden-entropy-keyword", SECRET_WORDS, entropyWithKeyword),
@@ -344,9 +345,10 @@ export function secretRules(): SecretRule[] {
 
 /**
  * One multi-pattern pass over the text for every rule's prefilter words (Aho–Corasick, `@eden/primitives`), instead
- * of an `includes` scan per word: 8.7x less time on a 2 KB email (docs/research/primitives.md). The matcher folds
- * case and accents, so it reports a superset of `text.toLowerCase().includes(word)`: a rule it lets through still
- * applies its own regex, so results are unchanged (secrets.test.ts checks this against the per-word scan).
+ * of an `includes` scan per word: the whole gate runs 5–8x faster on a 2 KB email across measured runs
+ * (bench/gate.bench.ts in @eden/primitives; docs/research/primitives.md). The matcher folds case and accents, so it
+ * reports a superset of `text.toLowerCase().includes(word)`: a rule it lets through still applies its own regex, so
+ * results are unchanged (prefilter.test.ts checks this against the per-word scan).
  */
 let prefilter: { matcher: MultiMatcher; rulesOf: number[][]; always: number[] } | undefined;
 
@@ -358,7 +360,8 @@ function candidates(text: string): SecretRule[] {
     const rulesOf: number[][] = words.map(() => []);
     const always: number[] = [];
     rules.forEach((rule, r) => {
-      if (rule.prefilter.length === 0) always.push(r);
+      // No words, or an empty word (which `includes` would always find): the rule always runs.
+      if (rule.prefilter.length === 0 || rule.prefilter.some((word) => word.length === 0)) always.push(r);
       for (const word of new Set(rule.prefilter)) rulesOf[index.get(word)!]!.push(r);
     });
     prefilter = { matcher: new MultiMatcher(words), rulesOf, always };

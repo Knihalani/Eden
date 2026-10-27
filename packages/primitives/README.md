@@ -24,7 +24,7 @@ choices they drove are in [docs/research/primitives.md](../../docs/research/prim
 ## Rules this package follows (measured, not folklore)
 
 - **No default parameters in hot functions.** On JavaScriptCore a default parameter in a loop function cost 5x
-  (14.1 µs vs 2.8 µs per 2 KB).
+  (13.49 µs vs 2.72 µs per 2 KB; `bench/jsc.bench.ts`).
 - **Typed arrays over objects** for anything per item (heap, cache slots, interner): no GC pauses in p99.
 - **No per-call allocation** on hot paths (`S3FifoCache.get` returns the value, not `{value, stale}`).
 - **Bulk calls over per-item calls** where JavaScriptCore does not inline (`TopK.pushDense` is ~3.4x faster than a

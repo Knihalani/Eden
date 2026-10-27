@@ -6,12 +6,13 @@
  * keys, so if it returns soon it goes straight to main. Main is FIFO with lazy promotion: an entry read since it last
  * reached the head is reinserted (its 2-bit frequency decremented) instead of evicted. One-hit wonders (most lookup
  * results) are filtered quickly and reads only bump a counter. On skewed traces the hit ratio beats LRU by 15–35%
- * relative (bench/cache.bench.ts; numbers in docs/research/primitives.md).
+ * relative (bench/compare/cache.compare.ts; numbers in docs/research/primitives.md).
  *
  * Layout. Entries live in parallel typed arrays indexed by slot (struct of arrays), FIFOs are Int32Array rings of
  * slots, freed slots go on a free list: a steady-state get/set allocates nothing, so there are no GC pauses in p99.
- * A deleted entry is only marked dead; its slot is freed when it reaches its FIFO's head, so a slot is never in two
- * ring positions at once and each ring needs no more room than there are slots.
+ * A deleted or expired entry is only marked dead; its slot is freed when it reaches its FIFO's head, so a slot is never
+ * in two ring positions at once. Dead slots are also counted, and when they outnumber live ones (delete or TTL churn
+ * while under budget, when eviction never runs) the rings are compacted: memory stays proportional to live entries.
  *
  * Budget. Each entry has a cost in bytes (the caller's estimate, default 1, making the budget an entry count).
  *
@@ -61,12 +62,13 @@ export class S3FifoCache<K, V> {
   private readonly index = new Map<K, number>();
   private keys: (K | undefined)[] = [];
   private values: (V | undefined)[] = [];
-  private bytesOf: Int32Array;
+  private bytesOf: Float64Array;
   private freq: Uint8Array;
   private flags: Uint8Array;
   private staleAt: Float64Array;
   private expiresAt: Float64Array;
   private free: number[] = [];
+  private dead = 0;
   private slots = 0;
   private readonly small: Ring;
   private readonly main: Ring;
@@ -92,7 +94,7 @@ export class S3FifoCache<K, V> {
     this.staleAfterMs = Math.min(options.staleAfterMs ?? Infinity, this.expireAfterMs);
     this.now = options.now ?? Date.now;
     const initial = 64;
-    this.bytesOf = new Int32Array(initial);
+    this.bytesOf = new Float64Array(initial);
     this.freq = new Uint8Array(initial);
     this.flags = new Uint8Array(initial);
     this.staleAt = new Float64Array(initial);
@@ -148,9 +150,13 @@ export class S3FifoCache<K, V> {
     const expireAfter = ttl?.expireAfterMs ?? this.expireAfterMs;
     const staleAfter = Math.min(ttl?.staleAfterMs ?? this.staleAfterMs, expireAfter);
     const now = expireAfter === Infinity && staleAfter === Infinity ? 0 : this.now();
-    const size = Math.max(1, bytes | 0);
-    if (size > this.maxBytes) return; // Larger than the whole cache: never admitted.
+    const size = Math.max(1, Math.floor(Number.isFinite(bytes) ? bytes : Number.MAX_SAFE_INTEGER));
     const existing = this.index.get(key);
+    if (size > this.maxBytes) {
+      // Larger than the whole cache: never admitted, and an older value for the key must not keep being served.
+      if (existing !== undefined) this.kill(existing);
+      return;
+    }
     if (existing !== undefined) {
       const delta = size - this.bytesOf[existing]!;
       if ((this.flags[existing]! & IN_MAIN) !== 0) this.mainBytes += delta;
@@ -210,9 +216,28 @@ export class S3FifoCache<K, V> {
     this.flags[slot]! &= ~LIVE;
     this.keys[slot] = undefined;
     this.values[slot] = undefined;
+    if (++this.dead > Math.max(64, this.index.size)) this.compact();
+  }
+
+  /** Drops dead slots from both rings and frees them. O(slots), amortized over at least as many kills. */
+  private compact(): void {
+    for (const ring of [this.small, this.main]) {
+      const n = ring.length;
+      for (let i = 0; i < n; i++) {
+        const slot = ring.shift();
+        if ((this.flags[slot]! & LIVE) !== 0) ring.push(slot);
+        else this.release(slot);
+      }
+    }
+  }
+
+  /** Slots allocated (live, dead or free), for leak tests. */
+  get slotCount(): number {
+    return this.slots;
   }
 
   private release(slot: number): void {
+    if ((this.flags[slot]! & LIVE) === 0) this.dead--;
     this.flags[slot] = 0;
     this.keys[slot] = undefined;
     this.values[slot] = undefined;
@@ -227,11 +252,6 @@ export class S3FifoCache<K, V> {
   }
 
   private grow(n: number): void {
-    const i32 = (a: Int32Array) => {
-      const b = new Int32Array(n);
-      b.set(a);
-      return b;
-    };
     const u8 = (a: Uint8Array) => {
       const b = new Uint8Array(n);
       b.set(a);
@@ -242,7 +262,7 @@ export class S3FifoCache<K, V> {
       b.set(a);
       return b;
     };
-    this.bytesOf = i32(this.bytesOf);
+    this.bytesOf = f64(this.bytesOf);
     this.freq = u8(this.freq);
     this.flags = u8(this.flags);
     this.staleAt = f64(this.staleAt);

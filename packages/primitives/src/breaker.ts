@@ -28,6 +28,7 @@ export class CircuitBreaker {
   private readonly now: () => number;
   private openedAt = -Infinity;
   private probing = false;
+  private probeAt = -Infinity;
   private mode: BreakerState = "closed";
 
   constructor(options: BreakerOptions = {}) {
@@ -47,12 +48,18 @@ export class CircuitBreaker {
     return this.mode;
   }
 
-  /** Whether a call may go now. In half-open, exactly one probe is allowed until it reports back. */
+  /**
+   * Whether a call may go now. In half-open, one probe is allowed until it reports back; a probe that never reports
+   * (its caller was aborted) is forgotten after `openMs`, so the breaker cannot stay half-open forever.
+   */
   allow(): boolean {
     const state = this.state;
     if (state === "closed") return true;
-    if (state === "open" || this.probing) return false;
+    if (state === "open") return false;
+    const now = this.now();
+    if (this.probing && now - this.probeAt < this.openMs) return false;
     this.probing = true;
+    this.probeAt = now;
     return true;
   }
 

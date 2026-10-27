@@ -22,14 +22,20 @@ export class Gcra<K = string> {
   private readonly now: () => number;
   private ops = 0;
 
+  private readonly burst: number;
+
   constructor(options: GcraOptions) {
+    if (!(options.ratePerSec > 0) || !Number.isFinite(options.ratePerSec)) throw new Error("ratePerSec must be > 0");
+    if (!(options.burst >= 1)) throw new Error("burst must be >= 1");
+    this.burst = options.burst;
     this.interval = 1_000 / options.ratePerSec;
     this.tolerance = this.interval * Math.max(0, options.burst - 1);
     this.now = options.now ?? Date.now;
   }
 
-  /** 0 if `cost` requests may go now (and records them), else milliseconds until they may. */
+  /** 0 if `cost` requests may go now (and records them), else milliseconds until they may; Infinity if never. */
   take(key: K, cost = 1): number {
+    if (cost > this.burst) return Infinity; // More than the bucket holds: no wait makes it fit.
     const now = this.now();
     if ((++this.ops & 1023) === 0) this.prune(now);
     const tat = Math.max(this.tat.get(key) ?? now, now);

@@ -3,37 +3,44 @@
 What `@eden/primitives` is built from and why, with every number as the benchmark printed it. Environment: Bun 1.4.4
 (JavaScriptCore) and Node 22.22.0 (V8), 4 vCPU Intel Xeon @ 2.10 GHz, shared cloud VM; 2026-10-27. Benchmarks are in
 `packages/primitives/bench/` (harness: warmup, 200 timed batches, mean / p50 / p99 per op). Text is a deterministic
-email-like corpus (`corpus()` in the harness), made flat (not a rope) as JSON or network input would be. Expect ±30%
-run to run on this VM; the ratios are stable, the absolute numbers less so.
+email-like corpus (`corpus()` in the harness). Expect ±30% run to run on this VM (an independent reviewer re-ran
+them and saw that much); the ratios are stable, the absolute numbers less so. Every table names its benchmark.
 
 ## Where the time went before
 
 Per event, the engine tokenizes and extracts entities from the event text and redacts it; per live lookup, it does
-the same for each of ~32 returned items. On a benign 2 KB email (first measurement, before any change):
+the same for each of ~32 returned items. On a benign 2 KB email (`bench/baseline.bench.ts`; the gate "before" is
+reconstructed from the same rules with the old per-keyword filter):
 
-| Step | µs/op |
-|---|---|
-| `sanitizeForStore` (secret gate) | 107.4 |
-| `contentTerms` (engine tokenizer, Unicode regex) | 75.3 |
-| `extractEntities` | 85.2 |
-| `String.prototype.normalize("NFKC")` | 0.1 |
-| `toLowerCase` | 3.8 |
-| `Bun.hash` (wyhash) | 0.2 |
-| `TextEncoder.encode` | 3.1 |
+| Step | mean | p50 |
+|---|---|---|
+| Secret gate, before | 131.49 µs | 137.22 µs |
+| `contentTerms` (engine tokenizer, Unicode regex) | 51.51 µs | 52.01 µs |
+| `extractEntities` (engine) | 48.15 µs | 41.04 µs |
+| `String.prototype.normalize("NFKC")` | 48.9 ns | 34.3 ns |
+| `toLowerCase` | 3.36 µs | 2.81 µs |
+| `Bun.hash` (wyhash) | 163.4 ns | 135.8 ns |
+| `TextEncoder.encode` | 1.18 µs | 349.1 ns |
 
-So ~270 µs of CPU per item, ~8.5 ms per 32-item lookup: tokenizing and redaction were the targets, not hashing or
-normalization (native and nearly free).
+So ~230 µs of CPU per item, ~7 ms per 32-item lookup: the gate and tokenizing were the targets; hashing and
+normalization are native and nearly free. (`extractEntities` is retrieval-specific and was left alone.)
 
 ## JavaScriptCore findings that shaped the code
 
-| Finding | Measurement (2 KB) |
+`bench/jsc.bench.ts`, one 2 KB string:
+
+| Variant of the same FNV loop | mean |
 |---|---|
-| A default parameter (`end = s.length`) in a hot loop function | 14.12 µs vs 2.82 µs without (5x) |
-| Hoisting `length` and fusing the multiply | 3.66 → 2.82 µs |
-| Floor for any JS scan: reading every char with `charCodeAt` | 2.10 µs (~1 ns/char) |
-| Strings built with `+=` are ropes; `charCodeAt` over a rope | ~6 ns/char until flattened |
-| `TopK.push` per candidate is not inlined into the caller's loop | 47.8 µs vs 14.2 µs with a bulk `pushDense` (10k candidates) |
-| Returning `{ value, stale }` from a cache `get` | allocation per hit; p99 GC spikes (5.6 µs) |
+| Default parameters (`start = 0, end = s.length`) | 13.49 µs |
+| Length hoisted, no defaults | 3.50 µs |
+| Explicit range, fused `Math.imul(h ^ c, p)` | 2.72 µs |
+| Floor: read every char, sum only | 1.94 µs |
+| Same read over a string built with `+=` (a rope) | 1.69 µs |
+
+A default parameter cost 5x; ropes cost nothing measurable once read (JavaScriptCore flattens them). Two more, from
+the benchmarks below: a per-candidate `TopK.push` is not inlined into the caller's loop (bulk `pushDense` is 3.4x
+faster on Bun), and returning a `{ value, stale }` object per cache hit gave 4.6 µs p99 GC spikes that the
+allocation-free version does not have.
 
 ## Hashing (`hash.ts`)
 
@@ -61,11 +68,19 @@ FNV-1a computed inline while scanning, since a native call would need a `slice` 
 | 16 KB: `contentTerms` | 650.67 µs | 609.50 µs | 1684.63 µs |
 | 16 KB: `tokenizeInto` | 127.29 µs | 121.93 µs | 200.33 µs |
 
-4.8x faster at 2 KB, 5.1x at 16 KB, and accented text costs the same as ASCII. How it got there, measured on the same
-2 KB text (298 terms): scan + hash alone 4.2–4.6 µs; + interning against string objects 13.4 µs; against a character
-arena 12.1 µs; with a 64-bit two-lane fingerprint and no character comparison 8.6 µs. Accented terms first went
-through `normalize` + regex per term (29.95 µs for the 10% non-ASCII text); a lazily filled per-character fold table
-(NFKD, marks dropped, lowercased, cached per code unit) brought that to 11.54 µs.
+4.8x faster at 2 KB, 5.1x at 16 KB, and accented text costs the same as ASCII. How it got there
+(`bench/vocab.bench.ts`, same 2 KB text, 298 terms):
+
+| Interning design | mean |
+|---|---|
+| Scan + hash only | 4.56 µs |
+| + intern, comparing against string objects | 17.15 µs |
+| + intern, comparing against a character arena | 15.31 µs |
+| + intern, two-lane fingerprint, no comparison (`Vocab`) | 6.30 µs |
+
+Accented terms first went through `normalize` + regex per term (29.95 µs for the 10% non-ASCII text, an earlier run);
+a lazily filled per-character fold table (NFKD, marks dropped, lowercased, cached per code unit) brought that to the
+ASCII cost.
 
 Semantics (one definition for every consumer): a term starts with a letter or digit, continues through letters,
 digits, combining marks, `'`, `_`, `-`; folded; trailing possessive and punctuation trimmed; one-character terms
@@ -89,11 +104,14 @@ JIT-compiled regex alternation by 5.5x at 2 KB.
 Same rules, same findings (`prefilter.test.ts` compares every rule's result against the old per-keyword filter on
 318 texts with and without secrets). Keyword-less rules got literals every match contains (`sk-`, `://`, …):
 
-| Text | before (`includes` per keyword) | after (Aho–Corasick prefilter) |
-|---|---|---|
-| 256 B | 36.33 µs | 7.33 µs |
-| 2 KB | 124.53 µs (p50 127.82) | 15.11 µs (p50 13.21) |
-| 16 KB | 1638.95 µs | 195.35 µs |
+| Text | before (`includes` per keyword) | after (Aho–Corasick prefilter) | speed-up |
+|---|---|---|---|
+| 256 B | 36.33 µs | 7.33 µs | 5.0x |
+| 2 KB | 124.53 µs (p50 127.82) | 15.11 µs (p50 13.21) | 8.2x |
+| 16 KB | 1638.95 µs | 195.35 µs | 8.4x |
+
+(`bench/gate.bench.ts`.) The reviewer's independent run measured 2 KB 110.4 → 20.6 µs (5.4x), 256 B 4.4x, 16 KB 11.2x:
+the gain is 4–11x depending on run and size, not one number.
 
 What remains at 2 KB is the matcher (~6 µs) and the structural redactor `redact()` (~9 µs).
 
@@ -105,8 +123,8 @@ What remains at 2 KB is the matcher (~6 µs) and the structural redactor `redact
 | `pushDense` | 16.00 µs | 54.33 µs |
 | `Array.sort` + `slice` | 1844.13 µs | 2906.23 µs |
 
-(Node runs: same code bundled with `bun build --target=node`.) An earlier Node run measured 17.25 µs per-candidate;
-Node's numbers were the noisier of the two here.
+(`bench/topk.bench.ts`; Node: the same file bundled with `bun build --target=node`.) An earlier Node run measured
+17.25 µs per candidate: Node's numbers were the noisier of the two here.
 
 ## Cache (`cache.ts`): S3-FIFO vs LRU
 
@@ -118,7 +136,8 @@ Hit ratio, 400k requests:
 | Zipf 1.0, 100k keys, cache 1k | 0.5964 | 0.5068 | 0.5068 |
 | 50% one-hit wonders + Zipf hot set, cache 1k | 0.3659 | 0.2721 | 0.2721 |
 
-Throughput (get, set on miss; Zipf 0.9, cache 10k): `S3FifoCache` mean 176.2 ns (p50 116.6, p99 2.22 µs);
+(`bench/compare/cache.compare.ts`, which needs `lru-cache` installed outside the repo.) Throughput (get, set on miss;
+Zipf 0.9, cache 10k): `S3FifoCache` mean 176.2 ns (p50 116.6, p99 2.22 µs);
 `lru-cache@11` 181.1 ns (p50 150.8, p99 1.16 µs); a `Map` LRU 4.59 µs. The first object-per-entry version was 255 ns
 with 4.6 µs p99; struct-of-arrays slots and ring buffers removed the allocation. `lru-cache` stays a fine choice where
 LRU is enough; S3-FIFO is kept for its 15–35% relative hit-ratio gain on skewed and one-hit-heavy traffic, which is
@@ -126,16 +145,19 @@ what lookup results look like.
 
 ## Bun vs Node for the same TypeScript
 
-| Primitive | Bun 1.4.4 | Node 22 |
-|---|---|---|
-| `tokenizeInto` 2 KB ASCII | 13.42 µs | 11.93 µs |
-| `tokenizeInto` 2 KB +10% non-ASCII | 11.83 µs | 12.02 µs |
-| `MultiMatcher.markHits` 244 kw, 2 KB | 7.32 µs | 9.27 µs |
-| `S3FifoCache` get/set | 383.9 ns | 328.5 ns |
+`bench/runtime.sh` (the same file under both runtimes; Node runs a `bun build --target=node` bundle):
 
-Within noise of each other for this code: the runtime is not the lever; algorithms and data layout are. Bun stays
-(native hashing, `bun:sqlite`, test runner, no build step). Native code (Rust) is evaluated separately in
-[language-choice.md](language-choice.md).
+| Primitive | Bun 1.4.4 | Node 22.22.0 |
+|---|---|---|
+| `tokenizeInto` 2 KB ASCII | 15.69 µs | 13.94 µs |
+| `tokenizeInto` 2 KB +10% non-ASCII | 10.61 µs | 14.32 µs |
+| `MultiMatcher.markHits` 11 keywords, 2 KB | 6.86 µs | 9.55 µs |
+| `S3FifoCache` get/set | 476.1 ns | 376.3 ns |
+| `TopK(10)` `pushDense` over 10k | 20.18 µs | 68.20 µs |
+
+Neither runtime wins across the board; differences are within 1.5x except top-k. The runtime is not the lever;
+algorithms and data layout are. Bun stays (native hashing, `bun:sqlite`, test runner, no build step). Native code
+(Rust) is evaluated separately in [language-choice.md](language-choice.md).
 
 ## Library choices
 

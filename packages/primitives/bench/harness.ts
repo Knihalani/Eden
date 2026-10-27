@@ -68,7 +68,7 @@ export function corpus(bytes: number, options: { nonAscii?: boolean; seed?: numb
     else w = words[Math.floor(rnd() * words.length)]!;
     out += w + (rnd() < 0.1 ? ". " : " ");
   }
-  // `+=` builds a rope; real input (JSON.parse, network) is a flat string. Flatten, or charCodeAt walks the rope.
+  // Flattened like input from JSON or the network (bench/jsc.bench.ts found reading a rope costs no more).
   return flat(out.slice(0, bytes));
 }
 
