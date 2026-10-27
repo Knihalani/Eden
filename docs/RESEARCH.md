@@ -15,7 +15,8 @@ Agents.* arXiv:2607.08716, 9 July 2026. https://arxiv.org/abs/2607.08716
   and general retrieval. The numbers for those ablations were not read yet: read the PDF.
 - Open-weight: Qwen3.5-27B trained with SFT + GRPO on SETA as a memory policy, with partial transfer.
 
-From the full paper (read 2026-10-27; details in [research/fast-primitives-notes/proactive_decision_and_routing.md](research/fast-primitives-notes/proactive_decision_and_routing.md)):
+From the full paper (read 2026-10-27; details in
+[research/fast-primitives-notes/proactive_decision_and_routing.md](research/fast-primitives-notes/proactive_decision_and_routing.md)):
 - Bank: a private status the action agent never sees, knowledge memories, procedural memories (attempts, failures,
   fixes). Phase 1 edits the bank with four tool calls; phase 2 emits a reminder or an explicit no-intervention.
   A reminder goes into the next call only and is never kept in history.

@@ -61,8 +61,10 @@ to compose a cited answer when a model and budget are available; otherwise it re
 
 ## Learning loop
 
-When an injection is handed to the agent, it records its distinctive tokens (tokens the session had not seen). A later agent message or tool call
-that repeats them marks the injection *used*; an injection with no sign of use within `usageWindowTurns` is *unused*.
+When an injection is handed to the agent, it records its distinctive tokens (tokens the session had not seen). A
+later agent message or tool call that repeats them marks the injection *used*; an injection with no sign of use within
+`usageWindowTurns` is *unused*. Feedback may arrive after the session ends: each user's recorded outcomes outlive
+their sessions (bounded), so it can still correct them.
 Each outcome updates a Beta posterior per (user, situation, source) in the source map, which routing reads. Explicit
 feedback from the integration (`/v1/feedback`) overrides the inference, correcting an outcome already recorded (D18).
 
