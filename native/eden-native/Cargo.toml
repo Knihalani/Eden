@@ -1,0 +1,21 @@
+[package]
+name = "eden-native"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Language-choice experiment: Eden's per-event kernels in Rust behind a C ABI (bun:ffi) and WebAssembly"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+aho-corasick = "1"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
