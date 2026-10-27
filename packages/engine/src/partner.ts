@@ -537,25 +537,25 @@ export class ContextPartner {
       { timeoutMs: this.config.sourceTimeoutMs, signal: s.abort.signal },
     );
     if (s.closed) return chosen.length; // Forgotten or ended mid-search: keep nothing.
-    const mentions: { sourceId: string; entities: string[] }[] = [];
     for (let k = 0; k < outcomes.length; k++) {
       const o = outcomes[k]!;
       // One source's items at a time, yielding between: storing a lookup's items (tokenizing, indexing, sketching) is
       // ~80 µs each, and other users' events should not wait behind all of them at once.
       if (k > 0) await yieldToLoop();
       if (s.closed) return chosen.length;
-      // Mentions count the items that mention an entity, so only items new to the cache (or changed) are recorded:
-      // an item a dozen lookups return is still one mention, and re-recording it was ~10% of server CPU.
+      // Mentions are recorded for items new to the cache or changed, so an item many lookups return is not counted
+      // each time (that let one item dominate routing, and was ~10% of server CPU). They are written with the put,
+      // before the next yield: a session closing in between must not leave items cached whose mentions never land.
       const added = this.deps.cache.put(s.scope, o.items, this.now(), true);
-      for (const item of added) {
-        const entities = extractTypedEntities(`${item.title}. ${item.text}`)
+      const mentions = added.map((item) => ({
+        sourceId: item.sourceId,
+        entities: extractTypedEntities(`${item.title}. ${item.text}`)
           .filter((e) => PERSISTABLE_KINDS.has(e.kind))
           .slice(0, 20)
-          .map((e) => e.text);
-        mentions.push({ sourceId: item.sourceId, entities });
-      }
+          .map((e) => e.text),
+      }));
+      if (mentions.length > 0) this.deps.sourceMap.recordMentionsMany(s.scope, mentions, this.now());
     }
-    if (mentions.length > 0) this.deps.sourceMap.recordMentionsMany(s.scope, mentions, this.now());
     return chosen.length;
   }
 
