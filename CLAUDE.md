@@ -13,8 +13,9 @@ what is worth mining from it.
 ## Repo
 
 Bun/TypeScript monorepo, no build step (packages export `src/*.ts`). Repo `KaiavN/Eden`, work targets `main`.
-Packages: `protocol`, `redact`, `sources`, `graph`, `llm`, `engine`, `server`, `client`, `eval`; examples in
-`examples/`. Dependencies are deliberately few (the MCP SDK and zod); justify any new one in the PR.
+Packages: `protocol`, `primitives`, `redact`, `sources`, `graph`, `llm`, `engine`, `server`, `client`, `eval`;
+examples in `examples/`. Hot-path code uses `@eden/primitives` (one tokenizer, typed-array structures) and follows its
+README's measured rules; a change to a primitive re-runs its benchmark and reports before/after numbers. Dependencies are deliberately few (the MCP SDK and zod); justify any new one in the PR.
 
 ## CI is local
 
