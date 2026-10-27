@@ -6,25 +6,53 @@
       "id": "calendar",
       "description": "The user's calendar",
       "docs": [
-        { "ref": "evt-dentist", "title": "Dentist", "text": "Dr. Okafor, Friday 9:00-10:00, 12 Harley St" },
-        { "ref": "evt-priya", "title": "Lunch with Priya Raman", "text": "Thursday 12:30 at Dishoom, confirmed" },
-        { "ref": "evt-board", "title": "Board prep with Marcus Webb", "text": "Wednesday 16:00, bring Q3 numbers" }
+        {
+          "ref": "evt-dentist",
+          "title": "Dentist",
+          "text": "Dr. Okafor, Friday 9:00-10:00, 12 Harley St"
+        },
+        {
+          "ref": "evt-priya",
+          "title": "Lunch with Priya Raman",
+          "text": "Thursday 12:30 at Dishoom, confirmed"
+        },
+        {
+          "ref": "evt-board",
+          "title": "Board prep with Marcus Webb",
+          "text": "Wednesday 16:00, bring Q3 numbers"
+        }
       ]
     },
     {
       "id": "gmail",
       "description": "The user's email",
       "docs": [
-        { "ref": "m-priya", "title": "Re: lunch", "text": "Priya Raman: I'm vegetarian and can't do anything before 12:15" },
-        { "ref": "m-landlord", "title": "Boiler repair", "text": "Landlord Steve: engineer visits Monday between 8 and 12" },
-        { "ref": "m-marcus", "title": "Q3 numbers", "text": "Marcus Webb: please send the Q3 revenue sheet by Tuesday EOD" }
+        {
+          "ref": "m-priya",
+          "title": "Re: lunch",
+          "text": "Priya Raman: I'm vegetarian and can't do anything before 12:15"
+        },
+        {
+          "ref": "m-landlord",
+          "title": "Boiler repair",
+          "text": "Landlord Steve: engineer visits Monday between 8 and 12"
+        },
+        {
+          "ref": "m-marcus",
+          "title": "Q3 numbers",
+          "text": "Marcus Webb: please send the Q3 revenue sheet by Tuesday EOD"
+        }
       ]
     },
     {
       "id": "notes",
       "description": "The user's personal notes",
       "docs": [
-        { "ref": "n-gifts", "title": "Gift ideas", "text": "Priya Raman likes Ottolenghi cookbooks; birthday 14 Nov" }
+        {
+          "ref": "n-gifts",
+          "title": "Gift ideas",
+          "text": "Priya Raman likes Ottolenghi cookbooks; birthday 14 Nov"
+        }
       ]
     }
   ],
@@ -32,23 +60,79 @@
     {
       "id": "week",
       "turns": [
-        { "event": { "kind": "session_start" } },
         {
-          "event": { "kind": "user_message", "text": "Can you move my lunch with Priya Raman to Friday?" },
-          "expect": { "items": ["calendar:evt-priya"] }
+          "event": {
+            "kind": "session_start"
+          }
         },
-        { "event": { "kind": "agent_message", "text": "Sure, checking Friday." } },
-        { "event": { "kind": "user_message", "text": "thanks!" }, "expect": "silent" },
         {
-          "event": { "kind": "user_message", "text": "What should I prepare for the session with Marcus Webb?" },
-          "expect": { "items": ["gmail:m-marcus"] }
+          "event": {
+            "kind": "user_message",
+            "text": "Can you move my lunch with Priya Raman to Friday?"
+          },
+          "expect": {
+            "items": [
+              "calendar:evt-priya"
+            ]
+          }
         },
-        { "event": { "kind": "user_message", "text": "ok" }, "expect": "silent" },
         {
-          "event": { "kind": "external", "source": "gmail", "text": "New email from Landlord Steve about the boiler repair" },
-          "expect": { "items": ["gmail:m-landlord"] }
+          "event": {
+            "kind": "agent_message",
+            "text": "Sure, checking Friday."
+          }
         },
-        { "event": { "kind": "user_message", "text": "tell me a joke" }, "expect": "silent" }
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "thanks!"
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "What should I prepare for the session with Marcus Webb?"
+          },
+          "expect": {
+            "items": [
+              "gmail:m-marcus"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "ok"
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "external",
+            "source": "gmail",
+            "text": "New email from Landlord Steve about the boiler repair"
+          },
+          "expect": {
+            "items": [
+              "gmail:m-landlord"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "please ask Al to bring the slides"
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "tell me a joke"
+          },
+          "expect": "silent"
+        }
       ]
     }
   ]

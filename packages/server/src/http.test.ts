@@ -52,10 +52,34 @@ describe("HTTP API", () => {
   });
 });
 
+describe("input checks (review finding 12)", () => {
+  test("ids are validated on every route and used must be a boolean", async () => {
+    expect((await post("/v1/pending", { userId: "a/b", sessionId: "s" })).status).toBe(400);
+    expect((await post("/v1/forget", { userId: "u#1" })).status).toBe(400);
+    const bad = await post("/v1/feedback", { ...who, injectionId: "inj_1", used: "false" });
+    expect(bad.status).toBe(400);
+    const ok = await post("/v1/feedback", { ...who, injectionId: "inj_unknown", used: false });
+    expect(await ok.json()).toEqual({ ok: true, applied: false });
+  });
+
+  test("dev mode rejects a wrong key instead of mapping it to tenant dev", async () => {
+    const dev = createHandler(partner, { keys: new Map(), dev: true });
+    const req = (auth?: string) =>
+      new Request("http://x/v1/pending", {
+        method: "POST",
+        headers: auth ? { authorization: `Bearer ${auth}` } : {},
+        body: JSON.stringify(who),
+      });
+    expect((await dev(req("typo-key"))).status).toBe(401);
+    expect((await dev(req())).status).toBe(200);
+  });
+});
+
 describe("loadConfig", () => {
   test("refuses to start without keys outside dev, and rejects short keys", () => {
     expect(() => loadConfig({})).toThrow(/EDEN_API_KEYS/);
     expect(() => loadConfig({ EDEN_API_KEYS: "acme:short" })).toThrow(/16\+/);
     expect(loadConfig({ EDEN_DEV: "1" }).dev).toBe(true);
+    expect(() => loadConfig({ EDEN_API_KEYS: "a/b:0123456789abcdef" })).toThrow(/tenant/);
   });
 });

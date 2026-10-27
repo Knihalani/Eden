@@ -39,7 +39,8 @@ messages = withContext(messages, await eden.collect(injection));           // be
 const answer = await eden.ask("What did Dana say about the renewal?");     // or expose as a tool
 ```
 
-MCP-capable agents can also mount the `ask_context` tool (`packages/server/src/mcp.ts`). A full loop:
+MCP-capable agents can also use the `ask_context` tool: `bun packages/server/src/mcp-stdio.ts` serves it over stdio for
+one user (`EDEN_USER`, `EDEN_TENANT`), and `createMcpServer` attaches it to any other MCP transport. A full loop:
 [examples/personal-agent/agent.ts](examples/personal-agent/agent.ts).
 
 ## Repository

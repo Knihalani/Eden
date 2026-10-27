@@ -24,30 +24,64 @@ export function contentTerms(text: string): string[] {
 }
 
 /**
+ * What kind of thing an entity is. Names, handles and ids may be persisted in the source map (they route lookups);
+ * emails, URLs and quoted phrases are used for this lookup only, since they can carry content ("my biopsy results").
+ */
+export type EntityKind = "name" | "handle" | "id" | "email" | "url" | "quoted";
+
+export interface Entity {
+  text: string;
+  kind: EntityKind;
+}
+
+/** Kinds safe to store in the content-free source map (D8). */
+export const PERSISTABLE_KINDS: ReadonlySet<EntityKind> = new Set(["name", "handle", "id"]);
+
+/**
  * Named things a source might hold: emails, @handles, ticket-style ids (ABC-123), URLs, quoted phrases, and runs of
  * capitalised words not at a sentence start ("Dana Lee", "Acme Corp"). Recall over precision: a false entity costs
  * one wasted lookup, a missed one costs the injection.
  */
-export function extractEntities(text: string): string[] {
-  const found = new Set<string>();
-  const add = (s: string | undefined) => {
+export function extractTypedEntities(text: string): Entity[] {
+  const found = new Map<string, Entity>();
+  const add = (s: string | undefined, kind: EntityKind) => {
     const v = s?.trim();
-    if (v && v.length > 1 && v.length <= 80) found.add(v);
+    if (v && v.length > 1 && v.length <= 80 && !found.has(v)) found.set(v, { text: v, kind });
   };
-  for (const m of text.matchAll(/[\w.+-]+@[\w-]+\.[\w.-]+/g)) add(m[0]);
-  for (const m of text.matchAll(/(?:^|\s)@([A-Za-z0-9_][\w.-]{1,40})/g)) add(m[1]);
-  for (const m of text.matchAll(/\b[A-Z][A-Z0-9]{1,9}-\d{1,6}\b/g)) add(m[0]);
-  for (const m of text.matchAll(/https?:\/\/[^\s)>\]]+/g)) add(m[0]);
-  for (const m of text.matchAll(/["“]([^"”\n]{3,60})["”]/g)) add(m[1]);
+  for (const m of text.matchAll(/[\w.+-]+@[\w-]+\.[\w.-]+/g)) add(m[0], "email");
+  for (const m of text.matchAll(/(?:^|\s)@([A-Za-z0-9_][\w.-]{1,40})/g)) add(m[1], "handle");
+  for (const m of text.matchAll(/\b[A-Z][A-Z0-9]{1,9}-\d{1,6}\b/g)) add(m[0], "id");
+  for (const m of text.matchAll(/https?:\/\/[^\s)>\]]+/g)) add(m[0], "url");
+  for (const m of text.matchAll(/["“]([^"”\n]{3,60})["”]/g)) add(m[1], "quoted");
   // Capitalised runs. A run that starts a sentence counts only if it has two or more words.
   for (const m of text.matchAll(/(^|[.!?]\s+|\s)((?:[A-Z][\p{L}&'-]+)(?:\s+[A-Z][\p{L}&'-]+)*)/gu)) {
     const run = m[2]!;
     const sentenceStart = m[1] === "" || /[.!?]/.test(m[1]!);
     const words = run.split(/\s+/);
     if (words.length === 1 && (sentenceStart || STOPWORDS.has(run.toLowerCase()))) continue;
-    add(run);
+    add(run, "name");
   }
-  return [...found];
+  return [...found.values()];
+}
+
+export function extractEntities(text: string): string[] {
+  return extractTypedEntities(text).map((e) => e.text);
+}
+
+/** The set of word tokens in a text, lowercased, stopwords kept: for whole-word entity matching. */
+export function wordSet(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .match(/[\p{L}\p{N}][\p{L}\p{N}'_-]*/gu)
+      ?.map((t) => t.replace(/'s$/, "")) ?? [],
+  );
+}
+
+/** True when every word of `entity` is a whole word of the text. Never a substring: "Al" is not in "also". */
+export function mentions(words: Set<string>, entity: string): boolean {
+  const parts = entity.toLowerCase().split(/\s+/).filter(Boolean);
+  return parts.length > 0 && parts.every((p) => words.has(p.replace(/'s$/, "")));
 }
 
 const CHATTER =
