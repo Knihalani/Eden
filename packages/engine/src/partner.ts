@@ -82,7 +82,6 @@ interface Session {
   ledger: Ledger;
   /** Injections handed to the agent and not yet judged used or unused. */
   outstanding: Map<string, Outstanding>;
-  recorded: Map<string, Recorded>;
   pending: Injection[];
   cues: Map<string, number>;
   situation: string;
@@ -111,13 +110,16 @@ interface Built {
   text: string;
 }
 
+/** Outcomes kept per user for later correction, and users kept. Outlives sessions: feedback often comes at the end. */
 const MAX_RECORDED = 200;
+const MAX_RECORDED_USERS = 10_000;
 
 export class ContextPartner {
   readonly config: EngineConfig;
   private readonly sessions = new Map<string, Session>();
   private readonly perTenant = new Map<string, number>();
   private readonly built = new WeakMap<Injection, Built>();
+  private readonly recorded = new Map<string, Map<string, Recorded>>();
   private readonly now: () => number;
 
   constructor(private readonly deps: PartnerDeps) {
@@ -275,18 +277,19 @@ export class ContextPartner {
    * Returns false when the injection is unknown (never handed out, or its session is gone).
    */
   feedback(f: Feedback): boolean {
+    const scope = { tenantId: f.tenantId, userId: f.userId };
     const s = this.sessions.get(sessionKey(f));
-    if (!s) return false;
-    const o = s.outstanding.get(f.injectionId);
-    if (o) {
+    const o = s?.outstanding.get(f.injectionId);
+    if (s && o) {
       s.outstanding.delete(f.injectionId);
-      this.record(s, f.injectionId, o.sourceIds, o.situation, f.used);
+      this.record(scope, f.injectionId, o.sourceIds, o.situation, f.used);
       return true;
     }
-    const r = s.recorded.get(f.injectionId);
+    // The session may have ended (and counted the injection unused): the user's record outlives it.
+    const r = this.recorded.get(scopeKey(scope))?.get(f.injectionId);
     if (!r) return false;
     if (r.used !== f.used) {
-      for (const sourceId of r.sourceIds) this.deps.sourceMap.correctOutcome(s.scope, r.situation, sourceId, f.used);
+      for (const sourceId of r.sourceIds) this.deps.sourceMap.correctOutcome(scope, r.situation, sourceId, f.used);
       r.used = f.used;
     }
     return true;
@@ -300,6 +303,7 @@ export class ContextPartner {
   forget(scope: Scope, sourceId?: string): void {
     const key = scopeKey(scope);
     for (const s of [...this.sessions.values()]) if (scopeKey(s.scope) === key) this.close(s, false);
+    this.recorded.delete(key);
     this.deps.cache.forget(scope, sourceId);
     this.deps.sourceMap.forget(scope, sourceId);
   }
@@ -344,7 +348,6 @@ export class ContextPartner {
       seen: new Set(),
       ledger: new Ledger(this.config.ledgerCooldownTurns),
       outstanding: new Map(),
-      recorded: new Map(),
       pending: [],
       cues: new Map(),
       situation: "general",
@@ -366,7 +369,7 @@ export class ContextPartner {
     s.closed = true;
     s.abort.abort();
     if (learn) {
-      for (const [id, o] of s.outstanding) this.record(s, id, o.sourceIds, o.situation, false);
+      for (const [id, o] of s.outstanding) this.record(s.scope, id, o.sourceIds, o.situation, false);
     }
     s.outstanding.clear();
     s.pending.length = 0;
@@ -400,7 +403,8 @@ export class ContextPartner {
   /** Starts usage tracking: from the moment the agent actually receives an injection, against what it had seen. */
   private handOut(s: Session, injection: Injection): void {
     const built = this.built.get(injection);
-    if (!built || s.outstanding.has(injection.id) || s.recorded.has(injection.id)) return;
+    if (!built || s.outstanding.has(injection.id)) return;
+    if (this.recorded.get(scopeKey(s.scope))?.has(injection.id)) return;
     s.outstanding.set(injection.id, {
       injectionId: injection.id,
       sourceIds: built.sourceIds,
@@ -417,14 +421,19 @@ export class ContextPartner {
       const expired = s.turn - o.deliveredTurn > this.config.usageWindowTurns;
       if (!used && !expired) continue;
       s.outstanding.delete(id);
-      this.record(s, id, o.sourceIds, o.situation, used);
+      this.record(s.scope, id, o.sourceIds, o.situation, used);
     }
   }
 
-  private record(s: Session, injectionId: string, sourceIds: string[], situation: string, used: boolean): void {
-    for (const sourceId of sourceIds) this.deps.sourceMap.recordOutcome(s.scope, situation, sourceId, used);
-    s.recorded.set(injectionId, { sourceIds, situation, used });
-    while (s.recorded.size > MAX_RECORDED) s.recorded.delete(s.recorded.keys().next().value as string);
+  private record(scope: Scope, injectionId: string, sourceIds: string[], situation: string, used: boolean): void {
+    for (const sourceId of sourceIds) this.deps.sourceMap.recordOutcome(scope, situation, sourceId, used);
+    const key = scopeKey(scope);
+    const mine = this.recorded.get(key) ?? new Map<string, Recorded>();
+    this.recorded.delete(key); // Re-insert: Map order is least recently recorded user first.
+    this.recorded.set(key, mine);
+    mine.set(injectionId, { sourceIds, situation, used });
+    while (mine.size > MAX_RECORDED) mine.delete(mine.keys().next().value as string);
+    while (this.recorded.size > MAX_RECORDED_USERS) this.recorded.delete(this.recorded.keys().next().value as string);
   }
 
   // ── retrieval ──
