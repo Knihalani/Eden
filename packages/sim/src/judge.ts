@@ -56,6 +56,8 @@ export class OracleJudge implements Model {
   async chat(request: ChatRequest): Promise<ChatResponse> {
     const system = request.messages[0]?.content ?? "";
     const userMsg = request.messages[1]?.content ?? "";
+    // The labels of the turn that asked: the runner moves on to later turns while this call "thinks".
+    const relevant = this.relevant;
     const delay = this.rng.lognormal(this.o.latencyMs, 0.4) * this.o.timeScale;
     if (delay > 0) await Bun.sleep(delay);
     if (request.signal?.aborted) throw request.signal.reason;
@@ -63,17 +65,18 @@ export class OracleJudge implements Model {
     if (system.includes('{"pick"')) {
       this.stats.judgeCalls++;
       const picks: number[] = [];
-      const lines = userMsg.split("\nCandidates:\n")[1]?.split("\n") ?? [];
-      lines.forEach((line, i) => {
-        const m = /^\[(\d+)\] \(([^)]+)\) (.*?) — /.exec(line);
-        if (!m) return;
+      // Candidates are "[i] (source) title — text", and text keeps its newlines: split on the "[i] (source) " heads.
+      const list = userMsg.split("\nCandidates:\n")[1] ?? "";
+      const heads = [...list.matchAll(/^\[(\d+)\] \(([^)\n]+)\) /gm)];
+      heads.forEach((m, k) => {
+        const block = list.slice(m.index + m[0].length, heads[k + 1]?.index ?? list.length);
         this.stats.candidates++;
-        const item = this.find(m[2]!, m[3]!.replace(/…$/, ""), line);
+        const item = this.find(m[2]!, block);
         if (!item) this.stats.unmatched++;
         else this.shown.push(item.id);
-        const rel = !!item && item.facts.some((f) => this.relevant.has(f));
+        const rel = !!item && item.facts.some((f) => relevant.has(f));
         if (rel) this.stats.relevantCandidates++;
-        if (this.rng.chance(rel ? this.o.tp : this.o.fp)) picks.push(i);
+        if (this.rng.chance(rel ? this.o.tp : this.o.fp)) picks.push(Number(m[1]));
       });
       text = JSON.stringify({ pick: picks });
     } else {
@@ -91,11 +94,20 @@ export class OracleJudge implements Model {
     };
   }
 
-  private find(sourceId: string, title: string, line: string): WorldItem | undefined {
-    const list = this.byTitle.get(`${sourceId}|${title}`);
-    if (!list || list.length === 1) return list?.[0];
-    // Several items share a title (a thread's replies): pick the one whose text the candidate line starts with.
-    const body = line.slice(line.indexOf(" — ") + 3, line.indexOf(" — ") + 63).replace(/\s+/g, " ");
-    return list.find((it) => it.text.replace(/\s+/g, " ").startsWith(body.slice(0, 40))) ?? list[0];
+  /**
+   * The world item a candidate block ("title — text") shows. A title may itself contain " — " ("Globex — call
+   * notes"), so each split point is tried; titles are clipped to 80 characters with "…".
+   */
+  private find(sourceId: string, block: string): WorldItem | undefined {
+    for (let at = block.indexOf(" — "); at >= 0; at = block.indexOf(" — ", at + 1)) {
+      const title = block.slice(0, at).replace(/…$/, "");
+      const list = this.byTitle.get(`${sourceId}|${title}`);
+      if (!list) continue;
+      if (list.length === 1) return list[0];
+      // Several items share a title (a thread's replies): pick the one whose text the candidate starts with.
+      const body = block.slice(at + 3, at + 63).replace(/\s+/g, " ");
+      return list.find((it) => it.text.replace(/\s+/g, " ").startsWith(body.slice(0, 40))) ?? list[0];
+    }
+    return undefined;
   }
 }

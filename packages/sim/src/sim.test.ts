@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { judgeMessages, parseJudge } from "@eden/engine";
+import { OracleJudge } from "./judge";
 import { buildSessions } from "./sessions";
 import { IDEAL, REALISTIC, SimIndex, SimSource } from "./sources";
 import { runQuality } from "./quality";
@@ -100,5 +102,21 @@ describe("quality runner", () => {
     expect(r.privacy.deliveredNotInert).toBe(0);
     expect(r.ask.cases).toBeGreaterThan(10);
     expect(r.funnel.mustFacts).toBeGreaterThan(0);
+  });
+});
+
+describe("oracle judge", () => {
+  test("picks exactly the relevant candidates by their index, titles with dashes and multi-line text included", async () => {
+    const w = buildWorld({ seed: 6 });
+    const deal = w.arcs.find((a) => a.kind === "deal")!;
+    const notes = w.items.find((i) => i.facts.includes(deal.facts.notes!) && i.title.includes(" — "))!;
+    const noise = w.items.filter((i) => i.noise && i.text.includes("\n")).slice(0, 3);
+    const candidates = [noise[0]!, noise[1]!, notes, noise[2]!];
+    const oracle = new OracleJudge(w, { tp: 1, fp: 0, latencyMs: 0, timeScale: 0, seed: 1 });
+    oracle.relevant = new Set([deal.facts.notes!]);
+    const res = await oracle.chat({ messages: judgeMessages("user: prep me for the call", candidates), maxTokens: 60 });
+    expect(parseJudge(res.text, candidates.length)).toEqual([2]);
+    expect(oracle.stats.unmatched).toBe(0);
+    expect(oracle.stats.candidates).toBe(4);
   });
 });

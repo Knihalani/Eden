@@ -5,13 +5,14 @@ command run on 2026-10-27 on this repository (4 vCPU Intel Xeon @ 2.10 GHz share
 under [Reproduce](#reproduce). Modelled or assumed inputs are labelled where they appear.
 
 **In one paragraph.** With connectors that behave like real ones (Gmail-style AND search, snippets), Eden gets
-**13–17% of needed facts** to the agent before it answers, never more than the 21% the connectors return at all; with
-ideal connectors (ranked full-text search) the same engine reaches **24–40%**, and 74% of facts are within reach. Hard
-false fires stay low (**0.1–2.0%** of turns that need nothing), no planted secret ever reached the agent (**0 of
-2,160**), and over HTTP the fast path answers in **under 1 ms at the median, under 5 ms at p99** at production-like
-load, and under 50 ms at p99 up to **~1,800 events/s** on one core. The binding constraint is retrieval (query
-construction per connector, vocabulary mismatch, bulk mail crowding out personal items), not speed and not the
-judge.
+**13–19% of needed facts** to the agent before it answers, never more than the 21% the connectors return at all.
+With ideal connectors (ranked full-text search) 74% of facts are within reach, and the same engine delivers **24%
+without a model and 57–62% with a judge** (modelled: an imperfect one and a perfect one). The judge's own mistakes
+then set the false-fire rate: hard false fires are **0.1–0.4%** without a judge or with a perfect one and **2–7%**
+with a judge that wrongly picks 5% of candidates. No planted secret ever reached the agent (**0 of 2,160**). Over
+HTTP the fast path answers in **under 1 ms at the median, under 5 ms at p99** at production-like load, and under 50 ms
+at p99 up to **~1,800 events/s** on one core. The binding constraints are retrieval (query construction per connector,
+vocabulary mismatch, bulk mail) and the judge's precision, not speed.
 
 ## What is simulated
 
@@ -84,58 +85,66 @@ ordinal.
 
 20 users × 20 sessions × 3 seeds per row (2,511 needed facts, 1,500–2,200 silent turns); 95% Wilson intervals.
 "Available" is the share of needed facts in the cache or returned by a source for the turn; "judged" the share shown
-to the judge or delivered without it.
+to the judge or delivered without it. Judges are modelled (see above).
 
 | Connectors | Judge | Precision | Recall (in time) | Hard false fires | Available | Judged |
 |---|---|---|---|---|---:|---:|
 | ideal | none | 0.543 [0.518–0.567] | 0.236 [0.220–0.253] | 0.004 [0.002–0.008] | 0.74 | 0.24 |
-| ideal | noisy (modelled) | 0.599 [0.578–0.620] | 0.384 [0.365–0.403] | 0.020 [0.015–0.028] | 0.74 | 0.55 |
-| ideal | perfect (ceiling) | 0.641 [0.621–0.662] | 0.403 [0.384–0.423] | 0.004 [0.002–0.008] | 0.75 | 0.55 |
+| ideal | noisy | 0.675 [0.659–0.690] | 0.573 [0.554–0.593] | 0.067 [0.056–0.079] | 0.73 | 0.61 |
+| ideal | perfect | 0.785 [0.771–0.799] | 0.616 [0.597–0.635] | 0.004 [0.002–0.008] | 0.74 | 0.62 |
 | realistic | none | 0.585 [0.550–0.620] | 0.128 [0.116–0.142] | 0.001 [0.000–0.003] | 0.21 | 0.13 |
-| realistic | noisy (modelled) | 0.559 [0.527–0.590] | 0.170 [0.155–0.185] | 0.014 [0.010–0.021] | 0.22 | 0.18 |
-| realistic | perfect (ceiling) | 0.631 [0.598–0.663] | 0.171 [0.157–0.186] | 0.001 [0.000–0.003] | 0.21 | 0.18 |
-| realistic, entity queries | noisy (modelled) | 0.562 [0.537–0.587] | 0.238 [0.222–0.255] | 0.018 [0.013–0.025] | 0.40 | 0.29 |
-| realistic, entity queries | perfect (ceiling) | 0.612 [0.586–0.638] | 0.247 [0.230–0.264] | 0.001 [0.000–0.003] | 0.40 | 0.29 |
+| realistic | noisy | 0.621 [0.595–0.647] | 0.186 [0.172–0.202] | 0.020 [0.014–0.027] | 0.21 | 0.19 |
+| realistic | perfect | 0.738 [0.712–0.762] | 0.192 [0.177–0.208] | 0.001 [0.000–0.003] | 0.21 | 0.19 |
+| realistic, entity queries | none | 0.549 [0.520–0.578] | 0.168 [0.154–0.183] | 0.001 [0.000–0.003] | 0.40 | 0.17 |
+| realistic, entity queries | noisy | 0.641 [0.620–0.661] | 0.311 [0.293–0.329] | 0.031 [0.024–0.040] | 0.40 | 0.33 |
+| realistic, entity queries | perfect | 0.740 [0.720–0.759] | 0.328 [0.310–0.346] | 0.001 [0.000–0.003] | 0.40 | 0.33 |
 
 Recall equals in-time recall in instant runs; with real-time pacing they differ by under a point (Timeliness below).
 
 | Connectors | Judge | Lenient precision | Soft fires (passing mentions) | `ask` recall@5 | `ask` MRR | `ask` empty | Judge cost per 1k turns |
 |---|---|---:|---:|---:|---:|---:|---:|
-| ideal | noisy | 0.828 | 0.347 | 0.857 | 0.578 | 0.000 | $0.029 |
-| realistic | noisy | 0.802 | 0.227 | 0.642 | 0.509 | 0.174 | $0.018 |
-| realistic, entity queries | noisy | 0.807 | 0.351 | 0.794 | 0.563 | 0.073 | $0.021 |
+| ideal | noisy | 0.833 | 0.466 | 0.857 | 0.578 | 0.000 | $0.028 |
+| ideal | perfect | 0.919 | 0.288 | 0.857 | 0.577 | 0.000 | $0.028 |
+| realistic | noisy | 0.810 | 0.224 | 0.642 | 0.508 | 0.175 | $0.018 |
+| realistic, entity queries | noisy | 0.820 | 0.391 | 0.795 | 0.565 | 0.073 | $0.021 |
 
-Injections carry 1.3–1.8 items, 450–580 bytes at the median and 1.0–1.2 KB at p95 (the 1,200-byte cap). Each
-lookup asks ~4 sources; 36–54% of the items they return state a fact. Privacy across all 27 runs: **0 of 2,160 planted
-secrets** appeared in any injection or `ask` answer; **3** prompt-injection emails were delivered, all inside the
-data-not-instructions envelope.
+Injections carry 1.3–1.8 items, 460–680 bytes at the median and 1.0–1.2 KB at p95 (the 1,200-byte cap). Each
+lookup asks ~4 sources; 36–54% of the items they return state a fact. Privacy across all 27 runs: **0 of 2,160
+planted secrets** appeared in any injection or `ask` answer; **5** prompt-injection emails were delivered, all inside
+the data-not-instructions envelope.
 
 **What limits recall.** The funnel says where facts are lost:
 
 - *Retrieval, with real connectors.* AND-semantics search over Eden's multi-term cue mostly returns nothing: only 21%
   of needed facts are returned or cached, against 74% with ranked search; searching by entities alone recovers to
-  40%. No judge can deliver what never arrived: the perfect judge gains 0.001 over none on realistic connectors.
-- *Vocabulary mismatch*, with any connector. Recall by task (ideal, noisy judge): "draft a reply about the
-  discount" **0.10** (the email says "12% off"), "how's the data migration going?" **0.08** (the blocker message names
-  the ticket, not the topic), "anything for Maya's school trip?" **0.01** (the teacher's email never names Maya), "which
-  hotel in Lisbon?" **0.10**. Lexical matching cannot bridge these.
-- *Bulk mail crowds out personal items.* Newsletters repeat "flight", "hotel", city and client names; 15–23% of
-  delivered items are noise, flight-time recall is 0.23, and a 4x larger mailbox lowers ideal precision from 0.586
-  [0.549–0.622] to 0.524 [0.489–0.560] and recall from 0.378 to 0.354 (one seed).
-- *Ranking before the judge* loses a quarter of what is available (74% available → 55% judged).
+  40%. No judge can deliver what never arrived: on realistic connectors a perfect judge lifts recall from 0.128 to
+  0.192, on ideal ones from 0.236 to 0.616.
+- *The judge*, once retrieval works. Without a model the engine delivers only what clears the confident threshold
+  (24% of facts with ideal connectors); a judge more than doubles that. Its false picks are the false fires: a judge
+  that picks 5% of irrelevant candidates gives 6.7% hard false fires, concentrated where a turn has a cue but needs
+  nothing (new people and places 43 of 380 turns, requests the data cannot help with 49 of 670). Judge precision
+  matters as much as recall.
+- *Vocabulary mismatch*, with any connector. Recall by task (ideal, noisy judge): "anything for Maya's school
+  trip?" **0.06** (the teacher's email never names Maya), "how's the data migration going?" **0.20** (the blocker
+  message names the ticket, not the topic), "which hotel in Lisbon?" **0.20**, "status of OPS-142?" **0.23**, "draft a
+  reply about the discount" **0.46** (the email says "12% off").
+- *Bulk mail crowds out personal items.* Newsletters repeat "flight", "hotel", city and client names; 10–23% of
+  delivered items are noise, and a 4x larger mailbox lowers ideal-connector precision from 0.652 [0.623–0.679] to
+  0.606 [0.577–0.634] and recall from 0.560 to 0.513 (one seed).
+- *Passing mentions* of known people ("Jamie says hi") trigger a delivery 17–47% of the time.
 
-Where the words line up, Eden does well (ideal, noisy judge): "when's my lunch with X" 0.79, gift ideas 0.74, invoice
-amounts 0.69, the dentist 0.68, ticket pings 0.61. By reference style: full name 0.47, nickname 0.48 (n=27), first name
-0.42 (0.42 when the first name is shared, one seed, n=45), organisation 0.39, role 0.36, topic 0.32, ticket id 0.22.
-Role references have the best precision (0.92): "my landlord" maps to one thread.
+Where the words line up, Eden does well (ideal, noisy judge): "when's my lunch with X" 0.91, rescheduling 0.75, the
+dentist 0.75, invoice amounts 0.76, inbound meeting and invoice emails 0.69. By reference style: first name 0.71,
+full name 0.59, nickname 0.59 (n=27), organisation 0.56, topic 0.52, role 0.47, ticket id 0.23. Role references have
+the best precision (0.84): "my landlord" maps to one thread.
 
-**Learning.** Recall and source calls per lookup were flat across each user's sessions (first, middle, last third:
-recall 0.373 / 0.396 / 0.398 on ideal, one seed; 3 sources per lookup throughout): twenty sessions of inferred usage do
-not measurably change routing.
+**Across sessions.** With a judge, recall rises over each user's sessions (ideal, noisy judge, mean of three seeds:
+first, middle, last third 0.522 / 0.598 / 0.603), while each lookup keeps asking 3 sources: the cache warming up fits
+this; a change in routing does not show.
 
-**The agent's own tools.** Coverage (the agent had the fact by its answer from any route) rises from 0.397 with no
-agent tool use to 0.566 at 40% and 0.742 at 80%, while Eden's recall stays at 0.38–0.39 and only 5.5% of what Eden
-delivers duplicates what the agent fetched: Eden mostly delivers before the agent's own lookup would have.
+**The agent's own tools** (ideal, noisy judge, one seed). Coverage (the agent had the fact by its answer from any
+route) rises from 0.599 with no agent tool use to 0.703 at 40% and 0.835 at 80%, while Eden's recall stays at
+0.56–0.59; 10–12% of what Eden delivers duplicates what the agent already had.
 
 ### Timeliness
 
@@ -144,13 +153,13 @@ converted back to real time), 12 users × 10 sessions, noisy judge:
 
 | Connectors | Integration `waitMs` (real) | Recall | In-time recall | Time to context p50 / p95 (real) |
 |---|---:|---:|---:|---:|
-| realistic | 0 | 0.139 | 0.134 | 1.9 s / 5.8 s |
-| realistic | 2,000 | 0.139 | 0.139 | 0.5 s / 1.7 s |
-| ideal | 0 | 0.336 | 0.336 | 1.9 s / 6.4 s |
-| ideal | 300 | 0.336 | 0.336 | 0.04 s / 4.7 s |
+| realistic | 0 | 0.164 | 0.160 | 2.0 s / 5.8 s |
+| realistic | 2,000 | 0.172 | 0.172 | 0.6 s / 2.0 s |
+| ideal | 0 | 0.521 | 0.517 | 2.0 s / 6.4 s |
+| ideal | 300 | 0.521 | 0.521 | 2.0 s / 4.2 s |
 
 A slow-path result lands within the agent's own think time in almost every case, so waiting inside `observe` buys
-nothing measurable here: `waitMs` 0 is right for integrations.
+little: in-time recall moves by under a point. `waitMs` 0 is right for integrations.
 
 ## Findings fixed in this change
 
@@ -160,11 +169,14 @@ The simulation found four engine problems; each is fixed with a test that fails 
    result freshness and breakers ignored `PartnerDeps.now`: 12 questions spread over 12 simulated minutes were rate
    limited at 10. The partner now passes its clock to `SourceFanout`.
 2. **Mentions were counted per sighting.** Every lookup that returned an item recorded its entities again, so an item
-   returned by ten lookups weighed ten times in routing. Mentions are now recorded for items new to the cache (or
-   changed) only.
+   returned by ten lookups weighed ten times in routing. Mentions are now recorded when an item enters the user's
+   cache or its words change, and written with each source's items before the engine yields (a session closing
+   between two sources must not leave cached items whose mentions never land; review finding).
 3. **Re-indexing unchanged items.** `ItemCache.put` re-tokenized, re-indexed and re-sketched every returned item,
-   though most lookups return items the cache already holds; an unchanged item is now only refreshed. With (2) and
-   (4), this took the saturation point from ~2,840 to ~3,320 events/s (Performance).
+   though most lookups return items the cache already holds; an item with the same words is now only refreshed
+   (taking the new copy's url, metadata and timestamp). With (2) and (4), this took the saturation point from ~2,840
+   to ~3,320 events/s; writing mentions per source rather than once per lookup brought it back to ~3,000
+   (Performance).
 4. **Per-user memory.** Each user's cache preallocated a 4,096-term vocabulary and a sketcher with 96 KB of
    per-text scratch; the scratch is now shared by all sketchers (reading it after another sketcher's `load` throws)
    and the vocabulary starts at 256 terms. Heap per warm user: ~340 KB → ~165 KB.
@@ -176,7 +188,9 @@ Harness bugs found and fixed on the way, kept here because each one first looked
 cut off by sessions ending at simulated time 0 (recall under-counted); the simulated token bucket converting time
 the wrong way; simulated connectors' linear scans running inside the server process (a third of its CPU);
 generator-side session building stalling the load generator; harness setup counted as engine latency; arrival
-rounding that made coverage lower than recall.
+rounding that made coverage lower than recall; and, found by review, an oracle judge that answered with line numbers
+instead of candidate numbers and missed titles containing " — " (it understated every judge row and led to a wrong
+first conclusion, "not the judge"), and that read its labels after its latency sleep.
 
 ## Performance
 
@@ -223,7 +237,9 @@ traffic; users double every 20 s; tenant rate limits lifted to find the server's
 | 6,400 | 3,324 | 496 ms | 802 ms | 108% | 164 ms | 13% (SDK timeouts) |
 
 One server process on one core sustains **~1,800 events/s with p99 under 50 ms**, and saturates at ~3,300 events/s
-(before the fixes above: p99 71 ms at 1,600 users, saturation ~2,840). At the steady scenario's per-user rate (0.13
+(before the fixes above: p99 71 ms at 1,600 users, saturation ~2,840). After the review fixes (mentions written per
+source) a second ramp gave 1,792 events/s at p99 20 ms and saturation at ~3,000 events/s (3,200 users: 2,971
+events/s, p50 73 ms; 6,400 users: 3,052, 21% SDK timeouts). At the steady scenario's per-user rate (0.13
 events/s while active), 1,800 events/s is ~14,000 concurrently active users per core. With the default per-tenant
 limit (200 requests/s, burst 400; ~2.2 requests per event with the SDK's loop) one tenant gets ~90 events/s, about
 700 concurrently active users: in the first ramp, with ten tenants at the default, 39% of calls failed open (429) at
@@ -276,9 +292,12 @@ latency or errors at the edge.
    items, or a budgeted model rewrite of the cue on the slow path (with a cost estimate, per the model-last rule).
 3. **Demote bulk mail.** Newsletters and notifications are 15–23% of what is delivered and crowd out travel and
    personal facts. Signals connectors provide: list headers, no-reply senders, whether the user ever replied.
-4. **Ranking before the judge** drops a quarter of what is available (74% → 55%); and passing mentions of known
-   people trigger deliveries 17–35% of the time.
-5. **Learning** does not move routing within 20 sessions; explicit feedback or cross-session priors would.
+4. **Judge precision.** Once retrieval works the judge more than doubles recall, and its false picks become the false
+   fires (2–7% with a judge that wrongly picks 5% of candidates); passing mentions of known people trigger deliveries
+   17–47% of the time. Measure the real model's pick accuracy (it could not be measured here) and give the judge a
+   stricter bar for turns that name no task.
+5. **Learning**: routing asks the same number of sources throughout; recall rises across sessions as the cache warms.
+   Explicit feedback would let routing learn faster than inferred usage does.
 6. **Bound per-user vocabulary growth** below 50,000 terms, and cache the source map's routing reads in memory.
 
 ## What this cannot tell
@@ -287,7 +306,8 @@ latency or errors at the edge.
   (quotes, signatures, paraphrase, typos, lowercase), but a model-written corpus would be a stronger test. The plan
   was to render the world with the live model; the key's $0.01 limit stopped it (and every live-model number).
 - **The judge is modelled**, not measured: the perfect judge bounds the model path, the noisy one assumes accuracies.
-- **Connector behaviour and latency are assumptions** about real APIs, chosen to be plausible.
+- **Connector behaviour and latency are assumptions** about real APIs, chosen to be plausible. In accelerated soak
+  runs the simulated connectors rate-limit on real time while the engine runs on the accelerated clock.
 - **One world shape**: one persona (a partnerships lead with a family), ~1,500 items; real mailboxes are larger
   (the 4x-noise run is the only probe of that).
 - **Ramp compression**: each simulated user sends ten real users' traffic; memory per real user is the memory

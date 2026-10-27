@@ -186,6 +186,8 @@ export class ItemCache {
       const item = sanitized ? raw : sanitizeItem(raw, this.limits.maxTextChars);
       const old = u.items.get(item.id);
       if (old && old.item.text === item.text && old.item.title === item.title) {
+        // Same words, so the index and sketch stand; the rest (url, meta, updatedAt) is taken from the new copy.
+        old.item = item;
         old.fetchedAt = now;
         u.items.delete(item.id); // Re-insert: Map order stays oldest-first for eviction.
         u.items.set(item.id, old);
