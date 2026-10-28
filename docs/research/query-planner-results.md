@@ -541,6 +541,46 @@ No connector is lower beyond noise in either world. The largest gains are where 
 The IMAP cases vary from run to run on identical code (world 2000, two runs of main: imap-body 51.6% and 50.3%,
 imap-subject 34.8% and 36.6%), so single IMAP rows move by a few points on their own.
 
+### 6. Credit the shape that retrieved a delivered item (kept, D39)
+
+**Target:** plan item 5, rewards at delivery and at usage. The immediate reward (cue coverage of the best returned
+item) cannot tell shapes apart where every shape returns something.
+
+**Change:** the planner remembers which shape returned each item (per tenant, user, connector and item; at most
+20,000 entries in memory; dropped by `forget`). When the engine delivers an item, that shape gets one more success,
+once. A usage credit (another success when the agent visibly used the injection) was tried and not kept.
+
+**Tuning (zoo-tune, seeds 1–10, before D37 and D38, against the planner with D38's logic):**
+
+| Variant | Retrieved, no model | Recall, perfect judge | Calls per lookup, no model |
+|---|---|---|---|
+| no credit | 0.517 | 0.459 | 5.58 |
+| delivery, weight 1 | 0.529 | 0.475 | 5.41 |
+| delivery, weight 3 | 0.527 | 0.472 | 5.36 |
+| usage only | 0.529 | 0.474 | 5.56 |
+| delivery and usage | 0.527 | 0.469 | 5.39 |
+
+Retrieval and recall moved within noise in every variant; calls per lookup fell with delivery credit (weight 1:
+−0.17 per lookup, −0.19 to −0.14, no model; −0.21, −0.25 to −0.18, perfect judge). Usage added nothing on top.
+Chosen: delivery credit at weight 1, the simplest with the fewest calls among those that kept retrieval.
+
+**Against main with D37 and D38, seeds 1–20 (zoo-tune 1–10), planner on:**
+
+| Mix | Judge | Retrieved | Gain per seed | Recall | Gain per seed | Calls per lookup (paired difference) |
+|---|---|---|---|---|---|---|
+| zoo-tune | none | 0.495 → 0.509 | +2.5 (0.1–4.9) | 0.244 → 0.246 | +0.5 (−0.7–1.7) | 5.55 → 5.37 (−0.18, −0.21 to −0.16) |
+| held-out A | none | 0.478 → 0.491 | +2.4 (0.7–4.0) | 0.230 → 0.239 | +1.6 (0.2–2.9) | 5.85 → 5.60 (−0.25, −0.28 to −0.23) |
+| held-out A | perfect | 0.493 → 0.502 | +1.8 (0.2–3.3) | 0.422 → 0.428 | +1.2 (−0.3–2.8) | 5.84 → 5.56 (−0.29, −0.31 to −0.26) |
+| held-out B | none | 0.641 → 0.640 | −0.1 (−1.0–0.7) | 0.262 → 0.261 | −0.2 (−1.3–0.9) | 5.65 → 5.49 (−0.16, −0.19 to −0.14) |
+| held-out B | perfect | 0.655 → 0.657 | +0.3 (−1.0–1.7) | 0.560 → 0.563 | +0.5 (−0.9–1.8) | 5.63 → 5.45 (−0.18, −0.20 to −0.16) |
+| realistic | none | 0.473 → 0.485 | +2.2 (0.9–3.6) | 0.241 → 0.245 | +0.7 (−0.1–1.5) | 6.04 → 5.78 (−0.27, −0.30 to −0.24) |
+| realistic | perfect | 0.476 → 0.494 | +3.5 (1.8–5.1) | 0.413 → 0.429 | +3.1 (1.4–4.8) | 6.05 → 5.70 (−0.35, −0.38 to −0.32) |
+
+Calls per lookup fell 3–6% on every row with intervals apart from 0, retrieval rose or held, recall rose or held,
+and no hard false fire before or after (9,862 silent turns with no model, 8,448 with the judge). The connector lab
+calls the planner without the engine, so nothing is delivered there and nothing credited: lab reach is D38's by
+construction.
+
 ### The default-on gate (D31, D32)
 
 The owner chose a cost-normalised gate (D31) and, for its fourth condition, the reading pooled over the held-out
@@ -580,7 +620,8 @@ sets (D32). Where it stands after iteration 4:
   works.
 - **Quotes only by operator config (`quotes`).** No probe tests phrase support, and an unescaped quote broke a real
   server (Wiki.js, docs/research/connectors.md).
-- **Immediate reward only.** Rewards at delivery and at usage, from the plan, are not wired. The immediate reward
-  cannot tell shapes apart on OR and vector search, so the incumbent rule carries that case.
+- **No usage reward.** The immediate reward and delivery credit (D39) are wired; a usage credit added nothing in
+  simulation (iteration 6). The immediate reward cannot tell shapes apart on OR and vector search, so the incumbent
+  rule carries that case.
 - **No new `ContextualBandit` primitive.** One `BetaBandit` per (user, connector, bucket) was enough.
 - **Two lab worlds.** The tier-3 tables are from world 1000; world 2000 (iterations, above) repeats them.

@@ -385,6 +385,25 @@ describe("query planner wiring", () => {
     expect(JSON.stringify(plans)).not.toMatch(/globex|dana/i);
   });
 
+  test("a delivery credits the planner for each delivered item (D39)", async () => {
+    const planner = new QueryPlanner({ seed: 1 });
+    const credited: string[] = [];
+    const credit = planner.creditDelivery.bind(planner);
+    planner.creditDelivery = (sc, sourceId, itemId) => {
+      credited.push(`${sc.userId}/${itemId}`);
+      credit(sc, sourceId, itemId);
+    };
+    const { p } = partner({ planner });
+    const r = await p.observe(ev({ kind: "user_message", text: "Email Dana Lee about the Globex renewal" }), {
+      waitMs: 1_000,
+    });
+    const delivered = [...(r.injection ? [r.injection] : []), ...p.takePending(scope)].flatMap((i) =>
+      i.citations.map((c) => `${scope.userId}/${c.itemId}`),
+    );
+    expect(delivered.length).toBeGreaterThan(0);
+    expect(credited).toEqual(delivered);
+  });
+
   test("forget clears what the planner learned for the user", async () => {
     const { source } = substringCrm();
     const planner = new QueryPlanner({ seed: 1 });

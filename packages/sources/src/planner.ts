@@ -22,6 +22,11 @@
  *   comes back empty as well; there the cascade stops once its draws fall below `cascadeMin`, with an ε floor so it
  *   is re-tried now and then.
  *
+ * - Delivery credit: when the engine delivers an item, the shape that retrieved it gets one more success
+ *   (`creditDelivery`). The immediate reward cannot tell shapes apart where every shape returns something; whether
+ *   what came back was worth delivering can. The planner remembers which shape returned each item (bounded, in
+ *   memory, dropped by `forget`) and credits it once.
+ *
  * No query text is stored: state is two numbers per (connector, bucket, shape). State is keyed by tenant and user
  * (CLAUDE.md: isolation) and bounded in memory: the least recently used connectors' state is dropped past
  * `maxStates`. With a `store` (the source map), arms are loaded when a connector's state is created and written after
@@ -80,6 +85,8 @@ export interface PlannerOptions {
    * judge (docs/research/query-planner-results.md, iteration 1).
    */
   cascadeMin?: number;
+  /** Credit the shape that retrieved an item when the engine delivers it (`creditDelivery`; D39). */
+  deliveryCredit?: boolean;
   /** Connectors whose search takes `"a b"` as a phrase (operator config; unknown connectors get no quotes). */
   quotes?: (sourceId: string) => boolean;
   /**
@@ -162,6 +169,11 @@ function bestMean(bandit: BetaBandit, eligible: Uint8Array): number {
   return best;
 }
 
+/** Items whose retrieving shape is remembered for delivery credit, across all users (about 100 bytes each). */
+const MAX_ORIGINS = 20_000;
+const originKey = (scope: Scope, sourceId: string, itemId: string) =>
+  `${scope.tenantId}\u0000${scope.userId}\u0000${sourceId}\u0000${itemId}`;
+
 /** The stored name of a bucket's cascade posterior (`PlannerArm.shape`); not a shape. */
 const CASCADE = "cascade";
 
@@ -173,6 +185,7 @@ const DEFAULTS = {
   maxCalls: 3,
   cascade: true,
   cascadeGreedy: true,
+  deliveryCredit: true,
   runnerUp: { shape: "each-entity" as Shape, mean: 0.7, strength: 4 },
   cascadeMin: 0.05,
   reuse: true,
@@ -186,6 +199,8 @@ const DEFAULTS = {
 
 export class QueryPlanner {
   private readonly states = new Map<string, ConnectorState>();
+  /** Per (tenant, user, connector, item): the bucket and shape that returned it, until it is credited or dropped. */
+  private readonly origins = new Map<string, { bucket: number; arm: number }>();
   private readonly rng: Xoshiro128;
   private readonly o: typeof DEFAULTS & Pick<PlannerOptions, "quotes" | "store">;
   private readonly picked = new Int32Array(SHAPES.length);
@@ -293,6 +308,7 @@ export class QueryPlanner {
         if (seen.has(it.id)) continue;
         seen.add(it.id);
         items.push(it);
+        if (this.o.deliveryCredit) this.remember(query.scope, source.id, it.id, bucket, arm);
       }
       // A shape cut short by the permit (one call per entity, the later ones refused) is not credited either: its
       // reward may be 0 only because the query that would have found something was never sent. Its items are kept.
@@ -322,12 +338,39 @@ export class QueryPlanner {
     return this.rng.beta(c.alpha[0]!, c.beta[0]!) >= this.o.cascadeMin;
   }
 
+  /**
+   * The engine delivered `itemId` from `sourceId`: one more success for the shape that retrieved it, once. Unknown
+   * items (retrieved before a restart, or by another path) credit nothing.
+   */
+  creditDelivery(scope: Scope, sourceId: string, itemId: string): void {
+    const key = originKey(scope, sourceId, itemId);
+    const o = this.origins.get(key);
+    if (!o) return;
+    this.origins.delete(key);
+    const state = this.states.get(`${scope.tenantId}\u0000${scope.userId}\u0000${sourceId}`);
+    if (!state) return; // Evicted or forgotten since: nothing to credit.
+    const bandit = state.bandits[o.bucket]!;
+    bandit.decayArm(o.arm, 1);
+    bandit.update(o.arm, 1);
+    this.save(scope, sourceId, o.bucket, o.arm, bandit);
+  }
+
+  /** Which shape returned an item, for `creditDelivery`; least recently returned dropped past MAX_ORIGINS. */
+  private remember(scope: Scope, sourceId: string, itemId: string, bucket: number, arm: number): void {
+    const key = originKey(scope, sourceId, itemId);
+    this.origins.delete(key); // Re-insert: Map order is least recently returned first.
+    this.origins.set(key, { bucket, arm });
+    while (this.origins.size > MAX_ORIGINS) this.origins.delete(this.origins.keys().next().value!);
+  }
+
   /** Drops what was learned for a user (and one connector, when given), in memory; the store forgets its own. */
   forget(scope: Scope, sourceId?: string): void {
     const prefix = `${scope.tenantId}\u0000${scope.userId}\u0000`;
     for (const key of [...this.states.keys()]) {
       if (sourceId ? key === prefix + sourceId : key.startsWith(prefix)) this.states.delete(key);
     }
+    const origins = sourceId ? `${prefix}${sourceId}\u0000` : prefix;
+    for (const key of [...this.origins.keys()]) if (key.startsWith(origins)) this.origins.delete(key);
   }
 
   /** Whether `state` is still the one held for this user's connector (not forgotten or evicted since). */

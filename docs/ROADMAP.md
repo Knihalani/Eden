@@ -34,8 +34,8 @@ train / held-out split for tuning, and text not written by templates.
   71–79% (margin chosen on the same runs). Expecting each connector's recent latency then brought
   them within noise of planner-off's rate per call (1.15–1.28x in absolute numbers). The other D31/D32 conditions
   hold in simulation; the owner read the timeout check per call and turned it on by default (D33). A greedy
-  cascade with a runner-up prior then cut its learning cost (D38). Next: delivery and usage rewards, and
-  real-account evidence. Its evidence:
+  cascade with a runner-up prior then cut its learning cost (D38), and crediting the shape that retrieved a
+  delivered item cut its calls per lookup by 3–6% (D39). Next: real-account evidence. Its evidence:
   a source survey of real MCP servers ([research/connectors.md](research/connectors.md)) and the connector lab,
   where the query Eden sent reached nothing on whole-string-substring connectors
   ([research/connector-lab.md](research/connector-lab.md)).

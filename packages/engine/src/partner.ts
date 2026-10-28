@@ -827,6 +827,8 @@ export class ContextPartner {
 
   private deliver(s: Session, scored: Scored[], mode: InjectionMode, reason: string): Injection {
     const items = scored.map((x) => x.item);
+    // The shape that retrieved each item learns it was worth delivering (D39).
+    for (const i of items) this.deps.planner?.creditDelivery(s.scope, i.sourceId, i.id);
     for (const x of scored) if (x.sketch) s.delivered.push(x.sketch);
     if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
     s.ledger.mark(
