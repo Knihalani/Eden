@@ -205,6 +205,12 @@ export interface QualityReport {
   needDecisions: Record<string, number>;
   /** Present when the planner ran in shadow mode for at least one lookup. */
   shadow?: ShadowReport;
+  /**
+   * With the planner serving: keyed by connector and path ("gmail:terms", "gmail:terms>each-entity" for a cascade),
+   * how many of that connector's lookups took the path, how many of those returned nothing, and the calls they made.
+   * Where the extra calls go.
+   */
+  plans?: Record<string, { lookups: number; empty: number; calls: number }>;
 }
 
 const pct = (xs: number[], p: number) => {
@@ -613,6 +619,14 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
 
   const decisions: Record<string, number> = {};
   for (const t of traces) decisions[t.decision] = (decisions[t.decision] ?? 0) + 1;
+  const plans: Record<string, { lookups: number; empty: number; calls: number }> = {};
+  for (const p of traces.flatMap((t) => t.plans ?? [])) {
+    const k = `${p.sourceId}:${p.shapes.join(">") || "none"}`;
+    const e = (plans[k] ??= { lookups: 0, empty: 0, calls: 0 });
+    e.lookups++;
+    if (p.found === 0) e.empty++;
+    e.calls += p.calls;
+  }
   const cost = traces.reduce((s, t) => s + t.costUsd, 0);
   const modelCalls = traces.reduce((s, t) => s + t.modelCalls, 0);
   const r3 = (x: number) => Math.round(x * 1000) / 1000;
@@ -640,6 +654,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         };
   return {
     shadow,
+    ...(Object.keys(plans).length ? { plans } : {}),
     overall: rates(total),
     turns,
     injections,
