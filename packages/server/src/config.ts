@@ -61,7 +61,8 @@ export function loadConfig(env = process.env): ServerConfig {
   };
 }
 
-function plannerMode(raw: string | undefined): ServerConfig["queryPlanner"] {
+/** EDEN_QUERY_PLANNER's value as a planner mode; throws on anything else. */
+export function plannerMode(raw: string | undefined): ServerConfig["queryPlanner"] {
   if (raw === "0") return "off";
   if (raw === undefined || raw === "" || raw === "1") return "serve";
   if (raw === "shadow") return "shadow";

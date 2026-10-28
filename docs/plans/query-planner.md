@@ -245,7 +245,7 @@ From the literature, cited by name; nothing here was re-measured in this reposit
 |---|---|---|
 | 0 | Decisions below; a labelled schema corpus from the surveyed servers (each search tool's `inputSchema` with its correct argument mapping); sim connector zoo with tune/held-out splits; the local lab; baselines (single query, each fixed shape) in sim and lab | baselines reported with intervals |
 | 1 | `ContextualBandit` primitive (tests, benchmark); shape builders and escaping (fuzzed) | tier 1 green |
-| 2 | `QueryPlanner` + engine wiring, behind `EngineConfig.queryPlanner` (off by default); content-free traces | tier 2 gate met |
+| 2 | `QueryPlanner` + engine wiring, behind `PartnerDeps.planner` (off by default then; on in the server since D33); content-free traces | tier 2 gate met |
 | 3 | probe; schema-driven arguments; `toItems` extension | tier 2 gains hold on zoo variants with unknown argument names |
 | 4 | seeding tool + real-connector runner + recording; sandbox accounts | tier 3 gate met on 5+ services |
 | 5 | shadow mode, aggregates only | two weeks of shadow data on consenting accounts |
