@@ -154,6 +154,7 @@ describe("connector lab", () => {
     expect([e.cases, e.hits, e.reach, e.reachAll]).toEqual([1, 1, 1, 0.333]);
     expect(r.refFallback).toBe(0); // Rows with an `id` keep it in toItems.
     expect(r.idCollisions).toBe(0);
+    expect(r.idSplits).toBe(0);
   });
 
   test("runConnector tears the connector down when setup fails", async () => {

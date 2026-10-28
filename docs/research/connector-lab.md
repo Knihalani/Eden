@@ -1,7 +1,8 @@
 # The connector lab: real MCP servers, a simulated world, known answers
 
 Status: first runs, 2026-10-27. Code in `packages/sim/src/lab/`, images in `packages/sim/lab/`. Raw reports:
-[connector-lab.jsonl](connector-lab.jsonl).
+[connector-lab.jsonl](connector-lab.jsonl) (run before the `toItems` fix, so its `refFallback` counts positional refs
+only; the reach figures do not depend on `toItems`).
 
 ## What it is
 
@@ -123,12 +124,17 @@ Latency is the server and backend on this machine with no network between them, 
    issues carry `id` and `html_url`, kept its identity. The partner's per-user cache is keyed by item id, so each
    lookup to such a connector overwrote the previous lookup's items, and the ledger could take a new item for one
    already delivered. `toItems` now reads `structuredContent` first, finds the result list under common container
-   keys (a few levels down, and Chroma's columns), reads more id fields (`uid`, `permalink`, `path`, `uri`,
-   `messageId`…), treats JSON with no rows as an empty result, and gives a row with no id a hash of its content,
-   never its position. Measured with the lab's `idCollisions` (the share of item ids given to more than one world
-   item; 20 sessions, all ten configurations): 1.0 on 7 configurations before, 0 on all 10 after. Basic Memory was
-   affected too but its items do not name their world key, so the metric cannot see it there. The reference memory
-   server's rows have no id field at all; they now get content-hash refs, with no collisions.
+   keys (a few levels down, and Chroma's columns) without mistaking a record's own nested lists (an issue's labels)
+   or the lists beside an empty result (facets) for results, parses JSON after one prose line ending in a colon,
+   reads more id fields (`uid`, `permalink`, `path`, `uri`, `messageId`…), treats JSON with no rows as an empty
+   result, and gives a row with no id a hash of its identifying content (title and full text, not scores or
+   excerpts), never its position. Measured with two lab metrics over 20 sessions on all ten configurations
+   (raw: [before](connector-lab-toitems-before.jsonl), [after](connector-lab-toitems-after.jsonl); "before" is this
+   lab code run with `toItems` from before the fix): `idCollisions`, the share of item ids given to more than one
+   world item, was 1.0 on 7 configurations before and 0 on all 10 after; `idSplits`, the share of world items given
+   more than one id, was 0.607 on mcpvault before (the same note at different positions) and 0 on all 10 after.
+   Basic Memory was affected too, but its items do not name their world key, so neither metric can see it there.
+   The reference memory server's rows have no id field at all; they now get content-hash refs.
 6. **Half of these servers do not annotate their search tool read-only.** The reference memory server, Basic Memory,
    Meilisearch and Gitea do; mcpvault, CalDAV, the IMAP server and Chroma do not. `McpSource` refused CalDAV until
    the lab's trust list named it (in a first run, not in the raw file: every call refused). Under D7 that refusal
