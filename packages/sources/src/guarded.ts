@@ -222,7 +222,8 @@ export class SourceFanout {
         breaker: new CircuitBreaker({ ...this.options.breaker, now: this.now }),
         limiter: new AimdLimiter({ initial: 2, min: 1, max: this.options.maxConcurrency ?? 4 }),
         latency: new RollingHistogram(60_000, this.now),
-        callLatency: new RollingHistogram(60_000, this.now),
+        // Ten minutes, not one: a user's planner calls to one connector are sparse, and its latency changes slowly.
+        callLatency: new RollingHistogram(600_000, this.now),
       };
       this.per.set(key, s);
     }
