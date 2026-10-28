@@ -197,13 +197,11 @@ function first(row: Row, keys: string[]): string | undefined {
 }
 
 /**
- * What identifies a row with no id: its title and full text when it has them, else its fields without the volatile
- * ones, so the same row returned by two queries (another score, another excerpt) keeps one ref.
+ * What identifies a row with no id: every field except the volatile ones, so the same row returned by two queries
+ * (another score, another excerpt) keeps one ref, while two rows that differ anywhere else (two contacts named Dana
+ * Lee with different emails, two "Standup" events on different days) never share one.
  */
 function identity(row: Row): string {
-  const title = first(row, TITLE_KEYS) ?? "";
-  const text = first(row, ["text", "content", "body", "description", "document", "observations"]) ?? "";
-  if (title || text) return `${title}\n${text}`;
   return JSON.stringify(Object.fromEntries(Object.entries(row).filter(([k]) => !VOLATILE.test(k))));
 }
 
@@ -237,10 +235,10 @@ const isObject = (x: unknown): x is Row => !!x && typeof x === "object" && !Arra
  * The result rows in a parsed value, `[]` for an empty result, or null when there are none to find:
  * - an array is the result list (its objects);
  * - Chroma's columnar `{ids: [[…]], documents: [[…]]}`;
- * - an object with its own id is one record, nested lists included (an issue's labels, an event's attendees);
- * - otherwise a container key (`results`, `hits`, `entities`…) decides, even when its list is empty: other lists
- *   beside it (facets, filters, suggestions) are not results;
- * - an object with a title or text field is one record;
+ * - a container key (`results`, `hits`, `entities`…) holding a list decides, even when the list is empty: other lists
+ *   and fields beside it (facets, filters, the echoed query URL or folder, a request id) are not results;
+ * - an object with its own id, title or text is one record, nested lists included (an issue's labels, an event's
+ *   attendees);
  * - with none of those, a sole list of objects among its values is the result list.
  */
 function rowsOf(v: unknown, depth: number): Row[] | null {
@@ -249,15 +247,13 @@ function rowsOf(v: unknown, depth: number): Row[] | null {
   const o = v as Row;
   const columnar = columns(o);
   if (columnar) return columnar;
-  if (first(o, ID_KEYS)) return [o];
+  for (const k of CONTAINER_KEYS) if (Array.isArray(o[k])) return (o[k] as unknown[]).filter(isObject);
+  if (first(o, [...ID_KEYS, ...TITLE_KEYS, ...TEXT_KEYS])) return [o];
+  // A wrapper object (`{data: {...}}`, `{result: {results: [...]}}`): look inside its container keys.
   for (const k of CONTAINER_KEYS) {
-    if (!(k in o)) continue;
-    const inner = o[k];
-    if (Array.isArray(inner)) return inner.filter(isObject);
-    const rows = rowsOf(inner, depth + 1);
+    const rows = isObject(o[k]) ? rowsOf(o[k], depth + 1) : null;
     if (rows) return rows;
   }
-  if (first(o, [...TITLE_KEYS, ...TEXT_KEYS])) return [o];
   const lists = Object.values(o).filter((x) => Array.isArray(x) && x.some(isObject));
   return lists.length === 1 ? (lists[0] as unknown[]).filter(isObject) : null;
 }

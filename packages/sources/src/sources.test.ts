@@ -136,6 +136,32 @@ describe("toItems on real servers' results", () => {
     expect(toItems("x", [], 5, { hits: [], suggestions: [{ text: "did you mean" }] })).toEqual([]);
   });
 
+  test("rows with no id that share a title but differ elsewhere get different refs", () => {
+    const refs = (v: unknown) => toItems("x", [{ type: "text", text: JSON.stringify(v) }], 5).map((i) => i.ref);
+    const contacts = refs([
+      { name: "Dana Lee", email: "a@x.io" },
+      { name: "Dana Lee", email: "b@y.io" },
+    ]);
+    expect(new Set(contacts).size).toBe(2);
+    const standups = refs({
+      events: [
+        { summary: "Standup", start: "2026-10-01T09:00" },
+        { summary: "Standup", start: "2026-10-02T09:00" },
+      ],
+    });
+    expect(new Set(standups).size).toBe(2);
+  });
+
+  test("a response that echoes its request (url, path, id) still yields its results", () => {
+    const refs = (v: unknown) => toItems("x", [{ type: "text", text: JSON.stringify(v) }], 5).map((i) => i.ref);
+    expect(refs({ url: "https://api.x/search?q=a", results: [{ id: "a" }, { id: "b" }] })).toEqual(["a", "b"]);
+    expect(refs({ path: "notes/", matches: [{ path: "notes/a.md" }, { path: "notes/b.md" }] })).toEqual([
+      "notes/a.md",
+      "notes/b.md",
+    ]);
+    expect(refs({ id: "req-1", hits: [{ id: "h1" }] })).toEqual(["h1"]);
+  });
+
   test("plain text that merely ends in JSON is still one item", () => {
     for (const text of ["Budget for Q3 attached: [1, 2, 3]", "Config used: {}", "see {the notes}"]) {
       expect(toItems("x", [{ type: "text", text }], 5)).toMatchObject([{ text }]);
