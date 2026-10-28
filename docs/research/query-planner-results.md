@@ -488,7 +488,24 @@ confident delivery of an item the cascade retrieved, with or without the judge. 
 | gitea-db | 196 | 22% (17–29) | 26% (20–33) | each-entity 27% |
 | gitea-bleve | 196 | 23% (18–30) | 27% (21–33) | each-entity 27% |
 
-WORLD2000
+World 2000:
+
+| Connector | Cases | main | this change |
+|---|---|---|---|
+| memory | 202 | 70% (64–76) | 71% (65–77) |
+| mcpvault | 202 | 84% (78–88) | 84% (78–88) |
+| basic-memory | 202 | 69% (63–75) | 71% (65–77) |
+| meilisearch | 202 | 62% (56–69) | 60% (54–67) |
+| caldav | 69 | 68% (56–78) | 72% (61–82) |
+| imap-body | 161 | 50% (43–58) | 54% (46–62) |
+| imap-subject | 161 | 37% (30–44) | 38% (31–46) |
+| chroma | 202 | 85% (79–89) | 84% (78–89) |
+| gitea-db | 202 | 23% (18–29) | 27% (21–33) |
+| gitea-bleve | 202 | 24% (18–30) | 29% (23–35) |
+
+No connector is lower beyond noise in either world; the largest gains are where the cue's terms fail (CalDAV,
+IMAP, Gitea, Meilisearch on world 1000). Meilisearch on world 2000 (62% to 60%) and Chroma (85% to 84%) moved down
+within noise. Reproduce: `bun run sim:lab --world W --sessions 120 --only-planner`.
 
 ### The default-on gate (D31, D32)
 
