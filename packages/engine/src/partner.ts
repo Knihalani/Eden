@@ -616,7 +616,8 @@ export class ContextPartner {
    * - it runs only for connectors that served this lookup normally (not ones skipped as open, busy or limited, or
    *   that failed), so it adds no load to a struggling connector;
    * - its calls draw on a separate, smaller rate bucket (`permitShadow`), so serving's budget is never spent on it;
-   * - a rate-limit error it sees is fed back to the limit, as serving's are.
+   * - a rate-limit error it sees is fed back to the limit, as serving's are;
+   * - like serving, it starts no call its timeout would cut off.
    * Records carry sanitized item ids, the same ids serving's items get.
    */
   private async shadowLookup(s: Session, sources: Source[], cue: Cue, served: FanoutOutcome[]): Promise<void> {
@@ -625,6 +626,8 @@ export class ContextPartner {
     if (!planner) return;
     const turn = s.turn;
     const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(this.config.sourceTimeoutMs)]);
+    // As in serving: no call is started that this timeout would cut off.
+    const deadlineAt = performance.now() + this.config.sourceTimeoutMs;
     const query = { scope: s.scope, text: cue.text, entities: cue.entities, limit: 8 };
     const healthy = new Set(["ok", "cached", "stale"]);
     await Promise.all(
@@ -653,7 +656,7 @@ export class ContextPartner {
         const permit = () => this.fanout.permitShadow(s.scope, source.id);
         if (!permit()) return record({ status: "limited" });
         try {
-          const r = await planner.search(source, query, signal, permit);
+          const r = await planner.search(source, query, signal, permit, undefined, deadlineAt);
           record({ shapes: r.shapes, calls: r.calls, itemIds: r.items.map((i) => sanitizedId(i)) });
         } catch (e) {
           this.fanout.rateLimited(s.scope, source.id, String(e));

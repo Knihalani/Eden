@@ -383,6 +383,43 @@ describe("QueryPlanner", () => {
     ).toBeGreaterThan(1);
   });
 
+  test("a shape cut short by the deadline partway keeps its items but is not credited", async () => {
+    const slow: Source = {
+      id: "slow",
+      kind: "t",
+      description: "",
+      search: async (q) => (
+        await Bun.sleep(40),
+        q.text === "Globex" ? [{ id: "slow:2", sourceId: "slow", ...DOCS[1]! }] : []
+      ),
+    };
+    const rows: PlannerArm[] = [];
+    const store: PlannerStore = { loadArms: () => [], saveArms: (_s, _id, arms) => void rows.push(...arms) };
+    // One call per entity leads: "Globex" is sent, then "Sam Ortiz" would not answer before the deadline.
+    const planner = new QueryPlanner({
+      seed: 1,
+      epsilon: 0,
+      store,
+      incumbent: { shape: "each-entity", mean: 0.99, strength: 100 },
+    });
+    const q = query("globex renewal sam ortiz", ["Globex", "Sam Ortiz"]);
+    const r = await planner.search(slow, q, signal, undefined, undefined, performance.now() + 60);
+    expect(r.shapes).toEqual(["each-entity"]);
+    expect(r.calls).toBe(1);
+    expect(r.items.map((i) => i.id)).toEqual(["slow:2"]);
+    expect(rows).toEqual([]);
+    // PlannedSource passes its lookup's deadline through.
+    const p = new PlannedSource(
+      slow,
+      new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0 }),
+      undefined,
+      undefined,
+      performance.now() + 60,
+    );
+    await p.search(q, signal);
+    expect(p.last!.calls).toBe(1);
+  });
+
   test("a lookup aborted mid-flight (session ended) learns nothing", async () => {
     const rows: PlannerArm[] = [];
     const store: PlannerStore = { loadArms: () => [], saveArms: (_s, _id, arms) => void rows.push(...arms) };

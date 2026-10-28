@@ -336,10 +336,11 @@ the deadline: 86–122 calls given up on per mix, against 6 with the planner off
 returns nothing, and counts as a timeout against it (its circuit breaker).
 
 **Change:** a call after a lookup's first is started only if the lookup's slowest call so far, times a margin (2),
-still fits before the fan-out's deadline. A shape cut short this way is not credited. Runs without real latency are
-unchanged (the iteration-2 rows reproduce byte for byte).
+still fits before the fan-out's deadline (`deadlineMargin`). A shape cut short this way is not credited. Shadow
+lookups apply the same check to their own timeout. Runs without real latency are unchanged: rerun iteration-2 rows
+are identical apart from the new `sources.aborted` field (0).
 
-| Mix | Run | Source calls per lookup | Calls given up (timeouts) | 429s | Needed facts delivered |
+| Mix | Run | Source calls per lookup | Calls given up (timeouts and session ends) | 429s | Needed facts delivered |
 |---|---|---|---|---|---|
 | zoo-a | off | 4.62 | 6 | 0 | 14/165 |
 | zoo-a | before | 6.64 | 86 | 0 | 30/165 |
@@ -358,10 +359,11 @@ unchanged (the iteration-2 rows reproduce byte for byte).
   slower than the lookup's slowest so far (latency is heavy-tailed).
 - **429s:** none, with or without the planner.
 - **Recall:** the samples are small (165 facts per mix); delivered facts moved by 1–4 either way.
-- **Calls** at real pacing are 1.31–1.44x off: higher than at time 0 (1.36–1.46x there on other seeds), because
-  real pacing changes what is cached.
-- **How the margin was chosen:** on these same timed seeds, from 1.25 and 2; there is no separate timed tune set.
-  Before: main at commit 4c2b0ea (the JSONL's "before" rows; rerun from a checkout of it).
+- **Calls** at real pacing are 1.31–1.44x off. Calls per lookup are higher than at time 0 for both the planner and
+  off (off: 4.62 against 4.10), and the ratio is lower (1.36–1.47x at time 0, on other seeds); why is not measured.
+- **How the margin was chosen:** on these same timed seeds, from 1.25 and 2; there is no separate timed tune set, so
+  the timeout reduction is an in-sample number. "Before" is main at commit 4c2b0ea; the script builds a worktree of
+  it with only the sim's stats files (which add the `aborted` count) copied in.
 - At 1/50 of real time the deadline is 30 ms of wall clock and timer jitter inflates timeouts, so the check runs at
   1/10.
 
@@ -371,23 +373,25 @@ The lab reran with the current planner on both worlds (`cascadeMin` 0.05; the la
 and the deadline check do not apply; raw:
 [query-planner-lab-iter3-world1000.jsonl](query-planner-lab-iter3-world1000.jsonl),
 [query-planner-lab-iter3-world2000.jsonl](query-planner-lab-iter3-world2000.jsonl)). Against the earlier runs
-(`cascadeMin` 0.2 on world 2000; before iteration 1 on world 1000), reach is within noise on all twenty
-configurations, and higher on IMAP subject search (world 1000: 44% to 52%; world 2000: 29% to 37%) and IMAP body
-(world 2000: 44% to 50%). Calls per case moved by at most 0.06.
+(`cascadeMin` 0.2, iteration 1's first version, on both worlds; on world 1000 also before iteration 1), reach is
+within noise on all twenty configurations, and higher on IMAP subject search (world 1000: 47% to 52% against 0.2,
+44% to 52% against before iteration 1; world 2000: 29% to 37%) and IMAP body (world 2000: 44% to 50%). Calls per case
+moved by at most 0.06.
 
-### The default-on gate (D31)
+### The default-on gate (D31, D32)
 
-The owner chose a cost-normalised gate (D31). Where it stands after iteration 3:
+The owner chose a cost-normalised gate (D31) and, for its fourth condition, the reading pooled over the held-out
+sets (D32). Where it stands after iteration 3:
 - **Recall:** higher with intervals apart on A and realistic, with and without a judge; within noise on B. Holds.
 - **False fires and secrets:** unchanged and 0. Holds.
-- **Calls at most 1.5x off:** 1.36–1.46x at time 0 (iteration 2) and 1.31–1.44x at real pacing. Holds.
-- **Calls per point of recall no worse than off:** holds on A and realistic and pooled over the three held-out sets
-  (no model: 0.311 against 0.325; judge: 0.132 against 0.138); fails on B alone (0.284 against 0.225; judge: 0.099
-  against 0.076), where today's query already finds nearly everything, so any extra call costs more than it adds. D31
-  as recorded reads the condition per set; the owner's choice did not say which.
-- **Lab reach:** within noise or higher on both worlds at the current settings. Holds.
-- **429s and timeouts in a timed run:** no 429s; timeouts 3–6x planner-off's after iteration 3 (17–35 against 6 per
-  mix). Not yet at planner-off's level.
+- **Calls at most 1.5x off:** 1.36–1.47x at time 0 (iteration 2) and 1.31–1.44x at real pacing. Holds.
+- **Calls per point of recall no worse than off, pooled over the held-out sets (D32):** no model 0.311 against 0.325;
+  judge 0.132 against 0.138. Holds. Read per set, it fails on B (0.284 against 0.225; judge 0.099 against 0.076),
+  where today's query already finds nearly everything; the pooled figure leans on B's high recall.
+- **Lab reach:** within noise or higher on both worlds with `cascadeMin` 0.05 (the lab calls the planner directly, so
+  reuse and the deadline check are not exercised there). Holds.
+- **429s and timeouts in a timed run:** no 429s; calls given up 3–6x planner-off's after iteration 3 (17–35 against
+  6 per mix). Not met.
 
 ## Gates in the plan, and where they stand
 
