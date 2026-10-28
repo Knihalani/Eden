@@ -647,3 +647,47 @@ describe("what the agent has or does not need is not delivered", () => {
     expect(answer.citations.map((c) => c.itemId)).toContain("mail:nl");
   });
 });
+
+describe("no-model fallback (D36)", () => {
+  const notes = new StaticSource("notes", "notes", [
+    {
+      ref: "qbr",
+      title: "Quarterly budget review",
+      text: "Marketing budget review outcome: approved with travel cuts",
+    },
+    { ref: "other", title: "Office plants", text: "Water the office plants on Fridays" },
+  ]);
+  const ask = "what was the outcome of the quarterly marketing budget review";
+  const delivered = async (p: ContextPartner, text: string, sessionId = "fb") => {
+    const r = await p.observe(ev({ kind: "user_message", text, sessionId }), { waitMs: 1_000 });
+    return [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId })].flatMap((i) =>
+      i.citations.map((c) => c.itemId),
+    );
+  };
+
+  test("without a model, the best candidate is delivered when it holds three or more query terms", async () => {
+    const { p, traces } = partner({}, [notes]);
+    expect(await delivered(p, ask)).toEqual(["notes:qbr"]);
+    expect(traces.some((t) => t.decision === "sources" && t.reason.startsWith("fallback:"))).toBe(true);
+  });
+
+  test("two shared terms are not enough, and fallbackMatchedTerms 0 turns it off", async () => {
+    expect(await delivered(partner({}, [notes]).p, "how did the budget review go")).toEqual([]);
+    expect(await delivered(partner({ config: { fallbackMatchedTerms: 0 } }, [notes]).p, ask)).toEqual([]);
+  });
+
+  test("with a model, the model decides; over budget, the fallback applies", async () => {
+    const model = new FakeModel(() => '{"pick": []}');
+    expect(await delivered(partner({ model }, [notes]).p, ask)).toEqual([]);
+    expect(model.calls.length).toBe(1);
+    const broke = new Budget({ callsPerSession: 0, usdPerSession: 1, usdPerUserDay: 1 });
+    expect(await delivered(partner({ model, budget: broke }, [notes]).p, ask)).toEqual(["notes:qbr"]);
+  });
+
+  test("bulk mail is never the fallback's pick", async () => {
+    const mail = new StaticSource("mail", "mail", [
+      { ref: "nl", title: "Quarterly budget review newsletter", text: "Marketing budget review outcome and tips" },
+    ]);
+    expect(await delivered(partner({}, [mail]).p, ask)).toEqual([]);
+  });
+});

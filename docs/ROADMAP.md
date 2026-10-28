@@ -14,7 +14,10 @@ train / held-out split for tuning, and text not written by templates.
   names); per-category metrics, a privacy check and direct asks in the report. Baseline with no model: precision
   0.833, recall 0.349, 3 false fires in 58 silent turns, no secret leaked; after plan item 6, precision 1.000 and no
   false fires, recall unchanged.
-- Tune `confidentScore`, `candidateScore`, `entityBonus` on a train split; report on a held-out split.
+- Tune `confidentScore`, `candidateScore`, `entityBonus` on a train split; report on a held-out split. Lowering the
+  bar raised false fires (the owner kept precision); a no-model fallback for the best candidate, tuned on zoo-tune,
+  raised held-out recall with false fires unchanged (D36,
+  [research/no-model-fallback.md](research/no-model-fallback.md)).
 - Measure how often inferred usage (D13) agrees with labels.
 
 ## M2 — Real connectors
