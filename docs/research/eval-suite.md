@@ -6,7 +6,7 @@
 
 ## What is in it
 
-- **26 scenarios, 125 turns, 88 scored**, hand-written, each its own small world (1–3 sources, 1–6 items, most with
+- **26 scenarios, 125 turns, 88 scored**, hand-written, each its own small world (1–3 sources, 1–7 items, most with
   distractors that share words with the answer):
   - scheduling 5, inbox 4, follow-ups 3, purchases 3, relationships 3, travel 2;
   - adversarial 6:
