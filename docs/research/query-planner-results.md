@@ -11,7 +11,7 @@ entities where an operator says the connector takes phrases. It learns per (tena
 cues with and without an entity, with Thompson sampling over Beta posteriors (`BetaBandit`). The reward is
 immediate: how much of the cue the best returned item covers, as whole words; nothing returned scores 0. When the
 chosen shape returns nothing, one other shape is tried in the same lookup (the cascade), unless the connector has
-taught the planner that its cascades find nothing (iteration 1, below). Up to 3 calls per lookup per connector.
+taught the planner that its cascades find nothing (iteration 1, below; D30). Up to 3 calls per lookup per connector.
 
 It is conservative. The cue's terms are the incumbent, with a stronger prior (mean 0.75, 8 pseudo-observations). The
 planner sends another shape only when that shape's posterior mean beats the incumbent's by 0.1, plus 5% exploration.
@@ -175,44 +175,67 @@ its target improves and no guardrail regresses. Raw: [query-planner-iterations.j
 produced by [query-planner-iterations.sh](query-planner-iterations.sh) and summarised by
 [query-planner-iterations.py](query-planner-iterations.py). The tables above were measured before these changes.
 
-### 1. A learned cascade gate (kept)
+### 1. A learned cascade gate (kept, D30)
 
-**Target:** source calls per lookup, the gate that keeps the planner off. The quality report now breaks a run's
-connector lookups down by path (`plans`: "terms", "terms>each-entity" for a cascade). On held-out A, seed 1, every
-cascade after an empty answer from the cue's terms came back empty on the OR connector (166 of 166 lookups) and nearly
-all did on the ranked one: there an empty OR answer means nothing is there, and every narrower shape is empty too.
+**Target:** source calls per lookup, the gate that keeps the planner off. The quality report now breaks each
+connector's lookups down by path, with how many came back empty (`plans`: "drive:terms>entities", for a cascade). On
+held-out A, before this change and pooled over 5 seeds, the cascade after an empty answer from the cue's terms came
+back empty in 777 of 781 lookups on the OR connector and 694 of 706 on the ranked one: there an empty answer means
+nothing is there, and every narrower shape is empty too. On the substring CRM, 817 of 1,125 were empty.
 
 **Change:** whether to cascade is learned per (user, connector, bucket): a Beta posterior on "the cascade step found
 something" (cue coverage above 0), decayed like the arms and stored with them. The cascade runs when a draw from it is
-at least `cascadeMin` (default 0.2), or on an ε step, so it is re-tried now and then.
+at least `cascadeMin` (default 0.05), or on an ε step, so a closed gate is re-tried now and then. A cascade step cut
+short by the rate limit teaches nothing, to the gate or to its shape's arm.
 
-**Tuning** (`zoo-tune`, 5 seeds): `cascadeMin` 0, 0.1, 0.2, 0.3 and 0.4 gave recall 18.9%, 18.9%, 19.1%, 18.3% and
-18.7% (all within noise), at 6.04, 5.48, 5.22, 5.05 and 4.89 calls per lookup. 0.2 was chosen before looking at the
-held-out sets, as the middle of the range where recall held.
+**Tuning** (`zoo-tune`, 5 seeds). Recall and calls per lookup by `cascadeMin`:
 
-| Mix | Run | Needed facts retrieved or cached | Recall | Precision | False fires | Source calls per lookup |
+| `cascadeMin` | 0 | 0.05 | 0.1 | 0.2 | 0.3 | 0.4 |
 |---|---|---|---|---|---|---|
-| zoo-a | off | 16.8% (15–19) | 9.0% (7–11) | 0.563 | 1/713 | 4.11 |
-| zoo-a | before (always cascade) | 41.1% (38–44) | 17.6% (15–20) | 0.598 | 1/713 | 6.28 |
-| zoo-a | after (`cascadeMin` 0.2) | 37.3% (34–40) | 16.2% (14–19) | 0.588 | 1/713 | 5.46 |
-| zoo-b | off | 60.6% (57–64) | 21.5% (19–24) | 0.535 | 1/713 | 4.13 |
-| zoo-b | before | 63.5% (60–67) | 23.9% (21–27) | 0.560 | 1/713 | 6.06 |
-| zoo-b | after | 61.4% (58–64) | 22.4% (20–25) | 0.556 | 1/713 | 5.18 |
-| realistic | off | 19.4% (17–22) | 13.1% (11–15) | 0.634 | 1/713 | 4.11 |
-| realistic | before | 41.7% (39–45) | 18.9% (16–22) | 0.613 | 1/713 | 6.52 |
-| realistic | after | 38.3% (35–41) | 18.4% (16–21) | 0.623 | 1/713 | 5.65 |
+| Recall, no model | 18.9% | 20.4% | 18.9% | 19.1% | 18.3% | 18.7% |
+| Recall, perfect judge | 39.1% | 40.0% | 38.1% | 36.6% | 34.5% | 31.0% |
+| Calls per lookup | 6.04 | 5.66–5.71 | 5.46–5.48 | 5.21–5.22 | 5.04–5.05 | 4.87–4.89 |
 
-- **Calls:** the planner's extra calls fell by 36–46% (held-out A: from 2.17 to 1.35 extra per lookup; B: 1.93 to
-  1.05; realistic: 2.41 to 1.54).
-- **Recall:** within noise of before in every mix, and still above off on A and realistic with intervals apart. It is
-  lower in every mix (by 0.5–1.5 points), and reach by 2–4 points: the gate also stops some cascades that would have
-  found something. Calls per lookup per point of recall fell in every mix (A: 0.36 to 0.34; B: 0.25 to 0.23;
-  realistic: 0.34 to 0.31).
-- **Guardrails:** false fires unchanged (1/713); no secret leaked; precision within noise.
-- **Real servers** (the connector lab, world 1000, planner only; raw:
-  [query-planner-lab-cascade.jsonl](query-planner-lab-cascade.jsonl)): reach and calls per case within noise of
-  before on all ten configurations. Every lab case has a needed item to find, so a cascade there often finds
-  something, and the gate stays open:
+With no model every threshold was within noise. With a judge (how a deployment runs), recall fell steadily from
+0.1 up. 0.05 was chosen on the tune set as the highest threshold whose recall was not below always cascading in
+either judge setting.
+
+**Held-out** (5 seeds with no model, 3 with a perfect judge):
+
+| Judge | Mix | Run | Needed facts retrieved or cached | Recall | Precision | False fires | Source calls per lookup |
+|---|---|---|---|---|---|---|---|
+| none | zoo-a | off | 16.8% (15–19) | 9.0% (7–11) | 0.563 | 1/713 | 4.11 |
+| none | zoo-a | before (always cascade) | 41.1% (38–44) | 17.6% (15–20) | 0.598 | 1/713 | 6.28 |
+| none | zoo-a | after (`cascadeMin` 0.05) | 44.9% (42–48) | 18.8% (16–21) | 0.624 | 1/713 | 6.01 |
+| none | zoo-b | off | 60.6% (57–64) | 21.5% (19–24) | 0.535 | 1/713 | 4.13 |
+| none | zoo-b | before | 63.5% (60–67) | 23.9% (21–27) | 0.560 | 1/713 | 6.06 |
+| none | zoo-b | after | 62.0% (59–65) | 23.3% (21–26) | 0.558 | 1/713 | 5.79 |
+| none | realistic | off | 19.4% (17–22) | 13.1% (11–15) | 0.634 | 1/713 | 4.11 |
+| none | realistic | before | 41.7% (39–45) | 18.9% (16–22) | 0.613 | 1/713 | 6.52 |
+| none | realistic | after | 41.3% (38–45) | 19.1% (17–22) | 0.627 | 1/713 | 6.22 |
+| perfect | zoo-a | off | 16.7% (14–20) | 14.8% (12–18) | 0.698 | 1/398 | 4.12 |
+| perfect | zoo-a | before | 44.8% (41–49) | 39.6% (36–44) | 0.790 | 1/398 | 6.34 |
+| perfect | zoo-a | after | 45.9% (42–50) | 39.3% (35–43) | 0.792 | 1/398 | 6.06 |
+| perfect | zoo-b | off | 66.1% (62–70) | 55.7% (52–60) | 0.781 | 1/398 | 4.14 |
+| perfect | zoo-b | before | 66.5% (62–70) | 56.3% (52–60) | 0.790 | 0/398 | 6.07 |
+| perfect | zoo-b | after | 66.1% (62–70) | 56.7% (52–61) | 0.786 | 0/398 | 5.81 |
+| perfect | realistic | off | 20.0% (17–24) | 18.9% (16–22) | 0.776 | 1/398 | 4.11 |
+| perfect | realistic | before | 45.2% (41–49) | 38.7% (35–43) | 0.782 | 1/398 | 6.56 |
+| perfect | realistic | after | 42.6% (38–47) | 36.9% (33–41) | 0.817 | 1/398 | 6.21 |
+
+- **Calls:** the planner's extra calls fell by 12–14% (no model: A from 2.17 to 1.90 extra per lookup, B 1.93 to
+  1.66, realistic 2.41 to 2.11; perfect judge: 2.22 to 1.94, 1.93 to 1.67, 2.45 to 2.10). On held-out A the OR and
+  ranked connectors' empty cascades fell from 1,471 to 1,021.
+- **Recall:** within noise of before in every mix and judge setting, and still above off on A and realistic with
+  intervals apart. The largest drop is realistic with a judge (38.7% to 36.9%).
+- **Guardrails:** false fires unchanged; precision equal or higher; no secret leaked.
+- **Not enough on its own:** the planner still makes 40–51% more calls than off. A higher threshold saves more
+  (0.2 cut extra calls by 42% on the tune set) but cost recall there with a judge (39.1% to 36.6%), so it was not
+  taken.
+- **Real servers** (the connector lab, world 1000, planner only, measured at `cascadeMin` 0.2, which closes the gate
+  sooner than the default; raw: [query-planner-lab-cascade.jsonl](query-planner-lab-cascade.jsonl)): reach and calls
+  per case within noise of before on all ten configurations. Every lab case has a needed item to find, so the cascade
+  there often finds something and the gate stays open:
 
 | Connector | Cases | Reach before | Calls per case before | Reach after | Calls per case after |
 |---|---|---|---|---|---|
@@ -227,14 +250,14 @@ held-out sets, as the middle of the range where recall held.
 | gitea-db | 196 | 23% | 1.63 | 21% | 1.67 |
 | gitea-bleve | 196 | 24% | 1.63 | 21% | 1.67 |
 
-**Where the rest of the extra calls go** (held-out A, seed 1, after): 41% of the planner's connector calls are the
-cue's terms alone, 40% are cascades from them (to each-entity, entities, entity+term), and the rest start from an
-entity shape. Most cascades are the learning cost of leaving the incumbent; the next iterations target that.
+**Tried and dropped:** choosing the cascade's shape by the highest posterior mean, or by mean per call, instead of a
+Thompson draw (tune set, no model, at 0.2): recall 18.2% and 17.8% against 19.1%, calls 5.33 and 5.19 against 5.22.
 
 ## Gates in the plan, and where they stand
 
 - **Tier 2:** met for recall and false fires on held-out connectors. Not met for "source calls no worse": the default
-  made about 50% more calls, and 25–37% more after iteration 1. The one-call setting meets the call budget, but its recall gain is within noise.
+  made about 50% more calls, and 40–51% more after iteration 1. The one-call setting meets the call budget, but its
+  recall gain is within noise.
 - **Tier 3:**
   - Met for reach on more than five services with different search behaviour, with no regression beyond noise.
   - Not measured: false fires, 429s and timeouts on real servers. The lab measures reach only.

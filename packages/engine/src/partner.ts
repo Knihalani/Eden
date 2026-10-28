@@ -568,7 +568,7 @@ export class ContextPartner {
     s.plans = planner
       ? chosen.flatMap((x) => {
           const last = (x as PlannedSource).last;
-          return last ? [{ sourceId: x.id, shapes: last.shapes, calls: last.calls }] : [];
+          return last ? [{ sourceId: x.id, shapes: last.shapes, calls: last.calls, found: last.found }] : [];
         })
       : undefined;
     if (s.closed) return chosen.length; // Forgotten or ended mid-search: keep nothing.
