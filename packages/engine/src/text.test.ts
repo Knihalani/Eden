@@ -13,6 +13,25 @@ describe("extractEntities", () => {
   test("a single capitalised word that starts a sentence is not an entity", () => {
     expect(extractEntities("Book a table for tonight.")).toEqual([]);
     expect(extractEntities("lunch with Priya tomorrow")).toEqual(["Priya"]);
+    // Weekdays and months are dates, not entities; a month that is also a first name, or a longer name, stays.
+    expect(extractEntities("Find me a yoga class on Sunday mornings in Islington")).toEqual(["Islington"]);
+    expect(extractEntities("the invoice is due in October, ask May")).toEqual(["May"]);
+    expect(extractEntities("tickets for the Sunday Times quiz")).toEqual(["Sunday Times"]);
+    const dates = [
+      "meet Sunday's crew",
+      "meet on Sunday-morning",
+      "the SUNDAY deadline",
+      "due Fri, see you",
+      "free on Fridays",
+    ];
+    for (const t of dates) {
+      expect(extractEntities(t)).toEqual([]);
+    }
+    expect(extractEntities("on Friday Dana Lee is free")).toEqual(["Dana Lee"]);
+    expect(extractEntities("dinner on Monday Tuesday")).toEqual([]);
+    expect(extractEntities("lunch with Jun and Jan, ask Sun")).toEqual(["Jun", "Jan", "Sun"]);
+    expect(extractEntities("a yoga class on Sundays in Islington, and a Mars bar")).toEqual(["Islington", "Mars"]);
+    expect(extractEntities("the report is due in March, July at the latest")).toEqual([]);
   });
 });
 
