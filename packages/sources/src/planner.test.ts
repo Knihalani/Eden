@@ -367,11 +367,17 @@ describe("QueryPlanner", () => {
     const rows: PlannerArm[] = [];
     const store: PlannerStore = { loadArms: () => [], saveArms: (_s, _id, arms) => void rows.push(...arms) };
     const q = query("globex renewal sam ortiz", ["Globex", "Sam Ortiz"]);
-    // 60 ms left after a 40 ms call: a second call would need 50 ms (with the margin), so none is sent.
+    // A 60 ms deadline: after a 40 ms call 20 ms are left, and a second call needs 80 (40 ms times the margin, 2).
     const tight = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0, store });
     const r = await tight.search(slow, q, signal, undefined, undefined, performance.now() + 60);
     expect(r.calls).toBe(1);
     expect(rows.filter((x) => x.shape === "cascade")).toEqual([]);
+    // The margin decides: with 110 ms, about 70 are left after the first call. Margin 1 needs 40, so it sends the
+    // next call; the default (2) needs 80, so it does not.
+    const loose = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0, deadlineMargin: 1 });
+    expect((await loose.search(slow, q, signal, undefined, undefined, performance.now() + 110)).calls).toBe(2);
+    const strict = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0 });
+    expect((await strict.search(slow, q, signal, undefined, undefined, performance.now() + 110)).calls).toBe(1);
     // With time to spare, the cascade runs as before.
     const roomy = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0 });
     expect(

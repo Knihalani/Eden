@@ -177,7 +177,9 @@ export interface QualityReport {
     usefulResultShare: number;
     errors: number;
     limited: number;
-    /** Connector calls given up on before they answered: source timeouts, at real pacing (`timeScale` > 0). */
+    /**
+     * Connector calls given up on before they answered (timeouts and session ends), at real pacing (`timeScale` > 0).
+     */
     aborted: number;
     lookups: number;
   };
