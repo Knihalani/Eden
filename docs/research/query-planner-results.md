@@ -458,9 +458,11 @@ Each part alone was at most marginally better than main (the prior alone: 0.3–
 better. Chosen: the highest tune retrieval. (A prior of 0.6 at strength 2 scored below main on seeds 1–5, 0.434
 against 0.443.) The tuning ran before D37; the results below are against main with D37.
 
-**Held out, against main with D37 (weekday and month names no longer entities), planner on, seeds 1–20 (seeds
-11–20 had backed no earlier decision); paired per-seed gain, 95% t-interval with df 9's critical value
-(conservative for 20 seeds):**
+**Held out, against main with D37 (weekday and month names no longer entities), planner on, seeds 1–20 (the
+same seeds D37 was measured on, and D37 was written after seeing this change's false fires on seeds 6 and 17, so
+fresh seeds 21–30 follow below); paired per-seed gain, 95% t-interval with df 9's critical value (conservative for
+20 seeds). At `--time 0` a run can shift slightly under CPU load; the reviewer reproduced these tables exactly with
+one run at a time:**
 
 | Mix | Judge | Retrieved | Gain per seed | Recall | Gain per seed | Calls per lookup |
 |---|---|---|---|---|---|---|
@@ -474,7 +476,9 @@ against 0.443.) The tuning ran before D37; the results below are against main wi
 
 Retrieval rose on every mix, and recall with the perfect judge on every mix, with intervals apart from 0; recall
 with no model rose on B and realistic and stayed within noise on A (no-model delivery, not retrieval, bounds it).
-Calls per lookup rose 1–2%.
+Calls per lookup rose 0.7–2.2%.
+
+FRESH38
 
 **False fires:** none, before or after, in every row above (1,414 silent turns on zoo-tune, 2,816 per held-out mix
 and judge setting). Before D37, the same change measured against main raised them from 6 to 8 of 8,448 (no model)
