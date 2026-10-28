@@ -88,9 +88,32 @@ export interface Entity {
 export const PERSISTABLE_KINDS: ReadonlySet<EntityKind> = new Set(["name", "handle", "id"]);
 
 /**
+ * Weekday and month names (lower-cased): capitalised, but dates, not entities. As one entity they matched every item
+ * that names the day ("Sunday" in a yoga request found an invoice due on a Sunday) and earned the entity bonus.
+ * Months and abbreviations that are also common names (April, May, June, August, Jan, Jun, Sun) stay entities:
+ * missing a person costs more.
+ */
+const CALENDAR = new Set(
+  (
+    "monday tuesday wednesday thursday friday saturday sunday mon tue tues wed thu thur thurs fri sat " +
+    "january february march july september october november december feb mar apr jul aug sep sept oct nov dec"
+  ).split(" "),
+);
+
+/** A capitalised word is a date: `Sunday`, `Sundays`, `Sunday's`, `Sunday-morning`, `SUNDAY`. */
+const isCalendar = (word: string) =>
+  CALENDAR.has(
+    word
+      .replace(/['’]s$/i, "")
+      .replace(/(?<=day)s$/i, "") // Plural weekdays ("on Sundays"); not months: "Mars" is no "Mar".
+      .split("-")[0]!
+      .toLowerCase(),
+  );
+
+/**
  * Named things a source might hold: emails, @handles, ticket-style ids (ABC-123), URLs, quoted phrases, and runs of
  * capitalised words not at a sentence start ("Dana Lee", "Acme Corp"). Recall over precision: a false entity costs
- * one wasted lookup, a missed one costs the injection.
+ * one wasted lookup, a missed one costs the injection. Weekday and month names are not entities (D37).
  */
 export function extractTypedEntities(text: string): Entity[] {
   const found = new Map<string, Entity>();
@@ -105,10 +128,18 @@ export function extractTypedEntities(text: string): Entity[] {
   for (const m of text.matchAll(/["“]([^"”\n]{3,60})["”]/g)) add(m[1], "quoted");
   // Capitalised runs. A run that starts a sentence counts only if it has two or more words.
   for (const m of text.matchAll(/(^|[.!?]\s+|\s)((?:[A-Z][\p{L}&'-]+)(?:\s+[A-Z][\p{L}&'-]+)*)/gu)) {
-    const run = m[2]!;
     const sentenceStart = m[1] === "" || /[.!?]/.test(m[1]!);
-    const words = run.split(/\s+/);
-    if (words.length === 1 && (sentenceStart || STOPWORDS.has(run.toLowerCase()))) continue;
+    let words = m[2]!.split(/\s+/);
+    // Dates around a name ("on Friday Dana Lee") are trimmed when a name of two or more words remains; a weekday
+    // with one other word ("Sunday Times") may be the name itself, so it stays whole.
+    let from = 0;
+    let to = words.length;
+    while (from < to && isCalendar(words[from]!)) from++;
+    while (to > from && isCalendar(words[to - 1]!)) to--;
+    if (to === from) continue; // Dates only ("Monday Tuesday").
+    if (to - from >= 2) words = words.slice(from, to);
+    const run = words.join(" ");
+    if (words.length === 1 && (sentenceStart || STOPWORDS.has(run.toLowerCase()) || isCalendar(run))) continue;
     add(run, "name");
   }
   return [...found.values()];
