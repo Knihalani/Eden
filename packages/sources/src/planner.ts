@@ -33,6 +33,24 @@ export interface PlannerOptions {
   gamma?: number;
   /** Prior pseudo-observations per arm (prior mean 0.5). */
   priorStrength?: number;
+  /**
+   * The incumbent: what Eden sent before the planner (the cue's terms), with a stronger prior, so the planner leaves
+   * it only on evidence that it fails. Without one, on connectors where every shape returns something (OR and vector
+   * search) the reward barely separates shapes, and exploring cost reach the terms already had
+   * (docs/research/query-planner-results.md). `strength` 0 disables it.
+   */
+  incumbent?: { shape: Shape; mean: number; strength: number };
+  /**
+   * Items whose cue coverage is averaged for the reward, in the order the connector returned them: 1 scores only the
+   * best-covering item; more also rewards ranking cue-heavy items first, which separates shapes on connectors where
+   * every shape returns something.
+   */
+  rewardTopK?: number;
+  /**
+   * How much better (posterior mean) a shape must look than the incumbent to replace it; 0 is plain Thompson
+   * sampling. Exploration still sends a non-incumbent shape with probability `epsilon`, so evidence keeps coming.
+   */
+  margin?: number;
   /** Most calls a lookup makes for one connector, cascade included. */
   maxCalls?: number;
   /** Try the next shape when the chosen one returns nothing. */
@@ -78,6 +96,9 @@ const DEFAULTS = {
   maxCalls: 3,
   cascade: true,
   maxStates: 50_000,
+  incumbent: { shape: "terms" as Shape, mean: 0.75, strength: 8 },
+  rewardTopK: 1,
+  margin: 0.1,
 };
 
 export class QueryPlanner {
@@ -85,11 +106,13 @@ export class QueryPlanner {
   private readonly rng: Xoshiro128;
   private readonly o: typeof DEFAULTS & Pick<PlannerOptions, "quotes" | "store">;
   private readonly picked = new Int32Array(SHAPES.length);
+  private readonly incumbentArm: number;
   private readonly eligible = new Uint8Array(SHAPES.length);
 
   constructor(options: PlannerOptions = {}) {
     this.o = { ...DEFAULTS, ...options };
     this.rng = new Xoshiro128(this.o.seed);
+    this.incumbentArm = this.o.incumbent.strength > 0 ? SHAPES.indexOf(this.o.incumbent.shape) : -1;
   }
 
   /** Runs one lookup against `source`, choosing and crediting shapes. Errors from the source propagate. */
@@ -112,7 +135,20 @@ export class QueryPlanner {
     while (calls < this.o.maxCalls) {
       const n = bandit.select(this.rng, 1, this.eligible, null, this.o.epsilon, this.picked);
       if (n === 0) break;
-      const arm = this.picked[0]!;
+      let arm = this.picked[0]!;
+      // Conservative: the incumbent is sent unless the draw's winner beats it, on posterior means, by `margin`. Where
+      // the reward cannot tell shapes apart, today's query stays; where it fails, the means part quickly.
+      const inc = this.incumbentArm;
+      if (
+        shapes.length === 0 &&
+        inc >= 0 &&
+        arm !== inc &&
+        this.eligible[inc] === 1 &&
+        bandit.mean(arm) - bandit.mean(inc) < this.o.margin &&
+        this.rng.uniform() >= this.o.epsilon
+      ) {
+        arm = inc;
+      }
       const queries = built[arm]!.slice(0, this.o.maxCalls - calls);
       const got: ContextItem[] = [];
       for (const text of queries) {
@@ -120,7 +156,7 @@ export class QueryPlanner {
         // Shapes carry the whole query in `text`; entities are cleared so a source does not re-add its own.
         for (const it of await source.search({ ...query, text, entities: [] }, signal)) got.push(it);
       }
-      const r = cueCoverage(input, got);
+      const r = this.o.rewardTopK > 1 ? rankedCoverage(input, got, this.o.rewardTopK) : cueCoverage(input, got);
       bandit.decayArm(arm, 1);
       bandit.update(arm, r);
       this.o.store?.saveArms(query.scope, source.id, [
@@ -160,7 +196,13 @@ export class QueryPlanner {
       return s;
     }
     const prior = new Float64Array(SHAPES.length).fill(0.5);
-    const make = () => new BetaBandit(SHAPES.length, prior, this.o.priorStrength, this.o.gamma, 1);
+    const inc = this.o.incumbent;
+    const incArm = SHAPES.indexOf(inc.shape);
+    const make = () => {
+      const b = new BetaBandit(SHAPES.length, prior, this.o.priorStrength, this.o.gamma, 1);
+      if (incArm >= 0 && inc.strength > 0) b.setPrior(incArm, inc.mean, inc.strength);
+      return b;
+    };
     s = { bandits: [make(), make()] };
     for (const a of this.o.store?.loadArms(scope, sourceId) ?? []) {
       const i = SHAPES.indexOf(a.shape as Shape);
@@ -195,6 +237,15 @@ export function cueCoverage(input: ShapeInput, items: ContextItem[]): number {
     if (n > best) best = n;
   }
   return best / cue.size;
+}
+
+/** Mean cue coverage of the first `k` items as returned (fewer if fewer came back); 0 for nothing. */
+export function rankedCoverage(input: ShapeInput, items: ContextItem[], k: number): number {
+  const top = items.slice(0, k);
+  if (top.length === 0) return 0;
+  let sum = 0;
+  for (const it of top) sum += cueCoverage(input, [it]);
+  return sum / top.length;
 }
 
 /** A source whose lookups go through the planner: what the engine searches when the planner is on. */

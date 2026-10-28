@@ -53,7 +53,8 @@ describe("QueryPlanner", () => {
     for (let i = 0; i < 60; i++) await planner.search(src, cues[i % cues.length]!, signal);
     const m = planner.means(alice, "substring", true);
     expect(m["each-entity"]).toBeGreaterThan(0.5);
-    expect(m.terms).toBeLessThan(0.4); // Tried a few times, all empty; then rarely tried again.
+    // The incumbent (terms) starts at 0.75; every try comes back empty, so it falls below the shape that works.
+    expect(m.terms).toBeLessThan(0.75);
     expect(m.terms).toBeLessThan(m["each-entity"]);
     // Late lookups mostly use the learned shape (ε keeps some exploration).
     let perEntity = 0;
@@ -96,9 +97,8 @@ describe("QueryPlanner", () => {
     for (let i = 0; i < 40; i++) await planner.search(substring(), cues[i % cues.length]!, signal);
     const bob = { tenantId: "t", userId: "bob" };
     const other = { tenantId: "t2", userId: "alice" };
-    for (const s of [bob, other]) {
-      for (const v of Object.values(planner.means(s, "substring", true))) expect(v).toBe(0.5);
-    }
+    const prior = new QueryPlanner().means(alice, "substring", true);
+    for (const s of [bob, other]) expect(planner.means(s, "substring", true)).toEqual(prior);
   });
 
   test("state is bounded: past maxStates the least recently used connector is dropped", async () => {
@@ -153,8 +153,20 @@ describe("QueryPlanner", () => {
       { bucket: 7, shape: "terms", alpha: 9, beta: 1 },
       { bucket: 1, shape: "terms", alpha: -1, beta: Number.NaN },
     ]);
-    for (const v of Object.values(restarted.means({ tenantId: "t", userId: "bob" }, "substring", true))) {
-      expect(v).toBe(0.5);
+    const prior = new QueryPlanner().means(alice, "substring", true);
+    expect(restarted.means({ tenantId: "t", userId: "bob" }, "substring", true)).toEqual(prior);
+  });
+
+  test("the incumbent (terms) starts ahead, and is kept where it works", async () => {
+    const prior = new QueryPlanner().means(alice, "or", true);
+    expect(prior.terms).toBe(0.75);
+    expect(prior["each-entity"]).toBe(0.5);
+    const planner = new QueryPlanner({ seed: 6, cascade: false });
+    let terms = 0;
+    for (let i = 0; i < 60; i++) {
+      const r = await planner.search(anyWord(), cues[i % cues.length]!, signal);
+      if (i >= 30 && r.shapes[0] === "terms") terms++;
     }
+    expect(terms).toBeGreaterThanOrEqual(15);
   });
 });

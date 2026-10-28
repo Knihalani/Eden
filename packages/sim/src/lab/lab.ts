@@ -13,7 +13,7 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import { contentTerms, extractEntities } from "@eden/engine";
 import { Vocab } from "@eden/primitives";
-import { McpSource, QueryPlanner, type SearchQuery, type Source } from "@eden/sources";
+import { McpSource, QueryPlanner, type PlannerOptions, type SearchQuery, type Source } from "@eden/sources";
 import { buildSessions } from "../sessions";
 import type { World, WorldItem } from "../world";
 
@@ -184,7 +184,7 @@ export async function runConnector(
   c: LabConnector,
   world: World,
   cases: LabCase[],
-  options: { limit?: number; timeoutMs?: number } = {},
+  options: { limit?: number; timeoutMs?: number; variants?: VariantName[]; planner?: PlannerOptions } = {},
 ): Promise<ConnectorReport> {
   const limit = options.limit ?? 10;
   const items = world.items.filter((i) => c.accepts(i));
@@ -271,10 +271,10 @@ export async function runConnector(
         }
       },
     };
-    const planner = new QueryPlanner({ seed: 11 });
+    const planner = new QueryPlanner({ seed: 11, ...options.planner });
     // `counted` applies its own per-call timeout.
     const never = new AbortController().signal;
-    for (const v of VARIANTS) {
+    for (const v of options.variants ?? VARIANTS) {
       variant = v;
       lat = [];
       const t = { n: 0, calls: 0, hits: 0, empty: 0, errors: 0, returned: 0, returnedRaw: 0, rel: 0 };

@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 /**
  * bun packages/sim/src/quality-cli.ts [--users 6] [--sessions 15] [--seed 1] [--profile realistic|ideal|entities|
- *   zoo-tune|zoo-a|zoo-b] [--planner] [--time 0] [--wait 0] [--noise 1] [--tool-rate 0.4] [--judge none|perfect|noisy]
- *   [--live] [--brief]
+ *   zoo-tune|zoo-a|zoo-b] [--planner [--planner-max-calls 3] [--planner-no-cascade]] [--time 0] [--wait 0]
+ *   [--noise 1] [--tool-rate 0.4] [--judge none|perfect|noisy] [--live] [--brief]
  *
  * Plays generated sessions over simulated sources and prints the quality report as JSON. Without --live no model is
  * used (free, deterministic at --time 0). --time 1 runs source latency and agent pacing in real time.
@@ -42,7 +42,17 @@ const report = await runQuality({
   agentToolRate: Number(arg("tool-rate", "0.4")),
   model,
   judge: arg("judge", "none") as "none" | "perfect" | "noisy",
-  planner: args.includes("--planner") ? {} : undefined,
+  planner: args.includes("--planner")
+    ? {
+        maxCalls: Number(arg("planner-max-calls", "3")),
+        cascade: !args.includes("--planner-no-cascade"),
+        incumbent: {
+          shape: "terms" as const,
+          mean: Number(arg("planner-incumbent-mean", "0.75")),
+          strength: Number(arg("planner-incumbent-strength", "8")),
+        },
+      }
+    : undefined,
 });
 const out = args.includes("--brief")
   ? {
