@@ -21,14 +21,14 @@ train / held-out split for tuning, hand-written adversarial scenarios, and text 
   product such as Supermemory or Mem0) and a `fetch` mapping for refresh.
 - Connector revocation → `forget(scope, sourceId)`.
 - An adaptive query planner per (user, connector): what to send, learned from outcomes
-  ([plans/query-planner.md](plans/query-planner.md)). Built and opt-in (D28,
+  ([plans/query-planner.md](plans/query-planner.md)). Built (D28) and on by default in the server (D33;
   [research/query-planner-results.md](research/query-planner-results.md)); its shadow mode was measured in simulation
   (D29). Iterating on it: a learned cascade gate (D30) and reusing recent answers cut its extra calls by 12–14% and
   then 7–12% with recall within noise; a deadline check cut the calls it gave up on (timeouts and session ends) by
   71–79% (margin chosen on the same runs). Expecting each connector's recent latency then brought
   them within noise of planner-off's rate per call (1.15–1.28x in absolute numbers). The other D31/D32 conditions
-  hold in simulation; D31 sets no bar for timeouts. Next: the default-on decision, then the planner's learning
-  cost, delivery and usage rewards. Its evidence:
+  hold in simulation; the owner read the timeout check per call and turned it on by default (D33). Next: the
+  planner's learning cost, delivery and usage rewards, and real-account evidence. Its evidence:
   a source survey of real MCP servers ([research/connectors.md](research/connectors.md)) and the connector lab,
   where the query Eden sent reached nothing on whole-string-substring connectors
   ([research/connector-lab.md](research/connector-lab.md)).
