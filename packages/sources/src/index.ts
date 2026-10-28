@@ -4,4 +4,12 @@ export { McpSource, ReadOnlyViolation, toItems, type McpSourceOptions } from "./
 export { searchSources, type SourceOutcome } from "./fanout";
 export { SourceFanout, type FanoutOptions, type FanoutOutcome, type FanoutStatus } from "./guarded";
 export { buildShape, inert, SHAPES, type Shape, type ShapeInput, type ShapeOptions } from "./shapes";
-export { cueCoverage, PlannedSource, QueryPlanner, type PlanOutcome, type PlannerOptions } from "./planner";
+export {
+  cueCoverage,
+  PlannedSource,
+  QueryPlanner,
+  type PlanOutcome,
+  type PlannerArm,
+  type PlannerOptions,
+  type PlannerStore,
+} from "./planner";

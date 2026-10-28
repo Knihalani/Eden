@@ -114,6 +114,12 @@ describe("loadConfig", () => {
 });
 
 describe("gate pool", () => {
+  test("EDEN_QUERY_PLANNER: off by default, 1 turns it on, junk refused", () => {
+    expect(loadConfig({ EDEN_DEV: "1" }).queryPlanner).toBe(false);
+    expect(loadConfig({ EDEN_DEV: "1", EDEN_QUERY_PLANNER: "1" }).queryPlanner).toBe(true);
+    expect(() => loadConfig({ EDEN_DEV: "1", EDEN_QUERY_PLANNER: "yes" })).toThrow(/EDEN_QUERY_PLANNER/);
+  });
+
   test("EDEN_GATE_WORKERS: default 0 (gate on the loop), a count, junk refused", async () => {
     expect(loadConfig({ EDEN_DEV: "1" }).gateWorkers).toBe(0);
     expect(loadConfig({ EDEN_DEV: "1", EDEN_GATE_WORKERS: "2" }).gateWorkers).toBe(2);

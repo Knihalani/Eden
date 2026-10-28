@@ -12,11 +12,13 @@
  *   stay usable for off-policy evaluation.
  * - Reward, at once: how much of the cue the best returned item covers (`cueCoverage`); 0 for nothing returned. It
  *   is a proxy for "a needed item came back": cheap, available on every call, and measured against the lab's labels.
- * - Cascade: when the chosen shape returns nothing and another shape applies, the next one by posterior mean is
- *   tried once, within the same lookup. An empty result costs one more call, not the lookup.
+ * - Cascade: when the chosen shape returns nothing and another shape applies, another one (a fresh Thompson draw
+ *   among the rest) is tried once, within the same lookup. An empty result costs one more call, not the lookup.
  *
  * No query text is stored: state is two numbers per (connector, bucket, shape). State is keyed by tenant and user
- * (CLAUDE.md: isolation) and bounded: the least recently used connectors' state is dropped past `maxStates`.
+ * (CLAUDE.md: isolation) and bounded in memory: the least recently used connectors' state is dropped past
+ * `maxStates`. With a `store` (the source map), arms are loaded when a connector's state is created and written after
+ * each update, so learning survives a restart and an eviction.
  */
 import type { ContextItem, Scope } from "@eden/protocol";
 import { BetaBandit, Xoshiro128 } from "@eden/primitives";
@@ -39,6 +41,21 @@ export interface PlannerOptions {
   quotes?: (sourceId: string) => boolean;
   /** Connector states kept in memory, across all users. */
   maxStates?: number;
+  /** Where arms persist (`SourceMap` implements it). Absent: learning lives in memory only. */
+  store?: PlannerStore;
+}
+
+/** One learned arm as stored: content-free. */
+export interface PlannerArm {
+  bucket: number;
+  shape: string;
+  alpha: number;
+  beta: number;
+}
+
+export interface PlannerStore {
+  loadArms(scope: Scope, sourceId: string): PlannerArm[];
+  saveArms(scope: Scope, sourceId: string, arms: PlannerArm[]): void;
 }
 
 /** What one lookup did with one connector, for traces (content-free: shape names and counts only). */
@@ -66,7 +83,7 @@ const DEFAULTS = {
 export class QueryPlanner {
   private readonly states = new Map<string, ConnectorState>();
   private readonly rng: Xoshiro128;
-  private readonly o: typeof DEFAULTS & Pick<PlannerOptions, "quotes">;
+  private readonly o: typeof DEFAULTS & Pick<PlannerOptions, "quotes" | "store">;
   private readonly picked = new Int32Array(SHAPES.length);
   private readonly eligible = new Uint8Array(SHAPES.length);
 
@@ -106,6 +123,9 @@ export class QueryPlanner {
       const r = cueCoverage(input, got);
       bandit.decayArm(arm, 1);
       bandit.update(arm, r);
+      this.o.store?.saveArms(query.scope, source.id, [
+        { bucket, shape: SHAPES[arm]!, alpha: bandit.alpha[arm]!, beta: bandit.beta[arm]! },
+      ]);
       shapes.push(SHAPES[arm]!);
       reward = Math.max(reward, r);
       for (const it of got) {
@@ -142,6 +162,13 @@ export class QueryPlanner {
     const prior = new Float64Array(SHAPES.length).fill(0.5);
     const make = () => new BetaBandit(SHAPES.length, prior, this.o.priorStrength, this.o.gamma, 1);
     s = { bandits: [make(), make()] };
+    for (const a of this.o.store?.loadArms(scope, sourceId) ?? []) {
+      const i = SHAPES.indexOf(a.shape as Shape);
+      // Stored rows are checked, not trusted: an unknown shape or a non-positive parameter is skipped.
+      if (i < 0 || (a.bucket !== 0 && a.bucket !== 1) || !(a.alpha > 0) || !(a.beta > 0)) continue;
+      s.bandits[a.bucket].alpha[i] = a.alpha;
+      s.bandits[a.bucket].beta[i] = a.beta;
+    }
     this.states.set(key, s);
     while (this.states.size > this.o.maxStates) this.states.delete(this.states.keys().next().value!);
     return s;

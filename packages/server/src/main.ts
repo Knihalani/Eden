@@ -11,6 +11,7 @@ const partner = buildPartner({
   gatePool,
   sources: staticResolver(process.env.EDEN_SOURCES_FILE),
   sourceMapPath: config.sourceMapPath,
+  queryPlanner: config.queryPlanner,
   onTrace: process.env.EDEN_TRACE === "1" ? (t) => console.log(JSON.stringify(t)) : undefined,
 });
 const server = Bun.serve({ port: config.port, hostname: config.host, fetch: createHandler(partner, config) });

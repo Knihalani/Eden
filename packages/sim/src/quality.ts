@@ -257,9 +257,10 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
     const arcNames = new Map(
       world.arcs.map((a) => [a.id, [a.person?.full, a.slots.org].filter((x): x is string => !!x)]),
     );
+    const sourceMap = new SourceMap(":memory:", { seed: o.seed + u });
     const partner = new ContextPartner({
       sources: async () => sources,
-      sourceMap: new SourceMap(":memory:", { seed: o.seed + u }),
+      sourceMap,
       cache: new ItemCache(),
       budget: new Budget(),
       model: o.model ?? oracle,
@@ -269,7 +270,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         userTraces.push(t);
       },
       now: () => clock,
-      planner: o.planner ? new QueryPlanner({ seed: o.seed * 7_919 + u, ...o.planner }) : undefined,
+      planner: o.planner ? new QueryPlanner({ seed: o.seed * 7_919 + u, store: sourceMap, ...o.planner }) : undefined,
     });
     const who = { tenantId: "sim", userId: `u${u}` };
     const pace = new Rng(o.seed * 104_729 + u);
