@@ -10,8 +10,8 @@ For each lookup and each connector, the planner chooses what to send. The option
 entities where an operator says the connector takes phrases. It learns per (tenant, user, connector), separately for
 cues with and without an entity, with Thompson sampling over Beta posteriors (`BetaBandit`). The reward is
 immediate: how much of the cue the best returned item covers, as whole words; nothing returned scores 0. When the
-chosen shape returns nothing, one other shape is tried in the same lookup (the cascade). Up to 3 calls per lookup
-per connector.
+chosen shape returns nothing, one other shape is tried in the same lookup (the cascade), unless the connector has
+taught the planner that its cascades find nothing (iteration 1, below). Up to 3 calls per lookup per connector.
 
 It is conservative. The cue's terms are the incumbent, with a stronger prior (mean 0.75, 8 pseudo-observations). The
 planner sends another shape only when that shape's posterior mean beats the incumbent's by 0.1, plus 5% exploration.
@@ -168,10 +168,73 @@ What a deployment would see, and what the labels say about it:
   highest of any run (0.637, 0.651). The intervals overlap with serving from the start, so the claim is "at least as
   good, with no exposure while learning", not "better".
 
+## Iterations
+
+The plan's post-ship loop: one measured change at a time, tuned on `zoo-tune`, reported on held-out sets, kept only if
+its target improves and no guardrail regresses. Raw: [query-planner-iterations.jsonl](query-planner-iterations.jsonl),
+produced by [query-planner-iterations.sh](query-planner-iterations.sh) and summarised by
+[query-planner-iterations.py](query-planner-iterations.py). The tables above were measured before these changes.
+
+### 1. A learned cascade gate (kept)
+
+**Target:** source calls per lookup, the gate that keeps the planner off. The quality report now breaks a run's
+connector lookups down by path (`plans`: "terms", "terms>each-entity" for a cascade). On held-out A, seed 1, every
+cascade after an empty answer from the cue's terms came back empty on the OR connector (166 of 166 lookups) and nearly
+all did on the ranked one: there an empty OR answer means nothing is there, and every narrower shape is empty too.
+
+**Change:** whether to cascade is learned per (user, connector, bucket): a Beta posterior on "the cascade step found
+something" (cue coverage above 0), decayed like the arms and stored with them. The cascade runs when a draw from it is
+at least `cascadeMin` (default 0.2), or on an ε step, so it is re-tried now and then.
+
+**Tuning** (`zoo-tune`, 5 seeds): `cascadeMin` 0, 0.1, 0.2, 0.3 and 0.4 gave recall 18.9%, 18.9%, 19.1%, 18.3% and
+18.7% (all within noise), at 6.04, 5.48, 5.22, 5.05 and 4.89 calls per lookup. 0.2 was chosen before looking at the
+held-out sets, as the middle of the range where recall held.
+
+| Mix | Run | Needed facts retrieved or cached | Recall | Precision | False fires | Source calls per lookup |
+|---|---|---|---|---|---|---|
+| zoo-a | off | 16.8% (15–19) | 9.0% (7–11) | 0.563 | 1/713 | 4.11 |
+| zoo-a | before (always cascade) | 41.1% (38–44) | 17.6% (15–20) | 0.598 | 1/713 | 6.28 |
+| zoo-a | after (`cascadeMin` 0.2) | 37.3% (34–40) | 16.2% (14–19) | 0.588 | 1/713 | 5.46 |
+| zoo-b | off | 60.6% (57–64) | 21.5% (19–24) | 0.535 | 1/713 | 4.13 |
+| zoo-b | before | 63.5% (60–67) | 23.9% (21–27) | 0.560 | 1/713 | 6.06 |
+| zoo-b | after | 61.4% (58–64) | 22.4% (20–25) | 0.556 | 1/713 | 5.18 |
+| realistic | off | 19.4% (17–22) | 13.1% (11–15) | 0.634 | 1/713 | 4.11 |
+| realistic | before | 41.7% (39–45) | 18.9% (16–22) | 0.613 | 1/713 | 6.52 |
+| realistic | after | 38.3% (35–41) | 18.4% (16–21) | 0.623 | 1/713 | 5.65 |
+
+- **Calls:** the planner's extra calls fell by 36–46% (held-out A: from 2.17 to 1.35 extra per lookup; B: 1.93 to
+  1.05; realistic: 2.41 to 1.54).
+- **Recall:** within noise of before in every mix, and still above off on A and realistic with intervals apart. It is
+  lower in every mix (by 0.5–1.5 points), and reach by 2–4 points: the gate also stops some cascades that would have
+  found something. Calls per lookup per point of recall fell in every mix (A: 0.36 to 0.34; B: 0.25 to 0.23;
+  realistic: 0.34 to 0.31).
+- **Guardrails:** false fires unchanged (1/713); no secret leaked; precision within noise.
+- **Real servers** (the connector lab, world 1000, planner only; raw:
+  [query-planner-lab-cascade.jsonl](query-planner-lab-cascade.jsonl)): reach and calls per case within noise of
+  before on all ten configurations. Every lab case has a needed item to find, so a cascade there often finds
+  something, and the gate stays open:
+
+| Connector | Cases | Reach before | Calls per case before | Reach after | Calls per case after |
+|---|---|---|---|---|---|
+| memory | 196 | 69% | 1.48 | 69% | 1.43 |
+| mcpvault | 196 | 81% | 1.01 | 81% | 1.01 |
+| basic-memory | 196 | 72% | 1.15 | 72% | 1.15 |
+| meilisearch | 196 | 62% | 1.30 | 63% | 1.35 |
+| caldav | 73 | 70% | 1.48 | 68% | 1.42 |
+| imap-body | 154 | 32% | 1.53 | 33% | 1.51 |
+| imap-subject | 154 | 44% | 1.52 | 47% | 1.48 |
+| chroma | 196 | 86% | 1.01 | 88% | 1.01 |
+| gitea-db | 196 | 23% | 1.63 | 21% | 1.67 |
+| gitea-bleve | 196 | 24% | 1.63 | 21% | 1.67 |
+
+**Where the rest of the extra calls go** (held-out A, seed 1, after): 41% of the planner's connector calls are the
+cue's terms alone, 40% are cascades from them (to each-entity, entities, entity+term), and the rest start from an
+entity shape. Most cascades are the learning cost of leaving the incumbent; the next iterations target that.
+
 ## Gates in the plan, and where they stand
 
 - **Tier 2:** met for recall and false fires on held-out connectors. Not met for "source calls no worse": the default
-  makes about 50% more calls. The one-call setting meets the call budget, but its recall gain is within noise.
+  made about 50% more calls, and 25–37% more after iteration 1. The one-call setting meets the call budget, but its recall gain is within noise.
 - **Tier 3:**
   - Met for reach on more than five services with different search behaviour, with no regression beyond noise.
   - Not measured: false fires, 429s and timeouts on real servers. The lab measures reach only.

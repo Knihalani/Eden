@@ -85,6 +85,24 @@ describe("QueryPlanner", () => {
     expect(rescued).toBeGreaterThan(0);
   });
 
+  test("the cascade is learned: it stops where it never finds anything, and keeps going where it rescues", async () => {
+    // OR search with nothing on the cue: an empty answer to the terms means every narrower shape is empty too.
+    const planner = new QueryPlanner({ seed: 4 });
+    const none = connector("none", () => false);
+    const late = async (src: Source) => {
+      let calls = 0;
+      for (let i = 0; i < 40; i++) calls += (await planner.search(src, cues[i % cues.length]!, signal)).calls;
+      return calls;
+    };
+    await late(none);
+    expect(planner.cascadeMean(alice, "none", true)).toBeLessThan(0.1);
+    // Mostly one call per lookup now; ε still re-tries the cascade now and then.
+    expect(await late(none)).toBeLessThan(40 * 1.25);
+    // Where the cascade finds what the terms missed (substring search), it stays on.
+    await late(substring());
+    expect(planner.cascadeMean(alice, "substring", true)).toBeGreaterThan(0.5);
+  });
+
   test("a cue with no entity uses terms, the only shape that applies", async () => {
     const planner = new QueryPlanner({ seed: 2 });
     const r = await planner.search(anyWord(), query("team lunch friday", []), signal);
@@ -144,9 +162,19 @@ describe("QueryPlanner", () => {
     };
     const first = new QueryPlanner({ seed: 3, cascade: false, store });
     for (let i = 0; i < 60; i++) await first.search(substring(), cues[i % cues.length]!, signal);
+    const cascading = new QueryPlanner({ seed: 5, store });
+    for (let i = 0; i < 10; i++)
+      await cascading.search(
+        connector("none", () => false),
+        cues[0]!,
+        signal,
+      );
     const learned = first.means(alice, "substring", true);
     const restarted = new QueryPlanner({ seed: 4, store });
     expect(restarted.means(alice, "substring", true)).toEqual(learned);
+    // The cascade's posterior persists with the arms.
+    expect(cascading.cascadeMean(alice, "none", true)).toBeLessThan(0.5);
+    expect(restarted.cascadeMean(alice, "none", true)).toBe(cascading.cascadeMean(alice, "none", true));
     // Nothing stored for another user; junk rows are skipped, not loaded.
     rows.set("t/bob/substring", [
       { bucket: 1, shape: "drop table", alpha: 9, beta: 1 },

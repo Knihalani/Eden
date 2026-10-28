@@ -14,6 +14,10 @@
  *   is a proxy for "a needed item came back": cheap, available on every call, and measured against the lab's labels.
  * - Cascade: when the chosen shape returns nothing and another shape applies, another one (a fresh Thompson draw
  *   among the rest) is tried once, within the same lookup. An empty result costs one more call, not the lookup.
+ *   Whether to cascade is learned too, per (connector, bucket): a Beta posterior on "the cascade found something".
+ *   On OR and ranked search an empty answer to the cue's terms means nothing is there, and every narrower shape
+ *   comes back empty as well; there the cascade stops once its draws fall below `cascadeMin`, with an ε floor so it
+ *   is re-tried now and then.
  *
  * No query text is stored: state is two numbers per (connector, bucket, shape). State is keyed by tenant and user
  * (CLAUDE.md: isolation) and bounded in memory: the least recently used connectors' state is dropped past
@@ -55,6 +59,11 @@ export interface PlannerOptions {
   maxCalls?: number;
   /** Try the next shape when the chosen one returns nothing. */
   cascade?: boolean;
+  /**
+   * The cascade runs when a draw from its posterior (chance it finds something, per connector and bucket) is at least
+   * this, or on an ε exploration step. 0 always cascades.
+   */
+  cascadeMin?: number;
   /** Connectors whose search takes `"a b"` as a phrase (operator config; unknown connectors get no quotes). */
   quotes?: (sourceId: string) => boolean;
   /** Connector states kept in memory, across all users. */
@@ -92,7 +101,12 @@ export interface PlanOutcome {
 interface ConnectorState {
   /** Bucket 0: the cue names no entity; bucket 1: it names at least one. */
   bandits: [BetaBandit, BetaBandit];
+  /** Per bucket, one arm: does a cascade step after an empty result find anything? */
+  cascades: [BetaBandit, BetaBandit];
 }
+
+/** The stored name of a bucket's cascade posterior (`PlannerArm.shape`); not a shape. */
+const CASCADE = "cascade";
 
 const DEFAULTS = {
   seed: 1,
@@ -101,6 +115,7 @@ const DEFAULTS = {
   priorStrength: 2,
   maxCalls: 3,
   cascade: true,
+  cascadeMin: 0.2,
   maxStates: 50_000,
   incumbent: { shape: "terms" as Shape, mean: 0.75, strength: 8 },
   rewardTopK: 1,
@@ -197,11 +212,25 @@ export class QueryPlanner {
         seen.add(it.id);
         items.push(it);
       }
+      if (shapes.length > 1) {
+        // The cascade step's outcome teaches whether to cascade on this connector.
+        const c = state.cascades[bucket];
+        c.decayArm(0, 1);
+        c.update(0, r > 0 ? 1 : 0);
+        this.saveCascade(query.scope, source.id, bucket, c);
+        break;
+      }
       // One cascade step at most, and only after an empty result: a non-empty one is the lookup's answer.
-      if (got.length > 0 || !this.o.cascade || shapes.length > 1) break;
+      if (got.length > 0 || !this.o.cascade || !this.cascadeWorth(state.cascades[bucket])) break;
       eligible[arm] = 0;
     }
     return { items: items.slice(0, query.limit), shapes, calls, reward };
+  }
+
+  /** Whether to try one more shape after an empty result: a Thompson draw against `cascadeMin`, or exploration. */
+  private cascadeWorth(c: BetaBandit): boolean {
+    if (this.o.cascadeMin <= 0 || this.rng.uniform() < this.o.epsilon) return true;
+    return this.rng.beta(c.alpha[0]!, c.beta[0]!) >= this.o.cascadeMin;
   }
 
   /** Drops what was learned for a user (and one connector, when given), in memory; the store forgets its own. */
@@ -227,10 +256,23 @@ export class QueryPlanner {
     }
   }
 
+  private saveCascade(scope: Scope, sourceId: string, bucket: number, c: BetaBandit): void {
+    try {
+      this.o.store?.saveArms(scope, sourceId, [{ bucket, shape: CASCADE, alpha: c.alpha[0]!, beta: c.beta[0]! }]);
+    } catch {
+      // As for arms: persistence fails open.
+    }
+  }
+
   /** Posterior mean usefulness of each shape for one connector and bucket, for tests and reports. */
   means(scope: Scope, sourceId: string, withEntity: boolean): Record<Shape, number> {
     const b = this.state(scope, sourceId).bandits[withEntity ? 1 : 0];
     return Object.fromEntries(SHAPES.map((s, i) => [s, b.mean(i)])) as Record<Shape, number>;
+  }
+
+  /** Posterior chance that a cascade step finds something, for one connector and bucket (tests and reports). */
+  cascadeMean(scope: Scope, sourceId: string, withEntity: boolean): number {
+    return this.state(scope, sourceId).cascades[withEntity ? 1 : 0].mean(0);
   }
 
   get size(): number {
@@ -254,7 +296,8 @@ export class QueryPlanner {
       if (incArm >= 0 && inc.strength > 0) b.setPrior(incArm, inc.mean, inc.strength);
       return b;
     };
-    s = { bandits: [make(), make()] };
+    const cascade = () => new BetaBandit(1, new Float64Array([0.5]), this.o.priorStrength, this.o.gamma, 1);
+    s = { bandits: [make(), make()], cascades: [cascade(), cascade()] };
     let stored: PlannerArm[] = [];
     try {
       stored = this.o.store?.loadArms(scope, sourceId) ?? [];
@@ -262,11 +305,13 @@ export class QueryPlanner {
       // As for saving: an unreadable store means starting from the priors, not failing the lookup.
     }
     for (const a of stored) {
-      const i = SHAPES.indexOf(a.shape as Shape);
       // Stored rows are checked, not trusted: an unknown shape or a non-positive parameter is skipped.
-      if (i < 0 || (a.bucket !== 0 && a.bucket !== 1) || !(a.alpha > 0) || !(a.beta > 0)) continue;
-      s.bandits[a.bucket].alpha[i] = a.alpha;
-      s.bandits[a.bucket].beta[i] = a.beta;
+      if ((a.bucket !== 0 && a.bucket !== 1) || !(a.alpha > 0) || !(a.beta > 0)) continue;
+      const i = a.shape === CASCADE ? 0 : SHAPES.indexOf(a.shape as Shape);
+      if (i < 0) continue;
+      const b = a.shape === CASCADE ? s.cascades[a.bucket] : s.bandits[a.bucket];
+      b.alpha[i] = a.alpha;
+      b.beta[i] = a.beta;
     }
     this.states.set(key, s);
     while (this.states.size > this.o.maxStates) this.states.delete(this.states.keys().next().value!);

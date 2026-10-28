@@ -205,6 +205,11 @@ export interface QualityReport {
   needDecisions: Record<string, number>;
   /** Present when the planner ran in shadow mode for at least one lookup. */
   shadow?: ShadowReport;
+  /**
+   * With the planner serving: per connector searched, what it sent ("terms", "terms>each-entity" for a cascade) with
+   * how many connector lookups took that path and the calls they made. Where the extra calls go.
+   */
+  plans?: Record<string, { lookups: number; calls: number }>;
 }
 
 const pct = (xs: number[], p: number) => {
@@ -613,6 +618,13 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
 
   const decisions: Record<string, number> = {};
   for (const t of traces) decisions[t.decision] = (decisions[t.decision] ?? 0) + 1;
+  const plans: Record<string, { lookups: number; calls: number }> = {};
+  for (const p of traces.flatMap((t) => t.plans ?? [])) {
+    const k = p.shapes.join(">") || "none";
+    const e = (plans[k] ??= { lookups: 0, calls: 0 });
+    e.lookups++;
+    e.calls += p.calls;
+  }
   const cost = traces.reduce((s, t) => s + t.costUsd, 0);
   const modelCalls = traces.reduce((s, t) => s + t.modelCalls, 0);
   const r3 = (x: number) => Math.round(x * 1000) / 1000;
@@ -640,6 +652,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         };
   return {
     shadow,
+    ...(Object.keys(plans).length ? { plans } : {}),
     overall: rates(total),
     turns,
     injections,
