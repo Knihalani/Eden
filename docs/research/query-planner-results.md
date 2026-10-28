@@ -381,10 +381,52 @@ within noise on all twenty configurations, and higher on IMAP subject search (wo
 44% to 52% against before iteration 1; world 2000: 29% to 37%) and IMAP body (world 2000: 44% to 50%). Calls per case
 moved by at most 0.06.
 
+### 4. Expect the connector's recent latency (kept)
+
+**Target:** the calls iteration 3 still gave up on: calls slower than anything earlier in the same lookup, which one
+lookup's own calls cannot predict.
+
+**Change:** the fan-out records the latency of every planner call per (user, connector) over the last ten minutes
+(a call cut off counts with its time so far, a lower bound), and the deadline check expects a call to take at
+least the 0.9 quantile of that history (`latencyQuantile`) once 5 calls are known, as well as the lookup's slowest
+call so far. Shadow lookups, which do not go through the fan-out's planner calls, keep the lookup-only estimate. A
+first version kept one minute of history; in simulated time a user's calls to one connector are sparse, the history
+rarely held 5 calls, and tuning showed no effect at any quantile (raw rows not kept).
+
+**Tuned** on timed seeds 21–23 (quantile 0 is iteration 3), then **reported** on fresh seeds 31–33
+([query-planner-timed.sh](query-planner-timed.sh) `4-tune` and `4-report`; raw rows with `"iteration": 4` in
+[query-planner-timed.jsonl](query-planner-timed.jsonl)). Calls given up are timeouts and session ends:
+
+| Seeds | Mix | Run | Source calls per lookup | Calls given up | Per 1,000 calls | 429s | Needed facts delivered |
+|---|---|---|---|---|---|---|---|
+| 21–23 (tune) | zoo-a | off | 4.60 | 27 | 5.8 | 0 | 9/157 |
+| 21–23 (tune) | zoo-a | quantile 0 / 0.5 / 0.9 | 6.19 / 6.17 / 5.77 | 45 / 42 / 28 | 7.2 / 6.7 / 4.8 | 0 | 20 / 19 / 20 |
+| 21–23 (tune) | zoo-b | off | 4.60 | 27 | 5.8 | 0 | 32/157 |
+| 21–23 (tune) | zoo-b | quantile 0 / 0.5 / 0.9 | 6.04 / 5.98 / 5.63 | 49 / 50 / 31 | 8.0 / 8.3 / 5.5 | 0 | 33 / 33 / 33 |
+| 21–23 (tune) | realistic | off | 4.60 | 26 | 5.6 | 0 | 15/157 |
+| 21–23 (tune) | realistic | quantile 0 / 0.5 / 0.9 | 6.53 / 6.54 / 6.10 | 43 / 39 / 30 | 6.5 / 5.9 / 4.8 | 0 | 28 / 30 / 30 |
+| 31–33 | zoo-a | off | 4.65 | 25 | 5.5 | 0 | 9/130 |
+| 31–33 | zoo-a | before (quantile 0) | 6.26 | 39 | 6.3 | 0 | 14/130 |
+| 31–33 | zoo-a | after (0.9) | 5.89 | 32 | 5.5 | 0 | 16/130 |
+| 31–33 | zoo-b | off | 4.65 | 25 | 5.5 | 0 | 27/130 |
+| 31–33 | zoo-b | before | 6.13 | 54 | 9.0 | 0 | 31/130 |
+| 31–33 | zoo-b | after | 5.72 | 29 | 5.2 | 0 | 31/130 |
+| 31–33 | realistic | off | 4.65 | 26 | 5.7 | 0 | 11/130 |
+| 31–33 | realistic | before | 6.62 | 47 | 7.2 | 0 | 18/130 |
+| 31–33 | realistic | after | 6.17 | 30 | 4.9 | 0 | 18/130 |
+
+- **Calls given up** on the fresh seeds: 18–46% fewer than before; per 1,000 calls, at or below planner-off's in every
+  mix (4.9–5.5 against 5.5–5.7). In absolute numbers 1.15–1.28x planner-off's, for 1.23–1.33x its calls.
+- **Calls per lookup** fell 6–7%, since fewer doomed calls are started.
+- **Recall:** delivered facts equal or higher than before in every mix (small samples); false fires equal to
+  planner-off's (one on zoo-b in all three runs).
+- 0.9 was the highest quantile tried and the best on the tune seeds in every mix; nothing above it was tried.
+- Seeds differ a lot: planner-off gave up 6 calls per mix on seeds 11–13 and 25–27 on seeds 21–33.
+
 ### The default-on gate (D31, D32)
 
 The owner chose a cost-normalised gate (D31) and, for its fourth condition, the reading pooled over the held-out
-sets (D32). Where it stands after iteration 3:
+sets (D32). Where it stands after iteration 4:
 - **Recall:** higher with intervals apart on A and realistic, with and without a judge; within noise on B. Holds.
 - **False fires and secrets:** unchanged and 0. Holds.
 - **Calls at most 1.5x off:** 1.36–1.47x at time 0 (iteration 2) and 1.32–1.44x at real pacing. Holds.
@@ -394,8 +436,10 @@ sets (D32). Where it stands after iteration 3:
   recall; the pooled figure leans on B's high recall.
 - **Lab reach:** within noise or higher on both worlds with `cascadeMin` 0.05 (the lab calls the planner directly, so
   reuse and the deadline check are not exercised there). Holds.
-- **429s and timeouts in a timed run:** no 429s; calls given up 3–6x planner-off's after iteration 3 (17–36 against
-  6 per mix). Not met.
+- **429s and timeouts in a timed run:** no 429s in any run. After iteration 4, calls given up per 1,000 calls are at
+  or below planner-off's in every mix on fresh seeds (4.9–5.5 against 5.5–5.7), and 1.15–1.28x planner-off's in
+  absolute numbers. D31 says only that they are "checked"; whether the per-call reading is the bar is the owner's
+  call.
 
 ## Gates in the plan, and where they stand
 
