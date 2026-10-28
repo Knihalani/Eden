@@ -240,7 +240,7 @@ describe("SourceFanout.planCalls (the query planner's calls)", () => {
     const gate = new Promise<void>((r) => (release = r));
     const slow: Source = { id: "s", kind: "t", description: "", search: async () => (await gate, [item("x")]) };
     const f = new SourceFanout({ sanitize: (x) => x });
-    await f.search([slow], { ...cue(), text: "warm" }, { timeoutMs: 1_000 }).catch(() => {});
+    await f.search([slow], { ...cue(), text: "warm" }, { timeoutMs: 5 }).catch(() => {});
     const pending = f.planCalls(slow).call(shapeQuery(), signal);
     f.forget(scope);
     release();
