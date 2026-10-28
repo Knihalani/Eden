@@ -6,7 +6,7 @@
 
 ## What is in it
 
-- **26 scenarios, 125 turns, 89 scored**, hand-written, each its own small world (1–3 sources, 1–7 items, most with
+- **26 scenarios, 124 turns, 86 scored**, hand-written, each its own small world (1–3 sources, 1–7 items, most with
   distractors that share words with the answer):
   - scheduling 5, inbox 4, follow-ups 3, purchases 3, relationships 3, travel 2;
   - adversarial 6:
@@ -19,7 +19,8 @@
 - **Labels** say what an ideal partner does, not what Eden does today: the items to deliver by the turn or the next
   one, or silence. Silence is labelled where any delivery would be noise: small talk, agent chatter, an unrelated
   request, what the agent just fetched or read out, a newsletter arriving. An expected item the agent already got
-  earlier in the session counts as met, since delivering it again would be a repeat.
+  earlier in the session counts as met, since delivering it again would be a repeat; turns that would only ask for a
+  repeat are left unscored, so no item counts twice.
 - **Asks:** 3 questions asked directly (`ask`), scored on their citations. They also carry the secret check, which
   must not rest on proactive delivery alone.
 - **Dates** follow the 2026 calendar (the eval's clock starts 1 Oct 2026).
@@ -41,25 +42,29 @@ From `bun run eval` and `bun run eval --no-planner`, which give the same scores:
 
 | Run | Precision | Recall | False fires | Secrets exposed, leaked | Not inert | Ask recall |
 |---|---|---|---|---|---|---|
-| planner (default) | 0.889 (16/18) | 0.348 (16/46) | 2/56 | 2, 0 | 0 of 19 | 1.0 (3 of 3) |
-| no planner | 0.889 (16/18) | 0.348 (16/46) | 2/56 | 2, 0 | 0 of 19 | 1.0 (3 of 3) |
+| planner (default) | 0.833 (15/18) | 0.349 (15/43) | 3/56 | 2, 0 | 0 of 19 | 1.0 (3 of 3) |
+| no planner | 0.833 (15/18) | 0.349 (15/43) | 3/56 | 2, 0 | 0 of 19 | 1.0 (3 of 3) |
 
 Per category, with the planner:
 
 | Category | Scenarios | Scored turns | Precision | Recall | False-fire rate |
 |---|---|---|---|---|---|
-| adversarial | 6 | 20 | 1.000 | 0.500 | 0.000 |
+| adversarial | 6 | 19 | 0.667 | 0.400 | 0.067 |
 | follow-ups | 3 | 9 | 1.000 | 0.500 | 0.000 |
-| inbox | 4 | 15 | 0.600 | 0.500 | 0.182 |
+| inbox | 4 | 14 | 0.600 | 0.600 | 0.182 |
 | purchases | 3 | 8 | 1.000 | 0.000 | 0.000 |
 | relationships | 3 | 9 | 1.000 | 0.167 | 0.000 |
-| scheduling | 5 | 23 | 1.000 | 0.429 | 0.000 |
+| scheduling | 5 | 22 | 1.000 | 0.462 | 0.000 |
 | travel | 2 | 5 | 1.000 | 0.200 | 0.000 |
 
 - **Recall is the gap:** with no model, Eden stays silent on most need turns, as in the simulation (plan item 2).
-  With 46 expected items, one item moves recall by 2.2 points.
-- **Both false fires are one engine weakness:** when a newsletter arrives (an `external` event), Eden delivers that
-  same email back to the agent, which already sees it in the event (`newsletter-arrives`). Added to the plan.
+  With 43 expected items, one item moves recall by 2.3 points.
+- **The three false fires are two engine weaknesses**, both added to the plan:
+  - when a newsletter arrives (an `external` event), Eden delivers that low-value email itself
+    (`newsletter-arrives`, 2). An overdue invoice arriving the same way is worth delivering (`invoice-triage`): the
+    difference is the mail's value, not that it is the event's subject;
+  - after the agent fetched an item with its own tool and read it out, Eden delivers it when the user asks about it
+    (`agent-already-fetched`, 1).
 - **The planner makes no difference here.** The scenarios' sources are `StaticSource`s, which match any query term,
   so today's query already reaches everything. The planner's evidence is in the simulation's connector zoo and the
   connector lab (docs/research/query-planner-results.md).

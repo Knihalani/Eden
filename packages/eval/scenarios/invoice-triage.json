@@ -69,11 +69,6 @@
           "event": {
             "kind": "user_message",
             "text": "Has that one been approved already?"
-          },
-          "expect": {
-            "items": [
-              "finance:bill-2291"
-            ]
           }
         },
         {

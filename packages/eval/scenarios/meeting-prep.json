@@ -80,11 +80,6 @@
           "event": {
             "kind": "user_message",
             "text": "Pull up the Q3 board pack too."
-          },
-          "expect": {
-            "items": [
-              "docs:doc-q3"
-            ]
           }
         },
         {
