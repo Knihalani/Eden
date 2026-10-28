@@ -47,8 +47,8 @@ known. Over budget, the engine takes the no-model path; it never defers spend.
 3. Cheaper model: a fine-tuned small judge (M6).
 
 The non-model costs (source API calls, hosting) are not modelled yet. Source calls may dominate for some connectors;
-measure them per connector in M2. The query planner (D28), on by default in the server since D33, adds no model
-call. After its iterations it makes 1.36–1.47x planner-off's source calls per lookup in the simulation at time 0 and 1.23–1.32x at
-real pacing (about 5.6–6.2 calls per lookup against 4.1–4.65), and 1.00–1.74 calls per lookup per connector on the
-lab's real servers at the current settings; with `maxCalls: 1` it adds none
+measure them per connector in M2. The query planner (D28), on by default in the server since D33, adds no model call.
+After its iterations it makes 1.36–1.47x planner-off's source calls per lookup in the simulation at time 0 and
+1.23–1.32x at real pacing (about 5.6–6.2 calls per lookup against 4.1–4.65), and 1.00–1.74 calls per lookup per
+connector on the lab's real servers at the current settings; with `maxCalls: 1` it adds none
 (docs/research/query-planner-results.md).
