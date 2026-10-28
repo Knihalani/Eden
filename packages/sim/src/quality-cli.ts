@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 /**
  * bun packages/sim/src/quality-cli.ts [--users 6] [--sessions 15] [--seed 1] [--profile realistic|ideal|entities|
- *   zoo-tune|zoo-a|zoo-b] [--planner [--planner-max-calls 3] [--planner-no-cascade]] [--time 0] [--wait 0]
+ *   zoo-tune|zoo-a|zoo-b] [--planner [--planner-max-calls 3] [--planner-no-cascade] [--planner-mode serve|shadow]
+ *   [--promote-after N]] [--time 0] [--wait 0]
  *   [--noise 1] [--tool-rate 0.4] [--judge none|perfect|noisy] [--live] [--brief]
  *
  * Plays generated sessions over simulated sources and prints the quality report as JSON. Without --live no model is
@@ -42,10 +43,12 @@ const report = await runQuality({
   agentToolRate: Number(arg("tool-rate", "0.4")),
   model,
   judge: arg("judge", "none") as "none" | "perfect" | "noisy",
+  promoteAfter: args.includes("--promote-after") ? Number(arg("promote-after", "0")) : undefined,
   planner: args.includes("--planner")
     ? {
         maxCalls: Number(arg("planner-max-calls", "3")),
         cascade: !args.includes("--planner-no-cascade"),
+        mode: arg("planner-mode", "serve") as "serve" | "shadow",
         incumbent: {
           shape: "terms" as const,
           mean: Number(arg("planner-incumbent-mean", "0.75")),
@@ -58,6 +61,7 @@ const out = args.includes("--brief")
   ? {
       overall: report.overall,
       ask: report.ask,
+      shadow: report.shadow,
       privacy: report.privacy,
       noiseShare: report.noiseShare,
       redundantShare: report.redundantShare,

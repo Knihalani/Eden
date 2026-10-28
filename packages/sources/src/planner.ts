@@ -61,6 +61,12 @@ export interface PlannerOptions {
   maxStates?: number;
   /** Where arms persist (`SourceMap` implements it). Absent: learning lives in memory only. */
   store?: PlannerStore;
+  /**
+   * "serve" (default): lookups go through the planner. "shadow": the engine serves as if there were no planner, and
+   * runs the planner's lookup beside it to learn and to report what it would have found (D28's phase 5), delivering
+   * nothing from it. Mutable on the planner (`mode`), so a deployment can promote shadow learning to serving.
+   */
+  mode?: "serve" | "shadow";
 }
 
 /** One learned arm as stored: content-free. */
@@ -107,12 +113,15 @@ export class QueryPlanner {
   private readonly o: typeof DEFAULTS & Pick<PlannerOptions, "quotes" | "store">;
   private readonly picked = new Int32Array(SHAPES.length);
   private readonly incumbentArm: number;
+  /** See `PlannerOptions.mode`. */
+  mode: "serve" | "shadow";
   private readonly eligible = new Uint8Array(SHAPES.length);
 
   constructor(options: PlannerOptions = {}) {
     this.o = { ...DEFAULTS, ...options };
     this.rng = new Xoshiro128(this.o.seed);
     this.incumbentArm = this.o.incumbent.strength > 0 ? SHAPES.indexOf(this.o.incumbent.shape) : -1;
+    this.mode = options.mode ?? "serve";
   }
 
   /**
