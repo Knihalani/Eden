@@ -630,7 +630,11 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
   }
 
   const decisions: Record<string, number> = {};
-  for (const t of traces) decisions[t.decision] = (decisions[t.decision] ?? 0) + 1;
+  for (const t of traces) {
+    // No-model fallback deliveries (D36) are counted apart from confident ones, so a change in either shows.
+    const k = t.decision === "sources" && t.reason.startsWith("fallback:") ? "fallback" : t.decision;
+    decisions[k] = (decisions[k] ?? 0) + 1;
+  }
   const plans: Record<string, { lookups: number; empty: number; calls: number }> = {};
   for (const p of traces.flatMap((t) => t.plans ?? [])) {
     const k = `${p.sourceId}:${p.shapes.join(">") || "none"}`;

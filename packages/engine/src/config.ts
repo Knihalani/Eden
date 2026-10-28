@@ -12,6 +12,13 @@ export interface EngineConfig {
   entityBonus: number;
   /** Distinct query terms an item must hold to be delivered without the model. One shared word is not evidence. */
   minMatchedTerms: number;
+  /**
+   * With no model to judge (none configured, or over budget), the best-scored candidate is still delivered if it
+   * holds at least `fallbackMatchedTerms` distinct query terms and scores at least `fallbackScore`, entity or not
+   * (D36). Chosen on the simulation's tuning set; 0 turns it off. A model, when there is one, judges instead.
+   */
+  fallbackMatchedTerms: number;
+  fallbackScore: number;
   maxItemsPerInjection: number;
   maxInjectionBytes: number;
   /** Sources asked per proactive lookup (routing picks them). An ask uses `askSources`. */
@@ -59,6 +66,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   candidateScore: 0.3,
   entityBonus: 0.35,
   minMatchedTerms: 2,
+  fallbackMatchedTerms: 3,
+  fallbackScore: 0.8,
   maxItemsPerInjection: 3,
   maxInjectionBytes: 1_200,
   lookupSources: 3,
