@@ -1,0 +1,59 @@
+{
+  "id": "hotel-checkin",
+  "category": "travel",
+  "description": "Checking in to a hotel: the booking confirmation, among other trips.",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-memmo",
+          "title": "Booking confirmed: Memmo Alfama",
+          "text": "Check-in from 15:00 on 14 Nov, 3 nights, confirmation 77341. Breakfast included."
+        },
+        {
+          "ref": "msg-ibis",
+          "title": "Booking confirmed: ibis Manchester",
+          "text": "Check-in 2 Dec, 1 night, confirmation 55102."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "hotel-checkin-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "What time can I check in at the Memmo Alfama?"
+          },
+          "expect": {
+            "items": [
+              "mail:msg-memmo"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "From 15:00 on the 14th."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Is breakfast included there?"
+          }
+        }
+      ]
+    }
+  ]
+}

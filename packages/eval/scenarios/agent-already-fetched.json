@@ -1,0 +1,61 @@
+{
+  "id": "agent-already-fetched",
+  "category": "adversarial",
+  "description": "The agent fetched the fact with its own tool before the user asked: delivering it at the tool result, or when the user asks about what the agent just read out, would be noise.",
+  "sources": [
+    {
+      "id": "calendar",
+      "description": "The user's calendar",
+      "docs": [
+        {
+          "ref": "evt-review",
+          "title": "Design review with Hana",
+          "text": "Monday 11:00, room Orion, bring the mobile mocks"
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "agent-already-fetched-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "tool_call",
+            "tool": "calendar.get",
+            "input": {
+              "query": "design review Hana"
+            }
+          }
+        },
+        {
+          "event": {
+            "kind": "tool_result",
+            "tool": "calendar.get",
+            "output": "Design review with Hana, Monday 11:00, room Orion, bring the mobile mocks"
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "Your design review with Hana is Monday at 11:00 in Orion; bring the mobile mocks."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "What should I bring to the design review with Hana?"
+          },
+          "expect": "silent"
+        }
+      ]
+    }
+  ]
+}

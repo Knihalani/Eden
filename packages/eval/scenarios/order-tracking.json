@@ -1,0 +1,64 @@
+{
+  "id": "order-tracking",
+  "category": "purchases",
+  "description": "Where is an order; two orders from the same shop.",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-order-881",
+          "title": "Your order 881 has shipped",
+          "text": "Order 881: noise-cancelling headphones. Tracking DPD 15501234, arriving Thursday."
+        },
+        {
+          "ref": "msg-order-874",
+          "title": "Your order 874 was delivered",
+          "text": "Order 874: USB-C cable. Delivered Monday."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "order-tracking-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "When are my new headphones arriving?"
+          },
+          "expect": {
+            "items": [
+              "mail:msg-order-881"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "They should arrive Thursday."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "And the cable?"
+          },
+          "expect": {
+            "items": [
+              "mail:msg-order-874"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "id": "unanswered-thread",
+  "category": "follow-ups",
+  "description": "A thread the user never answered comes back up.",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-omar-q",
+          "title": "Question about the API limits",
+          "text": "Omar Haddad: is the 100 requests/minute limit per key or per account? Need to know before Monday."
+        },
+        {
+          "ref": "msg-omar-thanks",
+          "title": "Thanks!",
+          "text": "Omar Haddad: thanks for the docs link last month."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "unanswered-thread-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "external",
+            "source": "mail",
+            "text": "New email from Omar Haddad: Following up on my question"
+          },
+          "expect": {
+            "items": [
+              "mail:msg-omar-q"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "Omar is following up on his API limits question."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Tell him it's per key."
+          },
+          "expect": "silent"
+        }
+      ]
+    }
+  ]
+}

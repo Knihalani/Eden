@@ -1,0 +1,93 @@
+{
+  "id": "dentist-reschedule",
+  "category": "scheduling",
+  "description": "Moving a dentist appointment; a second appointment with a similar name must not be confused.",
+  "sources": [
+    {
+      "id": "calendar",
+      "description": "The user's calendar",
+      "docs": [
+        {
+          "ref": "evt-dentist",
+          "title": "Dentist: Dr. Okafor",
+          "text": "Tuesday 9:00-9:45 at 12 Harley Street, cleaning and check-up"
+        },
+        {
+          "ref": "evt-vet",
+          "title": "Vet: Biscuit's vaccinations",
+          "text": "Tuesday 17:30 at Riverside Vets"
+        },
+        {
+          "ref": "evt-standup",
+          "title": "Team standup",
+          "text": "Every weekday 9:30-9:45, video call"
+        }
+      ]
+    },
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-okafor",
+          "title": "Your appointment with Dr. Okafor",
+          "text": "Reminder: Tuesday 9:00. To reschedule, reply to this email or call 020 7946 0321 at least 24 hours ahead."
+        },
+        {
+          "ref": "msg-newsletter",
+          "title": "Harley Street Dental newsletter",
+          "text": "Autumn tips for healthy gums and our new opening hours."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "dentist-reschedule-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "I need to move my dentist appointment with Dr. Okafor to later in the week."
+          },
+          "expect": {
+            "items": [
+              "calendar:evt-dentist",
+              "mail:msg-okafor"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "Let me look for a free slot."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Thanks. Also, nice weather today, isn't it?"
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Is Thursday morning free instead?"
+          },
+          "expect": {
+            "items": [
+              "calendar:evt-standup"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

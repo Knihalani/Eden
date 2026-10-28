@@ -1,0 +1,67 @@
+{
+  "id": "anniversary",
+  "category": "relationships",
+  "description": "An anniversary dinner: the date and the restaurant they liked last year.",
+  "sources": [
+    {
+      "id": "calendar",
+      "description": "The user's calendar",
+      "docs": [
+        {
+          "ref": "evt-anniv",
+          "title": "Anniversary with Alex",
+          "text": "Friday 20 Nov"
+        }
+      ]
+    },
+    {
+      "id": "notes",
+      "description": "The user's notes",
+      "docs": [
+        {
+          "ref": "note-restaurants",
+          "title": "Restaurants we liked",
+          "text": "Brat in Shoreditch (anniversary 2025, loved the turbot); Kiln for a quick dinner."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "anniversary-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Book somewhere nice for our anniversary dinner with Alex."
+          },
+          "expect": {
+            "items": [
+              "calendar:evt-anniv",
+              "notes:note-restaurants"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "How about Brat again?"
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Perfect."
+          },
+          "expect": "silent"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "id": "reply-drafting",
+  "category": "inbox",
+  "description": "Drafting a reply: the original thread and the user's own commitment in a doc.",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-priya-contract",
+          "title": "Contract renewal for Northwind",
+          "text": "Priya Raman: can you confirm the renewal term? We discussed 24 months at the last call."
+        },
+        {
+          "ref": "msg-priya-old",
+          "title": "Northwind kickoff notes",
+          "text": "Kickoff happened in March 2025."
+        }
+      ]
+    },
+    {
+      "id": "docs",
+      "description": "The user's documents",
+      "docs": [
+        {
+          "ref": "doc-northwind-terms",
+          "title": "Northwind renewal terms (internal)",
+          "text": "Approved: 24-month term, 8% uplift, net-30 payment."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "reply-drafting-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Help me reply to Priya Raman about the Northwind renewal."
+          },
+          "expect": {
+            "items": [
+              "mail:msg-priya-contract",
+              "docs:doc-northwind-terms"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "Drafting a reply now."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Make it sound friendly."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "Here's a friendlier draft."
+          },
+          "expect": "silent"
+        }
+      ]
+    }
+  ]
+}

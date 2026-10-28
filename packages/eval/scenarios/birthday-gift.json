@@ -1,0 +1,72 @@
+{
+  "id": "birthday-gift",
+  "category": "relationships",
+  "description": "A friend's birthday: the date and what they like, from notes.",
+  "sources": [
+    {
+      "id": "calendar",
+      "description": "The user's calendar",
+      "docs": [
+        {
+          "ref": "evt-maya-bday",
+          "title": "Maya's birthday",
+          "text": "Saturday 7 Nov"
+        }
+      ]
+    },
+    {
+      "id": "notes",
+      "description": "The user's notes",
+      "docs": [
+        {
+          "ref": "note-maya",
+          "title": "Gift ideas: Maya",
+          "text": "Loves pottery and Ottolenghi cookbooks; already has Simple and Flavour."
+        },
+        {
+          "ref": "note-groceries",
+          "title": "Groceries",
+          "text": "Milk, eggs, oat flour."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "birthday-gift-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Maya's birthday is coming up, any ideas for a present?"
+          },
+          "expect": {
+            "items": [
+              "calendar:evt-maya-bday",
+              "notes:note-maya"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "Here are some ideas based on your notes."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Sounds good."
+          },
+          "expect": "silent"
+        }
+      ]
+    }
+  ]
+}
