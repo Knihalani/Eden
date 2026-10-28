@@ -64,3 +64,8 @@ Each item, when done, gets a line here with its PR and its numbers.
   check as search; arguments from its schema (or an `args` function), ambiguous schemas refused, Eden's content-hash
   refs never sent. Tests only: no real server's read-one tool was measured, and the engine does not call `fetch` yet
   (when to refresh a cached item is the next step for this item).
+- **4, the planner's learning cost (D37):** a greedy cascade step and a runner-up prior for one call per entity.
+  Retrieval on fresh held-out seeds: A 0.425 to 0.509, B 0.612 to 0.639, realistic 0.428 to 0.493; recall with a
+  perfect judge up with intervals apart from 0 on every mix, with no model within noise; calls +1–2%; hard false
+  fires 6 to 8 of 8,448 (one turn); lab world 1000 at or near the best fixed shape on the connectors where the terms
+  fail, no regression elsewhere (docs/research/query-planner-results.md, iteration 5).
