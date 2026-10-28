@@ -1,0 +1,60 @@
+{
+  "id": "ticket-follow-up",
+  "category": "follow-ups",
+  "description": "A support ticket the user is waiting on; the latest status, not the closed ticket.",
+  "sources": [
+    {
+      "id": "tickets",
+      "description": "The user's support tickets",
+      "docs": [
+        {
+          "ref": "tk-4412",
+          "title": "Laptop screen flicker (open)",
+          "text": "Status: waiting for parts. ETA 3 Nov. Assigned to IT, Omar."
+        },
+        {
+          "ref": "tk-3998",
+          "title": "VPN not connecting (closed)",
+          "text": "Resolved 2 Sep by reinstalling the client."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "ticket-follow-up-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Any news on my laptop screen ticket?"
+          },
+          "expect": {
+            "items": [
+              "tickets:tk-4412"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "It's waiting for parts."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Ok, thanks."
+          },
+          "expect": "silent"
+        }
+      ]
+    }
+  ]
+}

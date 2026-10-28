@@ -1,0 +1,88 @@
+{
+  "id": "two-sessions",
+  "category": "scheduling",
+  "description": "The same user over two sessions: what was delivered in the first does not leak into the second's scoring, and a new need is met.",
+  "sources": [
+    {
+      "id": "calendar",
+      "description": "The user's calendar",
+      "docs": [
+        {
+          "ref": "evt-physio",
+          "title": "Physio with Dr. Ines",
+          "text": "Monday 8:30, Wellbeing Clinic"
+        },
+        {
+          "ref": "evt-car",
+          "title": "Car MOT",
+          "text": "Wednesday 10:00, Kwik Fit Hammersmith"
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "two-sessions-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "When is my physio appointment?"
+          },
+          "expect": {
+            "items": [
+              "calendar:evt-physio"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "Monday at 8:30."
+          },
+          "expect": "silent"
+        }
+      ]
+    },
+    {
+      "id": "two-sessions-2",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Remind me when the car MOT is."
+          },
+          "expect": {
+            "items": [
+              "calendar:evt-car"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "Wednesday at 10:00 at Kwik Fit."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Thanks, bye."
+          },
+          "expect": "silent"
+        }
+      ]
+    }
+  ]
+}

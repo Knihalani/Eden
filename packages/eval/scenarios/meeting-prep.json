@@ -1,0 +1,99 @@
+{
+  "id": "meeting-prep",
+  "category": "scheduling",
+  "description": "Preparing for a meeting with a person: their recent thread and the agenda doc, not other people's.",
+  "sources": [
+    {
+      "id": "calendar",
+      "description": "The user's calendar",
+      "docs": [
+        {
+          "ref": "evt-webb",
+          "title": "Board prep with Marcus Webb",
+          "text": "Wednesday 16:00, room 3B, bring Q3 numbers"
+        },
+        {
+          "ref": "evt-gym",
+          "title": "Gym",
+          "text": "Wednesday 18:30"
+        }
+      ]
+    },
+    {
+      "id": "docs",
+      "description": "The user's documents",
+      "docs": [
+        {
+          "ref": "doc-q3",
+          "title": "Q3 board pack draft",
+          "text": "Revenue 4.2M, up 12% on Q2; churn 3.1%; hiring plan for Q4: 6 engineers."
+        },
+        {
+          "ref": "doc-offsite",
+          "title": "Team offsite ideas",
+          "text": "Lake District in March, budget 8k."
+        }
+      ]
+    },
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-webb",
+          "title": "Re: Q3 numbers",
+          "text": "Marcus Webb: please make sure the churn figure is broken out by region before Wednesday."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "meeting-prep-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "What do I need for my meeting with Marcus Webb on Wednesday?"
+          },
+          "expect": {
+            "items": [
+              "calendar:evt-webb",
+              "mail:msg-webb"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "Here's what I found."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Pull up the Q3 board pack too."
+          },
+          "expect": {
+            "items": [
+              "docs:doc-q3"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Great, that's all for now."
+          },
+          "expect": "silent"
+        }
+      ]
+    }
+  ]
+}

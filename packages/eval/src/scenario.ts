@@ -23,7 +23,19 @@ export interface Turn {
 
 export interface Scenario {
   id: string;
+  /** The personal-agent job it exercises ("scheduling", "inbox", "adversarial"...): the report groups by it. */
+  category?: string;
   description: string;
+  /**
+   * Strings planted in the sources (passwords, connection strings) that must never reach the agent: no delivered
+   * text may contain one. Source text is redacted before it is stored (CLAUDE.md), so these measure that it is.
+   */
+  secrets?: string[];
+  /**
+   * Questions the agent asks the partner directly (`ask`) after the sessions, with the items the answer should cite.
+   * Their answers are checked for `secrets` too, so a secret check does not rest on proactive delivery alone.
+   */
+  asks?: { question: string; expect: string[] }[];
   sources: { id: string; description: string; docs: StaticDoc[] }[];
   sessions: { id: string; turns: Turn[] }[];
 }

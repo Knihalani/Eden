@@ -1,0 +1,75 @@
+{
+  "id": "promised-follow-up",
+  "category": "follow-ups",
+  "description": "The user promised something in a past thread; when the person comes up, the promise is the context.",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-promise",
+          "title": "Re: intro to Dana",
+          "text": "You wrote to Leo Park: I'll send you the hiring deck by Friday."
+        },
+        {
+          "ref": "msg-leo-other",
+          "title": "Leo Park shared a photo album",
+          "text": "Holiday photos from Crete."
+        }
+      ]
+    },
+    {
+      "id": "crm",
+      "description": "The user's CRM",
+      "docs": [
+        {
+          "ref": "contact-leo",
+          "title": "Leo Park",
+          "text": "Partner at Seedcamp. Last contact 3 weeks ago. Interested in the seed round."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "promised-follow-up-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Leo Park just pinged me, what was I supposed to send him?"
+          },
+          "expect": {
+            "items": [
+              "mail:msg-promise"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "You promised him the hiring deck."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Right. Who is he again exactly?"
+          },
+          "expect": {
+            "items": [
+              "crm:contact-leo"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

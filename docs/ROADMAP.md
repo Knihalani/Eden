@@ -9,9 +9,10 @@ Packages, two-speed engine, source map, OpenRouter client, HTTP/MCP server, SDK,
 In progress: `packages/sim` generates worlds and labelled sessions at scale and reports per-task and no-model /
 with-model (modelled judge) splits ([research/simulation.md](research/simulation.md)). Still to do: a live-model run, a
 train / held-out split for tuning, hand-written adversarial scenarios, and text not written by templates.
-- 20+ scenarios across personal-agent jobs: scheduling, inbox triage, follow-ups, travel, purchases, relationships,
-  with gold `expect` labels, including many must-stay-silent turns and adversarial ones (prompt injection in mail).
-- Report per-situation metrics, and the no-model / with-model split.
+- Done (2026-10-28, [research/eval-suite.md](research/eval-suite.md)): 26 scenarios across personal-agent jobs with
+  gold labels, many must-stay-silent turns and 6 adversarial scenarios (prompt injection, planted secrets, look-alike
+  names); per-category metrics, a privacy check and direct asks in the report. Baseline with no model: precision
+  0.875, recall 0.35, no false fires, no secret leaked.
 - Tune `confidentScore`, `candidateScore`, `entityBonus` on a train split; report on a held-out split.
 - Measure how often inferred usage (D13) agrees with labels.
 

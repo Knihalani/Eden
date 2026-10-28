@@ -1,0 +1,81 @@
+{
+  "id": "quiet-inbox",
+  "category": "inbox",
+  "description": "Mostly chatter: the partner must stay silent unless something in the sources helps.",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-lunch",
+          "title": "Lunch on Friday?",
+          "text": "Sam: fancy lunch at Padella on Friday at 1?"
+        },
+        {
+          "ref": "msg-receipt",
+          "title": "Your Uber receipt",
+          "text": "Thursday trip, 14.20 GBP."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "quiet-inbox-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Good morning!"
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "Good morning! How can I help today?"
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Just thinking out loud about the weekend."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "What's a good recipe for banana bread?"
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "Here is a simple recipe."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Sam asked about lunch on Friday, what did they suggest?"
+          },
+          "expect": {
+            "items": [
+              "mail:msg-lunch"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
