@@ -231,4 +231,36 @@ describe("QueryPlanner", () => {
     expect(planner.means(alice, "substring", true)).toEqual(prior);
     expect(planner.means(bob, "substring", true)).toEqual(bobs);
   });
+
+  test("a lookup in flight when its user is forgotten learns nothing and writes nothing back", async () => {
+    const rows: PlannerArm[] = [];
+    const store: PlannerStore = { loadArms: () => [], saveArms: (_s, _id, arms) => void rows.push(...arms) };
+    const planner = new QueryPlanner({ seed: 1, store });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    // The connector ignores the abort and answers anyway, after the user was forgotten.
+    const late: Source = {
+      id: "s",
+      kind: "t",
+      description: "",
+      search: async () => (await gate, [DOCS[0]!].map((d) => ({ id: "s:1", sourceId: "s", ...d }))),
+    };
+    const pending = planner.search(late, cues[0]!, signal);
+    planner.forget(alice);
+    release();
+    await pending;
+    expect(rows).toEqual([]);
+    const prior = new QueryPlanner().means(alice, "s", true);
+    expect(planner.means(alice, "s", true)).toEqual(prior);
+  });
+
+  test("a lookup aborted mid-flight (session ended) learns nothing", async () => {
+    const rows: PlannerArm[] = [];
+    const store: PlannerStore = { loadArms: () => [], saveArms: (_s, _id, arms) => void rows.push(...arms) };
+    const planner = new QueryPlanner({ seed: 1, store });
+    const ac = new AbortController();
+    const late: Source = { id: "s", kind: "t", description: "", search: async () => (ac.abort(), []) };
+    await planner.search(late, cues[0]!, ac.signal);
+    expect(rows).toEqual([]);
+  });
 });

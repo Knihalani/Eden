@@ -130,7 +130,8 @@ export class QueryPlanner {
     const quotes = this.o.quotes?.(source.id) ?? false;
     const built = SHAPES.map((s) => buildShape(s, input, { quotes, maxCalls: this.o.maxCalls }));
     const bucket = query.entities.length > 0 ? 1 : 0;
-    const bandit = this.state(query.scope, source.id).bandits[bucket];
+    const state = this.state(query.scope, source.id);
+    const bandit = state.bandits[bucket];
     // Per lookup, never shared: lookups for other users and connectors run concurrently and must not see these.
     const eligible = new Uint8Array(SHAPES.length);
     const picked = new Int32Array(1);
@@ -167,8 +168,10 @@ export class QueryPlanner {
         // Shapes carry the whole query in `text`; entities are cleared so a source does not re-add its own.
         for (const it of await source.search({ ...query, text, entities: [] }, signal)) got.push(it);
       }
-      // A shape that sent nothing (the permit was refused) is not credited: nothing was learned about it.
-      if (sent === 0) break;
+      // A shape that sent nothing (the permit was refused) is not credited: nothing was learned about it. A lookup
+      // aborted meanwhile (session ended, user forgotten) learns nothing either (D17), and neither does one whose
+      // user's state was dropped while it waited: writing it back would undo `forget`.
+      if (sent === 0 || signal.aborted || !this.current(query.scope, source.id, state)) break;
       const r = this.o.rewardTopK > 1 ? rankedCoverage(input, got, this.o.rewardTopK) : cueCoverage(input, got);
       bandit.decayArm(arm, 1);
       bandit.update(arm, r);
@@ -193,6 +196,11 @@ export class QueryPlanner {
     for (const key of [...this.states.keys()]) {
       if (sourceId ? key === prefix + sourceId : key.startsWith(prefix)) this.states.delete(key);
     }
+  }
+
+  /** Whether `state` is still the one held for this user's connector (not forgotten or evicted since). */
+  private current(scope: Scope, sourceId: string, state: ConnectorState): boolean {
+    return this.states.get(`${scope.tenantId}\u0000${scope.userId}\u0000${sourceId}`) === state;
   }
 
   private save(scope: Scope, sourceId: string, bucket: number, arm: number, bandit: BetaBandit): void {
