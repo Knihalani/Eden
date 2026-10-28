@@ -102,6 +102,11 @@ interface Session {
   lastActive: number;
   window: string[];
   /**
+   * The words of recent events that show what the agent has: tool results it fetched and its own messages
+   * (bounded like the window), for `alreadyHas`. A user naming something is no sign the agent has its content.
+   */
+  agentHas: Set<string>[];
+  /**
    * The session's own vocabulary: all of its term ids (seen, usage, cues) are in it. Rebuilt past
    * `maxSessionTerms`; the cache's per-user vocabulary holds item terms only.
    */
@@ -397,6 +402,7 @@ export class ContextPartner {
       turn: 0,
       lastActive: now,
       window: [],
+      agentHas: [],
       vocab: new Vocab(256),
       seen: new Set(),
       ledger: new Ledger(this.config.ledgerCooldownTurns),
@@ -428,6 +434,7 @@ export class ContextPartner {
     s.outstanding.clear();
     s.pending.length = 0;
     s.window.length = 0;
+    s.agentHas.length = 0;
     this.deps.budget.endSession(s.key);
     this.sessions.delete(s.key);
     const n = (this.perTenant.get(s.scope.tenantId) ?? 1) - 1;
@@ -439,6 +446,10 @@ export class ContextPartner {
     if (!text) return;
     s.window.push(`${event.kind}: ${text.slice(0, 1_000)}`);
     if (s.window.length > this.config.windowEvents) s.window.shift();
+    if (event.kind === "tool_result" || event.kind === "agent_message") {
+      s.agentHas.push(contentWords(text.slice(0, 1_000)));
+      if (s.agentHas.length > this.config.windowEvents) s.agentHas.shift();
+    }
     for (let i = 0; i < terms.length; i++) {
       const id = terms[i]!;
       s.seen.delete(id); // Re-insert so Set order is least recently seen first.
@@ -521,6 +532,8 @@ export class ContextPartner {
         .filter((h) => options.ignoreLedger || s.ledger.isFresh(h.item.id, s.turn))
         // A near-duplicate of something already delivered this session (a reply quoting it, a synced copy) is old news.
         .filter((h) => options.ignoreLedger || !s.delivered.some((d) => nearDuplicate(d, h.sketch)))
+        // What the agent already has in front of it (a tool result it fetched, its own read-out) is not news either.
+        .filter((h) => options.ignoreLedger || !alreadyHas(s.agentHas, h.item))
         .map((h) => {
           const entityHit = entities.some(
             (ids) => ids.length > 0 && cache.containsAll(s.scope, h.doc, ids, ids.length),
@@ -535,9 +548,13 @@ export class ContextPartner {
   }
 
   private confident(scored: Scored[]): Scored[] {
-    return scored
-      .filter((x) => x.score >= this.config.confidentScore && x.matched >= this.config.minMatchedTerms)
-      .slice(0, this.config.maxItemsPerInjection);
+    return (
+      scored
+        .filter((x) => x.score >= this.config.confidentScore && x.matched >= this.config.minMatchedTerms)
+        // Bulk mail is never pushed without a model's say: a newsletter arriving is no reason to speak.
+        .filter((x) => !bulkMail(x.item))
+        .slice(0, this.config.maxItemsPerInjection)
+    );
   }
 
   /** Routes, searches the chosen sources live, caches what they return and records which entities they hold. */
@@ -883,4 +900,45 @@ function buildCue(text: string, ids: Uint32Array, vocab: Vocab): Cue {
   // Traces and reasons carry this id, never the cue itself: the cue is the user's words.
   const id = `cue:${createHash("sha256").update(key).digest("hex").slice(0, 10)}`;
   return { text: terms.join(" "), entities, key, id };
+}
+
+/** Share of an item's own words one recent event must hold for the agent to have it already. */
+const ALREADY_HAS = 0.8;
+
+/** Lower-cased words of two or more letters or digits, stopwords out. */
+function contentWords(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const w of text.toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? []) if (!isStopword(w)) out.add(w);
+  return out;
+}
+
+/**
+ * Whether one recent tool result or agent message already holds most of an item's words: then the agent has it (it
+ * fetched or said it), and delivering it is a repeat. Items of under four
+ * words are never judged so, since a few common words prove nothing.
+ */
+function alreadyHas(window: Set<string>[], item: ContextItem): boolean {
+  const own = contentWords(`${item.title} ${item.text}`);
+  if (own.size < 4) return false;
+  for (const words of window) {
+    let n = 0;
+    for (const w of own) if (words.has(w)) n++;
+    if (n >= ALREADY_HAS * own.size) return true;
+  }
+  return false;
+}
+
+/** Mailbox categories that mark bulk mail, as connectors report them in `meta.category` (Gmail's tabs). */
+const BULK_CATEGORIES = /^(promotions?|social|updates|forums)$/i;
+/** Wording that marks bulk mail in an item's title or text: newsletters, digests, notifications, promotions. */
+const BULK_WORDS = /\b(newsletter|digest|unsubscribe|top stories|you appeared in|webinar|promo(tion)?s?)\b/i;
+
+/**
+ * Whether an item looks like bulk mail. Such items are never delivered without a model: their words overlap with
+ * real work, and one arriving says nothing about the user's need. They can still be found by an ask.
+ */
+function bulkMail(item: ContextItem): boolean {
+  const category = item.meta?.category;
+  if (category !== undefined && BULK_CATEGORIES.test(category)) return true;
+  return BULK_WORDS.test(item.title) || BULK_WORDS.test(item.text.slice(0, 2_000));
 }

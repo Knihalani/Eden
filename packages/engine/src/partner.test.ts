@@ -538,3 +538,55 @@ describe("query planner wiring", () => {
     expect(planner.means(scope, "crm", true)).toEqual(prior);
   });
 });
+
+describe("what the agent has or does not need is not delivered", () => {
+  const review = new StaticSource("calendar", "calendar", [
+    { ref: "rev", title: "Design review with Hana", text: "Monday 11:00, room Orion, bring the mobile mocks" },
+  ]);
+  const delivered = async (p: ContextPartner, e: Record<string, unknown>) => {
+    const r = await p.observe(ev(e), { waitMs: 1_000 });
+    return [...(r.injection ? [r.injection] : []), ...p.takePending(scope)].flatMap((i) =>
+      i.citations.map((c) => c.itemId),
+    );
+  };
+
+  test("an item the agent fetched with its own tool is not delivered again when the user asks about it", async () => {
+    const { p } = partner({}, [review]);
+    const output = "Design review with Hana, Monday 11:00, room Orion, bring the mobile mocks";
+    await delivered(p, { kind: "tool_call", tool: "calendar.get", input: { q: "design review" } });
+    expect(await delivered(p, { kind: "tool_result", tool: "calendar.get", output })).toEqual([]);
+    expect(
+      await delivered(p, { kind: "user_message", text: "What should I bring to the design review with Hana?" }),
+    ).toEqual([]);
+  });
+
+  test("the user naming an item is no sign the agent has it: the item is still delivered", async () => {
+    const { p } = partner({}, [review]);
+    // The question holds most of the item's title words, but none of its content.
+    expect(await delivered(p, { kind: "user_message", text: "When is the design review with Hana?" })).toContain(
+      "calendar:rev",
+    );
+  });
+
+  test("bulk mail is not pushed without a model, by its wording or its mailbox category; an ask still finds it", async () => {
+    const mail = new StaticSource("mail", "mail", [
+      {
+        ref: "nl",
+        title: "Globex weekly newsletter",
+        text: "Globex renewal news, Dana Lee interview and pricing tips",
+      },
+      {
+        ref: "promo",
+        title: "Globex renewal offer for Dana Lee",
+        text: "Globex renewal pricing for Dana Lee this month",
+        meta: { category: "promotions" },
+      },
+    ]);
+    const { p } = partner({}, [mail]);
+    expect(
+      await delivered(p, { kind: "user_message", text: "What's new with the Globex renewal and Dana Lee?" }),
+    ).toEqual([]);
+    const answer = await p.ask({ ...scope, question: "Globex renewal newsletter Dana Lee" });
+    expect(answer.citations.map((c) => c.itemId)).toContain("mail:nl");
+  });
+});

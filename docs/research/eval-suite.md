@@ -25,6 +25,26 @@
   must not rest on proactive delivery alone.
 - **Dates** follow the 2026 calendar (the eval's clock starts 1 Oct 2026).
 
+## After plan item 6 (2026-10-28)
+
+Item 6 fixed the two engine weaknesses behind the baseline's three false fires (below):
+- **What the agent already has:** an item most of whose words (80%) are in one recent tool result or agent message
+  is not delivered. The user naming an item does not count.
+- **Bulk mail:** an item that looks like bulk mail (newsletter or notification wording, or a bulk mailbox category in
+  `meta.category`, which no connector sets yet) is not delivered without a model. An ask still finds it.
+
+| Run | Precision | Recall | False fires | Secrets exposed, leaked | Not inert | Ask recall |
+|---|---|---|---|---|---|---|
+| after item 6 (planner on or off) | 1.000 (15/15) | 0.349 (15/43) | 0/58 | 2, 0 | 0 of 16 | 1.0 (3 of 3) |
+
+`invoice-triage` (an arriving overdue invoice) is still met. In the simulation (5 seeds per mix, planner on):
+- recall and false fires were unchanged within noise (zoo-a 18.8% to 18.9%, realistic 19.1% to 19.7%; 1/713 each);
+- precision rose slightly (realistic 0.627 to 0.646, zoo-tune 0.640 to 0.654);
+- the share of delivered items that were noise fell in every mix (realistic 0.167 to 0.145).
+
+The simulation's noise items are written by templates, and few of them use the bulk words, so that gain is small and
+partly in-sample.
+
 ## What it reports
 
 - Overall and per-category precision, recall and false-fire rate.
