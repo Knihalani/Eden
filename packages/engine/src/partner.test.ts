@@ -385,6 +385,46 @@ describe("query planner wiring", () => {
     expect(JSON.stringify(plans)).not.toMatch(/globex|dana/i);
   });
 
+  test("a delivery credits the planner for each delivered item (D39)", async () => {
+    const planner = new QueryPlanner({ seed: 1 });
+    const credited: string[] = [];
+    const credit = planner.creditDelivery.bind(planner);
+    planner.creditDelivery = (sc, sourceId, itemId) => {
+      credited.push(`${sc.userId}/${itemId}`);
+      credit(sc, sourceId, itemId);
+    };
+    const { p } = partner({ planner });
+    const r = await p.observe(ev({ kind: "user_message", text: "Email Dana Lee about the Globex renewal" }), {
+      waitMs: 1_000,
+    });
+    const delivered = [...(r.injection ? [r.injection] : []), ...p.takePending(scope)].flatMap((i) =>
+      i.citations.map((c) => `${scope.userId}/${c.itemId}`),
+    );
+    expect(delivered.length).toBeGreaterThan(0);
+    expect(credited).toEqual(delivered);
+  });
+
+  test("credit comes when the agent receives the injection, not when it is built (D18, D39)", async () => {
+    const run = async (take: boolean) => {
+      const planner = new QueryPlanner({ seed: 1 });
+      const credited: string[] = [];
+      const credit = planner.creditDelivery.bind(planner);
+      planner.creditDelivery = (sc, sourceId, itemId) => {
+        credited.push(itemId);
+        credit(sc, sourceId, itemId);
+      };
+      const { p } = partner({ planner });
+      const r = await p.observe(ev({ kind: "user_message", text: "Email Dana Lee about the Globex renewal" }));
+      expect(r.injection).toBeNull(); // Not waited for: the lookup's result is queued.
+      await new Promise((res) => setTimeout(res, 100)); // Static sources answer at once.
+      if (take) expect(p.takePending(scope).length).toBeGreaterThan(0);
+      else await p.observe(ev({ kind: "session_end" }));
+      return credited;
+    };
+    expect(await run(false)).toEqual([]);
+    expect((await run(true)).length).toBeGreaterThan(0);
+  });
+
   test("forget clears what the planner learned for the user", async () => {
     const { source } = substringCrm();
     const planner = new QueryPlanner({ seed: 1 });
