@@ -27,23 +27,25 @@
 
 ## After plan item 6 (2026-10-28)
 
-Item 6 fixed the two engine weaknesses behind the baseline's three false fires (below):
-- **What the agent already has:** an item most of whose words (80%) are in one recent tool result or agent message
-  is not delivered. The user naming an item does not count.
-- **Bulk mail:** an item that looks like bulk mail (newsletter or notification wording, or a bulk mailbox category in
-  `meta.category`, which no connector sets yet) is not delivered without a model. An ask still finds it.
+Item 6 (D34) fixed the two engine weaknesses behind the baseline's three false fires (below):
+- **What the agent already has:** an item (four terms or more) every one of whose terms is in one recent tool
+  result or agent message is not delivered, with or without a model. The user naming an item does not count, and
+  an item with a term the agent has not seen (an update: another time, another room) is still delivered.
+- **Bulk mail:** an item whose `meta.category` is `promotions` (no connector sets it yet) or whose title names a
+  newsletter, "top stories" or "you appeared in" is not delivered without a model. The judge and asks still see it.
+  This is a heuristic tuned on one scenario (`newsletter-arrives`), kept narrow: a first version that also matched
+  "webinar", "promotion", "digest", "unsubscribe" and Gmail's Updates tab blocked real meeting, HR and billing mail.
 
 | Run | Precision | Recall | False fires | Secrets exposed, leaked | Not inert | Ask recall |
 |---|---|---|---|---|---|---|
-| after item 6 (planner on or off) | 1.000 (15/15) | 0.349 (15/43) | 0/58 | 2, 0 | 0 of 16 | 1.0 (3 of 3) |
+| after item 6 (planner on) | 1.000 (15/15) | 0.349 (15/43) | 0/58 | 2, 0 | 0 of 16 | 1.0 (3 of 3) |
 
-`invoice-triage` (an arriving overdue invoice) is still met. In the simulation (5 seeds per mix, planner on):
-- recall and false fires were unchanged within noise (zoo-a 18.8% to 18.9%, realistic 19.1% to 19.7%; 1/713 each);
-- precision rose slightly (realistic 0.627 to 0.646, zoo-tune 0.640 to 0.654);
-- the share of delivered items that were noise fell in every mix (realistic 0.167 to 0.145).
-
-The simulation's noise items are written by templates, and few of them use the bulk words, so that gain is small and
-partly in-sample.
+`invoice-triage` (an arriving overdue invoice) is still met. In the simulation (5 seeds per mix, planner on,
+`quality-cli`), recall, precision and false fires were unchanged in zoo-tune, zoo-a and realistic (realistic: recall
+19.1%, precision 0.627, 1/713) and within noise in zoo-b (561 items delivered against 563): the simulation's
+templates rarely produce what these rules match, so this change is measured only by the eval. Observe p95 0.23–0.25
+ms against 0.20–0.24 ms on main (realistic, 5 seeds, run one after another). No `--live` run (the key's spend
+limit).
 
 ## What it reports
 

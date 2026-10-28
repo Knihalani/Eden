@@ -568,6 +568,48 @@ describe("what the agent has or does not need is not delivered", () => {
     );
   });
 
+  test("an update to what the agent fetched is still delivered: a stale copy is no reason to hold it back", async () => {
+    const moved = new StaticSource("calendar", "calendar", [
+      { ref: "rev", title: "Design review with Hana", text: "Monday 11:30, room Vega, bring the mobile mocks" },
+    ]);
+    const { p } = partner({}, [moved]);
+    const stale = "Design review with Hana, Monday 11:00, room Orion, bring the mobile mocks";
+    const got = [
+      ...(await delivered(p, { kind: "tool_result", tool: "calendar.get", output: stale })),
+      ...(await delivered(p, { kind: "user_message", text: "What should I bring to the design review with Hana?" })),
+    ];
+    expect(got).toContain("calendar:rev");
+  });
+
+  test("a user message holding all of an item's words is no sign the agent has it", async () => {
+    const { p } = partner({}, [review]);
+    const text = "Design review with Hana, Monday 11:00, room Orion, bring the mobile mocks: is that still right?";
+    expect(await delivered(p, { kind: "user_message", text })).toContain("calendar:rev");
+  });
+
+  test("what one session's agent fetched does not hold the item back in another session", async () => {
+    const { p } = partner({}, [review]);
+    const output = "Design review with Hana, Monday 11:00, room Orion, bring the mobile mocks";
+    await delivered(p, { kind: "tool_result", tool: "calendar.get", output, sessionId: "a" });
+    // The same words in the same order: had the sessions shared what the agent holds, the term ids would match.
+    expect(await delivered(p, { kind: "user_message", text: output, sessionId: "b" })).toContain("calendar:rev");
+  });
+
+  test.each([
+    ["Webinar rehearsal with the Globex CFO", "Thursday 15:00, rehearse the Globex renewal pitch", undefined],
+    ["Dana Lee promotion to VP at Globex", "Dana Lee now owns the Globex renewal budget", undefined],
+    ["Globex renewal: Digest Pro seats", "Globex renewal adds 40 Digest Pro seats for Dana Lee", undefined],
+    ["Globex invoice overdue", "Globex renewal invoice overdue, Dana Lee to approve", "updates"],
+  ])("real mail is still delivered: %s", async (title, text, category) => {
+    const mail = new StaticSource("mail", "mail", [
+      { ref: "m", title, text, ...(category ? { meta: { category } } : {}) },
+    ]);
+    const { p } = partner({}, [mail]);
+    expect(
+      await delivered(p, { kind: "user_message", text: `${title}: what do I need to know for the Globex renewal?` }),
+    ).toContain("mail:m");
+  });
+
   test("bulk mail is not pushed without a model, by its wording or its mailbox category; an ask still finds it", async () => {
     const mail = new StaticSource("mail", "mail", [
       {
