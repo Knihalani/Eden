@@ -326,19 +326,76 @@ World 1000's findings hold on a second world:
 - elsewhere it trails the best fixed variant (chosen in hindsight) by 0–10 points, its learning cost, as on world
   1000.
 
-### The default-on gate (D31)
+### 3. No call the deadline will cut off (kept)
 
-The owner chose a cost-normalised gate (D31). On the fresh held-out seeds, after iteration 2:
+**Target:** source timeouts, which D31 requires checking at real pacing. A timed run
+([query-planner-timed.sh](query-planner-timed.sh): latency, agent pacing, the connectors' rate limits of 5–10 calls/s
+per user and the engine's 1.5 s source timeout all live, at 1/10 of real time; seeds 11–13, 6 users, 4 sessions; raw:
+[query-planner-timed.jsonl](query-planner-timed.jsonl)) showed the planner's calls after a lookup's first running into
+the deadline: 81–123 calls given up on per mix, against 6 with the planner off. Each one costs the connector a call,
+returns nothing, and counts as a timeout against it (its circuit breaker).
+
+**Change:** a call after a lookup's first is started only if the lookup's slowest call so far, times a margin (2),
+still fits before the fan-out's deadline (`deadlineMargin`). A shape cut short this way is not credited. Shadow
+lookups apply the same check to their own timeout. Runs without real latency are unchanged: rerun iteration-2 rows
+are identical apart from the new `sources.aborted` field (0).
+
+| Mix | Run | Source calls per lookup | Calls given up (timeouts and session ends) | 429s | Needed facts delivered |
+|---|---|---|---|---|---|
+| zoo-a | off | 4.62 | 6 | 0 | 14/165 |
+| zoo-a | before | 6.63 | 81 | 0 | 30/165 |
+| zoo-a | margin 1.25 | 6.49 | 39 | 0 | 27/165 |
+| zoo-a | margin 2 (default) | 6.28 | 17 | 0 | 26/165 |
+| zoo-b | off | 4.62 | 6 | 0 | 35/165 |
+| zoo-b | before | 6.47 | 123 | 0 | 38/165 |
+| zoo-b | margin 1.25 | 6.25 | 59 | 0 | 35/165 |
+| zoo-b | margin 2 (default) | 6.08 | 36 | 0 | 36/165 |
+| realistic | off | 4.61 | 6 | 0 | 20/165 |
+| realistic | before | 7.01 | 91 | 0 | 31/165 |
+| realistic | margin 1.25 | 6.83 | 33 | 0 | 32/165 |
+| realistic | margin 2 (default) | 6.65 | 22 | 0 | 31/165 |
+
+- **Calls given up** (timeouts and session ends) fell 71–79% from before, but are still 3–6x planner-off's (17–36
+  against 6). The rest are calls slower than the lookup's slowest so far (latency is heavy-tailed).
+- **429s:** none, with or without the planner.
+- **Recall:** the samples are small (165 facts per mix); delivered facts were 0–4 lower than before (still 11–12
+  above off on A and realistic, 1 above on B).
+- **Calls** at real pacing are 1.32–1.44x off. Calls per lookup are higher than at time 0 for both the planner and
+  off (off: 4.62 against 4.10), and the ratio is lower (1.36–1.47x at time 0, on other seeds); why is not measured.
+- **How the margin was chosen:** on these same timed seeds, from 1.25 and 2; there is no separate timed tune set, so
+  the timeout reduction is an in-sample number. "Before" is main at commit 4c2b0ea; the script builds a worktree of
+  it with only the sim's stats files (which add the `aborted` count) copied in.
+- At 1/50 of real time the deadline is 30 ms of wall clock and timer jitter inflates timeouts, so the check runs at
+  1/10.
+
+### Lab at the current settings
+
+The lab reran with the current planner on both worlds (`cascadeMin` 0.05; the lab calls the planner directly, so reuse
+and the deadline check do not apply; raw:
+[query-planner-lab-iter3-world1000.jsonl](query-planner-lab-iter3-world1000.jsonl),
+[query-planner-lab-iter3-world2000.jsonl](query-planner-lab-iter3-world2000.jsonl)). Against the earlier runs
+(`cascadeMin` 0.2, iteration 1's first version, on both worlds, which on world 2000 the JSONL does not record:
+unverified from the raw data alone; on world 1000 also before iteration 1; reproduce: `bun run sim:lab --world N
+--sessions 120 --only-planner`), reach is
+within noise on all twenty configurations, and higher on IMAP subject search (world 1000: 47% to 52% against 0.2,
+44% to 52% against before iteration 1; world 2000: 29% to 37%) and IMAP body (world 2000: 44% to 50%). Calls per case
+moved by at most 0.06.
+
+### The default-on gate (D31, D32)
+
+The owner chose a cost-normalised gate (D31) and, for its fourth condition, the reading pooled over the held-out
+sets (D32). Where it stands after iteration 3:
 - **Recall:** higher with intervals apart on A and realistic, with and without a judge; within noise on B. Holds.
 - **False fires and secrets:** unchanged and 0. Holds.
-- **Calls at most 1.5x off:** 1.36–1.46x on every set. Holds.
-- **Calls per point of recall no worse than off:** holds on A and realistic; fails on B (no model: 0.284 against
-  0.225; judge: 0.099 against 0.076), where the planner adds little recall for its calls.
-- **Lab reach:** no regression beyond noise on world 1000 (measured at `cascadeMin` 0.2, without reuse); world 2000
-  has no before/after pair yet.
-
-So the planner stays opt-in. What would pass B: not spending calls on connectors whose cascades find facts other
-connectors already returned.
+- **Calls at most 1.5x off:** 1.36–1.47x at time 0 (iteration 2) and 1.32–1.44x at real pacing. Holds.
+- **Calls per point of recall no worse than off, pooled over the held-out sets (D32):** no model 0.311 against 0.325;
+  judge 0.132 against 0.138. Holds. Read per set, it fails on B (0.284 against 0.226; judge 0.099 against 0.076),
+  where planner-off already reaches most reachable facts (60–64% retrieved or held), so the extra calls add little
+  recall; the pooled figure leans on B's high recall.
+- **Lab reach:** within noise or higher on both worlds with `cascadeMin` 0.05 (the lab calls the planner directly, so
+  reuse and the deadline check are not exercised there). Holds.
+- **429s and timeouts in a timed run:** no 429s; calls given up 3–6x planner-off's after iteration 3 (17–36 against
+  6 per mix). Not met.
 
 ## Gates in the plan, and where they stand
 

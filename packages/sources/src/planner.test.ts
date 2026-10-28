@@ -353,6 +353,79 @@ describe("QueryPlanner", () => {
     expect(cutShort).toBeGreaterThan(0);
   });
 
+  test("no call is started that cannot answer before the caller's deadline; a cut step is not credited", async () => {
+    // A slow substring connector: the cue's terms find nothing, so the cascade (one call per entity) would follow.
+    const slow: Source = {
+      id: "slow",
+      kind: "t",
+      description: "",
+      search: async (q) => (
+        await Bun.sleep(40),
+        q.text === "Globex" ? [{ id: "slow:2", sourceId: "slow", ...DOCS[1]! }] : []
+      ),
+    };
+    const rows: PlannerArm[] = [];
+    const store: PlannerStore = { loadArms: () => [], saveArms: (_s, _id, arms) => void rows.push(...arms) };
+    const q = query("globex renewal sam ortiz", ["Globex", "Sam Ortiz"]);
+    // A 60 ms deadline: after a 40 ms call 20 ms are left, and a second call needs 80 (40 ms times the margin, 2).
+    const tight = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0, store });
+    const r = await tight.search(slow, q, signal, undefined, undefined, performance.now() + 60);
+    expect(r.calls).toBe(1);
+    expect(rows.filter((x) => x.shape === "cascade")).toEqual([]);
+    // The margin decides: with 110 ms, about 70 are left after the first call. Margin 1 needs 40, so it sends the
+    // next call; the default (2) needs 80, so it does not.
+    const loose = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0, deadlineMargin: 1 });
+    expect((await loose.search(slow, q, signal, undefined, undefined, performance.now() + 110)).calls).toBe(2);
+    const strict = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0 });
+    expect((await strict.search(slow, q, signal, undefined, undefined, performance.now() + 110)).calls).toBe(1);
+    // With time to spare, the cascade runs as before.
+    const roomy = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0 });
+    expect(
+      (await roomy.search(slow, q, signal, undefined, undefined, performance.now() + 5_000)).calls,
+    ).toBeGreaterThan(1);
+    // No deadline: no cut.
+    expect(
+      (await new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0 }).search(slow, q, signal)).calls,
+    ).toBeGreaterThan(1);
+  });
+
+  test("a shape cut short by the deadline partway keeps its items but is not credited", async () => {
+    const slow: Source = {
+      id: "slow",
+      kind: "t",
+      description: "",
+      search: async (q) => (
+        await Bun.sleep(40),
+        q.text === "Globex" ? [{ id: "slow:2", sourceId: "slow", ...DOCS[1]! }] : []
+      ),
+    };
+    const rows: PlannerArm[] = [];
+    const store: PlannerStore = { loadArms: () => [], saveArms: (_s, _id, arms) => void rows.push(...arms) };
+    // One call per entity leads: "Globex" is sent, then "Sam Ortiz" would not answer before the deadline.
+    const planner = new QueryPlanner({
+      seed: 1,
+      epsilon: 0,
+      store,
+      incumbent: { shape: "each-entity", mean: 0.99, strength: 100 },
+    });
+    const q = query("globex renewal sam ortiz", ["Globex", "Sam Ortiz"]);
+    const r = await planner.search(slow, q, signal, undefined, undefined, performance.now() + 60);
+    expect(r.shapes).toEqual(["each-entity"]);
+    expect(r.calls).toBe(1);
+    expect(r.items.map((i) => i.id)).toEqual(["slow:2"]);
+    expect(rows).toEqual([]);
+    // PlannedSource passes its lookup's deadline through.
+    const p = new PlannedSource(
+      slow,
+      new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0 }),
+      undefined,
+      undefined,
+      performance.now() + 60,
+    );
+    await p.search(q, signal);
+    expect(p.last!.calls).toBe(1);
+  });
+
   test("a lookup aborted mid-flight (session ended) learns nothing", async () => {
     const rows: PlannerArm[] = [];
     const store: PlannerStore = { loadArms: () => [], saveArms: (_s, _id, arms) => void rows.push(...arms) };

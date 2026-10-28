@@ -72,6 +72,11 @@ export interface PlannerOptions {
    * measure what the reuse saves.
    */
   reuse?: boolean;
+  /**
+   * A call after a lookup's first is sent only if this many times the lookup's slowest call so far still fits
+   * before the caller's deadline (default 2, chosen in a timed run; docs/research/query-planner-results.md).
+   */
+  deadlineMargin?: number;
   /** Connector states kept in memory, across all users. */
   maxStates?: number;
   /** Where arms persist (`SourceMap` implements it). Absent: learning lives in memory only. */
@@ -138,6 +143,7 @@ const DEFAULTS = {
   cascade: true,
   cascadeMin: 0.05,
   reuse: true,
+  deadlineMargin: 2,
   maxStates: 50_000,
   incumbent: { shape: "terms" as Shape, mean: 0.75, strength: 8 },
   rewardTopK: 1,
@@ -172,6 +178,8 @@ export class QueryPlanner {
     signal: AbortSignal,
     permit?: () => boolean,
     via?: PlanCalls,
+    /** When the caller stops waiting (`performance.now()` ms): no call is started that cannot answer by then. */
+    deadlineAt?: number,
   ): Promise<{ items: ContextItem[] } & PlanOutcome> {
     const input: ShapeInput = { text: query.text, entities: query.entities };
     const quotes = this.o.quotes?.(source.id) ?? false;
@@ -188,6 +196,8 @@ export class QueryPlanner {
     let reward = 0;
     const seen = new Set<string>();
     const items: ContextItem[] = [];
+    // This lookup's slowest call so far (ms): what the next call is expected to take.
+    let callMs = 0;
     while (calls < this.o.maxCalls) {
       const n = bandit.select(this.rng, 1, eligible, null, this.o.epsilon, picked);
       if (n === 0) break;
@@ -218,11 +228,18 @@ export class QueryPlanner {
           sent++;
           continue;
         }
+        // A call after the first is sent only if it can answer before the caller's deadline, at this lookup's
+        // slowest call so far (with a margin): one the deadline cuts off costs the connector a call, returns nothing,
+        // and counts as a timeout against it. A shape cut short here is not credited (below).
+        if (calls > 0 && deadlineAt !== undefined && performance.now() + callMs * this.o.deadlineMargin > deadlineAt)
+          break;
         if (calls > 0 && permit && !permit()) break;
         calls++;
         sent++;
+        const t0 = performance.now();
         try {
           for (const it of await (via ? via.call(q, signal) : source.search(q, signal))) got.push(it);
+          callMs = Math.max(callMs, performance.now() - t0);
         } catch (e) {
           // What came back before the failure is reported with it, so a caller can account for the calls made.
           throw new PlanError(e, { items: [...items, ...got], shapes: [...shapes, SHAPES[arm]!], calls });
@@ -415,6 +432,8 @@ export class PlannedSource implements Source {
     private readonly permit?: () => boolean,
     /** The fan-out's cached, sanitized path for each call; absent: calls go straight to `inner`. */
     readonly via?: PlanCalls,
+    /** When the lookup's caller stops waiting (`performance.now()` ms). */
+    private readonly deadlineAt?: number,
   ) {
     this.id = inner.id;
     this.kind = inner.kind;
@@ -422,7 +441,7 @@ export class PlannedSource implements Source {
   }
 
   async search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]> {
-    const r = await this.planner.search(this.inner, query, signal, this.permit, this.via);
+    const r = await this.planner.search(this.inner, query, signal, this.permit, this.via, this.deadlineAt);
     this.last = { shapes: r.shapes, calls: r.calls, reward: r.reward, found: r.found };
     return r.items;
   }

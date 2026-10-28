@@ -148,6 +148,8 @@ export interface SourceStats {
   calls: number;
   errors: number;
   limited: number;
+  /** Calls given up on before they answered (the caller's deadline or the session ending). */
+  aborted: number;
   results: number;
   /** Results that state at least one fact (useful hits). */
   usefulResults: number;
@@ -310,7 +312,7 @@ export class SimSource implements Source {
   readonly kind = "sim";
   readonly id: string;
   readonly description: string;
-  readonly stats: SourceStats = { calls: 0, errors: 0, limited: 0, results: 0, usefulResults: 0, bytes: 0 };
+  readonly stats: SourceStats = { calls: 0, errors: 0, limited: 0, aborted: 0, results: 0, usefulResults: 0, bytes: 0 };
   fault: Fault = {};
   /** Ids of every item returned, in order (a runner reads the slice for one event). */
   readonly returned: string[] = [];
@@ -340,8 +342,13 @@ export class SimSource implements Source {
     const slow = f.slow && (f.slowUntil ?? Infinity) > now ? f.slow : 1;
     const delay = p.latency.medianMs > 0 ? this.rng.lognormal(p.latency.medianMs, p.latency.sigma) : 0;
     const scaled = delay * this.timeScale * slow;
-    if (scaled > 0) await sleep(scaled, signal);
-    else if (signal.aborted) throw signal.reason;
+    try {
+      if (scaled > 0) await sleep(scaled, signal);
+      else if (signal.aborted) throw signal.reason;
+    } catch (e) {
+      this.stats.aborted++;
+      throw e;
+    }
     const rate = f.ratePerSec !== undefined && (f.ratePerSecUntil ?? Infinity) > now ? f.ratePerSec : p.ratePerSec;
     if (rate !== undefined && !this.take(rate)) {
       this.stats.limited++;
