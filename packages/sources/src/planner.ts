@@ -67,6 +67,11 @@ export interface PlannerOptions {
   cascadeMin?: number;
   /** Connectors whose search takes `"a b"` as a phrase (operator config; unknown connectors get no quotes). */
   quotes?: (sourceId: string) => boolean;
+  /**
+   * Answer a shape's query from the fan-out's cache when it was sent recently (`PlanCalls.cached`). Off only to
+   * measure what the reuse saves.
+   */
+  reuse?: boolean;
   /** Connector states kept in memory, across all users. */
   maxStates?: number;
   /** Where arms persist (`SourceMap` implements it). Absent: learning lives in memory only. */
@@ -77,6 +82,19 @@ export interface PlannerOptions {
    * nothing from it. Mutable on the planner (`mode`), so a deployment can promote shadow learning to serving.
    */
   mode?: "serve" | "shadow";
+}
+
+/**
+ * How a planned lookup's calls reach the connector when they go through the fan-out (`SourceFanout.planCalls`): a
+ * shape's query already answered recently (one call per entity repeats across a session's lookups) is served from the
+ * fan-out's result cache, at no call; others are made once (singleflight), sanitized and cached. Without one, calls go
+ * straight to the source and nothing is cached (shadow lookups, D29).
+ */
+export interface PlanCalls {
+  /** Fresh, sanitized results already held for this query, if any. */
+  cached(query: SearchQuery): ContextItem[] | undefined;
+  /** One call to the connector; its results come back sanitized and are cached. */
+  call(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]>;
 }
 
 /** One learned arm as stored: content-free. */
@@ -119,6 +137,7 @@ const DEFAULTS = {
   maxCalls: 3,
   cascade: true,
   cascadeMin: 0.05,
+  reuse: true,
   maxStates: 50_000,
   incumbent: { shape: "terms" as Shape, mean: 0.75, strength: 8 },
   rewardTopK: 1,
@@ -152,6 +171,7 @@ export class QueryPlanner {
     query: SearchQuery,
     signal: AbortSignal,
     permit?: () => boolean,
+    via?: PlanCalls,
   ): Promise<{ items: ContextItem[] } & PlanOutcome> {
     const input: ShapeInput = { text: query.text, entities: query.entities };
     const quotes = this.o.quotes?.(source.id) ?? false;
@@ -189,12 +209,20 @@ export class QueryPlanner {
       const got: ContextItem[] = [];
       let sent = 0;
       for (const text of queries) {
+        // Shapes carry the whole query in `text`; entities are cleared so a source does not re-add its own.
+        const q = { ...query, text, entities: [] };
+        const held = this.o.reuse ? via?.cached(q) : undefined;
+        if (held) {
+          // Answered recently: no call, no rate token.
+          for (const it of held) got.push(it);
+          sent++;
+          continue;
+        }
         if (calls > 0 && permit && !permit()) break;
         calls++;
         sent++;
-        // Shapes carry the whole query in `text`; entities are cleared so a source does not re-add its own.
         try {
-          for (const it of await source.search({ ...query, text, entities: [] }, signal)) got.push(it);
+          for (const it of await (via ? via.call(q, signal) : source.search(q, signal))) got.push(it);
         } catch (e) {
           // What came back before the failure is reported with it, so a caller can account for the calls made.
           throw new PlanError(e, { items: [...items, ...got], shapes: [...shapes, SHAPES[arm]!], calls });
@@ -385,6 +413,8 @@ export class PlannedSource implements Source {
     private readonly planner: QueryPlanner,
     /** Asked before each call after a lookup's first (the caller's per-call rate limit). */
     private readonly permit?: () => boolean,
+    /** The fan-out's cached, sanitized path for each call; absent: calls go straight to `inner`. */
+    readonly via?: PlanCalls,
   ) {
     this.id = inner.id;
     this.kind = inner.kind;
@@ -392,7 +422,7 @@ export class PlannedSource implements Source {
   }
 
   async search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]> {
-    const r = await this.planner.search(this.inner, query, signal, this.permit);
+    const r = await this.planner.search(this.inner, query, signal, this.permit, this.via);
     this.last = { shapes: r.shapes, calls: r.calls, reward: r.reward, found: r.found };
     return r.items;
   }

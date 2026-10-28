@@ -25,6 +25,7 @@ import {
   type BreakerOptions,
 } from "@eden/primitives";
 import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
+import { PlannedSource, type PlanCalls } from "./planner";
 import type { SearchQuery, Source } from "./source";
 
 export type FanoutStatus = "ok" | "cached" | "stale" | "error" | "timeout" | "open" | "busy" | "limited";
@@ -76,6 +77,8 @@ export class SourceFanout {
   private readonly shadowRate: Gcra<string>;
   private readonly options: FanoutOptions;
   private readonly now: () => number;
+  /** The `PlanCalls` this fan-out handed out: a planned source using one returns items already sanitized here. */
+  private readonly minted = new WeakSet<PlanCalls>();
 
   constructor(options: FanoutOptions) {
     this.options = options;
@@ -136,6 +139,37 @@ export class SourceFanout {
   permitShadow(scope: Scope, sourceId: string): boolean {
     const key = `${scopeKey(scope)}|${sourceId}`;
     return this.rate.available(key) > 0 && this.shadowRate.take(key) <= 0;
+  }
+
+  /**
+   * The query planner's calls for one user's source, through this fan-out (`PlanCalls`): each shape's query is cached
+   * apart from whole lookups (its own key, so a lookup never joins its own call's flight), shared while in flight,
+   * sanitized before it is held, and dropped by `forget`. Rate tokens, the breaker and the concurrency limit stay
+   * with the lookup that admitted the source and with the planner's `permit`.
+   */
+  planCalls(scope: Scope, source: Source): PlanCalls {
+    const key = (q: SearchQuery) => `${scopeKey(scope)}|${source.id}|plan|${q.limit}|${q.text}`;
+    const calls: PlanCalls = {
+      cached: (q) => {
+        const k = key(q);
+        const v = this.results?.get(k);
+        return v !== undefined && !this.results!.isStale(k) ? v : undefined;
+      },
+      call: (q, signal) => {
+        const k = key(q);
+        return this.flights.run(
+          k,
+          async (sig) => {
+            const items = await this.options.sanitize(await source.search(q, sig), sig);
+            this.results?.set(k, items, sizeOf(items));
+            return items;
+          },
+          signal,
+        );
+      },
+    };
+    this.minted.add(calls);
+    return calls;
   }
 
   /** Tells the rate limits about an upstream's rate-limit error seen outside a fan-out call (shadow lookups). */
@@ -208,22 +242,20 @@ export class SourceFanout {
 
     const started = performance.now();
     try {
+      // A planned source whose calls went through `planCalls` returns items sanitized there: not gated twice.
+      const presanitized = source instanceof PlannedSource && source.via !== undefined && this.minted.has(source.via);
       const items = await this.flights.run(
         cacheKey,
-        async (signal) => this.options.sanitize(await source.search(query, signal), signal),
+        async (signal) => {
+          const raw = await source.search(query, signal);
+          return presanitized ? raw : this.options.sanitize(raw, signal);
+        },
         deadline,
       );
       s.latency.record(performance.now() - started);
       s.limiter.release("ok");
       s.breaker.success();
-      this.results?.set(
-        cacheKey,
-        items,
-        Math.max(
-          1,
-          items.reduce((n, it) => n + it.title.length + it.text.length, 0),
-        ),
-      );
+      this.results?.set(cacheKey, items, sizeOf(items));
       return done("ok", items);
     } catch (e) {
       const message = String(e);
@@ -241,6 +273,14 @@ export class SourceFanout {
       return fallback(timedOut ? "timeout" : "error", message);
     }
   }
+}
+
+/** A result's weight in the cache: bytes of item text, at least 1. */
+function sizeOf(items: ContextItem[]): number {
+  return Math.max(
+    1,
+    items.reduce((n, it) => n + it.title.length + it.text.length, 0),
+  );
 }
 
 /** A Retry-After hint in an error message ("retry after 30", "Retry-After: 12"), in ms. */
