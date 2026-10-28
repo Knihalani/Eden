@@ -100,11 +100,12 @@ const CALENDAR = new Set(
   ).split(" "),
 );
 
-/** A capitalised word is a date: `Sunday`, `Sunday's`, `Sunday-morning`, `SUNDAY`. */
+/** A capitalised word is a date: `Sunday`, `Sundays`, `Sunday's`, `Sunday-morning`, `SUNDAY`. */
 const isCalendar = (word: string) =>
   CALENDAR.has(
     word
       .replace(/['’]s$/i, "")
+      .replace(/(?<=day)s$/i, "") // Plural weekdays ("on Sundays"); not months: "Mars" is no "Mar".
       .split("-")[0]!
       .toLowerCase(),
   );
