@@ -153,3 +153,70 @@ export function buildArgs(m: ArgMapping, text: string, limit: number, now: numbe
   }
   return args;
 }
+
+/** How a source ref becomes a call to a fetch (read-one) tool. */
+export interface FetchMapping {
+  /** The argument that takes the ref, and whether it takes a number (an issue number) rather than a string. */
+  ref: { name: string; numeric: boolean } | null;
+  /** Required arguments with no value: the mapping cannot be used until the operator fixes them. */
+  missing: string[];
+  fixed: Record<string, unknown>;
+}
+
+/** Names that take a record's id, best first. */
+const REF_NAMES = [
+  "id",
+  "ref",
+  "uid",
+  "uuid",
+  "key",
+  "identifier",
+  "uri",
+  "url",
+  "path",
+  "file_path",
+  "filePath",
+  "permalink",
+];
+/**
+ * A name that ends in an id (`message_id`, `pageId`, `documentID`): the ref when it is the only such argument. Never
+ * a word that merely ends in "id" (`valid`, `paid`, `android`).
+ */
+const ID_LIKE = /(^|_)(id|ID)$|[a-z0-9](Id|ID)$/;
+/** Names that take a search's text: never a fetch's ref, even as the one required argument. */
+const SEARCH_TEXT = new Set(TEXT_NAMES.map((n) => n.toLowerCase()));
+
+/**
+ * The argument mapping for a fetch tool (one record by its id), given its input schema and the operator's fixed
+ * values. The ref goes to a known id name, else to the one argument named like an id, else to the one required
+ * string or number argument that is not a search's text; anything less certain is no mapping. Fetching the wrong
+ * record is worse than none.
+ */
+export function mapFetchArgs(schema: ToolSchema, fixed: Record<string, unknown> = {}): FetchMapping {
+  const props = schema.properties ?? {};
+  const required = new Set(schema.required ?? []);
+  const stringy = Object.keys(props).filter((n) => {
+    const t = typesOf(props[n]!);
+    const ok = t.length === 0 || t.includes("string") || t.includes("integer") || t.includes("number");
+    return !(n in fixed) && !props[n]!.enum && ok;
+  });
+  const one = (names: string[]) => (names.length === 1 ? names[0]! : null);
+  const name =
+    REF_NAMES.map((want) => stringy.find((n) => n.toLowerCase() === want.toLowerCase())).find(Boolean) ??
+    one(stringy.filter((n) => ID_LIKE.test(n))) ??
+    one(stringy.filter((n) => required.has(n) && !SEARCH_TEXT.has(n.toLowerCase())));
+  const filled = new Set([name, ...Object.keys(fixed)].filter(Boolean));
+  const missing = [...required].filter((n) => !filled.has(n) && props[n]?.default === undefined);
+  const numeric = name !== null && !typesOf(props[name]!).includes("string") && typesOf(props[name]!).length > 0;
+  return { ref: name ? { name, numeric } : null, missing, fixed };
+}
+
+/** Whether fetch calls can be made with this mapping. */
+export const fetchUsable = (m: FetchMapping) => m.ref !== null && m.missing.length === 0;
+
+/** The arguments for one fetch call, or null when the ref cannot fill the argument (a non-numeric ref for a number). */
+export function buildFetchArgs(m: FetchMapping, ref: string): Record<string, unknown> | null {
+  if (!m.ref) return null;
+  if (m.ref.numeric && !/^\d{1,15}$/.test(ref)) return null;
+  return { ...m.fixed, [m.ref.name]: m.ref.numeric ? Number(ref) : ref };
+}

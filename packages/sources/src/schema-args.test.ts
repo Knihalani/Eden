@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { buildArgs, mapSearchArgs, usable, type ToolSchema } from "./schema-args";
+import {
+  buildArgs,
+  buildFetchArgs,
+  fetchUsable,
+  mapFetchArgs,
+  mapSearchArgs,
+  usable,
+  type ToolSchema,
+} from "./schema-args";
 
 const NOW = Date.UTC(2026, 9, 27, 9);
 const s = (properties: ToolSchema["properties"], required: string[] = []): ToolSchema => ({
@@ -123,5 +131,79 @@ describe("mapSearchArgs on real servers' schemas", () => {
         .filter((n) => n !== "chroma")
         .sort(),
     );
+  });
+});
+
+describe("mapFetchArgs", () => {
+  const schema = (properties: Record<string, unknown>, required: string[] = []) =>
+    ({ type: "object", properties, required }) as ToolSchema;
+
+  test("the ref goes to a known id name", () => {
+    const m = mapFetchArgs(schema({ id: { type: "string" }, format: { type: "string" } }, ["id"]));
+    expect(buildFetchArgs(m, "n1")).toEqual({ id: "n1" });
+  });
+
+  test("else to the one argument named like an id", () => {
+    const m = mapFetchArgs(schema({ message_id: { type: "string" }, format: { type: "string" } }));
+    expect(buildFetchArgs(m, "m-9")).toEqual({ message_id: "m-9" });
+  });
+
+  test("two id-like arguments: the required one, else no mapping", () => {
+    const both = { user_id: { type: "string" }, message_id: { type: "string" } };
+    expect(buildFetchArgs(mapFetchArgs(schema(both, ["message_id"])), "m")).toEqual({ message_id: "m" });
+    expect(fetchUsable(mapFetchArgs(schema(both)))).toBe(false);
+  });
+
+  test("a number argument takes a numeric ref only; fixed values fill the rest", () => {
+    const github = schema({ owner: { type: "string" }, repo: { type: "string" }, issue_number: { type: "integer" } }, [
+      "owner",
+      "repo",
+      "issue_number",
+    ]);
+    expect(fetchUsable(mapFetchArgs(github))).toBe(false); // owner and repo: which one is the ref is a guess.
+    const m = mapFetchArgs(github, { owner: "acme", repo: "app" });
+    expect(fetchUsable(m)).toBe(true);
+    expect(buildFetchArgs(m, "42")).toEqual({ owner: "acme", repo: "app", issue_number: 42 });
+    expect(buildFetchArgs(m, "https://example.com/42")).toBeNull();
+  });
+
+  test("a required argument with no value makes the mapping unusable", () => {
+    const m = mapFetchArgs(schema({ id: { type: "string" }, collection: { type: "string" } }, ["id", "collection"]));
+    expect(m.missing).toEqual(["collection"]);
+    expect(fetchUsable(m)).toBe(false);
+  });
+
+  test("a word that merely ends in id is not an id", () => {
+    const m = mapFetchArgs(schema({ valid: { type: "string" }, thread: { type: "string" } }));
+    expect(fetchUsable(m)).toBe(false);
+    expect(mapFetchArgs(schema({ pageId: { type: "string" }, paid: { type: "string" } })).ref?.name).toBe("pageId");
+  });
+
+  test("a search's text argument is never the ref, even as the one required argument", () => {
+    const m = mapFetchArgs(schema({ query: { type: "string" }, limit: { type: "number" } }, ["query"]));
+    expect(m.ref).toBeNull();
+  });
+
+  test("enum arguments never take the ref; a required argument with a default is not missing", () => {
+    const m = mapFetchArgs(
+      schema(
+        {
+          uid: { type: "string" },
+          mode: { type: "string", enum: ["a", "b"] },
+          view: { type: "string", default: "full" },
+        },
+        ["uid", "view"],
+      ),
+    );
+    expect(m.ref?.name).toBe("uid");
+    expect(m.missing).toEqual([]);
+    const onlyEnum = mapFetchArgs(schema({ id: { type: "string", enum: ["x"] } }, ["id"]));
+    expect(onlyEnum.ref).toBeNull();
+  });
+
+  test("a number argument takes a numeric ref, as an integer one does", () => {
+    const m = mapFetchArgs(schema({ issue_number: { type: "number" } }, ["issue_number"]));
+    expect(buildFetchArgs(m, "7")).toEqual({ issue_number: 7 });
+    expect(buildFetchArgs(m, "abc")).toBeNull();
   });
 });
