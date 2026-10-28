@@ -51,15 +51,25 @@ among the judge's candidates precisely enough to deliver it without a model?
 
 ## Results (the shipped placement, this tree against main)
 
-No model, planner on, 5 seeds pooled; must-know facts delivered (recall), precision of delivered items, hard false
-fires; paired per-seed gain in facts with a 95% t-interval:
+No model, planner on, 5 seeds pooled: must-know facts delivered (recall), precision of delivered items, hard false
+fires (a delivery on a must-stay-silent turn), soft-fire rate (a delivery on a turn where it is merely unhelpful;
+mean over seeds), and the paired per-seed gain in facts with a 95% t-interval (df 4). Seeds 1–5 were used for the
+earlier decisions too (D33, D34, plan item 2), so seeds 6–10 were run as fresh ones:
 
-| Mix | Recall | Precision | Hard false fires | Gain per seed (95% interval) |
-|---|---|---|---|---|
-| zoo-tune (tuning) | 0.204 → 0.254 | 0.640 → 0.640 | 1 → 1 of 713 | 9.2 (2.3–16.1) |
-| held-out A | 0.188 → 0.244 | 0.624 → 0.643 | 1 → 1 of 713 | 10.4 (7.7–13.1) |
-| held-out B | 0.233 → 0.285 | 0.558 → 0.570 | 1 → 1 of 713 | 9.6 (2.7–16.5) |
-| realistic | 0.191 → 0.227 | 0.627 → 0.641 | 1 → 1 of 713 | 6.6 (0.4–12.8) |
+| Seeds | Mix | Recall | Precision | Hard false fires | Soft-fire rate | Gain per seed (95% interval) |
+|---|---|---|---|---|---|---|
+| 1–5 | zoo-tune (tuning) | 0.204 → 0.254 | 0.640 → 0.640 | 1 → 1 of 713 | 0.148 → 0.155 | 9.2 (2.3–16.1) |
+| 1–5 | held-out A | 0.188 → 0.244 | 0.624 → 0.643 | 1 → 1 of 713 | 0.208 → 0.216 | 10.4 (7.7–13.1) |
+| 1–5 | held-out B | 0.233 → 0.285 | 0.558 → 0.570 | 1 → 1 of 713 | 0.292 → 0.311 | 9.6 (2.7–16.5) |
+| 1–5 | realistic | 0.191 → 0.227 | 0.627 → 0.641 | 1 → 1 of 713 | 0.193 → 0.168 | 6.6 (0.4–12.8) |
+| 6–10 | held-out A | 0.184 → 0.227 | 0.587 → 0.603 | 0 → 0 of 701 | 0.214 → 0.219 | 8.2 (4.4–12.0) |
+| 6–10 | held-out B | 0.197 → 0.237 | 0.542 → 0.529 | 2 → 2 of 701 | 0.282 → 0.322 | 7.6 (3.2–12.0) |
+| 6–10 | realistic | 0.176 → 0.223 | 0.579 → 0.585 | 0 → 0 of 701 | 0.177 → 0.186 | 9.0 (6.7–11.3) |
+
+Every one of the 35 seed-and-mix pairs gained facts. The cost: about 25% more deliveries (zoo-tune 392 to 494), the
+soft-fire rate up on 6 of the 7 rows (most on held-out B, 0.282 to 0.322 on fresh seeds), and precision down on
+held-out B's fresh seeds (0.542 to 0.529). Hard false fires were unchanged everywhere, but at about 1 in 700 the
+check can rule out only large increases; precision and soft fires have no intervals here.
 
 With the perfect judge (held-out A and realistic), identical to main: recall 0.373 and 0.362, precision 0.790 and
 0.809, 1/713 each.
@@ -73,3 +83,8 @@ exposed 2 to 3 (one more delivery cited an item holding a planted secret), leake
   mail. The hand-written eval agrees in direction (3 more items, no false fire), on 43 expected items.
 - Real-model behaviour is unchanged by construction, but not measured (`--live` made no calls).
 - One item at most per fallback delivery; the rule never runs on the fast path.
+- Some leakage into "held out": the candidate log covered all four mixes (only zoo-tune's rows chose the signal),
+  the placement was picked after seeing held-out numbers, and seeds 1–5 had backed earlier decisions; seeds 6–10 are
+  the cleanest check. With 5 seeds the t-interval leans on normality (realistic's seeds 1–5 gains are bimodal).
+- The eval and the simulation report fallback deliveries as their own decision (`fallback`), so a change in the
+  fallback alone shows.

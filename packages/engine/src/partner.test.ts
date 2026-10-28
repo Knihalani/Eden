@@ -691,3 +691,52 @@ describe("no-model fallback (D36)", () => {
     expect(await delivered(partner({}, [mail]).p, ask)).toEqual([]);
   });
 });
+
+describe("no-model fallback limits (D36)", () => {
+  const ask = "what was the outcome of the quarterly marketing budget review";
+  const qbr = { ref: "qbr", title: "Quarterly budget review", text: "Marketing budget review outcome: approved" };
+  const run = async (docs: ConstructorParameters<typeof StaticSource>[2], text: string, extra = {}) => {
+    const { p, traces } = partner(extra, [new StaticSource("notes", "notes", docs)]);
+    const r = await p.observe(ev({ kind: "user_message", text, sessionId: "lim" }), { waitMs: 1_000 });
+    const ids = [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId: "lim" })].flatMap((i) =>
+      i.citations.map((c) => c.itemId),
+    );
+    return { ids, traces };
+  };
+
+  test("three or more terms but under fallbackScore: silent", async () => {
+    // The cue also names seven terms other notes hold, so the top item covers well under 0.8 of it.
+    const fillers = [
+      { ref: "f1", title: "Northwind kickoff", text: "Northwind kickoff offsite planning" },
+      { ref: "f2", title: "Catering vendor", text: "Catering vendor contract" },
+      { ref: "f3", title: "Offsite planning", text: "Offsite catering and vendor contract planning" },
+    ];
+    const text = `${ask} northwind kickoff offsite catering vendor contract planning`;
+    const { ids, traces } = await run([qbr, ...fillers], text);
+    expect(ids).toEqual([]);
+    expect(traces.some((t) => t.reason === "no model")).toBe(true);
+  });
+
+  test("exactly three terms is enough; fallbackMatchedTerms 4 is not met", async () => {
+    const three = [{ ref: "br", title: "Budget review", text: "Budget review outcome: approved" }];
+    expect((await run(three, "what was the budget review outcome")).ids).toEqual(["notes:br"]);
+    expect(
+      (await run(three, "what was the budget review outcome", { config: { fallbackMatchedTerms: 4 } })).ids,
+    ).toEqual([]);
+  });
+
+  test("two qualifying items: only the best one is delivered", async () => {
+    const two = [qbr, { ref: "qbr2", title: "Quarterly budget review notes", text: "Marketing budget review outcome" }];
+    expect((await run(two, ask)).ids).toHaveLength(1);
+  });
+
+  test("over budget with nothing strong enough: silent, traced as no model budget", async () => {
+    const model = new FakeModel(() => '{"pick": [0]}');
+    const budget = new Budget({ callsPerSession: 0, usdPerSession: 1, usdPerUserDay: 1 });
+    const weak = [{ ref: "w", title: "Budget", text: "Budget notes for marketing" }];
+    const { ids, traces } = await run(weak, "how did the budget go", { model, budget });
+    expect(ids).toEqual([]);
+    expect(traces.some((t) => t.reason === "no model budget")).toBe(true);
+    expect(model.calls.length).toBe(0);
+  });
+});

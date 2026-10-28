@@ -51,8 +51,9 @@ Each item, when done, gets a line here with its PR and its numbers.
   713 silent turns. The owner chose precision: no threshold change. Then a better no-model ranker (D36): with no
   model, the best candidate alone is delivered if it holds 3+ query terms and scores 0.8+ (chosen on zoo-tune).
   Held-out recall, no model: A 18.8% to 24.4%, B 23.3% to 28.5%, realistic 19.1% to 22.7% (paired intervals exclude
-  0), precision up, hard false fires 1/713 unchanged; with a perfect judge unchanged; eval recall 15 to 18 of 43 at
-  precision 1.000 (docs/research/no-model-fallback.md).
+  0; fresh seeds 6–10 agree), hard false fires unchanged, precision mostly up but the soft-fire rate up on 6 of 7
+  runs; with a perfect judge unchanged; eval recall 15 to 18 of 43 at precision 1.000
+  (docs/research/no-model-fallback.md).
 - **6, what the agent has or does not need (D34):** an item every one of whose terms and adjacent term pairs is in one
   recent tool result or agent message is not pushed, with or without a model; bulk mail (`meta.category` promotions, or
   a newsletter title) is not delivered without a model, and may cost a judge call where one would otherwise be delivered

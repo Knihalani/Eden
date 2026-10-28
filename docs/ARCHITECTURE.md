@@ -58,7 +58,7 @@ is never pushed without a model (D34).
 the top few live (each under its own deadline), cache the redacted results, record entity mentions, and re-score.
 A confident item is delivered with no model. Borderline candidates go to the model judge, whose default is
 "none", only if the budget allows. With no model (or no budget), the best candidate alone is delivered if it holds
-three or more query terms and most of the query (D36). The result is returned directly if the caller passed
+three or more query terms and scores at least 0.8 (coverage plus the entity bonus; D36). The result is returned directly if the caller passed
 `waitMs` and it landed in time; otherwise it is queued and delivered with the next event (or via `/v1/pending`).
 
 **Ask** always searches live (more sources), ignores the not-twice ledger (the agent asked), and uses one model call
