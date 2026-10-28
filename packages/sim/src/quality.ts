@@ -172,7 +172,15 @@ export interface QualityReport {
     deliveredNotInert: number;
   };
   model: { callsPerTurn: number; costPerTurnUsd: number; costPer1kTurnsUsd: number };
-  sources: { callsPerLookup: number; usefulResultShare: number; errors: number; limited: number; lookups: number };
+  sources: {
+    callsPerLookup: number;
+    usefulResultShare: number;
+    errors: number;
+    limited: number;
+    /** Connector calls given up on before they answered: source timeouts, at real pacing (`timeScale` > 0). */
+    aborted: number;
+    lookups: number;
+  };
   latency: {
     observeP50Ms: number;
     observeP95Ms: number;
@@ -268,6 +276,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
   let results = 0;
   let errors = 0;
   let limited = 0;
+  let aborted = 0;
   let lookups = 0;
   const ask = { cases: 0, hits: 0, must: 0, rr: 0, cited: 0, citedRelevant: 0, empty: 0, usedModel: 0 };
   const judged = { calls: 0, candidates: 0, relevantCandidates: 0, unmatched: 0 };
@@ -574,6 +583,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       results += s.stats.results;
       errors += s.stats.errors;
       limited += s.stats.limited;
+      aborted += s.stats.aborted;
     }
     lookups += userTraces.filter((t) => t.sourceCalls > 0).length;
     if (oracle) {
@@ -674,6 +684,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       usefulResultShare: r3(useful / Math.max(1, results)),
       errors,
       limited,
+      aborted,
       lookups,
     },
     latency: {
