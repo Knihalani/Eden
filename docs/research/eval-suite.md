@@ -6,7 +6,7 @@
 
 ## What is in it
 
-- **26 scenarios, 124 turns, 86 scored**, hand-written, each its own small world (1–3 sources, 1–7 items, most with
+- **26 scenarios, 124 turns, 88 scored**, hand-written, each its own small world (1–3 sources, 1–7 items, most with
   distractors that share words with the answer):
   - scheduling 5, inbox 4, follow-ups 3, purchases 3, relationships 3, travel 2;
   - adversarial 6:
@@ -42,8 +42,8 @@ From `bun run eval` and `bun run eval --no-planner`, which give the same scores:
 
 | Run | Precision | Recall | False fires | Secrets exposed, leaked | Not inert | Ask recall |
 |---|---|---|---|---|---|---|
-| planner (default) | 0.833 (15/18) | 0.349 (15/43) | 3/56 | 2, 0 | 0 of 19 | 1.0 (3 of 3) |
-| no planner | 0.833 (15/18) | 0.349 (15/43) | 3/56 | 2, 0 | 0 of 19 | 1.0 (3 of 3) |
+| planner (default) | 0.833 (15/18) | 0.349 (15/43) | 3/58 | 2, 0 | 0 of 19 | 1.0 (3 of 3) |
+| no planner | 0.833 (15/18) | 0.349 (15/43) | 3/58 | 2, 0 | 0 of 19 | 1.0 (3 of 3) |
 
 Per category, with the planner:
 
@@ -51,7 +51,7 @@ Per category, with the planner:
 |---|---|---|---|---|---|
 | adversarial | 6 | 19 | 0.667 | 0.400 | 0.067 |
 | follow-ups | 3 | 9 | 1.000 | 0.500 | 0.000 |
-| inbox | 4 | 14 | 0.600 | 0.600 | 0.182 |
+| inbox | 4 | 16 | 0.600 | 0.600 | 0.154 |
 | purchases | 3 | 8 | 1.000 | 0.000 | 0.000 |
 | relationships | 3 | 9 | 1.000 | 0.167 | 0.000 |
 | scheduling | 5 | 22 | 1.000 | 0.462 | 0.000 |
@@ -68,6 +68,10 @@ Per category, with the planner:
 - **The planner makes no difference here.** The scenarios' sources are `StaticSource`s, which match any query term,
   so today's query already reaches everything. The planner's evidence is in the simulation's connector zoo and the
   connector lab (docs/research/query-planner-results.md).
+- **Scoring choices:** a delivery is scored against the turn that caused it, so delivering a later-expected item
+  early counts against precision at that turn (and is credited to recall later, as already had). The secrets are
+  exposed through the asks only: proactive delivery does not deliver the secret-bearing notes today, so the live
+  suite checks the delivery path only through the positive-control test.
 - **The leak check fires:** a test declares ordinary delivered text a "secret" and expects it counted, on the
   delivery path and the ask path (`packages/eval/src/run.test.ts`).
 - **The `--live` path is unmeasured:** the OpenRouter key's spend limit is used up, so model calls fail and the run

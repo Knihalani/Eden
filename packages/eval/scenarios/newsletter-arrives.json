@@ -54,7 +54,8 @@
           "event": {
             "kind": "user_message",
             "text": "Anything urgent this morning?"
-          }
+          },
+          "expect": "silent"
         }
       ]
     }
