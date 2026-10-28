@@ -217,6 +217,22 @@ describe("SourceFanout.planCalls (the query planner's calls)", () => {
     }
   });
 
+  test("a connector's recent call latency is known per user after enough calls, and forgotten with them", async () => {
+    const src = substring();
+    let t = 0;
+    const f = new SourceFanout({ sanitize: (x) => x, cacheBytes: 0, now: () => t });
+    const bob = { tenantId: "t", userId: "bob" };
+    const calls = f.planCalls(src);
+    for (let i = 0; i < 4; i++) await calls.call(shapeQuery(scope, `q${i}`), signal);
+    // Too few calls to trust a quantile yet.
+    expect(calls.expectMs!(shapeQuery(), 0.9)).toBe(0);
+    await calls.call(shapeQuery(scope, "q4"), signal);
+    expect(calls.expectMs!(shapeQuery(), 0.9)).toBeGreaterThan(0);
+    expect(calls.expectMs!(shapeQuery(bob), 0.9)).toBe(0);
+    f.forget(scope);
+    expect(calls.expectMs!(shapeQuery(), 0.9)).toBe(0);
+  });
+
   test("planned results are per user and dropped by forget", async () => {
     const src = substring();
     const f = new SourceFanout({ sanitize: (x) => x });
