@@ -19,6 +19,7 @@ export interface BuildOptions {
 /** Wires a partner from its parts with production defaults. */
 export function buildPartner(options: BuildOptions): ContextPartner {
   const sourceMap = new SourceMap(options.sourceMapPath);
+  const mode = options.queryPlanner ?? "serve";
   return new ContextPartner({
     sources: options.sources,
     sourceMap,
@@ -28,13 +29,7 @@ export function buildPartner(options: BuildOptions): ContextPartner {
     onTrace: options.onTrace,
     gatePool: options.gatePool,
     planner:
-      (options.queryPlanner ?? "serve") === "off"
-        ? undefined
-        : new QueryPlanner({
-            seed: (Math.random() * 2 ** 32) >>> 0,
-            store: sourceMap,
-            mode: options.queryPlanner ?? "serve",
-          }),
+      mode === "off" ? undefined : new QueryPlanner({ seed: (Math.random() * 2 ** 32) >>> 0, store: sourceMap, mode }),
     onShadow: options.onShadow,
   });
 }
