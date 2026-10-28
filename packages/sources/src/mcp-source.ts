@@ -7,6 +7,7 @@
  * hand. The MCP spec says annotations are untrusted, so a server that lies passes this check: connect only servers
  * the operator trusts (D7). A failed connect is retried after RETRY_AFTER_MS, not on every lookup.
  */
+import { createHash } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { itemId, type ContextItem, type Scope } from "@eden/protocol";
@@ -81,7 +82,7 @@ export class McpSource implements Source {
       { signal },
     );
     if (result.isError) return [];
-    return toItems(this.id, result.content, query.limit);
+    return toItems(this.id, result.content, query.limit, result.structuredContent);
   }
 
   async fetch(_ref: string, _scope: Scope): Promise<ContextItem | null> {
@@ -95,45 +96,157 @@ export class McpSource implements Source {
 }
 
 type Block = { type: string; text?: string };
+type Row = Record<string, unknown>;
 
 /**
- * Turns a tool result into items. A text block that parses as a JSON array (or `{results: [...]}`) yields one item
- * per element, reading the usual field names; any other text block is one item.
+ * Turns a tool result into items. Rows come from the result's `structuredContent` when it has them, else from each
+ * text block that holds JSON (whole, or after a short prose line such as "Search results for 'x':"); any other text
+ * block is one item.
+ *
+ * An item's ref is the row's own id when it has one. Otherwise it is a hash of the row's content, never its position:
+ * the partner's cache, ledger and dedup key items by id, so a positional ref (the n-th row of every lookup) made
+ * different items from different lookups overwrite each other (docs/research/connector-lab.md, finding 5).
  */
-export function toItems(sourceId: string, content: unknown, limit: number): ContextItem[] {
-  const blocks = Array.isArray(content) ? (content as Block[]) : [];
+export function toItems(sourceId: string, content: unknown, limit: number, structured?: unknown): ContextItem[] {
   const out: ContextItem[] = [];
-  blocks.forEach((block, b) => {
-    if (block.type !== "text" || !block.text) return;
-    const rows = jsonRows(block.text);
+  const fromStructured = structured === undefined ? null : (rowsOf(structured, 0) ?? record(structured));
+  if (fromStructured) {
+    for (const row of fromStructured) out.push(rowItem(sourceId, row));
+    return out.slice(0, limit);
+  }
+  const blocks = Array.isArray(content) ? (content as Block[]) : [];
+  for (const block of blocks) {
+    if (block.type !== "text" || !block.text) continue;
+    const parsed = parseJson(block.text);
+    const rows = parsed === undefined ? null : (rowsOf(parsed, 0) ?? record(parsed));
+    // JSON with no rows and no record in it (`[]`, `{"totalFound": 0, "messages": []}`) is an empty result.
+    if (parsed !== undefined && !rows) continue;
     if (!rows) {
-      out.push({ id: itemId(sourceId, `block-${b}`), sourceId, ref: `block-${b}`, title: "", text: block.text });
-      return;
+      const ref = contentRef(block.text);
+      out.push({ id: itemId(sourceId, ref), sourceId, ref, title: "", text: block.text });
+      continue;
     }
-    rows.forEach((row, r) => {
-      const ref = str(row.id) ?? str(row.ref) ?? str(row.url) ?? `block-${b}-${r}`;
-      const text = str(row.text) ?? str(row.content) ?? str(row.body) ?? str(row.snippet) ?? JSON.stringify(row);
-      out.push({
-        id: itemId(sourceId, ref),
-        sourceId,
-        ref,
-        title: str(row.title) ?? str(row.subject) ?? str(row.name) ?? "",
-        text,
-        url: str(row.url),
-      });
-    });
-  });
+    for (const row of rows) out.push(rowItem(sourceId, row));
+  }
   return out.slice(0, limit);
 }
 
-function jsonRows(text: string): Record<string, unknown>[] | null {
-  try {
-    const v: unknown = JSON.parse(text);
-    const arr = Array.isArray(v) ? v : Array.isArray((v as { results?: unknown })?.results) ? (v as any).results : null;
-    return arr ? arr.filter((x: unknown) => x && typeof x === "object") : null;
-  } catch {
-    return null;
+/** Fields that identify a row, most specific first. Not `name` or `title`: two contacts can share a name. */
+const ID_KEYS = [
+  "id",
+  "ref",
+  "uid",
+  "uuid",
+  "key",
+  "_id",
+  "permalink",
+  "messageId",
+  "message_id",
+  "path",
+  "file_path",
+  "filePath",
+  "uri",
+  "url",
+  "html_url",
+  "link",
+];
+const TITLE_KEYS = ["title", "subject", "name", "summary", "filename"];
+const TEXT_KEYS = ["text", "content", "body", "snippet", "excerpt", "description", "document", "observations"];
+const URL_KEYS = ["url", "html_url", "link", "uri"];
+/** Keys under which servers put their list of results, tried before any other array of objects. */
+const CONTAINER_KEYS = [
+  "results",
+  "hits",
+  "items",
+  "data",
+  "messages",
+  "entities",
+  "documents",
+  "records",
+  "issues",
+  "notes",
+  "events",
+  "matches",
+  "value",
+  "result",
+];
+
+function rowItem(sourceId: string, row: Row): ContextItem {
+  const ref = first(row, ID_KEYS) ?? contentRef(JSON.stringify(row));
+  const url = URL_KEYS.map((k) => str(row[k])).find((u) => u && /^https?:\/\//.test(u));
+  return {
+    id: itemId(sourceId, ref),
+    sourceId,
+    ref,
+    title: first(row, TITLE_KEYS) ?? "",
+    text: first(row, TEXT_KEYS) ?? JSON.stringify(row),
+    url,
+  };
+}
+
+/** The first key of `keys` whose value is a non-empty string or number (or a list of strings, joined by lines). */
+function first(row: Row, keys: string[]): string | undefined {
+  for (const k of keys) {
+    const v = row[k];
+    const s = Array.isArray(v) && v.every((x) => typeof x === "string") ? v.join("\n") : str(v);
+    if (s) return s;
   }
+  return undefined;
+}
+
+/** A ref from content: stable across lookups for the same row, different for different rows. */
+function contentRef(text: string): string {
+  return `h-${createHash("sha256").update(text).digest("hex").slice(0, 16)}`;
+}
+
+/** JSON in a text block: the whole text, or what follows a short prose line before the first `{` or `[`. */
+function parseJson(text: string): unknown {
+  const start = text.search(/[[{]/);
+  if (start < 0 || start > 200) return undefined;
+  try {
+    return JSON.parse(start === 0 ? text : text.slice(start));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The result rows in a parsed value: an array of objects; Chroma's columnar `{ids: [[…]], documents: [[…]]}`; or the
+ * list under a container key (`results`, `hits`, `entities`…), looked for a few levels down.
+ */
+function rowsOf(v: unknown, depth: number): Row[] | null {
+  if (depth > 3 || !v || typeof v !== "object") return null;
+  if (Array.isArray(v)) {
+    const rows = v.filter((x): x is Row => !!x && typeof x === "object" && !Array.isArray(x));
+    return rows.length ? rows : null;
+  }
+  const o = v as Row;
+  const columnar = columns(o);
+  if (columnar) return columnar;
+  const keys = [...CONTAINER_KEYS.filter((k) => k in o), ...Object.keys(o).filter((k) => !CONTAINER_KEYS.includes(k))];
+  for (const k of keys) {
+    const rows = rowsOf(o[k], depth + 1);
+    if (rows) return rows;
+  }
+  return null;
+}
+
+/** A single object that is itself a record (it has a title or text field), as one row. */
+function record(v: unknown): Row[] | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const o = v as Row;
+  return [...TITLE_KEYS, ...TEXT_KEYS].some((k) => str(o[k])) ? [o] : null;
+}
+
+/** Chroma-style results: parallel lists, one per query (`ids: [[a, b]]`, `documents: [[da, db]]`). */
+function columns(o: Row): Row[] | null {
+  const ids = Array.isArray(o.ids) && Array.isArray(o.ids[0]) ? (o.ids[0] as unknown[]) : null;
+  if (!ids || !ids.every((x) => typeof x === "string")) return null;
+  const col = (k: string) =>
+    Array.isArray(o[k]) && Array.isArray((o[k] as unknown[])[0]) ? (o[k] as unknown[][])[0]! : [];
+  const docs = col("documents");
+  const metas = col("metadatas");
+  return ids.map((id, i) => ({ ...(metas[i] as Row | undefined), id, text: docs[i] }));
 }
 
 const str = (v: unknown): string | undefined =>
