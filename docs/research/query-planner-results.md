@@ -546,9 +546,12 @@ imap-subject 34.8% and 36.6%), so single IMAP rows move by a few points on their
 **Target:** plan item 5, rewards at delivery and at usage. The immediate reward (cue coverage of the best returned
 item) cannot tell shapes apart where every shape returns something.
 
-**Change:** the planner remembers which shape returned each item (per tenant, user, connector and item; at most
-20,000 entries in memory; dropped by `forget`). When the engine delivers an item, that shape gets one more success,
-once. A usage credit (another success when the agent visibly used the injection) was tried and not kept.
+**Change:** when serving, the planner remembers which shape returned each item (per tenant, user, connector and
+item; at most 20,000 entries in memory; dropped by `forget`). When the agent receives an injection, the shape behind
+each of its items gets one more success, once per retrieval. A usage credit (another success when the agent visibly
+used the injection) was tried and not kept. Review moved the credit from when an injection is built to when it is
+handed out (D18) and turned it off in shadow mode (a shadow lookup's items are raw); the tuning below used the first
+version, the results after it the final one.
 
 **Tuning (zoo-tune, seeds 1–10, before D37 and D38, against the planner with D38's logic):**
 
@@ -564,22 +567,7 @@ Retrieval and recall moved within noise in every variant; calls per lookup fell 
 −0.17 per lookup, −0.19 to −0.14, no model; −0.21, −0.25 to −0.18, perfect judge). Usage added nothing on top.
 Chosen: delivery credit at weight 1, the simplest with the fewest calls among those that kept retrieval.
 
-**Against main with D37 and D38, seeds 1–20 (zoo-tune 1–10), planner on:**
-
-| Mix | Judge | Retrieved | Gain per seed | Recall | Gain per seed | Calls per lookup (paired difference) |
-|---|---|---|---|---|---|---|
-| zoo-tune | none | 0.495 → 0.509 | +2.5 (0.1–4.9) | 0.244 → 0.246 | +0.5 (−0.7–1.7) | 5.55 → 5.37 (−0.18, −0.21 to −0.16) |
-| held-out A | none | 0.478 → 0.491 | +2.4 (0.7–4.0) | 0.230 → 0.239 | +1.6 (0.2–2.9) | 5.85 → 5.60 (−0.25, −0.28 to −0.23) |
-| held-out A | perfect | 0.493 → 0.502 | +1.8 (0.2–3.3) | 0.422 → 0.428 | +1.2 (−0.3–2.8) | 5.84 → 5.56 (−0.29, −0.31 to −0.26) |
-| held-out B | none | 0.641 → 0.640 | −0.1 (−1.0–0.7) | 0.262 → 0.261 | −0.2 (−1.3–0.9) | 5.65 → 5.49 (−0.16, −0.19 to −0.14) |
-| held-out B | perfect | 0.655 → 0.657 | +0.3 (−1.0–1.7) | 0.560 → 0.563 | +0.5 (−0.9–1.8) | 5.63 → 5.45 (−0.18, −0.20 to −0.16) |
-| realistic | none | 0.473 → 0.485 | +2.2 (0.9–3.6) | 0.241 → 0.245 | +0.7 (−0.1–1.5) | 6.04 → 5.78 (−0.27, −0.30 to −0.24) |
-| realistic | perfect | 0.476 → 0.494 | +3.5 (1.8–5.1) | 0.413 → 0.429 | +3.1 (1.4–4.8) | 6.05 → 5.70 (−0.35, −0.38 to −0.32) |
-
-Calls per lookup fell 3–6% on every row with intervals apart from 0, retrieval rose or held, recall rose or held,
-and no hard false fire before or after (9,862 silent turns with no model, 8,448 with the judge). The connector lab
-calls the planner without the engine, so nothing is delivered there and nothing credited: lab reach is D38's by
-construction.
+RESULTS39
 
 ### The default-on gate (D31, D32)
 
