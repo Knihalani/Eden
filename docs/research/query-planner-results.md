@@ -1,7 +1,8 @@
 # The query planner: results
 
-Status: built and measured, 2026-10-28; **off by default** (D28). Plan: docs/plans/query-planner.md. Code:
-`packages/sources/src/{shapes,planner,schema-args}.ts`, wired through `PartnerDeps.planner` and `EDEN_QUERY_PLANNER=1`.
+Status: built and measured, 2026-10-28; **on by default in the server** since D33 (`EDEN_QUERY_PLANNER=0` turns it
+off). Plan: docs/plans/query-planner.md. Code: `packages/sources/src/{shapes,planner,schema-args}.ts`, wired through
+`PartnerDeps.planner`. The tables before "Iterations" describe the planner as first built.
 
 ## What it does
 
@@ -459,8 +460,9 @@ sets (D32). Where it stands after iteration 4:
   - The capability probe is not built (see D28); its role is played by the cascade and the conservative bandit.
 - **Tier 4 (shadow):** run in simulation by the owner's decision, not on real accounts (above). The planner left
   serving unchanged, its content-free signal predicted real gains, and its learning carried over to serving.
-- **Default on (phase 6):** judged by D31's gate since 2026-10-28 (above); not met on held-out B, so the planner
-  stays opt-in.
+- **Default on (phase 6):** done (D33). After iteration 4, D31's conditions held in simulation with D32's pooled
+  reading of (4), and the owner chose the per-call reading of the timeout check (above); the server now serves
+  through the planner unless `EDEN_QUERY_PLANNER=0`.
 
 ## Not done, and why
 

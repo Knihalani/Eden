@@ -11,8 +11,10 @@ is the engineering side of that story. It is not legal advice and not a certific
 | Session events (messages, tool calls) | Eden server memory: a 12-event window per session, redacted | Until session end, idle timeout (2 h), eviction, `forget`, or restart |
 | Source items (mail, events, docs) | Per-user in-memory cache, all fields redacted, text capped at 8,000 chars | 24 h TTL, 2,000 items per user, 10,000 users per process, never written to disk (D8) |
 | Entity names (names, handles, ids only), source ids, counts | SQLite source map | Until `forget` (user deletion or connector revocation) |
+| Query-planner learning: per connector, query-shape names and two numbers each (`planner_arm`; no query text) | SQLite source map, on by default (D33) | Until `forget` |
+| Planner call latency per connector (numbers only) | Eden server memory | 10–20 min rolling window, `forget`, eviction or restart |
 | Model inputs (window + ≤ 6 candidates, redacted) | OpenRouter → a provider endpoint | Eden keeps nothing. Provider retention depends on routing; see below |
-| Traces | Operator logs, if `EDEN_TRACE=1` | Content-free: ids, a hashed cue id, decisions, latency, cost (D19) |
+| Traces | Operator logs, if `EDEN_TRACE=1` | Content-free: ids, a hashed cue id, decisions, latency, cost, and the planner's connector ids, shape names and call and item counts (D19) |
 
 ## Subprocessors (current design)
 

@@ -11,8 +11,9 @@
  * EDEN_TENANT_RPS    requests per second per tenant on the HTTP API (GCRA), default 200; EDEN_TENANT_BURST, 400.
  *                    The stdio MCP server (mcp-stdio.ts) serves one local user and is not limited.
  * EDEN_GATE_WORKERS  workers that redact lookup results off the event loop (D25, D26); default 0, on the loop.
- * EDEN_QUERY_PLANNER 1 to let the query planner choose what each lookup sends to each connector (D28); "shadow" to
- *                    run it beside serving, learning and reporting only; default off.
+ * EDEN_QUERY_PLANNER the query planner chooses what each lookup sends to each connector (D28), on by default (D33):
+ *                    1 (default) serves through it; "shadow" serves without it and runs it beside, learning and
+ *                    reporting only; 0 turns it off.
  */
 import { join } from "node:path";
 import { edenHome, isId } from "@eden/protocol";
@@ -29,7 +30,7 @@ export interface ServerConfig {
   tenantBurst: number;
   /** Workers in the gate pool (EDEN_GATE_WORKERS); 0 gates on the event loop. */
   gateWorkers: number;
-  /** The query planner (EDEN_QUERY_PLANNER): off by default (D28), "serve" or "shadow". */
+  /** The query planner (EDEN_QUERY_PLANNER): "serve" by default (D33), "shadow" or "off". */
   queryPlanner: "off" | "serve" | "shadow";
 }
 
@@ -60,9 +61,10 @@ export function loadConfig(env = process.env): ServerConfig {
   };
 }
 
-function plannerMode(raw: string | undefined): ServerConfig["queryPlanner"] {
-  if (raw === undefined || raw === "" || raw === "0") return "off";
-  if (raw === "1") return "serve";
+/** EDEN_QUERY_PLANNER's value as a planner mode; throws on anything else. */
+export function plannerMode(raw: string | undefined): ServerConfig["queryPlanner"] {
+  if (raw === "0") return "off";
+  if (raw === undefined || raw === "" || raw === "1") return "serve";
   if (raw === "shadow") return "shadow";
   throw new Error(`EDEN_QUERY_PLANNER must be 0, 1 or shadow, got ${raw}`);
 }
