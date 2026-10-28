@@ -32,7 +32,7 @@ describe("toItems", () => {
     );
     expect(items[0]).toMatchObject({ id: "gmail:m1", title: "Renewal", text: "Acme wants 3 years" });
     expect(items[1]).toMatchObject({ text: "plain note" });
-    expect(items[1]!.ref).toMatch(/^h-[0-9a-f]{16}$/);
+    expect(items[1]!.ref).toMatch(/^eden-h-[0-9a-f]{16}$/);
   });
 });
 
@@ -107,6 +107,49 @@ describe("toItems on real servers' results", () => {
     }
     const one = toItems("x", [{ type: "text", text: '{"id": "n1", "title": "Note", "content": "hello"}' }], 5);
     expect(one).toMatchObject([{ ref: "n1", title: "Note", text: "hello" }]);
+  });
+
+  test("a record keeps its nested lists: an issue's labels are not results", () => {
+    const issue = {
+      id: 7,
+      title: "Bug",
+      body: "crash",
+      labels: [
+        { id: 1, name: "bug" },
+        { id: 2, name: "p1" },
+      ],
+    };
+    expect(toItems("x", [{ type: "text", text: JSON.stringify(issue) }], 5)).toMatchObject([
+      { ref: "7", title: "Bug" },
+    ]);
+    const page = { data: { id: "p1", title: "Page", attachments: [{ name: "a.pdf" }] } };
+    expect(toItems("x", [{ type: "text", text: JSON.stringify(page) }], 5)).toMatchObject([{ ref: "p1" }]);
+  });
+
+  test("an empty result list stays empty whatever else the result holds (facets, filters)", () => {
+    const text = JSON.stringify({
+      results: [],
+      query: { filters: [{ field: "from", value: "a" }] },
+      facets: [{ k: 1 }],
+    });
+    expect(toItems("x", [{ type: "text", text }], 5)).toEqual([]);
+    expect(toItems("x", [], 5, { hits: [], suggestions: [{ text: "did you mean" }] })).toEqual([]);
+  });
+
+  test("plain text that merely ends in JSON is still one item", () => {
+    for (const text of ["Budget for Q3 attached: [1, 2, 3]", "Config used: {}", "see {the notes}"]) {
+      expect(toItems("x", [{ type: "text", text }], 5)).toMatchObject([{ text }]);
+    }
+  });
+
+  test("a row with no id keeps one ref when only its score or excerpt changes between queries", () => {
+    const a = { title: "A", content: "x", _score: 1.2, excerpt: "…x…" };
+    const b = { title: "A", content: "x", _score: 0.7, excerpt: "…other…" };
+    const ref = (row: object) => toItems("x", [{ type: "text", text: JSON.stringify([row]) }], 5)[0]!.ref;
+    expect(ref(a)).toBe(ref(b));
+    expect(ref(a)).not.toBe(ref({ ...a, content: "y" }));
+    // With no title or text, volatile fields are left out of the hash.
+    expect(ref({ k: 1, score: 3 })).toBe(ref({ k: 1, score: 9 }));
   });
 
   test("structuredContent wins over text, and only http(s) links become urls", () => {

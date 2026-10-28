@@ -100,16 +100,17 @@ type Row = Record<string, unknown>;
 
 /**
  * Turns a tool result into items. Rows come from the result's `structuredContent` when it has them, else from each
- * text block that holds JSON (whole, or after a short prose line such as "Search results for 'x':"); any other text
- * block is one item.
+ * text block that holds JSON (the whole block, or after one prose line ending in a colon, as in "Search results for
+ * 'x':"); any other text block is one item. JSON that holds an empty result list is no items.
  *
- * An item's ref is the row's own id when it has one. Otherwise it is a hash of the row's content, never its position:
- * the partner's cache, ledger and dedup key items by id, so a positional ref (the n-th row of every lookup) made
- * different items from different lookups overwrite each other (docs/research/connector-lab.md, finding 5).
+ * An item's ref is the row's own id when it has one. Otherwise it is a hash of the row's identifying content (title
+ * and full text, never scores or per-query excerpts), never its position: the partner's cache, ledger and dedup key
+ * items by id, so a positional ref (the n-th row of every lookup) made different items from different lookups
+ * overwrite each other (docs/research/connector-lab.md, finding 5).
  */
 export function toItems(sourceId: string, content: unknown, limit: number, structured?: unknown): ContextItem[] {
   const out: ContextItem[] = [];
-  const fromStructured = structured === undefined ? null : (rowsOf(structured, 0) ?? record(structured));
+  const fromStructured = structured === undefined ? null : rowsOf(structured, 0);
   if (fromStructured) {
     for (const row of fromStructured) out.push(rowItem(sourceId, row));
     return out.slice(0, limit);
@@ -118,15 +119,13 @@ export function toItems(sourceId: string, content: unknown, limit: number, struc
   for (const block of blocks) {
     if (block.type !== "text" || !block.text) continue;
     const parsed = parseJson(block.text);
-    const rows = parsed === undefined ? null : (rowsOf(parsed, 0) ?? record(parsed));
-    // JSON with no rows and no record in it (`[]`, `{"totalFound": 0, "messages": []}`) is an empty result.
-    if (parsed !== undefined && !rows) continue;
-    if (!rows) {
+    if (parsed === undefined) {
       const ref = contentRef(block.text);
       out.push({ id: itemId(sourceId, ref), sourceId, ref, title: "", text: block.text });
       continue;
     }
-    for (const row of rows) out.push(rowItem(sourceId, row));
+    // JSON with no rows in it (`[]`, `{"totalFound": 0, "messages": []}`, `{}`) is an empty result.
+    for (const row of rowsOf(parsed, 0) ?? []) out.push(rowItem(sourceId, row));
   }
   return out.slice(0, limit);
 }
@@ -171,8 +170,11 @@ const CONTAINER_KEYS = [
   "result",
 ];
 
+/** Fields that change from one query to the next for the same row: left out of a content-hash ref. */
+const VOLATILE = /^(_.*|score|rank|distance|distances|relevance|similarity|highlights?|matches|snippet|excerpt|ex)$/i;
+
 function rowItem(sourceId: string, row: Row): ContextItem {
-  const ref = first(row, ID_KEYS) ?? contentRef(JSON.stringify(row));
+  const ref = first(row, ID_KEYS) ?? contentRef(identity(row));
   const url = URL_KEYS.map((k) => str(row[k])).find((u) => u && /^https?:\/\//.test(u));
   return {
     id: itemId(sourceId, ref),
@@ -194,48 +196,70 @@ function first(row: Row, keys: string[]): string | undefined {
   return undefined;
 }
 
-/** A ref from content: stable across lookups for the same row, different for different rows. */
-function contentRef(text: string): string {
-  return `h-${createHash("sha256").update(text).digest("hex").slice(0, 16)}`;
+/**
+ * What identifies a row with no id: its title and full text when it has them, else its fields without the volatile
+ * ones, so the same row returned by two queries (another score, another excerpt) keeps one ref.
+ */
+function identity(row: Row): string {
+  const title = first(row, TITLE_KEYS) ?? "";
+  const text = first(row, ["text", "content", "body", "description", "document", "observations"]) ?? "";
+  if (title || text) return `${title}\n${text}`;
+  return JSON.stringify(Object.fromEntries(Object.entries(row).filter(([k]) => !VOLATILE.test(k))));
 }
 
-/** JSON in a text block: the whole text, or what follows a short prose line before the first `{` or `[`. */
+/**
+ * A ref from content: stable across lookups for the same content, different for different content. The prefix marks
+ * it as Eden's. The hash is of unredacted text, like the cache's own hashed refs; the cache redacts the item itself.
+ */
+function contentRef(text: string): string {
+  return `eden-h-${createHash("sha256").update(text).digest("hex").slice(0, 16)}`;
+}
+
+/** One prose line ending in a colon before JSON, as servers that describe their result put it. */
+const PROSE_THEN_JSON = /^[^\n]{1,200}:[ \t]*\r?\n\s*(?=[[{])/;
+
+/** JSON in a text block: the whole block, or what follows one prose line ending in a colon. */
 function parseJson(text: string): unknown {
-  const start = text.search(/[[{]/);
-  if (start < 0 || start > 200) return undefined;
+  const trimmed = text.trimStart();
+  const prose = PROSE_THEN_JSON.exec(trimmed);
+  const body = prose ? trimmed.slice(prose[0].length) : trimmed;
+  if (!/^[[{]/.test(body)) return undefined;
   try {
-    return JSON.parse(start === 0 ? text : text.slice(start));
+    return JSON.parse(body);
   } catch {
     return undefined;
   }
 }
 
+const isObject = (x: unknown): x is Row => !!x && typeof x === "object" && !Array.isArray(x);
+
 /**
- * The result rows in a parsed value: an array of objects; Chroma's columnar `{ids: [[…]], documents: [[…]]}`; or the
- * list under a container key (`results`, `hits`, `entities`…), looked for a few levels down.
+ * The result rows in a parsed value, `[]` for an empty result, or null when there are none to find:
+ * - an array is the result list (its objects);
+ * - Chroma's columnar `{ids: [[…]], documents: [[…]]}`;
+ * - an object with its own id is one record, nested lists included (an issue's labels, an event's attendees);
+ * - otherwise a container key (`results`, `hits`, `entities`…) decides, even when its list is empty: other lists
+ *   beside it (facets, filters, suggestions) are not results;
+ * - an object with a title or text field is one record;
+ * - with none of those, a sole list of objects among its values is the result list.
  */
 function rowsOf(v: unknown, depth: number): Row[] | null {
   if (depth > 3 || !v || typeof v !== "object") return null;
-  if (Array.isArray(v)) {
-    const rows = v.filter((x): x is Row => !!x && typeof x === "object" && !Array.isArray(x));
-    return rows.length ? rows : null;
-  }
+  if (Array.isArray(v)) return v.filter(isObject);
   const o = v as Row;
   const columnar = columns(o);
   if (columnar) return columnar;
-  const keys = [...CONTAINER_KEYS.filter((k) => k in o), ...Object.keys(o).filter((k) => !CONTAINER_KEYS.includes(k))];
-  for (const k of keys) {
-    const rows = rowsOf(o[k], depth + 1);
+  if (first(o, ID_KEYS)) return [o];
+  for (const k of CONTAINER_KEYS) {
+    if (!(k in o)) continue;
+    const inner = o[k];
+    if (Array.isArray(inner)) return inner.filter(isObject);
+    const rows = rowsOf(inner, depth + 1);
     if (rows) return rows;
   }
-  return null;
-}
-
-/** A single object that is itself a record (it has a title or text field), as one row. */
-function record(v: unknown): Row[] | null {
-  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
-  const o = v as Row;
-  return [...TITLE_KEYS, ...TEXT_KEYS].some((k) => str(o[k])) ? [o] : null;
+  if (first(o, [...TITLE_KEYS, ...TEXT_KEYS])) return [o];
+  const lists = Object.values(o).filter((x) => Array.isArray(x) && x.some(isObject));
+  return lists.length === 1 ? (lists[0] as unknown[]).filter(isObject) : null;
 }
 
 /** Chroma-style results: parallel lists, one per query (`ids: [[a, b]]`, `documents: [[da, db]]`). */

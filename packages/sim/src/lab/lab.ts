@@ -142,6 +142,8 @@ export interface ConnectorReport {
    * other. The same item with a different excerpt per query is not a collision.
    */
   idCollisions: number;
+  /** Of world items seen, the share that got more than one item id: the same item counted as new more than once. */
+  idSplits: number;
 }
 
 /**
@@ -192,6 +194,7 @@ export async function runConnector(
   let made = 0;
   let fallback = 0;
   const worldById = new Map<string, Set<string>>();
+  const idsByWorld = new Map<string, Set<string>>();
   let seedMs = 0;
   const source = new McpSource({
     id: c.name,
@@ -243,11 +246,13 @@ export async function runConnector(
             // A client keeps at most `limit` results per call, in the server's order, whatever the server sends.
             for (const key of keys.slice(0, limit)) got.add(key);
             made += res.length;
-            fallback += res.filter((it) => /^(?:block|h)-/.test(it.ref)).length;
+            fallback += res.filter((it) => /^(?:block|eden-h)-/.test(it.ref)).length;
             // Which world item each produced item is (the first world key it names), to find ids given to two items.
             for (const it of res) {
               const key = keysIn(`${it.ref} ${it.title} ${it.url ?? ""} ${it.text}`)[0];
-              if (key) (worldById.get(it.id) ?? worldById.set(it.id, new Set()).get(it.id)!).add(key);
+              if (!key) continue;
+              (worldById.get(it.id) ?? worldById.set(it.id, new Set()).get(it.id)!).add(key);
+              (idsByWorld.get(key) ?? idsByWorld.set(key, new Set()).get(key)!).add(it.id);
             }
           } catch (e) {
             t.errors++;
@@ -290,6 +295,9 @@ export async function runConnector(
     variants,
     errorSamples,
     refFallback: Math.round((fallback / Math.max(1, made)) * 1_000) / 1_000,
+    idSplits:
+      Math.round(([...idsByWorld.values()].filter((t) => t.size > 1).length / Math.max(1, idsByWorld.size)) * 1_000) /
+      1_000,
     idCollisions:
       Math.round(([...worldById.values()].filter((t) => t.size > 1).length / Math.max(1, worldById.size)) * 1_000) /
       1_000,
