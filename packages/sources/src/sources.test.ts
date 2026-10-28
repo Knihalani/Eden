@@ -160,6 +160,16 @@ describe("toItems on real servers' results", () => {
       "notes/b.md",
     ]);
     expect(refs({ id: "req-1", hits: [{ id: "h1" }] })).toEqual(["h1"]);
+    expect(refs({ url: "https://q", data: { results: [{ id: "a" }, { id: "b" }] } })).toEqual(["a", "b"]);
+    // Rows told apart only by a snippet still get different refs.
+    expect(
+      new Set(
+        refs([
+          { title: "Notes", snippet: "a" },
+          { title: "Notes", snippet: "b" },
+        ]),
+      ).size,
+    ).toBe(2);
   });
 
   test("plain text that merely ends in JSON is still one item", () => {

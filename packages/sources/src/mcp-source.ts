@@ -202,7 +202,11 @@ function first(row: Row, keys: string[]): string | undefined {
  * Lee with different emails, two "Standup" events on different days) never share one.
  */
 function identity(row: Row): string {
-  return JSON.stringify(Object.fromEntries(Object.entries(row).filter(([k]) => !VOLATILE.test(k))));
+  const stable = Object.entries(row).filter(([k]) => !VOLATILE.test(k));
+  // A row told apart only by a volatile field (a title and a snippet, nothing else) keeps that field: two such rows
+  // must not share a ref, and a row with nothing stable has no better identity.
+  const distinct = stable.some(([k]) => !TITLE_KEYS.includes(k));
+  return JSON.stringify(Object.fromEntries(distinct ? stable : Object.entries(row)));
 }
 
 /**
@@ -236,7 +240,8 @@ const isObject = (x: unknown): x is Row => !!x && typeof x === "object" && !Arra
  * - an array is the result list (its objects);
  * - Chroma's columnar `{ids: [[…]], documents: [[…]]}`;
  * - a container key (`results`, `hits`, `entities`…) holding a list decides, even when the list is empty: other lists
- *   and fields beside it (facets, filters, the echoed query URL or folder, a request id) are not results;
+ *   and fields beside it (facets, filters, the echoed query URL or folder, a request id) are not results; then rows
+ *   found inside a container key holding an object;
  * - an object with its own id, title or text is one record, nested lists included (an issue's labels, an event's
  *   attendees);
  * - with none of those, a sole list of objects among its values is the result list.
@@ -248,12 +253,13 @@ function rowsOf(v: unknown, depth: number): Row[] | null {
   const columnar = columns(o);
   if (columnar) return columnar;
   for (const k of CONTAINER_KEYS) if (Array.isArray(o[k])) return (o[k] as unknown[]).filter(isObject);
-  if (first(o, [...ID_KEYS, ...TITLE_KEYS, ...TEXT_KEYS])) return [o];
-  // A wrapper object (`{data: {...}}`, `{result: {results: [...]}}`): look inside its container keys.
+  // A wrapper object (`{data: {...}}`, `{result: {results: [...]}}`): what its container keys hold comes first, even
+  // when the wrapper also echoes an id-like field (`{url, data: {results: [...]}}`).
   for (const k of CONTAINER_KEYS) {
     const rows = isObject(o[k]) ? rowsOf(o[k], depth + 1) : null;
     if (rows) return rows;
   }
+  if (first(o, [...ID_KEYS, ...TITLE_KEYS, ...TEXT_KEYS])) return [o];
   const lists = Object.values(o).filter((x) => Array.isArray(x) && x.some(isObject));
   return lists.length === 1 ? (lists[0] as unknown[]).filter(isObject) : null;
 }
