@@ -63,12 +63,20 @@ interface PerSource {
   breaker: CircuitBreaker;
   limiter: AimdLimiter;
   latency: RollingHistogram;
-  /** Latency of the planner's single calls (`planCalls`), apart from whole lookups, which may be several calls. */
-  callLatency: RollingHistogram;
+  /**
+   * Latency of the planner's single calls (`planCalls`), apart from whole lookups, which may be several calls. Made on
+   * the first one: most (user, source) pairs never see the planner.
+   */
+  callLatency?: RollingHistogram;
 }
 
 /** Planner calls a connector's call-latency quantile needs before it is trusted. */
 const MIN_CALL_SAMPLES = 5;
+/**
+ * The call-latency history's window: ten minutes, not one, since a user's planner calls to one connector are sparse
+ * and its latency changes slowly. A rolling histogram answers over the current and the previous window: 10–20 min.
+ */
+const CALL_LATENCY_WINDOW_MS = 600_000;
 
 const RATE_LIMITED = /\b429\b|rate.?limit|too many requests/i;
 /** Per-source state kept for at most this many (user, source) pairs; the least recently used is dropped. */
@@ -180,11 +188,15 @@ export class SourceFanout {
             let raw: ContextItem[];
             try {
               raw = await source.search(q, sig);
-            } finally {
-              // Every outcome counts, a call cut off too (its time so far, a lower bound): the slow calls are the
-              // ones the estimate must see.
-              this.state(sourceKey(q)).callLatency.record(performance.now() - t0);
+            } catch (e) {
+              // A call cut off by the timeout counts with its time so far (a lower bound): the slow calls are the ones
+              // the estimate must see. One abandoned for another reason (the session ended, the user was forgotten)
+              // or failing fast says nothing about latency.
+              if ((sig.reason as Error | undefined)?.name === "TimeoutError")
+                this.recordCall(sourceKey(q), t0, forgets);
+              throw e;
             }
+            this.recordCall(sourceKey(q), t0, forgets);
             const items = await this.options.sanitize(raw, sig);
             if (!sig.aborted && this.forgets === forgets) this.results?.set(k, items, sizeOf(items));
             return items;
@@ -195,6 +207,17 @@ export class SourceFanout {
     };
     this.minted.add(calls);
     return calls;
+  }
+
+  /**
+   * One planner call's latency into its (user, source) history. Only into state that exists (the lookup that
+   * admitted the source made it), and not if any `forget` happened since the call started: recording then could
+   * bring back state the forget dropped.
+   */
+  private recordCall(key: string, t0: number, forgets: number): void {
+    const s = this.per.get(key);
+    if (!s || this.forgets !== forgets) return;
+    (s.callLatency ??= new RollingHistogram(CALL_LATENCY_WINDOW_MS, this.now)).record(performance.now() - t0);
   }
 
   /** Tells the rate limits about an upstream's rate-limit error seen outside a fan-out call (shadow lookups). */
@@ -222,8 +245,6 @@ export class SourceFanout {
         breaker: new CircuitBreaker({ ...this.options.breaker, now: this.now }),
         limiter: new AimdLimiter({ initial: 2, min: 1, max: this.options.maxConcurrency ?? 4 }),
         latency: new RollingHistogram(60_000, this.now),
-        // Ten minutes, not one: a user's planner calls to one connector are sparse, and its latency changes slowly.
-        callLatency: new RollingHistogram(600_000, this.now),
       };
       this.per.set(key, s);
     }

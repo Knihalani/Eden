@@ -205,7 +205,7 @@ export class QueryPlanner {
     const seen = new Set<string>();
     const items: ContextItem[] = [];
     // What the next call is expected to take (ms): the lookup's slowest call so far, and at least the connector's
-    // recent latency at `latencyQuantile` (one slow lookup does not show the tail; the last minute of calls may).
+    // recent latency at `latencyQuantile` (one lookup does not show the tail; the last 10–20 minutes of calls may).
     let callMs = this.o.latencyQuantile > 0 && via?.expectMs ? via.expectMs(query, this.o.latencyQuantile) : 0;
     while (calls < this.o.maxCalls) {
       const n = bandit.select(this.rng, 1, eligible, null, this.o.epsilon, picked);

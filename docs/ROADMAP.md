@@ -26,8 +26,9 @@ train / held-out split for tuning, hand-written adversarial scenarios, and text 
   (D29). Iterating on it: a learned cascade gate (D30) and reusing recent answers cut its extra calls by 12–14% and
   then 7–12% with recall within noise; a deadline check cut the calls it gave up on (timeouts and session ends) by
   71–79% (margin chosen on the same runs). Expecting each connector's recent latency then brought
-  them to planner-off's rate per call. Every D31/D32 condition now holds in simulation, with the timeout bar read
-  per call. Next: the default-on decision, then the planner's learning cost, delivery and usage rewards. Its evidence:
+  them within noise of planner-off's rate per call (1.15–1.28x in absolute numbers). The other D31/D32 conditions
+  hold in simulation; D31 sets no bar for timeouts. Next: the default-on decision, then the planner's learning
+  cost, delivery and usage rewards. Its evidence:
   a source survey of real MCP servers ([research/connectors.md](research/connectors.md)) and the connector lab,
   where the query Eden sent reached nothing on whole-string-substring connectors
   ([research/connector-lab.md](research/connector-lab.md)).

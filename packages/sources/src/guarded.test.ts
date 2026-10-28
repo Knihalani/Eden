@@ -222,15 +222,56 @@ describe("SourceFanout.planCalls (the query planner's calls)", () => {
     let t = 0;
     const f = new SourceFanout({ sanitize: (x) => x, cacheBytes: 0, now: () => t });
     const bob = { tenantId: "t", userId: "bob" };
+    // The lookup that admits the source makes its state; planner calls then record into it.
+    await f.search([planned(f, src)], cue(), { timeoutMs: 1_000 });
     const calls = f.planCalls(src);
-    for (let i = 0; i < 4; i++) await calls.call(shapeQuery(scope, `q${i}`), signal);
-    // Too few calls to trust a quantile yet.
+    for (let i = 0; i < 3; i++) await calls.call(shapeQuery(scope, `q${i}`), signal);
+    // The lookup's own call plus three: too few to trust a quantile yet.
     expect(calls.expectMs!(shapeQuery(), 0.9)).toBe(0);
-    await calls.call(shapeQuery(scope, "q4"), signal);
+    await calls.call(shapeQuery(scope, "q3"), signal);
     expect(calls.expectMs!(shapeQuery(), 0.9)).toBeGreaterThan(0);
     expect(calls.expectMs!(shapeQuery(bob), 0.9)).toBe(0);
     f.forget(scope);
     expect(calls.expectMs!(shapeQuery(), 0.9)).toBe(0);
+  });
+
+  test("a planner call still running when its user is forgotten brings back no state", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const slow: Source = { id: "s", kind: "t", description: "", search: async () => (await gate, [item("x")]) };
+    const f = new SourceFanout({ sanitize: (x) => x });
+    await f.search([slow], { ...cue(), text: "warm" }, { timeoutMs: 1_000 }).catch(() => {});
+    const pending = f.planCalls(slow).call(shapeQuery(), signal);
+    f.forget(scope);
+    release();
+    await pending;
+    expect((f as unknown as { per: Map<string, unknown> }).per.size).toBe(0);
+  });
+
+  test("a call cut off by its timeout counts with its time so far; one abandoned otherwise does not", async () => {
+    const hang: Source = {
+      id: "s",
+      kind: "t",
+      description: "",
+      search: (_q, sig) => new Promise((_, reject) => sig.addEventListener("abort", () => reject(sig.reason))),
+    };
+    const f = new SourceFanout({ sanitize: (x) => x, cacheBytes: 0 });
+    const calls = f.planCalls(hang);
+    // Admit the source (its state exists), then abandon five calls by session end and five by timeout.
+    await f.search([hang], { ...cue(), text: "warm" }, { timeoutMs: 5 });
+    for (let i = 0; i < 5; i++) {
+      const ac = new AbortController();
+      const p = calls.call(shapeQuery(scope, `ended ${i}`), ac.signal).catch(() => {});
+      // Ended after 10 ms: were these recorded, the history would read about 10 ms.
+      await Bun.sleep(10);
+      ac.abort();
+      await p;
+    }
+    expect(calls.expectMs!(shapeQuery(), 0.5)).toBe(0);
+    for (let i = 0; i < 5; i++) {
+      await calls.call(shapeQuery(scope, `slow ${i}`), AbortSignal.timeout(20)).catch(() => {});
+    }
+    expect(calls.expectMs!(shapeQuery(), 0.5)).toBeGreaterThanOrEqual(15);
   });
 
   test("planned results are per user and dropped by forget", async () => {

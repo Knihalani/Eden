@@ -386,12 +386,15 @@ moved by at most 0.06.
 **Target:** the calls iteration 3 still gave up on: calls slower than anything earlier in the same lookup, which one
 lookup's own calls cannot predict.
 
-**Change:** the fan-out records the latency of every planner call per (user, connector) over the last ten minutes
-(a call cut off counts with its time so far, a lower bound), and the deadline check expects a call to take at
-least the 0.9 quantile of that history (`latencyQuantile`) once 5 calls are known, as well as the lookup's slowest
-call so far. Shadow lookups, which do not go through the fan-out's planner calls, keep the lookup-only estimate. A
-first version kept one minute of history; in simulated time a user's calls to one connector are sparse, the history
-rarely held 5 calls, and tuning showed no effect at any quantile (raw rows not kept).
+**Change:** the fan-out records the latency of planner calls per (user, connector), in a rolling histogram that
+answers over the last 10–20 minutes. A call cut off by its timeout counts with its time so far (a lower bound); one
+abandoned for another reason (session end, forget) or failing fast is not counted, and a call still running when the
+user is forgotten records nothing. The deadline check expects a call to take at least the 0.9 quantile of that
+history (`latencyQuantile`) once 5 calls are known, as well as the lookup's slowest call so far. Shadow lookups,
+which do not go through the fan-out's planner calls, keep the lookup-only estimate. A first version kept one minute
+of history: in simulated time a user's calls to one connector are sparse, the history rarely held 5 calls, and on
+the tune seeds no quantile changed anything (its rows are in the JSONL, labelled "one-minute window"; the report
+seeds 31–33 were not run with it).
 
 **Tuned** on timed seeds 21–23 (quantile 0 is iteration 3), then **reported** on fresh seeds 31–33
 ([query-planner-timed.sh](query-planner-timed.sh) `4-tune` and `4-report`; raw rows with `"iteration": 4` in
@@ -415,8 +418,10 @@ rarely held 5 calls, and tuning showed no effect at any quantile (raw rows not k
 | 31–33 | realistic | before | 6.62 | 47 | 7.2 | 0 | 18/130 |
 | 31–33 | realistic | after | 6.17 | 30 | 4.9 | 0 | 18/130 |
 
-- **Calls given up** on the fresh seeds: 18–46% fewer than before; per 1,000 calls, at or below planner-off's in every
-  mix (4.9–5.5 against 5.5–5.7). In absolute numbers 1.15–1.28x planner-off's, for 1.23–1.33x its calls.
+- **Calls given up** on the fresh seeds: 18–46% fewer than before. Per 1,000 calls, within noise of planner-off's:
+  lower on realistic (4.95 against 5.69) and zoo-b (5.16 against 5.47), level on zoo-a (5.53 against 5.48). Each
+  figure rests on 25–54 events, with no intervals. In absolute numbers 1.15–1.28x planner-off's, for 1.23–1.33x
+  its calls.
 - **Calls per lookup** fell 6–7%, since fewer doomed calls are started.
 - **Recall:** delivered facts equal or higher than before in every mix (small samples); false fires equal to
   planner-off's (one on zoo-b in all three runs).
@@ -429,17 +434,16 @@ The owner chose a cost-normalised gate (D31) and, for its fourth condition, the 
 sets (D32). Where it stands after iteration 4:
 - **Recall:** higher with intervals apart on A and realistic, with and without a judge; within noise on B. Holds.
 - **False fires and secrets:** unchanged and 0. Holds.
-- **Calls at most 1.5x off:** 1.36–1.47x at time 0 (iteration 2) and 1.32–1.44x at real pacing. Holds.
+- **Calls at most 1.5x off:** 1.36–1.47x at time 0 (iteration 2) and 1.23–1.33x at real pacing (iteration 4). Holds.
 - **Calls per point of recall no worse than off, pooled over the held-out sets (D32):** no model 0.311 against 0.325;
   judge 0.132 against 0.138. Holds. Read per set, it fails on B (0.284 against 0.226; judge 0.099 against 0.076),
   where planner-off already reaches most reachable facts (60–64% retrieved or held), so the extra calls add little
   recall; the pooled figure leans on B's high recall.
 - **Lab reach:** within noise or higher on both worlds with `cascadeMin` 0.05 (the lab calls the planner directly, so
   reuse and the deadline check are not exercised there). Holds.
-- **429s and timeouts in a timed run:** no 429s in any run. After iteration 4, calls given up per 1,000 calls are at
-  or below planner-off's in every mix on fresh seeds (4.9–5.5 against 5.5–5.7), and 1.15–1.28x planner-off's in
-  absolute numbers. D31 says only that they are "checked"; whether the per-call reading is the bar is the owner's
-  call.
+- **429s and timeouts in a timed run:** no 429s in any run. After iteration 4, calls given up per 1,000 calls are
+  within noise of planner-off's on fresh seeds (4.95–5.53 against 5.47–5.69), and 1.15–1.28x planner-off's in
+  absolute numbers. D31 says only that they are "checked"; the bar, per call or absolute, is the owner's call.
 
 ## Gates in the plan, and where they stand
 
