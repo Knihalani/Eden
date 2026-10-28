@@ -559,6 +559,17 @@ export class ContextPartner {
   }
 
   /**
+   * With no model's say, the best candidate alone, if it is strong enough: several distinct query terms and a score
+   * of at least `fallbackScore` (coverage plus the entity bonus, D36). One item at most: nothing has judged it.
+   */
+  private fallback(unsure: Scored[]): Scored | null {
+    const top = unsure[0];
+    const c = this.config;
+    if (!top || c.fallbackMatchedTerms <= 0 || bulkMail(top.item)) return null;
+    return top.matched >= c.fallbackMatchedTerms && top.score >= c.fallbackScore ? top : null;
+  }
+
+  /**
    * Whether one recent tool result or agent message holds every term of a cached item and every pair of adjacent
    * terms in its title and text: then the item adds nothing the agent has not fetched or said, and delivering it is a
    * repeat. A new term or a new pairing (11:30 where the agent saw 11:00 and, elsewhere in a day's listing, 9:30)
@@ -755,12 +766,13 @@ export class ContextPartner {
         done("silent", "no candidates");
         return null;
       }
-      if (!this.deps.model) {
-        done("silent", "no model");
-        return null;
-      }
-      if (!this.charge(s)) {
-        done("silent", "no model budget");
+      if (!this.deps.model || !this.charge(s)) {
+        const top = this.fallback(unsure);
+        if (top) {
+          done("sources", `fallback:${cue.id}`, [top.item]);
+          return this.deliver(s, [top], "proactive", `fallback:${cue.id}`);
+        }
+        done("silent", this.deps.model ? "no model budget" : "no model");
         return null;
       }
       const candidates = unsure.map((x) => x.item);
