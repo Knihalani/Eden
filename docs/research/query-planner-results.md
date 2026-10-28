@@ -478,7 +478,23 @@ Retrieval rose on every mix, and recall with the perfect judge on every mix, wit
 with no model rose on B and realistic and stayed within noise on A (no-model delivery, not retrieval, bounds it).
 Calls per lookup rose 0.7–2.2%.
 
-FRESH38
+**Fresh seeds 21–30** (no decision had used them), against main with D37:
+
+| Mix | Judge | Retrieved | Gain per seed | Recall | Gain per seed |
+|---|---|---|---|---|---|
+| held-out A | none | 0.439 → 0.525 | +15.6 (10.3–20.9) | 0.218 → 0.239 | +3.9 (1.4–6.4) |
+| held-out A | perfect | 0.431 → 0.532 | +18.4 (12.7–24.1) | 0.365 → 0.450 | +15.4 (10.8–20.0) |
+| held-out B | none | 0.641 → 0.656 | +2.7 (0.0–5.4) | 0.264 → 0.270 | +1.1 (−1.3–3.5) |
+| held-out B | perfect | 0.640 → 0.662 | +4.1 (1.5–6.7) | 0.546 → 0.567 | +3.9 (1.8–6.0) |
+| realistic | none | 0.446 → 0.528 | +14.9 (10.2–19.6) | 0.229 → 0.256 | +4.9 (1.6–8.2) |
+| realistic | perfect | 0.438 → 0.524 | +15.6 (9.7–21.5) | 0.384 → 0.448 | +11.8 (7.4–16.2) |
+
+No hard false fire before or after (1,426 silent turns per row).
+
+**D31's call conditions, re-stated** (held-out seeds 1–20, against planner-off): (3) calls per lookup 1.37–1.47x
+planner-off on every set and judge setting (realistic 4.10 off, 5.98 with D37, 6.04 with this change), under 1.5x;
+(4) pooled calls per point of recall (D32) 0.239 against 0.251 off with no model and 0.126 against 0.141 with the
+perfect judge (D37 alone: 0.247 and 0.137). D33's timed check (calls given up per 1,000) was not re-run.
 
 **False fires:** none, before or after, in every row above (1,414 silent turns on zoo-tune, 2,816 per held-out mix
 and judge setting). Before D37, the same change measured against main raised them from 6 to 8 of 8,448 (no model)
