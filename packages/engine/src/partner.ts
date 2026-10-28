@@ -559,8 +559,8 @@ export class ContextPartner {
   }
 
   /**
-   * With no model's say, the best candidate alone, if it is strong enough: most of the query and several distinct
-   * query terms (D36). One item at most: nothing has judged it.
+   * With no model's say, the best candidate alone, if it is strong enough: several distinct query terms and a score
+   * of at least `fallbackScore` (coverage plus the entity bonus, D36). One item at most: nothing has judged it.
    */
   private fallback(unsure: Scored[]): Scored | null {
     const top = unsure[0];
