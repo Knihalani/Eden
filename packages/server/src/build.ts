@@ -11,7 +11,7 @@ export interface BuildOptions {
   onTrace?: TraceSink;
   /** A pool from `startGatePool`: lookup results are redacted in it. Without one they are redacted on the loop. */
   gatePool?: WorkerPool;
-  /** A query planner (D28), serving or in shadow; its learning persists in the source map. */
+  /** The query planner (D28): serving by default (D33), in shadow, or off; its learning persists in the source map. */
   queryPlanner?: "off" | "serve" | "shadow";
   onShadow?: ShadowSink;
 }
@@ -28,9 +28,13 @@ export function buildPartner(options: BuildOptions): ContextPartner {
     onTrace: options.onTrace,
     gatePool: options.gatePool,
     planner:
-      options.queryPlanner && options.queryPlanner !== "off"
-        ? new QueryPlanner({ seed: (Math.random() * 2 ** 32) >>> 0, store: sourceMap, mode: options.queryPlanner })
-        : undefined,
+      (options.queryPlanner ?? "serve") === "off"
+        ? undefined
+        : new QueryPlanner({
+            seed: (Math.random() * 2 ** 32) >>> 0,
+            store: sourceMap,
+            mode: options.queryPlanner ?? "serve",
+          }),
     onShadow: options.onShadow,
   });
 }
