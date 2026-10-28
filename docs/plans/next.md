@@ -49,3 +49,7 @@ Each item, when done, gets a line here with its PR and its numbers.
   16 to 21 of 46 items under the round-1 labels (commit d12c63a); held-out A and realistic in the simulation (5 seeds,
   `quality-cli --planner`) 18.8% to 23.1% and 19.1% to 25.0%. It also raised hard false fires there, from 1 to 5–6 of
   713 silent turns. The owner chose precision: no threshold change. Next for this item: a better no-model ranker.
+- **6, what the agent has or does not need:** items mostly contained in a recent tool result or agent message, and
+  bulk mail (wording, or `meta.category`), are not delivered without a model. Eval: false fires 3 to 0 of 58,
+  precision 0.833 to 1.000, recall unchanged (15/43); simulation: recall and false fires unchanged, noise share down
+  in every mix (docs/research/eval-suite.md).
