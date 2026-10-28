@@ -355,8 +355,8 @@ are identical apart from the new `sources.aborted` field (0).
 | realistic | margin 1.25 | 6.83 | 33 | 0 | 32/165 |
 | realistic | margin 2 (default) | 6.65 | 22 | 0 | 31/165 |
 
-- **Timeouts** fell 71–79% from before, but are still 3–6x planner-off's (17–36 against 6). The rest are calls
-  slower than the lookup's slowest so far (latency is heavy-tailed).
+- **Calls given up** (timeouts and session ends) fell 71–79% from before, but are still 3–6x planner-off's (17–36
+  against 6). The rest are calls slower than the lookup's slowest so far (latency is heavy-tailed).
 - **429s:** none, with or without the planner.
 - **Recall:** the samples are small (165 facts per mix); delivered facts were 0–4 lower than before (still 11–12
   above off on A and realistic, 1 above on B).
@@ -374,7 +374,9 @@ The lab reran with the current planner on both worlds (`cascadeMin` 0.05; the la
 and the deadline check do not apply; raw:
 [query-planner-lab-iter3-world1000.jsonl](query-planner-lab-iter3-world1000.jsonl),
 [query-planner-lab-iter3-world2000.jsonl](query-planner-lab-iter3-world2000.jsonl)). Against the earlier runs
-(`cascadeMin` 0.2, iteration 1's first version, on both worlds; on world 1000 also before iteration 1), reach is
+(`cascadeMin` 0.2, iteration 1's first version, on both worlds, which on world 2000 the JSONL does not record:
+unverified from the raw data alone; on world 1000 also before iteration 1; reproduce: `bun run sim:lab --world N
+--sessions 120 --only-planner`), reach is
 within noise on all twenty configurations, and higher on IMAP subject search (world 1000: 47% to 52% against 0.2,
 44% to 52% against before iteration 1; world 2000: 29% to 37%) and IMAP body (world 2000: 44% to 50%). Calls per case
 moved by at most 0.06.
@@ -387,8 +389,9 @@ sets (D32). Where it stands after iteration 3:
 - **False fires and secrets:** unchanged and 0. Holds.
 - **Calls at most 1.5x off:** 1.36–1.47x at time 0 (iteration 2) and 1.32–1.44x at real pacing. Holds.
 - **Calls per point of recall no worse than off, pooled over the held-out sets (D32):** no model 0.311 against 0.325;
-  judge 0.132 against 0.138. Holds. Read per set, it fails on B (0.284 against 0.225; judge 0.099 against 0.076),
-  where today's query already finds nearly everything; the pooled figure leans on B's high recall.
+  judge 0.132 against 0.138. Holds. Read per set, it fails on B (0.284 against 0.226; judge 0.099 against 0.076),
+  where planner-off already reaches most reachable facts (60–64% retrieved or held), so the extra calls add little
+  recall; the pooled figure leans on B's high recall.
 - **Lab reach:** within noise or higher on both worlds with `cascadeMin` 0.05 (the lab calls the planner directly, so
   reuse and the deadline check are not exercised there). Holds.
 - **429s and timeouts in a timed run:** no 429s; calls given up 3–6x planner-off's after iteration 3 (17–36 against

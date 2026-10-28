@@ -337,6 +337,32 @@ describe("query planner wiring", () => {
       { waitMs: 1_000 },
     );
 
+  test("serving and shadow lookups start no call their source timeout would cut off", async () => {
+    // A slow substring connector: the cue's terms find nothing, so the planner would cascade, but after one 40 ms
+    // call only 20 ms of the 60 ms timeout are left: the second call would be cut off, so it is never sent.
+    const slow = () => {
+      const { source, sent } = substringCrm();
+      const search = source.search.bind(source);
+      source.search = async (q, signal) => (await Bun.sleep(40), search(q, signal));
+      return { source, sent };
+    };
+    const config = { sourceTimeoutMs: 60 };
+    const served = slow();
+    const planner = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0 });
+    const { p } = partner({ planner, config }, [served.source]);
+    await ask(p);
+    expect(served.sent).toHaveLength(1);
+    const shadowed = slow();
+    const records: ShadowRecord[] = [];
+    const shadow = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0, mode: "shadow" });
+    const { p: q } = partner({ planner: shadow, config, onShadow: (r) => records.push(r) }, [shadowed.source]);
+    await ask(q);
+    for (let i = 0; i < 20 && records.length === 0; i++) await Bun.sleep(10);
+    expect(records.map((r) => r.calls)).toEqual([1]);
+    // Served once without a planner, shadowed once: two calls, no third.
+    expect(shadowed.sent).toHaveLength(2);
+  });
+
   test("without a planner, the connector gets the cue's terms only (off by default)", async () => {
     const { source, sent } = substringCrm();
     const { p } = partner({}, [source]);
