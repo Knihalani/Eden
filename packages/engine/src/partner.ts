@@ -102,6 +102,12 @@ interface Session {
   lastActive: number;
   window: string[];
   /**
+   * What recent events show the agent has: the terms and adjacent term pairs (session vocabulary) of tool results it
+   * fetched and its own messages (bounded like the window), for `alreadyHas`. A user naming something is no sign the
+   * agent has its content.
+   */
+  agentHas: Held[];
+  /**
    * The session's own vocabulary: all of its term ids (seen, usage, cues) are in it. Rebuilt past
    * `maxSessionTerms`; the cache's per-user vocabulary holds item terms only.
    */
@@ -182,7 +188,7 @@ export class ContextPartner {
     }
     const s = this.session(event);
     s.turn++;
-    if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s);
+    if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const text = sanitizeForStore(head(eventText(event), this.config.maxEventChars));
     const terms = text ? distinctTermIds(text, s.vocab) : NO_TERMS;
     this.checkUsage(s, event, terms);
@@ -397,6 +403,7 @@ export class ContextPartner {
       turn: 0,
       lastActive: now,
       window: [],
+      agentHas: [],
       vocab: new Vocab(256),
       seen: new Set(),
       ledger: new Ledger(this.config.ledgerCooldownTurns),
@@ -428,6 +435,7 @@ export class ContextPartner {
     s.outstanding.clear();
     s.pending.length = 0;
     s.window.length = 0;
+    s.agentHas.length = 0;
     this.deps.budget.endSession(s.key);
     this.sessions.delete(s.key);
     const n = (this.perTenant.get(s.scope.tenantId) ?? 1) - 1;
@@ -439,6 +447,10 @@ export class ContextPartner {
     if (!text) return;
     s.window.push(`${event.kind}: ${text.slice(0, 1_000)}`);
     if (s.window.length > this.config.windowEvents) s.window.shift();
+    if (event.kind === "tool_result" || event.kind === "agent_message") {
+      s.agentHas.push(heldOf(text, s.vocab));
+      if (s.agentHas.length > this.config.windowEvents) s.agentHas.shift();
+    }
     for (let i = 0; i < terms.length; i++) {
       const id = terms[i]!;
       s.seen.delete(id); // Re-insert so Set order is least recently seen first.
@@ -521,6 +533,8 @@ export class ContextPartner {
         .filter((h) => options.ignoreLedger || s.ledger.isFresh(h.item.id, s.turn))
         // A near-duplicate of something already delivered this session (a reply quoting it, a synced copy) is old news.
         .filter((h) => options.ignoreLedger || !s.delivered.some((d) => nearDuplicate(d, h.sketch)))
+        // What the agent already has in front of it (a tool result it fetched, its own read-out) is not news either.
+        .filter((h) => options.ignoreLedger || !this.alreadyHas(s, h.item, h.doc, vocab))
         .map((h) => {
           const entityHit = entities.some(
             (ids) => ids.length > 0 && cache.containsAll(s.scope, h.doc, ids, ids.length),
@@ -535,9 +549,39 @@ export class ContextPartner {
   }
 
   private confident(scored: Scored[]): Scored[] {
-    return scored
-      .filter((x) => x.score >= this.config.confidentScore && x.matched >= this.config.minMatchedTerms)
-      .slice(0, this.config.maxItemsPerInjection);
+    return (
+      scored
+        .filter((x) => x.score >= this.config.confidentScore && x.matched >= this.config.minMatchedTerms)
+        // Bulk mail is never pushed without a model's say: a newsletter arriving is no reason to speak.
+        .filter((x) => !bulkMail(x.item))
+        .slice(0, this.config.maxItemsPerInjection)
+    );
+  }
+
+  /**
+   * Whether one recent tool result or agent message holds every term of a cached item and every pair of adjacent
+   * terms in its title and text: then the item adds nothing the agent has not fetched or said, and delivering it is a
+   * repeat. A new term or a new pairing (11:30 where the agent saw 11:00 and, elsewhere in a day's listing, 9:30)
+   * keeps it: a stale copy in the agent's hands is no reason to hold back the update. Items of under four terms are
+   * never judged so, since a few common terms prove nothing.
+   */
+  private alreadyHas(s: Session, item: ContextItem, doc: number, vocab: Vocab): boolean {
+    if (s.agentHas.length === 0) return false; // The common case: no agent output yet, no work.
+    const own = this.deps.cache.termsOf(s.scope, doc);
+    if (own.length < 4) return false;
+    // Item terms are in the cache's vocabulary, held terms in the session's: map once, and a term the session has
+    // never seen means no event holds it.
+    const ids = new Array<number>(own.length);
+    for (let i = 0; i < own.length; i++) {
+      const id = s.vocab.lookup(vocab.term(own[i]!));
+      if (id < 0) return false;
+      ids[i] = id;
+    }
+    const holders = s.agentHas.filter((held) => ids.every((id) => held.terms.has(id)));
+    if (holders.length === 0) return false;
+    // Every term is known to the session now, so no term is skipped and adjacent ids are adjacent words.
+    const pairs = [...pairsOf(item.title, s.vocab), ...pairsOf(item.text.slice(0, HELD_CHARS), s.vocab)];
+    return holders.some((held) => pairs.every((p) => held.pairs.has(p)));
   }
 
   /** Routes, searches the chosen sources live, caches what they return and records which entities they hold. */
@@ -809,10 +853,11 @@ const NO_TERMS = new Uint32Array(0);
 const yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 /**
- * Replaces a session's vocabulary with one holding only the terms it still refers to: seen terms (in the same order)
- * and the distinctive terms of injections awaiting use. Ids change; nothing else holds them.
+ * Replaces a session's vocabulary with one holding only the terms it still refers to: seen terms (in the same order),
+ * the distinctive terms of injections awaiting use, and the newest agent-held events. Ids change; nothing else holds
+ * them.
  */
-function rebuildVocab(s: Session): void {
+function rebuildVocab(s: Session, maxTerms: number): void {
   const old = s.vocab;
   const vocab = new Vocab(Math.max(256, s.seen.size * 2));
   const seen = new Set<number>();
@@ -822,6 +867,20 @@ function rebuildVocab(s: Session): void {
     for (const id of o.tokens) tokens.add(vocab.intern(old.term(id)));
     o.tokens = tokens;
   }
+  // The newest held events keep their terms under the new ids while they fit in a quarter of the cap; older ones are
+  // dropped, which only errs toward delivering.
+  const agentHas: Held[] = [];
+  const remap = (id: number) => vocab.intern(old.term(id));
+  let room = Math.floor(maxTerms / 4);
+  for (let i = s.agentHas.length - 1; i >= 0 && s.agentHas[i]!.terms.size <= room; i--) {
+    const held = s.agentHas[i]!;
+    room -= held.terms.size;
+    const pairs = new Set(
+      Array.from(held.pairs, (p) => pairKey(remap(Math.floor(p / PAIR_BASE)), remap(p % PAIR_BASE))),
+    );
+    agentHas.unshift({ terms: new Set(Array.from(held.terms, remap)), pairs });
+  }
+  s.agentHas = agentHas;
   s.vocab = vocab;
   s.seen = seen;
 }
@@ -883,4 +942,61 @@ function buildCue(text: string, ids: Uint32Array, vocab: Vocab): Cue {
   // Traces and reasons carry this id, never the cue itself: the cue is the user's words.
   const id = `cue:${createHash("sha256").update(key).digest("hex").slice(0, 10)}`;
   return { text: terms.join(" "), entities, key, id };
+}
+
+/** What one agent-held event holds: its terms and its adjacent term pairs (`pairKey`), in session ids. */
+interface Held {
+  terms: Set<number>;
+  pairs: Set<number>;
+}
+
+/**
+ * The head of an agent-held event that is kept, and at most this many distinct terms of it: bounds the session
+ * vocabulary a rebuild must keep. An item longer than that is never judged held, so the bounds only err toward
+ * delivering.
+ */
+const HELD_CHARS = 8_000;
+const MAX_HELD_TERMS = 512;
+
+/** Pair keys are exact while ids stay under 2^21 (a session vocabulary is rebuilt far below that). */
+const PAIR_BASE = 2 ** 32;
+const pairKey = (a: number, b: number) => a * PAIR_BASE + b;
+
+/** An agent-held event's terms and pairs. Its terms are interned already (`observe`), so none is skipped. */
+function heldOf(text: string, vocab: Vocab): Held {
+  const { ids, n } = termIds(text.slice(0, HELD_CHARS), vocab, false);
+  const terms = new Set<number>();
+  const pairs = new Set<number>();
+  for (let i = 0; i < n; i++) {
+    if (!terms.has(ids[i]!) && terms.size === MAX_HELD_TERMS) break;
+    terms.add(ids[i]!);
+    if (i > 0) pairs.add(pairKey(ids[i - 1]!, ids[i]!));
+  }
+  return { terms, pairs };
+}
+
+/** The adjacent term pairs of `text` (terms the vocabulary does not know are skipped). */
+function pairsOf(text: string, vocab: Vocab): number[] {
+  const { ids, n } = termIds(text, vocab, false);
+  const out: number[] = [];
+  for (let i = 1; i < n; i++) out.push(pairKey(ids[i - 1]!, ids[i]!));
+  return out;
+}
+
+/**
+ * Bulk mail, by the connector's mailbox category (`meta.category`; Gmail's Promotions tab) or by a title that names
+ * itself a newsletter or digest of notifications. A heuristic tuned on one eval scenario (`newsletter-arrives`), kept
+ * narrow on purpose: Gmail's Updates tab holds bills and receipts, and words like "webinar", "promotion" or
+ * "unsubscribe" appear in real meeting, HR and transactional mail.
+ */
+const BULK_CATEGORY = /^promotions?$/i;
+const BULK_TITLE = /\b(newsletter|top stories|you appeared in)\b/i;
+
+/**
+ * Whether an item looks like bulk mail. Such items are never pushed without a model: their words overlap with real
+ * work, and one arriving says nothing about the user's need. The judge still sees them, and an ask still finds them.
+ */
+function bulkMail(item: ContextItem): boolean {
+  const category = item.meta?.category;
+  return (category !== undefined && BULK_CATEGORY.test(category)) || BULK_TITLE.test(item.title);
 }
