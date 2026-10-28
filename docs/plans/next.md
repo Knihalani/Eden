@@ -69,3 +69,7 @@ Each item, when done, gets a line here with its PR and its numbers.
   0.406 to 0.473), recall with a perfect judge up on every mix, with no model up on B and realistic; calls +0.7–2.2%; no
   hard false fire. Measuring it found D37 (weekday names as entities). Lab: no
   connector lower beyond noise; CalDAV, IMAP, Gitea and Meilisearch up (docs/research/query-planner-results.md).
+- **5, delivery and usage rewards (D39):** the shape that retrieved a delivered item gets one more success; usage
+  credit added nothing and is not kept. Against main with D37 and D38 (seeds 1–20): calls per lookup down 3–6% on
+  every mix, retrieval and recall up or unchanged, no hard false fire (docs/research/query-planner-results.md,
+  iteration 6).

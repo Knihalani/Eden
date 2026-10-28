@@ -131,7 +131,7 @@ and a router would need a new decision (see [Decisions](#decisions)).
 | `@eden/primitives` | `ContextualBandit`: Beta arms per context bucket, decay, propensity log, IPS evaluation. Benchmarked. |
 | `@eden/sources` | `QueryPlanner` (shapes, choose, credit), `probe.ts`, `schema-args.ts` (schema → call mapping), `escape.ts` (per-capability escaping), `toItems` extension |
 | `@eden/graph` | planner tables in the source map (arm counts, capability records) |
-| `@eden/engine` | `searchLive` asks the planner for calls per source; credits rewards at decision and usage time |
+| `@eden/engine` | `searchLive` asks the planner for calls per source; credits the retrieving shape when a delivered item is handed out (D39; no usage credit) |
 | `@eden/sim` | the connector zoo and the real-connector harness (below) |
 
 ## How it is tested
