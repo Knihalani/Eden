@@ -10,7 +10,7 @@
         {
           "ref": "msg-acme-invoice",
           "title": "Invoice 2291 from Acme Supplies is overdue",
-          "text": "Invoice 2291 for 1,240 GBP was due on 1 Oct. Please pay to avoid a late fee."
+          "text": "Invoice 2291 for 1,240 GBP was due on 15 Sep. Please pay to avoid a late fee."
         },
         {
           "ref": "msg-acme-promo",
@@ -75,7 +75,8 @@
           "event": {
             "kind": "user_message",
             "text": "Ok, I'll pay it later. Anything else important?"
-          }
+          },
+          "expect": "silent"
         }
       ]
     }

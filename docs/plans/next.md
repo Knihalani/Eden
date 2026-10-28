@@ -40,10 +40,12 @@ simulation, D29), tenant-level priors (D9), and production state (M5).
 
 Each item, when done, gets a line here with its PR and its numbers.
 
-- **1, the eval suite:** 26 scenarios (86 scored turns, 3 asks), per-category metrics, a privacy check. Baseline with
-  no model: precision 0.833 (15/18), recall 0.349 (15/43), false fires 3 of 56 silent turns, secrets exposed 2 and
+- **1, the eval suite:** 26 scenarios (88 scored turns, 3 asks), per-category metrics, a privacy check. Baseline with
+  no model: precision 0.833 (15/18), recall 0.349 (15/43), false fires 3 of 58 silent turns, secrets exposed 2 and
   leaked 0, deliveries and answers not inert 0 of 19 (docs/research/eval-suite.md). It surfaced two engine
   weaknesses (item 6).
-- **2, no-model delivery:** lowering the bar for explicit requests raised recall (eval 16 to 21 of 46 items under the
-  first labels; simulation held-out +4–6 points) but also hard false fires in the simulation (1 to 5–6 of 713). The
-  owner chose precision: no threshold change. Next for this item: a better no-model ranker.
+- **2, no-model delivery:** lowering the bar for explicit requests (a scratch patch, not in the tree, so these
+  figures cannot be rerun from it: an asked-for item needed a score of 0.9 instead of 1.1) raised recall: the eval
+  16 to 21 of 46 items under the round-1 labels (commit d12c63a); held-out A and realistic in the simulation (5 seeds,
+  `quality-cli --planner`) 18.8% to 23.1% and 19.1% to 25.0%. It also raised hard false fires there, from 1 to 5–6 of
+  713 silent turns. The owner chose precision: no threshold change. Next for this item: a better no-model ranker.

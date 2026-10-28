@@ -46,6 +46,33 @@ describe("eval harness", () => {
     expect(m.privacy.notInert).toBe(0);
   });
 
+  test("an expected item delivered earlier in the session counts as met, once; the credit does not cross sessions", async () => {
+    const docs = [{ ref: "e1", title: "Dentist with Dr. Okafor", text: "Tuesday 9:00 at Harley Street, check-up" }];
+    const ask = { kind: "user_message", text: "When is my dentist appointment with Dr. Okafor?" } as const;
+    const again = { kind: "user_message", text: "Remind me about Dr. Okafor again" } as const;
+    const s: Scenario = {
+      id: "credit",
+      description: "",
+      sources: [{ id: "cal", description: "calendar", docs }],
+      sessions: [
+        {
+          id: "a",
+          turns: [
+            { event: ask, expect: { items: ["cal:e1"] } },
+            { event: again, expect: { items: ["cal:e1"] } },
+          ],
+        },
+        // A new session: what the first one delivered is no credit here.
+        { id: "b", turns: [{ event: { kind: "user_message", text: "Nice day." }, expect: { items: ["cal:e1"] } }] },
+      ],
+    };
+    const m = await runScenarios([s], { model: null, waitMs: 1_000 });
+    // Delivered once at the first turn: met there and (as already had) at the second; not in session b.
+    expect(m.counts.delivered).toBe(1);
+    expect(m.counts.expected).toBe(3);
+    expect(m.counts.found).toBe(2);
+  });
+
   test("the leak check fires: a declared secret the engine does not redact is counted, delivered or answered", async () => {
     // "bring Q3 numbers" is ordinary text in an item the seed scenario delivers: declared a secret, every delivery or
     // answer carrying it must count as a leak.
