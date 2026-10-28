@@ -92,6 +92,18 @@ export const PERSISTABLE_KINDS: ReadonlySet<EntityKind> = new Set(["name", "hand
  * capitalised words not at a sentence start ("Dana Lee", "Acme Corp"). Recall over precision: a false entity costs
  * one wasted lookup, a missed one costs the injection.
  */
+/**
+ * Weekday and month names: capitalised, but dates, not entities. As one entity they matched every item that names
+ * the day ("Sunday" in a yoga request found an invoice due on a Sunday) and earned the entity bonus. Months that are
+ * also common first names (April, May, June, August, Jan) stay entities: missing a person costs more.
+ */
+const CALENDAR = new Set(
+  (
+    "Monday Tuesday Wednesday Thursday Friday Saturday Sunday Mon Tue Tues Wed Thu Thur Thurs Fri Sat Sun " +
+    "January February March July September October November December Feb Mar Apr Jun Jul Aug Sep Sept Oct Nov Dec"
+  ).split(" "),
+);
+
 export function extractTypedEntities(text: string): Entity[] {
   const found = new Map<string, Entity>();
   const add = (s: string | undefined, kind: EntityKind) => {
@@ -108,7 +120,7 @@ export function extractTypedEntities(text: string): Entity[] {
     const run = m[2]!;
     const sentenceStart = m[1] === "" || /[.!?]/.test(m[1]!);
     const words = run.split(/\s+/);
-    if (words.length === 1 && (sentenceStart || STOPWORDS.has(run.toLowerCase()))) continue;
+    if (words.length === 1 && (sentenceStart || STOPWORDS.has(run.toLowerCase()) || CALENDAR.has(run))) continue;
     add(run, "name");
   }
   return [...found.values()];
