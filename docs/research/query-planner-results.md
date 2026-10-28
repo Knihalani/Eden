@@ -262,6 +262,84 @@ recall came out lower in every mix (within noise). 0.05 was then added to the tu
 alone, by a criterion written after that look. Every held-out gap is inside its interval, but those sets are no
 longer fresh for this parameter; the next review checkpoint rotates the held-out seeds (the plan's step 6).
 
+### 2. Reuse a shape's recent answer (kept)
+
+**Target:** source calls per lookup. One call per entity repeats across a session's lookups ("Dana Lee" is searched
+for every cue that names her), but the planner's calls bypassed the fan-out's result cache, which only held whole
+lookups. Up to 13% of the planner's calls on held-out A repeated an earlier query text on the same connector (scratch
+measurement, seed 1; not in the raw data).
+
+**Change:** the planner's calls go through the fan-out (`SourceFanout.planCalls`). A shape's query answered within
+the cache's fresh window (60 s) is served from the cache, at no call and no rate token; others are made once
+(singleflight), sanitized before they are held, and cached under their own key, so a lookup never joins its own
+call. `forget` drops them with the rest. A planned source whose calls went through this fan-out is not sanitized a
+second time; one whose calls came from anywhere else still is. Shadow lookups keep calling the connector directly,
+so nothing they find is cached (D29). `QueryPlanner`'s `reuse` (default on) exists to measure the saving.
+
+**Measured** on the tune set (identical recall and precision, calls per lookup 5.66 to 5.47 with no model and 5.71 to
+5.51 with a judge), then on fresh held-out seeds 6–10 (6–8 with a judge), because seeds 1–5 had been looked at in
+iteration 1:
+
+| Judge | Mix | Off | Before (no reuse) | After | Recall off / before / after |
+|---|---|---|---|---|---|
+| none | zoo-a | 4.10 | 5.93 | 5.73 | 9.0% / 18.4% / 18.4% |
+| none | zoo-b | 4.10 | 5.77 | 5.60 | 18.2% / 19.7% / 19.7% |
+| none | realistic | 4.09 | 6.16 | 5.99 | 10.6% / 17.6% / 17.6% |
+| perfect | zoo-a | 4.09 | 5.96 | 5.73 | 18.2% / 38.9% / 38.2% |
+| perfect | zoo-b | 4.10 | 5.71 | 5.57 | 54.1% / 56.2% / 56.2% |
+| perfect | realistic | 4.09 | 6.13 | 5.98 | 16.8% / 35.4% / 36.3% |
+
+(Source calls per lookup; the full rows, with intervals, precision, false fires and secrets, are in the raw data.)
+
+- **Calls:** the planner's extra calls fell 7–12% (no model: A 1.83 to 1.63, B 1.67 to 1.50, realistic 2.07 to 1.90;
+  with a judge: 1.87 to 1.64, 1.61 to 1.47, 2.04 to 1.89).
+- **Quality:** with no model, recall, precision and false fires are identical before and after: reuse returns what
+  the call would have. One retrieved fact differs (realistic, seed 7), from the simulator's shared error stream,
+  which draws differently when fewer calls are made. With a judge, recall moved within noise both ways.
+- **Guardrails:** false fires equal; no planted secret leaked (0 of 120 per run set, 0 of 72 with a judge).
+
+### Lab, second world (world 2000)
+
+The connector lab on a second seeded world, every variant; reach is over all cases, as in the world-1000 table
+(raw: [query-planner-lab-world2000.jsonl](query-planner-lab-world2000.jsonl); reproduce: `bun run sim:lab --world
+2000 --sessions 120`). The planner column ran with iteration 1 at `cascadeMin` 0.2 and without reuse, the code at the
+time of the run; the JSONL does not record that configuration (unverified from the raw data alone).
+
+| Connector | Cases | terms (today) | best fixed (hindsight) | planner | calls per case |
+|---|---|---|---|---|---|
+| memory | 202 | 0% | each-entity 71% | 71% | 1.45 |
+| mcpvault | 202 | 84% | terms 84% | 84% | 1.00 |
+| basic-memory | 202 | 62% | each-entity 63% | 69% | 1.12 |
+| meilisearch | 202 | 31% | each-entity 68% | 61% | 1.32 |
+| caldav | 69 | 0% | each-entity 72% | 68% | 1.51 |
+| imap-body | 161 | 0% | each-entity 50% | 44% | 1.64 |
+| imap-subject | 161 | 0% | each-entity 39% | 29% | 1.66 |
+| chroma | 202 | 85% | question 86% | 85% | 1.00 |
+| gitea-db | 202 | 0% | each-entity 27% | 23% | 1.72 |
+| gitea-bleve | 202 | 0% | each-entity 29% | 25% | 1.71 |
+
+World 1000's findings hold on a second world:
+- today's query reaches nothing on the same six connectors, and one call per entity is the best fixed variant on
+  most of them;
+- the planner matches today's query where it already worked (mcpvault, Chroma);
+- it beats every fixed variant on Basic Memory again (69% against 63%);
+- elsewhere it trails the best fixed variant (chosen in hindsight) by 0–10 points, its learning cost, as on world
+  1000.
+
+### The default-on gate (D31)
+
+The owner chose a cost-normalised gate (D31). On the fresh held-out seeds, after iteration 2:
+- **Recall:** higher with intervals apart on A and realistic, with and without a judge; within noise on B. Holds.
+- **False fires and secrets:** unchanged and 0. Holds.
+- **Calls at most 1.5x off:** 1.36–1.46x on every set. Holds.
+- **Calls per point of recall no worse than off:** holds on A and realistic; fails on B (no model: 0.284 against
+  0.225; judge: 0.099 against 0.076), where the planner adds little recall for its calls.
+- **Lab reach:** no regression beyond noise on world 1000 (measured at `cascadeMin` 0.2, without reuse); world 2000
+  has no before/after pair yet.
+
+So the planner stays opt-in. What would pass B: not spending calls on connectors whose cascades find facts other
+connectors already returned.
+
 ## Gates in the plan, and where they stand
 
 - **Tier 2:** met for recall and false fires on held-out connectors. Not met for "source calls no worse": the default
@@ -273,7 +351,8 @@ longer fresh for this parameter; the next review checkpoint rotates the held-out
   - The capability probe is not built (see D28); its role is played by the cascade and the conservative bandit.
 - **Tier 4 (shadow):** run in simulation by the owner's decision, not on real accounts (above). The planner left
   serving unchanged, its content-free signal predicted real gains, and its learning carried over to serving.
-- **Default on (phase 6):** not met; the planner stays opt-in.
+- **Default on (phase 6):** judged by D31's gate since 2026-10-28 (above); not met on held-out B, so the planner
+  stays opt-in.
 
 ## Not done, and why
 
@@ -285,4 +364,4 @@ longer fresh for this parameter; the next review checkpoint rotates the held-out
 - **Immediate reward only.** Rewards at delivery and at usage, from the plan, are not wired. The immediate reward
   cannot tell shapes apart on OR and vector search, so the incumbent rule carries that case.
 - **No new `ContextualBandit` primitive.** One `BetaBandit` per (user, connector, bucket) was enough.
-- **Single-world lab.** All lab numbers are from world 1000; other seeds are the next check.
+- **Two lab worlds.** The tier-3 tables are from world 1000; world 2000 (iterations, above) repeats them.
