@@ -393,12 +393,13 @@ user is forgotten records nothing. The deadline check expects a call to take at 
 history (`latencyQuantile`) once 5 calls are known, as well as the lookup's slowest call so far. Shadow lookups,
 which do not go through the fan-out's planner calls, keep the lookup-only estimate. A first version kept one minute
 of history: in simulated time a user's calls to one connector are sparse, the history rarely held 5 calls, and on
-the tune seeds no quantile changed anything (its rows are in the JSONL, labelled "one-minute window"; the report
+the tune seeds no quantile helped (realistic gave up 44 calls at 0.9 against 39 at 0, within noise) (its rows are in the JSONL, labelled "one-minute window"; the report
 seeds 31–33 were not run with it). The report rows were rerun after a review fix that stopped counting calls abandoned
 for reasons other than their timeout; "before" moved with timing (seeds 31–33 gave up 39, 54 and 47 calls in the
 first run, 35, 51 and 40 in this one).
 
-**Tuned** on timed seeds 21–23 (quantile 0 is iteration 3), then **reported** on fresh seeds 31–33
+**Tuned** on timed seeds 21–23 (quantile 0 is iteration 3; these rows predate the review fix that stopped counting
+calls abandoned for other reasons, so 0.9 was chosen under the earlier recording), then **reported** on fresh seeds 31–33
 ([query-planner-timed.sh](query-planner-timed.sh) `4-tune` and `4-report`; raw rows with `"iteration": 4` in
 [query-planner-timed.jsonl](query-planner-timed.jsonl)). Calls given up are timeouts and session ends:
 
