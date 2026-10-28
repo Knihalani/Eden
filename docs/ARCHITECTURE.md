@@ -34,7 +34,7 @@
 | `packages/engine` | `ContextPartner`: cues, a per-user BM25F item cache (title, body), near-duplicate suppression, ledger, two-speed pipeline, model judge, usage inference, traces. Each event is tokenized once, into a per-session vocabulary. |
 | `packages/server` | HTTP API (tenant API keys, per-tenant rate limit: `EDEN_TENANT_RPS`, `EDEN_TENANT_BURST`), MCP server exposing `ask_context`, config, wiring; an optional worker pool that redacts lookup results (`EDEN_GATE_WORKERS`, D26). |
 | `packages/client` | SDK for agent builders: `EdenClient` (fail-open) and `withContext` for message lists. |
-| `packages/eval` | Scenario harness: precision, recall, false-fire rate, model calls and cost per turn, latency. |
+| `packages/eval` | Scenario harness over 26 hand-written scenarios (docs/research/eval-suite.md): precision, recall, false-fire rate, overall and per category; a privacy check (planted secrets, inert framing); direct asks; model calls and cost per turn, latency. |
 | `packages/sim` | Simulation: generated worlds and sessions with fact-level ground truth, connectors that behave like real ones, an oracle judge, and the real server under simulated agents over HTTP ([research/simulation.md](research/simulation.md)); the connector lab, open-source MCP servers over seeded backends in isolated containers ([research/connector-lab.md](research/connector-lab.md)). Not product code. |
 | `examples/personal-agent` | A minimal agent loop wired to Eden. |
 

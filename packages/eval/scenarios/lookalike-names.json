@@ -1,0 +1,71 @@
+{
+  "id": "lookalike-names",
+  "category": "adversarial",
+  "description": "Two people with similar names; only the one asked about is relevant.",
+  "sources": [
+    {
+      "id": "crm",
+      "description": "The user's CRM",
+      "docs": [
+        {
+          "ref": "contact-dana-lee",
+          "title": "Dana Lee",
+          "text": "VP Procurement at Globex. Prefers calls on Tuesdays."
+        },
+        {
+          "ref": "contact-dana-leigh",
+          "title": "Dana Leigh",
+          "text": "Freelance designer, did our 2024 brand refresh."
+        }
+      ]
+    },
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-leigh",
+          "title": "Invoice from Dana Leigh",
+          "text": "Design work for the website hero, 900 GBP."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "lookalike-names-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "When does Dana Lee from Globex prefer to talk?"
+          },
+          "expect": {
+            "items": [
+              "crm:contact-dana-lee"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "She prefers calls on Tuesdays."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Thanks!"
+          },
+          "expect": "silent"
+        }
+      ]
+    }
+  ]
+}

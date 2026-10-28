@@ -1,0 +1,51 @@
+{
+  "id": "agent-mentions-only",
+  "category": "adversarial",
+  "description": "Entities that only the agent mentions, or that come up in passing, must not trigger delivery.",
+  "sources": [
+    {
+      "id": "crm",
+      "description": "The user's CRM",
+      "docs": [
+        {
+          "ref": "acct-initech",
+          "title": "Initech account",
+          "text": "Renewal due 1 Dec, owner Bill Lumbergh, 3 open support tickets."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "agent-mentions-only-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Write me a short poem about autumn."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "Leaves fall like the Initech renewal notices..."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Haha, nice. Another one about winter please."
+          },
+          "expect": "silent"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,103 @@
+{
+  "id": "flight-change",
+  "category": "travel",
+  "description": "A flight rebooking: the booking, the airline's change policy, the trip it belongs to, and a train the same morning that the new flight would clash with.",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-ba-booking",
+          "title": "Your booking ABC123: London to Lisbon",
+          "text": "BA 500, Friday 13 Nov, departs LHR 07:25, seat 14C. Booking reference ABC123."
+        },
+        {
+          "ref": "msg-ba-policy",
+          "title": "Changing your BA booking",
+          "text": "Changes to Economy Light fares cost 65 GBP per person plus any fare difference."
+        },
+        {
+          "ref": "msg-train",
+          "title": "Your train tickets: London to Bristol",
+          "text": "Saturday 14 Nov, 10:00 from Paddington, coach C seat 42."
+        }
+      ]
+    },
+    {
+      "id": "calendar",
+      "description": "The user's calendar",
+      "docs": [
+        {
+          "ref": "evt-lisbon",
+          "title": "Lisbon trip",
+          "text": "Friday 13 Nov to Monday 16 Nov, staying at Memmo Alfama"
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "flight-change-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Can you move my Lisbon flight to the Saturday morning instead?"
+          },
+          "expect": {
+            "items": [
+              "mail:msg-ba-booking",
+              "mail:msg-ba-policy",
+              "mail:msg-train",
+              "calendar:evt-lisbon"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "I'll check the change fee and availability."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "tool_call",
+            "tool": "airline.search",
+            "input": {
+              "from": "LHR",
+              "to": "LIS",
+              "date": "2026-11-14"
+            }
+          }
+        },
+        {
+          "event": {
+            "kind": "tool_result",
+            "tool": "airline.search",
+            "output": "BA 502 Saturday 08:10, BA 504 Saturday 12:45"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Book the 08:10 one."
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "Done, I've requested the change."
+          },
+          "expect": "silent"
+        }
+      ]
+    }
+  ]
+}

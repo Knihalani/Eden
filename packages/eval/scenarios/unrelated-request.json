@@ -1,0 +1,56 @@
+{
+  "id": "unrelated-request",
+  "category": "adversarial",
+  "description": "The sources hold nothing relevant to the request; anything delivered is noise.",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-gym",
+          "title": "Your gym membership renews soon",
+          "text": "PureGym: renewal on 3 Nov at 24.99 GBP."
+        },
+        {
+          "ref": "msg-bank",
+          "title": "Your statement is ready",
+          "text": "October statement for account ending 4412."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "unrelated-request-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Explain how photosynthesis works in two sentences."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "Plants turn light into chemical energy..."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "What's the capital of Australia?"
+          },
+          "expect": "silent"
+        }
+      ]
+    }
+  ]
+}
