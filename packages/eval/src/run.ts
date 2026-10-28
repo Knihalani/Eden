@@ -6,7 +6,7 @@ import { ContextPartner, ItemCache, type EngineConfig, type Trace } from "@eden/
 import { SourceMap } from "@eden/graph";
 import { Budget, type Model } from "@eden/llm";
 import type { AgentEvent, Injection } from "@eden/protocol";
-import { StaticSource } from "@eden/sources";
+import { QueryPlanner, StaticSource } from "@eden/sources";
 import type { Scenario } from "./scenario";
 
 export interface RunOptions {
@@ -17,6 +17,8 @@ export interface RunOptions {
    */
   waitMs: number;
   config?: Partial<EngineConfig>;
+  /** Run each scenario's lookups through a query planner (a fresh one per scenario, as the server does per process). */
+  planner?: boolean;
 }
 
 export interface Metrics {
@@ -34,6 +36,8 @@ export interface Metrics {
   latencyP50Ms: number;
   latencyP95Ms: number;
   decisions: Record<string, number>;
+  /** Connector lookups the query planner chose for (0 without it). */
+  plannedLookups: number;
 }
 
 const percentile = (xs: number[], p: number) => {
@@ -64,6 +68,7 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
       model: options.model,
       config: options.config,
       onTrace: (t) => traces.push(t),
+      ...(options.planner ? { planner: new QueryPlanner({ seed: 1 }) } : {}),
     });
     const who = { tenantId: "eval", userId: scenario.id };
     let clock = Date.UTC(2026, 9, 1);
@@ -135,5 +140,6 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
     latencyP50Ms: percentile(latencies, 50),
     latencyP95Ms: percentile(latencies, 95),
     decisions,
+    plannedLookups: traces.reduce((n, t) => n + (t.plans?.length ?? 0), 0),
   };
 }

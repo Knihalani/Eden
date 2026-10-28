@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
 /**
- * bun run eval [--live] [--wait <ms>] [scenario dir]
+ * bun run eval [--live] [--wait <ms>] [--no-planner] [scenario dir]
  *
  * Without --live no model is used, so the run is free and deterministic: it measures the no-model paths.
- * --live uses OPENROUTER_API_KEY and EDEN_MODEL and reports the real spend.
+ * --live uses OPENROUTER_API_KEY and EDEN_MODEL and reports the real spend. Lookups go through the query planner, as
+ * the server's do by default (D33); --no-planner measures without it.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -13,6 +14,7 @@ import type { Scenario } from "./scenario";
 
 const args = process.argv.slice(2);
 const live = args.includes("--live");
+const planner = !args.includes("--no-planner");
 const waitAt = args.indexOf("--wait");
 const waitMs = waitAt >= 0 ? Number(args[waitAt + 1]) : 2_000;
 const dir =
@@ -28,5 +30,5 @@ if (live && !model) {
   console.error("--live needs OPENROUTER_API_KEY");
   process.exit(1);
 }
-const metrics = await runScenarios(scenarios, { model, waitMs });
-console.log(JSON.stringify({ live, waitMs, ...metrics }, null, 2));
+const metrics = await runScenarios(scenarios, { model, waitMs, planner });
+console.log(JSON.stringify({ live, waitMs, planner, ...metrics }, null, 2));

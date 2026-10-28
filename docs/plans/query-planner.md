@@ -1,9 +1,9 @@
 # Plan: an adaptive query planner, tested on real connectors
 
-Status: phases 0–5 built and measured, 2026-10-28; phase 5 (shadow) ran in simulation by the owner's decision (D29).
-Opt-in and off by default (D28); phase 6 (default on) is judged by D31's cost-normalised gate, not yet met. Results
-and gate status: docs/research/query-planner-results.md; departures from this plan are listed in D28–D31. The
-iteration loop has started; each iteration is logged in the results' "Iterations" section.
+Status: phases 0–6 done, 2026-10-28. Phase 5 (shadow) ran in simulation by the owner's decision (D29); phase 6
+(default on) was judged by D31's cost-normalised gate with D32's reading, and the server serves through the planner
+by default since D33. Results and gate status: docs/research/query-planner-results.md; departures from this plan
+are listed in D28–D33. The iteration loop continues; each iteration is logged in the results' "Iterations" section.
 
 ## Why
 

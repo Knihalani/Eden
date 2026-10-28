@@ -16,4 +16,12 @@ describe("eval harness", () => {
     expect(m.modelCallsPerTurn).toBe(0);
     expect(m.recall).toBeGreaterThan(0);
   });
+
+  test("with the planner (the server's default), lookups go through it; without, none do", async () => {
+    const on = await runScenarios([scenario], { model: null, waitMs: 1_000, planner: true });
+    const off = await runScenarios([scenario], { model: null, waitMs: 1_000 });
+    expect(on.plannedLookups).toBeGreaterThan(0);
+    expect(off.plannedLookups).toBe(0);
+    expect(on.falseFireRate).toBe(0);
+  });
 });
