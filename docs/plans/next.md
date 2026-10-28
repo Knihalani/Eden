@@ -19,7 +19,7 @@ yet unless it says so.
   `candidateScore` 0.3, `entityBonus` 0.35) have never been tuned (ROADMAP M1).
 - **The live model path is unmeasured**: the OpenRouter key's spend limit is used up, so `--live` makes no model call.
 - Connector revocation (`forget(scope, sourceId)`, `POST /v1/forget` with `sourceId`) is already wired; `McpSource`
-  has no `fetch` mapping, so cached items cannot be refreshed (a TODO in `mcp-source.ts`).
+  had no `fetch` mapping, so cached items could not be refreshed (item 3 added one; the engine does not refresh yet).
 
 ## The plan
 
@@ -55,3 +55,7 @@ Each item, when done, gets a line here with its PR and its numbers.
   confidently. Eval: false fires 3 to 0 of 58, precision 0.833 to 1.000, recall unchanged (15/43); simulation (4 mixes,
   5 seeds): recall and false fires unchanged; observe p95 0.21–0.25 ms against 0.21–0.26 ms. No `--live` run (the key's
   spend limit).
+- **3, `McpSource` fetch mapping (D35):** an optional, operator-configured read-one tool, under the same read-only
+  check as search; arguments from its schema (or an `args` function), ambiguous schemas refused, Eden's content-hash
+  refs never sent. Tests only: no real server's read-one tool was measured, and the engine does not call `fetch` yet
+  (when to refresh a cached item is the next step for this item).

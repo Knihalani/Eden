@@ -110,3 +110,90 @@ describe("McpSource", () => {
     await s.close();
   });
 });
+
+describe("McpSource fetch", () => {
+  /** A notes server with a read-one tool whose record can change between calls. */
+  function notesServer(readOnly = true) {
+    const server = new McpServer({ name: "notes", version: "1" });
+    const calls: unknown[] = [];
+    const notes = new Map([["n1", { id: "n1", title: "Dana's preferences", text: "Dana prefers morning calls" }]]);
+    server.registerTool(
+      "search_notes",
+      { inputSchema: { query: z.string() }, annotations: { readOnlyHint: true } },
+      async () => ({ content: [{ type: "text", text: JSON.stringify([...notes.values()]) }] }),
+    );
+    server.registerTool(
+      "get_note",
+      { inputSchema: { note_id: z.string(), format: z.string().optional() }, annotations: { readOnlyHint: readOnly } },
+      async (args) => {
+        calls.push(args);
+        const note = notes.get(args.note_id);
+        return note
+          ? { content: [{ type: "text", text: JSON.stringify(note) }] }
+          : { content: [{ type: "text", text: "not found" }], isError: true };
+      },
+    );
+    return { server, notes, calls };
+  }
+  const make = (server: McpServer, fetchTool?: { name: string }) =>
+    new McpSource({
+      id: "notes",
+      description: "the user's notes",
+      transport: () => {
+        const [client, serverSide] = InMemoryTransport.createLinkedPair();
+        void server.connect(serverSide);
+        return client;
+      },
+      searchTool: { name: "search_notes" },
+      fetchTool,
+    });
+  const scope = { tenantId: "t", userId: "u" };
+
+  test("returns the record's current version under the ref it was asked for, arguments from the schema", async () => {
+    const { server, notes, calls } = notesServer();
+    const s = make(server, { name: "get_note" });
+    const [cached] = await s.search(query, AbortSignal.timeout(2_000));
+    notes.set("n1", { id: "n1", title: "Dana's preferences", text: "Dana now prefers afternoon calls" });
+    const fresh = await s.fetch(cached!.ref, scope, AbortSignal.timeout(2_000));
+    expect(fresh).toEqual(
+      expect.objectContaining({ id: cached!.id, ref: "n1", text: "Dana now prefers afternoon calls" }),
+    );
+    expect(calls).toEqual([{ note_id: "n1" }]);
+    await s.close();
+  });
+
+  test("a record the server no longer has, an Eden content-hash ref, or no fetch tool: null", async () => {
+    const { server, calls } = notesServer();
+    const s = make(server, { name: "get_note" });
+    expect(await s.fetch("gone", scope, AbortSignal.timeout(2_000))).toBeNull();
+    expect(await s.fetch("eden-h-0123456789abcdef", scope, AbortSignal.timeout(2_000))).toBeNull();
+    expect(calls).toEqual([{ note_id: "gone" }]); // The hash ref never reached the server.
+    await s.close();
+    const plain = make(notesServer().server);
+    expect(await plain.fetch("n1", scope, AbortSignal.timeout(2_000))).toBeNull();
+  });
+
+  test("a fetch tool the server does not mark read-only fails the connect: neither tool is called", async () => {
+    const { server, calls } = notesServer(false);
+    const s = make(server, { name: "get_note" });
+    await expect(s.search(query, AbortSignal.timeout(2_000))).rejects.toBeInstanceOf(ReadOnlyViolation);
+    await expect(s.fetch("n1", scope, AbortSignal.timeout(2_000))).rejects.toBeInstanceOf(ReadOnlyViolation);
+    expect(calls).toEqual([]);
+  });
+
+  test("a fetch tool whose id argument cannot be found fails the connect", async () => {
+    const server = new McpServer({ name: "odd", version: "1" });
+    server.registerTool(
+      "search_notes",
+      { inputSchema: { query: z.string() }, annotations: { readOnlyHint: true } },
+      async () => ({ content: [] }),
+    );
+    server.registerTool(
+      "get_note",
+      { inputSchema: { a: z.string(), b: z.string() }, annotations: { readOnlyHint: true } },
+      async () => ({ content: [] }),
+    );
+    const s = make(server, { name: "get_note" });
+    await expect(s.search(query, AbortSignal.timeout(2_000))).rejects.toBeInstanceOf(ArgumentMappingError);
+  });
+});
