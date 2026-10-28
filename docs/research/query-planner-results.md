@@ -432,6 +432,95 @@ calls abandoned for other reasons, so 0.9 was chosen under the earlier recording
 - 0.9 was the highest quantile tried and the best on the tune seeds in every mix; nothing above it was tried.
 - Seeds differ a lot: planner-off gave up 6 calls per mix on seeds 11–13 and 25–27 on seeds 21–33.
 
+### 5. A greedy cascade with a runner-up prior (kept, D38)
+
+**Target:** plan item 4, the planner's learning cost: in the lab it trailed the best fixed shape (chosen in
+hindsight) by 0–10 points on the connectors where the cue's terms fail. While little is known, the cascade's second
+shape was a Thompson draw among near-uniform priors, so early cascades were often spent on shapes that rarely help.
+
+**Change:** the cascade step sends the remaining shape with the best posterior mean (a Thompson draw on an ε step),
+and one call per entity (the best fixed shape on most such connectors, in both lab worlds) starts with a prior mean
+of 0.7 at strength 4: below the incumbent's 0.75, so the cue's terms are still sent first on a fresh connector.
+
+**Tuning (zoo-tune, seeds 1–10, no model):** needed facts retrieved or held (`funnel.retrievedOrCached`, the
+planner's own job), paired per-seed gain with a 95% t-interval (df 9):
+
+| Variant | Retrieved | Gain per seed | Calls per lookup |
+|---|---|---|---|
+| main | 0.444 | — | 5.48 |
+| runner-up prior 0.65, strength 4 | 0.469 | +4.7 (−1.0–10.4) | 5.44 |
+| runner-up prior 0.7, strength 4 | 0.471 | +5.0 (0.3–9.7) | 5.45 |
+| greedy cascade step | 0.471 | +5.0 (−3.1–13.1) | 5.58 |
+| greedy + prior 0.65 | 0.507 | +11.9 (7.1–16.7) | 5.58 |
+| **greedy + prior 0.7** | **0.517** | **+13.7 (7.9–19.5)** | **5.58** |
+
+Each part alone was at most marginally better than main (the prior alone: 0.3–9.7); together they were clearly
+better. Chosen: the highest tune retrieval. (A prior of 0.6 at strength 2 scored below main on seeds 1–5, 0.434
+against 0.443.) The tuning ran before D37; the results below are against main with D37.
+
+**Held out, against main with D37 (weekday and month names no longer entities), planner on, seeds 1–20 (seeds
+11–20 had backed no earlier decision); paired per-seed gain, 95% t-interval with df 9's critical value
+(conservative for 20 seeds):**
+
+| Mix | Judge | Retrieved | Gain per seed | Recall | Gain per seed | Calls per lookup |
+|---|---|---|---|---|---|---|
+| zoo-tune (1–10) | none | 0.433 → 0.495 | +11.8 (7.8–15.8) | 0.238 → 0.244 | +1.1 (−1.5–3.7) | 5.43 → 5.55 |
+| held-out A | none | 0.423 → 0.478 | +10.3 (5.9–14.7) | 0.231 → 0.230 | −0.1 (−2.2–2.1) | 5.76 → 5.85 |
+| held-out A | perfect | 0.425 → 0.493 | +12.8 (9.2–16.5) | 0.365 → 0.422 | +10.7 (7.0–14.4) | 5.75 → 5.84 |
+| held-out B | none | 0.619 → 0.641 | +4.0 (2.2–5.8) | 0.251 → 0.262 | +2.2 (0.5–3.9) | 5.60 → 5.65 |
+| held-out B | perfect | 0.633 → 0.655 | +4.3 (2.5–6.1) | 0.544 → 0.560 | +3.0 (0.8–5.3) | 5.59 → 5.63 |
+| realistic | none | 0.406 → 0.473 | +12.6 (10.1–15.0) | 0.221 → 0.241 | +3.9 (2.1–5.6) | 5.98 → 6.04 |
+| realistic | perfect | 0.402 → 0.476 | +13.8 (10.3–17.3) | 0.353 → 0.413 | +11.2 (7.2–15.2) | 5.97 → 6.05 |
+
+Retrieval rose on every mix, and recall with the perfect judge on every mix, with intervals apart from 0; recall
+with no model rose on B and realistic and stayed within noise on A (no-model delivery, not retrieval, bounds it).
+Calls per lookup rose 1–2%.
+
+**False fires:** none, before or after, in every row above (1,414 silent turns on zoo-tune, 2,816 per held-out mix
+and judge setting). Before D37, the same change measured against main raised them from 6 to 8 of 8,448 (no model)
+and on seeds 11–20 from 1 to 3 (perfect judge): four new fires on seeds 6 and 17, two removed on others, all the
+same turn, "Find me a yoga class on Sunday mornings in Islington", where `Sunday` was an entity and one call per
+entity found an unrelated item naming the day. D37 removed that cause.
+
+**Lab (real servers, the planner from nothing over each connector's cases, planner only), against main with D37:**
+
+World 1000:
+
+| Connector | Cases | main (with D37) | this change | calls per case |
+|---|---|---|---|---|
+| memory | 196 | 68% (61–74) | 69% (63–75) | 1.45 → 1.42 |
+| mcpvault | 196 | 82% (76–86) | 81% (75–86) | 1.01 → 1.01 |
+| basic-memory | 196 | 71% (65–77) | 74% (67–79) | 1.15 → 1.19 |
+| meilisearch | 196 | 59% (52–65) | 62% (55–69) | 1.33 → 1.19 |
+| caldav | 73 | 67% (56–77) | 73% (61–82) | 1.33 → 1.45 |
+| imap-body | 154 | 30% (23–38) | 36% (29–44) | 1.47 → 1.56 |
+| imap-subject | 154 | 49% (42–57) | 53% (45–60) | 1.47 → 1.49 |
+| chroma | 196 | 87% (82–91) | 87% (81–91) | 1.00 → 1.00 |
+| gitea-db | 196 | 22% (17–28) | 26% (21–33) | 1.61 → 1.62 |
+| gitea-bleve | 196 | 23% (18–29) | 27% (21–34) | 1.58 → 1.62 |
+
+World 2000:
+
+| Connector | Cases | main (with D37) | this change | calls per case |
+|---|---|---|---|---|
+| memory | 202 | 69% (63–75) | 70% (64–76) | 1.41 → 1.46 |
+| mcpvault | 202 | 83% (77–88) | 84% (78–88) | 1.00 → 1.01 |
+| basic-memory | 202 | 69% (63–75) | 71% (64–77) | 1.13 → 1.13 |
+| meilisearch | 202 | 58% (51–65) | 64% (57–70) | 1.26 → 1.28 |
+| caldav | 69 | 67% (55–77) | 71% (59–80) | 1.41 → 1.45 |
+| imap-body | 161 | 48% (41–56) | 53% (46–61) | 1.50 → 1.57 |
+| imap-subject | 161 | 38% (31–46) | 36% (29–44) | 1.62 → 1.63 |
+| chroma | 202 | 85% (80–89) | 85% (80–89) | 1.00 → 1.00 |
+| gitea-db | 202 | 23% (18–30) | 26% (21–33) | 1.75 → 1.69 |
+| gitea-bleve | 202 | 24% (19–31) | 28% (22–35) | 1.66 → 1.71 |
+
+No connector is lower beyond noise in either world. The largest gains are where the cue's terms fail: CalDAV
+67% to 73% and 67% to 71%, IMAP body 30% to 36% and 48% to 53%, Gitea 22–24% to 26–28%, and Meilisearch 59% to
+62% and 58% to 64%. Reproduce: `bun run sim:lab --world W --sessions 120 --only-planner`.
+
+The IMAP cases vary from run to run on identical code (world 2000, two runs of main: imap-body 51.6% and 50.3%,
+imap-subject 34.8% and 36.6%), so single IMAP rows move by a few points on their own.
+
 ### The default-on gate (D31, D32)
 
 The owner chose a cost-normalised gate (D31) and, for its fourth condition, the reading pooled over the held-out
