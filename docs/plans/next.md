@@ -64,3 +64,8 @@ Each item, when done, gets a line here with its PR and its numbers.
   check as search; arguments from its schema (or an `args` function), ambiguous schemas refused, Eden's content-hash
   refs never sent. Tests only: no real server's read-one tool was measured, and the engine does not call `fetch` yet
   (when to refresh a cached item is the next step for this item).
+- **4, the planner's learning cost (D38):** a greedy cascade step and a runner-up prior for one call per entity.
+  Against main with D37 (seeds 1–20): retrieval up on every mix (A 0.423 to 0.478, B 0.619 to 0.641, realistic
+  0.406 to 0.473), recall with a perfect judge up on every mix, with no model up on B and realistic; calls +0.7–2.2%; no
+  hard false fire. Measuring it found D37 (weekday names as entities). Lab: no
+  connector lower beyond noise; CalDAV, IMAP, Gitea and Meilisearch up (docs/research/query-planner-results.md).
