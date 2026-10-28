@@ -514,3 +514,48 @@ describe("QueryPlanner cascade order (D38)", () => {
     }
   });
 });
+
+describe("QueryPlanner delivery credit (D39)", () => {
+  const bob = { tenantId: "t", userId: "bob" };
+  const lookup = async (planner: QueryPlanner, scope = alice) => {
+    const src = anyWord();
+    const r = await planner.search(src, query("invoice globex", ["Globex"], scope), signal);
+    return { r, arm: r.shapes[0]! };
+  };
+
+  test("a delivered item's shape gains one success, once", async () => {
+    const planner = new QueryPlanner({ seed: 1, epsilon: 0, cascade: false });
+    const { r, arm } = await lookup(planner);
+    const before = planner.means(alice, "or", true)[arm]!;
+    planner.creditDelivery(alice, "or", r.items[0]!.id);
+    const after = planner.means(alice, "or", true)[arm]!;
+    expect(after).toBeGreaterThan(before);
+    planner.creditDelivery(alice, "or", r.items[0]!.id);
+    expect(planner.means(alice, "or", true)[arm]).toBe(after);
+  });
+
+  test("crediting as another user, or with the option off, changes nothing", async () => {
+    const planner = new QueryPlanner({ seed: 1, epsilon: 0, cascade: false });
+    const { r, arm } = await lookup(planner);
+    const alicesMeans = planner.means(alice, "or", true);
+    planner.creditDelivery(bob, "or", r.items[0]!.id);
+    expect(planner.means(bob, "or", true)).toEqual(new QueryPlanner().means(bob, "or", true));
+    expect(planner.means(alice, "or", true)).toEqual(alicesMeans);
+    const off = new QueryPlanner({ seed: 1, epsilon: 0, cascade: false, deliveryCredit: false });
+    const o = await lookup(off);
+    const before = off.means(alice, "or", true)[o.arm];
+    off.creditDelivery(alice, "or", o.r.items[0]!.id);
+    expect(off.means(alice, "or", true)[o.arm]).toBe(before);
+    expect(arm).toBe(o.arm);
+  });
+
+  test("forget drops what a user's lookups returned before", async () => {
+    const planner = new QueryPlanner({ seed: 1, epsilon: 0, cascade: false });
+    const { r, arm } = await lookup(planner);
+    planner.forget(alice);
+    const prior = planner.means(alice, "or", true); // A fresh state for the user, with nothing returned yet.
+    planner.creditDelivery(alice, "or", r.items[0]!.id);
+    expect(planner.means(alice, "or", true)).toEqual(prior);
+    expect(prior[arm]).toBe(new QueryPlanner().means(alice, "or", true)[arm]);
+  });
+});
