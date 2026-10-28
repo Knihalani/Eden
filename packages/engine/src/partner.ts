@@ -149,6 +149,8 @@ interface Scored {
 /** What an injection was built from, kept until it is handed out and usage tracking starts. */
 interface Built {
   sourceIds: string[];
+  /** The delivered items, for the planner's delivery credit when the injection is handed out (D39). */
+  items: { sourceId: string; id: string }[];
   text: string;
 }
 
@@ -482,6 +484,8 @@ export class ContextPartner {
       })(),
       deliveredTurn: s.turn,
     });
+    // The shape that retrieved each item learns it was worth delivering, once the agent has it (D18, D39).
+    for (const i of built.items) this.deps.planner?.creditDelivery(s.scope, i.sourceId, i.id);
   }
 
   private checkUsage(s: Session, event: AgentEvent, terms: Uint32Array): void {
@@ -827,8 +831,6 @@ export class ContextPartner {
 
   private deliver(s: Session, scored: Scored[], mode: InjectionMode, reason: string): Injection {
     const items = scored.map((x) => x.item);
-    // The shape that retrieved each item learns it was worth delivering (D39).
-    for (const i of items) this.deps.planner?.creditDelivery(s.scope, i.sourceId, i.id);
     for (const x of scored) if (x.sketch) s.delivered.push(x.sketch);
     if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
     s.ledger.mark(
@@ -848,6 +850,7 @@ export class ContextPartner {
     };
     this.built.set(injection, {
       sourceIds: [...new Set(items.map((i) => i.sourceId))],
+      items: items.map((i) => ({ sourceId: i.sourceId, id: i.id })),
       text: items.map((i) => `${i.title} ${i.text}`).join(" "),
     });
     return injection;

@@ -87,6 +87,11 @@ export interface PlannerOptions {
   cascadeMin?: number;
   /** Credit the shape that retrieved an item when the engine delivers it (`creditDelivery`; D39). */
   deliveryCredit?: boolean;
+  /**
+   * Items whose retrieving shape is remembered for delivery credit, across all users, least recently returned dropped
+   * first. About 300 bytes each with typical ids (306 measured at 57-character keys): about 6 MB at 20,000.
+   */
+  maxOrigins?: number;
   /** Connectors whose search takes `"a b"` as a phrase (operator config; unknown connectors get no quotes). */
   quotes?: (sourceId: string) => boolean;
   /**
@@ -169,8 +174,6 @@ function bestMean(bandit: BetaBandit, eligible: Uint8Array): number {
   return best;
 }
 
-/** Items whose retrieving shape is remembered for delivery credit, across all users (about 100 bytes each). */
-const MAX_ORIGINS = 20_000;
 const originKey = (scope: Scope, sourceId: string, itemId: string) =>
   `${scope.tenantId}\u0000${scope.userId}\u0000${sourceId}\u0000${itemId}`;
 
@@ -186,6 +189,7 @@ const DEFAULTS = {
   cascade: true,
   cascadeGreedy: true,
   deliveryCredit: true,
+  maxOrigins: 20_000,
   runnerUp: { shape: "each-entity" as Shape, mean: 0.7, strength: 4 },
   cascadeMin: 0.05,
   reuse: true,
@@ -308,7 +312,8 @@ export class QueryPlanner {
         if (seen.has(it.id)) continue;
         seen.add(it.id);
         items.push(it);
-        if (this.o.deliveryCredit) this.remember(query.scope, source.id, it.id, bucket, arm);
+        // Serving only: a shadow lookup's items are raw (not yet redacted) and are never what gets delivered.
+        if (this.o.deliveryCredit && this.mode === "serve") this.remember(query.scope, source.id, it.id, bucket, arm);
       }
       // A shape cut short by the permit (one call per entity, the later ones refused) is not credited either: its
       // reward may be 0 only because the query that would have found something was never sent. Its items are kept.
@@ -355,12 +360,12 @@ export class QueryPlanner {
     this.save(scope, sourceId, o.bucket, o.arm, bandit);
   }
 
-  /** Which shape returned an item, for `creditDelivery`; least recently returned dropped past MAX_ORIGINS. */
+  /** Which shape returned an item, for `creditDelivery`; least recently returned dropped past `maxOrigins`. */
   private remember(scope: Scope, sourceId: string, itemId: string, bucket: number, arm: number): void {
     const key = originKey(scope, sourceId, itemId);
     this.origins.delete(key); // Re-insert: Map order is least recently returned first.
     this.origins.set(key, { bucket, arm });
-    while (this.origins.size > MAX_ORIGINS) this.origins.delete(this.origins.keys().next().value!);
+    while (this.origins.size > this.o.maxOrigins) this.origins.delete(this.origins.keys().next().value!);
   }
 
   /** Drops what was learned for a user (and one connector, when given), in memory; the store forgets its own. */
