@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ContextItem } from "@eden/protocol";
-import { cueCoverage, PlannedSource, QueryPlanner } from "./planner";
+import { cueCoverage, PlannedSource, QueryPlanner, type PlannerArm, type PlannerStore } from "./planner";
 import type { SearchQuery, Source } from "./source";
 
 const signal = new AbortController().signal;
@@ -130,5 +130,31 @@ describe("QueryPlanner", () => {
     expect(cueCoverage({ text: "dinner jamie fox", entities: ["Jamie Fox"] }, items)).toBe(1);
     expect(cueCoverage({ text: "lunch jamie", entities: [] }, items)).toBe(0.5);
     expect(cueCoverage({ text: "dinner", entities: [] }, [])).toBe(0);
+  });
+
+  test("with a store, learning survives a restart, and bad stored rows are ignored", async () => {
+    const rows = new Map<string, PlannerArm[]>();
+    const store: PlannerStore = {
+      loadArms: (sc, id) => rows.get(`${sc.tenantId}/${sc.userId}/${id}`) ?? [],
+      saveArms: (sc, id, arms) => {
+        const k = `${sc.tenantId}/${sc.userId}/${id}`;
+        const kept = (rows.get(k) ?? []).filter((r) => !arms.some((a) => a.bucket === r.bucket && a.shape === r.shape));
+        rows.set(k, [...kept, ...arms]);
+      },
+    };
+    const first = new QueryPlanner({ seed: 3, cascade: false, store });
+    for (let i = 0; i < 60; i++) await first.search(substring(), cues[i % cues.length]!, signal);
+    const learned = first.means(alice, "substring", true);
+    const restarted = new QueryPlanner({ seed: 4, store });
+    expect(restarted.means(alice, "substring", true)).toEqual(learned);
+    // Nothing stored for another user; junk rows are skipped, not loaded.
+    rows.set("t/bob/substring", [
+      { bucket: 1, shape: "drop table", alpha: 9, beta: 1 },
+      { bucket: 7, shape: "terms", alpha: 9, beta: 1 },
+      { bucket: 1, shape: "terms", alpha: -1, beta: Number.NaN },
+    ]);
+    for (const v of Object.values(restarted.means({ tenantId: "t", userId: "bob" }, "substring", true))) {
+      expect(v).toBe(0.5);
+    }
   });
 });
