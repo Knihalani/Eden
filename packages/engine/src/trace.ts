@@ -27,3 +27,21 @@ export interface Trace {
 }
 
 export type TraceSink = (trace: Trace) => void;
+
+/**
+ * What the query planner found in shadow mode for one connector of one lookup, beside what was served. Shapes, counts
+ * and item ids only, like a trace; never query text or item content (D19). `status`: "ok", "limited" (no rate token
+ * was left for it), "error".
+ */
+export interface ShadowRecord {
+  sessionId: string;
+  turn: number;
+  sourceId: string;
+  status: "ok" | "limited" | "error";
+  shapes: string[];
+  calls: number;
+  itemIds: string[];
+  servedItemIds: string[];
+}
+
+export type ShadowSink = (record: ShadowRecord) => void;

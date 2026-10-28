@@ -5,7 +5,7 @@ import type { AgentEvent } from "@eden/protocol";
 import { QueryPlanner, StaticSource, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner, type PartnerDeps } from "./partner";
-import type { Trace } from "./trace";
+import type { ShadowRecord, Trace } from "./trace";
 
 const scope = { tenantId: "acme-assistant", userId: "u1", sessionId: "s1" };
 let clock = 1_700_000_000_000;
@@ -362,5 +362,28 @@ describe("query planner wiring", () => {
     expect(planner.means(scope, "crm", true)).not.toEqual(prior);
     p.forget(scope);
     expect(planner.means(scope, "crm", true)).toEqual(prior);
+  });
+
+  test("shadow mode: serving is unchanged, the planner's lookup is reported and learned from, never delivered", async () => {
+    const { source, sent } = substringCrm();
+    const planner = new QueryPlanner({ seed: 1, mode: "shadow" });
+    const records: ShadowRecord[] = [];
+    const { p } = partner({ planner, onShadow: (r) => records.push(r) }, [source]);
+    const prior = planner.means(scope, "crm", true);
+    let delivered = 0;
+    for (let i = 0; i < 12; i++) {
+      const r = await ask(p);
+      delivered += r.injection?.citations.length ?? 0;
+      await Bun.sleep(5); // The shadow lookup runs after the served one.
+    }
+    // Served: the cue's terms, which this substring connector never matches, so nothing is delivered.
+    expect(delivered).toBe(0);
+    expect(records.length).toBeGreaterThan(0);
+    expect(records.every((r) => r.sourceId === "crm" && r.servedItemIds.length === 0)).toBe(true);
+    // In shadow, the planner found the deal by entity, learned so, and still delivered none of it.
+    expect(records.some((r) => r.itemIds.includes("crm:deal-9"))).toBe(true);
+    expect(planner.means(scope, "crm", true)).not.toEqual(prior);
+    expect(JSON.stringify(records)).not.toMatch(/globex|dana/i);
+    expect(sent.some((q) => q === "Globex" || q === "Dana Lee")).toBe(true);
   });
 });
