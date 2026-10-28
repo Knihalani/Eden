@@ -33,8 +33,16 @@ import {
 } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import { Vocab, type WorkerPool } from "@eden/primitives";
-import { PlannedSource, SourceFanout, type QueryPlanner, type Source, type SourceResolver } from "@eden/sources";
-import { nearDuplicate, sanitizeItem, type ItemCache, type Sketch } from "./cache";
+import {
+  PlanError,
+  PlannedSource,
+  SourceFanout,
+  type FanoutOutcome,
+  type QueryPlanner,
+  type Source,
+  type SourceResolver,
+} from "@eden/sources";
+import { nearDuplicate, sanitizedId, sanitizeItem, type ItemCache, type Sketch } from "./cache";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { answerMessages, judgeMessages, parseJudge } from "./judge";
@@ -51,7 +59,7 @@ import {
   PERSISTABLE_KINDS,
   termIds,
 } from "./text";
-import type { Trace, TraceSink } from "./trace";
+import type { ShadowRecord, ShadowSink, Trace, TraceSink } from "./trace";
 import { distinctiveTokens, showsUse, type Outstanding } from "./usage";
 
 export interface PartnerDeps {
@@ -74,6 +82,8 @@ export interface PartnerDeps {
    * (docs/plans/query-planner.md). Absent: every connector gets the cue's terms and entities as before.
    */
   planner?: QueryPlanner;
+  /** Receives the planner's shadow lookups when `planner.mode` is "shadow". */
+  onShadow?: ShadowSink;
 }
 
 /** An outcome already written to the source map, kept so explicit feedback can correct it. */
@@ -111,6 +121,8 @@ interface Session {
   closed: boolean;
   /** The last lookup's planner outcomes, for its trace (shape names and counts only). */
   plans?: Trace["plans"];
+  /** The planner's shadow lookup in flight, if any (shadow mode). */
+  shadowing?: Promise<void>;
 }
 
 interface Cue {
@@ -541,7 +553,8 @@ export class ContextPartner {
       limit,
     });
     const found = ranked.map((r) => all.find((x) => x.id === r.sourceId)!).filter(Boolean);
-    const planner = this.deps.planner;
+    // Serving through the planner only in "serve" mode; in "shadow" the lookup is served as without one.
+    const planner = this.deps.planner?.mode === "serve" ? this.deps.planner : undefined;
     // Wrapped per lookup (cheap: no state of its own). The fan-out admits each lookup per source id as before (breaker,
     // concurrency, one rate token); every extra call the planner makes takes its own rate token through `permit`.
     const chosen = planner
@@ -559,6 +572,10 @@ export class ContextPartner {
         })
       : undefined;
     if (s.closed) return chosen.length; // Forgotten or ended mid-search: keep nothing.
+    // One shadow lookup per session at a time: shadowing must not pile up work behind a slow connector.
+    if (this.deps.planner?.mode === "shadow" && !s.shadowing) {
+      s.shadowing = this.shadowLookup(s, found, cue, outcomes).finally(() => (s.shadowing = undefined));
+    }
     for (let k = 0; k < outcomes.length; k++) {
       const o = outcomes[k]!;
       // One source's items at a time, yielding between: storing a lookup's items (tokenizing, indexing, sketching) is
@@ -579,6 +596,65 @@ export class ContextPartner {
       if (mentions.length > 0) this.deps.sourceMap.recordMentionsMany(s.scope, mentions, this.now());
     }
     return chosen.length;
+  }
+
+  /**
+   * The planner's lookup beside a served one (shadow mode): it learns, and reports what it found, but nothing it
+   * returns is cached, delivered or recorded as a mention, and it must never change serving:
+   * - it runs only for connectors that served this lookup normally (not ones skipped as open, busy or limited, or
+   *   that failed), so it adds no load to a struggling connector;
+   * - its calls draw on a separate, smaller rate bucket (`permitShadow`), so serving's budget is never spent on it;
+   * - a rate-limit error it sees is fed back to the limit, as serving's are.
+   * Records carry sanitized item ids, the same ids serving's items get.
+   */
+  private async shadowLookup(s: Session, sources: Source[], cue: Cue, served: FanoutOutcome[]): Promise<void> {
+    const planner = this.deps.planner;
+    const sink = this.deps.onShadow;
+    if (!planner) return;
+    const turn = s.turn;
+    const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(this.config.sourceTimeoutMs)]);
+    const query = { scope: s.scope, text: cue.text, entities: cue.entities, limit: 8 };
+    const healthy = new Set(["ok", "cached", "stale"]);
+    await Promise.all(
+      sources.map(async (source) => {
+        const outcome = served.find((o) => o.sourceId === source.id);
+        if (!outcome || !healthy.has(outcome.status)) return;
+        const servedItemIds = outcome.items.map((i) => i.id);
+        const record = (r: Partial<ShadowRecord>): void => {
+          if (!sink || s.closed) return;
+          try {
+            sink({
+              sessionId: s.id,
+              turn,
+              sourceId: source.id,
+              status: "ok",
+              shapes: [],
+              calls: 0,
+              itemIds: [],
+              servedItemIds,
+              ...r,
+            });
+          } catch {
+            // A broken sink never breaks a lookup.
+          }
+        };
+        const permit = () => this.fanout.permitShadow(s.scope, source.id);
+        if (!permit()) return record({ status: "limited" });
+        try {
+          const r = await planner.search(source, query, signal, permit);
+          record({ shapes: r.shapes, calls: r.calls, itemIds: r.items.map((i) => sanitizedId(i)) });
+        } catch (e) {
+          this.fanout.rateLimited(s.scope, source.id, String(e));
+          const partial = e instanceof PlanError ? e.partial : { shapes: [], calls: 1, items: [] };
+          record({
+            status: "error",
+            shapes: partial.shapes,
+            calls: partial.calls,
+            itemIds: partial.items.map((i) => sanitizedId(i)),
+          });
+        }
+      }),
+    );
   }
 
   private async slowPath(s: Session, cue: Cue, t0: number, eventKind: string): Promise<Injection | null> {

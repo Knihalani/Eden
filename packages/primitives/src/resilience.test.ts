@@ -74,6 +74,21 @@ describe("Gcra", () => {
     now = 2_000;
     expect(rl.take("u")).toBeGreaterThan(2_900);
   });
+  test("available counts what could go now, matches take, and records nothing", () => {
+    let now = 0;
+    const rl = new Gcra({ ratePerSec: 10, burst: 3, now: () => now });
+    expect(rl.available("u")).toBe(3);
+    expect(rl.available("u")).toBe(3);
+    rl.take("u");
+    expect(rl.available("u")).toBe(2);
+    rl.take("u");
+    rl.take("u");
+    expect(rl.available("u")).toBe(0);
+    now = 100;
+    expect(rl.available("u")).toBe(1);
+    rl.penalize("u", 1_000);
+    expect(rl.available("u")).toBe(0);
+  });
 });
 
 describe("Gcra validation (finding 6)", () => {

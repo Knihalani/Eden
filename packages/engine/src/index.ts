@@ -6,5 +6,5 @@ export { Ledger } from "./ledger";
 export { inert, renderAnswer, renderPacket } from "./render";
 export { classifySituation, type Situation } from "./situation";
 export { contentTerms, distinctTermIds, extractEntities, isChatter, termIds } from "./text";
-export type { Trace, TraceSink } from "./trace";
+export type { ShadowRecord, ShadowSink, Trace, TraceSink } from "./trace";
 export { judgeMessages, parseJudge } from "./judge";

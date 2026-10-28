@@ -5,7 +5,7 @@ import type { AgentEvent } from "@eden/protocol";
 import { QueryPlanner, StaticSource, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner, type PartnerDeps } from "./partner";
-import type { Trace } from "./trace";
+import type { ShadowRecord, Trace } from "./trace";
 
 const scope = { tenantId: "acme-assistant", userId: "u1", sessionId: "s1" };
 let clock = 1_700_000_000_000;
@@ -325,11 +325,15 @@ describe("query planner wiring", () => {
     return { source, sent };
   }
   // Each question differs: the fan-out caches a lookup's result by its cue for a minute, so a repeat never reaches
-  // the planner.
+  // the planner. Numbered from 101: one-character terms are dropped from cues, so "item 1" and "item 2" would repeat.
   let n = 0;
   const ask = (p: ContextPartner) =>
     p.observe(
-      ev({ kind: "user_message", sessionId: `s-${clock}`, text: `Globex renewal status for Dana Lee, item ${++n}?` }),
+      ev({
+        kind: "user_message",
+        sessionId: `s-${clock}`,
+        text: `Globex renewal status for Dana Lee, item ${100 + ++n}?`,
+      }),
       { waitMs: 1_000 },
     );
 
@@ -361,6 +365,134 @@ describe("query planner wiring", () => {
     for (let i = 0; i < 12; i++) await ask(p);
     expect(planner.means(scope, "crm", true)).not.toEqual(prior);
     p.forget(scope);
+    expect(planner.means(scope, "crm", true)).toEqual(prior);
+  });
+
+  test("shadow mode: serving is unchanged, the planner's lookup is reported and learned from, never delivered", async () => {
+    const { source, sent } = substringCrm();
+    const planner = new QueryPlanner({ seed: 1, mode: "shadow" });
+    const records: ShadowRecord[] = [];
+    // Seconds between questions, as a real conversation has: the rate limit refills, so shadow has spare tokens.
+    let t = 1_700_000_000_000;
+    const { p } = partner({ planner, onShadow: (r) => records.push(r), now: () => (t += 1_000) }, [source]);
+    const prior = planner.means(scope, "crm", true);
+    let delivered = 0;
+    for (let i = 0; i < 12; i++) {
+      const r = await ask(p);
+      delivered += r.injection?.citations.length ?? 0;
+      await Bun.sleep(5); // The shadow lookup runs after the served one.
+    }
+    // Served: the cue's terms, which this substring connector never matches, so nothing is delivered.
+    expect(delivered).toBe(0);
+    expect(records.length).toBeGreaterThan(0);
+    expect(records.every((r) => r.sourceId === "crm" && r.servedItemIds.length === 0)).toBe(true);
+    // In shadow, the planner found the deal by entity, learned so, and still delivered none of it.
+    expect(records.some((r) => r.itemIds.includes("crm:deal-9"))).toBe(true);
+    expect(planner.means(scope, "crm", true)).not.toEqual(prior);
+    expect(JSON.stringify(records)).not.toMatch(/globex|dana/i);
+    expect(sent.some((q) => q === "Globex" || q === "Dana Lee")).toBe(true);
+  });
+
+  /** A connector that answers any query with one item echoing it, so every served lookup can deliver something. */
+  function echo(id = "notes", ref = (q: string) => `n-${q.length}-${q.split(" ")[0]}`) {
+    let calls = 0;
+    const source: Source = {
+      id,
+      kind: "test",
+      description: "Notes",
+      async search(q) {
+        calls++;
+        return [
+          {
+            id: `${id}:${ref(q.text)}`,
+            sourceId: id,
+            ref: ref(q.text),
+            title: `Globex ${q.text}`,
+            text: `Dana Lee ${q.text} Globex renewal`,
+          },
+        ];
+      },
+    };
+    return { source, calls: () => calls };
+  }
+
+  test("shadow never costs serving its rate budget: every lookup of a burst is still sent", async () => {
+    // A connector that never answers, so every question is a live lookup (nothing is ever cached). Served calls carry
+    // the cue's entities; the planner always clears them, so its calls are told apart.
+    const run = async (planner?: QueryPlanner) => {
+      let served = 0;
+      let shadow = 0;
+      const silent: Source = {
+        id: "crm",
+        kind: "test",
+        description: "",
+        async search(q) {
+          if (q.entities.length > 0) served++;
+          else shadow++;
+          return [];
+        },
+      };
+      const { p } = partner({ planner, now: () => 1_700_000_000_000 }, [silent]);
+      for (let i = 0; i < 12; i++) await ask(p);
+      await Bun.sleep(20);
+      return { served, shadow };
+    };
+    const off = await run();
+    const shadowed = await run(new QueryPlanner({ seed: 1, mode: "shadow" }));
+    // The burst is 10: both serve exactly 10 lookups, the rest are limited for both.
+    expect(off.served).toBe(10);
+    expect(shadowed.served).toBe(off.served);
+    // Shadow had its own, smaller budget: it ran, within half the burst.
+    expect(shadowed.shadow).toBeGreaterThan(0);
+    expect(shadowed.shadow).toBeLessThanOrEqual(5);
+  });
+
+  test("shadow records carry sanitized ids: a secret in an item's ref never reaches them", async () => {
+    const token = "ghp_" + "Z9y8X7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2";
+    const { source } = echo("crm", () => `deal-${token}`);
+    const records: ShadowRecord[] = [];
+    const { p } = partner(
+      { planner: new QueryPlanner({ seed: 1, mode: "shadow" }), onShadow: (r) => records.push(r) },
+      [source],
+    );
+    await ask(p);
+    await Bun.sleep(20);
+    expect(records.length).toBeGreaterThan(0);
+    expect(JSON.stringify(records)).not.toContain(token);
+    // The shadow's id for the item is the id serving gave it.
+    expect(records[0]!.itemIds[0]).toBe(records[0]!.servedItemIds[0]);
+  });
+
+  test("a shadow lookup's errors never touch serving, and forget mid-shadow leaves no learning", async () => {
+    let shadowPhase = false;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const flaky: Source = {
+      id: "crm",
+      kind: "test",
+      description: "",
+      async search(q) {
+        if (!shadowPhase)
+          return [{ id: "crm:1", sourceId: "crm", ref: "1", title: "Globex renewal", text: `Dana Lee ${q.text}` }];
+        await gate;
+        throw new Error("500 Internal Server Error");
+      },
+    };
+    const planner = new QueryPlanner({ seed: 1, mode: "shadow" });
+    const prior = planner.means(scope, "crm", true);
+    const { p } = partner({ planner }, [flaky]);
+    const original = flaky.search.bind(flaky);
+    // Serving answers; the shadow lookup that follows waits on the gate, then fails.
+    flaky.search = async (q, sig) => {
+      const r = original(q, sig);
+      shadowPhase = true;
+      return r;
+    };
+    const r = await ask(p);
+    expect(r.injection?.citations.map((c) => c.itemId)).toContain("crm:1");
+    p.forget(scope);
+    release();
+    await Bun.sleep(20);
     expect(planner.means(scope, "crm", true)).toEqual(prior);
   });
 });
