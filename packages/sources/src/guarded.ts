@@ -73,6 +73,7 @@ export class SourceFanout {
   private readonly flights = new Singleflight<string, ContextItem[]>();
   private readonly results: S3FifoCache<string, ContextItem[]> | null;
   private readonly rate: Gcra<string>;
+  private readonly burst: number;
   private readonly options: FanoutOptions;
   private readonly now: () => number;
 
@@ -89,7 +90,8 @@ export class SourceFanout {
             now: this.now,
           })
         : null;
-    this.rate = new Gcra({ ratePerSec: options.ratePerSec ?? 5, burst: options.burst ?? 10, now: this.now });
+    this.burst = options.burst ?? 10;
+    this.rate = new Gcra({ ratePerSec: options.ratePerSec ?? 5, burst: this.burst, now: this.now });
   }
 
   /** Searches `sources` for `query` within `timeoutMs`, cancelled with `signal`. */
@@ -116,6 +118,21 @@ export class SourceFanout {
    */
   permit(scope: Scope, sourceId: string): boolean {
     return this.rate.take(`${scopeKey(scope)}|${sourceId}`) <= 0;
+  }
+
+  /**
+   * A call that must never cost serving its budget (the query planner's shadow lookups): it takes a rate token only
+   * while more than half of the burst stays available for serving, else it is refused.
+   */
+  permitSpare(scope: Scope, sourceId: string): boolean {
+    const key = `${scopeKey(scope)}|${sourceId}`;
+    return this.rate.available(key) > Math.ceil(this.burst / 2) && this.rate.take(key) <= 0;
+  }
+
+  /** Tells the rate limit about an upstream's rate-limit error seen outside a fan-out call (shadow lookups). */
+  rateLimited(scope: Scope, sourceId: string, message: string): void {
+    if (RATE_LIMITED.test(message))
+      this.rate.penalize(`${scopeKey(scope)}|${sourceId}`, retryAfterMs(message) ?? 5_000);
   }
 
   /** The source's recent latency quantile in ms (NaN if no calls yet), for observability. */

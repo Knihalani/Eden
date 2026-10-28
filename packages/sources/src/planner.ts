@@ -175,7 +175,12 @@ export class QueryPlanner {
         calls++;
         sent++;
         // Shapes carry the whole query in `text`; entities are cleared so a source does not re-add its own.
-        for (const it of await source.search({ ...query, text, entities: [] }, signal)) got.push(it);
+        try {
+          for (const it of await source.search({ ...query, text, entities: [] }, signal)) got.push(it);
+        } catch (e) {
+          // What came back before the failure is reported with it, so a caller can account for the calls made.
+          throw new PlanError(e, { items: [...items, ...got], shapes: [...shapes, SHAPES[arm]!], calls });
+        }
       }
       // A shape that sent nothing (the permit was refused) is not credited: nothing was learned about it. A lookup
       // aborted meanwhile (session ended, user forgotten) learns nothing either (D17), and neither does one whose
@@ -266,6 +271,20 @@ export class QueryPlanner {
     this.states.set(key, s);
     while (this.states.size > this.o.maxStates) this.states.delete(this.states.keys().next().value!);
     return s;
+  }
+}
+
+/**
+ * A lookup that failed part-way: the connector's error (its message kept, so rate-limit detection still sees it), and
+ * what the lookup had already returned and spent.
+ */
+export class PlanError extends Error {
+  constructor(
+    override readonly cause: unknown,
+    readonly partial: { items: ContextItem[]; shapes: Shape[]; calls: number },
+  ) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = cause instanceof Error ? cause.name : "Error";
   }
 }
 

@@ -7,6 +7,7 @@ export { SourceFanout, type FanoutOptions, type FanoutOutcome, type FanoutStatus
 export { buildShape, inert, SHAPES, type Shape, type ShapeInput, type ShapeOptions } from "./shapes";
 export {
   cueCoverage,
+  PlanError,
   PlannedSource,
   QueryPlanner,
   type PlanOutcome,

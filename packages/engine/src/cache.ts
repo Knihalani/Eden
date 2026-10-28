@@ -98,16 +98,24 @@ export const DEFAULT_CACHE_LIMITS: CacheLimits = {
  */
 export function sanitizeItem(raw: ContextItem, maxTextChars = DEFAULT_CACHE_LIMITS.maxTextChars): ContextItem {
   const ref = sanitizeForStore(raw.ref);
-  const hashed = () => itemId(raw.sourceId, `h-${createHash("sha256").update(raw.ref).digest("hex").slice(0, 16)}`);
   return {
     ...raw,
-    id: ref === raw.ref ? raw.id : hashed(),
+    id: sanitizedId(raw, ref),
     ref,
     title: sanitizeForStore(raw.title.slice(0, 500)),
     text: sanitizeForStore(raw.text.slice(0, maxTextChars)),
     url: raw.url === undefined ? undefined : sanitizeForStore(raw.url),
     meta: raw.meta && Object.fromEntries(Object.entries(raw.meta).map(([k, v]) => [k, sanitizeForStore(v)])),
   };
+}
+
+/**
+ * The id an item has once sanitized: its own, unless its ref held something the gate redacts, then a hash of the ref.
+ * For places that keep only an item's id (shadow records) without paying to redact its text.
+ */
+export function sanitizedId(raw: ContextItem, sanitizedRef = sanitizeForStore(raw.ref)): string {
+  if (sanitizedRef === raw.ref) return raw.id;
+  return itemId(raw.sourceId, `h-${createHash("sha256").update(raw.ref).digest("hex").slice(0, 16)}`);
 }
 
 let titleIds = new Uint32Array(256);

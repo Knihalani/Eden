@@ -66,6 +66,9 @@ export interface ShadowReport {
     wouldAdd: number;
     /** Need turns where serving returned a needed fact that the shadow lookup did not. */
     wouldLose: number;
+    /** Need turns with the content-free signal, and those of them where the shadow really added a needed fact. */
+    signalled: number;
+    signalledAndAdded: number;
     /** Of need turns with the content-free signal (some connector empty when served, found in shadow), the share
      * where the shadow really added a needed fact; and of turns where it did, the share the signal flagged. */
     signalPrecision: number;
@@ -629,6 +632,8 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
             needTurns: shadowTruth.needTurns,
             wouldAdd: shadowTruth.wouldAdd,
             wouldLose: shadowTruth.wouldLose,
+            signalled: shadowTruth.signalled,
+            signalledAndAdded: shadowTruth.signalledAndAdded,
             signalPrecision: r3(shadowTruth.signalledAndAdded / Math.max(1, shadowTruth.signalled)),
             signalRecall: r3(shadowTruth.signalledAndAdded / Math.max(1, shadowTruth.wouldAdd)),
           },

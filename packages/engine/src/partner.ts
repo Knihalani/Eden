@@ -34,6 +34,7 @@ import {
 import { sanitizeForStore } from "@eden/redact";
 import { Vocab, type WorkerPool } from "@eden/primitives";
 import {
+  PlanError,
   PlannedSource,
   SourceFanout,
   type FanoutOutcome,
@@ -41,7 +42,7 @@ import {
   type Source,
   type SourceResolver,
 } from "@eden/sources";
-import { nearDuplicate, sanitizeItem, type ItemCache, type Sketch } from "./cache";
+import { nearDuplicate, sanitizedId, sanitizeItem, type ItemCache, type Sketch } from "./cache";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { answerMessages, judgeMessages, parseJudge } from "./judge";
@@ -571,11 +572,9 @@ export class ContextPartner {
         })
       : undefined;
     if (s.closed) return chosen.length; // Forgotten or ended mid-search: keep nothing.
-    if (this.deps.planner?.mode === "shadow") {
-      const run = this.shadowLookup(s, found, cue, outcomes).finally(() => {
-        if (s.shadowing === run) s.shadowing = undefined;
-      });
-      s.shadowing = run;
+    // One shadow lookup per session at a time: shadowing must not pile up work behind a slow connector.
+    if (this.deps.planner?.mode === "shadow" && !s.shadowing) {
+      s.shadowing = this.shadowLookup(s, found, cue, outcomes).finally(() => (s.shadowing = undefined));
     }
     for (let k = 0; k < outcomes.length; k++) {
       const o = outcomes[k]!;
@@ -601,8 +600,12 @@ export class ContextPartner {
 
   /**
    * The planner's lookup beside a served one (shadow mode): it learns, and reports what it found, but nothing it
-   * returns is cached, delivered or recorded as a mention. Every call takes a rate token, the first one included, so
-   * shadowing never pushes a connector past the limit serving keeps to; a connector with no token left is skipped.
+   * returns is cached, delivered or recorded as a mention, and it must never change serving:
+   * - it runs only for connectors that served this lookup normally (not ones skipped as open, busy or limited, or
+   *   that failed), so it adds no load to a struggling connector;
+   * - every call takes a rate token only while more than half the burst stays for serving (`permitSpare`);
+   * - a rate-limit error it sees is fed back to the limit, as serving's are.
+   * Records carry sanitized item ids, the same ids serving's items get.
    */
   private async shadowLookup(s: Session, sources: Source[], cue: Cue, served: FanoutOutcome[]): Promise<void> {
     const planner = this.deps.planner;
@@ -611,9 +614,12 @@ export class ContextPartner {
     const turn = s.turn;
     const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(this.config.sourceTimeoutMs)]);
     const query = { scope: s.scope, text: cue.text, entities: cue.entities, limit: 8 };
+    const healthy = new Set(["ok", "cached", "stale"]);
     await Promise.all(
       sources.map(async (source) => {
-        const servedItemIds = served.find((o) => o.sourceId === source.id)?.items.map((i) => i.id) ?? [];
+        const outcome = served.find((o) => o.sourceId === source.id);
+        if (!outcome || !healthy.has(outcome.status)) return;
+        const servedItemIds = outcome.items.map((i) => i.id);
         const record = (r: Partial<ShadowRecord>): void => {
           if (!sink || s.closed) return;
           try {
@@ -632,12 +638,20 @@ export class ContextPartner {
             // A broken sink never breaks a lookup.
           }
         };
-        if (!this.fanout.permit(s.scope, source.id)) return record({ status: "limited" });
+        const permit = () => this.fanout.permitSpare(s.scope, source.id);
+        if (!permit()) return record({ status: "limited" });
         try {
-          const r = await planner.search(source, query, signal, () => this.fanout.permit(s.scope, source.id));
-          record({ shapes: r.shapes, calls: r.calls, itemIds: r.items.map((i) => i.id) });
-        } catch {
-          record({ status: "error", calls: 1 });
+          const r = await planner.search(source, query, signal, permit);
+          record({ shapes: r.shapes, calls: r.calls, itemIds: r.items.map((i) => sanitizedId(i)) });
+        } catch (e) {
+          this.fanout.rateLimited(s.scope, source.id, String(e));
+          const partial = e instanceof PlanError ? e.partial : { shapes: [], calls: 1, items: [] };
+          record({
+            status: "error",
+            shapes: partial.shapes,
+            calls: partial.calls,
+            itemIds: partial.items.map((i) => sanitizedId(i)),
+          });
         }
       }),
     );
