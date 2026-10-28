@@ -556,9 +556,12 @@ export class ContextPartner {
     // Serving through the planner only in "serve" mode; in "shadow" the lookup is served as without one.
     const planner = this.deps.planner?.mode === "serve" ? this.deps.planner : undefined;
     // Wrapped per lookup (cheap: no state of its own). The fan-out admits each lookup per source id as before (breaker,
-    // concurrency, one rate token); every extra call the planner makes takes its own rate token through `permit`.
+    // concurrency, one rate token); every extra call the planner makes takes its own rate token through `permit`, and
+    // a shape's query answered recently comes from the fan-out's cache (`planCalls`), at no call.
     const chosen = planner
-      ? found.map((x) => new PlannedSource(x, planner, () => this.fanout.permit(s.scope, x.id)))
+      ? found.map(
+          (x) => new PlannedSource(x, planner, () => this.fanout.permit(s.scope, x.id), this.fanout.planCalls(x)),
+        )
       : found;
     const outcomes = await this.fanout.search(
       chosen,
