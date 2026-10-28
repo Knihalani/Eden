@@ -18,7 +18,13 @@ import type { SearchQuery, Source } from "@eden/sources";
 import { Rng } from "./rng";
 import { DAY, type World, type WorldItem } from "./world";
 
-export type Semantics = "and" | "ranked" | "names";
+/**
+ * What a connector's search does with a query. `and`, `ranked` and `names` model hosted products (Gmail-style AND,
+ * Drive-style ranking, CRM name search); `substring` and `or` are the two other behaviours the connector lab measured
+ * on real open-source servers (docs/research/connector-lab.md): the whole query as one substring (the reference memory
+ * server, CalDAV, IMAP fields, Gitea) and any query word, ranked by how many match (mcpvault).
+ */
+export type Semantics = "and" | "ranked" | "names" | "substring" | "or";
 /** How an integrator turns Eden's query into the connector's query string. */
 export type Adapter = "text" | "entities" | "entities-or-text";
 
@@ -93,6 +99,32 @@ export const REALISTIC: ProfileSet = {
   },
 };
 
+/**
+ * The connector zoo: the same world behind connectors with different search semantics, for learning what to send
+ * without being told (docs/plans/query-planner.md, tier 2). Every integrator passes Eden's query text through
+ * (`adapter: "text"`), so only the query decides what comes back. `ZOO_TUNE` is for tuning; numbers are reported on
+ * the held-out sets, where each source has a semantics it never had in `ZOO_TUNE`.
+ */
+const zoo = (semantics: Record<string, Semantics>): ProfileSet =>
+  Object.fromEntries(
+    Object.entries(REALISTIC).map(([k, v]) => [k, { ...v, adapter: "text" as Adapter, semantics: semantics[k]! }]),
+  );
+export const ZOO_TUNE = zoo({ gmail: "and", calendar: "substring", drive: "ranked", crm: "names", slack: "or" });
+export const ZOO_HELDOUT_A = zoo({
+  gmail: "substring",
+  calendar: "and",
+  drive: "or",
+  crm: "substring",
+  slack: "ranked",
+});
+export const ZOO_HELDOUT_B = zoo({
+  gmail: "or",
+  calendar: "ranked",
+  drive: "substring",
+  crm: "or",
+  slack: "substring",
+});
+
 /** Realistic connectors, but each integrator searches by the cue's entities when there are any. */
 export const REALISTIC_ENTITIES: ProfileSet = Object.fromEntries(
   Object.entries(REALISTIC).map(([k, v]) => [k, { ...v, adapter: "entities-or-text" as Adapter }]),
@@ -106,6 +138,9 @@ const words = (s: string) =>
       .toLowerCase()
       .match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu) ?? []
   ).map((w) => w.replace(/['’]s$/, ""));
+
+/** Lower case, accents dropped, whitespace collapsed: how a substring search compares text. */
+const fold = (s: string) => s.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
 
 const STOP = new Set("a an and are at be by for from in is it of on or the to with".split(" "));
 
@@ -145,6 +180,8 @@ export class SimIndex {
   /** Term → indexes of items holding it (ascending): searches touch postings, not every item. */
   private readonly postings = new Map<string, number[]>();
   private readonly titlePostings = new Map<string, number[]>();
+  /** Title and text, folded (lower case, no accents, single spaces), for substring search. */
+  private readonly folded: string[] = [];
 
   constructor(
     readonly id: string,
@@ -166,8 +203,14 @@ export class SimIndex {
       for (const w of titleSet) push(this.titlePostings, w, i);
       this.terms.push(termSet);
       this.titleTerms.push(titleSet);
+      this.folded.push(fold(`${it.title}\n${it.text}`));
     }
     this.avgLen = this.lens.reduce((s, x) => s + x, 0) / Math.max(1, this.lens.length);
+  }
+
+  /** The query as a substring connector compares it: the whole text, folded. */
+  queryPhrase(q: SearchQuery): string {
+    return fold(q.text);
   }
 
   queryTerms(q: SearchQuery, adapter: Adapter): string[] {
@@ -184,8 +227,23 @@ export class SimIndex {
     return [...new Set(chosen)];
   }
 
-  match(terms: string[], limit: number, p: SourceProfile): WorldItem[] {
+  match(terms: string[], limit: number, p: SourceProfile, phrase = ""): WorldItem[] {
+    if (p.semantics === "substring") {
+      if (!phrase) return [];
+      const out: WorldItem[] = [];
+      for (let i = 0; i < this.items.length; i++) if (this.folded[i]!.includes(phrase)) out.push(this.items[i]!);
+      return out.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, limit);
+    }
     if (terms.length === 0) return [];
+    if (p.semantics === "or") {
+      const count = new Map<number, number>();
+      for (const t of terms) for (const i of this.postings.get(t) ?? []) count.set(i, (count.get(i) ?? 0) + 1);
+      return [...count]
+        .map(([i, n]) => [this.items[i]!, n] as const)
+        .sort((a, b) => b[1] - a[1] || b[0].updatedAt - a[0].updatedAt)
+        .slice(0, limit)
+        .map(([it]) => it);
+    }
     if (p.semantics === "and") {
       const [lo, hi] = p.windowDays ?? [Infinity, Infinity];
       // Walk the rarest term's postings; check the other terms on each candidate.
@@ -295,7 +353,12 @@ export class SimSource implements Source {
         (f.outageUntil ?? -Infinity) > performance.now() ? "503 Service Unavailable" : "500 Internal Server Error",
       );
     }
-    const hits = this.index.match(this.index.queryTerms(query, p.adapter), query.limit, p);
+    const hits = this.index.match(
+      this.index.queryTerms(query, p.adapter),
+      query.limit,
+      p,
+      this.index.queryPhrase(query),
+    );
     this.stats.results += hits.length;
     for (const it of hits) if (it.facts.length) this.stats.usefulResults++;
     if (this.track) for (const it of hits) this.returned.push(it.id);

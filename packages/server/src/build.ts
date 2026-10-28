@@ -2,7 +2,7 @@ import { ContextPartner, GATE_MODULE, ItemCache, type TraceSink } from "@eden/en
 import { SourceMap } from "@eden/graph";
 import { Budget, OpenRouterModel, type Model } from "@eden/llm";
 import { WorkerPool } from "@eden/primitives";
-import type { SourceResolver } from "@eden/sources";
+import { QueryPlanner, type SourceResolver } from "@eden/sources";
 
 export interface BuildOptions {
   sources: SourceResolver;
@@ -11,18 +11,24 @@ export interface BuildOptions {
   onTrace?: TraceSink;
   /** A pool from `startGatePool`: lookup results are redacted in it. Without one they are redacted on the loop. */
   gatePool?: WorkerPool;
+  /** Let a query planner choose what each lookup sends (D28); its learning persists in the source map. */
+  queryPlanner?: boolean;
 }
 
 /** Wires a partner from its parts with production defaults. */
 export function buildPartner(options: BuildOptions): ContextPartner {
+  const sourceMap = new SourceMap(options.sourceMapPath);
   return new ContextPartner({
     sources: options.sources,
-    sourceMap: new SourceMap(options.sourceMapPath),
+    sourceMap,
     cache: new ItemCache(),
     budget: new Budget(),
     model: options.model === undefined ? OpenRouterModel.fromEnv() : options.model,
     onTrace: options.onTrace,
     gatePool: options.gatePool,
+    planner: options.queryPlanner
+      ? new QueryPlanner({ seed: (Math.random() * 2 ** 32) >>> 0, store: sourceMap })
+      : undefined,
   });
 }
 

@@ -11,6 +11,7 @@
  * EDEN_TENANT_RPS    requests per second per tenant on the HTTP API (GCRA), default 200; EDEN_TENANT_BURST, 400.
  *                    The stdio MCP server (mcp-stdio.ts) serves one local user and is not limited.
  * EDEN_GATE_WORKERS  workers that redact lookup results off the event loop (D25, D26); default 0, on the loop.
+ * EDEN_QUERY_PLANNER 1 to let the query planner choose what each lookup sends to each connector (D28); default off.
  */
 import { join } from "node:path";
 import { edenHome, isId } from "@eden/protocol";
@@ -27,6 +28,8 @@ export interface ServerConfig {
   tenantBurst: number;
   /** Workers in the gate pool (EDEN_GATE_WORKERS); 0 gates on the event loop. */
   gateWorkers: number;
+  /** The query planner (EDEN_QUERY_PLANNER=1); off by default until it has run in shadow (D28). */
+  queryPlanner: boolean;
 }
 
 export function loadConfig(env = process.env): ServerConfig {
@@ -52,7 +55,14 @@ export function loadConfig(env = process.env): ServerConfig {
     tenantRatePerSec: positive(env.EDEN_TENANT_RPS, 200, "EDEN_TENANT_RPS"),
     tenantBurst: positive(env.EDEN_TENANT_BURST, 400, "EDEN_TENANT_BURST"),
     gateWorkers: workers(env.EDEN_GATE_WORKERS),
+    queryPlanner: flag(env.EDEN_QUERY_PLANNER, "EDEN_QUERY_PLANNER"),
   };
+}
+
+function flag(raw: string | undefined, name: string): boolean {
+  if (raw === undefined || raw === "" || raw === "0") return false;
+  if (raw === "1") return true;
+  throw new Error(`${name} must be 0 or 1, got ${raw}`);
 }
 
 function positive(raw: string | undefined, fallback: number, name: string): number {
