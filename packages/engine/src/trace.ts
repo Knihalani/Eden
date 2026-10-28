@@ -20,10 +20,10 @@ export interface Trace {
   costUsd: number;
   itemIds: string[];
   /**
-   * With the query planner on: per connector searched, the shapes it sent and its calls. Shape names and counts only,
-   * never the query (D19).
+   * With the query planner on: per connector searched, the shapes it sent, its calls and how many items came back.
+   * Shape names and counts only, never the query (D19).
    */
-  plans?: { sourceId: string; shapes: string[]; calls: number }[];
+  plans?: { sourceId: string; shapes: string[]; calls: number; found: number }[];
 }
 
 export type TraceSink = (trace: Trace) => void;

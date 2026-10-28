@@ -2,7 +2,8 @@
 
 Status: phases 0–5 built and measured, 2026-10-28; phase 5 (shadow) ran in simulation by the owner's decision (D29).
 Opt-in and off by default (D28); phase 6 (default on) is not met because of the extra source calls. Results and gate
-status: docs/research/query-planner-results.md; departures from this plan are listed in D28 and D29.
+status: docs/research/query-planner-results.md; departures from this plan are listed in D28 and D29. The iteration
+loop has started; each iteration is logged in the results' "Iterations" section.
 
 ## Why
 
