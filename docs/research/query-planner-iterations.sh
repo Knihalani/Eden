@@ -11,11 +11,12 @@ run() { # iteration label profile seed judge [flags...]
   bun packages/sim/src/quality-cli.ts --profile "$profile" --seed "$seed" --users 6 --sessions 15 --judge "$judge" \
     "$@" 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print(json.dumps({'iteration':$it,\
 'label':'$label','profile':'$profile','seed':$seed,'judge':'$judge','overall':d['overall'],'funnel':d['funnel'],\
-'sources':d['sources'],'plans':d.get('plans')}))"
+'sources':d['sources'],'privacy':d['privacy'],'plans':d.get('plans')}))"
 }
 # 1. A learned cascade gate (cascadeMin). Tune the threshold on zoo-tune, with no model and with a perfect judge;
 # then held-out: off, before (always cascade, 0) and after (the default, 0.05).
 for judge in none perfect; do
+  for seed in 1 2 3 4 5; do run 1 off zoo-tune "$seed" "$judge"; done
   for m in 0 0.05 0.1 0.2 0.3 0.4; do
     for seed in 1 2 3 4 5; do
       run 1 "cascade-min-$m" zoo-tune "$seed" "$judge" --planner --planner-cascade-min "$m"
