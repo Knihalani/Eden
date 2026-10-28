@@ -432,6 +432,64 @@ calls abandoned for other reasons, so 0.9 was chosen under the earlier recording
 - 0.9 was the highest quantile tried and the best on the tune seeds in every mix; nothing above it was tried.
 - Seeds differ a lot: planner-off gave up 6 calls per mix on seeds 11–13 and 25–27 on seeds 21–33.
 
+### 5. A greedy cascade with a runner-up prior (kept, D37)
+
+**Target:** plan item 4, the planner's learning cost: in the lab it trailed the best fixed shape (chosen in
+hindsight) by 0–10 points on the connectors where the cue's terms fail. While little is known, the cascade's second
+shape was a Thompson draw among near-uniform priors, so early cascades were often spent on shapes that rarely help.
+
+**Change:** the cascade step sends the remaining shape with the best posterior mean (a Thompson draw on an ε step),
+and one call per entity (the best fixed shape on most such connectors, in both lab worlds) starts with a prior mean
+of 0.7 at strength 4: below the incumbent's 0.75, so the cue's terms are still sent first on a fresh connector.
+
+**Tuning (zoo-tune, seeds 1–10, no model):** needed facts retrieved or held (`funnel.retrievedOrCached`, the
+planner's own job), paired per-seed gain with a 95% t-interval (df 9):
+
+| Variant | Retrieved | Gain per seed | Calls per lookup |
+|---|---|---|---|
+| main | 0.444 | — | 5.48 |
+| runner-up prior 0.65, strength 4 | 0.469 | +4.7 (−1.0–10.4) | 5.44 |
+| runner-up prior 0.7, strength 4 | 0.471 | +5.0 (0.3–9.7) | 5.45 |
+| greedy cascade step | 0.471 | +5.0 (−3.1–13.1) | 5.58 |
+| greedy + prior 0.65 | 0.507 | +11.9 (7.1–16.7) | 5.58 |
+| **greedy + prior 0.7** | **0.517** | **+13.7 (7.9–19.5)** | **5.58** |
+
+Neither part alone was clearly better than main; together they were. Chosen: the highest tune retrieval. (A
+prior of 0.6 at strength 2 scored below main on seeds 1–5, 0.434 against 0.443.)
+
+**Held out, fresh seeds 11–20 (no decision had used them), planner on:**
+
+| Mix | Retrieved (no model) | Gain per seed | Recall, no model | Recall, perfect judge | Gain per seed (judge) | Calls per lookup |
+|---|---|---|---|---|---|---|
+| held-out A | 0.425 → 0.509 | +15.7 (9.3–22.1) | 0.239 → 0.254 | 0.371 → 0.432 | +11.4 (6.7–16.1) | 5.79 → 5.90 |
+| held-out B | 0.612 → 0.639 | +5.0 (0.8–9.2) | 0.262 → 0.277 | 0.525 → 0.550 | +4.7 (1.9–7.5) | 5.61 → 5.68 |
+| realistic | 0.428 → 0.493 | +12.3 (8.3–16.3) | 0.236 → 0.254 | 0.361 → 0.428 | +12.6 (7.9–17.3) | 6.00 → 6.09 |
+
+Seeds 1–10 on the same mixes agree (retrieved A 0.428 → 0.504, B 0.628 → 0.646, realistic 0.425 → 0.492). Recall
+with no model rose within noise (no-model delivery, not retrieval, bounds it); with the perfect judge it rose with
+intervals apart from 0 on every mix. Calls per lookup rose 1–2%.
+
+**False fires:** over held-out seeds 1–20 (8,448 must-stay-silent turns, no model), 6 before and 8 after. Seed 17
+accounts for both extra ones: one turn in its world (shared by held-out A and realistic) is now answered with a
+confident delivery of an item the cascade retrieved, with or without the judge. Within noise, and stated in D37.
+
+**Lab (real servers, the planner from nothing over each connector's cases, planner only), world 1000:**
+
+| Connector | Cases | main | this change | best fixed (hindsight, earlier run) |
+|---|---|---|---|---|
+| memory | 196 | 69% (62–75) | 71% (65–77) | each-entity 71% |
+| mcpvault | 196 | 81% (75–86) | 82% (76–87) | terms 83% |
+| basic-memory | 196 | 73% (66–79) | 73% (67–79) | terms 63% |
+| meilisearch | 196 | 60% (53–67) | 66% (59–73) | each-entity 64% |
+| caldav | 73 | 69% (57–78) | 77% (66–85) | each-entity 77% |
+| imap-body | 154 | 36% (29–44) | 36% (29–44) | each-entity 38% |
+| imap-subject | 154 | 49% (41–57) | 55% (47–62) | each-entity 55% |
+| chroma | 196 | 88% (82–92) | 87% (82–91) | question 91% |
+| gitea-db | 196 | 22% (17–29) | 26% (20–33) | each-entity 27% |
+| gitea-bleve | 196 | 23% (18–30) | 27% (21–33) | each-entity 27% |
+
+WORLD2000
+
 ### The default-on gate (D31, D32)
 
 The owner chose a cost-normalised gate (D31) and, for its fourth condition, the reading pooled over the held-out
