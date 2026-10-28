@@ -115,8 +115,9 @@ describe("loadConfig", () => {
 
 describe("gate pool", () => {
   test("EDEN_QUERY_PLANNER: off by default, 1 turns it on, junk refused", () => {
-    expect(loadConfig({ EDEN_DEV: "1" }).queryPlanner).toBe(false);
-    expect(loadConfig({ EDEN_DEV: "1", EDEN_QUERY_PLANNER: "1" }).queryPlanner).toBe(true);
+    expect(loadConfig({ EDEN_DEV: "1" }).queryPlanner).toBe("off");
+    expect(loadConfig({ EDEN_DEV: "1", EDEN_QUERY_PLANNER: "1" }).queryPlanner).toBe("serve");
+    expect(loadConfig({ EDEN_DEV: "1", EDEN_QUERY_PLANNER: "shadow" }).queryPlanner).toBe("shadow");
     expect(() => loadConfig({ EDEN_DEV: "1", EDEN_QUERY_PLANNER: "yes" })).toThrow(/EDEN_QUERY_PLANNER/);
   });
 

@@ -8,7 +8,7 @@
  * between sessions, so the cache's TTL applies), while real waits (source latency, pacing) are multiplied by
  * `timeScale`, so races between the slow path and the agent's next step keep their shape at any speed.
  */
-import { ContextPartner, ItemCache, type EngineConfig, type Trace } from "@eden/engine";
+import { ContextPartner, ItemCache, type EngineConfig, type ShadowRecord, type Trace } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, type Model } from "@eden/llm";
 import { QueryPlanner, type PlannerOptions } from "@eden/sources";
@@ -40,6 +40,40 @@ export interface QualityOptions {
   judge?: "none" | "perfect" | "noisy";
   /** Run each user's lookups through a query planner (one per user, so nothing is learned across users). */
   planner?: PlannerOptions;
+  /** With a planner in shadow mode: switch it to serving after this many sessions per user (learned state kept). */
+  promoteAfter?: number;
+}
+
+/**
+ * The planner in shadow mode (D28, phase 5, run in simulation instead of on real accounts). `seen` is what a real
+ * deployment would see: content-free counts. `truth` uses the world's labels, which only a simulation has: how often
+ * the shadow lookup found a needed fact the served lookup did not, and how well the content-free signal predicts it.
+ */
+export interface ShadowReport {
+  seen: {
+    records: number;
+    limited: number;
+    errors: number;
+    callsPerRecord: number;
+    /** Records where serving returned nothing from that connector and the shadow lookup returned something. */
+    servedEmptyShadowFound: number;
+    /** Records where both returned items; mean share of the shadow's items that serving also returned. */
+    overlap: number;
+  };
+  truth: {
+    needTurns: number;
+    /** Need turns where the shadow lookup returned an item holding a needed fact that serving did not return. */
+    wouldAdd: number;
+    /** Need turns where serving returned a needed fact that the shadow lookup did not. */
+    wouldLose: number;
+    /** Need turns with the content-free signal, and those of them where the shadow really added a needed fact. */
+    signalled: number;
+    signalledAndAdded: number;
+    /** Of need turns with the content-free signal (some connector empty when served, found in shadow), the share
+     * where the shadow really added a needed fact; and of turns where it did, the share the signal flagged. */
+    signalPrecision: number;
+    signalRecall: number;
+  };
 }
 
 interface Counter {
@@ -169,6 +203,8 @@ export interface QualityReport {
   };
   /** The engine's decision(s) on each need turn, counted (reasons from traces; cue ids dropped). */
   needDecisions: Record<string, number>;
+  /** Present when the planner ran in shadow mode for at least one lookup. */
+  shadow?: ShadowReport;
 }
 
 const pct = (xs: number[], p: number) => {
@@ -185,8 +221,9 @@ const sleep = (ms: number) => (ms > 0 ? Bun.sleep(ms) : Bun.sleep(1));
  * what happens in practice. Reads the partner's session table (a harness may; product code may not).
  */
 async function settle(partner: ContextPartner, key: string): Promise<void> {
-  const sessions = (partner as unknown as { sessions: Map<string, { inflight: unknown }> }).sessions;
-  for (let i = 0; i < 2_000 && sessions.get(key)?.inflight; i++) await Bun.sleep(1);
+  const sessions = (partner as unknown as { sessions: Map<string, { inflight: unknown; shadowing?: unknown }> })
+    .sessions;
+  for (let i = 0; i < 2_000 && (sessions.get(key)?.inflight || sessions.get(key)?.shadowing); i++) await Bun.sleep(1);
 }
 
 export async function runQuality(o: QualityOptions): Promise<QualityReport> {
@@ -201,6 +238,16 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
   const deliveryMs: number[] = [];
   const injBytes: number[] = [];
   const traces: Trace[] = [];
+  const shadowSeen = {
+    records: 0,
+    limited: 0,
+    errors: 0,
+    calls: 0,
+    servedEmptyShadowFound: 0,
+    overlapSum: 0,
+    overlapN: 0,
+  };
+  const shadowTruth = { needTurns: 0, wouldAdd: 0, wouldLose: 0, signalled: 0, signalledAndAdded: 0 };
   let turns = 0;
   let injections = 0;
   let itemsDelivered = 0;
@@ -258,6 +305,10 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       world.arcs.map((a) => [a.id, [a.person?.full, a.slots.org].filter((x): x is string => !!x)]),
     );
     const sourceMap = new SourceMap(":memory:", { seed: o.seed + u });
+    const planner = o.planner
+      ? new QueryPlanner({ seed: o.seed * 7_919 + u, store: sourceMap, ...o.planner })
+      : undefined;
+    const shadowRecs: ShadowRecord[] = [];
     const partner = new ContextPartner({
       sources: async () => sources,
       sourceMap,
@@ -270,7 +321,8 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         userTraces.push(t);
       },
       now: () => clock,
-      planner: o.planner ? new QueryPlanner({ seed: o.seed * 7_919 + u, store: sourceMap, ...o.planner }) : undefined,
+      planner,
+      onShadow: (r) => shadowRecs.push(r),
     });
     const who = { tenantId: "sim", userId: `u${u}` };
     const pace = new Rng(o.seed * 104_729 + u);
@@ -282,6 +334,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
 
     for (let si = 0; si < sessions.length; si++) {
       const session = sessions[si]!;
+      if (planner && o.promoteAfter !== undefined && si === o.promoteAfter) planner.mode = "serve";
       const third = Math.min(2, Math.floor((si * 3) / sessions.length));
       const callsBefore = sum(sources, (s) => s.stats.calls);
       const lookupsBefore = userTraces.filter((t) => t.sourceCalls > 0).length;
@@ -311,6 +364,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
           oracle.relevant = new Set(l.kind === "need" ? [...l.must, ...l.ok] : l.kind === "context" ? l.ok : []);
         }
         const mark = {
+          shadow: shadowRecs.length,
           returned: sources.map((s) => s.returned.length),
           shown: oracle?.shown.length ?? 0,
           traces: userTraces.length,
@@ -338,8 +392,40 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         // What landed during the wait is collected before the agent's next model call.
         const late = partner.takePending({ ...who, sessionId: session.id });
         for (const inj of late) recordInjection(inj, i + 0.5, performance.now());
+        const states = (ids: Set<string>, f: string) => [...ids].some((id) => byId.get(id)?.facts.includes(f));
+        // Shadow lookups call the same simulated connectors: what only they returned was never served, so it is taken
+        // out of what this turn retrieved, and scored on its own.
+        const recs = shadowRecs.slice(mark.shadow);
+        const shadowIds = new Set(recs.flatMap((r) => r.itemIds));
+        const servedByShadowedSource = new Set(recs.flatMap((r) => r.servedItemIds));
+        for (const r of recs) {
+          shadowSeen.records++;
+          if (r.status === "limited") shadowSeen.limited++;
+          if (r.status === "error") shadowSeen.errors++;
+          shadowSeen.calls += r.calls;
+          if (r.servedItemIds.length === 0 && r.itemIds.length > 0) shadowSeen.servedEmptyShadowFound++;
+          if (r.servedItemIds.length > 0 && r.itemIds.length > 0) {
+            const served = new Set(r.servedItemIds);
+            shadowSeen.overlapSum += r.itemIds.filter((id) => served.has(id)).length / r.itemIds.length;
+            shadowSeen.overlapN++;
+          }
+        }
         if (turn.label.kind === "need") {
-          const returned = new Set(sources.flatMap((s, k) => s.returned.slice(mark.returned[k]!)));
+          const returned = new Set(
+            sources
+              .flatMap((s, k) => s.returned.slice(mark.returned[k]!))
+              .filter((id) => !shadowIds.has(id) || servedByShadowedSource.has(id)),
+          );
+          if (recs.length > 0) {
+            const has = (ids: Set<string>) => turn.label.kind === "need" && turn.label.must.some((f) => states(ids, f));
+            const add = has(shadowIds) && !has(returned);
+            const signal = recs.some((r) => r.servedItemIds.length === 0 && r.itemIds.length > 0);
+            shadowTruth.needTurns++;
+            if (add) shadowTruth.wouldAdd++;
+            if (has(returned) && !has(shadowIds)) shadowTruth.wouldLose++;
+            if (signal) shadowTruth.signalled++;
+            if (signal && add) shadowTruth.signalledAndAdded++;
+          }
           const shown = new Set(oracle ? oracle.shown.slice(mark.shown) : []);
           const mine = userTraces.slice(mark.traces).filter((t) => t.turn === i + 1);
           const why =
@@ -348,7 +434,6 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
           const deliveredIds = new Set(
             mine.flatMap((t) => (["fast", "sources", "model"].includes(t.decision) ? t.itemIds : [])),
           );
-          const states = (ids: Set<string>, f: string) => [...ids].some((id) => byId.get(id)?.facts.includes(f));
           for (const f of turn.label.must) {
             funnel.mustFacts++;
             const r = states(returned, f);
@@ -531,7 +616,30 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
   const cost = traces.reduce((s, t) => s + t.costUsd, 0);
   const modelCalls = traces.reduce((s, t) => s + t.modelCalls, 0);
   const r3 = (x: number) => Math.round(x * 1000) / 1000;
+  const shadow: ShadowReport | undefined =
+    shadowSeen.records === 0
+      ? undefined
+      : {
+          seen: {
+            records: shadowSeen.records,
+            limited: shadowSeen.limited,
+            errors: shadowSeen.errors,
+            callsPerRecord: r3(shadowSeen.calls / shadowSeen.records),
+            servedEmptyShadowFound: shadowSeen.servedEmptyShadowFound,
+            overlap: r3(shadowSeen.overlapSum / Math.max(1, shadowSeen.overlapN)),
+          },
+          truth: {
+            needTurns: shadowTruth.needTurns,
+            wouldAdd: shadowTruth.wouldAdd,
+            wouldLose: shadowTruth.wouldLose,
+            signalled: shadowTruth.signalled,
+            signalledAndAdded: shadowTruth.signalledAndAdded,
+            signalPrecision: r3(shadowTruth.signalledAndAdded / Math.max(1, shadowTruth.signalled)),
+            signalRecall: r3(shadowTruth.signalledAndAdded / Math.max(1, shadowTruth.wouldAdd)),
+          },
+        };
   return {
+    shadow,
     overall: rates(total),
     turns,
     injections,
