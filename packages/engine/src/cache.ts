@@ -19,6 +19,8 @@ import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import { termIds } from "./text";
 
+const NO_TERMS = new Uint32Array(0);
+
 interface Entry {
   item: ContextItem;
   fetchedAt: number;
@@ -277,6 +279,11 @@ export class ItemCache {
       });
     }
     return out;
+  }
+
+  /** The cached item `doc`'s sorted unique term ids (title and body, the user's vocabulary); empty if unknown. */
+  termsOf(scope: Scope, doc: number): Uint32Array {
+    return this.peek(scope)?.index.termsOf(doc) ?? NO_TERMS;
   }
 
   /** True if the cached item `doc` contains every term id in `ids[0..n)`: whole-term matching, no text rescans. */

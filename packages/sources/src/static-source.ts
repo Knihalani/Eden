@@ -7,6 +7,8 @@ export interface StaticDoc {
   text: string;
   url?: string;
   updatedAt?: number;
+  /** Source-reported fields kept with the item (a mailbox category, a label). */
+  meta?: Record<string, string>;
 }
 
 const words = (s: string) => s.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}_.-]*/gu) ?? [];
