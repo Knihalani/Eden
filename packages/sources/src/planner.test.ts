@@ -94,9 +94,9 @@ describe("QueryPlanner", () => {
       for (let i = 0; i < 40; i++) calls += (await planner.search(src, cues[i % cues.length]!, signal)).calls;
       return calls;
     };
-    await late(none);
-    expect(planner.cascadeMean(alice, "none", true)).toBeLessThan(0.1);
-    // Mostly one call per lookup now; ε still re-tries the cascade now and then.
+    for (let i = 0; i < 3; i++) await late(none);
+    expect(planner.cascadeMean(alice, "none", true)).toBeLessThan(0.05);
+    // Mostly one call per lookup now; ε and the posterior's spread still re-try the cascade now and then.
     expect(await late(none)).toBeLessThan(40 * 1.25);
     // Where the cascade finds what the terms missed (substring search), it stays on.
     await late(substring());
@@ -280,6 +280,77 @@ describe("QueryPlanner", () => {
     expect(rows).toEqual([]);
     const prior = new QueryPlanner().means(alice, "s", true);
     expect(planner.means(alice, "s", true)).toEqual(prior);
+  });
+
+  test("the cascade posterior is per user and forgotten with them; junk cascade rows load as the prior", async () => {
+    const rows = new Map<string, PlannerArm[]>();
+    const store: PlannerStore = {
+      loadArms: (sc, id) => rows.get(`${sc.tenantId}/${sc.userId}/${id}`) ?? [],
+      saveArms: () => {},
+    };
+    const planner = new QueryPlanner({ seed: 2, store });
+    const none = connector("none", () => false);
+    const bob = { tenantId: "t", userId: "bob" };
+    const otherAlice = { tenantId: "t2", userId: "alice" };
+    const prior = new QueryPlanner().cascadeMean(alice, "none", true);
+    for (let i = 0; i < 20; i++) await planner.search(none, cues[i % cues.length]!, signal);
+    expect(planner.cascadeMean(alice, "none", true)).toBeLessThan(prior);
+    expect(planner.cascadeMean(bob, "none", true)).toBe(prior);
+    expect(planner.cascadeMean(otherAlice, "none", true)).toBe(prior);
+    planner.forget(alice);
+    expect(planner.cascadeMean(alice, "none", true)).toBe(prior);
+    // A user not seen yet, so the rows are read when their state is created.
+    const carol = { tenantId: "t", userId: "carol" };
+    rows.set("t/carol/none", [
+      { bucket: 1, shape: "cascade", alpha: Infinity, beta: 1 },
+      { bucket: 1, shape: "cascade", alpha: 1, beta: Number.NaN },
+      { bucket: 3, shape: "cascade", alpha: 1, beta: 9 },
+      { bucket: 1, shape: "terms", alpha: Infinity, beta: 1 },
+    ]);
+    expect(planner.cascadeMean(carol, "none", true)).toBe(prior);
+    expect(planner.means(carol, "none", true).terms).toBe(new QueryPlanner().means(alice, "none", true).terms);
+  });
+
+  test("a cascade step aborted, forgotten or cut short by the permit teaches the cascade nothing", async () => {
+    const rows: PlannerArm[] = [];
+    const store: PlannerStore = { loadArms: () => [], saveArms: (_s, _id, arms) => void rows.push(...arms) };
+    // The first call (terms) returns nothing, so the cascade runs; `during` happens on its first call.
+    const second = (during: () => void): Source => {
+      let n = 0;
+      return { id: "s", kind: "t", description: "", search: async () => (++n === 2 && during(), []) };
+    };
+    const q = query("globex renewal sam ortiz", ["Globex", "Sam Ortiz"]);
+    const run = async (during: (p: QueryPlanner, ac: AbortController) => void, seed = 1, permit?: () => boolean) => {
+      rows.length = 0;
+      const planner = new QueryPlanner({ seed, epsilon: 0, cascadeMin: 0, store });
+      const ac = new AbortController();
+      const r = await planner.search(
+        second(() => during(planner, ac)),
+        q,
+        ac.signal,
+        permit,
+      );
+      return { r, cascadeRows: rows.filter((x) => x.shape === "cascade") };
+    };
+    expect((await run(() => {})).cascadeRows.length).toBe(1);
+    expect((await run((_p, ac) => ac.abort())).cascadeRows).toEqual([]);
+    expect((await run((p) => p.forget(alice))).cascadeRows).toEqual([]);
+    // Two entities: each-entity is two calls. With only the cascade's first call permitted, it is cut short.
+    let cutShort = 0;
+    for (let seed = 1; seed <= 30; seed++) {
+      let permits = 0;
+      const { r, cascadeRows } = await run(
+        () => {},
+        seed,
+        () => ++permits === 1,
+      );
+      if (r.shapes[1] !== "each-entity") continue;
+      cutShort++;
+      expect(r.calls).toBe(2);
+      expect(cascadeRows).toEqual([]);
+      expect(rows.some((x) => x.shape === "each-entity")).toBe(false);
+    }
+    expect(cutShort).toBeGreaterThan(0);
   });
 
   test("a lookup aborted mid-flight (session ended) learns nothing", async () => {

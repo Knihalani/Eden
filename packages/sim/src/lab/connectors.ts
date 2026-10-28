@@ -36,12 +36,13 @@ export function removeLabContainers(): void {
   const ids = docker(["ps", "-aq", "--filter", `label=${LABEL}`])
     .split("\n")
     .filter(Boolean);
-  if (!ids.length) return;
-  try {
-    docker(["rm", "-f", ...ids]);
-  } catch (e) {
-    // A container already being removed (a `--rm` server exiting) or already gone is what this wanted.
-    if (!/already in progress|No such container/.test(String(e))) throw e;
+  for (const id of ids) {
+    try {
+      docker(["rm", "-f", id]);
+    } catch (e) {
+      // A container already being removed (a `--rm` server exiting) or already gone is what this wanted.
+      if (!/already in progress|No such container/.test(String(e))) throw e;
+    }
   }
 }
 

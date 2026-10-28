@@ -23,10 +23,11 @@ train / held-out split for tuning, hand-written adversarial scenarios, and text 
 - An adaptive query planner per (user, connector): what to send, learned from outcomes
   ([plans/query-planner.md](plans/query-planner.md)). Built and opt-in (D28,
   [research/query-planner-results.md](research/query-planner-results.md)); its shadow mode was measured in simulation
-  (D29). Iterating on it: a learned cascade gate cut its extra calls by 36–46% with recall within noise. Next: fewer
-  extra calls still, delivery and usage rewards, then a default-on decision. Its evidence: a source survey
-  of real MCP servers ([research/connectors.md](research/connectors.md)) and the connector lab, where the query Eden
-  sent reached nothing on whole-string-substring connectors ([research/connector-lab.md](research/connector-lab.md)).
+  (D29). Iterating on it: a learned cascade gate (D30) cut its extra calls by 12–14% with recall within noise.
+  Next: fewer extra calls still, delivery and usage rewards, then a default-on decision. Its evidence: a source
+  survey of real MCP servers ([research/connectors.md](research/connectors.md)) and the connector lab, where the query
+  Eden sent reached nothing on whole-string-substring connectors
+  ([research/connector-lab.md](research/connector-lab.md)).
 
 ## M3 — The graph, layer 2
 - Entity resolution (aliases, email ↔ name), typed relations (person–company–project), freshness per source.

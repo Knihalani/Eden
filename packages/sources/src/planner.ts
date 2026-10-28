@@ -57,11 +57,12 @@ export interface PlannerOptions {
   margin?: number;
   /** Most calls a lookup makes for one connector, cascade included. */
   maxCalls?: number;
-  /** Try the next shape when the chosen one returns nothing. */
+  /** Try the next shape when the chosen one returns nothing (subject to `cascadeMin`). */
   cascade?: boolean;
   /**
    * The cascade runs when a draw from its posterior (chance it finds something, per connector and bucket) is at least
-   * this, or on an ε exploration step. 0 always cascades.
+   * this, or on an ε exploration step. 0 always cascades. 0.05 was tuned on the simulation's tune set with a perfect
+   * judge (docs/research/query-planner-results.md, iteration 1).
    */
   cascadeMin?: number;
   /** Connectors whose search takes `"a b"` as a phrase (operator config; unknown connectors get no quotes). */
@@ -96,6 +97,8 @@ export interface PlanOutcome {
   shapes: Shape[];
   calls: number;
   reward: number;
+  /** Items the lookup returned (after merging its shapes' results). */
+  found: number;
 }
 
 interface ConnectorState {
@@ -115,7 +118,7 @@ const DEFAULTS = {
   priorStrength: 2,
   maxCalls: 3,
   cascade: true,
-  cascadeMin: 0.2,
+  cascadeMin: 0.05,
   maxStates: 50_000,
   incumbent: { shape: "terms" as Shape, mean: 0.75, strength: 8 },
   rewardTopK: 1,
@@ -202,9 +205,6 @@ export class QueryPlanner {
       // user's state was dropped while it waited: writing it back would undo `forget`.
       if (sent === 0 || signal.aborted || !this.current(query.scope, source.id, state)) break;
       const r = this.o.rewardTopK > 1 ? rankedCoverage(input, got, this.o.rewardTopK) : cueCoverage(input, got);
-      bandit.decayArm(arm, 1);
-      bandit.update(arm, r);
-      this.save(query.scope, source.id, bucket, arm, bandit);
       shapes.push(SHAPES[arm]!);
       reward = Math.max(reward, r);
       for (const it of got) {
@@ -212,6 +212,12 @@ export class QueryPlanner {
         seen.add(it.id);
         items.push(it);
       }
+      // A shape cut short by the permit (one call per entity, the later ones refused) is not credited either: its
+      // reward may be 0 only because the query that would have found something was never sent. Its items are kept.
+      if (sent < queries.length) break;
+      bandit.decayArm(arm, 1);
+      bandit.update(arm, r);
+      this.save(query.scope, source.id, bucket, arm, bandit);
       if (shapes.length > 1) {
         // The cascade step's outcome teaches whether to cascade on this connector.
         const c = state.cascades[bucket];
@@ -224,7 +230,8 @@ export class QueryPlanner {
       if (got.length > 0 || !this.o.cascade || !this.cascadeWorth(state.cascades[bucket])) break;
       eligible[arm] = 0;
     }
-    return { items: items.slice(0, query.limit), shapes, calls, reward };
+    const kept = items.slice(0, query.limit);
+    return { items: kept, shapes, calls, reward, found: kept.length };
   }
 
   /** Whether to try one more shape after an empty result: a Thompson draw against `cascadeMin`, or exploration. */
@@ -306,7 +313,8 @@ export class QueryPlanner {
     }
     for (const a of stored) {
       // Stored rows are checked, not trusted: an unknown shape or a non-positive parameter is skipped.
-      if ((a.bucket !== 0 && a.bucket !== 1) || !(a.alpha > 0) || !(a.beta > 0)) continue;
+      const ok = (x: number) => Number.isFinite(x) && x > 0;
+      if ((a.bucket !== 0 && a.bucket !== 1) || !ok(a.alpha) || !ok(a.beta)) continue;
       const i = a.shape === CASCADE ? 0 : SHAPES.indexOf(a.shape as Shape);
       if (i < 0) continue;
       const b = a.shape === CASCADE ? s.cascades[a.bucket] : s.bandits[a.bucket];
@@ -385,7 +393,7 @@ export class PlannedSource implements Source {
 
   async search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]> {
     const r = await this.planner.search(this.inner, query, signal, this.permit);
-    this.last = { shapes: r.shapes, calls: r.calls, reward: r.reward };
+    this.last = { shapes: r.shapes, calls: r.calls, reward: r.reward, found: r.found };
     return r.items;
   }
 
