@@ -17,6 +17,13 @@ describe("extractEntities", () => {
     expect(extractEntities("Find me a yoga class on Sunday mornings in Islington")).toEqual(["Islington"]);
     expect(extractEntities("the invoice is due in October, ask May")).toEqual(["May"]);
     expect(extractEntities("tickets for the Sunday Times quiz")).toEqual(["Sunday Times"]);
+    for (const t of ["meet Sunday's crew", "meet on Sunday-morning", "the SUNDAY deadline", "due Fri, see you"]) {
+      expect(extractEntities(t)).toEqual([]);
+    }
+    expect(extractEntities("on Friday Dana Lee is free")).toEqual(["Dana Lee"]);
+    expect(extractEntities("dinner on Monday Tuesday")).toEqual([]);
+    expect(extractEntities("lunch with Jun and Jan, ask Sun")).toEqual(["Jun", "Jan", "Sun"]);
+    expect(extractEntities("the report is due in March, July at the latest")).toEqual([]);
   });
 });
 
