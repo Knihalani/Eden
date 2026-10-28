@@ -12,7 +12,7 @@ train / held-out split for tuning, hand-written adversarial scenarios, and text 
 - Done (2026-10-28, [research/eval-suite.md](research/eval-suite.md)): 26 scenarios across personal-agent jobs with
   gold labels, many must-stay-silent turns and 6 adversarial scenarios (prompt injection, planted secrets, look-alike
   names); per-category metrics, a privacy check and direct asks in the report. Baseline with no model: precision
-  0.889, recall 0.348, 2 false fires in 56 silent turns, no secret leaked.
+  0.833, recall 0.349, 3 false fires in 56 silent turns, no secret leaked.
 - Tune `confidentScore`, `candidateScore`, `entityBonus` on a train split; report on a held-out split.
 - Measure how often inferred usage (D13) agrees with labels.
 

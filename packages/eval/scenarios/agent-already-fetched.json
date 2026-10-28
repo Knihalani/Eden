@@ -1,7 +1,7 @@
 {
   "id": "agent-already-fetched",
   "category": "adversarial",
-  "description": "The agent fetched the fact itself with a tool: delivering it again (at the tool result, or when the user asks about what the agent just read out) would be noise.",
+  "description": "The agent fetched the fact with its own tool before the user asked: delivering it at the tool result, or when the user asks about what the agent just read out, would be noise.",
   "sources": [
     {
       "id": "calendar",
@@ -26,17 +26,6 @@
         },
         {
           "event": {
-            "kind": "user_message",
-            "text": "Can you check my calendar for the design review with Hana?"
-          },
-          "expect": {
-            "items": [
-              "calendar:evt-review"
-            ]
-          }
-        },
-        {
-          "event": {
             "kind": "tool_call",
             "tool": "calendar.get",
             "input": {
@@ -55,7 +44,7 @@
         {
           "event": {
             "kind": "agent_message",
-            "text": "It's Monday at 11:00 in Orion; bring the mobile mocks."
+            "text": "Your design review with Hana is Monday at 11:00 in Orion; bring the mobile mocks."
           },
           "expect": "silent"
         },

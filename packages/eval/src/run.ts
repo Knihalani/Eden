@@ -217,7 +217,7 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
       const res = await partner.ask({ ...who, sessionId: `${scenario.id}-ask`, question: c.question, maxItems: 5 });
       ask.cases++;
       if (res.citations.length > 0) ask.answered++;
-      if (res.citations.length > 0) inspect(res.answer, res.citations);
+      if (res.answer.length > 0) inspect(res.answer, res.citations);
       const cited = new Set(res.citations.map((x) => x.itemId));
       ask.expected += c.expect.length;
       ask.found += c.expect.filter((id) => cited.has(id)).length;
