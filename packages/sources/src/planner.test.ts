@@ -537,16 +537,37 @@ describe("QueryPlanner delivery credit (D39)", () => {
   test("crediting as another user, or with the option off, changes nothing", async () => {
     const planner = new QueryPlanner({ seed: 1, epsilon: 0, cascade: false });
     const { r, arm } = await lookup(planner);
-    const alicesMeans = planner.means(alice, "or", true);
+    const bobsMeans = planner.means(bob, "or", true); // Bob has state of his own, so a leak would show.
     planner.creditDelivery(bob, "or", r.items[0]!.id);
-    expect(planner.means(bob, "or", true)).toEqual(new QueryPlanner().means(bob, "or", true));
-    expect(planner.means(alice, "or", true)).toEqual(alicesMeans);
+    expect(planner.means(bob, "or", true)).toEqual(bobsMeans);
+    const before = planner.means(alice, "or", true)[arm]!;
+    planner.creditDelivery(alice, "or", r.items[0]!.id); // Still Alice's to credit.
+    expect(planner.means(alice, "or", true)[arm]).toBeGreaterThan(before);
     const off = new QueryPlanner({ seed: 1, epsilon: 0, cascade: false, deliveryCredit: false });
     const o = await lookup(off);
-    const before = off.means(alice, "or", true)[o.arm];
+    const offBefore = off.means(alice, "or", true)[o.arm];
     off.creditDelivery(alice, "or", o.r.items[0]!.id);
-    expect(off.means(alice, "or", true)[o.arm]).toBe(before);
-    expect(arm).toBe(o.arm);
+    expect(off.means(alice, "or", true)[o.arm]).toBe(offBefore);
+  });
+
+  test("a shadow lookup remembers nothing: its items are raw and never the ones delivered", async () => {
+    const planner = new QueryPlanner({ seed: 1, epsilon: 0, cascade: false, mode: "shadow" });
+    const { r, arm } = await lookup(planner);
+    const before = planner.means(alice, "or", true)[arm];
+    planner.creditDelivery(alice, "or", r.items[0]!.id);
+    expect(planner.means(alice, "or", true)[arm]).toBe(before);
+  });
+
+  test("past maxOrigins the least recently returned item is forgotten", async () => {
+    const planner = new QueryPlanner({ seed: 1, epsilon: 0, cascade: false, maxOrigins: 1 });
+    const src = anyWord();
+    const first = await planner.search(src, query("dinner jamie fox", ["Jamie Fox"]), signal);
+    await planner.search(src, query("invoice globex", ["Globex"]), signal);
+    const arm = first.shapes[0]!;
+    const before = planner.means(alice, "or", true)[arm];
+    planner.creditDelivery(alice, "or", "or:1"); // Returned by the first lookup only.
+    expect(planner.means(alice, "or", true)[arm]).toBe(before);
+    expect(first.items.map((i) => i.id)).toContain("or:1");
   });
 
   test("forget drops what a user's lookups returned before", async () => {
