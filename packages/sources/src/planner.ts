@@ -12,8 +12,11 @@
  *   stay usable for off-policy evaluation.
  * - Reward, at once: how much of the cue the best returned item covers (`cueCoverage`); 0 for nothing returned. It
  *   is a proxy for "a needed item came back": cheap, available on every call, and measured against the lab's labels.
- * - Cascade: when the chosen shape returns nothing and another shape applies, another one (a fresh Thompson draw
- *   among the rest) is tried once, within the same lookup. An empty result costs one more call, not the lookup.
+ * - Cascade: when the chosen shape returns nothing and another shape applies, another one is tried once, within
+ *   the same lookup: the rest's best posterior mean (a Thompson draw on an ε step), so it goes straight to what has
+ *   worked rather than drawing at random while little is known. The runner-up prior (one call per entity, the best
+ *   fixed shape where the cue's terms fail in the lab) makes that the first fallback until evidence says otherwise.
+ *   An empty result costs one more call, not the lookup.
  *   Whether to cascade is learned too, per (connector, bucket): a Beta posterior on "the cascade found something".
  *   On OR and ranked search an empty answer to the cue's terms means nothing is there, and every narrower shape
  *   comes back empty as well; there the cascade stops once its draws fall below `cascadeMin`, with an ε floor so it
@@ -59,6 +62,18 @@ export interface PlannerOptions {
   maxCalls?: number;
   /** Try the next shape when the chosen one returns nothing (subject to `cascadeMin`). */
   cascade?: boolean;
+  /**
+   * The cascade step sends the remaining shape with the best posterior mean (a Thompson draw on an ε step) rather
+   * than a Thompson draw: a draw among near-uniform priors spends early cascades on shapes that rarely help. The
+   * uniform floor on cascade steps is then ε² (an ε step that `select` itself also made uniform), not ε.
+   */
+  cascadeGreedy?: boolean;
+  /**
+   * A prior for the shape to fall back to while little is known; below the incumbent's mean, so it is not sent first
+   * on a fresh connector. `strength` 0 disables it. One call per entity, mean 0.7, strength 4 was chosen on the
+   * simulation's tune set (D38).
+   */
+  runnerUp?: { shape: Shape; mean: number; strength: number };
   /**
    * The cascade runs when a draw from its posterior (chance it finds something, per connector and bucket) is at least
    * this, or on an ε exploration step. 0 always cascades. 0.05 was tuned on the simulation's tune set with a perfect
@@ -138,6 +153,15 @@ interface ConnectorState {
   cascades: [BetaBandit, BetaBandit];
 }
 
+/** The eligible arm with the highest posterior mean (the first on a tie). */
+function bestMean(bandit: BetaBandit, eligible: Uint8Array): number {
+  let best = -1;
+  for (let i = 0; i < eligible.length; i++) {
+    if (eligible[i] === 1 && (best < 0 || bandit.mean(i) > bandit.mean(best))) best = i;
+  }
+  return best;
+}
+
 /** The stored name of a bucket's cascade posterior (`PlannerArm.shape`); not a shape. */
 const CASCADE = "cascade";
 
@@ -148,6 +172,8 @@ const DEFAULTS = {
   priorStrength: 2,
   maxCalls: 3,
   cascade: true,
+  cascadeGreedy: true,
+  runnerUp: { shape: "each-entity" as Shape, mean: 0.7, strength: 4 },
   cascadeMin: 0.05,
   reuse: true,
   deadlineMargin: 2,
@@ -211,6 +237,8 @@ export class QueryPlanner {
       const n = bandit.select(this.rng, 1, eligible, null, this.o.epsilon, picked);
       if (n === 0) break;
       let arm = picked[0]!;
+      if (shapes.length > 0 && this.o.cascadeGreedy && this.rng.uniform() >= this.o.epsilon)
+        arm = bestMean(bandit, eligible);
       // Conservative: the incumbent is sent unless the draw's winner beats it, on posterior means, by `margin`. Where
       // the reward cannot tell shapes apart, today's query stays; where it fails, the means part quickly.
       const inc = this.incumbentArm;
@@ -352,9 +380,15 @@ export class QueryPlanner {
     const prior = new Float64Array(SHAPES.length).fill(0.5);
     const inc = this.o.incumbent;
     const incArm = SHAPES.indexOf(inc.shape);
+    const runner = this.o.runnerUp;
+    const runnerArm = SHAPES.indexOf(runner.shape);
     const make = () => {
       const b = new BetaBandit(SHAPES.length, prior, this.o.priorStrength, this.o.gamma, 1);
       if (incArm >= 0 && inc.strength > 0) b.setPrior(incArm, inc.mean, inc.strength);
+      // Only below an incumbent: without one, or above it, the runner-up would be sent first with no margin rule.
+      if (runnerArm >= 0 && runner.strength > 0 && incArm >= 0 && inc.strength > 0 && runner.mean < inc.mean) {
+        b.setPrior(runnerArm, runner.mean, runner.strength);
+      }
       return b;
     };
     const cascade = () => new BetaBandit(1, new Float64Array([0.5]), this.o.priorStrength, this.o.gamma, 1);

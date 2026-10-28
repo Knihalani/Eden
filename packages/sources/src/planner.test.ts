@@ -195,7 +195,7 @@ describe("QueryPlanner", () => {
   test("the incumbent (terms) starts ahead, and is kept where it works", async () => {
     const prior = new QueryPlanner().means(alice, "or", true);
     expect(prior.terms).toBe(0.75);
-    expect(prior["each-entity"]).toBe(0.5);
+    expect(prior["each-entity"]).toBe(0.7); // The runner-up prior (D38): below the incumbent, above the rest.
     const planner = new QueryPlanner({ seed: 6, cascade: false });
     let terms = 0;
     for (let i = 0; i < 60; i++) {
@@ -463,5 +463,54 @@ describe("QueryPlanner", () => {
     const late: Source = { id: "s", kind: "t", description: "", search: async () => (ac.abort(), []) };
     await planner.search(late, cues[0]!, ac.signal);
     expect(rows).toEqual([]);
+  });
+});
+
+describe("QueryPlanner cascade order (D38)", () => {
+  test("on a fresh connector the incumbent goes first, and the cascade falls back to one call per entity", async () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const r = await new QueryPlanner({ seed, epsilon: 0, cascadeMin: 0 }).search(substring(), cues[0]!, signal);
+      expect(r.shapes).toEqual(["terms", "each-entity"]);
+      expect(r.items.length).toBeGreaterThan(0);
+    }
+  });
+
+  test("the runner-up prior applies only below an incumbent", async () => {
+    const none = new QueryPlanner({ incumbent: { shape: "terms", mean: 0.75, strength: 0 } });
+    expect(none.means(alice, "or", true)["each-entity"]).toBe(0.5);
+    const low = new QueryPlanner({ incumbent: { shape: "terms", mean: 0.6, strength: 8 } });
+    expect(low.means(alice, "or", true)["each-entity"]).toBe(0.5);
+    expect(new QueryPlanner().means(alice, "or", true)["each-entity"]).toBe(0.7);
+  });
+
+  test("without the runner-up prior or the greedy step, the first cascade is a draw among the rest", async () => {
+    const seen = new Set<string>();
+    for (let seed = 1; seed <= 20; seed++) {
+      const planner = new QueryPlanner({ seed, epsilon: 0, cascadeMin: 0, cascadeGreedy: false });
+      const r = await planner.search(substring(), cues[0]!, signal);
+      seen.add(r.shapes[1]!);
+    }
+    expect(seen.size).toBeGreaterThan(1);
+    const flat = new QueryPlanner({
+      seed: 1,
+      epsilon: 0,
+      cascadeMin: 0,
+      runnerUp: { shape: "each-entity", mean: 0.7, strength: 0 },
+    });
+    expect((await flat.search(substring(), cues[0]!, signal)).shapes[1]).toBe("entities"); // The first on a tie.
+  });
+
+  test("the cascade follows evidence: a shape that found things comes before the runner-up", async () => {
+    // Train "entities" (all entities as one query) to succeed. A margin of 1 keeps the incumbent first, so the
+    // cascade's choice between "entities" and the runner-up is what is tested, on every seed.
+    for (let seed = 1; seed <= 20; seed++) {
+      const planner = new QueryPlanner({ seed, epsilon: 0, cascadeMin: 0, margin: 1 });
+      type Inner = { state: (s: unknown, id: string) => { bandits: { update(a: number, r: number): void }[] } };
+      const bucket = (planner as unknown as Inner).state(alice, "or");
+      for (let i = 0; i < 20; i++) bucket.bandits[1]!.update(1, 1); // SHAPES[1] is "entities".
+      const empty = { ...anyWord(), search: async () => [] as ContextItem[] };
+      const r = await planner.search(empty, cues[0]!, signal);
+      expect(r.shapes).toEqual(["terms", "entities"]);
+    }
   });
 });
