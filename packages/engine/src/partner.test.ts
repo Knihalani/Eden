@@ -730,6 +730,17 @@ describe("no-model fallback limits (D36)", () => {
     expect((await run(two, ask)).ids).toHaveLength(1);
   });
 
+  test("only the top candidate: when it fails the gate, a weaker one is not delivered instead", async () => {
+    // Both hold all three query terms; the newsletter ranks first (its title holds them too) and is bulk mail.
+    const docs = [
+      { ref: "nl", title: "Budget review outcome newsletter", text: "Budget review outcome news" },
+      { ref: "br", title: "Notes", text: "The budget review outcome was approved" },
+    ];
+    const { ids, traces } = await run(docs, "what was the budget review outcome");
+    expect(ids).toEqual([]);
+    expect(traces.some((t) => t.reason === "no model")).toBe(true);
+  });
+
   test("over budget with nothing strong enough: silent, traced as no model budget", async () => {
     const model = new FakeModel(() => '{"pick": [0]}');
     const budget = new Budget({ callsPerSession: 0, usdPerSession: 1, usdPerUserDay: 1 });
