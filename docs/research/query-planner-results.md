@@ -228,9 +228,11 @@ either judge setting.
   ranked connectors' empty cascades fell from 1,471 to 1,021.
 - **Recall:** within noise of before in every mix and judge setting, and still above off on A and realistic with
   intervals apart. The largest drop is realistic with a judge (38.7% to 36.9%).
-- **Guardrails:** false fires unchanged; precision equal or higher; no secret leaked.
+- **Guardrails:** false fires unchanged; precision within noise (zoo-b 0.002–0.004 lower, the others higher); no
+  planted secret leaked (0 of 120 per mix and run with no model, 0 of 72 with a judge).
 - **Not enough on its own:** the planner still makes 40–51% more calls than off. A higher threshold saves more
-  (0.2 cut extra calls by 42% on the tune set) but cost recall there with a judge (39.1% to 36.6%), so it was not
+  (0.2 cut extra calls by 42–43% on the tune set, against
+  4.11 with the planner off) but cost recall there with a judge (39.1% to 36.6%), so it was not
   taken.
 - **Real servers** (the connector lab, world 1000, planner only, measured at `cascadeMin` 0.2, which closes the gate
   sooner than the default; raw: [query-planner-lab-cascade.jsonl](query-planner-lab-cascade.jsonl)): reach and calls
@@ -252,6 +254,13 @@ either judge setting.
 
 **Tried and dropped:** choosing the cascade's shape by the highest posterior mean, or by mean per call, instead of a
 Thompson draw (tune set, no model, at 0.2): recall 18.2% and 17.8% against 19.1%, calls 5.33 and 5.19 against 5.22.
+These came from a scratch build that was not kept, so they are not in the raw data (unverified by the committed
+scripts).
+
+**On the held-out discipline:** a first version of this change used 0.2 and was measured on the held-out sets, where
+recall came out lower in every mix (within noise). 0.05 was then added to the tune grid and chosen on the tune set
+alone, by a criterion written after that look. Every held-out gap is inside its interval, but those sets are no
+longer fresh for this parameter; the next review checkpoint rotates the held-out seeds (the plan's step 6).
 
 ## Gates in the plan, and where they stand
 

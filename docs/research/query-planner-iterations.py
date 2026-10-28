@@ -12,8 +12,8 @@ groups = collections.defaultdict(list)
 for line in open(sys.argv[1]):
     r = json.loads(line)
     groups[(r["iteration"], r["judge"], r["profile"], r["label"])].append(r)
-print("| Iteration | Judge | Mix | Run | Seeds | Needed facts retrieved or cached | Recall | Precision | False fires | Source calls per lookup |")
-print("|---|---|---|---|---|---|---|---|---|---|")
+print("| Iteration | Judge | Mix | Run | Seeds | Needed facts retrieved or cached | Recall | Precision | False fires | Source calls per lookup | Secrets leaked |")
+print("|---|---|---|---|---|---|---|---|---|---|---|")
 for (it, judge, profile, label), rs in sorted(groups.items()):
     c = [r["overall"]["counts"] for r in rs]
     must = sum(x["mustFacts"] for x in c)
@@ -24,5 +24,6 @@ for (it, judge, profile, label), rs in sorted(groups.items()):
     print(
         f"| {it} | {judge} | {profile} | {label} | {len(rs)} | {wilson(sum(r['funnel']['retrievedOrCached'] for r in rs), must)} "
         f"| {wilson(sum(x['mustDelivered'] for x in c), must)} | {rel / max(1, delivered):.3f} ({rel}/{delivered}) "
-        f"| {sum(x['falseFires'] for x in c)}/{sum(x['silentTurns'] for x in c)} | {calls / lookups:.2f} |"
+        f"| {sum(x['falseFires'] for x in c)}/{sum(x['silentTurns'] for x in c)} | {calls / lookups:.2f} "
+        f"| {sum(r['privacy']['secretsLeaked'] for r in rs)}/{sum(r['privacy']['secretsPlanted'] for r in rs)} |"
     )
