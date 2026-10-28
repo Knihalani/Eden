@@ -27,8 +27,9 @@ train / held-out split for tuning, hand-written adversarial scenarios, and text 
   then 7–12% with recall within noise; a deadline check cut the calls it gave up on (timeouts and session ends) by
   71–79% (margin chosen on the same runs). The default-on gate (D31, D32) is open only on those (still 3–6x
   planner-off's). Next: the remaining ones, the planner's learning cost, delivery and usage rewards. Its evidence:
-  a source survey of real MCP servers ([research/connectors.md](research/connectors.md)) and the connector lab, where the query Eden
-  sent reached nothing on whole-string-substring connectors ([research/connector-lab.md](research/connector-lab.md)).
+  a source survey of real MCP servers ([research/connectors.md](research/connectors.md)) and the connector lab,
+  where the query Eden sent reached nothing on whole-string-substring connectors
+  ([research/connector-lab.md](research/connector-lab.md)).
 
 ## M3 — The graph, layer 2
 - Entity resolution (aliases, email ↔ name), typed relations (person–company–project), freshness per source.
