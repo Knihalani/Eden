@@ -393,6 +393,20 @@ describe("query planner wiring", () => {
     expect(sent.some((q) => q === "Globex" || q === "Dana Lee")).toBe(true);
   });
 
+  test("shadow lookups never read or fill the fan-out's cache of planner calls (D29)", async () => {
+    const { source, sent } = substringCrm();
+    let t = 1_700_000_000_000;
+    const planner = new QueryPlanner({ seed: 1, mode: "shadow" });
+    const { p } = partner({ planner, now: () => (t += 1_000) }, [source]);
+    for (let i = 0; i < 12; i++) {
+      await ask(p);
+      await Bun.sleep(5);
+    }
+    // Twelve questions within a minute name the same person: a shadow lookup sends the entity query every time,
+    // where a cached answer would have spared all but the first.
+    expect(sent.filter((q) => q === "Dana Lee").length).toBeGreaterThan(2);
+  });
+
   /** A connector that answers any query with one item echoing it, so every served lookup can deliver something. */
   function echo(id = "notes", ref = (q: string) => `n-${q.length}-${q.split(" ")[0]}`) {
     let calls = 0;

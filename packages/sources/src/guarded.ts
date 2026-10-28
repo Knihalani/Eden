@@ -79,6 +79,8 @@ export class SourceFanout {
   private readonly now: () => number;
   /** The `PlanCalls` this fan-out handed out: a planned source using one returns items already sanitized here. */
   private readonly minted = new WeakSet<PlanCalls>();
+  /** Counts `forget` calls: a planner call that started before one does not write its result back. */
+  private forgets = 0;
 
   constructor(options: FanoutOptions) {
     this.options = options;
@@ -118,6 +120,7 @@ export class SourceFanout {
   /** Drops everything held for a user (cached results and per-source state), or for one of their sources. */
   forget(scope: Scope, sourceId?: string): void {
     const prefix = sourceId ? `${scopeKey(scope)}|${sourceId}|` : `${scopeKey(scope)}|`;
+    this.forgets++;
     this.results?.deleteWhere((k) => k.startsWith(prefix));
     for (const k of [...this.per.keys()]) if (`${k}|`.startsWith(prefix) || k.startsWith(prefix)) this.per.delete(k);
   }
@@ -142,13 +145,15 @@ export class SourceFanout {
   }
 
   /**
-   * The query planner's calls for one user's source, through this fan-out (`PlanCalls`): each shape's query is cached
-   * apart from whole lookups (its own key, so a lookup never joins its own call's flight), shared while in flight,
-   * sanitized before it is held, and dropped by `forget`. Rate tokens, the breaker and the concurrency limit stay
-   * with the lookup that admitted the source and with the planner's `permit`.
+   * The query planner's calls to a source, through this fan-out (`PlanCalls`): each shape's query is cached apart
+   * from whole lookups (its own key, so a lookup never joins its own call's flight), keyed by the query's own user,
+   * shared while in flight, sanitized before it is held, and dropped by `forget`. A call that was abandoned, or that
+   * was still running when any `forget` happened, returns what it got but holds nothing: writing it back could undo
+   * the forget. Rate tokens, the breaker and the concurrency limit stay with the lookup that admitted the source and
+   * with the planner's `permit`.
    */
-  planCalls(scope: Scope, source: Source): PlanCalls {
-    const key = (q: SearchQuery) => `${scopeKey(scope)}|${source.id}|plan|${q.limit}|${q.text}`;
+  planCalls(source: Source): PlanCalls {
+    const key = (q: SearchQuery) => `${scopeKey(q.scope)}|${source.id}|plan|${q.limit}|${q.text}`;
     const calls: PlanCalls = {
       cached: (q) => {
         const k = key(q);
@@ -160,8 +165,9 @@ export class SourceFanout {
         return this.flights.run(
           k,
           async (sig) => {
+            const forgets = this.forgets;
             const items = await this.options.sanitize(await source.search(q, sig), sig);
-            this.results?.set(k, items, sizeOf(items));
+            if (!sig.aborted && this.forgets === forgets) this.results?.set(k, items, sizeOf(items));
             return items;
           },
           signal,

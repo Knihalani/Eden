@@ -144,13 +144,9 @@ describe("SourceFanout.planCalls (the query planner's calls)", () => {
     limit: 5,
   });
   const planned = (f: SourceFanout, src: Source, who = scope) =>
-    new PlannedSource(
-      src,
-      new QueryPlanner({ seed: 1, epsilon: 0 }),
-      () => f.permit(who, src.id),
-      f.planCalls(who, src),
-    );
-  const shapeQuery = (who = scope): SearchQuery => ({ scope: who, text: "dana lee", entities: [], limit: 5 });
+    new PlannedSource(src, new QueryPlanner({ seed: 1, epsilon: 0 }), () => f.permit(who, src.id), f.planCalls(src));
+  const shapeQuery = (who = scope, text = "dana lee"): SearchQuery => ({ scope: who, text, entities: [], limit: 5 });
+  const signal = new AbortController().signal;
 
   test("a shape's query answered recently is served from the cache: no call, no rate token", async () => {
     const src = substring();
@@ -172,16 +168,53 @@ describe("SourceFanout.planCalls (the query planner's calls)", () => {
     const [out] = await f.search([planned(f, src)], cue(), { timeoutMs: 1_000 });
     expect(out!.items[0]!.text).toBe("Dana Lee asked about the [REDACTED] renewal");
     expect(gated).toBe(1);
-    expect(f.planCalls(scope, src).cached(shapeQuery())![0]!.text).toContain("[REDACTED]");
+    expect(f.planCalls(src).cached(shapeQuery())![0]!.text).toContain("[REDACTED]");
   });
 
   test("a planned source with calls from another fan-out is still sanitized", async () => {
     const src = substring();
     const f = new SourceFanout({ sanitize: redactAll });
     const other = new SourceFanout({ sanitize: (x) => x });
-    const foreign = new PlannedSource(src, new QueryPlanner({ seed: 1 }), undefined, other.planCalls(scope, src));
+    const foreign = new PlannedSource(src, new QueryPlanner({ seed: 1 }), undefined, other.planCalls(src));
     const [out] = await f.search([foreign], cue(), { timeoutMs: 1_000 });
     expect(out!.items[0]!.text).toContain("[REDACTED]");
+  });
+
+  test("a later shape answered recently takes no call and no rate token", async () => {
+    const src = substring();
+    const f = new SourceFanout({ sanitize: (x) => x });
+    // Every cascade shape for this cue is already held: per entity ("Dana Lee") and entity plus term.
+    for (const text of ["Dana Lee", "Dana Lee status"]) await f.planCalls(src).call(shapeQuery(scope, text), signal);
+    const before = src.log.length;
+    let permits = 0;
+    const planner = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0 });
+    const p = new PlannedSource(src, planner, () => (permits++, true), f.planCalls(src));
+    // The cue's terms ("status" alone) find nothing on this connector, so the cascade runs.
+    const [out] = await f.search([p], { ...cue(), text: "status" }, { timeoutMs: 1_000 });
+    expect(out!.status).toBe("ok");
+    expect(p.last!.shapes).toHaveLength(2);
+    expect(src.log.slice(before)).toEqual(["status"]);
+    expect(permits).toBe(0);
+  });
+
+  test("a planner call still running when its user is forgotten holds nothing afterwards", async () => {
+    for (const abort of [true, false]) {
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      // A connector that ignores the abort and answers late, as a slow server may.
+      const src: Source = { id: "s", kind: "t", description: "", search: async () => (await gate, [item("Dana Lee")]) };
+      const f = new SourceFanout({ sanitize: (x) => x });
+      const ac = new AbortController();
+      const p = new PlannedSource(src, new QueryPlanner({ seed: 1 }), undefined, f.planCalls(src));
+      const out = f.search([p], cue(), { timeoutMs: 5_000, signal: ac.signal });
+      await Bun.sleep(5);
+      if (abort) ac.abort();
+      f.forget(scope);
+      release();
+      await out;
+      await Bun.sleep(5);
+      expect(f.planCalls(src).cached(shapeQuery())).toBeUndefined();
+    }
   });
 
   test("planned results are per user and dropped by forget", async () => {
@@ -189,9 +222,9 @@ describe("SourceFanout.planCalls (the query planner's calls)", () => {
     const f = new SourceFanout({ sanitize: (x) => x });
     const bob = { tenantId: "t", userId: "bob" };
     await f.search([planned(f, src)], cue(), { timeoutMs: 1_000 });
-    expect(f.planCalls(scope, src).cached(shapeQuery())).toBeDefined();
-    expect(f.planCalls(bob, src).cached(shapeQuery(bob))).toBeUndefined();
+    expect(f.planCalls(src).cached(shapeQuery())).toBeDefined();
+    expect(f.planCalls(src).cached(shapeQuery(bob))).toBeUndefined();
     f.forget(scope, "s");
-    expect(f.planCalls(scope, src).cached(shapeQuery())).toBeUndefined();
+    expect(f.planCalls(src).cached(shapeQuery())).toBeUndefined();
   });
 });

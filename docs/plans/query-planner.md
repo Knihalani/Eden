@@ -1,9 +1,9 @@
 # Plan: an adaptive query planner, tested on real connectors
 
 Status: phases 0–5 built and measured, 2026-10-28; phase 5 (shadow) ran in simulation by the owner's decision (D29).
-Opt-in and off by default (D28); phase 6 (default on) is not met because of the extra source calls. Results and gate
-status: docs/research/query-planner-results.md; departures from this plan are listed in D28 and D29. The iteration
-loop has started; each iteration is logged in the results' "Iterations" section.
+Opt-in and off by default (D28); phase 6 (default on) is judged by D31's cost-normalised gate, not yet met. Results
+and gate status: docs/research/query-planner-results.md; departures from this plan are listed in D28–D31. The
+iteration loop has started; each iteration is logged in the results' "Iterations" section.
 
 ## Why
 
@@ -290,7 +290,7 @@ Needed before or during the work; each becomes a numbered entry in DECISIONS.md.
 2. **Shadow mode on real accounts**: whose, with what consent, and what aggregates may be kept.
 3. **Tenant-level priors** (D9): opt-in content-free counts per connector kind, or per-user learning only.
 4. **A model budget** for the judge in live tier-3 runs (the current OpenRouter key's $0.01 limit is spent).
-5. **Default-on criteria** for phase 6.
+5. **Default-on criteria** for phase 6: decided, a cost-normalised gate (D31).
 6. **Running third-party MCP servers in the lab**: granted by the owner on 2026-10-27, for pinned open-source
    servers in containers without secrets or network beyond their backend.
 7. **Multi-tool connectors** (D7): keep one Eden source per search tool, or allow a connector with an operator-listed
