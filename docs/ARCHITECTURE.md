@@ -51,8 +51,8 @@ crosses a user boundary. Cross-user learning, if ever added, may share only cont
 SQLite source map): build a cue (entities, content terms, situation), look it up in the user's item cache, and
 deliver only if an item names a cue entity as whole words, covers most of the query, and holds at least two of its
 terms (D6: `confidentScore` > 1 by construction, since idf-weighted coverage is at most 1, plus an entity bonus).
-An item a recent tool result or agent message holds whole is never delivered, and bulk mail never without a model
-(D34).
+An item a recent tool result or agent message holds whole is never pushed (an ask still returns it), and bulk mail
+is never pushed without a model (D34).
 
 **Slow path** (background; at most one per session at a time): rank the user's sources with the source map, search
 the top few live (each under its own deadline), cache the redacted results, record entity mentions, and re-score.

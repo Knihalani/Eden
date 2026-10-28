@@ -102,11 +102,11 @@ interface Session {
   lastActive: number;
   window: string[];
   /**
-   * The term ids (session vocabulary) of recent events that show what the agent has: tool results it fetched and its
-   * own messages (bounded like the window), for `alreadyHas`. A user naming something is no sign the agent has its
-   * content.
+   * What recent events show the agent has: the terms and adjacent term pairs (session vocabulary) of tool results it
+   * fetched and its own messages (bounded like the window), for `alreadyHas`. A user naming something is no sign the
+   * agent has its content.
    */
-  agentHas: Set<number>[];
+  agentHas: Held[];
   /**
    * The session's own vocabulary: all of its term ids (seen, usage, cues) are in it. Rebuilt past
    * `maxSessionTerms`; the cache's per-user vocabulary holds item terms only.
@@ -448,7 +448,7 @@ export class ContextPartner {
     s.window.push(`${event.kind}: ${text.slice(0, 1_000)}`);
     if (s.window.length > this.config.windowEvents) s.window.shift();
     if (event.kind === "tool_result" || event.kind === "agent_message") {
-      s.agentHas.push(new Set(terms.subarray(0, MAX_HELD_TERMS)));
+      s.agentHas.push(heldOf(text, s.vocab));
       if (s.agentHas.length > this.config.windowEvents) s.agentHas.shift();
     }
     for (let i = 0; i < terms.length; i++) {
@@ -534,7 +534,7 @@ export class ContextPartner {
         // A near-duplicate of something already delivered this session (a reply quoting it, a synced copy) is old news.
         .filter((h) => options.ignoreLedger || !s.delivered.some((d) => nearDuplicate(d, h.sketch)))
         // What the agent already has in front of it (a tool result it fetched, its own read-out) is not news either.
-        .filter((h) => options.ignoreLedger || !this.alreadyHas(s, h.doc, vocab))
+        .filter((h) => options.ignoreLedger || !this.alreadyHas(s, h.item, h.doc, vocab))
         .map((h) => {
           const entityHit = entities.some(
             (ids) => ids.length > 0 && cache.containsAll(s.scope, h.doc, ids, ids.length),
@@ -559,12 +559,13 @@ export class ContextPartner {
   }
 
   /**
-   * Whether one recent tool result or agent message holds every term of a cached item: then the item adds nothing the
-   * agent has not fetched or said, and delivering it is a repeat. Any new term (a changed time, another room) keeps
-   * it: a stale copy in the agent's hands is no reason to hold back the update. Items of under four terms are never
-   * judged so, since a few common terms prove nothing.
+   * Whether one recent tool result or agent message holds every term of a cached item and every pair of adjacent
+   * terms in its title and text: then the item adds nothing the agent has not fetched or said, and delivering it is a
+   * repeat. A new term or a new pairing (11:30 where the agent saw 11:00 and, elsewhere in a day's listing, 9:30)
+   * keeps it: a stale copy in the agent's hands is no reason to hold back the update. Items of under four terms are
+   * never judged so, since a few common terms prove nothing.
    */
-  private alreadyHas(s: Session, doc: number, vocab: Vocab): boolean {
+  private alreadyHas(s: Session, item: ContextItem, doc: number, vocab: Vocab): boolean {
     if (s.agentHas.length === 0) return false; // The common case: no agent output yet, no work.
     const own = this.deps.cache.termsOf(s.scope, doc);
     if (own.length < 4) return false;
@@ -576,7 +577,11 @@ export class ContextPartner {
       if (id < 0) return false;
       ids[i] = id;
     }
-    return s.agentHas.some((held) => ids.every((id) => held.has(id)));
+    const holders = s.agentHas.filter((held) => ids.every((id) => held.terms.has(id)));
+    if (holders.length === 0) return false;
+    // Every term is known to the session now, so no term is skipped and adjacent ids are adjacent words.
+    const pairs = [...pairsOf(item.title, s.vocab), ...pairsOf(item.text.slice(0, HELD_CHARS), s.vocab)];
+    return holders.some((held) => pairs.every((p) => held.pairs.has(p)));
   }
 
   /** Routes, searches the chosen sources live, caches what they return and records which entities they hold. */
@@ -864,11 +869,16 @@ function rebuildVocab(s: Session, maxTerms: number): void {
   }
   // The newest held events keep their terms under the new ids while they fit in a quarter of the cap; older ones are
   // dropped, which only errs toward delivering.
-  const agentHas: Set<number>[] = [];
+  const agentHas: Held[] = [];
+  const remap = (id: number) => vocab.intern(old.term(id));
   let room = Math.floor(maxTerms / 4);
-  for (let i = s.agentHas.length - 1; i >= 0 && s.agentHas[i]!.size <= room; i--) {
-    room -= s.agentHas[i]!.size;
-    agentHas.unshift(new Set(Array.from(s.agentHas[i]!, (id) => vocab.intern(old.term(id)))));
+  for (let i = s.agentHas.length - 1; i >= 0 && s.agentHas[i]!.terms.size <= room; i--) {
+    const held = s.agentHas[i]!;
+    room -= held.terms.size;
+    const pairs = new Set(
+      Array.from(held.pairs, (p) => pairKey(remap(Math.floor(p / PAIR_BASE)), remap(p % PAIR_BASE))),
+    );
+    agentHas.unshift({ terms: new Set(Array.from(held.terms, remap)), pairs });
   }
   s.agentHas = agentHas;
   s.vocab = vocab;
@@ -934,12 +944,44 @@ function buildCue(text: string, ids: Uint32Array, vocab: Vocab): Cue {
   return { text: terms.join(" "), entities, key, id };
 }
 
+/** What one agent-held event holds: its terms and its adjacent term pairs (`pairKey`), in session ids. */
+interface Held {
+  terms: Set<number>;
+  pairs: Set<number>;
+}
+
 /**
- * Terms kept per agent-held event, in order of first appearance (about the first few thousand characters): bounds the
- * session vocabulary a rebuild must keep. An item longer than that is never judged held, so the bound only errs
- * toward delivering.
+ * The head of an agent-held event that is kept, and at most this many distinct terms of it: bounds the session
+ * vocabulary a rebuild must keep. An item longer than that is never judged held, so the bounds only err toward
+ * delivering.
  */
+const HELD_CHARS = 8_000;
 const MAX_HELD_TERMS = 512;
+
+/** Pair keys are exact while ids stay under 2^21 (a session vocabulary is rebuilt far below that). */
+const PAIR_BASE = 2 ** 32;
+const pairKey = (a: number, b: number) => a * PAIR_BASE + b;
+
+/** An agent-held event's terms and pairs. Its terms are interned already (`observe`), so none is skipped. */
+function heldOf(text: string, vocab: Vocab): Held {
+  const { ids, n } = termIds(text.slice(0, HELD_CHARS), vocab, false);
+  const terms = new Set<number>();
+  const pairs = new Set<number>();
+  for (let i = 0; i < n; i++) {
+    if (!terms.has(ids[i]!) && terms.size === MAX_HELD_TERMS) break;
+    terms.add(ids[i]!);
+    if (i > 0) pairs.add(pairKey(ids[i - 1]!, ids[i]!));
+  }
+  return { terms, pairs };
+}
+
+/** The adjacent term pairs of `text` (terms the vocabulary does not know are skipped). */
+function pairsOf(text: string, vocab: Vocab): number[] {
+  const { ids, n } = termIds(text, vocab, false);
+  const out: number[] = [];
+  for (let i = 1; i < n; i++) out.push(pairKey(ids[i - 1]!, ids[i]!));
+  return out;
+}
 
 /**
  * Bulk mail, by the connector's mailbox category (`meta.category`; Gmail's Promotions tab) or by a title that names
