@@ -110,6 +110,14 @@ export class SourceFanout {
     for (const k of [...this.per.keys()]) if (`${k}|`.startsWith(prefix) || k.startsWith(prefix)) this.per.delete(k);
   }
 
+  /**
+   * One more call to a source within a lookup already admitted (the query planner's extra calls): takes a token from
+   * the same per-(user, source) rate limit, so the limit counts calls, not lookups. False when the limit is spent.
+   */
+  permit(scope: Scope, sourceId: string): boolean {
+    return this.rate.take(`${scopeKey(scope)}|${sourceId}`) <= 0;
+  }
+
   /** The source's recent latency quantile in ms (NaN if no calls yet), for observability. */
   latency(scope: Scope, sourceId: string, q: number): number {
     return this.per.get(`${scopeKey(scope)}|${sourceId}`)?.latency.quantile(q) ?? NaN;

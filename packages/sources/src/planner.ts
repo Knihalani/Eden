@@ -115,27 +115,35 @@ export class QueryPlanner {
     this.incumbentArm = this.o.incumbent.strength > 0 ? SHAPES.indexOf(this.o.incumbent.shape) : -1;
   }
 
-  /** Runs one lookup against `source`, choosing and crediting shapes. Errors from the source propagate. */
+  /**
+   * Runs one lookup against `source`, choosing and crediting shapes. Errors from the source propagate; errors from the
+   * store do not (learning fails open). `permit` is asked before every call after the first: the caller's rate limit
+   * applies per call, not per lookup, and a refused permit ends the lookup with what it has.
+   */
   async search(
     source: Source,
     query: SearchQuery,
     signal: AbortSignal,
+    permit?: () => boolean,
   ): Promise<{ items: ContextItem[] } & PlanOutcome> {
     const input: ShapeInput = { text: query.text, entities: query.entities };
     const quotes = this.o.quotes?.(source.id) ?? false;
     const built = SHAPES.map((s) => buildShape(s, input, { quotes, maxCalls: this.o.maxCalls }));
     const bucket = query.entities.length > 0 ? 1 : 0;
     const bandit = this.state(query.scope, source.id).bandits[bucket];
-    for (let i = 0; i < SHAPES.length; i++) this.eligible[i] = built[i]!.length > 0 ? 1 : 0;
+    // Per lookup, never shared: lookups for other users and connectors run concurrently and must not see these.
+    const eligible = new Uint8Array(SHAPES.length);
+    const picked = new Int32Array(1);
+    for (let i = 0; i < SHAPES.length; i++) eligible[i] = built[i]!.length > 0 ? 1 : 0;
     const shapes: Shape[] = [];
     let calls = 0;
     let reward = 0;
     const seen = new Set<string>();
     const items: ContextItem[] = [];
     while (calls < this.o.maxCalls) {
-      const n = bandit.select(this.rng, 1, this.eligible, null, this.o.epsilon, this.picked);
+      const n = bandit.select(this.rng, 1, eligible, null, this.o.epsilon, picked);
       if (n === 0) break;
-      let arm = this.picked[0]!;
+      let arm = picked[0]!;
       // Conservative: the incumbent is sent unless the draw's winner beats it, on posterior means, by `margin`. Where
       // the reward cannot tell shapes apart, today's query stays; where it fails, the means part quickly.
       const inc = this.incumbentArm;
@@ -143,7 +151,7 @@ export class QueryPlanner {
         shapes.length === 0 &&
         inc >= 0 &&
         arm !== inc &&
-        this.eligible[inc] === 1 &&
+        eligible[inc] === 1 &&
         bandit.mean(arm) - bandit.mean(inc) < this.o.margin &&
         this.rng.uniform() >= this.o.epsilon
       ) {
@@ -151,17 +159,20 @@ export class QueryPlanner {
       }
       const queries = built[arm]!.slice(0, this.o.maxCalls - calls);
       const got: ContextItem[] = [];
+      let sent = 0;
       for (const text of queries) {
+        if (calls > 0 && permit && !permit()) break;
         calls++;
+        sent++;
         // Shapes carry the whole query in `text`; entities are cleared so a source does not re-add its own.
         for (const it of await source.search({ ...query, text, entities: [] }, signal)) got.push(it);
       }
+      // A shape that sent nothing (the permit was refused) is not credited: nothing was learned about it.
+      if (sent === 0) break;
       const r = this.o.rewardTopK > 1 ? rankedCoverage(input, got, this.o.rewardTopK) : cueCoverage(input, got);
       bandit.decayArm(arm, 1);
       bandit.update(arm, r);
-      this.o.store?.saveArms(query.scope, source.id, [
-        { bucket, shape: SHAPES[arm]!, alpha: bandit.alpha[arm]!, beta: bandit.beta[arm]! },
-      ]);
+      this.save(query.scope, source.id, bucket, arm, bandit);
       shapes.push(SHAPES[arm]!);
       reward = Math.max(reward, r);
       for (const it of got) {
@@ -171,9 +182,27 @@ export class QueryPlanner {
       }
       // One cascade step at most, and only after an empty result: a non-empty one is the lookup's answer.
       if (got.length > 0 || !this.o.cascade || shapes.length > 1) break;
-      this.eligible[arm] = 0;
+      eligible[arm] = 0;
     }
     return { items: items.slice(0, query.limit), shapes, calls, reward };
+  }
+
+  /** Drops what was learned for a user (and one connector, when given), in memory; the store forgets its own. */
+  forget(scope: Scope, sourceId?: string): void {
+    const prefix = `${scope.tenantId}\u0000${scope.userId}\u0000`;
+    for (const key of [...this.states.keys()]) {
+      if (sourceId ? key === prefix + sourceId : key.startsWith(prefix)) this.states.delete(key);
+    }
+  }
+
+  private save(scope: Scope, sourceId: string, bucket: number, arm: number, bandit: BetaBandit): void {
+    try {
+      this.o.store?.saveArms(scope, sourceId, [
+        { bucket, shape: SHAPES[arm]!, alpha: bandit.alpha[arm]!, beta: bandit.beta[arm]! },
+      ]);
+    } catch {
+      // Learning fails open: a store that cannot write (locked, full, closing) costs persistence, not the lookup.
+    }
   }
 
   /** Posterior mean usefulness of each shape for one connector and bucket, for tests and reports. */
@@ -204,7 +233,13 @@ export class QueryPlanner {
       return b;
     };
     s = { bandits: [make(), make()] };
-    for (const a of this.o.store?.loadArms(scope, sourceId) ?? []) {
+    let stored: PlannerArm[] = [];
+    try {
+      stored = this.o.store?.loadArms(scope, sourceId) ?? [];
+    } catch {
+      // As for saving: an unreadable store means starting from the priors, not failing the lookup.
+    }
+    for (const a of stored) {
       const i = SHAPES.indexOf(a.shape as Shape);
       // Stored rows are checked, not trusted: an unknown shape or a non-positive parameter is skipped.
       if (i < 0 || (a.bucket !== 0 && a.bucket !== 1) || !(a.alpha > 0) || !(a.beta > 0)) continue;
@@ -259,6 +294,8 @@ export class PlannedSource implements Source {
   constructor(
     readonly inner: Source,
     private readonly planner: QueryPlanner,
+    /** Asked before each call after a lookup's first (the caller's per-call rate limit). */
+    private readonly permit?: () => boolean,
   ) {
     this.id = inner.id;
     this.kind = inner.kind;
@@ -266,7 +303,7 @@ export class PlannedSource implements Source {
   }
 
   async search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]> {
-    const r = await this.planner.search(this.inner, query, signal);
+    const r = await this.planner.search(this.inner, query, signal, this.permit);
     this.last = { shapes: r.shapes, calls: r.calls, reward: r.reward };
     return r.items;
   }

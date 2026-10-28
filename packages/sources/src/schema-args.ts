@@ -123,8 +123,11 @@ export function mapSearchArgs(schema: ToolSchema, fixed: Record<string, unknown>
 
   const limit = LIMIT_NAMES.map((want) => names.find((n) => n === want)).find((n) => n && !(n in fixed)) ?? null;
 
-  const start = names.find((n) => START_NAMES.test(n) && !(n in fixed));
-  const end = names.find((n) => END_NAMES.test(n) && !(n in fixed));
+  // A bare `from` or `to` is a sender or recipient on mail tools: a date only when the schema says it is one.
+  const dateLike = (n: string) =>
+    !/^(from|to)$/i.test(n) || /date|time/i.test(`${props[n]!.format ?? ""} ${props[n]!.description ?? ""}`);
+  const start = names.find((n) => START_NAMES.test(n) && !(n in fixed) && dateLike(n));
+  const end = names.find((n) => END_NAMES.test(n) && !(n in fixed) && dateLike(n));
   const window = start && end && (required.has(start) || required.has(end)) ? { start, end } : null;
 
   const filled = new Set([text?.name, limit, window?.start, window?.end, ...Object.keys(fixed)].filter(Boolean));

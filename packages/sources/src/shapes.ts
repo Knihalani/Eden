@@ -37,12 +37,14 @@ const OPERATOR_WORDS = new Set(["AND", "OR", "NOT", "NEAR", "TO"]);
 
 /**
  * Text with every search-syntax character turned into a space: quotes, field and range separators, grouping, wildcards,
- * fuzziness and boosting marks, escapes, boolean symbols, and a leading `-` or `+` on any word (negation and
- * requirement). Hyphens and dots inside words stay (`OPS-142`, `dana.lee@acme.com`), as do `@` and `#`.
+ * fuzziness and boosting marks, escapes, boolean symbols, SQL LIKE's `%`, and a leading `-` or `+` on any word
+ * (negation and requirement). Hyphens and dots inside words stay (`OPS-142`, `dana.lee@acme.com`), as do `@` and `#`.
+ * So does `_`: it is LIKE's one-character wildcard, but also part of identifiers (`snake_case`, handles), and on a
+ * LIKE connector it can only widen a read-only match by one character.
  */
 export function inert(text: string): string {
   const words = text
-    .replace(/["'`‘’“”:()[\]{}<>*?~^\\|&!=;,/]/g, " ")
+    .replace(/["'`‘’“”:()[\]{}<>*?~^\\|&!=;,/%]/g, " ")
     .split(/\s+/)
     .map((w) => w.replace(/^[-+.]+/, "").replace(/[-+.]+$/, ""))
     .filter((w) => w && !OPERATOR_WORDS.has(w));
@@ -99,7 +101,7 @@ export function buildShape(shape: Shape, input: ShapeInput, options: ShapeOption
       // The rarest term, ties to the earlier one: the most specific word the cue adds to the entity.
       let best = rest[0]!;
       for (const t of rest) if (f(t) < f(best)) best = t;
-      return [`${entities[0]} ${best}`];
+      return [truncateWords(`${entities[0]} ${best}`, MAX_QUERY)];
     }
     case "phrase":
       if (!options.quotes) return [];

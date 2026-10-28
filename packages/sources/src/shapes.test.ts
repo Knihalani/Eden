@@ -32,6 +32,7 @@ describe("query shapes", () => {
     expect(inert("OPS-142 dana.lee@acme.com #launch")).toBe("OPS-142 dana.lee@acme.com #launch");
     expect(inert("project = EDEN ORDER BY created; DROP TABLE x")).toBe("project EDEN ORDER BY created DROP TABLE x");
     expect(inert("or and not")).toBe("or and not"); // Lower case is a word in every syntax checked.
+    expect(inert("50% off a%b snake_case")).toBe("50 off a b snake_case"); // LIKE's % is dropped; see inert() on _.
     // A phrase shape quotes only after the inner text is inert: no quote from the input survives.
     expect(buildShape("phrase", { text: "", entities: ['Sam" OR "x'] }, { quotes: true })).toEqual(['"Sam x"']);
   });
@@ -45,12 +46,12 @@ describe("query shapes", () => {
     for (let i = 0; i < 3_000; i++) {
       const input = {
         text: piece(Math.floor(rnd() * 400)),
-        entities: Array.from({ length: Math.floor(rnd() * 5) }, () => piece(1 + Math.floor(rnd() * 30))),
+        entities: Array.from({ length: Math.floor(rnd() * 5) }, () => piece(1 + Math.floor(rnd() * 300))),
       };
       for (const shape of SHAPES) {
         for (const q of buildShape(shape, input, { quotes: rnd() < 0.5, maxCalls: 3 })) {
           const body = shape === "phrase" && q.startsWith('"') ? q.slice(1, -1) : q;
-          expect(body).not.toMatch(/["'`:()[\]{}<>*?~^\\|&!=;,/“”]/);
+          expect(body).not.toMatch(/["'`:()[\]{}<>*?~^\\|&!=;,/%“”]/);
           expect(body.split(" ").some((w) => ["AND", "OR", "NOT", "NEAR", "TO"].includes(w))).toBe(false);
           expect(body.split(" ").some((w) => /^[-+]/.test(w))).toBe(false);
           expect(q.length).toBeGreaterThan(0);
