@@ -340,10 +340,12 @@ describe("query planner wiring", () => {
   test("serving and shadow lookups start no call their source timeout would cut off", async () => {
     // A slow substring connector: the cue's terms find nothing, so the planner would cascade, but after one 40 ms
     // call only 20 ms of the 60 ms timeout are left: the second call would be cut off, so it is never sent.
+    // Calls are counted when they start: one the timeout cuts off never gets to answer.
     const slow = () => {
-      const { source, sent } = substringCrm();
+      const { source } = substringCrm();
+      const sent: string[] = [];
       const search = source.search.bind(source);
-      source.search = async (q, signal) => (await Bun.sleep(40), search(q, signal));
+      source.search = async (q, signal) => (sent.push(q.text), await Bun.sleep(40), search(q, signal));
       return { source, sent };
     };
     const config = { sourceTimeoutMs: 60 };
