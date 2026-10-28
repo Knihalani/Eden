@@ -1,9 +1,9 @@
 # Plan: an adaptive query planner, tested on real connectors
 
-Status: phases 0–5 built and measured, 2026-10-28; phase 5 (shadow) ran in simulation by the owner's decision (D29).
-Opt-in and off by default (D28); phase 6 (default on) is judged by D31's cost-normalised gate, not yet met. Results
-and gate status: docs/research/query-planner-results.md; departures from this plan are listed in D28–D31. The
-iteration loop has started; each iteration is logged in the results' "Iterations" section.
+Status: phases 0–6 done, 2026-10-28. Phase 5 (shadow) ran in simulation by the owner's decision (D29); phase 6
+(default on) was judged by D31's cost-normalised gate with D32's reading, and the server serves through the planner
+by default since D33. Results and gate status: docs/research/query-planner-results.md; departures from this plan
+are listed in D28–D33. The iteration loop continues; each iteration is logged in the results' "Iterations" section.
 
 ## Why
 
@@ -245,7 +245,7 @@ From the literature, cited by name; nothing here was re-measured in this reposit
 |---|---|---|
 | 0 | Decisions below; a labelled schema corpus from the surveyed servers (each search tool's `inputSchema` with its correct argument mapping); sim connector zoo with tune/held-out splits; the local lab; baselines (single query, each fixed shape) in sim and lab | baselines reported with intervals |
 | 1 | `ContextualBandit` primitive (tests, benchmark); shape builders and escaping (fuzzed) | tier 1 green |
-| 2 | `QueryPlanner` + engine wiring, behind `EngineConfig.queryPlanner` (off by default); content-free traces | tier 2 gate met |
+| 2 | `QueryPlanner` + engine wiring, behind `PartnerDeps.planner` (off by default then; on in the server since D33); content-free traces | tier 2 gate met |
 | 3 | probe; schema-driven arguments; `toItems` extension | tier 2 gains hold on zoo variants with unknown argument names |
 | 4 | seeding tool + real-connector runner + recording; sandbox accounts | tier 3 gate met on 5+ services |
 | 5 | shadow mode, aggregates only | two weeks of shadow data on consenting accounts |

@@ -1,4 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { Trace } from "@eden/engine";
+import { SourceMap } from "@eden/graph";
 import { StaticSource } from "@eden/sources";
 import { buildPartner, startGatePool } from "./build";
 import { loadConfig } from "./config";
@@ -114,8 +119,44 @@ describe("loadConfig", () => {
 });
 
 describe("gate pool", () => {
-  test("EDEN_QUERY_PLANNER: off by default, 1 turns it on, junk refused", () => {
-    expect(loadConfig({ EDEN_DEV: "1" }).queryPlanner).toBe("off");
+  test("by default lookups go through the planner; its learning is per user and forget drops only theirs", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "eden-planner-")), "source-map.db");
+    const traces: Trace[] = [];
+    const p = buildPartner({
+      sources: async () => [crm],
+      model: null,
+      sourceMapPath: path,
+      onTrace: (t) => traces.push(t),
+    });
+    const h = createHandler(p, { keys: new Map([[key, "acme"]]), dev: false });
+    const send = (route: string, body: unknown) =>
+      h(
+        new Request(`http://x${route}`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+    for (const userId of ["u1", "u2"]) {
+      const ev = { userId, sessionId: "s1", kind: "user_message", text: "Where is the Globex renewal with Dana Lee?" };
+      expect((await send("/v1/events?waitMs=1000", ev)).status).toBe(200);
+    }
+    // Traces carry the planner's content-free outcome: connector, shape names, counts.
+    const plans = traces.flatMap((t) => t.plans ?? []);
+    expect(plans.length).toBeGreaterThan(0);
+    for (const plan of plans) expect(Object.keys(plan).sort()).toEqual(["calls", "found", "shapes", "sourceId"]);
+    const arms = (userId: string) => new SourceMap(path).loadArms({ tenantId: "acme", userId }, "crm");
+    expect(arms("u1").length).toBeGreaterThan(0);
+    expect(arms("u2").length).toBeGreaterThan(0);
+    expect((await send("/v1/forget", { userId: "u1" })).status).toBe(200);
+    expect(arms("u1")).toEqual([]);
+    expect(arms("u2").length).toBeGreaterThan(0);
+  });
+
+  test("EDEN_QUERY_PLANNER: on (serving) by default (D33), 0 turns it off, junk refused", () => {
+    expect(loadConfig({ EDEN_DEV: "1" }).queryPlanner).toBe("serve");
+    expect(loadConfig({ EDEN_DEV: "1", EDEN_QUERY_PLANNER: "0" }).queryPlanner).toBe("off");
+    expect(loadConfig({ EDEN_DEV: "1", EDEN_QUERY_PLANNER: "" }).queryPlanner).toBe("serve");
     expect(loadConfig({ EDEN_DEV: "1", EDEN_QUERY_PLANNER: "1" }).queryPlanner).toBe("serve");
     expect(loadConfig({ EDEN_DEV: "1", EDEN_QUERY_PLANNER: "shadow" }).queryPlanner).toBe("shadow");
     expect(() => loadConfig({ EDEN_DEV: "1", EDEN_QUERY_PLANNER: "yes" })).toThrow(/EDEN_QUERY_PLANNER/);
