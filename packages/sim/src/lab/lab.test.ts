@@ -155,6 +155,9 @@ describe("connector lab", () => {
     expect(r.refFallback).toBe(0); // Rows with an `id` keep it in toItems.
     expect(r.idCollisions).toBe(0);
     expect(r.idSplits).toBe(0);
+    // The planner ran every case once, leading with some shape each time.
+    expect(r.variants.planner!.cases).toBe(3);
+    expect(Object.values(r.planner!.shapes).reduce((a, b) => a + b, 0)).toBe(3);
   });
 
   test("runConnector tears the connector down when setup fails", async () => {

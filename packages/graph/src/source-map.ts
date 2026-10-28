@@ -3,8 +3,9 @@
  * entities (people, companies, projects, ids), and how useful each source has proven in each situation. Routing
  * reads both, so the partner asks the two sources likely to know instead of all twelve.
  *
- * It holds no content: entity names, source ids, item refs and counts. Content stays at the source or in the
- * short-lived item cache. Everything is partitioned by scope key (tenant/user); no query crosses it.
+ * It holds no content: entity names, source ids, item refs, counts, and the query planner's per-shape counts. Content
+ * stays at the source or in the short-lived item cache. Everything is partitioned by scope key (tenant/user); no query
+ * crosses it.
  *
  * Statements go through `db.query`, which caches the prepared statement (re-preparing per call was 5% of end-to-end
  * CPU; packages/engine/bench/pipeline.bench.ts).
@@ -78,6 +79,11 @@ export class SourceMap {
         scope TEXT NOT NULL, situation TEXT NOT NULL, source_id TEXT NOT NULL,
         shown INTEGER NOT NULL DEFAULT 0, used INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (scope, situation, source_id)
+      );
+      CREATE TABLE IF NOT EXISTS planner_arm (
+        scope TEXT NOT NULL, source_id TEXT NOT NULL, bucket INTEGER NOT NULL, shape TEXT NOT NULL,
+        alpha REAL NOT NULL, beta REAL NOT NULL,
+        PRIMARY KEY (scope, source_id, bucket, shape)
       );
     `);
   }
@@ -200,11 +206,34 @@ export class SourceMap {
       .slice(0, request.limit);
   }
 
+  /**
+   * The query planner's learned arms for one user's connector (`QueryPlanner`'s store): content-free, a shape name and
+   * two Beta parameters per (bucket, shape). Shapes and numbers are checked by the planner when loaded.
+   */
+  loadArms(scope: Scope, sourceId: string): { bucket: number; shape: string; alpha: number; beta: number }[] {
+    return this.db
+      .query("SELECT bucket, shape, alpha, beta FROM planner_arm WHERE scope = ? AND source_id = ?")
+      .all(scopeKey(scope), sourceId) as { bucket: number; shape: string; alpha: number; beta: number }[];
+  }
+
+  saveArms(
+    scope: Scope,
+    sourceId: string,
+    arms: { bucket: number; shape: string; alpha: number; beta: number }[],
+  ): void {
+    const key = scopeKey(scope);
+    const upsert = this.db.query(
+      `INSERT INTO planner_arm (scope, source_id, bucket, shape, alpha, beta) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (scope, source_id, bucket, shape) DO UPDATE SET alpha = excluded.alpha, beta = excluded.beta`,
+    );
+    for (const a of arms) upsert.run(key, sourceId, a.bucket, a.shape, a.alpha, a.beta);
+  }
+
   /** Deletes everything held for a user (account deletion, connector revocation). */
   forget(scope: Scope, sourceId?: string): void {
     this.flush();
     const key = scopeKey(scope);
-    for (const table of ["mention", "utility"]) {
+    for (const table of ["mention", "utility", "planner_arm"]) {
       if (sourceId) this.db.query(`DELETE FROM ${table} WHERE scope = ? AND source_id = ?`).run(key, sourceId);
       else this.db.query(`DELETE FROM ${table} WHERE scope = ?`).run(key);
     }

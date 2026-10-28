@@ -1,0 +1,722 @@
+{
+ "memory": {
+  "tool": "search_nodes",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "query": {
+     "type": "string",
+     "maxLength": 2048,
+     "description": "The search query to match against entity names, types, and observation content"
+    }
+   },
+   "required": [
+    "query"
+   ],
+   "$schema": "https://json-schema.org/draft/2020-12/schema"
+  },
+  "annotations": {
+   "readOnlyHint": true,
+   "destructiveHint": false,
+   "idempotentHint": true,
+   "openWorldHint": false
+  }
+ },
+ "mcpvault": {
+  "tool": "search_notes",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "query": {
+     "type": "string",
+     "description": "Search query text"
+    },
+    "limit": {
+     "type": "number",
+     "description": "Maximum number of results (default: 5, max: 20)",
+     "default": 5
+    },
+    "searchContent": {
+     "type": "boolean",
+     "description": "Search in note content (default: true)",
+     "default": true
+    },
+    "searchFrontmatter": {
+     "type": "boolean",
+     "description": "Search in frontmatter (default: false)",
+     "default": false
+    },
+    "caseSensitive": {
+     "type": "boolean",
+     "description": "Case sensitive search (default: false)",
+     "default": false
+    },
+    "pathPrefix": {
+     "type": "string",
+     "description": "Restrict the search to a vault subtree, e.g. \"Projects/2026\" (directory prefix)"
+    },
+    "excludePaths": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "Skip files under these subtrees, e.g. [\"Archive\", \"meta\"] (directory prefixes)"
+    },
+    "prettyPrint": {
+     "type": "boolean",
+     "description": "Format JSON response with indentation (default: false)",
+     "default": false
+    }
+   },
+   "required": [
+    "query"
+   ]
+  }
+ },
+ "basic-memory": {
+  "tool": "bm_search",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "query": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "What to search for. Omit to search by filters alone."
+    },
+    "mode": {
+     "anyOf": [
+      {
+       "enum": [
+        "hybrid",
+        "text",
+        "semantic",
+        "title",
+        "permalink"
+       ],
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "Search mode."
+    },
+    "filters": {
+     "anyOf": [
+      {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "Frontmatter filters as {field: condition}. Nested fields use dot notation (\"schema.confidence\"). A condition is a value for equality ({\"status\": \"draft\"}), null for absent-or-null ({\"owner\": null}), a list for contains-all ({\"tags\": [\"a\", \"b\"]}), or an operator object with $gt, $gte, $lt, $lte, $in, $between, $contains or $exists, e.g. {\"priority\": {\"$in\": [\"high\"]}}. Several operators on one field AND together."
+    },
+    "note_types": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "Frontmatter `type` values, e.g. ['person', 'meeting']."
+    },
+    "items": {
+     "anyOf": [
+      {
+       "items": {
+        "enum": [
+         "note",
+         "observation",
+         "relation"
+        ],
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "What to return: notes, observations, relations, or a mix. Default: notes."
+    },
+    "categories": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "Observation categories to match exactly, e.g. ['decision']."
+    },
+    "since": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "How far back to look: '7d', '24h', '2 days ago', 'last week', or a date. Windows shorter than one day are widened to one day."
+    },
+    "lines": {
+     "anyOf": [
+      {
+       "maximum": 10,
+       "minimum": 0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "Return each hit's matching lines with this many lines of context (0-10), instead of a match excerpt."
+    },
+    "max_matches": {
+     "default": 10,
+     "description": "Matching lines shown per note with `lines`.",
+     "maximum": 100,
+     "minimum": 1,
+     "type": "integer"
+    },
+    "identifier": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "Search only this note; returns its matching lines."
+    },
+    "path": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "Search only this folder and its subfolders."
+    },
+    "compact": {
+     "default": false,
+     "description": "Omit note bodies and excerpts; keep identifiers and scores.",
+     "type": "boolean"
+    },
+    "valid_at": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "Specialist: only facts whose authored valid time contains this date."
+    },
+    "valid_overlaps": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "Specialist: only facts whose valid range overlaps '[start,end)'."
+    },
+    "time_kind": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "Specialist: effective, valid, occurred, due or mentioned."
+    },
+    "min_similarity": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "Override the semantic similarity floor (0-1)."
+    },
+    "projects": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "Search these projects together."
+    },
+    "all_projects": {
+     "default": false,
+     "description": "Search every project you can access.",
+     "type": "boolean"
+    },
+    "page": {
+     "default": 1,
+     "description": "Page number.",
+     "minimum": 1,
+     "type": "integer"
+    },
+    "page_size": {
+     "default": 10,
+     "description": "Results per page (1-100).",
+     "maximum": 100,
+     "minimum": 1,
+     "type": "integer"
+    },
+    "output_format": {
+     "enum": [
+      "text",
+      "json"
+     ],
+     "type": "string",
+     "default": "text"
+    },
+    "project": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "Project name, 'workspace/project', or project external id. With multiple addressable projects, scope note and search calls explicitly with this parameter or a project-qualified target."
+    }
+   },
+   "additionalProperties": false
+  },
+  "annotations": {
+   "title": "Search notes",
+   "readOnlyHint": true,
+   "destructiveHint": false,
+   "idempotentHint": true,
+   "openWorldHint": false
+  }
+ },
+ "meilisearch": {
+  "tool": "search",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "query": {
+     "title": "Query",
+     "type": "string"
+    },
+    "indexUid": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Indexuid"
+    },
+    "limit": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Limit"
+    },
+    "offset": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Offset"
+    },
+    "filter": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Filter"
+    },
+    "sort": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Sort"
+    },
+    "hybrid": {
+     "anyOf": [
+      {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Hybrid"
+    }
+   },
+   "required": [
+    "query"
+   ],
+   "title": "searchArguments",
+   "additionalProperties": false
+  },
+  "annotations": {
+   "readOnlyHint": true
+  }
+ },
+ "caldav": {
+  "tool": "caldav_search_events",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "calendar_index": {
+     "type": "integer",
+     "description": "Index of the calendar (default: 0)",
+     "default": 0
+    },
+    "query": {
+     "type": "string",
+     "description": "Search query string"
+    },
+    "search_fields": {
+     "type": "array",
+     "description": "Fields to search in: 'title', 'description', 'location', 'attendees'. If not provided, searches in all fields",
+     "items": {
+      "type": "string",
+      "enum": [
+       "title",
+       "description",
+       "location",
+       "attendees"
+      ]
+     }
+    },
+    "start_date": {
+     "type": "string",
+     "description": "Start date for search period in ISO format"
+    },
+    "end_date": {
+     "type": "string",
+     "description": "End date for search period in ISO format"
+    }
+   },
+   "required": [
+    "start_date",
+    "end_date"
+   ]
+  }
+ },
+ "imap-subject": {
+  "tool": "imap_search_emails",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "accountId": {
+     "description": "Account ID (from imap_list_accounts). Optional if accountName is given or only one account is configured.",
+     "type": "string"
+    },
+    "accountName": {
+     "description": "Account name instead of accountId. Optional if accountId is given or only one account is configured.",
+     "type": "string"
+    },
+    "folder": {
+     "default": "INBOX",
+     "description": "Folder name to search (default: INBOX). Ignored when searchAllFolders is true.",
+     "type": "string"
+    },
+    "searchAllFolders": {
+     "default": false,
+     "description": "Search across ALL folders instead of just `folder`. Skips Trash/Spam/Drafts and non-selectable folders by default. Use when a message might have been filed/archived/moved and you do not know which folder it is in.",
+     "type": "boolean"
+    },
+    "includeTrash": {
+     "default": false,
+     "description": "When searchAllFolders is true, also search Trash/Bin/Deleted folders (off by default — noisy).",
+     "type": "boolean"
+    },
+    "includeSpam": {
+     "default": false,
+     "description": "When searchAllFolders is true, also search Spam/Junk folders (off by default — noisy).",
+     "type": "boolean"
+    },
+    "includeDrafts": {
+     "default": false,
+     "description": "When searchAllFolders is true, also search the Drafts folder (off by default).",
+     "type": "boolean"
+    },
+    "from": {
+     "description": "Search by sender",
+     "type": "string"
+    },
+    "to": {
+     "description": "Search by recipient",
+     "type": "string"
+    },
+    "subject": {
+     "description": "Search by subject",
+     "type": "string"
+    },
+    "body": {
+     "description": "Search in body text",
+     "type": "string"
+    },
+    "since": {
+     "description": "Search emails since date (YYYY-MM-DD)",
+     "type": "string"
+    },
+    "before": {
+     "description": "Search emails before date (YYYY-MM-DD)",
+     "type": "string"
+    },
+    "seen": {
+     "description": "Filter by read/unread status",
+     "type": "boolean"
+    },
+    "flagged": {
+     "description": "Filter by flagged status",
+     "type": "boolean"
+    },
+    "messageId": {
+     "description": "Search by RFC822 Message-ID header (substring match)",
+     "type": "string"
+    },
+    "keywords": {
+     "description": "Match messages that have ANY of these CUSTOM keywords (server-side OR; not system flags like \\Seen/\\Flagged). Read a mailbox's available custom keywords from imap_folder_status's customKeywords field, then pass the ones you want here.",
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "unKeywords": {
+     "description": "Exclude messages that have ANY of these CUSTOM keywords (server-side; result has NONE of them). Same keyword source as `keywords` — check imap_folder_status first.",
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "limit": {
+     "default": 50,
+     "description": "Maximum number of results",
+     "type": "number"
+    },
+    "includeBody": {
+     "default": false,
+     "description": "If true, also fetch the parsed message body in the same round-trip and return it alongside headers (avoids the N+1 cost of calling imap_get_email per match). Body is rendered per `bodyFormat` and capped at `bodyMaxLength` characters per field. Off by default to preserve lightweight behavior.",
+     "type": "boolean"
+    },
+    "bodyFormat": {
+     "default": "markdown",
+     "description": "How to render the body when `includeBody` is true. Mirrors `imap_get_email` — \"markdown\" (default) returns clean Markdown and omits raw HTML so it never crosses the MCP boundary; \"text\" returns plain text; \"html\" returns raw HTML; \"auto\" prefers substantive text/plain, else Markdown.",
+     "type": "string",
+     "enum": [
+      "markdown",
+      "text",
+      "html",
+      "auto"
+     ]
+    },
+    "bodyMaxLength": {
+     "default": 10000,
+     "description": "Per-message cap (in characters) for each rendered body field when `includeBody` is true. Defaults to 10000 to match `imap_get_email`.",
+     "type": "number"
+    }
+   },
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ "chroma": {
+  "tool": "chroma_query_documents",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "collection_name": {
+     "title": "Collection Name",
+     "type": "string"
+    },
+    "query_texts": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Query Texts",
+     "type": "array"
+    },
+    "n_results": {
+     "default": 5,
+     "title": "N Results",
+     "type": "integer"
+    },
+    "where": {
+     "anyOf": [
+      {
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Where"
+    },
+    "where_document": {
+     "anyOf": [
+      {
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Where Document"
+    },
+    "include": {
+     "default": [
+      "documents",
+      "metadatas",
+      "distances"
+     ],
+     "items": {
+      "type": "string"
+     },
+     "title": "Include",
+     "type": "array"
+    }
+   },
+   "required": [
+    "collection_name",
+    "query_texts"
+   ],
+   "title": "chroma_query_documentsArguments"
+  }
+ },
+ "gitea-bleve": {
+  "tool": "search_issues",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "labels": {
+     "description": "comma-separated",
+     "type": "string"
+    },
+    "owner": {
+     "description": "filter by owner",
+     "type": "string"
+    },
+    "page": {
+     "default": 1,
+     "description": "page",
+     "type": "number"
+    },
+    "per_page": {
+     "default": 30,
+     "description": "results per page",
+     "type": "number"
+    },
+    "query": {
+     "type": "string"
+    },
+    "state": {
+     "enum": [
+      "open",
+      "closed",
+      "all"
+     ],
+     "type": "string"
+    },
+    "type": {
+     "enum": [
+      "issues",
+      "pulls"
+     ],
+     "type": "string"
+    }
+   },
+   "required": [
+    "query"
+   ]
+  },
+  "annotations": {
+   "title": "Search issues",
+   "readOnlyHint": true,
+   "idempotentHint": false
+  }
+ }
+}

@@ -21,9 +21,11 @@ train / held-out split for tuning, hand-written adversarial scenarios, and text 
   product such as Supermemory or Mem0) and a `fetch` mapping for refresh.
 - Connector revocation → `forget(scope, sourceId)`.
 - An adaptive query planner per (user, connector): what to send, learned from outcomes
-  ([plans/query-planner.md](plans/query-planner.md)). Its evidence so far: a source survey of real MCP servers
-  ([research/connectors.md](research/connectors.md)) and the connector lab, where the query Eden sends today reaches
-  nothing on whole-string-substring connectors ([research/connector-lab.md](research/connector-lab.md)).
+  ([plans/query-planner.md](plans/query-planner.md)). Built and opt-in (D28,
+  [research/query-planner-results.md](research/query-planner-results.md)); next: delivery and usage rewards, shadow
+  runs on consenting accounts, fewer extra calls, then a default-on decision. Its evidence: a source survey of real
+  MCP servers ([research/connectors.md](research/connectors.md)) and the connector lab, where the query Eden sent
+  reached nothing on whole-string-substring connectors ([research/connector-lab.md](research/connector-lab.md)).
 
 ## M3 — The graph, layer 2
 - Entity resolution (aliases, email ↔ name), typed relations (person–company–project), freshness per source.

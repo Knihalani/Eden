@@ -13,7 +13,7 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import { contentTerms, extractEntities } from "@eden/engine";
 import { Vocab } from "@eden/primitives";
-import { McpSource, type SearchQuery } from "@eden/sources";
+import { McpSource, QueryPlanner, type PlannerOptions, type SearchQuery, type Source } from "@eden/sources";
 import { buildSessions } from "../sessions";
 import type { World, WorldItem } from "../world";
 
@@ -68,8 +68,12 @@ export function labCases(world: World, seed: number, sessions: number): LabCase[
   return [...out.values()];
 }
 
-export type VariantName = "question" | "terms" | "entities" | "each-entity" | "entity+term";
-export const VARIANTS: VariantName[] = ["question", "terms", "entities", "each-entity", "entity+term"];
+export type VariantName = "question" | "terms" | "entities" | "each-entity" | "entity+term" | "planner";
+/**
+ * Fixed variants send the same phrasing for every case. `planner` is Eden's `QueryPlanner` sent the cue Eden builds
+ * (terms and entities), learning online over the cases in order, as it would over one user's lookups.
+ */
+export const VARIANTS: VariantName[] = ["question", "terms", "entities", "each-entity", "entity+term", "planner"];
 
 /**
  * The query strings a variant sends for one case (several for each-entity), or none when it does not apply.
@@ -94,6 +98,8 @@ export function variantQueries(v: VariantName, text: string, df: Map<string, num
       const rest = terms.filter((t) => !inEntity.has(t)).sort((a, b) => (df.get(a) ?? 0) - (df.get(b) ?? 0));
       return rest.length ? [`${entities[0]} ${rest[0]}`] : [];
     }
+    case "planner":
+      return []; // Chosen per case by the planner, not fixed.
   }
 }
 
@@ -144,6 +150,8 @@ export interface ConnectorReport {
   idCollisions: number;
   /** Of world items seen, the share that got more than one item id: the same item counted as new more than once. */
   idSplits: number;
+  /** The planner variant: how often it led with each shape, and its reach over the second half of the cases. */
+  planner: { shapes: Record<string, number>; reachLate: number; casesLate: number } | null;
 }
 
 /**
@@ -176,7 +184,7 @@ export async function runConnector(
   c: LabConnector,
   world: World,
   cases: LabCase[],
-  options: { limit?: number; timeoutMs?: number } = {},
+  options: { limit?: number; timeoutMs?: number; variants?: VariantName[]; planner?: PlannerOptions } = {},
 ): Promise<ConnectorReport> {
   const limit = options.limit ?? 10;
   const items = world.items.filter((i) => c.accepts(i));
@@ -212,61 +220,96 @@ export async function runConnector(
   const variants: Record<string, VariantStats> = {};
   const errorSamples: string[] = [];
   const r = (x: number) => Math.round(x * 1_000) / 1_000;
+  const shapesLed: Record<string, number> = {};
+  const late = { n: 0, hits: 0 };
   try {
     // Inside the try: a setup that fails half-way still has its containers and seeded files removed.
     const t0 = performance.now();
     await c.setup(items, world);
     seedMs = Math.round(performance.now() - t0);
-    for (const v of VARIANTS) {
-      const lat: number[] = [];
-      const t = { n: 0, calls: 0, hits: 0, empty: 0, errors: 0, returned: 0, returnedRaw: 0, rel: 0 };
-      for (const k of applicable) {
-        const queries = variantQueries(v, k.text, df, vocab);
-        if (!queries.length) continue;
-        t.n++;
-        const got = new Set<string>();
-        let gotRaw = 0;
-        for (const text of queries) {
-          t.calls++;
-          const s = performance.now();
-          raw = "";
-          rawError = false;
-          try {
-            const res = await source.search(
-              { scope, text, entities: [], limit },
-              AbortSignal.timeout(options.timeoutMs ?? 30_000),
-            );
-            // McpSource turns a tool error into no items; count it as the error it is.
-            if (rawError) {
-              t.errors++;
-              if (errorSamples.length < 5) errorSamples.push(`${v}: tool error: ${raw.slice(0, 300)}`);
-            }
-            const keys = c.identify ? c.identify(raw) : keysIn(raw);
-            gotRaw += keys.length;
-            // A client keeps at most `limit` results per call, in the server's order, whatever the server sends.
-            for (const key of keys.slice(0, limit)) got.add(key);
-            made += res.length;
-            fallback += res.filter((it) => /^(?:block|eden-h)-/.test(it.ref)).length;
-            // Which world item each produced item is (the first world key it names), to find ids given to two items.
-            for (const it of res) {
-              const key = keysIn(`${it.ref} ${it.title} ${it.url ?? ""} ${it.text}`)[0];
-              if (!key) continue;
-              (worldById.get(it.id) ?? worldById.set(it.id, new Set()).get(it.id)!).add(key);
-              (idsByWorld.get(key) ?? idsByWorld.set(key, new Set()).get(key)!).add(it.id);
-            }
-          } catch (e) {
-            t.errors++;
-            if (errorSamples.length < 5) errorSamples.push(`${v}: ${String(e).slice(0, 300)}`);
+    // Every call of a case goes through here, whoever chose it: results are scored from the raw server answer.
+    let caseKeys = new Set<string>();
+    let caseRaw = 0;
+    let caseErrors = 0;
+    let lat: number[] = [];
+    let variant = "";
+    const counted: Source = {
+      id: c.name,
+      kind: "lab",
+      description: c.semantics,
+      search: async (q: SearchQuery) => {
+        const s = performance.now();
+        raw = "";
+        rawError = false;
+        try {
+          const res = await source.search({ ...q, limit }, AbortSignal.timeout(options.timeoutMs ?? 30_000));
+          // McpSource turns a tool error into no items; count it as the error it is.
+          if (rawError) {
+            caseErrors++;
+            if (errorSamples.length < 5) errorSamples.push(`${variant}: tool error: ${raw.slice(0, 300)}`);
           }
+          const keys = c.identify ? c.identify(raw) : keysIn(raw);
+          caseRaw += keys.length;
+          // A client keeps at most `limit` results per call, in the server's order, whatever the server sends.
+          for (const key of keys.slice(0, limit)) caseKeys.add(key);
+          made += res.length;
+          fallback += res.filter((it) => /^(?:block|eden-h)-/.test(it.ref)).length;
+          // Which world item each produced item is (the first world key it names), to find ids given to two items.
+          for (const it of res) {
+            const key = keysIn(`${it.ref} ${it.title} ${it.url ?? ""} ${it.text}`)[0];
+            if (!key) continue;
+            (worldById.get(it.id) ?? worldById.set(it.id, new Set()).get(it.id)!).add(key);
+            (idsByWorld.get(key) ?? idsByWorld.set(key, new Set()).get(key)!).add(it.id);
+          }
+          return res;
+        } catch (e) {
+          caseErrors++;
+          if (errorSamples.length < 5) errorSamples.push(`${variant}: ${String(e).slice(0, 300)}`);
+          return [];
+        } finally {
           lat.push(performance.now() - s);
         }
+      },
+    };
+    const planner = new QueryPlanner({ seed: 11, ...options.planner });
+    // `counted` applies its own per-call timeout.
+    const never = new AbortController().signal;
+    for (const v of options.variants ?? VARIANTS) {
+      variant = v;
+      lat = [];
+      const t = { n: 0, calls: 0, hits: 0, empty: 0, errors: 0, returned: 0, returnedRaw: 0, rel: 0 };
+      for (let ki = 0; ki < applicable.length; ki++) {
+        const k = applicable[ki]!;
+        caseKeys = new Set();
+        caseRaw = 0;
+        caseErrors = 0;
+        const callsBefore = lat.length;
+        if (v === "planner") {
+          const terms = [...new Set(contentTerms(k.text, vocab))].slice(0, 16).join(" ");
+          const entities = extractEntities(k.text).slice(0, 8);
+          if (!terms && !entities.length) continue;
+          const res = await planner.search(counted, { scope, text: terms, entities, limit }, never);
+          shapesLed[res.shapes[0] ?? "none"] = (shapesLed[res.shapes[0] ?? "none"] ?? 0) + 1;
+        } else {
+          const queries = variantQueries(v, k.text, df, vocab);
+          if (!queries.length) continue;
+          for (const text of queries) await counted.search({ scope, text, entities: [], limit }, never);
+        }
+        t.n++;
+        t.calls += lat.length - callsBefore;
+        t.errors += caseErrors;
         const needed = new Set(k.must.flatMap((f) => [...(holders.get(f) ?? [])]));
         const useful = new Set([...k.must, ...k.ok]);
-        if ([...got].some((key) => needed.has(key))) t.hits++;
-        if (!got.size) t.empty++;
-        t.returned += got.size;
-        t.returnedRaw += gotRaw;
-        for (const key of got) if ([...(factsOf.get(key) ?? [])].some((f) => useful.has(f))) t.rel++;
+        const hit = [...caseKeys].some((key) => needed.has(key));
+        if (hit) t.hits++;
+        if (v === "planner" && ki >= applicable.length / 2) {
+          late.n++;
+          if (hit) late.hits++;
+        }
+        if (!caseKeys.size) t.empty++;
+        t.returned += caseKeys.size;
+        t.returnedRaw += caseRaw;
+        for (const key of caseKeys) if ([...(factsOf.get(key) ?? [])].some((f) => useful.has(f))) t.rel++;
       }
       variants[v] = {
         cases: t.n,
@@ -295,6 +338,7 @@ export async function runConnector(
     variants,
     errorSamples,
     refFallback: Math.round((fallback / Math.max(1, made)) * 1_000) / 1_000,
+    planner: { shapes: shapesLed, reachLate: r(late.hits / Math.max(1, late.n)), casesLate: late.n },
     idSplits:
       Math.round(([...idsByWorld.values()].filter((t) => t.size > 1).length / Math.max(1, idsByWorld.size)) * 1_000) /
       1_000,

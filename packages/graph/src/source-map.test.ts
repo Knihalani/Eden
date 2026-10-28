@@ -44,6 +44,20 @@ describe("SourceMap", () => {
     map.forget(alice);
     expect(map.sourcesFor(alice, "acme")).toEqual([]);
   });
+
+  test("planner arms persist per user and connector, upsert, and are forgotten with the user or connector", () => {
+    const map = new SourceMap(":memory:", { explore: false });
+    map.saveArms(alice, "crm", [{ bucket: 1, shape: "each-entity", alpha: 5, beta: 2 }]);
+    map.saveArms(alice, "crm", [{ bucket: 1, shape: "each-entity", alpha: 6, beta: 2 }]);
+    map.saveArms(alice, "gmail", [{ bucket: 0, shape: "terms", alpha: 3, beta: 3 }]);
+    expect(map.loadArms(alice, "crm")).toEqual([{ bucket: 1, shape: "each-entity", alpha: 6, beta: 2 }]);
+    expect(map.loadArms(bob, "crm")).toEqual([]);
+    map.forget(alice, "crm");
+    expect(map.loadArms(alice, "crm")).toEqual([]);
+    expect(map.loadArms(alice, "gmail")).toHaveLength(1);
+    map.forget(alice);
+    expect(map.loadArms(alice, "gmail")).toEqual([]);
+  });
 });
 
 describe("Thompson routing", () => {

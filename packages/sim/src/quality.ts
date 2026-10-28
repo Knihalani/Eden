@@ -11,6 +11,7 @@
 import { ContextPartner, ItemCache, type EngineConfig, type Trace } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, type Model } from "@eden/llm";
+import { QueryPlanner, type PlannerOptions } from "@eden/sources";
 import type { AgentEvent, Injection } from "@eden/protocol";
 import { OracleJudge } from "./judge";
 import { Rng } from "./rng";
@@ -37,6 +38,8 @@ export interface QualityOptions {
    * figures). Ignored when `model` is set.
    */
   judge?: "none" | "perfect" | "noisy";
+  /** Run each user's lookups through a query planner (one per user, so nothing is learned across users). */
+  planner?: PlannerOptions;
 }
 
 interface Counter {
@@ -254,9 +257,10 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
     const arcNames = new Map(
       world.arcs.map((a) => [a.id, [a.person?.full, a.slots.org].filter((x): x is string => !!x)]),
     );
+    const sourceMap = new SourceMap(":memory:", { seed: o.seed + u });
     const partner = new ContextPartner({
       sources: async () => sources,
-      sourceMap: new SourceMap(":memory:", { seed: o.seed + u }),
+      sourceMap,
       cache: new ItemCache(),
       budget: new Budget(),
       model: o.model ?? oracle,
@@ -266,6 +270,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         userTraces.push(t);
       },
       now: () => clock,
+      planner: o.planner ? new QueryPlanner({ seed: o.seed * 7_919 + u, store: sourceMap, ...o.planner }) : undefined,
     });
     const who = { tenantId: "sim", userId: `u${u}` };
     const pace = new Rng(o.seed * 104_729 + u);

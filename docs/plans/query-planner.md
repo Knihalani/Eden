@@ -1,6 +1,8 @@
 # Plan: an adaptive query planner, tested on real connectors
 
-Status: proposed, 2026-10-27. Owner: whoever picks it up; decisions it needs are listed under [Decisions](#decisions).
+Status: phases 0–4 built and measured, 2026-10-28; opt-in, off by default (D28). Results and gate status:
+docs/research/query-planner-results.md. Phases 5 (shadow mode) and 6 (default on) are open; departures from this plan
+are listed in D28.
 
 ## Why
 

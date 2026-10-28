@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { McpSource, ReadOnlyViolation } from "./mcp-source";
+import { ArgumentMappingError, McpSource, ReadOnlyViolation } from "./mcp-source";
 
 /** A connector-like MCP server: one read tool, one write tool. */
 function connector() {
@@ -68,6 +68,45 @@ describe("McpSource", () => {
   test("an operator can trust a tool the server did not annotate", async () => {
     const s = source("search_notes", ["search_notes"]);
     expect(await s.search(query, AbortSignal.timeout(2_000))).toHaveLength(1);
+    await s.close();
+  });
+
+  test("without an args function, the call is built from the tool's schema and the operator's fixed values", async () => {
+    const server = new McpServer({ name: "chroma-like", version: "1" });
+    let seen: unknown = null;
+    server.registerTool(
+      "query_documents",
+      {
+        inputSchema: {
+          collection_name: z.string(),
+          query_texts: z.array(z.string()),
+          n_results: z.number().optional(),
+        },
+        annotations: { readOnlyHint: true },
+      },
+      async (args) => {
+        seen = args;
+        return {
+          content: [{ type: "text", text: JSON.stringify([{ id: "d1", text: "Dana prefers morning calls" }]) }],
+        };
+      },
+    );
+    const make = (fixed?: Record<string, unknown>) =>
+      new McpSource({
+        id: "docs",
+        description: "",
+        transport: () => {
+          const [client, serverSide] = InMemoryTransport.createLinkedPair();
+          void server.connect(serverSide);
+          return client;
+        },
+        searchTool: { name: "query_documents", fixed },
+      });
+    // collection_name is required and nothing says which: refused, not guessed.
+    await expect(make().search(query, AbortSignal.timeout(2_000))).rejects.toBeInstanceOf(ArgumentMappingError);
+    const s = make({ collection_name: "notes" });
+    expect(await s.search(query, AbortSignal.timeout(2_000))).toHaveLength(1);
+    expect(seen).toEqual({ collection_name: "notes", query_texts: ["morning"], n_results: 5 });
     await s.close();
   });
 });

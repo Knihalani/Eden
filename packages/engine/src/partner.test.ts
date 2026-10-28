@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
 import { Budget, FakeModel } from "@eden/llm";
 import type { AgentEvent } from "@eden/protocol";
-import { StaticSource, type Source } from "@eden/sources";
+import { QueryPlanner, StaticSource, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner, type PartnerDeps } from "./partner";
 import type { Trace } from "./trace";
@@ -304,5 +304,63 @@ describe("ask", () => {
     expect(res.usedModel).toBe(true);
     expect(res.answer).toContain("Thursday 3pm [0]");
     expect(res.answer).toStartWith("<context"); // Model text derived from sources is wrapped as data, too.
+  });
+});
+
+describe("query planner wiring", () => {
+  /** A connector that matches the whole query as one substring, and records what it was sent. */
+  function substringCrm() {
+    const sent: string[] = [];
+    const inner = crm;
+    const source: Source = {
+      id: "crm",
+      kind: "test",
+      description: "Deals and accounts",
+      async search(q) {
+        sent.push(q.text);
+        const all = await inner.search({ ...q, text: "globex renewal dana lee bill initech" });
+        return all.filter((i) => `${i.title} ${i.text}`.toLowerCase().includes(q.text.toLowerCase()));
+      },
+    };
+    return { source, sent };
+  }
+  // Each question differs: the fan-out caches a lookup's result by its cue for a minute, so a repeat never reaches
+  // the planner.
+  let n = 0;
+  const ask = (p: ContextPartner) =>
+    p.observe(
+      ev({ kind: "user_message", sessionId: `s-${clock}`, text: `Globex renewal status for Dana Lee, item ${++n}?` }),
+      { waitMs: 1_000 },
+    );
+
+  test("without a planner, the connector gets the cue's terms only (off by default)", async () => {
+    const { source, sent } = substringCrm();
+    const { p } = partner({}, [source]);
+    await ask(p);
+    expect(sent.length).toBe(1);
+    expect(sent[0]).toContain("globex");
+    expect(sent[0]).toContain("renewal");
+  });
+
+  test("with a planner, entity calls are sent and traces carry shapes and counts, not the query", async () => {
+    const { source, sent } = substringCrm();
+    const { p, traces } = partner({ planner: new QueryPlanner({ seed: 1 }) }, [source]);
+    for (let i = 0; i < 12; i++) await ask(p);
+    expect(sent.some((q) => q === "Globex" || q === "Dana Lee")).toBe(true);
+    const plans = traces.flatMap((t) => t.plans ?? []);
+    expect(plans.length).toBeGreaterThan(0);
+    expect(plans[0]!.sourceId).toBe("crm");
+    expect(JSON.stringify(plans)).not.toMatch(/globex|dana/i);
+  });
+
+  test("forget clears what the planner learned for the user", async () => {
+    const { source } = substringCrm();
+    const planner = new QueryPlanner({ seed: 1 });
+    const { p } = partner({ planner }, [source]);
+    const prior = new QueryPlanner().means(scope, "crm", true);
+    for (let i = 0; i < 12; i++) await ask(p);
+    expect(planner.means(scope, "crm", true)).not.toEqual(prior);
+    p.forget(scope);
+    expect(planner.means(scope, "crm", true)).toEqual(prior);
   });
 });
