@@ -46,6 +46,13 @@ export class Gcra<K = string> {
     return 0;
   }
 
+  /** How many requests `key` could make now, back to back, without waiting (records nothing). */
+  available(key: K): number {
+    const now = this.now();
+    const tat = Math.max(this.tat.get(key) ?? now, now);
+    return Math.max(0, Math.floor((now - tat + this.tolerance) / this.interval) + 1);
+  }
+
   /** Blocks `key` for at least `ms` (e.g. an upstream's Retry-After). */
   penalize(key: K, ms: number): void {
     const now = this.now();
