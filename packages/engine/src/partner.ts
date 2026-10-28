@@ -603,7 +603,7 @@ export class ContextPartner {
    * returns is cached, delivered or recorded as a mention, and it must never change serving:
    * - it runs only for connectors that served this lookup normally (not ones skipped as open, busy or limited, or
    *   that failed), so it adds no load to a struggling connector;
-   * - every call takes a rate token only while more than half the burst stays for serving (`permitSpare`);
+   * - its calls draw on a separate, smaller rate bucket (`permitShadow`), so serving's budget is never spent on it;
    * - a rate-limit error it sees is fed back to the limit, as serving's are.
    * Records carry sanitized item ids, the same ids serving's items get.
    */
@@ -638,7 +638,7 @@ export class ContextPartner {
             // A broken sink never breaks a lookup.
           }
         };
-        const permit = () => this.fanout.permitSpare(s.scope, source.id);
+        const permit = () => this.fanout.permitShadow(s.scope, source.id);
         if (!permit()) return record({ status: "limited" });
         try {
           const r = await planner.search(source, query, signal, permit);

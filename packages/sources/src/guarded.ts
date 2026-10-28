@@ -73,7 +73,7 @@ export class SourceFanout {
   private readonly flights = new Singleflight<string, ContextItem[]>();
   private readonly results: S3FifoCache<string, ContextItem[]> | null;
   private readonly rate: Gcra<string>;
-  private readonly burst: number;
+  private readonly shadowRate: Gcra<string>;
   private readonly options: FanoutOptions;
   private readonly now: () => number;
 
@@ -90,8 +90,15 @@ export class SourceFanout {
             now: this.now,
           })
         : null;
-    this.burst = options.burst ?? 10;
-    this.rate = new Gcra({ ratePerSec: options.ratePerSec ?? 5, burst: this.burst, now: this.now });
+    const ratePerSec = options.ratePerSec ?? 5;
+    const burst = options.burst ?? 10;
+    this.rate = new Gcra({ ratePerSec, burst, now: this.now });
+    // Shadow lookups' own bucket (permitShadow): half the rate and half the burst.
+    this.shadowRate = new Gcra({
+      ratePerSec: ratePerSec / 2,
+      burst: Math.max(1, Math.floor(burst / 2)),
+      now: this.now,
+    });
   }
 
   /** Searches `sources` for `query` within `timeoutMs`, cancelled with `signal`. */
@@ -121,18 +128,23 @@ export class SourceFanout {
   }
 
   /**
-   * A call that must never cost serving its budget (the query planner's shadow lookups): it takes a rate token only
-   * while more than half of the burst stays available for serving, else it is refused.
+   * A call that must never cost serving its budget (the query planner's shadow lookups). It draws from a separate
+   * bucket at half the rate and half the burst, and only looks at serving's bucket (never takes from it): while
+   * serving has nothing left, as after a 429, shadow waits too. The cost is upstream load: a shadowing deployment can
+   * send a connector up to 1.5x what serving alone may (D29).
    */
-  permitSpare(scope: Scope, sourceId: string): boolean {
+  permitShadow(scope: Scope, sourceId: string): boolean {
     const key = `${scopeKey(scope)}|${sourceId}`;
-    return this.rate.available(key) > Math.ceil(this.burst / 2) && this.rate.take(key) <= 0;
+    return this.rate.available(key) > 0 && this.shadowRate.take(key) <= 0;
   }
 
-  /** Tells the rate limit about an upstream's rate-limit error seen outside a fan-out call (shadow lookups). */
+  /** Tells the rate limits about an upstream's rate-limit error seen outside a fan-out call (shadow lookups). */
   rateLimited(scope: Scope, sourceId: string, message: string): void {
-    if (RATE_LIMITED.test(message))
-      this.rate.penalize(`${scopeKey(scope)}|${sourceId}`, retryAfterMs(message) ?? 5_000);
+    if (!RATE_LIMITED.test(message)) return;
+    const key = `${scopeKey(scope)}|${sourceId}`;
+    const ms = retryAfterMs(message) ?? 5_000;
+    this.rate.penalize(key, ms);
+    this.shadowRate.penalize(key, ms);
   }
 
   /** The source's recent latency quantile in ms (NaN if no calls yet), for observability. */

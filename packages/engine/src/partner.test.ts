@@ -325,11 +325,15 @@ describe("query planner wiring", () => {
     return { source, sent };
   }
   // Each question differs: the fan-out caches a lookup's result by its cue for a minute, so a repeat never reaches
-  // the planner.
+  // the planner. Numbered from 101: one-character terms are dropped from cues, so "item 1" and "item 2" would repeat.
   let n = 0;
   const ask = (p: ContextPartner) =>
     p.observe(
-      ev({ kind: "user_message", sessionId: `s-${clock}`, text: `Globex renewal status for Dana Lee, item ${++n}?` }),
+      ev({
+        kind: "user_message",
+        sessionId: `s-${clock}`,
+        text: `Globex renewal status for Dana Lee, item ${100 + ++n}?`,
+      }),
       { waitMs: 1_000 },
     );
 
@@ -412,17 +416,35 @@ describe("query planner wiring", () => {
     return { source, calls: () => calls };
   }
 
-  test("shadow never costs serving its rate budget: a burst is served the same as with no planner", async () => {
+  test("shadow never costs serving its rate budget: every lookup of a burst is still sent", async () => {
+    // A connector that never answers, so every question is a live lookup (nothing is ever cached). Served calls carry
+    // the cue's entities; the planner always clears them, so its calls are told apart.
     const run = async (planner?: QueryPlanner) => {
-      const { source } = echo();
-      const { p, traces } = partner({ planner, now: () => 1_700_000_000_000 }, [source]);
-      for (let i = 0; i < 10; i++) await ask(p);
+      let served = 0;
+      let shadow = 0;
+      const silent: Source = {
+        id: "crm",
+        kind: "test",
+        description: "",
+        async search(q) {
+          if (q.entities.length > 0) served++;
+          else shadow++;
+          return [];
+        },
+      };
+      const { p } = partner({ planner, now: () => 1_700_000_000_000 }, [silent]);
+      for (let i = 0; i < 12; i++) await ask(p);
       await Bun.sleep(20);
-      return traces.filter((t) => t.event === "user_message").map((t) => t.decision);
+      return { served, shadow };
     };
     const off = await run();
-    const shadow = await run(new QueryPlanner({ seed: 1, mode: "shadow" }));
-    expect(shadow).toEqual(off);
+    const shadowed = await run(new QueryPlanner({ seed: 1, mode: "shadow" }));
+    // The burst is 10: both serve exactly 10 lookups, the rest are limited for both.
+    expect(off.served).toBe(10);
+    expect(shadowed.served).toBe(off.served);
+    // Shadow had its own, smaller budget: it ran, within half the burst.
+    expect(shadowed.shadow).toBeGreaterThan(0);
+    expect(shadowed.shadow).toBeLessThanOrEqual(5);
   });
 
   test("shadow records carry sanitized ids: a secret in an item's ref never reaches them", async () => {

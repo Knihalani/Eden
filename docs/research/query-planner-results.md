@@ -104,8 +104,11 @@ simulation instead. In shadow mode (`planner.mode = "shadow"`, `EDEN_QUERY_PLANN
 exactly as without a planner and runs the planner's lookup beside it, and nothing it finds is cached or delivered:
 - it runs only for connectors that served the lookup normally, so it adds no load to one skipped as open, busy or
   limited;
-- each of its calls takes a rate token only while more than half the burst stays for serving, so it never costs
-  serving a call (an engine test serves a burst of 10 lookups identically with no planner and in shadow);
+- its calls draw on their own rate bucket per (user, connector), at half serving's rate and burst, and wait while
+  serving's bucket is empty; they never take serving's tokens, so serving loses no call (an engine test sends every
+  lookup of a burst of 10 with no planner and in shadow). The cost is upstream load: a shadowing deployment can send a
+  connector up to 1.5x what serving alone may. Rerunning the experiment below after this change gave byte-identical
+  results: no shadow call was ever rate-limited in it;
 - it runs one shadow lookup per session at a time;
 - it learns from what comes back;
 - it reports a content-free record to `onShadow`: shapes, calls, sanitized item ids, and the served item ids.
@@ -135,7 +138,7 @@ What a deployment would see, and what the labels say about it:
 - The signal is the content-free one: a connector that served nothing while the shadow lookup found something.
 - Precision and recall are pooled over turns.
 
-| Mix | Run | Shadow records | Skipped, no spare rate | Calls per record | Need turns | Shadow would add | Shadow would lose | Signal precision | Signal recall |
+| Mix | Run | Shadow records | Skipped, rate-limited | Calls per record | Need turns | Shadow would add | Shadow would lose | Signal precision | Signal recall |
 |---|---|---|---|---|---|---|---|---|---|
 | zoo-a | shadow | 3240 | 0 | 1.47 | 698 | 176 (25.2%) | 2 | 0.599 (176/294) | 1.000 (176/176) |
 | zoo-a | shadow-then-serve | 1085 | 0 | 1.49 | 233 | 50 (21.5%) | 2 | 0.575 (50/87) | 1.000 (50/50) |
