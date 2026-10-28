@@ -36,7 +36,13 @@ export function removeLabContainers(): void {
   const ids = docker(["ps", "-aq", "--filter", `label=${LABEL}`])
     .split("\n")
     .filter(Boolean);
-  if (ids.length) docker(["rm", "-f", ...ids]);
+  if (!ids.length) return;
+  try {
+    docker(["rm", "-f", ...ids]);
+  } catch (e) {
+    // A container already being removed (a `--rm` server exiting) or already gone is what this wanted.
+    if (!/already in progress|No such container/.test(String(e))) throw e;
+  }
 }
 
 /** Starts a backend container on the lab network and returns its address (reachable from this host). */
