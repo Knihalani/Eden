@@ -101,59 +101,69 @@ fixed variant). Reproduce: `bun run sim:lab --sessions 120 [--only-planner]`.
 
 The plan's phase 5 ran the planner in shadow on consenting real accounts. By the owner's decision it runs in
 simulation instead. In shadow mode (`planner.mode = "shadow"`, `EDEN_QUERY_PLANNER=shadow`), the engine serves
-exactly as without a planner and runs the planner's lookup beside it:
-- every shadow call takes a rate token;
-- the planner learns from what comes back;
-- a content-free record (shapes, calls, item ids, the served item ids) goes to `onShadow`;
-- nothing it finds is cached or delivered.
+exactly as without a planner and runs the planner's lookup beside it, and nothing it finds is cached or delivered:
+- it runs only for connectors that served the lookup normally, so it adds no load to one skipped as open, busy or
+  limited;
+- each of its calls takes a rate token only while more than half the burst stays for serving, so it never costs
+  serving a call (an engine test serves a burst of 10 lookups identically with no planner and in shadow);
+- it runs one shadow lookup per session at a time;
+- it learns from what comes back;
+- it reports a content-free record to `onShadow`: shapes, calls, sanitized item ids, and the served item ids.
 
 The simulation adds what real accounts could not: labels, to check what the content-free records say. Held-out sets
 A and B and the realistic mix, five seeds each, 6 users with 15 sessions. "Shadow, then serve" runs in shadow for
 the first 5 sessions per user, then serves with what it learned. Raw:
 [query-planner-shadow.jsonl](query-planner-shadow.jsonl), from [query-planner-shadow.sh](query-planner-shadow.sh).
 
-| Mix | Run | Recall, all sessions | Recall, sessions 6–15 | Precision | False fires | Source calls per lookup | Rate-limited calls |
+| Mix | Run | Recall, all sessions | Recall, sessions 6–15 | Precision | False fires / silent turns | Source calls per lookup | Errors (simulated) |
 |---|---|---|---|---|---|---|---|
-| zoo-a | off | 9.0% (7–11) | 9.3% (7–12) | 0.563 | 1/713 | 4.11 | 0 |
-| zoo-a | shadow | 9.0% (7–11) | 9.3% (7–12) | 0.569 | 1/713 | 10.40 | 0 |
-| zoo-a | serve | 17.6% (15–20) | 17.6% (15–21) | 0.598 | 1/713 | 6.28 | 0 |
-| zoo-a | shadow-then-serve | 15.4% (13–18) | 18.7% (16–22) | 0.634 | 1/713 | 6.75 | 0 |
-| zoo-b | off | 21.5% (19–24) | 23.5% (20–27) | 0.535 | 1/713 | 4.13 | 0 |
-| zoo-b | shadow | 21.7% (19–24) | 23.8% (21–27) | 0.537 | 1/713 | 10.16 | 0 |
-| zoo-b | serve | 23.9% (21–27) | 25.5% (22–29) | 0.560 | 1/713 | 6.06 | 0 |
-| zoo-b | shadow-then-serve | 23.3% (21–26) | 26.1% (23–30) | 0.560 | 1/713 | 6.49 | 0 |
-| realistic | off | 13.1% (11–15) | 13.5% (11–16) | 0.634 | 1/713 | 4.11 | 0 |
-| realistic | shadow | 13.2% (11–15) | 13.7% (11–17) | 0.635 | 1/713 | 10.66 | 0 |
-| realistic | serve | 18.9% (16–22) | 18.7% (16–22) | 0.613 | 1/713 | 6.52 | 0 |
-| realistic | shadow-then-serve | 18.6% (16–21) | 21.6% (19–25) | 0.656 | 1/713 | 6.99 | 0 |
+| zoo-a | off | 9.0% (7–11) | 9.3% (7–12) | 0.563 | 1/713 | 4.11 | 44 |
+| zoo-a | shadow | 9.0% (7–11) | 9.3% (7–12) | 0.569 | 1/713 | 10.36 | 130 |
+| zoo-a | serve | 17.6% (15–20) | 17.6% (15–21) | 0.598 | 1/713 | 6.28 | 76 |
+| zoo-a | shadow-then-serve | 15.5% (13–18) | 18.9% (16–22) | 0.637 | 1/713 | 6.74 | 83 |
+| zoo-b | off | 21.5% (19–24) | 23.5% (20–27) | 0.535 | 1/713 | 4.13 | 43 |
+| zoo-b | shadow | 21.7% (19–24) | 23.8% (21–27) | 0.537 | 1/713 | 10.12 | 130 |
+| zoo-b | serve | 23.9% (21–27) | 25.5% (22–29) | 0.560 | 1/713 | 6.06 | 63 |
+| zoo-b | shadow-then-serve | 23.4% (21–26) | 26.3% (23–30) | 0.561 | 1/713 | 6.49 | 72 |
+| realistic | off | 13.1% (11–15) | 13.5% (11–16) | 0.634 | 1/713 | 4.11 | 43 |
+| realistic | shadow | 13.2% (11–15) | 13.7% (11–17) | 0.635 | 1/713 | 10.60 | 137 |
+| realistic | serve | 18.9% (16–22) | 18.7% (16–22) | 0.613 | 1/713 | 6.52 | 86 |
+| realistic | shadow-then-serve | 18.7% (16–21) | 21.7% (19–25) | 0.651 | 1/713 | 6.97 | 90 |
 
-What a deployment would see, and what the labels say about it ("would add": need turns where the shadow lookup
-returned a needed fact that serving did not; the signal is the content-free one, a connector that served nothing
-while the shadow lookup found something):
+What a deployment would see, and what the labels say about it:
+- "Would add" counts need turns where the shadow lookup returned a needed fact that serving did not.
+- The signal is the content-free one: a connector that served nothing while the shadow lookup found something.
+- Precision and recall are pooled over turns.
 
-| Mix | Run | Shadow records | Limited | Shadow calls per record | Need turns | Shadow would add | Shadow would lose | Signal precision (mean of seeds) | Signal recall (mean of seeds) |
+| Mix | Run | Shadow records | Skipped, no spare rate | Calls per record | Need turns | Shadow would add | Shadow would lose | Signal precision | Signal recall |
 |---|---|---|---|---|---|---|---|---|---|
-| zoo-a | shadow | 3258 | 0 | 1.46 | 698 | 175 (25.1%) | 2 | 0.584 | 1.000 |
-| zoo-a | shadow-then-serve | 1095 | 0 | 1.48 | 233 | 52 (22.3%) | 2 | 0.574 | 1.000 |
-| zoo-b | shadow | 3132 | 0 | 1.30 | 654 | 22 (3.4%) | 4 | 0.238 | 1.000 |
-| zoo-b | shadow-then-serve | 1071 | 0 | 1.32 | 227 | 4 (1.8%) | 3 | 0.169 | 0.600 |
-| realistic | shadow | 3255 | 0 | 1.47 | 695 | 164 (23.6%) | 2 | 0.639 | 0.990 |
-| realistic | shadow-then-serve | 1089 | 0 | 1.47 | 232 | 54 (23.3%) | 1 | 0.640 | 1.000 |
+| zoo-a | shadow | 3240 | 0 | 1.47 | 698 | 176 (25.2%) | 2 | 0.599 (176/294) | 1.000 (176/176) |
+| zoo-a | shadow-then-serve | 1085 | 0 | 1.49 | 233 | 50 (21.5%) | 2 | 0.575 (50/87) | 1.000 (50/50) |
+| zoo-b | shadow | 3116 | 0 | 1.30 | 654 | 16 (2.4%) | 3 | 0.200 (16/80) | 1.000 (16/16) |
+| zoo-b | shadow-then-serve | 1067 | 0 | 1.32 | 227 | 3 (1.3%) | 3 | 0.115 (3/26) | 1.000 (3/3) |
+| realistic | shadow | 3239 | 0 | 1.47 | 695 | 153 (22.0%) | 1 | 0.627 (151/241) | 0.987 (151/153) |
+| realistic | shadow-then-serve | 1081 | 0 | 1.48 | 232 | 51 (22.0%) | 1 | 0.600 (51/85) | 1.000 (51/51) |
 
-- **Serving is unchanged in shadow.** Recall, precision and false fires match planner-off in every mix: 9.0% against
-  9.0% on held-out A, within noise on B and the realistic mix. What it costs is calls: 10.2–10.7 per lookup against
-  4.1, because the shadow lookup repeats the served one. No call was refused by the rate limit in these runs.
-- **The shadow lookup would add a needed fact** on 25% of need turns in held-out A and 24% in the realistic mix,
-  and on 3.4% in held-out B. It would lose one that serving found on at most 4 turns of about 650–700.
-- **The content-free signal is honest.** It flagged nearly every turn where the shadow really added something (recall
-  0.99–1.00, 0.60 on the one small sample of 5). Where gains were common, its precision was 0.57–0.64; on B, where
-  they were rare, 0.17–0.24. A deployment can therefore read, from content-free counts alone, whether the planner
-  would help its connectors. A high rate of "served nothing, shadow found something" means it would.
-- **Shadow learning carries over.** After 5 shadow sessions, sessions 6–15 reached 18.7% recall on held-out A
-  (serving from the start: 17.6%; off: 9.3%) and 21.6% on the realistic mix (18.7%; 13.5%). Precision was the
-  highest of any run (0.634, 0.656). The intervals overlap with serving from the start, so the claim is "at least as
+- **Serving does not change in shadow.** Pooled recall, precision and false fires match planner-off within noise in
+  every mix (held-out A: 9.0% and 9.0%). Seed by seed, needed facts delivered with planner off and in shadow were
+  A (16, 17), (9, 10), (21, 19), (15, 15), (22, 22); B (39, 38), (52, 52), (28, 28), (38, 41), (42, 42); realistic
+  (28, 28), (20, 21), (22, 22), (20, 20), (31, 31). The differences come from the simulator, not the engine: its
+  connectors draw latency and errors from one random stream, so the shadow's extra calls shift which served calls
+  fail (simulated errors 43–44 with planner off, 130–137 in shadow). On the `ideal` profile, which has no errors,
+  the two are identical: seeds 1–3 gave the same deliveries, precision, false fires and funnel counts (run by hand
+  with `--profile ideal`, not in the JSONL).
+- **Calls:** shadow costs 10.1–10.6 calls per lookup against 4.1, because it repeats the lookup. No shadow call was
+  skipped for lack of spare rate in these runs: simulated time between turns refills the limit.
+- **The shadow lookup would add a needed fact** on 25.2% of need turns in held-out A and 22.0% in the realistic
+  mix, and on 2.4% in held-out B. It would lose one that serving found on at most 3 turns of about 650–700.
+- **The content-free signal is honest.** It flagged 176 of 176 real gains in A, 151 of 153 in the realistic mix and
+  16 of 16 in B. When it fired, it was right in 60% of turns in A (176/294) and 63% in realistic, but only 20% in B,
+  where gains were rare. No threshold for switching to serving is calibrated yet. Two things separate the mixes:
+  the signal's rate per need turn (42% in A against 12% in B) and its precision.
+- **Shadow learning carries over.** After 5 shadow sessions, sessions 6–15 reached 18.9% recall on held-out A
+  (serving from the start: 17.6%; off: 9.3%) and 21.7% on the realistic mix (18.7%; 13.5%). Precision was the
+  highest of any run (0.637, 0.651). The intervals overlap with serving from the start, so the claim is "at least as
   good, with no exposure while learning", not "better".
-- **Caveat:** signal precision and recall are means over seeds, not pooled over turns. The report gives ratios only.
 
 ## Gates in the plan, and where they stand
 
