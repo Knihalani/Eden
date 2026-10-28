@@ -113,7 +113,11 @@ describe("McpSource", () => {
 
 describe("McpSource fetch", () => {
   /** A notes server with a read-one tool whose record can change between calls. */
-  type Reply = { content: { type: "text"; text: string }[]; structuredContent?: Record<string, unknown> };
+  type Reply = {
+    content: { type: "text"; text: string }[];
+    structuredContent?: Record<string, unknown>;
+    isError?: boolean;
+  };
   function notesServer(readOnly = true, reply?: (id: string) => Reply) {
     const server = new McpServer({ name: "notes", version: "1" });
     const calls: unknown[] = [];
@@ -210,6 +214,16 @@ describe("McpSource fetch", () => {
     ["another record", () => text(JSON.stringify({ id: "n2", title: "Other", text: "Someone else's note" }))],
     ["a row with no id", () => text(JSON.stringify({ title: "Dana's preferences", text: "Dana prefers calls" }))],
   ])("a reply that is not the asked-for record is null, never stored under its ref: %s", async (_, reply) => {
+    const s = make(notesServer(true, reply).server, { name: "get_note" });
+    expect(await s.fetch("n1", scope, AbortSignal.timeout(2_000))).toBeNull();
+    await s.close();
+  });
+
+  test("an error result is null even when it carries the asked-for row", async () => {
+    const reply = (): Reply => ({
+      ...text(JSON.stringify({ id: "n1", title: "Error", text: "quota exceeded" })),
+      isError: true,
+    });
     const s = make(notesServer(true, reply).server, { name: "get_note" });
     expect(await s.fetch("n1", scope, AbortSignal.timeout(2_000))).toBeNull();
     await s.close();
