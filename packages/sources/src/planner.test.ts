@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import type { ContextItem } from "@eden/protocol";
-import { cueCoverage, PlannedSource, QueryPlanner, type PlannerArm, type PlannerStore } from "./planner";
+import {
+  cueCoverage,
+  PlannedSource,
+  QueryPlanner,
+  type PlanCalls,
+  type PlannerArm,
+  type PlannerStore,
+} from "./planner";
 import type { SearchQuery, Source } from "./source";
 
 const signal = new AbortController().signal;
@@ -387,6 +394,28 @@ describe("QueryPlanner", () => {
     expect(
       (await new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0 }).search(slow, q, signal)).calls,
     ).toBeGreaterThan(1);
+  });
+
+  test("the deadline check also expects the connector's recent latency, not only this lookup's calls", async () => {
+    const quick: Source = {
+      id: "quick",
+      kind: "t",
+      description: "",
+      search: async () => (await Bun.sleep(5), []),
+    };
+    // The connector's recent calls took 400 ms at the 0.9 quantile; this lookup's first call took 5 ms.
+    const via: PlanCalls = {
+      cached: () => undefined,
+      call: (q, s) => quick.search(q, s),
+      expectMs: (_q, quantile) => (quantile === 0.9 ? 400 : 0),
+    };
+    const q = query("globex renewal sam ortiz", ["Globex", "Sam Ortiz"]);
+    const planner = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0 });
+    // 200 ms left: the history says a call needs 800 (400 times the margin), so the cascade is not sent.
+    expect((await planner.search(quick, q, signal, undefined, via, performance.now() + 200)).calls).toBe(1);
+    // With the history off (quantile 0), the lookup's own 5 ms call is the estimate, and the cascade runs.
+    const own = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0, latencyQuantile: 0 });
+    expect((await own.search(quick, q, signal, undefined, via, performance.now() + 200)).calls).toBeGreaterThan(1);
   });
 
   test("a shape cut short by the deadline partway keeps its items but is not credited", async () => {

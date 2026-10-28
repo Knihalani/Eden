@@ -63,7 +63,12 @@ interface PerSource {
   breaker: CircuitBreaker;
   limiter: AimdLimiter;
   latency: RollingHistogram;
+  /** Latency of the planner's single calls (`planCalls`), apart from whole lookups, which may be several calls. */
+  callLatency: RollingHistogram;
 }
+
+/** Planner calls a connector's call-latency quantile needs before it is trusted. */
+const MIN_CALL_SAMPLES = 5;
 
 const RATE_LIMITED = /\b429\b|rate.?limit|too many requests/i;
 /** Per-source state kept for at most this many (user, source) pairs; the least recently used is dropped. */
@@ -154,7 +159,12 @@ export class SourceFanout {
    */
   planCalls(source: Source): PlanCalls {
     const key = (q: SearchQuery) => `${scopeKey(q.scope)}|${source.id}|plan|${q.limit}|${q.text}`;
+    const sourceKey = (q: SearchQuery) => `${scopeKey(q.scope)}|${source.id}`;
     const calls: PlanCalls = {
+      expectMs: (q, quantile) => {
+        const h = this.per.get(sourceKey(q))?.callLatency;
+        return h && h.count >= MIN_CALL_SAMPLES ? h.quantile(quantile) : 0;
+      },
       cached: (q) => {
         const k = key(q);
         const v = this.results?.get(k);
@@ -166,7 +176,16 @@ export class SourceFanout {
           k,
           async (sig) => {
             const forgets = this.forgets;
-            const items = await this.options.sanitize(await source.search(q, sig), sig);
+            const t0 = performance.now();
+            let raw: ContextItem[];
+            try {
+              raw = await source.search(q, sig);
+            } finally {
+              // Every outcome counts, a call cut off too (its time so far, a lower bound): the slow calls are the
+              // ones the estimate must see.
+              this.state(sourceKey(q)).callLatency.record(performance.now() - t0);
+            }
+            const items = await this.options.sanitize(raw, sig);
             if (!sig.aborted && this.forgets === forgets) this.results?.set(k, items, sizeOf(items));
             return items;
           },
@@ -203,6 +222,7 @@ export class SourceFanout {
         breaker: new CircuitBreaker({ ...this.options.breaker, now: this.now }),
         limiter: new AimdLimiter({ initial: 2, min: 1, max: this.options.maxConcurrency ?? 4 }),
         latency: new RollingHistogram(60_000, this.now),
+        callLatency: new RollingHistogram(60_000, this.now),
       };
       this.per.set(key, s);
     }
