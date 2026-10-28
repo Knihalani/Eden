@@ -312,7 +312,8 @@ export class QueryPlanner {
         if (seen.has(it.id)) continue;
         seen.add(it.id);
         items.push(it);
-        // Serving only: a shadow lookup's items are raw (not yet redacted) and are never what gets delivered.
+        // Serving only: a shadow lookup's items are raw (not yet redacted) and are never what gets delivered. A caller
+        // that serves without the engine (no `via`) remembers its items as given; the engine's are redacted first.
         if (this.o.deliveryCredit && this.mode === "serve") this.remember(query.scope, source.id, it.id, bucket, arm);
       }
       // A shape cut short by the permit (one call per entity, the later ones refused) is not credited either: its
