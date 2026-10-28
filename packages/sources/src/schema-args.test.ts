@@ -42,6 +42,18 @@ describe("mapSearchArgs", () => {
     });
   });
 
+  test("a mail tool's required from/to are a sender and recipient, not a date window", () => {
+    const mail = s({ query: str, from: str, to: str }, ["from", "to"]);
+    const m = mapSearchArgs(mail);
+    expect(m.window).toBeNull();
+    expect(m.missing).toEqual(["from", "to"]);
+    const dated = s({ query: str, from: { type: "string", format: "date" }, to: { type: "string", format: "date" } }, [
+      "from",
+      "to",
+    ]);
+    expect(mapSearchArgs(dated).window).toEqual({ start: "from", end: "to" });
+  });
+
   test("field-only search uses a text field, never an id or a folder (IMAP)", () => {
     const imap = s({
       accountId: str,

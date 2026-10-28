@@ -109,6 +109,8 @@ interface Session {
   inflight: Promise<Injection | null> | null;
   abort: AbortController;
   closed: boolean;
+  /** The last lookup's planner outcomes, for its trace (shape names and counts only). */
+  plans?: Trace["plans"];
 }
 
 interface Cue {
@@ -302,6 +304,7 @@ export class ContextPartner {
       modelCalls: usedModel ? 1 : 0,
       costUsd,
       itemIds: items.map((i) => i.id),
+      ...(s.plans ? { plans: s.plans } : {}),
     });
     return { answer, citations: citationsOf(items), usedModel, costUsd, latencyMs };
   }
@@ -342,6 +345,7 @@ export class ContextPartner {
     this.deps.cache.forget(scope, sourceId);
     this.deps.sourceMap.forget(scope, sourceId);
     this.fanout.forget(scope, sourceId);
+    this.deps.planner?.forget(scope, sourceId);
   }
 
   get sessionCount(): number {
@@ -526,6 +530,7 @@ export class ContextPartner {
 
   /** Routes, searches the chosen sources live, caches what they return and records which entities they hold. */
   private async searchLive(s: Session, cue: Cue, limit: number): Promise<number> {
+    s.plans = undefined; // A trace reports this lookup's plans, never an earlier one's.
     const all = await this.deps.sources(s.scope).catch((): Source[] => []);
     if (all.length === 0 || s.closed) return 0;
     const ranked = this.deps.sourceMap.route({
@@ -537,13 +542,22 @@ export class ContextPartner {
     });
     const found = ranked.map((r) => all.find((x) => x.id === r.sourceId)!).filter(Boolean);
     const planner = this.deps.planner;
-    // Wrapped per lookup (cheap: no state of its own); the fan-out's breakers and limits still apply per source id.
-    const chosen = planner ? found.map((x) => new PlannedSource(x, planner)) : found;
+    // Wrapped per lookup (cheap: no state of its own). The fan-out admits each lookup per source id as before (breaker,
+    // concurrency, one rate token); every extra call the planner makes takes its own rate token through `permit`.
+    const chosen = planner
+      ? found.map((x) => new PlannedSource(x, planner, () => this.fanout.permit(s.scope, x.id)))
+      : found;
     const outcomes = await this.fanout.search(
       chosen,
       { scope: s.scope, text: cue.text, entities: cue.entities, limit: 8 },
       { timeoutMs: this.config.sourceTimeoutMs, signal: s.abort.signal },
     );
+    s.plans = planner
+      ? chosen.flatMap((x) => {
+          const last = (x as PlannedSource).last;
+          return last ? [{ sourceId: x.id, shapes: last.shapes, calls: last.calls }] : [];
+        })
+      : undefined;
     if (s.closed) return chosen.length; // Forgotten or ended mid-search: keep nothing.
     for (let k = 0; k < outcomes.length; k++) {
       const o = outcomes[k]!;
@@ -586,6 +600,7 @@ export class ContextPartner {
         modelCalls,
         costUsd,
         itemIds: items.map((i) => i.id),
+        ...(s.plans ? { plans: s.plans } : {}),
       });
     try {
       sourceCalls = await this.searchLive(s, cue, this.config.lookupSources);

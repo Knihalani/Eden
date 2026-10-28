@@ -169,4 +169,66 @@ describe("QueryPlanner", () => {
     }
     expect(terms).toBeGreaterThanOrEqual(15);
   });
+
+  test("concurrent lookups for different users never touch each other's choices or learning", async () => {
+    const planner = new QueryPlanner({ seed: 2 });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    // A's connector answers nothing, after B's lookup has run: A's cascade happens after B changed its own choices.
+    const slowEmpty: Source = { id: "x", kind: "t", description: "", search: async () => (await gate, []) };
+    const aScope = { tenantId: "t", userId: "a" };
+    const before = planner.means(aScope, "x", false);
+    const a = planner.search(slowEmpty, query("lunch friday", [], aScope), signal);
+    await planner.search(
+      substring(),
+      query("dinner jamie fox", ["Jamie Fox"], { tenantId: "t2", userId: "b" }),
+      signal,
+    );
+    release();
+    const r = await a;
+    // A's cue has no entity: terms is the only shape that applies, so no cascade shape exists to try.
+    expect(r.shapes).toEqual(["terms"]);
+    const after = planner.means(aScope, "x", false);
+    for (const s of ["entities", "each-entity", "entity+term", "phrase"] as const) expect(after[s]).toBe(before[s]);
+  });
+
+  test("a refused permit stops extra calls, and a shape that sent nothing is not credited", async () => {
+    const planner = new QueryPlanner({ seed: 1, epsilon: 0 });
+    const src = substring();
+    // terms (the incumbent) finds nothing on a substring connector; the cascade's call needs a permit.
+    const r = await planner.search(src, cues[0]!, signal, () => false);
+    expect(r.calls).toBe(1);
+    expect(src.log).toHaveLength(1);
+    expect(r.shapes).toEqual(["terms"]);
+  });
+
+  test("a store that throws costs persistence, never the lookup", async () => {
+    const broken: PlannerStore = {
+      loadArms: () => {
+        throw new Error("database is locked");
+      },
+      saveArms: () => {
+        throw new Error("disk full");
+      },
+    };
+    const planner = new QueryPlanner({ seed: 1, store: broken });
+    const r = await planner.search(anyWord(), cues[0]!, signal);
+    expect(r.items.length).toBeGreaterThan(0);
+  });
+
+  test("forget drops a user's state (one connector or all), and only theirs", async () => {
+    const planner = new QueryPlanner({ seed: 3, cascade: false });
+    const bob = { tenantId: "t", userId: "bob" };
+    for (let i = 0; i < 30; i++) {
+      await planner.search(substring(), cues[i % cues.length]!, signal);
+      await planner.search(substring(), { ...cues[i % cues.length]!, scope: bob }, signal);
+    }
+    const prior = new QueryPlanner().means(alice, "substring", true);
+    const bobs = planner.means(bob, "substring", true);
+    planner.forget(alice, "other");
+    expect(planner.means(alice, "substring", true)).not.toEqual(prior);
+    planner.forget(alice);
+    expect(planner.means(alice, "substring", true)).toEqual(prior);
+    expect(planner.means(bob, "substring", true)).toEqual(bobs);
+  });
 });
