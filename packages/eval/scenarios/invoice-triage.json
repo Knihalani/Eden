@@ -53,6 +53,7 @@
           },
           "expect": {
             "items": [
+              "mail:msg-acme-invoice",
               "finance:bill-2291"
             ]
           }

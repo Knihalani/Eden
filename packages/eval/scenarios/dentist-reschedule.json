@@ -80,6 +80,11 @@
           "event": {
             "kind": "user_message",
             "text": "Is Thursday morning free instead?"
+          },
+          "expect": {
+            "items": [
+              "calendar:evt-standup"
+            ]
           }
         }
       ]

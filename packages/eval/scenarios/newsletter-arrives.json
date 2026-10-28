@@ -11,6 +11,16 @@
           "ref": "msg-stratechery",
           "title": "Stratechery: weekly article",
           "text": "This week on aggregation theory."
+        },
+        {
+          "ref": "msg-morningbrew",
+          "title": "Morning Brew: Today's top stories",
+          "text": "Markets rally; a new phone launches; three stories you missed."
+        },
+        {
+          "ref": "msg-linkedin",
+          "title": "LinkedIn: You appeared in 12 searches",
+          "text": "See who's looking at your profile this week."
         }
       ]
     }

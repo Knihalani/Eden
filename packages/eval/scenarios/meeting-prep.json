@@ -64,7 +64,8 @@
           "expect": {
             "items": [
               "calendar:evt-webb",
-              "mail:msg-webb"
+              "mail:msg-webb",
+              "docs:doc-q3"
             ]
           }
         },
