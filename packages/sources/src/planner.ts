@@ -77,6 +77,11 @@ export interface PlannerOptions {
    * before the caller's deadline (default 2, chosen in a timed run; docs/research/query-planner-results.md).
    */
   deadlineMargin?: number;
+  /**
+   * The deadline check also expects a call to take at least this quantile of the connector's recent call latency
+   * (`PlanCalls.expectMs`), not only the lookup's slowest call so far; 0 uses the lookup's own calls alone.
+   */
+  latencyQuantile?: number;
   /** Connector states kept in memory, across all users. */
   maxStates?: number;
   /** Where arms persist (`SourceMap` implements it). Absent: learning lives in memory only. */
@@ -100,6 +105,8 @@ export interface PlanCalls {
   cached(query: SearchQuery): ContextItem[] | undefined;
   /** One call to the connector; its results come back sanitized and are cached. */
   call(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]>;
+  /** The connector's recent latency per call for this user at `quantile` (ms), or 0 while too few are known. */
+  expectMs?(query: SearchQuery, quantile: number): number;
 }
 
 /** One learned arm as stored: content-free. */
@@ -144,6 +151,7 @@ const DEFAULTS = {
   cascadeMin: 0.05,
   reuse: true,
   deadlineMargin: 2,
+  latencyQuantile: 0.9,
   maxStates: 50_000,
   incumbent: { shape: "terms" as Shape, mean: 0.75, strength: 8 },
   rewardTopK: 1,
@@ -196,8 +204,9 @@ export class QueryPlanner {
     let reward = 0;
     const seen = new Set<string>();
     const items: ContextItem[] = [];
-    // This lookup's slowest call so far (ms): what the next call is expected to take.
-    let callMs = 0;
+    // What the next call is expected to take (ms): the lookup's slowest call so far, and at least the connector's
+    // recent latency at `latencyQuantile` (one lookup does not show the tail; the last 10–20 minutes of calls may).
+    let callMs = this.o.latencyQuantile > 0 && via?.expectMs ? via.expectMs(query, this.o.latencyQuantile) : 0;
     while (calls < this.o.maxCalls) {
       const n = bandit.select(this.rng, 1, eligible, null, this.o.epsilon, picked);
       if (n === 0) break;
