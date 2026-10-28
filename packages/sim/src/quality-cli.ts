@@ -2,7 +2,7 @@
 /**
  * bun packages/sim/src/quality-cli.ts [--users 6] [--sessions 15] [--seed 1] [--profile realistic|ideal|entities|
  *   zoo-tune|zoo-a|zoo-b] [--planner [--planner-max-calls 3] [--planner-no-cascade] [--planner-cascade-min 0.05]
- *   [--planner-no-reuse]
+ *   [--planner-no-reuse] [--planner-deadline-margin 2]
  *   [--planner-mode serve|shadow] [--promote-after N]] [--time 0] [--wait 0]
  *   [--noise 1] [--tool-rate 0.4] [--judge none|perfect|noisy] [--live] [--brief]
  *
@@ -50,6 +50,9 @@ const report = await runQuality({
         maxCalls: Number(arg("planner-max-calls", "3")),
         cascade: !args.includes("--planner-no-cascade"),
         reuse: !args.includes("--planner-no-reuse"),
+        ...(args.includes("--planner-deadline-margin")
+          ? { deadlineMargin: Number(arg("planner-deadline-margin", "2")) }
+          : {}),
         ...(args.includes("--planner-cascade-min") ? { cascadeMin: Number(arg("planner-cascade-min", "0.05")) } : {}),
         mode: arg("planner-mode", "serve") as "serve" | "shadow",
         incumbent: {
