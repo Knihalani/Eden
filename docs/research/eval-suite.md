@@ -28,8 +28,8 @@
 ## After plan item 6 (2026-10-28)
 
 Item 6 (D34) fixed the two engine weaknesses behind the baseline's three false fires (below):
-- **What the agent already has:** an item (four terms or more) every one of whose terms is in one recent tool
-  result or agent message is not delivered, with or without a model. The user naming an item does not count, and
+- **What the agent already has:** an item (four terms or more) every one of whose terms and adjacent term pairs is
+  in one recent tool result or agent message is not pushed, with or without a model. The user naming an item does not count, and
   an item with a term the agent has not seen (an update: another time, another room) is still delivered.
 - **Bulk mail:** an item whose `meta.category` is `promotions` (no connector sets it yet) or whose title names a
   newsletter, "top stories" or "you appeared in" is not delivered without a model. The judge and asks still see it.
@@ -41,10 +41,10 @@ Item 6 (D34) fixed the two engine weaknesses behind the baseline's three false f
 | after item 6 (planner on) | 1.000 (15/15) | 0.349 (15/43) | 0/58 | 2, 0 | 0 of 16 | 1.0 (3 of 3) |
 
 `invoice-triage` (an arriving overdue invoice) is still met. In the simulation (5 seeds per mix, planner on,
-`quality-cli`), recall, precision and false fires were unchanged in zoo-tune, zoo-a and realistic (realistic: recall
-19.1%, precision 0.627, 1/713) and within noise in zoo-b (561 items delivered against 563): the simulation's
-templates rarely produce what these rules match, so this change is measured only by the eval. Observe p95 0.23–0.25
-ms against 0.20–0.24 ms on main (realistic, 5 seeds, run one after another). No `--live` run (the key's spend
+`quality-cli`), every mix scored as on main (realistic: recall 19.1%, precision 0.627, 1/713; zoo-b: 563 items
+delivered on both; a terms-only version without the pair check delivered 561): the simulation's templates rarely
+produce what these rules match, so this change is measured only by the eval. Observe p95 0.21–0.25
+ms against 0.21–0.26 ms on main (realistic, 5 seeds, run one after another). No `--live` run (the key's spend
 limit).
 
 ## What it reports

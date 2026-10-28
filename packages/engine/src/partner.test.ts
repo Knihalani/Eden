@@ -581,6 +581,21 @@ describe("what the agent has or does not need is not delivered", () => {
     expect(got).toContain("calendar:rev");
   });
 
+  test("a moved time is still delivered when the agent's listing holds its words elsewhere", async () => {
+    const moved = new StaticSource("calendar", "calendar", [
+      { ref: "rev", title: "Design review with Hana", text: "Monday 11:30, room Orion, bring the mobile mocks" },
+    ]);
+    const { p } = partner({}, [moved]);
+    // Every term of the moved item is in this listing ("30" from the standup), but not "11 30" side by side.
+    const output =
+      "Monday: standup 9:30; Design review with Hana 11:00, room Orion, bring the mobile mocks; lunch 12:00";
+    const got = [
+      ...(await delivered(p, { kind: "tool_result", tool: "calendar.list", output })),
+      ...(await delivered(p, { kind: "user_message", text: "What should I bring to the design review with Hana?" })),
+    ];
+    expect(got).toContain("calendar:rev");
+  });
+
   test("a user message holding all of an item's words is no sign the agent has it", async () => {
     const { p } = partner({}, [review]);
     const text = "Design review with Hana, Monday 11:00, room Orion, bring the mobile mocks: is that still right?";
