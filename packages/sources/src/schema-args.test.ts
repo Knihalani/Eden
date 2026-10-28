@@ -74,3 +74,42 @@ describe("mapSearchArgs", () => {
     expect(buildArgs(m, "x", 3, NOW)).toEqual({ mode: "text", query: "x" });
   });
 });
+
+/** The search tools of eight open-source MCP servers, as their `tools/list` reported them in the connector lab. */
+const corpus = (await Bun.file(new URL("./fixtures/mcp-tools.json", import.meta.url)).json()) as Record<
+  string,
+  { tool: string; inputSchema: ToolSchema }
+>;
+
+describe("mapSearchArgs on real servers' schemas", () => {
+  // Hand-labelled: where each server's query goes, its limit, and what the operator must still supply.
+  const expected: Record<string, { text: string; array?: boolean; limit: string | null; missing: string[] }> = {
+    memory: { text: "query", limit: null, missing: [] },
+    mcpvault: { text: "query", limit: "limit", missing: [] },
+    "basic-memory": { text: "query", limit: "page_size", missing: [] },
+    meilisearch: { text: "query", limit: "limit", missing: [] },
+    caldav: { text: "query", limit: null, missing: [] },
+    "imap-subject": { text: "body", limit: "limit", missing: [] },
+    chroma: { text: "query_texts", array: true, limit: "n_results", missing: ["collection_name"] },
+    "gitea-bleve": { text: "query", limit: "per_page", missing: [] },
+  };
+
+  for (const [name, want] of Object.entries(expected)) {
+    test(name, () => {
+      const m = mapSearchArgs(corpus[name]!.inputSchema);
+      expect(m.text).toEqual({ name: want.text, array: want.array ?? false });
+      expect(m.limit).toBe(want.limit);
+      expect(m.missing).toEqual(want.missing);
+    });
+  }
+
+  test("CalDAV's required date window is filled; the rest need nothing from the operator but Chroma's collection", () => {
+    expect(mapSearchArgs(corpus.caldav!.inputSchema).window).toEqual({ start: "start_date", end: "end_date" });
+    const usableWithout = Object.keys(expected).filter((n) => usable(mapSearchArgs(corpus[n]!.inputSchema)));
+    expect(usableWithout.sort()).toEqual(
+      Object.keys(expected)
+        .filter((n) => n !== "chroma")
+        .sort(),
+    );
+  });
+});

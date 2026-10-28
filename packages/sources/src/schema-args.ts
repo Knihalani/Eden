@@ -64,6 +64,9 @@ const TEXT_NAMES = [
   "content",
   "title",
 ];
+/** Names that are the query whatever their description says (a query may document `tag:` syntax). */
+const STRONG_TEXT = new Set(TEXT_NAMES.slice(0, TEXT_NAMES.indexOf("text") + 1));
+const TAG_LIKE = /\b(flags?|labels?|tags?)\b/i;
 const LIMIT_NAMES = [
   "limit",
   "max_results",
@@ -103,7 +106,9 @@ export function mapSearchArgs(schema: ToolSchema, fixed: Record<string, unknown>
   };
   for (const want of TEXT_NAMES) {
     const n = candidates.find((c) => c.toLowerCase() === want.toLowerCase());
-    if (n && textual(n).ok && !props[n]!.enum) {
+    // A weak name described as flags, labels or tags filters by them (IMAP's custom `keywords`): not the query.
+    const vetoed = n && !STRONG_TEXT.has(want) && TAG_LIKE.test(props[n]!.description ?? "");
+    if (n && !vetoed && textual(n).ok && !props[n]!.enum) {
       text = { name: n, array: textual(n).array };
       break;
     }

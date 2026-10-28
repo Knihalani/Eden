@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { itemId, type ContextItem, type Scope } from "@eden/protocol";
+import { buildArgs, mapSearchArgs, usable, type ArgMapping, type ToolSchema } from "./schema-args";
 import type { SearchQuery, Source } from "./source";
 
 export interface McpSourceOptions {
@@ -18,13 +19,24 @@ export interface McpSourceOptions {
   description: string;
   /** Builds the transport for this user's connection (stdio for local servers, streamable HTTP for remote ones). */
   transport: () => Transport;
-  /** The read tool to search with, and how a query becomes its arguments. */
-  searchTool: { name: string; args: (query: SearchQuery) => Record<string, unknown> };
+  /**
+   * The read tool to search with, and how a query becomes its arguments: an `args` function, or (without one) a
+   * mapping read from the tool's input schema at connect (`schema-args.ts`), with `fixed` values the operator sets
+   * (a collection, a channel) sent on every call.
+   */
+  searchTool: {
+    name: string;
+    args?: (query: SearchQuery) => Record<string, unknown>;
+    fixed?: Record<string, unknown>;
+  };
   /** Tools the server does not annotate read-only but an operator has verified are. */
   trustedReadTools?: string[];
 }
 
 export class ReadOnlyViolation extends Error {}
+
+/** The search tool's schema could not be mapped to a call: no query argument, or a required one with no value. */
+export class ArgumentMappingError extends Error {}
 
 const RETRY_AFTER_MS = 30_000;
 
@@ -37,6 +49,7 @@ export class McpSource implements Source {
   /** After a failed connect, no retry until this time: a broken server must not cost a reconnect per lookup. */
   private retryAt = 0;
   private lastError: unknown = null;
+  private mapping: ArgMapping | null = null;
 
   constructor(private readonly options: McpSourceOptions) {
     this.id = options.id;
@@ -56,6 +69,16 @@ export class McpSource implements Source {
         const trusted = this.options.trustedReadTools?.includes(tool.name) ?? false;
         if (tool.annotations?.readOnlyHint !== true && !trusted) {
           throw new ReadOnlyViolation(`${this.id}: ${tool.name} is not declared read-only and is not trusted`);
+        }
+        if (!this.options.searchTool.args) {
+          const m = mapSearchArgs(tool.inputSchema as ToolSchema, this.options.searchTool.fixed);
+          if (!usable(m)) {
+            const why = m.text ? `required arguments with no value: ${m.missing.join(", ")}` : "no query argument";
+            throw new ArgumentMappingError(
+              `${this.id}: cannot call ${tool.name}: ${why}; set searchTool.fixed or args`,
+            );
+          }
+          this.mapping = m;
         }
         this.client = client;
         return client;
@@ -77,7 +100,12 @@ export class McpSource implements Source {
   async search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]> {
     const client = await this.connect();
     const result = await client.callTool(
-      { name: this.options.searchTool.name, arguments: this.options.searchTool.args(query) },
+      {
+        name: this.options.searchTool.name,
+        arguments: this.options.searchTool.args
+          ? this.options.searchTool.args(query)
+          : buildArgs(this.mapping!, query.text, query.limit, Date.now()),
+      },
       undefined,
       { signal },
     );
