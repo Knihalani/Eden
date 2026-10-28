@@ -158,8 +158,9 @@ export class McpSource implements Source {
 
   /**
    * The current version of one item, by its ref, through the fetch tool; null when there is none, the server has no
-   * such record, or the ref is Eden's own content hash (a row with no id of its own cannot be asked for again). The
-   * item keeps the ref it was asked for, so it replaces the cached one rather than joining it.
+   * such record, or the ref is Eden's own content hash (a row with no id of its own cannot be asked for again). Only
+   * a returned row whose own id is the ref counts: prose ("No note found"), another record, or a row with no id is
+   * null, never stored under the ref. The result is not redacted: whoever holds it runs it through the gate (D10).
    */
   async fetch(ref: string, _scope: Scope, signal?: AbortSignal): Promise<ContextItem | null> {
     const fetchTool = this.options.fetchTool;
@@ -169,8 +170,8 @@ export class McpSource implements Source {
     if (!args) return null;
     const result = await client.callTool({ name: fetchTool.name, arguments: args }, undefined, { signal });
     if (result.isError) return null;
-    const item = toItems(this.id, result.content, 1, result.structuredContent)[0];
-    return item ? { ...item, id: itemId(this.id, ref), ref } : null;
+    const row = jsonRows(result.content, result.structuredContent).find((r) => first(r, ID_KEYS) === ref);
+    return row ? rowItem(this.id, row) : null;
   }
 
   async close(): Promise<void> {
@@ -212,6 +213,17 @@ export function toItems(sourceId: string, content: unknown, limit: number, struc
     for (const row of rowsOf(parsed, 0) ?? []) out.push(rowItem(sourceId, row));
   }
   return out.slice(0, limit);
+}
+
+/** The rows of a tool result: its `structuredContent`, else every text block that holds JSON. Prose is no row. */
+function jsonRows(content: unknown, structured?: unknown): Row[] {
+  const fromStructured = structured === undefined ? null : rowsOf(structured, 0);
+  if (fromStructured) return fromStructured;
+  const blocks = Array.isArray(content) ? (content as Block[]) : [];
+  return blocks.flatMap((b) => {
+    const parsed = b.type === "text" && b.text ? parseJson(b.text) : undefined;
+    return parsed === undefined ? [] : (rowsOf(parsed, 0) ?? []);
+  });
 }
 
 /** Fields that identify a row, most specific first. Not `name` or `title`: two contacts can share a name. */

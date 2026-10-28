@@ -172,4 +172,38 @@ describe("mapFetchArgs", () => {
     expect(m.missing).toEqual(["collection"]);
     expect(fetchUsable(m)).toBe(false);
   });
+
+  test("a word that merely ends in id is not an id", () => {
+    const m = mapFetchArgs(schema({ valid: { type: "string" }, thread: { type: "string" } }));
+    expect(fetchUsable(m)).toBe(false);
+    expect(mapFetchArgs(schema({ pageId: { type: "string" }, paid: { type: "string" } })).ref?.name).toBe("pageId");
+  });
+
+  test("a search's text argument is never the ref, even as the one required argument", () => {
+    const m = mapFetchArgs(schema({ query: { type: "string" }, limit: { type: "number" } }, ["query"]));
+    expect(m.ref).toBeNull();
+  });
+
+  test("enum arguments never take the ref; a required argument with a default is not missing", () => {
+    const m = mapFetchArgs(
+      schema(
+        {
+          uid: { type: "string" },
+          mode: { type: "string", enum: ["a", "b"] },
+          view: { type: "string", default: "full" },
+        },
+        ["uid", "view"],
+      ),
+    );
+    expect(m.ref?.name).toBe("uid");
+    expect(m.missing).toEqual([]);
+    const onlyEnum = mapFetchArgs(schema({ id: { type: "string", enum: ["x"] } }, ["id"]));
+    expect(onlyEnum.ref).toBeNull();
+  });
+
+  test("a number argument takes a numeric ref, as an integer one does", () => {
+    const m = mapFetchArgs(schema({ issue_number: { type: "number" } }, ["issue_number"]));
+    expect(buildFetchArgs(m, "7")).toEqual({ issue_number: 7 });
+    expect(buildFetchArgs(m, "abc")).toBeNull();
+  });
 });
