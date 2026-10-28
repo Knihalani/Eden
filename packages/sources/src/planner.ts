@@ -1,0 +1,203 @@
+/**
+ * The query planner: for each lookup and each connector, which query shape to send (docs/plans/query-planner.md).
+ *
+ * Connectors differ in what their search does with a query, and the difference decides recall. In the connector lab
+ * the cue's terms reached 0% of needed items on the six connectors that match the whole query as one substring, where
+ * one call per entity reached 27–77%; on OR and vector search the terms did best (docs/research/connector-lab.md).
+ * A tenant can connect any MCP server, so the planner learns per (tenant, user, connector) instead of being told.
+ *
+ * - Arms are shapes (`shapes.ts`), learned separately for cues with and without an entity (shapes that need an
+ *   entity do not apply to the second). Thompson sampling over Beta posteriors (`BetaBandit`): per-arm decay so a
+ *   connector that changes is relearned, an ε floor so every applicable shape keeps a chance and logged propensities
+ *   stay usable for off-policy evaluation.
+ * - Reward, at once: how much of the cue the best returned item covers (`cueCoverage`); 0 for nothing returned. It
+ *   is a proxy for "a needed item came back": cheap, available on every call, and measured against the lab's labels.
+ * - Cascade: when the chosen shape returns nothing and another shape applies, the next one by posterior mean is
+ *   tried once, within the same lookup. An empty result costs one more call, not the lookup.
+ *
+ * No query text is stored: state is two numbers per (connector, bucket, shape). State is keyed by tenant and user
+ * (CLAUDE.md: isolation) and bounded: the least recently used connectors' state is dropped past `maxStates`.
+ */
+import type { ContextItem, Scope } from "@eden/protocol";
+import { BetaBandit, Xoshiro128 } from "@eden/primitives";
+import { buildShape, SHAPES, type Shape, type ShapeInput } from "./shapes";
+import type { SearchQuery, Source } from "./source";
+
+export interface PlannerOptions {
+  seed?: number;
+  /** Probability a decision is a uniform choice among applicable shapes (exploration floor). */
+  epsilon?: number;
+  /** Per-update discount of an arm's evidence toward its prior; memory ≈ 1 / (1 − gamma) updates of that arm. */
+  gamma?: number;
+  /** Prior pseudo-observations per arm (prior mean 0.5). */
+  priorStrength?: number;
+  /** Most calls a lookup makes for one connector, cascade included. */
+  maxCalls?: number;
+  /** Try the next shape when the chosen one returns nothing. */
+  cascade?: boolean;
+  /** Connectors whose search takes `"a b"` as a phrase (operator config; unknown connectors get no quotes). */
+  quotes?: (sourceId: string) => boolean;
+  /** Connector states kept in memory, across all users. */
+  maxStates?: number;
+}
+
+/** What one lookup did with one connector, for traces (content-free: shape names and counts only). */
+export interface PlanOutcome {
+  shapes: Shape[];
+  calls: number;
+  reward: number;
+}
+
+interface ConnectorState {
+  /** Bucket 0: the cue names no entity; bucket 1: it names at least one. */
+  bandits: [BetaBandit, BetaBandit];
+}
+
+const DEFAULTS = {
+  seed: 1,
+  epsilon: 0.05,
+  gamma: 0.98,
+  priorStrength: 2,
+  maxCalls: 3,
+  cascade: true,
+  maxStates: 50_000,
+};
+
+export class QueryPlanner {
+  private readonly states = new Map<string, ConnectorState>();
+  private readonly rng: Xoshiro128;
+  private readonly o: typeof DEFAULTS & Pick<PlannerOptions, "quotes">;
+  private readonly picked = new Int32Array(SHAPES.length);
+  private readonly eligible = new Uint8Array(SHAPES.length);
+
+  constructor(options: PlannerOptions = {}) {
+    this.o = { ...DEFAULTS, ...options };
+    this.rng = new Xoshiro128(this.o.seed);
+  }
+
+  /** Runs one lookup against `source`, choosing and crediting shapes. Errors from the source propagate. */
+  async search(
+    source: Source,
+    query: SearchQuery,
+    signal: AbortSignal,
+  ): Promise<{ items: ContextItem[] } & PlanOutcome> {
+    const input: ShapeInput = { text: query.text, entities: query.entities };
+    const quotes = this.o.quotes?.(source.id) ?? false;
+    const built = SHAPES.map((s) => buildShape(s, input, { quotes, maxCalls: this.o.maxCalls }));
+    const bucket = query.entities.length > 0 ? 1 : 0;
+    const bandit = this.state(query.scope, source.id).bandits[bucket];
+    for (let i = 0; i < SHAPES.length; i++) this.eligible[i] = built[i]!.length > 0 ? 1 : 0;
+    const shapes: Shape[] = [];
+    let calls = 0;
+    let reward = 0;
+    const seen = new Set<string>();
+    const items: ContextItem[] = [];
+    while (calls < this.o.maxCalls) {
+      const n = bandit.select(this.rng, 1, this.eligible, null, this.o.epsilon, this.picked);
+      if (n === 0) break;
+      const arm = this.picked[0]!;
+      const queries = built[arm]!.slice(0, this.o.maxCalls - calls);
+      const got: ContextItem[] = [];
+      for (const text of queries) {
+        calls++;
+        // Shapes carry the whole query in `text`; entities are cleared so a source does not re-add its own.
+        for (const it of await source.search({ ...query, text, entities: [] }, signal)) got.push(it);
+      }
+      const r = cueCoverage(input, got);
+      bandit.decayArm(arm, 1);
+      bandit.update(arm, r);
+      shapes.push(SHAPES[arm]!);
+      reward = Math.max(reward, r);
+      for (const it of got) {
+        if (seen.has(it.id)) continue;
+        seen.add(it.id);
+        items.push(it);
+      }
+      // One cascade step at most, and only after an empty result: a non-empty one is the lookup's answer.
+      if (got.length > 0 || !this.o.cascade || shapes.length > 1) break;
+      this.eligible[arm] = 0;
+    }
+    return { items: items.slice(0, query.limit), shapes, calls, reward };
+  }
+
+  /** Posterior mean usefulness of each shape for one connector and bucket, for tests and reports. */
+  means(scope: Scope, sourceId: string, withEntity: boolean): Record<Shape, number> {
+    const b = this.state(scope, sourceId).bandits[withEntity ? 1 : 0];
+    return Object.fromEntries(SHAPES.map((s, i) => [s, b.mean(i)])) as Record<Shape, number>;
+  }
+
+  get size(): number {
+    return this.states.size;
+  }
+
+  private state(scope: Scope, sourceId: string): ConnectorState {
+    const key = `${scope.tenantId}\u0000${scope.userId}\u0000${sourceId}`;
+    let s = this.states.get(key);
+    if (s) {
+      // Re-insert: Map order is least recently used first, for eviction.
+      this.states.delete(key);
+      this.states.set(key, s);
+      return s;
+    }
+    const prior = new Float64Array(SHAPES.length).fill(0.5);
+    const make = () => new BetaBandit(SHAPES.length, prior, this.o.priorStrength, this.o.gamma, 1);
+    s = { bandits: [make(), make()] };
+    this.states.set(key, s);
+    while (this.states.size > this.o.maxStates) this.states.delete(this.states.keys().next().value!);
+    return s;
+  }
+}
+
+/** Lower-cased words of at least two characters, the way the planner compares a cue with an item. */
+function words(text: string): string[] {
+  return text.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}'.-]*[\p{L}\p{N}]/gu) ?? [];
+}
+
+/**
+ * How much of the cue the best returned item covers, in [0, 1]: the share of the cue's words (terms and entity
+ * words) the item's title and text contain, as whole words. 0 when nothing came back.
+ */
+export function cueCoverage(input: ShapeInput, items: ContextItem[]): number {
+  const cue = new Set([...words(input.text), ...input.entities.flatMap(words)]);
+  if (cue.size === 0 || items.length === 0) return 0;
+  let best = 0;
+  for (const it of items) {
+    const have = new Set(words(`${it.title} ${it.text}`));
+    let n = 0;
+    for (const w of cue) if (have.has(w)) n++;
+    if (n > best) best = n;
+  }
+  return best / cue.size;
+}
+
+/** A source whose lookups go through the planner: what the engine searches when the planner is on. */
+export class PlannedSource implements Source {
+  readonly id: string;
+  readonly kind: string;
+  readonly description: string;
+  /** The last lookup's outcome, for traces. */
+  last: PlanOutcome | null = null;
+
+  constructor(
+    readonly inner: Source,
+    private readonly planner: QueryPlanner,
+  ) {
+    this.id = inner.id;
+    this.kind = inner.kind;
+    this.description = inner.description;
+  }
+
+  async search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]> {
+    const r = await this.planner.search(this.inner, query, signal);
+    this.last = { shapes: r.shapes, calls: r.calls, reward: r.reward };
+    return r.items;
+  }
+
+  fetch(ref: string, scope: Scope, signal: AbortSignal): Promise<ContextItem | null> {
+    return this.inner.fetch ? this.inner.fetch(ref, scope, signal) : Promise.resolve(null);
+  }
+
+  close(): Promise<void> {
+    return this.inner.close ? this.inner.close() : Promise.resolve();
+  }
+}

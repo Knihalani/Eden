@@ -11,6 +11,7 @@
 import { ContextPartner, ItemCache, type EngineConfig, type Trace } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, type Model } from "@eden/llm";
+import { QueryPlanner, type PlannerOptions } from "@eden/sources";
 import type { AgentEvent, Injection } from "@eden/protocol";
 import { OracleJudge } from "./judge";
 import { Rng } from "./rng";
@@ -37,6 +38,8 @@ export interface QualityOptions {
    * figures). Ignored when `model` is set.
    */
   judge?: "none" | "perfect" | "noisy";
+  /** Run each user's lookups through a query planner (one per user, so nothing is learned across users). */
+  planner?: PlannerOptions;
 }
 
 interface Counter {
@@ -266,6 +269,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         userTraces.push(t);
       },
       now: () => clock,
+      planner: o.planner ? new QueryPlanner({ seed: o.seed * 7_919 + u, ...o.planner }) : undefined,
     });
     const who = { tenantId: "sim", userId: `u${u}` };
     const pace = new Rng(o.seed * 104_729 + u);

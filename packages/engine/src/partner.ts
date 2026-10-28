@@ -33,7 +33,7 @@ import {
 } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import { Vocab, type WorkerPool } from "@eden/primitives";
-import { SourceFanout, type Source, type SourceResolver } from "@eden/sources";
+import { PlannedSource, SourceFanout, type QueryPlanner, type Source, type SourceResolver } from "@eden/sources";
 import { nearDuplicate, sanitizeItem, type ItemCache, type Sketch } from "./cache";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
@@ -69,6 +69,11 @@ export interface PartnerDeps {
    * partner builds its source fan-out itself, so redaction before anything is held can never be swapped out.
    */
   gatePool?: Pick<WorkerPool, "runOrInline">;
+  /**
+   * Decides what each lookup sends to each connector, learned per (tenant, user, connector)
+   * (docs/plans/query-planner.md). Absent: every connector gets the cue's terms and entities as before.
+   */
+  planner?: QueryPlanner;
 }
 
 /** An outcome already written to the source map, kept so explicit feedback can correct it. */
@@ -530,7 +535,10 @@ export class ContextPartner {
       sourceIds: all.map((x) => x.id),
       limit,
     });
-    const chosen = ranked.map((r) => all.find((x) => x.id === r.sourceId)!).filter(Boolean);
+    const found = ranked.map((r) => all.find((x) => x.id === r.sourceId)!).filter(Boolean);
+    const planner = this.deps.planner;
+    // Wrapped per lookup (cheap: no state of its own); the fan-out's breakers and limits still apply per source id.
+    const chosen = planner ? found.map((x) => new PlannedSource(x, planner)) : found;
     const outcomes = await this.fanout.search(
       chosen,
       { scope: s.scope, text: cue.text, entities: cue.entities, limit: 8 },
