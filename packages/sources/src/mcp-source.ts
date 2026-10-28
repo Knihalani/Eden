@@ -2,16 +2,28 @@
  * A source backed by an MCP server's read tools: the way the partner reaches every connector the customer's agent
  * already has (mail, calendar, docs, CRM, a memory product). One instance per user and server.
  *
- * Read-only, as far as a client can check: the partner only ever calls the one configured search tool, and only if
- * the server declares it `readOnlyHint: true` or the operator lists it in `trustedReadTools` after checking it by
- * hand. The MCP spec says annotations are untrusted, so a server that lies passes this check: connect only servers
- * the operator trusts (D7). A failed connect is retried after RETRY_AFTER_MS, not on every lookup.
+ * Read-only, as far as a client can check: the partner only ever calls the configured search tool and, when one is
+ * configured, one fetch tool (read one record by its id), and each only if the server declares it
+ * `readOnlyHint: true` or the operator lists it in `trustedReadTools` after checking it by hand (D7, D35). The MCP
+ * spec says annotations are untrusted, so a server that lies passes this check: connect only servers the operator
+ * trusts (D7). A failed connect is retried after RETRY_AFTER_MS, not on every lookup.
  */
 import { createHash } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { itemId, type ContextItem, type Scope } from "@eden/protocol";
-import { buildArgs, mapSearchArgs, usable, type ArgMapping, type ToolSchema } from "./schema-args";
+import {
+  buildArgs,
+  buildFetchArgs,
+  fetchUsable,
+  mapFetchArgs,
+  mapSearchArgs,
+  usable,
+  type ArgMapping,
+  type FetchMapping,
+  type ToolSchema,
+} from "./schema-args";
 import type { SearchQuery, Source } from "./source";
 
 export interface McpSourceOptions {
@@ -27,6 +39,16 @@ export interface McpSourceOptions {
   searchTool: {
     name: string;
     args?: (query: SearchQuery) => Record<string, unknown>;
+    fixed?: Record<string, unknown>;
+  };
+  /**
+   * The read tool that returns one record by its id, for refreshing a cached item (`fetch`), if the server has one:
+   * an `args` function, or a mapping read from its input schema, with `fixed` values as for search. Without it,
+   * `fetch` returns null and cached items are refreshed only by searches that return them again.
+   */
+  fetchTool?: {
+    name: string;
+    args?: (ref: string) => Record<string, unknown>;
     fixed?: Record<string, unknown>;
   };
   /** Tools the server does not annotate read-only but an operator has verified are. */
@@ -50,6 +72,7 @@ export class McpSource implements Source {
   private retryAt = 0;
   private lastError: unknown = null;
   private mapping: ArgMapping | null = null;
+  private fetchMapping: FetchMapping | null = null;
 
   constructor(private readonly options: McpSourceOptions) {
     this.id = options.id;
@@ -64,12 +87,7 @@ export class McpSource implements Source {
       try {
         await client.connect(this.options.transport());
         const { tools } = await client.listTools();
-        const tool = tools.find((t) => t.name === this.options.searchTool.name);
-        if (!tool) throw new Error(`${this.id}: server has no tool ${this.options.searchTool.name}`);
-        const trusted = this.options.trustedReadTools?.includes(tool.name) ?? false;
-        if (tool.annotations?.readOnlyHint !== true && !trusted) {
-          throw new ReadOnlyViolation(`${this.id}: ${tool.name} is not declared read-only and is not trusted`);
-        }
+        const tool = this.readTool(tools, this.options.searchTool.name);
         if (!this.options.searchTool.args) {
           const m = mapSearchArgs(tool.inputSchema as ToolSchema, this.options.searchTool.fixed);
           if (!usable(m)) {
@@ -79,6 +97,20 @@ export class McpSource implements Source {
             );
           }
           this.mapping = m;
+        }
+        // A fetch tool is checked like the search tool, and a bad one fails the connect: an operator who configured
+        // one expects refreshes, and a source that silently never refreshes would hide the mistake.
+        const fetchTool = this.options.fetchTool;
+        if (fetchTool) {
+          const t = this.readTool(tools, fetchTool.name);
+          if (!fetchTool.args) {
+            const m = mapFetchArgs(t.inputSchema as ToolSchema, fetchTool.fixed);
+            if (!fetchUsable(m)) {
+              const why = m.ref ? `required arguments with no value: ${m.missing.join(", ")}` : "no id argument";
+              throw new ArgumentMappingError(`${this.id}: cannot call ${t.name}: ${why}; set fetchTool.fixed or args`);
+            }
+            this.fetchMapping = m;
+          }
         }
         this.client = client;
         return client;
@@ -113,8 +145,32 @@ export class McpSource implements Source {
     return toItems(this.id, result.content, query.limit, result.structuredContent);
   }
 
-  async fetch(_ref: string, _scope: Scope): Promise<ContextItem | null> {
-    return null; // TODO: per-server fetch tool mapping, for refreshing cached items.
+  /** The named tool, if the server has it and it is read-only (declared, or trusted by the operator). */
+  private readTool(tools: Tool[], name: string): Tool {
+    const tool = tools.find((t) => t.name === name);
+    if (!tool) throw new Error(`${this.id}: server has no tool ${name}`);
+    const trusted = this.options.trustedReadTools?.includes(tool.name) ?? false;
+    if (tool.annotations?.readOnlyHint !== true && !trusted) {
+      throw new ReadOnlyViolation(`${this.id}: ${tool.name} is not declared read-only and is not trusted`);
+    }
+    return tool;
+  }
+
+  /**
+   * The current version of one item, by its ref, through the fetch tool; null when there is none, the server has no
+   * such record, or the ref is Eden's own content hash (a row with no id of its own cannot be asked for again). The
+   * item keeps the ref it was asked for, so it replaces the cached one rather than joining it.
+   */
+  async fetch(ref: string, _scope: Scope, signal?: AbortSignal): Promise<ContextItem | null> {
+    const fetchTool = this.options.fetchTool;
+    if (!fetchTool || ref.startsWith(CONTENT_REF)) return null;
+    const client = await this.connect();
+    const args = fetchTool.args ? fetchTool.args(ref) : buildFetchArgs(this.fetchMapping!, ref);
+    if (!args) return null;
+    const result = await client.callTool({ name: fetchTool.name, arguments: args }, undefined, { signal });
+    if (result.isError) return null;
+    const item = toItems(this.id, result.content, 1, result.structuredContent)[0];
+    return item ? { ...item, id: itemId(this.id, ref), ref } : null;
   }
 
   async close(): Promise<void> {
@@ -242,8 +298,11 @@ function identity(row: Row): string {
  * it as Eden's. The hash is of unredacted text, like the cache's own hashed refs; the cache redacts the item itself.
  */
 function contentRef(text: string): string {
-  return `eden-h-${createHash("sha256").update(text).digest("hex").slice(0, 16)}`;
+  return `${CONTENT_REF}${createHash("sha256").update(text).digest("hex").slice(0, 16)}`;
 }
+
+/** Marks a ref as Eden's content hash rather than the server's own id. */
+const CONTENT_REF = "eden-h-";
 
 /** One prose line ending in a colon before JSON, as servers that describe their result put it. */
 const PROSE_THEN_JSON = /^[^\n]{1,200}:[ \t]*\r?\n\s*(?=[[{])/;
