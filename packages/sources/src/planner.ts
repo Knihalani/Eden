@@ -72,6 +72,11 @@ export interface PlannerOptions {
    * measure what the reuse saves.
    */
   reuse?: boolean;
+  /**
+   * A call after a lookup's first is sent only if this many times the lookup's slowest call so far still fits
+   * before the caller's deadline (default 2, chosen in a timed run; docs/research/query-planner-results.md).
+   */
+  deadlineMargin?: number;
   /** Connector states kept in memory, across all users. */
   maxStates?: number;
   /** Where arms persist (`SourceMap` implements it). Absent: learning lives in memory only. */
@@ -126,9 +131,6 @@ interface ConnectorState {
   cascades: [BetaBandit, BetaBandit];
 }
 
-/** A call after a lookup's first is sent only if this many times its slowest call so far still fits the deadline. */
-const DEADLINE_MARGIN = 2;
-
 /** The stored name of a bucket's cascade posterior (`PlannerArm.shape`); not a shape. */
 const CASCADE = "cascade";
 
@@ -141,6 +143,7 @@ const DEFAULTS = {
   cascade: true,
   cascadeMin: 0.05,
   reuse: true,
+  deadlineMargin: 2,
   maxStates: 50_000,
   incumbent: { shape: "terms" as Shape, mean: 0.75, strength: 8 },
   rewardTopK: 1,
@@ -228,7 +231,8 @@ export class QueryPlanner {
         // A call after the first is sent only if it can answer before the caller's deadline, at this lookup's
         // slowest call so far (with a margin): one the deadline cuts off costs the connector a call, returns nothing,
         // and counts as a timeout against it. A shape cut short here is not credited (below).
-        if (calls > 0 && deadlineAt !== undefined && performance.now() + callMs * DEADLINE_MARGIN > deadlineAt) break;
+        if (calls > 0 && deadlineAt !== undefined && performance.now() + callMs * this.o.deadlineMargin > deadlineAt)
+          break;
         if (calls > 0 && permit && !permit()) break;
         calls++;
         sent++;
