@@ -1,0 +1,87 @@
+{
+  "id": "invoice-triage",
+  "category": "inbox",
+  "description": "Inbox triage: an overdue invoice from a supplier, among marketing mail.",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-acme-invoice",
+          "title": "Invoice 2291 from Acme Supplies is overdue",
+          "text": "Invoice 2291 for 1,240 GBP was due on 1 Oct. Please pay to avoid a late fee."
+        },
+        {
+          "ref": "msg-acme-promo",
+          "title": "Acme Supplies: 20% off office chairs",
+          "text": "This week only, ergonomic chairs at 20% off."
+        },
+        {
+          "ref": "msg-hr",
+          "title": "Holiday calendar 2027",
+          "text": "Bank holidays for next year are now in the shared calendar."
+        }
+      ]
+    },
+    {
+      "id": "finance",
+      "description": "The user's accounting tool",
+      "docs": [
+        {
+          "ref": "bill-2291",
+          "title": "Bill 2291 - Acme Supplies",
+          "text": "Status: unpaid. Amount 1,240 GBP. Approved by Jane Doe on 20 Sep."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "invoice-triage-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "external",
+            "source": "mail",
+            "text": "New email from Acme Supplies: Invoice 2291 is overdue"
+          },
+          "expect": {
+            "items": [
+              "finance:bill-2291"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "You have an overdue invoice from Acme Supplies."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Has that one been approved already?"
+          },
+          "expect": {
+            "items": [
+              "finance:bill-2291"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Ok, I'll pay it later. Anything else important?"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "id": "family-logistics",
+  "category": "relationships",
+  "description": "School pick-up logistics: the family calendar, not work events.",
+  "sources": [
+    {
+      "id": "calendar",
+      "description": "The family calendar",
+      "docs": [
+        {
+          "ref": "evt-pickup",
+          "title": "School pick-up: Leo",
+          "text": "Weekdays 15:15, St Mary's Primary. Thursday: football club until 16:30."
+        },
+        {
+          "ref": "evt-1on1",
+          "title": "1:1 with manager",
+          "text": "Thursday 15:00-15:30"
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "family-logistics-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Who's picking Leo up from school on Thursday, and when?"
+          },
+          "expect": {
+            "items": [
+              "calendar:evt-pickup"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "Football club runs until 16:30 on Thursday."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Do I have a clash at that time?"
+          },
+          "expect": {
+            "items": [
+              "calendar:evt-1on1"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

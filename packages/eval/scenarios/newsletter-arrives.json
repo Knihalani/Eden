@@ -1,0 +1,52 @@
+{
+  "id": "newsletter-arrives",
+  "category": "inbox",
+  "description": "A newsletter arriving is no reason to speak.",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-stratechery",
+          "title": "Stratechery: weekly article",
+          "text": "This week on aggregation theory."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "newsletter-arrives-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "external",
+            "source": "mail",
+            "text": "New email from Morning Brew: Today's top stories"
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "external",
+            "source": "mail",
+            "text": "New email from LinkedIn: You appeared in 12 searches"
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Anything urgent this morning?"
+          }
+        }
+      ]
+    }
+  ]
+}

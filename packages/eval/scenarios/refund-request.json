@@ -1,0 +1,65 @@
+{
+  "id": "refund-request",
+  "category": "purchases",
+  "description": "Asking for a refund: the purchase and the shop's return window.",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-kettle",
+          "title": "Order confirmation: Smeg kettle",
+          "text": "Ordered 2 Oct from Lakeland, 149 GBP, order LK-20991."
+        },
+        {
+          "ref": "msg-lakeland-returns",
+          "title": "Lakeland returns policy",
+          "text": "Return any item within 30 days of delivery for a full refund."
+        },
+        {
+          "ref": "msg-lakeland-news",
+          "title": "Lakeland: winter catalogue",
+          "text": "New baking range now in store."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "refund-request-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "The Smeg kettle I bought is leaking, can I still get a refund?"
+          },
+          "expect": {
+            "items": [
+              "mail:msg-kettle",
+              "mail:msg-lakeland-returns"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "You're within the return window."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Great, start the return then."
+          }
+        }
+      ]
+    }
+  ]
+}

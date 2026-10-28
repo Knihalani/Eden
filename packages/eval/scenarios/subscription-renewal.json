@@ -1,0 +1,60 @@
+{
+  "id": "subscription-renewal",
+  "category": "purchases",
+  "description": "A subscription is about to renew; the price change matters.",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-notion-renew",
+          "title": "Your Notion Plus plan renews on 5 Nov",
+          "text": "Your plan renews at 10 USD per member per month, up from 8 USD."
+        },
+        {
+          "ref": "msg-notion-tips",
+          "title": "5 ways to use Notion AI",
+          "text": "Tips for summarising pages."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "subscription-renewal-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Is my Notion subscription going up in price?"
+          },
+          "expect": {
+            "items": [
+              "mail:msg-notion-renew"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "Yes, from 8 to 10 USD per member per month."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Ugh. Fine."
+          },
+          "expect": "silent"
+        }
+      ]
+    }
+  ]
+}

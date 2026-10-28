@@ -1,0 +1,61 @@
+{
+  "id": "calendar-clash",
+  "category": "scheduling",
+  "description": "A new invite clashes with an existing meeting.",
+  "sources": [
+    {
+      "id": "calendar",
+      "description": "The user's calendar",
+      "docs": [
+        {
+          "ref": "evt-quarterly",
+          "title": "Quarterly planning",
+          "text": "Thursday 13:00-15:00, all hands"
+        },
+        {
+          "ref": "evt-lunch",
+          "title": "Lunch",
+          "text": "Daily 12:00-13:00"
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "calendar-clash-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "external",
+            "source": "calendar",
+            "text": "New invite from Tom: Vendor demo, Thursday 14:00-14:30"
+          },
+          "expect": {
+            "items": [
+              "calendar:evt-quarterly"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "That clashes with quarterly planning."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Decline it politely."
+          },
+          "expect": "silent"
+        }
+      ]
+    }
+  ]
+}
