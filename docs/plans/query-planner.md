@@ -1,8 +1,8 @@
 # Plan: an adaptive query planner, tested on real connectors
 
-Status: phases 0–4 built and measured, 2026-10-28; opt-in, off by default (D28). Results and gate status:
-docs/research/query-planner-results.md. Phases 5 (shadow mode) and 6 (default on) are open; departures from this plan
-are listed in D28.
+Status: phases 0–5 built and measured, 2026-10-28; phase 5 (shadow) ran in simulation by the owner's decision (D29).
+Opt-in and off by default (D28); phase 6 (default on) is not met because of the extra source calls. Results and gate
+status: docs/research/query-planner-results.md; departures from this plan are listed in D28 and D29.
 
 ## Why
 

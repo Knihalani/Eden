@@ -97,6 +97,64 @@ fixed variant). Reproduce: `bun run sim:lab --sessions 120 [--only-planner]`.
   53%). The cascade rescues most lookups while today's query is being disproven.
 - **Calls per case:** 1.01–1.63. They are highest where today's query fails and per-entity calls take over.
 
+## Phase 5, in simulation: shadow mode
+
+The plan's phase 5 ran the planner in shadow on consenting real accounts. By the owner's decision it runs in
+simulation instead. In shadow mode (`planner.mode = "shadow"`, `EDEN_QUERY_PLANNER=shadow`), the engine serves
+exactly as without a planner and runs the planner's lookup beside it:
+- every shadow call takes a rate token;
+- the planner learns from what comes back;
+- a content-free record (shapes, calls, item ids, the served item ids) goes to `onShadow`;
+- nothing it finds is cached or delivered.
+
+The simulation adds what real accounts could not: labels, to check what the content-free records say. Held-out sets
+A and B and the realistic mix, five seeds each, 6 users with 15 sessions. "Shadow, then serve" runs in shadow for
+the first 5 sessions per user, then serves with what it learned. Raw:
+[query-planner-shadow.jsonl](query-planner-shadow.jsonl), from [query-planner-shadow.sh](query-planner-shadow.sh).
+
+| Mix | Run | Recall, all sessions | Recall, sessions 6–15 | Precision | False fires | Source calls per lookup | Rate-limited calls |
+|---|---|---|---|---|---|---|---|
+| zoo-a | off | 9.0% (7–11) | 9.3% (7–12) | 0.563 | 1/713 | 4.11 | 0 |
+| zoo-a | shadow | 9.0% (7–11) | 9.3% (7–12) | 0.569 | 1/713 | 10.40 | 0 |
+| zoo-a | serve | 17.6% (15–20) | 17.6% (15–21) | 0.598 | 1/713 | 6.28 | 0 |
+| zoo-a | shadow-then-serve | 15.4% (13–18) | 18.7% (16–22) | 0.634 | 1/713 | 6.75 | 0 |
+| zoo-b | off | 21.5% (19–24) | 23.5% (20–27) | 0.535 | 1/713 | 4.13 | 0 |
+| zoo-b | shadow | 21.7% (19–24) | 23.8% (21–27) | 0.537 | 1/713 | 10.16 | 0 |
+| zoo-b | serve | 23.9% (21–27) | 25.5% (22–29) | 0.560 | 1/713 | 6.06 | 0 |
+| zoo-b | shadow-then-serve | 23.3% (21–26) | 26.1% (23–30) | 0.560 | 1/713 | 6.49 | 0 |
+| realistic | off | 13.1% (11–15) | 13.5% (11–16) | 0.634 | 1/713 | 4.11 | 0 |
+| realistic | shadow | 13.2% (11–15) | 13.7% (11–17) | 0.635 | 1/713 | 10.66 | 0 |
+| realistic | serve | 18.9% (16–22) | 18.7% (16–22) | 0.613 | 1/713 | 6.52 | 0 |
+| realistic | shadow-then-serve | 18.6% (16–21) | 21.6% (19–25) | 0.656 | 1/713 | 6.99 | 0 |
+
+What a deployment would see, and what the labels say about it ("would add": need turns where the shadow lookup
+returned a needed fact that serving did not; the signal is the content-free one, a connector that served nothing
+while the shadow lookup found something):
+
+| Mix | Run | Shadow records | Limited | Shadow calls per record | Need turns | Shadow would add | Shadow would lose | Signal precision (mean of seeds) | Signal recall (mean of seeds) |
+|---|---|---|---|---|---|---|---|---|---|
+| zoo-a | shadow | 3258 | 0 | 1.46 | 698 | 175 (25.1%) | 2 | 0.584 | 1.000 |
+| zoo-a | shadow-then-serve | 1095 | 0 | 1.48 | 233 | 52 (22.3%) | 2 | 0.574 | 1.000 |
+| zoo-b | shadow | 3132 | 0 | 1.30 | 654 | 22 (3.4%) | 4 | 0.238 | 1.000 |
+| zoo-b | shadow-then-serve | 1071 | 0 | 1.32 | 227 | 4 (1.8%) | 3 | 0.169 | 0.600 |
+| realistic | shadow | 3255 | 0 | 1.47 | 695 | 164 (23.6%) | 2 | 0.639 | 0.990 |
+| realistic | shadow-then-serve | 1089 | 0 | 1.47 | 232 | 54 (23.3%) | 1 | 0.640 | 1.000 |
+
+- **Serving is unchanged in shadow.** Recall, precision and false fires match planner-off in every mix: 9.0% against
+  9.0% on held-out A, within noise on B and the realistic mix. What it costs is calls: 10.2–10.7 per lookup against
+  4.1, because the shadow lookup repeats the served one. No call was refused by the rate limit in these runs.
+- **The shadow lookup would add a needed fact** on 25% of need turns in held-out A and 24% in the realistic mix,
+  and on 3.4% in held-out B. It would lose one that serving found on at most 4 turns of about 650–700.
+- **The content-free signal is honest.** It flagged nearly every turn where the shadow really added something (recall
+  0.99–1.00, 0.60 on the one small sample of 5). Where gains were common, its precision was 0.57–0.64; on B, where
+  they were rare, 0.17–0.24. A deployment can therefore read, from content-free counts alone, whether the planner
+  would help its connectors. A high rate of "served nothing, shadow found something" means it would.
+- **Shadow learning carries over.** After 5 shadow sessions, sessions 6–15 reached 18.7% recall on held-out A
+  (serving from the start: 17.6%; off: 9.3%) and 21.6% on the realistic mix (18.7%; 13.5%). Precision was the
+  highest of any run (0.634, 0.656). The intervals overlap with serving from the start, so the claim is "at least as
+  good, with no exposure while learning", not "better".
+- **Caveat:** signal precision and recall are means over seeds, not pooled over turns. The report gives ratios only.
+
 ## Gates in the plan, and where they stand
 
 - **Tier 2:** met for recall and false fires on held-out connectors. Not met for "source calls no worse": the default
@@ -105,8 +163,8 @@ fixed variant). Reproduce: `bun run sim:lab --sessions 120 [--only-planner]`.
   - Met for reach on more than five services with different search behaviour, with no regression beyond noise.
   - Not measured: false fires, 429s and timeouts on real servers. The lab measures reach only.
   - The capability probe is not built (see D28); its role is played by the cascade and the conservative bandit.
-- **Tier 4 (shadow on consenting real accounts):** not started. It needs the owner's consent and a decision on what
-  may be kept.
+- **Tier 4 (shadow):** run in simulation by the owner's decision, not on real accounts (above). The planner left
+  serving unchanged, its content-free signal predicted real gains, and its learning carried over to serving.
 - **Default on (phase 6):** not met; the planner stays opt-in.
 
 ## Not done, and why
