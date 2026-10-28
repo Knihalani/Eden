@@ -1,0 +1,267 @@
+{
+ "memory": {
+  "tool": "search_nodes",
+  "query": "Jamie Fox",
+  "content": [
+   {
+    "type": "text",
+    "text": "{\n  \"entities\": [\n    {\n      \"name\": \"Dinner with Jamie Fox [calendar-event-0]\",\n      \"entityType\": \"event\",\n      \"observations\": [\n        \"When: Thursday 29 Oct 2026, 19:30–21:00\",\n        \"Where: Barrafina, London\",\n        \"Attendees: Robin Carter, Jamie Fox\"\n      ]\n    },\n    {\n      \"name\": \"Dinner next week [gmail-mail-1]\",\n      \"entityType\": \"mail\",\n      \"observations\": [\n        \"From: Robin Carter <robin@northwind.co>\",\n        \"To: Jamie Fox <jamie.fox@gmail.com>\",\n        \"Date: Wed, 21 Oct 2026 00:00\",\n        \"Hey Jamie,\",\n        \"Quick one from me. Fancy dinner sometime next week? I was thinking Barrafina. Happy to jump on a call if easier.\",\n        \"Thanks!\",\n        \"Robin\"\n      ]\n    },\n    {\n      \"name\": \"Re: Dinner next week [gmail-mail-2]\",\n      \"entityType\": \"mail\",\n      \"observations\": [\n        \"From: Jamie Fox <jamie.fox@gmail.com>\",\n        \"To: Robin Carter <robin@northwind.co>\",\n        \"Date: Wed, 21 Oct 2026 12:00\",\n        \"Robin,\",\n        \"Yes, would love to! Thursday at 19:30 works. I'll have to leave by 20:45 for school pickup. Speak soon.\",\n        \"Kind regards,\",\n        \"Jamie\",\n        \"On Wed, 21 Oct 2026 00:00, Robin Carter <robin@northwind.co> wrote:\",\n        \"> Hey Jamie,\",\n        \">\",\n        \"> Quick one from me. Fancy dinner sometime next week? I was thinking Barrafina. Happy to jump on a call if easier.\",\n        \">\",\n        \"> Thanks!\",\n        \"> Robin\"\n      ]\n    },\n    {\n      \"name\": \"Re: Dinner next week [gmail-mail-3]\",\n      \"entityType\": \"mail\",\n      \"observations\": [\n        \"From: Robin Carter <robin@northwind.co>\",\n        \"To: Jamie Fox <jamie.fox@gmail.com>\",\n        \"Date: Wed, 21 Oct 2026 22:00\",\n        \"Hi Jamie,\",\n        \"Thanks again for your time yesterday. Perfect, booked Barrafina for Thursday 19:30. See you then! Happy to jump on a call if easier.\",\n        \"Thanks,\",\n        \"R\",\n        \"Sent from my iPhone\",\n        \"On Wed, 21 Oct 2026 12:00, Jamie Fox <jamie.fox@gmail.com> wrote:\",\n        \"> Robin,\",\n        \">\",\n        \"> Yes, would love to! Thursday at 19:30 works. I'll have to leave by 20:45 for school pickup. Speak soon.\",\n        \">\",\n        \"> Kind regards,\",\n        \"> Jamie\",\n        \">\",\n        \"> On Wed, 21 Oct 2026 00:00, Robin Carter <robin@northwind.co> wrote:\",\n        \"> > Hey Jamie,\",\n        \"> >\",\n        \"> > Quick one from me. Fancy dinner sometime next week? I was thinking Barrafina. Happy to jump on a call if easier.\",\n        \"> >\",\n        \"> > Thanks!\",\n        \"> > Robin\"\n      ]\n    },\n    {\n      \"name\": \"Invitation: Dinner with Jamie Fox @ Thursday 29 Oct 19:30 [gmail-notification-4]\",\n      \"entityType\": \"notification\",\n      \"observations\": [\n        \"From: Google Calendar <calendar-notification@google.com>\",\n        \"To: Robin Carter <robin@northwind.co>\",\n        \"Date: Thu, 22 Oct 2026 17:00\",\n        \"Dinner with Jamie Fox\",\n        \"Thursday 29 Oct ⋅ 19:30\",\n        \"Barrafina, London\",\n        \"Join with Google Meet: https://meet.google.com/xye-nbkq-dkt\",\n        \"Invitation from Google Calendar. You are receiving this email because you are an attendee on the event.\"\n      ]\n    }\n  ],\n  \"relations\": []\n}"
+   }
+  ],
+  "structuredContent": {
+   "entities": [
+    {
+     "name": "Dinner with Jamie Fox [calendar-event-0]",
+     "entityType": "event",
+     "observations": [
+      "When: Thursday 29 Oct 2026, 19:30–21:00",
+      "Where: Barrafina, London",
+      "Attendees: Robin Carter, Jamie Fox"
+     ]
+    },
+    {
+     "name": "Dinner next week [gmail-mail-1]",
+     "entityType": "mail",
+     "observations": [
+      "From: Robin Carter <robin@northwind.co>",
+      "To: Jamie Fox <jamie.fox@gmail.com>",
+      "Date: Wed, 21 Oct 2026 00:00",
+      "Hey Jamie,",
+      "Quick one from me. Fancy dinner sometime next week? I was thinking Barrafina. Happy to jump on a call if easier.",
+      "Thanks!",
+      "Robin"
+     ]
+    },
+    {
+     "name": "Re: Dinner next week [gmail-mail-2]",
+     "entityType": "mail",
+     "observations": [
+      "From: Jamie Fox <jamie.fox@gmail.com>",
+      "To: Robin Carter <robin@northwind.co>",
+      "Date: Wed, 21 Oct 2026 12:00",
+      "Robin,",
+      "Yes, would love to! Thursday at 19:30 works. I'll have to leave by 20:45 for school pickup. Speak soon.",
+      "Kind regards,",
+      "Jamie",
+      "On Wed, 21 Oct 2026 00:00, Robin Carter <robin@northwind.co> wrote:",
+      "> Hey Jamie,",
+      ">",
+      "> Quick one from me. Fancy dinner sometime next week? I was thinking Barrafina. Happy to jump on a call if easier.",
+      ">",
+      "> Thanks!",
+      "> Robin"
+     ]
+    },
+    {
+     "name": "Re: Dinner next week [gmail-mail-3]",
+     "entityType": "mail",
+     "observations": [
+      "From: Robin Carter <robin@northwind.co>",
+      "To: Jamie Fox <jamie.fox@gmail.com>",
+      "Date: Wed, 21 Oct 2026 22:00",
+      "Hi Jamie,",
+      "Thanks again for your time yesterday. Perfect, booked Barrafina for Thursday 19:30. See you then! Happy to jump on a call if easier.",
+      "Thanks,",
+      "R",
+      "Sent from my iPhone",
+      "On Wed, 21 Oct 2026 12:00, Jamie Fox <jamie.fox@gmail.com> wrote:",
+      "> Robin,",
+      ">",
+      "> Yes, would love to! Thursday at 19:30 works. I'll have to leave by 20:45 for school pickup. Speak soon.",
+      ">",
+      "> Kind regards,",
+      "> Jamie",
+      ">",
+      "> On Wed, 21 Oct 2026 00:00, Robin Carter <robin@northwind.co> wrote:",
+      "> > Hey Jamie,",
+      "> >",
+      "> > Quick one from me. Fancy dinner sometime next week? I was thinking Barrafina. Happy to jump on a call if easier.",
+      "> >",
+      "> > Thanks!",
+      "> > Robin"
+     ]
+    },
+    {
+     "name": "Invitation: Dinner with Jamie Fox @ Thursday 29 Oct 19:30 [gmail-notification-4]",
+     "entityType": "notification",
+     "observations": [
+      "From: Google Calendar <calendar-notification@google.com>",
+      "To: Robin Carter <robin@northwind.co>",
+      "Date: Thu, 22 Oct 2026 17:00",
+      "Dinner with Jamie Fox",
+      "Thursday 29 Oct ⋅ 19:30",
+      "Barrafina, London",
+      "Join with Google Meet: https://meet.google.com/xye-nbkq-dkt",
+      "Invitation from Google Calendar. You are receiving this email because you are an attendee on the event."
+     ]
+    }
+   ],
+   "relations": []
+  }
+ },
+ "mcpvault": {
+  "tool": "search_notes",
+  "query": "Jamie Fox",
+  "content": [
+   {
+    "type": "text",
+    "text": "[{\"p\":\"calendar/calendar-event-0.md\",\"t\":\"calendar-event-0\",\"ex\":\"# Dinner with Jamie Fox\\n\\nWhen: Thursday...\",\"mc\":6,\"ln\":1,\"uri\":\"obsidian:////vault/calendar/calendar-event-0\"},{\"p\":\"gmail/gmail-mail-3.md\",\"t\":\"gmail-mail-3\",\"ex\":\"...in@northwind.co>\\nTo: Jamie Fox <jamie.fox@gmail...\",\"mc\":13,\"ln\":4,\"uri\":\"obsidian:////vault/gmail/gmail-mail-3\"},{\"p\":\"gmail/gmail-notification-4.md\",\"t\":\"gmail-notification-4\",\"ex\":\"...itation: Dinner with Jamie Fox @ Thursday 29 Oc...\",\"mc\":6,\"ln\":1,\"uri\":\"obsidian:////vault/gmail/gmail-notification-4\"}]"
+   }
+  ]
+ },
+ "basic-memory": {
+  "tool": "bm_search",
+  "query": "Jamie Fox",
+  "content": [
+   {
+    "type": "text",
+    "text": "{\"results\":[{\"title\":\"Re: Dinner next week\",\"type\":\"entity\",\"score\":-20.552846014423583,\"entity\":\"main/gmail/gmail-mail-3\",\"external_id\":\"d6d77711-b3b4-4419-afff-d9a23716e1b3\",\"permalink\":\"main/gmail/gmail-mail-3\",\"content\":\"# Re: Dinner next week\\n\\nFrom: Robin Carter <robin@northwind.co>\\nTo: Jamie Fox <jamie.fox@gmail.com>\\nDate: Wed, 21 Oct 2026 22:00\\n\\nHi Jamie,\\n\\nThanks again for your time yesterday. Perfect, booked Barrafina for Thursday 19:30. See you then! Happy to jump on a call if easier.\\n\\nThanks,\\nR\\nSent from my iPhone\\n\\nOn Wed, 21 Oct 2026 12:00, Jamie Fox <jamie.fox@gmail.com> wrote:\\n> Robin,\\n>\\n> Yes, would love to! Thursday at 19:30 works. I'll have to leave by 20:45 for school pickup. Speak soon.\\n>\\n> Kind regards,\\n> Jamie\\n>\\n> On Wed, 21 Oct 2026 00:00, Robin Carter <robin@northwind.co> wrote:\\n> > Hey Jamie,\\n> >\\n> > Quick one from me. Fancy dinner sometime next week? I was thinking Barrafina. Happy to jump on a call if easier.\\n> >\\n> > Thanks!\\n> > Robin\",\"content_length\":748,\"content_truncated\":false,\"file_path\":\"gmail/gmail-mail-3.md\",\"updated_at\":\"2026-10-28T02:52:09.086124Z\",\"metadata\":{\"note_type\":\"mail\"},\"entity_id\":461,\"project_id\":1,\"project_external_id\":\"3507d111-1768-4eb1-bdb8-fa94884ca590\"},{\"title\":\"Dinner next week\",\"type\":\"entity\",\"score\":-19.699948375062952,\"entity\":\"main/gmail/gmail-mail-1\",\"external_id\":\"8745ede9-baa3-4fb4-ba38-c43e77a361d1\",\"permalink\":\"main/gmail/gmail-mail-1\",\"content\":\"# Dinner next week\\n\\nFrom: Robin Carter <robin@northwind.co>\\nTo: Jamie Fox <jamie.fox@gmail.com>\\nDate: Wed, 21 Oct 2026 00:00\\n\\nHey Jamie,\\n\\nQuick one from me. Fancy dinner sometime next week? I was thinking Barrafina. Happy to jump on a call if easier.\\n\\nThanks!\\nRobin\",\"content_length\":265,\"content_truncated\":false,\"file_path\":\"gmail/gmail-mail-1.md\",\"updated_at\":\"2026-10-28T02:52:09.082786Z\",\"metadata\":{\"note_type\":\"mail\"},\"entity_id\":180,\"project_id\":1,\"project_external_id\":\"3507d111-1768-4eb1-bdb8-fa94884ca590\"},{\"title\":\"Dinner with Jamie Fox\",\"type\":\"entity\",\"score\":-18.99917374613579,\"entity\":\"main/calendar/calendar-event-0\",\"external_id\":\"1b3b6cef-f14e-4c30-86df-c34ccd5da9f5\",\"permalink\":\"main/calendar/calendar-event-0\",\"content\":\"# Dinner with Jamie Fox\\n\\nWhen: Thursday 29 Oct 2026, 19:30–21:00\\nWhere: Barrafina, London\\nAttendees: Robin Carter, Jamie Fox\",\"content_length\":124,\"content_truncated\":false,\"file_path\":\"calendar/calendar-event-0.md\",\"updated_at\":\"2026-10-28T02:52:09.082786Z\",\"metadata\":{\"note_type\":\"event\"},\"entity_id\":1,\"project_id\":1,\"project_external_id\":\"3507d111-1768-4eb1-bdb8-fa94884ca590\"}],\"current_page\":1,\"page_size\":3,\"total\":5,\"total_is_exact\":true,\"has_more\":true}"
+   }
+  ],
+  "structuredContent": {
+   "result": {
+    "results": [
+     {
+      "title": "Re: Dinner next week",
+      "type": "entity",
+      "score": -20.552846014423583,
+      "entity": "main/gmail/gmail-mail-3",
+      "external_id": "d6d77711-b3b4-4419-afff-d9a23716e1b3",
+      "permalink": "main/gmail/gmail-mail-3",
+      "content": "# Re: Dinner next week\n\nFrom: Robin Carter <robin@northwind.co>\nTo: Jamie Fox <jamie.fox@gmail.com>\nDate: Wed, 21 Oct 2026 22:00\n\nHi Jamie,\n\nThanks again for your time yesterday. Perfect, booked Barrafina for Thursday 19:30. See you then! Happy to jump on a call if easier.\n\nThanks,\nR\nSent from my iPhone\n\nOn Wed, 21 Oct 2026 12:00, Jamie Fox <jamie.fox@gmail.com> wrote:\n> Robin,\n>\n> Yes, would love to! Thursday at 19:30 works. I'll have to leave by 20:45 for school pickup. Speak soon.\n>\n> Kind regards,\n> Jamie\n>\n> On Wed, 21 Oct 2026 00:00, Robin Carter <robin@northwind.co> wrote:\n> > Hey Jamie,\n> >\n> > Quick one from me. Fancy dinner sometime next week? I was thinking Barrafina. Happy to jump on a call if easier.\n> >\n> > Thanks!\n> > Robin",
+      "content_length": 748,
+      "content_truncated": false,
+      "file_path": "gmail/gmail-mail-3.md",
+      "updated_at": "2026-10-28T02:52:09.086124Z",
+      "metadata": {
+       "note_type": "mail"
+      },
+      "entity_id": 461,
+      "project_id": 1,
+      "project_external_id": "3507d111-1768-4eb1-bdb8-fa94884ca590"
+     },
+     {
+      "title": "Dinner next week",
+      "type": "entity",
+      "score": -19.699948375062952,
+      "entity": "main/gmail/gmail-mail-1",
+      "external_id": "8745ede9-baa3-4fb4-ba38-c43e77a361d1",
+      "permalink": "main/gmail/gmail-mail-1",
+      "content": "# Dinner next week\n\nFrom: Robin Carter <robin@northwind.co>\nTo: Jamie Fox <jamie.fox@gmail.com>\nDate: Wed, 21 Oct 2026 00:00\n\nHey Jamie,\n\nQuick one from me. Fancy dinner sometime next week? I was thinking Barrafina. Happy to jump on a call if easier.\n\nThanks!\nRobin",
+      "content_length": 265,
+      "content_truncated": false,
+      "file_path": "gmail/gmail-mail-1.md",
+      "updated_at": "2026-10-28T02:52:09.082786Z",
+      "metadata": {
+       "note_type": "mail"
+      },
+      "entity_id": 180,
+      "project_id": 1,
+      "project_external_id": "3507d111-1768-4eb1-bdb8-fa94884ca590"
+     },
+     {
+      "title": "Dinner with Jamie Fox",
+      "type": "entity",
+      "score": -18.99917374613579,
+      "entity": "main/calendar/calendar-event-0",
+      "external_id": "1b3b6cef-f14e-4c30-86df-c34ccd5da9f5",
+      "permalink": "main/calendar/calendar-event-0",
+      "content": "# Dinner with Jamie Fox\n\nWhen: Thursday 29 Oct 2026, 19:30–21:00\nWhere: Barrafina, London\nAttendees: Robin Carter, Jamie Fox",
+      "content_length": 124,
+      "content_truncated": false,
+      "file_path": "calendar/calendar-event-0.md",
+      "updated_at": "2026-10-28T02:52:09.082786Z",
+      "metadata": {
+       "note_type": "event"
+      },
+      "entity_id": 1,
+      "project_id": 1,
+      "project_external_id": "3507d111-1768-4eb1-bdb8-fa94884ca590"
+     }
+    ],
+    "current_page": 1,
+    "page_size": 3,
+    "total": 5,
+    "total_is_exact": true,
+    "has_more": true
+   }
+  }
+ },
+ "meilisearch": {
+  "tool": "search",
+  "query": "Jamie Fox",
+  "content": [
+   {
+    "type": "text",
+    "text": "Search results for 'Jamie Fox':\n{\n  \"hits\": [\n    {\n      \"id\": \"gmail-mail-2\",\n      \"title\": \"Re: Dinner next week\",\n      \"text\": \"From: Jamie Fox <jamie.fox@gmail.com>\\nTo: Robin Carter <robin@northwind.co>\\nDate: Wed, 21 Oct 2026 12:00\\n\\nRobin,\\n\\nYes, would love to! Thursday at 19:30 works. I'll have to leave by 20:45 for school pickup. Speak soon.\\n\\nKind regards,\\nJamie\\n\\nOn Wed, 21 Oct 2026 00:00, Robin Carter <robin@northwind.co> wrote:\\n> Hey Jamie,\\n>\\n> Quick one from me. Fancy dinner sometime next week? I was thinking Barrafina. Happy to jump on a call if easier.\\n>\\n> Thanks!\\n> Robin\",\n      \"kind\": \"mail\"\n    },\n    {\n      \"id\": \"calendar-event-0\",\n      \"title\": \"Dinner with Jamie Fox\",\n      \"text\": \"When: Thursday 29 Oct 2026, 19:30\\u201321:00\\nWhere: Barrafina, London\\nAttendees: Robin Carter, Jamie Fox\",\n      \"kind\": \"event\"\n    },\n    {\n      \"id\": \"gmail-notification-4\",\n      \"title\": \"Invitation: Dinner with Jamie Fox @ Thursday 29 Oct 19:30\",\n      \"text\": \"From: Google Calendar <calendar-notification@google.com>\\nTo: Robin Carter <robin@northwind.co>\\nDate: Thu, 22 Oct 2026 17:00\\n\\nDinner with Jamie Fox\\nThursday 29 Oct \\u22c5 19:30\\nBarrafina, London\\n\\nJoin with Google Meet: https://meet.google.com/xye-nbkq-dkt\\n\\nInvitation from Google Calendar. You are receiving this email because you are an attendee on the event.\",\n      \"kind\": \"notification\"\n    }\n  ],\n  \"query\": \"Jamie Fox\",\n  \"processingTimeMs\": 6,\n  \"limit\": 3,\n  \"offset\": 0,\n  \"estimatedTotalHits\": 6\n}"
+   }
+  ],
+  "structuredContent": {
+   "hits": [
+    {
+     "id": "gmail-mail-2",
+     "title": "Re: Dinner next week",
+     "text": "From: Jamie Fox <jamie.fox@gmail.com>\nTo: Robin Carter <robin@northwind.co>\nDate: Wed, 21 Oct 2026 12:00\n\nRobin,\n\nYes, would love to! Thursday at 19:30 works. I'll have to leave by 20:45 for school pickup. Speak soon.\n\nKind regards,\nJamie\n\nOn Wed, 21 Oct 2026 00:00, Robin Carter <robin@northwind.co> wrote:\n> Hey Jamie,\n>\n> Quick one from me. Fancy dinner sometime next week? I was thinking Barrafina. Happy to jump on a call if easier.\n>\n> Thanks!\n> Robin",
+     "kind": "mail"
+    },
+    {
+     "id": "calendar-event-0",
+     "title": "Dinner with Jamie Fox",
+     "text": "When: Thursday 29 Oct 2026, 19:30–21:00\nWhere: Barrafina, London\nAttendees: Robin Carter, Jamie Fox",
+     "kind": "event"
+    },
+    {
+     "id": "gmail-notification-4",
+     "title": "Invitation: Dinner with Jamie Fox @ Thursday 29 Oct 19:30",
+     "text": "From: Google Calendar <calendar-notification@google.com>\nTo: Robin Carter <robin@northwind.co>\nDate: Thu, 22 Oct 2026 17:00\n\nDinner with Jamie Fox\nThursday 29 Oct ⋅ 19:30\nBarrafina, London\n\nJoin with Google Meet: https://meet.google.com/xye-nbkq-dkt\n\nInvitation from Google Calendar. You are receiving this email because you are an attendee on the event.",
+     "kind": "notification"
+    }
+   ],
+   "query": "Jamie Fox",
+   "processingTimeMs": 6,
+   "limit": 3,
+   "offset": 0,
+   "estimatedTotalHits": 6
+  }
+ },
+ "caldav": {
+  "tool": "caldav_search_events",
+  "query": "Jamie Fox",
+  "content": [
+   {
+    "type": "text",
+    "text": "[\n  {\n    \"uid\": \"calendar-event-0\",\n    \"title\": \"Dinner with Jamie Fox\",\n    \"start\": \"2026-10-29T19:30:00+00:00\",\n    \"end\": \"2026-10-29T21:00:00+00:00\",\n    \"description\": \"When: Thursday 29 Oct 2026, 19:30–21:00\\nWhere: Barrafina, London\\nAttendees: Robin Carter, Jamie Fox\",\n    \"location\": \"Barrafina, London\",\n    \"all_day\": false,\n    \"categories\": [],\n    \"priority\": null,\n    \"recurrence\": null,\n    \"attendees\": []\n  }\n]"
+   }
+  ]
+ },
+ "imap-subject": {
+  "tool": "imap_search_emails",
+  "query": "Dinner",
+  "content": [
+   {
+    "type": "text",
+    "text": "{\n  \"totalFound\": 20,\n  \"returned\": 3,\n  \"messages\": [\n    {\n      \"uid\": 244,\n      \"date\": \"2026-10-28T02:55:59.000Z\",\n      \"from\": \"OpenTable <hello@opentable.com>\",\n      \"to\": [\n        \"Robin Carter <robin@northwind.co>\"\n      ],\n      \"subject\": \"Dinner: what changed\",\n      \"messageId\": \"<gmail-newsletter-298@lab.invalid>\",\n      \"flags\": [\n        \"\\\\Recent\"\n      ],\n      \"customKeywords\": []\n    },\n    {\n      \"uid\": 245,\n      \"date\": \"2026-10-28T02:55:59.000Z\",\n      \"from\": \"OpenTable <hello@opentable.com>\",\n      \"to\": [\n        \"Robin Carter <robin@northwind.co>\"\n      ],\n      \"subject\": \"Dinner: what changed\",\n      \"messageId\": \"<gmail-newsletter-298-dup@lab.invalid>\",\n      \"flags\": [\n        \"\\\\Recent\"\n      ],\n      \"customKeywords\": []\n    },\n    {\n      \"uid\": 253,\n      \"date\": \"2026-10-28T02:55:59.000Z\",\n      \"from\": \"OpenTable <hello@opentable.com>\",\n      \"to\": [\n        \"Robin Carter <robin@northwind.co>\"\n      ],\n      \"subject\": \"Dinner: a deep dive\",\n      \"messageId\": \"<gmail-newsletter-307@lab.invalid>\",\n      \"flags\": [\n        \"\\\\Recent\"\n      ],\n      \"customKeywords\": []\n    }\n  ]\n}"
+   }
+  ]
+ },
+ "chroma": {
+  "tool": "chroma_query_documents",
+  "query": "Jamie Fox",
+  "content": [
+   {
+    "type": "text",
+    "text": "{\"ids\": [[\"calendar-event-0\", \"gmail-mail-1\", \"gmail-notification-4\"]], \"embeddings\": null, \"documents\": [[\"Dinner with Jamie Fox\\n\\nWhen: Thursday 29 Oct 2026, 19:30\\u201321:00\\nWhere: Barrafina, London\\nAttendees: Robin Carter, Jamie Fox\", \"Dinner next week\\n\\nFrom: Robin Carter <robin@northwind.co>\\nTo: Jamie Fox <jamie.fox@gmail.com>\\nDate: Wed, 21 Oct 2026 00:00\\n\\nHey Jamie,\\n\\nQuick one from me. Fancy dinner sometime next week? I was thinking Barrafina. Happy to jump on a call if easier.\\n\\nThanks!\\nRobin\", \"Invitation: Dinner with Jamie Fox @ Thursday 29 Oct 19:30\\n\\nFrom: Google Calendar <calendar-notification@google.com>\\nTo: Robin Carter <robin@northwind.co>\\nDate: Thu, 22 Oct 2026 17:00\\n\\nDinner with Jamie Fox\\nThursday 29 Oct \\u22c5 19:30\\nBarrafina, London\\n\\nJoin with Google Meet: https://meet.google.com/xye-nbkq-dkt\\n\\nInvitation from Google Calendar. You are receiving this email because you are an attendee on the event.\"]], \"uris\": null, \"included\": [\"documents\", \"metadatas\", \"distances\"], \"data\": null, \"metadatas\": [[{\"kind\": \"event\"}, {\"kind\": \"mail\"}, {\"kind\": \"notification\"}]], \"distances\": [[0.9730302691459656, 1.2248649597167969, 1.268327236175537]]}"
+   }
+  ]
+ },
+ "gitea-bleve": {
+  "tool": "search_issues",
+  "query": "Jamie Fox",
+  "content": [
+   {
+    "type": "text",
+    "text": "[{\"comments\":0,\"created_at\":\"2026-10-28T02:57:28Z\",\"html_url\":\"http://lab-gitea:3000/lab/items/issues/5\",\"id\":5,\"number\":5,\"repository\":\"lab/items\",\"state\":\"open\",\"title\":\"Invitation: Dinner with Jamie Fox @ Thursday 29 Oct 19:30\",\"updated_at\":\"2026-10-28T02:57:28Z\",\"user\":\"lab\"},{\"comments\":0,\"created_at\":\"2026-10-28T02:57:28Z\",\"html_url\":\"http://lab-gitea:3000/lab/items/issues/4\",\"id\":4,\"number\":4,\"repository\":\"lab/items\",\"state\":\"open\",\"title\":\"Re: Dinner next week\",\"updated_at\":\"2026-10-28T02:57:28Z\",\"user\":\"lab\"},{\"comments\":0,\"created_at\":\"2026-10-28T02:57:28Z\",\"html_url\":\"http://lab-gitea:3000/lab/items/issues/3\",\"id\":3,\"number\":3,\"repository\":\"lab/items\",\"state\":\"open\",\"title\":\"Re: Dinner next week\",\"updated_at\":\"2026-10-28T02:57:28Z\",\"user\":\"lab\"}]"
+   }
+  ]
+ }
+}

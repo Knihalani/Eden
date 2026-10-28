@@ -1,7 +1,8 @@
 # The connector lab: real MCP servers, a simulated world, known answers
 
 Status: first runs, 2026-10-27. Code in `packages/sim/src/lab/`, images in `packages/sim/lab/`. Raw reports:
-[connector-lab.jsonl](connector-lab.jsonl).
+[connector-lab.jsonl](connector-lab.jsonl) (run before the `toItems` fix, so its `refFallback` counts positional refs
+only; the reach figures do not depend on `toItems`).
 
 ## What it is
 
@@ -114,15 +115,26 @@ Latency is the server and backend on this machine with no network between them, 
    it applies to but reached only 33% of them. A name like the user's own matches hundreds of issues, and the
    needed one is not in the first 10. The deployment's indexer (database vs Bleve) made no measurable difference
    for these queries. Gitea also searches issue bodies, checked by a body-only word.
-5. **Eden's `toItems` loses item identity on 8 of 10 configurations.** `toItems` reads a text block as JSON rows
-   (an array or `{results: […]}`) and takes a row's ref from `id`, `ref` or `url`. The servers' shapes miss that:
-   `{entities: […]}` (memory), an array of `{path…}` rows (mcpvault), `{results: [{permalink…}]}` (Basic Memory),
-   `{messages: [{uid…}]}` (IMAP), events keyed by `uid` (CalDAV) and Chroma's columnar `{ids: [[…]]}`. Meilisearch
-   puts a prose line ("Search results for '…':") before its JSON, and also returns MCP `structuredContent`, which
-   `toItems` ignores. So every item got a positional ref (`block-0-3`); only Gitea, whose issues carry `id` and
-   `html_url`, kept its identity. The partner's per-user cache is keyed by item id, so each lookup to such a
-   connector overwrites the previous lookup's items, and the ledger can take a new item for one already delivered.
-   This is a bug, to be fixed in its own change.
+5. **Eden's `toItems` lost item identity on 8 of 10 configurations (fixed).** `toItems` read a text block as JSON
+   rows (an array or `{results: […]}`) and took a row's ref from `id`, `ref` or `url`. The servers' shapes missed
+   that: `{entities: […]}` (memory), an array of `{uri…}` rows (mcpvault), `{result: {results: [{permalink…}]}}`
+   (Basic Memory), `{messages: [{uid…}]}` (IMAP), events keyed by `uid` (CalDAV) and Chroma's columnar
+   `{ids: [[…]]}`. Meilisearch puts a prose line ("Search results for '…':") before its JSON, and also returns MCP
+   `structuredContent`, which `toItems` ignored. So every item got a positional ref (`block-0-3`); only Gitea, whose
+   issues carry `id` and `html_url`, kept its identity. The partner's per-user cache is keyed by item id, so each
+   lookup to such a connector overwrote the previous lookup's items, and the ledger could take a new item for one
+   already delivered. `toItems` now reads `structuredContent` first, finds the result list under common container
+   keys (a few levels down, and Chroma's columns) without mistaking a record's own nested lists (an issue's labels)
+   or the lists beside an empty result (facets) for results, parses JSON after one prose line ending in a colon,
+   reads more id fields (`uid`, `permalink`, `path`, `uri`, `messageId`…), treats JSON with no rows as an empty
+   result, and gives a row with no id a hash of its identifying content (title and full text, not scores or
+   excerpts), never its position. Measured with two lab metrics over 20 sessions on all ten configurations
+   (raw: [before](connector-lab-toitems-before.jsonl), [after](connector-lab-toitems-after.jsonl); "before" is this
+   lab code run with `toItems` from before the fix): `idCollisions`, the share of item ids given to more than one
+   world item, was 1.0 on 7 configurations before and 0 on all 10 after; `idSplits`, the share of world items given
+   more than one id, was 0.607 on mcpvault before (the same note at different positions) and 0 on all 10 after.
+   Basic Memory was affected too, but its items do not name their world key, so neither metric can see it there.
+   The reference memory server's rows have no id field at all; they now get content-hash refs.
 6. **Half of these servers do not annotate their search tool read-only.** The reference memory server, Basic Memory,
    Meilisearch and Gitea do; mcpvault, CalDAV, the IMAP server and Chroma do not. `McpSource` refused CalDAV until
    the lab's trust list named it (in a first run, not in the raw file: every call refused). Under D7 that refusal
@@ -164,7 +176,6 @@ bun run sim:lab --sessions 120 caldav      # one connector
 
 ## Next
 
-- The `toItems` fix (finding 5), measured here before and after.
 - Per-case results in the report, so combined variants can be scored without rerunning.
 - More seeds; then the planner plan's phase 0 baselines come from this table, not from assumptions.
 - More connectors: a CRM (Twenty or EspoCRM, archetype H), a wiki (BookStack or Wiki.js, including the unescaped

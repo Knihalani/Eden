@@ -24,7 +24,6 @@ train / held-out split for tuning, hand-written adversarial scenarios, and text 
   ([plans/query-planner.md](plans/query-planner.md)). Its evidence so far: a source survey of real MCP servers
   ([research/connectors.md](research/connectors.md)) and the connector lab, where the query Eden sends today reaches
   nothing on whole-string-substring connectors ([research/connector-lab.md](research/connector-lab.md)).
-- `toItems` keeps item identity across real servers' result shapes (the lab found positional ids on most).
 
 ## M3 — The graph, layer 2
 - Entity resolution (aliases, email ↔ name), typed relations (person–company–project), freshness per source.
