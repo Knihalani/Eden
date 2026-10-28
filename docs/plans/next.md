@@ -8,8 +8,9 @@ yet unless it says so.
 
 - The query planner is built and on by default (D28–D33). Its loop continues (below), but it is no longer the
   biggest gap.
-- **The eval cannot see most changes.** `bun run eval` runs one scenario of 9 turns (7 scored); it scored the same with
-  and without the planner (D33). Every PR pastes its JSON, so a regression in scoring or delivery would pass unseen.
+- **The eval could not see most changes.** Until item 1, `bun run eval` ran one scenario of 9 turns (7 scored); it
+  scored the same with and without the planner (D33), so a regression in scoring or delivery would have passed
+  unseen.
 - **No-model delivery is the funnel's biggest loss.** In the simulation, most needed facts that are retrieved are
   never delivered when there is no model: on held-out A, seed 1, with the planner (the default), 84 of 178 needed
   facts were retrieved or cached and 34 delivered; the commonest decision on need turns was "silent: no model" (78 of
@@ -29,6 +30,7 @@ yet unless it says so.
 | 3 | **`McpSource` fetch mapping** (M2): refresh a cached item through the server's read tool when one exists | Stale items are served today | Schema-driven fetch mapping like search's; read-only check unchanged; tests |
 | 4 | **The planner's learning cost**: it trails the best fixed shape by 0–10 points in the lab while it learns | The planner's largest remaining gap | Tune-set gain without held-out or lab regression |
 | 5 | **Delivery and usage rewards for the planner** (plan, "Not done") | The immediate reward cannot tell shapes apart on OR and vector search | Measured in simulation, kept only if it helps |
+| 6 | **Do not deliver the item an event is about**: an `external` event announcing an email gets that same email back (the eval's `newsletter-arrives`) | Both of the eval's false fires | The eval's false fires gone, no recall lost |
 
 Not in this plan, because each needs the owner first: OAuth and a token vault for real connectors (M2, whose
 accounts and where credentials live: plan decision 1), real-account evidence for the planner (the owner chose
@@ -38,6 +40,7 @@ simulation, D29), tenant-level priors (D9), and production state (M5).
 
 Each item, when done, gets a line here with its PR and its numbers.
 
-- **1, the eval suite:** 26 scenarios (88 scored turns, 3 asks), per-category metrics, a privacy check. Baseline with
-  no model: precision 0.875, recall 0.35, false fires 0, secrets leaked 0 of 2, deliveries not inert 0 of 14
-  (docs/research/eval-suite.md).
+- **1, the eval suite:** 26 scenarios (89 scored turns, 3 asks), per-category metrics, a privacy check. Baseline with
+  no model: precision 0.889 (16/18), recall 0.348 (16/46), false fires 2 of 56 silent turns, secrets exposed 2 and
+  leaked 0, deliveries and answers not inert 0 of 19 (docs/research/eval-suite.md). It surfaced an engine weakness:
+  an arriving email is delivered back to the agent that is being told about it (item 6).

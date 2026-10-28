@@ -1,7 +1,7 @@
 {
   "id": "flight-change",
   "category": "travel",
-  "description": "A flight rebooking: the booking and the airline's change policy, not an unrelated train ticket.",
+  "description": "A flight rebooking: the booking, the airline's change policy, the trip it belongs to, and a train the same morning that the new flight would clash with.",
   "sources": [
     {
       "id": "mail",
@@ -10,7 +10,7 @@
         {
           "ref": "msg-ba-booking",
           "title": "Your booking ABC123: London to Lisbon",
-          "text": "BA 500, Friday 14 Nov, departs LHR 07:25, seat 14C. Booking reference ABC123."
+          "text": "BA 500, Friday 13 Nov, departs LHR 07:25, seat 14C. Booking reference ABC123."
         },
         {
           "ref": "msg-ba-policy",
@@ -20,7 +20,7 @@
         {
           "ref": "msg-train",
           "title": "Your train tickets: London to Bristol",
-          "text": "Saturday 15 Nov, 10:00 from Paddington, coach C seat 42."
+          "text": "Saturday 14 Nov, 10:00 from Paddington, coach C seat 42."
         }
       ]
     },
@@ -31,7 +31,7 @@
         {
           "ref": "evt-lisbon",
           "title": "Lisbon trip",
-          "text": "Friday 14 Nov to Monday 17 Nov, staying at Memmo Alfama"
+          "text": "Friday 13 Nov to Monday 16 Nov, staying at Memmo Alfama"
         }
       ]
     }
@@ -53,7 +53,9 @@
           "expect": {
             "items": [
               "mail:msg-ba-booking",
-              "mail:msg-ba-policy"
+              "mail:msg-ba-policy",
+              "mail:msg-train",
+              "calendar:evt-lisbon"
             ]
           }
         },
@@ -71,7 +73,7 @@
             "input": {
               "from": "LHR",
               "to": "LIS",
-              "date": "2026-11-15"
+              "date": "2026-11-14"
             }
           }
         },

@@ -96,7 +96,8 @@
           },
           "expect": {
             "items": [
-              "gmail:m-marcus"
+              "gmail:m-marcus",
+              "calendar:evt-board"
             ]
           }
         },

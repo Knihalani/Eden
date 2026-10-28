@@ -1,7 +1,7 @@
 {
   "id": "family-logistics",
   "category": "relationships",
-  "description": "School pick-up logistics: the family calendar, not work events.",
+  "description": "School pick-up logistics from the family calendar, and the work meeting that clashes with Thursday's later pick-up.",
   "sources": [
     {
       "id": "calendar",
@@ -15,7 +15,7 @@
         {
           "ref": "evt-1on1",
           "title": "1:1 with manager",
-          "text": "Thursday 15:00-15:30"
+          "text": "Thursday 16:15-17:00"
         }
       ]
     }
