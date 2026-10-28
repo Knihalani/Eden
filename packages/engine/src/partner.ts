@@ -560,8 +560,7 @@ export class ContextPartner {
     // a shape's query answered recently comes from the fan-out's cache (`planCalls`), at no call.
     const chosen = planner
       ? found.map(
-          (x) =>
-            new PlannedSource(x, planner, () => this.fanout.permit(s.scope, x.id), this.fanout.planCalls(s.scope, x)),
+          (x) => new PlannedSource(x, planner, () => this.fanout.permit(s.scope, x.id), this.fanout.planCalls(x)),
         )
       : found;
     const outcomes = await this.fanout.search(

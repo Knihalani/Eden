@@ -293,35 +293,38 @@ iteration 1:
 
 - **Calls:** the planner's extra calls fell 7–12% (no model: A 1.83 to 1.63, B 1.67 to 1.50, realistic 2.07 to 1.90;
   with a judge: 1.87 to 1.64, 1.61 to 1.47, 2.04 to 1.89).
-- **Quality:** with no model, every count is identical before and after: reuse returns what the call would have. With
-  a judge, recall moved within noise both ways (the judge sees items in a different order).
+- **Quality:** with no model, recall, precision and false fires are identical before and after: reuse returns what
+  the call would have. One retrieved fact differs (realistic, seed 7), from the simulator's shared error stream,
+  which draws differently when fewer calls are made. With a judge, recall moved within noise both ways.
 - **Guardrails:** false fires equal; no planted secret leaked (0 of 120 per run set, 0 of 72 with a judge).
 
 ### Lab, second world (world 2000)
 
-The connector lab on a second seeded world, every variant (raw:
-[query-planner-lab-world2000.jsonl](query-planner-lab-world2000.jsonl); the planner ran with iteration 1 at
-`cascadeMin` 0.2 and without reuse):
+The connector lab on a second seeded world, every variant; reach is over all cases, as in the world-1000 table
+(raw: [query-planner-lab-world2000.jsonl](query-planner-lab-world2000.jsonl); reproduce: `bun run sim:lab --world
+2000 --sessions 120`). The planner column ran with iteration 1 at `cascadeMin` 0.2 and without reuse, the code at the
+time of the run; the JSONL does not record that configuration (unverified from the raw data alone).
 
 | Connector | Cases | terms (today) | best fixed (hindsight) | planner | calls per case |
 |---|---|---|---|---|---|
-| memory | 202 | 0% | each-entity 89% | 71% | 1.45 |
+| memory | 202 | 0% | each-entity 71% | 71% | 1.45 |
 | mcpvault | 202 | 84% | terms 84% | 84% | 1.00 |
-| basic-memory | 202 | 62% | each-entity 79% | 69% | 1.12 |
-| meilisearch | 202 | 31% | each-entity 85% | 61% | 1.32 |
-| caldav | 69 | 0% | each-entity 94% | 68% | 1.51 |
-| imap-body | 161 | 0% | each-entity 62% | 44% | 1.64 |
-| imap-subject | 161 | 0% | each-entity 48% | 29% | 1.66 |
+| basic-memory | 202 | 62% | each-entity 63% | 69% | 1.12 |
+| meilisearch | 202 | 31% | each-entity 68% | 61% | 1.32 |
+| caldav | 69 | 0% | each-entity 72% | 68% | 1.51 |
+| imap-body | 161 | 0% | each-entity 50% | 44% | 1.64 |
+| imap-subject | 161 | 0% | each-entity 39% | 29% | 1.66 |
 | chroma | 202 | 85% | question 86% | 85% | 1.00 |
-| gitea-db | 202 | 0% | each-entity 34% | 23% | 1.72 |
-| gitea-bleve | 202 | 0% | each-entity 36% | 25% | 1.71 |
+| gitea-db | 202 | 0% | each-entity 27% | 23% | 1.72 |
+| gitea-bleve | 202 | 0% | each-entity 29% | 25% | 1.71 |
 
-- **What holds:** today's query again reaches nothing on the same six connectors, and one call per entity is again
-  the best fixed variant on most of them; the planner matches today's query where it already worked (mcpvault,
-  Chroma).
-- **What does not:** the gap between the planner and the best fixed variant is wider than on world 1000: 9–26 points
-  on seven configurations (memory 71% against 89%). The planner learns online over the cases in order, so the gap is
-  its learning cost; it is the next iteration's target.
+World 1000's findings hold on a second world:
+- today's query reaches nothing on the same six connectors, and one call per entity is the best fixed variant on
+  most of them;
+- the planner matches today's query where it already worked (mcpvault, Chroma);
+- it beats every fixed variant on Basic Memory again (69% against 63%);
+- elsewhere it trails the best fixed variant (chosen in hindsight) by 0–10 points, its learning cost, as on world
+  1000.
 
 ### The default-on gate (D31)
 
@@ -331,7 +334,8 @@ The owner chose a cost-normalised gate (D31). On the fresh held-out seeds, after
 - **Calls at most 1.5x off:** 1.36–1.46x on every set. Holds.
 - **Calls per point of recall no worse than off:** holds on A and realistic; fails on B (no model: 0.284 against
   0.225; judge: 0.099 against 0.076), where the planner adds little recall for its calls.
-- **Lab reach:** no regression beyond noise on world 1000; world 2000 has no before/after pair yet.
+- **Lab reach:** no regression beyond noise on world 1000 (measured at `cascadeMin` 0.2, without reuse); world 2000
+  has no before/after pair yet.
 
 So the planner stays opt-in. What would pass B: not spending calls on connectors whose cascades find facts other
 connectors already returned.
@@ -360,4 +364,4 @@ connectors already returned.
 - **Immediate reward only.** Rewards at delivery and at usage, from the plan, are not wired. The immediate reward
   cannot tell shapes apart on OR and vector search, so the incumbent rule carries that case.
 - **No new `ContextualBandit` primitive.** One `BetaBandit` per (user, connector, bucket) was enough.
-- **Single-world lab.** All lab numbers are from world 1000; other seeds are the next check.
+- **Two lab worlds.** The tier-3 tables are from world 1000; world 2000 (iterations, above) repeats them.
