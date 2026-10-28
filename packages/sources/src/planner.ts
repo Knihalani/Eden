@@ -385,7 +385,10 @@ export class QueryPlanner {
     const make = () => {
       const b = new BetaBandit(SHAPES.length, prior, this.o.priorStrength, this.o.gamma, 1);
       if (incArm >= 0 && inc.strength > 0) b.setPrior(incArm, inc.mean, inc.strength);
-      if (runnerArm >= 0 && runner.strength > 0) b.setPrior(runnerArm, runner.mean, runner.strength);
+      // Only below an incumbent: without one, or above it, the runner-up would be sent first with no margin rule.
+      if (runnerArm >= 0 && runner.strength > 0 && incArm >= 0 && inc.strength > 0 && runner.mean < inc.mean) {
+        b.setPrior(runnerArm, runner.mean, runner.strength);
+      }
       return b;
     };
     const cascade = () => new BetaBandit(1, new Float64Array([0.5]), this.o.priorStrength, this.o.gamma, 1);
