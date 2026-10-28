@@ -24,8 +24,9 @@ train / held-out split for tuning, hand-written adversarial scenarios, and text 
   ([plans/query-planner.md](plans/query-planner.md)). Built and opt-in (D28,
   [research/query-planner-results.md](research/query-planner-results.md)); its shadow mode was measured in simulation
   (D29). Iterating on it: a learned cascade gate (D30) and reusing recent answers cut its extra calls by 12–14% and
-  then 7–12% with recall within noise; the default-on gate (D31) now fails only on one held-out set. Next: calls
-  that only repeat other connectors' facts, the planner's learning cost, delivery and usage rewards. Its evidence: a
+  then 7–12% with recall within noise; a deadline check cut its source timeouts by 71–80%. The default-on gate
+  (D31) is open on one held-out set read alone and on timeouts (still 3–6x planner-off's). Next: the remaining
+  timeouts, the planner's learning cost, delivery and usage rewards. Its evidence: a
   source survey of real MCP servers ([research/connectors.md](research/connectors.md)) and the connector lab, where the
   query Eden sent reached nothing on whole-string-substring connectors
   ([research/connector-lab.md](research/connector-lab.md)).

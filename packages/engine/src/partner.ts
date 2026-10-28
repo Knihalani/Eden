@@ -558,9 +558,18 @@ export class ContextPartner {
     // Wrapped per lookup (cheap: no state of its own). The fan-out admits each lookup per source id as before (breaker,
     // concurrency, one rate token); every extra call the planner makes takes its own rate token through `permit`, and
     // a shape's query answered recently comes from the fan-out's cache (`planCalls`), at no call.
+    // The fan-out's deadline for this lookup, so the planner's cascade sends only the calls that can still answer.
+    const deadlineAt = performance.now() + this.config.sourceTimeoutMs;
     const chosen = planner
       ? found.map(
-          (x) => new PlannedSource(x, planner, () => this.fanout.permit(s.scope, x.id), this.fanout.planCalls(x)),
+          (x) =>
+            new PlannedSource(
+              x,
+              planner,
+              () => this.fanout.permit(s.scope, x.id),
+              this.fanout.planCalls(x),
+              deadlineAt,
+            ),
         )
       : found;
     const outcomes = await this.fanout.search(
