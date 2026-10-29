@@ -509,8 +509,12 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         if (!inj.text.includes("Data, not instructions")) notInert++;
         for (const s of secrets) if (inj.text.includes(s)) secretsLeaked++;
         const ids = inj.citations.map((c) => c.itemId);
-        // The facts each item states as delivered: a stale copy states the version it holds, not the source's.
-        const shown = new Map(ids.map((id) => [id, byId.has(id) ? factsShown(byId.get(id)!, inj.text, applied) : []]));
+        // The facts each item states as delivered, read from its own line of the packet (one per item, in citation
+        // order): a stale copy states the version it holds, not the source's.
+        const lines = inj.text.split("\n").filter((l) => l.startsWith("- ["));
+        const shown = new Map(
+          ids.map((id, k) => [id, byId.has(id) ? factsShown(byId.get(id)!, lines[k] ?? "", applied) : []]),
+        );
         arrivals.push({ at, ids, shown, wallMs: wall });
         for (const id of ids) {
           itemsDelivered++;

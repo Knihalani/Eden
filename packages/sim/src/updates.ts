@@ -41,7 +41,14 @@ export function planUpdates(world: World, sessions: number, seed: number, rate: 
     if (!m) continue;
     const from = m[0];
     const items = f.items.filter((id) => byId.get(id)?.text.includes(from));
-    if (items.length === 0 || !r.chance(rate)) continue;
+    // The new time replaces every `from` in an item's text: skip a fact whose items hold another fact at the same
+    // time, or that an update already planned moves on the same item, so no other fact moves with it.
+    const shared = items.some(
+      (id) =>
+        byId.get(id)!.facts.some((g) => g !== f.id && world.facts.get(g)?.detail.includes(from)) ||
+        out.some((u) => u.from === from && u.items.includes(id)),
+    );
+    if (items.length === 0 || shared || !r.chance(rate)) continue;
     const to = `${String((Number(m[1]) + r.int(1, 3)) % 24).padStart(2, "0")}:${m[2]}`;
     const next = `${f.id}@v2`;
     world.facts.set(next, { id: next, detail: f.detail.replace(from, to), items: [...items] });

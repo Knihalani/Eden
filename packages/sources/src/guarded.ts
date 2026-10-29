@@ -149,14 +149,9 @@ export class SourceFanout {
     const s = this.state(key);
     if (!s.breaker.allow() || this.rate.take(key) > 0 || !s.limiter.tryAcquire()) return null;
     const started = performance.now();
+    let raw: ContextItem | null;
     try {
-      const raw = await source.fetch(ref, scope, signal);
-      s.latency.record(performance.now() - started);
-      s.limiter.release("ok");
-      s.breaker.success();
-      if (!raw) return null;
-      const [item] = await this.options.sanitize([raw], signal);
-      return item ?? null;
+      raw = await source.fetch(ref, scope, signal);
     } catch (e) {
       const message = String(e);
       if (signal.aborted && !timeout.aborted) {
@@ -167,6 +162,18 @@ export class SourceFanout {
       s.limiter.release("dropped");
       s.breaker.failure();
       if (RATE_LIMITED.test(message)) this.rate.penalize(key, retryAfterMs(message) ?? 5_000);
+      return null;
+    }
+    // The source answered: its permit and breaker are settled once, here. Gating is ours, not the source's: a gate
+    // that fails or runs out of time drops the item and says nothing against the source.
+    s.latency.record(performance.now() - started);
+    s.limiter.release("ok");
+    s.breaker.success();
+    if (!raw) return null;
+    try {
+      const [item] = await this.options.sanitize([raw], signal);
+      return item ?? null;
+    } catch {
       return null;
     }
   }
