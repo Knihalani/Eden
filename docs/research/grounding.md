@@ -61,6 +61,14 @@ week?" (held-out seeds 31–36, read for this):
 
 Because seeds 31–36 were read, fresh seeds 41–50 are the held-out set below.
 
+A second review round found more false readings, each now a test: "next" read as a time in "your next payment is
+due" (now only "next" followed by an event: a meeting, call, lunch, talk, or "next on my calendar"), which grounded a
+Globex event from a Globex invoice; a mail tool's `since`/`before` counted as a calendar (now only an event range,
+`start`/`end` or `timeMin`/`timeMax`, makes a source list by time); any past verb moving a weekday back ("Was the
+meeting moved to Friday?" is this Friday; now only a past verb governing the weekday, "we met on Monday"); "the 31st of
+February", an ignored explicit year, "2 dec ideas" read as a date, and "next weekend" read as this one. Every
+simulation row below was unchanged by these fixes.
+
 ## Results
 
 Simulation against main (#182), planner on, the final tree. Recall gain is per seed with a 95% interval:
@@ -96,7 +104,10 @@ does not hit the per-source rate limit): main 8 of 15 at precision 0.80; groundi
 way, unchanged by the review round. The remaining miss asked for a booking reference by airline name, a single word.
 Fifteen requests labelled by the person who built the rules are a sanity check, not a tuning set.
 
-The eval is identical to main apart from latency (its scenarios carry no people or start fields).
+The eval's existing scenarios are identical to main apart from latency (they carry no people or start fields). A new
+scheduling scenario, `people-and-days`, carries them: an email to a named person finds the meeting with them, a
+Sunday question finds that day's event, and a Globex invoice's "next payment" and "the agenda with elena this week"
+stay silent. Main delivers 0 of 2, grounding 2 of 2, with no false fire.
 
 Cost per event, measured with a micro-benchmark: reading a request's dates 3–4 µs; the scan for a day's events
 156 µs over a full cache (2,000 items per user), run only for a request that names a day; matching a name against an
