@@ -14,6 +14,8 @@ export interface BuildOptions {
   /** The query planner (D28): serving by default (D33), in shadow, or off; its learning persists in the source map. */
   queryPlanner?: "off" | "serve" | "shadow";
   onShadow?: ShadowSink;
+  /** Ask answers rewritten by the model (D43); off by default. */
+  askWithModel?: boolean;
 }
 
 /** Wires a partner from its parts with production defaults. */
@@ -31,6 +33,7 @@ export function buildPartner(options: BuildOptions): ContextPartner {
     planner:
       mode === "off" ? undefined : new QueryPlanner({ seed: (Math.random() * 2 ** 32) >>> 0, store: sourceMap, mode }),
     onShadow: options.onShadow,
+    config: { askWithModel: options.askWithModel ?? false },
   });
 }
 

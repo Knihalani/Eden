@@ -301,7 +301,8 @@ export class ContextPartner {
     let answer = items.length ? renderPacket(items, { maxBytes: 4_000 }) : "Nothing in the connected sources.";
     let usedModel = false;
     let costUsd = 0;
-    const reservation = items.length && this.deps.model && !s.closed ? this.charge(s) : null;
+    const reservation =
+      this.config.askWithModel && items.length && this.deps.model && !s.closed ? this.charge(s) : null;
     if (reservation && this.deps.model) {
       try {
         const res = await this.deps.model.chat({

@@ -25,7 +25,7 @@ OpenRouter returns the real cost per call (`usage.cost`), and the engine books t
 | Call | Input bound | Output bound | Cost at $0.15 / $0.50, uncached |
 |---|---|---|---|
 | Judge | system ≈ 100 tok + window ≤ 4,000 chars (≈ 1,000 tok) + ≤ 6 candidates × ≈ 100 tok ≈ 1,700 tok | 60 tok | ≈ $0.00029 |
-| Ask answer | ≈ 100 + question ≤ 10,000 chars (≈ 2,500) + window ≤ 2,000 chars (≈ 500) + ≤ 20 items × ≈ 170 tok ≈ 6,500 tok | 300 tok | ≈ $0.0011 |
+| Ask answer (only with `askWithModel`, off by default, D43) | ≈ 100 + question ≤ 10,000 chars (≈ 2,500) + window ≤ 2,000 chars (≈ 500) + ≤ 20 items × ≈ 170 tok ≈ 6,500 tok | 300 tok | ≈ $0.0011 |
 
 These are arithmetic on list prices, not measurements.
 
@@ -42,7 +42,11 @@ known. Over budget, the engine takes the no-model path; it never defers spend.
 
 ## Levers, in order of leverage
 
-1. Fewer model calls: better cheap scoring (M1 tuning), the graph (M3), learned silence.
+1. Fewer model calls: better cheap scoring (M1 tuning), the graph (M3), learned silence. Done so far: ask answers
+   without a model by default (D43), which halved model calls per turn in simulation (realistic, perfect judge,
+   seeds 31–40: 0.378 to 0.198; cost per 1,000 turns $0.027 to $0.014) with recall, precision and ask retrieval
+   unchanged. A rule that skipped the judge for weak candidate sets was measured and rejected
+   ([research/model-calls.md](research/model-calls.md)).
 2. Smaller inputs: shorter windows, candidate snippets, prompt-cache-friendly prompt layout (stable system prefix).
 3. Cheaper model: a fine-tuned small judge (M6).
 

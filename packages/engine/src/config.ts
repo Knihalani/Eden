@@ -39,6 +39,11 @@ export interface EngineConfig {
   sourceTimeoutMs: number;
   /** Most candidates shown to the model judge. Bounds its input tokens. */
   judgeCandidates: number;
+  /**
+   * Whether `ask` has the model rewrite the items it found as a short prose answer. Off by default (D43): the asker
+   * is itself a model and reads the cited items directly, and that rewrite was about half of all model calls.
+   */
+  askWithModel: boolean;
   /** Events kept as the session's recent window. */
   windowEvents: number;
   /** Turns before a delivered item may be delivered again. */
@@ -88,6 +93,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askSources: 6,
   sourceTimeoutMs: 1_500,
   judgeCandidates: 6,
+  askWithModel: false,
   windowEvents: 12,
   ledgerCooldownTurns: 40,
   cueCooldownTurns: 6,
