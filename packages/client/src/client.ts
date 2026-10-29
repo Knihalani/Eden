@@ -56,7 +56,11 @@ export class EdenClient {
       if (!res.ok) throw new Error(`eden ${path}: ${res.status}`);
       return (await res.json()) as T;
     } catch (e) {
-      this.options.onError?.(e);
+      try {
+        this.options.onError?.(e);
+      } catch {
+        // The integrator's logger failing is no reason to throw into the agent's loop.
+      }
       return null;
     }
   }

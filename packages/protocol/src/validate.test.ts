@@ -27,3 +27,12 @@ describe("checkAsk", () => {
     expect(checkAsk({ ...scope, question: "  " }).ok).toBe(false);
   });
 });
+
+test("tool_call.input must serialize to JSON under 1,000,000 characters", () => {
+  const scope = { tenantId: "t", userId: "u", sessionId: "s" };
+  expect(checkEvent({ ...scope, kind: "tool_call", tool: "t", input: { q: "x" } }).ok).toBe(true);
+  expect(checkEvent({ ...scope, kind: "tool_call", tool: "t", input: "x".repeat(1_000_001) }).ok).toBe(false);
+  let deep: unknown = 1;
+  for (let i = 0; i < 60_000; i++) deep = [deep];
+  expect(checkEvent({ ...scope, kind: "tool_call", tool: "t", input: deep }).ok).toBe(false);
+});
