@@ -17,6 +17,7 @@ import { OracleJudge } from "./judge";
 import { Rng } from "./rng";
 import { buildSessions, type AskCase, type Label, type SimTask, type SimTurn } from "./sessions";
 import { simSources, type ProfileSet, type SimSource } from "./sources";
+import { applyUpdate, factsShown, planUpdates, relabel, type FactUpdate } from "./updates";
 import { buildWorld, HOUR, type World, type WorldItem } from "./world";
 
 export interface QualityOptions {
@@ -31,6 +32,8 @@ export interface QualityOptions {
   model: Model | null;
   config?: Partial<EngineConfig>;
   noiseScale?: number;
+  /** Share of clock-time facts that get a new version at the source before a later session (`updates.ts`). */
+  updates?: number;
   agentToolRate?: number;
   /**
    * With no live model: "perfect" puts an oracle judge in the model's place (the ceiling of the model path),
@@ -171,9 +174,17 @@ export interface QualityReport {
     injectionItemsDelivered: number;
     deliveredNotInert: number;
   };
+  /**
+   * Source-side updates (`--updates`): planned and applied; deliveries of an item an applied update changed, and how
+   * many of them showed the old version (a stale cached copy).
+   */
+  updates: { planned: number; applied: number; updatedDelivered: number; staleDelivered: number };
   model: { callsPerTurn: number; costPerTurnUsd: number; costPer1kTurnsUsd: number };
   sources: {
+    /** Every connector call per lookup, refresh fetches included. */
     callsPerLookup: number;
+    /** Read-one calls made to refresh cached items (D40). */
+    fetches: number;
     usefulResultShare: number;
     errors: number;
     limited: number;
@@ -272,6 +283,11 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
   let secretsPlanted = 0;
   let secretsLeaked = 0;
   let injectionItems = 0;
+  let updatesPlanned = 0;
+  let updatesApplied = 0;
+  let fetches = 0;
+  let updatedDelivered = 0;
+  let staleDelivered = 0;
   let notInert = 0;
   let sourceCalls = 0;
   let useful = 0;
@@ -298,10 +314,15 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       sessions: o.sessionsPerUser,
       agentToolRate: o.agentToolRate,
     });
-    return { world, sessions, asks, sources: simSources(world, o.profiles, o.timeScale, o.seed + u) };
+    // Its own seed: a run without updates draws exactly as before.
+    const updates = planUpdates(world, sessions.length, o.seed * 15_331 + u, o.updates ?? 0);
+    relabel(sessions, asks, updates);
+    return { world, sessions, asks, updates, sources: simSources(world, o.profiles, o.timeScale, o.seed + u) };
   });
   const runUser = async (u: number) => {
-    const { world, sessions, asks, sources } = prepared[u]!;
+    const { world, sessions, asks, updates, sources } = prepared[u]!;
+    updatesPlanned += updates.length;
+    const applied: FactUpdate[] = [];
     const byId = new Map(world.items.map((i) => [i.id, i]));
     const secrets = world.items.filter((i) => i.secret).map((i) => i.secret!);
     secretsPlanted += secrets.length;
@@ -317,6 +338,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
             latencyMs: 900,
             timeScale: o.timeScale,
             seed: o.seed * 15_485_863 + u,
+            factsOf: (item, shown) => factsShown(item, shown, applied),
           });
     const arcNames = new Map(
       world.arcs.map((a) => [a.id, [a.person?.full, a.slots.org].filter((x): x is string => !!x)]),
@@ -352,6 +374,13 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
     for (let si = 0; si < sessions.length; si++) {
       const session = sessions[si]!;
       if (planner && o.promoteAfter !== undefined && si === o.promoteAfter) planner.mode = "serve";
+      // Items changed at the source since the last session: the connectors serve the new text from now on.
+      for (const up of updates.filter((x) => x.session === si)) {
+        const touched = applyUpdate(world, up, clock);
+        applied.push(up);
+        updatesApplied++;
+        for (const s of sources) if (touched.has(s.id)) s.reindex();
+      }
       const third = Math.min(2, Math.floor((si * 3) / sessions.length));
       const callsBefore = sum(sources, (s) => s.stats.calls);
       const lookupsBefore = userTraces.filter((t) => t.sourceCalls > 0).length;
@@ -362,7 +391,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       const traceStart = userTraces.length;
       const known = new Set<string>(); // Facts the agent has: delivered by Eden or fetched by its tools.
       const knownAt = new Map<string, number>(); // fact → turn index it became known
-      const arrivals: { at: number; ids: string[]; wallMs: number }[] = [];
+      const arrivals: { at: number; ids: string[]; shown: Map<string, string[]>; wallMs: number }[] = [];
       const sentAt: number[] = [];
 
       for (let i = 0; i < turnsFlat.length; i++) {
@@ -387,7 +416,9 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
           traces: userTraces.length,
         };
         const cachedBefore =
-          turn.label.kind === "need" ? cachedFacts(partner, who, world, turn.label.must, clock) : new Set<string>();
+          turn.label.kind === "need"
+            ? cachedFacts(partner, who, world, turn.label.must, clock, applied)
+            : new Set<string>();
         const t0 = performance.now();
         sentAt.push(t0);
         const res = await partner.observe(event, { waitMs: o.waitMs });
@@ -478,15 +509,20 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         if (!inj.text.includes("Data, not instructions")) notInert++;
         for (const s of secrets) if (inj.text.includes(s)) secretsLeaked++;
         const ids = inj.citations.map((c) => c.itemId);
-        arrivals.push({ at, ids, wallMs: wall });
+        // The facts each item states as delivered: a stale copy states the version it holds, not the source's.
+        const shown = new Map(ids.map((id) => [id, byId.has(id) ? factsShown(byId.get(id)!, inj.text, applied) : []]));
+        arrivals.push({ at, ids, shown, wallMs: wall });
         for (const id of ids) {
           itemsDelivered++;
           const item = byId.get(id);
           if (!item) continue;
+          const facts = shown.get(id)!;
+          if (applied.some((up) => up.items.includes(id))) updatedDelivered++;
+          if (facts.some((f, k) => f !== item.facts[k])) staleDelivered++;
           if (item.noise) noise++;
           if (item.injection) injectionItems++;
-          if (item.facts.length > 0 && item.facts.every((f) => known.has(f))) redundant++;
-          for (const f of item.facts) addKnown(f, at); // Fractional: arrived during the wait after turn floor(at).
+          if (facts.length > 0 && facts.every((f) => known.has(f))) redundant++;
+          for (const f of facts) addKnown(f, at); // Fractional: arrived during the wait after turn floor(at).
         }
       }
 
@@ -496,11 +532,12 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         if (t.sessionId !== session.id || !["fast", "sources", "model"].includes(t.decision)) continue;
         for (const id of t.itemIds) origin.set(id, t.turn - 1);
       }
-      const delivered: { id: string; origin: number; arrived: number; wallMs: number }[] = [];
+      const delivered: { id: string; facts: string[]; origin: number; arrived: number; wallMs: number }[] = [];
       for (const a of arrivals) {
         for (const id of a.ids)
           delivered.push({
             id,
+            facts: a.shown.get(id) ?? [],
             origin: Math.min(origin.get(id) ?? Math.floor(a.at), turnsFlat.length - 1),
             arrived: a.at,
             wallMs: a.wallMs,
@@ -518,7 +555,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         const names = task?.arc ? (arcNames.get(task.arc) ?? []) : [];
         for (const d of mine) {
           const item = byId.get(d.id);
-          const ok = isRelevant(item, label);
+          const ok = isRelevant(item && { ...item, facts: d.facts }, label);
           const about =
             ok ||
             (!!item &&
@@ -553,9 +590,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         }
         for (const c of cs) c.needTurns++;
         for (const f of label.must) {
-          const hits = delivered.filter(
-            (d) => (d.origin === i || d.origin === i + 1) && byId.get(d.id)?.facts.includes(f),
-          );
+          const hits = delivered.filter((d) => (d.origin === i || d.origin === i + 1) && d.facts.includes(f));
           const inTime = hits.some((d) => d.arrived < answerAt);
           const before = knownAt.get(f);
           const covered = before !== undefined && before < answerAt;
@@ -581,6 +616,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
     }
     for (const s of sources) {
       sourceCalls += s.stats.calls;
+      fetches += s.stats.fetches;
       useful += s.stats.usefulResults;
       results += s.stats.results;
       errors += s.stats.errors;
@@ -680,6 +716,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
     redundantShare: r3(redundant / Math.max(1, itemsDelivered)),
     noiseShare: r3(noise / Math.max(1, itemsDelivered)),
     privacy: { secretsPlanted, secretsLeaked, injectionItemsDelivered: injectionItems, deliveredNotInert: notInert },
+    updates: { planned: updatesPlanned, applied: updatesApplied, updatedDelivered, staleDelivered },
     model: {
       callsPerTurn: r3(modelCalls / turns),
       costPerTurnUsd: cost / turns,
@@ -687,6 +724,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
     },
     sources: {
       callsPerLookup: r3(sourceCalls / Math.max(1, lookups)),
+      fetches,
       usefulResultShare: r3(useful / Math.max(1, results)),
       errors,
       limited,
@@ -748,12 +786,16 @@ function cachedFacts(
   world: World,
   facts: string[],
   now: number,
+  applied: readonly FactUpdate[],
 ) {
   const cache = (partner as unknown as { deps: { cache: ItemCache } }).deps.cache;
+  const byId = new Map(world.items.map((i) => [i.id, i]));
   const out = new Set<string>();
   for (const f of facts) {
     for (const id of world.facts.get(f)?.items ?? []) {
-      if (cache.get(who, id, now)) out.add(f);
+      const held = cache.get(who, id, now);
+      // A copy cached before an update holds the old version: it does not state the new fact.
+      if (held && factsShown(byId.get(id)!, `${held.title}\n${held.text}`, applied).includes(f)) out.add(f);
     }
   }
   return out;

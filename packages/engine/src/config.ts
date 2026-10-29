@@ -21,6 +21,13 @@ export interface EngineConfig {
   fallbackScore: number;
   maxItemsPerInjection: number;
   maxInjectionBytes: number;
+  /**
+   * A cached item fetched longer ago than this is not delivered from the fast path: the slow path re-reads it first
+   * through its source's `fetch` (at most `maxRefreshes` per lookup), so a moved meeting is not delivered at its old
+   * time. 0 turns refreshing off. See D40.
+   */
+  refreshAfterMs: number;
+  maxRefreshes: number;
   /** Sources asked per proactive lookup (routing picks them). An ask uses `askSources`. */
   lookupSources: number;
   askSources: number;
@@ -69,6 +76,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   fallbackMatchedTerms: 3,
   fallbackScore: 0.8,
   maxItemsPerInjection: 3,
+  refreshAfterMs: 0,
+  maxRefreshes: 3,
   maxInjectionBytes: 1_200,
   lookupSources: 3,
   askSources: 6,
