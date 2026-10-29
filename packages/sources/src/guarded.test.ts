@@ -285,3 +285,57 @@ describe("SourceFanout.planCalls (the query planner's calls)", () => {
     expect(f.planCalls(src).cached(shapeQuery())).toBeUndefined();
   });
 });
+
+describe("SourceFanout fetch", () => {
+  const readable = (fetch: Source["fetch"]) => ({ ...source(async () => []), fetch });
+
+  test("returns the source's copy sanitized; null for a source without fetch or with no such record", async () => {
+    const f = new SourceFanout({ sanitize: redactAll });
+    const got = await f.fetch(
+      readable(async () => item("token secretXYZ")),
+      scope,
+      "1",
+      { timeoutMs: 1_000 },
+    );
+    expect(got?.text).toBe("token [REDACTED]");
+    expect(
+      await f.fetch(
+        source(async () => []),
+        scope,
+        "1",
+        { timeoutMs: 1_000 },
+      ),
+    ).toBeNull();
+    expect(
+      await f.fetch(
+        readable(async () => null),
+        scope,
+        "1",
+        { timeoutMs: 1_000 },
+      ),
+    ).toBeNull();
+  });
+
+  test("never throws, and shares the rate limit and breaker with searches", async () => {
+    const f = new SourceFanout({ sanitize: (x) => x, ratePerSec: 1, burst: 1 });
+    let calls = 0;
+    const failing = readable(async () => {
+      calls++;
+      throw new Error("500 Internal Server Error");
+    });
+    expect(await f.fetch(failing, scope, "1", { timeoutMs: 1_000 })).toBeNull();
+    expect(await f.fetch(failing, scope, "1", { timeoutMs: 1_000 })).toBeNull(); // The burst of 1 is spent.
+    expect(calls).toBe(1);
+  });
+
+  test("a call past its timeout is abandoned, not awaited", async () => {
+    const f = new SourceFanout({ sanitize: (x) => x });
+    const slow = readable(
+      (_ref, _scope, signal) =>
+        new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("aborted")))),
+    );
+    const t0 = performance.now();
+    expect(await f.fetch(slow, scope, "1", { timeoutMs: 30 })).toBeNull();
+    expect(performance.now() - t0).toBeLessThan(500);
+  });
+});
