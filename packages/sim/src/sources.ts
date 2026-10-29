@@ -313,6 +313,10 @@ function inWindow(it: WorldItem, now: number, before: number, after: number): bo
  */
 export class SimSource implements Source {
   readonly kind = "sim";
+  /** The calendar lists by time, as its list call does (D44). */
+  get listsByTime(): boolean {
+    return this.id === "calendar";
+  }
   readonly id: string;
   readonly description: string;
   readonly stats: SourceStats = {
@@ -372,12 +376,18 @@ export class SimSource implements Source {
         (f.outageUntil ?? -Infinity) > performance.now() ? "503 Service Unavailable" : "500 Internal Server Error",
       );
     }
-    const hits = this.index.match(
-      this.index.queryTerms(query, p.adapter),
-      query.limit,
-      p,
-      this.index.queryPhrase(query),
-    );
+    // A listing by time (no words, a window: D44) returns the events that start in it, as a calendar's list call does.
+    const w = query.window;
+    const hits =
+      w && !query.text.trim()
+        ? this.index.items
+            .filter((it) => {
+              const day = it.meta?.start?.slice(0, 10);
+              return !!day && day >= w.start && day < w.end;
+            })
+            .sort((a, b) => a.meta!.start!.localeCompare(b.meta!.start!))
+            .slice(0, query.limit)
+        : this.index.match(this.index.queryTerms(query, p.adapter), query.limit, p, this.index.queryPhrase(query));
     this.stats.results += hits.length;
     for (const it of hits) if (it.facts.length) this.stats.usefulResults++;
     if (this.track) for (const it of hits) this.returned.push(it.id);
@@ -439,7 +449,15 @@ function render(it: WorldItem, n: number): ContextItem {
     const flat = body.replace(/\s+/g, " ").trim();
     text = head + (flat.length > n ? `${flat.slice(0, n)}…` : flat);
   }
-  return { id: it.id, sourceId: it.sourceId, ref: it.ref, title: it.title, text, updatedAt: it.updatedAt };
+  return {
+    id: it.id,
+    sourceId: it.sourceId,
+    ref: it.ref,
+    title: it.title,
+    text,
+    updatedAt: it.updatedAt,
+    ...(it.meta ? { meta: it.meta } : {}),
+  };
 }
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {

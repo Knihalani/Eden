@@ -30,8 +30,12 @@ export interface ArgMapping {
   text: { name: string; array: boolean } | null;
   /** The argument that bounds the result count, if any. */
   limit: string | null;
-  /** A required date window (`start_date`/`end_date` and similar), filled around now. */
-  window: { start: string; end: string } | null;
+  /**
+   * A date window (`start_date`/`end_date`, `startTime`/`endTime` and similar): filled with the request's own days
+   * when it names some (D44), else, when the tool requires one, around now. `time` when the arguments take a
+   * timestamp rather than a date.
+   */
+  window: { start: string; end: string; required: boolean; time: boolean; events: boolean } | null;
   /** Required arguments with no value: the mapping cannot be used until the operator fixes them. */
   missing: string[];
   /** Values the operator set, sent on every call. */
@@ -88,6 +92,11 @@ const NOT_TEXT =
   /(^|_)(id|ids|uid|path|uri|url|date|time|since|before|after|collection|index|channel|folder|project|owner|repo|sort|order|format|mode|type|state|status|account|calendar|page|cursor|offset|lang|language|model)s?$/i;
 const START_NAMES = /^(start|from|since|after|time_?min|date_?from)(_?(date|time))?$/i;
 const END_NAMES = /^(end|to|until|before|time_?max|date_?to)(_?(date|time))?$/i;
+/**
+ * A window named as an event's range (`start`/`end`, `timeMin`/`timeMax`): a calendar's, which can list a day with no
+ * words. `since`/`before` and the like filter mail by date, and a listing of them is the day's mail (D44).
+ */
+const EVENT_NAMES = /^(start|end|time_?min|time_?max)(_?(date|time))?$/i;
 
 const typesOf = (p: PropertySchema) => (Array.isArray(p.type) ? p.type : p.type ? [p.type] : []);
 
@@ -128,9 +137,23 @@ export function mapSearchArgs(schema: ToolSchema, fixed: Record<string, unknown>
     !/^(from|to)$/i.test(n) || /date|time/i.test(`${props[n]!.format ?? ""} ${props[n]!.description ?? ""}`);
   const start = names.find((n) => START_NAMES.test(n) && !(n in fixed) && dateLike(n));
   const end = names.find((n) => END_NAMES.test(n) && !(n in fixed) && dateLike(n));
-  const window = start && end && (required.has(start) || required.has(end)) ? { start, end } : null;
+  const isTime = (n: string) => /time/i.test(`${n} ${props[n]!.format ?? ""}`);
+  const window =
+    start && end
+      ? {
+          start,
+          end,
+          required: required.has(start) || required.has(end),
+          time: isTime(start) || isTime(end),
+          events: EVENT_NAMES.test(start) && EVENT_NAMES.test(end),
+        }
+      : null;
 
-  const filled = new Set([text?.name, limit, window?.start, window?.end, ...Object.keys(fixed)].filter(Boolean));
+  const filled = new Set(
+    [text?.name, limit, window?.required ? window.start : undefined, window?.required ? window.end : undefined]
+      .concat(Object.keys(fixed))
+      .filter(Boolean),
+  );
   const missing = [...required].filter((n) => !filled.has(n) && props[n]?.default === undefined);
   return { text, limit, window, missing, fixed };
 }
@@ -142,14 +165,24 @@ export const usable = (m: ArgMapping) => m.text !== null && m.missing.length ===
 const WINDOW_DAYS: [number, number] = [30, 90];
 
 /** The arguments for one call. `now` is the partner's clock (ms). */
-export function buildArgs(m: ArgMapping, text: string, limit: number, now: number): Record<string, unknown> {
+export function buildArgs(
+  m: ArgMapping,
+  text: string,
+  limit: number,
+  now: number,
+  window?: { start: string; end: string; offsetMinutes?: number },
+): Record<string, unknown> {
   const args: Record<string, unknown> = { ...m.fixed };
   if (m.text) args[m.text.name] = m.text.array ? [text] : text;
   if (m.limit) args[m.limit] = limit;
-  if (m.window) {
+  if (m.window && (window || m.window.required)) {
     const day = (d: number) => new Date(now + d * 86_400_000).toISOString().slice(0, 10);
-    args[m.window.start] = day(-WINDOW_DAYS[0]);
-    args[m.window.end] = day(WINDOW_DAYS[1]);
+    // A timestamp argument takes the day's start at the user's offset (RFC 3339), "Z" when it is not known.
+    const o = window?.offsetMinutes ?? 0;
+    const zone = o === 0 ? "Z" : `${o < 0 ? "-" : "+"}${pad(Math.abs(o) / 60)}:${pad(Math.abs(o) % 60)}`;
+    const at = (d: string) => (m.window!.time ? `${d}T00:00:00${zone}` : d);
+    args[m.window.start] = at(window?.start ?? day(-WINDOW_DAYS[0]));
+    args[m.window.end] = at(window?.end ?? day(WINDOW_DAYS[1]));
   }
   return args;
 }
@@ -220,3 +253,5 @@ export function buildFetchArgs(m: FetchMapping, ref: string): Record<string, unk
   if (m.ref.numeric && !/^\d{1,15}$/.test(ref)) return null;
   return { ...m.fixed, [m.ref.name]: m.ref.numeric ? Number(ref) : ref };
 }
+
+const pad = (n: number) => String(Math.floor(n)).padStart(2, "0");

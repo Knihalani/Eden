@@ -59,7 +59,28 @@ describe("mapSearchArgs", () => {
       "from",
       "to",
     ]);
-    expect(mapSearchArgs(dated).window).toEqual({ start: "from", end: "to" });
+    expect(mapSearchArgs(dated).window).toMatchObject({ start: "from", end: "to", required: true });
+  });
+
+  test("an optional date window is filled only with the request's own days (D44); timestamps get a time", () => {
+    const cal = s({
+      fullText: str,
+      startTime: { type: "string", description: "ISO 8601 timestamp" },
+      endTime: { type: "string", description: "ISO 8601 timestamp" },
+    });
+    const m = mapSearchArgs(cal);
+    expect(m.window).toEqual({ start: "startTime", end: "endTime", required: false, time: true, events: true });
+    expect(m.missing).toEqual([]);
+    const now = Date.parse("2026-10-29T12:00:00Z");
+    expect(buildArgs(m, "globex", 5, now)).not.toHaveProperty("startTime");
+    // At the user's offset, RFC 3339.
+    expect(buildArgs(m, "", 5, now, { start: "2026-11-01", end: "2026-11-02", offsetMinutes: -420 })).toMatchObject({
+      startTime: "2026-11-01T00:00:00-07:00",
+    });
+    expect(buildArgs(m, "globex", 5, now, { start: "2026-11-01", end: "2026-11-02" })).toMatchObject({
+      startTime: "2026-11-01T00:00:00Z",
+      endTime: "2026-11-02T00:00:00Z",
+    });
   });
 
   test("field-only search uses a text field, never an id or a folder (IMAP)", () => {
@@ -124,7 +145,14 @@ describe("mapSearchArgs on real servers' schemas", () => {
   }
 
   test("CalDAV's required date window is filled; the rest need nothing from the operator but Chroma's collection", () => {
-    expect(mapSearchArgs(corpus.caldav!.inputSchema).window).toEqual({ start: "start_date", end: "end_date" });
+    expect(mapSearchArgs(corpus.caldav!.inputSchema).window).toMatchObject({
+      start: "start_date",
+      end: "end_date",
+      required: true,
+    });
+    expect(mapSearchArgs(corpus.caldav!.inputSchema).window?.events).toBe(true);
+    // IMAP's since/before filter mail by date: a listing of them would be the day's mail, not a calendar's (D44).
+    expect(mapSearchArgs(corpus["imap-subject"]!.inputSchema).window).toMatchObject({ start: "since", events: false });
     const usableWithout = Object.keys(expected).filter((n) => usable(mapSearchArgs(corpus[n]!.inputSchema)));
     expect(usableWithout.sort()).toEqual(
       Object.keys(expected)

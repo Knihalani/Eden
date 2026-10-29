@@ -59,8 +59,17 @@ does not: a source down, or a search that no longer finds the item; D40).
 **Slow path** (background; at most one per session at a time): rank the user's sources with the source map, search
 the top few live (each under its own deadline), cache the redacted results, record entity mentions, and re-score.
 A confident item is delivered with no model. Borderline candidates go to the model judge, whose default is
-"none", only if the budget allows. With no model, no budget, or a failing model call (D41), the best candidate alone is delivered if it holds
-three or more query terms and scores at least 0.8 (coverage plus the entity bonus; D36). The result is returned
+"none", only if the budget allows. With no model, no budget, or a failing model call (D41), Eden first grounds the
+request in the items' structure (D44, `grounding.ts`): who takes part (`meta.people`, from attendees, senders and
+recipients) and when it starts (`meta.start`). A full name the request acts on matches a participant by identity; a
+request about meeting someone takes only an event with them, any other one also needs a word of its topic; days the
+request names ("this Sunday", "next week", "12 November"), resolved at the user's own UTC offset (the one most of
+their events carry), select the events on them, and "the next X" (an event: "the next call") the earliest
+upcoming. A question about nothing but a time is sent as a listing of those days (`SearchQuery.window`, no words) to
+the sources that list by time (`Source.listsByTime`: an event range, not a mail filter), skipping the planner, and
+grounds that day's events. `ask` grounds the same way.
+Failing that, the best candidate alone is delivered if it holds three or more query terms and scores at least 0.8
+(coverage plus the entity bonus; D36). The result is returned
 directly if the caller passed `waitMs` and it landed in time; otherwise it is queued and delivered with the next
 event (or via `/v1/pending`).
 
