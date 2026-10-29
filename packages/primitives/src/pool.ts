@@ -63,6 +63,8 @@ interface Pending {
   onAbort: (() => void) | undefined;
   /** Settled already (aborted, or rejected by a timeout); a late result is dropped. */
   done: boolean;
+  /** Still in the queue, counted in `waiting`. */
+  queued: boolean;
 }
 
 interface Slot {
@@ -82,6 +84,9 @@ export class WorkerPool {
   private readonly slots: Slot[] = [];
   private readonly queue: Pending[] = [];
   private queueHead = 0;
+  // Live queued tasks. A task aborted while it waits stays in the array until dispatch skips it, so the array's length
+  // over-counts: back-pressure and stats use this instead.
+  private waiting = 0;
   private scheduled = false;
   private closed = false;
   private nextBatchId = 1;
@@ -110,7 +115,7 @@ export class WorkerPool {
   run<T>(fn: string, input: unknown, signal?: AbortSignal): Promise<T> {
     if (this.closed) return Promise.reject(new PoolClosedError("pool is closed"));
     if (signal?.aborted) return Promise.reject(signal.reason);
-    if (this.queue.length - this.queueHead >= this.options.maxQueue) {
+    if (this.waiting >= this.options.maxQueue) {
       this.counts.rejectedFull++;
       return Promise.reject(new PoolFullError(`${this.options.maxQueue} tasks already waiting`));
     }
@@ -123,12 +128,14 @@ export class WorkerPool {
         signal,
         onAbort: undefined,
         done: false,
+        queued: true,
       };
       if (signal) {
         task.onAbort = () => this.settle(task, false, signal.reason);
         signal.addEventListener("abort", task.onAbort, { once: true });
       }
       this.queue.push(task);
+      this.waiting++;
       this.schedule();
     });
   }
@@ -138,7 +145,7 @@ export class WorkerPool {
    * The inline path is synchronous work wrapped in a resolved promise: it still blocks the event loop, by design.
    */
   runOrInline<T>(fn: string, input: unknown, cost: number, signal?: AbortSignal): Promise<T> {
-    const full = this.queue.length - this.queueHead >= this.options.maxQueue;
+    const full = this.waiting >= this.options.maxQueue;
     if (cost >= this.options.inlineBelow && !full && !this.closed) return this.run<T>(fn, input, signal);
     if (signal?.aborted) return Promise.reject(signal.reason);
     const task = this.local[fn];
@@ -155,7 +162,7 @@ export class WorkerPool {
     return {
       workers: this.slots.length,
       busy: this.slots.filter((slot) => slot.batch !== undefined).length,
-      queued: this.queue.length - this.queueHead,
+      queued: this.waiting,
       ...this.counts,
     };
   }
@@ -173,6 +180,7 @@ export class WorkerPool {
     for (let i = this.queueHead; i < this.queue.length; i++) this.settle(this.queue[i]!, false, error);
     this.queue.length = 0;
     this.queueHead = 0;
+    this.waiting = 0;
   }
 
   private spawn(): Slot {
@@ -219,7 +227,9 @@ export class WorkerPool {
       const batch: Pending[] = [];
       while (batch.length < share && this.queueHead < this.queue.length) {
         const task = this.queue[this.queueHead++]!;
-        if (!task.done) batch.push(task);
+        if (task.done) continue;
+        this.dequeued(task);
+        batch.push(task);
       }
       waiting = this.queue.length - this.queueHead;
       if (batch.length > 0) this.send(idle[i]!, batch);
@@ -289,9 +299,16 @@ export class WorkerPool {
     this.slots[index] = fresh;
   }
 
+  private dequeued(task: Pending): void {
+    if (!task.queued) return;
+    task.queued = false;
+    this.waiting--;
+  }
+
   private settle(task: Pending, ok: boolean, value: unknown): void {
     if (task.done) return;
     task.done = true;
+    this.dequeued(task);
     if (task.onAbort) task.signal?.removeEventListener("abort", task.onAbort);
     if (ok) task.resolve(value);
     else task.reject(value);
