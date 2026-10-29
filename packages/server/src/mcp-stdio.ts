@@ -5,13 +5,13 @@
  *   EDEN_TENANT=acme EDEN_USER=u1 EDEN_SOURCES_FILE=examples/personal-agent/sources.json \
  *     bun packages/server/src/mcp-stdio.ts
  *
- * The session id is per process. Proactive delivery needs the HTTP API or the SDK (D14). EDEN_QUERY_PLANNER works as
- * for the HTTP server (config.ts).
+ * The session id is per process. Proactive delivery needs the HTTP API or the SDK (D14). EDEN_QUERY_PLANNER and
+ * EDEN_ASK_MODEL work as for the HTTP server (config.ts).
  */
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { isId, newId } from "@eden/protocol";
 import { buildPartner } from "./build";
-import { plannerMode } from "./config";
+import { askModel, plannerMode } from "./config";
 import { staticResolver } from "./connectors";
 import { createMcpServer } from "./mcp";
 
@@ -26,6 +26,7 @@ if (!isId(tenantId) || !isId(userId)) {
 const partner = buildPartner({
   sources: staticResolver(process.env.EDEN_SOURCES_FILE),
   queryPlanner: plannerMode(process.env.EDEN_QUERY_PLANNER),
+  askWithModel: askModel(process.env.EDEN_ASK_MODEL),
 });
 const server = createMcpServer(partner, { tenantId, userId, sessionId: newId("mcp") });
 await server.connect(new StdioServerTransport());
