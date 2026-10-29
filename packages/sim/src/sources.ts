@@ -145,7 +145,10 @@ const fold = (s: string) => s.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCa
 const STOP = new Set("a an and are at be by for from in is it of on or the to with".split(" "));
 
 export interface SourceStats {
+  /** Every call, fetches included. */
   calls: number;
+  /** Read-one calls (`fetch`), to refresh a cached item. */
+  fetches: number;
   errors: number;
   limited: number;
   /** Calls given up on before they answered (the caller's deadline or the session ending). */
@@ -312,7 +315,16 @@ export class SimSource implements Source {
   readonly kind = "sim";
   readonly id: string;
   readonly description: string;
-  readonly stats: SourceStats = { calls: 0, errors: 0, limited: 0, aborted: 0, results: 0, usefulResults: 0, bytes: 0 };
+  readonly stats: SourceStats = {
+    calls: 0,
+    fetches: 0,
+    errors: 0,
+    limited: 0,
+    aborted: 0,
+    results: 0,
+    usefulResults: 0,
+    bytes: 0,
+  };
   fault: Fault = {};
   /** Ids of every item returned, in order (a runner reads the slice for one event). */
   readonly returned: string[] = [];
@@ -321,7 +333,7 @@ export class SimSource implements Source {
   private lastRefill = performance.now();
 
   constructor(
-    private readonly index: SimIndex,
+    private index: SimIndex,
     private readonly profile: SourceProfile,
     private readonly timeScale: number,
     seed: number,
@@ -372,6 +384,36 @@ export class SimSource implements Source {
     const items = hits.map((it) => render(it, p.snippetChars));
     for (const i of items) this.stats.bytes += i.title.length + i.text.length;
     return items;
+  }
+
+  /**
+   * The source's current copy of one item by its ref (a connector's read-one tool), at the cost of one call: the same
+   * latency, faults and error draws as a search.
+   */
+  async fetch(ref: string, _scope: unknown, signal: AbortSignal): Promise<ContextItem | null> {
+    this.stats.calls++;
+    this.stats.fetches++;
+    const p = this.profile;
+    const delay = p.latency.medianMs > 0 ? this.rng.lognormal(p.latency.medianMs, p.latency.sigma) : 0;
+    const scaled = delay * this.timeScale;
+    try {
+      if (scaled > 0) await sleep(scaled, signal);
+      else if (signal.aborted) throw signal.reason;
+    } catch (e) {
+      this.stats.aborted++;
+      throw e;
+    }
+    if ((this.fault.outageUntil ?? -Infinity) > performance.now() || this.rng.chance(p.errorRate)) {
+      this.stats.errors++;
+      throw new Error("500 Internal Server Error");
+    }
+    const it = this.index.items.find((x) => x.ref === ref);
+    return it ? render(it, p.snippetChars) : null;
+  }
+
+  /** Rebuilds this connector's index from the world's current items (after an update at the source). */
+  reindex(): void {
+    this.index = new SimIndex(this.id, this.index.world);
   }
 
   /** A token bucket in simulated time: real elapsed time divided by the time scale. */

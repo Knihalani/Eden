@@ -31,7 +31,7 @@ import {
   type ObserveResult,
   type Scope,
 } from "@eden/protocol";
-import { sanitizeForStore } from "@eden/redact";
+import { REDACTED, sanitizeForStore } from "@eden/redact";
 import { Vocab, type WorkerPool } from "@eden/primitives";
 import {
   PlanError,
@@ -229,7 +229,8 @@ export class ContextPartner {
     }
 
     const fast = this.confident(this.rank(s, cue));
-    if (fast.length > 0) {
+    // A stale cached copy is not delivered from here: the slow path re-reads it first (D40).
+    if (fast.length > 0 && !this.stale(s, fast)) {
       this.markCue(s, cue);
       const injection = this.deliver(s, fast, "proactive", `cache:${cue.id}`);
       trace("fast", cue.id, { itemIds: fast.map((x) => x.item.id) });
@@ -656,17 +657,67 @@ export class ContextPartner {
       // Mentions are recorded for items new to the cache or changed, so an item many lookups return is not counted
       // each time (that let one item dominate routing, and was ~10% of server CPU). They are written with the put,
       // before the next yield: a session closing in between must not leave items cached whose mentions never land.
-      const added = this.deps.cache.put(s.scope, o.items, this.now(), true);
-      const mentions = added.map((item) => ({
-        sourceId: item.sourceId,
-        entities: extractTypedEntities(`${item.title}. ${item.text}`)
-          .filter((e) => PERSISTABLE_KINDS.has(e.kind))
-          .slice(0, 20)
-          .map((e) => e.text),
-      }));
-      if (mentions.length > 0) this.deps.sourceMap.recordMentionsMany(s.scope, mentions, this.now());
+      this.store(s, o.items);
     }
     return chosen.length;
+  }
+
+  /** Caches sanitized items and records the entity mentions of those new to the cache or changed. */
+  private store(s: Session, items: ContextItem[]): void {
+    const added = this.deps.cache.put(s.scope, items, this.now(), true);
+    const mentions = added.map((item) => ({
+      sourceId: item.sourceId,
+      entities: extractTypedEntities(`${item.title}. ${item.text}`)
+        .filter((e) => PERSISTABLE_KINDS.has(e.kind))
+        .slice(0, 20)
+        .map((e) => e.text),
+    }));
+    if (mentions.length > 0) this.deps.sourceMap.recordMentionsMany(s.scope, mentions, this.now());
+  }
+
+  /** Whether any of these cached items was fetched longer ago than `refreshAfterMs` (refreshing on). */
+  private stale(s: Session, scored: Scored[]): boolean {
+    const after = this.config.refreshAfterMs;
+    if (after <= 0) return false;
+    const now = this.now();
+    return scored.some((x) => now - (this.deps.cache.fetchedAt(s.scope, x.item.id) ?? now) > after);
+  }
+
+  /**
+   * Re-reads the best candidates fetched longer ago than `refreshAfterMs` through their source's `fetch`, so what is
+   * ranked next is the source's current copy (D40). At most `maxRefreshes`, in parallel, under the fan-out's guards;
+   * a source without `fetch`, or a call that fails or is skipped, leaves the cached copy as it is. Returns the fetches
+   * attempted.
+   */
+  private async refresh(s: Session, cue: Cue): Promise<number> {
+    const c = this.config;
+    if (c.refreshAfterMs <= 0 || c.maxRefreshes <= 0 || s.closed) return 0;
+    const now = this.now();
+    const stale = this.rank(s, cue)
+      .filter((x) => x.score >= c.candidateScore)
+      .slice(0, c.judgeCandidates)
+      .filter((x) => now - (this.deps.cache.fetchedAt(s.scope, x.item.id) ?? now) > c.refreshAfterMs)
+      .slice(0, c.maxRefreshes);
+    if (stale.length === 0) return 0;
+    const all = await this.deps.sources(s.scope).catch((): Source[] => []);
+    const jobs = stale.flatMap((x) => {
+      const source = all.find((a) => a.id === x.item.sourceId);
+      // A ref the gate redacted, or Eden's own content hash, cannot be asked for again: no call, no rate token.
+      const fetchable = !x.item.ref.includes(REDACTED) && !x.item.ref.startsWith("eden-h-");
+      return source?.fetch && fetchable ? [{ source, ref: x.item.ref }] : [];
+    });
+    if (jobs.length === 0 || s.closed) return 0;
+    const fresh = await Promise.all(
+      jobs.map((j) =>
+        this.fanout.fetch(j.source, s.scope, j.ref, { timeoutMs: c.sourceTimeoutMs, signal: s.abort.signal }),
+      ),
+    );
+    if (s.closed) return jobs.length; // Forgotten or ended meanwhile: keep nothing (D17).
+    this.store(
+      s,
+      fresh.filter((x): x is ContextItem => x !== null),
+    );
+    return jobs.length;
   }
 
   /**
@@ -754,6 +805,8 @@ export class ContextPartner {
       });
     try {
       sourceCalls = await this.searchLive(s, cue, this.config.lookupSources);
+      if (s.closed) return null;
+      sourceCalls += await this.refresh(s, cue);
       if (s.closed) return null;
       const scored = this.rank(s, cue);
       const sure = this.confident(scored);

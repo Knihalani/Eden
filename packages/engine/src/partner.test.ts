@@ -791,3 +791,196 @@ describe("no-model fallback limits (D36)", () => {
     expect(model.calls.length).toBe(0);
   });
 });
+
+describe("refreshing stale cached items (D40)", () => {
+  const hour = 3_600_000;
+  /** A calendar whose search finds the meeting only the first time; its fetch always reads the current copy. */
+  function calendarWithMove(fetchable = true) {
+    const doc = { title: "Design review with Hana", text: "Monday 11:00, room Orion, bring the mobile mocks" };
+    const calls = { search: 0, fetch: 0 };
+    const copy = () => ({ id: "calendar:rev", sourceId: "calendar", ref: "rev", ...doc });
+    const src: Source = {
+      id: "calendar",
+      kind: "test",
+      description: "calendar",
+      search: async () => (++calls.search === 1 ? [copy()] : []),
+      ...(fetchable
+        ? {
+            fetch: async () => {
+              calls.fetch++;
+              return copy();
+            },
+          }
+        : {}),
+    };
+    return { src, doc, calls };
+  }
+  const ask = async (p: ContextPartner, sessionId: string, at: number) => {
+    const text = "What should I bring to the design review with Hana?";
+    const r = await p.observe({ ...scope, sessionId, at, kind: "user_message", text } as AgentEvent, { waitMs: 1_000 });
+    return [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId })].map((i) => i.text).join();
+  };
+
+  test("a copy older than refreshAfterMs is re-read through fetch before it is delivered", async () => {
+    let clock = 1_700_000_000_000;
+    const { src, doc, calls } = calendarWithMove();
+    const { p } = partner({ now: () => clock, config: { refreshAfterMs: hour, maxRefreshes: 3 } }, [src]);
+    expect(await ask(p, "a", clock)).toContain("11:00");
+    doc.text = "Monday 11:30, room Orion, bring the mobile mocks"; // Moved at the source.
+    clock += 3 * hour;
+    const got = await ask(p, "b", clock);
+    expect(got).toContain("11:30");
+    expect(got).not.toContain("11:00");
+    expect(calls.fetch).toBe(1);
+  });
+
+  test("off, within the threshold, or past maxRefreshes: the cached copy, and no fetch", async () => {
+    for (const [config, gap] of [
+      [{ refreshAfterMs: 0 }, 3 * hour],
+      [{ refreshAfterMs: hour, maxRefreshes: 3 }, hour / 2],
+      [{ refreshAfterMs: hour, maxRefreshes: 0 }, 3 * hour],
+    ] as const) {
+      let clock = 1_700_000_000_000;
+      const { src, doc, calls } = calendarWithMove();
+      const { p } = partner({ now: () => clock, config }, [src]);
+      await ask(p, "a", clock);
+      doc.text = "Monday 11:30, room Orion, bring the mobile mocks";
+      clock += gap;
+      expect(await ask(p, "b", clock)).toContain("11:00");
+      expect(calls.fetch).toBe(0);
+    }
+  });
+
+  test("at most maxRefreshes fetches per lookup", async () => {
+    let clock = 1_700_000_000_000;
+    let searches = 0;
+    let fetches = 0;
+    const docs = [
+      { ref: "rev", title: "Design review with Hana", text: "Monday 11:00, room Orion, bring the mobile mocks" },
+      { ref: "rev2", title: "Design review prep with Hana", text: "Monday 10:00, room Orion, mobile mocks draft" },
+    ];
+    const copy = (d: (typeof docs)[number]) => ({ id: `calendar:${d.ref}`, sourceId: "calendar", ...d });
+    const src: Source = {
+      id: "calendar",
+      kind: "test",
+      description: "calendar",
+      search: async () => (++searches === 1 ? docs.map(copy) : []),
+      fetch: async (ref) => {
+        fetches++;
+        return copy(docs.find((d) => d.ref === ref)!);
+      },
+    };
+    const { p } = partner({ now: () => clock, config: { refreshAfterMs: hour, maxRefreshes: 1 } }, [src]);
+    await ask(p, "a", clock);
+    clock += 3 * hour;
+    await ask(p, "b", clock);
+    expect(fetches).toBe(1);
+  });
+
+  test("by default a stale copy is not delivered from the fast path: a live search brings the current one", async () => {
+    let clock = 1_700_000_000_000;
+    const doc = { title: "Design review with Hana", text: "Monday 11:00, room Orion, bring the mobile mocks" };
+    let fetches = 0;
+    const src: Source = {
+      id: "calendar",
+      kind: "test",
+      description: "calendar",
+      search: async () => [{ id: "calendar:rev", sourceId: "calendar", ref: "rev", ...doc }],
+      fetch: async () => {
+        fetches++;
+        return null;
+      },
+    };
+    const { p, traces } = partner({ now: () => clock }, [src]);
+    await ask(p, "a", clock);
+    doc.text = "Monday 11:30, room Orion, bring the mobile mocks";
+    clock += 3 * 3_600_000; // Past the default refreshAfterMs (2 h).
+    expect(await ask(p, "b", clock)).toContain("11:30");
+    expect(traces.filter((t) => t.sessionId === "b").map((t) => t.decision)).not.toContain("fast");
+    expect(fetches).toBe(0); // maxRefreshes is 0 by default.
+  });
+
+  test("a session that closes while a refresh fetch runs stores nothing; fetches count as source calls", async () => {
+    let clock = 1_700_000_000_000;
+    const { src, doc } = calendarWithMove();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const fetch = src.fetch!;
+    src.fetch = async (ref, sc, signal) => {
+      await gate;
+      return fetch(ref, sc, signal);
+    };
+    const cache = new ItemCache();
+    const { p, traces } = partner({ now: () => clock, cache, config: { refreshAfterMs: hour, maxRefreshes: 3 } }, [
+      src,
+    ]);
+    await ask(p, "a", clock);
+    doc.text = "Monday 11:30, room Orion, bring the mobile mocks";
+    clock += 3 * hour;
+    const text = "What should I bring to the design review with Hana?";
+    void p.observe({ ...scope, sessionId: "b", at: clock, kind: "user_message", text } as AgentEvent);
+    await new Promise((r) => setTimeout(r, 20));
+    await p.observe({ ...scope, sessionId: "b", at: clock, kind: "session_end" } as AgentEvent);
+    release();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(cache.get(scope, "calendar:rev", clock)?.text).toContain("11:00"); // Not overwritten after the close.
+    let clock2 = clock;
+    const { p: q, traces: t2 } = partner({ now: () => clock2, config: { refreshAfterMs: hour, maxRefreshes: 3 } }, [
+      calendarWithMove().src,
+    ]);
+    await ask(q, "a", clock2);
+    clock2 += 3 * hour;
+    await ask(q, "b", clock2);
+    expect(t2.filter((t) => t.sessionId === "b").some((t) => t.sourceCalls >= 2)).toBe(true); // Search and fetch.
+    expect(traces.length).toBeGreaterThan(0);
+  });
+
+  test("a fast set with one stale item takes the live lookup; redacted and content-hash refs are never fetched", async () => {
+    let clock = 1_700_000_000_000;
+    const fetched: string[] = [];
+    const docs = [
+      { ref: "fresh", title: "Design review with Hana", text: "Monday 11:00, room Orion, bring the mobile mocks" },
+      { ref: "tok=[REDACTED]", title: "Design review notes with Hana", text: "room Orion, the mobile mocks, Monday" },
+      { ref: "eden-h-0123456789abcdef", title: "Design review agenda with Hana", text: "Monday, room Orion, mocks" },
+    ];
+    let searches = 0;
+    const src: Source = {
+      id: "calendar",
+      kind: "test",
+      description: "calendar",
+      search: async () => {
+        searches++;
+        return searches === 1 ? docs.map((d) => ({ id: `calendar:${d.ref}`, sourceId: "calendar", ...d })) : [];
+      },
+      fetch: async (ref) => {
+        fetched.push(ref);
+        return null;
+      },
+    };
+    const { p, traces } = partner({ now: () => clock, config: { refreshAfterMs: hour, maxRefreshes: 3 } }, [src]);
+    await ask(p, "a", clock);
+    clock += 3 * hour;
+    await ask(p, "b", clock);
+    expect(traces.filter((t) => t.sessionId === "b").map((t) => t.decision)).not.toContain("fast");
+    expect(fetched.every((r) => !r.includes("[REDACTED") && !r.startsWith("eden-h-"))).toBe(true);
+    // One stale item is enough (`some`): a mix of a fresh and a stale copy is not delivered from the fast path.
+    const cache = new ItemCache();
+    const t0 = 1_700_000_000_000;
+    const { p: q } = partner({ now: () => t0 + 3 * hour, cache, config: { refreshAfterMs: hour } }, [src]);
+    cache.put(scope, [{ id: "calendar:old", sourceId: "calendar", ref: "old", title: "a", text: "a" }], t0);
+    cache.put(scope, [{ id: "calendar:new", sourceId: "calendar", ref: "new", title: "b", text: "b" }], t0 + 3 * hour);
+    const stale = (q as unknown as { stale(s: unknown, x: unknown[]): boolean }).stale.bind(q);
+    const of = (id: string) => ({ item: { id } });
+    expect(stale({ scope }, [of("calendar:new"), of("calendar:old")])).toBe(true);
+    expect(stale({ scope }, [of("calendar:new")])).toBe(false);
+  });
+
+  test("a source without fetch still has its cached copy delivered", async () => {
+    let clock = 1_700_000_000_000;
+    const { src } = calendarWithMove(false);
+    const { p } = partner({ now: () => clock, config: { refreshAfterMs: hour } }, [src]);
+    await ask(p, "a", clock);
+    clock += 3 * hour;
+    expect(await ask(p, "b", clock)).toContain("11:00");
+  });
+});

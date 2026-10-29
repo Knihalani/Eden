@@ -255,6 +255,11 @@ export class ItemCache {
     if (u.byDoc[e.doc] === e) u.byDoc[e.doc] = undefined;
   }
 
+  /** When the cached item was last fetched or seen in a lookup (ms), or undefined if it is not cached. */
+  fetchedAt(scope: Scope, id: string): number | undefined {
+    return this.peek(scope)?.items.get(id)?.fetchedAt;
+  }
+
   get(scope: Scope, id: string, now = Date.now()): ContextItem | null {
     const e = this.peek(scope)?.items.get(id);
     return e && now - e.fetchedAt <= this.limits.ttlMs ? e.item : null;

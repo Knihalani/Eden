@@ -20,6 +20,8 @@ export interface OracleOptions {
   latencyMs: number;
   timeScale: number;
   seed: number;
+  /** The facts a candidate's shown text states (a stale copy states its old version); default: the item's own. */
+  factsOf?: (item: WorldItem, shown: string) => string[];
 }
 
 export interface OracleStats {
@@ -76,7 +78,7 @@ export class OracleJudge implements Model {
         const item = this.find(m[2]!, block);
         if (!item) this.stats.unmatched++;
         else this.shown.push(item.id);
-        const rel = !!item && item.facts.some((f) => relevant.has(f));
+        const rel = !!item && (this.o.factsOf?.(item, block) ?? item.facts).some((f) => relevant.has(f));
         if (rel) this.stats.relevantCandidates++;
         if (this.rng.chance(rel ? this.o.tp : this.o.fp)) picks.push(Number(m[1]));
       });
