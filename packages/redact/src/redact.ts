@@ -156,12 +156,13 @@ function hasDashedSk(s: string): boolean {
  * a credential only if it decodes to printable text holding a ":", which prose after the word ("Basic Input/Output
  * System") never does.
  */
-const BASIC_AUTH = /\bBasic\s+([A-Za-z0-9+/]{8,}={0,2})(?![A-Za-z0-9+/=])/g;
+const BASIC_AUTH = /\bBasic\s+([A-Za-z0-9+/]{8,}={0,2})(?![A-Za-z0-9+/=])/gi;
 
 function isBasicCredential(b64: string): boolean {
   if (b64.length % 4 === 1) return false;
-  const decoded = Buffer.from(b64, "base64").toString("latin1");
-  return decoded.includes(":") && /^[\x20-\x7e]+$/.test(decoded);
+  // UTF-8, so a user or password with accents still counts; control characters or invalid bytes mean it is not text.
+  const decoded = Buffer.from(b64, "base64").toString("utf8");
+  return decoded.includes(":") && !/[\u0000-\u001f\u007f\ufffd]/.test(decoded);
 }
 
 function redactBasic(s: string): string {
