@@ -73,9 +73,13 @@ describe("mapSearchArgs", () => {
     expect(m.missing).toEqual([]);
     const now = Date.parse("2026-10-29T12:00:00Z");
     expect(buildArgs(m, "globex", 5, now)).not.toHaveProperty("startTime");
+    // At the user's offset, RFC 3339.
+    expect(buildArgs(m, "", 5, now, { start: "2026-11-01", end: "2026-11-02", offsetMinutes: -420 })).toMatchObject({
+      startTime: "2026-11-01T00:00:00-07:00",
+    });
     expect(buildArgs(m, "globex", 5, now, { start: "2026-11-01", end: "2026-11-02" })).toMatchObject({
-      startTime: "2026-11-01T00:00:00",
-      endTime: "2026-11-02T00:00:00",
+      startTime: "2026-11-01T00:00:00Z",
+      endTime: "2026-11-02T00:00:00Z",
     });
   });
 

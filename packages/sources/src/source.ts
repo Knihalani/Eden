@@ -16,7 +16,7 @@ export interface SearchQuery {
    * The days the request names (D44), as YYYY-MM-DD, `end` exclusive. A source that can list by time (a calendar)
    * returns what falls in it even when no word matches; others may ignore it.
    */
-  window?: { start: string; end: string };
+  window?: { start: string; end: string; offsetMinutes?: number };
 }
 
 export interface Source {
@@ -26,6 +26,8 @@ export interface Source {
   readonly kind: string;
   /** What the source holds, in one sentence. Seeds routing before anything is learned. */
   readonly description: string;
+  /** Whether a query with a `window` and no words lists what starts in it (a calendar), D44. */
+  readonly listsByTime?: boolean;
   search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]>;
   /** One item by its source ref, for refreshing a cached item. */
   fetch?(ref: string, scope: Scope, signal: AbortSignal): Promise<ContextItem | null>;

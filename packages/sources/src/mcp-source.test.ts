@@ -278,11 +278,11 @@ describe("people and start times kept as structure (D44)", () => {
         start: { dateTime: "2026-11-05T16:00:00+01:00" },
         attendees: [
           { email: "robin@example.com", self: true },
-          { email: "dana@danalee.io", displayName: "Dana Lee" },
+          { email: "dana@danalee.example", displayName: "Dana Lee" },
         ],
-        organizer: { email: "dana@danalee.io" },
+        organizer: { email: "dana@danalee.example" },
       }),
-    ).toEqual({ people: "Dana Lee <dana@danalee.io>; dana@danalee.io", start: "2026-11-05T16:00:00+01:00" });
+    ).toEqual({ people: "Dana Lee <dana@danalee.example>; dana@danalee.example", start: "2026-11-05T16:00:00+01:00" });
     expect(
       structureOf({ subject: "Re: plans", sender: "sam@globex.example", toRecipients: ["robin@example.com"] }),
     ).toEqual({
