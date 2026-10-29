@@ -124,4 +124,9 @@ test("HTTP Basic credentials are redacted; prose after the word Basic keeps its 
   expect(sanitizeForStore("basic income/healthcare reform")).toBe("basic income/healthcare reform");
   expect(sanitizeForStore("curl -u x -H 'Authorization: Basic dXNlcjpwYXNz'")).not.toContain("dXNlcjpwYXNz");
   expect(containsSecret("Basic YWRtaW46U3VwZXJTZWNyZXQxMjM0NQ==")).toBe(true);
+  // The scheme is case-insensitive, and credentials may hold any letters.
+  expect(sanitizeForStore('-H "authorization: basic YWRtaW46aHVudGVyMjI="')).not.toContain("YWRtaW46aHVudGVyMjI");
+  expect(sanitizeForStore("proxy auth was basic YWRtaW46aHVudGVyMjI=")).not.toContain("YWRtaW46aHVudGVyMjI");
+  const accented = Buffer.from("jörg:pässwörd").toString("base64");
+  expect(sanitizeForStore(`Authorization: Basic ${accented}`)).not.toContain(accented);
 });
