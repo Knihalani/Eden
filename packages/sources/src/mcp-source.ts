@@ -53,6 +53,8 @@ export interface McpSourceOptions {
   };
   /** Tools the server does not annotate read-only but an operator has verified are. */
   trustedReadTools?: string[];
+  /** A connection that closes sooner than this after connecting delays the next connect (default 5 s). */
+  quickCloseMs?: number;
 }
 
 export class ReadOnlyViolation extends Error {}
@@ -61,6 +63,23 @@ export class ReadOnlyViolation extends Error {}
 export class ArgumentMappingError extends Error {}
 
 const RETRY_AFTER_MS = 30_000;
+/** A connection that closes sooner than this after connecting waits `RETRY_AFTER_MS` before the next connect. */
+const QUICK_CLOSE_MS = 5_000;
+/** Pages of `tools/list` read at most: a server that keeps returning cursors cannot hold a connect forever. */
+const MAX_TOOL_PAGES = 20;
+
+/** Every tool the server lists, across `tools/list` pages. */
+async function listAllTools(client: Client): Promise<Awaited<ReturnType<Client["listTools"]>>["tools"]> {
+  const tools: Awaited<ReturnType<Client["listTools"]>>["tools"] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < MAX_TOOL_PAGES; page++) {
+    const res = await client.listTools(cursor ? { cursor } : undefined);
+    tools.push(...res.tools);
+    cursor = res.nextCursor;
+    if (!cursor) break;
+  }
+  return tools;
+}
 
 export class McpSource implements Source {
   readonly kind = "mcp";
@@ -86,7 +105,7 @@ export class McpSource implements Source {
       const client = new Client({ name: "eden-partner", version: "0.0.0" });
       try {
         await client.connect(this.options.transport());
-        const { tools } = await client.listTools();
+        const tools = await listAllTools(client);
         const tool = this.readTool(tools, this.options.searchTool.name);
         if (!this.options.searchTool.args) {
           const m = mapSearchArgs(tool.inputSchema as ToolSchema, this.options.searchTool.fixed);
@@ -112,6 +131,18 @@ export class McpSource implements Source {
             this.fetchMapping = m;
           }
         }
+        // A dropped connection (a stdio server that exited, an expired HTTP session) clears the client, so the next
+        // call connects again instead of failing with "Not connected" for the life of this source.
+        const connectedAt = Date.now();
+        client.onclose = () => {
+          if (this.client !== client) return;
+          this.client = null;
+          // A server that dies right after connecting (crashing on every call) must not cost a process per lookup.
+          if (Date.now() - connectedAt < (this.options.quickCloseMs ?? QUICK_CLOSE_MS)) {
+            this.lastError = new Error(`${this.id}: connection closed ${Date.now() - connectedAt} ms after connecting`);
+            this.retryAt = Date.now() + RETRY_AFTER_MS;
+          }
+        };
         this.client = client;
         return client;
       } catch (e) {
@@ -175,8 +206,9 @@ export class McpSource implements Source {
   }
 
   async close(): Promise<void> {
-    await this.client?.close();
-    this.client = null;
+    const client = this.client;
+    this.client = null; // first, so `onclose` sees a deliberate close and sets no reconnect backoff
+    await client?.close();
   }
 }
 

@@ -36,6 +36,8 @@ export class MultiMatcher {
   private readonly outList: Int32Array;
   private readonly lens: Int32Array;
   private readonly ring: Int32Array;
+  /** Per ring slot, its letter's place in a ligature's expansion (0 for an ordinary character). */
+  private readonly part: Uint8Array;
   private readonly ringMask: number;
 
   constructor(patterns: string[], options: MatcherOptions = {}) {
@@ -110,6 +112,7 @@ export class MultiMatcher {
     const longest = Math.max(1, ...this.lens);
     const size = 1 << Math.ceil(Math.log2(longest + 1));
     this.ring = new Int32Array(size);
+    this.part = new Uint8Array(size);
     this.ringMask = size - 1;
   }
 
@@ -162,6 +165,7 @@ export class MultiMatcher {
     const asciiCol = this.asciiCol;
     const outStart = this.outStart;
     const ring = this.ring;
+    const part = this.part;
     const ringMask = this.ringMask;
     const wholeWord = this.wholeWord;
     let s = 0;
@@ -169,26 +173,44 @@ export class MultiMatcher {
     for (let i = 0; i < n; i++) {
       const c = text.charCodeAt(i);
       let col: number;
+      // A character that folds to several (a ligature: "ﬁ" is "fi") is fed as its expansion, as the tokenizer and
+      // foldPattern read it; every expanded character starts at the ligature's index.
+      let expanded: string | null = null;
       if (c < 128) {
         col = asciiCol[FOLD[c]!]!;
       } else {
         const f = foldOf(c);
         if (f === FOLD_DROP) continue;
-        col = f === FOLD_EXPAND ? 0 : this.column(f);
+        if (f === FOLD_EXPAND) {
+          expanded = foldString(String.fromCharCode(c));
+          if (expanded.length === 0) continue;
+          col = this.column(expanded.charCodeAt(0));
+        } else col = this.column(f);
       }
-      ring[k & ringMask] = i;
-      k++;
-      s = delta[s * cols + col]!;
-      const from = outStart[s]!;
-      const to = outStart[s + 1]!;
-      if (from === to) continue;
-      for (let j = from; j < to; j++) {
-        const p = this.outList[j]!;
-        const start = ring[(k - this.lens[p]!) & ringMask]!;
-        const end = afterMarks(text, i + 1);
-        if (wholeWord && !(boundaryBefore(text, start) && boundaryAt(text, end))) continue;
-        if (stop !== null && stop()) return;
-        if (onMatch !== null) onMatch(p, start, end);
+      for (let u = 0; ;) {
+        ring[k & ringMask] = i;
+        part[k & ringMask] = u;
+        k++;
+        s = delta[s * cols + col]!;
+        const from = outStart[s]!;
+        const to = outStart[s + 1]!;
+        for (let j = from; j < to; j++) {
+          const p = this.outList[j]!;
+          const slot = (k - this.lens[p]!) & ringMask;
+          const start = ring[slot]!;
+          const end = afterMarks(text, i + 1);
+          if (wholeWord) {
+            // Inside a ligature is inside a word: a whole-word match must start on an expansion's first letter and
+            // end on its last ("ile" is not a word in "ﬁle", nor "f" in "ﬁ").
+            if (part[slot] !== 0 || (expanded !== null && u !== expanded.length - 1)) continue;
+            if (!(boundaryBefore(text, start) && boundaryAt(text, end))) continue;
+          }
+          if (stop !== null && stop()) return;
+          if (onMatch !== null) onMatch(p, start, end);
+        }
+        if (expanded === null || ++u >= expanded.length) break;
+        const e = expanded.charCodeAt(u);
+        col = e < 128 ? asciiCol[e]! : this.column(e);
       }
     }
   }

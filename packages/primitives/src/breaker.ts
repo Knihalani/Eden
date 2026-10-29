@@ -5,6 +5,11 @@
  * open for 30 s, then one probe call (half-open) decides.
  *
  * Callers count a call that missed its deadline as a failure.
+ *
+ * Reports can arrive late: a call allowed before the breaker opened may finish while it is open or half-open. A caller
+ * that reads `epoch` when it is allowed and passes it back with its report has a stale report ignored: it neither
+ * re-opens an open breaker (pushing the probe back) nor closes a half-open one in the probe's place. Reports without
+ * an epoch are taken as current.
  */
 export interface BreakerOptions {
   windowMs?: number;
@@ -30,6 +35,7 @@ export class CircuitBreaker {
   private probing = false;
   private probeAt = -Infinity;
   private mode: BreakerState = "closed";
+  private trips = 0;
 
   constructor(options: BreakerOptions = {}) {
     const buckets = options.buckets ?? 10;
@@ -63,16 +69,27 @@ export class CircuitBreaker {
     return true;
   }
 
-  success(): void {
-    if (this.mode === "half-open") {
+  /** Bumped each time the breaker opens: a report carrying an older epoch is from a call allowed before that. */
+  get epoch(): number {
+    return this.trips;
+  }
+
+  success(epoch?: number): void {
+    if (epoch !== undefined && epoch !== this.trips) return;
+    const state = this.state;
+    if (state === "open") return; // a late report while open says nothing new
+    if (state === "half-open") {
       this.reset();
       return;
     }
     this.record(false);
   }
 
-  failure(): void {
-    if (this.mode === "half-open") {
+  failure(epoch?: number): void {
+    if (epoch !== undefined && epoch !== this.trips) return;
+    const state = this.state;
+    if (state === "open") return; // already open: a late failure must not push the probe back
+    if (state === "half-open") {
       this.trip();
       return;
     }
@@ -102,6 +119,7 @@ export class CircuitBreaker {
   }
 
   private trip(): void {
+    this.trips++;
     this.mode = "open";
     this.openedAt = this.now();
     this.probing = false;
