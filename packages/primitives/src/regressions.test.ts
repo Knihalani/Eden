@@ -157,4 +157,9 @@ test("MultiMatcher reads a ligature in the text as its letters, as the tokenizer
   expect(new MultiMatcher(["file"]).any("the ﬁle")).toBe(true);
   expect(new MultiMatcher(["the file"], { wholeWord: true }).any("see the ﬁle now")).toBe(true);
   expect(new MultiMatcher(["fi"], { wholeWord: true }).any("ﬁle")).toBe(false);
+  // Part of a ligature is never a whole word.
+  expect(new MultiMatcher(["ile"], { wholeWord: true }).any("x ﬁle y")).toBe(false);
+  expect(new MultiMatcher(["i"], { wholeWord: true }).any("x ﬁ y")).toBe(false);
+  expect(new MultiMatcher(["f"], { wholeWord: true }).any("x ﬁ y")).toBe(false);
+  expect(new MultiMatcher(["fi"], { wholeWord: true }).any("x ﬁ y")).toBe(true);
 });

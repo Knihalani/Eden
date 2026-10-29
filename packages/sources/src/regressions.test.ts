@@ -1,9 +1,11 @@
 /** Regressions from the 2026-10-29 audit of the sources: each test failed before its fix. */
 import type { ContextItem } from "@eden/protocol";
+import type { Source } from "./source";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { McpSource } from "./mcp-source";
+import { McpSource, ReadOnlyViolation } from "./mcp-source";
+import { PlannedSource, QueryPlanner } from "./planner";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { SourceFanout } from "./guarded";
 import { describe, expect, test } from "bun:test";
@@ -174,42 +176,133 @@ describe("mcp listtools pagination", () => {
   });
 });
 
-describe("mcp no reconnect", () => {
-  test("after the server side drops the connection, McpSource reconnects instead of failing forever", async () => {
-    let connects = 0;
-    let serverSide: InMemoryTransport | null = null;
+describe("mcp reconnect", () => {
+  // A server whose search tool is read-only on the first connect and, optionally, not on later ones.
+  const source = (options: { quickCloseMs?: number; laterWritable?: boolean } = {}) => {
+    const state = { connects: 0, serverSide: null as InMemoryTransport | null };
     const src = new McpSource({
       id: "notes",
       description: "",
+      quickCloseMs: options.quickCloseMs,
       transport: () => {
-        connects++;
+        state.connects++;
         const server = new McpServer({ name: "notes", version: "1" });
+        const readOnly = state.connects === 1 || !options.laterWritable;
         server.registerTool(
           "search_notes",
-          { inputSchema: { query: z.string() }, annotations: { readOnlyHint: true } },
+          { inputSchema: { query: z.string() }, annotations: { readOnlyHint: readOnly } },
           async () => ({ content: [{ type: "text", text: JSON.stringify([{ id: "n1", text: "hello" }]) }] }),
         );
         const [client, s] = InMemoryTransport.createLinkedPair();
-        serverSide = s;
+        state.serverSide = s;
         void server.connect(s);
         return client;
       },
       searchTool: { name: "search_notes", args: (q) => ({ query: q.text }) },
     });
-    const q = { scope: { tenantId: "t", userId: "u" }, text: "hello", entities: [], limit: 5 };
-    const signal = () => AbortSignal.timeout(1_000);
-    expect((await src.search(q, signal())).length).toBe(1);
-    await serverSide!.close(); // the stdio server crashed / the HTTP session expired
+    return { src, state };
+  };
+  const q = { scope: { tenantId: "t", userId: "u" }, text: "hello", entities: [], limit: 5 };
+  const signal = () => AbortSignal.timeout(1_000);
+  const drop = async (state: { serverSide: InMemoryTransport | null }) => {
+    await state.serverSide!.close(); // the stdio server crashed / the HTTP session expired
     await Bun.sleep(5);
-    const errors: string[] = [];
-    for (let i = 0; i < 3; i++) {
-      try {
-        await src.search(q, signal());
-      } catch (e) {
-        errors.push(String(e));
-      }
-    }
-    // Actual: connects stays 1 and every later search throws "Not connected" for the life of the process.
-    expect(connects).toBeGreaterThan(1);
+  };
+
+  test("after the connection drops, the next search connects again", async () => {
+    const { src, state } = source({ quickCloseMs: 0 });
+    expect((await src.search(q, signal())).length).toBe(1);
+    await drop(state);
+    expect((await src.search(q, signal())).length).toBe(1);
+    expect(state.connects).toBe(2);
+  });
+
+  test("a connection that closes right after connecting waits before the next connect", async () => {
+    const { src, state } = source();
+    expect((await src.search(q, signal())).length).toBe(1);
+    await drop(state);
+    await expect(src.search(q, signal())).rejects.toThrow(/connection closed/);
+    expect(state.connects).toBe(1);
+  });
+
+  test("a reconnect checks the tool is read-only again (D7)", async () => {
+    const { src, state } = source({ quickCloseMs: 0, laterWritable: true });
+    expect((await src.search(q, signal())).length).toBe(1);
+    await drop(state);
+    await expect(src.search(q, signal())).rejects.toBeInstanceOf(ReadOnlyViolation);
+    expect(state.connects).toBe(2);
+  });
+});
+
+describe("gate failures and late reports", () => {
+  const scope = { tenantId: "t", userId: "u" };
+  const item: ContextItem = { id: "s:1", sourceId: "s", ref: "1", title: "t", text: "dana lee" };
+  const query = (text: string) => ({ scope, text, entities: [], limit: 5 });
+
+  test("a gate failure inside the query planner's calls does not open the source's breaker", async () => {
+    const f = new SourceFanout({
+      sanitize: () => {
+        throw new Error("gate failed");
+      },
+      breaker: { minCalls: 2, failureRate: 0.5, openMs: 60_000 },
+      ratePerSec: 100,
+      burst: 100,
+      cacheBytes: 0,
+    });
+    let calls = 0;
+    const src: Source = { id: "s", kind: "t", description: "", search: async () => (calls++, [item]) };
+    const planned = () =>
+      new PlannedSource(src, new QueryPlanner({ seed: 1, epsilon: 0 }), () => f.permit(scope, "s"), f.planCalls(src));
+    const statuses: string[] = [];
+    for (let i = 0; i < 4; i++)
+      statuses.push((await f.search([planned()], query(`dana lee ${i}`), { timeoutMs: 1_000 }))[0]!.status);
+    expect(statuses).toEqual(["error", "error", "error", "error"]);
+    expect(calls).toBeGreaterThanOrEqual(4);
+  });
+
+  test("a source that answers so late the gate times out is reported as a timeout", async () => {
+    const f = new SourceFanout({
+      sanitize: (_items, signal) =>
+        new Promise((_, reject) => signal?.addEventListener("abort", () => reject(signal.reason), { once: true })),
+      ratePerSec: 100,
+      burst: 100,
+      cacheBytes: 0,
+    });
+    const src: Source = { id: "s", kind: "t", description: "", search: async () => [item] };
+    const [out] = await f.search([src], query("dana"), { timeoutMs: 30 });
+    expect(out!.status).toBe("timeout");
+  });
+
+  test("a call allowed before the breaker opened that fails late does not push the probe back", async () => {
+    let now = 0;
+    let fail!: (e: Error) => void;
+    let n = 0;
+    const src: Source = {
+      id: "s",
+      kind: "t",
+      description: "",
+      search: async () => {
+        const call = ++n;
+        if (call === 1) await new Promise<void>((_, reject) => (fail = reject)); // hangs, then fails late
+        if (call === 2) throw new Error("upstream 500");
+        return [item];
+      },
+    };
+    const f = new SourceFanout({
+      sanitize: (items) => items,
+      breaker: { minCalls: 1, failureRate: 0.5, openMs: 1_000 },
+      ratePerSec: 100,
+      burst: 100,
+      cacheBytes: 0,
+      now: () => now,
+    });
+    const first = f.search([src], query("a"), { timeoutMs: 5_000 });
+    await Bun.sleep(1);
+    await f.search([src], query("b"), { timeoutMs: 5_000 }); // fails: the breaker opens at t=0
+    now = 900;
+    fail(new Error("upstream 500"));
+    expect((await first)[0]!.status).toBe("error");
+    now = 1_000; // openMs after the trip: the probe may go
+    expect((await f.search([src], query("c"), { timeoutMs: 5_000 }))[0]!.status).toBe("ok");
   });
 });
