@@ -45,7 +45,9 @@ known. Over budget, the engine takes the no-model path; it never defers spend.
 1. Fewer model calls: better cheap scoring (M1 tuning), the graph (M3), learned silence. Done so far: ask answers
    without a model by default (D43), which halved model calls per turn in simulation (realistic, perfect judge,
    seeds 31–40: 0.378 to 0.198; cost per 1,000 turns $0.027 to $0.014) with recall, precision and ask retrieval
-   unchanged. A rule that skipped the judge for weak candidate sets was measured and rejected
+   unchanged. Grounding the no-model path in people and days (D44) adds no model call: with the perfect judge, model
+   calls per turn are identical to main on every mix. A rule that skipped the judge for weak candidate sets was
+   measured and rejected
    ([research/model-calls.md](research/model-calls.md)).
 2. Smaller inputs: shorter windows, candidate snippets, prompt-cache-friendly prompt layout (stable system prefix).
 3. Cheaper model: a fine-tuned small judge (M6).
