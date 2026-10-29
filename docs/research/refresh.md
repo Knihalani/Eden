@@ -27,7 +27,8 @@ is scored on its own line of the packet.
 ## Two mechanisms
 
 1. **Deferral:** a cached item last fetched or seen in a lookup longer ago than `refreshAfterMs` is never delivered from
-   the fast path. The cue goes to the slow path, whose live search brings the source's current copy.
+   the fast path. The cue goes to the slow path, which delivers the source's current copy when its live search returns
+   it (and may still rank the cached copy when it does not).
 2. **Refetch:** after that search, the best candidates still older than `refreshAfterMs` are re-read through their
    source's `fetch` (`SourceFanout.fetch`: the same breaker, rate limit and concurrency limit as a search, a timeout,
    redaction before anything is held), at most `maxRefreshes` per lookup.
