@@ -1,7 +1,8 @@
 # Grounding requests in people and time (D44)
 
 Status: 2026-10-29. Simulation (planner on, `quality-cli`), the eval, and a private sample of the owner's real mail
-and calendar (read-only, not in the repo). No live model run (the key's spend limit). Re-measured after an independent review on fresh seeds.
+and calendar (read-only, not in the repo). No live model run (the key's spend limit). Re-measured after an
+independent review, on fresh held-out seeds.
 
 ## The problem
 
