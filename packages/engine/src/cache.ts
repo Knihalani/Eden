@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { dedupText, hamming64, SparseIndex, TextSketcher, Vocab } from "@eden/primitives";
 import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
-import { termIds } from "./text";
+import { head, termIds } from "./text";
 
 const NO_TERMS = new Uint32Array(0);
 
@@ -104,8 +104,9 @@ export function sanitizeItem(raw: ContextItem, maxTextChars = DEFAULT_CACHE_LIMI
     ...raw,
     id: sanitizedId(raw, ref),
     ref,
-    title: sanitizeForStore(raw.title.slice(0, 500)),
-    text: sanitizeForStore(raw.text.slice(0, maxTextChars)),
+    // Clipped with `head`, never a plain slice: a secret split by the cut would no longer look like one to the gate.
+    title: sanitizeForStore(head(raw.title, 500)),
+    text: sanitizeForStore(head(raw.text, maxTextChars)),
     url: raw.url === undefined ? undefined : sanitizeForStore(raw.url),
     meta: raw.meta && Object.fromEntries(Object.entries(raw.meta).map(([k, v]) => [k, sanitizeForStore(v)])),
   };

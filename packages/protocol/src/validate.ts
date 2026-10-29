@@ -11,6 +11,18 @@ const isText = (v: unknown, max = 1_000_000): v is string => typeof v === "strin
 /** The id shape for tenants, users, sessions and injections: no `/` or `#`, which scope keys use as separators. */
 export const isId = (v: unknown): v is string => typeof v === "string" && /^[A-Za-z0-9._:@-]{1,128}$/.test(v);
 
+/**
+ * Whether `v` serializes to JSON of at most `max` characters. The engine stringifies a tool call's input, so input it
+ * cannot stringify (nested past the stack limit) or that is huge is the caller's error, not a 503 later.
+ */
+function jsonUnder(v: unknown, max: number): boolean {
+  try {
+    return (JSON.stringify(v ?? null)?.length ?? 0) <= max;
+  } catch {
+    return false;
+  }
+}
+
 function scopeError(r: Record<string, unknown>): string | null {
   if (!isId(r.tenantId)) return "tenantId must be 1-128 characters of [A-Za-z0-9._:@-]";
   if (!isId(r.userId)) return "userId must be 1-128 characters of [A-Za-z0-9._:@-]";
@@ -35,6 +47,9 @@ export function checkEvent(v: unknown): Checked<AgentEvent> {
       return { ok: true, value: { ...base, kind: v.kind, text: v.text } };
     case "tool_call":
       if (!isText(v.tool, 200)) return { ok: false, error: "tool_call.tool must be a string" };
+      if (!jsonUnder(v.input, 1_000_000)) {
+        return { ok: false, error: "tool_call.input must be JSON of at most 1,000,000 characters" };
+      }
       return { ok: true, value: { ...base, kind: "tool_call", tool: v.tool, input: v.input } };
     case "tool_result":
       if (!isText(v.tool, 200) || !isText(v.output)) return { ok: false, error: "tool_result needs tool and output" };

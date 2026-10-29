@@ -151,6 +151,30 @@ function hasDashedSk(s: string): boolean {
   return false;
 }
 
+/**
+ * HTTP Basic credentials: "Basic " and base64 of user:password. A pass of its own, like dashed sk- keys: the token is
+ * a credential only if it decodes to printable text holding a ":", which prose after the word ("Basic Input/Output
+ * System") never does.
+ */
+const BASIC_AUTH = /\bBasic\s+([A-Za-z0-9+/]{8,}={0,2})(?![A-Za-z0-9+/=])/gi;
+
+function isBasicCredential(b64: string): boolean {
+  if (b64.length % 4 === 1) return false;
+  // UTF-8, so a user or password with accents still counts; control characters or invalid bytes mean it is not text.
+  const decoded = Buffer.from(b64, "base64").toString("utf8");
+  return decoded.includes(":") && !/[\u0000-\u001f\u007f\ufffd]/.test(decoded);
+}
+
+function redactBasic(s: string): string {
+  BASIC_AUTH.lastIndex = 0;
+  return s.replace(BASIC_AUTH, (m, b64: string) => (isBasicCredential(b64) ? REDACTED : m));
+}
+
+function hasBasic(s: string): boolean {
+  for (const m of s.matchAll(BASIC_AUTH)) if (isBasicCredential(m[1]!)) return true;
+  return false;
+}
+
 /** Longest key we will look back over from a separator. */
 const MAX_KEY_LEN = 128;
 
@@ -298,7 +322,7 @@ export function redactString(s: string): string {
   // second time — and a hand-written gate is exactly what drifted out of step
   // with the replacer.
   SECRET_INLINE.lastIndex = 0;
-  const t = redactDashedSk(redactPem(s)).replace(SECRET_INLINE, REDACTED);
+  const t = redactBasic(redactDashedSk(redactPem(s))).replace(SECRET_INLINE, REDACTED);
 
   let out = "";
   let cursor = 0;
@@ -317,7 +341,7 @@ function stringHasSecret(s: string): boolean {
   // Shortest token pattern is `Bearer a` (8). Assignment scan needs `=` or `:`.
   // Plain short strings (synth ids, tags) cannot match either.
   if (s.length < 8 && s.indexOf("=") < 0 && s.indexOf(":") < 0) return false;
-  return SECRET_ANY.test(s) || PEM_ANY.test(s) || hasDashedSk(s) || scanAssignments(s, null);
+  return SECRET_ANY.test(s) || PEM_ANY.test(s) || hasDashedSk(s) || hasBasic(s) || scanAssignments(s, null);
 }
 
 /**

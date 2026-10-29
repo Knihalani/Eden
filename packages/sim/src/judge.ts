@@ -68,12 +68,13 @@ export class OracleJudge implements Model {
       this.stats.judgeCalls++;
       const picks: number[] = [];
       // Candidates are "[i] (source) title — text", and text keeps its newlines: split on the "[i] (source) " heads.
-      const list = userMsg.split("\nCandidates:\n")[1] ?? "";
+      const list = (userMsg.split("\n<candidates>\n")[1] ?? "").replace(/\n<\/candidates>$/, "");
       // A head counts only if it is the next index: a line inside an item's text that looks like one is text.
       const heads: RegExpExecArray[] = [];
       for (const m of list.matchAll(/^\[(\d+)\] \(([^)\n]+)\) /gm)) if (Number(m[1]) === heads.length) heads.push(m);
       heads.forEach((m, k) => {
-        const block = list.slice(m.index + m[0].length, heads[k + 1]?.index ?? list.length);
+        // The engine makes candidate text inert ("<" as "&lt;"): undo it to match the item's own text.
+        const block = list.slice(m.index + m[0].length, heads[k + 1]?.index ?? list.length).replaceAll("&lt;", "<");
         this.stats.candidates++;
         const item = this.find(m[2]!, block);
         if (!item) this.stats.unmatched++;

@@ -140,6 +140,9 @@ export function extractTypedEntities(text: string): Entity[] {
     if (to - from >= 2) words = words.slice(from, to);
     const run = words.join(" ");
     if (words.length === 1 && (sentenceStart || STOPWORDS.has(run.toLowerCase()) || isCalendar(run))) continue;
+    // A capitalised run of common words ("What We", "It Is") names nothing: its bonus would push any item holding
+    // those words past the bar with no model's say (D6).
+    if (words.every((w) => STOPWORDS.has(w.toLowerCase()))) continue;
     add(run, "name");
   }
   return [...found.values()];
@@ -164,3 +167,26 @@ export function isChatterTerms(text: string, ids: ArrayLike<number>, vocab: Voca
   for (let i = 0; i < ids.length; i++) if (!STOPWORDS.has(vocab.term(ids[i]!))) return false;
   return true;
 }
+
+/**
+ * The first `max` characters of `s`, cut so that redaction (which runs after the cut) still sees every secret whole:
+ * the cut drops the whole run it would split, back to whitespace or JSON punctuation (" , { } [ ], which no token or
+ * base64 body contains, so minified JSON keeps its head: half a JWT no longer looks like one), and a private key whose
+ * END line falls past the cut is dropped from its BEGIN line (alone, the banner is all `redactPem` redacts).
+ */
+export function head(s: string, max: number): string {
+  if (s.length <= max) return s;
+  let end = max;
+  while (end > 0 && !isCutPoint(s.charCodeAt(end - 1))) end--;
+  let out = s.slice(0, end);
+  let begin = -1;
+  for (const m of out.matchAll(PEM_BEGIN)) begin = m.index;
+  if (begin >= 0 && !PEM_END.test(out.slice(begin))) out = out.slice(0, begin);
+  return out;
+}
+
+/** Whitespace and the JSON punctuation " , [ ] { }. */
+const isCutPoint = (c: number) => c <= 32 || c === 34 || c === 44 || c === 91 || c === 93 || c === 123 || c === 125;
+
+const PEM_BEGIN = /-----BEGIN [A-Z ]*PRIVATE KEY-----/gi;
+const PEM_END = /-----END [A-Z ]*PRIVATE KEY-----/i;

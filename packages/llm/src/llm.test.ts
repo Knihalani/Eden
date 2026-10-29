@@ -18,8 +18,9 @@ describe("pricing", () => {
 describe("Budget", () => {
   test("refuses once a session's call or spend cap is reached, and settles to actual cost", () => {
     const b = new Budget({ callsPerSession: 2, usdPerSession: 1, usdPerUserDay: 10 });
-    expect(b.charge("u", "s", 0.4)).toBe(true);
-    b.settle("u", "s", 0.4, 0.1);
+    const r = b.reserve("u", "s", 0.4);
+    expect(r).not.toBeNull();
+    b.settle(r!, 0.1);
     expect(b.spent("s").usd).toBeCloseTo(0.1);
     expect(b.charge("u", "s", 0.4)).toBe(true);
     expect(b.charge("u", "s", 0.01)).toBe(false);
@@ -30,6 +31,28 @@ describe("Budget", () => {
     expect(b.charge("u", "s1", 0.3)).toBe(true);
     expect(b.charge("u", "s2", 0.3)).toBe(false);
     expect(b.charge("other", "s3", 0.3)).toBe(true);
+  });
+});
+
+describe("Budget reservations", () => {
+  test("a call settled after midnight books against the day it was charged, not the new day", () => {
+    let now = Date.parse("2026-10-29T23:59:59Z");
+    const b = new Budget({ callsPerSession: 99, usdPerSession: 99, usdPerUserDay: 0.5 }, () => now);
+    const r = b.reserve("u", "s1", 0.5)!;
+    now = Date.parse("2026-10-30T00:00:01Z");
+    b.settle(r, 0); // cheaper than estimated: must not credit the new day with money it never reserved
+    expect(b.reserve("u", "s2", 0.5)).not.toBeNull();
+    expect(b.reserve("u", "s3", 0.01)).toBeNull();
+  });
+
+  test("settling a call of an ended session leaves a new session with the same id alone", () => {
+    const b = new Budget({ callsPerSession: 1, usdPerSession: 1, usdPerUserDay: 1 });
+    const old = b.reserve("u", "s", 0.01)!;
+    b.endSession("s");
+    expect(b.reserve("u", "s", 0.01)).not.toBeNull();
+    b.settle(old, 0);
+    expect(b.spent("s").calls).toBe(1);
+    expect(b.reserve("u", "s", 0.01)).toBeNull();
   });
 });
 

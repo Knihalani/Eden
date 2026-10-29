@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { containsSecret, redactString } from "./redact";
+import { sanitizeForStore } from "./secrets";
 
 describe("redact regressions", () => {
   test("a pasted PEM private key loses its whole body, not just its banner", () => {
@@ -112,4 +113,20 @@ describe("the per-install wrap key", () => {
       expect(containsSecret(word)).toBe(false);
     }
   });
+});
+
+test("HTTP Basic credentials are redacted; prose after the word Basic keeps its words", () => {
+  const out = sanitizeForStore("Authorization: Basic YWRtaW46U3VwZXJTZWNyZXQxMjM0NQ==");
+  expect(out).not.toContain("YWRtaW46U3VwZXJTZWNyZXQxMjM0NQ");
+  expect(sanitizeForStore("Basic information about the plan")).toBe("Basic information about the plan");
+  expect(sanitizeForStore("The Basic Plan costs 9 dollars")).toBe("The Basic Plan costs 9 dollars");
+  expect(sanitizeForStore("The Basic Input/Output System (BIOS)")).toBe("The Basic Input/Output System (BIOS)");
+  expect(sanitizeForStore("basic income/healthcare reform")).toBe("basic income/healthcare reform");
+  expect(sanitizeForStore("curl -u x -H 'Authorization: Basic dXNlcjpwYXNz'")).not.toContain("dXNlcjpwYXNz");
+  expect(containsSecret("Basic YWRtaW46U3VwZXJTZWNyZXQxMjM0NQ==")).toBe(true);
+  // The scheme is case-insensitive, and credentials may hold any letters.
+  expect(sanitizeForStore('-H "authorization: basic YWRtaW46aHVudGVyMjI="')).not.toContain("YWRtaW46aHVudGVyMjI");
+  expect(sanitizeForStore("proxy auth was basic YWRtaW46aHVudGVyMjI=")).not.toContain("YWRtaW46aHVudGVyMjI");
+  const accented = Buffer.from("jörg:pässwörd").toString("base64");
+  expect(sanitizeForStore(`Authorization: Basic ${accented}`)).not.toContain(accented);
 });

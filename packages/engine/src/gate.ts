@@ -12,6 +12,7 @@
 import type { WorkerPool } from "@eden/primitives";
 import type { ContextItem } from "@eden/protocol";
 import { DEFAULT_CACHE_LIMITS, sanitizeItem } from "./cache";
+import { head } from "./text";
 
 /** The module a gate pool's workers import (`PoolOptions.module`). */
 export const GATE_MODULE = import.meta.url;
@@ -30,7 +31,7 @@ export function pooledSanitizer(
     const gated = await Promise.allSettled(
       items.map((raw) => {
         // Clipped before the copy to the worker: sanitizeItem clips to the same lengths, so the result is unchanged.
-        const item = { ...raw, title: raw.title.slice(0, 500), text: raw.text.slice(0, maxTextChars) };
+        const item = { ...raw, title: head(raw.title, 500), text: head(raw.text, maxTextChars) };
         const cost = item.title.length + item.text.length;
         return pool.runOrInline<ContextItem>("gateItem", { item, maxTextChars }, cost, signal);
       }),
