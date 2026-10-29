@@ -182,6 +182,19 @@ describe("source-side updates", () => {
     expect(factsShown(item, `at ${from}`, [u])).toEqual([fact.id]);
   });
 
+  test("a fact sharing its time with another fact on the same item is not updated", () => {
+    const w = buildWorld({ seed: 4 });
+    const item = w.items.find((i) => i.facts.length > 0)!;
+    item.text = "Lunch at 12:30, call at 12:30";
+    const [a, b] = ["t:one", "t:two"];
+    w.facts.set(a, { id: a, detail: "lunch 12:30", items: [item.id] });
+    w.facts.set(b, { id: b, detail: "call 12:30", items: [item.id] });
+    item.facts = [a, b];
+    const updates = planUpdates(w, 4, 1, 1);
+    expect(updates.map((u) => u.fact)).not.toContain(a);
+    expect(updates.map((u) => u.fact)).not.toContain(b);
+  });
+
   test("a run without updates scores exactly as before; with them, stale deliveries are counted", async () => {
     const base = { users: 1, sessionsPerUser: 6, seed: 2, profiles: REALISTIC, timeScale: 0, waitMs: 0, model: null };
     const off = await runQuality(base);
