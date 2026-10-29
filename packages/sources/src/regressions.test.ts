@@ -225,6 +225,14 @@ describe("mcp reconnect", () => {
     expect(state.connects).toBe(1);
   });
 
+  test("a deliberate close right after connecting sets no backoff", async () => {
+    const { src, state } = source();
+    expect((await src.search(q, signal())).length).toBe(1);
+    await src.close();
+    expect((await src.search(q, signal())).length).toBe(1);
+    expect(state.connects).toBe(2);
+  });
+
   test("a reconnect checks the tool is read-only again (D7)", async () => {
     const { src, state } = source({ quickCloseMs: 0, laterWritable: true });
     expect((await src.search(q, signal())).length).toBe(1);
@@ -271,6 +279,22 @@ describe("gate failures and late reports", () => {
     const src: Source = { id: "s", kind: "t", description: "", search: async () => [item] };
     const [out] = await f.search([src], query("dana"), { timeoutMs: 30 });
     expect(out!.status).toBe("timeout");
+  });
+
+  test("a deadline that runs out in our gate after the source answered says nothing against the source", async () => {
+    const f = new SourceFanout({
+      sanitize: (_items, signal) =>
+        new Promise((_, reject) => signal?.addEventListener("abort", () => reject(signal.reason), { once: true })),
+      breaker: { minCalls: 1, failureRate: 0.5, openMs: 60_000 },
+      ratePerSec: 100,
+      burst: 100,
+      cacheBytes: 0,
+    });
+    let calls = 0;
+    const src: Source = { id: "s", kind: "t", description: "", search: async () => (calls++, [item]) };
+    for (const text of ["a", "b"])
+      expect((await f.search([src], query(text), { timeoutMs: 20 }))[0]!.status).toBe("timeout");
+    expect(calls).toBe(2); // the breaker did not open after the first
   });
 
   test("a call allowed before the breaker opened that fails late does not push the probe back", async () => {
