@@ -126,7 +126,6 @@ interface Session {
   inflight: Promise<Injection | null> | null;
   abort: AbortController;
   closed: boolean;
-  /** The last lookup's planner outcomes, for its trace (shape names and counts only). */
   /** The planner's shadow lookup in flight, if any (shadow mode). */
   shadowing?: Promise<void>;
 }
@@ -160,7 +159,11 @@ interface Built {
  */
 const MAX_RECORDED = 200;
 const MAX_RECORDED_USERS = 10_000;
-/** Injections awaiting a usage verdict per session; past this the oldest counts as unused (an ask-only session). */
+/**
+ * Injections awaiting a usage verdict per session; past this the oldest is dropped with no verdict. An ask-only session
+ * (an MCP client) sends no events, so nothing it was given can ever show use: counting those as unused would teach the
+ * source map that the sources answering its asks are useless.
+ */
 const MAX_OUTSTANDING = 64;
 
 export class ContextPartner {
@@ -498,11 +501,7 @@ export class ContextPartner {
       deliveredTurn: s.turn,
     });
     // Usage expires by turns, and only events move turns: a session that only asks would hold every answer forever.
-    while (s.outstanding.size > MAX_OUTSTANDING) {
-      const [id, o] = s.outstanding.entries().next().value as [string, Outstanding];
-      s.outstanding.delete(id);
-      this.record(s.scope, id, o.sourceIds, o.situation, false);
-    }
+    while (s.outstanding.size > MAX_OUTSTANDING) s.outstanding.delete(s.outstanding.keys().next().value as string);
     // The shape that retrieved each item learns it was worth delivering, once the agent has it (D18, D39).
     for (const i of built.items) this.deps.planner?.creditDelivery(s.scope, i.sourceId, i.id);
   }
@@ -554,9 +553,7 @@ export class ContextPartner {
       // An entity with a term no cached item holds matches nothing (never intern it: that grows the cache's vocab).
       const all = termIds(e, s.vocab, true).n;
       const t = termIds(e, vocab, false);
-      if (t.n !== all) return [];
-      // Its common words are no evidence the item names it; an entity of common words only matches nothing.
-      return Array.from(t.ids.subarray(0, t.n)).filter((id) => !isStopword(vocab.term(id)));
+      return t.n === all ? Array.from(t.ids.subarray(0, t.n)) : [];
     });
     return (
       cache
