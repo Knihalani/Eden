@@ -29,18 +29,29 @@ export class StaticSource implements Source {
     this.items = docs.map((d) => ({ ...d, id: itemId(id, d.ref), sourceId: id }));
   }
 
+  /** Lists by time when any of its items has a start (`meta.start`). */
+  get listsByTime(): boolean {
+    return this.items.some((i) => i.meta?.start !== undefined);
+  }
+
   async search(query: SearchQuery): Promise<ContextItem[]> {
     const terms = new Set([...words(query.text), ...query.entities.flatMap(words)]);
-    if (terms.size === 0) return [];
+    const w = query.window;
+    // With a window, what starts in it comes first, matched words or not (a calendar listed by time).
+    const inWindow = (item: ContextItem) => {
+      const day = item.meta?.start?.slice(0, 10);
+      return !!w && !!day && day >= w.start && day < w.end;
+    };
+    if (terms.size === 0 && !w) return [];
     return this.items
       .map((item) => {
         const hay = new Set(words(`${item.title} ${item.text}`));
         let hits = 0;
         for (const t of terms) if (hay.has(t)) hits++;
-        return { item, hits };
+        return { item, hits, dated: inWindow(item) };
       })
-      .filter((x) => x.hits > 0)
-      .sort((a, b) => b.hits - a.hits)
+      .filter((x) => x.hits > 0 || x.dated)
+      .sort((a, b) => Number(b.dated) - Number(a.dated) || b.hits - a.hits)
       .slice(0, query.limit)
       .map((x) => x.item);
   }
