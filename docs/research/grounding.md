@@ -122,6 +122,12 @@ item's participants about 2.6 µs per candidate.
   (`startTime`/`endTime` and similar) with the window, and sends no words. Measured on static and simulated sources
   only.
 - One-word names never ground a person; a first name grounds an event only for a meeting request.
+- A past verb moves a weekday back only with at most one word between: "what did we discuss on Monday" is the coming
+  Monday. "Next" counts when an event word follows within three words, so "your next payment for the coffee machine"
+  still asks for an event; a single shared title word then needs a named day, which keeps that narrow.
+- An arriving message that names a day and shares an uncommon word with that day's event grounds it ("Globex
+  Ventures: payment due on 12 November" finds "Globex <> Robin" that day): intended, and the branch's remaining
+  false-fire risk.
 
 ## Reproduce
 
