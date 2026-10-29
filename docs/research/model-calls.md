@@ -32,9 +32,10 @@ and summarise several items in a sentence. The agent now does that reading itsel
 ## Skipping the judge for weak candidate sets (measured, rejected)
 
 Measured with a scratch patch that is not in the tree (a `judgeSkipBelow` setting on the commit before D43's), so
-these rows cannot be reproduced from main. A candidate log (zoo-tune seeds 1–10, 1,463 judge calls, 1,108 perfect-judge picks) showed no free rule: candidates
-holding one query term were picked 6% of the time, two terms 23%, three 45%. The narrowest rule, "skip the judge when
-every candidate holds at most one query term and the best scores below S", end to end:
+these rows cannot be reproduced from main. A candidate log (zoo-tune seeds 1–10, 1,463 judge calls, 1,108
+perfect-judge picks) showed no free rule: candidates holding one query term were picked 6% of the time, two terms 23%,
+three 45%. The narrowest rule, "skip the judge when every candidate holds at most one query term and the best scores
+below S", end to end:
 
 | S | Judge calls saved | zoo-tune recall per seed | Held-out B recall per seed |
 |---|---|---|---|
