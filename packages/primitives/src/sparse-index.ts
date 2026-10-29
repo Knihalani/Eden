@@ -72,10 +72,13 @@ export class SparseIndex {
   // Query scratch.
   private acc = new Float32Array(64);
   private cov = new Float32Array(64);
-  private hit = new Uint8Array(64);
-  private stamp = new Int32Array(64);
+  // Per doc: distinct query terms matched (Uint32, so a long query cannot wrap it), and the term that last counted.
+  private hit = new Uint32Array(64);
+  private stamp = new Uint32Array(64);
   private touched = new Int32Array(64);
   private queryNo = 0;
+  // Per term: the query that last held it, so a repeated query term is skipped in O(1).
+  private queryTermStamp: Uint32Array = new Uint32Array(64);
   // Insert scratch, indexed by term id: per-field counts tagged with a stamp (no clearing, no hashing), the doc-level
   // seen stamp, and the touched-term lists. Replaced a Map and a Set per insert (bench/index.bench.ts).
   private tfCount = new Uint32Array(1_024);
@@ -234,12 +237,20 @@ export class SparseIndex {
     const lens = this.lens;
     let touchedN = 0;
     let totalIdf = 0;
+    if (this.queryNo > 0xffff_ffff - n - 1) {
+      // Stamps are Uint32: before the counter wraps, clear them so an old stamp can never equal a new one.
+      this.stamp.fill(0);
+      this.queryTermStamp.fill(0);
+      this.queryNo = 0;
+    }
+    if (this.queryTermStamp.length < this.df.length) this.queryTermStamp = growU32(this.queryTermStamp, this.df.length);
+    const queryMark = ++this.queryNo;
+    const termStamp = this.queryTermStamp;
     for (let q = 0; q < n; q++) {
       const t = query[q]!;
       if (t >= this.df.length || this.df[t] === 0) continue;
-      let dup = false;
-      for (let p = 0; p < q; p++) if (query[p] === t) dup = true;
-      if (dup) continue;
+      if (termStamp[t] === queryMark) continue; // a repeated query term counts once
+      termStamp[t] = queryMark;
       const idf = this.idf(t);
       totalIdf += idf;
       const mark = ++this.queryNo; // count coverage and matches once per doc for this term
@@ -280,7 +291,7 @@ export class SparseIndex {
     for (let j = 0; j < count; j++) {
       const d = results.docs[j]!;
       results.coverage[j] = totalIdf > 0 ? cov[d]! / totalIdf : 0;
-      results.matched[j] = hit[d]!;
+      results.matched[j] = Math.min(hit[d]!, 255); // matched is a Uint8 count: 255 means "255 or more"
     }
     for (let i = 0; i < touchedN; i++) {
       const d = touched[i]!;
@@ -301,8 +312,8 @@ export class SparseIndex {
       this.alive = growU8(this.alive, size);
       this.acc = new Float32Array(size);
       this.cov = new Float32Array(size);
-      this.hit = new Uint8Array(size);
-      this.stamp = new Int32Array(size);
+      this.hit = new Uint32Array(size);
+      this.stamp = new Uint32Array(size);
       this.touched = new Int32Array(size);
     }
     return doc;

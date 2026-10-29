@@ -169,26 +169,37 @@ export class MultiMatcher {
     for (let i = 0; i < n; i++) {
       const c = text.charCodeAt(i);
       let col: number;
+      // A character that folds to several (a ligature: "ﬁ" is "fi") is fed as its expansion, as the tokenizer and
+      // foldPattern read it; every expanded character starts at the ligature's index.
+      let expanded: string | null = null;
       if (c < 128) {
         col = asciiCol[FOLD[c]!]!;
       } else {
         const f = foldOf(c);
         if (f === FOLD_DROP) continue;
-        col = f === FOLD_EXPAND ? 0 : this.column(f);
+        if (f === FOLD_EXPAND) {
+          expanded = foldString(String.fromCharCode(c));
+          if (expanded.length === 0) continue;
+          col = this.column(expanded.charCodeAt(0));
+        } else col = this.column(f);
       }
-      ring[k & ringMask] = i;
-      k++;
-      s = delta[s * cols + col]!;
-      const from = outStart[s]!;
-      const to = outStart[s + 1]!;
-      if (from === to) continue;
-      for (let j = from; j < to; j++) {
-        const p = this.outList[j]!;
-        const start = ring[(k - this.lens[p]!) & ringMask]!;
-        const end = afterMarks(text, i + 1);
-        if (wholeWord && !(boundaryBefore(text, start) && boundaryAt(text, end))) continue;
-        if (stop !== null && stop()) return;
-        if (onMatch !== null) onMatch(p, start, end);
+      for (let u = 0; ;) {
+        ring[k & ringMask] = i;
+        k++;
+        s = delta[s * cols + col]!;
+        const from = outStart[s]!;
+        const to = outStart[s + 1]!;
+        for (let j = from; j < to; j++) {
+          const p = this.outList[j]!;
+          const start = ring[(k - this.lens[p]!) & ringMask]!;
+          const end = afterMarks(text, i + 1);
+          if (wholeWord && !(boundaryBefore(text, start) && boundaryAt(text, end))) continue;
+          if (stop !== null && stop()) return;
+          if (onMatch !== null) onMatch(p, start, end);
+        }
+        if (expanded === null || ++u >= expanded.length) break;
+        const e = expanded.charCodeAt(u);
+        col = e < 128 ? asciiCol[e]! : this.column(e);
       }
     }
   }

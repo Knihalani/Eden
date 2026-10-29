@@ -256,20 +256,20 @@ export class Isotonic {
     const weight = new Float64Array(m);
     const sum = new Float64Array(m);
     let top = 0;
-    for (let r = 0; r < m; r++) {
-      const i = order[r]!;
-      const x = scores[i]!;
-      const y = labels[i]!;
-      if (top > 0 && last[top - 1] === x) {
-        weight[top - 1]! += 1;
-        sum[top - 1]! += y;
-      } else {
-        first[top] = x;
-        last[top] = x;
-        weight[top] = 1;
-        sum[top] = y;
-        top++;
+    for (let r = 0; r < m;) {
+      // A run of tied scores enters as one point before any pooling, so the fit does not depend on their order.
+      const x = scores[order[r]!]!;
+      let w = 0;
+      let y = 0;
+      for (; r < m && scores[order[r]!]! === x; r++) {
+        w++;
+        y += labels[order[r]!]!;
       }
+      first[top] = x;
+      last[top] = x;
+      weight[top] = w;
+      sum[top] = y;
+      top++;
       // Pool while the previous block's mean is ≥ this one's (equal means merge too, so block values strictly rise).
       while (top > 1 && sum[top - 2]! * weight[top - 1]! >= sum[top - 1]! * weight[top - 2]!) {
         weight[top - 2]! += weight[top - 1]!;

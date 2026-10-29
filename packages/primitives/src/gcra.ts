@@ -55,6 +55,7 @@ export class Gcra<K = string> {
 
   /** Blocks `key` for at least `ms` (e.g. an upstream's Retry-After). */
   penalize(key: K, ms: number): void {
+    if (!(ms >= 0)) return; // NaN or negative (an unparsable Retry-After): no penalty, rather than a TAT of NaN
     const now = this.now();
     const blockedUntil = now + ms + this.interval + this.tolerance;
     this.tat.set(key, Math.max(this.tat.get(key) ?? now, blockedUntil));

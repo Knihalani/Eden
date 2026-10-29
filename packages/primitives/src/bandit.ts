@@ -191,7 +191,9 @@ export class BetaBandit {
     }
     let m = 0;
     for (let i = 0; i < this.arms; i++) if (eligible === null || eligible[i] !== 0) m++;
-    const uniform = m > 0 ? Math.min(k, m) / m : 0;
+    // The ε branch picks min(kk, m) of the m eligible arms, with kk clamped exactly as `select` clamps k.
+    const kk = Math.max(0, Math.min(k, this.topIds.length, chosen.length));
+    const uniform = m > 0 ? Math.min(kk, m) / m : 0;
     for (let i = 0; i < this.arms; i++) {
       const isEligible = eligible === null || eligible[i] !== 0;
       out[i] = isEligible ? (1 - epsilon) * (counts[i]! / total) + epsilon * uniform : 0;
