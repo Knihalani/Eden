@@ -70,9 +70,6 @@ const SECRET_KEY_SUFFIX = new RegExp(`(?:${SECRET_NOUNS.join("|")})s?[0-9]?$`, "
  */
 const SECRET_TOKEN_PATTERNS = [
   String.raw`\bBearer\s+[A-Za-z0-9._\-+=/]+`,
-  // HTTP Basic credentials: base64 of user:password. A digit, + or / is required so prose ("Basic information")
-  // keeps its words; base64 of a real credential pair has one in all but freak cases.
-  String.raw`\bBasic\s+(?=[A-Za-z0-9+/]*[0-9+/])[A-Za-z0-9+/]{8,}={0,2}`,
   // Dashed sk- keys (sk-ant-api03-…, sk-proj-…) are SK_DASHED below.
   String.raw`\bsk-[A-Za-z0-9]{8,}`,
   String.raw`\b[sr]k_(?:live|test)_[A-Za-z0-9]{8,}`,
@@ -151,6 +148,29 @@ function redactDashedSk(s: string): string {
 
 function hasDashedSk(s: string): boolean {
   for (const m of s.matchAll(SK_DASHED)) if (DIGIT.test(m[0])) return true;
+  return false;
+}
+
+/**
+ * HTTP Basic credentials: "Basic " and base64 of user:password. A pass of its own, like dashed sk- keys: the token is
+ * a credential only if it decodes to printable text holding a ":", which prose after the word ("Basic Input/Output
+ * System") never does.
+ */
+const BASIC_AUTH = /\bBasic\s+([A-Za-z0-9+/]{8,}={0,2})(?![A-Za-z0-9+/=])/g;
+
+function isBasicCredential(b64: string): boolean {
+  if (b64.length % 4 === 1) return false;
+  const decoded = Buffer.from(b64, "base64").toString("latin1");
+  return decoded.includes(":") && /^[\x20-\x7e]+$/.test(decoded);
+}
+
+function redactBasic(s: string): string {
+  BASIC_AUTH.lastIndex = 0;
+  return s.replace(BASIC_AUTH, (m, b64: string) => (isBasicCredential(b64) ? REDACTED : m));
+}
+
+function hasBasic(s: string): boolean {
+  for (const m of s.matchAll(BASIC_AUTH)) if (isBasicCredential(m[1]!)) return true;
   return false;
 }
 
@@ -301,7 +321,7 @@ export function redactString(s: string): string {
   // second time — and a hand-written gate is exactly what drifted out of step
   // with the replacer.
   SECRET_INLINE.lastIndex = 0;
-  const t = redactDashedSk(redactPem(s)).replace(SECRET_INLINE, REDACTED);
+  const t = redactBasic(redactDashedSk(redactPem(s))).replace(SECRET_INLINE, REDACTED);
 
   let out = "";
   let cursor = 0;
@@ -320,7 +340,7 @@ function stringHasSecret(s: string): boolean {
   // Shortest token pattern is `Bearer a` (8). Assignment scan needs `=` or `:`.
   // Plain short strings (synth ids, tags) cannot match either.
   if (s.length < 8 && s.indexOf("=") < 0 && s.indexOf(":") < 0) return false;
-  return SECRET_ANY.test(s) || PEM_ANY.test(s) || hasDashedSk(s) || scanAssignments(s, null);
+  return SECRET_ANY.test(s) || PEM_ANY.test(s) || hasDashedSk(s) || hasBasic(s) || scanAssignments(s, null);
 }
 
 /**

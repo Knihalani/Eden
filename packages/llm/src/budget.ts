@@ -1,7 +1,7 @@
 /**
  * The model is the expensive, slow part, so it is rationed. A budget caps calls and spend per session and per user
- * per day; `charge` reserves before a call and `settle` books what it really cost. When a cap is reached the engine
- * takes its no-model path; it never queues work to spend later.
+ * per day; `reserve` reserves before a call and `settle` books what its `Reservation` really cost. When a cap is
+ * reached the engine takes its no-model path; it never queues work to spend later.
  */
 export interface BudgetLimits {
   callsPerSession: number;

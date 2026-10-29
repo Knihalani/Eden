@@ -120,4 +120,8 @@ test("HTTP Basic credentials are redacted; prose after the word Basic keeps its 
   expect(out).not.toContain("YWRtaW46U3VwZXJTZWNyZXQxMjM0NQ");
   expect(sanitizeForStore("Basic information about the plan")).toBe("Basic information about the plan");
   expect(sanitizeForStore("The Basic Plan costs 9 dollars")).toBe("The Basic Plan costs 9 dollars");
+  expect(sanitizeForStore("The Basic Input/Output System (BIOS)")).toBe("The Basic Input/Output System (BIOS)");
+  expect(sanitizeForStore("basic income/healthcare reform")).toBe("basic income/healthcare reform");
+  expect(sanitizeForStore("curl -u x -H 'Authorization: Basic dXNlcjpwYXNz'")).not.toContain("dXNlcjpwYXNz");
+  expect(containsSecret("Basic YWRtaW46U3VwZXJTZWNyZXQxMjM0NQ==")).toBe(true);
 });
