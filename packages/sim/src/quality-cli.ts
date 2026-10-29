@@ -5,7 +5,7 @@
  *   [--planner-no-reuse] [--planner-deadline-margin 2] [--planner-latency-quantile 0.9]
  *   [--planner-mode serve|shadow] [--promote-after N]] [--time 0] [--wait 0]
  *   [--noise 1] [--updates 0] [--refresh-after-hours H] [--max-refreshes 3] [--tool-rate 0.4]
- *   [--judge none|perfect|noisy] [--live] [--brief]
+ *   [--judge none|perfect|noisy] [--ask-model] [--live] [--brief]
  *
  * Plays generated sessions over simulated sources and prints the quality report as JSON. Without --live no model is
  * used (free, deterministic at --time 0). --time 1 runs source latency and agent pacing in real time.
@@ -48,6 +48,7 @@ const report = await runQuality({
       ? { refreshAfterMs: Number(arg("refresh-after-hours", "0")) * 3_600_000 }
       : {}),
     ...(args.includes("--max-refreshes") ? { maxRefreshes: Number(arg("max-refreshes", "3")) } : {}),
+    ...(args.includes("--ask-model") ? { askWithModel: true } : {}),
   },
   agentToolRate: Number(arg("tool-rate", "0.4")),
   model,

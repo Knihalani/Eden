@@ -12,6 +12,7 @@ const partner = buildPartner({
   sources: staticResolver(process.env.EDEN_SOURCES_FILE),
   sourceMapPath: config.sourceMapPath,
   queryPlanner: config.queryPlanner,
+  askWithModel: config.askWithModel,
   onShadow: process.env.EDEN_TRACE === "1" ? (r) => console.log(JSON.stringify({ shadow: r })) : undefined,
   onTrace: process.env.EDEN_TRACE === "1" ? (t) => console.log(JSON.stringify(t)) : undefined,
 });
