@@ -36,7 +36,11 @@ export class Deadline {
 
   /** A sub-deadline of `f` (0..1) of what is left, keeping the rest for later stages. */
   fraction(f: number): Deadline {
-    return this.child(this.remaining() * Math.min(1, Math.max(0, f)));
+    const share = Math.min(1, Math.max(0, f));
+    const left = this.remaining();
+    // Unbounded: a positive share stays unbounded, but a zero share is no time at all (Infinity × 0 would be NaN).
+    if (left === Infinity) return share > 0 ? this.child(Infinity) : this.child(0);
+    return this.child(left * share);
   }
 
   /** Resolves with `work`, or rejects when the deadline passes first. `work` should honour `this.signal`. */

@@ -79,6 +79,8 @@ const MIN_CALL_SAMPLES = 5;
 const CALL_LATENCY_WINDOW_MS = 600_000;
 
 const RATE_LIMITED = /\b429\b|rate.?limit|too many requests/i;
+/** The name of an error raised by our own gate (redaction) rather than by the source. */
+const GATE_ERROR = "GateError";
 /** Per-source state kept for at most this many (user, source) pairs; the least recently used is dropped. */
 const MAX_STATES = 100_000;
 
@@ -147,7 +149,8 @@ export class SourceFanout {
     const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
     const key = `${scopeKey(scope)}|${source.id}`;
     const s = this.state(key);
-    if (!s.breaker.allow() || this.rate.take(key) > 0 || !s.limiter.tryAcquire()) return null;
+    const epoch = this.admit(key, s);
+    if (typeof epoch !== "number") return null;
     const started = performance.now();
     let raw: ContextItem | null;
     try {
@@ -160,7 +163,7 @@ export class SourceFanout {
       }
       s.latency.record(performance.now() - started);
       s.limiter.release("dropped");
-      s.breaker.failure();
+      s.breaker.failure(epoch);
       if (RATE_LIMITED.test(message)) this.rate.penalize(key, retryAfterMs(message) ?? 5_000);
       return null;
     }
@@ -168,7 +171,7 @@ export class SourceFanout {
     // that fails or runs out of time drops the item and says nothing against the source.
     s.latency.record(performance.now() - started);
     s.limiter.release("ok");
-    s.breaker.success();
+    s.breaker.success(epoch);
     if (!raw) return null;
     try {
       const [item] = await this.options.sanitize([raw], signal);
@@ -245,7 +248,7 @@ export class SourceFanout {
               throw e;
             }
             this.recordCall(sourceKey(q), t0, forgets);
-            const items = await this.options.sanitize(raw, sig);
+            const items = await this.gate(raw, sig);
             if (!sig.aborted && this.forgets === forgets) this.results?.set(k, items, sizeOf(items));
             return items;
           },
@@ -280,6 +283,34 @@ export class SourceFanout {
   /** The source's recent latency quantile in ms (NaN if no calls yet), for observability. */
   latency(scope: Scope, sourceId: string, q: number): number {
     return this.per.get(`${scopeKey(scope)}|${sourceId}`)?.latency.quantile(q) ?? NaN;
+  }
+
+  /**
+   * Admits one call to a source, or says why not. Each check that refuses takes nothing: the rate token is spent and
+   * the breaker's half-open probe is taken only once the call is sure to go, so a call skipped as limited or busy
+   * neither burns a token nor uses up the probe. Returns the breaker epoch to report with.
+   */
+  private admit(key: string, s: PerSource): number | "open" | "limited" | "busy" {
+    if (s.breaker.state === "open") return "open";
+    if (this.rate.available(key) < 1) return "limited";
+    if (!s.limiter.tryAcquire()) return "busy";
+    if (!s.breaker.allow()) {
+      s.limiter.release("ignored"); // half-open with its probe already out
+      return "open";
+    }
+    this.rate.take(key);
+    return s.breaker.epoch;
+  }
+
+  /** Sanitizes a source's items, marking a failure as the gate's (`GATE_ERROR`), not the source's. */
+  private async gate(items: ContextItem[], signal: AbortSignal): Promise<ContextItem[]> {
+    try {
+      return await this.options.sanitize(items, signal);
+    } catch (e) {
+      const error = new Error(`gate: ${e instanceof Error ? e.message : String(e)}`);
+      error.name = GATE_ERROR;
+      throw error;
+    }
   }
 
   private state(key: string): PerSource {
@@ -332,11 +363,13 @@ export class SourceFanout {
       }
     }
     const s = this.state(sourceKey);
-    if (!s.breaker.allow()) return fallback("open");
-    if (this.rate.take(sourceKey) > 0) return fallback("limited");
-    if (!s.limiter.tryAcquire()) return fallback("busy");
+    const epoch = this.admit(sourceKey, s);
+    if (typeof epoch !== "number") return fallback(epoch);
 
     const started = performance.now();
+    const forgets = this.forgets;
+    // Set once the source has answered: a deadline that runs out after that ran out in our gate, not at the source.
+    let answered = false;
     try {
       // A planned source whose calls went through `planCalls` returns items sanitized there: not gated twice.
       const presanitized = source instanceof PlannedSource && source.via !== undefined && this.minted.has(source.via);
@@ -344,18 +377,32 @@ export class SourceFanout {
         cacheKey,
         async (signal) => {
           const raw = await source.search(query, signal);
-          return presanitized ? raw : this.options.sanitize(raw, signal);
+          answered = true;
+          return presanitized ? raw : this.gate(raw, signal);
         },
         deadline,
       );
       s.latency.record(performance.now() - started);
       s.limiter.release("ok");
-      s.breaker.success();
-      this.results?.set(cacheKey, items, sizeOf(items));
+      s.breaker.success(epoch);
+      // A forget while the call ran: writing the result back could undo it.
+      if (this.forgets === forgets) this.results?.set(cacheKey, items, sizeOf(items));
       return done("ok", items);
     } catch (e) {
       const message = String(e);
       const timedOut = timeout.aborted;
+      if ((e as Error | undefined)?.name === GATE_ERROR || (answered && timedOut)) {
+        s.latency.record(performance.now() - started);
+        if (timedOut) {
+          // The source answered so late that the gate ran out of time: neither a success nor the source's failure.
+          s.limiter.release("ignored");
+          return fallback("timeout", message);
+        }
+        // The source answered; our gate failed (a worker pool overloaded). No evidence against the source.
+        s.limiter.release("ok");
+        s.breaker.success(epoch);
+        return fallback("error", message);
+      }
       if (deadline.aborted && !timedOut) {
         // The caller gave up (session ended, user forgotten): no evidence against the source. The breaker forgets
         // a half-open probe that never reports.
@@ -364,7 +411,7 @@ export class SourceFanout {
       }
       s.latency.record(performance.now() - started);
       s.limiter.release("dropped");
-      s.breaker.failure();
+      s.breaker.failure(epoch);
       if (RATE_LIMITED.test(message)) this.rate.penalize(sourceKey, retryAfterMs(message) ?? 5_000);
       return fallback(timedOut ? "timeout" : "error", message);
     }
