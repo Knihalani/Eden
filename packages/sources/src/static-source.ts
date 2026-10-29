@@ -29,6 +29,11 @@ export class StaticSource implements Source {
     this.items = docs.map((d) => ({ ...d, id: itemId(id, d.ref), sourceId: id }));
   }
 
+  /** Lists by time when any of its items has a start (`meta.start`). */
+  get listsByTime(): boolean {
+    return this.items.some((i) => i.meta?.start !== undefined);
+  }
+
   async search(query: SearchQuery): Promise<ContextItem[]> {
     const terms = new Set([...words(query.text), ...query.entities.flatMap(words)]);
     const w = query.window;

@@ -160,6 +160,11 @@ export class McpSource implements Source {
     }
   }
 
+  /** Lists by time when its search tool takes a date window (read at connect: false until then). */
+  get listsByTime(): boolean {
+    return this.mapping?.window != null;
+  }
+
   async search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]> {
     const client = await this.connect();
     const result = await client.callTool(

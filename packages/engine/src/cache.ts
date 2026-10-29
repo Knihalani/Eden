@@ -17,6 +17,7 @@ import { createHash } from "node:crypto";
 import { dedupText, hamming64, SparseIndex, TextSketcher, Vocab } from "@eden/primitives";
 import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
+import { userOffset } from "./grounding";
 import { head, termIds } from "./text";
 
 const NO_TERMS = new Uint32Array(0);
@@ -59,6 +60,8 @@ class UserCache {
   readonly vocab = new Vocab(256); // Grows by doubling: most users hold few terms.
   readonly index = new SparseIndex({ fields: 2, weights: [2, 1] });
   readonly sketcher = new TextSketcher(this.vocab, 8_192, 3);
+  /** The UTC offset most of the user's events carry (minutes), computed on demand; dropped when events change. */
+  offset: number | undefined;
 }
 
 const simScratch = new Uint32Array(2);
@@ -205,6 +208,7 @@ export class ItemCache {
         continue;
       }
       if (old) this.drop(u, old);
+      if (item.meta?.start) u.offset = undefined;
       const doc = this.index(u, item);
       const entry = { item, fetchedAt: now, doc, sketch: sketchOf(u, item) };
       u.items.set(item.id, entry); // Map order stays oldest-first for eviction (old entry was removed above).
@@ -288,18 +292,32 @@ export class ItemCache {
   }
 
   /**
-   * Fresh cached items that start at a known time (`meta.start`: events), for requests that name a day rather than
-   * words the item holds (D44). A scan of the user's items, run only for such requests: at most `maxItemsPerUser`.
+   * Fresh cached items that start on one of `days` (YYYY-MM-DD of their `meta.start`: events), soonest first, at most
+   * `limit`: for requests that name a day rather than words the item holds (D44). A scan of the user's items (at most
+   * `maxItemsPerUser`), run only for such requests; the cap keeps what is scored after it small.
    */
-  timed(scope: Scope, now = Date.now()): CacheHit[] {
+  timed(scope: Scope, days: ReadonlySet<string>, now = Date.now(), limit = 30): CacheHit[] {
     const u = this.peek(scope);
-    if (!u) return [];
+    if (!u || days.size === 0) return [];
     const out: CacheHit[] = [];
     for (const e of u.items.values()) {
-      if (!e.item.meta?.start || now - e.fetchedAt > this.limits.ttlMs) continue;
+      const start = e.item.meta?.start;
+      if (!start || !days.has(start.slice(0, 10)) || now - e.fetchedAt > this.limits.ttlMs) continue;
       out.push({ item: e.item, sketch: e.sketch, doc: e.doc, score: 0, coverage: 0, matched: 0 });
     }
-    return out;
+    return out.sort((a, b) => Date.parse(a.item.meta!.start!) - Date.parse(b.item.meta!.start!)).slice(0, limit);
+  }
+
+  /** The UTC offset (minutes) most of the user's cached events carry: their calendar's zone; 0 if none says. */
+  offsetOf(scope: Scope): number {
+    const u = this.peek(scope);
+    if (!u) return 0;
+    if (u.offset === undefined) {
+      const starts: string[] = [];
+      for (const e of u.items.values()) if (e.item.meta?.start) starts.push(e.item.meta.start);
+      u.offset = userOffset(starts);
+    }
+    return u.offset;
   }
 
   /** The cached item `doc`'s sorted unique term ids (title and body, the user's vocabulary); empty if unknown. */

@@ -159,15 +159,17 @@ export function buildArgs(
   text: string,
   limit: number,
   now: number,
-  window?: { start: string; end: string },
+  window?: { start: string; end: string; offsetMinutes?: number },
 ): Record<string, unknown> {
   const args: Record<string, unknown> = { ...m.fixed };
   if (m.text) args[m.text.name] = m.text.array ? [text] : text;
   if (m.limit) args[m.limit] = limit;
   if (m.window && (window || m.window.required)) {
     const day = (d: number) => new Date(now + d * 86_400_000).toISOString().slice(0, 10);
-    // A timestamp argument takes the day's start, with no offset: the server reads it in the user's own zone.
-    const at = (d: string) => (m.window!.time ? `${d}T00:00:00` : d);
+    // A timestamp argument takes the day's start at the user's offset (RFC 3339), "Z" when it is not known.
+    const o = window?.offsetMinutes ?? 0;
+    const zone = o === 0 ? "Z" : `${o < 0 ? "-" : "+"}${pad(Math.abs(o) / 60)}:${pad(Math.abs(o) % 60)}`;
+    const at = (d: string) => (m.window!.time ? `${d}T00:00:00${zone}` : d);
     args[m.window.start] = at(window?.start ?? day(-WINDOW_DAYS[0]));
     args[m.window.end] = at(window?.end ?? day(WINDOW_DAYS[1]));
   }
@@ -240,3 +242,5 @@ export function buildFetchArgs(m: FetchMapping, ref: string): Record<string, unk
   if (m.ref.numeric && !/^\d{1,15}$/.test(ref)) return null;
   return { ...m.fixed, [m.ref.name]: m.ref.numeric ? Number(ref) : ref };
 }
+
+const pad = (n: number) => String(Math.floor(n)).padStart(2, "0");
