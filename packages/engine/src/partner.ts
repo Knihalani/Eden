@@ -833,36 +833,45 @@ export class ContextPartner {
         return null;
       }
       const candidates = unsure.map((x) => x.item);
+      let res: Awaited<ReturnType<Model["chat"]>>;
       try {
-        const res = await this.deps.model.chat({
+        res = await this.deps.model.chat({
           messages: judgeMessages(s.window.join("\n"), candidates),
           cacheKey: userCacheKey(s.scope),
           maxTokens: 60,
           json: true,
           signal: s.abort.signal,
         });
-        modelCalls = 1;
-        costUsd = res.costUsd;
-        this.settle(s, res.costUsd);
-        if (s.closed) return null;
-        const picked = parseJudge(res.text, candidates.length)
-          .slice(0, this.config.maxItemsPerInjection)
-          .map((i) => unsure[i]!);
-        if (picked.length === 0) {
-          done("silent", "model: none");
-          return null;
-        }
-        done(
-          "model",
-          cue.id,
-          picked.map((x) => x.item),
-        );
-        return this.deliver(s, picked, "proactive", `model:${cue.id}`);
       } catch {
         this.settle(s, 0);
+        if (s.closed) return null;
+        // A failing model (bad key, spend limit, outage) is treated as no model, never worse than none (D41). The
+        // reason keeps the cause, so a broken key does not look like a healthy keyless server in traces.
+        const top = this.fallback(unsure);
+        if (top) {
+          done("sources", `fallback:model-error:${cue.id}`, [top.item]);
+          return this.deliver(s, [top], "proactive", `fallback:${cue.id}`);
+        }
         done("silent", "model error");
         return null;
       }
+      modelCalls = 1;
+      costUsd = res.costUsd;
+      this.settle(s, res.costUsd);
+      if (s.closed) return null;
+      const picked = parseJudge(res.text, candidates.length)
+        .slice(0, this.config.maxItemsPerInjection)
+        .map((i) => unsure[i]!);
+      if (picked.length === 0) {
+        done("silent", "model: none");
+        return null;
+      }
+      done(
+        "model",
+        cue.id,
+        picked.map((x) => x.item),
+      );
+      return this.deliver(s, picked, "proactive", `model:${cue.id}`);
     } catch {
       // A failing source map or cache never escapes as an unhandled rejection; the lookup just ends silent.
       done("silent", "error");

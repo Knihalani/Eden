@@ -724,6 +724,45 @@ describe("no-model fallback (D36)", () => {
     expect(await delivered(partner({ model, budget: broke }, [notes]).p, ask)).toEqual(["notes:qbr"]);
   });
 
+  test("a failing model is treated as none: the fallback applies (D41)", async () => {
+    const broken = {
+      id: "broken",
+      chat: async () => {
+        throw new Error("model 402: spend limit");
+      },
+    };
+    const { p, traces } = partner({ model: broken }, [notes]);
+    expect(await delivered(p, ask)).toEqual(["notes:qbr"]);
+    // The trace keeps the cause: a broken key must not look like a keyless server.
+    expect(traces.some((t) => t.decision === "sources" && t.reason.startsWith("fallback:model-error:"))).toBe(true);
+    // Below the fallback's bar a failing model still means silence.
+    expect(await delivered(partner({ model: broken }, [notes]).p, "how did the budget review go")).toEqual([]);
+  });
+
+  test("a model call aborted by session_end delivers nothing, not the fallback (D41)", async () => {
+    let started!: () => void;
+    const inFlight = new Promise<void>((r) => (started = r));
+    const hanging = {
+      id: "hanging",
+      chat: (req: { signal?: AbortSignal }) =>
+        new Promise<never>((_, reject) => {
+          started();
+          req.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+        }),
+    };
+    const budget = new Budget();
+    const { p, traces } = partner({ model: hanging as never, budget }, [notes]);
+    const sessionId = "gone";
+    const pending = p.observe(ev({ kind: "user_message", text: ask, sessionId }), { waitMs: 1_000 });
+    await inFlight;
+    await p.observe(ev({ kind: "session_end", sessionId }));
+    expect((await pending).injection).toBeNull();
+    await Bun.sleep(10);
+    expect(p.takePending({ ...scope, sessionId })).toEqual([]);
+    expect(traces.some((t) => t.sessionId === sessionId && t.decision === "sources")).toBe(false);
+    expect(budget.size.sessions).toBe(0);
+  });
+
   test("bulk mail is never the fallback's pick", async () => {
     const mail = new StaticSource("mail", "mail", [
       { ref: "nl", title: "Quarterly budget review newsletter", text: "Marketing budget review outcome and tips" },

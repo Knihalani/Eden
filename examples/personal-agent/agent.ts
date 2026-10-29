@@ -10,7 +10,14 @@
  */
 import { EdenClient, withContext } from "@eden/client";
 
-const eden = new EdenClient({ apiKey: "dev", userId: "demo-user", sessionId: `demo-${Date.now()}` });
+// No key against the dev server; EDEN_API_KEY against one with EDEN_API_KEYS set. Eden fails open, so a wrong key
+// shows up only through onError.
+const eden = new EdenClient({
+  apiKey: process.env.EDEN_API_KEY,
+  userId: "demo-user",
+  sessionId: `demo-${Date.now()}`,
+  onError: (e) => console.error(`[eden] ${e instanceof Error ? e.message : e}`),
+});
 const baseUrl = process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
 const model = process.env.AGENT_MODEL ?? "gpt-4o-mini";
 
