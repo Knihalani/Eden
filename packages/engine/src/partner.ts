@@ -860,6 +860,13 @@ export class ContextPartner {
         return this.deliver(s, picked, "proactive", `model:${cue.id}`);
       } catch {
         this.settle(s, 0);
+        if (s.closed) return null;
+        // A failing model (bad key, spend limit, outage) is treated as no model, never worse than none (D41).
+        const top = this.fallback(unsure);
+        if (top) {
+          done("sources", `fallback:${cue.id}`, [top.item]);
+          return this.deliver(s, [top], "proactive", `fallback:${cue.id}`);
+        }
         done("silent", "model error");
         return null;
       }

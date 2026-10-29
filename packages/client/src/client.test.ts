@@ -32,6 +32,20 @@ describe("EdenClient", () => {
     await eden.observe({ kind: "external", source: "gmail", text: "New mail" });
     expect(sent).toMatchObject({ userId: "u", sessionId: "s", kind: "external", source: "gmail" });
   });
+
+  test("sends the key as a bearer token, and no authorization header without one (dev server)", async () => {
+    const seen: (string | null)[] = [];
+    const fake = (async (_u: string, init: RequestInit) => {
+      seen.push(new Headers(init.headers).get("authorization"));
+      return Response.json({ injection: null, pending: false });
+    }) as unknown as typeof fetch;
+    await new EdenClient({ apiKey: "k", userId: "u", sessionId: "s", fetch: fake }).observe({
+      kind: "user_message",
+      text: "hi",
+    });
+    await new EdenClient({ userId: "u", sessionId: "s", fetch: fake }).observe({ kind: "user_message", text: "hi" });
+    expect(seen).toEqual(["Bearer k", null]);
+  });
 });
 
 describe("withContext", () => {

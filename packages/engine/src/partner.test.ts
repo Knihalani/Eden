@@ -724,6 +724,20 @@ describe("no-model fallback (D36)", () => {
     expect(await delivered(partner({ model, budget: broke }, [notes]).p, ask)).toEqual(["notes:qbr"]);
   });
 
+  test("a failing model is treated as none: the fallback applies (D41)", async () => {
+    const broken = {
+      id: "broken",
+      chat: async () => {
+        throw new Error("model 402: spend limit");
+      },
+    };
+    const { p, traces } = partner({ model: broken }, [notes]);
+    expect(await delivered(p, ask)).toEqual(["notes:qbr"]);
+    expect(traces.some((t) => t.decision === "sources" && t.reason.startsWith("fallback:"))).toBe(true);
+    // Below the fallback's bar a failing model still means silence.
+    expect(await delivered(partner({ model: broken }, [notes]).p, "how did the budget review go")).toEqual([]);
+  });
+
   test("bulk mail is never the fallback's pick", async () => {
     const mail = new StaticSource("mail", "mail", [
       { ref: "nl", title: "Quarterly budget review newsletter", text: "Marketing budget review outcome and tips" },
