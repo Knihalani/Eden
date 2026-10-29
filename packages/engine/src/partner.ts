@@ -31,7 +31,7 @@ import {
   type ObserveResult,
   type Scope,
 } from "@eden/protocol";
-import { sanitizeForStore } from "@eden/redact";
+import { REDACTED, sanitizeForStore } from "@eden/redact";
 import { Vocab, type WorkerPool } from "@eden/primitives";
 import {
   PlanError,
@@ -702,7 +702,9 @@ export class ContextPartner {
     const all = await this.deps.sources(s.scope).catch((): Source[] => []);
     const jobs = stale.flatMap((x) => {
       const source = all.find((a) => a.id === x.item.sourceId);
-      return source?.fetch ? [{ source, ref: x.item.ref }] : [];
+      // A ref the gate redacted, or Eden's own content hash, cannot be asked for again: no call, no rate token.
+      const fetchable = !x.item.ref.includes(REDACTED) && !x.item.ref.startsWith("eden-h-");
+      return source?.fetch && fetchable ? [{ source, ref: x.item.ref }] : [];
     });
     if (jobs.length === 0 || s.closed) return 0;
     const fresh = await Promise.all(

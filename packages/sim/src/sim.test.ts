@@ -153,6 +153,35 @@ describe("source-side updates", () => {
     expect(factsShown(item, item.text, [u])).toContain(u.next);
   });
 
+  test("relabel moves later sessions' tool output, uses and asks to the new version; old and new text read apart", () => {
+    const w = buildWorld({ seed: 4 });
+    const fact = [...w.facts.values()].find((f) => /\d\d:\d\d/.test(f.detail))!;
+    const from = /\d\d:\d\d/.exec(fact.detail)![0];
+    const u = { session: 1, fact: fact.id, next: `${fact.id}@v2`, from, to: "23:59", items: fact.items };
+    const turn = (fetched: string[]) => ({
+      event: { kind: "tool_result" as const, tool: "t", output: `at ${from}` },
+      label: { kind: "context" as const, ok: [fact.id] },
+      uses: [fact.id],
+      fetched,
+    });
+    const sessions = [0, 1].map((i) => ({
+      id: `s${i}`,
+      tasks: [{ type: "x", style: "none" as const, turns: [turn([fact.id])] }],
+    }));
+    const asks = [{ question: "q", must: [fact.id], ok: [], style: "none" as const, arc: "a" }];
+    relabel(sessions, asks, [u]);
+    const [before, after] = sessions.map((x) => x.tasks[0]!.turns[0]!);
+    expect(before!.uses).toEqual([fact.id]);
+    expect(after!.uses).toEqual([u.next]);
+    expect((after!.event as { output: string }).output).toBe("at 23:59");
+    expect((before!.event as { output: string }).output).toBe(`at ${from}`);
+    expect(asks[0]!.must).toEqual([u.next]);
+    const item = { ...w.items.find((i) => i.id === fact.items[0])!, facts: [u.next] };
+    // A text holding both times is the new version (a note quoting the change), not a stale copy.
+    expect(factsShown(item, `was ${from}, now 23:59`, [u])).toEqual([u.next]);
+    expect(factsShown(item, `at ${from}`, [u])).toEqual([fact.id]);
+  });
+
   test("a run without updates scores exactly as before; with them, stale deliveries are counted", async () => {
     const base = { users: 1, sessionsPerUser: 6, seed: 2, profiles: REALISTIC, timeScale: 0, waitMs: 0, model: null };
     const off = await runQuality(base);
