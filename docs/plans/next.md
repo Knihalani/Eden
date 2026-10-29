@@ -19,7 +19,8 @@ yet unless it says so.
   `candidateScore` 0.3, `entityBonus` 0.35) have never been tuned (ROADMAP M1).
 - **The live model path is unmeasured**: the OpenRouter key's spend limit is used up, so `--live` makes no model call.
 - Connector revocation (`forget(scope, sourceId)`, `POST /v1/forget` with `sourceId`) is already wired; `McpSource`
-  had no `fetch` mapping, so cached items could not be refreshed (item 3 added one; D40 keeps stale copies off the fast path).
+  had no `fetch` mapping, so cached items could not be refreshed (item 3 added one; D40 keeps stale copies off the
+  fast path).
 
 ## The plan
 
