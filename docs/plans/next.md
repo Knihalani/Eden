@@ -19,7 +19,7 @@ yet unless it says so.
   `candidateScore` 0.3, `entityBonus` 0.35) have never been tuned (ROADMAP M1).
 - **The live model path is unmeasured**: the OpenRouter key's spend limit is used up, so `--live` makes no model call.
 - Connector revocation (`forget(scope, sourceId)`, `POST /v1/forget` with `sourceId`) is already wired; `McpSource`
-  had no `fetch` mapping, so cached items could not be refreshed (item 3 added one; the engine does not refresh yet).
+  had no `fetch` mapping, so cached items could not be refreshed (item 3 added one; D40 keeps stale copies off the fast path).
 
 ## The plan
 
@@ -73,3 +73,9 @@ Each item, when done, gets a line here with its PR and its numbers.
   credit added nothing and is not kept. Against main with D37 and D38 (seeds 1–20): calls per lookup down 3–6% on
   every mix, retrieval and recall up or unchanged, no hard false fire (docs/research/query-planner-results.md,
   iteration 6).
+- **3, follow-up: refreshing stale cached items (D40):** the simulation gained source-side updates (`--updates`); a
+  cached copy older than two hours is now never delivered from the fast path, and its cue takes a live lookup.
+  Refetching through `fetch` is built and opt-in (`maxRefreshes`): it added calls and no recall beyond noise. On fresh
+  held-out seeds 31–40 with updates: stale deliveries 4–11 per mix to 0–1, precision up on five of six rows, soft
+  fires down on all, recall up (perfect judge +4.0 to +4.6 facts per seed, as much without updates: the live lookup
+  finds more than the old copy), calls per lookup about 1% lower, no hard false fire (docs/research/refresh.md).
