@@ -12,7 +12,8 @@
 import type { AgentEvent, AskResponse, Injection, ObserveResult } from "@eden/protocol";
 
 export interface EdenClientOptions {
-  apiKey: string;
+  /** The tenant's API key. Omit it against a dev server (`EDEN_DEV=1`), which refuses any key. */
+  apiKey?: string;
   tenantId?: string;
   userId: string;
   sessionId: string;
@@ -45,7 +46,10 @@ export class EdenClient {
     try {
       const res = await (this.options.fetch ?? fetch)(`${this.baseUrl}${path}`, {
         method: "POST",
-        headers: { authorization: `Bearer ${this.options.apiKey}`, "content-type": "application/json" },
+        headers: {
+          ...(this.options.apiKey ? { authorization: `Bearer ${this.options.apiKey}` } : {}),
+          "content-type": "application/json",
+        },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(timeoutMs),
       });
