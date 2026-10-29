@@ -327,4 +327,5 @@ PROFILE=/tmp/prof bun run sim:perf hot --tenant-rps 100000                      
 ```
 
 Profiles: `ideal`, `realistic`, `entities`; judges: `none`, `noisy`, `perfect`; `--noise 4` for a larger mailbox,
-`--tool-rate` for how often the agent fetches context itself, `--model fake` for a model stand-in in perf runs.
+`--tool-rate` for how often the agent fetches context itself, `--model fake` for a model stand-in in perf runs,
+`--updates R` for items that change at the source between sessions (stale cached copies, [refresh.md](refresh.md)).

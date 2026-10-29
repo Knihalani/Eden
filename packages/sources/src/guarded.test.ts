@@ -285,3 +285,112 @@ describe("SourceFanout.planCalls (the query planner's calls)", () => {
     expect(f.planCalls(src).cached(shapeQuery())).toBeUndefined();
   });
 });
+
+describe("SourceFanout fetch", () => {
+  const readable = (fetch: Source["fetch"]) => ({ ...source(async () => []), fetch });
+
+  test("returns the source's copy sanitized; null for a source without fetch or with no such record", async () => {
+    const f = new SourceFanout({ sanitize: redactAll });
+    const got = await f.fetch(
+      readable(async () => item("token secretXYZ")),
+      scope,
+      "1",
+      { timeoutMs: 1_000 },
+    );
+    expect(got?.text).toBe("token [REDACTED]");
+    expect(
+      await f.fetch(
+        source(async () => []),
+        scope,
+        "1",
+        { timeoutMs: 1_000 },
+      ),
+    ).toBeNull();
+    expect(
+      await f.fetch(
+        readable(async () => null),
+        scope,
+        "1",
+        { timeoutMs: 1_000 },
+      ),
+    ).toBeNull();
+  });
+
+  test("a failing source opens the breaker for searches too; a failing gate does not count against the source", async () => {
+    const breaker = { minCalls: 2, failureRate: 0.5, openMs: 60_000 };
+    const f = new SourceFanout({ sanitize: (x) => x, breaker, ratePerSec: 100, burst: 100 });
+    const failing = readable(async () => {
+      throw new Error("500 Internal Server Error");
+    });
+    await f.fetch(failing, scope, "1", { timeoutMs: 1_000 });
+    await f.fetch(failing, scope, "1", { timeoutMs: 1_000 });
+    const [out] = await f.search([failing], query(), { timeoutMs: 1_000 });
+    expect(out!.status).toBe("open");
+    let calls = 0;
+    const counted = readable(async () => {
+      calls++;
+      return item("v1");
+    });
+    expect(await f.fetch(counted, scope, "1", { timeoutMs: 1_000 })).toBeNull(); // Open: not called.
+    expect(calls).toBe(0);
+    const gateFails = new SourceFanout({
+      sanitize: () => {
+        throw new Error("gate failed");
+      },
+      breaker,
+      ratePerSec: 100,
+      burst: 100,
+    });
+    const fine = readable(async () => item("v1"));
+    for (let i = 0; i < 4; i++) expect(await gateFails.fetch(fine, scope, "1", { timeoutMs: 1_000 })).toBeNull();
+    const [after] = await gateFails.search([{ ...fine, search: async () => [] }], query(), { timeoutMs: 1_000 });
+    expect(after!.status).not.toBe("open");
+  });
+
+  test("a 429 holds off later calls; the caller giving up says nothing against the source", async () => {
+    const f = new SourceFanout({ sanitize: (x) => x, ratePerSec: 100, burst: 100 });
+    let calls = 0;
+    const limited = readable(async () => {
+      calls++;
+      throw new Error("429 Too Many Requests");
+    });
+    await f.fetch(limited, scope, "1", { timeoutMs: 1_000 });
+    await f.fetch(limited, scope, "1", { timeoutMs: 1_000 });
+    expect(calls).toBe(1);
+    const breaker = { minCalls: 1, failureRate: 0.5, openMs: 60_000 };
+    const g = new SourceFanout({ sanitize: (x) => x, breaker, ratePerSec: 100, burst: 100 });
+    const hang = readable(
+      (_ref, _scope, signal) =>
+        new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("aborted")))),
+    );
+    const caller = new AbortController();
+    const pending = g.fetch(hang, scope, "1", { timeoutMs: 5_000, signal: caller.signal });
+    caller.abort();
+    expect(await pending).toBeNull();
+    const [out] = await g.search([{ ...hang, search: async () => [] }], query(), { timeoutMs: 1_000 });
+    expect(out!.status).not.toBe("open");
+  });
+
+  test("never throws, and shares the rate limit with searches", async () => {
+    const f = new SourceFanout({ sanitize: (x) => x, ratePerSec: 1, burst: 1 });
+    let calls = 0;
+    const failing = readable(async () => {
+      calls++;
+      throw new Error("500 Internal Server Error");
+    });
+    expect(await f.fetch(failing, scope, "1", { timeoutMs: 1_000 })).toBeNull();
+    expect(await f.fetch(failing, scope, "1", { timeoutMs: 1_000 })).toBeNull(); // The burst of 1 is spent.
+    expect(calls).toBe(1);
+  });
+
+  test("a call past its timeout is abandoned, not awaited", async () => {
+    const f = new SourceFanout({ sanitize: (x) => x });
+    const slow = readable(
+      (_ref, _scope, signal) =>
+        new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("aborted")))),
+    );
+    const t0 = performance.now();
+    expect(await f.fetch(slow, scope, "1", { timeoutMs: 30 })).toBeNull();
+    expect(performance.now() - t0).toBeLessThan(500);
+  });
+});

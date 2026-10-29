@@ -23,8 +23,8 @@ train / held-out split for tuning, and text not written by templates.
 ## M2 — Real connectors
 - Per-user `McpSource` connections over streamable HTTP with OAuth; a token vault interface (tenant-supplied or ours).
 - Per-server search-argument mappings for the first connectors (Gmail, Google Calendar, Notion, Slack, a memory
-  product such as Supermemory or Mem0) and a `fetch` mapping for refresh (built, D35; the engine does not refresh
-  yet).
+  product such as Supermemory or Mem0) and a `fetch` mapping for refresh (built, D35; stale copies are kept off the
+  fast path, and refetching through `fetch` is opt-in, D40).
 - Connector revocation → `forget(scope, sourceId)`.
 - An adaptive query planner per (user, connector): what to send, learned from outcomes
   ([plans/query-planner.md](plans/query-planner.md)). Built (D28) and on by default in the server (D33;

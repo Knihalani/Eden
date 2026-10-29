@@ -4,6 +4,7 @@ import { OracleJudge } from "./judge";
 import { buildSessions } from "./sessions";
 import { IDEAL, REALISTIC, SimIndex, SimSource } from "./sources";
 import { runQuality } from "./quality";
+import { applyUpdate, factsShown, planUpdates, relabel } from "./updates";
 import { buildWorld } from "./world";
 
 const scope = { tenantId: "t", userId: "u" };
@@ -118,5 +119,88 @@ describe("oracle judge", () => {
     expect(parseJudge(res.text, candidates.length)).toEqual([2]);
     expect(oracle.stats.unmatched).toBe(0);
     expect(oracle.stats.candidates).toBe(4);
+  });
+});
+
+describe("source-side updates", () => {
+  test("plan only clock-time facts, deterministically; relabel later sessions; apply and detect stale copies", () => {
+    const plan = (seed: number) => {
+      const w = buildWorld({ seed: 4 });
+      const { sessions, asks } = buildSessions(w, { seed: 4, sessions: 12 });
+      return { w, sessions, asks, updates: planUpdates(w, sessions.length, seed, 0.5) };
+    };
+    const { w, sessions, asks, updates } = plan(9);
+    expect(plan(9).updates).toEqual(updates);
+    expect(updates.length).toBeGreaterThan(5);
+    const u = updates[0]!;
+    expect(w.facts.get(u.fact)!.detail).toContain(u.from);
+    expect(w.facts.get(u.next)!.detail).toContain(u.to);
+    expect(u.from).not.toBe(u.to);
+    relabel(sessions, asks, updates);
+    const labels = (from: number, to: number) =>
+      sessions
+        .slice(from, to)
+        .flatMap((s) => s.tasks.flatMap((t) => t.turns))
+        .flatMap((t) => (t.label.kind === "need" ? t.label.must : []));
+    expect(labels(u.session, sessions.length)).not.toContain(u.fact);
+    expect(labels(0, u.session)).not.toContain(u.next);
+    const item = w.items.find((i) => i.id === u.items[0])!;
+    const oldText = item.text;
+    applyUpdate(w, u, w.now);
+    expect(item.text).toContain(u.to);
+    expect(item.facts).toContain(u.next);
+    expect(factsShown(item, oldText, [u])).toContain(u.fact); // A copy cached before the update states the old fact.
+    expect(factsShown(item, item.text, [u])).toContain(u.next);
+  });
+
+  test("relabel moves later sessions' tool output, uses and asks to the new version; old and new text read apart", () => {
+    const w = buildWorld({ seed: 4 });
+    const fact = [...w.facts.values()].find((f) => /\d\d:\d\d/.test(f.detail))!;
+    const from = /\d\d:\d\d/.exec(fact.detail)![0];
+    const u = { session: 1, fact: fact.id, next: `${fact.id}@v2`, from, to: "23:59", items: fact.items };
+    const turn = (fetched: string[]) => ({
+      event: { kind: "tool_result" as const, tool: "t", output: `at ${from}` },
+      label: { kind: "context" as const, ok: [fact.id] },
+      uses: [fact.id],
+      fetched,
+    });
+    const sessions = [0, 1].map((i) => ({
+      id: `s${i}`,
+      tasks: [{ type: "x", style: "none" as const, turns: [turn([fact.id])] }],
+    }));
+    const asks = [{ question: "q", must: [fact.id], ok: [], style: "none" as const, arc: "a" }];
+    relabel(sessions, asks, [u]);
+    const [before, after] = sessions.map((x) => x.tasks[0]!.turns[0]!);
+    expect(before!.uses).toEqual([fact.id]);
+    expect(after!.uses).toEqual([u.next]);
+    expect((after!.event as { output: string }).output).toBe("at 23:59");
+    expect((before!.event as { output: string }).output).toBe(`at ${from}`);
+    expect(asks[0]!.must).toEqual([u.next]);
+    const item = { ...w.items.find((i) => i.id === fact.items[0])!, facts: [u.next] };
+    // A text holding both times is the new version (a note quoting the change), not a stale copy.
+    expect(factsShown(item, `was ${from}, now 23:59`, [u])).toEqual([u.next]);
+    expect(factsShown(item, `at ${from}`, [u])).toEqual([fact.id]);
+  });
+
+  test("a fact sharing its time with another fact on the same item is not updated", () => {
+    const w = buildWorld({ seed: 4 });
+    const item = w.items.find((i) => i.facts.length > 0)!;
+    item.text = "Lunch at 12:30, call at 12:30";
+    const [a, b] = ["t:one", "t:two"];
+    w.facts.set(a, { id: a, detail: "lunch 12:30", items: [item.id] });
+    w.facts.set(b, { id: b, detail: "call 12:30", items: [item.id] });
+    item.facts = [a, b];
+    const updates = planUpdates(w, 4, 1, 1);
+    expect(updates.map((u) => u.fact)).not.toContain(a);
+    expect(updates.map((u) => u.fact)).not.toContain(b);
+  });
+
+  test("a run without updates scores exactly as before; with them, stale deliveries are counted", async () => {
+    const base = { users: 1, sessionsPerUser: 6, seed: 2, profiles: REALISTIC, timeScale: 0, waitMs: 0, model: null };
+    const off = await runQuality(base);
+    expect(off.updates).toEqual({ planned: 0, applied: 0, updatedDelivered: 0, staleDelivered: 0 });
+    const on = await runQuality({ ...base, updates: 0.5 });
+    expect(on.updates.applied).toBe(on.updates.planned);
+    expect(on.updates.planned).toBeGreaterThan(0);
   });
 });
