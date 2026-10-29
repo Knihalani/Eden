@@ -195,6 +195,7 @@ describe("plans in traces", () => {
       budget: new Budget(),
       model,
       planner: new QueryPlanner({ seed: 1 }),
+      config: { askWithModel: true },
       onTrace: (t) => traces.push(t),
     });
     const asking = p.ask({ ...who, question: "Globex renewal for Dana Lee?" });
