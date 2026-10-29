@@ -23,10 +23,22 @@ export function renderPacket(items: ContextItem[], options: { maxBytes: number }
     const size = utf8Length(line);
     if (size > room || cut) line = truncateUtf8(line, room - 3) + "…"; // "…" is 3 bytes
     lines.push(line);
-    bytes += (size > room ? utf8Length(line) : size) + 1;
+    bytes += (size > room || cut ? utf8Length(line) : size) + 1;
   }
   lines.push(footer);
   return lines.join("\n");
+}
+
+/**
+ * The words the agent was shown in a packet or answer: the envelope's lines and each item's `[source]` tag dropped.
+ * Usage tracking looks for these words later, so it must not count words the packet cut or the envelope adds.
+ */
+export function shownText(rendered: string): string {
+  return rendered
+    .split("\n")
+    .filter((line) => line !== HEADER && line !== "</context>")
+    .map((line) => line.replace(/^- \[[^\]]*\] /, ""))
+    .join("\n");
 }
 
 /** An ask answer composed by the model, in the same envelope: it is derived from source text, so it is data too. */

@@ -62,3 +62,18 @@ describe("withContext", () => {
     expect(withContext(messages, [])).toBe(messages);
   });
 });
+
+test("a throwing onError never throws into the agent's loop", async () => {
+  const eden = new EdenClient({
+    userId: "u1",
+    sessionId: "s1",
+    fetch: (async () => {
+      throw new Error("network down");
+    }) as unknown as typeof fetch,
+    onError: () => {
+      throw new Error("logger not ready");
+    },
+  });
+  expect(await eden.observe({ kind: "user_message", text: "hi" })).toEqual({ injection: null, pending: false });
+  expect(await eden.ask("x")).toBeNull();
+});

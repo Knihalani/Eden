@@ -41,10 +41,16 @@ export function loadConfig(env = process.env): ServerConfig {
   const dev = env.EDEN_DEV === "1";
   const keys = new Map<string, string>();
   for (const pair of (env.EDEN_API_KEYS ?? "").split(",").filter(Boolean)) {
-    const [tenant, key] = pair.split(":");
+    // The tenant ends at the first ":"; the key is everything after it, so a key may itself hold ":".
+    const colon = pair.indexOf(":");
+    const tenant = colon < 0 ? "" : pair.slice(0, colon);
+    const key = colon < 0 ? "" : pair.slice(colon + 1);
     if (!tenant || !key || key.length < 16) throw new Error("EDEN_API_KEYS entries must be tenant:key, keys 16+ chars");
     // Scope keys join tenant and user with "/": a tenant id holding one could alias another tenant's users.
     if (!isId(tenant)) throw new Error(`EDEN_API_KEYS tenant "${tenant}" must be 1-128 characters of [A-Za-z0-9._:@-]`);
+    // One key for two tenants is a misconfiguration: refuse it rather than let the last entry win silently.
+    const other = keys.get(key);
+    if (other !== undefined && other !== tenant) throw new Error(`EDEN_API_KEYS lists one key for two tenants`);
     keys.set(key, tenant);
   }
   if (!dev && keys.size === 0) throw new Error("set EDEN_API_KEYS (or EDEN_DEV=1 for local development)");
