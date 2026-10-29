@@ -368,6 +368,8 @@ export class SourceFanout {
 
     const started = performance.now();
     const forgets = this.forgets;
+    // Set once the source has answered: a deadline that runs out after that ran out in our gate, not at the source.
+    let answered = false;
     try {
       // A planned source whose calls went through `planCalls` returns items sanitized there: not gated twice.
       const presanitized = source instanceof PlannedSource && source.via !== undefined && this.minted.has(source.via);
@@ -375,6 +377,7 @@ export class SourceFanout {
         cacheKey,
         async (signal) => {
           const raw = await source.search(query, signal);
+          answered = true;
           return presanitized ? raw : this.gate(raw, signal);
         },
         deadline,
@@ -388,7 +391,7 @@ export class SourceFanout {
     } catch (e) {
       const message = String(e);
       const timedOut = timeout.aborted;
-      if ((e as Error | undefined)?.name === GATE_ERROR) {
+      if ((e as Error | undefined)?.name === GATE_ERROR || (answered && timedOut)) {
         s.latency.record(performance.now() - started);
         if (timedOut) {
           // The source answered so late that the gate ran out of time: neither a success nor the source's failure.

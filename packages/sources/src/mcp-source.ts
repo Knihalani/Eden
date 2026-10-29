@@ -206,8 +206,9 @@ export class McpSource implements Source {
   }
 
   async close(): Promise<void> {
-    await this.client?.close();
-    this.client = null;
+    const client = this.client;
+    this.client = null; // first, so `onclose` sees a deliberate close and sets no reconnect backoff
+    await client?.close();
   }
 }
 
