@@ -1,7 +1,7 @@
 # Grounding requests in people and time (D44)
 
 Status: 2026-10-29. Simulation (planner on, `quality-cli`), the eval, and a private sample of the owner's real mail
-and calendar (read-only, not in the repo). No live model run (the key's spend limit).
+and calendar (read-only, not in the repo). No live model run (the key's spend limit). Re-measured after an independent review on fresh seeds.
 
 ## The problem
 
@@ -41,37 +41,75 @@ named does not say which of their items. Two engine bugs also showed up on the r
 read only the judge's six candidates (a day's events rank after every word match), and the near-duplicate filter
 removed every occurrence of a recurring event but one.
 
+## Review round
+
+An independent review found false matches the first version allowed, each now a test: a name inside an address's
+domain ("Mark Hall" and marketing@townhall), "last Friday" read as the coming one, "next steps" read as a time, "the 2
+may be late" read as a date, a common title word ("Weekly Report" and "Weekly mentoring"), and days taken in UTC
+rather than the user's own offset (now the offset most of their events carry). A time listing now goes only to
+sources that list by time (`Source.listsByTime`) and bypasses the planner, which made no call for a request with no
+words; a day's cached events are capped at 30 before scoring.
+
+Re-measuring then showed two branches below the fallback's precision, both on "What's on the agenda with Elena this
+week?" (held-out seeds 31–36, read for this):
+
+| Branch | Before (zoo-tune 1–10, held-out 31–40) | After (zoo-tune 1–10, held-out 31–50) |
+|---|---|---|
+| Whole day: a calendar question with no entity | 0/32 | gone: a lowercase or one-word name ("with sam") is no entity, so the rule now needs a request of nothing but time and calendar words, the listing's own test |
+| Named event: a first name in the title ("Robin / Elena 1:1") | 15/40 (0.38) | 29/39 (0.74): a first name alone names an event only for a meeting request ("push coffee with Ahmed next week") |
+
+Because seeds 31–36 were read, fresh seeds 41–50 are the held-out set below.
+
 ## Results
 
-Simulation against main, planner on (recall gain per seed with a 95% interval):
+Simulation against main (#182), planner on, the final tree. Recall gain is per seed with a 95% interval:
 
-| Mix | Seeds | No model: recall, precision | Perfect judge: recall, precision |
+| Mix | Seeds | No model: recall, precision | Perfect judge |
 |---|---|---|---|
-| zoo-tune | 1–10 | 0.257 → 0.271 (+2.6, −0.8–6.0), 0.594 → 0.611 | 0.482 → 0.492 (+1.8, −1.0–4.6), 0.819 → 0.818 |
-| held-out A | 31–40 | 0.260 → 0.281 (+3.8, 1.6–6.0), 0.614 → 0.627 | 0.471 → 0.474 (+0.6), 0.805 → 0.809 |
-| held-out B | 31–40 | 0.287 → 0.306 (+3.4, 1.3–5.5), 0.544 → 0.547 | 0.578 → 0.585 (+1.1), 0.773 → 0.770 |
-| realistic | 31–40 | 0.262 → 0.283 (+3.8, 1.6–6.0), 0.614 → 0.630 | 0.458 → 0.466 (+1.4), 0.805 → 0.807 |
+| zoo-tune | 1–10 | 0.257 → 0.271 (+2.6, 0.6–4.6), 0.594 → 0.618 | identical |
+| held-out A | 41–50 | 0.239 → 0.248 (+1.7, −1.1–4.5), 0.571 → 0.585 | identical |
+| held-out B | 41–50 | 0.259 → 0.280 (+3.7, 1.6–5.8), 0.529 → 0.548 | identical |
+| realistic | 41–50 | 0.240 → 0.250 (+1.7, 0.6–2.8), 0.576 → 0.594 | identical |
 
-No hard false fire before or after (1,414 and 1,316 silent turns per row). The soft-fire rate moved both ways (no
-model: A 0.183 → 0.195, realistic 0.185 → 0.180; judge: zoo-tune 0.174 → 0.186). With the judge the changes are
-within noise: grounding is the no-model path, and the judge only sees a day's events as extra candidates.
+"Identical" means equal recall, precision, soft-fire rate and model calls per turn (realistic 41–50: 0.192 both):
+grounding is the no-model path, and adds no model call. No hard false fire on any row (1,414 silent turns on
+zoo-tune, 1,470 per held-out row). Soft-fire rate (turns labelled "better silent" that fired): A 0.223 → 0.217, B
+0.313 → 0.329, realistic 0.170 → 0.179.
+
+Precision per branch, no model, pooled over each mix's seeds (zoo-tune 1–10, held-out 31–50), against D36's fallback
+at 0.60–0.65 and source deliveries at 0.53–0.60:
+
+| Mix | Person | Person + day | Named event on the day |
+|---|---|---|---|
+| zoo-tune | 65/83 (0.78) | 8/8 | 2/3 |
+| held-out A | 135/185 (0.73) | 6/7 | 6/9 |
+| held-out B | 152/238 (0.64) | 10/10 | 13/16 |
+| realistic | 138/185 (0.75) | 4/4 | 8/11 |
+
+The person branch's misses on B are mostly an item from the same person that shares topic words but is not the one
+labelled (a "Contract template" they own for "Legal is asking for the order form"); left as is.
 
 The owner's real data, same harness and clock for both (one user per request, so an instant burst of 25 requests
 does not hit the per-source rate limit): main 8 of 15 at precision 0.80; grounding 14 of 15 at precision 0.933
 (strict labels; the one extra item was a booking email beside the meeting it booked); 0 of 16 false fires either
-way. The remaining miss asked for a booking reference by airline name, a single word. Fifteen requests labelled by
-the person who built the rules are a sanity check, not a tuning set: the rules were chosen on the simulation.
+way, unchanged by the review round. The remaining miss asked for a booking reference by airline name, a single word.
+Fifteen requests labelled by the person who built the rules are a sanity check, not a tuning set.
 
 The eval is identical to main apart from latency (its scenarios carry no people or start fields).
 
+Cost per event, measured with a micro-benchmark: reading a request's dates 3–4 µs; the scan for a day's events
+156 µs over a full cache (2,000 items per user), run only for a request that names a day; matching a name against an
+item's participants about 2.6 µs per candidate.
+
 ## Limits
 
-- Dates are compared as calendar days: an item's day from its own offset, the request's from the event clock's UTC
-  day. Near midnight in a far timezone this can be a day off.
+- Dates are compared as calendar days: an item's day from its own offset, the request's at the user's offset (the
+  one most of their events carry). An event stored in another offset than the user's can be a day off.
 - Date phrases are English; "next Sunday" is the next Sunday, not the one in next week.
 - A time listing needs a connector that lists by time: `McpSource` fills a tool's date arguments
   (`startTime`/`endTime` and similar) with the window, and sends no words. Measured on static and simulated sources
   only.
+- One-word names never ground a person; a first name grounds an event only for a meeting request.
 
 ## Reproduce
 
