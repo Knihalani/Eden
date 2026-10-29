@@ -23,11 +23,17 @@ const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "
 const MONTH = String.raw`(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)`;
 /** Month names that are also verbs ("I may 2 …", "march 5 miles"): dates only with an ordinal, "of" or "on". */
 const VERB_MONTHS = new Set(["may", "mar", "march"]);
-/** "next" that names no event: "next steps", "next time", "next to the station". */
-const NEXT_NOT_TIME =
-  /\bnext\s+(steps?|time|times|to|up|door|one|ones|thing|things|level|gen\w*|best|week|month|year|(sun|mon|tues|wednes|thurs|fri|satur)day)\b/;
-/** A request about the past: a bare weekday in it is the last one, not the coming one ("what happened on Monday"). */
-const PAST = /\b(met|happened|had|was|were|did|went|sent|said|told|wrote|called|spoke|ago)\b/;
+/**
+ * "The next X" asks for an event only when X is one: "the next Priya Raman talk", "my upcoming meetings", "what's next
+ * on my calendar". "Your next payment", "what's next for our product", "next quarter" name no event.
+ */
+const NEXT_EVENT =
+  /\b(next|upcoming|soonest)\s+(?:[\w'’-]+\s+){0,3}?(meetings?|calls?|lunch(es)?|dinners?|breakfasts?|coffees?|drinks|1:1s?|one-on-ones?|appointments?|catch-?ups?|syncs?|standups?|sessions?|talks?|events?|visits?|flights?|trips?|interviews?|classes|class|demos?|workshops?|webinars?|games?|matches|match|concerts?|shows?|part(y|ies)|on (my |the )?(calendar|schedule|agenda|diary))(?=\W|$)/;
+/**
+ * A past verb governing a weekday ("we met on Monday", "what happened on Monday", "I met them Friday"): that weekday
+ * is the last one. Anywhere else ("Was the meeting moved to Friday?") a weekday is the coming one.
+ */
+const PAST_BEFORE = /\b(met|happened|had|was|were|went|spoke|called|saw|did)\s+(?:[\w'’-]+\s+)?(on\s+)?$/;
 
 export interface TimeWindow {
   /** Calendar days the request names, as YYYY-MM-DD. Empty when it names none but asks for the next one. */
@@ -58,16 +64,19 @@ export function timeWindow(text: string, now: number, offsetMinutes = 0): TimeWi
   if (/\bthis week\b/.test(t)) add(today, untilSunday + 1);
   if (/\bnext week\b/.test(t)) add(today + (untilSunday + 1) * DAY, 7);
   if (/\blast week\b/.test(t)) add(today - (weekday === 0 ? 13 : weekday + 6) * DAY, 7);
-  if (/\b(this |the )?weekend\b/.test(t) && !/\blast weekend\b/.test(t)) {
-    const sat = (6 - weekday + 7) % 7;
-    add(today + (weekday === 0 ? 0 : sat) * DAY, weekday === 0 ? 1 : 2);
+  // This weekend's Saturday (today on a Saturday; on a Sunday, today is the weekend's last day).
+  const sat = today + ((6 - weekday + 7) % 7) * DAY;
+  if (/\bnext weekend\b/.test(t)) add(weekday === 0 ? sat : sat + 7 * DAY, 2);
+  else if (/\b(this |the )?weekend\b/.test(t) && !/\blast weekend\b/.test(t)) {
+    add(weekday === 0 ? today : sat, weekday === 0 ? 1 : 2);
   }
-  const past = PAST.test(t);
   for (const m of t.matchAll(
     /\b(this|next|on|coming|last|past|previous)?\s*(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/g,
   )) {
     const target = WEEKDAYS.indexOf(m[2]!);
-    if (m[1] === "last" || m[1] === "past" || m[1] === "previous" || (past && m[1] !== "next" && m[1] !== "coming")) {
+    const before = t.slice(0, m.index! + m[0].length - m[2]!.length);
+    const ago = m[1] === "last" || m[1] === "past" || m[1] === "previous";
+    if (ago || (m[1] !== "next" && m[1] !== "coming" && PAST_BEFORE.test(before))) {
       // The last such day before today ("last Friday", "we met on Monday").
       add(today - ((weekday - target + 7) % 7 || 7) * DAY);
       continue;
@@ -77,27 +86,33 @@ export function timeWindow(text: string, now: number, offsetMinutes = 0): TimeWi
     if (ahead === 0 && m[1] === "next") ahead = 7;
     add(today + ahead * DAY);
   }
+  // Dates in either order, with an optional year: "12 November", "the 3rd of January 2027", "Nov 5th".
+  const YEAR = String.raw`(?:,?\s+(\d{4}))?`;
   const explicit = [
     ...[
-      ...t.matchAll(new RegExp(String.raw`\b(on |by |from |until )?(\d{1,2})(st|nd|rd|th)?(\s+of)?\s+${MONTH}\b`, "g")),
-    ].map((m) => ({ day: m[2]!, month: m[5]!, firm: !!(m[1] || m[3] || m[4]) })),
-    ...[...t.matchAll(new RegExp(String.raw`\b(on |by |from |until )?${MONTH}\s+(\d{1,2})(st|nd|rd|th)?\b`, "g"))].map(
-      (m) => ({ day: m[3]!, month: m[2]!, firm: !!(m[1] || m[4]) }),
-    ),
+      ...t.matchAll(
+        new RegExp(String.raw`\b(on |by |from |until )?(\d{1,2})(st|nd|rd|th)?(\s+of)?\s+${MONTH}\b${YEAR}`, "g"),
+      ),
+    ].map((m) => ({ day: m[2]!, month: m[5]!, year: m[6], firm: !!(m[1] || m[3] || m[4]), dayFirst: true })),
+    ...[
+      ...t.matchAll(new RegExp(String.raw`\b(on |by |from |until )?${MONTH}\s+(\d{1,2})(st|nd|rd|th)?\b${YEAR}`, "g")),
+    ].map((m) => ({ day: m[3]!, month: m[2]!, year: m[5], firm: !!(m[1] || m[4]), dayFirst: false })),
   ];
   for (const e of explicit) {
     const day = Number(e.day);
     const month = MONTHS.indexOf(e.month.slice(0, 3));
     if (month < 0 || day < 1 || day > 31) continue;
     if (VERB_MONTHS.has(e.month) && !e.firm) continue; // "the 2 may be late" names no date
-    // The nearest such date: this year's, unless it is more than half a year gone, then next year's.
-    const year = new Date(today).getUTCFullYear();
+    // A number before a short month needs a firm cue too: "2 dec ideas" names no date, "on 2 Dec" does.
+    if (e.dayFirst && e.month.length <= 4 && !["june", "july"].includes(e.month) && !e.firm) continue;
+    // The year said, else the nearest such date: this year's, unless more than half a year gone, then next year's.
+    const year = e.year ? Number(e.year) : new Date(today).getUTCFullYear();
     let at = Date.UTC(year, month, day);
-    if (at < today - 182 * DAY) at = Date.UTC(year + 1, month, day);
+    if (!e.year && at < today - 182 * DAY) at = Date.UTC(year + 1, month, day);
+    if (new Date(at).getUTCDate() !== day) continue; // "31st of February" is no date
     add(at);
   }
-  const next = /\b(next|upcoming|soonest)\b/.test(t) && !NEXT_NOT_TIME.test(t.replace(/\b(upcoming|soonest)\b/g, ""));
-  const asksNext = next || /\b(upcoming|soonest)\b/.test(t);
+  const asksNext = NEXT_EVENT.test(t);
   if (days.size === 0 && !asksNext) return null;
   return { days, next: asksNext };
 }

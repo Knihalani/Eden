@@ -160,9 +160,12 @@ export class McpSource implements Source {
     }
   }
 
-  /** Lists by time when its search tool takes a date window (read at connect: false until then). */
+  /**
+   * Lists by time when its search tool takes an event's range (`start`/`end`, `timeMin`/`timeMax`): a calendar. A mail
+   * tool's `since`/`before` does not count (D44). Read at connect: false until then.
+   */
   get listsByTime(): boolean {
-    return this.mapping?.window != null;
+    return this.mapping?.window?.events === true;
   }
 
   async search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]> {

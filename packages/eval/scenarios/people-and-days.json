@@ -1,0 +1,142 @@
+{
+  "id": "people-and-days",
+  "category": "scheduling",
+  "description": "Requests grounded in who takes part and which day (D44): a meeting with a named person, a day's calendar, and arriving mail or questions whose 'next' or first name names no event.",
+  "clock": "2026-10-29T12:00:00Z",
+  "sources": [
+    {
+      "id": "calendar",
+      "description": "The user's calendar",
+      "docs": [
+        {
+          "ref": "evt-dana",
+          "title": "Robin / Dana",
+          "text": "Video call",
+          "meta": {
+            "people": "Dana Lee <dana.lee@globex.example>",
+            "start": "2026-11-05T16:00:00Z"
+          }
+        },
+        {
+          "ref": "evt-brunch",
+          "title": "Brunch at Rosa's",
+          "text": "Table for four",
+          "meta": {
+            "start": "2026-11-01T11:00:00Z"
+          }
+        },
+        {
+          "ref": "evt-globex",
+          "title": "Globex <> Robin",
+          "text": "Quarterly check-in",
+          "meta": {
+            "people": "Sam Ortiz <sam.ortiz@globex.example>",
+            "start": "2026-11-12T15:00:00Z"
+          }
+        },
+        {
+          "ref": "evt-elena",
+          "title": "Robin / Elena 1:1",
+          "text": "Weekly",
+          "meta": {
+            "people": "Elena Ivanova <elena@initech.example>",
+            "start": "2026-10-30T10:00:00Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-agenda",
+          "title": "Planning doc for Q1",
+          "text": "Draft goals and owners for the first quarter, comments welcome",
+          "meta": {
+            "people": "Elena Ivanova <elena@initech.example>"
+          }
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "people-and-days-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Can you email Dana Lee to find a new time to meet?"
+          },
+          "expect": {
+            "items": [
+              "calendar:evt-dana"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "people-and-days-2",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "What's on my calendar this Sunday?"
+          },
+          "expect": {
+            "items": [
+              "calendar:evt-brunch"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "people-and-days-3",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "external",
+            "text": "Invoice from Globex Ventures: your next payment is due",
+            "source": "mail"
+          },
+          "expect": "silent"
+        }
+      ]
+    },
+    {
+      "id": "people-and-days-4",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "what's on the agenda with elena this week?"
+          },
+          "expect": "silent"
+        }
+      ]
+    }
+  ]
+}

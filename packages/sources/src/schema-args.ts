@@ -35,7 +35,7 @@ export interface ArgMapping {
    * when it names some (D44), else, when the tool requires one, around now. `time` when the arguments take a
    * timestamp rather than a date.
    */
-  window: { start: string; end: string; required: boolean; time: boolean } | null;
+  window: { start: string; end: string; required: boolean; time: boolean; events: boolean } | null;
   /** Required arguments with no value: the mapping cannot be used until the operator fixes them. */
   missing: string[];
   /** Values the operator set, sent on every call. */
@@ -92,6 +92,11 @@ const NOT_TEXT =
   /(^|_)(id|ids|uid|path|uri|url|date|time|since|before|after|collection|index|channel|folder|project|owner|repo|sort|order|format|mode|type|state|status|account|calendar|page|cursor|offset|lang|language|model)s?$/i;
 const START_NAMES = /^(start|from|since|after|time_?min|date_?from)(_?(date|time))?$/i;
 const END_NAMES = /^(end|to|until|before|time_?max|date_?to)(_?(date|time))?$/i;
+/**
+ * A window named as an event's range (`start`/`end`, `timeMin`/`timeMax`): a calendar's, which can list a day with no
+ * words. `since`/`before` and the like filter mail by date, and a listing of them is the day's mail (D44).
+ */
+const EVENT_NAMES = /^(start|end|time_?min|time_?max)(_?(date|time))?$/i;
 
 const typesOf = (p: PropertySchema) => (Array.isArray(p.type) ? p.type : p.type ? [p.type] : []);
 
@@ -135,7 +140,13 @@ export function mapSearchArgs(schema: ToolSchema, fixed: Record<string, unknown>
   const isTime = (n: string) => /time/i.test(`${n} ${props[n]!.format ?? ""}`);
   const window =
     start && end
-      ? { start, end, required: required.has(start) || required.has(end), time: isTime(start) || isTime(end) }
+      ? {
+          start,
+          end,
+          required: required.has(start) || required.has(end),
+          time: isTime(start) || isTime(end),
+          events: EVENT_NAMES.test(start) && EVENT_NAMES.test(end),
+        }
       : null;
 
   const filled = new Set(

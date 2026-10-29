@@ -683,14 +683,15 @@ export class ContextPartner {
     if (!time) return none;
     const events = pool.filter((x) => (time.days.size > 0 ? onDay(x) : time.next && upcoming(x)));
     // A title that holds a name the request uses whole ("Priya Raman talk"); one shared uncommon word ("Globex" for
-    // "Globex Ventures") only from an arriving message, where the sender's name is what the event is filed under. A
+    // "Globex Ventures") only from an arriving message naming a day, where the sender's name is what the event is filed
+    // under ("your next payment" from Globex names no day, and no event). A
     // first name alone ("Elena" in "Robin / Elena 1:1") names the event only when the request is about meeting them:
     // "the agenda with Elena this week" asks for something other than the 1:1.
     const whole = meeting ? cue.entities : cue.entities.filter((e) => nameWords(e) >= 2);
     const named = events
       .filter((x) => {
         if (titleNames(whole, x.item) === "whole") return true;
-        return eventKind === "external" && titleNames(cue.entities, x.item) === "word";
+        return eventKind === "external" && time.days.size > 0 && titleNames(cue.entities, x.item) === "word";
       })
       .sort(soonest);
     if (named.length > 0) {
@@ -1180,7 +1181,6 @@ function wantsLookup(e: AgentEvent, text: string, terms: Uint32Array, vocab: Voc
   return !isChatterTerms(text, terms, vocab);
 }
 
-/** `offset`: the user's UTC offset in minutes, so "today" is their today (D44). */
 /** Whether a request names days and nothing but days and calendar words: a listing of the days answers it (D44). */
 function onlyTime(cue: Cue): boolean {
   return (
@@ -1188,6 +1188,7 @@ function onlyTime(cue: Cue): boolean {
   );
 }
 
+/** `offset`: the user's UTC offset in minutes, so "today" is their today (D44). */
 function buildCue(text: string, ids: Uint32Array, vocab: Vocab, at: number, offset: number): Cue {
   const entities = extractEntities(text).slice(0, 8);
   const terms = contentTermsOf(ids, vocab).slice(0, 16); // Distinct already.

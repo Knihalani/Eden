@@ -60,7 +60,7 @@ class UserCache {
   readonly vocab = new Vocab(256); // Grows by doubling: most users hold few terms.
   readonly index = new SparseIndex({ fields: 2, weights: [2, 1] });
   readonly sketcher = new TextSketcher(this.vocab, 8_192, 3);
-  /** The UTC offset most of the user's events carry (minutes), computed on demand; dropped when events change. */
+  /** The UTC offset most of the user's events carry (minutes), computed on demand; reset as events come and go. */
   offset: number | undefined;
 }
 
@@ -258,6 +258,7 @@ export class ItemCache {
     u.items.delete(e.item.id);
     u.index.remove(e.doc);
     if (u.byDoc[e.doc] === e) u.byDoc[e.doc] = undefined;
+    if (e.item.meta?.start) u.offset = undefined; // An event gone (evicted, expired, forgotten) may change the mode.
   }
 
   /** When the cached item was last fetched or seen in a lookup (ms), or undefined if it is not cached. */
