@@ -53,7 +53,8 @@ deliver only if an item names a cue entity as whole words, covers most of the qu
 terms (D6: `confidentScore` > 1 by construction, since idf-weighted coverage is at most 1, plus an entity bonus).
 An item a recent tool result or agent message holds whole is never pushed (an ask still returns it), and bulk mail
 is never pushed without a model (D34). A cached copy older than two hours is never delivered from here: its cue goes
-to the slow path, whose live search brings the source's current copy (D40).
+to the slow path, which delivers the source's current copy when its live search returns it (and the cached one if it
+does not: a source down, or a search that no longer finds the item; D40).
 
 **Slow path** (background; at most one per session at a time): rank the user's sources with the source map, search
 the top few live (each under its own deadline), cache the redacted results, record entity mentions, and re-score.
