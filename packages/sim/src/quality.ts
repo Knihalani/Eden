@@ -224,6 +224,8 @@ export interface QualityReport {
   };
   /** The engine's decision(s) on each need turn, counted (reasons from traces; cue ids dropped). */
   needDecisions: Record<string, number>;
+  /** Delivered items and how many were relevant, by the injection reason's first part. */
+  byReason: Record<string, { delivered: number; relevant: number }>;
   /** Present when the planner ran in shadow mode for at least one lookup. */
   shadow?: ShadowReport;
   /**
@@ -302,6 +304,8 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
   // judge, was it delivered.
   const funnel = { mustFacts: 0, inCacheBefore: 0, retrieved: 0, retrievedOrCached: 0, judged: 0, delivered: 0 };
   const needDecisions: Record<string, number> = {};
+  /** Delivered items and how many were relevant, by how the engine decided (cache, sources, model, fallback...). */
+  const byReason: Record<string, { delivered: number; relevant: number }> = {};
 
   // Users are independent (each has its own engine, connectors and clock), so in real-time runs they play
   // concurrently; at timeScale 0 one at a time, which keeps instant runs simple to profile.
@@ -391,7 +395,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       const traceStart = userTraces.length;
       const known = new Set<string>(); // Facts the agent has: delivered by Eden or fetched by its tools.
       const knownAt = new Map<string, number>(); // fact → turn index it became known
-      const arrivals: { at: number; ids: string[]; shown: Map<string, string[]>; wallMs: number }[] = [];
+      const arrivals: { at: number; ids: string[]; shown: Map<string, string[]>; wallMs: number; why: string }[] = [];
       const sentAt: number[] = [];
 
       for (let i = 0; i < turnsFlat.length; i++) {
@@ -476,8 +480,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
           }
           const shown = new Set(oracle ? oracle.shown.slice(mark.shown) : []);
           const mine = userTraces.slice(mark.traces).filter((t) => t.turn === i + 1);
-          const why =
-            mine.map((t) => `${t.decision}:${t.reason.startsWith("cue:") ? "" : t.reason}`).join(" > ") || "none";
+          const why = mine.map((t) => `${t.decision}:${t.reason.replace(/:?cue:[0-9a-f]+/, "")}`).join(" > ") || "none";
           needDecisions[why] = (needDecisions[why] ?? 0) + 1;
           const deliveredIds = new Set(
             mine.flatMap((t) => (["fast", "sources", "model"].includes(t.decision) ? t.itemIds : [])),
@@ -515,7 +518,8 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         const shown = new Map(
           ids.map((id, k) => [id, byId.has(id) ? factsShown(byId.get(id)!, lines[k] ?? "", applied) : []]),
         );
-        arrivals.push({ at, ids, shown, wallMs: wall });
+        // How the engine decided to deliver it: the injection reason's first part (cache, sources, model, fallback...).
+        arrivals.push({ at, ids, shown, wallMs: wall, why: inj.reason.split(":")[0] ?? "" });
         for (const id of ids) {
           itemsDelivered++;
           const item = byId.get(id);
@@ -536,7 +540,8 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         if (t.sessionId !== session.id || !["fast", "sources", "model"].includes(t.decision)) continue;
         for (const id of t.itemIds) origin.set(id, t.turn - 1);
       }
-      const delivered: { id: string; facts: string[]; origin: number; arrived: number; wallMs: number }[] = [];
+      const delivered: { id: string; facts: string[]; origin: number; arrived: number; wallMs: number; why: string }[] =
+        [];
       for (const a of arrivals) {
         for (const id of a.ids)
           delivered.push({
@@ -545,6 +550,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
             origin: Math.min(origin.get(id) ?? Math.floor(a.at), turnsFlat.length - 1),
             arrived: a.at,
             wallMs: a.wallMs,
+            why: a.why,
           });
       }
       for (let i = 0; i < turnsFlat.length; i++) {
@@ -570,6 +576,9 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
             if (ok) c.relevant++;
             if (about) c.related++;
           }
+          const r = (byReason[d.why] ??= { delivered: 0, relevant: 0 });
+          r.delivered++;
+          if (ok) r.relevant++;
         }
         if (label.kind === "silent") {
           for (const c of cs) {
@@ -762,6 +771,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
     ...(judged.calls ? { judge: judged } : {}),
     funnel,
     needDecisions: Object.fromEntries(Object.entries(needDecisions).sort((a, b) => b[1] - a[1])),
+    byReason,
   };
 }
 

@@ -287,6 +287,21 @@ export class ItemCache {
     return out;
   }
 
+  /**
+   * Fresh cached items that start at a known time (`meta.start`: events), for requests that name a day rather than
+   * words the item holds (D44). A scan of the user's items, run only for such requests: at most `maxItemsPerUser`.
+   */
+  timed(scope: Scope, now = Date.now()): CacheHit[] {
+    const u = this.peek(scope);
+    if (!u) return [];
+    const out: CacheHit[] = [];
+    for (const e of u.items.values()) {
+      if (!e.item.meta?.start || now - e.fetchedAt > this.limits.ttlMs) continue;
+      out.push({ item: e.item, sketch: e.sketch, doc: e.doc, score: 0, coverage: 0, matched: 0 });
+    }
+    return out;
+  }
+
   /** The cached item `doc`'s sorted unique term ids (title and body, the user's vocabulary); empty if unknown. */
   termsOf(scope: Scope, doc: number): Uint32Array {
     return this.peek(scope)?.index.termsOf(doc) ?? NO_TERMS;

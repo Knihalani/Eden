@@ -46,6 +46,7 @@ import { nearDuplicate, sanitizedId, sanitizeItem, type ItemCache, type Sketch }
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { answerMessages, judgeMessages, parseJudge } from "./judge";
+import { namesParticipant, sharesTitleName, startDay, startMs, timeWindow, type TimeWindow } from "./grounding";
 import { Ledger } from "./ledger";
 import { citationsOf, renderAnswer, renderPacket, shownText } from "./render";
 import { classifySituation } from "./situation";
@@ -136,7 +137,27 @@ interface Cue {
   key: string;
   /** A content-free id for the cue, for traces and injection reasons. */
   id: string;
+  /** The days the request names, resolved against the event's clock (D44); null when it names no time. */
+  time: TimeWindow | null;
+  /** When the triggering event happened (ms): "the next one" is the first at or after this. */
+  at: number;
+  /** The request's own (redacted) text, for questions about the calendar itself. */
+  raw: string;
 }
+
+/** Requests that act on someone, where an item they take part in is context (D44). */
+const ACTING = new Set<string>(["scheduling", "communication", "task", "travel"]);
+/**
+ * A request about meeting someone (moving plans, running late, "still on for lunch?"): only an event with them is the
+ * item it is about, never another thread they are on (D44).
+ */
+const ABOUT_MEETING =
+  /\b(meet(ing)?|plans?|push|reschedul\w*|postpone|cancel|still on|running late|late|lunch|coffee|dinner|drinks|call|catch(ing)? up|slot|1:1)\b/i;
+/** Words of a request that only say when or ask about the calendar: with nothing else, it is a listing (D44). */
+const TIME_WORD =
+  /^(|calendar|schedule|diary|agenda|plans?|busy|free|happening|booked|today|tonight|tomorrow|yesterday|week|weekend|next|coming|upcoming|morning|afternoon|evening|(mon|tues|wednes|thurs|fri|satur|sun)day|jan\w*|feb\w*|mar\w*|apr\w*|may|june?|july?|aug\w*|sep\w*|oct\w*|nov\w*|dec\w*|\d{1,2}(st|nd|rd|th)?)$/;
+/** A question about the calendar itself: then every event on the day it names is the answer (D44). */
+const ASKS_SCHEDULE = /\b(calendar|schedule|diary|agenda|plans?|busy|free|on for|happening|booked)\b/i;
 
 interface Scored {
   item: ContextItem;
@@ -230,7 +251,7 @@ export class ContextPartner {
       return reply(queued);
     }
     if (event.kind === "user_message") s.situation = classifySituation(text);
-    const cue = buildCue(text, terms, s.vocab);
+    const cue = buildCue(text, terms, s.vocab, event.at);
     const last = s.cues.get(cue.key);
     const repeat = last !== undefined && s.turn - last < this.config.cueCooldownTurns;
 
@@ -291,7 +312,7 @@ export class ContextPartner {
     // An ask-only session (an MCP client) never runs observe, which keeps the session vocabulary bounded.
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const question = sanitizeForStore(request.question);
-    const cue = buildCue(question, distinctTermIds(question, s.vocab), s.vocab);
+    const cue = buildCue(question, distinctTermIds(question, s.vocab), s.vocab, this.now());
     const limit = request.maxItems ?? 5;
     const { calls: sourceCalls, plans } = await this.searchLive(s, cue, this.config.askSources);
     const items = this.rank(s, cue, { ignoreLedger: true })
@@ -549,16 +570,22 @@ export class ContextPartner {
     const q = termIds(`${cue.text} ${cue.entities.join(" ")}`, vocab, false);
     const query: number[] = [];
     for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
-    if (query.length === 0) return [];
+    // Events on a day the request names are candidates whether or not they share its words (D44); they rank after
+    // every item that does, so the judge, when there is one, sees them only if there is room.
+    const timed = cue.time?.days.size
+      ? cache.timed(s.scope, this.now()).filter((h) => cue.time!.days.has(startDay(h.item)!))
+      : [];
+    if (query.length === 0 && timed.length === 0) return [];
     const entities = cue.entities.map((e) => {
       // An entity with a term no cached item holds matches nothing (never intern it: that grows the cache's vocab).
       const all = termIds(e, s.vocab, true).n;
       const t = termIds(e, vocab, false);
       return t.n === all ? Array.from(t.ids.subarray(0, t.n)) : [];
     });
+    const found = query.length > 0 ? cache.search(s.scope, query, query.length, 12, this.now()) : [];
+    for (const h of timed) if (!found.some((f) => f.item.id === h.item.id)) found.push(h);
     return (
-      cache
-        .search(s.scope, query, query.length, 12, this.now())
+      found
         .filter((h) => options.ignoreLedger || s.ledger.isFresh(h.item.id, s.turn))
         // A near-duplicate of something already delivered this session (a reply quoting it, a synced copy) is old news.
         .filter((h) => options.ignoreLedger || !s.delivered.some((d) => nearDuplicate(d, h.sketch)))
@@ -573,7 +600,11 @@ export class ContextPartner {
         })
         .sort((a, b) => b.score - a.score)
         // Of near-duplicates among the candidates, keep the best scored: one packet never says the same thing twice.
-        .filter((x, i, all) => !all.slice(0, i).some((y) => nearDuplicate(x.sketch, y.sketch)))
+        // Occurrences of a recurring event read alike but are not the same thing: another day is another item.
+        .filter(
+          (x, i, all) =>
+            !all.slice(0, i).some((y) => nearDuplicate(x.sketch, y.sketch) && startDay(x.item) === startDay(y.item)),
+        )
     );
   }
 
@@ -585,6 +616,71 @@ export class ContextPartner {
         .filter((x) => !bulkMail(x.item))
         .slice(0, this.config.maxItemsPerInjection)
     );
+  }
+
+  /**
+   * With no model's say, what the request's people and days ground (D44), from the item's structure rather than the
+   * words it shares with the request:
+   * - an item a person the request names takes part in (`namesParticipant`), when the request acts on someone
+   *   (scheduling, writing to them, a task) or arrives from outside; on a named day or, for "the next", the earliest
+   *   upcoming such item, else the best scored, nearer in time first;
+   * - events on a day the request names that share a name with it ("a call on 12 November" from Globex Ventures
+   *   finds "Globex <> Robin" that day), or, when the user asks what is on their calendar, every event that day.
+   * Bulk mail is never grounded. Empty when nothing is.
+   */
+  private grounded(s: Session, cue: Cue, candidates: Scored[], eventKind: string): { items: Scored[]; how: string } {
+    const none = { items: [] as Scored[], how: "" };
+    const pool = candidates.filter((x) => !bulkMail(x.item));
+    const time = cue.time;
+    const onDay = (x: Scored) => time !== null && time.days.has(startDay(x.item) ?? "");
+    const upcoming = (x: Scored) => startMs(x.item) >= cue.at;
+    const soonest = (a: Scored, b: Scored) => startMs(a.item) - startMs(b.item);
+    const acts = eventKind === "external" || eventKind === "ask" || ACTING.has(s.situation);
+    // A run that starts the sentence may carry the verb with it ("Email Dana Lee"): try it without its first word too.
+    const people = cue.entities
+      .flatMap((e) => {
+        const w = e.trim().split(/\s+/);
+        return w.length >= 3 ? [e, w.slice(1).join(" ")] : [e];
+      })
+      .filter((e) => e.includes("@") || e.trim().split(/\s+/).length >= 2);
+    const meeting = ABOUT_MEETING.test(cue.raw);
+    // Who is named is not enough to say which item: a meeting needs an event with them; anything else needs the
+    // item to hold a word of the request beyond the person's name (the topic).
+    const nameWords = (p: string) => p.trim().split(/\s+/).length;
+    const fits = (x: Scored, p: string) => (meeting ? startDay(x.item) !== null : x.matched > nameWords(p));
+    const withPerson = acts ? pool.filter((x) => people.some((p) => namesParticipant(p, x.item) && fits(x, p))) : [];
+    if (withPerson.length > 0) {
+      const dated = withPerson.filter(onDay);
+      if (dated.length > 0) return { items: [dated[0]!], how: "person-day" };
+      if (time?.next) {
+        const next = withPerson.filter(upcoming).sort(soonest);
+        if (next.length > 0) return { items: [next[0]!], how: "person-next" };
+      }
+      // Equal scores: the one nearer in time (a meeting this week over one in March); undated items keep their order.
+      const near = (x: Scored) => Math.abs((startMs(x.item) || cue.at) - cue.at);
+      return { items: [[...withPerson].sort((a, b) => b.score - a.score || near(a) - near(b))[0]!], how: "person" };
+    }
+    if (!time) return none;
+    const events = pool.filter((x) => (time.days.size > 0 ? onDay(x) : time.next && upcoming(x)));
+    const named = events.filter((x) => sharesTitleName(cue.entities, x.item)).sort(soonest);
+    if (named.length > 0) {
+      return { items: time.next && time.days.size === 0 ? [named[0]!] : named.slice(0, this.max()), how: "time-named" };
+    }
+    // The whole day only for a question about the calendar that names nobody ("what's on my calendar on Sunday?"): with
+    // a name in it, even a first name, the day's other events are not what is asked.
+    if (
+      eventKind === "user_message" &&
+      time.days.size > 0 &&
+      cue.entities.length === 0 &&
+      ASKS_SCHEDULE.test(cue.raw)
+    ) {
+      return { items: events.sort(soonest).slice(0, this.max()), how: "time-schedule" };
+    }
+    return none;
+  }
+
+  private max(): number {
+    return this.config.maxItemsPerInjection;
   }
 
   /**
@@ -645,23 +741,39 @@ export class ContextPartner {
     // Wrapped per lookup (cheap: no state of its own). The fan-out admits each lookup per source id as before (breaker,
     // concurrency, one rate token); every extra call the planner makes takes its own rate token through `permit`, and
     // a shape's query answered recently comes from the fan-out's cache (`planCalls`), at no call.
-    // The fan-out's deadline for this lookup, so the planner's cascade sends only the calls that can still answer.
+    // A request about nothing but a time ("what's on my calendar on Sunday?") is sent as a listing of those days, with
+    // no words: a calendar that filters by text and time together would find nothing for "calendar sunday" (D44).
+    // Any other request keeps its words and no window: its days may be the new slot, not the item it is about.
+    const days = cue.time ? [...cue.time.days].sort() : [];
+    const listing = days.length > 0 && cue.entities.length === 0 && cue.text.split(" ").every((w) => TIME_WORD.test(w));
+    const window = listing
+      ? { start: days[0]!, end: new Date(Date.parse(days.at(-1)!) + 86_400_000).toISOString().slice(0, 10) }
+      : undefined;
+    // The fan-out's deadline for this lookup, so the planner's cascade sends only the calls that can still answer. A
+    // listing goes to each source as it is: the planner's shapes are ways of sending words, and it has none.
     const deadlineAt = performance.now() + this.config.sourceTimeoutMs;
-    const chosen = planner
-      ? found.map(
-          (x) =>
-            new PlannedSource(
-              x,
-              planner,
-              () => this.fanout.permit(s.scope, x.id),
-              this.fanout.planCalls(x),
-              deadlineAt,
-            ),
-        )
-      : found;
+    const chosen =
+      planner && !listing
+        ? found.map(
+            (x) =>
+              new PlannedSource(
+                x,
+                planner,
+                () => this.fanout.permit(s.scope, x.id),
+                this.fanout.planCalls(x),
+                deadlineAt,
+              ),
+          )
+        : found;
     const outcomes = await this.fanout.search(
       chosen,
-      { scope: s.scope, text: cue.text, entities: cue.entities, limit: 8 },
+      {
+        scope: s.scope,
+        text: listing ? "" : cue.text,
+        entities: cue.entities,
+        limit: 8,
+        ...(window ? { window } : {}),
+      },
       { timeoutMs: this.config.sourceTimeoutMs, signal: s.abort.signal },
     );
     const plans = planner
@@ -847,21 +959,37 @@ export class ContextPartner {
         );
         return this.deliver(s, sure, "proactive", `sources:${cue.id}`);
       }
-      const unsure = scored.filter((x) => x.score >= this.config.candidateScore).slice(0, this.config.judgeCandidates);
+      // An event on a day the request names is a candidate whatever it scores on words (D44).
+      const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item) ?? "") === true;
+      const eligible = scored.filter((x) => x.score >= this.config.candidateScore || onNamedDay(x));
+      const unsure = eligible.slice(0, this.config.judgeCandidates);
       if (unsure.length === 0) {
         done("silent", "no candidates");
         return null;
       }
-      const reservation = this.deps.model ? this.charge(s) : null;
-      if (!this.deps.model || !reservation) {
+      // With no model to judge: what the request's people and days ground first (D44), then D36's fallback.
+      const noModel = (why: string, reasonPrefix: string): Injection | null => {
+        // Grounding reads every candidate, not only the judge's few: a day's events rank after every word match.
+        const grounded = this.grounded(s, cue, eligible, eventKind);
+        if (grounded.items.length > 0) {
+          const items = grounded.items;
+          done(
+            "sources",
+            `grounded-${grounded.how}${reasonPrefix}:${cue.id}`,
+            items.map((x) => x.item),
+          );
+          return this.deliver(s, items, "proactive", `grounded-${grounded.how}:${cue.id}`);
+        }
         const top = this.fallback(unsure);
         if (top) {
-          done("sources", `fallback:${cue.id}`, [top.item]);
+          done("sources", `fallback${reasonPrefix}:${cue.id}`, [top.item]);
           return this.deliver(s, [top], "proactive", `fallback:${cue.id}`);
         }
-        done("silent", this.deps.model ? "no model budget" : "no model");
+        done("silent", why);
         return null;
-      }
+      };
+      const reservation = this.deps.model ? this.charge(s) : null;
+      if (!this.deps.model || !reservation) return noModel(this.deps.model ? "no model budget" : "no model", "");
       const candidates = unsure.map((x) => x.item);
       let res: Awaited<ReturnType<Model["chat"]>>;
       try {
@@ -877,13 +1005,7 @@ export class ContextPartner {
         if (s.closed) return null;
         // A failing model (bad key, spend limit, outage) is treated as no model, never worse than none (D41). The
         // reason keeps the cause, so a broken key does not look like a healthy keyless server in traces.
-        const top = this.fallback(unsure);
-        if (top) {
-          done("sources", `fallback:model-error:${cue.id}`, [top.item]);
-          return this.deliver(s, [top], "proactive", `fallback:${cue.id}`);
-        }
-        done("silent", "model error");
-        return null;
+        return noModel("model error", ":model-error");
       }
       modelCalls = 1;
       costUsd = res.costUsd;
@@ -1023,13 +1145,13 @@ function wantsLookup(e: AgentEvent, text: string, terms: Uint32Array, vocab: Voc
   return !isChatterTerms(text, terms, vocab);
 }
 
-function buildCue(text: string, ids: Uint32Array, vocab: Vocab): Cue {
+function buildCue(text: string, ids: Uint32Array, vocab: Vocab, at: number): Cue {
   const entities = extractEntities(text).slice(0, 8);
   const terms = contentTermsOf(ids, vocab).slice(0, 16); // Distinct already.
   const key = (entities.length ? entities.map((e) => e.toLowerCase()) : terms).slice().sort().join("|").slice(0, 200);
   // Traces and reasons carry this id, never the cue itself: the cue is the user's words.
   const id = `cue:${createHash("sha256").update(key).digest("hex").slice(0, 10)}`;
-  return { text: terms.join(" "), entities, key, id };
+  return { text: terms.join(" "), entities, key, id, time: timeWindow(text, at), at, raw: text };
 }
 
 /** What one agent-held event holds: its terms and its adjacent term pairs (`pairKey`), in session ids. */

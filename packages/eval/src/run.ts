@@ -153,7 +153,7 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
       ...(options.planner ? { planner: new QueryPlanner({ seed: 1 }) } : {}),
     });
     const who = { tenantId: "eval", userId: scenario.id };
-    let clock = Date.UTC(2026, 9, 1);
+    let clock = scenario.clock ? Date.parse(scenario.clock) : Date.UTC(2026, 9, 1);
     for (const session of scenario.sessions) {
       const traceStart = traces.length;
       const deliveries: string[][] = [];
