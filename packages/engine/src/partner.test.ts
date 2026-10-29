@@ -1175,6 +1175,60 @@ describe("grounding: people, days and intent without a model (D44)", () => {
     expect(await say("Can we push the coffee with Elena this week?")).toEqual(["calendar:oneone"]);
   });
 
+  test("a 'next' that names no event grounds nothing from an arriving message", async () => {
+    for (const text of [
+      "Invoice from Globex Ventures: your next payment is due",
+      "Globex Ventures newsletter: what's next for our product",
+    ]) {
+      const { ids, reasons } = await run(text, "external");
+      expect(ids).not.toContain("calendar:globex");
+      expect(reasons.some((r) => r?.startsWith("grounded-"))).toBe(false);
+    }
+  });
+
+  test("each user's days are at their own offset: the same moment is Thursday for one, Friday for another", async () => {
+    const sent: { userId: string; window?: { start: string; offsetMinutes?: number } }[] = [];
+    const spy: Source = {
+      id: "calendar",
+      kind: "test",
+      description: "Calendar",
+      listsByTime: true,
+      search: async (q) => (sent.push({ userId: q.scope.userId, window: q.window }), []),
+    };
+    const cache = new ItemCache();
+    const { p } = partner({ cache }, [spy]);
+    const event = (ref: string, start: string) => ({
+      id: `calendar:${ref}`,
+      sourceId: "calendar",
+      ref,
+      title: ref,
+      text: ref,
+      meta: { start },
+    });
+    const evening = Date.parse("2026-10-30T03:00:00Z"); // Thursday 20:00 at UTC-7, Friday 04:00 at UTC+1
+    cache.put({ tenantId: scope.tenantId, userId: "west" }, [event("w", "2026-11-02T09:00:00-07:00")], evening);
+    cache.put({ tenantId: scope.tenantId, userId: "east" }, [event("e", "2026-11-02T09:00:00+01:00")], evening);
+    for (const userId of ["west", "east"]) {
+      await p.observe(
+        {
+          ...scope,
+          userId,
+          sessionId: userId,
+          at: evening,
+          kind: "user_message",
+          text: "What's on my calendar today?",
+        } as AgentEvent,
+        { waitMs: 1_000 },
+      );
+    }
+    expect(sent.find((q) => q.userId === "west")?.window).toMatchObject({ start: "2026-10-29", offsetMinutes: -420 });
+    expect(sent.find((q) => q.userId === "east")?.window).toMatchObject({ start: "2026-10-30", offsetMinutes: 60 });
+    // The offset follows the user's events: with theirs forgotten, days are UTC's again.
+    cache.forget({ tenantId: scope.tenantId, userId: "west" }, "calendar");
+    expect(cache.offsetOf({ tenantId: scope.tenantId, userId: "west" })).toBe(0);
+    expect(cache.offsetOf({ tenantId: scope.tenantId, userId: "east" })).toBe(60);
+  });
+
   test("a month-like word is not a time: the request keeps its words and the planner", async () => {
     const sent: { text: string; window?: unknown }[] = [];
     const spy: Source = {

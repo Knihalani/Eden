@@ -69,7 +69,7 @@ describe("mapSearchArgs", () => {
       endTime: { type: "string", description: "ISO 8601 timestamp" },
     });
     const m = mapSearchArgs(cal);
-    expect(m.window).toEqual({ start: "startTime", end: "endTime", required: false, time: true });
+    expect(m.window).toEqual({ start: "startTime", end: "endTime", required: false, time: true, events: true });
     expect(m.missing).toEqual([]);
     const now = Date.parse("2026-10-29T12:00:00Z");
     expect(buildArgs(m, "globex", 5, now)).not.toHaveProperty("startTime");
@@ -150,6 +150,9 @@ describe("mapSearchArgs on real servers' schemas", () => {
       end: "end_date",
       required: true,
     });
+    expect(mapSearchArgs(corpus.caldav!.inputSchema).window?.events).toBe(true);
+    // IMAP's since/before filter mail by date: a listing of them would be the day's mail, not a calendar's (D44).
+    expect(mapSearchArgs(corpus["imap-subject"]!.inputSchema).window).toMatchObject({ start: "since", events: false });
     const usableWithout = Object.keys(expected).filter((n) => usable(mapSearchArgs(corpus[n]!.inputSchema)));
     expect(usableWithout.sort()).toEqual(
       Object.keys(expected)
