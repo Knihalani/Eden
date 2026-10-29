@@ -824,7 +824,7 @@ describe("refreshing stale cached items (D40)", () => {
   test("a copy older than refreshAfterMs is re-read through fetch before it is delivered", async () => {
     let clock = 1_700_000_000_000;
     const { src, doc, calls } = calendarWithMove();
-    const { p } = partner({ now: () => clock, config: { refreshAfterMs: hour } }, [src]);
+    const { p } = partner({ now: () => clock, config: { refreshAfterMs: hour, maxRefreshes: 3 } }, [src]);
     expect(await ask(p, "a", clock)).toContain("11:00");
     doc.text = "Monday 11:30, room Orion, bring the mobile mocks"; // Moved at the source.
     clock += 3 * hour;
@@ -837,7 +837,7 @@ describe("refreshing stale cached items (D40)", () => {
   test("off, within the threshold, or past maxRefreshes: the cached copy, and no fetch", async () => {
     for (const [config, gap] of [
       [{ refreshAfterMs: 0 }, 3 * hour],
-      [{ refreshAfterMs: hour }, hour / 2],
+      [{ refreshAfterMs: hour, maxRefreshes: 3 }, hour / 2],
       [{ refreshAfterMs: hour, maxRefreshes: 0 }, 3 * hour],
     ] as const) {
       let clock = 1_700_000_000_000;
@@ -875,6 +875,29 @@ describe("refreshing stale cached items (D40)", () => {
     clock += 3 * hour;
     await ask(p, "b", clock);
     expect(fetches).toBe(1);
+  });
+
+  test("by default a stale copy is not delivered from the fast path: a live search brings the current one", async () => {
+    let clock = 1_700_000_000_000;
+    const doc = { title: "Design review with Hana", text: "Monday 11:00, room Orion, bring the mobile mocks" };
+    let fetches = 0;
+    const src: Source = {
+      id: "calendar",
+      kind: "test",
+      description: "calendar",
+      search: async () => [{ id: "calendar:rev", sourceId: "calendar", ref: "rev", ...doc }],
+      fetch: async () => {
+        fetches++;
+        return null;
+      },
+    };
+    const { p, traces } = partner({ now: () => clock }, [src]);
+    await ask(p, "a", clock);
+    doc.text = "Monday 11:30, room Orion, bring the mobile mocks";
+    clock += 3 * 3_600_000; // Past the default refreshAfterMs (2 h).
+    expect(await ask(p, "b", clock)).toContain("11:30");
+    expect(traces.filter((t) => t.sessionId === "b").map((t) => t.decision)).not.toContain("fast");
+    expect(fetches).toBe(0); // maxRefreshes is 0 by default.
   });
 
   test("a source without fetch still has its cached copy delivered", async () => {
