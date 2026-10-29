@@ -4,6 +4,7 @@ import { OracleJudge } from "./judge";
 import { buildSessions } from "./sessions";
 import { IDEAL, REALISTIC, SimIndex, SimSource } from "./sources";
 import { runQuality } from "./quality";
+import { applyUpdate, factsShown, planUpdates, relabel } from "./updates";
 import { buildWorld } from "./world";
 
 const scope = { tenantId: "t", userId: "u" };
@@ -118,5 +119,46 @@ describe("oracle judge", () => {
     expect(parseJudge(res.text, candidates.length)).toEqual([2]);
     expect(oracle.stats.unmatched).toBe(0);
     expect(oracle.stats.candidates).toBe(4);
+  });
+});
+
+describe("source-side updates", () => {
+  test("plan only clock-time facts, deterministically; relabel later sessions; apply and detect stale copies", () => {
+    const plan = (seed: number) => {
+      const w = buildWorld({ seed: 4 });
+      const { sessions, asks } = buildSessions(w, { seed: 4, sessions: 12 });
+      return { w, sessions, asks, updates: planUpdates(w, sessions.length, seed, 0.5) };
+    };
+    const { w, sessions, asks, updates } = plan(9);
+    expect(plan(9).updates).toEqual(updates);
+    expect(updates.length).toBeGreaterThan(5);
+    const u = updates[0]!;
+    expect(w.facts.get(u.fact)!.detail).toContain(u.from);
+    expect(w.facts.get(u.next)!.detail).toContain(u.to);
+    expect(u.from).not.toBe(u.to);
+    relabel(sessions, asks, updates);
+    const labels = (from: number, to: number) =>
+      sessions
+        .slice(from, to)
+        .flatMap((s) => s.tasks.flatMap((t) => t.turns))
+        .flatMap((t) => (t.label.kind === "need" ? t.label.must : []));
+    expect(labels(u.session, sessions.length)).not.toContain(u.fact);
+    expect(labels(0, u.session)).not.toContain(u.next);
+    const item = w.items.find((i) => i.id === u.items[0])!;
+    const oldText = item.text;
+    applyUpdate(w, u, w.now);
+    expect(item.text).toContain(u.to);
+    expect(item.facts).toContain(u.next);
+    expect(factsShown(item, oldText, [u])).toContain(u.fact); // A copy cached before the update states the old fact.
+    expect(factsShown(item, item.text, [u])).toContain(u.next);
+  });
+
+  test("a run without updates scores exactly as before; with them, stale deliveries are counted", async () => {
+    const base = { users: 1, sessionsPerUser: 6, seed: 2, profiles: REALISTIC, timeScale: 0, waitMs: 0, model: null };
+    const off = await runQuality(base);
+    expect(off.updates).toEqual({ planned: 0, applied: 0, updatedDelivered: 0, staleDelivered: 0 });
+    const on = await runQuality({ ...base, updates: 0.5 });
+    expect(on.updates.applied).toBe(on.updates.planned);
+    expect(on.updates.planned).toBeGreaterThan(0);
   });
 });

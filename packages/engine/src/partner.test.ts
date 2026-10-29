@@ -791,3 +791,98 @@ describe("no-model fallback limits (D36)", () => {
     expect(model.calls.length).toBe(0);
   });
 });
+
+describe("refreshing stale cached items (D40)", () => {
+  const hour = 3_600_000;
+  /** A calendar whose search finds the meeting only the first time; its fetch always reads the current copy. */
+  function calendarWithMove(fetchable = true) {
+    const doc = { title: "Design review with Hana", text: "Monday 11:00, room Orion, bring the mobile mocks" };
+    const calls = { search: 0, fetch: 0 };
+    const copy = () => ({ id: "calendar:rev", sourceId: "calendar", ref: "rev", ...doc });
+    const src: Source = {
+      id: "calendar",
+      kind: "test",
+      description: "calendar",
+      search: async () => (++calls.search === 1 ? [copy()] : []),
+      ...(fetchable
+        ? {
+            fetch: async () => {
+              calls.fetch++;
+              return copy();
+            },
+          }
+        : {}),
+    };
+    return { src, doc, calls };
+  }
+  const ask = async (p: ContextPartner, sessionId: string, at: number) => {
+    const text = "What should I bring to the design review with Hana?";
+    const r = await p.observe({ ...scope, sessionId, at, kind: "user_message", text } as AgentEvent, { waitMs: 1_000 });
+    return [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId })].map((i) => i.text).join();
+  };
+
+  test("a copy older than refreshAfterMs is re-read through fetch before it is delivered", async () => {
+    let clock = 1_700_000_000_000;
+    const { src, doc, calls } = calendarWithMove();
+    const { p } = partner({ now: () => clock, config: { refreshAfterMs: hour } }, [src]);
+    expect(await ask(p, "a", clock)).toContain("11:00");
+    doc.text = "Monday 11:30, room Orion, bring the mobile mocks"; // Moved at the source.
+    clock += 3 * hour;
+    const got = await ask(p, "b", clock);
+    expect(got).toContain("11:30");
+    expect(got).not.toContain("11:00");
+    expect(calls.fetch).toBe(1);
+  });
+
+  test("off, within the threshold, or past maxRefreshes: the cached copy, and no fetch", async () => {
+    for (const [config, gap] of [
+      [{ refreshAfterMs: 0 }, 3 * hour],
+      [{ refreshAfterMs: hour }, hour / 2],
+      [{ refreshAfterMs: hour, maxRefreshes: 0 }, 3 * hour],
+    ] as const) {
+      let clock = 1_700_000_000_000;
+      const { src, doc, calls } = calendarWithMove();
+      const { p } = partner({ now: () => clock, config }, [src]);
+      await ask(p, "a", clock);
+      doc.text = "Monday 11:30, room Orion, bring the mobile mocks";
+      clock += gap;
+      expect(await ask(p, "b", clock)).toContain("11:00");
+      expect(calls.fetch).toBe(0);
+    }
+  });
+
+  test("at most maxRefreshes fetches per lookup", async () => {
+    let clock = 1_700_000_000_000;
+    let searches = 0;
+    let fetches = 0;
+    const docs = [
+      { ref: "rev", title: "Design review with Hana", text: "Monday 11:00, room Orion, bring the mobile mocks" },
+      { ref: "rev2", title: "Design review prep with Hana", text: "Monday 10:00, room Orion, mobile mocks draft" },
+    ];
+    const copy = (d: (typeof docs)[number]) => ({ id: `calendar:${d.ref}`, sourceId: "calendar", ...d });
+    const src: Source = {
+      id: "calendar",
+      kind: "test",
+      description: "calendar",
+      search: async () => (++searches === 1 ? docs.map(copy) : []),
+      fetch: async (ref) => {
+        fetches++;
+        return copy(docs.find((d) => d.ref === ref)!);
+      },
+    };
+    const { p } = partner({ now: () => clock, config: { refreshAfterMs: hour, maxRefreshes: 1 } }, [src]);
+    await ask(p, "a", clock);
+    clock += 3 * hour;
+    await ask(p, "b", clock);
+    expect(fetches).toBe(1);
+  });
+
+  test("a source without fetch still has its cached copy delivered", async () => {
+    let clock = 1_700_000_000_000;
+    const { src } = calendarWithMove(false);
+    const { p } = partner({ now: () => clock, config: { refreshAfterMs: hour } }, [src]);
+    await ask(p, "a", clock);
+    clock += 3 * hour;
+    expect(await ask(p, "b", clock)).toContain("11:00");
+  });
+});
