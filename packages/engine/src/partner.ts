@@ -17,7 +17,7 @@
  */
 import { createHash } from "node:crypto";
 import type { SourceMap } from "@eden/graph";
-import type { Budget, Model } from "@eden/llm";
+import type { Budget, Model, Reservation } from "@eden/llm";
 import {
   newId,
   scopeKey,
@@ -47,13 +47,14 @@ import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { answerMessages, judgeMessages, parseJudge } from "./judge";
 import { Ledger } from "./ledger";
-import { citationsOf, renderAnswer, renderPacket } from "./render";
+import { citationsOf, renderAnswer, renderPacket, shownText } from "./render";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
   distinctTermIds,
   extractEntities,
   extractTypedEntities,
+  head,
   isChatterTerms,
   isStopword,
   PERSISTABLE_KINDS,
@@ -126,7 +127,6 @@ interface Session {
   abort: AbortController;
   closed: boolean;
   /** The last lookup's planner outcomes, for its trace (shape names and counts only). */
-  plans?: Trace["plans"];
   /** The planner's shadow lookup in flight, if any (shadow mode). */
   shadowing?: Promise<void>;
 }
@@ -154,16 +154,22 @@ interface Built {
   text: string;
 }
 
-/** Outcomes kept per user for later correction, and users kept. Outlives sessions: feedback often comes at the end. */
+/**
+ * Outcomes kept per user for later correction, and users kept per tenant (so one tenant's traffic cannot push out
+ * another's, as with sessions and the cache, D17). Outlives sessions: feedback often comes at the end.
+ */
 const MAX_RECORDED = 200;
 const MAX_RECORDED_USERS = 10_000;
+/** Injections awaiting a usage verdict per session; past this the oldest counts as unused (an ask-only session). */
+const MAX_OUTSTANDING = 64;
 
 export class ContextPartner {
   readonly config: EngineConfig;
   private readonly sessions = new Map<string, Session>();
   private readonly perTenant = new Map<string, number>();
   private readonly built = new WeakMap<Injection, Built>();
-  private readonly recorded = new Map<string, Map<string, Recorded>>();
+  /** Tenant → user scope key → injection id → outcome; both inner maps least recently recorded first. */
+  private readonly recorded = new Map<string, Map<string, Map<string, Recorded>>>();
   private readonly now: () => number;
   private readonly fanout: SourceFanout;
 
@@ -223,19 +229,21 @@ export class ContextPartner {
     if (event.kind === "user_message") s.situation = classifySituation(text);
     const cue = buildCue(text, terms, s.vocab);
     const last = s.cues.get(cue.key);
-    if (last !== undefined && s.turn - last < this.config.cueCooldownTurns) {
-      trace("repeat", cue.id);
-      return reply(queued);
-    }
+    const repeat = last !== undefined && s.turn - last < this.config.cueCooldownTurns;
 
     const fast = this.confident(this.rank(s, cue));
-    // A stale cached copy is not delivered from here: the slow path re-reads it first (D40).
+    // A stale cached copy is not delivered from here: the slow path re-reads it first (D40). A cue in cooldown is not
+    // looked up again, but the cache may hold something new for it (another question about the same person).
     if (fast.length > 0 && !this.stale(s, fast)) {
       this.markCue(s, cue);
       const injection = this.deliver(s, fast, "proactive", `cache:${cue.id}`);
       trace("fast", cue.id, { itemIds: fast.map((x) => x.item.id) });
       if (queued) s.pending.unshift(queued);
       return reply(injection);
+    }
+    if (repeat) {
+      trace("repeat", cue.id);
+      return reply(queued);
     }
     if (s.inflight) {
       // The cue is not put in cooldown: it was not looked up, so the next event may look it up.
@@ -277,10 +285,12 @@ export class ContextPartner {
   async ask(request: AskRequest): Promise<AskResponse> {
     const t0 = performance.now();
     const s = this.session(request);
+    // An ask-only session (an MCP client) never runs observe, which keeps the session vocabulary bounded.
+    if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const question = sanitizeForStore(request.question);
     const cue = buildCue(question, distinctTermIds(question, s.vocab), s.vocab);
     const limit = request.maxItems ?? 5;
-    const sourceCalls = await this.searchLive(s, cue, this.config.askSources);
+    const { calls: sourceCalls, plans } = await this.searchLive(s, cue, this.config.askSources);
     const items = this.rank(s, cue, { ignoreLedger: true })
       .filter((x) => x.score >= this.config.candidateScore)
       .slice(0, limit)
@@ -288,7 +298,8 @@ export class ContextPartner {
     let answer = items.length ? renderPacket(items, { maxBytes: 4_000 }) : "Nothing in the connected sources.";
     let usedModel = false;
     let costUsd = 0;
-    if (items.length && this.deps.model && !s.closed && this.charge(s)) {
+    const reservation = items.length && this.deps.model && !s.closed ? this.charge(s) : null;
+    if (reservation && this.deps.model) {
       try {
         const res = await this.deps.model.chat({
           messages: answerMessages(question, s.window.join("\n"), items),
@@ -296,12 +307,12 @@ export class ContextPartner {
           cacheKey: userCacheKey(s.scope),
           signal: s.abort.signal,
         });
-        this.settle(s, res.costUsd);
+        this.settle(reservation, res.costUsd);
         if (res.text.trim()) answer = renderAnswer(res.text);
         usedModel = true;
         costUsd = res.costUsd;
       } catch {
-        this.settle(s, 0);
+        this.settle(reservation, 0);
       }
     }
     if (items.length && !s.closed) {
@@ -310,6 +321,7 @@ export class ContextPartner {
         items.map((item) => ({ item, score: 1, matched: 0, sketch: null })),
         "answer",
         "ask",
+        answer,
       );
       this.handOut(s, injection);
     }
@@ -325,7 +337,7 @@ export class ContextPartner {
       modelCalls: usedModel ? 1 : 0,
       costUsd,
       itemIds: items.map((i) => i.id),
-      ...(s.plans ? { plans: s.plans } : {}),
+      ...(plans ? { plans } : {}),
     });
     return { answer, citations: citationsOf(items), usedModel, costUsd, latencyMs };
   }
@@ -345,7 +357,7 @@ export class ContextPartner {
       return true;
     }
     // The session may have ended (and counted the injection unused): the user's record outlives it.
-    const r = this.recorded.get(scopeKey(scope))?.get(f.injectionId);
+    const r = this.recordedOf(scope)?.get(f.injectionId);
     if (!r) return false;
     if (r.used !== f.used) {
       for (const sourceId of r.sourceIds) this.deps.sourceMap.correctOutcome(scope, r.situation, sourceId, f.used);
@@ -362,7 +374,7 @@ export class ContextPartner {
   forget(scope: Scope, sourceId?: string): void {
     const key = scopeKey(scope);
     for (const s of [...this.sessions.values()]) if (scopeKey(s.scope) === key) this.close(s, false);
-    this.recorded.delete(key);
+    this.recorded.get(scope.tenantId)?.delete(key);
     this.deps.cache.forget(scope, sourceId);
     this.deps.sourceMap.forget(scope, sourceId);
     this.fanout.forget(scope, sourceId);
@@ -474,7 +486,7 @@ export class ContextPartner {
   private handOut(s: Session, injection: Injection): void {
     const built = this.built.get(injection);
     if (!built || s.outstanding.has(injection.id)) return;
-    if (this.recorded.get(scopeKey(s.scope))?.has(injection.id)) return;
+    if (this.recordedOf(s.scope)?.has(injection.id)) return;
     s.outstanding.set(injection.id, {
       injectionId: injection.id,
       sourceIds: built.sourceIds,
@@ -485,6 +497,12 @@ export class ContextPartner {
       })(),
       deliveredTurn: s.turn,
     });
+    // Usage expires by turns, and only events move turns: a session that only asks would hold every answer forever.
+    while (s.outstanding.size > MAX_OUTSTANDING) {
+      const [id, o] = s.outstanding.entries().next().value as [string, Outstanding];
+      s.outstanding.delete(id);
+      this.record(s.scope, id, o.sourceIds, o.situation, false);
+    }
     // The shape that retrieved each item learns it was worth delivering, once the agent has it (D18, D39).
     for (const i of built.items) this.deps.planner?.creditDelivery(s.scope, i.sourceId, i.id);
   }
@@ -504,12 +522,18 @@ export class ContextPartner {
   private record(scope: Scope, injectionId: string, sourceIds: string[], situation: string, used: boolean): void {
     for (const sourceId of sourceIds) this.deps.sourceMap.recordOutcome(scope, situation, sourceId, used);
     const key = scopeKey(scope);
-    const mine = this.recorded.get(key) ?? new Map<string, Recorded>();
-    this.recorded.delete(key); // Re-insert: Map order is least recently recorded user first.
-    this.recorded.set(key, mine);
+    const tenant = this.recorded.get(scope.tenantId) ?? new Map<string, Map<string, Recorded>>();
+    this.recorded.set(scope.tenantId, tenant);
+    const mine = tenant.get(key) ?? new Map<string, Recorded>();
+    tenant.delete(key); // Re-insert: Map order is least recently recorded user first.
+    tenant.set(key, mine);
     mine.set(injectionId, { sourceIds, situation, used });
     while (mine.size > MAX_RECORDED) mine.delete(mine.keys().next().value as string);
-    while (this.recorded.size > MAX_RECORDED_USERS) this.recorded.delete(this.recorded.keys().next().value as string);
+    while (tenant.size > MAX_RECORDED_USERS) tenant.delete(tenant.keys().next().value as string);
+  }
+
+  private recordedOf(scope: Scope): Map<string, Recorded> | undefined {
+    return this.recorded.get(scope.tenantId)?.get(scopeKey(scope));
   }
 
   // ── retrieval ──
@@ -530,7 +554,9 @@ export class ContextPartner {
       // An entity with a term no cached item holds matches nothing (never intern it: that grows the cache's vocab).
       const all = termIds(e, s.vocab, true).n;
       const t = termIds(e, vocab, false);
-      return t.n === all ? Array.from(t.ids.subarray(0, t.n)) : [];
+      if (t.n !== all) return [];
+      // Its common words are no evidence the item names it; an entity of common words only matches nothing.
+      return Array.from(t.ids.subarray(0, t.n)).filter((id) => !isStopword(vocab.term(id)));
     });
     return (
       cache
@@ -600,11 +626,14 @@ export class ContextPartner {
     return holders.some((held) => pairs.every((p) => held.pairs.has(p)));
   }
 
-  /** Routes, searches the chosen sources live, caches what they return and records which entities they hold. */
-  private async searchLive(s: Session, cue: Cue, limit: number): Promise<number> {
-    s.plans = undefined; // A trace reports this lookup's plans, never an earlier one's.
+  /**
+   * Routes, searches the chosen sources live, caches what they return and records which entities they hold. Returns
+   * the sources called and the planner's plans for this lookup alone: a session can run an ask and a slow path at once,
+   * so plans are never kept on the session where the other could read them.
+   */
+  private async searchLive(s: Session, cue: Cue, limit: number): Promise<{ calls: number; plans?: Trace["plans"] }> {
     const all = await this.deps.sources(s.scope).catch((): Source[] => []);
-    if (all.length === 0 || s.closed) return 0;
+    if (all.length === 0 || s.closed) return { calls: 0 };
     const ranked = this.deps.sourceMap.route({
       scope: s.scope,
       entities: cue.entities,
@@ -637,13 +666,14 @@ export class ContextPartner {
       { scope: s.scope, text: cue.text, entities: cue.entities, limit: 8 },
       { timeoutMs: this.config.sourceTimeoutMs, signal: s.abort.signal },
     );
-    s.plans = planner
+    const plans = planner
       ? chosen.flatMap((x) => {
           const last = (x as PlannedSource).last;
           return last ? [{ sourceId: x.id, shapes: last.shapes, calls: last.calls, found: last.found }] : [];
         })
       : undefined;
-    if (s.closed) return chosen.length; // Forgotten or ended mid-search: keep nothing.
+    const result = { calls: chosen.length, ...(plans ? { plans } : {}) };
+    if (s.closed) return result; // Forgotten or ended mid-search: keep nothing.
     // One shadow lookup per session at a time: shadowing must not pile up work behind a slow connector.
     if (this.deps.planner?.mode === "shadow" && !s.shadowing) {
       s.shadowing = this.shadowLookup(s, found, cue, outcomes).finally(() => (s.shadowing = undefined));
@@ -653,13 +683,13 @@ export class ContextPartner {
       // One source's items at a time, yielding between: storing a lookup's items (tokenizing, indexing, sketching) is
       // ~80 µs each, and other users' events should not wait behind all of them at once.
       if (k > 0) await yieldToLoop();
-      if (s.closed) return chosen.length;
+      if (s.closed) return result;
       // Mentions are recorded for items new to the cache or changed, so an item many lookups return is not counted
       // each time (that let one item dominate routing, and was ~10% of server CPU). They are written with the put,
       // before the next yield: a session closing in between must not leave items cached whose mentions never land.
       this.store(s, o.items);
     }
-    return chosen.length;
+    return result;
   }
 
   /** Caches sanitized items and records the entity mentions of those new to the cache or changed. */
@@ -789,6 +819,7 @@ export class ContextPartner {
     let modelCalls = 0;
     let costUsd = 0;
     let sourceCalls = 0;
+    let plans: Trace["plans"];
     const done = (decision: Trace["decision"], reason: string, items: ContextItem[] = []) =>
       this.trace({
         sessionId: s.id,
@@ -801,10 +832,10 @@ export class ContextPartner {
         modelCalls,
         costUsd,
         itemIds: items.map((i) => i.id),
-        ...(s.plans ? { plans: s.plans } : {}),
+        ...(plans ? { plans } : {}),
       });
     try {
-      sourceCalls = await this.searchLive(s, cue, this.config.lookupSources);
+      ({ calls: sourceCalls, plans } = await this.searchLive(s, cue, this.config.lookupSources));
       if (s.closed) return null;
       sourceCalls += await this.refresh(s, cue);
       if (s.closed) return null;
@@ -823,7 +854,8 @@ export class ContextPartner {
         done("silent", "no candidates");
         return null;
       }
-      if (!this.deps.model || !this.charge(s)) {
+      const reservation = this.deps.model ? this.charge(s) : null;
+      if (!this.deps.model || !reservation) {
         const top = this.fallback(unsure);
         if (top) {
           done("sources", `fallback:${cue.id}`, [top.item]);
@@ -843,7 +875,7 @@ export class ContextPartner {
           signal: s.abort.signal,
         });
       } catch {
-        this.settle(s, 0);
+        this.settle(reservation, 0);
         if (s.closed) return null;
         // A failing model (bad key, spend limit, outage) is treated as no model, never worse than none (D41). The
         // reason keeps the cause, so a broken key does not look like a healthy keyless server in traces.
@@ -857,7 +889,7 @@ export class ContextPartner {
       }
       modelCalls = 1;
       costUsd = res.costUsd;
-      this.settle(s, res.costUsd);
+      this.settle(reservation, res.costUsd);
       if (s.closed) return null;
       const picked = parseJudge(res.text, candidates.length)
         .slice(0, this.config.maxItemsPerInjection)
@@ -879,19 +911,20 @@ export class ContextPartner {
     }
   }
 
-  private charge(s: Session): boolean {
-    return this.deps.budget.charge(scopeKey(s.scope), s.key, this.config.estimatedCallUsd);
+  private charge(s: Session): Reservation | null {
+    return this.deps.budget.reserve(scopeKey(s.scope), s.key, this.config.estimatedCallUsd);
   }
 
-  private settle(s: Session, actualUsd: number): void {
-    if (s.closed) {
-      this.deps.budget.endSession(s.key); // The session ended mid-call: settle nothing, keep no tally for it.
-      return;
-    }
-    this.deps.budget.settle(scopeKey(s.scope), s.key, this.config.estimatedCallUsd, actualUsd);
+  /**
+   * Books a call's real cost against the session and day it was charged to. A session that ended mid-call already
+   * dropped its tally (`close`), so only the user's day is corrected; a new session reusing the id is not touched.
+   */
+  private settle(r: Reservation, actualUsd: number): void {
+    this.deps.budget.settle(r, actualUsd);
   }
 
-  private deliver(s: Session, scored: Scored[], mode: InjectionMode, reason: string): Injection {
+  /** `shown` is what the agent receives when it is not the injection's own text (an ask's answer). */
+  private deliver(s: Session, scored: Scored[], mode: InjectionMode, reason: string, shown?: string): Injection {
     const items = scored.map((x) => x.item);
     for (const x of scored) if (x.sketch) s.delivered.push(x.sketch);
     if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
@@ -913,7 +946,8 @@ export class ContextPartner {
     this.built.set(injection, {
       sourceIds: [...new Set(items.map((i) => i.sourceId))],
       items: items.map((i) => ({ sourceId: i.sourceId, id: i.id })),
-      text: items.map((i) => `${i.title} ${i.text}`).join(" "),
+      // Only the words the agent received: an item's text past the packet's cut is not evidence of use.
+      text: shownText(shown ?? injection.text),
     });
     return injection;
   }
@@ -984,29 +1018,6 @@ function eventText(e: AgentEvent): string {
       return "";
   }
 }
-
-/**
- * The first `max` characters of `s`, cut so that redaction (which runs after the cut) still sees every secret whole:
- * the cut drops the whole run it would split, back to whitespace or JSON punctuation (" , { } [ ], which no token or
- * base64 body contains, so minified JSON keeps its head: half a JWT no longer looks like one), and a private key whose
- * END line falls past the cut is dropped from its BEGIN line (alone, the banner is all `redactPem` redacts).
- */
-function head(s: string, max: number): string {
-  if (s.length <= max) return s;
-  let end = max;
-  while (end > 0 && !isCutPoint(s.charCodeAt(end - 1))) end--;
-  let out = s.slice(0, end);
-  let begin = -1;
-  for (const m of out.matchAll(PEM_BEGIN)) begin = m.index;
-  if (begin >= 0 && !PEM_END.test(out.slice(begin))) out = out.slice(0, begin);
-  return out;
-}
-
-/** Whitespace and the JSON punctuation " , [ ] { }. */
-const isCutPoint = (c: number) => c <= 32 || c === 34 || c === 44 || c === 91 || c === 93 || c === 123 || c === 125;
-
-const PEM_BEGIN = /-----BEGIN [A-Z ]*PRIVATE KEY-----/gi;
-const PEM_END = /-----END [A-Z ]*PRIVATE KEY-----/i;
 
 /** Proactive lookups start from what the user or the world says, not from the agent's own words. */
 function wantsLookup(e: AgentEvent, text: string, terms: Uint32Array, vocab: Vocab): boolean {

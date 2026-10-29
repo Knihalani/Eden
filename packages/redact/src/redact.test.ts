@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { containsSecret, redactString } from "./redact";
+import { sanitizeForStore } from "./secrets";
 
 describe("redact regressions", () => {
   test("a pasted PEM private key loses its whole body, not just its banner", () => {
@@ -112,4 +113,11 @@ describe("the per-install wrap key", () => {
       expect(containsSecret(word)).toBe(false);
     }
   });
+});
+
+test("HTTP Basic credentials are redacted; prose after the word Basic keeps its words", () => {
+  const out = sanitizeForStore("Authorization: Basic YWRtaW46U3VwZXJTZWNyZXQxMjM0NQ==");
+  expect(out).not.toContain("YWRtaW46U3VwZXJTZWNyZXQxMjM0NQ");
+  expect(sanitizeForStore("Basic information about the plan")).toBe("Basic information about the plan");
+  expect(sanitizeForStore("The Basic Plan costs 9 dollars")).toBe("The Basic Plan costs 9 dollars");
 });

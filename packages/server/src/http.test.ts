@@ -194,3 +194,31 @@ describe("gate pool", () => {
     }
   });
 });
+
+describe("audit regressions (2026-10-29)", () => {
+  test("a tool_call input nested past the stack limit is the caller's error: 400, not 503", async () => {
+    const key = "k_acme_0123456789abcdef";
+    const handle = createHandler(buildPartner({ sources: async () => [], model: null }), {
+      keys: new Map([[key, "acme"]]),
+      dev: false,
+    });
+    const n = 60_000;
+    const body = `{"userId":"u1","sessionId":"s1","kind":"tool_call","tool":"t","input":${"[".repeat(n)}${"]".repeat(n)}}`;
+    const res = await handle(
+      new Request("http://x/v1/events", {
+        method: "POST",
+        headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+        body,
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  test("EDEN_API_KEYS: a key may hold ':', and one key for two tenants is refused", () => {
+    const full = "0123456789abcdef:ZZZZ-rest-of-key";
+    const config = loadConfig({ EDEN_API_KEYS: `acme:${full}` });
+    expect(config.keys.has("0123456789abcdef")).toBe(false);
+    expect(config.keys.get(full)).toBe("acme");
+    expect(() => loadConfig({ EDEN_API_KEYS: "acme:0123456789abcdef,globex:0123456789abcdef" })).toThrow(/two tenants/);
+  });
+});

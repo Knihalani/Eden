@@ -70,6 +70,9 @@ const SECRET_KEY_SUFFIX = new RegExp(`(?:${SECRET_NOUNS.join("|")})s?[0-9]?$`, "
  */
 const SECRET_TOKEN_PATTERNS = [
   String.raw`\bBearer\s+[A-Za-z0-9._\-+=/]+`,
+  // HTTP Basic credentials: base64 of user:password. A digit, + or / is required so prose ("Basic information")
+  // keeps its words; base64 of a real credential pair has one in all but freak cases.
+  String.raw`\bBasic\s+(?=[A-Za-z0-9+/]*[0-9+/])[A-Za-z0-9+/]{8,}={0,2}`,
   // Dashed sk- keys (sk-ant-api03-…, sk-proj-…) are SK_DASHED below.
   String.raw`\bsk-[A-Za-z0-9]{8,}`,
   String.raw`\b[sr]k_(?:live|test)_[A-Za-z0-9]{8,}`,
