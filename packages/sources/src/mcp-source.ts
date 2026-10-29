@@ -167,7 +167,7 @@ export class McpSource implements Source {
         name: this.options.searchTool.name,
         arguments: this.options.searchTool.args
           ? this.options.searchTool.args(query)
-          : buildArgs(this.mapping!, query.text, query.limit, Date.now()),
+          : buildArgs(this.mapping!, query.text, query.limit, Date.now(), query.window),
       },
       undefined,
       { signal },
@@ -304,6 +304,7 @@ const VOLATILE = /^(_.*|score|rank|distance|distances|relevance|similarity|highl
 function rowItem(sourceId: string, row: Row): ContextItem {
   const ref = first(row, ID_KEYS) ?? contentRef(identity(row));
   const url = URL_KEYS.map((k) => str(row[k])).find((u) => u && /^https?:\/\//.test(u));
+  const meta = structureOf(row);
   return {
     id: itemId(sourceId, ref),
     sourceId,
@@ -311,7 +312,61 @@ function rowItem(sourceId: string, row: Row): ContextItem {
     title: first(row, TITLE_KEYS) ?? "",
     text: first(row, TEXT_KEYS) ?? JSON.stringify(row),
     url,
+    ...(meta ? { meta } : {}),
   };
+}
+
+/** Fields naming who takes part in a row: attendees, sender, recipients, owners. */
+const PEOPLE_KEYS = [
+  "attendees",
+  "participants",
+  "organizer",
+  "creator",
+  "from",
+  "sender",
+  "to",
+  "toRecipients",
+  "cc",
+  "ccRecipients",
+  "author",
+  "assignee",
+  "owner",
+  "members",
+];
+/** Fields holding when a row starts (an event), as an ISO string or Google Calendar's `{ dateTime | date }`. */
+const START_KEYS = ["start", "startTime", "start_time", "startDate", "dtstart", "begin"];
+
+/**
+ * Who takes part in a row and when it starts, kept as structure (D44): `meta.people` as "Display Name <email>"
+ * entries joined by "; " (the user's own entry, `self: true`, left out), `meta.start` as the server's own timestamp,
+ * offset kept. Undefined when the row has neither.
+ */
+export function structureOf(row: Row): Record<string, string> | undefined {
+  const people: string[] = [];
+  const person = (v: unknown): void => {
+    if (people.length >= 30) return;
+    if (typeof v === "string" && v.trim()) people.push(v.trim().slice(0, 200));
+    else if (Array.isArray(v)) v.forEach(person);
+    else if (v && typeof v === "object" && !(v as Row).self) {
+      const p = v as Row;
+      const name = str(p.displayName) ?? str(p.name) ?? "";
+      const email = str(p.email) ?? str(p.address) ?? "";
+      const entry = email ? (name ? `${name} <${email}>` : email) : name;
+      if (entry) people.push(entry.slice(0, 200));
+    }
+  };
+  for (const k of PEOPLE_KEYS) person(row[k]);
+  let start: string | undefined;
+  for (const k of START_KEYS) {
+    const v = row[k];
+    const s = v && typeof v === "object" ? (str((v as Row).dateTime) ?? str((v as Row).date)) : str(v);
+    if (s && /^\d{4}-\d{2}-\d{2}/.test(s) && !Number.isNaN(Date.parse(s))) {
+      start = s;
+      break;
+    }
+  }
+  if (people.length === 0 && !start) return undefined;
+  return { ...(people.length ? { people: people.join("; ") } : {}), ...(start ? { start } : {}) };
 }
 
 /** The first key of `keys` whose value is a non-empty string or number (or a list of strings, joined by lines). */

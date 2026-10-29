@@ -217,7 +217,9 @@ export class SourceFanout {
    * with the planner's `permit`.
    */
   planCalls(source: Source): PlanCalls {
-    const key = (q: SearchQuery) => `${scopeKey(q.scope)}|${source.id}|plan|${q.limit}|${q.text}`;
+    const key = (q: SearchQuery) =>
+      `${scopeKey(q.scope)}|${source.id}|plan|${q.limit}|${q.text}` +
+      (q.window ? `|${q.window.start}..${q.window.end}` : "");
     const sourceKey = (q: SearchQuery) => `${scopeKey(q.scope)}|${source.id}`;
     const calls: PlanCalls = {
       expectMs: (q, quantile) => {
@@ -339,7 +341,8 @@ export class SourceFanout {
     const t0 = performance.now();
     const elapsed = () => Math.round(performance.now() - t0);
     const sourceKey = `${scopeKey(query.scope)}|${source.id}`;
-    const cacheKey = `${sourceKey}|${query.limit}|${query.text}|${query.entities.join("\u0001")}`;
+    const span = query.window ? `|${query.window.start}..${query.window.end}` : "";
+    const cacheKey = `${sourceKey}|${query.limit}|${query.text}|${query.entities.join("\u0001")}${span}`;
     const done = (status: FanoutStatus, items: ContextItem[], error?: string): FanoutOutcome => ({
       sourceId: source.id,
       status,

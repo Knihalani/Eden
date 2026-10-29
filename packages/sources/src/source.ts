@@ -12,6 +12,11 @@ export interface SearchQuery {
   /** Entities the cue named (people, projects, ids), when known. A source may search on them directly. */
   entities: string[];
   limit: number;
+  /**
+   * The days the request names (D44), as YYYY-MM-DD, `end` exclusive. A source that can list by time (a calendar)
+   * returns what falls in it even when no word matches; others may ignore it.
+   */
+  window?: { start: string; end: string };
 }
 
 export interface Source {

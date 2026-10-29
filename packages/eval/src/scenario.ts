@@ -36,6 +36,8 @@ export interface Scenario {
    * Their answers are checked for `secrets` too, so a secret check does not rest on proactive delivery alone.
    */
   asks?: { question: string; expect: string[] }[];
+  /** When the sessions happen (ISO), for turns that name days ("this Sunday", D44). Default 2026-10-01. */
+  clock?: string;
   sources: { id: string; description: string; docs: StaticDoc[] }[];
   sessions: { id: string; turns: Turn[] }[];
 }

@@ -87,6 +87,8 @@ export interface WorldItem {
   secret?: string;
   /** Text addressed to an AI that tries to give it instructions. */
   injection?: boolean;
+  /** What a connector reports as structure (D44): participants ("Name <email>; …") and an event's start (ISO). */
+  meta?: Record<string, string>;
 }
 
 export type ArcKind =
@@ -281,6 +283,14 @@ class Builder {
   }
 
   private add(item: Omit<WorldItem, "id" | "ref"> & { ref?: string }): WorldItem {
+    // A mail's participants, as a connector reports them (D44): its header's From, To and Cc, the user left out.
+    if (item.kind === "mail" && !item.meta) {
+      const header = item.text.slice(0, Math.max(0, item.text.indexOf("\n\n")));
+      const people = [...header.matchAll(/^(?:From|To|Cc): (.+)$/gm)]
+        .flatMap((m) => m[1]!.split(/, (?=[^,]+ <)/))
+        .filter((p) => !p.includes(`<${this.user.email}>`));
+      if (people.length > 0) item = { ...item, meta: { people: people.join("; ") } };
+    }
     const base = item.ref ?? `${item.kind}-${this.items.length}`;
     const n = this.refs.get(base) ?? 0;
     this.refs.set(base, n + 1);
@@ -314,6 +324,12 @@ class Builder {
           updatedAt: m.at,
           facts,
           noise: extra.noise ?? false,
+          meta: {
+            people: [m.from, m.to, ...(extra.cc ?? [])]
+              .filter((w) => w.email !== this.user.email)
+              .map((w) => `${w.full} <${w.email}>`)
+              .join("; "),
+          },
         }),
       );
     });
@@ -355,6 +371,7 @@ class Builder {
       updatedAt: start - this.r.int(2, 20) * DAY,
       facts,
       noise: false,
+      meta: { people: who.map((p) => `${p.full} <${p.email}>`).join("; "), start: new Date(start).toISOString() },
     });
   }
 
@@ -1063,6 +1080,7 @@ class Builder {
         updatedAt: at - 10 * DAY,
         facts: [],
         noise: true,
+        meta: { start: new Date(at).toISOString() },
       });
     }
     const docs = [

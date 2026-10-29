@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { ArgumentMappingError, McpSource, ReadOnlyViolation } from "./mcp-source";
+import { SourceFanout } from "./guarded";
+import { ArgumentMappingError, McpSource, ReadOnlyViolation, structureOf } from "./mcp-source";
+import { StaticSource } from "./static-source";
 
 /** A connector-like MCP server: one read tool, one write tool. */
 function connector() {
@@ -265,5 +267,44 @@ describe("McpSource fetch", () => {
     controller.abort();
     await expect(s.fetch("n1", scope, controller.signal)).rejects.toThrow();
     await s.close();
+  });
+});
+
+describe("people and start times kept as structure (D44)", () => {
+  test("Google Calendar and Gmail rows: attendees, sender, recipients, the user left out; the start as given", () => {
+    expect(
+      structureOf({
+        summary: "Robin / Dana",
+        start: { dateTime: "2026-11-05T16:00:00+01:00" },
+        attendees: [
+          { email: "robin@example.com", self: true },
+          { email: "dana@danalee.io", displayName: "Dana Lee" },
+        ],
+        organizer: { email: "dana@danalee.io" },
+      }),
+    ).toEqual({ people: "Dana Lee <dana@danalee.io>; dana@danalee.io", start: "2026-11-05T16:00:00+01:00" });
+    expect(
+      structureOf({ subject: "Re: plans", sender: "sam@globex.example", toRecipients: ["robin@example.com"] }),
+    ).toEqual({
+      people: "sam@globex.example; robin@example.com",
+    });
+    expect(structureOf({ title: "Notes", text: "no people, no time" })).toBeUndefined();
+    expect(structureOf({ title: "x", start: "not a date" })).toBeUndefined();
+  });
+
+  test("a time listing (no words, a window) returns what starts in it; windows are cached apart", async () => {
+    const cal = new StaticSource("calendar", "Calendar", [
+      { ref: "a", title: "Standup", text: "daily", meta: { start: "2026-11-01T09:00:00Z" } },
+      { ref: "b", title: "Standup", text: "daily", meta: { start: "2026-11-02T09:00:00Z" } },
+    ]);
+    const scope = { tenantId: "t", userId: "u" };
+    const list = (start: string, end: string) => ({ scope, text: "", entities: [], limit: 5, window: { start, end } });
+    expect((await cal.search(list("2026-11-01", "2026-11-02"))).map((i) => i.ref)).toEqual(["a"]);
+    const f = new SourceFanout({ sanitize: (items) => items, cacheBytes: 1_000_000 });
+    const [one] = await f.search([cal], list("2026-11-01", "2026-11-02"), { timeoutMs: 1_000 });
+    const [two] = await f.search([cal], list("2026-11-02", "2026-11-03"), { timeoutMs: 1_000 });
+    expect(one!.items.map((i) => i.ref)).toEqual(["a"]);
+    expect(two!.status).toBe("ok"); // not the first window's cached answer
+    expect(two!.items.map((i) => i.ref)).toEqual(["b"]);
   });
 });

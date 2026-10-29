@@ -12,7 +12,10 @@ const RULES: [Situation, RegExp][] = [
   ],
   ["travel", /\b(flight|hotel|trip|travel|airport|itinerary|booking|check[- ]?in)\b/i],
   ["purchase", /\b(buy|order|purchase|price|invoice|refund|subscription|receipt)\b/i],
-  ["communication", /\b(email|mail|reply|respond|message|text|slack|dm|follow[- ]?up|draft)\b/i],
+  [
+    "communication",
+    /\b(email|mail|reply|respond|message|text|slack|dm|follow[- ]?up|draft|write|note|thank|chase|ping|tell|intro(duce)?)\b/i,
+  ],
   ["research", /\b(find|look up|research|what is|who is|compare|summari[sz]e|learn about)\b/i],
   ["task", /\b(todo|to-do|task|remind|deadline|due|project|ticket)\b/i],
 ];

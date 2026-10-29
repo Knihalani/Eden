@@ -1033,3 +1033,80 @@ describe("refreshing stale cached items (D40)", () => {
     expect(await ask(p, "b", clock)).toContain("11:00");
   });
 });
+
+describe("grounding: people, days and intent without a model (D44)", () => {
+  // Thursday 29 October 2026, noon UTC.
+  const at = Date.parse("2026-10-29T12:00:00Z");
+  const calendar = new StaticSource("calendar", "Calendar", [
+    {
+      ref: "dana",
+      title: "Robin / Dana",
+      text: "Thursday 05 November 2026 16:00",
+      meta: { people: "dana@danalee.io", start: "2026-11-05T16:00:00Z" },
+    },
+    {
+      ref: "globex",
+      title: "Globex <> Robin",
+      text: "Thursday 12 November 2026 22:30",
+      meta: { people: "sam@globex.example", start: "2026-11-12T22:30:00Z" },
+    },
+    { ref: "webinar", title: "Founders webinar", text: "Webinar", meta: { start: "2026-11-12T16:00:00Z" } },
+    ...[25, 32, 39].map((d) => ({
+      ref: `weekly-${d}`,
+      title: "Weekly mentoring",
+      text: "Weekly mentoring session with the advisers",
+      meta: { start: new Date(Date.UTC(2026, 9, d, 17)).toISOString() },
+    })),
+  ]);
+  const mail = new StaticSource("gmail", "Mail", [
+    {
+      ref: "intro",
+      title: "Intro to Priya Raman?",
+      text: "Hey Dana, would love to talk to Priya Raman given her work on the Initech rollout",
+      meta: { people: "Dana Lee <dana@danalee.io>" },
+    },
+  ]);
+  const run = async (text: string, kind = "user_message", extra: Partial<PartnerDeps> = {}) => {
+    const { p, traces } = partner(extra, [calendar, mail]);
+    const sessionId = `g${clock++}`;
+    const event = { ...scope, sessionId, at, kind, text, ...(kind === "external" ? { source: "gmail" } : {}) };
+    const r = await p.observe(event as AgentEvent, { waitMs: 1_000 });
+    const ids = [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId })].flatMap((i) =>
+      i.citations.map((c) => c.itemId),
+    );
+    return { ids, reasons: traces.map((t) => t.reason) };
+  };
+
+  test("a meeting with a named person on a named day: that event, not their mail", async () => {
+    const { ids, reasons } = await run("Book me a call with Dana Lee next week");
+    expect(ids).toEqual(["calendar:dana"]);
+    expect(reasons.some((r) => r.startsWith("grounded-person-day:"))).toBe(true);
+  });
+
+  test("an arriving email naming a day finds that day's event sharing its name, not the day's others", async () => {
+    const { ids } = await run(
+      "New email from Sam at Globex Ventures: looking forward to our call on 12 November",
+      "external",
+    );
+    expect(ids).toEqual(["calendar:globex"]);
+  });
+
+  test("a question about the calendar lists the day, each occurrence of a recurring event its own item", async () => {
+    expect((await run("What's on my calendar this Sunday?")).ids).toEqual(["calendar:weekly-32"]);
+  });
+
+  test("a named person is not enough: a request that is not about meeting needs a word of the topic too", async () => {
+    expect((await run("Write to Dana Lee")).ids).toEqual([]);
+    expect((await run("Chase Dana Lee about the intro to Priya Raman")).ids).toEqual(["gmail:intro"]);
+  });
+
+  test("silent when the day named has nothing to do with the request", async () => {
+    expect((await run("What's the weather like next Thursday?")).ids).toEqual([]);
+  });
+
+  test("with a model, the judge decides: grounding is the no-model path only", async () => {
+    const model = new FakeModel(() => '{"pick": []}');
+    expect((await run("Book me a call with Dana Lee next week", "user_message", { model })).ids).toEqual([]);
+    expect(model.calls.length).toBe(1);
+  });
+});
