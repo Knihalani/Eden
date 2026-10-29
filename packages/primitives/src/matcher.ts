@@ -36,6 +36,8 @@ export class MultiMatcher {
   private readonly outList: Int32Array;
   private readonly lens: Int32Array;
   private readonly ring: Int32Array;
+  /** Per ring slot, its letter's place in a ligature's expansion (0 for an ordinary character). */
+  private readonly part: Uint8Array;
   private readonly ringMask: number;
 
   constructor(patterns: string[], options: MatcherOptions = {}) {
@@ -110,6 +112,7 @@ export class MultiMatcher {
     const longest = Math.max(1, ...this.lens);
     const size = 1 << Math.ceil(Math.log2(longest + 1));
     this.ring = new Int32Array(size);
+    this.part = new Uint8Array(size);
     this.ringMask = size - 1;
   }
 
@@ -162,6 +165,7 @@ export class MultiMatcher {
     const asciiCol = this.asciiCol;
     const outStart = this.outStart;
     const ring = this.ring;
+    const part = this.part;
     const ringMask = this.ringMask;
     const wholeWord = this.wholeWord;
     let s = 0;
@@ -185,15 +189,22 @@ export class MultiMatcher {
       }
       for (let u = 0; ;) {
         ring[k & ringMask] = i;
+        part[k & ringMask] = u;
         k++;
         s = delta[s * cols + col]!;
         const from = outStart[s]!;
         const to = outStart[s + 1]!;
         for (let j = from; j < to; j++) {
           const p = this.outList[j]!;
-          const start = ring[(k - this.lens[p]!) & ringMask]!;
+          const slot = (k - this.lens[p]!) & ringMask;
+          const start = ring[slot]!;
           const end = afterMarks(text, i + 1);
-          if (wholeWord && !(boundaryBefore(text, start) && boundaryAt(text, end))) continue;
+          if (wholeWord) {
+            // Inside a ligature is inside a word: a whole-word match must start on an expansion's first letter and
+            // end on its last ("ile" is not a word in "ﬁle", nor "f" in "ﬁ").
+            if (part[slot] !== 0 || (expanded !== null && u !== expanded.length - 1)) continue;
+            if (!(boundaryBefore(text, start) && boundaryAt(text, end))) continue;
+          }
           if (stop !== null && stop()) return;
           if (onMatch !== null) onMatch(p, start, end);
         }

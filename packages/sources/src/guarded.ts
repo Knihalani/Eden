@@ -389,8 +389,13 @@ export class SourceFanout {
       const message = String(e);
       const timedOut = timeout.aborted;
       if ((e as Error | undefined)?.name === GATE_ERROR) {
-        // The source answered; our gate failed (a worker pool overloaded or out of time). No evidence against it.
         s.latency.record(performance.now() - started);
+        if (timedOut) {
+          // The source answered so late that the gate ran out of time: neither a success nor the source's failure.
+          s.limiter.release("ignored");
+          return fallback("timeout", message);
+        }
+        // The source answered; our gate failed (a worker pool overloaded). No evidence against the source.
         s.limiter.release("ok");
         s.breaker.success(epoch);
         return fallback("error", message);

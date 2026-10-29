@@ -53,6 +53,8 @@ export interface McpSourceOptions {
   };
   /** Tools the server does not annotate read-only but an operator has verified are. */
   trustedReadTools?: string[];
+  /** A connection that closes sooner than this after connecting delays the next connect (default 5 s). */
+  quickCloseMs?: number;
 }
 
 export class ReadOnlyViolation extends Error {}
@@ -61,6 +63,8 @@ export class ReadOnlyViolation extends Error {}
 export class ArgumentMappingError extends Error {}
 
 const RETRY_AFTER_MS = 30_000;
+/** A connection that closes sooner than this after connecting waits `RETRY_AFTER_MS` before the next connect. */
+const QUICK_CLOSE_MS = 5_000;
 /** Pages of `tools/list` read at most: a server that keeps returning cursors cannot hold a connect forever. */
 const MAX_TOOL_PAGES = 20;
 
@@ -129,8 +133,15 @@ export class McpSource implements Source {
         }
         // A dropped connection (a stdio server that exited, an expired HTTP session) clears the client, so the next
         // call connects again instead of failing with "Not connected" for the life of this source.
+        const connectedAt = Date.now();
         client.onclose = () => {
-          if (this.client === client) this.client = null;
+          if (this.client !== client) return;
+          this.client = null;
+          // A server that dies right after connecting (crashing on every call) must not cost a process per lookup.
+          if (Date.now() - connectedAt < (this.options.quickCloseMs ?? QUICK_CLOSE_MS)) {
+            this.lastError = new Error(`${this.id}: connection closed ${Date.now() - connectedAt} ms after connecting`);
+            this.retryAt = Date.now() + RETRY_AFTER_MS;
+          }
         };
         this.client = client;
         return client;
