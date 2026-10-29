@@ -64,8 +64,9 @@ three or more query terms and scores at least 0.8 (coverage plus the entity bonu
 directly if the caller passed `waitMs` and it landed in time; otherwise it is queued and delivered with the next
 event (or via `/v1/pending`).
 
-**Ask** always searches live (more sources), ignores the not-twice ledger (the agent asked), and uses one model call
-to compose a cited answer when a model and budget are available; otherwise it returns the cited items as is.
+**Ask** always searches live (more sources), ignores the not-twice ledger (the agent asked), and returns the cited
+items as they are, with no model call: the asker is a model and reads them directly (D43). `askWithModel`
+(`EDEN_ASK_MODEL=1`) has one model call compose a short cited answer instead, when a model and budget are available.
 
 ## Learning loop
 

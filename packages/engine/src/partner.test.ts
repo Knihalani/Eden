@@ -297,13 +297,23 @@ describe("ask", () => {
     expect(res.citations.map((c) => c.itemId)).toContain("calendar:evt-1");
   });
 
-  test("uses the model to answer when one is configured", async () => {
+  test("with askWithModel, uses the model to answer when one is configured", async () => {
     const model = new FakeModel(() => "Thursday 3pm [0]");
-    const { p } = partner({ model });
+    const { p } = partner({ model, config: { askWithModel: true } });
     const res = await p.ask({ ...scope, question: "When is the call with Dana Lee?" });
     expect(res.usedModel).toBe(true);
     expect(res.answer).toContain("Thursday 3pm [0]");
     expect(res.answer).toStartWith("<context"); // Model text derived from sources is wrapped as data, too.
+  });
+
+  test("by default answers with the cited items and no model call, even with a model configured (D43)", async () => {
+    const model = new FakeModel(() => "Thursday 3pm [0]");
+    const { p } = partner({ model });
+    const res = await p.ask({ ...scope, question: "When is the call with Dana Lee?" });
+    expect(res.usedModel).toBe(false);
+    expect(model.calls.length).toBe(0);
+    expect(res.citations.length).toBeGreaterThan(0);
+    expect(res.answer).toStartWith("<context");
   });
 });
 

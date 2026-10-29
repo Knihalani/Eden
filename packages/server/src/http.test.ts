@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Trace } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
+import { FakeModel } from "@eden/llm";
 import { StaticSource } from "@eden/sources";
 import { buildPartner, startGatePool } from "./build";
 import { loadConfig } from "./config";
@@ -220,5 +221,31 @@ describe("audit regressions (2026-10-29)", () => {
     expect(config.keys.has("0123456789abcdef")).toBe(false);
     expect(config.keys.get(full)).toBe("acme");
     expect(() => loadConfig({ EDEN_API_KEYS: "acme:0123456789abcdef,globex:0123456789abcdef" })).toThrow(/two tenants/);
+  });
+});
+
+describe("EDEN_ASK_MODEL (D43)", () => {
+  test("off by default; 1 has the model compose ask answers, through loadConfig and buildPartner", async () => {
+    expect(loadConfig({ EDEN_DEV: "1" }).askWithModel).toBe(false);
+    expect(loadConfig({ EDEN_DEV: "1", EDEN_ASK_MODEL: "0" }).askWithModel).toBe(false);
+    expect(() => loadConfig({ EDEN_DEV: "1", EDEN_ASK_MODEL: "yes" })).toThrow(/EDEN_ASK_MODEL/);
+    const docs = [{ ref: "d1", title: "Globex renewal", text: "Globex renewal with Dana Lee due Friday" }];
+    for (const on of [false, true]) {
+      const config = loadConfig({ EDEN_DEV: "1", EDEN_ASK_MODEL: on ? "1" : "0" });
+      const model = new FakeModel(() => "Friday [0]");
+      const partner = buildPartner({
+        sources: async () => [new StaticSource("crm", "Deals", docs)],
+        model,
+        askWithModel: config.askWithModel,
+      });
+      const res = await partner.ask({
+        tenantId: "dev",
+        userId: "u",
+        sessionId: "s",
+        question: "Globex renewal Dana Lee?",
+      });
+      expect(res.usedModel).toBe(on);
+      expect(model.calls.length).toBe(on ? 1 : 0);
+    }
   });
 });
