@@ -4,7 +4,7 @@
  *   zoo-tune|zoo-a|zoo-b] [--planner [--planner-max-calls 3] [--planner-no-cascade] [--planner-cascade-min 0.05]
  *   [--planner-no-reuse] [--planner-deadline-margin 2] [--planner-latency-quantile 0.9]
  *   [--planner-mode serve|shadow] [--promote-after N]] [--time 0] [--wait 0]
- *   [--noise 1] [--tool-rate 0.4] [--judge none|perfect|noisy] [--live] [--brief]
+ *   [--noise 1] [--updates 0] [--refresh-after-hours H] [--tool-rate 0.4] [--judge none|perfect|noisy] [--live] [--brief]
  *
  * Plays generated sessions over simulated sources and prints the quality report as JSON. Without --live no model is
  * used (free, deterministic at --time 0). --time 1 runs source latency and agent pacing in real time.
@@ -41,6 +41,10 @@ const report = await runQuality({
   timeScale: Number(arg("time", "0")),
   waitMs: Number(arg("wait", "0")),
   noiseScale: Number(arg("noise", "1")),
+  updates: Number(arg("updates", "0")),
+  ...(args.includes("--refresh-after-hours")
+    ? { config: { refreshAfterMs: Number(arg("refresh-after-hours", "0")) * 3_600_000 } }
+    : {}),
   agentToolRate: Number(arg("tool-rate", "0.4")),
   model,
   judge: arg("judge", "none") as "none" | "perfect" | "noisy",
@@ -72,6 +76,7 @@ const out = args.includes("--brief")
       ask: report.ask,
       shadow: report.shadow,
       privacy: report.privacy,
+      updates: report.updates,
       noiseShare: report.noiseShare,
       redundantShare: report.redundantShare,
     }

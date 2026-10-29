@@ -130,6 +130,47 @@ export class SourceFanout {
     return Promise.all(sources.map((source) => this.one(source, query, deadline, timeout)));
   }
 
+  /**
+   * One item by its ref through the source's `fetch` (refreshing a cached item), under the same per-(user, source)
+   * breaker, rate limit and concurrency limit as a search, within `timeoutMs`, sanitized before it is returned. Not
+   * cached here: a refresh wants the source's current copy. Null when the source has no fetch, a guard skips the call,
+   * it fails, or the source returns nothing. Never throws.
+   */
+  async fetch(
+    source: Source,
+    scope: Scope,
+    ref: string,
+    options: { timeoutMs: number; signal?: AbortSignal },
+  ): Promise<ContextItem | null> {
+    if (!source.fetch) return null;
+    const timeout = AbortSignal.timeout(options.timeoutMs);
+    const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+    const key = `${scopeKey(scope)}|${source.id}`;
+    const s = this.state(key);
+    if (!s.breaker.allow() || this.rate.take(key) > 0 || !s.limiter.tryAcquire()) return null;
+    const started = performance.now();
+    try {
+      const raw = await source.fetch(ref, scope, signal);
+      s.latency.record(performance.now() - started);
+      s.limiter.release("ok");
+      s.breaker.success();
+      if (!raw) return null;
+      const [item] = await this.options.sanitize([raw], signal);
+      return item ?? null;
+    } catch (e) {
+      const message = String(e);
+      if (signal.aborted && !timeout.aborted) {
+        s.limiter.release("ignored"); // The caller gave up: no evidence against the source.
+        return null;
+      }
+      s.latency.record(performance.now() - started);
+      s.limiter.release("dropped");
+      s.breaker.failure();
+      if (RATE_LIMITED.test(message)) this.rate.penalize(key, retryAfterMs(message) ?? 5_000);
+      return null;
+    }
+  }
+
   /** Drops everything held for a user (cached results and per-source state), or for one of their sources. */
   forget(scope: Scope, sourceId?: string): void {
     const prefix = sourceId ? `${scopeKey(scope)}|${sourceId}|` : `${scopeKey(scope)}|`;
