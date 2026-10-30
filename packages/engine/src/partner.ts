@@ -53,6 +53,7 @@ import { namesParticipant, startDay, startMs, timeWindow, titleNames, type TimeW
 import {
   absenceSpan,
   cleanEntities,
+  daysNamed,
   isAction,
   isScheduling,
   isSubject,
@@ -785,7 +786,9 @@ export class ContextPartner {
     const time = cue.time;
     if (!this.config.groundAway || !time || time.days.size === 0) return false;
     const span = absenceSpan(item, cue.at);
-    return span !== null && ![...time.days].some((d) => d >= span.from && d <= span.to);
+    if (span === null || [...time.days].some((d) => d >= span.from && d <= span.to)) return false;
+    // An item that names a day the request names is about that day too ("Offsite Fri 6 Nov … Sam is away 9-10 Nov").
+    return !daysNamed(item, cue.at).some((d) => time.days.has(d)) && !time.days.has(startDay(item) ?? "");
   }
 
   private max(): number {

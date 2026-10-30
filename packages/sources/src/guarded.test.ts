@@ -420,8 +420,9 @@ describe("SharedCalls (one lookup's planner and probes)", () => {
     expect(await shared.get(sharedKey("s", q("dana  lee")))!).toEqual(got);
   });
 
-  test("keys ignore case, quotes and spacing, and keep the source and the window apart", () => {
-    expect(sharedKey("s", q('"Dana  Lee"'))).toBe(sharedKey("s", q("dana lee")));
+  test("keys ignore case and spacing, and keep quotes, the source and the window apart", () => {
+    expect(sharedKey("s", q("Dana  Lee"))).toBe(sharedKey("s", q("dana lee")));
+    expect(sharedKey("s", q('"Dana Lee"'))).not.toBe(sharedKey("s", q("dana lee")));
     expect(sharedKey("t", q("dana lee"))).not.toBe(sharedKey("s", q("dana lee")));
     const windowed = { ...q(""), window: { start: "2026-11-04", end: "2026-11-05", offsetMinutes: 0 } };
     expect(sharedKey("s", windowed)).not.toBe(sharedKey("s", q("")));

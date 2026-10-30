@@ -66,14 +66,44 @@ class UserCache {
   readonly probes = new Map<string, { ids: string[]; at: number }>();
   /** The user's own name as their items list it (`selfOf`), computed on demand; null when none stands out. */
   self: string | null | undefined;
-  /** Items with people added since `self` was computed: it is computed again after `SELF_REFRESH` of them. */
-  selfStale = 0;
+  /** How many cached items name each person (`partiesOf`), and how many name anyone: kept as items come and go. */
+  parties = new Map<string, number>();
+  partied = 0;
 }
 
 /** Header lines naming who takes part in an item: a mail's From, To and Cc, an event's attendees, an owner. */
 const PARTY_LINES = /^(from|to|cc|attendees|owner|organi[sz]er):[^\n]*$/gim;
-/** Items with people that make the user's name worth computing again (`ItemCache.selfOf`). */
-const SELF_REFRESH = 32;
+/**
+ * The people an item names as taking part: its `meta.people`, and its header lines (a mail's From, To and Cc, an
+ * event's attendees, a record's owner), as full names of two or three capitalised words.
+ */
+function partiesOf(item: ContextItem): string[] {
+  const heads = item.text.match(PARTY_LINES) ?? [];
+  const out: string[] = [];
+  for (const entry of [item.meta?.people ?? "", ...heads.map((h) => h.replace(/^[^:]*:/, ""))]
+    .join(";")
+    .split(/[;,\n]/)) {
+    const name = entry
+      .replace(/<[^<>]*>/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (/^\p{Lu}[\p{L}'-]*( \p{Lu}[\p{L}'-]*){1,2}$/u.test(name) && !out.includes(name)) out.push(name);
+  }
+  return out;
+}
+
+/** Counts an item's people in or out of the user's tally (`selfOf`). */
+function tally(u: UserCache, item: ContextItem, by: 1 | -1): void {
+  const names = partiesOf(item);
+  if (names.length === 0) return;
+  u.partied += by;
+  for (const n of names) {
+    const c = (u.parties.get(n) ?? 0) + by;
+    if (c > 0) u.parties.set(n, c);
+    else u.parties.delete(n);
+  }
+  u.self = undefined;
+}
 
 const simScratch = new Uint32Array(2);
 
@@ -211,8 +241,11 @@ export class ItemCache {
       const item = sanitized ? raw : sanitizeItem(raw, this.limits.maxTextChars);
       const old = u.items.get(item.id);
       if (old && old.item.text === item.text && old.item.title === item.title) {
-        // Same words, so the index and sketch stand; the rest (url, meta, updatedAt) is taken from the new copy.
+        // Same words, so the index and sketch stand; the rest (url, meta, updatedAt) is taken from the new copy. Its
+        // people are counted again: its meta may name others.
+        tally(u, old.item, -1);
         old.item = item;
+        tally(u, item, 1);
         old.fetchedAt = now;
         u.items.delete(item.id); // Re-insert: Map order stays oldest-first for eviction.
         u.items.set(item.id, old);
@@ -220,8 +253,7 @@ export class ItemCache {
       }
       if (old) this.drop(u, old);
       if (item.meta?.start) u.offset = undefined;
-      if (item.meta?.people || PARTY_LINES.test(item.text)) u.selfStale++;
-      PARTY_LINES.lastIndex = 0;
+      tally(u, item, 1);
       const doc = this.index(u, item);
       const entry = { item, fetchedAt: now, doc, sketch: sketchOf(u, item) };
       u.items.set(item.id, entry); // Map order stays oldest-first for eviction (old entry was removed above).
@@ -246,6 +278,10 @@ export class ItemCache {
       u.byDoc[doc] = entry;
     }
     u.baseline = u.vocab.size;
+    // Same items, so the same people: their counts carry over.
+    u.parties = old.parties;
+    u.partied = old.partied;
+    u.self = old.self;
     this.users.set(scopeKey(scope), u); // Same key: the user's place in the eviction order is unchanged.
   }
 
@@ -272,6 +308,7 @@ export class ItemCache {
     u.index.remove(e.doc);
     if (u.byDoc[e.doc] === e) u.byDoc[e.doc] = undefined;
     if (e.item.meta?.start) u.offset = undefined; // An event gone (evicted, expired, forgotten) may change the mode.
+    tally(u, e.item, -1);
   }
 
   /** When the cached item was last fetched or seen in a lookup (ms), or undefined if it is not cached. */
@@ -367,38 +404,17 @@ export class ItemCache {
   /**
    * The user's own name, read from their items: the person their items' `meta.people` lists most, when listed on at
    * least a third of the items that list anyone and on at least five (the user is on their own events and mail).
-   * Null when no one stands out. Compaction writes it as "you" (`render.ts`).
+   * Null when no one stands out. Compaction writes it as their first name (`render.ts`).
    */
   selfOf(scope: Scope): string | null {
     const u = this.peek(scope);
     if (!u) return null;
-    // Not known yet, or many items later: computed again. While no one stands out, any new item may settle it.
-    if (u.self === undefined || u.selfStale >= SELF_REFRESH || (u.self === null && u.selfStale > 0)) {
-      const counts = new Map<string, number>();
-      let listed = 0;
-      for (const e of u.items.values()) {
-        // Who an item names as taking part: its people, and its header lines (a mail's From and To, an event's
-        // attendees, a record's owner).
-        const heads = e.item.text.match(PARTY_LINES) ?? [];
-        const people = [e.item.meta?.people ?? "", ...heads.map((h) => h.replace(/^[^:]*:/, ""))].join(";");
-        if (!people.replace(/;/g, "").trim()) continue;
-        listed++;
-        const seen = new Set<string>();
-        for (const entry of people.split(/[;,\n]/)) {
-          const name = entry
-            .replace(/<[^<>]*>/g, "")
-            .replace(/\s+/g, " ")
-            .trim();
-          if (!/^\p{Lu}[\p{L}'-]*( \p{Lu}[\p{L}'-]*){1,2}$/u.test(name) || seen.has(name)) continue;
-          seen.add(name);
-          counts.set(name, (counts.get(name) ?? 0) + 1);
-        }
-      }
+    // Kept as items come and go (`tally`): what is computed here is only the best of the counts.
+    if (u.self === undefined) {
       let best: string | null = null;
       let most = 0;
-      for (const [name, n] of counts) if (n > most) [best, most] = [name, n];
-      u.self = best && most >= 5 && most * 3 >= listed ? best : null;
-      u.selfStale = 0;
+      for (const [name, n] of u.parties) if (n > most) [best, most] = [name, n];
+      u.self = best && most >= 5 && most * 3 >= u.partied ? best : null;
     }
     return u.self;
   }

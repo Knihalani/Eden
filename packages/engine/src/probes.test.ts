@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
 import { Budget, FakeModel } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
-import { StaticSource, type Source } from "@eden/sources";
+import { QueryPlanner, StaticSource, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { timeWindow } from "./grounding";
 import { ContextPartner } from "./partner";
@@ -63,6 +63,9 @@ describe("probes: what a request implies", () => {
     expect(requestedSpan("dinner on Thursday at 19:00")).toEqual({ from: 1140, to: 1230 });
     expect(requestedSpan("we'll come to the barbecue saturday at 1")).toEqual({ from: 780, to: 870 });
     expect(requestedSpan("a workshop Thursday afternoon")).toEqual({ from: 720, to: 1080 });
+    // The first range that is a time ("6-9 nov" is a date); a pm end with a larger start number starts in the morning.
+    expect(requestedSpan("Book dinner on 6-9 nov, from 7-9pm")).toEqual({ from: 1140, to: 1260 });
+    expect(requestedSpan("Book 11-1pm Friday")).toEqual({ from: 660, to: 780 });
     // Numbers that are not times: a percentage range, a date range, a count.
     expect(requestedSpan("prices go up 3-5% next year")).toBeNull();
     expect(requestedSpan("away 2-3 November")).toBeNull();
@@ -88,6 +91,19 @@ describe("probes: what a request implies", () => {
     const walkthrough = { ...item("15:30–16:30"), title: "Security audit walkthrough – Pied Piper" };
     // "pipeline" and "Piper" share a stem, but blocking time makes something new: no subject.
     expect(isSubject(walkthrough, "Block Wednesday 3–5pm for prep on the quarterly pipeline review")).toBe(false);
+    // Checking whether a slot is free, or fitting something in, makes something new: a shared stem is no subject.
+    const budget = { ...item("15:00"), title: "Budget review with finance" };
+    expect(isSubject(budget, "Check if Friday at 3pm works for a design review with Acme")).toBe(false);
+    const onboarding = { ...item("15:00"), title: "Client onboarding call" };
+    expect(isSubject(onboarding, "Check if I can fit in a call with a new client Friday 3pm")).toBe(false);
+  });
+
+  test("the time parsers stay linear on hostile text", () => {
+    for (const hostile of ["1" + " ".repeat(32_000), "1:00" + " ".repeat(32_000), "1 - ".repeat(8_000)]) {
+      const t0 = performance.now();
+      requestedSpan(hostile);
+      expect(performance.now() - t0).toBeLessThan(50);
+    }
   });
 
   test("an item that only says things stand as expected is settled; a change, a return or a negation is not", () => {
@@ -97,6 +113,11 @@ describe("probes: what a request implies", () => {
     expect(settled(item("We are holding payment until the credit note arrives"))).toBe(false);
     expect(settled(item("INV-1042 was already paid on Tuesday"))).toBe(false);
     expect(settled(item("Back from leave on Monday 9 November"))).toBe(false);
+    // Asked, not said; nothing settled; a request to go ahead.
+    expect(settled(item("Is this resolved?"))).toBe(false);
+    expect(settled(item("Nothing is resolved"))).toBe(false);
+    expect(settled(item("Can you go ahead and cancel the order?"))).toBe(false);
+    expect(settled(item("You can go ahead with the order."))).toBe(true);
   });
 
   test("the days an item says someone is away, from the dates near its absence words", () => {
@@ -110,6 +131,13 @@ describe("probes: what a request implies", () => {
     // A date in early January is next year's.
     expect(absenceSpan(item("On holiday 2-5 Jan"), now)).toEqual({ from: "2027-01-02", to: "2027-01-05" });
     expect(absenceSpan(item("Our offsite on 6 Nov was great"), now)).toBeNull();
+    // "Away" in an idiom is no absence; the date after the absence words is the absence's.
+    expect(absenceSpan(item("Please send the deck right away. Board meeting 12 Nov"), now)).toBeNull();
+    expect(absenceSpan(item("Throw away the old drafts before the 12 Nov review"), now)).toBeNull();
+    expect(absenceSpan(item("Dentist on 6 Nov; I'll be unavailable for calls 20 Nov"), now)).toEqual({
+      from: "2026-11-20",
+      to: "2026-11-20",
+    });
     expect(absenceSpan(item("Away, no dates yet"), now)).toBeNull();
   });
 
@@ -576,5 +604,105 @@ describe("the fallback for a request that asks about something it names (fallbac
 
   test("a question about the world at large names nothing of the user's: silent", async () => {
     expect(await got(true, "What's a good stretch for back pain this week?")).toEqual([]);
+  });
+});
+
+describe("more of D48's settings, through the engine", () => {
+  const scope = { tenantId: "t", userId: "u" };
+  const at = Date.parse("2026-10-27T09:00:00Z");
+  const engine = (
+    sources: Source[],
+    config: Record<string, unknown>,
+    model: FakeModel | null = null,
+    planner?: QueryPlanner,
+  ) =>
+    new ContextPartner({
+      sources: async () => sources,
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model,
+      now: () => at,
+      ...(planner ? { planner } : {}),
+      config: { probeGraceMs: 1_000, ...config },
+    });
+  const logged = (id: string, items: { ref: string; title: string; text: string }[], log: string[]): Source => {
+    const s = new StaticSource(id, id, items);
+    return { ...s, id, kind: "test", search: (q) => (log.push(`${id}|${q.text}`), s.search(q)) };
+  };
+  const say = async (p: ContextPartner, text: string) => {
+    const r = await p.observe({ ...scope, sessionId: "s", at, kind: "user_message", text } as AgentEvent, {
+      waitMs: 1_000,
+    });
+    return [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId: "s" })].flatMap((i) =>
+      i.citations.map((c) => c.itemId),
+    );
+  };
+
+  test("judgeContested: two sure items go to the judge, one does not", async () => {
+    const two = [
+      { ref: "a", title: "Globex renewal pricing", text: "Globex renewal pricing: 15% off agreed" },
+      { ref: "b", title: "Globex renewal pricing call", text: "Globex renewal pricing call notes" },
+    ];
+    const model = new FakeModel(() => '{"pick": [0]}');
+    // Both score as sure (a low bar): contested, so judged.
+    const sure = { judgeContested: true, confidentScore: 0.5 };
+    await say(engine([logged("drive", two, [])], sure, model), "Globex renewal pricing");
+    expect(model.calls.length).toBe(1);
+    const lone = new FakeModel(() => '{"pick": []}');
+    const got = await say(engine([logged("drive", two.slice(0, 1), [])], sure, lone), "Globex renewal pricing");
+    expect(lone.calls.length).toBe(0);
+    expect(got).toEqual(["drive:a"]);
+  });
+
+  test("quietSettled: a sure item that only says things stand as expected is not pushed with no model", async () => {
+    const notes = [{ ref: "a", title: "Globex renewal pricing", text: "Globex renewal pricing unchanged, as usual" }];
+    expect(await say(engine([logged("drive", notes, [])], {}), "Globex renewal pricing")).toEqual(["drive:a"]);
+    expect(await say(engine([logged("drive", notes, [])], { quietSettled: true }), "Globex renewal pricing")).toEqual(
+      [],
+    );
+  });
+
+  test("probeRoles sends the relation word; probeSecondSources bounds the second person's sources", async () => {
+    const log: string[] = [];
+    const docs = [{ ref: "a", title: "Note", text: "My manager is away" }];
+    const sources = ["a", "b", "c", "d"].map((id) => logged(id, docs, log));
+    await say(engine(sources, { probes: true, probeRoles: true }), "Book a 1:1 with my manager on Monday");
+    expect(log.some((l) => l.endsWith("|manager"))).toBe(true);
+    log.length = 0;
+    await say(
+      engine(sources, { probes: true, probeSecondSources: 1, probeCalls: 8 }),
+      "Set up a call with Dana Lee and Sam Ortiz",
+    );
+    expect(log.filter((l) => l.endsWith("|Dana Lee")).length).toBe(3);
+    expect(log.filter((l) => l.endsWith("|Sam Ortiz")).length).toBe(1);
+  });
+
+  test("judgeItemBytes and judgeWindowChars bound the judge's input", async () => {
+    const long = {
+      ref: "a",
+      title: "Globex",
+      text: `Globex renewal. ${"More words about Globex pricing. ".repeat(40)}`,
+    };
+    const model = new FakeModel(() => '{"pick": []}');
+    const p = engine(
+      [logged("drive", [long], [])],
+      { compactInjection: true, judgeItemBytes: 120, confidentScore: 99 },
+      model,
+    );
+    await say(p, "What is the latest on the Globex renewal pricing?");
+    const user = model.calls[0]!.messages.at(-1)!.content;
+    const line = user.split("\n").find((l) => l.startsWith("[0]"))!;
+    expect(new TextEncoder().encode(line).length).toBeLessThan(120 + 40); // the item, its title and its source tag
+  });
+
+  test("probeShare: within a lookup, the planner and the probes never send the same query to a source twice", async () => {
+    const log: string[] = [];
+    const docs = [{ ref: "a", title: "Dana Lee", text: "Dana Lee prefers mornings" }];
+    const sources = ["a", "b", "c"].map((id) => logged(id, docs, log));
+    const p = engine(sources, { probes: true, probeShare: true }, null, new QueryPlanner({ seed: 3, epsilon: 0 }));
+    await say(p, "Set up a call with Dana Lee about the renewal");
+    const lower = log.map((l) => l.toLowerCase());
+    expect(new Set(lower).size).toBe(lower.length);
   });
 });

@@ -34,9 +34,10 @@ import type { SearchQuery, Source } from "./source";
  */
 export type SharedCalls = Map<string, Promise<ContextItem[] | null>>;
 
-/** The key of a query in `SharedCalls`: the source, the text as words in lowercase, and a window if any. */
+/** The key of a query in `SharedCalls`: the source, the text in lowercase with its spacing collapsed, and a window. */
 export function sharedKey(sourceId: string, q: SearchQuery): string {
-  const text = q.text.toLowerCase().replace(/["']/g, "").replace(/\s+/g, " ").trim();
+  // Quotes kept: a phrase query ("Dana Lee" in quotes) and the same words loose may find different items.
+  const text = q.text.toLowerCase().replace(/\s+/g, " ").trim();
   return `${sourceId}|${text}|${q.window ? `${q.window.start}..${q.window.end}` : ""}`;
 }
 

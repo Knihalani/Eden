@@ -85,21 +85,24 @@ export function requestedRange(raw: string): { from: number; to: number } | null
  * when it names no time. A clash is an event overlapping this (`overlaps`), not one merely near it.
  */
 export function requestedSpan(raw: string): { from: number; to: number } | null {
-  const t = raw.toLowerCase().replace(/[–—]/g, "-");
+  // Whitespace collapsed first, and a request's head is where its time is: the patterns below then never rescan a
+  // long run (a digit before thousands of spaces was quadratic).
+  const t = raw.slice(0, 2_000).toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, " ");
   const clock = (h: string, m: string | undefined, half: string | undefined) => {
     let hour = Number(h) % 24;
     if (half === "pm" && hour < 12) hour += 12;
     if (half === "am" && hour === 12) hour = 0;
     return hour * 60 + Number(m ?? 0);
   };
-  // A stated range; a meridiem written once ("3-5pm") holds for both ends.
-  const r =
-    /\b(?:from\s+|between\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|to|and|until)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/.exec(
-      t,
-    );
-  if (r && (r[3] || r[6] || r[2] || r[5])) {
-    const from = clock(r[1]!, r[2], r[3] ?? r[6]);
+  // A stated range, the first one that is a time ("6-9 nov" is a date): a meridiem written once ("3-5pm") holds for
+  // both ends, unless that would start it after it ends ("11-1pm" is 11 in the morning to 1).
+  for (const r of t.matchAll(
+    /\b(?:from |between )?(\d{1,2})(?::(\d{2}))? ?(am|pm)? ?(?:-|to|and|until) ?(\d{1,2})(?::(\d{2}))? ?(am|pm)?\b/g,
+  )) {
+    if (!(r[3] || r[6] || r[2] || r[5])) continue;
+    let from = clock(r[1]!, r[2], r[3] ?? r[6]);
     const to = clock(r[4]!, r[5], r[6] ?? r[3]);
+    if (!r[3] && r[6] === "pm" && from >= to) from = clock(r[1]!, r[2], "am");
     if (to > from && to - from <= 12 * 60) return { from, to };
   }
   const one =
@@ -139,7 +142,9 @@ export function overlaps(item: ContextItem, start: number, span: { from: number;
 }
 
 /** Verbs of a request about an event that already exists. */
-const ABOUT_EXISTING = /\b(confirm|check|cancel|move|reschedul\w*|push|postpone|remind|attend|still on|what time)\b/i;
+const ABOUT_EXISTING = /\b(confirm|cancel|move|reschedul\w*|push|postpone|remind|attend|still on|what time)\b/i;
+/** Verbs of a request that makes something new in the calendar: then no existing event is its subject. */
+const MAKES_NEW = /\b(book|schedule|set up|arrange|add|fit in|put in|block|invite|organi[sz]e)\b/i;
 
 /**
  * Whether an event is the thing the request is about rather than something in its way: it shares a distinctive word
@@ -148,7 +153,7 @@ const ABOUT_EXISTING = /\b(confirm|check|cancel|move|reschedul\w*|push|postpone|
  */
 export function isSubject(item: ContextItem, raw: string): boolean {
   // Only a request about something already in the calendar has one there; "block", "book" or "set up" make a new one.
-  if (!ABOUT_EXISTING.test(raw)) return false;
+  if (!ABOUT_EXISTING.test(raw) || MAKES_NEW.test(raw)) return false;
   const stems = (text: string) =>
     new Set(
       (text.toLowerCase().match(/[\p{L}]{5,}/gu) ?? [])
@@ -226,8 +231,9 @@ const FREE_MAIL = new Set(
  * then), and not when negated ("not resolved").
  */
 const SETTLED =
-  /\b(as usual|as planned|as normal|as agreed|as before|no changes?|unchanged|nothing (has )?changed|still (on|valid|in place|the same|going ahead)|all clear|(is|are|now|it's) clear to|good to go|go ahead|resolved|sorted( out)?)\b/i;
-const NEGATED = /\b(not|n't|never|no longer|isn't|hasn't|wasn't|yet to be)\s+(\w+\s+)?$/i;
+  /\b(as usual|as planned|as normal|as agreed|as before|no changes?|unchanged|nothing (has )?changed|still (on|valid|in place|the same|going ahead)|all clear|(is|are|now|it's) clear to|good to go|(?:you|we) can go ahead|(?:you're|you are) clear to go ahead|resolved|sorted( out)?)\b/i;
+const NEGATED =
+  /\b(not|n't|never|no longer|isn't|hasn't|wasn't|yet to be|nothing (?:is|has been|was|got))\s+(\w+\s+)?$/i;
 
 /**
  * Whether an item only confirms that things stand as expected (`SETTLED`, not negated): with no model to judge, such
@@ -236,14 +242,20 @@ const NEGATED = /\b(not|n't|never|no longer|isn't|hasn't|wasn't|yet to be)\s+(\w
 export function settled(item: ContextItem): boolean {
   const text = `${item.title}. ${item.text}`;
   for (const m of text.matchAll(new RegExp(SETTLED.source, "gi"))) {
-    if (!NEGATED.test(text.slice(Math.max(0, m.index! - 24), m.index!))) return true;
+    if (NEGATED.test(text.slice(Math.max(0, m.index! - 24), m.index!))) continue;
+    // Asked, not said: the sentence it is in ends with a question mark ("Is this resolved?").
+    const end = text.slice(m.index!).search(/[.!?\n]/);
+    if (end >= 0 && text[m.index! + end] === "?") continue;
+    return true;
   }
   return false;
 }
 
 /** Words saying someone is not there: on leave, away, out of office, unavailable. */
+// "Away" only as a person's ("is away", "I'm away", "away on Skye", "away until"); "right away" and "throw away" are
+// not.
 const ABSENT =
-  /\b(away|on leave|annual leave|parental leave|maternity leave|paternity leave|sick leave|compassionate leave|out of (the )?office|ooo|on holiday|on vacation|off sick|off work|unavailable|not available)\b/i;
+  /\b((?:is|am|are|i'm|im|we're|he's|she's|they're|be|been|being)\s+away|away\s+(?:on|from|until|till|through|for|in|at|between)|on leave|annual leave|parental leave|maternity leave|paternity leave|sick leave|compassionate leave|out of (the )?office|ooo|on holiday|on vacation|off sick|off work|unavailable|not available)\b/i;
 const MONTH = "(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*";
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
@@ -257,7 +269,9 @@ export function absenceSpan(item: ContextItem, now: number): { from: string; to:
   const text = `${item.title}. ${item.text}`;
   const m = ABSENT.exec(text);
   if (!m) return null;
-  const near = text.slice(Math.max(0, m.index - 60), m.index + m[0].length + 120).toLowerCase();
+  // Dates after the absence words first ("unavailable for calls 20 Nov"), then just before them ("6–9 Nov: away").
+  const after = text.slice(m.index, m.index + m[0].length + 120).toLowerCase();
+  const before = text.slice(Math.max(0, m.index - 60), m.index + m[0].length).toLowerCase();
   const today = new Date(now).toISOString().slice(0, 10);
   const iso = (day: number, month: string) => {
     const mi = MONTHS.indexOf(month.slice(0, 3));
@@ -274,36 +288,41 @@ export function absenceSpan(item: ContextItem, now: number): { from: string; to:
   const dayBefore = (d: string) => new Date(Date.parse(d) - 86_400_000).toISOString().slice(0, 10);
   const span = (from: string | null, to: string | null) => (from && to && from <= to ? { from, to } : null);
   const sep = "\\s*(?:-|–|—|to|until|till|through|and)\\s*";
-  let r: RegExpExecArray | null;
-  // "6–9 Nov"
-  if ((r = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?${sep}(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`).exec(near))) {
-    return span(iso(Number(r[1]), r[3]!), iso(Number(r[2]), r[3]!));
-  }
-  // "2 Nov to 6 Nov", "30 Oct – 2 Nov"
-  if (
-    (r = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}${sep}(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`).exec(near))
-  ) {
-    return span(iso(Number(r[1]), r[2]!), iso(Number(r[3]), r[4]!));
-  }
-  // "Nov 6–9"
-  if ((r = new RegExp(`\\b${MONTH}\\s+(\\d{1,2})(?:st|nd|rd|th)?${sep}(\\d{1,2})\\b`).exec(near))) {
-    return span(iso(Number(r[2]), r[1]!), iso(Number(r[3]), r[1]!));
-  }
-  // "until 9 November", "back on 9 Nov" (away until the day before)
-  if (
-    (r = new RegExp(
-      `\\b(until|till|through|thru|back(?: on)?|returning(?: on)?)\\s+(?:\\w+day,?\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`,
-    ).exec(near))
-  ) {
-    const d = iso(Number(r[2]), r[3]!);
-    return d ? span(today, r[1]!.startsWith("back") || r[1]!.startsWith("return") ? dayBefore(d) : d) : null;
-  }
-  // One date: that day.
-  if ((r = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`).exec(near))) {
-    const d = iso(Number(r[1]), r[2]!);
-    return span(d, d);
-  }
-  return null;
+  const read = (near: string): { from: string; to: string } | null => {
+    let r: RegExpExecArray | null;
+    // "6–9 Nov"
+    if ((r = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?${sep}(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`).exec(near))) {
+      return span(iso(Number(r[1]), r[3]!), iso(Number(r[2]), r[3]!));
+    }
+    // "2 Nov to 6 Nov", "30 Oct – 2 Nov"
+    if (
+      (r = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}${sep}(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`).exec(
+        near,
+      ))
+    ) {
+      return span(iso(Number(r[1]), r[2]!), iso(Number(r[3]), r[4]!));
+    }
+    // "Nov 6–9"
+    if ((r = new RegExp(`\\b${MONTH}\\s+(\\d{1,2})(?:st|nd|rd|th)?${sep}(\\d{1,2})\\b`).exec(near))) {
+      return span(iso(Number(r[2]), r[1]!), iso(Number(r[3]), r[1]!));
+    }
+    // "until 9 November", "back on 9 Nov" (away until the day before)
+    if (
+      (r = new RegExp(
+        `\\b(until|till|through|thru|back(?: on)?|returning(?: on)?)\\s+(?:\\w+day,?\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`,
+      ).exec(near))
+    ) {
+      const d = iso(Number(r[2]), r[3]!);
+      return d ? span(today, r[1]!.startsWith("back") || r[1]!.startsWith("return") ? dayBefore(d) : d) : null;
+    }
+    // One date: that day.
+    if ((r = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`).exec(near))) {
+      const d = iso(Number(r[1]), r[2]!);
+      return span(d, d);
+    }
+    return null;
+  };
+  return read(after) ?? read(before);
 }
 
 /** Whether a request's person (a name of one or more words) is named in an item, whole words, any case. */
@@ -336,6 +355,27 @@ export function rolesOf(raw: string, max = 2): string[] {
   for (const w of raw.toLowerCase().match(/[a-z]+/g) ?? []) {
     if (ROLES.has(w) && !out.includes(w)) out.push(w);
     if (out.length >= max) break;
+  }
+  return out;
+}
+
+/** The days an item names by day and month ("Fri 6 Nov", "6 November"), as ISO dates: the year nearest `now`. */
+export function daysNamed(item: ContextItem, now: number): string[] {
+  const out: string[] = [];
+  const year = new Date(now).getUTCFullYear();
+  for (const m of `${item.title} ${item.text}`
+    .toLowerCase()
+    .matchAll(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`, "g"))) {
+    const mi = MONTHS.indexOf(m[2]!.slice(0, 3));
+    const day = Number(m[1]);
+    if (mi < 0 || day < 1 || day > 31) continue;
+    let best = "";
+    let gap = Infinity;
+    for (const y of [year - 1, year, year + 1]) {
+      const t = Date.UTC(y, mi, day);
+      if (Math.abs(t - now) < gap) [best, gap] = [new Date(t).toISOString().slice(0, 10), Math.abs(t - now)];
+    }
+    if (!out.includes(best)) out.push(best);
   }
   return out;
 }
