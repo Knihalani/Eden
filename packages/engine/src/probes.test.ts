@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
-import { Budget } from "@eden/llm";
+import { Budget, FakeModel } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { StaticSource, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
@@ -163,5 +163,88 @@ describe("probe state is the session's own (isolation)", () => {
     // Cached items by id are the user's own.
     expect(cache.hits({ tenantId: "t", userId: "u1" }, ["drive:n1"], at).length).toBe(1);
     expect(cache.hits({ tenantId: "t", userId: "u3" }, ["drive:n1"], at)).toEqual([]);
+  });
+});
+
+describe("probe state, review round (D46)", () => {
+  const t0 = Date.parse("2026-10-27T09:00:00Z");
+  const notes = () =>
+    new StaticSource("drive", "Notes", [
+      { ref: "n1", title: "People notes", text: "Dana Lee: severe nut allergy" },
+      { ref: "w1", title: "Weather report", text: "weather forecast this week: rain, then sun" },
+    ]);
+  const setup = (config: Record<string, unknown>, sources: Source[], model: FakeModel | null = null) => {
+    let clock = t0;
+    const p = new ContextPartner({
+      sources: async () => sources,
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model,
+      now: () => clock,
+      config: { probes: true, ...config },
+    });
+    const say = async (sessionId: string, minutes: number, text: string) => {
+      clock = t0 + minutes * 60_000;
+      await p.observe({ tenantId: "t", userId: "u", sessionId, at: clock, kind: "user_message", text } as AgentEvent, {
+        waitMs: 1_000,
+      });
+    };
+    return { say };
+  };
+  const counting = (source: StaticSource, log: string[]): Source => ({
+    id: source.id,
+    kind: "test",
+    description: source.description,
+    search: (q) => (log.push(q.text), source.search(q)),
+  });
+
+  test("the memo is the session's: a repeat within 10 minutes skips the person probe there, not elsewhere", async () => {
+    const log: string[] = [];
+    // No confident fast-path answer, so every turn looks up and probes (the cached note would answer otherwise).
+    const { say } = setup({ confidentScore: 99 }, [counting(notes(), log)]);
+    const probes = () => log.filter((q) => q === "Dana Lee").length;
+    await say("a", 0, "Order chocolates for Dana Lee");
+    expect(probes()).toBe(1);
+    // Past the fan-out's 60 s result cache: only the memo can skip the call.
+    // Each turn names someone else too: a new cue each time, not a repeat the cue cooldown would skip.
+    await say("a", 2, "Book a table for me and Dana Lee at Nopi");
+    expect(probes()).toBe(1);
+    await say("b", 2, "Order chocolates for Dana Lee from Hotel Chocolat");
+    expect(probes()).toBe(2);
+    // Past the memo's 10 minutes, session a asks again: new mail about the person is found.
+    await say("a", 15, "Order flowers for Dana Lee from Bloom");
+    expect(probes()).toBe(3);
+  });
+
+  test("probes make exactly probeCalls source calls when there are more sources than that", async () => {
+    const run = async (probes: boolean) => {
+      const log: string[] = [];
+      const many = Array.from({ length: 10 }, (_, i) =>
+        counting(
+          new StaticSource(`s${i}`, `Source ${i}`, [{ ref: "a", title: "Dana Lee", text: "Dana Lee notes" }]),
+          log,
+        ),
+      );
+      const { say } = setup({ probes, probeCalls: 2 }, many);
+      await say("a", 0, "Order chocolates for Dana Lee and Sam Ortiz about the quarterly report");
+      return log.length;
+    };
+    expect((await run(true)) - (await run(false))).toBe(2);
+  });
+
+  test("a lookup's probe finds are its own: a later unrelated turn never seats them with the judge", async () => {
+    const shown: string[] = [];
+    const model = new FakeModel((req) => {
+      shown.push(req.messages.map((m) => m.content).join("\n"));
+      return '{"pick": []}';
+    });
+    const { say } = setup({ probeWhen: "actions" }, [notes()], model);
+    await say("a", 0, "Order chocolates for Dana Lee");
+    const before = shown.length;
+    await say("a", 30, "what is the weather forecast this week?");
+    const later = shown.slice(before);
+    expect(later.length).toBeGreaterThan(0);
+    expect(later.some((prompt) => prompt.includes("nut allergy"))).toBe(false);
   });
 });
