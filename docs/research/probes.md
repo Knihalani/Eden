@@ -80,17 +80,48 @@ Dev suite (60 hidden, 60 control): eden-judge + probes − tools +0.250 (+0.133�
 
 ### Free tiers (engine only and simulation)
 
-Funnel and simulation, probes on against off, and the per-part ablation: see the tables below (filled from the
-ledger's `probes-final`, `probes-final-actions`, `baseline-final` and `ablate-*` runs).
+Simulation (4 seeds, 589 silent turns per row; ledger labels `baseline-final`, `probes-final-actions`,
+`probes-final`). Recall and precision; the perfect judge stands in for a model that judges well:
 
-ABLATION_AND_SIM_TABLES
+| Mix | Judge | Off | Actions only | Always | Source calls / lookup (off / actions / always) |
+|---|---|---|---|---|---|
+| realistic | none | 0.238, 0.595 | 0.276, 0.581 | 0.305, 0.593 | 5.6 / 9.1 / 11.8 |
+| realistic | perfect | 0.447, 0.804 | 0.571, 0.842 | 0.618, 0.823 | 5.6 / 8.9 / 11.7 |
+| held-out A | none | 0.242, 0.587 | 0.266, 0.579 | 0.288, 0.596 | 5.5 / 8.9 / 11.6 |
+| held-out A | perfect | 0.448, 0.800 | 0.540, 0.827 | 0.581, 0.822 | 5.5 / 8.8 / 11.5 |
+| held-out B | none | 0.281, 0.559 | 0.306, 0.557 | 0.314, 0.561 | 5.4 / 8.7 / 11.4 |
+| held-out B | perfect | 0.579, 0.780 | 0.666, 0.809 | 0.687, 0.809 | 5.4 / 8.7 / 11.4 |
+
+No hard false fire in any row. Ask recall@5 0.85–0.88 off, 0.86–0.90 with probes. With the perfect judge, model
+calls per turn 0.19–0.23 off, 0.22–0.24 on. The eval is identical under all three (recall 0.444, precision 1, no
+false fire). The simulation's tasks were not used to design probes: these rows are out of sample.
+
+Funnel (engine only, no model; 4 seeds): the planted item reached the agent on dev 0.125 → 0.625 of tasks, held-out
+0.042 → 0.167; decoys delivered on dev 0.075 → 0.275, held-out 0.104 → 0.062; source calls per task 3 → 9–10;
+engine time 3 → 5 ms. "Actions only" gives the same funnel (every hidden-context request is an action).
+
+Ablation (each part switched off with the rest on; ledger `ablate-*`; realistic simulation and both funnels):
+
+| Off | Dev delivered | Held-out delivered | Sim recall (none / perfect) | Calls per funnel task |
+|---|---|---|---|---|
+| (nothing) | 0.625 | 0.167 | 0.305 / 0.618 | 9.4 |
+| people | 0.475 | 0.125 | 0.251 / 0.535 | 6.3 |
+| topic | 0.625 | 0.167 | 0.292 / 0.565 | 6.8 |
+| day listing | 0.400 | 0.083 | 0.306 / 0.610 | 9.2 |
+| clash ground | 0.425 | 0.083 | 0.305 / 0.618 | 9.4 |
+| organisation | 0.550 | 0.167 | 0.305 / 0.608 | 9.3 |
+| judge seats | 0.625 | 0.167 | 0.305 / 0.606 | 9.4 |
+
+People probes carry most of the general gain; the topic probe matters for the simulation's lookups, not for hidden
+context; the day listing and clash ground carry the scheduling clashes; organisations and seats are small. A
+meeting-change ground was built too and removed: it changed nothing measurable.
 
 ## Costs
 
-- Source calls per lookup roughly double (simulation 5.6 → about 11.7; `probeWhen: "actions"` about 9).
-- No probe calls a model. With the judge, model calls per turn rise slightly (0.19 → 0.22, more candidates
-  qualify); judge input grows by up to three candidates.
-- Engine time per task in the funnel 3–4 ms → 6–8 ms (sources instant).
+- Source calls per lookup roughly double (simulation 5.4–5.6 → 11.4–11.8; `probeWhen: "actions"` 8.7–9.1).
+- No probe calls a model. With the perfect judge, model calls per turn rise slightly (0.19–0.23 → 0.22–0.24: more
+  lookups have candidates); judge input grows by up to three candidates.
+- Engine time per task in the funnel about 3 → 5 ms (sources instant); simulated delivery p95 up a few to 15 ms.
 - For the agent, Eden in place of tools is cheaper than tools: fewer agent model calls and 40% fewer input tokens.
 
 ## Limits

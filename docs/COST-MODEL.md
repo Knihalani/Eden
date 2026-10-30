@@ -57,6 +57,11 @@ takes the no-model path; it never defers spend.
 2. Smaller inputs: shorter windows, candidate snippets, prompt-cache-friendly prompt layout (stable system prefix).
 3. Cheaper model: a fine-tuned small judge (M6).
 
+Probes (D46, off by default) add no model call but roughly double source calls per lookup in simulation (5.4–5.6 →
+11.4–11.8; 8.7–9.1 with `probeWhen: "actions"`), within `probeCalls` (8) per lookup; with a judge, model calls per
+turn rise by 0.01–0.03 (more lookups have candidates). For the agent, Eden with probes in place of search tools cost
+less per task than the tools did ($0.330 against $0.378 per 1,000 held-out tasks; docs/research/probes.md).
+
 The non-model costs (source API calls, hosting) are not modelled yet. Source calls may dominate for some connectors;
 measure them per connector in M2. The query planner (D28), on by default in the server since D33, adds no model call.
 After its iterations it makes 1.36–1.47x planner-off's source calls per lookup in the simulation at time 0 and
