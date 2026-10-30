@@ -21,7 +21,7 @@ import type { ContextItem } from "@eden/protocol";
  * Words that start a request without naming anything: imperatives and politeness. A capitalised run at a sentence
  * start keeps them ("Send Rose Kimura", "Ask Łukasz"); without them the run is the name.
  */
-const LEADING = new Set(
+export const LEADING = new Set(
   (
     "please pls can could would will ask tell send email e-mail message text ping remind reply respond forward share " +
     "book schedule set arrange organise organize plan invite accept decline cancel move reschedule push offer order " +
@@ -51,6 +51,30 @@ export const isAction = (raw: string) =>
       .toLowerCase()
       .replace(/[^a-z-]/g, ""),
   ) || isScheduling(raw);
+
+/** Words that open a request without being its verb: a courtesy, an aside, a "can you". */
+const OPENERS = new Set("please pls can could would will you hi hey ok okay so and also then".split(" "));
+
+/**
+ * A request in the imperative: its first word other than an opener (`OPENERS`) is a verb that acts ("Book a table…",
+ * "Please give Dana access…", "can you send…"). Stricter than `isAction`, which also takes a scheduling word anywhere
+ * ("a great book on negotiation"). Reads at most the first eight words.
+ */
+export function isImperative(raw: string): boolean {
+  const words = raw.trim().split(/\s+/, 8);
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i]!.toLowerCase().replace(/[^a-z-]/g, "");
+    if (OPENERS.has(word)) continue;
+    // "Can you tell me if the migration finished?" asks to be told, not for the migration: a question.
+    const next = words[i + 1]?.toLowerCase().replace(/[^a-z]/g, "");
+    if (TELL_ME.has(word) && (next === "me" || next === "us") && /\?\s*$/.test(raw)) return false;
+    return LEADING.has(word);
+  }
+  return false;
+}
+
+/** Verbs that, with "me" and a question mark, ask to be told something ("let me know", "show me", "tell me"). */
+const TELL_ME = new Set(["tell", "let", "show", "remind"]);
 
 /** A request that puts something in the calendar or commits the user's time. */
 const SCHEDULING =

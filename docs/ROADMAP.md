@@ -33,6 +33,13 @@ train / held-out split for tuning, and text not written by templates.
   facts raised against tools' 0.403, at 64% fewer probe calls; precision 0.949 in simulation; packets 39% smaller than
   probes'. Missed: 1.7× tools, cost below tools, no-model decoys. Next: semantic retrieval (about half of the hidden
   facts are never returned by a source), behind its own decision.
+- Done (2026-10-30, PoC): a structural conflict test, a learned probe economy, dense packets, name-only quiet and a tied
+  judge (D49–D55, [research/combined-config.md](research/combined-config.md),
+  [research/serverless-bridge.md](research/serverless-bridge.md)), no model and no new dependency. Configuration H, no
+  model, on seven held-out suites: 163 hidden facts delivered against 43 decoys (D48's F: 91 against 59 on six);
+  simulation no-model recall 0.407 and soft fires 0.086, perfect-judge precision 0.952, 432 bytes per needed fact, model
+  cost $0.0172 per 1,000 turns. Not measured live. Next: a live run of H against tools; semantic retrieval across the
+  vocabulary gap (held-out 6 retrieves 29 of 80; a fixed consequence vocabulary gained 1 in 220 blind).
 - Done (2026-10-28, [research/eval-suite.md](research/eval-suite.md)): 26 scenarios across personal-agent jobs with
   gold labels, many must-stay-silent turns and 6 adversarial scenarios (prompt injection, planted secrets, look-alike
   names); per-category metrics, a privacy check and direct asks in the report. Baseline with no model: precision

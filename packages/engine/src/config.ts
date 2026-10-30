@@ -112,12 +112,48 @@ export interface EngineConfig {
   /** The topic probe only for a request that names no person. */
   probeTopicAlone: boolean;
   /**
+   * A probe's query is not sent again to a source whose answers to it have not been changing (`economy.ts`): the
+   * chance it changed since last asked, from its own and the user's learned change rates, is below
+   * `probeFreshFloor`; its last answer, still cached, stands in for the call.
+   */
+  probeFresh: boolean;
+  /** With `probeFresh`, the least chance that a query's answer changed for it to be asked again. */
+  probeFreshFloor: number;
+  /**
+   * A probe kind (person, organisation, topic, role, day) is sent to a source only while the upper 90% bound of what
+   * such calls have yielded for this user (an item new to the cache that was seated with the judge or delivered, then
+   * or later) is at least `probeYieldFloor` (`economy.ts`); the first person then goes to every source, not
+   * `probePeopleSources` of them.
+   */
+  probeYield: boolean;
+  /** With `probeYield`, the least yield per call worth a call. */
+  probeYieldFloor: number;
+  /**
+   * A request that acts, of an action class (release, delete, pay, hire, travel, food, spend, share: `consequence.ts`),
+   * sends that class's constraint vocabulary ("freeze moratorium blackout ...") as one more probe, to the
+   * `consequenceSources` sources best for the class (learned per user with `probeYield`). A find that holds a class
+   * term and that the conflict test, tied by the class's words, says conflicts with the request takes a judge seat
+   * and, with `groundConflict`, is delivered with no model.
+   */
+  consequenceProbe: boolean;
+  /** Sources the consequence probe goes to per lookup. */
+  consequenceSources: number;
+  /**
    * With a judge configured, the slow path's confident items are judged too (with the other candidates, one call)
    * rather than delivered on their score alone. Costs a judge call on lookups that had only confident items.
    */
   judgeConfident: boolean;
   /** With a judge configured, sure items are judged when more than one scored as sure (a contested set). */
   judgeContested: boolean;
+  /**
+   * The judge is asked only when a candidate is tied to the request: it holds a word of the request that is rare in
+   * the user's items (on fewer than `judgeTiedShare` of them: a name, a reference, a place), or it is an event on a
+   * day the request names. Candidates that share only common words with it ("nice", "week", "thanks") are what a
+   * judge almost always turns down, so the call is not made and the lookup ends silent (`judgeTied`).
+   */
+  judgeTied: boolean;
+  /** With `judgeTied`, a word on fewer than this share of the user's live items ties a candidate to the request. */
+  judgeTiedShare: number;
   /** The judge's input: the recent conversation, at most this many characters (its newest end). */
   judgeWindowChars: number;
   /** With `compactInjection`, each candidate's compacted text in the judge's input, at most this many bytes. */
@@ -134,8 +170,48 @@ export interface EngineConfig {
    * "away"), and one saying someone is away only on other days is not (`probes.ts` `absenceSpan`; D48).
    */
   groundAway: boolean;
+  /**
+   * With no model's say: an item that would change what the request is about to do is delivered (grounded
+   * "conflict"): a hold, absence or freeze over a day it acts on, a deadline or expiry before it, a limit below an
+   * amount it commits, a thing already done, a standing constraint (an allergy, a confidentiality), about something
+   * the request names or, for a request that names no one, one of its words, whatever the request (`conflict.ts`;
+   * D49).
+   */
+  groundConflict: boolean;
+  /**
+   * With no model's say (the confident path and the fallback), an item about what the request names whose decisive
+   * value does not conflict with it is not delivered: a span elsewhere, an amount under the limit, a matter lifted
+   * or unchanged, a sibling reference (Q2 for Q3, another invoice number) (`conflict.ts`; D49).
+   */
+  quietClear: boolean;
   /** With `judgeConfident`, a lone sure item the lookup and a probe both found is judged too (false: delivered). */
   judgeAgreed: boolean;
+  /**
+   * With `compactInjection`, a packet says each occurrence once: an item that echoes one above it (the same weekday
+   * and time, and no word the user's items make rare: an invitation under its calendar event, the reply that booked
+   * it) is left out of the packet (`fold.ts`), and compaction drops a notification's echo of its own title, footers
+   * run into a line and the user from attendee lists (`render.ts` `messageParts`).
+   */
+  densePacket: boolean;
+  /**
+   * With no model's say, names a request types in lowercase ("move my drinks with chen wei") ground it and pick its
+   * fallback as capitalised ones do, when the user's own sources have been recorded mentioning them (the source map;
+   * `Partner.withRecoveredNames`). Probes and ranking keep the request as typed: no source call is added.
+   */
+  recoverNames: boolean;
+  /**
+   * With no model's say, the event a request names the way people do is grounded: by its occasion and who it is with
+   * ("dinner with Elena"), its occasion and day ("lunch on Monday"), or, for a message from someone about meeting, the
+   * next event whose title names them (`Partner.occasion`).
+   */
+  groundOccasion: boolean;
+  /**
+   * With no model's say, an item tied to the request by a name alone is not pushed: it shares no other word of the
+   * request, is on no day the request names and holds no reference it names (`Partner.beyondName`). A passing
+   * mention of someone ("Sam says hi") is no need, and the name does not say which of their items would be meant.
+   * Applies to the confident path, the fallback and the conflict ground.
+   */
+  quietNameOnly: boolean;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
   /** Cost reserved per judge call before the real cost is known: about its worst case at the cap (D45). */
@@ -191,17 +267,31 @@ export const DEFAULT_CONFIG: EngineConfig = {
   probePeopleSources: 3,
   probeTopicSources: 8,
   probeTopicAlone: false,
+  probeFresh: false,
+  probeFreshFloor: 0.15,
+  probeYield: false,
+  probeYieldFloor: 0.05,
+  consequenceProbe: false,
+  consequenceSources: 1,
   probeRoles: false,
   probeShare: false,
   probeSecondSources: 3,
   probeOff: [],
   judgeConfident: false,
   judgeContested: false,
+  judgeTied: false,
+  judgeTiedShare: 0.03,
   judgeWindowChars: 4_000,
   judgeItemBytes: 280,
   confidentItems: 3,
   quietSettled: false,
   groundAway: false,
+  groundConflict: false,
+  quietClear: false,
   judgeAgreed: true,
+  densePacket: false,
+  recoverNames: false,
+  groundOccasion: false,
+  quietNameOnly: false,
   maxEventChars: 32_000,
 };
