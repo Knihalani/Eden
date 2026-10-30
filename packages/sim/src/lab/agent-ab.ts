@@ -18,9 +18,12 @@
  *
  *   OPENROUTER_API_KEY=… bun packages/sim/src/lab/agent-ab.ts [--seeds 41,42,43] [--tasks 30] [--offworld 5]
  *     [--conditions none,tools,eden,both] [--judge] [--model z-ai/glm-5.3-flash] [--grader anthropic/claude-haiku-5.5]
- *     [--budget 3] [--out results.json]
+ *     [--budget 3] [--out results.json] [--merge earlier.json]
+ *
+ * --merge keeps an earlier run's results for the conditions not listed in --conditions (same seeds and task counts),
+ * re-runs the listed ones, and grades every result that has no grade yet.
  */
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { ContextPartner, ItemCache } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, OpenRouterModel } from "@eden/llm";
@@ -92,7 +95,12 @@ async function chat(
       signal: AbortSignal.timeout(90_000),
     }).catch((e: unknown) => ({ ok: false, status: 0, text: async () => String(e) }) as Response);
     if (res.ok) {
-      const body = (await res.json()) as { choices?: { message: Msg }[]; usage?: Usage; error?: { message: string } };
+      // A connection reset while reading the body is retried like a server error.
+      const body = (await res.json().catch(() => ({}))) as {
+        choices?: { message: Msg }[];
+        usage?: Usage;
+        error?: { message: string };
+      };
       if (body.choices?.[0]) {
         const usage = body.usage ?? { prompt_tokens: 0, completion_tokens: 0 };
         spent += usage.cost ?? 0;
@@ -386,20 +394,35 @@ console.error(
   `${worlds.reduce((n, w) => n + w.tasks.length, 0)} tasks × ${CONDITIONS.length} conditions, model ${MODEL}, ` +
     `grader ${GRADER}, budget $${BUDGET}`,
 );
-const results: RunResult[] = [];
+const MERGE = opt("merge", "");
+const earlier = MERGE
+  ? (JSON.parse(readFileSync(MERGE, "utf8")) as { results: RunResult[] }).results.filter(
+      (r) => !CONDITIONS.includes(r.condition),
+    )
+  : [];
+const results: RunResult[] = [...earlier];
+const byId = new Map(worlds.flatMap((w) => w.tasks).map((t) => [t.id, t]));
 try {
   const streams = worlds.flatMap((w) => CONDITIONS.map((c) => runWorld(w.world, w.seed, w.tasks, c)));
   for (const r of await Promise.all(streams)) results.push(...r);
-  const byId = new Map(worlds.flatMap((w) => w.tasks).map((t) => [t.id, t]));
-  const queue = results.filter((r) => !r.error);
-  await Promise.all(
-    Array.from({ length: 8 }, async () => {
-      for (let r = queue.shift(); r; r = queue.shift()) r.facts = await grade(byId.get(r.task)!, r.answer);
-    }),
-  );
 } catch (e) {
   console.error(`stopped: ${e instanceof Error ? e.message : e}`);
 }
+// Grading: each result once; a failed grading call leaves that result ungraded (reported), never scored as a miss.
+const queue = results.filter((r) => !r.error && !r.facts && byId.has(r.task));
+let ungraded = 0;
+await Promise.all(
+  Array.from({ length: 8 }, async () => {
+    for (let r = queue.shift(); r; r = queue.shift()) {
+      try {
+        r.facts = await grade(byId.get(r.task)!, r.answer);
+      } catch (e) {
+        ungraded++;
+        if (e instanceof OverBudget) queue.length = 0;
+      }
+    }
+  }),
+);
 const tasks = worlds.flatMap((w) => w.tasks);
 writeFileSync(OUT, JSON.stringify({ model: MODEL, grader: GRADER, seeds: SEEDS, spent, tasks, results }, null, 2));
-console.error(`spent $${spent.toFixed(4)}; ${results.length} runs → ${OUT}`);
+console.error(`spent $${spent.toFixed(4)}; ${results.length} runs, ${ungraded} left ungraded → ${OUT}`);
