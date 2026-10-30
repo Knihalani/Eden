@@ -79,6 +79,86 @@ export function requestedRange(raw: string): { from: number; to: number } | null
   return null;
 }
 
+/**
+ * The time a request asks to fill, in minutes from midnight: a range it states ("3–5pm", "15:00-17:00", "from 2 to
+ * 4pm") as it is, a single time ("dinner at 19:00") as the 90 minutes from it, a part of the day as that part. Null
+ * when it names no time. A clash is an event overlapping this (`overlaps`), not one merely near it.
+ */
+export function requestedSpan(raw: string): { from: number; to: number } | null {
+  const t = raw.toLowerCase().replace(/[–—]/g, "-");
+  const clock = (h: string, m: string | undefined, half: string | undefined) => {
+    let hour = Number(h) % 24;
+    if (half === "pm" && hour < 12) hour += 12;
+    if (half === "am" && hour === 12) hour = 0;
+    return hour * 60 + Number(m ?? 0);
+  };
+  // A stated range; a meridiem written once ("3-5pm") holds for both ends.
+  const r =
+    /\b(?:from\s+|between\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|to|and|until)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/.exec(
+      t,
+    );
+  if (r && (r[3] || r[6] || r[2] || r[5])) {
+    const from = clock(r[1]!, r[2], r[3] ?? r[6]);
+    const to = clock(r[4]!, r[5], r[6] ?? r[3]);
+    if (to > from && to - from <= 12 * 60) return { from, to };
+  }
+  const one =
+    /\b(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/.exec(t) ?? /\b(?:at\s+)?([01]?\d|2[0-3]):([0-5]\d)\b/.exec(t);
+  if (one) {
+    const at = clock(one[1]!, one[2], one[3]);
+    return { from: at, to: at + 90 };
+  }
+  // A bare hour after "at" ("the barbecue at 1", "dinner at 7"): one to seven is the afternoon or evening.
+  const bare = /\bat\s+(\d{1,2})\b(?![:.\d%])/.exec(t);
+  if (bare && Number(bare[1]) >= 1 && Number(bare[1]) <= 12) {
+    const h = Number(bare[1]);
+    const at = (h <= 7 ? h + 12 : h) * 60;
+    return { from: at, to: at + 90 };
+  }
+  if (/\bmorning\b/.test(t)) return { from: 6 * 60, to: 12 * 60 };
+  if (/\bafternoon\b/.test(t)) return { from: 12 * 60, to: 18 * 60 };
+  if (/\b(evening|tonight|night)\b/.test(t)) return { from: 17 * 60, to: 23 * 60 + 59 };
+  return null;
+}
+
+/**
+ * Minutes from midnight an event ends: the first time its text gives after its start ("10:00–11:30", "departs 07:10,
+ * arrives 10:35"), within twelve hours; else an hour after it starts.
+ */
+export function endMinutes(item: ContextItem, start: number): number {
+  for (const m of item.text.matchAll(/\b([01]?\d|2[0-3]):([0-5]\d)\b/g)) {
+    const t = Number(m[1]) * 60 + Number(m[2]);
+    if (t > start && t - start <= 12 * 60) return t;
+  }
+  return start + 60;
+}
+
+/** Whether an event starting at `start` overlaps the span (an hour long when its end is not stated). */
+export function overlaps(item: ContextItem, start: number, span: { from: number; to: number }): boolean {
+  return start < span.to && endMinutes(item, start) > span.from;
+}
+
+/** Verbs of a request about an event that already exists. */
+const ABOUT_EXISTING = /\b(confirm|check|cancel|move|reschedul\w*|push|postpone|remind|attend|still on|what time)\b/i;
+
+/**
+ * Whether an event is the thing the request is about rather than something in its way: it shares a distinctive word
+ * with the request ("confirm my dentist appointment" and "Dental check-up": the same first four letters, words of
+ * five letters or more that are neither scheduling words nor times). Confirming an appointment is not a clash with it.
+ */
+export function isSubject(item: ContextItem, raw: string): boolean {
+  // Only a request about something already in the calendar has one there; "block", "book" or "set up" make a new one.
+  if (!ABOUT_EXISTING.test(raw)) return false;
+  const stems = (text: string) =>
+    new Set(
+      (text.toLowerCase().match(/[\p{L}]{5,}/gu) ?? [])
+        .filter((w) => !SCHEDULING.test(w) && !TIMEISH.test(w) && !LEADING.has(w))
+        .map((w) => w.slice(0, 4)),
+    );
+  const asked = stems(raw);
+  return [...stems(item.title)].some((x) => asked.has(x));
+}
+
 /** Minutes from midnight an item starts at, in its own offset; null without a timed `meta.start`. */
 export function startMinutes(item: ContextItem): number | null {
   const m = /T(\d{2}):(\d{2})/.exec(item.meta?.start ?? "");
