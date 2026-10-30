@@ -126,7 +126,11 @@ export function compactText(
   let signed = false; // in a quoted message's signature: until the next quoted message starts
   let first = true; // the message's first sentence, past its headers
   // A connector's snippet is often one line: the thread's markers are put back on lines of their own first.
+  // Whitespace is collapsed first, in linear passes: every pattern below then sees runs of one character at most (a
+  // long run would make their leading `\s+` rescan it from every start, quadratic on hostile text).
   const lines = text
+    .replace(/[ \t\r\f\v]+/g, " ")
+    .replace(/ ?\n[\n ]*/g, "\n")
     .replace(/\s+(On [^\n]{6,160}? wrote:)\s*/g, "\n$1\n")
     .replace(/[ \t]+((?:>[ \t]?)+)/g, "\n$1")
     .replace(/\s+(--|Sent from my \S+)(\s|$)/g, "\n$1\n")
@@ -141,7 +145,7 @@ export function compactText(
       if (!quoted) own = false;
       continue;
     }
-    if (/^from:/i.test(line)) line = line.replace(/\s*<[^>]*>/g, "");
+    if (/^from:/i.test(line)) line = line.replace(/ ?<[^<>\n]*>/g, "");
     for (let part of line.split(/(?<=[.!?])\s+(?=[\p{Lu}\d—-])/u)) {
       if (SIGNOFF.test(part) || SIGNED.test(part)) {
         if (quoted) signed = true;
