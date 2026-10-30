@@ -85,10 +85,10 @@ between them may be grading noise.
 - One agent model, one simulated world family built by the same project, one run (live models vary run to run).
 - Arrivals are 35 tasks: their intervals are wide.
 - This run's harness had three faults found in review and fixed after it: Eden's judge ran without zero-retention
-  routing (`zdr: false`, not the product's default); a judge verdict landing after its task's agent answered was
-  charged to the next task and never counted (the harness now charges it by session and records `lateItems`); and
-  the grader saw the answer untagged (now `<answer>`, through `inert`). Totals are unaffected by the first two
-  except at the edges: the judge's cost lands in the same condition, and late context reached no answer either way.
+  routing (`zdr: false`, not the product's default); a judge verdict landing after its task's agent answered was charged
+  to the next task and never counted (the harness now charges it by session and records `lateItems`); and the grader saw
+  the answer untagged (now `<answer>`, through `inert`). The judge's cost lands in the same condition either way, and
+  late context reached no answer; the effect of the routing on the judge's verdicts was not measured.
 
 ## Reproduce
 

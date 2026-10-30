@@ -210,7 +210,10 @@ interface RunResult {
   /** Eden's own model calls and spend for this task (its judge, in the -judge conditions). */
   edenModelCalls: number;
   edenCostUsd: number;
-  /** Items Eden queued for this task after the agent's final answer (they reached no answer). */
+  /**
+   * Items Eden queued for this task after the agent's final answer (they reached no answer). A lower bound: the next
+   * task ends this one's session, cutting off a judge call still running.
+   */
   lateItems: number;
   error?: string;
   facts?: Record<string, boolean>;
