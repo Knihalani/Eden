@@ -48,6 +48,9 @@ import {
 import { nearDuplicate, sanitizedId, sanitizeItem, type ItemCache, type Sketch } from "./cache";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
+import { assess, frameOf, namesRef, unmeasuredLimit, type Frame, type Verdict } from "./conflict";
+import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
+import { ProbeEconomy, type ProbeKind } from "./economy";
 import { answerMessages, judgeMessages, parseJudge } from "./judge";
 import { namesParticipant, startDay, startMs, timeWindow, titleNames, type TimeWindow } from "./grounding";
 import {
@@ -55,6 +58,8 @@ import {
   cleanEntities,
   daysNamed,
   isAction,
+  isImperative,
+  LEADING,
   isScheduling,
   isSubject,
   mentions,
@@ -66,6 +71,7 @@ import {
   startMinutes,
   topicOf,
 } from "./probes";
+import { foldEchoes } from "./fold";
 import { Ledger } from "./ledger";
 import { citationsOf, renderAnswer, renderPacket, shownText } from "./render";
 import { classifySituation } from "./situation";
@@ -176,7 +182,34 @@ interface Cue {
 const JUDGE_MAX_TOKENS = 512;
 /** Probes a user's cache remembers (`ItemCache.rememberProbe`): enough for the people and days of their week. */
 const PROBE_MEMO = 256;
+/** Consequence-probe finds a lookup ranks (`consequenceProbe`): its own and its class's earlier ones still cached. */
+const MAX_CONSEQUENCE = 8;
+
+/** What a lookup's probes found: the calls they made, their finds, and the consequence probe's (`consequence`). */
+interface ProbeOut {
+  calls: number;
+  kept: string[];
+  consequence?: { cls: ActionClass; ids: string[] };
+}
+
+/** One probe query (`Partner.probe`'s `send`): its kind, sources, words or day, and what to do with live answers. */
+type ProbeSend = (
+  kind: ProbeKind,
+  sources: Source[],
+  text: string,
+  window?: SearchQuery["window"],
+  keep?: boolean,
+  onAnswer?: (sourceId: string, page: ContextItem[]) => void,
+) => Promise<ContextItem[]>;
 const ANSWER_MAX_TOKENS = 1_000;
+/** `densePacket`: a word on fewer than this share of the user's items is rare; an item adding one is no echo. */
+const RARE_SHARE = 0.03;
+/** `recoverNames`: names taken from one request at most, and the words of it read for them. */
+const MAX_RECOVERED = 2;
+const RECOVER_WORDS = 24;
+
+/** Each cue's frame (`conflict.ts`), read once and dropped with the cue. */
+const FRAMES = new WeakMap<Cue, Frame>();
 
 /** Requests that act on someone, where an item they take part in is context (D44). */
 const ACTING = new Set<string>(["scheduling", "communication", "task", "travel"]);
@@ -202,6 +235,13 @@ interface Scored {
   score: number;
   matched: number;
   sketch: Sketch | null;
+  /**
+   * With `quietNameOnly`, for a request that names someone: how many of its words the item holds beyond their names
+   * and words that only say when (`rank`). Undefined otherwise.
+   */
+  beyond?: number;
+  /** The item's document in the user's cache index, when ranked from it (for whole-term checks, `judgeTied`). */
+  doc?: number;
 }
 
 /** What an injection was built from, kept until it is handed out and usage tracking starts. */
@@ -234,6 +274,8 @@ export class ContextPartner {
   private readonly recorded = new Map<string, Map<string, Map<string, Recorded>>>();
   private readonly now: () => number;
   private readonly fanout: SourceFanout;
+  /** What each user's probes bring back (`probeFresh`, `probeYield`). */
+  private readonly economy = new ProbeEconomy();
 
   constructor(private readonly deps: PartnerDeps) {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
@@ -464,6 +506,7 @@ export class ContextPartner {
     this.deps.sourceMap.forget(scope, sourceId);
     this.fanout.forget(scope, sourceId);
     this.deps.planner?.forget(scope, sourceId);
+    this.economy.forget(scope, sourceId);
   }
 
   get sessionCount(): number {
@@ -640,6 +683,28 @@ export class ContextPartner {
       const t = termIds(e, vocab, false);
       return t.n === all ? Array.from(t.ids.subarray(0, t.n)) : [];
     });
+    // `quietNameOnly`: the request's words that are not part of the name of someone it names nor only say when (its
+    // topic: a company, a place or a project it names counts), each checked against the item's terms in the index, so
+    // a tie by a person's name alone can be told from one by what the request is about.
+    let topic: number[] = [];
+    const people = this.config.quietNameOnly ? this.peopleOf(s, cue) : [];
+    if (people.length > 0) {
+      const inNames = new Set<number>();
+      for (const p of people) {
+        const t = termIds(p, vocab, false);
+        for (let i = 0; i < t.n; i++) inNames.add(t.ids[i]!);
+      }
+      topic = query.filter((id) => !inNames.has(id) && !TIME_WORD.test(vocab.term(id)));
+    }
+    const one = [0];
+    const beyondOf = (doc: number) => {
+      let n = 0;
+      for (const id of topic) {
+        one[0] = id;
+        if (cache.containsAll(s.scope, doc, one, 1)) n++;
+      }
+      return n;
+    };
     const found = query.length > 0 ? cache.search(s.scope, query, query.length, 12, this.now()) : [];
     for (const h of timed) if (!found.some((f) => f.item.id === h.item.id)) found.push(h);
     // The probes' finds for the request's people, organisations and day are candidates whatever they share in words.
@@ -657,7 +722,9 @@ export class ContextPartner {
             (ids) => ids.length > 0 && cache.containsAll(s.scope, h.doc, ids, ids.length),
           );
           const score = h.coverage + (entityHit ? this.config.entityBonus : 0);
-          return { item: h.item, matched: h.matched, score, sketch: h.sketch };
+          const scored: Scored = { item: h.item, matched: h.matched, score, sketch: h.sketch, doc: h.doc };
+          if (people.length > 0) scored.beyond = beyondOf(h.doc);
+          return scored;
         })
         .sort((a, b) => b.score - a.score)
         // Of near-duplicates among the candidates, keep the best scored: one packet never says the same thing twice.
@@ -679,6 +746,10 @@ export class ContextPartner {
         // `groundAway`, an absence on other days than the request names (`awayElsewhere`).
         .filter((x) => !this.config.quietSettled || !settled(x.item))
         .filter((x) => !this.awayElsewhere(x.item, cue))
+        // Nor, with `quietClear`, one about what the request names whose decisive value does not conflict with it.
+        .filter((x) => !this.cleared(x, cue))
+        // Nor, with `quietNameOnly`, one only a name ties to the request.
+        .filter((x) => this.beyondName(x, cue))
         .slice(0, Math.min(this.config.maxItemsPerInjection, this.config.confidentItems))
     );
   }
@@ -693,7 +764,14 @@ export class ContextPartner {
    *   finds "Globex <> Robin" that day), or, when the user asks what is on their calendar, every event that day.
    * Bulk mail is never grounded. Empty when nothing is.
    */
-  private grounded(s: Session, cue: Cue, candidates: Scored[], eventKind: string): { items: Scored[]; how: string } {
+  private grounded(
+    s: Session,
+    cue: Cue,
+    candidates: Scored[],
+    eventKind: string,
+    bridged: ReadonlySet<string> = new Set(),
+    cls?: ActionClass,
+  ): { items: Scored[]; how: string } {
     const none = { items: [] as Scored[], how: "" };
     const pool = candidates.filter((x) => !bulkMail(x.item));
     const time = cue.time;
@@ -727,6 +805,23 @@ export class ContextPartner {
       const clashes = pool.filter((x) => time.days.has(startDay(x.item) ?? "") && near(x)).sort(soonest);
       if (clashes.length > 0) return { items: clashes.slice(0, this.max()), how: "clash" };
     }
+    // With `groundConflict`: what would change the action (or the answer), tied to what the request names or asks
+    // (`conflict.ts`): a hold over the day it acts on, a limit below its amount, a thing done already (D49).
+    if (this.config.groundConflict) {
+      const hits = pool.filter(
+        (x) => this.about(x, cue) && this.beyondName(x, cue) && this.verdict(x.item, cue) === "conflict",
+      );
+      // A consequence find that conflicts (`bridged`) is about the request by its class's words: for a class whose
+      // constraints bind everyone (a change freeze, the user's own passport), whoever it names; for one whose bind one
+      // party, when the request names no one or the find names someone it does: a legal hold on another client's
+      // records is not this one's. The class's words are a tie beyond a name, so `quietNameOnly` does not gate it.
+      const names = cleanEntities(cue.entities).filter((e) => !e.includes("@"));
+      for (const x of pool) {
+        if (!bridged.has(x.item.id) || hits.includes(x)) continue;
+        if (cls?.scope === "general" || names.length === 0 || names.some((n) => mentions(n, x.item))) hits.push(x);
+      }
+      if (hits.length > 0) return { items: hits.slice(0, this.max()), how: "conflict" };
+    }
     // With `groundAway`: a person the request names, away on a day it names ("ask Jamie to feed the cat next weekend"
     // and Jamie's "away on Skye 6–9 Nov"), whatever the words: the agent should know before it asks them (D48).
     if (this.config.groundAway && time && time.days.size > 0) {
@@ -740,6 +835,10 @@ export class ContextPartner {
         );
       });
       if (away.length > 0) return { items: away.slice(0, this.max()), how: "away" };
+    }
+    if (this.config.groundOccasion) {
+      const occasion = this.occasion(cue, pool, eventKind, acts, meeting);
+      if (occasion.items.length > 0) return occasion;
     }
     if (withPerson.length > 0) {
       const dated = withPerson.filter(onDay);
@@ -791,8 +890,158 @@ export class ContextPartner {
     return !daysNamed(item, cue.at).some((d) => time.days.has(d)) && !time.days.has(startDay(item) ?? "");
   }
 
+  /** The request's frame (`conflict.ts`), read once per cue. */
+  private frame(cue: Cue): Frame {
+    let f = FRAMES.get(cue);
+    if (!f) {
+      const names = cleanEntities(cue.entities).filter((e) => !e.includes("@"));
+      // The user's wall clock, so "today" and a date's nearest year are their own (D44), as `cue.time.days` are.
+      FRAMES.set(cue, (f = frameOf(cue.raw, cue.time?.days ?? null, localNow(cue), names)));
+    }
+    return f;
+  }
+
+  /** What an item says about the request's frame: conflict, clear or none (`conflict.ts` `assess`). */
+  private verdict(item: ContextItem, cue: Cue, ties?: ReadonlySet<string>): Verdict {
+    return assess(this.frame(cue), item, localNow(cue), ties);
+  }
+
+  /**
+   * Whether an item is about what the request names: a person or organisation it names, a reference it names
+   * ("INV-5842"), or two of its terms. A conflict or a clearance is only read from such an item.
+   */
+  private about(x: Scored, cue: Cue): boolean {
+    if (x.matched >= 2 || namesRef(this.frame(cue), x.item)) return true;
+    return cleanEntities(cue.entities).some((e) => !e.includes("@") && mentions(e, x.item));
+  }
+
+  /**
+   * With `quietNameOnly`, whether something besides a name ties an item to the request: a word of the request beyond
+   * its names and time words, a day it names (the item's own, or one its text names), or a reference it names. A
+   * passing mention ("Leila says hi by the way") ties every item of Leila's by her name alone, and no item by anything
+   * else: with no model to ask, nothing is pushed. True when the flag is off.
+   */
+  private beyondName(x: Scored, cue: Cue): boolean {
+    if (!this.config.quietNameOnly || x.beyond === undefined || x.beyond > 0) return true;
+    // A message arriving from someone is their act, and a request to act on someone ("Book a table for me and Sam",
+    // "Send Priya a hamper") is the user's: what bears on that person bears on the act (D44). Neither is a mention.
+    if (cue.external || isImperative(cue.raw)) return true;
+    const days = cue.time?.days;
+    if (days && days.size > 0) {
+      if (days.has(startDay(x.item) ?? "") || daysNamed(x.item, cue.at).some((d) => days.has(d))) return true;
+    }
+    return namesRef(this.frame(cue), x.item);
+  }
+
+  /** The people a request names: its names that someone in the user's items goes by (`ItemCache.isPerson`). */
+  private peopleOf(s: Session, cue: Cue): string[] {
+    return cleanEntities(cue.entities).filter((e) => !e.includes("@") && this.deps.cache.isPerson(s.scope, e));
+  }
+
+  /** With `quietClear`, whether an item is about the request and says its decisive value does not conflict. */
+  private cleared(x: Scored, cue: Cue): boolean {
+    return this.config.quietClear && this.about(x, cue) && this.verdict(x.item, cue) === "clear";
+  }
+
   private max(): number {
     return this.config.maxItemsPerInjection;
+  }
+
+  /**
+   * `groundOccasion`: with no model's say, the event a request means by what its title says, the way people name
+   * one: by the occasion and who it is with ("dinner with Elena", "push coffee with Kofi"), by the occasion and the
+   * day ("where are we having lunch on Monday?"), or, for a message from someone about meeting ("running late, still
+   * ok to meet?"), by the event that names them. An event's title holds the request's occasion word (a word of the
+   * request other than a name, a date or a stopword) and every word of a name it uses, a first name alone included;
+   * or, for a question, the occasion word on a day the request names; or, for a meeting message, the person's name.
+   * The one on a day the request names wins, else the soonest still to come (with no day named, a past one is never
+   * taken). A named day no such event is on grounds nothing. Only for a request that asks or acts.
+   */
+  private occasion(
+    cue: Cue,
+    pool: Scored[],
+    eventKind: string,
+    acts: boolean,
+    meeting: boolean,
+  ): { items: Scored[]; how: string } {
+    const none = { items: [] as Scored[], how: "" };
+    const asks = acts || /\?\s*$/.test(cue.raw) || isAction(cue.raw);
+    if (!asks) return none;
+    const time = cue.time;
+    const names = cleanEntities(cue.entities)
+      .filter((e) => !e.includes("@"))
+      .map((e) => e.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])
+      .filter((w) => w.length > 0 && w.every((x) => !TIME_WORD.test(x)));
+    const inNames = new Set(names.flat());
+    const kinds = (cue.raw.toLowerCase().match(/[\p{L}]{3,}/gu) ?? []).filter(
+      (w) => !inNames.has(w) && !isStopword(w) && !TIME_WORD.test(w) && !LEADING.has(w),
+    );
+    const titleWordsOf = (x: Scored) => new Set(x.item.title.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []);
+    const events = pool.filter((x) => startDay(x.item) !== null);
+    const onDay = (x: Scored) => time !== null && time.days.has(startDay(x.item) ?? "");
+    const pick = (xs: Scored[], how: string, many = false) => {
+      const dated = xs.filter(onDay).sort((a, b) => startMs(a.item) - startMs(b.item));
+      if (dated.length > 0) return { items: many ? dated.slice(0, this.max()) : [dated[0]!], how: `${how}-day` };
+      // A day the request names that no such event is on: the request may be about a new one ("an invite for drinks
+      // Saturday"), or where one is going ("move my dinner to Friday"). Which is not for words to say: no ground.
+      if (time !== null && time.days.size > 0) return none;
+      const next = xs.filter((x) => startMs(x.item) >= cue.at).sort((a, b) => startMs(a.item) - startMs(b.item));
+      return next.length > 0 ? { items: [next[0]!], how } : none;
+    };
+    const named = (t: Set<string>) => names.some((n) => n.every((w) => t.has(w)));
+    const kind = (t: Set<string>) => kinds.some((w) => t.has(w));
+    const withName = events.filter((x) => {
+      const t = titleWordsOf(x);
+      return named(t) && kind(t);
+    });
+    if (withName.length > 0) {
+      const r = pick(withName, "occasion-person");
+      if (r.items.length > 0) return r;
+    }
+    // By occasion and day alone only for a question about it: an action on a day's occasion ("send the pack before
+    // next week's board meeting") is about the action, and the occasion standing as planned is no news.
+    if (time !== null && time.days.size > 0 && names.length === 0 && /\?\s*$/.test(cue.raw)) {
+      const r = pick(
+        events.filter((x) => onDay(x) && kind(titleWordsOf(x))),
+        "occasion",
+        true,
+      );
+      if (r.items.length > 0) return r;
+    }
+    if (eventKind === "external" && meeting && names.length > 0) {
+      return pick(
+        events.filter((x) => named(titleWordsOf(x))),
+        "occasion-sender",
+      );
+    }
+    return none;
+  }
+
+  /**
+   * `recoverNames`: the cue with the names it holds in lowercase added ("drinks with chen wei", "reply to stark
+   * freight"). A run of two or three words, none a stopword, a date or already an entity, is a name when the user's
+   * own sources have been recorded mentioning it (the source map's mentions: names their items wrote capitalised).
+   * A single word is never taken: "Lunch" is capitalised in many subjects. Longest runs first; at most
+   * `MAX_RECOVERED` names, from the request's first `RECOVER_WORDS` words. One indexed read per run tried.
+   */
+  private withRecoveredNames(s: Session, cue: Cue): Cue {
+    const have = new Set(cue.entities.map((e) => e.toLowerCase()));
+    const words = (cue.raw.match(/[\p{L}\p{N}][\p{L}\p{N}&'’-]*/gu) ?? []).slice(0, RECOVER_WORDS);
+    // Only words typed in lowercase: a capitalised run was the extractor's to read ("Has Aperture Labs been paid?").
+    const open = (w: string) => w === w.toLowerCase() && !isStopword(w) && !TIME_WORD.test(w) && !LEADING.has(w);
+    const used = new Uint8Array(words.length);
+    const found: string[] = [];
+    for (let n = 3; n >= 2; n--) {
+      for (let i = 0; i + n <= words.length && found.length < MAX_RECOVERED; i++) {
+        const run = words.slice(i, i + n);
+        if (run.some((w, k) => used[i + k] || !open(w))) continue;
+        const name = run.join(" ");
+        if (have.has(name) || this.deps.sourceMap.sourcesFor(s.scope, name).length === 0) continue;
+        found.push(run.map((w) => w[0]!.toUpperCase() + w.slice(1)).join(" "));
+        used.fill(1, i, i + n);
+      }
+    }
+    return found.length ? { ...cue, entities: [...cue.entities, ...found] } : cue;
   }
 
   /**
@@ -804,6 +1053,7 @@ export class ContextPartner {
     const c = this.config;
     if (!top || c.fallbackMatchedTerms <= 0 || (c.quietSettled && settled(top.item))) return null;
     if (cue && this.awayElsewhere(top.item, cue)) return null;
+    if (cue && this.cleared(top, cue)) return null;
     // `fallbackAsks`: a request that asks (a question, or an action) about something it names, with an item that names
     // it too, needs two of its terms, not three. A question about the world at large ("a good stretch for back pain")
     // names nothing of the user's, and words like "good" or "week" match anything.
@@ -820,19 +1070,28 @@ export class ContextPartner {
             x.matched >= 2 &&
             x.score >= c.fallbackScore &&
             !(c.quietSettled && settled(x.item)) &&
-            !this.awayElsewhere(x.item, cue!),
+            !this.awayElsewhere(x.item, cue!) &&
+            !this.cleared(x, cue!) &&
+            this.beyondName(x, cue!),
         );
       if (hit) return hit;
     }
-    if (!bulkMail(top.item) && top.matched >= c.fallbackMatchedTerms && top.score >= c.fallbackScore) return top;
+    const strong = !bulkMail(top.item) && top.matched >= c.fallbackMatchedTerms && top.score >= c.fallbackScore;
+    if (strong && (!cue || this.beyondName(top, cue))) return top;
     // Found both by the request's own search and by a probe for its people (`fallbackAgree`): two independent queries
     // agreeing is evidence words alone are not. Still one item, and it must share two of the request's terms.
     if (!agreed) return null;
     return (
       unsure
         .slice(0, 3)
-        .find((x) => agreed.has(x.item.id) && x.matched >= 2 && x.score >= c.fallbackAgreeScore && !bulkMail(x.item)) ??
-      null
+        .find(
+          (x) =>
+            agreed.has(x.item.id) &&
+            x.matched >= 2 &&
+            x.score >= c.fallbackAgreeScore &&
+            !bulkMail(x.item) &&
+            (!cue || this.beyondName(x, cue)),
+        ) ?? null
     );
   }
 
@@ -871,7 +1130,13 @@ export class ContextPartner {
     s: Session,
     cue: Cue,
     limit: number,
-  ): Promise<{ calls: number; plans?: Trace["plans"]; probed?: string[]; looked?: string[] }> {
+  ): Promise<{
+    calls: number;
+    plans?: Trace["plans"];
+    probed?: string[];
+    looked?: string[];
+    consequence?: { cls: ActionClass; ids: string[] };
+  }> {
     const all = await this.deps.sources(s.scope).catch((): Source[] => []);
     if (all.length === 0 || s.closed) return { calls: 0 };
     const ranked = this.deps.sourceMap.route({
@@ -944,7 +1209,7 @@ export class ContextPartner {
       { timeoutMs: this.config.sourceTimeoutMs, signal: s.abort.signal },
     );
     const settled = searching.catch(() => null);
-    const probed = { calls: 0, kept: [] as string[] };
+    const probed: ProbeOut = { calls: 0, kept: [] };
     const probing =
       this.config.probes && probeThis
         ? this.probe(s, cue, found, all, listing, probed, settled, shared).catch(() => {})
@@ -983,7 +1248,15 @@ export class ContextPartner {
       clearTimeout(timer);
       // What the request's own search returned, beside the probes' finds: an item both found is twice supported.
       const looked = outcomes.flatMap((o) => o.items.map((i) => i.id));
-      return { ...result, calls: result.calls + probed.calls, probed: probed.kept.slice(0, 20), looked };
+      // What the lookup's own search found too is not a probe's contribution (`probeYield`).
+      if (this.config.probeYield) this.economy.claimed(s.scope, looked);
+      return {
+        ...result,
+        calls: result.calls + probed.calls,
+        probed: probed.kept.slice(0, 20),
+        looked,
+        ...(probed.consequence ? { consequence: probed.consequence } : {}),
+      };
     }
     return result;
   }
@@ -1002,15 +1275,24 @@ export class ContextPartner {
     found: Source[],
     all: Source[],
     listed: boolean,
-    out: { calls: number; kept: string[] },
+    out: ProbeOut,
     searched: Promise<unknown>,
     shared?: SharedCalls,
   ): Promise<void> {
     const lanes = new Map<string, Promise<unknown>>();
     const budget = this.config.probeCalls;
+    // Calls the consequence probe made (outside `budget`).
+    let extra = 0;
     const deadline = performance.now() + this.config.sourceTimeoutMs;
     const kept = out.kept;
-    const send = async (sources: Source[], text: string, window?: SearchQuery["window"], keep = true) => {
+    const send = async (
+      kind: ProbeKind,
+      sources: Source[],
+      text: string,
+      window?: SearchQuery["window"],
+      keep = true,
+      onAnswer?: (sourceId: string, page: ContextItem[]) => void,
+    ) => {
       const key = `${text}|${window ? `${window.start}/${window.end}` : ""}|${sources.map((x) => x.id).join(",")}`;
       // Probed recently by this user (any of their sessions): its finds at no call, while every one is still cached.
       const hits = this.deps.cache.probeHits(s.scope, key, this.config.probeMemoMs, this.now());
@@ -1018,9 +1300,40 @@ export class ContextPartner {
         if (keep) for (const h of hits) if (!kept.includes(h.item.id)) kept.push(h.item.id);
         return hits.map((h) => h.item);
       }
-      const to = sources.slice(0, Math.max(0, budget - out.calls));
-      if (to.length === 0 || s.closed || deadline - performance.now() < 50) return [] as ContextItem[];
+      // The probe economy (`economy.ts`): a source whose answer to this query has likely not changed, or where this
+      // kind of probe has not been yielding, is not called; its last answer, while still cached, stands in.
+      const asked = `${text}|${window ? `${window.start}/${window.end}` : ""}`;
+      const reused: ContextItem[] = [];
+      let live = sources;
+      if (this.config.probeFresh || this.config.probeYield) {
+        live = [];
+        const now = this.now();
+        for (const source of sources) {
+          const unchanged =
+            this.config.probeFresh &&
+            this.economy.changeChance(s.scope, source.id, asked, now) < this.config.probeFreshFloor;
+          const idle =
+            !unchanged &&
+            this.config.probeYield &&
+            !this.economy.worth(s.scope, kind, source.id, this.config.probeYieldFloor);
+          const last = unchanged || idle ? this.economy.lastIds(s.scope, source.id, asked) : null;
+          const held = last ? this.deps.cache.hits(s.scope, last, now) : [];
+          // Unchanged but no longer cached: asked again, since nothing stands in for it.
+          if (!idle && (!unchanged || !last || held.length < last.length)) {
+            live.push(source);
+            continue;
+          }
+          for (const h of held) reused.push(h.item);
+        }
+        if (keep) for (const i of reused) if (!kept.includes(i.id)) kept.push(i.id);
+      }
+      // The consequence probe is bounded by its own `consequenceSources`, on top of `probeCalls`: it must never take
+      // the calls an organisation probe, sent after the people it is read from, would need.
+      const own = kind === "consequence";
+      const to = own ? live : live.slice(0, Math.max(0, budget - (out.calls - extra)));
+      if (to.length === 0 || s.closed || deadline - performance.now() < 50) return reused;
       out.calls += to.length;
+      if (own) extra += to.length;
       // A day's listing is the whole day (a busy one has more than a search's page); a query, its first page.
       const query = {
         scope: s.scope,
@@ -1072,20 +1385,46 @@ export class ContextPartner {
       // crowd the probes' seats with the judge (live, the judge passed fewer planted items with them).
       const items = outcomes.flatMap((o) => o.items.slice(0, window ? 20 : 5));
       // A call the fan-out did not make (busy, limited, open, answered from its cache, past the deadline) is no call.
-      out.calls -= to.length - outcomes.filter((o) => !SKIPPED.has(o.status)).length;
+      const unmade = to.length - outcomes.filter((o) => !SKIPPED.has(o.status)).length;
+      out.calls -= unmade;
+      if (own) extra -= unmade;
+      // A consequence probe's answers are always recorded: which of its terms each source was asked, and when, is
+      // what rotates them and what its later lookups recall (`consequence`).
+      const learn = this.config.probeFresh || this.config.probeYield || this.config.consequenceProbe;
+      if (!s.closed && learn) {
+        const now = this.now();
+        for (const o of outcomes) {
+          if (o.status !== "ok") continue;
+          const page = o.items.slice(0, window ? 20 : 5);
+          this.economy.answered(s.scope, o.sourceId, asked, page, now, kind === "consequence");
+          onAnswer?.(o.sourceId, page);
+          // A name of several words teaches how the source searches them (`consequenceProbe` picks its query by it).
+          if (this.config.consequenceProbe && (kind === "person" || kind === "second" || kind === "org")) {
+            const words = text
+              .toLowerCase()
+              .split(/\s+/)
+              .filter((w) => w.length > 1);
+            this.economy.observeForm(s.scope, o.sourceId, words, page);
+          }
+          if (!this.config.probeYield) continue;
+          // New to the user's cache (read before it is stored): what this call alone brought.
+          const fresh = page.filter((i) => this.deps.cache.fetchedAt(s.scope, i.id) === undefined).map((i) => i.id);
+          this.economy.called(s.scope, kind, o.sourceId, fresh);
+        }
+      }
       if (!s.closed) this.store(s, items);
       if (keep) for (const i of items) if (!kept.includes(i.id)) kept.push(i.id);
       // Only a complete answer is remembered: a source that failed or timed out is asked again next time.
-      if (outcomes.length === sources.length && outcomes.every((o) => o.status === "ok")) {
+      if (outcomes.length === to.length && live.length === to.length && outcomes.every((o) => o.status === "ok")) {
         this.deps.cache.rememberProbe(
           s.scope,
           key,
-          items.map((i) => i.id),
+          [...items, ...reused].map((i) => i.id),
           PROBE_MEMO,
           this.now(),
         );
       }
-      return items;
+      return [...items, ...reused];
     };
     const c = this.config;
     const off = new Set(c.probeOff);
@@ -1124,23 +1463,123 @@ export class ContextPartner {
     // The organisations of the request's people, from what came back for them; what is said of someone's
     // organisation (a hold, a policy) applies to them.
     const byPeople = (async () => {
-      // The request's first person to `probePeopleSources` sources, a second to `probeSecondSources`.
+      // The request's first person to `probePeopleSources` sources, a second to `probeSecondSources`. With
+      // `probeYield`, the first goes to every source, best first, and the user's own yields drop the sources where
+      // their person probes find nothing: which sources hold a user's people is learned, not guessed at three.
+      const wide = c.probeYield ? all.length : c.probePeopleSources;
       const first = await Promise.all(
-        people.map((q, i) => send(routeFor(q, i === 0 ? c.probePeopleSources : c.probeSecondSources), q)),
+        people.map((q, i) =>
+          send(i === 0 ? "person" : "second", routeFor(q, i === 0 ? wide : c.probeSecondSources), q),
+        ),
       );
       for (const org of off.has("org") ? [] : orgsOf(people, first.flat()).slice(0, 1)) {
-        if (!cue.entities.includes(org)) await send(routeFor(org), org);
+        if (!cue.entities.includes(org)) await send("org", routeFor(org), org);
       }
     })();
     // `probeRoles`: someone named by their relation ("my manager"), to the lookup's best two sources.
     const roles = c.probeRoles && !off.has("roles") ? rolesOf(cue.raw) : [];
+    // `consequenceProbe`: a request that acts, of an action class (`consequence.ts`), asks its class's constraint
+    // vocabulary of the sources best for that class: what would stop the action, in words the request never uses.
+    // An imperative or an arriving message, not `isAction` or `ACTS_ON` (which match "tell", "ping" anywhere): a
+    // question that mentions a release ("did Sam tell you whether the release went out?") is no release.
+    const acts = isImperative(cue.raw) || cue.external === true;
+    const cls = c.consequenceProbe && !off.has("consequence") ? actionClass(cue.raw, acts) : null;
     await Promise.all([
-      ...windows.map((w) => send(listers, "", w)),
+      ...windows.map((w) => send("day", listers, "", w)),
       byPeople,
-      ...roles.map((r) => send(found.slice(0, 2), r)),
+      ...roles.map((r) => send("role", found.slice(0, 2), r)),
       // The topic's finds share the request's words, and rank on them; the others get seats of their own.
-      ...(topic ? [send(found.slice(0, this.config.probeTopicSources), topic, undefined, false)] : []),
+      ...(topic ? [send("topic", found.slice(0, this.config.probeTopicSources), topic, undefined, false)] : []),
+      // Last: a source's probe calls go one at a time, and the request's own probes go first.
+      ...(cls ? [this.consequence(s, cls, all, found, send, out)] : []),
     ]);
+  }
+
+  /**
+   * The consequence probe (`consequenceProbe`, `consequence.ts`): the request's action class's constraint vocabulary,
+   * to the `consequenceSources` sources best for that class. With `probeYield`, best is learned per user (the upper
+   * bound of what that class's probes have yielded at each source, an untried source first); without, the lookup's own
+   * routing. A source learned to search any word gets every term in one query; one learned to need every word gets one
+   * term, the next not yet asked (`nextTerm`), so a run of lookups of the class covers its vocabulary at one call each.
+   * Its finds that hold a class term, with those its class's earlier queries found that are still cached, are this
+   * lookup's consequence finds (never kept on the session).
+   */
+  private async consequence(
+    s: Session,
+    cls: ActionClass,
+    all: Source[],
+    found: Source[],
+    send: ProbeSend,
+    out: ProbeOut,
+  ): Promise<void> {
+    // One arm per source for every class: where a user's notices, policies and alerts live (their mail, a chat's
+    // channels, a shared drive) is the same whatever the action.
+    const kind: ProbeKind = "consequence";
+    const now = this.now();
+    const joined = cls.terms.join(" ");
+    const ids = new Set<string>();
+    const take = (items: ContextItem[]) => {
+      for (const i of items) if (matchesClass(cls, `${i.title}\n${i.text}`)) ids.add(i.id);
+    };
+    // The user's cache first, at no call: an item an earlier lookup or probe brought in that holds a class term. The
+    // sources such items came from are where the user's constraints of this kind are written (a #legal channel, a
+    // calendar of freeze windows): they are asked first, while no yield is learned.
+    const where = new Map<string, number>();
+    const vocab = this.deps.cache.peekVocab(s.scope);
+    const t = vocab ? termIds(joined, vocab, false) : null;
+    const cached =
+      t && t.n > 0 ? this.deps.cache.search(s.scope, Array.from(t.ids.subarray(0, t.n)), t.n, 12, now) : [];
+    for (const h of cached) where.set(h.item.sourceId, (where.get(h.item.sourceId) ?? 0) + 1);
+    const order = [...found, ...all.filter((x) => !found.includes(x))];
+    const ranked = order
+      .map((x, i) => ({
+        x,
+        i,
+        b: this.config.probeYield ? this.economy.bound(s.scope, kind, x.id) : 1,
+        w: where.get(x.id) ?? 0,
+      }))
+      .sort((a, b) => b.b - a.b || b.w - a.w || a.i - b.i)
+      .map((r) => r.x);
+    await Promise.all(
+      ranked.slice(0, this.config.consequenceSources).map(async (source) => {
+        // Every term at once only where the source is known to search any word; one term works everywhere.
+        const text = this.economy.formOf(s.scope, source.id) === "any" ? joined : this.nextTerm(s, cls, source.id, now);
+        if (!text) return;
+        // What a source answers to every term at once teaches how it searches (`ProbeEconomy.observeForm`).
+        const learn = (id: string, page: ContextItem[]) => {
+          if (text === joined) this.economy.observeForm(s.scope, id, cls.terms, page, true);
+        };
+        const got = await send(kind, [source], text, undefined, false, learn);
+        take(got);
+      }),
+    );
+    if (s.closed) return;
+    // This lookup's own finds first (the bound below keeps the first), then the cache's.
+    take(cached.map((h) => h.item));
+    // What the class's queries found at earlier lookups, at any source, while still cached: a freeze found when the
+    // last release was asked for still stands in the way of this one.
+    for (const source of all) {
+      for (const q of [joined, ...cls.terms]) {
+        const last = this.economy.lastIds(s.scope, source.id, `${q}|`);
+        if (last) take(this.deps.cache.hits(s.scope, last, now).map((h) => h.item));
+      }
+    }
+    if (ids.size > 0) out.consequence = { cls, ids: [...ids].slice(0, MAX_CONSEQUENCE) };
+  }
+
+  /**
+   * The class term to ask a source that needs every word: the first never asked there, else the one asked longest
+   * ago once its answer may have changed (past `probeMemoMs`); null when every term was asked recently.
+   */
+  private nextTerm(s: Session, cls: ActionClass, sourceId: string, now: number): string | null {
+    let best: string | null = null;
+    let bestAt = Infinity;
+    for (const t of cls.terms) {
+      const at = this.economy.askedAt(s.scope, sourceId, `${t}|`);
+      if (at === null) return t;
+      if (at < bestAt) [best, bestAt] = [t, at];
+    }
+    return best !== null && now - bestAt >= this.config.probeMemoMs ? best : null;
   }
 
   /** Caches sanitized items and records the entity mentions of those new to the cache or changed. */
@@ -1288,17 +1727,38 @@ export class ContextPartner {
     try {
       let probedIds: string[] | undefined;
       let lookedIds: string[] | undefined;
+      let consequence: { cls: ActionClass; ids: string[] } | undefined;
       ({
         calls: sourceCalls,
         plans,
         probed: probedIds,
         looked: lookedIds,
+        consequence,
       } = await this.searchLive(s, cue, this.config.lookupSources));
       if (s.closed) return null;
       sourceCalls += await this.refresh(s, cue);
       if (s.closed) return null;
       // This lookup's probe finds, its own (never another turn's or a concurrent ask's).
-      const scored = this.rank(s, cue, { probed: probedIds });
+      const consIds = new Set(consequence?.ids ?? []);
+      const scored = this.rank(s, cue, {
+        probed: consIds.size > 0 ? [...(probedIds ?? []), ...consIds] : probedIds,
+      });
+      // A consequence find counts only where the conflict test, tied by its class's words, says it conflicts with the
+      // request (`consequenceProbe`): a freeze over the day a release is asked for, not one last month; and not a
+      // limit on an amount the request does not state ("travel over £500 needs pre-approval" for printer paper).
+      const ties = consequence ? classTies(consequence.cls) : undefined;
+      const bridged = new Set(
+        consIds.size > 0
+          ? scored
+              .filter(
+                (x) =>
+                  consIds.has(x.item.id) &&
+                  !unmeasuredLimit(this.frame(cue), x.item) &&
+                  this.verdict(x.item, cue, ties) === "conflict",
+              )
+              .map((x) => x.item.id)
+          : [],
+      );
       const sure = this.confident(scored, cue);
       // With `judgeConfident` and a judge to ask, what scores as sure is judged with the rest in the same call: the
       // no-model bar is right about half the time (docs/research/probes.md), the judge more often.
@@ -1321,19 +1781,33 @@ export class ContextPartner {
       // An event on a day the request names is a candidate whatever it scores on words (D44).
       const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item) ?? "") === true;
       const probed = new Set(probedIds ?? []);
+      // A consequence find that does not conflict is no candidate: it shares nothing with the request but its class.
       const eligible = scored.filter(
-        (x) => x.score >= this.config.candidateScore || onNamedDay(x) || probed.has(x.item.id),
+        (x) =>
+          x.score >= this.config.candidateScore || onNamedDay(x) || probed.has(x.item.id) || bridged.has(x.item.id),
       );
       // With probes on, up to three of the probes' finds join the judge's candidates beyond the best scored: found for
       // the request's people, organisations or day, they share few of its words and would otherwise never be seen.
       const top = judgeSure
         ? [...sure, ...eligible.filter((x) => !sure.includes(x))].slice(0, this.config.judgeCandidates)
         : eligible.slice(0, this.config.judgeCandidates);
+      // A conflicting consequence find takes the first of those seats: nothing else would bring it to the judge.
       const seats =
         this.config.probes && !this.config.probeOff.includes("seats")
-          ? eligible.filter((x) => probed.has(x.item.id) && !top.includes(x)).slice(0, 3)
+          ? [
+              ...eligible.filter((x) => bridged.has(x.item.id) && !top.includes(x)).slice(0, 1),
+              ...eligible.filter((x) => probed.has(x.item.id) && !bridged.has(x.item.id) && !top.includes(x)),
+            ].slice(0, 3)
           : [];
       const unsure = [...top, ...seats];
+      // A probe that brought in what is seated for the judge did its part, whatever the judge then makes of it: the
+      // judge rules on relevance, the probe only on finding (`probeYield`).
+      if (this.config.probeYield && !s.closed) {
+        this.economy.reached(
+          s.scope,
+          unsure.map((x) => x.item.id),
+        );
+      }
       if (unsure.length === 0) {
         done("silent", "no candidates");
         return null;
@@ -1350,8 +1824,11 @@ export class ContextPartner {
           );
           return this.deliver(s, sure, "proactive", `sources:${cue.id}`, cue);
         }
+        // `recoverNames`: names the request typed in lowercase ("move my drinks with chen wei"), from the user's own
+        // record of names, ground and fall back as typed ones do. Only here: probes and ranking keep the cue as typed.
+        const named = this.config.recoverNames ? this.withRecoveredNames(s, cue) : cue;
         // Grounding reads every candidate, not only the judge's few: a day's events rank after every word match.
-        const grounded = this.grounded(s, cue, eligible, eventKind);
+        const grounded = this.grounded(s, named, eligible, eventKind, bridged, consequence?.cls);
         if (grounded.items.length > 0) {
           const items = grounded.items;
           done(
@@ -1361,7 +1838,7 @@ export class ContextPartner {
           );
           return this.deliver(s, items, "proactive", `grounded-${grounded.how}:${cue.id}`, cue);
         }
-        const top = this.fallback(unsure, this.config.fallbackAgree ? agreed(probed, lookedIds) : undefined, cue);
+        const top = this.fallback(unsure, this.config.fallbackAgree ? agreed(probed, lookedIds) : undefined, named);
         if (top) {
           done("sources", `fallback${reasonPrefix}:${cue.id}`, [top.item]);
           return this.deliver(s, [top], "proactive", `fallback:${cue.id}`, cue);
@@ -1369,6 +1846,24 @@ export class ContextPartner {
         done("silent", why);
         return null;
       };
+      // `judgeTied`: a judge shown only candidates the request is barely tied to (one common word each: "nice",
+      // "week", "calendar") says "none" almost always, so the call is not made and the lookup ends silent. A candidate
+      // is tied by a probe's find, a day the request names, two of its words, or one word few of the user's items hold.
+      if (this.deps.model && this.config.judgeTied) {
+        const rare = this.rareTerms(s, cue);
+        // A consequence find that conflicts with the request (`bridged`) is tied by its class's words, which the
+        // request never uses: without this, the judge never sees the constraint the probe was sent to find.
+        const tied = (x: Scored) =>
+          probed.has(x.item.id) ||
+          bridged.has(x.item.id) ||
+          onNamedDay(x) ||
+          x.matched >= 2 ||
+          this.holdsAny(s, x, rare);
+        if (!unsure.some(tied)) {
+          done("silent", "judge: untied");
+          return null;
+        }
+      }
       const reservation = this.deps.model ? this.charge(s) : null;
       if (!this.deps.model || !reservation) return noModel(this.deps.model ? "no model budget" : "no model", "");
       const candidates = unsure.map((x) => x.item);
@@ -1422,6 +1917,32 @@ export class ContextPartner {
     }
   }
 
+  /**
+   * The request's words (cue and entities, stopwords out) that fewer than `judgeTiedShare` of the user's items hold:
+   * a name, a reference, a place, rather than words common to their mail. Ids in the user's cache vocabulary; a word
+   * no cached item holds has no id and so ties nothing (`judgeTied`).
+   */
+  private rareTerms(s: Session, cue: Cue): number[] {
+    const vocab = this.deps.cache.peekVocab(s.scope);
+    if (!vocab) return [];
+    const q = termIds(`${cue.text} ${cue.entities.join(" ")}`, vocab, false);
+    const out: number[] = [];
+    for (let i = 0; i < q.n; i++) {
+      const id = q.ids[i]!;
+      const word = vocab.term(id);
+      if (isStopword(word) || out.includes(id)) continue;
+      if (this.deps.cache.isRare(s.scope, word, this.config.judgeTiedShare)) out.push(id);
+    }
+    return out;
+  }
+
+  /** Whether the cached item `x` was ranked from holds one of `terms` (whole terms, the cache's index). */
+  private holdsAny(s: Session, x: Scored, terms: readonly number[]): boolean {
+    if (x.doc === undefined) return false;
+    for (const id of terms) if (this.deps.cache.containsAll(s.scope, x.doc, [id], 1)) return true;
+    return false;
+  }
+
   private charge(s: Session, usd = this.config.estimatedCallUsd): Reservation | null {
     return this.deps.budget.reserve(scopeKey(s.scope), s.key, usd);
   }
@@ -1446,13 +1967,31 @@ export class ContextPartner {
     cue: Cue,
     shown?: string,
   ): Injection {
-    const items = scored.map((x) => x.item);
+    // Whatever path delivered them, a probe that first brought one in paid for its call (`probeYield`).
+    if (this.config.probeYield) {
+      this.economy.reached(
+        s.scope,
+        scored.map((x) => x.item.id),
+      );
+    }
     for (const x of scored) if (x.sketch) s.delivered.push(x.sketch);
     if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
+    // Every item counts as delivered, an echo folded out of the packet too: the agent has its occurrence.
     s.ledger.mark(
-      items.map((i) => i.id),
+      scored.map((x) => x.item.id),
       s.turn,
     );
+    const dense = this.config.densePacket && this.config.compactInjection;
+    const self = this.config.compactInjection ? this.deps.cache.selfOf(s.scope) : null;
+    const shownItems = dense
+      ? foldEchoes(scored, {
+          focus: focusOf(cue),
+          year: new Date(this.now()).getUTCFullYear(),
+          self,
+          rare: (w) => this.deps.cache.isRare(s.scope, w, RARE_SHARE),
+        })
+      : scored;
+    const items = shownItems.map((x) => x.item);
     const injection: Injection = {
       ...s.scope,
       id: newId("inj", this.now()),
@@ -1465,7 +2004,8 @@ export class ContextPartner {
               focus: focusOf(cue),
               itemBytes: this.config.compactItemBytes,
               year: new Date(this.now()).getUTCFullYear(),
-              self: this.deps.cache.selfOf(s.scope),
+              self,
+              dense,
               // A word the session has seen: a part with nothing else the agent has (`compactText`).
               ...(this.config.compactNovel ? { known: (w: string) => s.seen.has(s.vocab.lookup(w)) } : {}),
             }
@@ -1578,6 +2118,9 @@ function onlyTime(cue: Cue): boolean {
     (cue.time?.days.size ?? 0) > 0 && cue.entities.length === 0 && cue.text.split(" ").every((w) => TIME_WORD.test(w))
   );
 }
+
+/** The cue's time on the user's wall clock, read as UTC: its ISO day is the user's day. */
+const localNow = (cue: Cue) => cue.at + cue.offset * 60_000;
 
 /** `offset`: the user's UTC offset in minutes, so "today" is their today (D44). */
 function buildCue(text: string, ids: Uint32Array, vocab: Vocab, at: number, offset: number, probes = false): Cue {

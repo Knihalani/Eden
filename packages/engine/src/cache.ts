@@ -69,6 +69,8 @@ class UserCache {
   /** How many cached items name each person (`partiesOf`), and how many name anyone: kept as items come and go. */
   parties = new Map<string, number>();
   partied = 0;
+  /** The parties' names and first names, lowercased (`isPerson`), computed on demand; reset as the tally changes. */
+  personNames: Set<string> | undefined;
 }
 
 /** Header lines naming who takes part in an item: a mail's From, To and Cc, an event's attendees, an owner. */
@@ -103,6 +105,7 @@ function tally(u: UserCache, item: ContextItem, by: 1 | -1): void {
     else u.parties.delete(n);
   }
   u.self = undefined;
+  u.personNames = undefined;
 }
 
 const simScratch = new Uint32Array(2);
@@ -417,6 +420,41 @@ export class ItemCache {
       u.self = best && most >= 5 && most * 3 >= u.partied ? best : null;
     }
     return u.self;
+  }
+
+  /**
+   * Whether `name` is someone who takes part in the user's items (`partiesOf`: a mail's From, To or Cc, an event's
+   * attendees, an owner): their full name, or a first name one of them goes by ("Zoë" for Zoë Müller). A place, a
+   * company or a project is not, unless someone is called that. Case-insensitive.
+   */
+  isPerson(scope: Scope, name: string): boolean {
+    const u = this.peek(scope);
+    if (!u) return false;
+    if (u.personNames === undefined) {
+      u.personNames = new Set();
+      for (const full of u.parties.keys()) {
+        const lower = full.toLowerCase();
+        u.personNames.add(lower);
+        u.personNames.add(lower.split(" ")[0]!);
+      }
+    }
+    return u.personNames.has(name.trim().replace(/\s+/g, " ").toLowerCase());
+  }
+
+  /**
+   * Whether `word` is on fewer than `share` of the user's live items (a name, a place, a constraint), rather than
+   * common to many ("perfect", "booked"). A word the user's items never hold is rare; so is every word while the
+   * cache holds too few items for a share to mean anything (fewer than 1/share).
+   */
+  isRare(scope: Scope, word: string, share: number): boolean {
+    const u = this.peek(scope);
+    if (!u || u.index.size * share < 1) return true;
+    const id = u.vocab.lookup(word);
+    if (id < 0) return true;
+    // idf is monotone in a term's document count: compare it with the idf a term on exactly `share` of them has.
+    const n = u.index.size;
+    const at = share * n;
+    return u.index.idf(id) > Math.log(1 + (n - at + 0.5) / (at + 0.5));
   }
 
   /** The cached item `doc`'s sorted unique term ids (title and body, the user's vocabulary); empty if unknown. */
