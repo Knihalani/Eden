@@ -532,3 +532,41 @@ describe("fewer probe calls", () => {
     expect(await sent({ probeTopicAlone: true }, "send the q3 report to finance")).toContain("q3 report");
   });
 });
+
+describe("the fallback for a request that asks about something it names (fallbackAsks)", () => {
+  const scope = { tenantId: "t", userId: "u" };
+  const at = Date.parse("2026-10-27T09:00:00Z");
+  const notes = new StaticSource("drive", "Notes", [
+    { ref: "n1", title: "People notes", text: "Dana Lee prefers a quiet table, never before 7" },
+    { ref: "n2", title: "Weekly digest", text: "A good week for the team: back pain clinic opens on Friday" },
+  ]);
+  const got = async (fallbackAsks: boolean, text: string) => {
+    const p = new ContextPartner({
+      sources: async () => [notes],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => at,
+      // Nothing is sure on its words alone, and the plain fallback wants more terms than either item shares: only
+      // the rule under test can deliver.
+      config: { fallbackAsks, confidentScore: 99, fallbackMatchedTerms: 5 },
+    });
+    const r = await p.observe({ ...scope, sessionId: "s", at, kind: "user_message", text } as AgentEvent, {
+      waitMs: 1_000,
+    });
+    return [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId: "s" })].flatMap((i) =>
+      i.citations.map((c) => c.itemId),
+    );
+  };
+
+  test("an item naming what the request names, sharing two of its terms, is delivered", async () => {
+    const ask = "Can you book a table for Dana Lee?";
+    expect(await got(false, ask)).toEqual([]);
+    expect(await got(true, ask)).toEqual(["drive:n1"]);
+  });
+
+  test("a question about the world at large names nothing of the user's: silent", async () => {
+    expect(await got(true, "What's a good stretch for back pain this week?")).toEqual([]);
+  });
+});

@@ -800,6 +800,26 @@ export class ContextPartner {
     const c = this.config;
     if (!top || c.fallbackMatchedTerms <= 0 || (c.quietSettled && settled(top.item))) return null;
     if (cue && this.awayElsewhere(top.item, cue)) return null;
+    // `fallbackAsks`: a request that asks (a question, or an action) about something it names, with an item that names
+    // it too, needs two of its terms, not three. A question about the world at large ("a good stretch for back pain")
+    // names nothing of the user's, and words like "good" or "week" match anything.
+    const asks = cue !== undefined && c.fallbackAsks && (/\?\s*$/.test(cue.raw) || isAction(cue.raw));
+    const named = asks ? cleanEntities(cue.entities).filter((e) => !e.includes("@")) : [];
+    if (named.length > 0) {
+      // The best of the first three that names what the request names: the top one may be about something else.
+      const hit = unsure
+        .slice(0, 3)
+        .find(
+          (x) =>
+            named.some((e) => mentions(e, x.item)) &&
+            !bulkMail(x.item) &&
+            x.matched >= 2 &&
+            x.score >= c.fallbackScore &&
+            !(c.quietSettled && settled(x.item)) &&
+            !this.awayElsewhere(x.item, cue!),
+        );
+      if (hit) return hit;
+    }
     if (!bulkMail(top.item) && top.matched >= c.fallbackMatchedTerms && top.score >= c.fallbackScore) return top;
     // Found both by the request's own search and by a probe for its people (`fallbackAgree`): two independent queries
     // agreeing is evidence words alone are not. Still one item, and it must share two of the request's terms.
