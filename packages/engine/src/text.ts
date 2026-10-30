@@ -127,7 +127,8 @@ export function extractTypedEntities(text: string): Entity[] {
   for (const m of text.matchAll(/https?:\/\/[^\s)>\]]+/g)) add(m[0], "url");
   for (const m of text.matchAll(/["“]([^"”\n]{3,60})["”]/g)) add(m[1], "quoted");
   // Capitalised runs. A run that starts a sentence counts only if it has two or more words.
-  for (const m of text.matchAll(/(^|[.!?]\s+|\s)((?:[A-Z][\p{L}&'-]+)(?:\s+[A-Z][\p{L}&'-]+)*)/gu)) {
+  // Any capital letter starts a word, not only ASCII ones: "Łukasz", "Émile", "Ögmundur".
+  for (const m of text.matchAll(/(^|[.!?]\s+|\s)((?:\p{Lu}[\p{L}&'-]+)(?:\s+\p{Lu}[\p{L}&'-]+)*)/gu)) {
     const sentenceStart = m[1] === "" || /[.!?]/.test(m[1]!);
     let words = m[2]!.split(/\s+/);
     // Dates around a name ("on Friday Dana Lee") are trimmed when a name of two or more words remains; a weekday

@@ -39,6 +39,7 @@ import {
   SourceFanout,
   type FanoutOutcome,
   type QueryPlanner,
+  type SearchQuery,
   type Source,
   type SourceResolver,
 } from "@eden/sources";
@@ -47,6 +48,16 @@ import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { answerMessages, judgeMessages, parseJudge } from "./judge";
 import { namesParticipant, startDay, startMs, timeWindow, titleNames, type TimeWindow } from "./grounding";
+import {
+  CHANGES_MEETING,
+  cleanEntities,
+  isAction,
+  isScheduling,
+  orgsOf,
+  requestedRange,
+  startMinutes,
+  topicOf,
+} from "./probes";
 import { Ledger } from "./ledger";
 import { citationsOf, renderAnswer, renderPacket, shownText } from "./render";
 import { classifySituation } from "./situation";
@@ -117,6 +128,16 @@ interface Session {
   /** Term ids the session has seen (bounded, least recently seen first). */
   seen: Set<number>;
   ledger: Ledger;
+  /**
+   * What the last lookup's probes found for the request's people, their organisations and its day (`probes.ts`): ranked
+   * with the lookup's own items, and given seats among the judge's candidates. Replaced by each lookup.
+   */
+  probed?: string[];
+  /**
+   * The session's recent probes (a query and its sources → the ids it found), so a person a conversation keeps naming
+   * is not searched again each turn: their items are still cached. At most `PROBE_MEMO` entries, oldest dropped.
+   */
+  probeMemo?: Map<string, string[]>;
   /** Sketches of items delivered in this session (bounded): a near-duplicate of one is not delivered again. */
   delivered: Sketch[];
   /** Injections handed to the agent and not yet judged used or unused. */
@@ -145,6 +166,8 @@ interface Cue {
   raw: string;
   /** The user's UTC offset (minutes) the days were resolved at. */
   offset: number;
+  /** The request arrived from outside the conversation (a new email): probed whatever its wording (`probeWhen`). */
+  external?: boolean;
 }
 
 /**
@@ -153,6 +176,8 @@ interface Cue {
  * is billed on tokens used: a verdict is a few tokens plus low-effort reasoning.
  */
 const JUDGE_MAX_TOKENS = 512;
+/** Probes a session remembers (`Session.probeMemo`): enough for a conversation's people and days. */
+const PROBE_MEMO = 32;
 const ANSWER_MAX_TOKENS = 1_000;
 
 /** Requests that act on someone, where an item they take part in is context (D44). */
@@ -266,7 +291,8 @@ export class ContextPartner {
       return reply(queued);
     }
     if (event.kind === "user_message") s.situation = classifySituation(text);
-    const cue = buildCue(text, terms, s.vocab, event.at, this.deps.cache.offsetOf(s.scope));
+    const cue = buildCue(text, terms, s.vocab, event.at, this.deps.cache.offsetOf(s.scope), this.config.probes);
+    if (event.kind === "external") cue.external = true;
     const last = s.cues.get(cue.key);
     const repeat = last !== undefined && s.turn - last < this.config.cueCooldownTurns;
 
@@ -333,6 +359,7 @@ export class ContextPartner {
       s.vocab,
       this.now(),
       this.deps.cache.offsetOf(s.scope),
+      this.config.probes,
     );
     const limit = request.maxItems ?? 5;
     const { calls: sourceCalls, plans } = await this.searchLive(s, cue, this.config.askSources);
@@ -607,7 +634,7 @@ export class ContextPartner {
     // Events on a day the request names are candidates whether or not they share its words (D44); they rank after
     // every item that does, so the judge, when there is one, sees them only if there is room.
     const timed = cue.time?.days.size ? cache.timed(s.scope, cue.time.days, this.now()) : [];
-    if (query.length === 0 && timed.length === 0) return [];
+    if (query.length === 0 && timed.length === 0 && !(this.config.probes && s.probed?.length)) return [];
     const entities = cue.entities.map((e) => {
       // An entity with a term no cached item holds matches nothing (never intern it: that grows the cache's vocab).
       const all = termIds(e, s.vocab, true).n;
@@ -616,6 +643,9 @@ export class ContextPartner {
     });
     const found = query.length > 0 ? cache.search(s.scope, query, query.length, 12, this.now()) : [];
     for (const h of timed) if (!found.some((f) => f.item.id === h.item.id)) found.push(h);
+    // The probes' finds for the request's people, organisations and day are candidates whatever they share in words.
+    const probed = this.config.probes && s.probed ? cache.hits(s.scope, s.probed, this.now()) : [];
+    for (const h of probed) if (!found.some((f) => f.item.id === h.item.id)) found.push(h);
     return (
       found
         .filter((h) => options.ignoreLedger || s.ledger.isFresh(h.item.id, s.turn))
@@ -679,8 +709,27 @@ export class ContextPartner {
     // Who is named is not enough to say which item: a meeting needs an event with them; anything else needs the
     // item to hold a word of the request beyond the person's name (the topic).
     const nameWords = (p: string) => p.trim().split(/\s+/).length;
-    const fits = (x: Scored, p: string) => (meeting ? startDay(x.item) !== null : x.matched > nameWords(p));
+    // With probes on, a message from them that changes the meeting is about it too ("can we push tomorrow's call?").
+    const changes = (x: Scored) =>
+      this.config.probes &&
+      !this.config.probeOff.includes("change") &&
+      startDay(x.item) === null &&
+      CHANGES_MEETING.test(x.item.text);
+    const fits = (x: Scored, p: string) =>
+      meeting ? startDay(x.item) !== null || changes(x) : x.matched > nameWords(p);
     const withPerson = acts ? pool.filter((x) => people.some((p) => namesParticipant(p, x.item) && fits(x, p))) : [];
+    // With probes on: an action on a named day at a named time, and an event already there near that time, is a clash
+    // the agent should see before it acts, whoever the event is with.
+    const clash = this.config.probes && !this.config.probeOff.includes("clash");
+    const range = clash && time && time.days.size > 0 && isScheduling(cue.raw) ? requestedRange(cue.raw) : null;
+    if (range && time) {
+      const near = (x: Scored) => {
+        const m = startMinutes(x.item);
+        return m !== null && m >= range.from && m <= range.to;
+      };
+      const clashes = pool.filter((x) => time.days.has(startDay(x.item) ?? "") && near(x)).sort(soonest);
+      if (clashes.length > 0) return { items: clashes.slice(0, this.max()), how: "clash" };
+    }
     if (withPerson.length > 0) {
       const dated = withPerson.filter(onDay);
       if (dated.length > 0) return { items: [dated[0]!], how: "person-day" };
@@ -847,7 +896,90 @@ export class ContextPartner {
       // before the next yield: a session closing in between must not leave items cached whose mentions never land.
       this.store(s, o.items);
     }
+    const probeThis =
+      this.config.probeWhen === "always" ||
+      isAction(cue.raw) ||
+      ACTING.has(s.situation) ||
+      ACTS_ON.test(cue.raw) ||
+      cue.external;
+    if (this.config.probes && probeThis && !s.closed) result.calls += await this.probe(s, cue, found, all, listing);
     return result;
+  }
+
+  /**
+   * The checks a request implies but does not ask for (`probes.ts`): its people, their organisations and its topic as
+   * short queries to the lookup's sources, and the day an action names listed from sources that list by time. Their
+   * items are cached as the lookup's are, and ranked with them. At most `probeCalls` source calls. Returns the calls.
+   */
+  private async probe(s: Session, cue: Cue, found: Source[], all: Source[], listed: boolean): Promise<number> {
+    let calls = 0;
+    const budget = this.config.probeCalls;
+    const kept: string[] = [];
+    const memo = (s.probeMemo ??= new Map());
+    const send = async (sources: Source[], text: string, window?: SearchQuery["window"], keep = true) => {
+      const key = `${text}|${window ? `${window.start}/${window.end}` : ""}|${sources.map((x) => x.id).join(",")}`;
+      const seen = memo.get(key);
+      if (seen) {
+        // Probed earlier this session: its finds, still in the cache, at no call.
+        const items = this.deps.cache.hits(s.scope, seen, this.now()).map((h) => h.item);
+        if (keep) for (const i of items) if (!kept.includes(i.id)) kept.push(i.id);
+        return items;
+      }
+      const to = sources.slice(0, Math.max(0, budget - calls));
+      if (to.length === 0 || s.closed) return [] as ContextItem[];
+      calls += to.length;
+      const outcomes = await this.fanout.search(
+        to,
+        // A day's listing is the whole day (a busy one has more than a search's page); a query, its first page.
+        { scope: s.scope, text, entities: text ? [text] : [], limit: window ? 20 : 5, ...(window ? { window } : {}) },
+        { timeoutMs: this.config.sourceTimeoutMs, signal: s.abort.signal },
+      );
+      const items = outcomes.flatMap((o) => o.items);
+      if (!s.closed) this.store(s, items);
+      if (keep) for (const i of items) if (!kept.includes(i.id)) kept.push(i.id);
+      // Only a complete answer is remembered: a source that failed or timed out is asked again next time.
+      if (to.length === sources.length && outcomes.every((o) => o.status === "ok")) {
+        memo.set(
+          key,
+          items.map((i) => i.id),
+        );
+        if (memo.size > PROBE_MEMO) memo.delete(memo.keys().next().value!);
+      }
+      return items;
+    };
+    // An action on a named day: what is already that day is what it may clash with.
+    const days = cue.time ? [...cue.time.days].sort() : [];
+    const off = new Set(this.config.probeOff);
+    if (!off.has("day") && !listed && days.length > 0 && days.length <= 7 && isScheduling(cue.raw)) {
+      const listers = all.filter((x) => x.listsByTime === true);
+      // Runs of consecutive days, each listed whole: one span over separate days would page out the days asked for.
+      const next = (d: string) => new Date(Date.parse(d) + 86_400_000).toISOString().slice(0, 10);
+      for (let i = 0; i < days.length;) {
+        let j = i;
+        while (j + 1 < days.length && days[j + 1] === next(days[j]!)) j++;
+        await send(listers, "", { start: days[i]!, end: next(days[j]!), offsetMinutes: cue.offset });
+        i = j + 1;
+      }
+    }
+    // A person or organisation goes to the sources most likely to hold them, by the source map's own record of which
+    // sources mention which names (any source may, not only the lookup's): three per name, not every source.
+    const routeFor = (name: string) =>
+      this.deps.sourceMap
+        .route({ scope: s.scope, entities: [name], situation: s.situation, sourceIds: all.map((x) => x.id), limit: 3 })
+        .map((r) => all.find((x) => x.id === r.sourceId)!)
+        .filter(Boolean);
+    const people = off.has("people") ? [] : cue.entities.slice(0, 2);
+    const topic = off.has("topic") ? "" : topicOf(cue.text.split(" "), cue.entities);
+    const first = await Promise.all(people.map((q) => send(routeFor(q), q)));
+    // The organisations of the request's people, from what came back for them; before the topic, as what is said of
+    // someone's organisation (a hold, a policy) applies to them more surely than any item sharing a word.
+    for (const org of off.has("org") ? [] : orgsOf(people, first.flat()).slice(0, 1)) {
+      if (!cue.entities.includes(org)) await send(routeFor(org), org);
+    }
+    // The topic's finds share the request's words, and rank on them; the others get seats of their own.
+    if (topic) await send(found, topic, undefined, false);
+    s.probed = kept.slice(0, 20);
+    return calls;
   }
 
   /** Caches sanitized items and records the entity mentions of those new to the cache or changed. */
@@ -1009,8 +1141,18 @@ export class ContextPartner {
       }
       // An event on a day the request names is a candidate whatever it scores on words (D44).
       const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item) ?? "") === true;
-      const eligible = scored.filter((x) => x.score >= this.config.candidateScore || onNamedDay(x));
-      const unsure = eligible.slice(0, this.config.judgeCandidates);
+      const probed = new Set(this.config.probes ? (s.probed ?? []) : []);
+      const eligible = scored.filter(
+        (x) => x.score >= this.config.candidateScore || onNamedDay(x) || probed.has(x.item.id),
+      );
+      // With probes on, up to three of the probes' finds join the judge's candidates beyond the best scored: found for
+      // the request's people, organisations or day, they share few of its words and would otherwise never be seen.
+      const top = eligible.slice(0, this.config.judgeCandidates);
+      const seats =
+        this.config.probes && !this.config.probeOff.includes("seats")
+          ? eligible.filter((x) => probed.has(x.item.id) && !top.includes(x)).slice(0, 3)
+          : [];
+      const unsure = [...top, ...seats];
       if (unsure.length === 0) {
         done("silent", "no candidates");
         return null;
@@ -1042,7 +1184,7 @@ export class ContextPartner {
       let res: Awaited<ReturnType<Model["chat"]>>;
       try {
         res = await this.deps.model.chat({
-          messages: judgeMessages(s.window.join("\n"), candidates),
+          messages: judgeMessages(s.window.join("\n"), candidates, this.config.probes),
           cacheKey: userCacheKey(s.scope),
           maxTokens: JUDGE_MAX_TOKENS,
           reasoning: "low",
@@ -1205,8 +1347,9 @@ function onlyTime(cue: Cue): boolean {
 }
 
 /** `offset`: the user's UTC offset in minutes, so "today" is their today (D44). */
-function buildCue(text: string, ids: Uint32Array, vocab: Vocab, at: number, offset: number): Cue {
-  const entities = extractEntities(text).slice(0, 8);
+function buildCue(text: string, ids: Uint32Array, vocab: Vocab, at: number, offset: number, probes = false): Cue {
+  // With probes on, a sentence's leading verb is not part of the name it starts ("Send Rose Kimura").
+  const entities = (probes ? cleanEntities(extractEntities(text)) : extractEntities(text)).slice(0, 8);
   const terms = contentTermsOf(ids, vocab).slice(0, 16); // Distinct already.
   const key = (entities.length ? entities.map((e) => e.toLowerCase()) : terms).slice().sort().join("|").slice(0, 200);
   // Traces and reasons carry this id, never the cue itself: the cue is the user's words.

@@ -9,10 +9,11 @@
  */
 import { readFileSync } from "node:fs";
 import { Rng } from "../rng";
+import { record, tidy } from "./ledger";
 
 interface Task {
   id: string;
-  kind: "request" | "arrival" | "offworld" | "hidden";
+  kind: "request" | "arrival" | "offworld" | "hidden" | "control";
   type: string;
   must: { id: string; detail: string }[];
 }
@@ -68,7 +69,7 @@ const ungraded = ok.filter((r) => tasks.get(r.task)!.kind !== "offworld" && !r.f
 console.log(`model ${run.model}, grader ${run.grader}, spent $${run.spent.toFixed(4)}, ${results.length} runs`);
 console.log(`errors ${results.length - ok.length}, ungraded ${ungraded}${ungraded ? " (left out of recall)" : ""}`);
 
-for (const kind of ["request", "arrival", "hidden", "offworld"] as const) {
+for (const kind of ["request", "arrival", "hidden", "control", "offworld"] as const) {
   console.log(`\n== ${kind}`);
   for (const c of conditions) {
     const rs = ok.filter((r) => r.condition === c && tasks.get(r.task)!.kind === kind);
@@ -112,8 +113,17 @@ for (const [a, b] of [
   ["both-judge", "tools"],
   ["eden-judge", "eden"],
   ["both-judge", "both"],
+  ["eden+p", "eden"],
+  ["both+p", "both"],
+  ["eden-judge+p", "eden-judge"],
+  ["both-judge+p", "both-judge"],
+  ["eden-judge+p", "tools"],
+  ["both-judge+p", "tools"],
 ] as const) {
-  for (const kind of [null, "request", "arrival", "hidden"] as const) {
+  // Pooled only where the kinds measure one thing: a hidden task's hit and a control's false alarm do not add.
+  const mixed = run.tasks.some((t) => t.kind === "control");
+  for (const kind of [mixed ? undefined : null, "request", "arrival", "hidden", "control"] as const) {
+    if (kind === undefined) continue;
     const xs = [...byTask]
       .filter(([t, v]) => v.has(a) && v.has(b) && (kind === null || tasks.get(t)!.kind === kind))
       .map(([, v]) => v.get(a)! - v.get(b)!);
@@ -130,10 +140,12 @@ for (const [a, b] of [
 }
 
 // Hidden-context tasks: how many of each template's tasks each condition raised the hidden fact on.
-const hidden = ok.filter((r) => tasks.get(r.task)!.kind === "hidden" && r.facts);
-if (hidden.length) {
+for (const kind of ["hidden", "control"] as const) {
+  const hidden = ok.filter((r) => tasks.get(r.task)!.kind === kind && r.facts);
+  if (!hidden.length) continue;
   const types = [...new Set(hidden.map((r) => tasks.get(r.task)!.type))];
-  console.log(`\n== hidden context raised, by template (${conditions.join(" / ")})`);
+  const what = kind === "hidden" ? "hidden context raised" : "false concern raised (control)";
+  console.log(`\n== ${what}, by template (${conditions.join(" / ")})`);
   for (const type of types) {
     const cells = conditions.map((c) => {
       const rs = hidden.filter((r) => r.condition === c && tasks.get(r.task)!.type === type);
@@ -155,3 +167,89 @@ for (const r of ok) {
 console.log(
   `\ngrader and lexical check agree on ${agree} of ${total} facts (${(agree / Math.max(1, total)).toFixed(3)})`,
 );
+
+// `--record [label]`: the run's summary and every result into the benchmark ledger (bench/, ledger.ts).
+const at = process.argv.indexOf("--record");
+if (at >= 0) {
+  const label = process.argv[at + 1] && !process.argv[at + 1]!.startsWith("--") ? process.argv[at + 1]! : "agent";
+  const meta = JSON.parse(readFileSync(file, "utf8")) as { seeds?: number[] };
+  const metrics: Record<string, number> = { graderAgreement: agree / Math.max(1, total), runs: results.length };
+  const q = (xs: number[], p: number) => [...xs].sort((a, b) => a - b)[Math.floor((xs.length - 1) * p)] ?? 0;
+  for (const c of conditions) {
+    for (const kind of ["request", "arrival", "hidden", "control", "offworld"] as const) {
+      const rs = ok.filter((r) => r.condition === c && tasks.get(r.task)!.kind === kind);
+      if (!rs.length) continue;
+      const g = rs.filter((r) => r.facts);
+      const k = `${c}.${kind}`;
+      if (kind !== "offworld") {
+        metrics[`${k}.hit`] = mean(g.map(recall));
+        metrics[`${k}.success`] = mean(g.map((r) => (recall(r) === 1 ? 1 : 0)));
+      }
+      metrics[`${k}.n`] = rs.length;
+      metrics[`${k}.modelCalls`] = mean(rs.map((r) => r.modelCalls));
+      metrics[`${k}.toolCalls`] = mean(rs.map((r) => r.toolCalls));
+      metrics[`${k}.inTokens`] = mean(rs.map((r) => r.promptTokens));
+      metrics[`${k}.outTokens`] = mean(rs.map((r) => r.completionTokens));
+      metrics[`${k}.costPer1k`] = 1000 * mean(rs.map((r) => r.costUsd + (r.edenCostUsd ?? 0)));
+      metrics[`${k}.edenCalls`] = mean(rs.map((r) => r.edenModelCalls ?? 0));
+      metrics[`${k}.injected`] = mean(rs.map((r) => r.injectedItems));
+      metrics[`${k}.late`] = mean(rs.map((r) => r.lateItems ?? 0));
+      metrics[`${k}.wallP50`] =
+        q(
+          rs.map((r) => r.wallMs),
+          0.5,
+        ) / 1000;
+      metrics[`${k}.wallP95`] =
+        q(
+          rs.map((r) => r.wallMs),
+          0.95,
+        ) / 1000;
+      metrics[`${k}.leaks`] = rs.filter((r) => r.leaked).length;
+    }
+  }
+  const rows = results.map((r) => {
+    const t = tasks.get(r.task);
+    return {
+      task: r.task,
+      kind: t?.kind,
+      template: t?.type,
+      condition: r.condition,
+      hit: r.facts ? recall(r) : null,
+      facts: r.facts ?? null,
+      modelCalls: r.modelCalls,
+      toolCalls: r.toolCalls,
+      inTokens: r.promptTokens,
+      outTokens: r.completionTokens,
+      costUsd: r.costUsd,
+      edenCostUsd: r.edenCostUsd ?? 0,
+      edenModelCalls: r.edenModelCalls ?? 0,
+      injected: r.injectedItems,
+      late: r.lateItems ?? 0,
+      wallMs: Math.round(r.wallMs),
+      leaked: !!r.leaked,
+      error: r.error ?? null,
+      answer: r.answer.slice(0, 300),
+    };
+  });
+  const suite = run.tasks.some((t) => t.id.includes(":heldout"))
+    ? "heldout"
+    : run.tasks.some((t) => t.kind === "hidden")
+      ? "hidden"
+      : "lookups";
+  const e = record(
+    {
+      tier: "agent",
+      suite,
+      label,
+      config: { conditions },
+      seeds: meta.seeds ?? [],
+      models: { agent: run.model, grader: run.grader },
+      costUsd: Number(run.spent.toFixed(4)),
+      wallSeconds: 0,
+      metrics: tidy(metrics),
+      ...(process.argv.includes("--note") ? { note: process.argv[process.argv.indexOf("--note") + 1] } : {}),
+    },
+    rows,
+  );
+  console.log(`recorded ${e.id}`);
+}
