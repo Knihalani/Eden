@@ -87,27 +87,30 @@ eden-judge + probes − eden-judge +0.183 (+0.067…+0.300). Probes help most wh
 
 ### Free tiers (engine only and simulation)
 
-Simulation (4 seeds, 589 silent turns per row; ledger labels `baseline-final`, `probes-final-actions`,
-`probes-final`). Recall and precision; the perfect judge stands in for a model that judges well:
+Simulation (4 seeds, 589 silent turns per row; ledger `baseline-final` and, on the final code, `probes-final2`;
+`probes-final-actions` ran before the review fixes). Recall and precision; the perfect judge stands in for a model
+that judges well:
 
-| Mix | Judge | Off | Actions only | Always | Source calls / lookup (off / actions / always) |
+| Mix | Judge | Off | Actions only (pre-fix) | Always (final) | Source calls / lookup (off / actions / always) |
 |---|---|---|---|---|---|
-| realistic | none | 0.238, 0.595 | 0.276, 0.581 | 0.305, 0.593 | 5.6 / 9.1 / 11.8 |
-| realistic | perfect | 0.447, 0.804 | 0.571, 0.842 | 0.618, 0.823 | 5.6 / 8.9 / 11.7 |
-| held-out A | none | 0.242, 0.587 | 0.266, 0.579 | 0.288, 0.596 | 5.5 / 8.9 / 11.6 |
-| held-out A | perfect | 0.448, 0.800 | 0.540, 0.827 | 0.581, 0.822 | 5.5 / 8.8 / 11.5 |
-| held-out B | none | 0.281, 0.559 | 0.306, 0.557 | 0.314, 0.561 | 5.4 / 8.7 / 11.4 |
-| held-out B | perfect | 0.579, 0.780 | 0.666, 0.809 | 0.687, 0.809 | 5.4 / 8.7 / 11.4 |
+| realistic | none | 0.238, 0.595 | 0.276, 0.581 | 0.308, 0.595 | 5.6 / 9.1 / 11.8 |
+| realistic | perfect | 0.447, 0.804 | 0.571, 0.842 | 0.620, 0.822 | 5.6 / 8.9 / 11.7 |
+| held-out A | none | 0.242, 0.587 | 0.266, 0.579 | 0.289, 0.591 | 5.5 / 8.9 / 11.6 |
+| held-out A | perfect | 0.448, 0.800 | 0.540, 0.827 | 0.576, 0.824 | 5.5 / 8.8 / 11.6 |
+| held-out B | none | 0.281, 0.559 | 0.306, 0.557 | 0.314, 0.557 | 5.4 / 8.7 / 11.5 |
+| held-out B | perfect | 0.579, 0.780 | 0.666, 0.809 | 0.688, 0.814 | 5.4 / 8.7 / 11.4 |
 
 No hard false fire in any row. Ask recall@5 0.85–0.88 off, 0.86–0.90 with probes. With the perfect judge, model
-calls per turn 0.19–0.23 off, 0.22–0.24 on. The eval is identical under all three (recall 0.444, precision 1, no
+calls per turn 0.19–0.23 off, 0.21–0.24 on. The eval is identical under all of them (recall 0.444, precision 1, no
 false fire). The simulation's tasks were not used to design probes: these rows are out of sample.
 
-Funnel (engine only, no model; 4 seeds): the planted item reached the agent on dev 0.125 → 0.625 of tasks, held-out
-0.042 → 0.167; decoys delivered on dev 0.075 → 0.275, held-out 0.104 → 0.062; source calls per task 3 → 9–10;
-engine time 3 → 5 ms. "Actions only" gives the same funnel (every hidden-context request is an action).
+Funnel (engine only, no model; 4 seeds; final code, `probes-final2` at a4bf2b2f8): the planted item reached the
+agent on dev 0.125 → 0.55 of tasks, held-out 0.042 → 0.146; decoys delivered on dev 0.075 → 0.25, held-out 0.104 →
+0.0625; source calls per task 3 → 9–10. Before the review fixes (one deadline for all probes, run in parallel) the
+same funnel gave dev 0.625 and held-out 0.167: the shared deadline cuts some probes short.
 
-Ablation (each part switched off with the rest on; ledger `ablate-*`; realistic simulation and both funnels):
+Ablation (each part switched off with the rest on; ledger `ablate-*`, run on the code before the review fixes, a
+dirty tree of 1f2ddd5d43; realistic simulation and both funnels; the "(nothing)" row is that code's own):
 
 | Off | Dev delivered | Held-out delivered | Sim recall (none / perfect) | Calls per funnel task |
 |---|---|---|---|---|
@@ -133,7 +136,7 @@ meeting-change ground was built too and removed: it changed nothing measurable.
   2.6 → 5.3 s and p95 21.5 → 38.8 s, recall 0.379 → 0.483. Probes run within one `sourceTimeoutMs` deadline after the
   lookup's own calls, so a lookup can take up to twice as long; `ask` waits for them. Engine time with instant sources
   3 → 5 ms on this machine (machine-dependent: an independent rerun measured 4.5–5.1 → 5.9–6.7 ms).
-- No-model decoy deliveries rise on the dev funnel (0.075 → 0.275: a mail confirming the 3pm call, a Q2 report
+- No-model decoy deliveries rise on the dev funnel (0.075 → 0.25: a mail confirming the 3pm call, a Q2 report
   sent): the probes fetch items about the right people and topic that change nothing. With a judge the live false
   concerns did not rise on dev.
 - For the agent, Eden in place of tools is cheaper than tools: fewer agent model calls and 39% fewer input tokens
