@@ -24,15 +24,19 @@ OpenRouter returns the real cost per call (`usage.cost`), and the engine books t
 
 | Call | Input bound | Output bound | Cost at $0.15 / $0.50, uncached |
 |---|---|---|---|
-| Judge | system ≈ 100 tok + window ≤ 4,000 chars (≈ 1,000 tok) + ≤ 6 candidates × ≈ 100 tok ≈ 1,700 tok | 60 tok | ≈ $0.00029 |
-| Ask answer (only with `askWithModel`, off by default, D43) | ≈ 100 + question ≤ 10,000 chars (≈ 2,500) + window ≤ 2,000 chars (≈ 500) + ≤ 20 items × ≈ 170 tok ≈ 6,500 tok | 300 tok | ≈ $0.0011 |
+| Judge | system ≈ 100 tok + window ≤ 4,000 chars (≈ 1,000 tok) + ≤ 6 candidates × ≈ 100 tok ≈ 1,700 tok | 512 tok, reasoning included (D45) | ≈ $0.00051 |
+| Ask answer (only with `askWithModel`, off by default, D43) | ≈ 100 + question ≤ 10,000 chars (≈ 2,500) + window ≤ 2,000 chars (≈ 500) + ≤ 20 items × ≈ 170 tok ≈ 6,500 tok | 1,000 tok, reasoning included (D45) | ≈ $0.0015 |
 
-These are arithmetic on list prices, not measurements.
+These are arithmetic on list prices, not measurements. Output is billed on tokens used, not the cap: a judge verdict
+is a few tokens plus low-effort reasoning (about 20 tokens on GLM 5.3 Flash in a probe of three calls).
 
 ## Measured so far (tiny samples, not statistics)
 
 - `bun run eval --live`, seed scenario, 8 turns, 2026-10-27: 1 model call, $0.0000162 total
   (`costPerTurnUsd` 0.00000202825), p95 observe latency 767 ms with `waitMs` 2000.
+- Live judge in simulation, realistic, seeds 41–43, 2026-10-30 (D45): 0.186 model calls per turn, $0.010 per 1,000
+  turns (about $0.000056 per judge call, OpenRouter's reported cost), delivery p95 3.5 s on seed 41 with the judge
+  against 11 ms without (docs/research/live-judge.md).
 - Server smoke test, one `ask`: $0.000013639431, 1,549 ms end to end, including the OpenRouter round trip.
 
 ## Budget defaults (`packages/llm/src/budget.ts`)
