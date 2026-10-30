@@ -21,6 +21,8 @@ export interface EngineConfig {
   fallbackScore: number;
   /** The fallback also takes an item the lookup's own search and a probe both found, sharing two request terms. */
   fallbackAgree: boolean;
+  /** The least score an agreed item needs (`fallbackAgree`). */
+  fallbackAgreeScore: number;
   maxItemsPerInjection: number;
   maxInjectionBytes: number;
   /**
@@ -128,6 +130,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   fallbackMatchedTerms: 3,
   fallbackScore: 0.8,
   fallbackAgree: false,
+  fallbackAgreeScore: 0.6,
   maxItemsPerInjection: 3,
   refreshAfterMs: 2 * 3_600_000,
   maxRefreshes: 0,

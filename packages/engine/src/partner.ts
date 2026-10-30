@@ -758,7 +758,12 @@ export class ContextPartner {
     // Found both by the request's own search and by a probe for its people (`fallbackAgree`): two independent queries
     // agreeing is evidence words alone are not. Still one item, and it must share two of the request's terms.
     if (!agreed) return null;
-    return unsure.slice(0, 3).find((x) => agreed.has(x.item.id) && x.matched >= 2 && !bulkMail(x.item)) ?? null;
+    return (
+      unsure
+        .slice(0, 3)
+        .find((x) => agreed.has(x.item.id) && x.matched >= 2 && x.score >= c.fallbackAgreeScore && !bulkMail(x.item)) ??
+      null
+    );
   }
 
   /**
@@ -1230,6 +1235,16 @@ export class ContextPartner {
       }
       // With no model to judge: what the request's people and days ground first (D44), then D36's fallback.
       const noModel = (why: string, reasonPrefix: string): Injection | null => {
+        // What scored as sure is delivered as it would have been with no judge to ask (`judgeConfident`): a failing
+        // or unaffordable model is never worse than none (D41).
+        if (judgeSure) {
+          done(
+            "sources",
+            `${cue.id}${reasonPrefix}`,
+            sure.map((x) => x.item),
+          );
+          return this.deliver(s, sure, "proactive", `sources:${cue.id}`, cue);
+        }
         // Grounding reads every candidate, not only the judge's few: a day's events rank after every word match.
         const grounded = this.grounded(s, cue, eligible, eventKind);
         if (grounded.items.length > 0) {

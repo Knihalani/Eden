@@ -72,6 +72,20 @@ describe("compactText", () => {
     expect(out).toBe("From: Jamie Fox Bring the Q3 deck.");
   });
 
+  test("hostile whitespace and brackets stay linear (an item's text is capped at 8,000 characters)", () => {
+    for (const hostile of [
+      " ".repeat(8_000),
+      "\t".repeat(8_000),
+      "  \n".repeat(2_700),
+      `From: ${"<".repeat(8_000)}`,
+      `x${" ".repeat(8_000)}y`,
+    ]) {
+      const t0 = performance.now();
+      compactText(hostile, new Set(["x"]), 320);
+      expect(performance.now() - t0).toBeLessThan(50);
+    }
+  });
+
   test("hostile text stays linear: 100 KB of near-markers compacts quickly", () => {
     const hostile = "On ".repeat(20_000) + "> ".repeat(10_000) + "Best regards, ".repeat(2_000);
     const t0 = performance.now();
