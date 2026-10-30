@@ -129,6 +129,16 @@ export interface EngineConfig {
   /** With `probeYield`, the least yield per call worth a call. */
   probeYieldFloor: number;
   /**
+   * A request that acts, of an action class (release, delete, pay, hire, travel, food, spend, share: `consequence.ts`),
+   * sends that class's constraint vocabulary ("freeze moratorium blackout ...") as one more probe, to the
+   * `consequenceSources` sources best for the class (learned per user with `probeYield`). A find that holds a class
+   * term and that the conflict test, tied by the class's words, says conflicts with the request takes a judge seat
+   * and, with `groundConflict`, is delivered with no model.
+   */
+  consequenceProbe: boolean;
+  /** Sources the consequence probe goes to per lookup. */
+  consequenceSources: number;
+  /**
    * With a judge configured, the slow path's confident items are judged too (with the other candidates, one call)
    * rather than delivered on their score alone. Costs a judge call on lookups that had only confident items.
    */
@@ -245,6 +255,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   probeFreshFloor: 0.15,
   probeYield: false,
   probeYieldFloor: 0.05,
+  consequenceProbe: false,
+  consequenceSources: 1,
   probeRoles: false,
   probeShare: false,
   probeSecondSources: 3,
