@@ -68,6 +68,21 @@ export interface EngineConfig {
    * with every id and hash in every tool result for as long as the user is cached.
    */
   maxSessionTerms: number;
+  /**
+   * Probes (docs/research/probes.md, PoC, off by default): send a request's people, their organisations, its topic
+   * and, for an action on a named day, that day's listing, as short queries besides the request itself; ground a
+   * clash with the requested time with no model; give the probes' finds seats among the judge's candidates.
+   */
+  probes: boolean;
+  /** Source calls the probes may make per lookup, on top of the lookup's own. */
+  probeCalls: number;
+  /**
+   * Which requests are probed: "always", or "actions" (a request that starts with a verb, schedules, or acts on
+   * someone, and arriving messages): where unasked context changes the outcome, at fewer source calls.
+   */
+  probeWhen: "always" | "actions";
+  /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
+  probeOff: string[];
   /** Cost reserved per judge call before the real cost is known: about its worst case at the cap (D45). */
   estimatedCallUsd: number;
   /** Cost reserved per model-composed ask answer (`askWithModel`): about its worst case at its cap (D45). */
@@ -107,5 +122,9 @@ export const DEFAULT_CONFIG: EngineConfig = {
   maxSessionTerms: 20_000,
   estimatedCallUsd: 0.0005,
   estimatedAnswerUsd: 0.0015,
+  probes: false,
+  probeCalls: 8,
+  probeWhen: "always",
+  probeOff: [],
   maxEventChars: 32_000,
 };

@@ -17,6 +17,11 @@ train / held-out split for tuning, and text not written by templates.
   agent was not asked for ([research/agent-hidden.md](research/agent-hidden.md)), tools raised it on 36% of tasks,
   Eden in place of them on 20–24%, Eden with its judge beside them on 40% (within noise of tools). Eden's one clear
   win is a note no search finds (7 of 8 against 2 of 8); its clear gap is scheduling: it never lists the named day.
+- Done (2026-10-30, PoC): probes (D46, [research/probes.md](research/probes.md)), measured on a rebuilt benchmark
+  with a blind held-out suite, decoy controls and a ledger of every run ([bench/](../bench/README.md)). Large gains
+  in simulation and on the dev suite; on the held-out suite Eden's judge alone already beats tools (0.389 against
+  0.264 of hidden facts raised) and probes add little over it there (+0.014, within noise), at twice the source calls
+  and slower delivery. Next: a larger held-out suite, real connectors, and cutting probe latency.
 - Done (2026-10-28, [research/eval-suite.md](research/eval-suite.md)): 26 scenarios across personal-agent jobs with
   gold labels, many must-stay-silent turns and 6 adversarial scenarios (prompt injection, planted secrets, look-alike
   names); per-category metrics, a privacy check and direct asks in the report. Baseline with no model: precision
