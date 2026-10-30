@@ -170,3 +170,35 @@ for j in none perfect; do for sd in 41 42 43 44; do
 done; done
 bun packages/sim/src/lab/hidden-funnel.ts --suite heldout5,heldout6,heldout7 --no-record --config "$CFG" --json blind.json
 ```
+
+## Final (after review; D55)
+
+Re-measured on the final code in one session, after the review fixes (`judgeTied` counts consequence finds as tied; the consequence probe classes only imperatives). G is D53's set, H is G plus `quietNameOnly` and `judgeTied`, ALL is H plus `consequenceProbe`.
+
+Funnel, no model, seeds 41–44 (returned / delivered / decoys delivered, calls per task):
+
+| Suite | G | H | ALL |
+|---|---|---|---|
+| hidden | 28/24/4 | 28/24/4 | 28/24/4 |
+| held-out 1 | 28/26/1 | 28/26/1 | 29/30/1 |
+| held-out 2 | 32/28/3 | 32/28/3 | 32/28/3 |
+| held-out 3 | 29/24/7 | 29/24/7 | 31/26/7 |
+| held-out 4 | 31/26/6 | 31/26/6 | 34/29/6 |
+| held-out 5 (blind) | 34/26/8 | 34/26/8 | 35/26/8 |
+| held-out 6 (blind) | 29/9/6 | 29/9/6 | 30/10/6 |
+| held-out 7 (blind) | 33/20/12 | 33/20/12 | 34/20/12 |
+| Total | 244/183/47, 8.4 | 244/183/47, 8.4 | 253/193/47, 8.8 |
+
+Simulation (realistic 4 seeds; zoo-a and zoo-b 2 seeds; recall / precision / soft fire rate; perfect judge adds calls per lookup, bytes per needed fact, model calls per turn, model $ per 1,000 turns as the unrounded mean):
+
+| Run | No model | Perfect judge |
+|---|---|---|
+| realistic G | 0.408 / 0.601 / 0.299 | 0.647 / 0.950 / 0.062; 7.79, 433, 0.253, $0.0203 |
+| realistic H | 0.407 / 0.639 / 0.086 | 0.645 / 0.952 / 0.045; 7.78, 432, 0.213, $0.0172 |
+| realistic ALL | 0.407 / 0.639 / 0.086 | 0.645 / 0.952 / 0.045; 7.79, 432, 0.214, $0.0173 |
+| zoo-a G | 0.416 / 0.614 / 0.284 | 0.596 / 0.952 / 0.134; 7.70, 447, 0.253, $0.0199 |
+| zoo-a H | 0.411 / 0.645 / 0.134 | 0.596 / 0.954 / 0.100; 7.71, 445, 0.214, $0.0170 |
+| zoo-b G | 0.434 / 0.596 / 0.400 | 0.722 / 0.965 / 0.134; 7.86, 430, 0.284, $0.0233 |
+| zoo-b H | 0.434 / 0.635 / 0.217 | 0.717 / 0.970 / 0.067; 7.84, 426, 0.254, $0.0209 |
+
+No hard false fire in any run. The consequence probe's gain is in the suites its branch diagnosed on; blind it adds one delivery (a passport) for 0.4 calls more per task (in its own run 0.5), so it stays off (D55). The `legal-hold-deletion` template is never returned with one consequence source; the delete class is unproven.
