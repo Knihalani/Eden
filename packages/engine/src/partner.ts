@@ -1480,7 +1480,8 @@ export class ContextPartner {
     const roles = c.probeRoles && !off.has("roles") ? rolesOf(cue.raw) : [];
     // `consequenceProbe`: a request that acts, of an action class (`consequence.ts`), asks its class's constraint
     // vocabulary of the sources best for that class: what would stop the action, in words the request never uses.
-    const acts = isAction(cue.raw) || cue.external === true || ACTS_ON.test(cue.raw);
+    // An imperative, not `isAction`: a question that mentions a release ("did the release go out?") is no release.
+    const acts = isImperative(cue.raw) || cue.external === true || ACTS_ON.test(cue.raw);
     const cls = c.consequenceProbe && !off.has("consequence") ? actionClass(cue.raw, acts) : null;
     await Promise.all([
       ...windows.map((w) => send("day", listers, "", w)),
@@ -1849,8 +1850,14 @@ export class ContextPartner {
       // is tied by a probe's find, a day the request names, two of its words, or one word few of the user's items hold.
       if (this.deps.model && this.config.judgeTied) {
         const rare = this.rareTerms(s, cue);
+        // A consequence find that conflicts with the request (`bridged`) is tied by its class's words, which the
+        // request never uses: without this, the judge never sees the constraint the probe was sent to find.
         const tied = (x: Scored) =>
-          probed.has(x.item.id) || onNamedDay(x) || x.matched >= 2 || this.holdsAny(s, x, rare);
+          probed.has(x.item.id) ||
+          bridged.has(x.item.id) ||
+          onNamedDay(x) ||
+          x.matched >= 2 ||
+          this.holdsAny(s, x, rare);
         if (!unsure.some(tied)) {
           done("silent", "judge: untied");
           return null;
