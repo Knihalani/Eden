@@ -28,6 +28,11 @@ train / held-out split for tuning, and text not written by templates.
   live loss. Cutting probe calls cost live accuracy, and Eden beside the agent's own tools did worse than Eden alone.
   Next: turn on probes with compaction behind a decision, real connectors, and why the agent with tools uses the packet
   less.
+- Done (2026-10-30, PoC): sharper grounds, shared calls, denser packets (D48,
+  [research/sharper-grounds.md](research/sharper-grounds.md)). Live on five blind held-out suites: Eden 0.602 of hidden
+  facts raised against tools' 0.403, at 64% fewer probe calls; precision 0.949 in simulation; packets 39% smaller than
+  probes'. Missed: 1.7× tools, cost below tools, no-model decoys. Next: semantic retrieval (about half of the hidden
+  facts are never returned by a source), behind its own decision.
 - Done (2026-10-28, [research/eval-suite.md](research/eval-suite.md)): 26 scenarios across personal-agent jobs with
   gold labels, many must-stay-silent turns and 6 adversarial scenarios (prompt injection, planted secrets, look-alike
   names); per-category metrics, a privacy check and direct asks in the report. Baseline with no model: precision
