@@ -12,7 +12,8 @@ import { Rng } from "../rng";
 
 interface Task {
   id: string;
-  kind: "request" | "arrival" | "offworld";
+  kind: "request" | "arrival" | "offworld" | "hidden";
+  type: string;
   must: { id: string; detail: string }[];
 }
 interface Result {
@@ -67,7 +68,7 @@ const ungraded = ok.filter((r) => tasks.get(r.task)!.kind !== "offworld" && !r.f
 console.log(`model ${run.model}, grader ${run.grader}, spent $${run.spent.toFixed(4)}, ${results.length} runs`);
 console.log(`errors ${results.length - ok.length}, ungraded ${ungraded}${ungraded ? " (left out of recall)" : ""}`);
 
-for (const kind of ["request", "arrival", "offworld"] as const) {
+for (const kind of ["request", "arrival", "hidden", "offworld"] as const) {
   console.log(`\n== ${kind}`);
   for (const c of conditions) {
     const rs = ok.filter((r) => r.condition === c && tasks.get(r.task)!.kind === kind);
@@ -112,7 +113,7 @@ for (const [a, b] of [
   ["eden-judge", "eden"],
   ["both-judge", "both"],
 ] as const) {
-  for (const kind of [null, "request", "arrival"] as const) {
+  for (const kind of [null, "request", "arrival", "hidden"] as const) {
     const xs = [...byTask]
       .filter(([t, v]) => v.has(a) && v.has(b) && (kind === null || tasks.get(t)!.kind === kind))
       .map(([, v]) => v.get(a)! - v.get(b)!);
@@ -125,6 +126,20 @@ for (const [a, b] of [
       `${a.padEnd(10)} - ${b.padEnd(6)} ${(kind ?? "all").padEnd(8)} n=${String(xs.length).padStart(3)} ${f(mean(xs))}` +
         ` (${f(boots[50]!)}..${f(boots[1_949]!)})`,
     );
+  }
+}
+
+// Hidden-context tasks: how many of each template's tasks each condition raised the hidden fact on.
+const hidden = ok.filter((r) => tasks.get(r.task)!.kind === "hidden" && r.facts);
+if (hidden.length) {
+  const types = [...new Set(hidden.map((r) => tasks.get(r.task)!.type))];
+  console.log(`\n== hidden context raised, by template (${conditions.join(" / ")})`);
+  for (const type of types) {
+    const cells = conditions.map((c) => {
+      const rs = hidden.filter((r) => r.condition === c && tasks.get(r.task)!.type === type);
+      return `${rs.filter((r) => recall(r) === 1).length}/${rs.length}`;
+    });
+    console.log(`${type.padEnd(16)} ${cells.join("  ")}`);
   }
 }
 
