@@ -116,6 +116,10 @@ const SIGNED =
 const BOILERPLATE =
   /^(view (issue|it|in|on|the)|this (message|email) was sent|you are receiving|you('re| are)? received this|unsubscribe|confidentiality notice|join with google meet|join (the )?zoom|invitation from google calendar)/i;
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// A weekday, whole or short, before the comma of a date ("Sat, 24 Oct"); not any word that starts like one
+// ("Monitor, 5").
+const WEEKDAY_COMMA =
+  /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues?|wed|thu|thur|thurs|fri|sat|sun), (\d)/gi;
 const MONTH_WORD = "(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*";
 const URL = /\bhttps?:\/\/\S+/g;
 const SALUTED = /^([Hh]i|[Hh]ello|[Hh]ey|[Dd]ear)?\s*[\p{Lu}][\p{L}'-]*\s?[,-]\s+(?=[\p{Lu}])/u;
@@ -174,8 +178,7 @@ export function compactText(
     }
     if (/^from:/i.test(line)) line = line.replace(/ ?<[^<>\n]*>/g, "");
     if (you) line = line.replace(you, selfFirst);
-    if (thisYear)
-      line = line.replace(thisYear, "$1").replace(/\b(mon|tue|wed|thu|fri|sat|sun)([a-z]*), (\d)/gi, "$1$2 $3");
+    if (thisYear) line = line.replace(thisYear, "$1").replace(WEEKDAY_COMMA, "$1 $2");
     for (let part of line.split(/(?<=[.!?])\s+(?=[\p{Lu}\d—-])/u)) {
       if (SIGNOFF.test(part) || SIGNED.test(part)) {
         if (quoted) signed = true;
