@@ -280,6 +280,8 @@ if (out) {
         rows,
         total: grand,
         ...(SUITE_LIST.length > 1 ? { suites } : {}),
+        // Per task, with the suite: how each planted item was delivered (`why`), for breakdowns by path.
+        perTask: runs.flatMap((r) => r.perTask.map((t) => ({ suite: r.suite, ...t }))),
       },
       null,
       2,

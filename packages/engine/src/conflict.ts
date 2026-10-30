@@ -117,6 +117,7 @@ const CLEARS = new RegExp(
     "may be (?:shared|used)|can be (?:shared|used)|can go ahead|good to go|no (?:current )?conflict|no restrictions?",
     "no open|no need|negative|came back clear|eat(?:ing)? everything|as usual|as normal|as planned|went fine",
     "extended|renewed|back at|back from|valid (?:to|until)|signed off|countersigned|approved\\b|keeps? [a-z]+ing (?:to|as)",
+    "(?:with |at )?no (?:charge|fee|penalty|cost)|free of charge|without (?:a |any )?(?:charge|fee|penalty)",
   ].join("|")})\\b`,
   "gi",
 );
@@ -292,7 +293,9 @@ export function assess(frame: Frame, item: ContextItem, now: number): Verdict {
   let s = "";
   for (const sentence of body.split(/[.!?;\n]+\s|\n+|,? but |\s(?=\[\d{1,2}:\d{2}\])/)) {
     before = s;
-    s = sentence.trim();
+    // A restriction that has ended is lifted: "the minimum term ended on 30 Jun" frees the request, unlike "the
+    // passport expired on 30 Sep", where what ended is the thing the request needs.
+    s = sentence.trim().replace(RESTRICTION_ENDED, "$1 lifted");
     if (s.length < 3 || BOILER.test(s)) continue;
     const money = amountVerdict(frame, s);
     if (money === "conflict") conflict(s, true, true);
@@ -347,6 +350,10 @@ const FIRST_PERSON = /\b(?:i|i'm|im|i've|i'll|i'd|my|me|we|we're|we've|our|us)\b
 const REVERSAL =
   /\b(?:lifted|restored|reinstated|resolved|unchanged|no changes?|not changed|back (?:at|from)|extended|renewed|still (?:on|valid|good)|stands|holds|cleared (?:it )?for|cleared to|clear to|approved for|no (?:current )?conflict|no restrictions?|no open|no need|eat(?:ing)? everything|came back clear|negative|went fine|is fine again)\b/;
 
+/** A restriction, then a word saying it is over. */
+const RESTRICTION_ENDED =
+  /\b((?:minimum |notice |lock-?in |contract |initial |fixed )?(?:term|period|freeze|hold|embargo|ban|suspension|moratorium|restrictions?|blackout|exclusivity|lock-?(?:in|up)|commitment|probation)(?: (?:on|of|for|in) [a-z-]+(?: [a-z-]+)?)?) (?:has |have |had )?(?:now )?(?:ended|expired|lapsed|finished|ran out|run out|is over|was over)\b/g;
+
 /** Footers and notices that say nothing about the matter ("Please do not reply to this email"). */
 const BOILER =
   /\b(?:do not reply|don't reply|no-?reply|automated (?:message|email)|you are receiving|you're receiving|notification (?:settings|preferences)|unsubscribe|intended recipient|confidentiality notice|legally privileged|this email and any attachments)\b/;
@@ -370,7 +377,13 @@ const DATE_WORD = new RegExp(`^(?:${MON}|(?:mon|tues|wednes|thurs|fri|satur|sun)
 
 /** The words of a statement that can tie it to another about the same matter. */
 function wordsOf(s: string): Set<string> {
-  return new Set((s.match(/[a-z][a-z0-9-]{3,}/g) ?? []).filter((w) => !COMMON.has(w) && !DATE_WORD.test(w)));
+  // Five-letter stems, so "allergy" and "allergic" are one matter: a clearance that says "not allergic" undoes the
+  // conflict read from "the allergy results". A wrong tie can only clear, which errs toward silence.
+  return new Set(
+    (s.match(/[a-z][a-z0-9-]{3,}/g) ?? [])
+      .filter((w) => !COMMON.has(w) && !DATE_WORD.test(w))
+      .map((w) => w.slice(0, 5)),
+  );
 }
 
 /**
@@ -483,7 +496,7 @@ function amountVerdict(frame: Frame, s: string): Verdict {
 function amountsOf(text: string, perHead: boolean): Amount[] {
   const out: Amount[] = [];
   const t = text.toLowerCase();
-  for (const m of t.matchAll(/([£€$])\s?(\d[\d,]*(?:\.\d+)?)\s?(k|m|bn)?\b|(\d+(?:\.\d+)?)\s?%/g)) {
+  for (const m of t.matchAll(/([£€$])\s?(\d[\d,]*(?:\.\d+)?)\s?(k|m|bn)?\b|\b(\d+(?:\.\d+)?)\s?%/g)) {
     if (m[4]) out.push({ unit: "%", value: Number(m[4]) });
     else out.push({ unit: m[1]!, value: Number(m[2]!.replace(/,/g, "")) * scale(m[3]) });
   }
@@ -536,14 +549,19 @@ function twin(asked: Ref[], said: Ref[]): boolean {
 function dayOf(day: number, month: string, year: string | undefined, now: number): string | null {
   const mi = MONTHS.indexOf(month.slice(0, 3));
   if (mi < 0 || day < 1 || day > 31) return null;
-  if (year) return new Date(Date.UTC(Number(year), mi, day)).toISOString().slice(0, 10);
+  // "31 Feb" is no day (Date.UTC would roll it to 3 Mar); 29 Feb is a day only in a leap year.
+  const real = (t: number) => new Date(t).getUTCDate() === day;
+  if (year) {
+    const t = Date.UTC(Number(year), mi, day);
+    return real(t) ? iso(t) : null;
+  }
   const y = new Date(now).getUTCFullYear();
   let best = 0;
   for (const c of [y - 1, y, y + 1]) {
     const t = Date.UTC(c, mi, day);
-    if (best === 0 || Math.abs(t - now) < Math.abs(best - now)) best = t;
+    if (real(t) && (best === 0 || Math.abs(t - now) < Math.abs(best - now))) best = t;
   }
-  return new Date(best).toISOString().slice(0, 10);
+  return best === 0 ? null : iso(best);
 }
 
 /** The last day of a month of a year ("October 2027" as a limit means its end). */

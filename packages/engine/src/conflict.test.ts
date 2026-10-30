@@ -136,6 +136,34 @@ describe("conflict: what would change the action", () => {
     expect(namesRef(f, item("Payment sent", "Transfer for INV-7157"))).toBe(false);
   });
 
+  test("a restriction that has ended frees the request; a thing the request needs that has ended does not", () => {
+    const ended = "Your minimum term ended on 30 Jun 2026, so you can end the plan any time with no charge.";
+    expect(verdict("Cancel Hooli today", "Hooli: your agreement", ended)).toBe("clear");
+    expect(verdict("Cancel Hooli today", "Hooli: your agreement", "The freeze on cancellations has ended.")).toBe(
+      "clear",
+    );
+    expect(verdict("book flights abroad on my passport", "Passport", "Your passport expired on 30 Sep.")).toBe(
+      "conflict",
+    );
+  });
+
+  test("a clearance undoes a conflict about the same matter in another form of its word", () => {
+    const text =
+      "finally got the allergy clinic results back this morning. " +
+      "I'm not allergic to shellfish after all, test was negative, so panic over.";
+    expect(verdict("Book a seafood lunch for me and Ana Ruiz", "allergy test results", text)).toBe("clear");
+  });
+
+  test("an impossible date is no date", () => {
+    // Read as a real day, "31 Feb" would be 3 Mar, and a payment on 4 Mar would be late.
+    expect(verdict("Pay the Hooli invoice on 4 March", "Payment terms", "Hooli payment is due by 31 Feb.")).toBe(
+      "none",
+    );
+    expect(verdict("Pay the Hooli invoice on 4 March", "Payment terms", "Hooli payment is due by 3 Mar.")).toBe(
+      "conflict",
+    );
+  });
+
   test("hostile input stays linear (32 KB)", () => {
     const shapes = [
       "do not ".repeat(4_600),
@@ -148,6 +176,7 @@ describe("conflict: what would change the action", () => {
       `${"a".repeat(31_000)} until`,
       "push ".repeat(6_400),
       "q3 ".repeat(10_000),
+      `${"7".repeat(2_000)}%`,
     ];
     for (const text of shapes) {
       const t0 = performance.now();
@@ -203,6 +232,47 @@ describe("the conflict ground in the engine (groundConflict, quietClear)", () =>
     const sure = { confidentScore: 0.1, minMatchedTerms: 1 };
     expect((await run(sure, [policy("£75,000")])).u1).toEqual(["drive:p1 sources"]);
     expect((await run({ ...sure, quietClear: true }, [policy("£75,000")])).u1).toEqual([]);
+  });
+
+  test("the request's today is the user's: a deadline is not past while it is still that day where they are", async () => {
+    // 20:00 on 31 Dec in Los Angeles is 04:00 on 1 Jan UTC; the user's calendar gives their offset.
+    const late = Date.parse("2027-01-01T04:00:00Z");
+    const deadline = { ref: "p", title: "Expenses policy", text: "Submit your expense report by 31 Dec." };
+    const run = async (calendar: boolean) => {
+      const cache = new ItemCache();
+      const scope = { tenantId: "t", userId: "la" };
+      if (calendar) {
+        const start = "2026-12-31T19:00:00-08:00";
+        cache.put(scope, [
+          { id: "cal:e", sourceId: "cal", ref: "e", title: "Dinner", text: "Dinner", meta: { start } },
+        ]);
+      }
+      const p = new ContextPartner({
+        sources: async () => [new StaticSource("drive", "Notes", [deadline])],
+        sourceMap: new SourceMap(),
+        cache,
+        budget: new Budget(),
+        model: null,
+        now: () => late,
+        config: {
+          probes: true,
+          probeGraceMs: 1_000,
+          confidentScore: 99,
+          fallbackMatchedTerms: 0,
+          groundConflict: true,
+        },
+      });
+      const text = "Submit my expense report";
+      const r = await p.observe({ ...scope, sessionId: "s", at: late, kind: "user_message", text } as AgentEvent, {
+        waitMs: 1_000,
+      });
+      return [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId: "s" })].map(
+        (i) => i.reason.split(":")[0],
+      );
+    };
+    // In UTC it is 1 Jan and the deadline has passed; in Los Angeles it is still 31 Dec.
+    expect(await run(false)).toEqual(["grounded-conflict"]);
+    expect(await run(true)).toEqual([]);
   });
 
   test("isolation: each user's verdict comes from their own sources' items, under their own scope", async () => {
