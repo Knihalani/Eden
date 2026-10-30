@@ -48,7 +48,17 @@ import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { answerMessages, judgeMessages, parseJudge } from "./judge";
 import { namesParticipant, startDay, startMs, timeWindow, titleNames, type TimeWindow } from "./grounding";
-import { cleanEntities, isAction, isScheduling, orgsOf, requestedRange, startMinutes, topicOf } from "./probes";
+import {
+  cleanEntities,
+  isAction,
+  isScheduling,
+  isSubject,
+  orgsOf,
+  overlaps,
+  requestedSpan,
+  startMinutes,
+  topicOf,
+} from "./probes";
 import { Ledger } from "./ledger";
 import { citationsOf, renderAnswer, renderPacket, shownText } from "./render";
 import { classifySituation } from "./situation";
@@ -696,11 +706,12 @@ export class ContextPartner {
     // With probes on: an action on a named day at a named time, and an event already there near that time, is a clash
     // the agent should see before it acts, whoever the event is with.
     const clash = this.config.probes && !this.config.probeOff.includes("clash");
-    const range = clash && time && time.days.size > 0 && isScheduling(cue.raw) ? requestedRange(cue.raw) : null;
+    const range = clash && time && time.days.size > 0 && isScheduling(cue.raw) ? requestedSpan(cue.raw) : null;
     if (range && time) {
+      // An event in the time asked for, other than the one the request is about (D48).
       const near = (x: Scored) => {
         const m = startMinutes(x.item);
-        return m !== null && m >= range.from && m <= range.to;
+        return m !== null && overlaps(x.item, m, range) && !isSubject(x.item, cue.raw);
       };
       const clashes = pool.filter((x) => time.days.has(startDay(x.item) ?? "") && near(x)).sort(soonest);
       if (clashes.length > 0) return { items: clashes.slice(0, this.max()), how: "clash" };

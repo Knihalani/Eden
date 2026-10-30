@@ -101,6 +101,7 @@ interface TaskRow {
   returned: boolean;
   cached: boolean;
   delivered: boolean;
+  why: string;
   injected: number;
   calls: number;
   ms: number;
@@ -157,9 +158,10 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       { waitMs: LIVE ? 30_000 : 3_000 },
     );
     const ms = performance.now() - t0;
-    const got = [...(r.injection ? [r.injection] : []), ...partner.takePending({ ...scope, sessionId })].flatMap((x) =>
-      x.citations.map((c) => c.itemId),
-    );
+    const injections = [...(r.injection ? [r.injection] : []), ...partner.takePending({ ...scope, sessionId })];
+    const got = injections.flatMap((x) => x.citations.map((c) => c.itemId));
+    // How the planted item was delivered (the injection reason's kind: sources, grounded-…, fallback, model).
+    const why = injections.find((x) => x.citations.some((c) => c.itemId === id))?.reason.split(":")[0] ?? "";
     perTask.push({
       seed,
       variant,
@@ -167,6 +169,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       returned: returned.has(id),
       cached: !!cache.get(scope, id, clock),
       delivered: got.includes(id),
+      why,
       injected: got.length,
       calls: calls - callsBefore,
       ms: Number(ms.toFixed(2)),

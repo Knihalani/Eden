@@ -6,7 +6,17 @@ import { StaticSource, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { timeWindow } from "./grounding";
 import { ContextPartner } from "./partner";
-import { cleanEntities, isScheduling, orgsOf, requestedRange, topicOf } from "./probes";
+import {
+  cleanEntities,
+  endMinutes,
+  isScheduling,
+  isSubject,
+  orgsOf,
+  overlaps,
+  requestedRange,
+  requestedSpan,
+  topicOf,
+} from "./probes";
 import { extractEntities } from "./text";
 
 const item = (text: string, meta?: Record<string, string>): ContextItem => ({
@@ -40,6 +50,40 @@ describe("probes: what a request implies", () => {
     expect(requestedRange("send the report")).toBeNull();
     expect(isScheduling("Set up dinner with Dana on Friday")).toBe(true);
     expect(isScheduling("Send Rose the Q3 report")).toBe(false);
+  });
+
+  test("the time a request asks to fill: a stated range as it is, a single time as the 90 minutes from it", () => {
+    expect(requestedSpan("Block Wednesday 3–5pm for prep")).toEqual({ from: 900, to: 1020 });
+    expect(requestedSpan("between 2 and 4pm")).toEqual({ from: 840, to: 960 });
+    expect(requestedSpan("from 14:00 to 15:30 on Friday")).toEqual({ from: 840, to: 930 });
+    expect(requestedSpan("dinner on Thursday at 19:00")).toEqual({ from: 1140, to: 1230 });
+    expect(requestedSpan("we'll come to the barbecue saturday at 1")).toEqual({ from: 780, to: 870 });
+    expect(requestedSpan("a workshop Thursday afternoon")).toEqual({ from: 720, to: 1080 });
+    // Numbers that are not times: a percentage range, a date range, a count.
+    expect(requestedSpan("prices go up 3-5% next year")).toBeNull();
+    expect(requestedSpan("away 2-3 November")).toBeNull();
+    expect(requestedSpan("book 2 tickets for 14 November")).toBeNull();
+  });
+
+  test("an event clashes when it overlaps the span, its end read from its own text", () => {
+    const ev = (text: string): ContextItem => ({ ...item(text), sourceId: "calendar" });
+    const block = requestedSpan("Block Wednesday 3–5pm")!;
+    expect(overlaps(ev("Wed, 15:30–16:30 audit walkthrough"), 930, block)).toBe(true);
+    expect(overlaps(ev("Wed, 17:15–18:00 audit walkthrough"), 1035, block)).toBe(false);
+    // A flight that departs 07:10 and arrives 10:35 is in the way of a 10:00 workshop.
+    expect(endMinutes(ev("departs 07:10 LHR, arrives 10:35 MAD"), 430)).toBe(635);
+    expect(overlaps(ev("departs 07:10 LHR, arrives 10:35 MAD"), 430, requestedSpan("workshop at 10:00")!)).toBe(true);
+    // No end stated: an hour.
+    expect(endMinutes(ev("Hall B"), 1110)).toBe(1170);
+  });
+
+  test("the event a request is about is not a clash with it; a request to make something new has no subject", () => {
+    const dental = { ...item("Thursday 29 October at 10:20"), title: "Dental check-up" };
+    expect(isSubject(dental, "Can you confirm my dentist appointment on Thursday morning?")).toBe(true);
+    expect(isSubject(dental, "Book a haircut on Thursday morning")).toBe(false);
+    const walkthrough = { ...item("15:30–16:30"), title: "Security audit walkthrough – Pied Piper" };
+    // "pipeline" and "Piper" share a stem, but blocking time makes something new: no subject.
+    expect(isSubject(walkthrough, "Block Wednesday 3–5pm for prep on the quarterly pipeline review")).toBe(false);
   });
 
   test("the topic is what is neither a person, a day nor the action, at most two words", () => {
