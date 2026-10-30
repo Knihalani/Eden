@@ -165,23 +165,6 @@ export interface EngineConfig {
    * or unchanged, a sibling reference (Q2 for Q3, another invoice number) (`conflict.ts`; D49).
    */
   quietClear: boolean;
-  /**
-   * The standing-constraints register (`register.ts`; off by default): for a request to act (or an arriving message),
-   * the user's cached items that state a rule, cap or blocking state the request touches get seats with the judge
-   * (`registerSeats`), and with no model one in structural conflict with it is delivered (an amount over a stated
-   * cap, a day inside a stated span or past a deadline, a blocking state of someone the request names).
-   */
-  register: boolean;
-  /** Judge seats the register's records may take, within the probes' bound on candidates. */
-  registerSeats: number;
-  /**
-   * With `register`, how often (ms) a user's sources are swept for standing rules (`register.ts` `SWEEP_WORDS`, one
-   * search per word and source, `registerSweepCalls` per lookup, in the background): rules rarely share a request's
-   * words, so a lookup alone seldom finds them. 0 (the default) never sweeps.
-   */
-  registerSweepMs: number;
-  /** Sweep calls a lookup may add (`registerSweepMs`). */
-  registerSweepCalls: number;
   /** With `judgeConfident`, a lone sure item the lookup and a probe both found is judged too (false: delivered). */
   judgeAgreed: boolean;
   /**
@@ -276,10 +259,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   groundConflict: false,
   quietClear: false,
   judgeAgreed: true,
-  register: false,
-  registerSeats: 2,
-  registerSweepMs: 0,
-  registerSweepCalls: 2,
   densePacket: false,
   recoverNames: false,
   groundOccasion: false,

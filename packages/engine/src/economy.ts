@@ -51,6 +51,11 @@ const FRESH_PRIOR = 1;
 const MAX_QUERIES = 512;
 const MAX_ARMS = 128;
 const MAX_FINDS = 2_048;
+/**
+ * Users kept per tenant, least recently used dropped first, so one tenant's traffic never evicts another's learning
+ * (as `ItemCache` caps its users); and over all tenants, a backstop on memory.
+ */
+const MAX_USERS_PER_TENANT = 1_000;
 const MAX_USERS = 10_000;
 
 interface Asked {
@@ -79,6 +84,7 @@ interface Arm {
 }
 
 class UserEconomy {
+  constructor(readonly tenantId: string) {}
   readonly asked = new Map<string, Asked>();
   /** Pooled over every query of the user: re-asks, changes, exposure. */
   n = 0;
@@ -98,6 +104,7 @@ const printOf = (item: ContextItem) => hashString(`${item.id}\n${item.title}\n${
 
 export class ProbeEconomy {
   private readonly users = new Map<string, UserEconomy>();
+  private readonly perTenant = new Map<string, number>();
 
   private user(scope: Scope, create: true): UserEconomy;
   private user(scope: Scope, create: false): UserEconomy | undefined;
@@ -110,10 +117,27 @@ export class ProbeEconomy {
       return u;
     }
     if (!create) return undefined;
-    const made = new UserEconomy();
+    if ((this.perTenant.get(scope.tenantId) ?? 0) >= MAX_USERS_PER_TENANT) {
+      for (const [k, v] of this.users) {
+        if (v.tenantId !== scope.tenantId) continue;
+        this.drop(k);
+        break;
+      }
+    }
+    if (this.users.size >= MAX_USERS) this.drop(this.users.keys().next().value!);
+    const made = new UserEconomy(scope.tenantId);
     this.users.set(key, made);
-    if (this.users.size > MAX_USERS) this.users.delete(this.users.keys().next().value!);
+    this.perTenant.set(scope.tenantId, (this.perTenant.get(scope.tenantId) ?? 0) + 1);
     return made;
+  }
+
+  private drop(key: string): void {
+    const u = this.users.get(key);
+    if (!u) return;
+    this.users.delete(key);
+    const n = (this.perTenant.get(u.tenantId) ?? 1) - 1;
+    if (n <= 0) this.perTenant.delete(u.tenantId);
+    else this.perTenant.set(u.tenantId, n);
   }
 
   /**
@@ -139,7 +163,8 @@ export class ProbeEconomy {
 
   /**
    * Records a live answer to a query at a source: whether it changed since the last (an item the last did not hold,
-   * or held with other text) teaches the query's and the user's change rates.
+   * held with other text, or no longer there: an event cancelled, a mail deleted) teaches the query's and the user's
+   * change rates.
    */
   answered(scope: Scope, sourceId: string, query: string, items: ContextItem[], now: number): void {
     const u = this.user(scope, true);
@@ -148,7 +173,7 @@ export class ProbeEconomy {
     const prints = new Set(items.map(printOf));
     if (before) {
       const dt = Math.max(0, now - before.at);
-      let changed = 0;
+      let changed = prints.size !== before.prints.size ? 1 : 0;
       for (const p of prints) if (!before.prints.has(p)) changed = 1;
       before.n++;
       before.changed += changed;
@@ -247,7 +272,7 @@ export class ProbeEconomy {
   forget(scope: Scope, sourceId?: string): void {
     const key = scopeKey(scope);
     if (!sourceId) {
-      this.users.delete(key);
+      this.drop(key);
       return;
     }
     const u = this.users.get(key);

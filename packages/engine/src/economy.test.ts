@@ -46,6 +46,31 @@ describe("probe economy: has the answer changed? (probeFresh)", () => {
     expect(e.lastIds(alice, "mail", "Dana Lee")).toEqual(["m1"]);
   });
 
+  test("an answer that shrank changed: an event cancelled or a mail deleted is a change", () => {
+    const e = new ProbeEconomy();
+    let at = 0;
+    // Answers that only lose an item each time: never steady, so never skipped as unchanged.
+    for (let k = 0; k <= FRESH_WARMUP; k++, at += 2 * MIN) {
+      e.answered(
+        alice,
+        "mail",
+        "Dana Lee",
+        Array.from({ length: 10 - k }, (_, i) => item(`m${i}`)),
+        at,
+      );
+    }
+    expect(e.changeChance(alice, "mail", "Dana Lee", at - 2 * MIN + MIN)).toBeGreaterThan(0.15);
+  });
+
+  test("users are capped per tenant: one tenant's users never evict another tenant's learning", () => {
+    const e = new ProbeEconomy();
+    e.answered({ tenantId: "quiet", userId: "q" }, "mail", "Dana Lee", [item("m1")], 0);
+    for (let k = 0; k < 1_500; k++) e.answered({ tenantId: "busy", userId: `u${k}` }, "mail", "x", [item("m1")], 0);
+    expect(e.lastIds({ tenantId: "quiet", userId: "q" }, "mail", "Dana Lee")).toEqual(["mail:m1".slice(5)]);
+    expect(e.lastIds({ tenantId: "busy", userId: "u0" }, "mail", "x")).toBeNull();
+    expect(e.userCount).toBe(1_001);
+  });
+
   test("what one user's probes learned is theirs alone, and is forgotten with them or their source", () => {
     const e = new ProbeEconomy();
     const last = steady(e);
