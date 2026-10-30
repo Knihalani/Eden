@@ -74,6 +74,14 @@ export function timeWindow(text: string, now: number, offsetMinutes = 0): TimeWi
     /\b(this|next|on|coming|last|past|previous)?\s*(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/g,
   )) {
     const target = WEEKDAYS.indexOf(m[2]!);
+    // A weekday written with its date ("Wednesday 4 November", "Wednesday, Nov 4") is that date, not the coming one.
+    if (
+      new RegExp(String.raw`^,?\s+(\d{1,2}(st|nd|rd|th)?(\s+of)?\s+${MONTH}|${MONTH}\s+\d{1,2})\b`).test(
+        t.slice(m.index! + m[0].length),
+      )
+    ) {
+      continue;
+    }
     const before = t.slice(0, m.index! + m[0].length - m[2]!.length);
     const ago = m[1] === "last" || m[1] === "past" || m[1] === "previous";
     if (ago || (m[1] !== "next" && m[1] !== "coming" && PAST_BEFORE.test(before))) {

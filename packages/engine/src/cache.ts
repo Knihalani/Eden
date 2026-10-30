@@ -309,6 +309,20 @@ export class ItemCache {
     return out.sort((a, b) => Date.parse(a.item.meta!.start!) - Date.parse(b.item.meta!.start!)).slice(0, limit);
   }
 
+  /** Fresh cached items by id, as unscored hits (the probes' finds); unknown or expired ids are skipped. */
+  hits(scope: Scope, ids: Iterable<string>, now = Date.now()): CacheHit[] {
+    const u = this.peek(scope);
+    if (!u) return [];
+    const out: CacheHit[] = [];
+    for (const id of ids) {
+      const e = u.items.get(id);
+      if (e && now - e.fetchedAt <= this.limits.ttlMs) {
+        out.push({ item: e.item, sketch: e.sketch, doc: e.doc, score: 0, coverage: 0, matched: 0 });
+      }
+    }
+    return out;
+  }
+
   /** The UTC offset (minutes) most of the user's cached events carry: their calendar's zone; 0 if none says. */
   offsetOf(scope: Scope): number {
     const u = this.peek(scope);
