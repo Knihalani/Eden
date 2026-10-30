@@ -252,10 +252,11 @@ const FULL = {
 async function runWorld(world: World, seed: number, tasks: Task[], condition: string): Promise<RunResult[]> {
   const sources = simSources(world, REALISTIC, 0, seed);
   // A "+p" suffix runs Eden with probes on (docs/research/probes.md), "+f" with probes and the changes measured with
-  // them (`FULL`); the rest of the name is the condition.
+  // them (`FULL`), "+g" the same with the judge's six candidates; the rest of the name is the condition.
   const probes = condition.endsWith("+p");
   const full = condition.endsWith("+f");
-  const base = probes || full ? condition.slice(0, -2) : condition;
+  const wide = condition.endsWith("+g");
+  const base = probes || full || wide ? condition.slice(0, -2) : condition;
   const useEden = base !== "none" && base !== "tools";
   const useTools = base === "tools" || base.startsWith("both");
   const judge = base.endsWith("-judge");
@@ -271,7 +272,7 @@ async function runWorld(world: World, seed: number, tasks: Task[], condition: st
         model: judge ? new OpenRouterModel({ apiKey: KEY!, model: MODEL }) : null,
         planner: new QueryPlanner({ seed }),
         now: () => clock,
-        config: full ? FULL : { probes },
+        config: full ? FULL : wide ? { ...FULL, judgeCandidates: 6 } : { probes },
         // Charged to the task whose session the trace is from: a slow-path verdict can land after it ended.
         onTrace: (t) => {
           const owner = bySession.get(t.sessionId);
