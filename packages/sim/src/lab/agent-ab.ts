@@ -270,6 +270,8 @@ const SETTINGS: Record<string, Record<string, unknown>> = {
 };
 // C with the lookup's planner and probes sharing their calls, and the topic probe only when no one is named.
 SETTINGS.C2 = { ...SETTINGS.C, probeShare: true, probeTopicAlone: true };
+// D48's measured configuration: C2 with the no-model fallback for requests that ask about something they name.
+SETTINGS.F = { ...SETTINGS.C2, fallbackAsks: true };
 
 /** One world under one condition: a fresh Eden (if any) sees the world's tasks in order, as it would in use. */
 async function runWorld(world: World, seed: number, tasks: Task[], condition: string): Promise<RunResult[]> {

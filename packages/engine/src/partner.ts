@@ -1065,7 +1065,9 @@ export class ContextPartner {
         return run;
       };
       const outcomes = (await Promise.all(to.map(one))).filter((o): o is FanoutOutcome => o !== null);
-      const items = outcomes.flatMap((o) => o.items);
+      // A page of the probe's own size from each source, even when the call was the planner's (8 items): more would
+      // crowd the probes' seats with the judge (live, the judge passed fewer planted items with them).
+      const items = outcomes.flatMap((o) => o.items.slice(0, window ? 20 : 5));
       // A call the fan-out did not make (busy, limited, open, answered from its cache, past the deadline) is no call.
       out.calls -= to.length - outcomes.filter((o) => !SKIPPED.has(o.status)).length;
       if (!s.closed) this.store(s, items);
