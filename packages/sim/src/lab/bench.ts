@@ -2,7 +2,8 @@
 /**
  * Runs the free tiers of the benchmark (bench/README.md) on the current tree and records each in the ledger:
  *
- * - funnel: the hidden-context suites (dev and held-out) through Eden alone (`hidden-funnel.ts`);
+ * - funnel: the hidden-context suites (by default `hidden` and `heldout`; `--suites` takes any list of
+ *   `suites.ts`, or `all` / `heldout-all`) through Eden alone (`hidden-funnel.ts`);
  * - sim: simulation quality on the realistic and held-out connector mixes, no judge and the perfect judge
  *   (`quality-cli.ts`), every seed's report kept as a row;
  * - eval: the scenario eval, no model.
@@ -14,6 +15,7 @@
  */
 import { join } from "node:path";
 import { record, tidy } from "./ledger";
+import { parseSuites } from "./suites";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -40,8 +42,8 @@ const run = async (cmd: string[]) => {
 };
 const json = (s: string) => JSON.parse(s.slice(s.indexOf("{")));
 
-// Funnel: both suites.
-for (const suite of ["hidden", "heldout"]) {
+// Funnel: one run per suite. The default stays the dev and first held-out suites, so ledger entries compare.
+for (const suite of parseSuites(opt("suites", "hidden,heldout"))) {
   const out = await run([
     "bun",
     "packages/sim/src/lab/hidden-funnel.ts",

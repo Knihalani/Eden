@@ -5,7 +5,10 @@
  * and wall time; paired fact-recall differences between conditions with a bootstrap 95% interval over tasks; and how
  * often the grader agrees with the lexical check.
  *
- *   bun packages/sim/src/lab/agent-ab-report.ts ab.json
+ *   bun packages/sim/src/lab/agent-ab-report.ts ab.json [more.json ...] [--record [label]] [--note text]
+ *
+ * Several results files are merged: their tasks and results pooled, a task run under the same condition in two files
+ * kept from the later file. The hidden-context tasks also get a per-suite table (suites.ts).
  */
 import { readFileSync } from "node:fs";
 import { Rng } from "../rng";
@@ -13,6 +16,8 @@ import { record, tidy } from "./ledger";
 
 interface Task {
   id: string;
+  /** Absent in results files written before suites.ts: then read from the id. */
+  suite?: string;
   kind: "request" | "arrival" | "offworld" | "hidden" | "control";
   type: string;
   must: { id: string; detail: string }[];
@@ -36,11 +41,41 @@ interface Result {
   leaked?: boolean;
 }
 
-const file = process.argv[2];
-if (!file) throw new Error("usage: agent-ab-report.ts results.json");
-const run = JSON.parse(readFileSync(file, "utf8")) as { model: string; grader: string; spent: number; tasks: Task[] };
-const results = (JSON.parse(readFileSync(file, "utf8")) as { results: Result[] }).results;
+// Positional arguments are results files; `--record` takes an optional label and `--note` a value.
+const argv = process.argv.slice(2);
+const files: string[] = [];
+for (let i = 0; i < argv.length; i++) {
+  const a = argv[i]!;
+  if (a === "--note") i++;
+  else if (a === "--record") {
+    if (argv[i + 1] && !argv[i + 1]!.startsWith("--") && !argv[i + 1]!.endsWith(".json")) i++;
+  } else if (!a.startsWith("--")) files.push(a);
+}
+if (!files.length) throw new Error("usage: agent-ab-report.ts results.json [more.json ...]");
+interface RunFile {
+  model: string;
+  grader: string;
+  spent: number;
+  seeds?: number[];
+  tasks: Task[];
+  results: Result[];
+}
+const runs = files.map((f) => JSON.parse(readFileSync(f, "utf8")) as RunFile);
+const joined = (xs: string[]) => [...new Set(xs)].join(",");
+const run = {
+  model: joined(runs.map((r) => r.model)),
+  grader: joined(runs.map((r) => r.grader)),
+  spent: runs.reduce((n, r) => n + r.spent, 0),
+  seeds: [...new Set(runs.flatMap((r) => r.seeds ?? []))],
+  tasks: [...new Map(runs.flatMap((r) => r.tasks).map((t) => [t.id, t])).values()],
+};
+// The later file wins for a task run under the same condition.
+const results = [...new Map(runs.flatMap((r) => r.results).map((r) => [`${r.task}\u0000${r.condition}`, r])).values()];
 const tasks = new Map(run.tasks.map((t) => [t.id, t]));
+/** A task's suite: recorded, or the id's second part (`w41:heldout2-control:<template>`) for hidden-context tasks. */
+const suiteOf = (t: Task) =>
+  t.suite ??
+  (t.kind === "hidden" || t.kind === "control" ? (t.id.split(":")[1] ?? "hidden").replace(/-control$/, "") : "lookups");
 const conditions = [...new Set(results.map((r) => r.condition))];
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 
@@ -155,6 +190,28 @@ for (const kind of ["hidden", "control"] as const) {
   }
 }
 
+// Per suite: how often each condition raised the hidden fact (hidden tasks) and a false concern (control tasks).
+const hiddenSuites = [...new Set(run.tasks.filter((t) => t.kind === "hidden" || t.kind === "control").map(suiteOf))];
+const suiteRate = (c: string, suite: string, kind: "hidden" | "control") => {
+  const rs = ok.filter(
+    (r) => r.condition === c && r.facts && tasks.get(r.task)!.kind === kind && suiteOf(tasks.get(r.task)!) === suite,
+  );
+  return { hit: rs.filter((r) => recall(r) === 1).length, n: rs.length };
+};
+if (hiddenSuites.length) {
+  console.log("\n== by suite: hidden fact raised / false concern raised (control)");
+  for (const suite of hiddenSuites) {
+    for (const c of conditions) {
+      const h = suiteRate(c, suite, "hidden");
+      const f = suiteRate(c, suite, "control");
+      if (!h.n && !f.n) continue;
+      const cell = (x: { hit: number; n: number }) =>
+        x.n ? `${`${x.hit}/${x.n}`.padStart(7)} ${(x.hit / x.n).toFixed(3)}` : `${"-".padStart(7)}      `;
+      console.log(`${suite.padEnd(10)} ${c.padEnd(13)} hidden ${cell(h)}   false-concern ${cell(f)}`);
+    }
+  }
+}
+
 let agree = 0;
 let total = 0;
 for (const r of ok) {
@@ -171,8 +228,8 @@ console.log(
 // `--record [label]`: the run's summary and every result into the benchmark ledger (bench/, ledger.ts).
 const at = process.argv.indexOf("--record");
 if (at >= 0) {
-  const label = process.argv[at + 1] && !process.argv[at + 1]!.startsWith("--") ? process.argv[at + 1]! : "agent";
-  const meta = JSON.parse(readFileSync(file, "utf8")) as { seeds?: number[] };
+  const next = process.argv[at + 1];
+  const label = next && !next.startsWith("--") && !next.endsWith(".json") ? next : "agent";
   const metrics: Record<string, number> = { graderAgreement: agree / Math.max(1, total), runs: results.length };
   const q = (xs: number[], p: number) => [...xs].sort((a, b) => a - b)[Math.floor((xs.length - 1) * p)] ?? 0;
   for (const c of conditions) {
@@ -206,6 +263,12 @@ if (at >= 0) {
         ) / 1000;
       metrics[`${k}.leaks`] = rs.filter((r) => r.leaked).length;
     }
+    for (const suite of hiddenSuites) {
+      const h = suiteRate(c, suite, "hidden");
+      const f = suiteRate(c, suite, "control");
+      if (h.n) metrics[`${c}.suite.${suite}.hidden`] = h.hit / h.n;
+      if (f.n) metrics[`${c}.suite.${suite}.falseConcern`] = f.hit / f.n;
+    }
   }
   const rows = results.map((r) => {
     const t = tasks.get(r.task);
@@ -231,18 +294,15 @@ if (at >= 0) {
       answer: r.answer.slice(0, 300),
     };
   });
-  const suite = run.tasks.some((t) => t.id.includes(":heldout"))
-    ? "heldout"
-    : run.tasks.some((t) => t.kind === "hidden")
-      ? "hidden"
-      : "lookups";
+  // The suites run, in order; a lookups-only run stays "lookups" as before.
+  const suite = joined(run.tasks.map(suiteOf));
   const e = record(
     {
       tier: "agent",
       suite,
       label,
       config: { conditions },
-      seeds: meta.seeds ?? [],
+      seeds: run.seeds,
       models: { agent: run.model, grader: run.grader },
       costUsd: Number(run.spent.toFixed(4)),
       wallSeconds: 0,
