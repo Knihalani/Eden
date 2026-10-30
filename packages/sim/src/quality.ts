@@ -552,17 +552,6 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
           }),
         );
         // How the engine decided to deliver it: the injection reason's first part (cache, sources, model, fallback...).
-        if (process.env.DUMP_INJ)
-          require("node:fs").appendFileSync(
-            process.env.DUMP_INJ,
-            JSON.stringify({
-              text: inj.text,
-              reason: inj.reason,
-              ids,
-              facts: ids.map((id) => byId.get(id)?.facts ?? []),
-              stated: ids.map((id) => stated.get(id)),
-            }) + "\n",
-          );
         arrivals.push({ at, ids, shown, stated, wallMs: wall, why: inj.reason.split(":")[0] ?? "" });
         for (const id of ids) {
           itemsDelivered++;
