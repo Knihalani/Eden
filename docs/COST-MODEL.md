@@ -75,6 +75,8 @@ offset by 200-byte judge candidates: $0.0200 against probes' $0.0203 per 1,000 t
 settings $0.357, tools $0.329, Eden beside tools $0.329 per 1,000 held-out tasks; Eden's judge is about $0.034 of that
 (live judge funnel). A cheaper judge model (mistral-nemo, $0.0097 per 1,000 tasks) let more decoys through.
 
+D49–D53 (docs/research/combined-config.md): the conflict ground, the probe economy and dense packets add no model call. With them (D53's configuration), simulation, realistic, 4 seeds, perfect judge: 7.79 source calls per lookup (F 7.86), model calls per turn 0.253 (0.251), $0.02025 per 1,000 turns (F $0.0200), 433 bytes per needed fact (484). The probe economy starts cold for each new user, so a user's first lookups make the wider calls `probeYield` sends before it has learned which to skip (8.4 calls per task in the per-task funnel, which builds a new engine each task). The register's background sweep (D51) added calls (10.4 per task) and was removed with it.
+
 The non-model costs (source API calls, hosting) are not modelled yet. Source calls may dominate for some connectors;
 measure them per connector in M2. The query planner (D28), on by default in the server since D33, adds no model call.
 After its iterations it makes 1.36–1.47x planner-off's source calls per lookup in the simulation at time 0 and
