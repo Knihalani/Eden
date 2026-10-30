@@ -186,6 +186,13 @@ export interface EngineConfig {
    * next event whose title names them (`Partner.occasion`).
    */
   groundOccasion: boolean;
+  /**
+   * With no model's say, an item tied to the request by a name alone is not pushed: it shares no other word of the
+   * request, is on no day the request names and holds no reference it names (`Partner.beyondName`). A passing
+   * mention of someone ("Sam says hi") is no need, and the name does not say which of their items would be meant.
+   * Applies to the confident path, the fallback and the conflict ground.
+   */
+  quietNameOnly: boolean;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
   /** Cost reserved per judge call before the real cost is known: about its worst case at the cap (D45). */
@@ -262,5 +269,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   densePacket: false,
   recoverNames: false,
   groundOccasion: false,
+  quietNameOnly: false,
   maxEventChars: 32_000,
 };
