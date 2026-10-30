@@ -136,6 +136,25 @@ export interface EngineConfig {
   groundAway: boolean;
   /** With `judgeConfident`, a lone sure item the lookup and a probe both found is judged too (false: delivered). */
   judgeAgreed: boolean;
+  /**
+   * With `compactInjection`, a packet says each occurrence once: an item that echoes one above it (the same weekday
+   * and time, and no word the user's items make rare: an invitation under its calendar event, the reply that booked
+   * it) is left out of the packet (`fold.ts`), and compaction drops a notification's echo of its own title, footers
+   * run into a line and the user from attendee lists (`render.ts` `messageParts`).
+   */
+  densePacket: boolean;
+  /**
+   * With no model's say, names a request types in lowercase ("move my drinks with chen wei") ground it and pick its
+   * fallback as capitalised ones do, when the user's own sources have been recorded mentioning them (the source map;
+   * `Partner.withRecoveredNames`). Probes and ranking keep the request as typed: no source call is added.
+   */
+  recoverNames: boolean;
+  /**
+   * With no model's say, the event a request names the way people do is grounded: by its occasion and who it is with
+   * ("dinner with Elena"), its occasion and day ("lunch on Monday"), or, for a message from someone about meeting, the
+   * next event whose title names them (`Partner.occasion`).
+   */
+  groundOccasion: boolean;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
   /** Cost reserved per judge call before the real cost is known: about its worst case at the cap (D45). */
@@ -203,5 +222,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   quietSettled: false,
   groundAway: false,
   judgeAgreed: true,
+  densePacket: false,
+  recoverNames: false,
+  groundOccasion: false,
   maxEventChars: 32_000,
 };
