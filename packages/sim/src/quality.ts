@@ -237,8 +237,11 @@ export interface QualityReport {
   };
   /** The engine's decision(s) on each need turn, counted (reasons from traces; cue ids dropped). */
   needDecisions: Record<string, number>;
-  /** Delivered items and how many were relevant, by the injection reason's first part. */
-  byReason: Record<string, { delivered: number; relevant: number }>;
+  /**
+   * Delivered items and how many were relevant, by the injection reason's first part; `softFires`, how many soft
+   * turns (a passing mention) that path delivered on.
+   */
+  byReason: Record<string, { delivered: number; relevant: number; softFires?: number }>;
   /** Present when the planner ran in shadow mode for at least one lookup. */
   shadow?: ShadowReport;
   /**
@@ -320,7 +323,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
   const funnel = { mustFacts: 0, inCacheBefore: 0, retrieved: 0, retrievedOrCached: 0, judged: 0, delivered: 0 };
   const needDecisions: Record<string, number> = {};
   /** Delivered items and how many were relevant, by how the engine decided (cache, sources, model, fallback...). */
-  const byReason: Record<string, { delivered: number; relevant: number }> = {};
+  const byReason: Record<string, { delivered: number; relevant: number; softFires?: number }> = {};
 
   // Users are independent (each has its own engine, connectors and clock), so in real-time runs they play
   // concurrently; at timeScale 0 one at a time, which keeps instant runs simple to profile.
@@ -622,6 +625,13 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
           if (ok) r.relevant++;
         }
         if (label.kind === "silent") {
+          // Which delivery paths fired on a soft-silent turn (a turn counts once per path): where soft fires come from.
+          if (label.soft) {
+            for (const why of new Set(mine.map((d) => d.why))) {
+              const r = (byReason[why] ??= { delivered: 0, relevant: 0 });
+              r.softFires = (r.softFires ?? 0) + 1;
+            }
+          }
           for (const c of cs) {
             if (label.soft) {
               c.softTurns++;
