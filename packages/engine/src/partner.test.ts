@@ -306,6 +306,16 @@ describe("ask", () => {
     expect(res.answer).toStartWith("<context"); // Model text derived from sources is wrapped as data, too.
   });
 
+  test("a model answer cut off at its cap is not shown: the cited items stand (D45)", async () => {
+    const model = new FakeModel(() => ({ text: "The call with Dana is at", truncated: true }));
+    const { p } = partner({ model, config: { askWithModel: true } });
+    const res = await p.ask({ ...scope, question: "When is the call with Dana Lee?" });
+    expect(res.answer).not.toContain("The call with Dana is at");
+    expect(res.citations.map((c) => c.itemId)).toContain("calendar:evt-1");
+    expect(res.answer).toContain("Call with Dana Lee: Thursday 3pm");
+    expect(model.calls[0]).toMatchObject({ maxTokens: 1_000, reasoning: "low" });
+  });
+
   test("by default answers with the cited items and no model call, even with a model configured (D43)", async () => {
     const model = new FakeModel(() => "Thursday 3pm [0]");
     const { p } = partner({ model });
@@ -747,6 +757,19 @@ describe("no-model fallback (D36)", () => {
     expect(traces.some((t) => t.decision === "sources" && t.reason.startsWith("fallback:model-error:"))).toBe(true);
     // Below the fallback's bar a failing model still means silence.
     expect(await delivered(partner({ model: broken }, [notes]).p, "how did the budget review go")).toEqual([]);
+  });
+
+  test("a verdict cut off at the token cap is no verdict: the no-model path decides (D45)", async () => {
+    // A reasoning model that spent its cap thinking: "{\"pick" and finish_reason "length".
+    const cut = new FakeModel(() => ({ text: '{"pick', truncated: true }));
+    const { p, traces } = partner({ model: cut }, [notes]);
+    expect(await delivered(p, ask)).toEqual(["notes:qbr"]);
+    expect(traces.some((t) => t.reason.startsWith("fallback:model-truncated:"))).toBe(true);
+    // The judge asks for low effort and leaves room for reasoning.
+    expect(cut.calls[0]).toMatchObject({ reasoning: "low", maxTokens: 512 });
+    // A complete "none" is still a none.
+    const none = new FakeModel(() => ({ text: '{"pick": []}', truncated: false }));
+    expect(await delivered(partner({ model: none }, [notes]).p, ask)).toEqual([]);
   });
 
   test("a model call aborted by session_end delivers nothing, not the fallback (D41)", async () => {

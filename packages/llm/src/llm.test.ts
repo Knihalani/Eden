@@ -79,5 +79,22 @@ describe("OpenRouterModel", () => {
     expect(sent.response_format).toEqual({ type: "json_object" });
     expect(out).toMatchObject({ text: "{}", costUsd: 0.0001 });
     expect(out.usage.inputTokens).toBe(1000);
+    expect(out.truncated).toBe(false);
+    expect(sent.reasoning).toBeUndefined();
+  });
+
+  test("asks for low reasoning effort when told, and reports a reply cut off at the cap (D45)", async () => {
+    let sent: any;
+    const fake = (async (_url: string, init: RequestInit) => {
+      sent = JSON.parse(String(init.body));
+      return Response.json({
+        choices: [{ message: { content: '{"pick' }, finish_reason: "length" }],
+        usage: { prompt_tokens: 300, completion_tokens: 60 },
+      });
+    }) as unknown as typeof fetch;
+    const model = new OpenRouterModel({ apiKey: "k", model: "z-ai/glm-5.3-flash", fetch: fake });
+    const out = await model.chat({ messages: [{ role: "user", content: "hi" }], maxTokens: 60, reasoning: "low" });
+    expect(sent.reasoning).toEqual({ effort: "low", exclude: true });
+    expect(out.truncated).toBe(true);
   });
 });
