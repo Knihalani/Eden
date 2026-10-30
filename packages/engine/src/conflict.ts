@@ -236,7 +236,10 @@ const UNTIED = new RegExp(
  * one about a date or an amount decides for the sentences after it that only repeat its point ("… while Robert is
  * away"), and a clearing statement anywhere after a blocking one wins ("was blocked, but … the date holds").
  */
-export function assess(frame: Frame, item: ContextItem, now: number): Verdict {
+export function assess(frame: Frame, item: ContextItem, now: number, extraTies?: ReadonlySet<string>): Verdict {
+  // A consequence probe's find (`consequence.ts`) is tied to the request by its action class's own words: "freeze"
+  // and "production" tie a release request that says neither. Plural "s" dropped, as for the request's own words.
+  const extra = extraTies ? new Set([...extraTies].map(stem)) : null;
   // A message from someone the request names speaks for them: its "I" is them ("I'm vegetarian" from Sam).
   const sender = /^from:\s*([^<\n]{2,80})/im.exec(item.text.slice(0, 2_000))?.[1]?.toLowerCase() ?? "";
   const fromNamed = sender !== "" && frame.names.some((n) => n.split(/\s+/).every((w) => sender.includes(w)));
@@ -251,6 +254,7 @@ export function assess(frame: Frame, item: ContextItem, now: number): Verdict {
     const s = said ? line.slice(said[0].length) : line;
     const words = (s.match(/[a-z][a-z0-9'-]{1,}/g) ?? []).map(stem);
     const ties = frame.names.length > 0 ? [frame.nameTies] : [frame.nameTies, frame.wordTies];
+    if (extra) ties.push(extra);
     if (words.some((w) => ties.some((t) => t.has(w)))) return true;
     return (fromNamed || (said !== null && isNamed(said[1]!))) && FIRST_PERSON.test(s);
   };
@@ -468,6 +472,22 @@ function datesOf(s: string, now: number): Dates {
   return { spans, limits };
 }
 
+/** A limit on an amount: a threshold ("above £40,000", "over 10%") or a cap ("up to 20%", "capped at $5k"). */
+const LIMIT =
+  /\b(above|over|exceeds?|exceeding|more than|greater than|in excess of|up to|at most|most (?:[a-z']+ ){0,6}is|maximum(?: of)?|max|no more than|capped at|cap of|limit of)\s?([£€$]?\s?\d[\d,]*(?:\.\d+)?(?:\s?(?:k|m|bn)\b)?\s?%?)/g;
+
+/**
+ * Whether an item states a limit on an amount ("travel over £500 needs pre-approval") that a request committing no
+ * amount cannot be set against: then whether it binds the request is unknown, and with no model it is not raised
+ * on its class's words alone (`consequenceProbe`).
+ */
+export function unmeasuredLimit(frame: Frame, item: ContextItem): boolean {
+  if (frame.amounts.length > 0) return false;
+  const text = `${item.title}. ${item.text}`.slice(0, MAX_TEXT).toLowerCase();
+  for (const m of text.matchAll(LIMIT)) if (/[£€$%]/.test(m[2]!)) return true;
+  return false;
+}
+
 /**
  * Amounts set against a limit the sentence states: above a threshold ("above £40,000 … two quotes are required",
  * "discounts above 10% need CFO sign-off") or a cap ("up to 20%", "the most we can offer is 8%") is a conflict, at or
@@ -476,9 +496,7 @@ function datesOf(s: string, now: number): Dates {
 function amountVerdict(frame: Frame, s: string): Verdict {
   if (frame.amounts.length === 0) return "none";
   let verdict: Verdict = "none";
-  for (const m of s.matchAll(
-    /\b(above|over|exceeds?|exceeding|more than|greater than|in excess of|up to|at most|most (?:[a-z']+ ){0,6}is|maximum(?: of)?|max|no more than|capped at|cap of|limit of)\s?([£€$]?\s?\d[\d,]*(?:\.\d+)?(?:\s?(?:k|m|bn)\b)?\s?%?)/g,
-  )) {
+  for (const m of s.matchAll(LIMIT)) {
     const [limit] = amountsOf(m[2]!, false);
     if (!limit) continue;
     const mine = frame.amounts.filter((a) => a.unit === limit.unit);
