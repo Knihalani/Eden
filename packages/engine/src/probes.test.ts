@@ -17,6 +17,7 @@ import {
   overlaps,
   requestedRange,
   requestedSpan,
+  rolesOf,
   settled,
   topicOf,
 } from "./probes";
@@ -110,6 +111,13 @@ describe("probes: what a request implies", () => {
     expect(absenceSpan(item("On holiday 2-5 Jan"), now)).toEqual({ from: "2027-01-02", to: "2027-01-05" });
     expect(absenceSpan(item("Our offsite on 6 Nov was great"), now)).toBeNull();
     expect(absenceSpan(item("Away, no dates yet"), now)).toBeNull();
+  });
+
+  test("someone named by their relation: the relation words, in order, at most two", () => {
+    expect(rolesOf("Book a 1:1 with my manager on Monday")).toEqual(["manager"]);
+    expect(rolesOf("email the letting agent that the boiler's broken")).toEqual(["letting", "agent"]);
+    expect(rolesOf("dinner with my sister and her husband and the kids")).toEqual(["sister", "husband"]);
+    expect(rolesOf("Send Dana Lee the Q3 report")).toEqual([]);
   });
 
   test("a person is named by whole words, any case", () => {

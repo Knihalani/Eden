@@ -60,6 +60,7 @@ import {
   orgsOf,
   overlaps,
   requestedSpan,
+  rolesOf,
   settled,
   startMinutes,
   topicOf,
@@ -1126,9 +1127,12 @@ export class ContextPartner {
         if (!cue.entities.includes(org)) await send(routeFor(org), org);
       }
     })();
+    // `probeRoles`: someone named by their relation ("my manager"), to the lookup's best two sources.
+    const roles = c.probeRoles && !off.has("roles") ? rolesOf(cue.raw) : [];
     await Promise.all([
       ...windows.map((w) => send(listers, "", w)),
       byPeople,
+      ...roles.map((r) => send(found.slice(0, 2), r)),
       // The topic's finds share the request's words, and rank on them; the others get seats of their own.
       ...(topic ? [send(found.slice(0, this.config.probeTopicSources), topic, undefined, false)] : []),
     ]);

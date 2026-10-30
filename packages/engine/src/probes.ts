@@ -315,3 +315,27 @@ export function mentions(name: string, item: ContextItem): boolean {
     .filter((w) => w.length > 1);
   return words.length > 0 && words.every((w) => hay.includes(` ${w} `));
 }
+
+/**
+ * Words that name someone by their relation to the user rather than by name ("my manager", "the landlord", "my
+ * sister"): a person probe has no name to send, so the word itself is sent (the user's items say "your landlord",
+ * "Mum", "the school office").
+ */
+const ROLES = new Set(
+  (
+    "manager boss lead director ceo cfo cto founder cofounder colleague team assistant recruiter hr payroll finance " +
+    "accounts legal counsel lawyer solicitor accountant landlord letting agent tenant neighbour neighbor nanny " +
+    "babysitter cleaner school teacher nursery doctor gp dentist physio therapist vet pharmacy mum mom dad mother " +
+    "father sister brother wife husband partner son daughter grandma grandpa aunt uncle cousin parents kids"
+  ).split(" "),
+);
+
+/** The relation words of a request ("Book a 1:1 with my manager" is ["manager"]), at most `max`, in order. */
+export function rolesOf(raw: string, max = 2): string[] {
+  const out: string[] = [];
+  for (const w of raw.toLowerCase().match(/[a-z]+/g) ?? []) {
+    if (ROLES.has(w) && !out.includes(w)) out.push(w);
+    if (out.length >= max) break;
+  }
+  return out;
+}
