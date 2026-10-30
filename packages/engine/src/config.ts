@@ -104,6 +104,8 @@ export interface EngineConfig {
    * rather than delivered on their score alone. Costs a judge call on lookups that had only confident items.
    */
   judgeConfident: boolean;
+  /** With `judgeConfident`, a lone sure item the lookup and a probe both found is judged too (false: delivered). */
+  judgeAgreed: boolean;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
   /** Cost reserved per judge call before the real cost is known: about its worst case at the cap (D45). */
@@ -150,7 +152,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   compactInjection: false,
   compactItemBytes: 320,
   compactNovel: false,
-  probeGraceMs: 300,
+  probeGraceMs: 100,
   probeMemoMs: 10 * 60_000,
   probeCalls: 8,
   probeWhen: "always",
@@ -158,5 +160,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   probeTopicSources: 8,
   probeOff: [],
   judgeConfident: false,
+  judgeAgreed: true,
   maxEventChars: 32_000,
 };

@@ -237,12 +237,25 @@ interface RunResult {
   leaked?: boolean;
 }
 
+/** The "+f" conditions' engine settings: probes with compaction, agreement and the judged confident path. */
+const FULL = {
+  probes: true,
+  probeCalls: 4,
+  compactInjection: true,
+  fallbackAgree: true,
+  judgeConfident: true,
+  judgeAgreed: false,
+  judgeCandidates: 4,
+};
+
 /** One world under one condition: a fresh Eden (if any) sees the world's tasks in order, as it would in use. */
 async function runWorld(world: World, seed: number, tasks: Task[], condition: string): Promise<RunResult[]> {
   const sources = simSources(world, REALISTIC, 0, seed);
-  // A "+p" suffix runs Eden with probes on (docs/research/probes.md); the rest of the name is the condition.
+  // A "+p" suffix runs Eden with probes on (docs/research/probes.md), "+f" with probes and the changes measured with
+  // them (`FULL`); the rest of the name is the condition.
   const probes = condition.endsWith("+p");
-  const base = probes ? condition.slice(0, -2) : condition;
+  const full = condition.endsWith("+f");
+  const base = probes || full ? condition.slice(0, -2) : condition;
   const useEden = base !== "none" && base !== "tools";
   const useTools = base === "tools" || base.startsWith("both");
   const judge = base.endsWith("-judge");
@@ -258,7 +271,7 @@ async function runWorld(world: World, seed: number, tasks: Task[], condition: st
         model: judge ? new OpenRouterModel({ apiKey: KEY!, model: MODEL }) : null,
         planner: new QueryPlanner({ seed }),
         now: () => clock,
-        config: { probes },
+        config: full ? FULL : { probes },
         // Charged to the task whose session the trace is from: a slow-path verdict can land after it ended.
         onTrace: (t) => {
           const owner = bySession.get(t.sessionId);

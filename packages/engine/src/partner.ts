@@ -1177,7 +1177,11 @@ export class ContextPartner {
       const sure = this.confident(scored);
       // With `judgeConfident` and a judge to ask, what scores as sure is judged with the rest in the same call: the
       // no-model bar is right about half the time (docs/research/probes.md), the judge more often.
-      const judgeSure = this.config.judgeConfident && this.deps.model !== null && sure.length > 0;
+      // One sure item both the request's search and a probe found is corroborated: delivered without the call
+      // (`judgeAgreed` false).
+      const both = agreed(new Set(probedIds ?? []), lookedIds);
+      const corroborated = !this.config.judgeAgreed && sure.length === 1 && both.has(sure[0]!.item.id);
+      const judgeSure = this.config.judgeConfident && this.deps.model !== null && sure.length > 0 && !corroborated;
       if (sure.length > 0 && !judgeSure) {
         done(
           "sources",
@@ -1233,7 +1237,12 @@ export class ContextPartner {
       let res: Awaited<ReturnType<Model["chat"]>>;
       try {
         res = await this.deps.model.chat({
-          messages: judgeMessages(s.window.join("\n"), candidates, this.config.probes),
+          messages: judgeMessages(
+            s.window.join("\n"),
+            candidates,
+            this.config.probes,
+            this.config.compactInjection ? focusOf(cue) : undefined,
+          ),
           cacheKey: userCacheKey(s.scope),
           maxTokens: JUDGE_MAX_TOKENS,
           reasoning: "low",

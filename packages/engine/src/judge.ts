@@ -8,16 +8,27 @@
  */
 import type { ChatMessage } from "@eden/llm";
 import type { ContextItem } from "@eden/protocol";
-import { inert } from "./render";
+import { compactText, inert } from "./render";
+
+/** A compacted candidate's room in the judge's input: about what 280 characters of an uncompacted one take. */
+const JUDGE_ITEM_BYTES = 280;
 
 const clip = (s: string, n: number) => (s.length <= n ? s : `${s.slice(0, n)}…`);
 /** Keeps the end: the window is oldest-first, and the newest turns are the ones the verdict is about. */
 const clipTail = (s: string, n: number) => (s.length <= n ? s : `…${s.slice(s.length - n)}`);
 
-export function judgeMessages(recent: string, candidates: ContextItem[], checks = false): ChatMessage[] {
-  const list = candidates.map(
-    (c, i) => `[${i}] (${c.sourceId}) ${inert(clip(c.title, 80))} — ${inert(clip(c.text, 280))}`,
-  );
+/**
+ * With `focus` (the request's words, `compactInjection`), each candidate is shown as the packet would show it: the
+ * parts that bear on the request, rather than its first 280 characters (a reply's greeting and pleasantries).
+ */
+export function judgeMessages(
+  recent: string,
+  candidates: ContextItem[],
+  checks = false,
+  focus?: ReadonlySet<string>,
+): ChatMessage[] {
+  const text = (c: ContextItem) => (focus ? compactText(c.text, focus, JUDGE_ITEM_BYTES) : clip(c.text, 280));
+  const list = candidates.map((c, i) => `[${i}] (${c.sourceId}) ${inert(clip(c.title, 80))} — ${inert(text(c))}`);
   return [
     {
       role: "system",
