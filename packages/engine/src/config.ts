@@ -112,6 +112,23 @@ export interface EngineConfig {
   /** The topic probe only for a request that names no person. */
   probeTopicAlone: boolean;
   /**
+   * A probe's query is not sent again to a source whose answers to it have not been changing (`economy.ts`): the
+   * chance it changed since last asked, from its own and the user's learned change rates, is below
+   * `probeFreshFloor`; its last answer, still cached, stands in for the call.
+   */
+  probeFresh: boolean;
+  /** With `probeFresh`, the least chance that a query's answer changed for it to be asked again. */
+  probeFreshFloor: number;
+  /**
+   * A probe kind (person, organisation, topic, role, day) is sent to a source only while the upper 90% bound of what
+   * such calls have yielded for this user (an item new to the cache that was seated with the judge or delivered, then
+   * or later) is at least `probeYieldFloor` (`economy.ts`); the first person then goes to every source, not
+   * `probePeopleSources` of them.
+   */
+  probeYield: boolean;
+  /** With `probeYield`, the least yield per call worth a call. */
+  probeYieldFloor: number;
+  /**
    * With a judge configured, the slow path's confident items are judged too (with the other candidates, one call)
    * rather than delivered on their score alone. Costs a judge call on lookups that had only confident items.
    */
@@ -134,8 +151,58 @@ export interface EngineConfig {
    * "away"), and one saying someone is away only on other days is not (`probes.ts` `absenceSpan`; D48).
    */
   groundAway: boolean;
+  /**
+   * With no model's say: an item that would change what the request is about to do is delivered (grounded
+   * "conflict"): a hold, absence or freeze over a day it acts on, a deadline or expiry before it, a limit below an
+   * amount it commits, a thing already done, a standing constraint (an allergy, a confidentiality), about something
+   * the request names or, for a request that names no one, one of its words, whatever the request (`conflict.ts`;
+   * D49).
+   */
+  groundConflict: boolean;
+  /**
+   * With no model's say (the confident path and the fallback), an item about what the request names whose decisive
+   * value does not conflict with it is not delivered: a span elsewhere, an amount under the limit, a matter lifted
+   * or unchanged, a sibling reference (Q2 for Q3, another invoice number) (`conflict.ts`; D49).
+   */
+  quietClear: boolean;
+  /**
+   * The standing-constraints register (`register.ts`; off by default): for a request to act (or an arriving message),
+   * the user's cached items that state a rule, cap or blocking state the request touches get seats with the judge
+   * (`registerSeats`), and with no model one in structural conflict with it is delivered (an amount over a stated
+   * cap, a day inside a stated span or past a deadline, a blocking state of someone the request names).
+   */
+  register: boolean;
+  /** Judge seats the register's records may take, within the probes' bound on candidates. */
+  registerSeats: number;
+  /**
+   * With `register`, how often (ms) a user's sources are swept for standing rules (`register.ts` `SWEEP_WORDS`, one
+   * search per word and source, `registerSweepCalls` per lookup, in the background): rules rarely share a request's
+   * words, so a lookup alone seldom finds them. 0 (the default) never sweeps.
+   */
+  registerSweepMs: number;
+  /** Sweep calls a lookup may add (`registerSweepMs`). */
+  registerSweepCalls: number;
   /** With `judgeConfident`, a lone sure item the lookup and a probe both found is judged too (false: delivered). */
   judgeAgreed: boolean;
+  /**
+   * With `compactInjection`, a packet says each occurrence once: an item that echoes one above it (the same weekday
+   * and time, and no word the user's items make rare: an invitation under its calendar event, the reply that booked
+   * it) is left out of the packet (`fold.ts`), and compaction drops a notification's echo of its own title, footers
+   * run into a line and the user from attendee lists (`render.ts` `messageParts`).
+   */
+  densePacket: boolean;
+  /**
+   * With no model's say, names a request types in lowercase ("move my drinks with chen wei") ground it and pick its
+   * fallback as capitalised ones do, when the user's own sources have been recorded mentioning them (the source map;
+   * `Partner.withRecoveredNames`). Probes and ranking keep the request as typed: no source call is added.
+   */
+  recoverNames: boolean;
+  /**
+   * With no model's say, the event a request names the way people do is grounded: by its occasion and who it is with
+   * ("dinner with Elena"), its occasion and day ("lunch on Monday"), or, for a message from someone about meeting, the
+   * next event whose title names them (`Partner.occasion`).
+   */
+  groundOccasion: boolean;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
   /** Cost reserved per judge call before the real cost is known: about its worst case at the cap (D45). */
@@ -191,6 +258,10 @@ export const DEFAULT_CONFIG: EngineConfig = {
   probePeopleSources: 3,
   probeTopicSources: 8,
   probeTopicAlone: false,
+  probeFresh: false,
+  probeFreshFloor: 0.15,
+  probeYield: false,
+  probeYieldFloor: 0.05,
   probeRoles: false,
   probeShare: false,
   probeSecondSources: 3,
@@ -202,6 +273,15 @@ export const DEFAULT_CONFIG: EngineConfig = {
   confidentItems: 3,
   quietSettled: false,
   groundAway: false,
+  groundConflict: false,
+  quietClear: false,
   judgeAgreed: true,
+  register: false,
+  registerSeats: 2,
+  registerSweepMs: 0,
+  registerSweepCalls: 2,
+  densePacket: false,
+  recoverNames: false,
+  groundOccasion: false,
   maxEventChars: 32_000,
 };

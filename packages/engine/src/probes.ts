@@ -21,7 +21,7 @@ import type { ContextItem } from "@eden/protocol";
  * Words that start a request without naming anything: imperatives and politeness. A capitalised run at a sentence
  * start keeps them ("Send Rose Kimura", "Ask Łukasz"); without them the run is the name.
  */
-const LEADING = new Set(
+export const LEADING = new Set(
   (
     "please pls can could would will ask tell send email e-mail message text ping remind reply respond forward share " +
     "book schedule set arrange organise organize plan invite accept decline cancel move reschedule push offer order " +

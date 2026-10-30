@@ -18,6 +18,7 @@ import { dedupText, hamming64, SparseIndex, TextSketcher, Vocab } from "@eden/pr
 import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import { userOffset } from "./grounding";
+import { constraintOf, type Constraint } from "./register";
 import { head, termIds } from "./text";
 
 const NO_TERMS = new Uint32Array(0);
@@ -69,6 +70,15 @@ class UserCache {
   /** How many cached items name each person (`partiesOf`), and how many name anyone: kept as items come and go. */
   parties = new Map<string, number>();
   partied = 0;
+  /**
+   * The standing constraint each cached item states (`register.ts`), or null when it states none: read once per item
+   * while it is cached, only when the register is asked for (`config.register`), dropped with the item.
+   */
+  readonly rules = new Map<string, Constraint | null>();
+  /** When the user's last sweep for rules ended (`config.registerSweepMs`; never: -∞), and its next step (past the end
+   * when none is under way). */
+  sweptAt = Number.NEGATIVE_INFINITY;
+  sweepNext = Number.MAX_SAFE_INTEGER;
 }
 
 /** Header lines naming who takes part in an item: a mail's From, To and Cc, an event's attendees, an owner. */
@@ -282,6 +292,9 @@ export class ItemCache {
     u.parties = old.parties;
     u.partied = old.partied;
     u.self = old.self;
+    for (const [id, c] of old.rules) u.rules.set(id, c);
+    u.sweptAt = old.sweptAt;
+    u.sweepNext = old.sweepNext;
     this.users.set(scopeKey(scope), u); // Same key: the user's place in the eviction order is unchanged.
   }
 
@@ -305,6 +318,7 @@ export class ItemCache {
 
   private drop(u: UserCache, e: Entry): void {
     u.items.delete(e.item.id);
+    u.rules.delete(e.item.id);
     u.index.remove(e.doc);
     if (u.byDoc[e.doc] === e) u.byDoc[e.doc] = undefined;
     if (e.item.meta?.start) u.offset = undefined; // An event gone (evicted, expired, forgotten) may change the mode.
@@ -389,6 +403,44 @@ export class ItemCache {
     return out;
   }
 
+  /**
+   * The user's standing constraints (`register.ts`): every fresh cached item that states one, with its record. Each
+   * item is read once while cached (the scan is linear in its head); later calls only walk the user's items.
+   */
+  register(scope: Scope, now = Date.now()): { hit: CacheHit; rule: Constraint }[] {
+    const u = this.peek(scope);
+    if (!u) return [];
+    const out: { hit: CacheHit; rule: Constraint }[] = [];
+    for (const e of u.items.values()) {
+      if (now - e.fetchedAt > this.limits.ttlMs) continue;
+      let rule = u.rules.get(e.item.id);
+      if (rule === undefined) {
+        rule = constraintOf(e.item, now);
+        u.rules.set(e.item.id, rule);
+      }
+      if (rule)
+        out.push({ hit: { item: e.item, sketch: e.sketch, doc: e.doc, score: 0, coverage: 0, matched: 0 }, rule });
+    }
+    return out;
+  }
+
+  /**
+   * The next `n` steps of the user's sweep for rules (`config.registerSweepMs`), of `total`, as indexes from 0: a sweep
+   * goes a few calls per lookup, never in a burst (a source's rate limit is the user's), and starts again `everyMs`
+   * after it ended. Empty when none is due.
+   */
+  sweepSteps(scope: Scope, n: number, total: number, everyMs: number, now = Date.now()): number[] {
+    const u = this.touch(scope);
+    if (u.sweepNext >= total) {
+      if (now - u.sweptAt < everyMs) return [];
+      u.sweepNext = 0;
+    }
+    const out: number[] = [];
+    while (out.length < n && u.sweepNext < total) out.push(u.sweepNext++);
+    if (u.sweepNext >= total) u.sweptAt = now;
+    return out;
+  }
+
   /** The UTC offset (minutes) most of the user's cached events carry: their calendar's zone; 0 if none says. */
   offsetOf(scope: Scope): number {
     const u = this.peek(scope);
@@ -417,6 +469,22 @@ export class ItemCache {
       u.self = best && most >= 5 && most * 3 >= u.partied ? best : null;
     }
     return u.self;
+  }
+
+  /**
+   * Whether `word` is on fewer than `share` of the user's live items (a name, a place, a constraint), rather than
+   * common to many ("perfect", "booked"). A word the user's items never hold is rare; so is every word while the
+   * cache holds too few items for a share to mean anything (fewer than 1/share).
+   */
+  isRare(scope: Scope, word: string, share: number): boolean {
+    const u = this.peek(scope);
+    if (!u || u.index.size * share < 1) return true;
+    const id = u.vocab.lookup(word);
+    if (id < 0) return true;
+    // idf is monotone in a term's document count: compare it with the idf a term on exactly `share` of them has.
+    const n = u.index.size;
+    const at = share * n;
+    return u.index.idf(id) > Math.log(1 + (n - at + 0.5) / (at + 0.5));
   }
 
   /** The cached item `doc`'s sorted unique term ids (title and body, the user's vocabulary); empty if unknown. */

@@ -23,6 +23,8 @@ export function renderPacket(
     year?: number;
     /** The user's own name (`ItemCache.selfOf`): their first name alone in compacted text ("From: Robin"). */
     self?: string | null;
+    /** `densePacket`: compaction drops the title's echo, run-in footers and known attendees (`messageParts`). */
+    dense?: boolean;
   },
 ): string {
   if (options.focus) {
@@ -42,6 +44,7 @@ export function renderPacket(
         (w) => own.has(w) || shown.has(w) || known(w),
         options.year,
         options.self,
+        options.dense ? { title: item.title } : undefined,
       );
       for (const w of title) shown.add(w);
       for (const w of text.toLowerCase().match(WORDS) ?? []) shown.add(w);
@@ -128,6 +131,88 @@ const PLEASANTRY =
   /^(shout if|let me know (if|what)|hope (you|your|all)|see you (then|soon)|thanks|thank you|looking forward|following up on|happy to help|have a (great|good|nice)|speak soon|talk soon|any questions)\b.{0,50}$/i;
 const WORDS = /[\p{L}\p{N}]+/gu;
 const DIGIT = /\d/;
+// A sentence ends at ". " before a capital or digit; with `dense`, not after a title or street abbreviation ("booked
+// St. John for Tuesday", "Dr. Okafor"), which would split a place or a name in two.
+const SENTENCE = /(?<=[.!?])\s+(?=[\p{Lu}\d—-])/u;
+const SENTENCE_DENSE = /(?<=[.!?])(?<!\b(?:St|Dr|Mr|Mrs|Ms|Mt|Jr|Sr|Prof|Rd|Ave)\.)\s+(?=[\p{Lu}\d—-])/u;
+const ATTENDEES = /^(attendees|guests|participants|invitees):/i;
+// A notification footer run into the line before it (a connector's one-line snippet): the part ends where it starts.
+const FOOTER =
+  /\s(join with google meet|join zoom meeting|join (the )?(teams )?meeting|invitation from google calendar|you are receiving this|you('re| are)? received this|this (message|email) was sent|view (it|this|issue) (in|on)\b|unsubscribe\b)/i;
+// A run of at least this many of the title's words, in its order, is an echo of the title in the text.
+const ECHO_RUN = 4;
+// The title's first words are the ones a notification repeats; a longer title is cut, which bounds the echo search.
+const TITLE_WORDS = 32;
+
+// With `dense`: a greeting by the time of day run into the first sentence ("Morning Robin, Thanks…"), and stock
+// courtesies. (Dropping a mail's sent time of day was tried and left out: 5 bytes a line, and the hour can matter.)
+const TIME_OF_DAY_GREETING =
+  /^([Gg]ood )?([Mm]orning|[Aa]fternoon|[Ee]vening)\s[\p{Lu}][\p{L}'-]*\s?[,!-]\s+(?=[\p{Lu}])/u;
+const COURTESY =
+  /^(sorry for (the|my) (slow|late|delayed) (reply|response)|quick one from me|thanks (again )?for (your time|getting back|the quick reply)|hope (you're|you are|all is) (well|keeping well))\b.{0,40}$/i;
+
+/**
+ * An attendee line without the user (`self`, whole or first name: on their own calendar they attend) and without the
+ * people the title names ("Lunch with Nadia Petrova"). Empty when no one else is listed.
+ */
+function attendeesBeyond(line: string, self: string | null | undefined, title: readonly string[]): string {
+  const colon = line.indexOf(":");
+  const me = self?.toLowerCase() ?? "";
+  const first = me.split(" ")[0]!;
+  const named = new Set(title);
+  const others = line
+    .slice(colon + 1)
+    .split(",")
+    .map((p) => p.trim())
+    .filter((p) => {
+      const name = p.replace(/\s*<[^<>]*>$/, "").toLowerCase();
+      const words = name.match(WORDS) ?? [];
+      if (!p || (me && (name === me || name === first))) return false;
+      return !(words.length >= 2 && words.every((w) => named.has(w)));
+    });
+  return others.length ? `${line.slice(0, colon + 1)} ${others.join(", ")}` : "";
+}
+
+/**
+ * `part` without the runs of `ECHO_RUN` or more words that repeat a run of the title's words in order ("Lunch with
+ * Nadia Petrova Wednesday 4 Nov ⋅ 10:30 Padella" under the title "Invitation: Lunch with Nadia Petrova @ Wednesday 4
+ * Nov 10:30" is "Padella"). Longest common runs by dynamic programming over the part's words against at most
+ * `TITLE_WORDS` title words: linear in the part.
+ */
+function withoutEcho(part: string, title: string[]): string {
+  const spans: { start: number; end: number }[] = [];
+  let prev = new Uint16Array(title.length + 1);
+  let cur = new Uint16Array(title.length + 1);
+  const words = [...part.matchAll(WORDS)];
+  const best = new Uint16Array(words.length);
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i]![0].toLowerCase();
+    let run = 0;
+    for (let j = 0; j < title.length; j++) {
+      cur[j + 1] = title[j] === w ? prev[j]! + 1 : 0;
+      if (cur[j + 1]! > run) run = cur[j + 1]!;
+    }
+    best[i] = run;
+    [prev, cur] = [cur, prev];
+  }
+  // From the end: a run ending at word i covers words i-run+1..i; take it whole and continue before it.
+  for (let i = words.length - 1; i >= 0;) {
+    const run = best[i]!;
+    if (run >= ECHO_RUN) {
+      const a = words[i - run + 1]!;
+      const b = words[i]!;
+      spans.push({ start: a.index!, end: b.index! + b[0].length });
+      i -= run;
+    } else i--;
+  }
+  if (spans.length === 0) return part;
+  let out = part;
+  for (const s of spans) out = out.slice(0, s.start) + out.slice(s.end); // spans run from the end: indexes hold
+  return out
+    .replace(/\s+/g, " ")
+    .replace(/^[\s⋅·•,:;@–—-]+/, "")
+    .trim();
+}
 
 /**
  * An item's text cut to the parts that bear on a request, at most `maxBytes`. Recipients, greetings, pleasantries and
@@ -143,7 +228,33 @@ export function compactText(
   known: (word: string) => boolean = () => false,
   year?: number,
   self?: string | null,
+  dense?: { title: string },
 ): string {
+  return pick(messageParts(text, known, year, self, dense), focus, maxBytes);
+}
+
+/** One part of a message (`messageParts`): a sentence or a line, whether it is quoted, whether it is a header. */
+export interface Part {
+  text: string;
+  quoted: boolean;
+  header: boolean;
+}
+
+/**
+ * A message's parts as compaction reads them: its own sentences and lines and its quoted thread's, with recipients,
+ * greetings, pleasantries, signatures, boilerplate and repeats gone, and those whose every content word `known` has.
+ * `dense` (`densePacket`) also drops what the item's own title already says (a notification repeating its subject:
+ * "Invitation: Lunch with Nadia @ Wed 4 Nov 10:30" over "Lunch with Nadia Wed 4 Nov ⋅ 10:30 Padella"), a footer run
+ * into a line ("… Padella, London Join with Google Meet: …"), and the user from an attendee list (their calendar is
+ * theirs); and a sentence does not end at "St." or "Dr." ("booked St. John").
+ */
+export function messageParts(
+  text: string,
+  known: (word: string) => boolean = () => false,
+  year?: number,
+  self?: string | null,
+  dense?: { title: string },
+): Part[] {
   // The user goes by their first name: their full name is on most of their own items and tells the agent nothing new
   // ("you" would read as the agent itself).
   const selfFirst = self?.split(" ")[0] ?? "";
@@ -151,8 +262,9 @@ export function compactText(
   // The current year adds nothing to a day and month ("Sat, 24 Oct 2026 12:00" is "Sat 24 Oct 12:00"); ISO dates
   // ("2026-11-10") keep it.
   const thisYear = year ? new RegExp(`\\b(\\d{1,2}(?:st|nd|rd|th)? ${MONTH_WORD}),? ${year}\\b`, "gi") : null;
-  const parts: { text: string; quoted: boolean }[] = [];
+  const parts: Part[] = [];
   const seen = new Set<string>();
+  const titleWords = dense ? (dense.title.toLowerCase().match(WORDS) ?? []).slice(0, TITLE_WORDS) : [];
   let own = true; // before the message's sign-off
   let signed = false; // in a quoted message's signature: until the next quoted message starts
   let first = true; // the message's first sentence, past its headers
@@ -177,9 +289,13 @@ export function compactText(
       continue;
     }
     if (/^from:/i.test(line)) line = line.replace(/ ?<[^<>\n]*>/g, "");
+    if (dense && !quoted && ATTENDEES.test(line)) {
+      line = attendeesBeyond(line, self, titleWords);
+      if (!line) continue;
+    }
     if (you) line = line.replace(you, selfFirst);
     if (thisYear) line = line.replace(thisYear, "$1").replace(WEEKDAY_COMMA, "$1 $2");
-    for (let part of line.split(/(?<=[.!?])\s+(?=[\p{Lu}\d—-])/u)) {
+    for (let part of line.split(dense ? SENTENCE_DENSE : SENTENCE)) {
       if (SIGNOFF.test(part) || SIGNED.test(part)) {
         if (quoted) signed = true;
         else own = false;
@@ -191,6 +307,13 @@ export function compactText(
       part = part.replace(first && !quoted && !header ? SALUTED : GREETED, "");
       if (!quoted && !header) first = false;
       part = part.replace(URL, "").trim();
+      if (dense && !header) {
+        part = part.replace(TIME_OF_DAY_GREETING, "");
+        const footer = part.search(FOOTER);
+        if (footer >= 0) part = part.slice(0, footer).trim();
+        if (titleWords.length >= ECHO_RUN) part = withoutEcho(part, titleWords);
+        if (COURTESY.test(part)) continue;
+      }
       if (part.length < 3 || PLEASANTRY.test(part) || BOILERPLATE.test(part)) continue;
       const key = part.toLowerCase();
       if (seen.has(key)) continue;
@@ -199,10 +322,15 @@ export function compactText(
       const words = key.match(WORDS) ?? [];
       if (!/^from:/.test(key) && !words.some((w) => w.length > 1 && !isStopword(w) && !known(w))) continue;
       seen.add(key);
-      parts.push({ text: part, quoted });
+      parts.push({ text: part, quoted, header });
     }
   }
-  const score = (part: { text: string; quoted: boolean }, k: number) => {
+  return parts;
+}
+
+/** The parts that bear most on the request's words, at most `maxBytes`, in their own order, gaps marked "…". */
+function pick(parts: Part[], focus: ReadonlySet<string>, maxBytes: number): string {
+  const score = (part: Part, k: number) => {
     let n = k === 0 ? 0.5 : 0;
     for (const w of part.text.toLowerCase().match(WORDS) ?? []) if (focus.has(w)) n += 1;
     n += DIGIT.test(part.text) ? 1 : 0;
