@@ -15,6 +15,11 @@ export interface ChatRequest {
    * to the same endpoint so the prompt-cache prefix is reused. Never put content or raw ids in it.
    */
   cacheKey?: string;
+  /**
+   * How hard a reasoning model should think. Its reasoning tokens count against `maxTokens`, so a small cap with no
+   * effort set can leave no room for the answer (D45). Models that do not reason ignore it.
+   */
+  reasoning?: "low" | "medium" | "high";
 }
 
 export interface Usage {
@@ -30,6 +35,8 @@ export interface ChatResponse {
   costUsd: number;
   model: string;
   latencyMs: number;
+  /** The model stopped at `maxTokens`: the text may be cut off (or empty, when reasoning used the cap). */
+  truncated?: boolean;
 }
 
 /** The one interface the engine sees. Tests use `FakeModel`; production uses `OpenRouterModel`. */

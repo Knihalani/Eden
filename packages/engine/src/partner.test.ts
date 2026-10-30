@@ -749,6 +749,19 @@ describe("no-model fallback (D36)", () => {
     expect(await delivered(partner({ model: broken }, [notes]).p, "how did the budget review go")).toEqual([]);
   });
 
+  test("a verdict cut off at the token cap is no verdict: the no-model path decides (D45)", async () => {
+    // A reasoning model that spent its cap thinking: "{\"pick" and finish_reason "length".
+    const cut = new FakeModel(() => ({ text: '{"pick', truncated: true }));
+    const { p, traces } = partner({ model: cut }, [notes]);
+    expect(await delivered(p, ask)).toEqual(["notes:qbr"]);
+    expect(traces.some((t) => t.reason.startsWith("fallback:model-truncated:"))).toBe(true);
+    // The judge asks for low effort and leaves room for reasoning.
+    expect(cut.calls[0]).toMatchObject({ reasoning: "low", maxTokens: 512 });
+    // A complete "none" is still a none.
+    const none = new FakeModel(() => ({ text: '{"pick": []}', truncated: false }));
+    expect(await delivered(partner({ model: none }, [notes]).p, ask)).toEqual([]);
+  });
+
   test("a model call aborted by session_end delivers nothing, not the fallback (D41)", async () => {
     let started!: () => void;
     const inFlight = new Promise<void>((r) => (started = r));
