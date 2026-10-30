@@ -129,12 +129,31 @@ export interface EngineConfig {
   /** With `probeYield`, the least yield per call worth a call. */
   probeYieldFloor: number;
   /**
+   * A request that acts, of an action class (release, delete, pay, hire, travel, food, spend, share: `consequence.ts`),
+   * sends that class's constraint vocabulary ("freeze moratorium blackout ...") as one more probe, to the
+   * `consequenceSources` sources best for the class (learned per user with `probeYield`). A find that holds a class
+   * term and that the conflict test, tied by the class's words, says conflicts with the request takes a judge seat
+   * and, with `groundConflict`, is delivered with no model.
+   */
+  consequenceProbe: boolean;
+  /** Sources the consequence probe goes to per lookup. */
+  consequenceSources: number;
+  /**
    * With a judge configured, the slow path's confident items are judged too (with the other candidates, one call)
    * rather than delivered on their score alone. Costs a judge call on lookups that had only confident items.
    */
   judgeConfident: boolean;
   /** With a judge configured, sure items are judged when more than one scored as sure (a contested set). */
   judgeContested: boolean;
+  /**
+   * The judge is asked only when a candidate is tied to the request: it holds a word of the request that is rare in
+   * the user's items (on fewer than `judgeTiedShare` of them: a name, a reference, a place), or it is an event on a
+   * day the request names. Candidates that share only common words with it ("nice", "week", "thanks") are what a
+   * judge almost always turns down, so the call is not made and the lookup ends silent (`judgeTied`).
+   */
+  judgeTied: boolean;
+  /** With `judgeTied`, a word on fewer than this share of the user's live items ties a candidate to the request. */
+  judgeTiedShare: number;
   /** The judge's input: the recent conversation, at most this many characters (its newest end). */
   judgeWindowChars: number;
   /** With `compactInjection`, each candidate's compacted text in the judge's input, at most this many bytes. */
@@ -186,6 +205,13 @@ export interface EngineConfig {
    * next event whose title names them (`Partner.occasion`).
    */
   groundOccasion: boolean;
+  /**
+   * With no model's say, an item tied to the request by a name alone is not pushed: it shares no other word of the
+   * request, is on no day the request names and holds no reference it names (`Partner.beyondName`). A passing
+   * mention of someone ("Sam says hi") is no need, and the name does not say which of their items would be meant.
+   * Applies to the confident path, the fallback and the conflict ground.
+   */
+  quietNameOnly: boolean;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
   /** Cost reserved per judge call before the real cost is known: about its worst case at the cap (D45). */
@@ -245,12 +271,16 @@ export const DEFAULT_CONFIG: EngineConfig = {
   probeFreshFloor: 0.15,
   probeYield: false,
   probeYieldFloor: 0.05,
+  consequenceProbe: false,
+  consequenceSources: 1,
   probeRoles: false,
   probeShare: false,
   probeSecondSources: 3,
   probeOff: [],
   judgeConfident: false,
   judgeContested: false,
+  judgeTied: false,
+  judgeTiedShare: 0.03,
   judgeWindowChars: 4_000,
   judgeItemBytes: 280,
   confidentItems: 3,
@@ -262,5 +292,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   densePacket: false,
   recoverNames: false,
   groundOccasion: false,
+  quietNameOnly: false,
   maxEventChars: 32_000,
 };

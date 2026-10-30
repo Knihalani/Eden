@@ -29,9 +29,13 @@
  */
 import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { betaIncInv, hashString } from "@eden/primitives";
+import { hasWord } from "./consequence";
 
-/** What a probe asks for: a request's first or second person, an organisation, its topic, a role, a day's listing. */
-export type ProbeKind = "person" | "second" | "org" | "topic" | "role" | "day";
+/**
+ * What a probe asks for: a request's first or second person, an organisation, its topic, a role, a day's listing,
+ * or an action class's constraint vocabulary (`consequence.ts`).
+ */
+export type ProbeKind = "person" | "second" | "org" | "topic" | "role" | "day" | "consequence";
 
 /** Re-asks a user's probes must have answered, with and without a change, before any is skipped as unchanged. */
 export const FRESH_WARMUP = 6;
@@ -49,8 +53,11 @@ const YIELD_PRIOR = 2;
 const FRESH_PRIOR = 1;
 /** Queries and arms kept per user, least recently used dropped first; users kept, least recently used dropped. */
 const MAX_QUERIES = 512;
+const MAX_SIDE_QUERIES = 256;
 const MAX_ARMS = 128;
 const MAX_FINDS = 2_048;
+/** Sources whose search form is kept per user. */
+const MAX_FORMS = 64;
 /**
  * Users kept per tenant, least recently used dropped first, so one tenant's traffic never evicts another's learning
  * (as `ItemCache` caps its users); and over all tenants, a backstop on memory.
@@ -86,6 +93,12 @@ interface Arm {
 class UserEconomy {
   constructor(readonly tenantId: string) {}
   readonly asked = new Map<string, Asked>();
+  /**
+   * The consequence probe's queries (`consequence.ts`), apart from the others: a class's vocabulary asked of every
+   * source would otherwise push the user's own probes out of `asked`, and its answers, unchanged for weeks, would
+   * lower the pooled change rate the user's probes are skipped by.
+   */
+  readonly side = new Map<string, Asked>();
   /** Pooled over every query of the user: re-asks, changes, exposure. */
   n = 0;
   changed = 0;
@@ -95,7 +108,16 @@ class UserEconomy {
   readonly kinds = new Map<ProbeKind, { a: number; b: number }>();
   /** Item id -> the probe call that first brought it into the cache. */
   readonly finds = new Map<string, Find>();
+  /**
+   * Per source, evidence of how it searches a query of several words: `any` when an answer held an item missing one
+   * of them (it matches any word: ranked or OR search), `all` when an answer to many words was empty (it needs every
+   * word, as mail and chat search do).
+   */
+  readonly forms = new Map<string, { any: number; all: number }>();
 }
+
+/** A query's record, the user's own probes' first. */
+const recordOf = (u: UserEconomy, key: string) => u.asked.get(key) ?? u.side.get(key);
 
 /** A query's key at one source: the source first, so a source's keys can be dropped with it. */
 const queryKey = (sourceId: string, query: string) => `${sourceId}\u0000${query}`;
@@ -146,7 +168,7 @@ export class ProbeEconomy {
    */
   changeChance(scope: Scope, sourceId: string, query: string, now: number): number {
     const u = this.user(scope, false);
-    const q = u?.asked.get(queryKey(sourceId, query));
+    const q = u ? recordOf(u, queryKey(sourceId, query)) : undefined;
     if (!u || !q || u.n < FRESH_WARMUP || u.exposure <= 0) return 1;
     // The user's pooled rate is the prior (FRESH_PRIOR pseudo-changes over the exposure that rate implies); the
     // query's own re-asks move it. Half a change is added to the user's count (Jeffreys): no change seen yet is a low
@@ -156,9 +178,56 @@ export class ProbeEconomy {
     return 1 - Math.exp(-rate * Math.max(0, now - q.at));
   }
 
+  /** When a query was last asked live at a source, or null when never (the economy keeps `MAX_QUERIES` per user). */
+  askedAt(scope: Scope, sourceId: string, query: string): number | null {
+    const u = this.user(scope, false);
+    return (u && recordOf(u, queryKey(sourceId, query))?.at) ?? null;
+  }
+
+  /**
+   * How a source searches several words, as learned for this user: "any" (any word matches), "all" (every word must),
+   * or "unknown" before evidence. "any" wins a tie: one answer that held an item missing a word is proof.
+   */
+  formOf(scope: Scope, sourceId: string): "any" | "all" | "unknown" {
+    const f = this.user(scope, false)?.forms.get(sourceId);
+    if (!f || f.any + f.all === 0) return "unknown";
+    return f.any > 0 && f.any >= f.all ? "any" : "all";
+  }
+
+  /**
+   * Records what a live answer to a query of several `words` says about the source's search: an item that holds not
+   * every word is an any-word search, one where every item holds every word an every-word one. With `emptyIsAll`, an
+   * empty answer counts for every-word too: for a query of many alternatives (a class's whole vocabulary), where an
+   * any-word search rarely finds nothing; for a name, where no item may mention them, it says nothing.
+   */
+  observeForm(
+    scope: Scope,
+    sourceId: string,
+    words: readonly string[],
+    items: readonly ContextItem[],
+    emptyIsAll = false,
+  ): void {
+    if (words.length < 2 || (items.length === 0 && !emptyIsAll)) return;
+    const u = this.user(scope, true);
+    const f = u.forms.get(sourceId) ?? { any: 0, all: 0 };
+    if (items.length === 0) f.all++;
+    else {
+      const lacks = (i: ContextItem) => {
+        const hay = `${i.title}\n${i.text}`.slice(0, 4_000).toLowerCase();
+        return !words.every((w) => hasWord(hay, w.toLowerCase()));
+      };
+      if (items.some(lacks)) f.any++;
+      else f.all++;
+    }
+    u.forms.delete(sourceId);
+    u.forms.set(sourceId, f);
+    if (u.forms.size > MAX_FORMS) u.forms.delete(u.forms.keys().next().value!);
+  }
+
   /** The ids a query's last live answer at a source held (to stand in for a call skipped as unchanged). */
   lastIds(scope: Scope, sourceId: string, query: string): string[] | null {
-    return this.user(scope, false)?.asked.get(queryKey(sourceId, query))?.ids ?? null;
+    const u = this.user(scope, false);
+    return (u && recordOf(u, queryKey(sourceId, query))?.ids) ?? null;
   }
 
   /**
@@ -166,10 +235,11 @@ export class ProbeEconomy {
    * held with other text, or no longer there: an event cancelled, a mail deleted) teaches the query's and the user's
    * change rates.
    */
-  answered(scope: Scope, sourceId: string, query: string, items: ContextItem[], now: number): void {
+  answered(scope: Scope, sourceId: string, query: string, items: ContextItem[], now: number, side = false): void {
     const u = this.user(scope, true);
     const key = queryKey(sourceId, query);
-    const before = u.asked.get(key);
+    const map = side ? u.side : u.asked;
+    const before = map.get(key);
     const prints = new Set(items.map(printOf));
     if (before) {
       const dt = Math.max(0, now - before.at);
@@ -178,17 +248,19 @@ export class ProbeEconomy {
       before.n++;
       before.changed += changed;
       before.exposure += dt;
-      u.n++;
-      u.changed += changed;
-      u.exposure += dt;
+      if (!side) {
+        u.n++;
+        u.changed += changed;
+        u.exposure += dt;
+      }
       before.prints = prints;
       before.ids = items.map((i) => i.id);
       before.at = now;
-      u.asked.delete(key);
-      u.asked.set(key, before);
+      map.delete(key);
+      map.set(key, before);
     } else {
-      u.asked.set(key, { prints, ids: items.map((i) => i.id), at: now, n: 0, changed: 0, exposure: 0 });
-      if (u.asked.size > MAX_QUERIES) u.asked.delete(u.asked.keys().next().value!);
+      map.set(key, { prints, ids: items.map((i) => i.id), at: now, n: 0, changed: 0, exposure: 0 });
+      if (map.size > (side ? MAX_SIDE_QUERIES : MAX_QUERIES)) map.delete(map.keys().next().value!);
     }
   }
 
@@ -208,6 +280,19 @@ export class ProbeEconomy {
     arm.a *= YIELD_SKIP_GAMMA;
     arm.b *= YIELD_SKIP_GAMMA;
     return false;
+  }
+
+  /**
+   * The upper `YIELD_CONFIDENCE` bound of an arm's yield (prior: the user's pooled yield for the kind), for ranking
+   * sources for a probe: 1 for an arm never called, so each source is tried before the evidence picks among them.
+   */
+  bound(scope: Scope, kind: ProbeKind, sourceId: string): number {
+    const u = this.user(scope, false);
+    const arm = u?.arms.get(armKey(kind, sourceId));
+    if (!u || !arm) return 1;
+    const pool = u.kinds.get(kind) ?? { a: 0, b: 0 };
+    const mean = (pool.a + 1) / (pool.a + pool.b + 2);
+    return betaIncInv(YIELD_CONFIDENCE, arm.a + YIELD_PRIOR * mean, arm.b + YIELD_PRIOR * (1 - mean));
   }
 
   /**
@@ -279,8 +364,10 @@ export class ProbeEconomy {
     if (!u) return;
     const prefix = `${sourceId}\u0000`;
     for (const k of [...u.asked.keys()]) if (k.startsWith(prefix)) u.asked.delete(k);
+    for (const k of [...u.side.keys()]) if (k.startsWith(prefix)) u.side.delete(k);
     for (const k of [...u.arms.keys()]) if (k.startsWith(prefix)) u.arms.delete(k);
     for (const [id, find] of [...u.finds]) if (find.arm.startsWith(prefix)) u.finds.delete(id);
+    u.forms.delete(sourceId);
   }
 
   get userCount(): number {
