@@ -2,11 +2,25 @@ import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
 import { Budget, FakeModel } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
-import { StaticSource, type Source } from "@eden/sources";
+import { QueryPlanner, StaticSource, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { timeWindow } from "./grounding";
 import { ContextPartner } from "./partner";
-import { cleanEntities, isScheduling, orgsOf, requestedRange, topicOf } from "./probes";
+import {
+  absenceSpan,
+  cleanEntities,
+  endMinutes,
+  isScheduling,
+  isSubject,
+  mentions,
+  orgsOf,
+  overlaps,
+  requestedRange,
+  requestedSpan,
+  rolesOf,
+  settled,
+  topicOf,
+} from "./probes";
 import { extractEntities } from "./text";
 
 const item = (text: string, meta?: Record<string, string>): ContextItem => ({
@@ -40,6 +54,104 @@ describe("probes: what a request implies", () => {
     expect(requestedRange("send the report")).toBeNull();
     expect(isScheduling("Set up dinner with Dana on Friday")).toBe(true);
     expect(isScheduling("Send Rose the Q3 report")).toBe(false);
+  });
+
+  test("the time a request asks to fill: a stated range as it is, a single time as the 90 minutes from it", () => {
+    expect(requestedSpan("Block Wednesday 3–5pm for prep")).toEqual({ from: 900, to: 1020 });
+    expect(requestedSpan("between 2 and 4pm")).toEqual({ from: 840, to: 960 });
+    expect(requestedSpan("from 14:00 to 15:30 on Friday")).toEqual({ from: 840, to: 930 });
+    expect(requestedSpan("dinner on Thursday at 19:00")).toEqual({ from: 1140, to: 1230 });
+    expect(requestedSpan("we'll come to the barbecue saturday at 1")).toEqual({ from: 780, to: 870 });
+    expect(requestedSpan("a workshop Thursday afternoon")).toEqual({ from: 720, to: 1080 });
+    // The first range that is a time ("6-9 nov" is a date); a pm end with a larger start number starts in the morning.
+    expect(requestedSpan("Book dinner on 6-9 nov, from 7-9pm")).toEqual({ from: 1140, to: 1260 });
+    expect(requestedSpan("Book 11-1pm Friday")).toEqual({ from: 660, to: 780 });
+    // Numbers that are not times: a percentage range, a date range, a count.
+    expect(requestedSpan("prices go up 3-5% next year")).toBeNull();
+    expect(requestedSpan("away 2-3 November")).toBeNull();
+    expect(requestedSpan("book 2 tickets for 14 November")).toBeNull();
+  });
+
+  test("an event clashes when it overlaps the span, its end read from its own text", () => {
+    const ev = (text: string): ContextItem => ({ ...item(text), sourceId: "calendar" });
+    const block = requestedSpan("Block Wednesday 3–5pm")!;
+    expect(overlaps(ev("Wed, 15:30–16:30 audit walkthrough"), 930, block)).toBe(true);
+    expect(overlaps(ev("Wed, 17:15–18:00 audit walkthrough"), 1035, block)).toBe(false);
+    // A flight that departs 07:10 and arrives 10:35 is in the way of a 10:00 workshop.
+    expect(endMinutes(ev("departs 07:10 LHR, arrives 10:35 MAD"), 430)).toBe(635);
+    expect(overlaps(ev("departs 07:10 LHR, arrives 10:35 MAD"), 430, requestedSpan("workshop at 10:00")!)).toBe(true);
+    // No end stated: an hour.
+    expect(endMinutes(ev("Hall B"), 1110)).toBe(1170);
+  });
+
+  test("the event a request is about is not a clash with it; a request to make something new has no subject", () => {
+    const dental = { ...item("Thursday 29 October at 10:20"), title: "Dental check-up" };
+    expect(isSubject(dental, "Can you confirm my dentist appointment on Thursday morning?")).toBe(true);
+    expect(isSubject(dental, "Book a haircut on Thursday morning")).toBe(false);
+    const walkthrough = { ...item("15:30–16:30"), title: "Security audit walkthrough – Pied Piper" };
+    // "pipeline" and "Piper" share a stem, but blocking time makes something new: no subject.
+    expect(isSubject(walkthrough, "Block Wednesday 3–5pm for prep on the quarterly pipeline review")).toBe(false);
+    // Checking whether a slot is free, or fitting something in, makes something new: a shared stem is no subject.
+    const budget = { ...item("15:00"), title: "Budget review with finance" };
+    expect(isSubject(budget, "Check if Friday at 3pm works for a design review with Acme")).toBe(false);
+    const onboarding = { ...item("15:00"), title: "Client onboarding call" };
+    expect(isSubject(onboarding, "Check if I can fit in a call with a new client Friday 3pm")).toBe(false);
+  });
+
+  test("the time parsers stay linear on hostile text", () => {
+    for (const hostile of ["1" + " ".repeat(32_000), "1:00" + " ".repeat(32_000), "1 - ".repeat(8_000)]) {
+      const t0 = performance.now();
+      requestedSpan(hostile);
+      expect(performance.now() - t0).toBeLessThan(50);
+    }
+  });
+
+  test("an item that only says things stand as expected is settled; a change, a return or a negation is not", () => {
+    expect(settled(item("When it's countersigned, send it straight back to me as usual"))).toBe(true);
+    expect(settled(item("Ticket resolved, closing."))).toBe(true);
+    expect(settled(item("The issue is not resolved yet"))).toBe(false);
+    expect(settled(item("We are holding payment until the credit note arrives"))).toBe(false);
+    expect(settled(item("INV-1042 was already paid on Tuesday"))).toBe(false);
+    expect(settled(item("Back from leave on Monday 9 November"))).toBe(false);
+    // Asked, not said; nothing settled; a request to go ahead.
+    expect(settled(item("Is this resolved?"))).toBe(false);
+    expect(settled(item("Nothing is resolved"))).toBe(false);
+    expect(settled(item("Can you go ahead and cancel the order?"))).toBe(false);
+    expect(settled(item("You can go ahead with the order."))).toBe(true);
+  });
+
+  test("the days an item says someone is away, from the dates near its absence words", () => {
+    const now = Date.parse("2026-10-27T09:00:00Z");
+    expect(absenceSpan(item("Jamie: away on Skye 6–9 Nov"), now)).toEqual({ from: "2026-11-06", to: "2026-11-09" });
+    expect(absenceSpan(item("On leave from 2 Nov to 6 Nov"), now)).toEqual({ from: "2026-11-02", to: "2026-11-06" });
+    expect(absenceSpan(item("I'm away Nov 6-9"), now)).toEqual({ from: "2026-11-06", to: "2026-11-09" });
+    expect(absenceSpan(item("Out of office until 9 November"), now)).toEqual({ from: "2026-10-27", to: "2026-11-09" });
+    expect(absenceSpan(item("OOO, back on 9 Nov"), now)).toEqual({ from: "2026-10-27", to: "2026-11-08" });
+    expect(absenceSpan(item("Off sick 30 Oct"), now)).toEqual({ from: "2026-10-30", to: "2026-10-30" });
+    // A date in early January is next year's.
+    expect(absenceSpan(item("On holiday 2-5 Jan"), now)).toEqual({ from: "2027-01-02", to: "2027-01-05" });
+    expect(absenceSpan(item("Our offsite on 6 Nov was great"), now)).toBeNull();
+    // "Away" in an idiom is no absence; the date after the absence words is the absence's.
+    expect(absenceSpan(item("Please send the deck right away. Board meeting 12 Nov"), now)).toBeNull();
+    expect(absenceSpan(item("Throw away the old drafts before the 12 Nov review"), now)).toBeNull();
+    expect(absenceSpan(item("Dentist on 6 Nov; I'll be unavailable for calls 20 Nov"), now)).toEqual({
+      from: "2026-11-20",
+      to: "2026-11-20",
+    });
+    expect(absenceSpan(item("Away, no dates yet"), now)).toBeNull();
+  });
+
+  test("someone named by their relation: the relation words, in order, at most two", () => {
+    expect(rolesOf("Book a 1:1 with my manager on Monday")).toEqual(["manager"]);
+    expect(rolesOf("email the letting agent that the boiler's broken")).toEqual(["letting", "agent"]);
+    expect(rolesOf("dinner with my sister and her husband and the kids")).toEqual(["sister", "husband"]);
+    expect(rolesOf("Send Dana Lee the Q3 report")).toEqual([]);
+  });
+
+  test("a person is named by whole words, any case", () => {
+    expect(mentions("Jamie", item("jamie: away"))).toBe(true);
+    expect(mentions("Jamie Fox", { ...item("x"), meta: { people: "Jamie Fox <jamie@fox.example>" } })).toBe(true);
+    expect(mentions("Sam", item("Samuel is away"))).toBe(false);
   });
 
   test("the topic is what is neither a person, a day nor the action, at most two words", () => {
@@ -385,5 +497,212 @@ describe("the judged confident path (judgeConfident)", () => {
     expect(r.injections[0]!.text).toContain("Dana Lee is vegetarian");
     expect(r.injections[0]!.text).not.toContain("Head of Partnerships");
     expect(r.model.calls[0]!.messages.at(-1)!.content).not.toContain("Head of Partnerships");
+  });
+});
+
+describe("an absence on the day a request names (groundAway)", () => {
+  const scope = { tenantId: "t", userId: "u" };
+  const at = Date.parse("2026-10-27T09:00:00Z");
+  const notes = (text: string) =>
+    new StaticSource("gmail", "Mail", [
+      { ref: "m1", title: "Next weekend", text, meta: { people: "Jamie Fox <j@x.example>" } },
+    ]);
+  const run = async (source: StaticSource, groundAway: boolean) => {
+    const p = new ContextPartner({
+      sources: async () => [source],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => at,
+      // Nothing is sure on its words alone, and the plain fallback is off: only grounding can deliver.
+      config: { probes: true, probeGraceMs: 1_000, groundAway, confidentScore: 99, fallbackMatchedTerms: 0 },
+    });
+    const text = "Ask Jamie Fox if they can feed the cat on Saturday 7 November";
+    const r = await p.observe({ ...scope, sessionId: "s", at, kind: "user_message", text } as AgentEvent, {
+      waitMs: 1_000,
+    });
+    return [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId: "s" })].flatMap((i) =>
+      i.citations.map((c) => `${c.itemId} ${i.reason.split(":")[0]}`),
+    );
+  };
+
+  test("a person away on that day is grounded; away on other days is not", async () => {
+    const away = notes("Jamie Fox here: I'm away on Skye 6–9 Nov, back the Tuesday");
+    expect(await run(away, true)).toEqual(["gmail:m1 grounded-away"]);
+    expect(await run(away, false)).toEqual([]);
+    expect(await run(notes("Jamie Fox here: I'm away on Skye 20–23 Nov"), true)).toEqual([]);
+  });
+});
+
+describe("fewer probe calls", () => {
+  const scope = { tenantId: "t", userId: "u" };
+  const at = Date.parse("2026-10-27T09:00:00Z");
+  const sent = async (config: Record<string, unknown>, text: string) => {
+    const queries: string[] = [];
+    const notes = new StaticSource("drive", "Notes", [
+      { ref: "n1", title: "Q3 report", text: "Dana Lee owns the Q3 report" },
+    ]);
+    const logged: Source = {
+      ...notes,
+      id: "drive",
+      kind: "test",
+      search: (q) => (queries.push(q.text), notes.search(q)),
+    };
+    const p = new ContextPartner({
+      sources: async () => [logged],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => at,
+      config: { probes: true, probeGraceMs: 1_000, ...config },
+    });
+    await p.observe({ ...scope, sessionId: "s", at, kind: "user_message", text } as AgentEvent, { waitMs: 1_000 });
+    return queries;
+  };
+
+  test("with probeTopicAlone, a request that names a person sends no topic query; one that names no one does", async () => {
+    expect(await sent({}, "Send Dana Lee the Q3 report")).toContain("q3 report");
+    expect(await sent({ probeTopicAlone: true }, "Send Dana Lee the Q3 report")).not.toContain("q3 report");
+    expect(await sent({ probeTopicAlone: true }, "send the q3 report to finance")).toContain("q3 report");
+  });
+});
+
+describe("the fallback for a request that asks about something it names (fallbackAsks)", () => {
+  const scope = { tenantId: "t", userId: "u" };
+  const at = Date.parse("2026-10-27T09:00:00Z");
+  const notes = new StaticSource("drive", "Notes", [
+    { ref: "n1", title: "People notes", text: "Dana Lee prefers a quiet table, never before 7" },
+    { ref: "n2", title: "Weekly digest", text: "A good week for the team: back pain clinic opens on Friday" },
+  ]);
+  const got = async (fallbackAsks: boolean, text: string) => {
+    const p = new ContextPartner({
+      sources: async () => [notes],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => at,
+      // Nothing is sure on its words alone, and the plain fallback wants more terms than either item shares: only
+      // the rule under test can deliver.
+      config: { fallbackAsks, confidentScore: 99, fallbackMatchedTerms: 5 },
+    });
+    const r = await p.observe({ ...scope, sessionId: "s", at, kind: "user_message", text } as AgentEvent, {
+      waitMs: 1_000,
+    });
+    return [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId: "s" })].flatMap((i) =>
+      i.citations.map((c) => c.itemId),
+    );
+  };
+
+  test("an item naming what the request names, sharing two of its terms, is delivered", async () => {
+    const ask = "Can you book a table for Dana Lee?";
+    expect(await got(false, ask)).toEqual([]);
+    expect(await got(true, ask)).toEqual(["drive:n1"]);
+  });
+
+  test("a question about the world at large names nothing of the user's: silent", async () => {
+    expect(await got(true, "What's a good stretch for back pain this week?")).toEqual([]);
+  });
+});
+
+describe("more of D48's settings, through the engine", () => {
+  const scope = { tenantId: "t", userId: "u" };
+  const at = Date.parse("2026-10-27T09:00:00Z");
+  const engine = (
+    sources: Source[],
+    config: Record<string, unknown>,
+    model: FakeModel | null = null,
+    planner?: QueryPlanner,
+  ) =>
+    new ContextPartner({
+      sources: async () => sources,
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model,
+      now: () => at,
+      ...(planner ? { planner } : {}),
+      config: { probeGraceMs: 1_000, ...config },
+    });
+  const logged = (id: string, items: { ref: string; title: string; text: string }[], log: string[]): Source => {
+    const s = new StaticSource(id, id, items);
+    return { ...s, id, kind: "test", search: (q) => (log.push(`${id}|${q.text}`), s.search(q)) };
+  };
+  const say = async (p: ContextPartner, text: string) => {
+    const r = await p.observe({ ...scope, sessionId: "s", at, kind: "user_message", text } as AgentEvent, {
+      waitMs: 1_000,
+    });
+    return [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId: "s" })].flatMap((i) =>
+      i.citations.map((c) => c.itemId),
+    );
+  };
+
+  test("judgeContested: two sure items go to the judge, one does not", async () => {
+    const two = [
+      { ref: "a", title: "Globex renewal pricing", text: "Globex renewal pricing: 15% off agreed" },
+      { ref: "b", title: "Globex renewal pricing call", text: "Globex renewal pricing call notes" },
+    ];
+    const model = new FakeModel(() => '{"pick": [0]}');
+    // Both score as sure (a low bar): contested, so judged.
+    const sure = { judgeContested: true, confidentScore: 0.5 };
+    await say(engine([logged("drive", two, [])], sure, model), "Globex renewal pricing");
+    expect(model.calls.length).toBe(1);
+    const lone = new FakeModel(() => '{"pick": []}');
+    const got = await say(engine([logged("drive", two.slice(0, 1), [])], sure, lone), "Globex renewal pricing");
+    expect(lone.calls.length).toBe(0);
+    expect(got).toEqual(["drive:a"]);
+  });
+
+  test("quietSettled: a sure item that only says things stand as expected is not pushed with no model", async () => {
+    const notes = [{ ref: "a", title: "Globex renewal pricing", text: "Globex renewal pricing unchanged, as usual" }];
+    expect(await say(engine([logged("drive", notes, [])], {}), "Globex renewal pricing")).toEqual(["drive:a"]);
+    expect(await say(engine([logged("drive", notes, [])], { quietSettled: true }), "Globex renewal pricing")).toEqual(
+      [],
+    );
+  });
+
+  test("probeRoles sends the relation word; probeSecondSources bounds the second person's sources", async () => {
+    const log: string[] = [];
+    const docs = [{ ref: "a", title: "Note", text: "My manager is away" }];
+    const sources = ["a", "b", "c", "d"].map((id) => logged(id, docs, log));
+    await say(engine(sources, { probes: true, probeRoles: true }), "Book a 1:1 with my manager on Monday");
+    expect(log.some((l) => l.endsWith("|manager"))).toBe(true);
+    log.length = 0;
+    await say(
+      engine(sources, { probes: true, probeSecondSources: 1, probeCalls: 8 }),
+      "Set up a call with Dana Lee and Sam Ortiz",
+    );
+    expect(log.filter((l) => l.endsWith("|Dana Lee")).length).toBe(3);
+    expect(log.filter((l) => l.endsWith("|Sam Ortiz")).length).toBe(1);
+  });
+
+  test("judgeItemBytes and judgeWindowChars bound the judge's input", async () => {
+    const long = {
+      ref: "a",
+      title: "Globex",
+      text: `Globex renewal. ${"More words about Globex pricing. ".repeat(40)}`,
+    };
+    const model = new FakeModel(() => '{"pick": []}');
+    const p = engine(
+      [logged("drive", [long], [])],
+      { compactInjection: true, judgeItemBytes: 120, confidentScore: 99 },
+      model,
+    );
+    await say(p, "What is the latest on the Globex renewal pricing?");
+    const user = model.calls[0]!.messages.at(-1)!.content;
+    const line = user.split("\n").find((l) => l.startsWith("[0]"))!;
+    expect(new TextEncoder().encode(line).length).toBeLessThan(120 + 40); // the item, its title and its source tag
+  });
+
+  test("probeShare: within a lookup, the planner and the probes never send the same query to a source twice", async () => {
+    const log: string[] = [];
+    const docs = [{ ref: "a", title: "Dana Lee", text: "Dana Lee prefers mornings" }];
+    const sources = ["a", "b", "c"].map((id) => logged(id, docs, log));
+    const p = engine(sources, { probes: true, probeShare: true }, null, new QueryPlanner({ seed: 3, epsilon: 0 }));
+    await say(p, "Set up a call with Dana Lee about the renewal");
+    const lower = log.map((l) => l.toLowerCase());
+    expect(new Set(lower).size).toBe(lower.length);
   });
 });

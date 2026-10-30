@@ -41,12 +41,16 @@ Sim (summed over seeds): `recall`, `precision`, `hardFalseFires` of `silentTurns
 only when three in four of its words are in the packet's line for the item) and `injectionBytesTotal`,
 `bytesPerMustFact`, `bytesPerStatedFact` (injected bytes per needed fact: the packet's density).
 
+Funnel with a live judge (`hidden-funnel.ts --judge live [--model m]`): the planted item and the decoy through Eden
+with its real judge, plus `judgeCallsPerTask`, `judgeInputTokens`, `judgeOutputTokens`, `judgeUsdPer1kTasks`; about
+$0.03 for the 456 held-out tasks. A repeat differed by 4 of 228: read smaller differences as noise.
+
 Latency (`--latency`): the realistic simulation in real time (3 users × 6 sessions, perfect judge): `deliveryP50Ms`,
 `deliveryP95Ms`, `observeP50Ms`, `observeP95Ms`, `recall`, `precision`, `sourceCallsPerLookup`. Small (about 29 facts)
 and stepped by the agent's turns: compare with larger runs before believing a difference.
 
-Suites (`suites.ts`): `hidden` (dev), `heldout`, `heldout2`, `heldout3`, `heldout4` (blind); `all` and `heldout-all`
-for several. `bench.ts --suites`, `hidden-funnel.ts --suite`, `agent-ab.ts --suite`; the report takes several result
+Suites (`suites.ts`): `hidden` (dev), `heldout`, `heldout2`, `heldout3`, `heldout4`, `heldout5` (blind; `heldout5`
+written after D47, measured only); `all`, and `heldout-all` (the first four), for several. `bench.ts --suites`, `hidden-funnel.ts --suite`, `agent-ab.ts --suite`; the report takes several result
 files and prints a per-suite table.
 
 Eval: `recall`, `precision`, `falseFireRate`, latency, `secretsLeaked`, `notInert`, `askRecall`, per category.

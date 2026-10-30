@@ -38,6 +38,8 @@ import {
   PlannedSource,
   SourceFanout,
   type FanoutOutcome,
+  sharedKey,
+  type SharedCalls,
   type QueryPlanner,
   type SearchQuery,
   type Source,
@@ -48,7 +50,22 @@ import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { answerMessages, judgeMessages, parseJudge } from "./judge";
 import { namesParticipant, startDay, startMs, timeWindow, titleNames, type TimeWindow } from "./grounding";
-import { cleanEntities, isAction, isScheduling, orgsOf, requestedRange, startMinutes, topicOf } from "./probes";
+import {
+  absenceSpan,
+  cleanEntities,
+  daysNamed,
+  isAction,
+  isScheduling,
+  isSubject,
+  mentions,
+  orgsOf,
+  overlaps,
+  requestedSpan,
+  rolesOf,
+  settled,
+  startMinutes,
+  topicOf,
+} from "./probes";
 import { Ledger } from "./ledger";
 import { citationsOf, renderAnswer, renderPacket, shownText } from "./render";
 import { classifySituation } from "./situation";
@@ -277,7 +294,7 @@ export class ContextPartner {
     const last = s.cues.get(cue.key);
     const repeat = last !== undefined && s.turn - last < this.config.cueCooldownTurns;
 
-    const fast = this.confident(this.rank(s, cue));
+    const fast = this.confident(this.rank(s, cue), cue);
     // A stale cached copy is not delivered from here: the slow path re-reads it first (D40). A cue in cooldown is not
     // looked up again, but the cache may hold something new for it (another question about the same person).
     if (fast.length > 0 && !this.stale(s, fast)) {
@@ -652,13 +669,17 @@ export class ContextPartner {
     );
   }
 
-  private confident(scored: Scored[]): Scored[] {
+  private confident(scored: Scored[], cue: Cue): Scored[] {
     return (
       scored
         .filter((x) => x.score >= this.config.confidentScore && x.matched >= this.config.minMatchedTerms)
         // Bulk mail is never pushed without a model's say: a newsletter arriving is no reason to speak.
         .filter((x) => !bulkMail(x.item))
-        .slice(0, this.config.maxItemsPerInjection)
+        // Nor, with `quietSettled`, an item that only says things stand as expected (`settled`); nor, with
+        // `groundAway`, an absence on other days than the request names (`awayElsewhere`).
+        .filter((x) => !this.config.quietSettled || !settled(x.item))
+        .filter((x) => !this.awayElsewhere(x.item, cue))
+        .slice(0, Math.min(this.config.maxItemsPerInjection, this.config.confidentItems))
     );
   }
 
@@ -696,14 +717,29 @@ export class ContextPartner {
     // With probes on: an action on a named day at a named time, and an event already there near that time, is a clash
     // the agent should see before it acts, whoever the event is with.
     const clash = this.config.probes && !this.config.probeOff.includes("clash");
-    const range = clash && time && time.days.size > 0 && isScheduling(cue.raw) ? requestedRange(cue.raw) : null;
+    const range = clash && time && time.days.size > 0 && isScheduling(cue.raw) ? requestedSpan(cue.raw) : null;
     if (range && time) {
+      // An event in the time asked for, other than the one the request is about (D48).
       const near = (x: Scored) => {
         const m = startMinutes(x.item);
-        return m !== null && m >= range.from && m <= range.to;
+        return m !== null && overlaps(x.item, m, range) && !isSubject(x.item, cue.raw);
       };
       const clashes = pool.filter((x) => time.days.has(startDay(x.item) ?? "") && near(x)).sort(soonest);
       if (clashes.length > 0) return { items: clashes.slice(0, this.max()), how: "clash" };
+    }
+    // With `groundAway`: a person the request names, away on a day it names ("ask Jamie to feed the cat next weekend"
+    // and Jamie's "away on Skye 6–9 Nov"), whatever the words: the agent should know before it asks them (D48).
+    if (this.config.groundAway && time && time.days.size > 0) {
+      const names = cleanEntities(cue.entities).filter((e) => !e.includes("@"));
+      const away = pool.filter((x) => {
+        const span = absenceSpan(x.item, cue.at);
+        return (
+          span !== null &&
+          [...time.days].some((d) => d >= span.from && d <= span.to) &&
+          names.some((n) => mentions(n, x.item))
+        );
+      });
+      if (away.length > 0) return { items: away.slice(0, this.max()), how: "away" };
     }
     if (withPerson.length > 0) {
       const dated = withPerson.filter(onDay);
@@ -742,6 +778,19 @@ export class ContextPartner {
     return none;
   }
 
+  /**
+   * With `groundAway`, whether an item says someone is away only on days other than the ones the request names: no
+   * reason, with no model's say, to raise it (the person is there then).
+   */
+  private awayElsewhere(item: ContextItem, cue: Cue): boolean {
+    const time = cue.time;
+    if (!this.config.groundAway || !time || time.days.size === 0) return false;
+    const span = absenceSpan(item, cue.at);
+    if (span === null || [...time.days].some((d) => d >= span.from && d <= span.to)) return false;
+    // An item that names a day the request names is about that day too ("Offsite Fri 6 Nov … Sam is away 9-10 Nov").
+    return !daysNamed(item, cue.at).some((d) => time.days.has(d)) && !time.days.has(startDay(item) ?? "");
+  }
+
   private max(): number {
     return this.config.maxItemsPerInjection;
   }
@@ -750,10 +799,31 @@ export class ContextPartner {
    * With no model's say, the best candidate alone, if it is strong enough: several distinct query terms and a score
    * of at least `fallbackScore` (coverage plus the entity bonus, D36). One item at most: nothing has judged it.
    */
-  private fallback(unsure: Scored[], agreed?: Set<string>): Scored | null {
+  private fallback(unsure: Scored[], agreed?: Set<string>, cue?: Cue): Scored | null {
     const top = unsure[0];
     const c = this.config;
-    if (!top || c.fallbackMatchedTerms <= 0) return null;
+    if (!top || c.fallbackMatchedTerms <= 0 || (c.quietSettled && settled(top.item))) return null;
+    if (cue && this.awayElsewhere(top.item, cue)) return null;
+    // `fallbackAsks`: a request that asks (a question, or an action) about something it names, with an item that names
+    // it too, needs two of its terms, not three. A question about the world at large ("a good stretch for back pain")
+    // names nothing of the user's, and words like "good" or "week" match anything.
+    const asks = cue !== undefined && c.fallbackAsks && (/\?\s*$/.test(cue.raw) || isAction(cue.raw));
+    const named = asks ? cleanEntities(cue.entities).filter((e) => !e.includes("@")) : [];
+    if (named.length > 0) {
+      // The best of the first three that names what the request names: the top one may be about something else.
+      const hit = unsure
+        .slice(0, 3)
+        .find(
+          (x) =>
+            named.some((e) => mentions(e, x.item)) &&
+            !bulkMail(x.item) &&
+            x.matched >= 2 &&
+            x.score >= c.fallbackScore &&
+            !(c.quietSettled && settled(x.item)) &&
+            !this.awayElsewhere(x.item, cue!),
+        );
+      if (hit) return hit;
+    }
     if (!bulkMail(top.item) && top.matched >= c.fallbackMatchedTerms && top.score >= c.fallbackScore) return top;
     // Found both by the request's own search and by a probe for its people (`fallbackAgree`): two independent queries
     // agreeing is evidence words alone are not. Still one item, and it must share two of the request's terms.
@@ -835,6 +905,8 @@ export class ContextPartner {
     // The fan-out's deadline for this lookup, so the planner's cascade sends only the calls that can still answer. A
     // listing goes to each source as it is: the planner's shapes are ways of sending words, and it has none.
     const deadlineAt = performance.now() + this.config.sourceTimeoutMs;
+    // With `probeShare`: what the planner and the probes of this lookup send alike is sent once (`SharedCalls`).
+    const shared: SharedCalls | undefined = this.config.probeShare ? new Map() : undefined;
     const chosen =
       planner && !listing
         ? found.map(
@@ -843,7 +915,7 @@ export class ContextPartner {
                 x,
                 planner,
                 () => this.fanout.permit(s.scope, x.id),
-                this.fanout.planCalls(x),
+                this.fanout.planCalls(x, shared),
                 deadlineAt,
               ),
           )
@@ -874,7 +946,9 @@ export class ContextPartner {
     const settled = searching.catch(() => null);
     const probed = { calls: 0, kept: [] as string[] };
     const probing =
-      this.config.probes && probeThis ? this.probe(s, cue, found, all, listing, probed, settled).catch(() => {}) : null;
+      this.config.probes && probeThis
+        ? this.probe(s, cue, found, all, listing, probed, settled, shared).catch(() => {})
+        : null;
     const outcomes = await searching;
     const plans = planner
       ? chosen.flatMap((x) => {
@@ -930,6 +1004,7 @@ export class ContextPartner {
     listed: boolean,
     out: { calls: number; kept: string[] },
     searched: Promise<unknown>,
+    shared?: SharedCalls,
   ): Promise<void> {
     const lanes = new Map<string, Promise<unknown>>();
     const budget = this.config.probeCalls;
@@ -951,13 +1026,29 @@ export class ContextPartner {
         scope: s.scope,
         text,
         entities: text ? [text] : [],
-        limit: window ? 20 : 5,
+        // Shared with the planner's queries (`probeShare`), its page size: either may answer for the other.
+        limit: window ? 20 : shared ? 8 : 5,
         ...(window ? { window } : {}),
       };
-      const attempt = async (source: Source) => {
+      const attempt = async (source: Source): Promise<FanoutOutcome | null> => {
         const left = deadline - performance.now();
         if (s.closed || left < 50) return null;
-        const [o] = await this.fanout.search([source], query, { timeoutMs: left, signal: s.abort.signal });
+        // The planner sent the same query to this source in this lookup: its answer, at no call.
+        const sk = shared && !window ? sharedKey(source.id, query) : "";
+        const had = sk ? shared!.get(sk) : undefined;
+        if (had) {
+          const items = await had.catch(() => null);
+          if (items) return { sourceId: source.id, status: "cached", items, latencyMs: 0 };
+        }
+        const run = this.fanout.search([source], query, { timeoutMs: left, signal: s.abort.signal });
+        if (sk) {
+          const answered = new Set(["ok", "cached", "stale"]);
+          shared!.set(
+            sk,
+            run.then(([o]) => (o && answered.has(o.status) ? o.items : null)),
+          );
+        }
+        const [o] = await run;
         return o ?? null;
       };
       // One probe call per source at a time, in this lookup: with the lookup's own call, that is two, the fan-out's
@@ -977,7 +1068,9 @@ export class ContextPartner {
         return run;
       };
       const outcomes = (await Promise.all(to.map(one))).filter((o): o is FanoutOutcome => o !== null);
-      const items = outcomes.flatMap((o) => o.items);
+      // A page of the probe's own size from each source, even when the call was the planner's (8 items): more would
+      // crowd the probes' seats with the judge (live, the judge passed fewer planted items with them).
+      const items = outcomes.flatMap((o) => o.items.slice(0, window ? 20 : 5));
       // A call the fan-out did not make (busy, limited, open, answered from its cache, past the deadline) is no call.
       out.calls -= to.length - outcomes.filter((o) => !SKIPPED.has(o.status)).length;
       if (!s.closed) this.store(s, items);
@@ -1012,30 +1105,39 @@ export class ContextPartner {
     const listers = all.filter((x) => x.listsByTime === true);
     // A person or organisation goes to the sources most likely to hold them, by the source map's own record of which
     // sources mention which names (any source may, not only the lookup's): three per name, not every source.
-    const routeFor = (name: string) =>
+    const routeFor = (name: string, limit = c.probePeopleSources) =>
       this.deps.sourceMap
         .route({
           scope: s.scope,
           entities: [name],
           situation: s.situation,
           sourceIds: all.map((x) => x.id),
-          limit: c.probePeopleSources,
+          limit,
         })
         .map((r) => all.find((x) => x.id === r.sourceId)!)
         .filter(Boolean);
     const people = off.has("people") ? [] : cue.entities.slice(0, 2);
-    const topic = off.has("topic") ? "" : topicOf(cue.text.split(" "), cue.entities);
+    // `probeTopicAlone`: the topic only for a request that names no one (with people, their probes find what the topic
+    // would: held-out funnels returned as many planted items without it, at fewer calls).
+    const topic =
+      off.has("topic") || (c.probeTopicAlone && people.length > 0) ? "" : topicOf(cue.text.split(" "), cue.entities);
     // The organisations of the request's people, from what came back for them; what is said of someone's
     // organisation (a hold, a policy) applies to them.
     const byPeople = (async () => {
-      const first = await Promise.all(people.map((q) => send(routeFor(q), q)));
+      // The request's first person to `probePeopleSources` sources, a second to `probeSecondSources`.
+      const first = await Promise.all(
+        people.map((q, i) => send(routeFor(q, i === 0 ? c.probePeopleSources : c.probeSecondSources), q)),
+      );
       for (const org of off.has("org") ? [] : orgsOf(people, first.flat()).slice(0, 1)) {
         if (!cue.entities.includes(org)) await send(routeFor(org), org);
       }
     })();
+    // `probeRoles`: someone named by their relation ("my manager"), to the lookup's best two sources.
+    const roles = c.probeRoles && !off.has("roles") ? rolesOf(cue.raw) : [];
     await Promise.all([
       ...windows.map((w) => send(listers, "", w)),
       byPeople,
+      ...roles.map((r) => send(found.slice(0, 2), r)),
       // The topic's finds share the request's words, and rank on them; the others get seats of their own.
       ...(topic ? [send(found.slice(0, this.config.probeTopicSources), topic, undefined, false)] : []),
     ]);
@@ -1197,14 +1299,17 @@ export class ContextPartner {
       if (s.closed) return null;
       // This lookup's probe finds, its own (never another turn's or a concurrent ask's).
       const scored = this.rank(s, cue, { probed: probedIds });
-      const sure = this.confident(scored);
+      const sure = this.confident(scored, cue);
       // With `judgeConfident` and a judge to ask, what scores as sure is judged with the rest in the same call: the
       // no-model bar is right about half the time (docs/research/probes.md), the judge more often.
       // One sure item both the request's search and a probe found is corroborated: delivered without the call
       // (`judgeAgreed` false).
       const both = agreed(new Set(probedIds ?? []), lookedIds);
       const corroborated = !this.config.judgeAgreed && sure.length === 1 && both.has(sure[0]!.item.id);
-      const judgeSure = this.config.judgeConfident && this.deps.model !== null && sure.length > 0 && !corroborated;
+      // `judgeContested`: only when more than one item scored as sure (which is meant is then the judge's call).
+      const contested = this.config.judgeContested && sure.length > 1;
+      const judgeSure =
+        (this.config.judgeConfident || contested) && this.deps.model !== null && sure.length > 0 && !corroborated;
       if (sure.length > 0 && !judgeSure) {
         done(
           "sources",
@@ -1256,7 +1361,7 @@ export class ContextPartner {
           );
           return this.deliver(s, items, "proactive", `grounded-${grounded.how}:${cue.id}`, cue);
         }
-        const top = this.fallback(unsure, this.config.fallbackAgree ? agreed(probed, lookedIds) : undefined);
+        const top = this.fallback(unsure, this.config.fallbackAgree ? agreed(probed, lookedIds) : undefined, cue);
         if (top) {
           done("sources", `fallback${reasonPrefix}:${cue.id}`, [top.item]);
           return this.deliver(s, [top], "proactive", `fallback:${cue.id}`, cue);
@@ -1275,6 +1380,7 @@ export class ContextPartner {
             candidates,
             this.config.probes,
             this.config.compactInjection ? focusOf(cue) : undefined,
+            { windowChars: this.config.judgeWindowChars, itemBytes: this.config.judgeItemBytes },
           ),
           cacheKey: userCacheKey(s.scope),
           maxTokens: JUDGE_MAX_TOKENS,
@@ -1358,6 +1464,8 @@ export class ContextPartner {
           ? {
               focus: focusOf(cue),
               itemBytes: this.config.compactItemBytes,
+              year: new Date(this.now()).getUTCFullYear(),
+              self: this.deps.cache.selfOf(s.scope),
               // A word the session has seen: a part with nothing else the agent has (`compactText`).
               ...(this.config.compactNovel ? { known: (w: string) => s.seen.has(s.vocab.lookup(w)) } : {}),
             }
