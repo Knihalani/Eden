@@ -65,9 +65,9 @@ unless the caller waits (`waitMs`).
 
 The eval, live, on the same 60 silent turns: before the fix recall 0.644, precision 0.935, 2 false fires; after, two
 runs, recall 0.667 and 0.644, precision 0.909 and 0.935, 1 false fire each; no secret leaked. Live runs vary (an
-independent review measured 1 to 3 false fires on the same set), so the eval shows neither a gain nor a loss: its
-candidate lists are short, and the cap mattered less there. Its one recurring false fire is "what's on the agenda
-with elena this week?", where the judge delivers the 1:1 with Elena; the label stays silent.
+independent review measured 3 false fires on this branch and 1 and 1 on main, on the same set), so the eval shows
+neither a gain nor a loss: its candidate lists are short, and the cap mattered less there. Its one recurring false fire
+is "what's on the agenda with elena this week?", where the judge delivers the 1:1 with Elena; the label stays silent.
 
 ## Reproduce
 
