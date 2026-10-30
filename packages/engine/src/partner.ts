@@ -57,6 +57,7 @@ import {
   cleanEntities,
   daysNamed,
   isAction,
+  LEADING,
   isScheduling,
   isSubject,
   mentions,
@@ -68,6 +69,7 @@ import {
   startMinutes,
   topicOf,
 } from "./probes";
+import { foldEchoes } from "./fold";
 import { Ledger } from "./ledger";
 import { amountsOf, judge, SWEEP_WORDS, wordsOf, type Act, type Conflict } from "./register";
 import { citationsOf, renderAnswer, renderPacket, shownText } from "./render";
@@ -180,6 +182,11 @@ const JUDGE_MAX_TOKENS = 512;
 /** Probes a user's cache remembers (`ItemCache.rememberProbe`): enough for the people and days of their week. */
 const PROBE_MEMO = 256;
 const ANSWER_MAX_TOKENS = 1_000;
+/** `densePacket`: a word on fewer than this share of the user's items is rare; an item adding one is no echo. */
+const RARE_SHARE = 0.03;
+/** `recoverNames`: names taken from one request at most, and the words of it read for them. */
+const MAX_RECOVERED = 2;
+const RECOVER_WORDS = 24;
 
 /** Each cue's frame (`conflict.ts`), read once and dropped with the cue. */
 const FRAMES = new WeakMap<Cue, Frame>();
@@ -758,6 +765,10 @@ export class ContextPartner {
       });
       if (away.length > 0) return { items: away.slice(0, this.max()), how: "away" };
     }
+    if (this.config.groundOccasion) {
+      const occasion = this.occasion(cue, pool, eventKind, acts, meeting);
+      if (occasion.items.length > 0) return occasion;
+    }
     if (withPerson.length > 0) {
       const dated = withPerson.filter(onDay);
       if (dated.length > 0) return { items: [dated[0]!], how: "person-day" };
@@ -897,6 +908,103 @@ export class ContextPartner {
 
   private max(): number {
     return this.config.maxItemsPerInjection;
+  }
+
+  /**
+   * `groundOccasion`: with no model's say, the event a request means by what its title says, the way people name
+   * one: by the occasion and who it is with ("dinner with Elena", "push coffee with Kofi"), by the occasion and the
+   * day ("where are we having lunch on Monday?"), or, for a message from someone about meeting ("running late, still
+   * ok to meet?"), by the event that names them. An event's title holds the request's occasion word (a word of the
+   * request other than a name, a date or a stopword) and every word of a name it uses, a first name alone included;
+   * or, for a question, the occasion word on a day the request names; or, for a meeting message, the person's name.
+   * The one on a day the request names wins, else the soonest still to come (with no day named, a past one is never
+   * taken). A named day no such event is on grounds nothing. Only for a request that asks or acts.
+   */
+  private occasion(
+    cue: Cue,
+    pool: Scored[],
+    eventKind: string,
+    acts: boolean,
+    meeting: boolean,
+  ): { items: Scored[]; how: string } {
+    const none = { items: [] as Scored[], how: "" };
+    const asks = acts || /\?\s*$/.test(cue.raw) || isAction(cue.raw);
+    if (!asks) return none;
+    const time = cue.time;
+    const names = cleanEntities(cue.entities)
+      .filter((e) => !e.includes("@"))
+      .map((e) => e.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])
+      .filter((w) => w.length > 0 && w.every((x) => !TIME_WORD.test(x)));
+    const inNames = new Set(names.flat());
+    const kinds = (cue.raw.toLowerCase().match(/[\p{L}]{3,}/gu) ?? []).filter(
+      (w) => !inNames.has(w) && !isStopword(w) && !TIME_WORD.test(w) && !LEADING.has(w),
+    );
+    const titleWordsOf = (x: Scored) => new Set(x.item.title.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []);
+    const events = pool.filter((x) => startDay(x.item) !== null);
+    const onDay = (x: Scored) => time !== null && time.days.has(startDay(x.item) ?? "");
+    const pick = (xs: Scored[], how: string, many = false) => {
+      const dated = xs.filter(onDay).sort((a, b) => startMs(a.item) - startMs(b.item));
+      if (dated.length > 0) return { items: many ? dated.slice(0, this.max()) : [dated[0]!], how: `${how}-day` };
+      // A day the request names that no such event is on: the request may be about a new one ("an invite for drinks
+      // Saturday"), or where one is going ("move my dinner to Friday"). Which is not for words to say: no ground.
+      if (time !== null && time.days.size > 0) return none;
+      const next = xs.filter((x) => startMs(x.item) >= cue.at).sort((a, b) => startMs(a.item) - startMs(b.item));
+      return next.length > 0 ? { items: [next[0]!], how } : none;
+    };
+    const named = (t: Set<string>) => names.some((n) => n.every((w) => t.has(w)));
+    const kind = (t: Set<string>) => kinds.some((w) => t.has(w));
+    const withName = events.filter((x) => {
+      const t = titleWordsOf(x);
+      return named(t) && kind(t);
+    });
+    if (withName.length > 0) {
+      const r = pick(withName, "occasion-person");
+      if (r.items.length > 0) return r;
+    }
+    // By occasion and day alone only for a question about it: an action on a day's occasion ("send the pack before
+    // next week's board meeting") is about the action, and the occasion standing as planned is no news.
+    if (time !== null && time.days.size > 0 && names.length === 0 && /\?\s*$/.test(cue.raw)) {
+      const r = pick(
+        events.filter((x) => onDay(x) && kind(titleWordsOf(x))),
+        "occasion",
+        true,
+      );
+      if (r.items.length > 0) return r;
+    }
+    if (eventKind === "external" && meeting && names.length > 0) {
+      return pick(
+        events.filter((x) => named(titleWordsOf(x))),
+        "occasion-sender",
+      );
+    }
+    return none;
+  }
+
+  /**
+   * `recoverNames`: the cue with the names it holds in lowercase added ("drinks with chen wei", "reply to stark
+   * freight"). A run of two or three words, none a stopword, a date or already an entity, is a name when the user's
+   * own sources have been recorded mentioning it (the source map's mentions: names their items wrote capitalised).
+   * A single word is never taken: "Lunch" is capitalised in many subjects. Longest runs first; at most
+   * `MAX_RECOVERED` names, from the request's first `RECOVER_WORDS` words. One indexed read per run tried.
+   */
+  private withRecoveredNames(s: Session, cue: Cue): Cue {
+    const have = new Set(cue.entities.map((e) => e.toLowerCase()));
+    const words = (cue.raw.match(/[\p{L}\p{N}][\p{L}\p{N}&'’-]*/gu) ?? []).slice(0, RECOVER_WORDS);
+    // Only words typed in lowercase: a capitalised run was the extractor's to read ("Has Aperture Labs been paid?").
+    const open = (w: string) => w === w.toLowerCase() && !isStopword(w) && !TIME_WORD.test(w) && !LEADING.has(w);
+    const used = new Uint8Array(words.length);
+    const found: string[] = [];
+    for (let n = 3; n >= 2; n--) {
+      for (let i = 0; i + n <= words.length && found.length < MAX_RECOVERED; i++) {
+        const run = words.slice(i, i + n);
+        if (run.some((w, k) => used[i + k] || !open(w))) continue;
+        const name = run.join(" ");
+        if (have.has(name) || this.deps.sourceMap.sourcesFor(s.scope, name).length === 0) continue;
+        found.push(run.map((w) => w[0]!.toUpperCase() + w.slice(1)).join(" "));
+        used.fill(1, i, i + n);
+      }
+    }
+    return found.length ? { ...cue, entities: [...cue.entities, ...found] } : cue;
   }
 
   /**
@@ -1530,8 +1638,11 @@ export class ContextPartner {
           );
           return this.deliver(s, sure, "proactive", `sources:${cue.id}`, cue);
         }
+        // `recoverNames`: names the request typed in lowercase ("move my drinks with chen wei"), from the user's own
+        // record of names, ground and fall back as typed ones do. Only here: probes and ranking keep the cue as typed.
+        const named = this.config.recoverNames ? this.withRecoveredNames(s, cue) : cue;
         // Grounding reads every candidate, not only the judge's few: a day's events rank after every word match.
-        const grounded = this.grounded(s, cue, eligible, eventKind);
+        const grounded = this.grounded(s, named, eligible, eventKind);
         if (grounded.items.length > 0) {
           const items = grounded.items;
           done(
@@ -1549,7 +1660,7 @@ export class ContextPartner {
           const items = binding
             .sort((a, b) => ruledIds.get(b.item.id)!.rank - ruledIds.get(a.item.id)!.rank)
             .slice(0, 1);
-          const also = this.fallback(unsure, this.config.fallbackAgree ? agreed(probed, lookedIds) : undefined, cue);
+          const also = this.fallback(unsure, this.config.fallbackAgree ? agreed(probed, lookedIds) : undefined, named);
           if (also && also.item.id !== items[0]!.item.id) items.push(also);
           done(
             "sources",
@@ -1558,7 +1669,7 @@ export class ContextPartner {
           );
           return this.deliver(s, items, "proactive", `grounded-rule:${cue.id}`, cue);
         }
-        const top = this.fallback(unsure, this.config.fallbackAgree ? agreed(probed, lookedIds) : undefined, cue);
+        const top = this.fallback(unsure, this.config.fallbackAgree ? agreed(probed, lookedIds) : undefined, named);
         if (top) {
           done("sources", `fallback${reasonPrefix}:${cue.id}`, [top.item]);
           return this.deliver(s, [top], "proactive", `fallback:${cue.id}`, cue);
@@ -1643,20 +1754,31 @@ export class ContextPartner {
     cue: Cue,
     shown?: string,
   ): Injection {
-    const items = scored.map((x) => x.item);
     // Whatever path delivered them, a probe that first brought one in paid for its call (`probeYield`).
     if (this.config.probeYield) {
       this.economy.reached(
         s.scope,
-        items.map((i) => i.id),
+        scored.map((x) => x.item.id),
       );
     }
     for (const x of scored) if (x.sketch) s.delivered.push(x.sketch);
     if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
+    // Every item counts as delivered, an echo folded out of the packet too: the agent has its occurrence.
     s.ledger.mark(
-      items.map((i) => i.id),
+      scored.map((x) => x.item.id),
       s.turn,
     );
+    const dense = this.config.densePacket && this.config.compactInjection;
+    const self = this.config.compactInjection ? this.deps.cache.selfOf(s.scope) : null;
+    const shownItems = dense
+      ? foldEchoes(scored, {
+          focus: focusOf(cue),
+          year: new Date(this.now()).getUTCFullYear(),
+          self,
+          rare: (w) => this.deps.cache.isRare(s.scope, w, RARE_SHARE),
+        })
+      : scored;
+    const items = shownItems.map((x) => x.item);
     const injection: Injection = {
       ...s.scope,
       id: newId("inj", this.now()),
@@ -1669,7 +1791,8 @@ export class ContextPartner {
               focus: focusOf(cue),
               itemBytes: this.config.compactItemBytes,
               year: new Date(this.now()).getUTCFullYear(),
-              self: this.deps.cache.selfOf(s.scope),
+              self,
+              dense,
               // A word the session has seen: a part with nothing else the agent has (`compactText`).
               ...(this.config.compactNovel ? { known: (w: string) => s.seen.has(s.vocab.lookup(w)) } : {}),
             }

@@ -471,6 +471,22 @@ export class ItemCache {
     return u.self;
   }
 
+  /**
+   * Whether `word` is on fewer than `share` of the user's live items (a name, a place, a constraint), rather than
+   * common to many ("perfect", "booked"). A word the user's items never hold is rare; so is every word while the
+   * cache holds too few items for a share to mean anything (fewer than 1/share).
+   */
+  isRare(scope: Scope, word: string, share: number): boolean {
+    const u = this.peek(scope);
+    if (!u || u.index.size * share < 1) return true;
+    const id = u.vocab.lookup(word);
+    if (id < 0) return true;
+    // idf is monotone in a term's document count: compare it with the idf a term on exactly `share` of them has.
+    const n = u.index.size;
+    const at = share * n;
+    return u.index.idf(id) > Math.log(1 + (n - at + 0.5) / (at + 0.5));
+  }
+
   /** The cached item `doc`'s sorted unique term ids (title and body, the user's vocabulary); empty if unknown. */
   termsOf(scope: Scope, doc: number): Uint32Array {
     return this.peek(scope)?.index.termsOf(doc) ?? NO_TERMS;
