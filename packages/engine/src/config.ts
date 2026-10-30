@@ -21,6 +21,8 @@ export interface EngineConfig {
   fallbackScore: number;
   /** The fallback also takes an item the lookup's own search and a probe both found, sharing two request terms. */
   fallbackAgree: boolean;
+  /** The fallback takes two of the request's terms, not `fallbackMatchedTerms`, when the request asks or acts. */
+  fallbackAsks: boolean;
   /** The least score an agreed item needs (`fallbackAgree`). */
   fallbackAgreeScore: number;
   maxItemsPerInjection: number;
@@ -101,11 +103,37 @@ export interface EngineConfig {
   probePeopleSources: number;
   /** Sources the topic probe goes to (the lookup's best routed). */
   probeTopicSources: number;
+  /** Sources a second person's probe goes to (the first's: `probePeopleSources`). */
+  probeSecondSources: number;
+  /** A lookup's planner and probes send the same query to the same source once (`SharedCalls`). */
+  probeShare: boolean;
+  /** A request naming someone by their relation ("my manager") sends that word as a probe (`probes.ts` `rolesOf`). */
+  probeRoles: boolean;
+  /** The topic probe only for a request that names no person. */
+  probeTopicAlone: boolean;
   /**
    * With a judge configured, the slow path's confident items are judged too (with the other candidates, one call)
    * rather than delivered on their score alone. Costs a judge call on lookups that had only confident items.
    */
   judgeConfident: boolean;
+  /** With a judge configured, sure items are judged when more than one scored as sure (a contested set). */
+  judgeContested: boolean;
+  /** The judge's input: the recent conversation, at most this many characters (its newest end). */
+  judgeWindowChars: number;
+  /** With `compactInjection`, each candidate's compacted text in the judge's input, at most this many bytes. */
+  judgeItemBytes: number;
+  /** At most this many items delivered on their score alone, with no model's say (the confident path). */
+  confidentItems: number;
+  /**
+   * With no model's say (the confident path and the fallback), an item that only says things stand as expected ("as
+   * usual", "resolved", "no change": `probes.ts` `settled`) is not delivered: it changes nothing (D48).
+   */
+  quietSettled: boolean;
+  /**
+   * With no model's say: an item saying a person the request names is away on a day it names is delivered (grounded
+   * "away"), and one saying someone is away only on other days is not (`probes.ts` `absenceSpan`; D48).
+   */
+  groundAway: boolean;
   /** With `judgeConfident`, a lone sure item the lookup and a probe both found is judged too (false: delivered). */
   judgeAgreed: boolean;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
@@ -130,6 +158,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   fallbackMatchedTerms: 3,
   fallbackScore: 0.8,
   fallbackAgree: false,
+  fallbackAsks: false,
   fallbackAgreeScore: 0.6,
   maxItemsPerInjection: 3,
   refreshAfterMs: 2 * 3_600_000,
@@ -161,8 +190,18 @@ export const DEFAULT_CONFIG: EngineConfig = {
   probeWhen: "always",
   probePeopleSources: 3,
   probeTopicSources: 8,
+  probeTopicAlone: false,
+  probeRoles: false,
+  probeShare: false,
+  probeSecondSources: 3,
   probeOff: [],
   judgeConfident: false,
+  judgeContested: false,
+  judgeWindowChars: 4_000,
+  judgeItemBytes: 280,
+  confidentItems: 3,
+  quietSettled: false,
+  groundAway: false,
   judgeAgreed: true,
   maxEventChars: 32_000,
 };

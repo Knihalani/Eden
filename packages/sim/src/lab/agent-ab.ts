@@ -207,7 +207,11 @@ const ASK_TOOL = {
   type: "function" as const,
   function: {
     name: "ask_context",
-    description: "Ask about the user's people, plans, messages or documents. Searches their connected accounts.",
+    // Eden's own description of the tool, as its MCP server gives it (packages/server/src/mcp.ts).
+    description:
+      "Ask the user's context partner a question. It searches the user's connected sources (mail, calendar, " +
+      "documents, CRM and more) and answers with citations. Use it when you need a fact about the user, their " +
+      "people, projects or history that is not in the conversation.",
     parameters: { type: "object", properties: { question: { type: "string" } }, required: ["question"] },
   },
 };
@@ -254,7 +258,20 @@ const SETTINGS: Record<string, Record<string, unknown>> = {
   p4: { probes: true, probeCalls: 4 },
   pc: { probes: true, compactInjection: true },
   pj: { probes: true, judgeConfident: true },
+  // D48's candidate: probes, compaction, the no-model grounds and the judged contested sure set.
+  C: {
+    probes: true,
+    compactInjection: true,
+    quietSettled: true,
+    groundAway: true,
+    judgeContested: true,
+    judgeItemBytes: 200,
+  },
 };
+// C with the lookup's planner and probes sharing their calls, and the topic probe only when no one is named.
+SETTINGS.C2 = { ...SETTINGS.C, probeShare: true, probeTopicAlone: true };
+// D48's measured configuration: C2 with the no-model fallback for requests that ask about something they name.
+SETTINGS.F = { ...SETTINGS.C2, fallbackAsks: true };
 
 /** One world under one condition: a fresh Eden (if any) sees the world's tasks in order, as it would in use. */
 async function runWorld(world: World, seed: number, tasks: Task[], condition: string): Promise<RunResult[]> {

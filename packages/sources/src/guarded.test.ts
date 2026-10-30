@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ContextItem } from "@eden/protocol";
-import { SourceFanout } from "./guarded";
+import { sharedKey, SourceFanout, type SharedCalls } from "./guarded";
 import { PlannedSource, QueryPlanner } from "./planner";
 import type { SearchQuery, Source } from "./source";
 
@@ -392,5 +392,39 @@ describe("SourceFanout fetch", () => {
     const t0 = performance.now();
     expect(await f.fetch(slow, scope, "1", { timeoutMs: 30 })).toBeNull();
     expect(performance.now() - t0).toBeLessThan(500);
+  });
+});
+
+describe("SharedCalls (one lookup's planner and probes)", () => {
+  const q = (text: string): SearchQuery => ({ scope, text, entities: [], limit: 8 });
+  const signal = new AbortController().signal;
+
+  test("a query already sent in the lookup is answered by it: no second call", async () => {
+    const src = source(async () => [item("from the source")]);
+    const f = new SourceFanout({ sanitize: async (items) => items });
+    const shared: SharedCalls = new Map();
+    shared.set(sharedKey("s", q("Dana Lee")), Promise.resolve([item("from the probe")]));
+    const got = await f.planCalls(src, shared).call(q("dana lee"), signal);
+    expect(got.map((i) => i.text)).toEqual(["from the probe"]);
+    expect(src.calls).toBe(0);
+  });
+
+  test("a failed shared answer is no answer: the call is made, and registered for the next", async () => {
+    const src = source(async () => [item("from the source")]);
+    const f = new SourceFanout({ sanitize: async (items) => items });
+    const shared: SharedCalls = new Map();
+    shared.set(sharedKey("s", q("Dana Lee")), Promise.resolve(null));
+    const got = await f.planCalls(src, shared).call(q("Dana Lee"), signal);
+    expect(got.map((i) => i.text)).toEqual(["from the source"]);
+    expect(src.calls).toBe(1);
+    expect(await shared.get(sharedKey("s", q("dana  lee")))!).toEqual(got);
+  });
+
+  test("keys ignore case and spacing, and keep quotes, the source and the window apart", () => {
+    expect(sharedKey("s", q("Dana  Lee"))).toBe(sharedKey("s", q("dana lee")));
+    expect(sharedKey("s", q('"Dana Lee"'))).not.toBe(sharedKey("s", q("dana lee")));
+    expect(sharedKey("t", q("dana lee"))).not.toBe(sharedKey("s", q("dana lee")));
+    const windowed = { ...q(""), window: { start: "2026-11-04", end: "2026-11-05", offsetMinutes: 0 } };
+    expect(sharedKey("s", windowed)).not.toBe(sharedKey("s", q("")));
   });
 });

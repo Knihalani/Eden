@@ -9,6 +9,7 @@ import { plantHeldout } from "./hidden-heldout";
 import { plantHeldout2 } from "./hidden-heldout2";
 import { plantHeldout3 } from "./hidden-heldout3";
 import { plantHeldout4 } from "./hidden-heldout4";
+import { plantHeldout5 } from "./hidden-heldout5";
 
 export type { HiddenTask };
 export type Variant = "hidden" | "control";
@@ -20,6 +21,8 @@ export const SUITES: Record<string, Plant> = {
   heldout2: plantHeldout2,
   heldout3: plantHeldout3,
   heldout4: plantHeldout4,
+  // Written after D47, blind to the engine and to every other suite; never tuned on (docs/research/lean-probes.md).
+  heldout5: plantHeldout5,
 };
 export const SUITE_NAMES = Object.keys(SUITES);
 const HELDOUT_ALL = ["heldout", "heldout2", "heldout3", "heldout4"];
