@@ -372,7 +372,8 @@ export class ItemCache {
   selfOf(scope: Scope): string | null {
     const u = this.peek(scope);
     if (!u) return null;
-    if (u.self === undefined || u.selfStale >= SELF_REFRESH) {
+    // Not known yet, or many items later: computed again. While no one stands out, any new item may settle it.
+    if (u.self === undefined || u.selfStale >= SELF_REFRESH || (u.self === null && u.selfStale > 0)) {
       const counts = new Map<string, number>();
       let listed = 0;
       for (const e of u.items.values()) {

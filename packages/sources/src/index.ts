@@ -13,7 +13,14 @@ export {
   type ToolSchema,
 } from "./schema-args";
 export { searchSources, type SourceOutcome } from "./fanout";
-export { SourceFanout, type FanoutOptions, type FanoutOutcome, type FanoutStatus } from "./guarded";
+export {
+  sharedKey,
+  SourceFanout,
+  type FanoutOptions,
+  type FanoutOutcome,
+  type FanoutStatus,
+  type SharedCalls,
+} from "./guarded";
 export { buildShape, inert, SHAPES, type Shape, type ShapeInput, type ShapeOptions } from "./shapes";
 export {
   cueCoverage,

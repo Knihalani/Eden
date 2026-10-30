@@ -101,6 +101,12 @@ export interface EngineConfig {
   probePeopleSources: number;
   /** Sources the topic probe goes to (the lookup's best routed). */
   probeTopicSources: number;
+  /** Sources a second person's probe goes to (the first's: `probePeopleSources`). */
+  probeSecondSources: number;
+  /** A lookup's planner and probes send the same query to the same source once (`SharedCalls`). */
+  probeShare: boolean;
+  /** The topic probe only for a request that names no person. */
+  probeTopicAlone: boolean;
   /**
    * With a judge configured, the slow path's confident items are judged too (with the other candidates, one call)
    * rather than delivered on their score alone. Costs a judge call on lookups that had only confident items.
@@ -179,6 +185,9 @@ export const DEFAULT_CONFIG: EngineConfig = {
   probeWhen: "always",
   probePeopleSources: 3,
   probeTopicSources: 8,
+  probeTopicAlone: false,
+  probeShare: false,
+  probeSecondSources: 3,
   probeOff: [],
   judgeConfident: false,
   judgeContested: false,

@@ -110,3 +110,21 @@ describe("renderPacket with focus", () => {
     expect(out.endsWith("</context>")).toBe(true);
   });
 });
+
+describe("compaction of dates and the user's own name", () => {
+  test("the current year leaves day-and-month dates, ISO dates keep it; the user goes by their first name", () => {
+    const out = compactText(
+      "From: Robin Carter <r@x.example>\nDate: Sat, 24 Oct 2026 12:00\n\nMonday 2 Nov 2026 works. Close date: 2026-11-10.",
+      new Set(),
+      320,
+      () => false,
+      2026,
+      "Robin Carter",
+    );
+    expect(out).toBe("From: Robin Date: Sat 24 Oct 12:00 Monday 2 Nov works. Close date: 2026-11-10.");
+    // Another year stays; a longer name that starts the same is someone else.
+    expect(
+      compactText("Born 3 May 1990. Robin Carterson called.", new Set(), 320, () => false, 2026, "Robin Carter"),
+    ).toBe("Born 3 May 1990. Robin Carterson called.");
+  });
+});

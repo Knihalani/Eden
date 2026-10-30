@@ -56,3 +56,34 @@ describe("ItemCache bounds (branch review)", () => {
     expect(cache.search(alice, q.ids, q.n, 5, 1_800).map((h) => h.item.id)).toEqual(["crm:1"]);
   });
 });
+
+describe("selfOf: the user's own name, read from their items", () => {
+  const mail = (i: number, from: string, to: string) => ({
+    id: `g:${i}`,
+    sourceId: "gmail",
+    ref: String(i),
+    title: `Mail ${i}`,
+    text: `From: ${from} <a${i}@x.example>\nTo: ${to} <b${i}@x.example>\n\nBody ${i}`,
+  });
+  test("the person on most of a user's items, once there are enough of them; per user", () => {
+    const cache = new ItemCache();
+    const u1 = { tenantId: "t", userId: "u1" };
+    const u2 = { tenantId: "t", userId: "u2" };
+    cache.put(u1, [mail(1, "Jamie Fox", "Robin Carter"), mail(2, "Robin Carter", "Dana Lee")], 0);
+    expect(cache.selfOf(u1)).toBeNull(); // Two items: too few to say.
+    cache.put(
+      u1,
+      [3, 4, 5, 6, 7].map((i) => mail(i, `Person ${String.fromCharCode(64 + i)}`, "Robin Carter")),
+      0,
+    );
+    expect(cache.selfOf(u1)).toBe("Robin Carter");
+    expect(cache.selfOf(u2)).toBeNull();
+    cache.put(
+      u2,
+      [1, 2, 3, 4, 5].map((i) => mail(10 + i, "Alex Moreno", `Person ${String.fromCharCode(64 + i)}`)),
+      0,
+    );
+    expect(cache.selfOf(u2)).toBe("Alex Moreno");
+    expect(cache.selfOf(u1)).toBe("Robin Carter");
+  });
+});

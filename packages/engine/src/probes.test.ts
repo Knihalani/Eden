@@ -498,3 +498,37 @@ describe("an absence on the day a request names (groundAway)", () => {
     expect(await run(notes("Jamie Fox here: I'm away on Skye 20–23 Nov"), true)).toEqual([]);
   });
 });
+
+describe("fewer probe calls", () => {
+  const scope = { tenantId: "t", userId: "u" };
+  const at = Date.parse("2026-10-27T09:00:00Z");
+  const sent = async (config: Record<string, unknown>, text: string) => {
+    const queries: string[] = [];
+    const notes = new StaticSource("drive", "Notes", [
+      { ref: "n1", title: "Q3 report", text: "Dana Lee owns the Q3 report" },
+    ]);
+    const logged: Source = {
+      ...notes,
+      id: "drive",
+      kind: "test",
+      search: (q) => (queries.push(q.text), notes.search(q)),
+    };
+    const p = new ContextPartner({
+      sources: async () => [logged],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => at,
+      config: { probes: true, probeGraceMs: 1_000, ...config },
+    });
+    await p.observe({ ...scope, sessionId: "s", at, kind: "user_message", text } as AgentEvent, { waitMs: 1_000 });
+    return queries;
+  };
+
+  test("with probeTopicAlone, a request that names a person sends no topic query; one that names no one does", async () => {
+    expect(await sent({}, "Send Dana Lee the Q3 report")).toContain("q3 report");
+    expect(await sent({ probeTopicAlone: true }, "Send Dana Lee the Q3 report")).not.toContain("q3 report");
+    expect(await sent({ probeTopicAlone: true }, "send the q3 report to finance")).toContain("q3 report");
+  });
+});
