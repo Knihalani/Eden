@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
-import { Budget } from "@eden/llm";
+import { Budget, FakeModel } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
@@ -224,5 +224,58 @@ describe("the consequence probe in the engine (consequenceProbe)", () => {
     expect(out.u2).toEqual(["chat:f1 grounded-conflict"]);
     // Each user's first lookup asks the class's first term itself: no user's memo answers for another.
     expect(log.filter((q) => q === "freeze").length).toBe(2);
+  });
+});
+
+describe("the consequence probe with a judge (judgeTied) and with questions", () => {
+  const freeze = doc("f1", "Quarter-end close", "Change freeze 4-9 Nov: no production changes while finance closes.");
+  /** A source that returns an item only when it holds every word of the query. */
+  const strict = (items: ContextItem[], log: string[]): Source => ({
+    id: "chat",
+    kind: "test",
+    description: "Team chat",
+    search: async (q) => {
+      log.push(q.text);
+      const words = q.text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+      if (words.length === 0) return [];
+      return items.filter((i) => words.every((w) => hasWord(`${i.title} ${i.text}`.toLowerCase(), w)));
+    },
+  });
+  const run = async (config: Record<string, unknown>, model: FakeModel | null, text: string) => {
+    const log: string[] = [];
+    const p = new ContextPartner({
+      sources: async () => [strict([freeze], log)],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model,
+      now: () => NOW,
+      config: { probes: true, probeGraceMs: 1_000, confidentScore: 99, fallbackMatchedTerms: 0, ...config },
+    });
+    const scope = { tenantId: "t", userId: "u1", sessionId: "s" };
+    const r = await p.observe({ ...scope, at: NOW, kind: "user_message", text } as AgentEvent, { waitMs: 1_000 });
+    const got = [...(r.injection ? [r.injection] : []), ...p.takePending(scope)].flatMap((i) =>
+      i.citations.map((c) => c.itemId),
+    );
+    return { got, log };
+  };
+
+  test("judgeTied does not silence a constraint the probe found: the judge still sees it", async () => {
+    const config = { consequenceProbe: true, groundConflict: true, judgeTied: true };
+    const model = new FakeModel(() => '{"pick": [0]}');
+    const { got } = await run(config, model, "Deploy the billing migration on Thursday 5 November.");
+    expect(model.calls.length).toBe(1);
+    expect(got).toEqual(["chat:f1"]);
+  });
+
+  test("a question that mentions a release is no release: no class vocabulary is sent", async () => {
+    for (const text of [
+      "What did Sam say about the deploy at lunch?",
+      "Have you read a great book on the migration?",
+      "Did the release go out? Let's catch up over coffee Friday",
+    ]) {
+      const { log } = await run({ consequenceProbe: true }, null, text);
+      expect(log.some((q) => /freeze|moratorium|change window/i.test(q))).toBe(false);
+    }
   });
 });
