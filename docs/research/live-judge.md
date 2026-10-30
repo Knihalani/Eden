@@ -43,7 +43,8 @@ Realistic connectors, planner on, seeds 41–43 (417 silent turns):
 | perfect | 0.466 | 0.799 | 0 | all | (oracle) |
 
 The fix closes about 65% of the gap between no judge and a perfect one, at the same cost. It is not free of false
-fires: 3 hard false fires in 417 silent turns, where the no-model path has none; D45 records that trade.
+fires: 3 hard false fires in 417 silent turns, against 1 for the 60-token judge and none for the no-model path; D45
+records that trade.
 
 Other judges, seed 41, after the fix (154 silent turns; one seed: a ranking, not a precise gap):
 
@@ -62,9 +63,11 @@ GLM 5.3 Flash stays the default: the best of these on recall and the cheapest.
 The judge costs latency: delivery p95 3.5 s on seed 41 with it, 11 ms without. Delivery is off the agent's path
 unless the caller waits (`waitMs`).
 
-The eval, live, after the fix (two runs, its turns vary run to run): recall 0.667 and 0.622, precision 0.938 and
-0.966, false-fire rate 0.017 and 0, no secret leaked. Before: recall 0.644, precision 0.935, false-fire rate 0.033.
-The eval's candidate lists are short, so the cap mattered less there.
+The eval, live, on the same 60 silent turns: before the fix recall 0.644, precision 0.935, 2 false fires; after, two
+runs, recall 0.667 and 0.644, precision 0.909 and 0.935, 1 false fire each; no secret leaked. Live runs vary (an
+independent review measured 1 to 3 false fires on the same set), so the eval shows neither a gain nor a loss: its
+candidate lists are short, and the cap mattered less there. Its one recurring false fire is "what's on the agenda
+with elena this week?", where the judge delivers the 1:1 with Elena; the label stays silent.
 
 ## Reproduce
 

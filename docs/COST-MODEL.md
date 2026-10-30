@@ -41,8 +41,9 @@ is a few tokens plus low-effort reasoning (about 20 tokens on GLM 5.3 Flash in a
 
 ## Budget defaults (`packages/llm/src/budget.ts`)
 
-20 calls and $0.02 per session; $0.25 per user per day; each call reserved at $0.0005 before its real cost is
-known. Over budget, the engine takes the no-model path; it never defers spend.
+20 calls and $0.02 per session; $0.25 per user per day; each call reserved before its real cost is known, at about its
+worst case at the cap: $0.0005 for the judge, $0.0015 for a model-composed ask answer (D45). Over budget, the engine
+takes the no-model path; it never defers spend.
 
 ## Levers, in order of leverage
 

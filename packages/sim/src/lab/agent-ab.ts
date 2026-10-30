@@ -24,7 +24,7 @@
  * re-runs the listed ones, and grades every result that has no grade yet.
  */
 import { readFileSync, writeFileSync } from "node:fs";
-import { ContextPartner, ItemCache } from "@eden/engine";
+import { ContextPartner, inert, ItemCache } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, OpenRouterModel } from "@eden/llm";
 import type { AgentEvent, Injection } from "@eden/protocol";
@@ -210,6 +210,8 @@ interface RunResult {
   /** Eden's own model calls and spend for this task (its judge, in the -judge conditions). */
   edenModelCalls: number;
   edenCostUsd: number;
+  /** Items Eden queued for this task after the agent's final answer (they reached no answer). */
+  lateItems: number;
   error?: string;
   facts?: Record<string, boolean>;
   leaked?: boolean;
@@ -229,13 +231,17 @@ async function runWorld(world: World, seed: number, tasks: Task[], condition: st
         sourceMap: new SourceMap(":memory:", { seed }),
         cache: new ItemCache(),
         budget: new Budget(),
-        model: judge ? new OpenRouterModel({ apiKey: KEY!, model: MODEL, zdr: false }) : null,
+        // The product's routing: zero-retention endpoints only (OpenRouterModel's default).
+        model: judge ? new OpenRouterModel({ apiKey: KEY!, model: MODEL }) : null,
         planner: new QueryPlanner({ seed }),
         now: () => clock,
+        // Charged to the task whose session the trace is from: a slow-path verdict can land after it ended.
         onTrace: (t) => {
-          if (!current) return;
-          current.edenModelCalls += t.modelCalls;
-          current.edenCostUsd += t.costUsd;
+          const owner = bySession.get(t.sessionId);
+          if (owner) {
+            owner.edenModelCalls += t.modelCalls;
+            owner.edenCostUsd += t.costUsd;
+          }
           spent += t.costUsd;
         },
       })
@@ -243,7 +249,16 @@ async function runWorld(world: World, seed: number, tasks: Task[], condition: st
   const tools = [...(useTools ? searchTools(sources) : []), ...(useEden && !useTools ? [ASK_TOOL] : [])];
   const today = new Date(world.now).toUTCString().replace(" GMT", " UTC");
   const out: RunResult[] = [];
-  let current: RunResult | null = null;
+  const bySession = new Map<string, RunResult>();
+  let previous: { sessionId: string; r: RunResult } | null = null;
+  // Context Eden queued for a task after its agent had answered: counted (it reached no answer), then the session ends.
+  const closePrevious = async () => {
+    if (!partner || !previous) return;
+    const who = { ...scope, sessionId: previous.sessionId };
+    previous.r.lateItems = partner.takePending(who).reduce((n, i) => n + i.citations.length, 0);
+    await partner.observe({ ...who, at: clock, kind: "session_end" });
+    previous = null;
+  };
   for (const task of tasks) {
     clock += 3_600_000; // an hour between tasks: Eden's clock, for its caches and planner
     const sessionId = task.id;
@@ -262,8 +277,10 @@ async function runWorld(world: World, seed: number, tasks: Task[], condition: st
       injectedChars: 0,
       edenModelCalls: 0,
       edenCostUsd: 0,
+      lateItems: 0,
     };
-    current = r;
+    await closePrevious();
+    bySession.set(sessionId, r);
     const t0 = performance.now();
     try {
       const prompt =
@@ -346,13 +363,16 @@ async function runWorld(world: World, seed: number, tasks: Task[], condition: st
         if (step === MAX_STEPS - 1) r.answer = msg.content ?? "";
       }
     } catch (e) {
-      if (e instanceof OverBudget) throw e;
       r.error = e instanceof Error ? e.message : String(e);
     }
     r.wallMs = performance.now() - t0;
     r.leaked = task.secrets.some((s) => r.answer.includes(s));
     out.push(r);
+    previous = { sessionId, r };
+    // Over budget: this stream stops, and what it finished is kept.
+    if (spent >= BUDGET) break;
   }
+  await closePrevious();
   return out;
 }
 
@@ -372,7 +392,9 @@ async function grade(task: Task, answer: string): Promise<Record<string, boolean
       },
       {
         role: "user",
-        content: `Request: ${task.text}\n\nRequired facts:\n${list}\n\nAnswer:\n${answer.slice(0, 6_000)}`,
+        content:
+          `<request>${inert(task.text)}</request>\n\nRequired facts:\n${list}\n\n` +
+          `<answer>${inert(answer.slice(0, 6_000))}</answer>`,
       },
     ],
     undefined,

@@ -7,10 +7,10 @@ owner asked: is Eden useful to an agent, or could the agent's builder get the sa
 
 - **Worlds.** Five simulated users (seeds 41–45), ≈1,500 items each over mail, calendar, documents, CRM and chat,
   behind the realistic connector profiles (the same search semantics, latencies and failures the simulation uses).
-- **Tasks.** The first 30 tasks per world that need facts from the sources: 93 requests ("What time is my Berlin
-  flight?", "Where are we with the Umbrella Health deal?") and 35 arriving messages ("New email from Pied Piper:
-  invoice INV-1332 is overdue", given to the agent as "tell the user what they need to know"). Plus 18 off-world
-  requests ("write a haiku") to see what each condition costs when the sources do not help.
+- **Tasks.** Up to 30 tasks per world that need facts from the sources (fewer in some worlds; 128 in all): 93 requests
+  ("What time is my Berlin flight?", "Where are we with the Umbrella Health deal?") and 35 arriving messages ("New email
+  from Pied Piper: invoice INV-1332 is overdue", given to the agent as "tell the user what they need to know"). Plus 18
+  off-world requests ("write a haiku") to see what each condition costs when the sources do not help.
 - **Agent.** `z-ai/glm-5.3-flash` (Eden's default model), temperature 0, up to 6 model calls per task, the same
   system prompt in every condition.
 - **Conditions.**
@@ -58,9 +58,9 @@ Paired differences in fact recall against tools (same tasks; bootstrap 95% inter
 
 | | All (128) | Requests (93) | Arrivals (35) |
 |---|---|---|---|
-| eden − tools | −0.070 (−0.148…+0.004) | −0.075 (−0.151…−0.005) | −0.057 (−0.257…+0.143) |
-| both − tools | −0.020 (−0.070…+0.031) | +0.005 (−0.043…+0.054) | −0.086 (−0.229…+0.057) |
-| eden-judge − tools | −0.039 (−0.121…+0.039) | −0.065 (−0.145…+0.016) | +0.029 (−0.171…+0.200) |
+| eden − tools | −0.070 (−0.145…+0.000) | −0.075 (−0.151…+0.000) | −0.057 (−0.257…+0.143) |
+| both − tools | −0.020 (−0.070…+0.035) | +0.005 (−0.048…+0.054) | −0.086 (−0.229…+0.057) |
+| eden-judge − tools | −0.039 (−0.117…+0.039) | −0.065 (−0.145…+0.016) | +0.029 (−0.171…+0.229) |
 | both-judge − tools | −0.004 (−0.059…+0.055) | +0.027 (−0.016…+0.070) | −0.086 (−0.257…+0.086) |
 
 The lexical check gives tools, eden and both the same request recall (0.694 each): part of the grader's differences
@@ -68,12 +68,12 @@ between them may be grading noise.
 
 ## What it says
 
-- **A capable model with search tools does as well as Eden, or better.** Eden in place of tools found 7 points fewer
-  of the facts requests needed (the one interval that excludes zero). Eden beside tools added nothing measurable: every
-  "both" interval spans zero.
-- **Eden is cheaper per task.** In place of tools it used 25–34% fewer model calls, 40–48% fewer input tokens, and
-  cost 18–25% less, at the same latency. That is the measurable advantage, and it comes with the recall loss above
-  (the judge narrows it on arrivals, within noise).
+- **A capable model with search tools does as well as Eden, or better.** Eden in place of tools found 7.5 points fewer
+  of the facts requests needed (its interval reaches zero only at its upper end). Eden beside tools added nothing
+  measurable: every "both" interval spans zero.
+- **Eden is cheaper per task.** In place of tools (no judge) it used 25–34% fewer model calls, 40–48% fewer input
+  tokens, and cost 18–25% less, at the same latency; with its judge, 14% (requests) and 21% (arrivals) less. That is the
+  measurable advantage, and it comes with the recall loss above (the judge narrows it on arrivals, within noise).
 - **The judge matters for arrivals.** eden-judge has the best arrival recall (0.800 against 0.771 for tools, within
   noise) at 21% less than tools; with no judge Eden is behind.
 
@@ -84,11 +84,17 @@ between them may be grading noise.
   another thread) — is not in this task set, and the arrivals here tell the agent to act on them.
 - One agent model, one simulated world family built by the same project, one run (live models vary run to run).
 - Arrivals are 35 tasks: their intervals are wide.
+- This run's harness had three faults found in review and fixed after it: Eden's judge ran without zero-retention
+  routing (`zdr: false`, not the product's default); a judge verdict landing after its task's agent answered was
+  charged to the next task and never counted (the harness now charges it by session and records `lateItems`); and
+  the grader saw the answer untagged (now `<answer>`, through `inert`). Totals are unaffected by the first two
+  except at the edges: the judge's cost lands in the same condition, and late context reached no answer either way.
 
 ## Reproduce
 
 ```bash
 bun packages/sim/src/lab/agent-ab.ts --seeds 41,42,43,44,45 --tasks 30 --offworld 5 --judge --budget 3 --out ab.json
+bun packages/sim/src/lab/agent-ab-report.ts ab.json    # every table and interval above
 ```
 
 This run cost $0.30 in all (agent, Eden's judge and grading), in two passes: the first's grading was cut short by a
