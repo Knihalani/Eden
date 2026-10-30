@@ -750,11 +750,15 @@ export class ContextPartner {
    * With no model's say, the best candidate alone, if it is strong enough: several distinct query terms and a score
    * of at least `fallbackScore` (coverage plus the entity bonus, D36). One item at most: nothing has judged it.
    */
-  private fallback(unsure: Scored[]): Scored | null {
+  private fallback(unsure: Scored[], agreed?: Set<string>): Scored | null {
     const top = unsure[0];
     const c = this.config;
-    if (!top || c.fallbackMatchedTerms <= 0 || bulkMail(top.item)) return null;
-    return top.matched >= c.fallbackMatchedTerms && top.score >= c.fallbackScore ? top : null;
+    if (!top || c.fallbackMatchedTerms <= 0) return null;
+    if (!bulkMail(top.item) && top.matched >= c.fallbackMatchedTerms && top.score >= c.fallbackScore) return top;
+    // Found both by the request's own search and by a probe for its people (`fallbackAgree`): two independent queries
+    // agreeing is evidence words alone are not. Still one item, and it must share two of the request's terms.
+    if (!agreed) return null;
+    return unsure.slice(0, 3).find((x) => agreed.has(x.item.id) && x.matched >= 2 && !bulkMail(x.item)) ?? null;
   }
 
   /**
@@ -792,7 +796,7 @@ export class ContextPartner {
     s: Session,
     cue: Cue,
     limit: number,
-  ): Promise<{ calls: number; plans?: Trace["plans"]; probed?: string[] }> {
+  ): Promise<{ calls: number; plans?: Trace["plans"]; probed?: string[]; looked?: string[] }> {
     const all = await this.deps.sources(s.scope).catch((): Source[] => []);
     if (all.length === 0 || s.closed) return { calls: 0 };
     const ranked = this.deps.sourceMap.route({
@@ -894,7 +898,9 @@ export class ContextPartner {
       let timer: ReturnType<typeof setTimeout> | undefined;
       await Promise.race([probing, new Promise<void>((done) => (timer = setTimeout(done, grace)))]);
       clearTimeout(timer);
-      return { ...result, calls: result.calls + probed.calls, probed: probed.kept.slice(0, 20) };
+      // What the request's own search returned, beside the probes' finds: an item both found is twice supported.
+      const looked = outcomes.flatMap((o) => o.items.map((i) => i.id));
+      return { ...result, calls: result.calls + probed.calls, probed: probed.kept.slice(0, 20), looked };
     }
     return result;
   }
@@ -937,6 +943,20 @@ export class ContextPartner {
         { timeoutMs: left, signal: s.abort.signal },
       );
       const items = outcomes.flatMap((o) => o.items);
+      {
+        const g = globalThis as any;
+        g.__y ??= {};
+        const kind = window ? "day" : keep ? "pp" : "topic";
+        outcomes.forEach((o, k) => {
+          const nw = o.items.filter((i) => this.deps.cache.fetchedAt(s.scope, i.id) === undefined).length;
+          const key = `${kind}${k}`;
+          const e = (g.__y[key] ??= { calls: 0, items: 0, fresh: 0, zero: 0 });
+          e.calls++;
+          e.items += o.items.length;
+          e.fresh += nw;
+          if (nw === 0) e.zero++;
+        });
+      }
       if (!s.closed) this.store(s, items);
       if (keep) for (const i of items) if (!kept.includes(i.id)) kept.push(i.id);
       // Only a complete answer is remembered: a source that failed or timed out is asked again next time.
@@ -1142,7 +1162,13 @@ export class ContextPartner {
       });
     try {
       let probedIds: string[] | undefined;
-      ({ calls: sourceCalls, plans, probed: probedIds } = await this.searchLive(s, cue, this.config.lookupSources));
+      let lookedIds: string[] | undefined;
+      ({
+        calls: sourceCalls,
+        plans,
+        probed: probedIds,
+        looked: lookedIds,
+      } = await this.searchLive(s, cue, this.config.lookupSources));
       if (s.closed) return null;
       sourceCalls += await this.refresh(s, cue);
       if (s.closed) return null;
@@ -1193,7 +1219,7 @@ export class ContextPartner {
           );
           return this.deliver(s, items, "proactive", `grounded-${grounded.how}:${cue.id}`, cue);
         }
-        const top = this.fallback(unsure);
+        const top = this.fallback(unsure, this.config.fallbackAgree ? agreed(probed, lookedIds) : undefined);
         if (top) {
           done("sources", `fallback${reasonPrefix}:${cue.id}`, [top.item]);
           return this.deliver(s, [top], "proactive", `fallback:${cue.id}`, cue);
@@ -1319,6 +1345,11 @@ export class ContextPartner {
 }
 
 const NO_TERMS = new Uint32Array(0);
+
+/** Ids both a lookup's own search and its probes found. */
+function agreed(probed: ReadonlySet<string>, looked: readonly string[] | undefined): Set<string> {
+  return new Set((looked ?? []).filter((id) => probed.has(id)));
+}
 
 /** The request's words and its people's names, lowercased: what a compacted packet keeps the parts holding. */
 function focusOf(cue: Cue): Set<string> {
