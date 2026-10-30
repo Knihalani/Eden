@@ -48,6 +48,7 @@ import {
 import { nearDuplicate, sanitizedId, sanitizeItem, type ItemCache, type Sketch } from "./cache";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
+import { assess, frameOf, namesRef, type Frame, type Verdict } from "./conflict";
 import { answerMessages, judgeMessages, parseJudge } from "./judge";
 import { namesParticipant, startDay, startMs, timeWindow, titleNames, type TimeWindow } from "./grounding";
 import {
@@ -177,6 +178,9 @@ const JUDGE_MAX_TOKENS = 512;
 /** Probes a user's cache remembers (`ItemCache.rememberProbe`): enough for the people and days of their week. */
 const PROBE_MEMO = 256;
 const ANSWER_MAX_TOKENS = 1_000;
+
+/** Each cue's frame (`conflict.ts`), read once and dropped with the cue. */
+const FRAMES = new WeakMap<Cue, Frame>();
 
 /** Requests that act on someone, where an item they take part in is context (D44). */
 const ACTING = new Set<string>(["scheduling", "communication", "task", "travel"]);
@@ -679,6 +683,8 @@ export class ContextPartner {
         // `groundAway`, an absence on other days than the request names (`awayElsewhere`).
         .filter((x) => !this.config.quietSettled || !settled(x.item))
         .filter((x) => !this.awayElsewhere(x.item, cue))
+        // Nor, with `quietClear`, one about what the request names whose decisive value does not conflict with it.
+        .filter((x) => !this.cleared(x, cue))
         .slice(0, Math.min(this.config.maxItemsPerInjection, this.config.confidentItems))
     );
   }
@@ -726,6 +732,12 @@ export class ContextPartner {
       };
       const clashes = pool.filter((x) => time.days.has(startDay(x.item) ?? "") && near(x)).sort(soonest);
       if (clashes.length > 0) return { items: clashes.slice(0, this.max()), how: "clash" };
+    }
+    // With `groundConflict`: what would change the action (or the answer), tied to what the request names or asks
+    // (`conflict.ts`): a hold over the day it acts on, a limit below its amount, a thing done already (D49).
+    if (this.config.groundConflict) {
+      const hits = pool.filter((x) => this.about(x, cue) && this.verdict(x.item, cue) === "conflict");
+      if (hits.length > 0) return { items: hits.slice(0, this.max()), how: "conflict" };
     }
     // With `groundAway`: a person the request names, away on a day it names ("ask Jamie to feed the cat next weekend"
     // and Jamie's "away on Skye 6–9 Nov"), whatever the words: the agent should know before it asks them (D48).
@@ -791,6 +803,35 @@ export class ContextPartner {
     return !daysNamed(item, cue.at).some((d) => time.days.has(d)) && !time.days.has(startDay(item) ?? "");
   }
 
+  /** The request's frame (`conflict.ts`), read once per cue. */
+  private frame(cue: Cue): Frame {
+    let f = FRAMES.get(cue);
+    if (!f) {
+      const names = cleanEntities(cue.entities).filter((e) => !e.includes("@"));
+      FRAMES.set(cue, (f = frameOf(cue.raw, cue.time?.days ?? null, cue.at, names)));
+    }
+    return f;
+  }
+
+  /** What an item says about the request's frame: conflict, clear or none (`conflict.ts` `assess`). */
+  private verdict(item: ContextItem, cue: Cue): Verdict {
+    return assess(this.frame(cue), item, cue.at);
+  }
+
+  /**
+   * Whether an item is about what the request names: a person or organisation it names, a reference it names
+   * ("INV-5842"), or two of its terms. A conflict or a clearance is only read from such an item.
+   */
+  private about(x: Scored, cue: Cue): boolean {
+    if (x.matched >= 2 || namesRef(this.frame(cue), x.item)) return true;
+    return cleanEntities(cue.entities).some((e) => !e.includes("@") && mentions(e, x.item));
+  }
+
+  /** With `quietClear`, whether an item is about the request and says its decisive value does not conflict. */
+  private cleared(x: Scored, cue: Cue): boolean {
+    return this.config.quietClear && this.about(x, cue) && this.verdict(x.item, cue) === "clear";
+  }
+
   private max(): number {
     return this.config.maxItemsPerInjection;
   }
@@ -804,6 +845,7 @@ export class ContextPartner {
     const c = this.config;
     if (!top || c.fallbackMatchedTerms <= 0 || (c.quietSettled && settled(top.item))) return null;
     if (cue && this.awayElsewhere(top.item, cue)) return null;
+    if (cue && this.cleared(top, cue)) return null;
     // `fallbackAsks`: a request that asks (a question, or an action) about something it names, with an item that names
     // it too, needs two of its terms, not three. A question about the world at large ("a good stretch for back pain")
     // names nothing of the user's, and words like "good" or "week" match anything.
@@ -820,7 +862,8 @@ export class ContextPartner {
             x.matched >= 2 &&
             x.score >= c.fallbackScore &&
             !(c.quietSettled && settled(x.item)) &&
-            !this.awayElsewhere(x.item, cue!),
+            !this.awayElsewhere(x.item, cue!) &&
+            !this.cleared(x, cue!),
         );
       if (hit) return hit;
     }
