@@ -9,6 +9,12 @@ Packages, two-speed engine, source map, OpenRouter client, HTTP/MCP server, SDK,
 In progress: `packages/sim` generates worlds and labelled sessions at scale and reports per-task and no-model /
 with-model (modelled judge) splits ([research/simulation.md](research/simulation.md)). Still to do: a live-model run, a
 train / held-out split for tuning, and text not written by templates.
+- Done (2026-10-30): live-model runs. The judge's verdict was being cut off by its own token cap on reasoning models;
+  fixed (D45, [research/live-judge.md](research/live-judge.md)), GLM 5.3 Flash kept as the default after comparing
+  four cheap judges. An agent given search tools against the same agent with Eden
+  ([research/agent-ab.md](research/agent-ab.md)): on explicit lookups, tools matched or beat Eden on recall and Eden
+  beside tools added nothing measurable; Eden in place of tools cost 18–25% less. The case Eden is for (context the
+  agent would not look up) is not measured yet: that task set is next.
 - Done (2026-10-28, [research/eval-suite.md](research/eval-suite.md)): 26 scenarios across personal-agent jobs with
   gold labels, many must-stay-silent turns and 6 adversarial scenarios (prompt injection, planted secrets, look-alike
   names); per-category metrics, a privacy check and direct asks in the report. Baseline with no model: precision
