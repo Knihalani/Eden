@@ -57,6 +57,7 @@ import {
   cleanEntities,
   daysNamed,
   isAction,
+  isImperative,
   LEADING,
   isScheduling,
   isSubject,
@@ -214,6 +215,11 @@ interface Scored {
   score: number;
   matched: number;
   sketch: Sketch | null;
+  /**
+   * With `quietNameOnly`, for a request that names someone: how many of its words the item holds beyond their names
+   * and words that only say when (`rank`). Undefined otherwise.
+   */
+  beyond?: number;
 }
 
 /** What an injection was built from, kept until it is handed out and usage tracking starts. */
@@ -655,6 +661,28 @@ export class ContextPartner {
       const t = termIds(e, vocab, false);
       return t.n === all ? Array.from(t.ids.subarray(0, t.n)) : [];
     });
+    // `quietNameOnly`: the request's words that are not part of the name of someone it names nor only say when (its
+    // topic: a company, a place or a project it names counts), each checked against the item's terms in the index, so
+    // a tie by a person's name alone can be told from one by what the request is about.
+    let topic: number[] = [];
+    const people = this.config.quietNameOnly ? this.peopleOf(s, cue) : [];
+    if (people.length > 0) {
+      const inNames = new Set<number>();
+      for (const p of people) {
+        const t = termIds(p, vocab, false);
+        for (let i = 0; i < t.n; i++) inNames.add(t.ids[i]!);
+      }
+      topic = query.filter((id) => !inNames.has(id) && !TIME_WORD.test(vocab.term(id)));
+    }
+    const one = [0];
+    const beyondOf = (doc: number) => {
+      let n = 0;
+      for (const id of topic) {
+        one[0] = id;
+        if (cache.containsAll(s.scope, doc, one, 1)) n++;
+      }
+      return n;
+    };
     const found = query.length > 0 ? cache.search(s.scope, query, query.length, 12, this.now()) : [];
     for (const h of timed) if (!found.some((f) => f.item.id === h.item.id)) found.push(h);
     // The probes' finds for the request's people, organisations and day are candidates whatever they share in words.
@@ -672,7 +700,9 @@ export class ContextPartner {
             (ids) => ids.length > 0 && cache.containsAll(s.scope, h.doc, ids, ids.length),
           );
           const score = h.coverage + (entityHit ? this.config.entityBonus : 0);
-          return { item: h.item, matched: h.matched, score, sketch: h.sketch };
+          const scored: Scored = { item: h.item, matched: h.matched, score, sketch: h.sketch };
+          if (people.length > 0) scored.beyond = beyondOf(h.doc);
+          return scored;
         })
         .sort((a, b) => b.score - a.score)
         // Of near-duplicates among the candidates, keep the best scored: one packet never says the same thing twice.
@@ -696,6 +726,8 @@ export class ContextPartner {
         .filter((x) => !this.awayElsewhere(x.item, cue))
         // Nor, with `quietClear`, one about what the request names whose decisive value does not conflict with it.
         .filter((x) => !this.cleared(x, cue))
+        // Nor, with `quietNameOnly`, one only a name ties to the request.
+        .filter((x) => this.beyondName(x, cue))
         .slice(0, Math.min(this.config.maxItemsPerInjection, this.config.confidentItems))
     );
   }
@@ -747,7 +779,9 @@ export class ContextPartner {
     // With `groundConflict`: what would change the action (or the answer), tied to what the request names or asks
     // (`conflict.ts`): a hold over the day it acts on, a limit below its amount, a thing done already (D49).
     if (this.config.groundConflict) {
-      const hits = pool.filter((x) => this.about(x, cue) && this.verdict(x.item, cue) === "conflict");
+      const hits = pool.filter(
+        (x) => this.about(x, cue) && this.beyondName(x, cue) && this.verdict(x.item, cue) === "conflict",
+      );
       if (hits.length > 0) return { items: hits.slice(0, this.max()), how: "conflict" };
     }
     // With `groundAway`: a person the request names, away on a day it names ("ask Jamie to feed the cat next weekend"
@@ -841,6 +875,29 @@ export class ContextPartner {
   private about(x: Scored, cue: Cue): boolean {
     if (x.matched >= 2 || namesRef(this.frame(cue), x.item)) return true;
     return cleanEntities(cue.entities).some((e) => !e.includes("@") && mentions(e, x.item));
+  }
+
+  /**
+   * With `quietNameOnly`, whether something besides a name ties an item to the request: a word of the request beyond
+   * its names and time words, a day it names (the item's own, or one its text names), or a reference it names. A
+   * passing mention ("Leila says hi by the way") ties every item of Leila's by her name alone, and no item by anything
+   * else: with no model to ask, nothing is pushed. True when the flag is off.
+   */
+  private beyondName(x: Scored, cue: Cue): boolean {
+    if (!this.config.quietNameOnly || x.beyond === undefined || x.beyond > 0) return true;
+    // A message arriving from someone is their act, and a request to act on someone ("Book a table for me and Sam",
+    // "Send Priya a hamper") is the user's: what bears on that person bears on the act (D44). Neither is a mention.
+    if (cue.external || isImperative(cue.raw)) return true;
+    const days = cue.time?.days;
+    if (days && days.size > 0) {
+      if (days.has(startDay(x.item) ?? "") || daysNamed(x.item, cue.at).some((d) => days.has(d))) return true;
+    }
+    return namesRef(this.frame(cue), x.item);
+  }
+
+  /** The people a request names: its names that someone in the user's items goes by (`ItemCache.isPerson`). */
+  private peopleOf(s: Session, cue: Cue): string[] {
+    return cleanEntities(cue.entities).filter((e) => !e.includes("@") && this.deps.cache.isPerson(s.scope, e));
   }
 
   /** With `quietClear`, whether an item is about the request and says its decisive value does not conflict. */
@@ -976,19 +1033,27 @@ export class ContextPartner {
             x.score >= c.fallbackScore &&
             !(c.quietSettled && settled(x.item)) &&
             !this.awayElsewhere(x.item, cue!) &&
-            !this.cleared(x, cue!),
+            !this.cleared(x, cue!) &&
+            this.beyondName(x, cue!),
         );
       if (hit) return hit;
     }
-    if (!bulkMail(top.item) && top.matched >= c.fallbackMatchedTerms && top.score >= c.fallbackScore) return top;
+    const strong = !bulkMail(top.item) && top.matched >= c.fallbackMatchedTerms && top.score >= c.fallbackScore;
+    if (strong && (!cue || this.beyondName(top, cue))) return top;
     // Found both by the request's own search and by a probe for its people (`fallbackAgree`): two independent queries
     // agreeing is evidence words alone are not. Still one item, and it must share two of the request's terms.
     if (!agreed) return null;
     return (
       unsure
         .slice(0, 3)
-        .find((x) => agreed.has(x.item.id) && x.matched >= 2 && x.score >= c.fallbackAgreeScore && !bulkMail(x.item)) ??
-      null
+        .find(
+          (x) =>
+            agreed.has(x.item.id) &&
+            x.matched >= 2 &&
+            x.score >= c.fallbackAgreeScore &&
+            !bulkMail(x.item) &&
+            (!cue || this.beyondName(x, cue)),
+        ) ?? null
     );
   }
 

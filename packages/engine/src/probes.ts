@@ -52,6 +52,23 @@ export const isAction = (raw: string) =>
       .replace(/[^a-z-]/g, ""),
   ) || isScheduling(raw);
 
+/** Words that open a request without being its verb: a courtesy, an aside, a "can you". */
+const OPENERS = new Set("please pls can could would will you hi hey ok okay so and also then".split(" "));
+
+/**
+ * A request in the imperative: its first word other than an opener (`OPENERS`) is a verb that acts ("Book a table…",
+ * "Please give Dana access…", "can you send…"). Stricter than `isAction`, which also takes a scheduling word anywhere
+ * ("a great book on negotiation"). Reads at most the first eight words.
+ */
+export function isImperative(raw: string): boolean {
+  for (const w of raw.trim().split(/\s+/, 8)) {
+    const word = w.toLowerCase().replace(/[^a-z-]/g, "");
+    if (OPENERS.has(word)) continue;
+    return LEADING.has(word);
+  }
+  return false;
+}
+
 /** A request that puts something in the calendar or commits the user's time. */
 const SCHEDULING =
   /\b(schedul\w*|set up|setup|arrange|organi[sz]e|book|invite|accept|put .* (diary|calendar)|block|hold|meet(ing)?|dinner|lunch|breakfast|coffee|drinks|call|workshop|session|1:1|appointment|visit|trip|flight|travel)\b/i;
