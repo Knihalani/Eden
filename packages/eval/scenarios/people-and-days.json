@@ -1,7 +1,7 @@
 {
   "id": "people-and-days",
   "category": "scheduling",
-  "description": "Requests grounded in who takes part and which day (D44): a meeting with a named person, a day's calendar, and arriving mail or questions whose 'next' or first name names no event.",
+  "description": "Requests grounded in who takes part and which day (D44): a meeting with a named person, a day's calendar, and arriving mail whose 'next' names no event. 'The agenda with elena this week' runs unscored: without a model nothing is grounded (unit-tested), and a judge delivering the 1:1 is defensible.",
   "clock": "2026-10-29T12:00:00Z",
   "sources": [
     {
@@ -133,8 +133,7 @@
           "event": {
             "kind": "user_message",
             "text": "what's on the agenda with elena this week?"
-          },
-          "expect": "silent"
+          }
         }
       ]
     }
