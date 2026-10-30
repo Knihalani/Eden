@@ -61,13 +61,20 @@ const OPENERS = new Set("please pls can could would will you hi hey ok okay so a
  * ("a great book on negotiation"). Reads at most the first eight words.
  */
 export function isImperative(raw: string): boolean {
-  for (const w of raw.trim().split(/\s+/, 8)) {
-    const word = w.toLowerCase().replace(/[^a-z-]/g, "");
+  const words = raw.trim().split(/\s+/, 8);
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i]!.toLowerCase().replace(/[^a-z-]/g, "");
     if (OPENERS.has(word)) continue;
+    // "Can you tell me if the migration finished?" asks to be told, not for the migration: a question.
+    const next = words[i + 1]?.toLowerCase().replace(/[^a-z]/g, "");
+    if (TELL_ME.has(word) && (next === "me" || next === "us") && /\?\s*$/.test(raw)) return false;
     return LEADING.has(word);
   }
   return false;
 }
+
+/** Verbs that, with "me" and a question mark, ask to be told something ("let me know", "show me", "tell me"). */
+const TELL_ME = new Set(["tell", "let", "show", "remind"]);
 
 /** A request that puts something in the calendar or commits the user's time. */
 const SCHEDULING =

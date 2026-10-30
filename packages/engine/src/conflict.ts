@@ -111,8 +111,8 @@ const DONE =
 /** Statements that a matter is clear: lifted, restored, unchanged, allowed, still on. */
 const CLEARS = new RegExp(
   `\\b(?:${[
-    "lifted|restored|reinstated|resolved|unchanged|no changes?|not changed|stands|holds|still (?:on|valid|good|works)",
-    "remains?|stays? (?:the same|active|on|open|valid|at|in place|unchanged)|active\\b|approved for|cleared (?:it )?for|cleared to|clear to|is clear|all clear|is fine",
+    "lifted|restored|reinstated|resolved|unchanged|no changes?|not changed",
+    "approved for|cleared (?:it )?for|cleared to|clear to|is clear|all clear|is fine",
     "are fine|fine by me|all good|works for|happy (?:from|to|with)|permits?|permitted|allows?|allowed to",
     "may be (?:shared|used)|can be (?:shared|used)|can go ahead|good to go|no (?:current )?conflict|no restrictions?",
     "no open|no need|negative|came back clear|eat(?:ing)? everything|as usual|as normal|as planned|went fine",
@@ -121,6 +121,13 @@ const CLEARS = new RegExp(
   ].join("|")})\\b`,
   "gi",
 );
+
+/**
+ * Words that say a matter stands as it was: a clearance only before any block in the sentence ("the booking stands"),
+ * a confirmation of the block after one ("the freeze remains in place until 9 Nov", "freeze 4-9 Nov still holds").
+ */
+const REAFFIRMS =
+  /\b(?:stands|holds|still (?:on|valid|good|works|active|in place)|remains?|stays? (?:the same|active|on|open|valid|at|in place|unchanged)|active)\b/gi;
 
 /** Words before a mark that negate it ("not approved", "no longer active"). */
 const NEGATION = /(?:\b(?:not|no|never|without|nothing)|n't)\s+(?:[a-z]+\s+)?$/;
@@ -305,8 +312,15 @@ export function assess(frame: Frame, item: ContextItem, now: number, extraTies?:
     if (money === "conflict") conflict(s, true, true);
     else if (money === "clear") [state, firm] = ["clear", null];
     if (money !== "none") continue;
-    const lastBlock = Math.max(-1, ...marks(s, BLOCKS, true));
-    const lastClear = Math.max(-1, ...marks(s, CLEARS, false));
+    const blocks = marks(s, BLOCKS, true);
+    const lastBlock = Math.max(-1, ...blocks);
+    // A reaffirming word after a block or move in the sentence confirms it, so it clears only before the first.
+    const firstBlock = Math.min(Number.MAX_SAFE_INTEGER, ...blocks, ...marks(s, MOVES, true));
+    const lastClear = Math.max(
+      -1,
+      ...marks(s, CLEARS, false),
+      ...marks(s, REAFFIRMS, false).filter((at) => at < firstBlock),
+    );
     // Something done already, or a standing constraint (an allergy, a confidentiality): when does not matter, and
     // a clearing word after it in the same sentence undoes it ("tested for coeliac and it's negative").
     // So is a change to what the request assumes is as usual ("same as usual" against "goes from £1650 to £1710").
@@ -432,22 +446,27 @@ function datesOf(s: string, now: number): Dates {
   let rest = s.replace(RANGE, (r, d1: string, d2: string, m: string, y: string | undefined) => {
     const from = dayOf(Number(d1), m, y, now);
     const to = dayOf(Number(d2), m, y, now);
-    if (from && to && from <= to) spans.push({ from, to });
+    const end = from && to && !y ? after(from, to) : to;
+    if (from && end && from <= end) spans.push({ from, to: end });
     return " ".repeat(r.length);
   });
   rest = rest.replace(PAIR, (r, ...g: (string | undefined)[]) => {
     const from = dayOf(Number(g[0]), g[1]!, g[2], now);
     const to = dayOf(Number(g[3]), g[4]!, g[5], now);
-    if (from && to && from <= to) spans.push({ from, to });
+    // Each end's year is the one nearest now: in July, "20 Dec - 5 Jan" is 20 Dec this year to 5 Jan next.
+    const end = from && to && !g[5] ? after(from, to) : to;
+    if (from && end && from <= end) spans.push({ from, to: end });
     return " ".repeat(r.length);
   });
   // "Must be uploaded by 17:00 on Monday 26 October": a day in a sentence that sets a deadline is that deadline.
   const deadline = DEADLINE.test(rest);
   let start: string | null = null;
-  const take = (word: string, day: string) => {
+  const take = (word: string, day: string, yearGiven = false) => {
     if (STARTS.has(word)) start = day;
     else if (ENDS.has(word)) {
-      spans.push({ from: start ?? iso(now), to: day });
+      // "From Dec 20 to Jan 5": an end before its start, with no year said, is in the year after.
+      const to = start && !yearGiven ? after(start, day) : day;
+      if (to) spans.push({ from: start ?? iso(now), to });
       start = null;
     } else if (LIMITS.has(word) || deadline) limits.push(day);
     else spans.push({ from: day, to: day });
@@ -464,9 +483,9 @@ function datesOf(s: string, now: number): Dates {
       : g.d2
         ? dayOf(Number(g.d2), g.m2!, g.y2, now)
         : lastOfMonth(g.m3!, g.y3!);
-    if (day) take(word, day);
+    if (day) take(word, day, Boolean(g.y1 ?? g.y2 ?? g.y3));
   }
-  for (const m of rest.matchAll(YEAR_LIMIT)) take(m[1]!, `${m[2]}-12-31`);
+  for (const m of rest.matchAll(YEAR_LIMIT)) take(m[1]!, `${m[2]}-12-31`, true);
   // A start with no end: from then on ("pausing headcount from 19 Oct until Q1 planning").
   if (start) spans.push({ from: start, to: "9999-12-31" });
   return { spans, limits };
@@ -580,6 +599,13 @@ function dayOf(day: number, month: string, year: string | undefined, now: number
     if (real(t) && (best === 0 || Math.abs(t - now) < Math.abs(best - now))) best = t;
   }
   return best === 0 ? null : iso(best);
+}
+
+/** An end day not before `start`: an ISO day before it moves to the year after (null if that day does not exist). */
+function after(start: string, end: string): string | null {
+  if (end >= start) return end;
+  const next = `${Number(end.slice(0, 4)) + 1}${end.slice(4)}`;
+  return iso(Date.parse(`${next}T00:00:00Z`)) === next ? next : null;
 }
 
 /** The last day of a month of a year ("October 2027" as a limit means its end). */
