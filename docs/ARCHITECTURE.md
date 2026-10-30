@@ -77,6 +77,14 @@ a few short queries, at most `probeCalls` source calls: each person it names (th
 the sources the source map says mention them, their organisation (read from what came back for them), its topic,
 and for an action on a named day that day's listing. An event near the time a scheduling request names is a clash
 delivered with no model, and up to three of the probes' finds get seats among the judge's candidates.
+Probes go out with the lookup's own search (admitted first, so they never take its per-source slot), one probe call
+per source at a time; the lookup waits at most `probeGraceMs` for them, and slower finds are cached for later turns
+(D47). Their memo is per user.
+
+**Compaction** (`compactInjection`, off by default; D47, `render.ts` `compactText`): a delivered item, and the judge's
+copy of a candidate, is cut to the parts that bear on the request, with no model and in linear time: recipients,
+greetings, pleasantries, signatures, footers and links dropped, and parts that repeat the item's title or an earlier
+item in the packet.
 
 **Ask** always searches live (more sources), ignores the not-twice ledger (the agent asked), and returns the cited
 items as they are, with no model call: the asker is a model and reads them directly (D43). `askWithModel`

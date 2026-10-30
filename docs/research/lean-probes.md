@@ -1,7 +1,8 @@
 # Lean probes and dense packets (D47, PoC)
 
-Status: 2026-10-30. Follows [probes.md](probes.md) (D46). Every change is behind a flag, off by default; the settings
-measured together are called **full** below:
+Status: 2026-10-30. Follows [probes.md](probes.md) (D46). Every change is behind a flag, off by default. Recommended
+from the live run: probes with `compactInjection` (see Conclusions). The settings measured together are called **full**
+below:
 
 ```json
 {"probes": true, "probeCalls": 4, "compactInjection": true, "fallbackAgree": true,
@@ -104,9 +105,54 @@ turns, so it moves in whole steps; the larger runs are the better estimate, but 
 the time goes: `judgeConfident` puts a judge call in front of deliveries that went out on their score, and probe finds
 that miss the 100 ms grace reach the agent a turn later.
 
-### Live agent
+### Live agent (GLM 5.3 Flash agent, Claude Haiku 5.5 grader; all four held-out suites, 57 templates, 4 worlds)
 
-(see the PR; filled from `agent-ab-report.ts` over the held-out suites.)
+228 hidden and 228 control tasks per condition (ledger `lean-live-heldout-all`; the Eden conditions ran on the code
+with the concurrency fix, the tools condition, which does not use Eden, in the run before it; $2.97 in all for 4,560
+agent runs and their grading). "+p" is D46's probes; the other suffixes add one change each (`agent-ab.ts`
+`SETTINGS`).
+
+| Condition | Hidden fact raised | False concern (control) | Cost / 1k tasks | Agent input tokens |
+|---|---|---|---|---|
+| tools | 0.377 | 0.009 | $0.370 | 3,045 |
+| eden-judge + probes | **0.614** | 0.022 | $0.407 | 1,714 |
+| eden-judge + probes + compaction | 0.596 | 0.022 | $0.392 | 1,751 |
+| eden-judge + probes + judged confident path | 0.570 | 0.031 | $0.434 | 1,865 |
+| eden-judge + probes, 4 calls | 0.557 | 0.022 | $0.427 | 1,811 |
+| eden-judge + full, 6 judge candidates | 0.588 | 0.035 | $0.402 | 1,799 |
+| eden-judge + full | 0.548 | 0.035 | $0.398 | 1,875 |
+| both-judge + probes | 0.535 | 0.022 | $0.425 | 2,656 |
+
+Paired, bootstrap 95% intervals: eden-judge + probes − tools **+0.237 (+0.167…+0.307)**, 1.63× as often, false concerns
++0.013 (−0.009…+0.035); both-judge + probes − tools +0.158 (+0.096…+0.219), 1.42×. Against eden-judge + probes:
+compaction −0.018 (−0.070…+0.039), the judged confident path −0.044 (−0.096…+0.013), four probe calls −0.057
+(−0.110…−0.004), full −0.066 (−0.114…−0.009), both −0.079 (−0.127…−0.018); no change moves false concerns. The
+agent beside its own tools does worse with Eden than Eden alone does: given search tools, it searches and answers from
+what it found more than from the packet.
+
+On the earlier held-out suite alone (12 templates) probes over the judge alone had been indistinguishable from zero
+(probes.md); with the concurrency fix and four times the templates, Eden with probes is well clear of tools.
+
+## Conclusions
+
+- **What to turn on: probes with compaction.** Live, compaction costs no measurable hidden-fact rate (−0.018, interval
+  across zero) and lowers cost per task; in the simulation it cuts bytes per needed fact 808 → 562 (−30%) at stated
+  recall 0.579 → 0.564, and model cost per turn $0.0203 → $0.0180 per 1,000 turns (the judge reads less).
+- **Fewer probe calls cost accuracy.** The simulation said four calls kept recall; live they lose 0.057 of hidden
+  facts (interval excludes zero). Halving probe calls is not had for free; `probeCalls` stays 8.
+- **The judged confident path** buys simulation precision (0.82 → 0.98 with the perfect judge) for a live hidden-fact
+  rate that is lower but not clearly so (−0.044), and about 30% more judge calls. Not recommended until a live run
+  shows it does not lose facts.
+- **The simulation's perfect judge over-rewards the sim's own tuning.** Every setting tuned there (calls, candidates,
+  confident path) lost live; only the one that does not change what is found (compaction) held. Settings that change
+  what reaches the judge need a live run before they are believed.
+
+Against the targets set before this work: (1) Eden with its judge and probes 1.63× tools, false concerns +1.3 points,
+Eden alone ahead of tools: met for Eden in place of tools; Eden beside tools 1.42×, not met. (2) Probes' calls −40%
+with recall kept in the simulation, but that setting loses live: not met; delivery latency on the larger real-time
+runs +19% p50 / +7% p95 (met there, not on the small tier). (3) Bytes per needed fact −40% (full) or −30% (probes and
+compaction, the setting recommended); perfect-judge precision 0.965 (full, met), 0.814 (recommended, not met);
+no-model recall 0.318 (not met); model cost per turn not up (met).
 
 ## Limits
 

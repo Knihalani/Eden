@@ -37,7 +37,17 @@ sources instant); per template `delivered.<name>` and `decoy.<name>`.
 
 Sim (summed over seeds): `recall`, `precision`, `hardFalseFires` of `silentTurns`, `softFireRate`, `modelCallsPerTurn`,
 `sourceCallsPerLookup`, `observeP50Ms`/`observeP95Ms`, `deliveryP95Ms`, `injectionBytesP50`, `redundantShare`,
-`noiseShare`, `askRecallAt5`, and per delivery reason `delivered.<reason>` / `precision.<reason>`.
+`noiseShare`, `askRecallAt5`, and per delivery reason `delivered.<reason>` / `precision.<reason>`. `recallStated` (a fact counts
+only when three in four of its words are in the packet's line for the item) and `injectionBytesTotal`,
+`bytesPerMustFact`, `bytesPerStatedFact` (injected bytes per needed fact: the packet's density).
+
+Latency (`--latency`): the realistic simulation in real time (3 users × 6 sessions, perfect judge): `deliveryP50Ms`,
+`deliveryP95Ms`, `observeP50Ms`, `observeP95Ms`, `recall`, `precision`, `sourceCallsPerLookup`. Small (about 29 facts)
+and stepped by the agent's turns: compare with larger runs before believing a difference.
+
+Suites (`suites.ts`): `hidden` (dev), `heldout`, `heldout2`, `heldout3`, `heldout4` (blind); `all` and `heldout-all`
+for several. `bench.ts --suites`, `hidden-funnel.ts --suite`, `agent-ab.ts --suite`; the report takes several result
+files and prints a per-suite table.
 
 Eval: `recall`, `precision`, `falseFireRate`, latency, `secretsLeaked`, `notInert`, `askRecall`, per category.
 
