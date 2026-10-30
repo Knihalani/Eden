@@ -72,6 +72,12 @@ holds three or more query terms and scores at least 0.8 (coverage plus the entit
 directly if the caller passed `waitMs` and it landed in time; otherwise it is queued and delivered with the next event
 (or via `/v1/pending`).
 
+**Probes** (PoC behind `config.probes`, off by default; D46, `probes.ts`): besides the request itself, a lookup sends
+a few short queries, at most `probeCalls` source calls: each person it names (the sentence's leading verb removed) to
+the sources the source map says mention them, their organisation (read from what came back for them), its topic,
+and for an action on a named day that day's listing. An event near the time a scheduling request names is a clash
+delivered with no model, and up to three of the probes' finds get seats among the judge's candidates.
+
 **Ask** always searches live (more sources), ignores the not-twice ledger (the agent asked), and returns the cited
 items as they are, with no model call: the asker is a model and reads them directly (D43). `askWithModel`
 (`EDEN_ASK_MODEL=1`) has one model call compose a short cited answer instead, when a model and budget are available.

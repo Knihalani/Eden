@@ -71,7 +71,7 @@ export interface EngineConfig {
   /**
    * Probes (docs/research/probes.md, PoC, off by default): send a request's people, their organisations, its topic
    * and, for an action on a named day, that day's listing, as short queries besides the request itself; ground a
-   * clash with the requested time and a message changing the meeting with no model.
+   * clash with the requested time with no model; give the probes' finds seats among the judge's candidates.
    */
   probes: boolean;
   /** Source calls the probes may make per lookup, on top of the lookup's own. */
@@ -81,7 +81,7 @@ export interface EngineConfig {
    * someone, and arriving messages): where unasked context changes the outcome, at fewer source calls.
    */
   probeWhen: "always" | "actions";
-  /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash", "change". */
+  /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
   /** Cost reserved per judge call before the real cost is known: about its worst case at the cap (D45). */
   estimatedCallUsd: number;

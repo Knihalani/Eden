@@ -1,0 +1,112 @@
+# Probes: the checks a request implies (D46, PoC)
+
+Status: 2026-10-30. A proof of concept behind `config.probes` (off by default). Every number here is in the benchmark
+ledger ([bench/](../../bench/README.md)) with its commit, config and per-task rows.
+
+## The problem
+
+On tasks where the right answer depends on something the request does not mention ([agent-hidden.md](agent-hidden.md):
+a calendar clash, an invoice already paid, a friend's allergy), an agent with plain search tools raised the hidden
+fact more often than the same agent with Eden. A trace of each lost task through the engine (no model, no agent)
+showed where:
+
+| Where it was lost | Example |
+|---|---|
+| The whole request sent as one query; all-words connectors return nothing | "set dinner jamie fox thursday 29 october 19 00 send invite" → 0 |
+| A sentence's leading verb glued to the name | entities "Send Rose Kimura", "Offer Globex" |
+| Names starting with a non-ASCII capital never extracted | "Łukasz" |
+| A weekday written with its date read as two days | "Wednesday 4 November" → 28 Oct and 4 Nov; the day's listing paged out |
+| The day an action names never looked at | no listing of "Thursday 29 October" before setting up dinner then |
+| Probes reaching only the request's routed sources | a person's mail never asked |
+| Fetched but never shown to the judge | 44 of 72 held-out planted items cached, 21 shown |
+
+## What probes do
+
+Besides the request itself, a lookup sends a few short queries (`probes.ts`, at most `probeCalls` = 8 source calls):
+
+- **People**: each person the request names, cleaned of the verb that starts the sentence, to the three sources the
+  source map says mention them most.
+- **Organisations**: a person's organisation, read from what came back for them (an address at
+  umbrellahealth.com and the name "Umbrella Health" in the same results); what is said of the organisation applies.
+- **Day**: for an action on a named day (scheduling, accepting, booking), that day listed whole from sources that
+  list by time.
+- **Topic**: the request's content words that are neither people, days nor the action (two at most).
+
+Delivery adds a **clash** ground (an event within ±3 h of the time a scheduling request names, on its day) and
+**judge seats**: up to three of the probes' finds join the judge's candidates beyond the best scored, since they
+share few of the request's words by design. The judge is told to pick what would change the action (a clash, a
+constraint, a rule, something already done), not what merely mentions the same person. A per-session memo skips
+re-probing what the session probed already. `probeWhen: "actions"` probes only requests to act. No probe calls a
+model.
+
+Two general fixes ship regardless of the flag: any capital letter starts a name, and a weekday written with its
+date is that date.
+
+## The benchmark it was measured on
+
+The earlier benchmark only rewarded finding things. It now has:
+
+- **A blind held-out suite**: twelve templates written by a separate agent that never read the engine, the docs or
+  the dev templates (`hidden-heldout.ts`). The design was frozen before it was run; its template names were seen
+  (not its code) before the design, and its aggregate funnel was used once to find the judge-seat bottleneck
+  (nothing was tuned on it).
+- **Decoy controls**: every template has a near-miss twin (an event the next week, a different invoice paid, an
+  out-of-office that ended) graded for a false concern, so a system that cries wolf is penalised.
+- **Fair worlds**: planted items in the world's own formats (mail headers, event blocks), and the requested slot
+  cleared of other events (`clearSlot`). Without the latter, decoy tasks counted real clashes in the generated
+  calendar as false alarms (the first live run, recorded as `probes-v1-unclearedslots`).
+- **Three tiers**: the free funnel (engine only), the free simulation and eval, the live agent.
+
+## Results
+
+### Live agent (GLM 5.3 Flash agent, Claude Haiku 5.5 grader; 6 worlds; hidden and control tasks)
+
+Held-out suite, never tuned on (72 hidden, 72 control tasks):
+
+| Condition | Hidden fact raised | False concern (control) | Cost / 1k tasks | Agent input tokens | p50 |
+|---|---|---|---|---|---|
+| tools | 0.278 | 0.028 | $0.378 | 3,397 | 8.6 s |
+| eden-judge (today) | 0.403 | 0.056 | $0.349 | 1,994 | 9.2 s |
+| eden-judge + probes | 0.444 | 0.083 | $0.330 | 1,955 | 10.3 s |
+| both-judge + probes | 0.458 | 0.042 | $0.373 | 2,792 | 9.4 s |
+
+Paired against tools on the same tasks (bootstrap 95% interval): eden-judge + probes +0.167 (+0.042…+0.292), false
+concerns +0.056 (0.000…+0.125); both-judge + probes +0.181 (+0.056…+0.292), false concerns +0.014
+(−0.042…+0.083). The false concerns are mostly one decoy ("September retainer paid, October invoice to follow" read
+as paid), which the judge without probes misreads as often (4 of 6).
+
+Dev suite (60 hidden, 60 control): eden-judge + probes − tools +0.250 (+0.133…+0.367), false concerns −0.017
+(−0.083…+0.050).
+
+### Free tiers (engine only and simulation)
+
+Funnel and simulation, probes on against off, and the per-part ablation: see the tables below (filled from the
+ledger's `probes-final`, `probes-final-actions`, `baseline-final` and `ablate-*` runs).
+
+ABLATION_AND_SIM_TABLES
+
+## Costs
+
+- Source calls per lookup roughly double (simulation 5.6 → about 11.7; `probeWhen: "actions"` about 9).
+- No probe calls a model. With the judge, model calls per turn rise slightly (0.19 → 0.22, more candidates
+  qualify); judge input grows by up to three candidates.
+- Engine time per task in the funnel 3–4 ms → 6–8 ms (sources instant).
+- For the agent, Eden in place of tools is cheaper than tools: fewer agent model calls and 40% fewer input tokens.
+
+## Limits
+
+- Ten dev and twelve held-out templates, six worlds, one agent model, one run each: per-template counts are rough.
+- Some hidden facts no condition finds: a synonym ("15% off" against "discounts above 10%"), a moved launch date, a
+  passport away. Those need a judge that reads more, or semantics, not more queries.
+- The extra source calls are real connector calls: on rate-limited connectors they compete with the lookup's own.
+
+## Reproduce
+
+```bash
+bun packages/sim/src/lab/bench.ts --label probes --config '{"probes":true}'     # free tiers, recorded
+bun packages/sim/src/lab/hidden-funnel.ts --suite heldout --config '{"probes":true}'
+bun packages/sim/src/lab/agent-ab.ts --suite heldout --variants hidden,control --seeds 41,42,43,44,45,46 \
+  --conditions tools,eden-judge,eden-judge+p,both-judge+p --out h.json
+bun packages/sim/src/lab/agent-ab-report.ts h.json --record mylabel
+bun packages/sim/src/lab/bench-compare.ts --latest baseline-final probes-final
+```
