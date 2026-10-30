@@ -18,10 +18,13 @@
  *
  *   OPENROUTER_API_KEY=… bun packages/sim/src/lab/agent-ab.ts [--seeds 41,42,43] [--tasks 30] [--offworld 5]
  *     [--conditions none,tools,eden,both] [--judge] [--model z-ai/glm-5.3-flash] [--grader anthropic/claude-haiku-5.5]
- *     [--budget 3] [--out results.json] [--merge earlier.json] [--suite lookups|hidden]
+ *     [--budget 3] [--out results.json] [--merge earlier.json] [--suite lookups|hidden|heldout-all|all|a,b]
+ *     [--dry]
  *
  * --suite hidden runs the hidden-context tasks instead (hidden-context.ts, docs/research/agent-hidden.md): requests
- * whose answer depends on something they do not ask about, planted in each world.
+ * whose answer depends on something they do not ask about, planted in each world. Any suite of `suites.ts` can be
+ * named, or several (a comma list, `heldout-all`, `all`): each suite is planted in its own copy of each world, and
+ * every task records its suite. --dry builds the tasks and prints their counts, with no model call and no key.
  *
  * --merge keeps an earlier run's results for the conditions not listed in --conditions (same seeds and task counts),
  * re-runs the listed ones, and grades every result that has no grade yet.
@@ -35,16 +38,17 @@ import { QueryPlanner } from "@eden/sources";
 import { buildSessions } from "../sessions";
 import { REALISTIC, simSources, type SimSource } from "../sources";
 import { buildWorld, type World } from "../world";
-import { clearSlot, dress, plantHidden } from "./hidden-context";
-import { plantHeldout } from "./hidden-heldout";
+import { clearSlot, dress } from "./hidden-context";
+import { parseSuites, SUITES } from "./suites";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
   const i = args.indexOf(`--${name}`);
   return i >= 0 && args[i + 1] ? args[i + 1]! : fallback;
 };
+const DRY = args.includes("--dry");
 const KEY = process.env.OPENROUTER_API_KEY;
-if (!KEY) throw new Error("needs OPENROUTER_API_KEY");
+if (!KEY && !DRY) throw new Error("needs OPENROUTER_API_KEY");
 const SEEDS = opt("seeds", "41,42,43").split(",").map(Number);
 const MAX_TASKS = Number(opt("tasks", "30"));
 const OFFWORLD = Number(opt("offworld", "5"));
@@ -58,6 +62,9 @@ const CONDITIONS = opt(
 ).split(",");
 const OUT = opt("out", "agent-ab.json");
 const SUITE = opt("suite", "lookups");
+// `lookups` is the sessions' fact-needing tasks; anything else names hidden-context suites (suites.ts).
+const LOOKUPS = SUITE === "lookups";
+const SUITE_LIST = LOOKUPS ? ["lookups"] : parseSuites(SUITE);
 const MAX_STEPS = 6;
 const TOOL_ITEMS = 5;
 const TOOL_CHARS = 600;
@@ -122,6 +129,8 @@ async function chat(
 
 interface Task {
   id: string;
+  /** `lookups`, or the hidden-context suite the task was planted by. */
+  suite: string;
   kind: "request" | "arrival" | "offworld" | "hidden" | "control";
   type: string;
   event: AgentEvent["kind"];
@@ -146,6 +155,7 @@ function tasksOf(world: World, seed: number): Task[] {
         if (out.filter((x) => x.kind !== "offworld").length >= MAX_TASKS) continue;
         out.push({
           id: `w${seed}:${s.id}:${ti}`,
+          suite: "lookups",
           kind: text.kind === "external" ? "arrival" : "request",
           type: t.type,
           event: text.kind,
@@ -157,6 +167,7 @@ function tasksOf(world: World, seed: number): Task[] {
         offworld++;
         out.push({
           id: `w${seed}:${s.id}:${ti}`,
+          suite: "lookups",
           kind: "offworld",
           type: t.type,
           event: "user_message",
@@ -312,7 +323,7 @@ async function runWorld(world: World, seed: number, tasks: Task[], condition: st
               : "") +
             "Be concise, and state the specific details you rely on (names, times, places, amounts, references)." +
             // The hidden-context requests are actions: the agent has no tool to act, so it says what it would do.
-            (SUITE !== "lookups"
+            (!LOOKUPS
               ? " You cannot send, book, pay or order anything yourself: say what you would do, or draft it."
               : ""),
         },
@@ -435,34 +446,51 @@ async function grade(task: Task, answer: string): Promise<Record<string, boolean
 
 // Hidden-context suites run each world twice: with the hidden item planted, and with its decoy (`--variants`).
 const VARIANTS = opt("variants", "hidden").split(",") as ("hidden" | "control")[];
+// Several suites: each is planted in its own copy of the world, so their items never share a slot.
 const worlds = SEEDS.flatMap((seed) =>
-  (SUITE === "hidden" || SUITE === "heldout" ? VARIANTS : ["hidden" as const]).map((variant) => {
-    const world = buildWorld({ seed: seed * 1_000 });
-    if (SUITE !== "hidden" && SUITE !== "heldout") return { seed, world, tasks: tasksOf(world, seed) };
-    const secrets = world.items.filter((i) => i.secret).map((i) => i.secret!);
-    const before = world.items.length;
-    const planted = SUITE === "heldout" ? plantHeldout(world, seed, variant) : plantHidden(world, seed, variant);
-    const plantedItems = world.items.slice(before);
-    for (const it of plantedItems) dress(world, it);
-    // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
-    const keep = new Set(plantedItems.map((it) => it.id));
-    for (const h of planted) clearSlot(world, h.text, keep);
-    const tasks: Task[] = planted.map((h) => ({
-      id: h.id,
-      kind: variant === "control" ? "control" : "hidden",
-      type: h.template,
-      event: "user_message",
-      text: h.text,
-      must: [{ id: h.template, detail: h.detail }],
-      secrets,
-    }));
-    return { seed, world, tasks };
-  }),
+  SUITE_LIST.flatMap((suite) =>
+    (LOOKUPS ? ["hidden" as const] : VARIANTS).map((variant) => worldOf(seed, suite, variant)),
+  ),
 );
+/** One world for one seed, suite and variant, with its tasks. */
+function worldOf(
+  seed: number,
+  suite: string,
+  variant: "hidden" | "control",
+): { seed: number; world: World; tasks: Task[] } {
+  const world = buildWorld({ seed: seed * 1_000 });
+  if (LOOKUPS) return { seed, world, tasks: tasksOf(world, seed) };
+  const secrets = world.items.filter((i) => i.secret).map((i) => i.secret!);
+  const before = world.items.length;
+  const planted = SUITES[suite]!(world, seed, variant);
+  const plantedItems = world.items.slice(before);
+  for (const it of plantedItems) dress(world, it);
+  // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
+  const keep = new Set(plantedItems.map((it) => it.id));
+  for (const h of planted) clearSlot(world, h.text, keep);
+  const tasks: Task[] = planted.map((h) => ({
+    id: h.id,
+    suite,
+    kind: variant === "control" ? "control" : "hidden",
+    type: h.template,
+    event: "user_message",
+    text: h.text,
+    must: [{ id: h.template, detail: h.detail }],
+    secrets,
+  }));
+  return { seed, world, tasks };
+}
 console.error(
   `${worlds.reduce((n, w) => n + w.tasks.length, 0)} tasks × ${CONDITIONS.length} conditions, model ${MODEL}, ` +
-    `grader ${GRADER}, budget $${BUDGET}`,
+    `grader ${GRADER}, budget $${BUDGET}, suites ${SUITE_LIST.join(",")}`,
 );
+if (DRY) {
+  const count = new Map<string, number>();
+  for (const t of worlds.flatMap((w) => w.tasks))
+    count.set(`${t.suite}/${t.kind}`, (count.get(`${t.suite}/${t.kind}`) ?? 0) + 1);
+  for (const [k, n] of count) console.error(`  ${k}: ${n}`);
+  process.exit(0);
+}
 const MERGE = opt("merge", "");
 const earlier = MERGE
   ? (JSON.parse(readFileSync(MERGE, "utf8")) as { results: RunResult[] }).results.filter(
@@ -493,5 +521,8 @@ await Promise.all(
   }),
 );
 const tasks = worlds.flatMap((w) => w.tasks);
-writeFileSync(OUT, JSON.stringify({ model: MODEL, grader: GRADER, seeds: SEEDS, spent, tasks, results }, null, 2));
+writeFileSync(
+  OUT,
+  JSON.stringify({ model: MODEL, grader: GRADER, seeds: SEEDS, suites: SUITE_LIST, spent, tasks, results }, null, 2),
+);
 console.error(`spent $${spent.toFixed(4)}; ${results.length} runs, ${ungraded} left ungraded → ${OUT}`);
