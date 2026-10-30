@@ -147,6 +147,14 @@ interface Cue {
   offset: number;
 }
 
+/**
+ * Output caps for the two model calls. Reasoning models (the default GLM among them) spend part of the cap thinking
+ * before they answer; at 60 tokens the judge's verdict was cut off most of the time (D45). The caps bound spend, which
+ * is billed on tokens used: a verdict is a few tokens plus low-effort reasoning.
+ */
+const JUDGE_MAX_TOKENS = 512;
+const ANSWER_MAX_TOKENS = 1_000;
+
 /** Requests that act on someone, where an item they take part in is context (D44). */
 const ACTING = new Set<string>(["scheduling", "communication", "task", "travel"]);
 /**
@@ -350,12 +358,14 @@ export class ContextPartner {
       try {
         const res = await this.deps.model.chat({
           messages: answerMessages(question, s.window.join("\n"), items),
-          maxTokens: 300,
+          maxTokens: ANSWER_MAX_TOKENS,
+          reasoning: "low",
           cacheKey: userCacheKey(s.scope),
           signal: s.abort.signal,
         });
         this.settle(reservation, res.costUsd);
-        if (res.text.trim()) answer = renderAnswer(res.text);
+        // A cut-off answer is not shown: the cited items stand on their own (D43, D45).
+        if (res.text.trim() && !res.truncated) answer = renderAnswer(res.text);
         usedModel = true;
         costUsd = res.costUsd;
       } catch {
@@ -1032,7 +1042,8 @@ export class ContextPartner {
         res = await this.deps.model.chat({
           messages: judgeMessages(s.window.join("\n"), candidates),
           cacheKey: userCacheKey(s.scope),
-          maxTokens: 60,
+          maxTokens: JUDGE_MAX_TOKENS,
+          reasoning: "low",
           json: true,
           signal: s.abort.signal,
         });
@@ -1050,6 +1061,9 @@ export class ContextPartner {
       const picked = parseJudge(res.text, candidates.length)
         .slice(0, this.config.maxItemsPerInjection)
         .map((i) => unsure[i]!);
+      // A verdict cut off at the token cap is no verdict: the no-model path decides, as for a failing call (D41,
+      // D45), rather than reading the cut-off text as "none".
+      if (picked.length === 0 && res.truncated) return noModel("model truncated", ":model-truncated");
       if (picked.length === 0) {
         done("silent", "model: none");
         return null;
