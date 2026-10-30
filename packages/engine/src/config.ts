@@ -106,6 +106,14 @@ export interface EngineConfig {
    * rather than delivered on their score alone. Costs a judge call on lookups that had only confident items.
    */
   judgeConfident: boolean;
+  /** With a judge configured, sure items are judged when more than one scored as sure (a contested set). */
+  judgeContested: boolean;
+  /** The judge's input: the recent conversation, at most this many characters (its newest end). */
+  judgeWindowChars: number;
+  /** With `compactInjection`, each candidate's compacted text in the judge's input, at most this many bytes. */
+  judgeItemBytes: number;
+  /** At most this many items delivered on their score alone, with no model's say (the confident path). */
+  confidentItems: number;
   /**
    * With no model's say (the confident path and the fallback), an item that only says things stand as expected ("as
    * usual", "resolved", "no change": `probes.ts` `settled`) is not delivered: it changes nothing (D48).
@@ -173,6 +181,10 @@ export const DEFAULT_CONFIG: EngineConfig = {
   probeTopicSources: 8,
   probeOff: [],
   judgeConfident: false,
+  judgeContested: false,
+  judgeWindowChars: 4_000,
+  judgeItemBytes: 280,
+  confidentItems: 3,
   quietSettled: false,
   groundAway: false,
   judgeAgreed: true,
