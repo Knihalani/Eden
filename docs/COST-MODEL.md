@@ -53,7 +53,10 @@ takes the no-model path; it never defers spend.
    unchanged. Grounding the no-model path in people and days (D44) adds no model call: with the perfect judge, model
    calls per turn are identical to main on every mix. A rule that skipped the judge for weak candidate sets was
    measured and rejected
-   ([research/model-calls.md](research/model-calls.md)).
+   ([research/model-calls.md](research/model-calls.md)). `judgeTied` (D54, off by default) skips the judge only when
+   no candidate is tied to the request (a probe's find, a day it names, two of its words, or one word rare in the
+   user's items): simulation, perfect judge, realistic seeds 41–44, on G (D54): model calls per turn 0.253 → 0.212,
+   $0.02025 → $0.0170 per 1,000 turns at recall 0.647 → 0.643 ([research/judge-tied.md](research/judge-tied.md)).
 2. Smaller inputs: shorter windows, candidate snippets, prompt-cache-friendly prompt layout (stable system prefix).
 3. Cheaper model: a fine-tuned small judge (M6).
 
