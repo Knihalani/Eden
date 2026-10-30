@@ -49,6 +49,7 @@ import { nearDuplicate, sanitizedId, sanitizeItem, type ItemCache, type Sketch }
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { assess, frameOf, namesRef, type Frame, type Verdict } from "./conflict";
+import { ProbeEconomy, type ProbeKind } from "./economy";
 import { answerMessages, judgeMessages, parseJudge } from "./judge";
 import { namesParticipant, startDay, startMs, timeWindow, titleNames, type TimeWindow } from "./grounding";
 import {
@@ -239,6 +240,8 @@ export class ContextPartner {
   private readonly recorded = new Map<string, Map<string, Map<string, Recorded>>>();
   private readonly now: () => number;
   private readonly fanout: SourceFanout;
+  /** What each user's probes bring back (`probeFresh`, `probeYield`). */
+  private readonly economy = new ProbeEconomy();
 
   constructor(private readonly deps: PartnerDeps) {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
@@ -469,6 +472,7 @@ export class ContextPartner {
     this.deps.sourceMap.forget(scope, sourceId);
     this.fanout.forget(scope, sourceId);
     this.deps.planner?.forget(scope, sourceId);
+    this.economy.forget(scope, sourceId);
   }
 
   get sessionCount(): number {
@@ -1085,6 +1089,8 @@ export class ContextPartner {
       clearTimeout(timer);
       // What the request's own search returned, beside the probes' finds: an item both found is twice supported.
       const looked = outcomes.flatMap((o) => o.items.map((i) => i.id));
+      // What the lookup's own search found too is not a probe's contribution (`probeYield`).
+      if (this.config.probeYield) this.economy.claimed(s.scope, looked);
       return { ...result, calls: result.calls + probed.calls, probed: probed.kept.slice(0, 20), looked };
     }
     return result;
@@ -1112,7 +1118,13 @@ export class ContextPartner {
     const budget = this.config.probeCalls;
     const deadline = performance.now() + this.config.sourceTimeoutMs;
     const kept = out.kept;
-    const send = async (sources: Source[], text: string, window?: SearchQuery["window"], keep = true) => {
+    const send = async (
+      kind: ProbeKind,
+      sources: Source[],
+      text: string,
+      window?: SearchQuery["window"],
+      keep = true,
+    ) => {
       const key = `${text}|${window ? `${window.start}/${window.end}` : ""}|${sources.map((x) => x.id).join(",")}`;
       // Probed recently by this user (any of their sessions): its finds at no call, while every one is still cached.
       const hits = this.deps.cache.probeHits(s.scope, key, this.config.probeMemoMs, this.now());
@@ -1120,8 +1132,35 @@ export class ContextPartner {
         if (keep) for (const h of hits) if (!kept.includes(h.item.id)) kept.push(h.item.id);
         return hits.map((h) => h.item);
       }
-      const to = sources.slice(0, Math.max(0, budget - out.calls));
-      if (to.length === 0 || s.closed || deadline - performance.now() < 50) return [] as ContextItem[];
+      // The probe economy (`economy.ts`): a source whose answer to this query has likely not changed, or where this
+      // kind of probe has not been yielding, is not called; its last answer, while still cached, stands in.
+      const asked = `${text}|${window ? `${window.start}/${window.end}` : ""}`;
+      const reused: ContextItem[] = [];
+      let live = sources;
+      if (this.config.probeFresh || this.config.probeYield) {
+        live = [];
+        const now = this.now();
+        for (const source of sources) {
+          const unchanged =
+            this.config.probeFresh &&
+            this.economy.changeChance(s.scope, source.id, asked, now) < this.config.probeFreshFloor;
+          const idle =
+            !unchanged &&
+            this.config.probeYield &&
+            !this.economy.worth(s.scope, kind, source.id, this.config.probeYieldFloor);
+          const last = unchanged || idle ? this.economy.lastIds(s.scope, source.id, asked) : null;
+          const held = last ? this.deps.cache.hits(s.scope, last, now) : [];
+          // Unchanged but no longer cached: asked again, since nothing stands in for it.
+          if (!idle && (!unchanged || !last || held.length < last.length)) {
+            live.push(source);
+            continue;
+          }
+          for (const h of held) reused.push(h.item);
+        }
+        if (keep) for (const i of reused) if (!kept.includes(i.id)) kept.push(i.id);
+      }
+      const to = live.slice(0, Math.max(0, budget - out.calls));
+      if (to.length === 0 || s.closed || deadline - performance.now() < 50) return reused;
       out.calls += to.length;
       // A day's listing is the whole day (a busy one has more than a search's page); a query, its first page.
       const query = {
@@ -1175,19 +1214,31 @@ export class ContextPartner {
       const items = outcomes.flatMap((o) => o.items.slice(0, window ? 20 : 5));
       // A call the fan-out did not make (busy, limited, open, answered from its cache, past the deadline) is no call.
       out.calls -= to.length - outcomes.filter((o) => !SKIPPED.has(o.status)).length;
+      if (!s.closed && (this.config.probeFresh || this.config.probeYield)) {
+        const now = this.now();
+        for (const o of outcomes) {
+          if (o.status !== "ok") continue;
+          const page = o.items.slice(0, window ? 20 : 5);
+          this.economy.answered(s.scope, o.sourceId, asked, page, now);
+          if (!this.config.probeYield) continue;
+          // New to the user's cache (read before it is stored): what this call alone brought.
+          const fresh = page.filter((i) => this.deps.cache.fetchedAt(s.scope, i.id) === undefined).map((i) => i.id);
+          this.economy.called(s.scope, kind, o.sourceId, fresh);
+        }
+      }
       if (!s.closed) this.store(s, items);
       if (keep) for (const i of items) if (!kept.includes(i.id)) kept.push(i.id);
       // Only a complete answer is remembered: a source that failed or timed out is asked again next time.
-      if (outcomes.length === sources.length && outcomes.every((o) => o.status === "ok")) {
+      if (outcomes.length === to.length && live.length === to.length && outcomes.every((o) => o.status === "ok")) {
         this.deps.cache.rememberProbe(
           s.scope,
           key,
-          items.map((i) => i.id),
+          [...items, ...reused].map((i) => i.id),
           PROBE_MEMO,
           this.now(),
         );
       }
-      return items;
+      return [...items, ...reused];
     };
     const c = this.config;
     const off = new Set(c.probeOff);
@@ -1226,22 +1277,27 @@ export class ContextPartner {
     // The organisations of the request's people, from what came back for them; what is said of someone's
     // organisation (a hold, a policy) applies to them.
     const byPeople = (async () => {
-      // The request's first person to `probePeopleSources` sources, a second to `probeSecondSources`.
+      // The request's first person to `probePeopleSources` sources, a second to `probeSecondSources`. With
+      // `probeYield`, the first goes to every source, best first, and the user's own yields drop the sources where
+      // their person probes find nothing: which sources hold a user's people is learned, not guessed at three.
+      const wide = c.probeYield ? all.length : c.probePeopleSources;
       const first = await Promise.all(
-        people.map((q, i) => send(routeFor(q, i === 0 ? c.probePeopleSources : c.probeSecondSources), q)),
+        people.map((q, i) =>
+          send(i === 0 ? "person" : "second", routeFor(q, i === 0 ? wide : c.probeSecondSources), q),
+        ),
       );
       for (const org of off.has("org") ? [] : orgsOf(people, first.flat()).slice(0, 1)) {
-        if (!cue.entities.includes(org)) await send(routeFor(org), org);
+        if (!cue.entities.includes(org)) await send("org", routeFor(org), org);
       }
     })();
     // `probeRoles`: someone named by their relation ("my manager"), to the lookup's best two sources.
     const roles = c.probeRoles && !off.has("roles") ? rolesOf(cue.raw) : [];
     await Promise.all([
-      ...windows.map((w) => send(listers, "", w)),
+      ...windows.map((w) => send("day", listers, "", w)),
       byPeople,
-      ...roles.map((r) => send(found.slice(0, 2), r)),
+      ...roles.map((r) => send("role", found.slice(0, 2), r)),
       // The topic's finds share the request's words, and rank on them; the others get seats of their own.
-      ...(topic ? [send(found.slice(0, this.config.probeTopicSources), topic, undefined, false)] : []),
+      ...(topic ? [send("topic", found.slice(0, this.config.probeTopicSources), topic, undefined, false)] : []),
     ]);
   }
 
@@ -1450,6 +1506,14 @@ export class ContextPartner {
         .slice(0, this.config.registerSeats);
       if (ruleSeats.length > 0) seats.splice(Math.max(0, 3 - ruleSeats.length));
       const unsure = [...top, ...seats, ...ruleSeats];
+      // A probe that brought in what is seated for the judge did its part, whatever the judge then makes of it: the
+      // judge rules on relevance, the probe only on finding (`probeYield`).
+      if (this.config.probeYield && !s.closed) {
+        this.economy.reached(
+          s.scope,
+          unsure.map((x) => x.item.id),
+        );
+      }
       if (unsure.length === 0) {
         done("silent", "no candidates");
         return null;
@@ -1580,6 +1644,13 @@ export class ContextPartner {
     shown?: string,
   ): Injection {
     const items = scored.map((x) => x.item);
+    // Whatever path delivered them, a probe that first brought one in paid for its call (`probeYield`).
+    if (this.config.probeYield) {
+      this.economy.reached(
+        s.scope,
+        items.map((i) => i.id),
+      );
+    }
     for (const x of scored) if (x.sketch) s.delivered.push(x.sketch);
     if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
     s.ledger.mark(
