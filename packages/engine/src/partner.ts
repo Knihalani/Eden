@@ -353,7 +353,9 @@ export class ContextPartner {
     let usedModel = false;
     let costUsd = 0;
     const reservation =
-      this.config.askWithModel && items.length && this.deps.model && !s.closed ? this.charge(s) : null;
+      this.config.askWithModel && items.length && this.deps.model && !s.closed
+        ? this.charge(s, this.config.estimatedAnswerUsd)
+        : null;
     if (reservation && this.deps.model) {
       try {
         const res = await this.deps.model.chat({
@@ -1081,8 +1083,8 @@ export class ContextPartner {
     }
   }
 
-  private charge(s: Session): Reservation | null {
-    return this.deps.budget.reserve(scopeKey(s.scope), s.key, this.config.estimatedCallUsd);
+  private charge(s: Session, usd = this.config.estimatedCallUsd): Reservation | null {
+    return this.deps.budget.reserve(scopeKey(s.scope), s.key, usd);
   }
 
   /**

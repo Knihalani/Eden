@@ -68,8 +68,10 @@ export interface EngineConfig {
    * with every id and hash in every tool result for as long as the user is cached.
    */
   maxSessionTerms: number;
-  /** Rough cost reserved per model call before the real cost is known. */
+  /** Cost reserved per judge call before the real cost is known: about its worst case at the cap (D45). */
   estimatedCallUsd: number;
+  /** Cost reserved per model-composed ask answer (`askWithModel`): about its worst case at its cap (D45). */
+  estimatedAnswerUsd: number;
   /**
    * Characters of an event the engine reads (the head; the rest is ignored). The protocol accepts up to 1,000,000,
    * and redaction, tokenizing and usage checks are linear in it: without this, one large tool result costs every
@@ -104,5 +106,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   maxCues: 200,
   maxSessionTerms: 20_000,
   estimatedCallUsd: 0.0005,
+  estimatedAnswerUsd: 0.0015,
   maxEventChars: 32_000,
 };

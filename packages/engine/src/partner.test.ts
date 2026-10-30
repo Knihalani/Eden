@@ -306,6 +306,16 @@ describe("ask", () => {
     expect(res.answer).toStartWith("<context"); // Model text derived from sources is wrapped as data, too.
   });
 
+  test("a model answer cut off at its cap is not shown: the cited items stand (D45)", async () => {
+    const model = new FakeModel(() => ({ text: "The call with Dana is at", truncated: true }));
+    const { p } = partner({ model, config: { askWithModel: true } });
+    const res = await p.ask({ ...scope, question: "When is the call with Dana Lee?" });
+    expect(res.answer).not.toContain("The call with Dana is at");
+    expect(res.citations.map((c) => c.itemId)).toContain("calendar:evt-1");
+    expect(res.answer).toContain("Call with Dana Lee: Thursday 3pm");
+    expect(model.calls[0]).toMatchObject({ maxTokens: 1_000, reasoning: "low" });
+  });
+
   test("by default answers with the cited items and no model call, even with a model configured (D43)", async () => {
     const model = new FakeModel(() => "Thursday 3pm [0]");
     const { p } = partner({ model });
