@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * bun run eval [--live [--ask-model]] [--wait <ms>] [--no-planner] [scenario dir]
+ * bun run eval [--live [--ask-model]] [--wait <ms>] [--no-planner] [--config '{"probes":true}'] [scenario dir]
  *
  * Without --live no model is used, so the run is free and deterministic: it measures the no-model paths.
  * --live uses OPENROUTER_API_KEY and EDEN_MODEL and reports the real spend. Lookups go through the query planner, as
@@ -19,8 +19,12 @@ const planner = !args.includes("--no-planner");
 const askWithModel = args.includes("--ask-model");
 const waitAt = args.indexOf("--wait");
 const waitMs = waitAt >= 0 ? Number(args[waitAt + 1]) : 2_000;
+// Any engine setting, as JSON (`--config '{"probes":true}'`): for experiments behind a flag.
+const configAt = args.indexOf("--config");
+const extra = configAt >= 0 ? (JSON.parse(args[configAt + 1] ?? "{}") as Record<string, unknown>) : {};
 const dir =
-  args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--wait") ?? join(import.meta.dir, "..", "scenarios");
+  args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--wait" && args[i - 1] !== "--config") ??
+  join(import.meta.dir, "..", "scenarios");
 
 const scenarios = readdirSync(dir)
   .filter((f) => f.endsWith(".json"))
@@ -32,5 +36,5 @@ if (live && !model) {
   console.error("--live needs OPENROUTER_API_KEY");
   process.exit(1);
 }
-const metrics = await runScenarios(scenarios, { model, waitMs, planner, config: { askWithModel } });
+const metrics = await runScenarios(scenarios, { model, waitMs, planner, config: { askWithModel, ...extra } });
 console.log(JSON.stringify({ live, waitMs, planner, askWithModel, ...metrics }, null, 2));
