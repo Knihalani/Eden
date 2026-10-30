@@ -61,22 +61,29 @@ The earlier benchmark only rewarded finding things. It now has:
 
 ### Live agent (GLM 5.3 Flash agent, Claude Haiku 5.5 grader; 6 worlds; hidden and control tasks)
 
-Held-out suite, never tuned on (72 hidden, 72 control tasks):
+Held-out suite, never tuned on (72 hidden, 72 control tasks), final code (ledger `probes-final2`, commit
+a4bf2b2f8):
 
-| Condition | Hidden fact raised | False concern (control) | Cost / 1k tasks | Agent input tokens | p50 |
+| Condition | Hidden fact raised | False concern (control) | Cost / 1k tasks | Agent input tokens | p50 / p95 |
 |---|---|---|---|---|---|
-| tools | 0.278 | 0.028 | $0.378 | 3,397 | 8.6 s |
-| eden-judge (today) | 0.403 | 0.056 | $0.349 | 1,994 | 9.2 s |
-| eden-judge + probes | 0.444 | 0.083 | $0.330 | 1,955 | 10.3 s |
-| both-judge + probes | 0.458 | 0.042 | $0.373 | 2,792 | 9.4 s |
+| tools | 0.264 | 0.028 | $0.354 | 3,091 | 6.6 / 12.1 s |
+| eden-judge (today) | 0.389 | 0.083 | $0.336 | 2,136 | 7.9 / 20.6 s |
+| eden-judge + probes | 0.403 | 0.069 | $0.327 | 1,888 | 7.7 / 24.1 s |
+| both-judge + probes | 0.444 | 0.042 | $0.355 | 2,790 | 7.3 / 16.2 s |
 
-Paired against tools on the same tasks (bootstrap 95% interval): eden-judge + probes +0.167 (+0.042…+0.292), false
-concerns +0.056 (0.000…+0.125); both-judge + probes +0.181 (+0.056…+0.292), false concerns +0.014
-(−0.042…+0.083). The false concerns are mostly one decoy ("September retainer paid, October invoice to follow" read
-as paid), which the judge without probes misreads as often (4 of 6).
+Paired against tools on the same tasks (bootstrap 95% interval): eden-judge +0.125 (+0.014…+0.236); eden-judge +
+probes +0.139 (+0.028…+0.264), false concerns +0.042 (−0.014…+0.111); both-judge + probes +0.181 (+0.069…+0.292),
+false concerns +0.014 (−0.028…+0.069). **Probes over the judge alone: +0.014 (−0.083…+0.111), not distinguishable
+from zero on the held-out suite**; the earlier run of the same comparison (ledger `probes-v2`, before the review
+fixes) gave +0.042 (−0.069…+0.153). On held-out tasks most of Eden's lead over tools is the judge's (D45), and the
+configuration that is robustly ahead is Eden with its judge and probes beside the agent's own tools. The false
+concerns are mostly one decoy ("September retainer paid, October invoice to follow" read as paid), which the judge
+misreads with or without probes.
 
-Dev suite (60 hidden, 60 control): eden-judge + probes − tools +0.250 (+0.133…+0.367), false concerns −0.017
-(−0.083…+0.050).
+Dev suite (60 hidden, 60 control; ledger `probes-v2`, commit aaffc32c2, which still had a meeting-change ground
+removed since): eden-judge + probes − tools +0.250 (+0.133…+0.367), false concerns −0.017 (−0.083…+0.050);
+eden-judge + probes − eden-judge +0.183 (+0.067…+0.300). Probes help most where the dev suite's failures were
+(clashes, people named by first name), which the design targeted.
 
 ### Free tiers (engine only and simulation)
 
@@ -121,8 +128,16 @@ meeting-change ground was built too and removed: it changed nothing measurable.
 - Source calls per lookup roughly double (simulation 5.4–5.6 → 11.4–11.8; `probeWhen: "actions"` 8.7–9.1).
 - No probe calls a model. With the perfect judge, model calls per turn rise slightly (0.19–0.23 → 0.22–0.24: more
   lookups have candidates); judge input grows by up to three candidates.
-- Engine time per task in the funnel about 3 → 5 ms (sources instant); simulated delivery p95 up a few to 15 ms.
-- For the agent, Eden in place of tools is cheaper than tools: fewer agent model calls and 40% fewer input tokens.
+- Latency. The agent's path (`observe`) is unchanged (p50 0.3 ms). Delivery of the slow path is not: in the
+  simulation run in real time (realistic connector latencies, perfect judge, 3 users × 6 sessions), delivery p50
+  2.6 → 5.3 s and p95 21.5 → 38.8 s, recall 0.379 → 0.483. Probes run within one `sourceTimeoutMs` deadline after the
+  lookup's own calls, so a lookup can take up to twice as long; `ask` waits for them. Engine time with instant sources
+  3 → 5 ms on this machine (machine-dependent: an independent rerun measured 4.5–5.1 → 5.9–6.7 ms).
+- No-model decoy deliveries rise on the dev funnel (0.075 → 0.275: a mail confirming the 3pm call, a Q2 report
+  sent): the probes fetch items about the right people and topic that change nothing. With a judge the live false
+  concerns did not rise on dev.
+- For the agent, Eden in place of tools is cheaper than tools: fewer agent model calls and 39% fewer input tokens
+  (held-out, final code: 1,888 against 3,091).
 
 ## Limits
 
