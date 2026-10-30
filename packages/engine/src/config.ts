@@ -107,6 +107,8 @@ export interface EngineConfig {
   probeSecondSources: number;
   /** A lookup's planner and probes send the same query to the same source once (`SharedCalls`). */
   probeShare: boolean;
+  /** A request naming someone by their relation ("my manager") sends that word as a probe (`probes.ts` `rolesOf`). */
+  probeRoles: boolean;
   /** The topic probe only for a request that names no person. */
   probeTopicAlone: boolean;
   /**
@@ -189,6 +191,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   probePeopleSources: 3,
   probeTopicSources: 8,
   probeTopicAlone: false,
+  probeRoles: false,
   probeShare: false,
   probeSecondSources: 3,
   probeOff: [],
