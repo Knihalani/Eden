@@ -38,6 +38,8 @@ import {
   PlannedSource,
   SourceFanout,
   type FanoutOutcome,
+  sharedKey,
+  type SharedCalls,
   type QueryPlanner,
   type SearchQuery,
   type Source,
@@ -879,6 +881,8 @@ export class ContextPartner {
     // The fan-out's deadline for this lookup, so the planner's cascade sends only the calls that can still answer. A
     // listing goes to each source as it is: the planner's shapes are ways of sending words, and it has none.
     const deadlineAt = performance.now() + this.config.sourceTimeoutMs;
+    // With `probeShare`: what the planner and the probes of this lookup send alike is sent once (`SharedCalls`).
+    const shared: SharedCalls | undefined = this.config.probeShare ? new Map() : undefined;
     const chosen =
       planner && !listing
         ? found.map(
@@ -887,7 +891,7 @@ export class ContextPartner {
                 x,
                 planner,
                 () => this.fanout.permit(s.scope, x.id),
-                this.fanout.planCalls(x),
+                this.fanout.planCalls(x, shared),
                 deadlineAt,
               ),
           )
@@ -918,7 +922,9 @@ export class ContextPartner {
     const settled = searching.catch(() => null);
     const probed = { calls: 0, kept: [] as string[] };
     const probing =
-      this.config.probes && probeThis ? this.probe(s, cue, found, all, listing, probed, settled).catch(() => {}) : null;
+      this.config.probes && probeThis
+        ? this.probe(s, cue, found, all, listing, probed, settled, shared).catch(() => {})
+        : null;
     const outcomes = await searching;
     const plans = planner
       ? chosen.flatMap((x) => {
@@ -974,6 +980,7 @@ export class ContextPartner {
     listed: boolean,
     out: { calls: number; kept: string[] },
     searched: Promise<unknown>,
+    shared?: SharedCalls,
   ): Promise<void> {
     const lanes = new Map<string, Promise<unknown>>();
     const budget = this.config.probeCalls;
@@ -995,13 +1002,29 @@ export class ContextPartner {
         scope: s.scope,
         text,
         entities: text ? [text] : [],
-        limit: window ? 20 : 5,
+        // Shared with the planner's queries (`probeShare`), its page size: either may answer for the other.
+        limit: window ? 20 : shared ? 8 : 5,
         ...(window ? { window } : {}),
       };
-      const attempt = async (source: Source) => {
+      const attempt = async (source: Source): Promise<FanoutOutcome | null> => {
         const left = deadline - performance.now();
         if (s.closed || left < 50) return null;
-        const [o] = await this.fanout.search([source], query, { timeoutMs: left, signal: s.abort.signal });
+        // The planner sent the same query to this source in this lookup: its answer, at no call.
+        const sk = shared && !window ? sharedKey(source.id, query) : "";
+        const had = sk ? shared!.get(sk) : undefined;
+        if (had) {
+          const items = await had.catch(() => null);
+          if (items) return { sourceId: source.id, status: "cached", items, latencyMs: 0 };
+        }
+        const run = this.fanout.search([source], query, { timeoutMs: left, signal: s.abort.signal });
+        if (sk) {
+          const answered = new Set(["ok", "cached", "stale"]);
+          shared!.set(
+            sk,
+            run.then(([o]) => (o && answered.has(o.status) ? o.items : null)),
+          );
+        }
+        const [o] = await run;
         return o ?? null;
       };
       // One probe call per source at a time, in this lookup: with the lookup's own call, that is two, the fan-out's
@@ -1056,23 +1079,29 @@ export class ContextPartner {
     const listers = all.filter((x) => x.listsByTime === true);
     // A person or organisation goes to the sources most likely to hold them, by the source map's own record of which
     // sources mention which names (any source may, not only the lookup's): three per name, not every source.
-    const routeFor = (name: string) =>
+    const routeFor = (name: string, limit = c.probePeopleSources) =>
       this.deps.sourceMap
         .route({
           scope: s.scope,
           entities: [name],
           situation: s.situation,
           sourceIds: all.map((x) => x.id),
-          limit: c.probePeopleSources,
+          limit,
         })
         .map((r) => all.find((x) => x.id === r.sourceId)!)
         .filter(Boolean);
     const people = off.has("people") ? [] : cue.entities.slice(0, 2);
-    const topic = off.has("topic") ? "" : topicOf(cue.text.split(" "), cue.entities);
+    // `probeTopicAlone`: the topic only for a request that names no one (with people, their probes find what the topic
+    // would: held-out funnels returned as many planted items without it, at fewer calls).
+    const topic =
+      off.has("topic") || (c.probeTopicAlone && people.length > 0) ? "" : topicOf(cue.text.split(" "), cue.entities);
     // The organisations of the request's people, from what came back for them; what is said of someone's
     // organisation (a hold, a policy) applies to them.
     const byPeople = (async () => {
-      const first = await Promise.all(people.map((q) => send(routeFor(q), q)));
+      // The request's first person to `probePeopleSources` sources, a second to `probeSecondSources`.
+      const first = await Promise.all(
+        people.map((q, i) => send(routeFor(q, i === 0 ? c.probePeopleSources : c.probeSecondSources), q)),
+      );
       for (const org of off.has("org") ? [] : orgsOf(people, first.flat()).slice(0, 1)) {
         if (!cue.entities.includes(org)) await send(routeFor(org), org);
       }

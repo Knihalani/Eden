@@ -28,6 +28,18 @@ import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { PlannedSource, type PlanCalls } from "./planner";
 import type { SearchQuery, Source } from "./source";
 
+/**
+ * One lookup's queries in flight or answered, by source and text (`sharedKey`): what the query planner and the probes
+ * of the same lookup send alike ("Jamie Fox" to mail, by both) is sent once. A failed entry resolves to null.
+ */
+export type SharedCalls = Map<string, Promise<ContextItem[] | null>>;
+
+/** The key of a query in `SharedCalls`: the source, the text as words in lowercase, and a window if any. */
+export function sharedKey(sourceId: string, q: SearchQuery): string {
+  const text = q.text.toLowerCase().replace(/["']/g, "").replace(/\s+/g, " ").trim();
+  return `${sourceId}|${text}|${q.window ? `${q.window.start}..${q.window.end}` : ""}`;
+}
+
 export type FanoutStatus = "ok" | "cached" | "stale" | "error" | "timeout" | "open" | "busy" | "limited";
 
 export interface FanoutOutcome {
@@ -216,7 +228,7 @@ export class SourceFanout {
    * the forget. Rate tokens, the breaker and the concurrency limit stay with the lookup that admitted the source and
    * with the planner's `permit`.
    */
-  planCalls(source: Source): PlanCalls {
+  planCalls(source: Source, shared?: SharedCalls): PlanCalls {
     const key = (q: SearchQuery) =>
       `${scopeKey(q.scope)}|${source.id}|plan|${q.limit}|${q.text}` +
       (q.window ? `|${q.window.start}..${q.window.end}` : "");
@@ -231,9 +243,17 @@ export class SourceFanout {
         const v = this.results?.get(k);
         return v !== undefined && !this.results!.isStale(k) ? v : undefined;
       },
-      call: (q, signal) => {
+      call: async (q, signal) => {
+        // The same query to the same source made in this lookup by someone else (a probe, `SharedCalls`): its items,
+        // at no call. One that failed is no answer: the call is made.
+        const sk = shared ? sharedKey(source.id, q) : "";
+        const had = shared?.get(sk);
+        if (had) {
+          const got = await had.catch(() => null);
+          if (got) return got;
+        }
         const k = key(q);
-        return this.flights.run(
+        const run = this.flights.run(
           k,
           async (sig) => {
             const forgets = this.forgets;
@@ -256,6 +276,8 @@ export class SourceFanout {
           },
           signal,
         );
+        if (shared) shared.set(sk, run);
+        return run;
       },
     };
     this.minted.add(calls);

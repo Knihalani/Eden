@@ -268,6 +268,8 @@ const SETTINGS: Record<string, Record<string, unknown>> = {
     judgeItemBytes: 200,
   },
 };
+// C with the lookup's planner and probes sharing their calls, and the topic probe only when no one is named.
+SETTINGS.C2 = { ...SETTINGS.C, probeShare: true, probeTopicAlone: true };
 
 /** One world under one condition: a fresh Eden (if any) sees the world's tasks in order, as it would in use. */
 async function runWorld(world: World, seed: number, tasks: Task[], condition: string): Promise<RunResult[]> {
