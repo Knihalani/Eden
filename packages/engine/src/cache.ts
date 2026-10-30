@@ -64,7 +64,16 @@ class UserCache {
   offset: number | undefined;
   /** Recent probes (`probes.ts`): a query → the ids it found and when, shared by the user's sessions. */
   readonly probes = new Map<string, { ids: string[]; at: number }>();
+  /** The user's own name as their items list it (`selfOf`), computed on demand; null when none stands out. */
+  self: string | null | undefined;
+  /** Items with people added since `self` was computed: it is computed again after `SELF_REFRESH` of them. */
+  selfStale = 0;
 }
+
+/** Header lines naming who takes part in an item: a mail's From, To and Cc, an event's attendees, an owner. */
+const PARTY_LINES = /^(from|to|cc|attendees|owner|organi[sz]er):[^\n]*$/gim;
+/** Items with people that make the user's name worth computing again (`ItemCache.selfOf`). */
+const SELF_REFRESH = 32;
 
 const simScratch = new Uint32Array(2);
 
@@ -211,6 +220,8 @@ export class ItemCache {
       }
       if (old) this.drop(u, old);
       if (item.meta?.start) u.offset = undefined;
+      if (item.meta?.people || PARTY_LINES.test(item.text)) u.selfStale++;
+      PARTY_LINES.lastIndex = 0;
       const doc = this.index(u, item);
       const entry = { item, fetchedAt: now, doc, sketch: sketchOf(u, item) };
       u.items.set(item.id, entry); // Map order stays oldest-first for eviction (old entry was removed above).
@@ -351,6 +362,44 @@ export class ItemCache {
       u.offset = userOffset(starts);
     }
     return u.offset;
+  }
+
+  /**
+   * The user's own name, read from their items: the person their items' `meta.people` lists most, when listed on at
+   * least a third of the items that list anyone and on at least five (the user is on their own events and mail).
+   * Null when no one stands out. Compaction writes it as "you" (`render.ts`).
+   */
+  selfOf(scope: Scope): string | null {
+    const u = this.peek(scope);
+    if (!u) return null;
+    if (u.self === undefined || u.selfStale >= SELF_REFRESH) {
+      const counts = new Map<string, number>();
+      let listed = 0;
+      for (const e of u.items.values()) {
+        // Who an item names as taking part: its people, and its header lines (a mail's From and To, an event's
+        // attendees, a record's owner).
+        const heads = e.item.text.match(PARTY_LINES) ?? [];
+        const people = [e.item.meta?.people ?? "", ...heads.map((h) => h.replace(/^[^:]*:/, ""))].join(";");
+        if (!people.replace(/;/g, "").trim()) continue;
+        listed++;
+        const seen = new Set<string>();
+        for (const entry of people.split(/[;,\n]/)) {
+          const name = entry
+            .replace(/<[^<>]*>/g, "")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (!/^\p{Lu}[\p{L}'-]*( \p{Lu}[\p{L}'-]*){1,2}$/u.test(name) || seen.has(name)) continue;
+          seen.add(name);
+          counts.set(name, (counts.get(name) ?? 0) + 1);
+        }
+      }
+      let best: string | null = null;
+      let most = 0;
+      for (const [name, n] of counts) if (n > most) [best, most] = [name, n];
+      u.self = best && most >= 5 && most * 3 >= listed ? best : null;
+      u.selfStale = 0;
+    }
+    return u.self;
   }
 
   /** The cached item `doc`'s sorted unique term ids (title and body, the user's vocabulary); empty if unknown. */

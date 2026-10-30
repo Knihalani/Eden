@@ -675,7 +675,7 @@ export class ContextPartner {
         // `groundAway`, an absence on other days than the request names (`awayElsewhere`).
         .filter((x) => !this.config.quietSettled || !settled(x.item))
         .filter((x) => !this.awayElsewhere(x.item, cue))
-        .slice(0, this.config.maxItemsPerInjection)
+        .slice(0, Math.min(this.config.maxItemsPerInjection, this.config.confidentItems))
     );
   }
 
@@ -1248,7 +1248,10 @@ export class ContextPartner {
       // (`judgeAgreed` false).
       const both = agreed(new Set(probedIds ?? []), lookedIds);
       const corroborated = !this.config.judgeAgreed && sure.length === 1 && both.has(sure[0]!.item.id);
-      const judgeSure = this.config.judgeConfident && this.deps.model !== null && sure.length > 0 && !corroborated;
+      // `judgeContested`: only when more than one item scored as sure (which is meant is then the judge's call).
+      const contested = this.config.judgeContested && sure.length > 1;
+      const judgeSure =
+        (this.config.judgeConfident || contested) && this.deps.model !== null && sure.length > 0 && !corroborated;
       if (sure.length > 0 && !judgeSure) {
         done(
           "sources",
@@ -1319,6 +1322,7 @@ export class ContextPartner {
             candidates,
             this.config.probes,
             this.config.compactInjection ? focusOf(cue) : undefined,
+            { windowChars: this.config.judgeWindowChars, itemBytes: this.config.judgeItemBytes },
           ),
           cacheKey: userCacheKey(s.scope),
           maxTokens: JUDGE_MAX_TOKENS,
@@ -1402,6 +1406,8 @@ export class ContextPartner {
           ? {
               focus: focusOf(cue),
               itemBytes: this.config.compactItemBytes,
+              year: new Date(this.now()).getUTCFullYear(),
+              self: this.deps.cache.selfOf(s.scope),
               // A word the session has seen: a part with nothing else the agent has (`compactText`).
               ...(this.config.compactNovel ? { known: (w: string) => s.seen.has(s.vocab.lookup(w)) } : {}),
             }
