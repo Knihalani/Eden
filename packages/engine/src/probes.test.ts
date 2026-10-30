@@ -7,14 +7,17 @@ import { ItemCache } from "./cache";
 import { timeWindow } from "./grounding";
 import { ContextPartner } from "./partner";
 import {
+  absenceSpan,
   cleanEntities,
   endMinutes,
   isScheduling,
   isSubject,
+  mentions,
   orgsOf,
   overlaps,
   requestedRange,
   requestedSpan,
+  settled,
   topicOf,
 } from "./probes";
 import { extractEntities } from "./text";
@@ -84,6 +87,35 @@ describe("probes: what a request implies", () => {
     const walkthrough = { ...item("15:30–16:30"), title: "Security audit walkthrough – Pied Piper" };
     // "pipeline" and "Piper" share a stem, but blocking time makes something new: no subject.
     expect(isSubject(walkthrough, "Block Wednesday 3–5pm for prep on the quarterly pipeline review")).toBe(false);
+  });
+
+  test("an item that only says things stand as expected is settled; a change, a return or a negation is not", () => {
+    expect(settled(item("When it's countersigned, send it straight back to me as usual"))).toBe(true);
+    expect(settled(item("Ticket resolved, closing."))).toBe(true);
+    expect(settled(item("The issue is not resolved yet"))).toBe(false);
+    expect(settled(item("We are holding payment until the credit note arrives"))).toBe(false);
+    expect(settled(item("INV-1042 was already paid on Tuesday"))).toBe(false);
+    expect(settled(item("Back from leave on Monday 9 November"))).toBe(false);
+  });
+
+  test("the days an item says someone is away, from the dates near its absence words", () => {
+    const now = Date.parse("2026-10-27T09:00:00Z");
+    expect(absenceSpan(item("Jamie: away on Skye 6–9 Nov"), now)).toEqual({ from: "2026-11-06", to: "2026-11-09" });
+    expect(absenceSpan(item("On leave from 2 Nov to 6 Nov"), now)).toEqual({ from: "2026-11-02", to: "2026-11-06" });
+    expect(absenceSpan(item("I'm away Nov 6-9"), now)).toEqual({ from: "2026-11-06", to: "2026-11-09" });
+    expect(absenceSpan(item("Out of office until 9 November"), now)).toEqual({ from: "2026-10-27", to: "2026-11-09" });
+    expect(absenceSpan(item("OOO, back on 9 Nov"), now)).toEqual({ from: "2026-10-27", to: "2026-11-08" });
+    expect(absenceSpan(item("Off sick 30 Oct"), now)).toEqual({ from: "2026-10-30", to: "2026-10-30" });
+    // A date in early January is next year's.
+    expect(absenceSpan(item("On holiday 2-5 Jan"), now)).toEqual({ from: "2027-01-02", to: "2027-01-05" });
+    expect(absenceSpan(item("Our offsite on 6 Nov was great"), now)).toBeNull();
+    expect(absenceSpan(item("Away, no dates yet"), now)).toBeNull();
+  });
+
+  test("a person is named by whole words, any case", () => {
+    expect(mentions("Jamie", item("jamie: away"))).toBe(true);
+    expect(mentions("Jamie Fox", { ...item("x"), meta: { people: "Jamie Fox <jamie@fox.example>" } })).toBe(true);
+    expect(mentions("Sam", item("Samuel is away"))).toBe(false);
   });
 
   test("the topic is what is neither a person, a day nor the action, at most two words", () => {
@@ -429,5 +461,40 @@ describe("the judged confident path (judgeConfident)", () => {
     expect(r.injections[0]!.text).toContain("Dana Lee is vegetarian");
     expect(r.injections[0]!.text).not.toContain("Head of Partnerships");
     expect(r.model.calls[0]!.messages.at(-1)!.content).not.toContain("Head of Partnerships");
+  });
+});
+
+describe("an absence on the day a request names (groundAway)", () => {
+  const scope = { tenantId: "t", userId: "u" };
+  const at = Date.parse("2026-10-27T09:00:00Z");
+  const notes = (text: string) =>
+    new StaticSource("gmail", "Mail", [
+      { ref: "m1", title: "Next weekend", text, meta: { people: "Jamie Fox <j@x.example>" } },
+    ]);
+  const run = async (source: StaticSource, groundAway: boolean) => {
+    const p = new ContextPartner({
+      sources: async () => [source],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => at,
+      // Nothing is sure on its words alone, and the plain fallback is off: only grounding can deliver.
+      config: { probes: true, probeGraceMs: 1_000, groundAway, confidentScore: 99, fallbackMatchedTerms: 0 },
+    });
+    const text = "Ask Jamie Fox if they can feed the cat on Saturday 7 November";
+    const r = await p.observe({ ...scope, sessionId: "s", at, kind: "user_message", text } as AgentEvent, {
+      waitMs: 1_000,
+    });
+    return [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId: "s" })].flatMap((i) =>
+      i.citations.map((c) => `${c.itemId} ${i.reason.split(":")[0]}`),
+    );
+  };
+
+  test("a person away on that day is grounded; away on other days is not", async () => {
+    const away = notes("Jamie Fox here: I'm away on Skye 6–9 Nov, back the Tuesday");
+    expect(await run(away, true)).toEqual(["gmail:m1 grounded-away"]);
+    expect(await run(away, false)).toEqual([]);
+    expect(await run(notes("Jamie Fox here: I'm away on Skye 20–23 Nov"), true)).toEqual([]);
   });
 });
