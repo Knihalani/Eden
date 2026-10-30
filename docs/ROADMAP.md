@@ -13,8 +13,10 @@ train / held-out split for tuning, and text not written by templates.
   fixed (D45, [research/live-judge.md](research/live-judge.md)), GLM 5.3 Flash kept as the default after comparing
   four cheap judges. An agent given search tools against the same agent with Eden
   ([research/agent-ab.md](research/agent-ab.md)): on explicit lookups, tools matched or beat Eden on recall and Eden
-  beside tools added nothing measurable; Eden in place of tools cost 18–25% less. The case Eden is for (context the
-  agent would not look up) is not measured yet: that task set is next.
+  beside tools added nothing measurable; Eden in place of tools cost 18–25% less. On the case Eden is for, context the
+  agent was not asked for ([research/agent-hidden.md](research/agent-hidden.md)), tools raised it on 36% of tasks,
+  Eden in place of them on 20–24%, Eden with its judge beside them on 40% (within noise of tools). Eden's one clear
+  win is a note no search finds (7 of 8 against 2 of 8); its clear gap is scheduling: it never lists the named day.
 - Done (2026-10-28, [research/eval-suite.md](research/eval-suite.md)): 26 scenarios across personal-agent jobs with
   gold labels, many must-stay-silent turns and 6 adversarial scenarios (prompt injection, planted secrets, look-alike
   names); per-category metrics, a privacy check and direct asks in the report. Baseline with no model: precision
