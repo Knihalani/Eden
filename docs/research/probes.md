@@ -35,9 +35,9 @@ Besides the request itself, a lookup sends a few short queries (`probes.ts`, at 
 Delivery adds a **clash** ground (an event within ±3 h of the time a scheduling request names, on its day) and
 **judge seats**: up to three of the probes' finds join the judge's candidates beyond the best scored, since they
 share few of the request's words by design. The judge is told to pick what would change the action (a clash, a
-constraint, a rule, something already done), not what merely mentions the same person. A per-session memo skips
-re-probing what the session probed already. `probeWhen: "actions"` probes only requests to act. No probe calls a
-model.
+constraint, a rule, something already done), not what merely mentions the same person. A per-user memo (D47; per
+session before) skips re-probing what the user's lookups probed recently. `probeWhen: "actions"` probes only
+requests to act. No probe calls a model.
 
 Two general fixes ship regardless of the flag: any capital letter starts a name, and a weekday written with its
 date is that date.
@@ -133,9 +133,10 @@ meeting-change ground was built too and removed: it changed nothing measurable.
   lookups have candidates); judge input grows by up to three candidates.
 - Latency. The agent's path (`observe`) is unchanged (p50 0.3 ms). Delivery of the slow path is not: in the
   simulation run in real time (realistic connector latencies, perfect judge, 3 users × 6 sessions), delivery p50
-  2.6 → 5.3 s and p95 21.5 → 38.8 s, recall 0.379 → 0.483. Probes run within one `sourceTimeoutMs` deadline after the
-  lookup's own calls, so a lookup can take up to twice as long; `ask` waits for them. Engine time with instant sources
-  3 → 5 ms on this machine (machine-dependent: an independent rerun measured 4.5–5.1 → 5.9–6.7 ms).
+  2.6 → 5.3 s and p95 21.5 → 38.8 s, recall 0.379 → 0.483. Probes ran within one `sourceTimeoutMs` deadline after the
+  lookup's own calls (`ask` waited for them); since D47 they run beside it and the lookup waits at most `probeGraceMs`
+  for them. Engine time with instant sources 3 → 5 ms on this machine (machine-dependent: an independent rerun
+  measured 4.5–5.1 → 5.9–6.7 ms).
 - No-model decoy deliveries rise on the dev funnel (0.075 → 0.25: a mail confirming the 3pm call, a Q2 report
   sent): the probes fetch items about the right people and topic that change nothing. With a judge the live false
   concerns did not rise on dev.

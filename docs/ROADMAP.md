@@ -22,6 +22,12 @@ train / held-out split for tuning, and text not written by templates.
   in simulation and on the dev suite; on the held-out suite Eden's judge alone already beats tools (0.389 against
   0.264 of hidden facts raised) and probes add little over it there (+0.014, within noise), at twice the source calls
   and slower delivery. Next: a larger held-out suite, real connectors, and cutting probe latency.
+- Done (2026-10-30, PoC): lean probes and dense packets (D47, [research/lean-probes.md](research/lean-probes.md)).
+  Four blind held-out suites (57 templates): Eden with its judge and probes raises the hidden fact 1.63× as often as
+  tools (0.614 against 0.377), false concerns +1.3 points; compaction cuts bytes per needed fact 30% with no measurable
+  live loss. Cutting probe calls cost live accuracy, and Eden beside the agent's own tools did worse than Eden alone.
+  Next: turn on probes with compaction behind a decision, real connectors, and why the agent with tools uses the packet
+  less.
 - Done (2026-10-28, [research/eval-suite.md](research/eval-suite.md)): 26 scenarios across personal-agent jobs with
   gold labels, many must-stay-silent turns and 6 adversarial scenarios (prompt injection, planted secrets, look-alike
   names); per-category metrics, a privacy check and direct asks in the report. Baseline with no model: precision

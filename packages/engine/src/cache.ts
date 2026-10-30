@@ -62,6 +62,8 @@ class UserCache {
   readonly sketcher = new TextSketcher(this.vocab, 8_192, 3);
   /** The UTC offset most of the user's events carry (minutes), computed on demand; reset as events come and go. */
   offset: number | undefined;
+  /** Recent probes (`probes.ts`): a query → the ids it found and when, shared by the user's sessions. */
+  readonly probes = new Map<string, { ids: string[]; at: number }>();
 }
 
 const simScratch = new Uint32Array(2);
@@ -307,6 +309,22 @@ export class ItemCache {
       out.push({ item: e.item, sketch: e.sketch, doc: e.doc, score: 0, coverage: 0, matched: 0 });
     }
     return out.sort((a, b) => Date.parse(a.item.meta!.start!) - Date.parse(b.item.meta!.start!)).slice(0, limit);
+  }
+
+  /** A probe this user made within `maxAgeMs` (D46): its ids, when every one is still cached and fresh; else null. */
+  probeHits(scope: Scope, key: string, maxAgeMs: number, now = Date.now()): CacheHit[] | null {
+    const memo = this.peek(scope)?.probes.get(key);
+    if (!memo || now - memo.at >= maxAgeMs) return null;
+    const hits = this.hits(scope, memo.ids, now);
+    return hits.length === memo.ids.length ? hits : null;
+  }
+
+  /** Remembers a probe's finds for the user, at most `max` probes, the least recently made dropped first. */
+  rememberProbe(scope: Scope, key: string, ids: string[], max: number, now = Date.now()): void {
+    const u = this.touch(scope);
+    u.probes.delete(key);
+    u.probes.set(key, { ids, at: now });
+    if (u.probes.size > max) u.probes.delete(u.probes.keys().next().value!);
   }
 
   /** Fresh cached items by id, as unscored hits (the probes' finds); unknown or expired ids are skipped. */

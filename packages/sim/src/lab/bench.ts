@@ -2,7 +2,8 @@
 /**
  * Runs the free tiers of the benchmark (bench/README.md) on the current tree and records each in the ledger:
  *
- * - funnel: the hidden-context suites (dev and held-out) through Eden alone (`hidden-funnel.ts`);
+ * - funnel: the hidden-context suites (by default `hidden` and `heldout`; `--suites` takes any list of
+ *   `suites.ts`, or `all` / `heldout-all`) through Eden alone (`hidden-funnel.ts`);
  * - sim: simulation quality on the realistic and held-out connector mixes, no judge and the perfect judge
  *   (`quality-cli.ts`), every seed's report kept as a row;
  * - eval: the scenario eval, no model.
@@ -10,9 +11,11 @@
  * None of it calls a model or costs anything. The live tier is `agent-ab.ts` then `agent-ab-report.ts --record`.
  *
  *   bun packages/sim/src/lab/bench.ts --label probes --config '{"probes":true}' [--seeds 41,42,43,44] [--quick]
+ *     [--latency] [--suites hidden,heldout,heldout2,heldout3,heldout4]
  */
 import { join } from "node:path";
 import { record, tidy } from "./ledger";
+import { parseSuites } from "./suites";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -39,8 +42,8 @@ const run = async (cmd: string[]) => {
 };
 const json = (s: string) => JSON.parse(s.slice(s.indexOf("{")));
 
-// Funnel: both suites.
-for (const suite of ["hidden", "heldout"]) {
+// Funnel: one run per suite. The default stays the dev and first held-out suites, so ledger entries compare.
+for (const suite of parseSuites(opt("suites", "hidden,heldout"))) {
   const out = await run([
     "bun",
     "packages/sim/src/lab/hidden-funnel.ts",
@@ -101,6 +104,8 @@ for (const profile of mixes) {
       observeP95Ms: avg((r) => r.latency.observeP95Ms),
       deliveryP95Ms: avg((r) => r.latency.deliveryP95Ms),
       injectionBytesP50: avg((r) => r.injectionBytesP50),
+      injectionBytesTotal: sum((r) => r.injectionBytesTotal ?? 0),
+      bytesPerMustFact: sum((r) => r.injectionBytesTotal ?? 0) / Math.max(1, counts("mustDelivered")),
       redundantShare: avg((r) => r.redundantShare ?? 0),
       noiseShare: avg((r) => r.noiseShare ?? 0),
       askRecallAt5: avg((r) => r.ask?.recallAt5 ?? 0),
@@ -145,6 +150,60 @@ for (const profile of mixes) {
         `hardFF ${metrics.hardFalseFires}/${metrics.silentTurns} calls/lookup ${metrics.sourceCallsPerLookup!.toFixed(2)} → ${e.id}`,
     );
   }
+}
+
+// Latency (`--latency`): the realistic simulation in real time, with its connectors' latencies, 3 users × 6
+// sessions, the perfect judge (its own latency modelled at 900 ms). Minutes of wall time, no cost.
+if (args.includes("--latency")) {
+  const t0 = performance.now();
+  const r = json(
+    await run([
+      "bun",
+      "packages/sim/src/quality-cli.ts",
+      "--profile",
+      "realistic",
+      "--seed",
+      SEEDS[0]!,
+      "--users",
+      "3",
+      "--sessions",
+      "6",
+      "--planner",
+      "--time",
+      "1",
+      "--judge",
+      "perfect",
+      "--config",
+      CONFIG,
+    ]),
+  );
+  const c = r.overall.counts;
+  const metrics: Record<string, number> = {
+    deliveryP50Ms: r.latency.deliveryP50Ms,
+    deliveryP95Ms: r.latency.deliveryP95Ms,
+    observeP50Ms: r.latency.observeP50Ms,
+    observeP95Ms: r.latency.observeP95Ms,
+    recall: c.mustDelivered / Math.max(1, c.mustFacts),
+    precision: c.relevant / Math.max(1, r.overall.delivered),
+    sourceCallsPerLookup: r.sources.callsPerLookup,
+  };
+  const e = record(
+    {
+      tier: "latency",
+      suite: "realistic/perfect/realtime",
+      label: LABEL,
+      config: JSON.parse(CONFIG),
+      seeds: [Number(SEEDS[0])],
+      costUsd: 0,
+      wallSeconds: Number(((performance.now() - t0) / 1000).toFixed(1)),
+      metrics: tidy(metrics),
+    },
+    [{ latency: r.latency, overall: r.overall, sources: r.sources }],
+  );
+  console.log(
+    `latency: delivery p50 ${metrics.deliveryP50Ms} p95 ${metrics.deliveryP95Ms} ms, recall ` +
+      `${metrics.recall!.toFixed(3)} → ${e.id}`,
+  );
 }
 
 // Eval, no model.
