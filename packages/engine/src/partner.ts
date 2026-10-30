@@ -1480,8 +1480,9 @@ export class ContextPartner {
     const roles = c.probeRoles && !off.has("roles") ? rolesOf(cue.raw) : [];
     // `consequenceProbe`: a request that acts, of an action class (`consequence.ts`), asks its class's constraint
     // vocabulary of the sources best for that class: what would stop the action, in words the request never uses.
-    // An imperative, not `isAction`: a question that mentions a release ("did the release go out?") is no release.
-    const acts = isImperative(cue.raw) || cue.external === true || ACTS_ON.test(cue.raw);
+    // An imperative or an arriving message, not `isAction` or `ACTS_ON` (which match "tell", "ping" anywhere): a
+    // question that mentions a release ("did Sam tell you whether the release went out?") is no release.
+    const acts = isImperative(cue.raw) || cue.external === true;
     const cls = c.consequenceProbe && !off.has("consequence") ? actionClass(cue.raw, acts) : null;
     await Promise.all([
       ...windows.map((w) => send("day", listers, "", w)),

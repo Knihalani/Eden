@@ -122,6 +122,8 @@ describe("isImperative", () => {
     expect(isImperative("Leila recommended a great book, what was it about again?")).toBe(false);
     expect(isImperative("haha Sam just sent me the funniest meme")).toBe(false);
     expect(isImperative("")).toBe(false);
+    expect(isImperative("Can you tell me if the billing migration finished?")).toBe(false);
+    expect(isImperative("Tell me the plan for Friday")).toBe(true);
   });
 
   test("linear on hostile input", () => {

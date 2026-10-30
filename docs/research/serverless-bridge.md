@@ -173,7 +173,9 @@ bun packages/sim/src/lab/hidden-funnel.ts --suite heldout5,heldout6,heldout7 --n
 
 ## Final (after review; D55)
 
-Re-measured on the final code in one session, after the review fixes (`judgeTied` counts consequence finds as tied; the consequence probe classes only imperatives). G is D53's set, H is G plus `quietNameOnly` and `judgeTied`, ALL is H plus `consequenceProbe`.
+Re-measured on the final code in one session, after the review fixes (`judgeTied` counts consequence finds as tied; the
+consequence probe classes only imperatives). G is D53's set, H is G plus `quietNameOnly` and `judgeTied`, ALL is H plus
+`consequenceProbe`.
 
 Funnel, no model, seeds 41–44 (returned / delivered / decoys delivered, calls per task):
 
@@ -189,7 +191,16 @@ Funnel, no model, seeds 41–44 (returned / delivered / decoys delivered, calls 
 | held-out 7 (blind) | 33/20/12 | 33/20/12 | 34/20/12 |
 | Total | 244/183/47, 8.4 | 244/183/47, 8.4 | 253/193/47, 8.8 |
 
-Simulation (realistic 4 seeds; zoo-a and zoo-b 2 seeds; recall / precision / soft fire rate; perfect judge adds calls per lookup, bytes per needed fact, model calls per turn, model $ per 1,000 turns as the unrounded mean):
+Delivered can exceed returned (held-out 1, ALL: 30 of 29): returned counts the planted item in this task's source
+answers, while a delivery may come from the user's cache, filled by an earlier task's lookups, or from the consequence
+probe's no-call cache search.
+
+After the second review's fixes (a range over the new year; "remains in place", "still holds" confirm a block; questions
+are not classed), H gives 244/187/47 at 8.4 calls per task: held-out 5 delivers 30, not 26, with the same 8 decoys;
+every other suite and every simulation row above is unchanged.
+
+Simulation (realistic 4 seeds; zoo-a and zoo-b 2 seeds; recall / precision / soft fire rate; perfect judge adds calls
+per lookup, bytes per needed fact, model calls per turn, model $ per 1,000 turns as the unrounded mean):
 
 | Run | No model | Perfect judge |
 |---|---|---|
@@ -201,4 +212,6 @@ Simulation (realistic 4 seeds; zoo-a and zoo-b 2 seeds; recall / precision / sof
 | zoo-b G | 0.434 / 0.596 / 0.400 | 0.722 / 0.965 / 0.134; 7.86, 430, 0.284, $0.0233 |
 | zoo-b H | 0.434 / 0.635 / 0.217 | 0.717 / 0.970 / 0.067; 7.84, 426, 0.254, $0.0209 |
 
-No hard false fire in any run. The consequence probe's gain is in the suites its branch diagnosed on; blind it adds one delivery (a passport) for 0.4 calls more per task (in its own run 0.5), so it stays off (D55). The `legal-hold-deletion` template is never returned with one consequence source; the delete class is unproven.
+No hard false fire in any run. The consequence probe's gain is in the suites its branch diagnosed on; blind it adds one
+delivery (a passport) for 0.4 calls more per task (in its own run 0.5), so it stays off (D55). The `legal-hold-deletion`
+template is never returned with one consequence source; the delete class is unproven.

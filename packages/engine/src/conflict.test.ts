@@ -154,6 +154,35 @@ describe("conflict: what would change the action", () => {
     expect(verdict("Book a seafood lunch for me and Ana Ruiz", "allergy test results", text)).toBe("clear");
   });
 
+  test("a range over the new year, read in summer, ends in the year after its start", () => {
+    const july = Date.parse("2026-07-01T09:00:00Z");
+    const deploy = "Deploy the billing release to production";
+    const at = (text: string, days: string[] | null = null) =>
+      assess(frameOf(deploy, days, july, []), item("Freeze", text), july);
+    expect(at("Release freeze 20 Dec - 5 Jan: no production releases over the holidays.")).not.toBe("conflict");
+    expect(at("Release freeze 20 Dec to 5 Jan: no production releases over the holidays.")).not.toBe("conflict");
+    // A day inside it, the year after its start, is covered.
+    const jan2 = ["2027-01-02"];
+    expect(at("Release freeze 20 Dec - 5 Jan: no production releases.", jan2)).toBe("conflict");
+    expect(at("Release freeze from Dec 20 to Jan 5: no production releases.", jan2)).toBe("conflict");
+  });
+
+  test("a block that remains, stays or holds is confirmed, not cleared", () => {
+    const deploy = "Deploy the billing release to production on Thursday 5 November";
+    for (const text of [
+      "The production release freeze remains in place until 9 Nov.",
+      "The release freeze stays in place until 9 Nov.",
+      "Release freeze 4-9 Nov still holds for production.",
+      "Release freeze 4-9 Nov: the freeze is still active for production.",
+    ]) {
+      expect(verdict(deploy, "Freeze", text)).toBe("conflict");
+    }
+    // Before any block, the same words still clear ("the booking stands", after a freeze lifted).
+    expect(verdict(deploy, "Freeze", "Release freeze 4-9 Nov. Update: the production release slot stands.")).toBe(
+      "clear",
+    );
+  });
+
   test("an impossible date is no date", () => {
     // Read as a real day, "31 Feb" would be 3 Mar, and a payment on 4 Mar would be late.
     expect(verdict("Pay the Hooli invoice on 4 March", "Payment terms", "Hooli payment is due by 31 Feb.")).toBe(

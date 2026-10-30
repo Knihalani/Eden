@@ -273,6 +273,8 @@ describe("the consequence probe with a judge (judgeTied) and with questions", ()
       "What did Sam say about the deploy at lunch?",
       "Have you read a great book on the migration?",
       "Did the release go out? Let's catch up over coffee Friday",
+      "Did Sam tell you whether the billing release went out?",
+      "Can you tell me if the billing migration finished?",
     ]) {
       const { log } = await run({ consequenceProbe: true }, null, text);
       expect(log.some((q) => /freeze|moratorium|change window/i.test(q))).toBe(false);
