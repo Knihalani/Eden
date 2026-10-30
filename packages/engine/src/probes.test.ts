@@ -265,3 +265,61 @@ describe("probe state, review round (D46)", () => {
     expect(later.some((prompt) => prompt.includes("nut allergy"))).toBe(false);
   });
 });
+
+describe("probes beside the lookup", () => {
+  const scope = { tenantId: "t", userId: "u" };
+  const at = Date.parse("2026-10-27T09:00:00Z");
+  const notes = new StaticSource("drive", "Notes", [
+    { ref: "n1", title: "Notes", text: "Dana Lee is vegetarian; a quiet table suits her best" },
+  ]);
+  const partner = (config: Record<string, unknown>, slowMs = 0) => {
+    const slow: Source = {
+      id: "drive",
+      kind: "test",
+      description: "Notes",
+      // Only the person probe ("Dana Lee") is slow; the lookup's own query answers at once.
+      search: async (q) => {
+        if (slowMs && q.text === "Dana Lee") await Bun.sleep(slowMs);
+        return notes.search(q);
+      },
+    };
+    return new ContextPartner({
+      sources: async () => [slow],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => at,
+      config: { probes: true, ...config },
+    });
+  };
+
+  test("a slow probe holds the lookup up for at most probeGraceMs, and still caches what it finds", async () => {
+    const p = partner({ probeGraceMs: 50 }, 400);
+    const t0 = performance.now();
+    await p.ask({ ...scope, sessionId: "s", question: "Book dinner with Dana Lee on Friday" });
+    expect(performance.now() - t0).toBeLessThan(300);
+    const waited = partner({ probeGraceMs: 5_000 }, 400);
+    const t1 = performance.now();
+    await waited.ask({ ...scope, sessionId: "s", question: "Book dinner with Dana Lee on Friday" });
+    expect(performance.now() - t1).toBeGreaterThanOrEqual(390);
+  });
+
+  test("with fallbackAgree, an item both the lookup and a person probe found is delivered with no model", async () => {
+    const text =
+      "Invite Dana Lee to the team offsite and book a table for six at an Italian restaurant in Soho on Friday evening";
+    const got = async (fallbackAgree: boolean) => {
+      // Nothing is sure on its words (confidentScore out of reach) and the plain fallback wants more of them than the
+      // item has (three: dana, lee, table): only agreement can deliver it.
+      const p = partner({ fallbackAgree, probeGraceMs: 1_000, confidentScore: 99, fallbackMatchedTerms: 4 });
+      const r = await p.observe({ ...scope, sessionId: "s", at, kind: "user_message", text } as AgentEvent, {
+        waitMs: 1_000,
+      });
+      return [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId: "s" })].flatMap((i) =>
+        i.citations.map((c) => c.itemId),
+      );
+    };
+    expect(await got(false)).toEqual([]);
+    expect(await got(true)).toEqual(["drive:n1"]);
+  });
+});

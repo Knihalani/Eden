@@ -853,10 +853,9 @@ export class ContextPartner {
       ACTS_ON.test(cue.raw) ||
       cue.external;
     // A probe that fails is no probe; a session that closes mid-search leaves it to finish on its own (it checks).
-    const probed = { calls: 0, kept: [] as string[] };
-    const probing =
-      this.config.probes && probeThis ? this.probe(s, cue, found, all, listing, probed).catch(() => {}) : null;
-    const outcomes = await this.fanout.search(
+    // The lookup's own search starts first: the fan-out admits a call when it starts (a per-source concurrency slot),
+    // and probes started before it could take the slots and leave the request itself skipped as busy.
+    const searching = this.fanout.search(
       chosen,
       {
         scope: s.scope,
@@ -867,6 +866,11 @@ export class ContextPartner {
       },
       { timeoutMs: this.config.sourceTimeoutMs, signal: s.abort.signal },
     );
+    const settled = searching.catch(() => null);
+    const probed = { calls: 0, kept: [] as string[] };
+    const probing =
+      this.config.probes && probeThis ? this.probe(s, cue, found, all, listing, probed, settled).catch(() => {}) : null;
+    const outcomes = await searching;
     const plans = planner
       ? chosen.flatMap((x) => {
           const last = (x as PlannedSource).last;
@@ -920,7 +924,9 @@ export class ContextPartner {
     all: Source[],
     listed: boolean,
     out: { calls: number; kept: string[] },
+    searched: Promise<unknown>,
   ): Promise<void> {
+    const lanes = new Map<string, Promise<unknown>>();
     const budget = this.config.probeCalls;
     const deadline = performance.now() + this.config.sourceTimeoutMs;
     const kept = out.kept;
@@ -932,35 +938,47 @@ export class ContextPartner {
         if (keep) for (const h of hits) if (!kept.includes(h.item.id)) kept.push(h.item.id);
         return hits.map((h) => h.item);
       }
-      const left = deadline - performance.now();
       const to = sources.slice(0, Math.max(0, budget - out.calls));
-      if (to.length === 0 || s.closed || left < 50) return [] as ContextItem[];
+      if (to.length === 0 || s.closed || deadline - performance.now() < 50) return [] as ContextItem[];
       out.calls += to.length;
-      const outcomes = await this.fanout.search(
-        to,
-        // A day's listing is the whole day (a busy one has more than a search's page); a query, its first page.
-        { scope: s.scope, text, entities: text ? [text] : [], limit: window ? 20 : 5, ...(window ? { window } : {}) },
-        { timeoutMs: left, signal: s.abort.signal },
-      );
-      const items = outcomes.flatMap((o) => o.items);
-      {
-        const g = globalThis as any;
-        g.__y ??= {};
-        const kind = window ? "day" : keep ? "pp" : "topic";
-        outcomes.forEach((o, k) => {
-          const nw = o.items.filter((i) => this.deps.cache.fetchedAt(s.scope, i.id) === undefined).length;
-          const key = `${kind}${k}`;
-          const e = (g.__y[key] ??= { calls: 0, items: 0, fresh: 0, zero: 0 });
-          e.calls++;
-          e.items += o.items.length;
-          e.fresh += nw;
-          if (nw === 0) e.zero++;
+      // A day's listing is the whole day (a busy one has more than a search's page); a query, its first page.
+      const query = {
+        scope: s.scope,
+        text,
+        entities: text ? [text] : [],
+        limit: window ? 20 : 5,
+        ...(window ? { window } : {}),
+      };
+      const attempt = async (source: Source) => {
+        const left = deadline - performance.now();
+        if (s.closed || left < 50) return null;
+        const [o] = await this.fanout.search([source], query, { timeoutMs: left, signal: s.abort.signal });
+        return o ?? null;
+      };
+      // One probe call per source at a time, in this lookup: with the lookup's own call, that is two, the fan-out's
+      // starting concurrency per source. One skipped as busy anyway (another lookup of the user's holds the slots)
+      // is tried once more when the lookup's own search is done.
+      const one = (source: Source) => {
+        const run = (lanes.get(source.id) ?? Promise.resolve()).then(async () => {
+          const o = await attempt(source);
+          if (o?.status !== "busy") return o;
+          await searched;
+          return attempt(source);
         });
-      }
+        lanes.set(
+          source.id,
+          run.catch(() => null),
+        );
+        return run;
+      };
+      const outcomes = (await Promise.all(to.map(one))).filter((o): o is FanoutOutcome => o !== null);
+      const items = outcomes.flatMap((o) => o.items);
+      // A call the fan-out did not make (busy, limited, open, answered from its cache, past the deadline) is no call.
+      out.calls -= to.length - outcomes.filter((o) => !SKIPPED.has(o.status)).length;
       if (!s.closed) this.store(s, items);
       if (keep) for (const i of items) if (!kept.includes(i.id)) kept.push(i.id);
       // Only a complete answer is remembered: a source that failed or timed out is asked again next time.
-      if (to.length === sources.length && outcomes.every((o) => o.status === "ok")) {
+      if (outcomes.length === sources.length && outcomes.every((o) => o.status === "ok")) {
         this.deps.cache.rememberProbe(
           s.scope,
           key,
@@ -1354,6 +1372,9 @@ export class ContextPartner {
 }
 
 const NO_TERMS = new Uint32Array(0);
+
+/** Fan-out outcomes with no call to the source behind them. */
+const SKIPPED = new Set<string>(["busy", "limited", "open", "cached"]);
 
 /** Ids both a lookup's own search and its probes found. */
 function agreed(probed: ReadonlySet<string>, looked: readonly string[] | undefined): Set<string> {
