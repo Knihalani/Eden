@@ -134,6 +134,20 @@ export interface EngineConfig {
    * "away"), and one saying someone is away only on other days is not (`probes.ts` `absenceSpan`; D48).
    */
   groundAway: boolean;
+  /**
+   * With no model's say: an item that would change what the request is about to do is delivered (grounded
+   * "conflict"): a hold, absence or freeze over a day it acts on, a deadline or expiry before it, a limit below an
+   * amount it commits, a thing already done, a standing constraint (an allergy, a confidentiality), about something
+   * the request names or, for a request that names no one, one of its words, whatever the request (`conflict.ts`;
+   * D49).
+   */
+  groundConflict: boolean;
+  /**
+   * With no model's say (the confident path and the fallback), an item about what the request names whose decisive
+   * value does not conflict with it is not delivered: a span elsewhere, an amount under the limit, a matter lifted
+   * or unchanged, a sibling reference (Q2 for Q3, another invoice number) (`conflict.ts`; D49).
+   */
+  quietClear: boolean;
   /** With `judgeConfident`, a lone sure item the lookup and a probe both found is judged too (false: delivered). */
   judgeAgreed: boolean;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
@@ -202,6 +216,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   confidentItems: 3,
   quietSettled: false,
   groundAway: false,
+  groundConflict: false,
+  quietClear: false,
   judgeAgreed: true,
   maxEventChars: 32_000,
 };
