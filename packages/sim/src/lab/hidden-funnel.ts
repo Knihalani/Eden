@@ -10,7 +10,11 @@
  * - source calls per task, and the engine's wall time per task.
  *
  *   bun packages/sim/src/lab/hidden-funnel.ts [--suite hidden|heldout|heldout-all|all|a,b] [--seeds 41,42,43,44]
- *     [--config '{"probes":true}'] [--json out.json] [--label probes] [--no-record]
+ *     [--config '{"probes":true}'] [--json out.json] [--label probes] [--no-record] [--judge live [--model m]]
+ *
+ * `--judge live` gives Eden its judge (OpenRouter, `OPENROUTER_API_KEY`): the funnel then measures what the judge lets
+ * through, hidden and decoy, and its calls, tokens and spend (about $0.03 for the 456 held-out tasks), a cheap screen
+ * before an agent run. Seeds run concurrently.
  *
  * `--suite` names any suite of `suites.ts`, or several: each gets its own table, then a TOTAL over all of them.
  * Each suite's run is recorded in the benchmark ledger (bench/, `ledger.ts`) unless `--no-record`.
@@ -18,7 +22,7 @@
 import { writeFileSync } from "node:fs";
 import { ContextPartner, ItemCache } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
-import { Budget } from "@eden/llm";
+import { Budget, OpenRouterModel, type Model } from "@eden/llm";
 import type { AgentEvent } from "@eden/protocol";
 import { QueryPlanner } from "@eden/sources";
 import { REALISTIC, simSources } from "../sources";
@@ -36,6 +40,23 @@ const SUITE = opt("suite", "hidden");
 const SUITE_LIST = parseSuites(SUITE);
 const SEEDS = opt("seeds", "41,42,43,44").split(",").map(Number);
 const CONFIG = JSON.parse(opt("config", "{}")) as Record<string, unknown>;
+const LIVE = opt("judge", "none") === "live";
+const KEY = process.env.OPENROUTER_API_KEY;
+if (LIVE && !KEY) throw new Error("--judge live needs OPENROUTER_API_KEY");
+const MODEL = opt("model", "z-ai/glm-5.3-flash");
+/** The live judge's use over the whole run (every suite): calls, tokens and OpenRouter's reported cost. */
+const usage = { calls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
+const metered = (inner: Model): Model => ({
+  id: inner.id,
+  chat: async (request) => {
+    const res = await inner.chat(request);
+    usage.calls++;
+    usage.inputTokens += res.usage.inputTokens;
+    usage.outputTokens += res.usage.outputTokens;
+    usage.costUsd += res.costUsd;
+    return res;
+  },
+});
 
 interface Row {
   n: number;
@@ -54,83 +75,104 @@ async function runSuite(suite: string): Promise<{ rows: Rows; perTask: Record<st
   const perTask: Record<string, unknown>[] = [];
   const started = performance.now();
   for (const variant of ["hidden", "control"] as const) {
-    for (const seed of SEEDS) {
-      const world = buildWorld({ seed: seed * 1_000 });
-      const before = world.items.length;
-      const tasks: HiddenTask[] = SUITES[suite]!(world, seed, variant);
-      const planted = world.items.slice(before);
-      for (const it of planted) dress(world, it);
-      // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
-      const keep = new Set(planted.map((it) => it.id));
-      for (const task of tasks) clearSlot(world, task.text, keep);
-      const sources = simSources(world, REALISTIC, 0, seed);
-      const returned = new Set<string>();
-      for (const s of sources) {
-        const search = s.search.bind(s);
-        s.search = async (q, signal) => {
-          const items = await search(q, signal);
-          for (const i of items) returned.add(i.id);
-          return items;
-        };
-      }
-      let clock = world.now;
-      const cache = new ItemCache();
-      let calls = 0;
-      const partner = new ContextPartner({
-        sources: async () => sources,
-        sourceMap: new SourceMap(":memory:", { seed }),
-        cache,
-        budget: new Budget(),
-        model: null,
-        planner: new QueryPlanner({ seed }),
-        now: () => clock,
-        config: CONFIG,
-        onTrace: (t) => (calls += t.sourceCalls),
-      });
-      const scope = { tenantId: "funnel", userId: `w${seed}` };
-      for (const [i, task] of tasks.entries()) {
-        clock += 3_600_000;
-        const id = planted[i]!.id;
-        const sessionId = task.id;
-        returned.clear();
-        const callsBefore = calls;
-        const t0 = performance.now();
-        const at = clock;
-        await partner.observe({ ...scope, sessionId, at, kind: "session_start" } as AgentEvent);
-        const r = await partner.observe(
-          { ...scope, sessionId, at, kind: "user_message", text: task.text } as AgentEvent,
-          {
-            waitMs: 3_000,
-          },
-        );
-        const ms = performance.now() - t0;
-        const got = [...(r.injection ? [r.injection] : []), ...partner.takePending({ ...scope, sessionId })].flatMap(
-          (x) => x.citations.map((c) => c.itemId),
-        );
-        const both = rows.get(task.template) ?? { hidden: row(), control: row() };
-        rows.set(task.template, both);
+    const results = await Promise.all(SEEDS.map((seed) => runSeed(suite, variant, seed)));
+    for (const r of results) {
+      for (const t of r) {
+        const both = rows.get(t.template) ?? { hidden: row(), control: row() };
+        rows.set(t.template, both);
         const x = both[variant];
         x.n++;
-        if (returned.has(id)) x.returned++;
-        if (cache.get(scope, id, clock)) x.cached++;
-        if (got.includes(id)) x.delivered++;
-        x.calls += calls - callsBefore;
-        x.ms += ms;
-        perTask.push({
-          seed,
-          variant,
-          template: task.template,
-          returned: returned.has(id),
-          cached: !!cache.get(scope, id, clock),
-          delivered: got.includes(id),
-          injected: got.length,
-          calls: calls - callsBefore,
-          ms: Number(ms.toFixed(2)),
-        });
+        if (t.returned) x.returned++;
+        if (t.cached) x.cached++;
+        if (t.delivered) x.delivered++;
+        x.calls += t.calls;
+        x.ms += t.ms;
+        perTask.push({ ...t });
       }
     }
   }
   return { rows, perTask, wall: (performance.now() - started) / 1000 };
+}
+
+interface TaskRow {
+  seed: number;
+  variant: "hidden" | "control";
+  template: string;
+  returned: boolean;
+  cached: boolean;
+  delivered: boolean;
+  injected: number;
+  calls: number;
+  ms: number;
+}
+
+/** One suite's tasks in one seed's world, in order, as one user would bring them. */
+async function runSeed(suite: string, variant: "hidden" | "control", seed: number): Promise<TaskRow[]> {
+  const perTask: TaskRow[] = [];
+  const world = buildWorld({ seed: seed * 1_000 });
+  const before = world.items.length;
+  const tasks: HiddenTask[] = SUITES[suite]!(world, seed, variant);
+  const planted = world.items.slice(before);
+  for (const it of planted) dress(world, it);
+  // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
+  const keep = new Set(planted.map((it) => it.id));
+  for (const task of tasks) clearSlot(world, task.text, keep);
+  const sources = simSources(world, REALISTIC, 0, seed);
+  const returned = new Set<string>();
+  for (const s of sources) {
+    const search = s.search.bind(s);
+    s.search = async (q, signal) => {
+      const items = await search(q, signal);
+      for (const i of items) returned.add(i.id);
+      return items;
+    };
+  }
+  let clock = world.now;
+  const cache = new ItemCache();
+  let calls = 0;
+  const partner = new ContextPartner({
+    sources: async () => sources,
+    sourceMap: new SourceMap(":memory:", { seed }),
+    cache,
+    budget: new Budget(),
+    model: LIVE ? metered(new OpenRouterModel({ apiKey: KEY!, model: MODEL })) : null,
+    planner: new QueryPlanner({ seed }),
+    now: () => clock,
+    config: CONFIG,
+    onTrace: (t) => (calls += t.sourceCalls),
+  });
+  const scope = { tenantId: "funnel", userId: `w${seed}` };
+  for (const [i, task] of tasks.entries()) {
+    clock += 3_600_000;
+    const id = planted[i]!.id;
+    const sessionId = task.id;
+    returned.clear();
+    const callsBefore = calls;
+    const t0 = performance.now();
+    const at = clock;
+    await partner.observe({ ...scope, sessionId, at, kind: "session_start" } as AgentEvent);
+    const r = await partner.observe(
+      { ...scope, sessionId, at, kind: "user_message", text: task.text } as AgentEvent,
+      // A live judge answers in seconds: the slow path is waited for, so what it lets through counts here.
+      { waitMs: LIVE ? 30_000 : 3_000 },
+    );
+    const ms = performance.now() - t0;
+    const got = [...(r.injection ? [r.injection] : []), ...partner.takePending({ ...scope, sessionId })].flatMap((x) =>
+      x.citations.map((c) => c.itemId),
+    );
+    perTask.push({
+      seed,
+      variant,
+      template: task.template,
+      returned: returned.has(id),
+      cached: !!cache.get(scope, id, clock),
+      delivered: got.includes(id),
+      injected: got.length,
+      calls: calls - callsBefore,
+      ms: Number(ms.toFixed(2)),
+    });
+  }
+  return perTask;
 }
 
 const pct = (a: number, n: number) => `${a}/${n}`;
@@ -168,6 +210,15 @@ if (SUITE_LIST.length > 1) {
   for (const r of runs) console.log(line(r.suite, r.total));
   console.log(line("TOTAL", grand));
 }
+if (LIVE) {
+  const tasks = Math.max(1, grand.hidden.n + grand.control.n);
+  console.log(
+    `judge ${MODEL}: ${usage.calls} calls (${(usage.calls / tasks).toFixed(2)}/task), ` +
+      `${(usage.inputTokens / Math.max(1, usage.calls)).toFixed(0)} in / ` +
+      `${(usage.outputTokens / Math.max(1, usage.calls)).toFixed(0)} out tokens per call, ` +
+      `$${usage.costUsd.toFixed(4)} ($${((1000 * usage.costUsd) / tasks).toFixed(4)} per 1k tasks)`,
+  );
+}
 if (!args.includes("--no-record")) {
   for (const { suite, rows, perTask, wall, total: t } of runs) {
     const n = (k: keyof Row, v: "hidden" | "control") => t[v][k] / Math.max(1, t[v].n);
@@ -179,6 +230,14 @@ if (!args.includes("--no-record")) {
       callsPerTask: (t.hidden.calls + t.control.calls) / Math.max(1, t.hidden.n + t.control.n),
       msPerTask: (t.hidden.ms + t.control.ms) / Math.max(1, t.hidden.n + t.control.n),
       tasks: t.hidden.n + t.control.n,
+      ...(LIVE && suite === runs[0]!.suite
+        ? {
+            judgeCallsPerTask: usage.calls / Math.max(1, grand.hidden.n + grand.control.n),
+            judgeInputTokens: usage.inputTokens / Math.max(1, usage.calls),
+            judgeOutputTokens: usage.outputTokens / Math.max(1, usage.calls),
+            judgeUsdPer1kTasks: (1000 * usage.costUsd) / Math.max(1, grand.hidden.n + grand.control.n),
+          }
+        : {}),
     };
     for (const [name, r] of rows) {
       metrics[`delivered.${name}`] = r.hidden.delivered / Math.max(1, r.hidden.n);
@@ -191,7 +250,8 @@ if (!args.includes("--no-record")) {
         label: opt("label", Object.keys(CONFIG).length ? "custom" : "baseline"),
         config: CONFIG,
         seeds: SEEDS,
-        costUsd: 0,
+        // The judge's spend is the whole run's (all suites), booked on the first suite's record.
+        costUsd: suite === runs[0]!.suite ? Number(usage.costUsd.toFixed(6)) : 0,
         wallSeconds: Number(wall.toFixed(1)),
         metrics: tidy(metrics),
       },
