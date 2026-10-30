@@ -62,6 +62,13 @@ Probes (D46, off by default) add no model call but roughly double source calls p
 turn rise by 0.01–0.03 (more lookups have candidates). For the agent, Eden with probes in place of search tools cost
 less per task than the tools did ($0.327 against $0.354 per 1,000 held-out tasks; docs/research/probes.md).
 
+D47 (docs/research/lean-probes.md), simulation, realistic, 4 seeds, perfect judge: compaction lowers model cost per turn
+($0.0203 → $0.0180 per 1,000 turns with probes: the judge reads compacted candidates) and the agent's cost per task
+(live held-out, $0.407 → $0.392 per 1,000 tasks). `judgeConfident`, off by default, adds a judge call on lookups whose
+candidates all scored as sure: model calls per turn 0.21 → 0.28 and $0.0180 → $0.0245 per 1,000 turns with probes and
+compaction (about +36%). Live, Eden with probes cost $0.407 per 1,000 held-out tasks against $0.370 for tools (the
+agent's tokens fall, 3,045 → 1,714 input, but Eden's judge calls are added).
+
 The non-model costs (source API calls, hosting) are not modelled yet. Source calls may dominate for some connectors;
 measure them per connector in M2. The query planner (D28), on by default in the server since D33, adds no model call.
 After its iterations it makes 1.36–1.47x planner-off's source calls per lookup in the simulation at time 0 and

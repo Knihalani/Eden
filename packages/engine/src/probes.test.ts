@@ -199,21 +199,38 @@ describe("probe state, review round (D46)", () => {
     search: (q) => (log.push(q.text), source.search(q)),
   });
 
-  test("the memo is the session's: a repeat within 10 minutes skips the person probe there, not elsewhere", async () => {
+  test("the memo is the user's: a repeat within 10 minutes skips the person probe in any of their sessions", async () => {
     const log: string[] = [];
     // No confident fast-path answer, so every turn looks up and probes (the cached note would answer otherwise).
-    const { say } = setup({ confidentScore: 99 }, [counting(notes(), log)]);
+    let clock = t0;
+    const p = new ContextPartner({
+      sources: async () => [counting(notes(), log)],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: { probes: true, confidentScore: 99 },
+    });
+    const say = async (userId: string, sessionId: string, minutes: number, text: string) => {
+      clock = t0 + minutes * 60_000;
+      await p.observe({ tenantId: "t", userId, sessionId, at: clock, kind: "user_message", text } as AgentEvent, {
+        waitMs: 1_000,
+      });
+    };
     const probes = () => log.filter((q) => q === "Dana Lee").length;
-    await say("a", 0, "Order chocolates for Dana Lee");
+    await say("u1", "a", 0, "Order chocolates for Dana Lee");
     expect(probes()).toBe(1);
-    // Past the fan-out's 60 s result cache: only the memo can skip the call.
-    // Each turn names someone else too: a new cue each time, not a repeat the cue cooldown would skip.
-    await say("a", 2, "Book a table for me and Dana Lee at Nopi");
+    // Past the fan-out's 60 s result cache, so only the memo can skip the call. Each turn names someone else too: a
+    // new cue each time, not a repeat the cue cooldown would skip.
+    await say("u1", "a", 2, "Book a table for me and Dana Lee at Nopi");
+    await say("u1", "b", 3, "Order chocolates for Dana Lee from Hotel Chocolat");
     expect(probes()).toBe(1);
-    await say("b", 2, "Order chocolates for Dana Lee from Hotel Chocolat");
+    // Another user shares nothing.
+    await say("u2", "a", 3, "Order chocolates for Dana Lee");
     expect(probes()).toBe(2);
-    // Past the memo's 10 minutes, session a asks again: new mail about the person is found.
-    await say("a", 15, "Order flowers for Dana Lee from Bloom");
+    // Past the memo's 10 minutes the user's sessions ask again: new mail about the person is found.
+    await say("u1", "a", 15, "Order flowers for Dana Lee from Bloom");
     expect(probes()).toBe(3);
   });
 
@@ -246,5 +263,127 @@ describe("probe state, review round (D46)", () => {
     const later = shown.slice(before);
     expect(later.length).toBeGreaterThan(0);
     expect(later.some((prompt) => prompt.includes("nut allergy"))).toBe(false);
+  });
+});
+
+describe("probes beside the lookup", () => {
+  const scope = { tenantId: "t", userId: "u" };
+  const at = Date.parse("2026-10-27T09:00:00Z");
+  const notes = new StaticSource("drive", "Notes", [
+    { ref: "n1", title: "Notes", text: "Dana Lee is vegetarian; a quiet table suits her best" },
+  ]);
+  const partner = (config: Record<string, unknown>, slowMs = 0) => {
+    const slow: Source = {
+      id: "drive",
+      kind: "test",
+      description: "Notes",
+      // Only the person probe ("Dana Lee") is slow; the lookup's own query answers at once.
+      search: async (q) => {
+        if (slowMs && q.text === "Dana Lee") await Bun.sleep(slowMs);
+        return notes.search(q);
+      },
+    };
+    return new ContextPartner({
+      sources: async () => [slow],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => at,
+      config: { probes: true, ...config },
+    });
+  };
+
+  test("a slow probe holds the lookup up for at most probeGraceMs, and still caches what it finds", async () => {
+    const p = partner({ probeGraceMs: 50 }, 400);
+    const t0 = performance.now();
+    await p.ask({ ...scope, sessionId: "s", question: "Book dinner with Dana Lee on Friday" });
+    expect(performance.now() - t0).toBeLessThan(300);
+    const waited = partner({ probeGraceMs: 5_000 }, 400);
+    const t1 = performance.now();
+    await waited.ask({ ...scope, sessionId: "s", question: "Book dinner with Dana Lee on Friday" });
+    expect(performance.now() - t1).toBeGreaterThanOrEqual(390);
+  });
+
+  test("with fallbackAgree, an item both the lookup and a person probe found is delivered with no model", async () => {
+    const text =
+      "Invite Dana Lee to the team offsite and book a table for six at an Italian restaurant in Soho on Friday evening";
+    const got = async (fallbackAgree: boolean) => {
+      // Nothing is sure on its words (confidentScore out of reach) and the plain fallback wants more of them than the
+      // item has (three: dana, lee, table): only agreement can deliver it.
+      const p = partner({ fallbackAgree, probeGraceMs: 1_000, confidentScore: 99, fallbackMatchedTerms: 4 });
+      const r = await p.observe({ ...scope, sessionId: "s", at, kind: "user_message", text } as AgentEvent, {
+        waitMs: 1_000,
+      });
+      return [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId: "s" })].flatMap((i) =>
+        i.citations.map((c) => c.itemId),
+      );
+    };
+    expect(await got(false)).toEqual([]);
+    expect(await got(true)).toEqual(["drive:n1"]);
+  });
+});
+
+describe("the judged confident path (judgeConfident)", () => {
+  const scope = { tenantId: "t", userId: "u" };
+  const at = Date.parse("2026-10-27T09:00:00Z");
+  const text =
+    "Invite Dana Lee to the team offsite and book a table for six at an Italian restaurant in Soho on Friday evening";
+  const notes = new StaticSource("drive", "Notes", [
+    {
+      ref: "n1",
+      title: "Notes",
+      text: "Dana Lee is vegetarian; a quiet table suits her best.\nBest regards,\nRobin Carter\nHead of Partnerships",
+    },
+  ]);
+  const run = async (config: Record<string, unknown>, reply: () => string) => {
+    const model = new FakeModel(reply);
+    const p = new ContextPartner({
+      sources: async () => [notes],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model,
+      now: () => at,
+      config: { probes: true, probeGraceMs: 1_000, ...config },
+    });
+    const r = await p.observe({ ...scope, sessionId: "s", at, kind: "user_message", text } as AgentEvent, {
+      waitMs: 1_000,
+    });
+    const injections = [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId: "s" })];
+    return { injections, got: injections.flatMap((i) => i.citations.map((c) => c.itemId)), model };
+  };
+
+  test("off, a sure item is delivered on its score; on, the judge sees it and may decline it", async () => {
+    const off = await run({}, () => '{"pick": []}');
+    expect(off.got).toEqual(["drive:n1"]);
+    expect(off.model.calls.length).toBe(0);
+    const on = await run({ judgeConfident: true }, () => '{"pick": []}');
+    expect(on.model.calls.length).toBe(1);
+    expect(on.model.calls[0]!.messages.at(-1)!.content).toContain("Dana Lee is vegetarian");
+    expect(on.got).toEqual([]);
+  });
+
+  test("a failing model delivers the sure item as no judge would (D41)", async () => {
+    const failing = await run({ judgeConfident: true }, () => {
+      throw new Error("outage");
+    });
+    expect(failing.got).toEqual(["drive:n1"]);
+  });
+
+  test("with judgeAgreed off, a lone sure item the lookup and a probe both found skips the judge", async () => {
+    const r = await run({ judgeConfident: true, judgeAgreed: false }, () => {
+      throw new Error("not called");
+    });
+    expect(r.got).toEqual(["drive:n1"]);
+    expect(r.model.calls.length).toBe(0);
+  });
+
+  test("with compactInjection, the delivered item and the judge's copy drop the signature", async () => {
+    const r = await run({ compactInjection: true, judgeConfident: true }, () => '{"pick": [0]}');
+    expect(r.got).toEqual(["drive:n1"]);
+    expect(r.injections[0]!.text).toContain("Dana Lee is vegetarian");
+    expect(r.injections[0]!.text).not.toContain("Head of Partnerships");
+    expect(r.model.calls[0]!.messages.at(-1)!.content).not.toContain("Head of Partnerships");
   });
 });

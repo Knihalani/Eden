@@ -119,12 +119,6 @@ interface Session {
   /** Term ids the session has seen (bounded, least recently seen first). */
   seen: Set<number>;
   ledger: Ledger;
-  /**
-   * The session's recent probes (a query and its sources → the ids it found, and when), so a person a conversation
-   * keeps naming is not searched again each turn. An entry serves for `PROBE_MEMO_MS` while all its items are cached;
-   * at most `PROBE_MEMO` entries, the least recently probed dropped.
-   */
-  probeMemo?: Map<string, { ids: string[]; at: number }>;
   /** Sketches of items delivered in this session (bounded): a near-duplicate of one is not delivered again. */
   delivered: Sketch[];
   /** Injections handed to the agent and not yet judged used or unused. */
@@ -163,10 +157,8 @@ interface Cue {
  * is billed on tokens used: a verdict is a few tokens plus low-effort reasoning.
  */
 const JUDGE_MAX_TOKENS = 512;
-/** Probes a session remembers (`Session.probeMemo`): enough for a conversation's people and days. */
-const PROBE_MEMO = 32;
-/** How long a remembered probe serves (`Session.probeMemo`): new mail about a person is found after it. */
-const PROBE_MEMO_MS = 10 * 60_000;
+/** Probes a user's cache remembers (`ItemCache.rememberProbe`): enough for the people and days of their week. */
+const PROBE_MEMO = 256;
 const ANSWER_MAX_TOKENS = 1_000;
 
 /** Requests that act on someone, where an item they take part in is context (D44). */
@@ -290,7 +282,7 @@ export class ContextPartner {
     // looked up again, but the cache may hold something new for it (another question about the same person).
     if (fast.length > 0 && !this.stale(s, fast)) {
       this.markCue(s, cue);
-      const injection = this.deliver(s, fast, "proactive", `cache:${cue.id}`);
+      const injection = this.deliver(s, fast, "proactive", `cache:${cue.id}`, cue);
       trace("fast", cue.id, { itemIds: fast.map((x) => x.item.id) });
       if (queued) s.pending.unshift(queued);
       return reply(injection);
@@ -396,6 +388,7 @@ export class ContextPartner {
         items.map((item) => ({ item, score: 1, matched: 0, sketch: null })),
         "answer",
         "ask",
+        cue,
         answer,
       );
       this.handOut(s, injection);
@@ -757,11 +750,20 @@ export class ContextPartner {
    * With no model's say, the best candidate alone, if it is strong enough: several distinct query terms and a score
    * of at least `fallbackScore` (coverage plus the entity bonus, D36). One item at most: nothing has judged it.
    */
-  private fallback(unsure: Scored[]): Scored | null {
+  private fallback(unsure: Scored[], agreed?: Set<string>): Scored | null {
     const top = unsure[0];
     const c = this.config;
-    if (!top || c.fallbackMatchedTerms <= 0 || bulkMail(top.item)) return null;
-    return top.matched >= c.fallbackMatchedTerms && top.score >= c.fallbackScore ? top : null;
+    if (!top || c.fallbackMatchedTerms <= 0) return null;
+    if (!bulkMail(top.item) && top.matched >= c.fallbackMatchedTerms && top.score >= c.fallbackScore) return top;
+    // Found both by the request's own search and by a probe for its people (`fallbackAgree`): two independent queries
+    // agreeing is evidence words alone are not. Still one item, and it must share two of the request's terms.
+    if (!agreed) return null;
+    return (
+      unsure
+        .slice(0, 3)
+        .find((x) => agreed.has(x.item.id) && x.matched >= 2 && x.score >= c.fallbackAgreeScore && !bulkMail(x.item)) ??
+      null
+    );
   }
 
   /**
@@ -799,7 +801,7 @@ export class ContextPartner {
     s: Session,
     cue: Cue,
     limit: number,
-  ): Promise<{ calls: number; plans?: Trace["plans"]; probed?: string[] }> {
+  ): Promise<{ calls: number; plans?: Trace["plans"]; probed?: string[]; looked?: string[] }> {
     const all = await this.deps.sources(s.scope).catch((): Source[] => []);
     if (all.length === 0 || s.closed) return { calls: 0 };
     const ranked = this.deps.sourceMap.route({
@@ -848,7 +850,17 @@ export class ContextPartner {
         : listing
           ? listers
           : found;
-    const outcomes = await this.fanout.search(
+    // Probes (`probe`) go out with the lookup, not after it: the slow path waits for the slower of the two, not both.
+    const probeThis =
+      this.config.probeWhen === "always" ||
+      isAction(cue.raw) ||
+      ACTING.has(s.situation) ||
+      ACTS_ON.test(cue.raw) ||
+      cue.external;
+    // A probe that fails is no probe; a session that closes mid-search leaves it to finish on its own (it checks).
+    // The lookup's own search starts first: the fan-out admits a call when it starts (a per-source concurrency slot),
+    // and probes started before it could take the slots and leave the request itself skipped as busy.
+    const searching = this.fanout.search(
       chosen,
       {
         scope: s.scope,
@@ -859,6 +871,11 @@ export class ContextPartner {
       },
       { timeoutMs: this.config.sourceTimeoutMs, signal: s.abort.signal },
     );
+    const settled = searching.catch(() => null);
+    const probed = { calls: 0, kept: [] as string[] };
+    const probing =
+      this.config.probes && probeThis ? this.probe(s, cue, found, all, listing, probed, settled).catch(() => {}) : null;
+    const outcomes = await searching;
     const plans = planner
       ? chosen.flatMap((x) => {
           const last = (x as PlannedSource).last;
@@ -882,15 +899,17 @@ export class ContextPartner {
       // before the next yield: a session closing in between must not leave items cached whose mentions never land.
       this.store(s, o.items);
     }
-    const probeThis =
-      this.config.probeWhen === "always" ||
-      isAction(cue.raw) ||
-      ACTING.has(s.situation) ||
-      ACTS_ON.test(cue.raw) ||
-      cue.external;
-    if (this.config.probes && probeThis && !s.closed) {
-      const probed = await this.probe(s, cue, found, all, listing);
-      return { ...result, calls: result.calls + probed.calls, probed: probed.probed };
+    if (probing) {
+      // The lookup waits at most `probeGraceMs` past its own search for the probes: a slow probe must not hold up
+      // what the lookup found. One still running finishes on its own and caches what it finds for later turns; this
+      // lookup ranks what the probes found by then, and counts the calls they had sent.
+      const grace = this.config.probeGraceMs;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([probing, new Promise<void>((done) => (timer = setTimeout(done, grace)))]);
+      clearTimeout(timer);
+      // What the request's own search returned, beside the probes' finds: an item both found is twice supported.
+      const looked = outcomes.flatMap((o) => o.items.map((i) => i.id));
+      return { ...result, calls: result.calls + probed.calls, probed: probed.kept.slice(0, 20), looked };
     }
     return result;
   }
@@ -909,45 +928,74 @@ export class ContextPartner {
     found: Source[],
     all: Source[],
     listed: boolean,
-  ): Promise<{ calls: number; probed: string[] }> {
-    let calls = 0;
+    out: { calls: number; kept: string[] },
+    searched: Promise<unknown>,
+  ): Promise<void> {
+    const lanes = new Map<string, Promise<unknown>>();
     const budget = this.config.probeCalls;
     const deadline = performance.now() + this.config.sourceTimeoutMs;
-    const kept: string[] = [];
-    const memo = (s.probeMemo ??= new Map());
+    const kept = out.kept;
     const send = async (sources: Source[], text: string, window?: SearchQuery["window"], keep = true) => {
       const key = `${text}|${window ? `${window.start}/${window.end}` : ""}|${sources.map((x) => x.id).join(",")}`;
-      const seen = memo.get(key);
-      if (seen && this.now() - seen.at < PROBE_MEMO_MS) {
-        // Probed recently in this session: its finds at no call, while every one is still cached.
-        const hits = this.deps.cache.hits(s.scope, seen.ids, this.now());
-        if (hits.length === seen.ids.length) {
-          if (keep) for (const h of hits) if (!kept.includes(h.item.id)) kept.push(h.item.id);
-          return hits.map((h) => h.item);
-        }
+      // Probed recently by this user (any of their sessions): its finds at no call, while every one is still cached.
+      const hits = this.deps.cache.probeHits(s.scope, key, this.config.probeMemoMs, this.now());
+      if (hits) {
+        if (keep) for (const h of hits) if (!kept.includes(h.item.id)) kept.push(h.item.id);
+        return hits.map((h) => h.item);
       }
-      const left = deadline - performance.now();
-      const to = sources.slice(0, Math.max(0, budget - calls));
-      if (to.length === 0 || s.closed || left < 50) return [] as ContextItem[];
-      calls += to.length;
-      const outcomes = await this.fanout.search(
-        to,
-        // A day's listing is the whole day (a busy one has more than a search's page); a query, its first page.
-        { scope: s.scope, text, entities: text ? [text] : [], limit: window ? 20 : 5, ...(window ? { window } : {}) },
-        { timeoutMs: left, signal: s.abort.signal },
-      );
+      const to = sources.slice(0, Math.max(0, budget - out.calls));
+      if (to.length === 0 || s.closed || deadline - performance.now() < 50) return [] as ContextItem[];
+      out.calls += to.length;
+      // A day's listing is the whole day (a busy one has more than a search's page); a query, its first page.
+      const query = {
+        scope: s.scope,
+        text,
+        entities: text ? [text] : [],
+        limit: window ? 20 : 5,
+        ...(window ? { window } : {}),
+      };
+      const attempt = async (source: Source) => {
+        const left = deadline - performance.now();
+        if (s.closed || left < 50) return null;
+        const [o] = await this.fanout.search([source], query, { timeoutMs: left, signal: s.abort.signal });
+        return o ?? null;
+      };
+      // One probe call per source at a time, in this lookup: with the lookup's own call, that is two, the fan-out's
+      // starting concurrency per source. One skipped as busy anyway (another lookup of the user's holds the slots)
+      // is tried once more when the lookup's own search is done.
+      const one = (source: Source) => {
+        const run = (lanes.get(source.id) ?? Promise.resolve()).then(async () => {
+          const o = await attempt(source);
+          if (o?.status !== "busy") return o;
+          await searched;
+          return attempt(source);
+        });
+        lanes.set(
+          source.id,
+          run.catch(() => null),
+        );
+        return run;
+      };
+      const outcomes = (await Promise.all(to.map(one))).filter((o): o is FanoutOutcome => o !== null);
       const items = outcomes.flatMap((o) => o.items);
+      // A call the fan-out did not make (busy, limited, open, answered from its cache, past the deadline) is no call.
+      out.calls -= to.length - outcomes.filter((o) => !SKIPPED.has(o.status)).length;
       if (!s.closed) this.store(s, items);
       if (keep) for (const i of items) if (!kept.includes(i.id)) kept.push(i.id);
       // Only a complete answer is remembered: a source that failed or timed out is asked again next time.
-      if (to.length === sources.length && outcomes.every((o) => o.status === "ok")) {
-        memo.delete(key);
-        memo.set(key, { ids: items.map((i) => i.id), at: this.now() });
-        if (memo.size > PROBE_MEMO) memo.delete(memo.keys().next().value!);
+      if (outcomes.length === sources.length && outcomes.every((o) => o.status === "ok")) {
+        this.deps.cache.rememberProbe(
+          s.scope,
+          key,
+          items.map((i) => i.id),
+          PROBE_MEMO,
+          this.now(),
+        );
       }
       return items;
     };
-    const off = new Set(this.config.probeOff);
+    const c = this.config;
+    const off = new Set(c.probeOff);
     // An action on a named day: what is already that day is what it may clash with. Runs of consecutive days, each
     // listed whole: one span over separate days would page out the days asked for.
     const days = cue.time ? [...cue.time.days].sort() : [];
@@ -966,7 +1014,13 @@ export class ContextPartner {
     // sources mention which names (any source may, not only the lookup's): three per name, not every source.
     const routeFor = (name: string) =>
       this.deps.sourceMap
-        .route({ scope: s.scope, entities: [name], situation: s.situation, sourceIds: all.map((x) => x.id), limit: 3 })
+        .route({
+          scope: s.scope,
+          entities: [name],
+          situation: s.situation,
+          sourceIds: all.map((x) => x.id),
+          limit: c.probePeopleSources,
+        })
         .map((r) => all.find((x) => x.id === r.sourceId)!)
         .filter(Boolean);
     const people = off.has("people") ? [] : cue.entities.slice(0, 2);
@@ -983,9 +1037,8 @@ export class ContextPartner {
       ...windows.map((w) => send(listers, "", w)),
       byPeople,
       // The topic's finds share the request's words, and rank on them; the others get seats of their own.
-      ...(topic ? [send(found, topic, undefined, false)] : []),
+      ...(topic ? [send(found.slice(0, this.config.probeTopicSources), topic, undefined, false)] : []),
     ]);
-    return { calls, probed: kept.slice(0, 20) };
   }
 
   /** Caches sanitized items and records the entity mentions of those new to the cache or changed. */
@@ -1132,20 +1185,33 @@ export class ContextPartner {
       });
     try {
       let probedIds: string[] | undefined;
-      ({ calls: sourceCalls, plans, probed: probedIds } = await this.searchLive(s, cue, this.config.lookupSources));
+      let lookedIds: string[] | undefined;
+      ({
+        calls: sourceCalls,
+        plans,
+        probed: probedIds,
+        looked: lookedIds,
+      } = await this.searchLive(s, cue, this.config.lookupSources));
       if (s.closed) return null;
       sourceCalls += await this.refresh(s, cue);
       if (s.closed) return null;
       // This lookup's probe finds, its own (never another turn's or a concurrent ask's).
       const scored = this.rank(s, cue, { probed: probedIds });
       const sure = this.confident(scored);
-      if (sure.length > 0) {
+      // With `judgeConfident` and a judge to ask, what scores as sure is judged with the rest in the same call: the
+      // no-model bar is right about half the time (docs/research/probes.md), the judge more often.
+      // One sure item both the request's search and a probe found is corroborated: delivered without the call
+      // (`judgeAgreed` false).
+      const both = agreed(new Set(probedIds ?? []), lookedIds);
+      const corroborated = !this.config.judgeAgreed && sure.length === 1 && both.has(sure[0]!.item.id);
+      const judgeSure = this.config.judgeConfident && this.deps.model !== null && sure.length > 0 && !corroborated;
+      if (sure.length > 0 && !judgeSure) {
         done(
           "sources",
           cue.id,
           sure.map((x) => x.item),
         );
-        return this.deliver(s, sure, "proactive", `sources:${cue.id}`);
+        return this.deliver(s, sure, "proactive", `sources:${cue.id}`, cue);
       }
       // An event on a day the request names is a candidate whatever it scores on words (D44).
       const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item) ?? "") === true;
@@ -1155,7 +1221,9 @@ export class ContextPartner {
       );
       // With probes on, up to three of the probes' finds join the judge's candidates beyond the best scored: found for
       // the request's people, organisations or day, they share few of its words and would otherwise never be seen.
-      const top = eligible.slice(0, this.config.judgeCandidates);
+      const top = judgeSure
+        ? [...sure, ...eligible.filter((x) => !sure.includes(x))].slice(0, this.config.judgeCandidates)
+        : eligible.slice(0, this.config.judgeCandidates);
       const seats =
         this.config.probes && !this.config.probeOff.includes("seats")
           ? eligible.filter((x) => probed.has(x.item.id) && !top.includes(x)).slice(0, 3)
@@ -1167,6 +1235,16 @@ export class ContextPartner {
       }
       // With no model to judge: what the request's people and days ground first (D44), then D36's fallback.
       const noModel = (why: string, reasonPrefix: string): Injection | null => {
+        // What scored as sure is delivered as it would have been with no judge to ask (`judgeConfident`): a failing
+        // or unaffordable model is never worse than none (D41).
+        if (judgeSure) {
+          done(
+            "sources",
+            `${cue.id}${reasonPrefix}`,
+            sure.map((x) => x.item),
+          );
+          return this.deliver(s, sure, "proactive", `sources:${cue.id}`, cue);
+        }
         // Grounding reads every candidate, not only the judge's few: a day's events rank after every word match.
         const grounded = this.grounded(s, cue, eligible, eventKind);
         if (grounded.items.length > 0) {
@@ -1176,12 +1254,12 @@ export class ContextPartner {
             `grounded-${grounded.how}${reasonPrefix}:${cue.id}`,
             items.map((x) => x.item),
           );
-          return this.deliver(s, items, "proactive", `grounded-${grounded.how}:${cue.id}`);
+          return this.deliver(s, items, "proactive", `grounded-${grounded.how}:${cue.id}`, cue);
         }
-        const top = this.fallback(unsure);
+        const top = this.fallback(unsure, this.config.fallbackAgree ? agreed(probed, lookedIds) : undefined);
         if (top) {
           done("sources", `fallback${reasonPrefix}:${cue.id}`, [top.item]);
-          return this.deliver(s, [top], "proactive", `fallback:${cue.id}`);
+          return this.deliver(s, [top], "proactive", `fallback:${cue.id}`, cue);
         }
         done("silent", why);
         return null;
@@ -1192,7 +1270,12 @@ export class ContextPartner {
       let res: Awaited<ReturnType<Model["chat"]>>;
       try {
         res = await this.deps.model.chat({
-          messages: judgeMessages(s.window.join("\n"), candidates, this.config.probes),
+          messages: judgeMessages(
+            s.window.join("\n"),
+            candidates,
+            this.config.probes,
+            this.config.compactInjection ? focusOf(cue) : undefined,
+          ),
           cacheKey: userCacheKey(s.scope),
           maxTokens: JUDGE_MAX_TOKENS,
           reasoning: "low",
@@ -1225,7 +1308,7 @@ export class ContextPartner {
         cue.id,
         picked.map((x) => x.item),
       );
-      return this.deliver(s, picked, "proactive", `model:${cue.id}`);
+      return this.deliver(s, picked, "proactive", `model:${cue.id}`, cue);
     } catch {
       // A failing source map or cache never escapes as an unhandled rejection; the lookup just ends silent.
       done("silent", "error");
@@ -1245,8 +1328,18 @@ export class ContextPartner {
     this.deps.budget.settle(r, actualUsd);
   }
 
-  /** `shown` is what the agent receives when it is not the injection's own text (an ask's answer). */
-  private deliver(s: Session, scored: Scored[], mode: InjectionMode, reason: string, shown?: string): Injection {
+  /**
+   * `shown` is what the agent receives when it is not the injection's own text (an ask's answer). With
+   * `compactInjection`, each item is cut to what bears on `cue` (`compactText`) rather than to its first bytes.
+   */
+  private deliver(
+    s: Session,
+    scored: Scored[],
+    mode: InjectionMode,
+    reason: string,
+    cue: Cue,
+    shown?: string,
+  ): Injection {
     const items = scored.map((x) => x.item);
     for (const x of scored) if (x.sketch) s.delivered.push(x.sketch);
     if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
@@ -1259,7 +1352,17 @@ export class ContextPartner {
       id: newId("inj", this.now()),
       sessionId: s.id,
       mode,
-      text: renderPacket(items, { maxBytes: this.config.maxInjectionBytes }),
+      text: renderPacket(items, {
+        maxBytes: this.config.maxInjectionBytes,
+        ...(this.config.compactInjection
+          ? {
+              focus: focusOf(cue),
+              itemBytes: this.config.compactItemBytes,
+              // A word the session has seen: a part with nothing else the agent has (`compactText`).
+              ...(this.config.compactNovel ? { known: (w: string) => s.seen.has(s.vocab.lookup(w)) } : {}),
+            }
+          : {}),
+      }),
       citations: citationsOf(items),
       reason,
       score: Math.max(...scored.map((x) => x.score)),
@@ -1284,6 +1387,20 @@ export class ContextPartner {
 }
 
 const NO_TERMS = new Uint32Array(0);
+
+/** Fan-out outcomes with no call to the source behind them. */
+const SKIPPED = new Set<string>(["busy", "limited", "open", "cached"]);
+
+/** Ids both a lookup's own search and its probes found. */
+function agreed(probed: ReadonlySet<string>, looked: readonly string[] | undefined): Set<string> {
+  return new Set((looked ?? []).filter((id) => probed.has(id)));
+}
+
+/** The request's words and its people's names, lowercased: what a compacted packet keeps the parts holding. */
+function focusOf(cue: Cue): Set<string> {
+  const words = `${cue.text} ${cue.entities.join(" ")}`.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  return new Set(words.filter((w) => w.length > 1 && !isStopword(w)));
+}
 
 const yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
 
