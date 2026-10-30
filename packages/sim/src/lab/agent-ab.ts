@@ -237,7 +237,7 @@ interface RunResult {
   leaked?: boolean;
 }
 
-/** The "+f" conditions' engine settings: probes with compaction, agreement and the judged confident path. */
+/** Engine settings by condition suffix ("eden-judge+p"): the measured settings of docs/research/lean-probes.md. */
 const FULL = {
   probes: true,
   probeCalls: 4,
@@ -247,16 +247,23 @@ const FULL = {
   judgeAgreed: false,
   judgeCandidates: 4,
 };
+const SETTINGS: Record<string, Record<string, unknown>> = {
+  p: { probes: true },
+  f: FULL,
+  g: { ...FULL, judgeCandidates: 6 },
+  p4: { probes: true, probeCalls: 4 },
+  pc: { probes: true, compactInjection: true },
+  pj: { probes: true, judgeConfident: true },
+};
 
 /** One world under one condition: a fresh Eden (if any) sees the world's tasks in order, as it would in use. */
 async function runWorld(world: World, seed: number, tasks: Task[], condition: string): Promise<RunResult[]> {
   const sources = simSources(world, REALISTIC, 0, seed);
-  // A "+p" suffix runs Eden with probes on (docs/research/probes.md), "+f" with probes and the changes measured with
-  // them (`FULL`), "+g" the same with the judge's six candidates; the rest of the name is the condition.
-  const probes = condition.endsWith("+p");
-  const full = condition.endsWith("+f");
-  const wide = condition.endsWith("+g");
-  const base = probes || full || wide ? condition.slice(0, -2) : condition;
+  // A suffix ("+p", "+f", ...) runs Eden with that variant's settings (`SETTINGS`); the rest is the condition.
+  const plus = condition.lastIndexOf("+");
+  const variant = plus > 0 ? SETTINGS[condition.slice(plus + 1)] : undefined;
+  if (plus > 0 && !variant) throw new Error(`unknown variant in ${condition}: ${Object.keys(SETTINGS).join(", ")}`);
+  const base = plus > 0 ? condition.slice(0, plus) : condition;
   const useEden = base !== "none" && base !== "tools";
   const useTools = base === "tools" || base.startsWith("both");
   const judge = base.endsWith("-judge");
@@ -272,7 +279,7 @@ async function runWorld(world: World, seed: number, tasks: Task[], condition: st
         model: judge ? new OpenRouterModel({ apiKey: KEY!, model: MODEL }) : null,
         planner: new QueryPlanner({ seed }),
         now: () => clock,
-        config: full ? FULL : wide ? { ...FULL, judgeCandidates: 6 } : { probes },
+        config: variant ?? {},
         // Charged to the task whose session the trace is from: a slow-path verdict can land after it ended.
         onTrace: (t) => {
           const owner = bySession.get(t.sessionId);
