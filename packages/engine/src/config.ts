@@ -74,6 +74,18 @@ export interface EngineConfig {
    * clash with the requested time with no model; give the probes' finds seats among the judge's candidates.
    */
   probes: boolean;
+  /**
+   * Each delivered item cut to the sentences that bear on the request (its words, numbers, times), at most
+   * `compactItemBytes`, with quoted threads, greetings and signatures dropped, rather than to its first bytes.
+   */
+  compactInjection: boolean;
+  compactItemBytes: number;
+  /** Compaction also drops the parts whose every content word the session has already seen. */
+  compactNovel: boolean;
+  /** How long a lookup waits for its probes past its own search (ms); slower ones only fill the cache. */
+  probeGraceMs: number;
+  /** A probe the user's lookups made this recently (ms) is answered from its cached finds, at no call. */
+  probeMemoMs: number;
   /** Source calls the probes may make per lookup, on top of the lookup's own. */
   probeCalls: number;
   /**
@@ -81,6 +93,15 @@ export interface EngineConfig {
    * someone, and arriving messages): where unasked context changes the outcome, at fewer source calls.
    */
   probeWhen: "always" | "actions";
+  /** Sources each person or organisation probe goes to (the source map's best for that name). */
+  probePeopleSources: number;
+  /** Sources the topic probe goes to (the lookup's best routed). */
+  probeTopicSources: number;
+  /**
+   * With a judge configured, the slow path's confident items are judged too (with the other candidates, one call)
+   * rather than delivered on their score alone. Costs a judge call on lookups that had only confident items.
+   */
+  judgeConfident: boolean;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
   /** Cost reserved per judge call before the real cost is known: about its worst case at the cap (D45). */
@@ -123,8 +144,16 @@ export const DEFAULT_CONFIG: EngineConfig = {
   estimatedCallUsd: 0.0005,
   estimatedAnswerUsd: 0.0015,
   probes: false,
+  compactInjection: false,
+  compactItemBytes: 320,
+  compactNovel: false,
+  probeGraceMs: 300,
+  probeMemoMs: 10 * 60_000,
   probeCalls: 8,
   probeWhen: "always",
+  probePeopleSources: 3,
+  probeTopicSources: 8,
   probeOff: [],
+  judgeConfident: false,
   maxEventChars: 32_000,
 };

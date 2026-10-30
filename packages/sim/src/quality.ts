@@ -83,6 +83,8 @@ interface Counter {
   needTurns: number;
   mustFacts: number;
   mustDelivered: number;
+  /** Must facts delivered with their words in the packet's line for the item, not only the item cited. */
+  mustStated: number;
   mustInTime: number;
   mustCovered: number;
   delivered: number;
@@ -99,6 +101,7 @@ const counter = (): Counter => ({
   needTurns: 0,
   mustFacts: 0,
   mustDelivered: 0,
+  mustStated: 0,
   mustInTime: 0,
   mustCovered: 0,
   delivered: 0,
@@ -115,6 +118,8 @@ export interface Rates {
   /** Precision counting items about the task's person or organisation as relevant. */
   precisionLenient: number;
   recall: number;
+  /** Recall counting a fact only when its words are in the packet (a cut or compacted line may drop them). */
+  recallStated: number;
   /** Must facts that reached the agent before it answered (its next agent message). */
   recallInTime: number;
   /** Must facts the agent had by its answer from any route: Eden now, Eden earlier, or its own tools. */
@@ -128,6 +133,7 @@ export interface Rates {
     relevant: number;
     mustFacts: number;
     mustDelivered: number;
+    mustStated: number;
     mustInTime: number;
     silentTurns: number;
     falseFires: number;
@@ -140,6 +146,7 @@ function rates(c: Counter): Rates {
     precision: r(c.relevant, c.delivered),
     precisionLenient: r(c.related, c.delivered),
     recall: r(c.mustDelivered, c.mustFacts),
+    recallStated: r(c.mustStated, c.mustFacts),
     recallInTime: r(c.mustInTime, c.mustFacts),
     coverage: r(c.mustCovered, c.mustFacts),
     falseFireRate: r(c.falseFires, c.silentTurns),
@@ -150,6 +157,7 @@ function rates(c: Counter): Rates {
       relevant: c.relevant,
       mustFacts: c.mustFacts,
       mustDelivered: c.mustDelivered,
+      mustStated: c.mustStated,
       mustInTime: c.mustInTime,
       silentTurns: c.silentTurns,
       falseFires: c.falseFires,
@@ -164,6 +172,11 @@ export interface QualityReport {
   itemsPerInjection: number;
   injectionBytesP50: number;
   injectionBytesP95: number;
+  /** All injected bytes over the run, and per must-fact delivered: what the agent reads for each fact it needed. */
+  injectionBytesTotal: number;
+  bytesPerMustFact: number;
+  /** Injected bytes per must fact whose words reached the agent (`recallStated`): the packet's knowledge density. */
+  bytesPerStatedFact: number;
   /** Delivered items whose facts the agent already had (from its own tools or an earlier delivery). */
   redundantShare: number;
   /** Delivered items from noise (newsletters, notifications, unrelated threads). */
@@ -241,6 +254,8 @@ const pct = (xs: number[], p: number) => {
   const s = [...xs].sort((a, b) => a - b);
   return Math.round(s[Math.min(s.length - 1, Math.floor(p * s.length))]! * 100) / 100;
 };
+
+const wordsOf = (s: string) => s.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
 
 const sleep = (ms: number) => (ms > 0 ? Bun.sleep(ms) : Bun.sleep(1));
 
@@ -395,7 +410,14 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       const traceStart = userTraces.length;
       const known = new Set<string>(); // Facts the agent has: delivered by Eden or fetched by its tools.
       const knownAt = new Map<string, number>(); // fact → turn index it became known
-      const arrivals: { at: number; ids: string[]; shown: Map<string, string[]>; wallMs: number; why: string }[] = [];
+      const arrivals: {
+        at: number;
+        ids: string[];
+        shown: Map<string, string[]>;
+        stated: Map<string, string[]>;
+        wallMs: number;
+        why: string;
+      }[] = [];
       const sentAt: number[] = [];
 
       for (let i = 0; i < turnsFlat.length; i++) {
@@ -518,8 +540,30 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         const shown = new Map(
           ids.map((id, k) => [id, byId.has(id) ? factsShown(byId.get(id)!, lines[k] ?? "", applied) : []]),
         );
+        // The facts whose words the item's line holds (three in four of the detail's words): what the agent can read.
+        const stated = new Map(
+          ids.map((id, k) => {
+            const words = new Set(wordsOf(lines[k] ?? ""));
+            const facts = shown.get(id)!.filter((f) => {
+              const d = wordsOf(world.facts.get(f)?.detail ?? "");
+              return d.filter((x) => words.has(x)).length >= 0.75 * d.length;
+            });
+            return [id, facts];
+          }),
+        );
         // How the engine decided to deliver it: the injection reason's first part (cache, sources, model, fallback...).
-        arrivals.push({ at, ids, shown, wallMs: wall, why: inj.reason.split(":")[0] ?? "" });
+        if (process.env.DUMP_INJ)
+          require("node:fs").appendFileSync(
+            process.env.DUMP_INJ,
+            JSON.stringify({
+              text: inj.text,
+              reason: inj.reason,
+              ids,
+              facts: ids.map((id) => byId.get(id)?.facts ?? []),
+              stated: ids.map((id) => stated.get(id)),
+            }) + "\n",
+          );
+        arrivals.push({ at, ids, shown, stated, wallMs: wall, why: inj.reason.split(":")[0] ?? "" });
         for (const id of ids) {
           itemsDelivered++;
           const item = byId.get(id);
@@ -540,13 +584,21 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         if (t.sessionId !== session.id || !["fast", "sources", "model"].includes(t.decision)) continue;
         for (const id of t.itemIds) origin.set(id, t.turn - 1);
       }
-      const delivered: { id: string; facts: string[]; origin: number; arrived: number; wallMs: number; why: string }[] =
-        [];
+      const delivered: {
+        id: string;
+        facts: string[];
+        stated: string[];
+        origin: number;
+        arrived: number;
+        wallMs: number;
+        why: string;
+      }[] = [];
       for (const a of arrivals) {
         for (const id of a.ids)
           delivered.push({
             id,
             facts: a.shown.get(id) ?? [],
+            stated: a.stated.get(id) ?? [],
             origin: Math.min(origin.get(id) ?? Math.floor(a.at), turnsFlat.length - 1),
             arrived: a.at,
             wallMs: a.wallMs,
@@ -605,11 +657,13 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         for (const f of label.must) {
           const hits = delivered.filter((d) => (d.origin === i || d.origin === i + 1) && d.facts.includes(f));
           const inTime = hits.some((d) => d.arrived < answerAt);
+          const stated = hits.some((d) => d.stated.includes(f));
           const before = knownAt.get(f);
           const covered = before !== undefined && before < answerAt;
           for (const c of cs) {
             c.mustFacts++;
             if (hits.length) c.mustDelivered++;
+            if (stated) c.mustStated++;
             if (inTime) c.mustInTime++;
             if (covered) c.mustCovered++;
           }
@@ -726,6 +780,9 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
     itemsPerInjection: r3(itemsDelivered / Math.max(1, injections)),
     injectionBytesP50: pct(injBytes, 0.5),
     injectionBytesP95: pct(injBytes, 0.95),
+    injectionBytesTotal: injBytes.reduce((a, b) => a + b, 0),
+    bytesPerMustFact: Math.round(injBytes.reduce((a, b) => a + b, 0) / Math.max(1, total.mustDelivered)),
+    bytesPerStatedFact: Math.round(injBytes.reduce((a, b) => a + b, 0) / Math.max(1, total.mustStated)),
     redundantShare: r3(redundant / Math.max(1, itemsDelivered)),
     noiseShare: r3(noise / Math.max(1, itemsDelivered)),
     privacy: { secretsPlanted, secretsLeaked, injectionItemsDelivered: injectionItems, deliveredNotInert: notInert },

@@ -199,21 +199,38 @@ describe("probe state, review round (D46)", () => {
     search: (q) => (log.push(q.text), source.search(q)),
   });
 
-  test("the memo is the session's: a repeat within 10 minutes skips the person probe there, not elsewhere", async () => {
+  test("the memo is the user's: a repeat within 10 minutes skips the person probe in any of their sessions", async () => {
     const log: string[] = [];
     // No confident fast-path answer, so every turn looks up and probes (the cached note would answer otherwise).
-    const { say } = setup({ confidentScore: 99 }, [counting(notes(), log)]);
+    let clock = t0;
+    const p = new ContextPartner({
+      sources: async () => [counting(notes(), log)],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: { probes: true, confidentScore: 99 },
+    });
+    const say = async (userId: string, sessionId: string, minutes: number, text: string) => {
+      clock = t0 + minutes * 60_000;
+      await p.observe({ tenantId: "t", userId, sessionId, at: clock, kind: "user_message", text } as AgentEvent, {
+        waitMs: 1_000,
+      });
+    };
     const probes = () => log.filter((q) => q === "Dana Lee").length;
-    await say("a", 0, "Order chocolates for Dana Lee");
+    await say("u1", "a", 0, "Order chocolates for Dana Lee");
     expect(probes()).toBe(1);
-    // Past the fan-out's 60 s result cache: only the memo can skip the call.
-    // Each turn names someone else too: a new cue each time, not a repeat the cue cooldown would skip.
-    await say("a", 2, "Book a table for me and Dana Lee at Nopi");
+    // Past the fan-out's 60 s result cache, so only the memo can skip the call. Each turn names someone else too: a
+    // new cue each time, not a repeat the cue cooldown would skip.
+    await say("u1", "a", 2, "Book a table for me and Dana Lee at Nopi");
+    await say("u1", "b", 3, "Order chocolates for Dana Lee from Hotel Chocolat");
     expect(probes()).toBe(1);
-    await say("b", 2, "Order chocolates for Dana Lee from Hotel Chocolat");
+    // Another user shares nothing.
+    await say("u2", "a", 3, "Order chocolates for Dana Lee");
     expect(probes()).toBe(2);
-    // Past the memo's 10 minutes, session a asks again: new mail about the person is found.
-    await say("a", 15, "Order flowers for Dana Lee from Bloom");
+    // Past the memo's 10 minutes the user's sessions ask again: new mail about the person is found.
+    await say("u1", "a", 15, "Order flowers for Dana Lee from Bloom");
     expect(probes()).toBe(3);
   });
 
