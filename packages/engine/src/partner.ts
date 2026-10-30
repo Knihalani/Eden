@@ -67,6 +67,7 @@ import {
   topicOf,
 } from "./probes";
 import { Ledger } from "./ledger";
+import { amountsOf, judge, SWEEP_WORDS, wordsOf, type Act, type Conflict } from "./register";
 import { citationsOf, renderAnswer, renderPacket, shownText } from "./render";
 import { classifySituation } from "./situation";
 import {
@@ -779,6 +780,64 @@ export class ContextPartner {
   }
 
   /**
+   * The next steps of the user's sweep for rules (`SWEEP_WORDS` × their sources, `registerSweepCalls` per lookup, at
+   * most once per `registerSweepMs`), sent in the background: what comes back is cached, where the register reads it
+   * on later lookups. Returns the calls sent.
+   */
+  private async sweepRules(s: Session): Promise<number> {
+    const all = await this.deps.sources(s.scope).catch((): Source[] => []);
+    if (all.length === 0 || s.closed) return 0;
+    const c = this.config;
+    const total = all.length * SWEEP_WORDS.length;
+    const steps = this.deps.cache.sweepSteps(s.scope, c.registerSweepCalls, total, c.registerSweepMs, this.now());
+    for (const i of steps) {
+      const source = all[i % all.length]!;
+      const query = { scope: s.scope, text: SWEEP_WORDS[Math.floor(i / all.length)]!, entities: [], limit: 8 };
+      void this.fanout
+        .search([source], query, { timeoutMs: c.sourceTimeoutMs, signal: s.abort.signal })
+        .then((outcomes) => {
+          if (!s.closed) for (const o of outcomes) this.store(s, o.items);
+        })
+        .catch(() => {});
+    }
+    return steps.length;
+  }
+
+  /**
+   * The user's standing rules (`register.ts`) a request to act touches: a subject word they share, a person or
+   * organisation both name, or a structural conflict (an amount over a cap, a day in a span or past a deadline). Each
+   * with whether it binds with no model's say: a dated or capped conflict about what the request is about, or a
+   * blocking state of someone it names. Ranked: binding first, then any conflict, then the rest; at most eight.
+   */
+  private ruled(s: Session, cue: Cue): { id: string; binds: boolean; conflict: Conflict | null; rank: number }[] {
+    const today = new Date(cue.at + cue.offset * 60_000).toISOString().slice(0, 10);
+    const days = cue.time?.days.size ? [...cue.time.days] : [today];
+    // The request's own words, without the people it names (a name shared is `named`, not a subject).
+    const names = cleanEntities(cue.entities).filter((e) => !e.includes("@"));
+    const nameWords = new Set(names.flatMap((n) => n.toLowerCase().split(/\s+/)));
+    const words = wordsOf(cue.raw).filter((w) => !nameWords.has(w));
+    const lead = words[0] !== undefined && cue.raw.trim().toLowerCase().startsWith(words[0]);
+    const act: Act = { days, amounts: amountsOf(cue.raw), words, lead };
+    const out: { id: string; binds: boolean; conflict: Conflict | null; rank: number }[] = [];
+    // A person the request names by full name, named in the item by it or by their first name alone ("Łukasz:").
+    const firsts = names.filter((n) => /\s/.test(n)).map((n) => n.split(/\s+/)[0]!);
+    const called = [...names, ...firsts.filter((n) => n.length >= 3)];
+    const whole = (hay: string, n: string) =>
+      ` ${hay.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ")} `.includes(` ${n.toLowerCase()} `);
+    for (const { hit, rule } of this.deps.cache.register(s.scope, this.now())) {
+      // The record is about them when their name is its title's or they take part in it; else it only mentions them.
+      // A name the item gives as where someone is or was ("no longer at Globex", "joined from Globex") is their
+      // organisation: the record is about that person, not about everything to do with the organisation.
+      const own = called.filter((n) => !whole(hit.item.text, `at ${n}`) && !whole(hit.item.text, `from ${n}`));
+      const about = own.some((n) => whole(hit.item.title, n) || whole(hit.item.meta?.people ?? "", n));
+      const naming = about ? "subject" : own.some((n) => mentions(n, hit.item)) ? "named" : null;
+      const v = judge(rule, act, naming);
+      if (v.touches) out.push({ id: hit.item.id, binds: v.binds, conflict: v.conflict, rank: v.rank });
+    }
+    return out.sort((a, b) => b.rank - a.rank).slice(0, 8);
+  }
+
+  /**
    * With `groundAway`, whether an item says someone is away only on days other than the ones the request names: no
    * reason, with no model's say, to raise it (the person is there then).
    */
@@ -1297,8 +1356,13 @@ export class ContextPartner {
       if (s.closed) return null;
       sourceCalls += await this.refresh(s, cue);
       if (s.closed) return null;
+      // `registerSweepMs`: the user's sources swept for rules now and then, in the background, for later lookups.
+      if (this.config.register && this.config.registerSweepMs > 0) sourceCalls += await this.sweepRules(s);
+      // `register`: the user's standing rules this request touches (`register.ts`), ranked with the lookup's finds.
+      const ruled = this.config.register && (isAction(cue.raw) || eventKind === "external") ? this.ruled(s, cue) : [];
+      const ruledIds = new Map(ruled.map((r) => [r.id, r]));
       // This lookup's probe finds, its own (never another turn's or a concurrent ask's).
-      const scored = this.rank(s, cue, { probed: probedIds });
+      const scored = this.rank(s, cue, { probed: [...(probedIds ?? []), ...ruledIds.keys()] });
       const sure = this.confident(scored, cue);
       // With `judgeConfident` and a judge to ask, what scores as sure is judged with the rest in the same call: the
       // no-model bar is right about half the time (docs/research/probes.md), the judge more often.
@@ -1322,7 +1386,8 @@ export class ContextPartner {
       const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item) ?? "") === true;
       const probed = new Set(probedIds ?? []);
       const eligible = scored.filter(
-        (x) => x.score >= this.config.candidateScore || onNamedDay(x) || probed.has(x.item.id),
+        (x) =>
+          x.score >= this.config.candidateScore || onNamedDay(x) || probed.has(x.item.id) || ruledIds.has(x.item.id),
       );
       // With probes on, up to three of the probes' finds join the judge's candidates beyond the best scored: found for
       // the request's people, organisations or day, they share few of its words and would otherwise never be seen.
@@ -1333,7 +1398,15 @@ export class ContextPartner {
         this.config.probes && !this.config.probeOff.includes("seats")
           ? eligible.filter((x) => probed.has(x.item.id) && !top.includes(x)).slice(0, 3)
           : [];
-      const unsure = [...top, ...seats];
+      // `register`: the rules the request touches take up to `registerSeats` seats, in the probes' bound (the judge's
+      // input is no larger), the binding ones first. A rule that only shares a word or a name with the request and
+      // conflicts with nothing (rank 0) takes none: the probes' seats were measured to be worth more.
+      const ruleSeats = eligible
+        .filter((x) => (ruledIds.get(x.item.id)?.rank ?? 0) > 0 && !top.includes(x) && !seats.includes(x))
+        .sort((a, b) => ruledIds.get(b.item.id)!.rank - ruledIds.get(a.item.id)!.rank)
+        .slice(0, this.config.registerSeats);
+      if (ruleSeats.length > 0) seats.splice(Math.max(0, 3 - ruleSeats.length));
+      const unsure = [...top, ...seats, ...ruleSeats];
       if (unsure.length === 0) {
         done("silent", "no candidates");
         return null;
@@ -1360,6 +1433,23 @@ export class ContextPartner {
             items.map((x) => x.item),
           );
           return this.deliver(s, items, "proactive", `grounded-${grounded.how}:${cue.id}`, cue);
+        }
+        // `register`: a rule the request breaks, structurally (an amount over its cap, a day in its span or past its
+        // deadline, a blocking state of someone it names), and that is about what the request is about. With what
+        // D36's fallback would have delivered beside it: the rule is news, and leaves the fallback's item news too.
+        const binding = eligible.filter((x) => ruledIds.get(x.item.id)?.binds && !bulkMail(x.item));
+        if (binding.length > 0) {
+          const items = binding
+            .sort((a, b) => ruledIds.get(b.item.id)!.rank - ruledIds.get(a.item.id)!.rank)
+            .slice(0, 1);
+          const also = this.fallback(unsure, this.config.fallbackAgree ? agreed(probed, lookedIds) : undefined, cue);
+          if (also && also.item.id !== items[0]!.item.id) items.push(also);
+          done(
+            "sources",
+            `grounded-rule${reasonPrefix}:${cue.id}`,
+            items.map((x) => x.item),
+          );
+          return this.deliver(s, items, "proactive", `grounded-rule:${cue.id}`, cue);
         }
         const top = this.fallback(unsure, this.config.fallbackAgree ? agreed(probed, lookedIds) : undefined, cue);
         if (top) {
