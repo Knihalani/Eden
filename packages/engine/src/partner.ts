@@ -49,13 +49,16 @@ import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { answerMessages, judgeMessages, parseJudge } from "./judge";
 import { namesParticipant, startDay, startMs, timeWindow, titleNames, type TimeWindow } from "./grounding";
 import {
+  absenceSpan,
   cleanEntities,
   isAction,
   isScheduling,
   isSubject,
+  mentions,
   orgsOf,
   overlaps,
   requestedSpan,
+  settled,
   startMinutes,
   topicOf,
 } from "./probes";
@@ -287,7 +290,7 @@ export class ContextPartner {
     const last = s.cues.get(cue.key);
     const repeat = last !== undefined && s.turn - last < this.config.cueCooldownTurns;
 
-    const fast = this.confident(this.rank(s, cue));
+    const fast = this.confident(this.rank(s, cue), cue);
     // A stale cached copy is not delivered from here: the slow path re-reads it first (D40). A cue in cooldown is not
     // looked up again, but the cache may hold something new for it (another question about the same person).
     if (fast.length > 0 && !this.stale(s, fast)) {
@@ -662,12 +665,16 @@ export class ContextPartner {
     );
   }
 
-  private confident(scored: Scored[]): Scored[] {
+  private confident(scored: Scored[], cue: Cue): Scored[] {
     return (
       scored
         .filter((x) => x.score >= this.config.confidentScore && x.matched >= this.config.minMatchedTerms)
         // Bulk mail is never pushed without a model's say: a newsletter arriving is no reason to speak.
         .filter((x) => !bulkMail(x.item))
+        // Nor, with `quietSettled`, an item that only says things stand as expected (`settled`); nor, with
+        // `groundAway`, an absence on other days than the request names (`awayElsewhere`).
+        .filter((x) => !this.config.quietSettled || !settled(x.item))
+        .filter((x) => !this.awayElsewhere(x.item, cue))
         .slice(0, this.config.maxItemsPerInjection)
     );
   }
@@ -716,6 +723,20 @@ export class ContextPartner {
       const clashes = pool.filter((x) => time.days.has(startDay(x.item) ?? "") && near(x)).sort(soonest);
       if (clashes.length > 0) return { items: clashes.slice(0, this.max()), how: "clash" };
     }
+    // With `groundAway`: a person the request names, away on a day it names ("ask Jamie to feed the cat next weekend"
+    // and Jamie's "away on Skye 6–9 Nov"), whatever the words: the agent should know before it asks them (D48).
+    if (this.config.groundAway && time && time.days.size > 0) {
+      const names = cleanEntities(cue.entities).filter((e) => !e.includes("@"));
+      const away = pool.filter((x) => {
+        const span = absenceSpan(x.item, cue.at);
+        return (
+          span !== null &&
+          [...time.days].some((d) => d >= span.from && d <= span.to) &&
+          names.some((n) => mentions(n, x.item))
+        );
+      });
+      if (away.length > 0) return { items: away.slice(0, this.max()), how: "away" };
+    }
     if (withPerson.length > 0) {
       const dated = withPerson.filter(onDay);
       if (dated.length > 0) return { items: [dated[0]!], how: "person-day" };
@@ -753,6 +774,17 @@ export class ContextPartner {
     return none;
   }
 
+  /**
+   * With `groundAway`, whether an item says someone is away only on days other than the ones the request names: no
+   * reason, with no model's say, to raise it (the person is there then).
+   */
+  private awayElsewhere(item: ContextItem, cue: Cue): boolean {
+    const time = cue.time;
+    if (!this.config.groundAway || !time || time.days.size === 0) return false;
+    const span = absenceSpan(item, cue.at);
+    return span !== null && ![...time.days].some((d) => d >= span.from && d <= span.to);
+  }
+
   private max(): number {
     return this.config.maxItemsPerInjection;
   }
@@ -761,10 +793,11 @@ export class ContextPartner {
    * With no model's say, the best candidate alone, if it is strong enough: several distinct query terms and a score
    * of at least `fallbackScore` (coverage plus the entity bonus, D36). One item at most: nothing has judged it.
    */
-  private fallback(unsure: Scored[], agreed?: Set<string>): Scored | null {
+  private fallback(unsure: Scored[], agreed?: Set<string>, cue?: Cue): Scored | null {
     const top = unsure[0];
     const c = this.config;
-    if (!top || c.fallbackMatchedTerms <= 0) return null;
+    if (!top || c.fallbackMatchedTerms <= 0 || (c.quietSettled && settled(top.item))) return null;
+    if (cue && this.awayElsewhere(top.item, cue)) return null;
     if (!bulkMail(top.item) && top.matched >= c.fallbackMatchedTerms && top.score >= c.fallbackScore) return top;
     // Found both by the request's own search and by a probe for its people (`fallbackAgree`): two independent queries
     // agreeing is evidence words alone are not. Still one item, and it must share two of the request's terms.
@@ -1208,7 +1241,7 @@ export class ContextPartner {
       if (s.closed) return null;
       // This lookup's probe finds, its own (never another turn's or a concurrent ask's).
       const scored = this.rank(s, cue, { probed: probedIds });
-      const sure = this.confident(scored);
+      const sure = this.confident(scored, cue);
       // With `judgeConfident` and a judge to ask, what scores as sure is judged with the rest in the same call: the
       // no-model bar is right about half the time (docs/research/probes.md), the judge more often.
       // One sure item both the request's search and a probe found is corroborated: delivered without the call
@@ -1267,7 +1300,7 @@ export class ContextPartner {
           );
           return this.deliver(s, items, "proactive", `grounded-${grounded.how}:${cue.id}`, cue);
         }
-        const top = this.fallback(unsure, this.config.fallbackAgree ? agreed(probed, lookedIds) : undefined);
+        const top = this.fallback(unsure, this.config.fallbackAgree ? agreed(probed, lookedIds) : undefined, cue);
         if (top) {
           done("sources", `fallback${reasonPrefix}:${cue.id}`, [top.item]);
           return this.deliver(s, [top], "proactive", `fallback:${cue.id}`, cue);

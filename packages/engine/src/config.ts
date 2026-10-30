@@ -106,6 +106,16 @@ export interface EngineConfig {
    * rather than delivered on their score alone. Costs a judge call on lookups that had only confident items.
    */
   judgeConfident: boolean;
+  /**
+   * With no model's say (the confident path and the fallback), an item that only says things stand as expected ("as
+   * usual", "resolved", "no change": `probes.ts` `settled`) is not delivered: it changes nothing (D48).
+   */
+  quietSettled: boolean;
+  /**
+   * With no model's say: an item saying a person the request names is away on a day it names is delivered (grounded
+   * "away"), and one saying someone is away only on other days is not (`probes.ts` `absenceSpan`; D48).
+   */
+  groundAway: boolean;
   /** With `judgeConfident`, a lone sure item the lookup and a probe both found is judged too (false: delivered). */
   judgeAgreed: boolean;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
@@ -163,6 +173,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   probeTopicSources: 8,
   probeOff: [],
   judgeConfident: false,
+  quietSettled: false,
+  groundAway: false,
   judgeAgreed: true,
   maxEventChars: 32_000,
 };

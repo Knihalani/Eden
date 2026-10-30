@@ -219,3 +219,99 @@ const FREE_MAIL = new Set(
     " ",
   ),
 );
+
+/**
+ * Phrases saying a matter stands as the user would expect: the plan holds, the issue is closed. Not "already done"
+ * ("already paid" changes what to do: do not pay twice), not a return ("back from leave on Monday" says away until
+ * then), and not when negated ("not resolved").
+ */
+const SETTLED =
+  /\b(as usual|as planned|as normal|as agreed|as before|no changes?|unchanged|nothing (has )?changed|still (on|valid|in place|the same|going ahead)|all clear|(is|are|now|it's) clear to|good to go|go ahead|resolved|sorted( out)?)\b/i;
+const NEGATED = /\b(not|n't|never|no longer|isn't|hasn't|wasn't|yet to be)\s+(\w+\s+)?$/i;
+
+/**
+ * Whether an item only confirms that things stand as expected (`SETTLED`, not negated): with no model to judge, such
+ * an item is not pushed unasked, since it changes nothing the agent would do (`quietSettled`).
+ */
+export function settled(item: ContextItem): boolean {
+  const text = `${item.title}. ${item.text}`;
+  for (const m of text.matchAll(new RegExp(SETTLED.source, "gi"))) {
+    if (!NEGATED.test(text.slice(Math.max(0, m.index! - 24), m.index!))) return true;
+  }
+  return false;
+}
+
+/** Words saying someone is not there: on leave, away, out of office, unavailable. */
+const ABSENT =
+  /\b(away|on leave|annual leave|parental leave|maternity leave|paternity leave|sick leave|compassionate leave|out of (the )?office|ooo|on holiday|on vacation|off sick|off work|unavailable|not available)\b/i;
+const MONTH = "(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*";
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+/**
+ * The days an item says someone is away, as ISO dates from and to (inclusive), read from the dates written near its
+ * absence words ("away on Skye 6–9 Nov", "on leave from 2 Nov to 6 Nov", "out of office until 9 November", "back on
+ * 9 Nov"); the year is the one that puts the date nearest after `now` less two months. Null when the item says no one
+ * is away or gives no date for it.
+ */
+export function absenceSpan(item: ContextItem, now: number): { from: string; to: string } | null {
+  const text = `${item.title}. ${item.text}`;
+  const m = ABSENT.exec(text);
+  if (!m) return null;
+  const near = text.slice(Math.max(0, m.index - 60), m.index + m[0].length + 120).toLowerCase();
+  const today = new Date(now).toISOString().slice(0, 10);
+  const iso = (day: number, month: string) => {
+    const mi = MONTHS.indexOf(month.slice(0, 3));
+    if (mi < 0 || day < 1 || day > 31) return null;
+    const base = new Date(now);
+    for (const year of [base.getUTCFullYear() - 1, base.getUTCFullYear(), base.getUTCFullYear() + 1]) {
+      const d = new Date(Date.UTC(year, mi, day));
+      if (d.getTime() >= now - 60 * 86_400_000 && d.getTime() <= now + 300 * 86_400_000) {
+        return d.toISOString().slice(0, 10);
+      }
+    }
+    return null;
+  };
+  const dayBefore = (d: string) => new Date(Date.parse(d) - 86_400_000).toISOString().slice(0, 10);
+  const span = (from: string | null, to: string | null) => (from && to && from <= to ? { from, to } : null);
+  const sep = "\\s*(?:-|–|—|to|until|till|through|and)\\s*";
+  let r: RegExpExecArray | null;
+  // "6–9 Nov"
+  if ((r = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?${sep}(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`).exec(near))) {
+    return span(iso(Number(r[1]), r[3]!), iso(Number(r[2]), r[3]!));
+  }
+  // "2 Nov to 6 Nov", "30 Oct – 2 Nov"
+  if (
+    (r = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}${sep}(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`).exec(near))
+  ) {
+    return span(iso(Number(r[1]), r[2]!), iso(Number(r[3]), r[4]!));
+  }
+  // "Nov 6–9"
+  if ((r = new RegExp(`\\b${MONTH}\\s+(\\d{1,2})(?:st|nd|rd|th)?${sep}(\\d{1,2})\\b`).exec(near))) {
+    return span(iso(Number(r[2]), r[1]!), iso(Number(r[3]), r[1]!));
+  }
+  // "until 9 November", "back on 9 Nov" (away until the day before)
+  if (
+    (r = new RegExp(
+      `\\b(until|till|through|thru|back(?: on)?|returning(?: on)?)\\s+(?:\\w+day,?\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`,
+    ).exec(near))
+  ) {
+    const d = iso(Number(r[2]), r[3]!);
+    return d ? span(today, r[1]!.startsWith("back") || r[1]!.startsWith("return") ? dayBefore(d) : d) : null;
+  }
+  // One date: that day.
+  if ((r = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`).exec(near))) {
+    const d = iso(Number(r[1]), r[2]!);
+    return span(d, d);
+  }
+  return null;
+}
+
+/** Whether a request's person (a name of one or more words) is named in an item, whole words, any case. */
+export function mentions(name: string, item: ContextItem): boolean {
+  const hay = ` ${`${item.title} ${item.text} ${item.meta?.people ?? ""}`.toLowerCase().replace(/[^\p{L}\p{N}@.]+/gu, " ")} `;
+  const words = name
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 1);
+  return words.length > 0 && words.every((w) => hay.includes(` ${w} `));
+}
