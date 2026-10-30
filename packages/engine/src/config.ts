@@ -112,6 +112,23 @@ export interface EngineConfig {
   /** The topic probe only for a request that names no person. */
   probeTopicAlone: boolean;
   /**
+   * A probe's query is not sent again to a source whose answers to it have not been changing (`economy.ts`): the
+   * chance it changed since last asked, from its own and the user's learned change rates, is below
+   * `probeFreshFloor`; its last answer, still cached, stands in for the call.
+   */
+  probeFresh: boolean;
+  /** With `probeFresh`, the least chance that a query's answer changed for it to be asked again. */
+  probeFreshFloor: number;
+  /**
+   * A probe kind (person, organisation, topic, role, day) is sent to a source only while the upper 90% bound of what
+   * such calls have yielded for this user (an item new to the cache that was seated with the judge or delivered, then
+   * or later) is at least `probeYieldFloor` (`economy.ts`); the first person then goes to every source, not
+   * `probePeopleSources` of them.
+   */
+  probeYield: boolean;
+  /** With `probeYield`, the least yield per call worth a call. */
+  probeYieldFloor: number;
+  /**
    * With a judge configured, the slow path's confident items are judged too (with the other candidates, one call)
    * rather than delivered on their score alone. Costs a judge call on lookups that had only confident items.
    */
@@ -191,6 +208,10 @@ export const DEFAULT_CONFIG: EngineConfig = {
   probePeopleSources: 3,
   probeTopicSources: 8,
   probeTopicAlone: false,
+  probeFresh: false,
+  probeFreshFloor: 0.15,
+  probeYield: false,
+  probeYieldFloor: 0.05,
   probeRoles: false,
   probeShare: false,
   probeSecondSources: 3,
