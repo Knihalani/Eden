@@ -11,8 +11,8 @@
  * - for an action on a named day (scheduling, accepting, booking), a listing of that day from sources that list by
  *   time: what is already there is what the action might clash with.
  *
- * And it adds two structural grounds for delivery with no model: an event close to the time a scheduling request
- * names on the day it names (a clash), and a person's message that changes the meeting the request is about.
+ * And it adds a structural ground for delivery with no model: an event close to the time a scheduling request names,
+ * on the day it names (a clash). Their finds get seats among the judge's candidates.
  * Nothing here calls a model; every probe is a source call, bounded per lookup (`probeCalls`).
  */
 import type { ContextItem } from "@eden/protocol";
@@ -84,10 +84,6 @@ export function startMinutes(item: ContextItem): number | null {
   const m = /T(\d{2}):(\d{2})/.exec(item.meta?.start ?? "");
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
 }
-
-/** Words that change a meeting someone else wrote about ("could we push tomorrow's call to 4:30pm?"). */
-export const CHANGES_MEETING =
-  /\b(push|move|moved|resched\w*|postpone\w*|cancel\w*|can'?t make|cannot make|won'?t make|running late|instead|another time|new time|bring (it )?forward)\b/i;
 
 /**
  * Words of a request that carry its topic: not a person's, not a day's, not the action's. "Send Rose Kimura the Q3

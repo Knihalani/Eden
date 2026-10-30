@@ -48,16 +48,7 @@ import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { answerMessages, judgeMessages, parseJudge } from "./judge";
 import { namesParticipant, startDay, startMs, timeWindow, titleNames, type TimeWindow } from "./grounding";
-import {
-  CHANGES_MEETING,
-  cleanEntities,
-  isAction,
-  isScheduling,
-  orgsOf,
-  requestedRange,
-  startMinutes,
-  topicOf,
-} from "./probes";
+import { cleanEntities, isAction, isScheduling, orgsOf, requestedRange, startMinutes, topicOf } from "./probes";
 import { Ledger } from "./ledger";
 import { citationsOf, renderAnswer, renderPacket, shownText } from "./render";
 import { classifySituation } from "./situation";
@@ -709,14 +700,7 @@ export class ContextPartner {
     // Who is named is not enough to say which item: a meeting needs an event with them; anything else needs the
     // item to hold a word of the request beyond the person's name (the topic).
     const nameWords = (p: string) => p.trim().split(/\s+/).length;
-    // With probes on, a message from them that changes the meeting is about it too ("can we push tomorrow's call?").
-    const changes = (x: Scored) =>
-      this.config.probes &&
-      !this.config.probeOff.includes("change") &&
-      startDay(x.item) === null &&
-      CHANGES_MEETING.test(x.item.text);
-    const fits = (x: Scored, p: string) =>
-      meeting ? startDay(x.item) !== null || changes(x) : x.matched > nameWords(p);
+    const fits = (x: Scored, p: string) => (meeting ? startDay(x.item) !== null : x.matched > nameWords(p));
     const withPerson = acts ? pool.filter((x) => people.some((p) => namesParticipant(p, x.item) && fits(x, p))) : [];
     // With probes on: an action on a named day at a named time, and an event already there near that time, is a clash
     // the agent should see before it acts, whoever the event is with.
