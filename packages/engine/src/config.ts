@@ -135,6 +135,15 @@ export interface EngineConfig {
   judgeConfident: boolean;
   /** With a judge configured, sure items are judged when more than one scored as sure (a contested set). */
   judgeContested: boolean;
+  /**
+   * The judge is asked only when a candidate is tied to the request: it holds a word of the request that is rare in
+   * the user's items (on fewer than `judgeTiedShare` of them: a name, a reference, a place), or it is an event on a
+   * day the request names. Candidates that share only common words with it ("nice", "week", "thanks") are what a
+   * judge almost always turns down, so the call is not made and the lookup ends silent (`judgeTied`).
+   */
+  judgeTied: boolean;
+  /** With `judgeTied`, a word on fewer than this share of the user's live items ties a candidate to the request. */
+  judgeTiedShare: number;
   /** The judge's input: the recent conversation, at most this many characters (its newest end). */
   judgeWindowChars: number;
   /** With `compactInjection`, each candidate's compacted text in the judge's input, at most this many bytes. */
@@ -251,6 +260,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   probeOff: [],
   judgeConfident: false,
   judgeContested: false,
+  judgeTied: false,
+  judgeTiedShare: 0.03,
   judgeWindowChars: 4_000,
   judgeItemBytes: 280,
   confidentItems: 3,

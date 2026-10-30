@@ -214,6 +214,8 @@ interface Scored {
   score: number;
   matched: number;
   sketch: Sketch | null;
+  /** The item's document in the user's cache index, when ranked from it (for whole-term checks, `judgeTied`). */
+  doc?: number;
 }
 
 /** What an injection was built from, kept until it is handed out and usage tracking starts. */
@@ -672,7 +674,7 @@ export class ContextPartner {
             (ids) => ids.length > 0 && cache.containsAll(s.scope, h.doc, ids, ids.length),
           );
           const score = h.coverage + (entityHit ? this.config.entityBonus : 0);
-          return { item: h.item, matched: h.matched, score, sketch: h.sketch };
+          return { item: h.item, matched: h.matched, score, sketch: h.sketch, doc: h.doc };
         })
         .sort((a, b) => b.score - a.score)
         // Of near-duplicates among the candidates, keep the best scored: one packet never says the same thing twice.
@@ -1588,6 +1590,18 @@ export class ContextPartner {
         done("silent", why);
         return null;
       };
+      // `judgeTied`: a judge shown only candidates the request is barely tied to (one common word each: "nice",
+      // "week", "calendar") says "none" almost always, so the call is not made and the lookup ends silent. A candidate
+      // is tied by a probe's find, a day the request names, two of its words, or one word few of the user's items hold.
+      if (this.deps.model && this.config.judgeTied) {
+        const rare = this.rareTerms(s, cue);
+        const tied = (x: Scored) =>
+          probed.has(x.item.id) || onNamedDay(x) || x.matched >= 2 || this.holdsAny(s, x, rare);
+        if (!unsure.some(tied)) {
+          done("silent", "judge: untied");
+          return null;
+        }
+      }
       const reservation = this.deps.model ? this.charge(s) : null;
       if (!this.deps.model || !reservation) return noModel(this.deps.model ? "no model budget" : "no model", "");
       const candidates = unsure.map((x) => x.item);
@@ -1639,6 +1653,32 @@ export class ContextPartner {
       done("silent", "error");
       return null;
     }
+  }
+
+  /**
+   * The request's words (cue and entities, stopwords out) that fewer than `judgeTiedShare` of the user's items hold:
+   * a name, a reference, a place, rather than words common to their mail. Ids in the user's cache vocabulary; a word
+   * no cached item holds has no id and so ties nothing (`judgeTied`).
+   */
+  private rareTerms(s: Session, cue: Cue): number[] {
+    const vocab = this.deps.cache.peekVocab(s.scope);
+    if (!vocab) return [];
+    const q = termIds(`${cue.text} ${cue.entities.join(" ")}`, vocab, false);
+    const out: number[] = [];
+    for (let i = 0; i < q.n; i++) {
+      const id = q.ids[i]!;
+      const word = vocab.term(id);
+      if (isStopword(word) || out.includes(id)) continue;
+      if (this.deps.cache.isRare(s.scope, word, this.config.judgeTiedShare)) out.push(id);
+    }
+    return out;
+  }
+
+  /** Whether the cached item `x` was ranked from holds one of `terms` (whole terms, the cache's index). */
+  private holdsAny(s: Session, x: Scored, terms: readonly number[]): boolean {
+    if (x.doc === undefined) return false;
+    for (const id of terms) if (this.deps.cache.containsAll(s.scope, x.doc, [id], 1)) return true;
+    return false;
   }
 
   private charge(s: Session, usd = this.config.estimatedCallUsd): Reservation | null {
