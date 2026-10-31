@@ -45,7 +45,8 @@ import {
   type Source,
   type SourceResolver,
 } from "@eden/sources";
-import { nearDuplicate, sanitizedId, sanitizeItem, type ItemCache, type Sketch } from "./cache";
+import { nearDuplicate, sanitizedId, sanitizeItem, type CacheHit, type ItemCache, type Sketch } from "./cache";
+import { SyncManager } from "./sync";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { assess, frameOf, namesRef, unmeasuredLimit, type Frame, type Verdict } from "./conflict";
@@ -287,6 +288,12 @@ export class ContextPartner {
   /** Span tracing (`spans.ts`): null when off, so each phase's call site is one null check. */
   private readonly spans: Tracer | null;
   private readonly stats: SpanStats | null;
+  /**
+   * The background sync (`sync`, D56), or null when off. Its `tick` does the background work: a server runs it on a
+   * timer (`startSync`), a simulation calls it on its own clock.
+   */
+  readonly sync: SyncManager | null;
+  private syncTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private readonly deps: PartnerDeps) {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
@@ -325,6 +332,50 @@ export class ContextPartner {
       // cache and sessions (an injected clock that skipped the fan-out made simulated time hit real-time limits).
       now: this.now,
     });
+    const c = this.config;
+    this.sync = c.sync
+      ? new SyncManager(
+          {
+            sources: deps.sources,
+            fanout: this.fanout,
+            cache: deps.cache,
+            now: this.now,
+            // Synced items name people as looked-up ones do: the source map learns which sources mention whom.
+            onStored: (scope, items) => this.recordMentions(scope, items),
+            tracer: spans,
+          },
+          {
+            maxItems: c.syncMaxItems,
+            pageSize: c.syncPageSize,
+            everyMs: c.syncEveryMs,
+            staleChance: c.syncStaleChance,
+            maxStaleMs: c.syncMaxStaleMs,
+            activeMs: c.syncActiveMs,
+            sweepMs: c.syncSweepMs,
+            dropMs: c.syncDropMs,
+            callsPerMin: c.syncCallsPerMin,
+            catchupPages: c.syncCatchupPages,
+            maxUsersPerTenant: c.syncMaxUsersPerTenant,
+            timeoutMs: Math.max(c.sourceTimeoutMs, 5_000),
+          },
+        )
+      : null;
+  }
+
+  /**
+   * Runs the background sync's `tick` every `everyMs` (`sync` on; a no-op otherwise). The timer does not keep the
+   * process alive, and a tick never overlaps another.
+   */
+  startSync(everyMs = 60_000): void {
+    if (!this.sync || this.syncTimer) return;
+    const sync = this.sync;
+    this.syncTimer = setInterval(() => void sync.tick(), everyMs);
+    this.syncTimer.unref?.();
+  }
+
+  stopSync(): void {
+    if (this.syncTimer) clearInterval(this.syncTimer);
+    this.syncTimer = null;
   }
 
   async observe(event: AgentEvent, options: { waitMs?: number } = {}): Promise<ObserveResult> {
@@ -338,6 +389,8 @@ export class ContextPartner {
       return { injection: null, pending: false };
     }
     const s = this.session(event);
+    // The user is active: their sources are synced (and polled) while they are (D56). O(1), no I/O.
+    this.sync?.track(s.scope, this.now());
     s.turn++;
     const prep = spans?.open("observe.prep", root!.id);
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
@@ -467,7 +520,13 @@ export class ContextPartner {
     );
     if (root) cue.span = root.id;
     const limit = request.maxItems ?? 5;
-    const { calls: sourceCalls, plans, probed } = await this.searchLive(s, cue, this.config.askSources);
+    const {
+      calls: sourceCalls,
+      plans,
+      probed,
+      local,
+      syncCalls,
+    } = await this.searchLive(s, cue, this.config.askSources);
     const ranking = spans?.open("rank", cue.span);
     const scored = this.rank(s, cue, { ignoreLedger: true, probed });
     if (ranking) spans!.close(ranking, { candidates: scored.length });
@@ -539,6 +598,7 @@ export class ContextPartner {
       costUsd,
       itemIds: items.map((i) => i.id),
       ...(plans ? { plans } : {}),
+      ...(local !== undefined ? { localSources: local, syncCalls: syncCalls ?? 0 } : {}),
     });
     if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "answer", delivered: items.length > 0 });
     return { answer, citations: citationsOf(items), usedModel, costUsd, latencyMs };
@@ -582,6 +642,7 @@ export class ContextPartner {
     this.fanout.forget(scope, sourceId);
     this.deps.planner?.forget(scope, sourceId);
     this.economy.forget(scope, sourceId);
+    this.sync?.forget(scope, sourceId);
   }
 
   get sessionCount(): number {
@@ -1211,9 +1272,28 @@ export class ContextPartner {
     probed?: string[];
     looked?: string[];
     consequence?: { cls: ActionClass; ids: string[] };
+    /** With `sync`: sources answered from the local index, and listing calls of on-demand polls (in `calls`). */
+    local?: number;
+    syncCalls?: number;
   }> {
     const all = await this.deps.sources(s.scope).catch((): Source[] => []);
     if (all.length === 0 || s.closed) return { calls: 0 };
+    // The background sync (D56): a source whose synced copy is current answers from the user's local index, at no
+    // call; with `syncOnDemand`, a stale one is polled first (one listing call, rather than its search and probes).
+    let local: Set<string> | null = null;
+    let syncCalls = 0;
+    if (this.sync) {
+      if (this.config.syncOnDemand) {
+        const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(this.config.sourceTimeoutMs)]);
+        const freshening = this.spans?.open("sync.freshen", cue.span, { async: true });
+        syncCalls = await this.sync.freshen(s.scope, all, signal);
+        if (freshening) this.spans!.close(freshening, { calls: syncCalls });
+        if (s.closed) return { calls: syncCalls, syncCalls };
+      }
+      const now = this.now();
+      local = new Set(all.filter((x) => this.sync!.current(s.scope, x.id, now)).map((x) => x.id));
+      if (local.size === 0) local = null;
+    }
     const routing = this.spans?.open("route", cue.span);
     const ranked = this.deps.sourceMap.route({
       scope: s.scope,
@@ -1222,8 +1302,10 @@ export class ContextPartner {
       sourceIds: all.map((x) => x.id),
       limit,
     });
-    if (routing) this.spans!.close(routing, { sources: ranked.length });
-    const found = ranked.map((r) => all.find((x) => x.id === r.sourceId)!).filter(Boolean);
+    if (routing) this.spans!.close(routing, { sources: ranked.length, local: local?.size ?? 0, syncCalls });
+    const routed = ranked.map((r) => all.find((x) => x.id === r.sourceId)!).filter(Boolean);
+    // Only the sources not answered locally are searched live; the local ones answer the same query below.
+    const found = local ? routed.filter((x) => !local.has(x.id)) : routed;
     // Serving through the planner only in "serve" mode; in "shadow" the lookup is served as without one.
     const planner = this.deps.planner?.mode === "serve" ? this.deps.planner : undefined;
     // Wrapped per lookup (cheap: no state of its own). The fan-out admits each lookup per source id as before (breaker,
@@ -1235,7 +1317,7 @@ export class ContextPartner {
     // A listing goes only to sources that list by time (a calendar): with no words, any other would return nothing, or
     // everything. With none such, the request is sent with its words as any other.
     const days = cue.time ? [...cue.time.days].sort() : [];
-    const listers = onlyTime(cue) ? found.filter((x) => x.listsByTime === true) : [];
+    const listers = onlyTime(cue) ? routed.filter((x) => x.listsByTime === true) : [];
     const listing = listers.length > 0;
     const window = listing
       ? {
@@ -1266,7 +1348,7 @@ export class ContextPartner {
               ),
           )
         : listing
-          ? sendTo(listers)
+          ? sendTo(listers.filter((x) => !local?.has(x.id)))
           : sendTo(found);
     // Probes (`probe`) go out with the lookup, not after it: the slow path waits for the slower of the two, not both.
     const probeThis =
@@ -1293,8 +1375,18 @@ export class ContextPartner {
     const probed: ProbeOut = { calls: 0, kept: [] };
     const probing =
       this.config.probes && probeThis
-        ? this.probe(s, cue, found, all, listing, probed, settled, shared).catch(() => {})
+        ? this.probe(s, cue, routed, all, listing, probed, settled, shared, local).catch(() => {})
         : null;
+    // The same query answered by the synced sources from the local index (D56): no call, nothing to store.
+    const answeredHere = local
+      ? this.localAnswer(
+          s,
+          new Set((listing ? listers : routed).filter((x) => local!.has(x.id)).map((x) => x.id)),
+          listing ? "" : cue.text,
+          8,
+          window,
+        ).map((i) => i.id)
+      : [];
     const outcomes = await searching;
     if (searchSpan) spans!.close(searchSpan, outcomeAttrs(outcomes));
     const plans = planner
@@ -1303,7 +1395,11 @@ export class ContextPartner {
           return last ? [{ sourceId: x.id, shapes: last.shapes, calls: last.calls, found: last.found }] : [];
         })
       : undefined;
-    const result = { calls: chosen.length, ...(plans ? { plans } : {}) };
+    const result = {
+      calls: chosen.length + syncCalls,
+      ...(plans ? { plans } : {}),
+      ...(this.sync ? { local: local?.size ?? 0, syncCalls } : {}),
+    };
     if (s.closed) return result; // Forgotten or ended mid-search: keep nothing.
     // One shadow lookup per session at a time: shadowing must not pile up work behind a slow connector.
     if (this.deps.planner?.mode === "shadow" && !s.shadowing) {
@@ -1335,7 +1431,7 @@ export class ContextPartner {
       clearTimeout(timer);
       if (graceSpan) spans!.close(graceSpan);
       // What the request's own search returned, beside the probes' finds: an item both found is twice supported.
-      const looked = outcomes.flatMap((o) => o.items.map((i) => i.id));
+      const looked = [...outcomes.flatMap((o) => o.items.map((i) => i.id)), ...answeredHere];
       // What the lookup's own search found too is not a probe's contribution (`probeYield`).
       if (this.config.probeYield) this.economy.claimed(s.scope, looked);
       return {
@@ -1366,6 +1462,7 @@ export class ContextPartner {
     out: ProbeOut,
     searched: Promise<unknown>,
     shared?: SharedCalls,
+    local: ReadonlySet<string> | null = null,
   ): Promise<void> {
     const lanes = new Map<string, Promise<unknown>>();
     const budget = this.config.probeCalls;
@@ -1401,12 +1498,25 @@ export class ContextPartner {
       onAnswer: ((sourceId: string, page: ContextItem[]) => void) | undefined,
       parent: number,
     ): Promise<ContextItem[]> => {
+      // Synced sources whose copy is current answer from the local index (D56), at no call and outside `probeCalls`;
+      // with `syncWide`, every such source does, not only the ones this probe was routed to (a person or a topic).
+      let here: ContextItem[] = [];
+      if (local) {
+        const wide = this.config.syncWide && kind !== "day" ? all.filter((x) => local.has(x.id)) : [];
+        const mine = new Set([...sources.filter((x) => local.has(x.id)), ...wide].map((x) => x.id));
+        sources = sources.filter((x) => !local.has(x.id));
+        if (mine.size > 0) {
+          here = this.localAnswer(s, mine, text, window ? 20 : 5, window);
+          if (keep) for (const i of here) if (!kept.includes(i.id)) kept.push(i.id);
+        }
+        if (sources.length === 0) return here;
+      }
       const key = `${text}|${window ? `${window.start}/${window.end}` : ""}|${sources.map((x) => x.id).join(",")}`;
       // Probed recently by this user (any of their sessions): its finds at no call, while every one is still cached.
       const hits = this.deps.cache.probeHits(s.scope, key, this.config.probeMemoMs, this.now());
       if (hits) {
         if (keep) for (const h of hits) if (!kept.includes(h.item.id)) kept.push(h.item.id);
-        return hits.map((h) => h.item);
+        return [...here, ...hits.map((h) => h.item)];
       }
       // The probe economy (`economy.ts`): a source whose answer to this query has likely not changed, or where this
       // kind of probe has not been yielding, is not called; its last answer, while still cached, stands in.
@@ -1439,7 +1549,7 @@ export class ContextPartner {
       // the calls an organisation probe, sent after the people it is read from, would need.
       const own = kind === "consequence";
       const to = own ? live : live.slice(0, Math.max(0, budget - (out.calls - extra)));
-      if (to.length === 0 || s.closed || deadline - performance.now() < 50) return reused;
+      if (to.length === 0 || s.closed || deadline - performance.now() < 50) return [...here, ...reused];
       out.calls += to.length;
       if (own) extra += to.length;
       // A day's listing is the whole day (a busy one has more than a search's page); a query, its first page.
@@ -1535,7 +1645,7 @@ export class ContextPartner {
           this.now(),
         );
       }
-      return [...items, ...reused];
+      return [...here, ...items, ...reused];
     };
     const c = this.config;
     const off = new Set(c.probeOff);
@@ -1598,7 +1708,12 @@ export class ContextPartner {
     // question that mentions a release ("did Sam tell you whether the release went out?") is no release.
     const acts = isImperative(cue.raw) || cue.external === true;
     const cls = c.consequenceProbe && !off.has("consequence") ? actionClass(cue.raw, acts) : null;
+    // `syncTermProbes` (D56): with sources answered locally, each of the request's words that few of the user's items
+    // hold (a place, a reference, a product), alone, to those sources: a query per word, which no live budget allows.
+    const synced = local ? all.filter((x) => local.has(x.id)) : [];
+    const terms = synced.length > 0 && c.syncTermProbes > 0 ? this.termProbes(s, cue, c.syncTermProbes) : [];
     await Promise.all([
+      ...terms.map((t) => send("topic", synced, t)),
       ...windows.map((w) => send("day", listers, "", w)),
       byPeople,
       ...roles.map((r) => send("role", found.slice(0, 2), r)),
@@ -1703,7 +1818,64 @@ export class ContextPartner {
     const putting = items.length > 0 ? spans?.open("cache.put", parent, { items: items.length }) : undefined;
     const added = this.deps.cache.put(s.scope, items, this.now(), true);
     if (putting) spans!.close(putting, { added: added.length });
+    this.recordMentions(s.scope, added, parent);
+  }
+
+  /**
+   * A query answered from the user's synced items of the given sources (D56), as their live search would answer it
+   * but with no call: at most `limit` per source, holding every word of the query (`syncLocalAll`: a mail or chat
+   * search) or ranked on any; a listing (a window and no words) is the events that start on its days, soonest first.
+   */
+  private localAnswer(
+    s: Session,
+    sourceIds: ReadonlySet<string>,
+    text: string,
+    limit: number,
+    window?: SearchQuery["window"],
+  ): ContextItem[] {
+    const cache = this.deps.cache;
+    const now = this.now();
+    const capped = (hits: CacheHit[]) => {
+      const per = new Map<string, number>();
+      return hits.filter((h) => {
+        const k = per.get(h.item.sourceId) ?? 0;
+        if (!sourceIds.has(h.item.sourceId) || k >= limit) return false;
+        per.set(h.item.sourceId, k + 1);
+        return true;
+      });
+    };
+    if (window && !text.trim()) {
+      const days = new Set<string>();
+      const end = Date.parse(window.end);
+      for (let t = Date.parse(window.start); t < end && days.size < 31; t += 86_400_000) {
+        days.add(new Date(t).toISOString().slice(0, 10));
+      }
+      return capped(cache.timed(s.scope, days, now, 400)).map((h) => h.item);
+    }
+    const vocab = cache.peekVocab(s.scope);
+    if (!vocab) return [];
+    // The query's words, stopwords out, each once (in the session's vocabulary, so the user's never grows from a
+    // query); a word no synced item holds matches nothing when every word is needed.
+    const q = termIds(text, s.vocab, true);
+    const words = new Set<string>();
+    for (let i = 0; i < q.n; i++) {
+      const w = s.vocab.term(q.ids[i]!);
+      if (!isStopword(w)) words.add(w);
+    }
+    const ids: number[] = [];
+    for (const w of words) {
+      const id = vocab.lookup(w);
+      if (id >= 0) ids.push(id);
+      else if (this.config.syncLocalAll) return [];
+    }
+    const all = this.config.syncLocalAll;
+    return cache.searchIn(s.scope, ids, ids.length, limit, sourceIds, all, now).map((h) => h.item);
+  }
+
+  /** Records the entity mentions of items new to the user's cache or changed (lookups and the sync, D56). */
+  private recordMentions(scope: Scope, added: ContextItem[], parent = 0): void {
     if (added.length === 0) return;
+    const spans = this.spans;
     const noting = spans?.open("mentions", parent, { items: added.length });
     const mentions = added.map((item) => ({
       sourceId: item.sourceId,
@@ -1712,7 +1884,7 @@ export class ContextPartner {
         .slice(0, 20)
         .map((e) => e.text),
     }));
-    if (mentions.length > 0) this.deps.sourceMap.recordMentionsMany(s.scope, mentions, this.now());
+    if (mentions.length > 0) this.deps.sourceMap.recordMentionsMany(scope, mentions, this.now());
     if (noting) spans!.close(noting);
   }
 
@@ -1721,6 +1893,9 @@ export class ContextPartner {
     const after = this.config.refreshAfterMs;
     if (after <= 0) return false;
     const now = this.now();
+    // A synced item counts by when the sync last read it too (D56): its source's copy may be current, but the fast
+    // path stays for what was read recently, and the rest goes through the slow path, which answers from the local
+    // index at no call and lets the judge, when there is one, rule (the fast path never asks it).
     return scored.some((x) => now - (this.deps.cache.fetchedAt(s.scope, x.item.id) ?? now) > after);
   }
 
@@ -1867,6 +2042,8 @@ export class ContextPartner {
     let costUsd = 0;
     let sourceCalls = 0;
     let plans: Trace["plans"];
+    let local: number | undefined;
+    let syncCalls: number | undefined;
     const done = (decision: Trace["decision"], reason: string, items: ContextItem[] = []) =>
       this.trace({
         sessionId: s.id,
@@ -1880,6 +2057,7 @@ export class ContextPartner {
         costUsd,
         itemIds: items.map((i) => i.id),
         ...(plans ? { plans } : {}),
+        ...(local !== undefined ? { localSources: local, syncCalls: syncCalls ?? 0 } : {}),
       });
     try {
       let probedIds: string[] | undefined;
@@ -1891,6 +2069,8 @@ export class ContextPartner {
         probed: probedIds,
         looked: lookedIds,
         consequence,
+        local,
+        syncCalls,
       } = await this.searchLive(s, cue, this.config.lookupSources));
       if (s.closed) return null;
       sourceCalls += await this.refresh(s, cue);
@@ -2101,6 +2281,31 @@ export class ContextPartner {
    * a name, a reference, a place, rather than words common to their mail. Ids in the user's cache vocabulary; a word
    * no cached item holds has no id and so ties nothing (`judgeTied`).
    */
+  /**
+   * The request's words for `syncTermProbes`: at least four letters, rare in the user's items (`judgeTiedShare`), not
+   * a stopword, a word that only says when, nor part of a name the people probes already send; at most `max`.
+   */
+  private termProbes(s: Session, cue: Cue, max: number): string[] {
+    const vocab = this.deps.cache.peekVocab(s.scope);
+    if (!vocab) return [];
+    const named = new Set(
+      cue.entities.flatMap((e) =>
+        e
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((w) => w.length > 0),
+      ),
+    );
+    const out: string[] = [];
+    for (const id of this.rareTerms(s, cue)) {
+      const w = vocab.term(id);
+      if (w.length < 4 || named.has(w) || TIME_WORD.test(w) || out.includes(w)) continue;
+      out.push(w);
+      if (out.length >= max) break;
+    }
+    return out;
+  }
+
   private rareTerms(s: Session, cue: Cue): number[] {
     const vocab = this.deps.cache.peekVocab(s.scope);
     if (!vocab) return [];
@@ -2244,6 +2449,8 @@ export class ContextPartner {
       kind: source.kind,
       description: source.description,
       ...(source.listsByTime !== undefined ? { listsByTime: source.listsByTime } : {}),
+      // A listing (the sync, D56) is traced by the sync itself (`sync.list`): passed through as it is.
+      ...(source.list ? { list: source.list.bind(source) } : {}),
       // One `then`, no async frame of its own: a source call is the most frequent span (tracing overhead).
       search: (query, signal) => {
         const sp = spans.open("source.search", parent, { async: true, source: source.id, window: !!query.window });

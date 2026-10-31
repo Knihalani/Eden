@@ -75,6 +75,8 @@ export const SPAN_NAMES = [
   "render",
   "shadow",
   "ask",
+  "sync.freshen",
+  "sync.list",
 ] as const;
 
 const ORIGIN = performance.timeOrigin;

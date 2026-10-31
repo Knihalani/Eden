@@ -1,6 +1,7 @@
 export { ContextPartner, type PartnerDeps } from "./partner";
 export { DEFAULT_CONFIG, type EngineConfig } from "./config";
-export { ItemCache, sanitizeItem, type CacheHit } from "./cache";
+export { ItemCache, sanitizeItem, type CacheHit, type CacheLimits } from "./cache";
+export { SyncManager, type SyncOptions, type SyncStats } from "./sync";
 export { GATE_MODULE, gateItem, pooledSanitizer } from "./gate";
 export { Ledger } from "./ledger";
 export { inert, renderAnswer, renderPacket } from "./render";

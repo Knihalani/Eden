@@ -27,6 +27,11 @@ interface Entry {
   fetchedAt: number;
   doc: number;
   sketch: Sketch | null;
+  /**
+   * Held by the user's background sync (D56): counted against `maxSyncedPerUser`, not `maxItemsPerUser`, kept for
+   * `syncTtlMs`, and dropped by the sync when its source no longer lists it. A lookup that returns it keeps it synced.
+   */
+  synced?: true;
 }
 
 /**
@@ -56,6 +61,8 @@ class UserCache {
   /** Vocabulary size after the last rebuild. */
   baseline = 0;
   readonly items = new Map<string, Entry>();
+  /** How many of `items` are synced (D56). */
+  synced = 0;
   readonly byDoc: (Entry | undefined)[] = [];
   readonly vocab = new Vocab(256); // Grows by doubling: most users hold few terms.
   readonly index = new SparseIndex({ fields: 2, weights: [2, 1] });
@@ -132,6 +139,13 @@ export interface CacheLimits {
   maxUsersPerTenant: number;
   ttlMs: number;
   maxTextChars: number;
+  /**
+   * Items a user's background sync may hold (D56), apart from `maxItemsPerUser`: lookups never evict what the sync
+   * keeps, nor the sync what lookups brought. Past it, the least recently synced is dropped.
+   */
+  maxSyncedPerUser: number;
+  /** How long a synced item is kept without a sync seeing it again (a re-listing refreshes it). */
+  syncTtlMs: number;
 }
 
 export const DEFAULT_CACHE_LIMITS: CacheLimits = {
@@ -139,6 +153,8 @@ export const DEFAULT_CACHE_LIMITS: CacheLimits = {
   maxUsersPerTenant: 10_000,
   ttlMs: 24 * 3_600_000,
   maxTextChars: 8_000,
+  maxSyncedPerUser: 5_000,
+  syncTtlMs: 7 * 24 * 3_600_000,
 };
 
 /**
@@ -236,13 +252,19 @@ export class ItemCache {
    * recency): most lookups return items the cache already holds, and re-indexing them was ~12% of server CPU at
    * saturation (packages/sim perf-cli, docs/research/simulation.md).
    */
-  put(scope: Scope, items: ContextItem[], now = Date.now(), sanitized = false): ContextItem[] {
+  put(scope: Scope, items: ContextItem[], now = Date.now(), sanitized = false, synced = false): ContextItem[] {
     const u = this.touch(scope);
     this.sweep(u, now);
     const changed: ContextItem[] = [];
     for (const raw of items) {
       const item = sanitized ? raw : sanitizeItem(raw, this.limits.maxTextChars);
       const old = u.items.get(item.id);
+      if (old && synced && !old.synced) {
+        old.synced = true;
+        u.synced++;
+      }
+      // A lookup's copy of a synced item leaves it synced: the sync still lists it, and drops it once it does not.
+      const isSynced = synced || old?.synced === true;
       if (old && old.item.text === item.text && old.item.title === item.title) {
         // Same words, so the index and sketch stand; the rest (url, meta, updatedAt) is taken from the new copy. Its
         // people are counted again: its meta may name others.
@@ -258,14 +280,75 @@ export class ItemCache {
       if (item.meta?.start) u.offset = undefined;
       tally(u, item, 1);
       const doc = this.index(u, item);
-      const entry = { item, fetchedAt: now, doc, sketch: sketchOf(u, item) };
+      const entry: Entry = { item, fetchedAt: now, doc, sketch: sketchOf(u, item) };
+      if (isSynced) {
+        entry.synced = true;
+        u.synced++;
+      }
       u.items.set(item.id, entry); // Map order stays oldest-first for eviction (old entry was removed above).
       u.byDoc[doc] = entry;
       changed.push(item);
     }
-    while (u.items.size > this.limits.maxItemsPerUser) this.drop(u, u.items.values().next().value as Entry);
+    if (u.synced === 0) {
+      while (u.items.size > this.limits.maxItemsPerUser) this.drop(u, u.items.values().next().value as Entry);
+    } else {
+      this.evictMixed(u);
+    }
     if (u.vocab.size > Math.max(MIN_VOCAB_REBUILD, u.baseline * VOCAB_REBUILD_FACTOR)) this.rebuild(scope, u);
     return changed;
+  }
+
+  /**
+   * Eviction when some items are synced (D56): lookups' items over `maxItemsPerUser` and synced ones over
+   * `maxSyncedPerUser` go, each class oldest first, in one pass over the oldest-first order.
+   */
+  private evictMixed(u: UserCache): void {
+    let loose = u.items.size - u.synced - this.limits.maxItemsPerUser;
+    let synced = u.synced - this.limits.maxSyncedPerUser;
+    if (loose <= 0 && synced <= 0) return;
+    for (const e of [...u.items.values()]) {
+      if (loose <= 0 && synced <= 0) break;
+      if (e.synced && synced > 0) {
+        this.drop(u, e);
+        synced--;
+      } else if (!e.synced && loose > 0) {
+        this.drop(u, e);
+        loose--;
+      }
+    }
+  }
+
+  /** Whether the cached item is held by the user's sync (D56). */
+  isSynced(scope: Scope, id: string): boolean {
+    return this.peek(scope)?.items.get(id)?.synced === true;
+  }
+
+  /**
+   * Drops synced items by id (a sync's delete propagation: its source no longer lists them, D56). An item a lookup
+   * also brought is dropped too: the source no longer has it. Returns how many were dropped.
+   */
+  dropSynced(scope: Scope, ids: Iterable<string>): number {
+    const u = this.peek(scope);
+    if (!u) return 0;
+    let n = 0;
+    for (const id of ids) {
+      const e = u.items.get(id);
+      if (e?.synced) {
+        this.drop(u, e);
+        n++;
+      }
+    }
+    return n;
+  }
+
+  /** Synced items the user's cache holds (D56). */
+  syncedCount(scope: Scope): number {
+    return this.peek(scope)?.synced ?? 0;
+  }
+
+  /** Whether an entry is still within its time to live: a synced item's is `syncTtlMs` (D56). */
+  private alive(e: Entry, now: number): boolean {
+    return now - e.fetchedAt <= (e.synced ? this.limits.syncTtlMs : this.limits.ttlMs);
   }
 
   /**
@@ -285,6 +368,7 @@ export class ItemCache {
     u.parties = old.parties;
     u.partied = old.partied;
     u.self = old.self;
+    u.synced = old.synced;
     this.users.set(scopeKey(scope), u); // Same key: the user's place in the eviction order is unchanged.
   }
 
@@ -298,15 +382,23 @@ export class ItemCache {
     return u.index.addFields([titleIds, b.ids], [nt, b.n]);
   }
 
-  /** Removes expired items. Map order is oldest-first, so the scan stops at the first fresh one. */
+  /**
+   * Removes expired items. Map order is oldest-first, so the scan stops at the first fresh one; a synced item (its
+   * own, longer time to live) is passed over, and reads check its time on their own.
+   */
   private sweep(u: UserCache, now: number): void {
     for (const e of u.items.values()) {
+      if (e.synced) {
+        if (!this.alive(e, now)) this.drop(u, e);
+        continue;
+      }
       if (now - e.fetchedAt <= this.limits.ttlMs) break;
       this.drop(u, e);
     }
   }
 
   private drop(u: UserCache, e: Entry): void {
+    if (e.synced) u.synced--;
     u.items.delete(e.item.id);
     u.index.remove(e.doc);
     if (u.byDoc[e.doc] === e) u.byDoc[e.doc] = undefined;
@@ -321,7 +413,7 @@ export class ItemCache {
 
   get(scope: Scope, id: string, now = Date.now()): ContextItem | null {
     const e = this.peek(scope)?.items.get(id);
-    return e && now - e.fetchedAt <= this.limits.ttlMs ? e.item : null;
+    return e && this.alive(e, now) ? e.item : null;
   }
 
   /** Top items for the query's term ids (`ids[0..n)` in the user's vocabulary), fresh only. */
@@ -332,7 +424,7 @@ export class ItemCache {
     const out: CacheHit[] = [];
     for (let j = 0; j < res.count && out.length < limit; j++) {
       const e = u.byDoc[res.docs[j]!];
-      if (!e || now - e.fetchedAt > this.limits.ttlMs) continue;
+      if (!e || !this.alive(e, now)) continue;
       out.push({
         item: e.item,
         sketch: e.sketch,
@@ -346,6 +438,48 @@ export class ItemCache {
   }
 
   /**
+   * Top fresh items of the given sources for the query's term ids, at most `limit` per source: a synced source
+   * answered from the local index (D56). With `all`, only items holding every query term, newest first (as a mail
+   * or chat search answers); otherwise the best scored. Reads the best `depth` of the whole index, so a source whose
+   * matches all rank below it answers fewer.
+   */
+  searchIn(
+    scope: Scope,
+    ids: ArrayLike<number>,
+    n: number,
+    limit: number,
+    sources: ReadonlySet<string>,
+    all: boolean,
+    now = Date.now(),
+    depth = 400,
+  ): CacheHit[] {
+    const u = this.peek(scope);
+    if (!u || n === 0) return [];
+    const res = u.index.search(ids, n, depth);
+    const hits: CacheHit[] = [];
+    for (let j = 0; j < res.count; j++) {
+      const e = u.byDoc[res.docs[j]!];
+      if (!e || !sources.has(e.item.sourceId) || !this.alive(e, now)) continue;
+      if (all && res.matched[j]! < n) continue;
+      hits.push({
+        item: e.item,
+        sketch: e.sketch,
+        doc: e.doc,
+        score: res.scores[j]!,
+        coverage: res.coverage[j]!,
+        matched: res.matched[j]!,
+      });
+    }
+    if (all) hits.sort((a, b) => (b.item.updatedAt ?? 0) - (a.item.updatedAt ?? 0));
+    const per = new Map<string, number>();
+    return hits.filter((h) => {
+      const k = per.get(h.item.sourceId) ?? 0;
+      per.set(h.item.sourceId, k + 1);
+      return k < limit;
+    });
+  }
+
+  /**
    * Fresh cached items that start on one of `days` (YYYY-MM-DD of their `meta.start`: events), soonest first, at most
    * `limit`: for requests that name a day rather than words the item holds (D44). A scan of the user's items (at most
    * `maxItemsPerUser`), run only for such requests; the cap keeps what is scored after it small.
@@ -356,7 +490,7 @@ export class ItemCache {
     const out: CacheHit[] = [];
     for (const e of u.items.values()) {
       const start = e.item.meta?.start;
-      if (!start || !days.has(start.slice(0, 10)) || now - e.fetchedAt > this.limits.ttlMs) continue;
+      if (!start || !days.has(start.slice(0, 10)) || !this.alive(e, now)) continue;
       out.push({ item: e.item, sketch: e.sketch, doc: e.doc, score: 0, coverage: 0, matched: 0 });
     }
     return out.sort((a, b) => Date.parse(a.item.meta!.start!) - Date.parse(b.item.meta!.start!)).slice(0, limit);
@@ -385,7 +519,7 @@ export class ItemCache {
     const out: CacheHit[] = [];
     for (const id of ids) {
       const e = u.items.get(id);
-      if (e && now - e.fetchedAt <= this.limits.ttlMs) {
+      if (e && this.alive(e, now)) {
         out.push({ item: e.item, sketch: e.sketch, doc: e.doc, score: 0, coverage: 0, matched: 0 });
       }
     }

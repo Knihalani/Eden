@@ -16,15 +16,20 @@ import { itemId, type ContextItem, type Scope } from "@eden/protocol";
 import {
   buildArgs,
   buildFetchArgs,
+  buildListArgs,
   fetchUsable,
+  listUsable,
   mapFetchArgs,
+  mapListArgs,
   mapSearchArgs,
+  MAX_CURSOR_CHARS,
   usable,
   type ArgMapping,
   type FetchMapping,
+  type ListMapping,
   type ToolSchema,
 } from "./schema-args";
-import type { SearchQuery, Source } from "./source";
+import type { ListPage, SearchQuery, Source } from "./source";
 
 export interface McpSourceOptions {
   id: string;
@@ -49,6 +54,17 @@ export interface McpSourceOptions {
   fetchTool?: {
     name: string;
     args?: (ref: string) => Record<string, unknown>;
+    fixed?: Record<string, unknown>;
+  };
+  /**
+   * The read tool that lists the user's records most recently updated first, page by page, for a background sync
+   * (`list`, D56), if the server has one: an `args` function, or a mapping read from its input schema (its cursor and
+   * page-size arguments), with `fixed` values as for search. It passes the same read-only check as the search tool,
+   * and one that fails it fails the connect. Without it, the source is not synced and is searched live.
+   */
+  listTool?: {
+    name: string;
+    args?: (cursor: string | undefined, limit: number) => Record<string, unknown>;
     fixed?: Record<string, unknown>;
   };
   /** Tools the server does not annotate read-only but an operator has verified are. */
@@ -92,10 +108,14 @@ export class McpSource implements Source {
   private lastError: unknown = null;
   private mapping: ArgMapping | null = null;
   private fetchMapping: FetchMapping | null = null;
+  private listMapping: ListMapping | null = null;
+  /** `list`, when a list tool is configured (D56); undefined otherwise, so the source is never synced. */
+  readonly list?: Source["list"];
 
   constructor(private readonly options: McpSourceOptions) {
     this.id = options.id;
     this.description = options.description;
+    if (options.listTool) this.list = (scope, cursor, limit, signal) => this.listPage(scope, cursor, limit, signal);
   }
 
   private async connect(): Promise<Client> {
@@ -129,6 +149,21 @@ export class McpSource implements Source {
               throw new ArgumentMappingError(`${this.id}: cannot call ${t.name}: ${why}; set fetchTool.fixed or args`);
             }
             this.fetchMapping = m;
+          }
+        }
+        // A list tool likewise: read-only or trusted, and mappable, or the connect fails and no tool is called.
+        const listTool = this.options.listTool;
+        if (listTool) {
+          const t = this.readTool(tools, listTool.name);
+          if (!listTool.args) {
+            const m = mapListArgs(t.inputSchema as ToolSchema, listTool.fixed);
+            if (!listUsable(m)) {
+              throw new ArgumentMappingError(
+                `${this.id}: cannot call ${t.name}: required arguments with no value: ${m.missing.join(", ")}; ` +
+                  "set listTool.fixed or args",
+              );
+            }
+            this.listMapping = m;
           }
         }
         // A dropped connection (a stdio server that exited, an expired HTTP session) clears the client, so the next
@@ -213,6 +248,30 @@ export class McpSource implements Source {
     return row ? rowItem(this.id, row) : null;
   }
 
+  /**
+   * One page of the user's records through the list tool, most recently updated first (D56), and the cursor of the
+   * next. The next cursor is the server's (`nextCursor`, `nextPageToken`, Slack's `response_metadata.next_cursor`
+   * and the like) or, for a tool that pages by offset, this one plus the rows returned while a page comes back full.
+   * An error result throws, so a sync never reads a failed page as an empty listing (which would drop every item).
+   * Items are not redacted here: whoever holds them runs them through the gate (D10).
+   */
+  private async listPage(_scope: Scope, cursor: string | undefined, limit: number, signal: AbortSignal) {
+    const listTool = this.options.listTool!;
+    const client = await this.connect();
+    const args = listTool.args ? listTool.args(cursor, limit) : buildListArgs(this.listMapping!, cursor, limit);
+    const result = await client.callTool({ name: listTool.name, arguments: args }, undefined, { signal });
+    if (result.isError) throw new Error(`${this.id}: ${listTool.name} returned an error`);
+    const items = toItems(this.id, result.content, limit, result.structuredContent);
+    const page: ListPage = { items, next: null };
+    if (!listTool.args && this.listMapping?.cursor?.kind === "offset") {
+      const at = cursor === undefined ? 0 : Number(cursor);
+      page.next = items.length >= limit && Number.isSafeInteger(at) ? String(at + items.length) : null;
+    } else if (listTool.args || this.listMapping?.cursor) {
+      page.next = nextCursorOf(result.content, result.structuredContent);
+    }
+    return page;
+  }
+
   async close(): Promise<void> {
     const client = this.client;
     this.client = null; // first, so `onclose` sees a deliberate close and sets no reconnect backoff
@@ -222,6 +281,59 @@ export class McpSource implements Source {
 
 type Block = { type: string; text?: string };
 type Row = Record<string, unknown>;
+
+/** Keys under which servers put the next page's cursor, best first. */
+const NEXT_KEYS = [
+  "nextCursor",
+  "next_cursor",
+  "nextPageToken",
+  "next_page_token",
+  "nextToken",
+  "next_token",
+  "continuation",
+  "continuationToken",
+  "endCursor",
+  "cursor",
+];
+/** Objects a cursor may sit in (`response_metadata` is Slack's, `pageInfo` GraphQL's). */
+const CURSOR_HOLDERS = ["response_metadata", "pagination", "paging", "meta", "page_info", "pageInfo"];
+
+/**
+ * The next page's cursor in a list tool's result, or null when there is none (the last page). Read from the
+ * structured content, else from the first text block that holds a JSON object: a known key at the top level or in
+ * one known holder object, a non-empty string of at most `MAX_CURSOR_CHARS` (or a finite number). A result that says
+ * `has_more: false` (`hasMore`, GraphQL's `hasNextPage`) has no next page whatever cursor it echoes. A fixed number of
+ * key lookups: the rows are never scanned.
+ */
+export function nextCursorOf(content: unknown, structured?: unknown): string | null {
+  let o: unknown = structured;
+  if (!isObject(o)) {
+    const blocks = Array.isArray(content) ? (content as Block[]) : [];
+    const block = blocks.find((b) => b.type === "text" && typeof b.text === "string" && b.text.trimStart()[0] === "{");
+    o = block ? parseJson(block.text!) : undefined;
+  }
+  if (!isObject(o)) return null;
+  const pick = (x: Row): string | null => {
+    if (x.has_more === false || x.hasMore === false || x.hasNextPage === false) return null;
+    for (const k of NEXT_KEYS) {
+      const v = x[k];
+      if (typeof v === "string" && v.length > 0 && v.length <= MAX_CURSOR_CHARS) return v;
+      if (typeof v === "number" && Number.isFinite(v)) return String(v);
+    }
+    return null;
+  };
+  if (o.has_more === false || o.hasMore === false) return null;
+  const top = pick(o);
+  if (top !== null) return top;
+  for (const h of CURSOR_HOLDERS) {
+    const holder = o[h];
+    if (!isObject(holder)) continue;
+    if (holder.has_more === false || holder.hasMore === false || holder.hasNextPage === false) return null;
+    const got = pick(holder);
+    if (got !== null) return got;
+  }
+  return null;
+}
 
 /**
  * Turns a tool result into items. Rows come from the result's `structuredContent` when it has them, else from each
