@@ -927,7 +927,8 @@ export function plantHeldout8(world: World, seed: number, variant: Variant): Hid
     };
     world.items.push(item);
     tasks.push({
-      id: `w${seed}:${SUITE}:${t.name}`,
+      // The control variant's ids differ, as every suite's do: runners key results by task id.
+      id: `w${seed}:${variant === "hidden" ? SUITE : `${SUITE}-control`}:${t.name}`,
       template: t.name,
       text: m.text,
       detail:
