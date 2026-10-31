@@ -33,7 +33,7 @@ import {
   type Scope,
 } from "@eden/protocol";
 import { REDACTED, sanitizeForStore } from "@eden/redact";
-import { Vocab, type WorkerPool } from "@eden/primitives";
+import { hashString, Vocab, type WorkerPool } from "@eden/primitives";
 import {
   PlanError,
   PlannedSource,
@@ -255,6 +255,11 @@ interface Cue {
    * item new or changed since the index answered the lookup).
    */
   polled?: Promise<boolean>;
+  /**
+   * `syncPollBehind`: the lookup made again after the poll (`afterPoll`). It decides as a lookup behind a delivery
+   * with no model (what is sure or grounded, and corrections), so it never calls the judge.
+   */
+  followUp?: true;
 }
 
 /**
@@ -350,6 +355,11 @@ interface Scored {
   walkedOnly?: true;
   /** A whole cue entity is in the item (`rank`'s entity bonus). */
   entity?: true;
+  /**
+   * `syncPollBehind`: delivered earlier this session and changed since (`Ledger.revised`), so the agent holds a
+   * superseded copy; a follow-up delivers the corrected one (D65).
+   */
+  revised?: true;
 }
 
 /** What an injection was built from, kept until it is handed out and usage tracking starts. */
@@ -543,7 +553,7 @@ export class ContextPartner {
       const text = sanitizeForStore(head(event.text, this.config.maxEventChars));
       if (text) this.anticipate(s, "draft", text, event.at, false);
       if (root) spans!.close(root, { session: s.id, decision: "draft" });
-      return { injection: null, pending: s.inflight !== null || s.pending.length > 0 };
+      return { injection: null, pending: pendingOf(s) };
     }
     const s = this.session(event);
     // The user is active: their sources are synced (and polled) while they are (D57). O(1), no I/O.
@@ -587,7 +597,7 @@ export class ContextPartner {
           ...(waited ? { async: true } : {}),
         });
       }
-      return { injection, pending: s.inflight !== null || s.pending.length > 0 };
+      return { injection, pending: pendingOf(s) };
     };
 
     const queued = s.pending.shift() ?? null;
@@ -701,8 +711,9 @@ export class ContextPartner {
   /**
    * `syncPollBehind`: once a lookup that answered from the index as it stood is done, and the poll it left running
    * stored something, the lookup is made again on the fresh index and what it delivers is queued. After a delivery
-   * (or an early one, `anticipate`) it adds only what is sure or grounded (`served`), as a lookup behind an early
-   * delivery does; after silence it decides as the lookup would have had it waited. Follow-ups run one at a time
+   * (or an early one, `anticipate`), or with a model, it adds only what is sure or grounded (`served`), as a lookup
+   * behind an early delivery does, plus the corrected copy of anything delivered that the poll changed (`revised`);
+   * after silence with no model it decides as the lookup would have had it waited. Follow-ups run one at a time
    * after any lookup in flight, so each request made while the poll was out gets one. Never throws.
    */
   private afterPoll(
@@ -718,14 +729,17 @@ export class ContextPartner {
         // `cue.polled` is set while the first lookup runs (its search), so it is read once the lookup is done.
         const fresh = cue.polled ? await cue.polled : false;
         if (!fresh || s.closed) return;
+        // With a model the follow-up is decided as one behind a delivery, so it never makes the event's second judge
+        // call: what is sure or grounded, and corrections.
+        const served = injection !== null || (early !== null && (await early) !== null) || this.deps.model !== null;
         // Another lookup still running (a later request, or another request's follow-up) may have read the index
         // before this poll stored anything, so this cue is not covered by it: wait, then look again. The ledger keeps
-        // what an earlier lookup delivered from being sent twice.
+        // what an earlier lookup delivered from being sent twice. Nothing awaits between the last check and taking
+        // `s.inflight` below, so two follow-ups woken in one tick still run one at a time.
         while (s.inflight && !s.closed) await s.inflight.catch(() => null);
         if (s.closed) return;
-        const served = injection !== null || (early !== null && (await early) !== null);
         const { polled: _, ...again0 } = cue;
-        const again = this.slowPath(s, again0, t0, eventKind, served);
+        const again = this.slowPath(s, { ...again0, followUp: true }, t0, eventKind, served);
         const tracked = again.finally(() => {
           if (s.inflight === tracked) s.inflight = null;
         });
@@ -1329,11 +1343,20 @@ export class ContextPartner {
       found.push(h);
       walkedOnly.add(h.item.id);
     }
+    // `syncPollBehind`: an item delivered from a copy since edited at its source is news again, though the ledger has
+    // it and its old words are near the new (D40: what the agent was given must not stand once superseded).
+    const revised = new Set(
+      this.config.syncPollBehind
+        ? found.filter((h) => s.ledger.revised(h.item.id, versionOf(h.item), s.turn)).map((h) => h.item.id)
+        : [],
+    );
     return (
       found
-        .filter((h) => options.ignoreLedger || s.ledger.isFresh(h.item.id, s.turn))
+        .filter((h) => options.ignoreLedger || revised.has(h.item.id) || s.ledger.isFresh(h.item.id, s.turn))
         // A near-duplicate of something already delivered this session (a reply quoting it, a synced copy) is old news.
-        .filter((h) => options.ignoreLedger || !s.delivered.some((d) => nearDuplicate(d, h.sketch)))
+        .filter(
+          (h) => options.ignoreLedger || revised.has(h.item.id) || !s.delivered.some((d) => nearDuplicate(d, h.sketch)),
+        )
         // What the agent already has in front of it (a tool result it fetched, its own read-out) is not news either.
         .filter((h) => options.ignoreLedger || !this.alreadyHas(s, h.item, h.doc, vocab))
         .map((h) => {
@@ -1345,6 +1368,7 @@ export class ContextPartner {
           if (people.length > 0) scored.beyond = beyondOf(h.doc);
           if (walkedOnly.has(h.item.id)) scored.walkedOnly = true;
           if (entityHit) scored.entity = true;
+          if (revised.has(h.item.id)) scored.revised = true;
           return scored;
         })
         .sort((a, b) => b.score - a.score)
@@ -3297,8 +3321,10 @@ export class ContextPartner {
       // or with no model what the request's structure grounds: never the fallback's best guess or a judge call, which
       // would have had that delivery among their candidates.
       if (served) {
+        // A follow-up (`afterPoll`) decides as with no model whatever is configured: its judge call would be the
+        // event's second (docs/COST-MODEL.md).
         const ruled =
-          this.deps.model && !this.config.judgeBehind
+          this.deps.model && !this.config.judgeBehind && !cue.followUp
             ? []
             : sure.length > 0
               ? sure
@@ -3313,14 +3339,25 @@ export class ContextPartner {
                   walked.size > 0 ? scored.filter((x) => walked.has(x.item.id)) : [],
                   carded,
                 ).items;
-        const { items, how } = extend(ruled);
+        // A follow-up corrects: an item the agent was given whose words its poll changed goes out again, as it now
+        // reads, whatever it scores (the agent holds the superseded copy).
+        const corrected = cue.followUp ? scored.filter((x) => x.revised && !ruled.includes(x)) : [];
+        const { items, how } = extend([...ruled, ...corrected]);
         dumped(
           "served",
           items,
-          items.length > 0 ? (ruled.length === 0 ? "" : sure.length > 0 ? "sure" : "grounded") : "",
+          items.length > 0
+            ? ruled.length > 0
+              ? sure.length > 0
+                ? "sure"
+                : "grounded"
+              : corrected.length > 0
+                ? "corrected"
+                : ""
+            : "",
         );
         // `judgeBehind`: the judge reads the best of the rest after this answer, and may only add to it.
-        if (this.deps.model && this.config.judgeBehind) {
+        if (this.deps.model && this.config.judgeBehind && !cue.followUp) {
           const rest = this.eligible(scored, cue, new Set(probedIds ?? []), bridged, carded)
             .filter((x) => !items.includes(x))
             .slice(0, this.config.judgeCandidates);
@@ -3700,6 +3737,8 @@ export class ContextPartner {
     s.ledger.mark(
       scored.map((x) => x.item.id),
       s.turn,
+      // `syncPollBehind` answers from copies its poll may then correct: each delivery's words are kept to tell.
+      this.config.syncPollBehind ? scored.map((x) => versionOf(x.item)) : undefined,
     );
     const dense = this.config.densePacket && this.config.compactInjection;
     const self = this.config.compactInjection ? this.deps.cache.selfOf(s.scope) : null;
@@ -3830,6 +3869,19 @@ export class ContextPartner {
 }
 
 const NO_TERMS = new Uint32Array(0);
+
+/**
+ * `ObserveResult.pending`: slower work may still queue an injection. That is a lookup in flight, work a lookup left
+ * running behind its answer (`syncPollBehind`'s poll and follow-up, `judgeBehind`'s judge), or a queued delivery.
+ */
+function pendingOf(s: Session): boolean {
+  return s.inflight !== null || !!s.behind || s.pending.length > 0;
+}
+
+/** An item's words as the ledger records them (`Ledger.revised`): a copy edited at its source hashes otherwise. */
+function versionOf(item: ContextItem): number {
+  return hashString(`${item.title}\n${item.text}`, 0);
+}
 
 /** A model call's span attributes: tokens, cost and whether it was cut off. Counts only. */
 function modelAttrs(res: {

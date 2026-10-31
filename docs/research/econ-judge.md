@@ -137,7 +137,14 @@ simulation, decides between them.
   - If the poll stores anything (new or changed items, counted by `SyncManager.freshen`'s new `tally`), the lookup is
     made again once both are done, and what it delivers is queued:
     - after a delivery, or after anticipation's early answer, it adds only what is sure or grounded (`served`);
-    - after silence, it decides as the lookup would have had it waited;
+    - after silence, it decides as the lookup would have had it waited, with no model; with a model it decides as
+      after a delivery, so the follow-up never makes the event's second judge call (review fix: it re-ran the full
+      slow path, judge included, two judge calls for one event);
+    - an item the session was given and the poll then changed (edited in place at its source) is delivered again as
+      it now reads (review fix: the index answered with the superseded copy, and the ledger, keyed by id, kept the
+      follow-up from correcting it; D40 says a stale copy is never delivered, and D65 records where this flag departs
+      from it: the old copy can go out first, and the correction follows). With the flag, the ledger records each
+      delivered item's words (`Ledger.revised`), and the near-duplicate check does not hold back the corrected copy;
     - follow-ups run one at a time after any lookup in flight, so each request made while the poll was out gets
       its own (integration change: the track skipped the follow-up when another lookup was running, which lost an
       item that answered the second of two requests made during one poll; `econ-judge.test.ts`).
@@ -145,6 +152,9 @@ simulation, decides between them.
     (integration fix: the track's lookup answered stale warm copies from the index even with no poll to bring them
     current).
   - The agent's `ask_context` still waits for the poll.
+  - `ObserveResult.pending` is true while a poll or follow-up left behind the answer is running (review fix: it was
+    false, so an integrator that skips `/v1/pending` on false never saw the follow-up's delivery; the same holds for
+    `judgeBehind`'s judge).
   - `SyncManager.isWarm` is new.
 - `judgeBehind` (engine, with a model):
   - The fast path, `early` and the slow path decide as with no model, and judge-contested sure items go out at once.
@@ -171,7 +181,9 @@ gives the same delivered and decoy sets as main, task by task.
 ## Recommendation
 
 - **Recommended configuration:** no model judge. `syncPollBehind` is a candidate for the next recommended
-  configuration (`ALL2`, decided after the blind run); ALL stays the recommended configuration until then.
+  configuration (`ALL2`, decided after the blind run); ALL stays the recommended configuration until then. Its cost
+  to weigh there: the first answer can carry a copy the poll behind it then corrects, and the correction reaches only
+  the agent's next request (or `/v1/pending`). How often that happens is unmeasured (the worlds are static).
 - **Experimental, not recommended:** `judgeBehind`, off by default, kept for the blind run.
 - **Expected impact, if the in-sample effects hold blind:**
   - facts found: unchanged by `syncPollBehind`; +0.07–0.09 hidden with `judgeBehind` (CI includes 0);

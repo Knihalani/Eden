@@ -263,7 +263,9 @@ export interface EngineConfig {
   syncOnDemand: boolean;
   /**
    * With `syncOnDemand`: an event's lookup does not wait for that poll. Every warm synced source answers from the
-   * index as it stands while the poll runs behind; the agent's asks still wait for it (docs/research/econ-judge.md).
+   * index as it stands while the poll runs behind; the agent's asks still wait for it. If the poll stores anything the
+   * lookup is made again with no judge call, and an item delivered from a copy the poll changed goes out again as it
+   * now reads (D65, docs/research/econ-judge.md).
    */
   syncPollBehind: boolean;
   syncCatchupPages: number;
