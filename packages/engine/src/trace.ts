@@ -45,3 +45,19 @@ export interface ShadowRecord {
 }
 
 export type ShadowSink = (record: ShadowRecord) => void;
+
+/**
+ * One timed phase of the engine's work, for lab timelines (`pi-ab.ts`): the slow path, a lookup's own search, each
+ * probe query, the probes' grace wait, a refresh, an ask. Names and counts only, never content (D19). `start` and
+ * `end` are `performance.now()` readings: a monotonic clock, so a lab can line spans up with its own.
+ */
+export interface Span {
+  sessionId: string;
+  name: string;
+  start: number;
+  end: number;
+  /** Source calls the phase made, when it makes any (a probe answered from memory or the economy makes none). */
+  calls?: number;
+}
+
+export type SpanSink = (span: Span) => void;
