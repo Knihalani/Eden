@@ -203,8 +203,9 @@ export interface EngineConfig {
   /**
    * Dates said whole in packets and `ask` answers (D68; docs/research/econ-uptake.md): compaction keeps the current
    * year ("left 9 Oct 2026", which `compactInjection` shortens to "9 Oct"), and an event whose text never names its
-   * day starts with its `meta.start` ("Starts: Thu 29 Oct 2026 13:30. "), since a calendar connector may keep the time
-   * only there. Wording only: what is delivered, and when, is unchanged; about 10 tokens more per packet.
+   * day starts with its `meta.start` ("Starts: Thu 29 Oct 2026 13:30 UTC. "), since a calendar connector may keep the
+   * time only there. Wording only: what is delivered, and when, is unchanged; in-sample, packet bytes +1.6%, about 6
+   * bytes (1–2 agent input tokens) a task (docs/COST-MODEL.md).
    */
   packetDates: boolean;
   /**

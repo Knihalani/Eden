@@ -89,7 +89,7 @@ import {
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger } from "./ledger";
-import { citationsOf, renderAnswer, renderPacket, shownText, withoutAddedDates } from "./render";
+import { citationsOf, renderAnswer, renderPacket, shownText, usageText } from "./render";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -1031,9 +1031,10 @@ export class ContextPartner {
       .map((x) => x.item);
     const rendering = spans?.open("render", cue.span);
     // `packetDates`: an answer is not compacted, so only an event's missing day needs saying.
-    let answer = items.length
-      ? renderPacket(items, { maxBytes: 4_000, ...(this.config.packetDates ? { when: true } : {}) })
-      : "Nothing in the connected sources.";
+    const answering = { maxBytes: 4_000, ...(this.config.packetDates ? { when: true } : {}) };
+    let answer = items.length ? renderPacket(items, answering) : "Nothing in the connected sources.";
+    // What usage learns from the answer: the packet without the flag's additions, unless the model composed it.
+    let learnt = this.config.packetDates && items.length ? usageText(items, answering) : undefined;
     if (rendering) spans!.close(rendering, { items: items.length });
     let usedModel = false;
     let costUsd = 0;
@@ -1053,7 +1054,10 @@ export class ContextPartner {
         });
         this.settle(reservation, res.costUsd);
         // A cut-off answer is not shown: the cited items stand on their own (D43, D45).
-        if (res.text.trim() && !res.truncated) answer = renderAnswer(res.text);
+        if (res.text.trim() && !res.truncated) {
+          answer = renderAnswer(res.text);
+          learnt = undefined;
+        }
         usedModel = true;
         costUsd = res.costUsd;
         if (calling) spans!.close(calling, modelAttrs(res));
@@ -1070,6 +1074,7 @@ export class ContextPartner {
         "ask",
         cue,
         answer,
+        learnt,
       );
       this.handOut(s, injection);
     }
@@ -3748,7 +3753,8 @@ export class ContextPartner {
   }
 
   /**
-   * `shown` is what the agent receives when it is not the injection's own text (an ask's answer). With
+   * `shown` is what the agent receives when it is not the injection's own text (an ask's answer), and `learnt` the
+   * words usage tracking reads for it when they differ (`usageText`, with `packetDates`). With
    * `compactInjection`, each item is cut to what bears on `cue` (`compactText`) rather than to its first bytes.
    */
   private deliver(
@@ -3758,10 +3764,11 @@ export class ContextPartner {
     reason: string,
     cue: Cue,
     shown?: string,
+    learnt?: string,
   ): Injection {
     const spans = this.spans;
     const sp = spans?.open("deliver", cue.span, { items: scored.length });
-    const injection = this.build(s, scored, mode, reason, cue, sp?.id ?? 0, shown);
+    const injection = this.build(s, scored, mode, reason, cue, sp?.id ?? 0, shown, learnt);
     if (sp) spans!.close(sp, { bytes: injection.text.length });
     return injection;
   }
@@ -3774,6 +3781,7 @@ export class ContextPartner {
     cue: Cue,
     parent: number,
     shown?: string,
+    learnt?: string,
   ): Injection {
     const spans = this.spans;
     // Whatever path delivered them, a probe that first brought one in paid for its call (`probeYield`).
@@ -3809,26 +3817,27 @@ export class ContextPartner {
     if (folding) spans!.close(folding, { kept: shownItems.length });
     const items = shownItems.map((x) => x.item);
     const rendering = spans?.open("render", parent, { items: items.length });
+    const options: Parameters<typeof renderPacket>[1] = {
+      maxBytes: this.config.maxInjectionBytes,
+      ...(this.config.compactInjection
+        ? {
+            focus: focusOf(cue),
+            itemBytes: this.config.compactItemBytes,
+            year: new Date(this.now()).getUTCFullYear(),
+            self,
+            dense,
+            // A word the session has seen: a part with nothing else the agent has (`compactText`).
+            ...(this.config.compactNovel ? { known: (w: string) => s.seen.has(s.vocab.lookup(w)) } : {}),
+          }
+        : {}),
+      ...(this.config.packetDates ? { keepYear: true, when: true } : {}),
+    };
     const injection: Injection = {
       ...s.scope,
       id: newId("inj", this.now()),
       sessionId: s.id,
       mode,
-      text: renderPacket(items, {
-        maxBytes: this.config.maxInjectionBytes,
-        ...(this.config.compactInjection
-          ? {
-              focus: focusOf(cue),
-              itemBytes: this.config.compactItemBytes,
-              year: new Date(this.now()).getUTCFullYear(),
-              self,
-              dense,
-              // A word the session has seen: a part with nothing else the agent has (`compactText`).
-              ...(this.config.compactNovel ? { known: (w: string) => s.seen.has(s.vocab.lookup(w)) } : {}),
-            }
-          : {}),
-        ...(this.config.packetDates ? { keepYear: true, when: true } : {}),
-      }),
+      text: renderPacket(items, options),
       citations: citationsOf(items),
       reason,
       score: Math.max(...scored.map((x) => x.score)),
@@ -3843,13 +3852,12 @@ export class ContextPartner {
       sourceIds: [...new Set(items.map((i) => i.sourceId))],
       items: items.map((i) => ({ sourceId: i.sourceId, id: i.id })),
       // Only the words the agent received: an item's text past the packet's cut is not evidence of use. Nor are the
-      // dates `packetDates` says whole: usage learns from the same words as without the flag.
-      text: this.config.packetDates
-        ? withoutAddedDates(
-            shownText(shown ?? injection.text),
-            this.config.compactInjection && shown === undefined ? new Date(this.now()).getUTCFullYear() : undefined,
-          )
-        : shownText(shown ?? injection.text),
+      // dates `packetDates` says whole: usage learns from the words the packet has without the flag (`usageText`).
+      text:
+        learnt ??
+        (this.config.packetDates && shown === undefined
+          ? usageText(items, options)
+          : shownText(shown ?? injection.text)),
     });
     return injection;
   }

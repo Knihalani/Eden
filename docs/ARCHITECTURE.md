@@ -86,8 +86,10 @@ copy of a candidate, is cut to the parts that bear on the request, with no model
 greetings, pleasantries, signatures, footers and links dropped, and parts that repeat the item's title or an earlier
 item in the packet. It drops the current year from dates ("9 Oct"); with `packetDates` (D68, off by default) it keeps
 it ("9 Oct 2026"), and an event whose shown text never names its day, in a packet or an `ask_context` answer, starts
-with its `meta.start` ("Starts: Thu 29 Oct 2026 13:30. "), built from the timestamp's digits only. Usage learning reads
-the packet without those additions (`withoutAddedDates`), so the flag changes wording, not what Eden learns.
+with its `meta.start` ("Starts: Thu 29 Oct 2026 13:30 UTC. "), built from the timestamp's digits only: the zone as
+written, no time when the stamp has no zone or is at midnight (an all-day event), and only when it fits the line whole.
+Usage learning reads the packet as rendered without the flag (`usageText`), so the flag changes wording, not what Eden
+learns.
 
 **No-model grounds and shared calls** (D48, flags off by default): with probes, a clash is an event overlapping the
 time asked for, never the event the request is about; `groundAway` delivers a named person's absence on a named day;
