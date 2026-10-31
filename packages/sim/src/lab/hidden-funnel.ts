@@ -41,6 +41,7 @@ const SUITE_LIST = parseSuites(SUITE);
 const SEEDS = opt("seeds", "41,42,43,44").split(",").map(Number);
 const CONFIG = JSON.parse(opt("config", "{}")) as Record<string, unknown>;
 const LIVE = opt("judge", "none") === "live";
+const SYNC = args.includes("--sync");
 const KEY = process.env.OPENROUTER_API_KEY;
 if (LIVE && !KEY) throw new Error("--judge live needs OPENROUTER_API_KEY");
 const MODEL = opt("model", "z-ai/glm-5.3-flash");
@@ -143,6 +144,13 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     onTrace: (t) => (calls += t.sourceCalls),
   });
   const scope = { tenantId: "funnel", userId: `w${seed}` };
+  // `--sync`: the experiment where Eden has already synced every item of the user's sources into its own index.
+  if (SYNC)
+    cache.put(
+      scope,
+      sources.flatMap((s) => s.listAll()),
+      clock,
+    );
   for (const [i, task] of tasks.entries()) {
     clock += 3_600_000;
     const id = planted[i]!.id;
