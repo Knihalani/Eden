@@ -228,6 +228,26 @@ describe("background sync (D56)", () => {
     expect(cache.syncedCount(ua)).toBe(0);
   });
 
+  test("a page that lands after the user was forgotten (and came back) is not stored", async () => {
+    const src = new ListSource("mail", mail(3));
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    const list = src.list.bind(src);
+    src.list = async (...args) => {
+      await gate;
+      return list(...args);
+    };
+    const { partner, cache } = setup([src]);
+    partner.sync!.track(scope);
+    const ticking = partner.sync!.tick();
+    await new Promise((r) => setTimeout(r, 5));
+    partner.forget(scope);
+    partner.sync!.track(scope); // Back at once: a new sync for them, which the old page must not feed.
+    release();
+    await ticking;
+    expect(cache.syncedCount(scope)).toBe(0);
+  });
+
   test("retention: a user idle past syncDropMs stops being synced and their synced items go", async () => {
     const src = new ListSource("mail", mail(3));
     const { partner, cache, advance } = setup([src], { syncDropMs: 2 * HOUR });

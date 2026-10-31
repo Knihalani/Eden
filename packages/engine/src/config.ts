@@ -249,6 +249,11 @@ export interface EngineConfig {
   syncLocalAll: boolean;
   /** Probes of a current synced source go to every synced source (they cost no call), not only the routed ones. */
   syncWide: boolean;
+  /**
+   * With sources answered locally, up to this many of the request's rare words (a place, a reference: on few of the
+   * user's items) are each sent alone to them as a probe, at no call; their finds get the probes' seats. 0: none.
+   */
+  syncTermProbes: number;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
   /** Cost reserved per judge call before the real cost is known: about its worst case at the cap (D45). */
@@ -345,5 +350,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,
   syncWide: false,
+  syncTermProbes: 0,
   maxEventChars: 32_000,
 };
