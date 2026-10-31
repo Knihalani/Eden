@@ -243,13 +243,22 @@ const UNTIED = new RegExp(
  * one about a date or an amount decides for the sentences after it that only repeat its point ("… while Robert is
  * away"), and a clearing statement anywhere after a blocking one wins ("was blocked, but … the date holds").
  */
-export function assess(frame: Frame, item: ContextItem, now: number, extraTies?: ReadonlySet<string>): Verdict {
+export function assess(
+  frame: Frame,
+  item: ContextItem,
+  now: number,
+  extraTies?: ReadonlySet<string>,
+  speaks = false,
+): Verdict {
   // A consequence probe's find (`consequence.ts`) is tied to the request by its action class's own words: "freeze"
   // and "production" tie a release request that says neither. Plural "s" dropped, as for the request's own words.
   const extra = extraTies ? new Set([...extraTies].map(stem)) : null;
   // A message from someone the request names speaks for them: its "I" is them ("I'm vegetarian" from Sam).
   const sender = /^from:\s*([^<\n]{2,80})/im.exec(item.text.slice(0, 2_000))?.[1]?.toLowerCase() ?? "";
-  const fromNamed = sender !== "" && frame.names.some((n) => n.split(/\s+/).every((w) => sender.includes(w)));
+  // `speaks`: the knowledge graph (`kg.ts`) says the item's author is someone the request names, or one of their
+  // organisation's people, or the person the request names by role ("my manager"), though no name matches here.
+  const fromNamed =
+    speaks || (sender !== "" && frame.names.some((n) => n.split(/\s+/).every((w) => sender.includes(w))));
   // A statement is tied to the request when it holds one of its words, or speaks in the first person from someone
   // it names. Only a tied statement's conflict is the request's ("travel over £500 needs pre-approval" in a mail
   // from Oskar is no conflict with lunch with Oskar). A request that names someone ties by name only: another
@@ -436,6 +445,24 @@ function dateVerdict(frame: Frame, s: string, now: number, blocked: boolean): Ve
   if (blocked) return late || covered ? "conflict" : "clear";
   if (d.limits.length > 0) return late ? "conflict" : "clear";
   return frame.named && !covered ? "clear" : "none";
+}
+
+/**
+ * Whether a sentence (lower case) states something that stops, moves or settles an action (`BLOCKS`, `MOVES`,
+ * `DONE`, `STANDING`): the knowledge graph links such an item to the days and things it names as constraining them.
+ */
+export function constrains(s: string): boolean {
+  return (
+    marks(s, BLOCKS, true).length > 0 ||
+    marks(s, MOVES, true).length > 0 ||
+    marks(s, DONE, true).length > 0 ||
+    marks(s, STANDING, true).length > 0
+  );
+}
+
+/** The spans and limits a sentence (lower case) states, as ISO days (`datesOf`), for the knowledge graph. */
+export function datesIn(s: string, now: number): { spans: { from: string; to: string }[]; limits: string[] } {
+  return datesOf(s.slice(0, MAX_TEXT).replace(/[\u2013\u2014]/g, "-"), now);
 }
 
 /** The spans and limits a sentence states (`Dates`). */

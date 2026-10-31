@@ -5,7 +5,7 @@
  *   [--planner-no-reuse] [--planner-deadline-margin 2] [--planner-latency-quantile 0.9]
  *   [--planner-mode serve|shadow] [--promote-after N]] [--time 0] [--wait 0]
  *   [--noise 1] [--updates 0] [--refresh-after-hours H] [--max-refreshes 3] [--tool-rate 0.4]
- *   [--judge none|perfect|noisy] [--ask-model] [--live] [--brief] [--config '{"probes":true}']
+ *   [--judge none|perfect|noisy] [--ask-model] [--live] [--brief] [--config '{"probes":true}'] [--sync]
  *
  * Plays generated sessions over simulated sources and prints the quality report as JSON. Without --live no model is
  * used (free, deterministic at --time 0). --time 1 runs source latency and agent pacing in real time.
@@ -56,6 +56,8 @@ const report = await runQuality({
   model,
   judge: arg("judge", "none") as "none" | "perfect" | "noisy",
   promoteAfter: args.includes("--promote-after") ? Number(arg("promote-after", "0")) : undefined,
+  // Lab only: every source item synced into Eden's cache before each session (docs/research/moon-graph.md).
+  sync: args.includes("--sync"),
   planner: args.includes("--planner")
     ? {
         maxCalls: Number(arg("planner-max-calls", "3")),

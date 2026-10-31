@@ -18,6 +18,7 @@ import { dedupText, hamming64, SparseIndex, TextSketcher, Vocab } from "@eden/pr
 import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import { userOffset } from "./grounding";
+import { squash, UserGraph, type Seed, type Walked, type WalkOptions } from "./kg";
 import { head, termIds } from "./text";
 
 const NO_TERMS = new Uint32Array(0);
@@ -71,6 +72,8 @@ class UserCache {
   partied = 0;
   /** The parties' names and first names, lowercased (`isPerson`), computed on demand; reset as the tally changes. */
   personNames: Set<string> | undefined;
+  /** The user's knowledge graph (`kg.ts`), when the cache keeps one (`enableGraph`); built on first use. */
+  graph: UserGraph | undefined;
 }
 
 /** Header lines naming who takes part in an item: a mail's From, To and Cc, an event's attendees, an owner. */
@@ -175,6 +178,8 @@ export class ItemCache {
   private readonly users = new Map<string, UserCache>();
   private readonly perTenant = new Map<string, number>();
   private readonly limits: CacheLimits;
+  /** Whether each user's items are also put in a knowledge graph (`enableGraph`). */
+  private graphs = false;
 
   constructor(limits: Partial<CacheLimits> = {}) {
     this.limits = { ...DEFAULT_CACHE_LIMITS, ...limits };
@@ -212,6 +217,56 @@ export class ItemCache {
     const n = (this.perTenant.get(tenantId) ?? 1) - 1;
     if (n <= 0) this.perTenant.delete(tenantId);
     else this.perTenant.set(tenantId, n);
+  }
+
+  /**
+   * Keeps a knowledge graph per user from now on (`kg.ts`, the engine's `graph` flag). A user's graph is built from
+   * their cached items on first use, then kept as items come and go; it is dropped with them and with the user.
+   */
+  enableGraph(): void {
+    this.graphs = true;
+  }
+
+  /** The user's graph, built from their live items if it does not exist yet; undefined without one. */
+  private graphOf(u: UserCache, now: number): UserGraph | undefined {
+    if (!this.graphs) return undefined;
+    if (!u.graph) {
+      u.graph = new UserGraph();
+      for (const e of u.items.values()) u.graph.add(e.item, e.fetchedAt || now);
+    }
+    return u.graph;
+  }
+
+  /**
+   * Items the user's knowledge graph reaches from `seeds` (`UserGraph.walk`), fresh ones only. Empty without a graph.
+   * Reads never allocate a cache for a user who has none.
+   */
+  walk(scope: Scope, seeds: Seed[], opt: WalkOptions, now = Date.now()): Walked[] {
+    const u = this.peek(scope);
+    if (!u || seeds.length === 0) return [];
+    const g = this.graphOf(u, now);
+    if (!g) return [];
+    // The user themself is on nearly everything they hold: their name, addresses and organisation spread nothing.
+    const self = this.selfOf(scope);
+    if (self && !opt.exclude) opt = { ...opt, exclude: g.around(`n:${squash(self)}`) };
+    // Asked for a few more than wanted: an expired item is skipped, not counted.
+    return g
+      .walk(seeds, { ...opt, limit: opt.limit * 2 })
+      .filter((w) => {
+        const e = u.items.get(w.id);
+        return e !== undefined && now - e.fetchedAt <= this.limits.ttlMs;
+      })
+      .slice(0, opt.limit);
+  }
+
+  /** Teaches the user's graph an outcome of items reached through `mask`'s edge types (`UserGraph.learn`). */
+  learnGraph(scope: Scope, mask: number, used: boolean): void {
+    this.peek(scope)?.graph?.learn(mask, used);
+  }
+
+  /** Nodes in the user's graph (0 without one), for tests and bounds. */
+  graphSize(scope: Scope): number {
+    return this.peek(scope)?.graph?.size ?? 0;
   }
 
   /** The user's vocabulary (creating the user's cache if needed). */
@@ -257,6 +312,8 @@ export class ItemCache {
       if (old) this.drop(u, old);
       if (item.meta?.start) u.offset = undefined;
       tally(u, item, 1);
+      // Added before the item is: a graph built on first use (`graphOf`) must not read it twice.
+      this.graphOf(u, now)?.add(item, now);
       const doc = this.index(u, item);
       const entry = { item, fetchedAt: now, doc, sketch: sketchOf(u, item) };
       u.items.set(item.id, entry); // Map order stays oldest-first for eviction (old entry was removed above).
@@ -285,6 +342,8 @@ export class ItemCache {
     u.parties = old.parties;
     u.partied = old.partied;
     u.self = old.self;
+    // Keyed by item id, not doc number: the graph stands as it is.
+    u.graph = old.graph;
     this.users.set(scopeKey(scope), u); // Same key: the user's place in the eviction order is unchanged.
   }
 
@@ -312,6 +371,7 @@ export class ItemCache {
     if (u.byDoc[e.doc] === e) u.byDoc[e.doc] = undefined;
     if (e.item.meta?.start) u.offset = undefined; // An event gone (evicted, expired, forgotten) may change the mode.
     tally(u, e.item, -1);
+    u.graph?.remove(e.item.id);
   }
 
   /** When the cached item was last fetched or seen in a lookup (ms), or undefined if it is not cached. */

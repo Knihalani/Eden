@@ -45,6 +45,11 @@ export interface QualityOptions {
   planner?: PlannerOptions;
   /** With a planner in shadow mode: switch it to serving after this many sessions per user (learned state kept). */
   promoteAfter?: number;
+  /**
+   * Lab only: before each session, every item of the user's sources is put in Eden's cache, as if Eden had synced
+   * them (the funnel's `--sync`; docs/research/moon-graph.md). Off: the cache holds what lookups returned.
+   */
+  sync?: boolean;
 }
 
 /**
@@ -370,10 +375,11 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       ? new QueryPlanner({ seed: o.seed * 7_919 + u, store: sourceMap, ...o.planner })
       : undefined;
     const shadowRecs: ShadowRecord[] = [];
+    const cache = new ItemCache();
     const partner = new ContextPartner({
       sources: async () => sources,
       sourceMap,
-      cache: new ItemCache(),
+      cache,
       budget: new Budget(),
       model: o.model ?? oracle,
       config: { ...(o.timeScale > 0 ? { sourceTimeoutMs: 1_500 * o.timeScale } : {}), ...o.config },
@@ -403,6 +409,12 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         updatesApplied++;
         for (const s of sources) if (touched.has(s.id)) s.reindex();
       }
+      if (o.sync)
+        cache.put(
+          who,
+          sources.flatMap((s) => s.listAll()),
+          clock,
+        );
       const third = Math.min(2, Math.floor((si * 3) / sessions.length));
       const callsBefore = sum(sources, (s) => s.stats.calls);
       const lookupsBefore = userTraces.filter((t) => t.sourceCalls > 0).length;
