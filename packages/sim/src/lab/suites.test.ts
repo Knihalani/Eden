@@ -15,9 +15,12 @@ describe("suite registry", () => {
   test("every blind suite is registered, so the blind run can name it (heldout5-9)", () => {
     for (const n of [5, 6, 7, 8, 9]) expect(SUITE_NAMES).toContain(`heldout${n}`);
     expect(parseSuites("heldout9")).toEqual(["heldout9"]);
-    expect(parseSuites("all")).toContain("heldout9");
-    // `heldout-all` stays the in-sample held-out set: a blind suite is only ever named on purpose.
+    // Neither `all` nor `heldout-all` runs a blind suite that has never been run: a tuning command with `--suite all`
+    // must not spend it. It is only ever named on purpose, alone or in a list.
+    expect(parseSuites("all")).not.toContain("heldout9");
+    expect(parseSuites("all")).toContain("heldout8");
     expect(parseSuites("heldout-all")).not.toContain("heldout9");
+    expect(parseSuites("all,heldout9")).toContain("heldout9");
   });
 
   test("heldout9 plants tasks under its own name (counts and ids only: its templates are not read here)", () => {

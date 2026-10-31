@@ -51,16 +51,22 @@ export function parseVariants(json: string): Variants {
   return v as Variants;
 }
 
-export function parseCondition(
-  name: string,
-  options: {
-    config: Record<string, unknown>;
-    variants?: Variants;
-    act?: boolean;
-    /** The engine's setting names (`DEFAULT_CONFIG`'s keys): a variant or flag naming another throws. */
-    known?: ReadonlySet<string>;
-  },
-): Condition {
+export interface ConditionOptions {
+  config: Record<string, unknown>;
+  variants?: Variants;
+  act?: boolean;
+  /**
+   * The engine's settings with their defaults (`DEFAULT_CONFIG`): a variant or flag naming another setting throws, a
+   * `+flag` must name an on/off setting, and a variant's value must have its setting's type. Without it (tests of the
+   * grammar alone) nothing is checked against the engine.
+   */
+  defaults?: Readonly<Record<string, unknown>>;
+}
+
+/** A value's type as a setting's is compared: arrays and null apart from other objects. */
+const kind = (v: unknown): string => (v === null ? "null" : Array.isArray(v) ? "array" : typeof v);
+
+export function parseCondition(name: string, options: ConditionOptions): Condition {
   const m = SHAPE.exec(name);
   const base = m?.[1] as Condition["base"] | undefined;
   if (!m || !base || !BASES.includes(base)) {
@@ -76,8 +82,20 @@ export function parseCondition(
     if (!v) throw new Error(`condition ${name}: no --variant-config entry "${variant}"`);
     extra = v;
   }
-  const unknown = [...Object.keys(extra), ...flags].filter((k) => options.known && !options.known.has(k));
-  if (unknown.length) throw new Error(`condition ${name}: no engine setting named ${unknown.join(", ")}`);
+  const defaults = options.defaults;
+  if (defaults) {
+    const unknown = [...Object.keys(extra), ...flags].filter((k) => !Object.hasOwn(defaults, k));
+    if (unknown.length) throw new Error(`condition ${name}: no engine setting named ${unknown.join(", ")}`);
+    // A setting of another type would run a configuration no other run uses under a name that looks valid
+    // (`+judgeItemBytes` as true, a variant's `"probes": "yes"`).
+    for (const f of flags) {
+      if (kind(defaults[f]) !== "boolean") throw new Error(`condition ${name}: ${f} is not an on/off flag`);
+    }
+    for (const [k, v] of Object.entries(extra)) {
+      const want = kind(defaults[k]);
+      if (kind(v) !== want) throw new Error(`condition ${name}: ${k} must be ${want}, got ${JSON.stringify(v)}`);
+    }
+  }
   const waitMs = wait === undefined ? 3_000 : wait.startsWith("w") ? Number(wait.slice(1)) : NaN;
   if (!Number.isFinite(waitMs) || waitMs < 0) throw new Error(`bad wait in ${name}: use @w<ms>`);
   const act = !!options.act;
@@ -100,6 +118,20 @@ export function parseCondition(
     useTools: base === "tools" || base.startsWith("both"),
     judge: base.endsWith("-judge"),
   };
+}
+
+/**
+ * Every `--conditions` name, parsed; two that end up with one name throw (`--act --conditions eden,eden-act` gives
+ * `eden-act` twice), since results and timelines are keyed by the name and the report would pool them.
+ */
+export function parseConditions(names: readonly string[], options: ConditionOptions): Condition[] {
+  const out = names.map((n) => parseCondition(n, options));
+  const seen = new Set<string>();
+  for (const c of out) {
+    if (seen.has(c.name)) throw new Error(`condition ${c.name} is given twice (with --act, x and x-act are one)`);
+    seen.add(c.name);
+  }
+  return out;
 }
 
 /**

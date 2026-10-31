@@ -67,6 +67,7 @@ import { clearSlot, dress } from "./hidden-context";
 import { record, tidy } from "./ledger";
 import { Timeline } from "./timeline";
 import { parseSuites, SUITES, type HiddenTask } from "./suites";
+import { packetLine } from "./uptake";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -391,12 +392,10 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     const first = arrived.find((x) => x.ids.includes(id));
     traced?.end({ template: task.template, delivered: got.includes(id), why, injected: got.length });
     if (PACKETS) {
-      const packets = [...injections, ...pendingSeen].map((x) => ({
-        reason: x.reason.split(":")[0],
-        text: x.text,
-        ids: x.citations.map((c) => c.itemId),
-      }));
-      const line = { suite, seed, variant, template: task.template, request: task.text, planted: id, packets };
+      const line = packetLine({ suite, seed, variant, template: task.template, request: task.text, planted: id }, [
+        ...injections,
+        ...pendingSeen,
+      ]);
       appendFileSync(PACKETS, JSON.stringify(line) + "\n");
     }
     if (CANDIDATES) {

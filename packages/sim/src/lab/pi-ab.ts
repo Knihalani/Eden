@@ -81,9 +81,10 @@ import {
   type Task,
 } from "./ab-common";
 import { ACTIONS, actionParams, coerceArgs, executed, type ActionRecord } from "./act";
-import { DiskCardMaker } from "./cards-disk";
-import { parseCondition, parseVariants, type Condition } from "./pi-conditions";
+import { DiskCardMaker, samePath } from "./cards-disk";
+import { parseConditions, parseVariants, type Condition } from "./pi-conditions";
 import { parseSuites } from "./suites";
+import { UptakeLog } from "./uptake";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
 
 const args = process.argv.slice(2);
@@ -142,14 +143,12 @@ const CARD_SORT = opt("card-sort", "");
 if (CARD_SORT && CARD_SORT !== "price") throw new Error("--card-sort must be price");
 const CONFIG_VARIANTS = parseVariants(opt("variant-config", "{}"));
 // Every condition is parsed before anything is spent: a typo fails here, not after the first stream has run.
-const CONDITIONS: Condition[] = CONDITION_NAMES.map((name) =>
-  parseCondition(name, {
-    config: CONFIG,
-    variants: CONFIG_VARIANTS,
-    act: ACT,
-    known: new Set(Object.keys(DEFAULT_CONFIG)),
-  }),
-);
+const CONDITIONS: Condition[] = parseConditions(CONDITION_NAMES, {
+  config: CONFIG,
+  variants: CONFIG_VARIANTS,
+  act: ACT,
+  defaults: DEFAULT_CONFIG as unknown as Record<string, unknown>,
+});
 // A flag whose dependency this harness cannot give it would run a different configuration under the flag's name: a
 // run that says R or ALL must be R or ALL (the review of moon/combined). Cards need a model; the sync, list tools.
 if (CONDITIONS.some((c) => c.withPartner && c.config.cards === true) && !KEY && !DRY)
@@ -157,11 +156,17 @@ if (CONDITIONS.some((c) => c.withPartner && c.config.cards === true) && !KEY && 
 // Cards replayed from disk: the replay file is only read, new cards go to their own file (cards-disk.ts).
 const CARDS_FILE = opt("cards", opt("cards-disk", ""));
 const CARDS_OUT = opt("cards-out", `${OUT.replace(/\.json$/, "")}.cards.jsonl`);
-if (CARDS_FILE && CARDS_OUT === CARDS_FILE) throw new Error("--cards-out must differ from the replayed --cards file");
+// Compared as files, not strings: `./a.cards.jsonl` or a symlink must not send new cards into the replay file.
+if (CARDS_FILE && samePath(CARDS_OUT, CARDS_FILE)) {
+  throw new Error(`--cards-out ${CARDS_OUT} is the replayed --cards file: give new cards their own file`);
+}
 // A mistyped replay path would otherwise make every card live, at the run's expense.
 if (CARDS_FILE && !existsSync(CARDS_FILE)) throw new Error(`--cards ${CARDS_FILE}: no such file`);
-/** One copy of the disk cards for every stream: read once, and each stream sees the cards the others made. */
-const diskCards = CARDS_FILE ? new DiskCardMaker(CARDS_FILE, undefined, { out: CARDS_OUT }).cards : null;
+/**
+ * One copy of the disk cards for every stream: read once, each stream sees the cards the others made, and a card
+ * another stream is making now is waited for rather than made twice.
+ */
+const diskCards = CARDS_FILE ? new DiskCardMaker(CARDS_FILE, undefined, { out: CARDS_OUT }) : null;
 
 // ---- Spend: one hard cap over every call, reserved before the call at its worst case and settled at its real cost.
 let spent = 0;
@@ -340,7 +345,16 @@ interface TaskRecord {
   wallMs: number;
   /** The first model request's time to first token, ms (streamed). */
   firstTokenMs: number | null;
-  requests: { startMs: number; firstTokenMs: number | null; endMs: number; in: number; out: number; cost: number }[];
+  requests: {
+    startMs: number;
+    firstTokenMs: number | null;
+    endMs: number;
+    in: number;
+    out: number;
+    cost: number;
+    /** Of `in`, the tokens the endpoint read from its prompt cache (billed at its cache-read price). */
+    cached?: number;
+  }[];
   events: Timeline["events"];
   dropped: number;
   error?: string;
@@ -496,17 +510,16 @@ async function runWorld(
     activeTasks++;
     tl.point("task.start", { condition, kind: task.kind });
     // Eden's packets for this task, oldest first: each a system message before the user turn, as agent-ab places them.
-    const packets: string[] = [];
-    const cited: string[] = [];
-    const askCited: string[] = [];
+    // With the ids each packet and `ask_context` answer cited, so the line tells delivery from uptake (uptake.ts).
+    const uptake = new UptakeLog();
+    const packets = uptake.packets;
     const takeEden = () => {
       // `tools-act-firewall`: Eden only checks actions; what it would have delivered never reaches the agent.
       if (!partner || !useEden) return;
       for (const i of partner.takePending({ ...scope, sessionId })) {
         r.injectedItems += i.citations.length;
         r.injectedChars += i.text.length;
-        packets.push(i.text);
-        cited.push(...i.citations.map((c) => c.itemId));
+        uptake.packet(i);
         tl.point("eden.inject", { items: i.citations.length, chars: i.text.length, mode: i.mode });
       }
     };
@@ -522,8 +535,7 @@ async function runWorld(
         if (first.injection && useEden) {
           r.injectedItems += first.injection.citations.length;
           r.injectedChars += first.injection.text.length;
-          packets.push(first.injection.text);
-          cited.push(...first.injection.citations.map((c) => c.itemId));
+          uptake.packet(first.injection);
           tl.point("eden.inject", { items: first.injection.citations.length, chars: first.injection.text.length });
         }
       }
@@ -571,7 +583,7 @@ async function runWorld(
           execute: async (_id, raw) => {
             const params = raw as { question: string };
             const a = await partner.ask({ ...scope, sessionId, question: params.question });
-            askCited.push(...a.citations.map((c) => c.itemId));
+            uptake.answer(a);
             return { content: [{ type: "text", text: a.answer || "Nothing found." }], details: {} };
           },
         });
@@ -607,8 +619,15 @@ async function runWorld(
         }
       }
       let turns = 0;
-      let request: { id: number; at: number; first: number | null; in: number; out: number; cost: number } | null =
-        null;
+      let request: {
+        id: number;
+        at: number;
+        first: number | null;
+        in: number;
+        out: number;
+        cost: number;
+        cached: number;
+      } | null = null;
       let est = 0;
       const agent = new Agent({
         initialState: {
@@ -639,6 +658,7 @@ async function runWorld(
             in: 0,
             out: 0,
             cost: 0,
+            cached: 0,
           };
           activeRequests++;
           const mine = request;
@@ -653,7 +673,12 @@ async function runWorld(
             onProviderStreamEvent: (chunk) => {
               const c = chunk as {
                 choices?: { delta?: { content?: string; tool_calls?: unknown[]; reasoning?: string } }[];
-                usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number };
+                usage?: {
+                  prompt_tokens?: number;
+                  completion_tokens?: number;
+                  cost?: number;
+                  prompt_tokens_details?: { cached_tokens?: number };
+                };
               };
               const d = c.choices?.[0]?.delta;
               if (mine.first === null && d && (d.content || d.tool_calls?.length || d.reasoning)) {
@@ -664,6 +689,8 @@ async function runWorld(
                 mine.in = c.usage.prompt_tokens ?? 0;
                 mine.out = c.usage.completion_tokens ?? 0;
                 mine.cost = c.usage.cost ?? 0;
+                // Billed at the endpoint's cache-read price: re-pricing needs them (reprice.ts).
+                mine.cached = c.usage.prompt_tokens_details?.cached_tokens ?? 0;
               }
             },
           });
@@ -694,7 +721,7 @@ async function runWorld(
                 actions.push(rec);
                 r.injectedItems += check.finding.citations.length;
                 r.injectedChars += check.finding.text.length;
-                cited.push(...check.finding.citations.map((c) => c.itemId));
+                uptake.finding(check.finding);
                 return { block: true, reason: heldResult(ctx.toolCall.name, check.finding) };
               },
             }
@@ -727,6 +754,7 @@ async function runWorld(
             in: q.in,
             out: q.out,
             cost,
+            ...(q.cached ? { cached: q.cached } : {}),
           });
         } else if (e.type === "tool_execution_start") {
           r.toolCalls++;
@@ -762,8 +790,7 @@ async function runWorld(
     record.wallMs = Math.round(r.wallMs);
     record.firstTokenMs = record.requests[0]?.firstTokenMs ?? null;
     if (r.error) record.error = r.error.slice(0, 200);
-    if (packets.length > 0) record.packets = packets.join("\n").slice(0, 6_000);
-    if (partner) [record.cited, record.askCited] = [[...new Set(cited)], [...new Set(askCited)]];
+    if (partner) Object.assign(record, uptake.fields());
     out.push(r);
     records.push(record);
     // Grading runs beside the next task, on this task's timeline (after its end): the agent never waits for it.
@@ -813,7 +840,7 @@ console.error(
     `(${CONDITIONS.map((c) => c.name).join(",")}), model ${MODEL}, grader ${GRADER}, cap $${BUDGET}, suites ` +
     `${SUITE_LIST.join(",")}, config ${JSON.stringify(CONFIG)}` +
     (Object.keys(CONFIG_VARIANTS).length ? `, variants ${JSON.stringify(CONFIG_VARIANTS)}` : "") +
-    (CARDS_FILE ? `, cards ${CARDS_FILE} (${diskCards!.size} replayed; new → ${CARDS_OUT})` : ""),
+    (CARDS_FILE ? `, cards ${CARDS_FILE} (${diskCards!.cards.size} replayed; new → ${CARDS_OUT})` : ""),
 );
 if (DRY) process.exit(0);
 

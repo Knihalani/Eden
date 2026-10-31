@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { pairedWith, parseCondition, parseVariants } from "./pi-conditions";
+import { DEFAULT_CONFIG } from "@eden/engine";
+import { pairedWith, parseCondition, parseConditions, parseVariants } from "./pi-conditions";
 
 const ALL = { sync: true, cards: true, densePacket: true };
 
@@ -35,11 +36,47 @@ describe("pi-ab conditions", () => {
   });
 
   test("a variant or flag that names no engine setting throws, so a typo cannot run as the base", () => {
-    const known = new Set(["sync", "cards", "densePacket", "judgeTied"]);
-    expect(parseCondition("eden+judgeTied", { config: ALL, known }).config.judgeTied).toBe(true);
-    expect(() => parseCondition("eden+judgeTide", { config: ALL, known })).toThrow(/judgeTide/);
+    const defaults = { sync: false, cards: false, densePacket: false, judgeTied: false };
+    expect(parseCondition("eden+judgeTied", { config: ALL, defaults }).config.judgeTied).toBe(true);
+    expect(() => parseCondition("eden+judgeTide", { config: ALL, defaults })).toThrow(/judgeTide/);
     const variants = { v: { densePacket: false, nope: 1 } };
-    expect(() => parseCondition("eden~v", { config: ALL, variants, known })).toThrow(/nope/);
+    expect(() => parseCondition("eden~v", { config: ALL, variants, defaults })).toThrow(/nope/);
+  });
+
+  test("+flag only turns on a boolean setting: a number, string or list setting set to true would run broken", () => {
+    const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
+    expect(parseCondition("eden+judgeTied", { config: {}, defaults }).config.judgeTied).toBe(true);
+    for (const f of ["judgeItemBytes", "probeWhen", "probeOff"]) {
+      expect(() => parseCondition(`eden+${f}`, { config: {}, defaults })).toThrow(/not an on\/off flag/);
+    }
+  });
+
+  test("a variant's settings must have the engine setting's type", () => {
+    const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
+    const ok = { V: { probes: true, judgeItemBytes: 400, probeWhen: "never", probeOff: ["gmail"] } };
+    expect(parseCondition("eden~V", { config: {}, variants: ok, defaults }).config).toEqual(ok.V);
+    const bad: [string, unknown][] = [
+      ["probes", "yes"],
+      ["judgeItemBytes", "400"],
+      ["probeWhen", 1],
+      ["probeOff", "gmail"],
+      ["probeOff", { a: 1 }],
+      ["probes", null],
+    ];
+    for (const [k, v] of bad) {
+      expect(() => parseCondition("eden~V", { config: {}, variants: { V: { [k]: v } }, defaults })).toThrow(
+        new RegExp(`${k} must be`),
+      );
+    }
+  });
+
+  test("conditions that end up with one name throw, so their results and timelines cannot collide", () => {
+    expect(parseConditions(["tools", "eden"], { config: {}, act: true }).map((c) => c.name)).toEqual([
+      "tools-act",
+      "eden-act",
+    ]);
+    expect(() => parseConditions(["eden", "eden-act"], { config: {}, act: true })).toThrow(/eden-act.*twice/);
+    expect(() => parseConditions(["eden", "eden"], { config: {} })).toThrow(/twice/);
   });
 
   test("a wait suffix is checked", () => {
