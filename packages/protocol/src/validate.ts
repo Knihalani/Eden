@@ -44,6 +44,10 @@ export function checkEvent(v: unknown): Checked<AgentEvent> {
     case "user_message":
     case "agent_message":
       if (!isText(v.text)) return { ok: false, error: `${v.kind}.text must be a string` };
+      // A draft the user is still typing (`anticipate`): only `true` marks one, anything else is a sent message.
+      if (v.kind === "user_message" && v.draft === true) {
+        return { ok: true, value: { ...base, kind: "user_message", text: v.text, draft: true } };
+      }
       return { ok: true, value: { ...base, kind: v.kind, text: v.text } };
     case "tool_call":
       if (!isText(v.tool, 200)) return { ok: false, error: "tool_call.tool must be a string" };

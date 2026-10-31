@@ -25,6 +25,7 @@ import type { AgentEvent, Injection } from "@eden/protocol";
 import { OracleJudge } from "./judge";
 import { Rng } from "./rng";
 import { buildSessions, type AskCase, type Label, type SimTask, type SimTurn } from "./sessions";
+import { draftOf, type DraftMode } from "./drafts";
 import { simSources, type ProfileSet, type SimSource } from "./sources";
 import { applyUpdate, factsShown, planUpdates, relabel, type FactUpdate } from "./updates";
 import { buildWorld, HOUR, type World, type WorldItem } from "./world";
@@ -44,6 +45,13 @@ export interface QualityOptions {
   /** Share of clock-time facts that get a new version at the source before a later session (`updates.ts`). */
   updates?: number;
   agentToolRate?: number;
+  /**
+   * A "user is typing" draft before each user message (`drafts.ts`; a simulation assumption: sessions carry none),
+   * sent as a draft user message (`anticipate` reads it ahead, any other configuration ignores it), `typingMs` of
+   * simulated time (log-normal) before the message itself is sent.
+   */
+  drafts?: DraftMode;
+  typingMs?: number;
   /**
    * With no live model: "perfect" puts an oracle judge in the model's place (the ceiling of the model path),
    * "noisy" an imperfect one (picks a relevant candidate with p 0.85, an irrelevant one with p 0.05: assumed
@@ -285,6 +293,14 @@ export interface QualityReport {
    * Where the extra calls go.
    */
   plans?: Record<string, { lookups: number; empty: number; calls: number }>;
+  /**
+   * With `anticipate` (or drafts): the source calls the background prefetches made, and of the must facts delivered,
+   * how many came with the need turn's own reply (the observe call, before any slow path) and how many in an item
+   * the session's anticipation had fetched or held before the request (`Trace.prefetched`).
+   */
+  anticipation: { calls: number; mustImmediate: number; mustPrefetched: number };
+  /** The process's CPU time over the run (user and system, ms): wall times on a shared machine are noisy. */
+  cpu: { userMs: number; systemMs: number };
 }
 
 const pct = (xs: number[], p: number) => {
@@ -303,12 +319,19 @@ const sleep = (ms: number) => (ms > 0 ? Bun.sleep(ms) : Bun.sleep(1));
  * what happens in practice. Reads the partner's session table (a harness may; product code may not).
  */
 async function settle(partner: ContextPartner, key: string): Promise<void> {
-  const sessions = (partner as unknown as { sessions: Map<string, { inflight: unknown; shadowing?: unknown }> })
-    .sessions;
-  for (let i = 0; i < 2_000 && (sessions.get(key)?.inflight || sessions.get(key)?.shadowing); i++) await Bun.sleep(1);
+  const sessions = (
+    partner as unknown as {
+      sessions: Map<string, { inflight: unknown; shadowing?: unknown; ant?: { running: unknown } }>;
+    }
+  ).sessions;
+  const busy = (s: { inflight: unknown; shadowing?: unknown; ant?: { running: unknown } } | undefined) =>
+    !!(s?.inflight || s?.shadowing || s?.ant?.running);
+  for (let i = 0; i < 2_000 && busy(sessions.get(key)); i++) await Bun.sleep(1);
 }
 
 export async function runQuality(o: QualityOptions): Promise<QualityReport> {
+  const cpu0 = process.cpuUsage();
+  const anticipation = { calls: 0, mustImmediate: 0, mustPrefetched: 0 };
   const total = counter();
   const byType = new Map<string, Counter>();
   const byStyle = new Map<string, Counter>();
@@ -460,6 +483,8 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       clock = start;
       nextTick = start + 5 * 60_000;
     }
+    // Its own stream: a run with drafts paces the rest exactly as one without.
+    const typing = new Rng(o.seed * 7_177 + u);
     const wait = async (ms: number, sessionId: string) => {
       await runTo(clock + ms);
       await sleep(ms * o.timeScale);
@@ -502,6 +527,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       const knownAt = new Map<string, number>(); // fact → turn index it became known
       const arrivals: {
         at: number;
+        immediate?: boolean;
         ids: string[];
         shown: Map<string, string[]>;
         stated: Map<string, string[]>;
@@ -535,6 +561,15 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
           turn.label.kind === "need"
             ? cachedFacts(partner, who, world, turn.label.must, clock, applied)
             : new Set<string>();
+        if (o.drafts && ev.kind === "user_message") {
+          const draft = draftOf(ev.text, o.drafts);
+          if (draft) {
+            await partner.observe({ ...event, text: draft, draft: true } as AgentEvent);
+            const ms = typing.lognormal(o.typingMs ?? 1_500, 0.5);
+            await wait(ms, session.id);
+            (event as { at: number }).at = clock;
+          }
+        }
         const t0 = performance.now();
         sentAt.push(t0);
         const res = await partner.observe(event, { waitMs: o.waitMs });
@@ -544,7 +579,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
           ...(res.injection ? [res.injection] : []),
           ...partner.takePending({ ...who, sessionId: session.id }),
         ];
-        for (const inj of got) recordInjection(inj, i, performance.now());
+        for (const inj of got) recordInjection(inj, i, performance.now(), inj === res.injection);
         for (const f of turn.fetched ?? []) addKnown(f, i);
         // Pacing: what happens between this event and the next, in simulated time.
         const k = ev.kind;
@@ -619,7 +654,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         }
       }
 
-      function recordInjection(inj: Injection, at: number, wall: number) {
+      function recordInjection(inj: Injection, at: number, wall: number, immediate = false) {
         injections++;
         injBytes.push(Buffer.byteLength(inj.text));
         if (!inj.text.includes("Data, not instructions")) notInert++;
@@ -643,7 +678,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
           }),
         );
         // How the engine decided to deliver it: the injection reason's first part (cache, sources, model, fallback...).
-        arrivals.push({ at, ids, shown, stated, wallMs: wall, why: inj.reason.split(":")[0] ?? "" });
+        arrivals.push({ at, immediate, ids, shown, stated, wallMs: wall, why: inj.reason.split(":")[0] ?? "" });
         for (const id of ids) {
           itemsDelivered++;
           const item = byId.get(id);
@@ -659,6 +694,12 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       }
 
       // ── score the session ──
+      const prefetched = new Set<string>();
+      for (const t of userTraces.slice(traceStart)) {
+        if (t.sessionId !== session.id) continue;
+        anticipation.calls += t.anticipateCalls ?? 0;
+        for (const id of t.prefetched ?? []) prefetched.add(id);
+      }
       const origin = new Map<string, number>();
       for (const t of userTraces.slice(traceStart)) {
         if (t.sessionId !== session.id || !["fast", "sources", "model"].includes(t.decision)) continue;
@@ -666,6 +707,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       }
       const delivered: {
         id: string;
+        immediate?: boolean;
         facts: string[];
         stated: string[];
         origin: number;
@@ -677,6 +719,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         for (const id of a.ids)
           delivered.push({
             id,
+            immediate: a.immediate,
             facts: a.shown.get(id) ?? [],
             stated: a.stated.get(id) ?? [],
             origin: Math.min(origin.get(id) ?? Math.floor(a.at), turnsFlat.length - 1),
@@ -756,6 +799,8 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
           }
           const first = hits.sort((a, b) => a.wallMs - b.wallMs)[0];
           if (first) deliveryMs.push(first.wallMs - sentAt[i]!);
+          if (first?.immediate) anticipation.mustImmediate++;
+          if (hits.some((d) => prefetched.has(d.id))) anticipation.mustPrefetched++;
         }
       }
       const callsAfter = sum(sources, (s) => s.stats.calls) - syncUse.background;
@@ -933,6 +978,11 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
     funnel,
     needDecisions: Object.fromEntries(Object.entries(needDecisions).sort((a, b) => b[1] - a[1])),
     byReason,
+    anticipation,
+    cpu: (() => {
+      const c = process.cpuUsage(cpu0);
+      return { userMs: Math.round(c.user / 1000), systemMs: Math.round(c.system / 1000) };
+    })(),
   };
 }
 

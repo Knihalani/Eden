@@ -40,3 +40,4 @@ export {
   type CardKind,
   type CardMaker,
 } from "./cards";
+export { predict } from "./anticipate";

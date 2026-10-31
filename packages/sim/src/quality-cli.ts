@@ -8,6 +8,7 @@
  *   [--judge none|perfect|noisy] [--ask-model] [--live] [--brief] [--config '{"probes":true}']
  *   [--timeline out.jsonl] [--sync]
  *   [--cards DIR/cards-v2.jsonl]
+ *   [--drafts clause|half [--typing-ms 1500]]
  *
  * Plays generated sessions over simulated sources and prints the quality report as JSON. Without --live no model is
  * used (free, deterministic at --time 0). --time 1 runs source latency and agent pacing in real time.
@@ -70,6 +71,9 @@ const report = await runQuality({
     ...(args.includes("--config") ? (JSON.parse(arg("config", "{}")) as Record<string, unknown>) : {}),
   },
   agentToolRate: Number(arg("tool-rate", "0.4")),
+  ...(args.includes("--drafts")
+    ? { drafts: arg("drafts", "clause") as "clause" | "half", typingMs: Number(arg("typing-ms", "1500")) }
+    : {}),
   model,
   judge: arg("judge", "none") as "none" | "perfect" | "noisy",
   promoteAfter: args.includes("--promote-after") ? Number(arg("promote-after", "0")) : undefined,
