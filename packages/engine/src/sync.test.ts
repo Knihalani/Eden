@@ -76,7 +76,7 @@ function mail(n: number, base = T0) {
   }));
 }
 
-describe("background sync (D56)", () => {
+describe("background sync (D57)", () => {
   test("off by default: no sync, no list call, the lookup searches live", async () => {
     const src = new ListSource("mail", mail(3));
     const p = new ContextPartner({
@@ -300,7 +300,7 @@ describe("background sync (D56)", () => {
   });
 });
 
-describe("item cache: synced items (D56)", () => {
+describe("item cache: synced items (D57)", () => {
   const it = (id: string, text = id): ContextItem => ({ id: `s:${id}`, sourceId: "s", ref: id, title: "", text });
 
   test("synced and looked-up items have separate caps: neither evicts the other", () => {

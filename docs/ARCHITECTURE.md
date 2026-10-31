@@ -110,7 +110,7 @@ share) by fixed verb lexicons and sends one query of the class's fixed constrain
 only by a person's name. `judgeTied` skips the judge when no candidate is tied to the request by a probe, a named day,
 two request words, a rare word or a consequence find.
 
-**Background sync, "Eden Atlas"** (proposed D56, `sync`, off by default; `sync.ts`): sources with a read-only list
+**Background sync, "Eden Atlas"** (proposed D57, `sync`, off by default; `sync.ts`): sources with a read-only list
 tool (`Source.list`; `McpSource.listTool`, checked like the search tool) are read into each active user's cache in the
 background: a backfill of the newest items across sources, polls when a lookup finds a source stale by its learned
 change rate, a daily sweep that drops what a source no longer lists. Synced items have their own cap and TTL in the
@@ -118,7 +118,7 @@ cache. A lookup answers every current synced source (its own search and every pr
 call, and calls live only the sources that are not synced or still stale. The tick runs on a timer, never on the fast
 path, which only marks the user active.
 
-**Knowledge graph** (proposed D56, `graph` off by default; `kg.ts`, docs/research/moon-graph.md): with the flag, the
+**Knowledge graph** (proposed D58, `graph` off by default; `kg.ts`, docs/research/moon-graph.md): with the flag, the
 item cache keeps a per-user graph over what it holds, built as items are cached and dropped with them: people (names,
 addresses, first names), organisations (an address's domain is the same node as the name "Umbrella Health"), projects
 and systems (capitalised runs), identifiers, channels, roles and days, with typed edges (about, authored, attended,
@@ -128,7 +128,7 @@ organisation left out, 2 ms bound, no model, no source call). What it reaches ge
 with `groundConflict` is set against the request by `conflict.ts` with the names it was reached through as ties
 (grounded "graph"), only when the request acts or asks and only for an item that blocks, moves or settles something.
 
-**Anticipation** (`anticipate`, off by default; proposed D56, `anticipate.ts`,
+**Anticipation** (`anticipate`, off by default; proposed D60, `anticipate.ts`,
 [research/moon-anticipate.md](research/moon-anticipate.md)): every event with words (a user message, a draft the user
 is still typing, `user_message` with `draft: true`, a tool call or result, an arriving message) is read, with no model
 and in linear time over its first 600 characters, for what the agent will need next: the names it mentions (from a
@@ -142,7 +142,24 @@ structure grounds, never the fallback), returned on the observe call itself, and
 adds only what is sure or grounded. With a judge, the request always goes to the slow path (a warm cache would
 otherwise end lookups before the judge sees the second candidate). A draft is ignored when the flag is off.
 
-**Ask** always searches (live, or a current synced source locally with D56; more sources), ignores the not-twice ledger (the agent asked), and returns the cited
+**Implication cards** (`cards`, off by default; proposed D59, `cards.ts`,
+[research/moon-cards.md](research/moon-cards.md)): items new to a user's cache, looked up or synced, that pass a
+no-model deontic prefilter are queued for a `CardEnricher` (`PartnerDeps.cards`), which reads them ten per call
+through the model, under its own per-user-day `Budget`, into small validated cards (constraint kind, actions from a
+fixed vocabulary, entities, span, limit). At request time, with no model, the request's actions (fixed lexicons) and
+frame (`conflict.ts`) are matched against the cards of cached items: a match is a candidate and a judge seat, and with
+`groundConflict` the best violated card is delivered (grounded "card"). The card's own statement never reaches the
+agent. The server's `buildPartner` does not wire an enricher yet.
+
+**The moonshots together** (proposed D62, [research/moonshots.md](research/moonshots.md)): the flags compose. With
+the sync, synced sources answer the lookup's search, every probe and the prefetch locally, and the graph and the
+cards cover every synced item; the graph walk and card matching run on the slow path after the lookup's items are
+cached; the
+anticipation's early decision reads what the prefetch, the sync and the cache hold. Every subsystem reports into the
+engine's spans (`sync.freshen`, `sync.list`, `graph.walk`, `cards.match`, `cards.make`, `anticipate.prefetch`,
+`anticipate.early`), and the Pi harness's timeline reads the same spans.
+
+**Ask** always searches (live, or a current synced source locally with D57; more sources), ignores the not-twice ledger (the agent asked), and returns the cited
 items as they are, with no model call: the asker is a model and reads them directly (D43). `askWithModel`
 (`EDEN_ASK_MODEL=1`) has one model call compose a short cited answer instead, when a model and budget are available.
 

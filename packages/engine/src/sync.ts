@@ -1,5 +1,5 @@
 /**
- * Background connector sync, "Eden Atlas" (D56, behind `sync`, off by default): each active user's sources are read
+ * Background connector sync, "Eden Atlas" (D57, behind `sync`, off by default): each active user's sources are read
  * through their read-only list tools (`Source.list`) into the user's own item cache, so a lookup can be answered from
  * the local index and request-time source calls drop.
  *
@@ -19,7 +19,7 @@
  *
  * Everything here is keyed by tenant and user, bounded (users per tenant, items per user, ids per source), runs off
  * the fast path (timers or a lookup's slow path), and stores only what the fan-out has already redacted. Users idle
- * longer than `syncDropMs` are no longer synced and their synced items are dropped (retention, D56).
+ * longer than `syncDropMs` are no longer synced and their synced items are dropped (retention, D57).
  */
 import { Gcra } from "@eden/primitives";
 import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
@@ -263,7 +263,7 @@ export class SyncManager {
     }
   }
 
-  /** Stops syncing a user and drops their synced items from the cache (retention, D56). */
+  /** Stops syncing a user and drops their synced items from the cache (retention, D57). */
   private drop(u: UserSync): void {
     u.gone = true;
     this.users.delete(u.key);

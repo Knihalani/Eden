@@ -358,7 +358,7 @@ export class SimSource implements Source {
   }
 
   /**
-   * One page of the connector's listing (D56): its items most recently updated first, from an offset cursor, at the
+   * One page of the connector's listing (D57): its items most recently updated first, from an offset cursor, at the
    * cost of one call with the same latency, rate limit, faults and error draws as a search. Counted in `stats.calls`
    * and apart in `stats.lists`, so a runner can report sync calls separately from request-time ones.
    */

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * What holding a synced index costs (D56, docs/research/moon-sync.md): twelve simulated users' sources backfilled
+ * What holding a synced index costs (D57, docs/research/moon-sync.md): twelve simulated users' sources backfilled
  * through the real `SyncManager`; prints the heap they add (after a full GC) and the CPU time of their backfill.
  *
  *   bun packages/sim/src/lab/sync-cost.ts

@@ -17,7 +17,7 @@ export interface BuildOptions {
   /** Ask answers rewritten by the model (D43); off by default. */
   askWithModel?: boolean;
   /**
-   * Background connector sync (D56, experimental, off by default): sources with a list tool are read into each
+   * Background connector sync (D57, experimental, off by default): sources with a list tool are read into each
    * active user's cache in the background, on a one-minute timer, and lookups answer them locally.
    */
   sync?: boolean;

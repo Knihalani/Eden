@@ -1,6 +1,6 @@
 # Implication cards: a model-built semantic bridge, matched with no model (track "cards")
 
-Status: experiment behind `cards` (off by default). Proposed decision D56 (track cards) in DECISIONS.md. Every number
+Status: experiment behind `cards` (off by default). Proposed decision D59 (track cards) in DECISIONS.md. Every number
 below comes from a command run in this session on the tree of commit `moon/cards`; the machine was shared with six
 other agents, so wall times are noisy and not reported as results.
 

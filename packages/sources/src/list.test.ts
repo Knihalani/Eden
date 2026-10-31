@@ -65,7 +65,7 @@ const make = (
     trustedReadTools: trusted,
   });
 
-describe("McpSource list (D56)", () => {
+describe("McpSource list (D57)", () => {
   test("pages through a read-only list tool with the server's own cursor, arguments from its schema", async () => {
     const { server, calls } = mailServer();
     const s = make(server, { name: "list_mail" });

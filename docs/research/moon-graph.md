@@ -1,6 +1,6 @@
 # A per-user knowledge graph with graph-walk retrieval (track graph, flags off)
 
-Status: 2026-10-31. Two flags, `graph` and `graphMerge`, off by default (proposed D56); no model call, no source call,
+Status: 2026-10-31. Two flags, `graph` and `graphMerge`, off by default (proposed D58); no model call, no source call,
 no dependency. State is per user, inside the item cache's per-user entry, bounded, and dropped with the items. Every
 number below comes from commands run in this work, on the final code unless a row says otherwise. Development used
 the dev suites only (hidden, held-out 1–4), the realistic simulation and zoo-a and zoo-b; held-out 5–8 were neither run

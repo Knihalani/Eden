@@ -256,7 +256,7 @@ export function buildFetchArgs(m: FetchMapping, ref: string): Record<string, unk
 
 const pad = (n: number) => String(Math.floor(n)).padStart(2, "0");
 
-/** How a listing page becomes a call to a list tool (`McpSource.list`, D56). */
+/** How a listing page becomes a call to a list tool (`McpSource.list`, D57). */
 export interface ListMapping {
   /**
    * The argument that takes the page cursor: a server's own opaque token (`token`), or a count of items to skip
