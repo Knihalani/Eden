@@ -52,6 +52,7 @@ import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { assess, frameOf, namesRef, unmeasuredLimit, type Frame, type Verdict } from "./conflict";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
 import { ProbeEconomy, type ProbeKind } from "./economy";
+import { seedsOf, tieWords, type Walked } from "./kg";
 import { answerMessages, judgeMessages, parseJudge } from "./judge";
 import { namesParticipant, startDay, startMs, timeWindow, titleNames, type TimeWindow } from "./grounding";
 import {
@@ -219,6 +220,8 @@ const RECOVER_WORDS = 24;
 
 /** Each cue's frame (`conflict.ts`), read once and dropped with the cue. */
 const FRAMES = new WeakMap<Cue, Frame>();
+/** A lookup's knowledge-graph finds (`graph`), by item id, kept with its cue for delivery's learning. */
+const WALKS = new WeakMap<Cue, Map<string, Walked>>();
 
 /** Requests that act on someone, where an item they take part in is context (D44). */
 const ACTING = new Set<string>(["scheduling", "communication", "task", "travel"]);
@@ -251,6 +254,8 @@ interface Scored {
   beyond?: number;
   /** The item's document in the user's cache index, when ranked from it (for whole-term checks, `judgeTied`). */
   doc?: number;
+  /** Ranked only because the knowledge graph reached it (`graph`): no path but the graph's reads it. */
+  walkedOnly?: true;
 }
 
 /** What an injection was built from, kept until it is handed out and usage tracking starts. */
@@ -259,6 +264,8 @@ interface Built {
   /** The delivered items, for the planner's delivery credit when the injection is handed out (D39). */
   items: { sourceId: string; id: string }[];
   text: string;
+  /** Edge types the knowledge graph reached the delivered items by (`graph`), learned from on use. */
+  graphMask: number;
 }
 
 /**
@@ -298,6 +305,7 @@ export class ContextPartner {
   constructor(private readonly deps: PartnerDeps) {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
     this.now = deps.now ?? Date.now;
+    if (this.config.graph) deps.cache.enableGraph();
     const maxText = deps.cache.maxTextChars;
     const stats = this.config.spans ? new SpanStats() : null;
     const sink = deps.onSpan;
@@ -615,7 +623,7 @@ export class ContextPartner {
     const o = s?.outstanding.get(f.injectionId);
     if (s && o) {
       s.outstanding.delete(f.injectionId);
-      this.record(scope, f.injectionId, o.sourceIds, o.situation, f.used);
+      this.record(scope, f.injectionId, o.sourceIds, o.situation, f.used, o.graphMask);
       return true;
     }
     // The session may have ended (and counted the injection unused): the user's record outlives it.
@@ -709,7 +717,7 @@ export class ContextPartner {
     s.closed = true;
     s.abort.abort();
     if (learn) {
-      for (const [id, o] of s.outstanding) this.record(s.scope, id, o.sourceIds, o.situation, false);
+      for (const [id, o] of s.outstanding) this.record(s.scope, id, o.sourceIds, o.situation, false, o.graphMask);
     }
     s.outstanding.clear();
     s.pending.length = 0;
@@ -760,6 +768,7 @@ export class ContextPartner {
         return distinctiveTokens(ids, n, s.seen, s.vocab);
       })(),
       deliveredTurn: s.turn,
+      ...(built.graphMask ? { graphMask: built.graphMask } : {}),
     });
     // Usage expires by turns, and only events move turns: a session that only asks would hold every answer forever.
     while (s.outstanding.size > MAX_OUTSTANDING) s.outstanding.delete(s.outstanding.keys().next().value as string);
@@ -775,12 +784,21 @@ export class ContextPartner {
       const expired = s.turn - o.deliveredTurn > this.config.usageWindowTurns;
       if (!used && !expired) continue;
       s.outstanding.delete(id);
-      this.record(s.scope, id, o.sourceIds, o.situation, used);
+      this.record(s.scope, id, o.sourceIds, o.situation, used, o.graphMask);
     }
   }
 
-  private record(scope: Scope, injectionId: string, sourceIds: string[], situation: string, used: boolean): void {
+  private record(
+    scope: Scope,
+    injectionId: string,
+    sourceIds: string[],
+    situation: string,
+    used: boolean,
+    graphMask = 0,
+  ): void {
     for (const sourceId of sourceIds) this.deps.sourceMap.recordOutcome(scope, situation, sourceId, used);
+    // The knowledge graph learns which edge types reach what the agent then uses (`graph`).
+    if (graphMask && this.config.graphLearn) this.deps.cache.learnGraph(scope, graphMask, used);
     const key = scopeKey(scope);
     const tenant = this.recorded.get(scope.tenantId) ?? new Map<string, Map<string, Recorded>>();
     this.recorded.set(scope.tenantId, tenant);
@@ -802,7 +820,11 @@ export class ContextPartner {
    * Scores cached items for a cue: idf-weighted query coverage, plus a bonus when the item names a cue entity as
    * whole terms ("Al" never matches "also"). Both come from the cache's index: the item's text is never rescanned.
    */
-  private rank(s: Session, cue: Cue, options: { ignoreLedger?: boolean; probed?: string[] } = {}): Scored[] {
+  private rank(
+    s: Session,
+    cue: Cue,
+    options: { ignoreLedger?: boolean; probed?: string[]; walked?: string[] } = {},
+  ): Scored[] {
     const cache = this.deps.cache;
     const vocab = cache.peekVocab(s.scope);
     if (!vocab) return []; // No cache for this user: nothing to rank, and nothing allocated.
@@ -812,7 +834,7 @@ export class ContextPartner {
     // Events on a day the request names are candidates whether or not they share its words (D44); they rank after
     // every item that does, so the judge, when there is one, sees them only if there is room.
     const timed = cue.time?.days.size ? cache.timed(s.scope, cue.time.days, this.now()) : [];
-    if (query.length === 0 && timed.length === 0 && !options.probed?.length) return [];
+    if (query.length === 0 && timed.length === 0 && !options.probed?.length && !options.walked?.length) return [];
     const entities = cue.entities.map((e) => {
       // An entity with a term no cached item holds matches nothing (never intern it: that grows the cache's vocab).
       const all = termIds(e, s.vocab, true).n;
@@ -846,6 +868,14 @@ export class ContextPartner {
     // The probes' finds for the request's people, organisations and day are candidates whatever they share in words.
     const probed = options.probed?.length ? cache.hits(s.scope, options.probed, this.now()) : [];
     for (const h of probed) if (!found.some((f) => f.item.id === h.item.id)) found.push(h);
+    // So are the knowledge graph's finds (`graph`): reached through a name, an id or a day, not through words.
+    const walked = options.walked?.length ? cache.hits(s.scope, options.walked, this.now()) : [];
+    const walkedOnly = new Set<string>();
+    for (const h of walked) {
+      if (found.some((f) => f.item.id === h.item.id)) continue;
+      found.push(h);
+      walkedOnly.add(h.item.id);
+    }
     return (
       found
         .filter((h) => options.ignoreLedger || s.ledger.isFresh(h.item.id, s.turn))
@@ -860,6 +890,7 @@ export class ContextPartner {
           const score = h.coverage + (entityHit ? this.config.entityBonus : 0);
           const scored: Scored = { item: h.item, matched: h.matched, score, sketch: h.sketch, doc: h.doc };
           if (people.length > 0) scored.beyond = beyondOf(h.doc);
+          if (walkedOnly.has(h.item.id)) scored.walkedOnly = true;
           return scored;
         })
         .sort((a, b) => b.score - a.score)
@@ -907,6 +938,8 @@ export class ContextPartner {
     eventKind: string,
     bridged: ReadonlySet<string> = new Set(),
     cls?: ActionClass,
+    walked?: ReadonlyMap<string, Walked>,
+    graphPool: Scored[] = [],
   ): { items: Scored[]; how: string } {
     const none = { items: [] as Scored[], how: "" };
     const pool = candidates.filter((x) => !bulkMail(x.item));
@@ -956,7 +989,37 @@ export class ContextPartner {
         if (!bridged.has(x.item.id) || hits.includes(x)) continue;
         if (cls?.scope === "general" || names.length === 0 || names.some((n) => mentions(n, x.item))) hits.push(x);
       }
-      if (hits.length > 0) return { items: hits.slice(0, this.max()), how: "conflict" };
+      // With `graph`: an item the knowledge graph reached from what the request names (a person's organisation, the
+      // name a colleague goes by, an identifier, a role) or from a day it names, though it shares none of its words,
+      // tied in the conflict test by the names it was reached through (`conflictTies`); its author speaks for them
+      // when the graph says the author is someone the request names or one of theirs.
+      const viaGraph: Scored[] = [];
+      // Only when the request's own words ground no conflict: the graph widens what is found, not what is said.
+      // Only for a request that acts or asks, or a message arriving: a remark that names someone ("haha Lucía sent me
+      // a meme") is no occasion to raise what binds them or their organisation.
+      const engaged = acts || isImperative(cue.raw) || isAction(cue.raw);
+      if (walked?.size && engaged && (hits.length === 0 || this.config.graphMerge)) {
+        for (const x of graphPool) {
+          const w = walked.get(x.item.id);
+          if (!w || !w.binds || bulkMail(x.item) || !this.beyondName(x, cue)) continue;
+          // A notification's status ("Status: Blocked") is no one's constraint on a person it names, unless the request
+          // names its reference.
+          if (w.automated && w.named && !w.byRef) continue;
+          // A limit on an amount ("travel over £500 needs pre-approval") binds a request that states no amount only
+          // perhaps: with no model's say, not raised on a name alone (as for the consequence probe, D54).
+          if (unmeasuredLimit(this.frame(cue), x.item)) continue;
+          if (this.verdict(x.item, cue, this.conflictTies(cue, w), w.speaks) === "conflict") viaGraph.push(x);
+        }
+      }
+      // The walk's best first: it is the one most tied to what the request names.
+      const by = (x: Scored) => walked!.get(x.item.id)!.score;
+      const best = viaGraph.filter((x) => !hits.includes(x)).sort((a, b) => by(b) - by(a));
+      if (hits.length > 0) {
+        // With `graphMerge`, the walk's best conflict joins the request's own (it was found another way).
+        const extra = this.config.graphMerge ? best.slice(0, this.config.graphGround) : [];
+        return { items: [...hits.slice(0, this.max() - extra.length), ...extra], how: "conflict" };
+      }
+      if (best.length > 0) return { items: best.slice(0, this.config.graphGround), how: "graph" };
     }
     // With `groundAway`: a person the request names, away on a day it names ("ask Jamie to feed the cat next weekend"
     // and Jamie's "away on Skye 6–9 Nov"), whatever the words: the agent should know before it asks them (D48).
@@ -1038,8 +1101,42 @@ export class ContextPartner {
   }
 
   /** What an item says about the request's frame: conflict, clear or none (`conflict.ts` `assess`). */
-  private verdict(item: ContextItem, cue: Cue, ties?: ReadonlySet<string>): Verdict {
-    return assess(this.frame(cue), item, localNow(cue), ties);
+  private verdict(item: ContextItem, cue: Cue, ties?: ReadonlySet<string>, speaks = false): Verdict {
+    return assess(this.frame(cue), item, localNow(cue), ties, speaks);
+  }
+
+  /**
+   * The words that tie a graph-walked item's statements to the request (`graph`): the names of the nodes it was
+   * reached through ("umbrella", "health"); with `graphWordTies`, for one reached by a name, the request's own words
+   * (the name already says the item is about what the request names); for one reached by a day alone, the request's
+   * action class's words (`consequence.ts`: "production" for a release), when it has one.
+   */
+  private conflictTies(cue: Cue, w: Walked): Set<string> {
+    const ties = tieWords(w.via);
+    if (w.named && this.config.graphWordTies) for (const t of this.frame(cue).wordTies) ties.add(t);
+    if (!w.named) {
+      const cls = actionClass(cue.raw, isAction(cue.raw) || cue.external === true);
+      if (cls) for (const t of classTies(cls)) ties.add(t);
+    }
+    return ties;
+  }
+
+  /**
+   * The knowledge graph's finds for a request (`graph`): a walk from its names (as typed, and capitalised runs the
+   * user's items name), identifiers, roles and, with `graphDays`, days. The user's own name, addresses and
+   * organisation are kept out (`ItemCache.walk`): they are on everything. CPU only, bounded by `graphBudgetMs`.
+   */
+  private walkGraph(s: Session, cue: Cue): Map<string, Walked> {
+    const seeds = seedsOf(cue.raw, cleanEntities(cue.entities), this.config.graphDays ? (cue.time?.days ?? []) : []);
+    const found = this.deps.cache.walk(
+      s.scope,
+      seeds,
+      { budgetMs: this.config.graphBudgetMs, limit: this.config.graphItems, floor: this.config.graphFloor },
+      this.now(),
+    );
+    const out = new Map(found.map((w) => [w.id, w]));
+    WALKS.set(cue, out);
+    return out;
   }
 
   /**
@@ -2078,9 +2175,14 @@ export class ContextPartner {
       const spans = this.spans;
       // This lookup's probe finds, its own (never another turn's or a concurrent ask's).
       const consIds = new Set(consequence?.ids ?? []);
+      // With `graph`: what the user's knowledge graph reaches from the request, after the lookup's items are cached.
+      const walking = this.config.graph ? spans?.open("graph.walk", cue.span) : undefined;
+      const walked = this.config.graph ? this.walkGraph(s, cue) : new Map<string, Walked>();
+      if (walking) spans!.close(walking, { reached: walked.size });
       const ranking = spans?.open("rank", cue.span);
       const scored = this.rank(s, cue, {
         probed: consIds.size > 0 ? [...(probedIds ?? []), ...consIds] : probedIds,
+        ...(walked.size > 0 ? { walked: [...walked.keys()] } : {}),
       });
       if (ranking) spans!.close(ranking, { candidates: scored.length });
       // A consequence find counts only where the conflict test, tied by its class's words, says it conflicts with the
@@ -2102,7 +2204,7 @@ export class ContextPartner {
       );
       if (conflicting) spans!.close(conflicting, { bridged: bridged.size });
       const confiding = spans?.open("confident", cue.span);
-      const sure = this.confident(scored, cue);
+      const sure = this.confident(walked.size > 0 ? scored.filter((x) => !x.walkedOnly) : scored, cue);
       if (confiding) spans!.close(confiding, { sure: sure.length });
       // With `judgeConfident` and a judge to ask, what scores as sure is judged with the rest in the same call: the
       // no-model bar is right about half the time (docs/research/probes.md), the judge more often.
@@ -2128,8 +2230,12 @@ export class ContextPartner {
       // A consequence find that does not conflict is no candidate: it shares nothing with the request but its class.
       const eligible = scored.filter(
         (x) =>
-          x.score >= this.config.candidateScore || onNamedDay(x) || probed.has(x.item.id) || bridged.has(x.item.id),
+          !x.walkedOnly &&
+          (x.score >= this.config.candidateScore || onNamedDay(x) || probed.has(x.item.id) || bridged.has(x.item.id)),
       );
+      // The walk's finds (`graph`), whatever they score on words: they get seats and the graph's conflict ground,
+      // and no other path (what every other path reads stays as it was without the graph).
+      const graphPool = walked.size > 0 ? scored.filter((x) => walked.has(x.item.id)) : [];
       // With probes on, up to three of the probes' finds join the judge's candidates beyond the best scored: found for
       // the request's people, organisations or day, they share few of its words and would otherwise never be seen.
       const top = judgeSure
@@ -2143,7 +2249,12 @@ export class ContextPartner {
               ...eligible.filter((x) => probed.has(x.item.id) && !bridged.has(x.item.id) && !top.includes(x)),
             ].slice(0, 3)
           : [];
-      const unsure = [...top, ...seats];
+      // With `graph`, the walk's best finds the judge would not otherwise see take seats of their own.
+      const graphSeats = graphPool
+        .filter((x) => !top.includes(x) && !seats.includes(x))
+        .sort((a, b) => walked.get(b.item.id)!.score - walked.get(a.item.id)!.score)
+        .slice(0, this.config.graphSeats);
+      const unsure = [...top, ...seats, ...graphSeats];
       // A probe that brought in what is seated for the judge did its part, whatever the judge then makes of it: the
       // judge rules on relevance, the probe only on finding (`probeYield`).
       if (this.config.probeYield && !s.closed) {
@@ -2173,7 +2284,7 @@ export class ContextPartner {
         const named = this.config.recoverNames ? this.withRecoveredNames(s, cue) : cue;
         // Grounding reads every candidate, not only the judge's few: a day's events rank after every word match.
         const grounding = spans?.open("ground", cue.span, { candidates: eligible.length });
-        const grounded = this.grounded(s, named, eligible, eventKind, bridged, consequence?.cls);
+        const grounded = this.grounded(s, named, eligible, eventKind, bridged, consequence?.cls, walked, graphPool);
         if (grounding) spans!.close(grounding, { grounded: grounded.items.length });
         if (grounded.items.length > 0) {
           const items = grounded.items;
@@ -2205,6 +2316,7 @@ export class ContextPartner {
         const tied = (x: Scored) =>
           probed.has(x.item.id) ||
           bridged.has(x.item.id) ||
+          walked.has(x.item.id) ||
           onNamedDay(x) ||
           x.matched >= 2 ||
           this.holdsAny(s, x, rare);
@@ -2421,7 +2533,11 @@ export class ContextPartner {
       createdAt: this.now(),
     };
     if (rendering) spans!.close(rendering);
+    const walks = WALKS.get(cue);
+    let graphMask = 0;
+    for (const x of scored) graphMask |= walks?.get(x.item.id)?.mask ?? 0;
     this.built.set(injection, {
+      graphMask,
       sourceIds: [...new Set(items.map((i) => i.sourceId))],
       items: items.map((i) => ({ sourceId: i.sourceId, id: i.id })),
       // Only the words the agent received: an item's text past the packet's cut is not evidence of use.

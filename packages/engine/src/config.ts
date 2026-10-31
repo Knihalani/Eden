@@ -259,6 +259,36 @@ export interface EngineConfig {
    * user's items) are each sent alone to them as a probe, at no call; their finds get the probes' seats. 0: none.
    */
   syncTermProbes: number;
+  /**
+   * A per-user knowledge graph over every cached item (`kg.ts`; docs/research/moon-graph.md): people, organisations,
+   * projects and systems, identifiers, channels, roles and days, joined by typed edges. A lookup walks it from the
+   * request's names, ids, roles and days (spreading activation, `graphBudgetMs` at most, no model, no source call);
+   * what it reaches with zero shared words ("Ahmed Hassan" to "Umbrella Health" through his address) is a candidate:
+   * `graphSeats` seats with the judge, a tie for `judgeTied`, and, with `groundConflict`, the conflict test with the
+   * names it was reached through as ties. Edge-type weights are learned per user from delivered items' use.
+   */
+  graph: boolean;
+  /** Items a graph walk returns at most. */
+  graphItems: number;
+  /** Judge seats for the walk's finds, beyond the best scored and the probes'. */
+  graphSeats: number;
+  /** Items the conflict ground delivers from the walk at most, with no model's say (the best walked first). */
+  graphGround: number;
+  /**
+   * The walk's best conflict is delivered beside the request's own conflicts too, not only when there are none
+   * (`graphGround` of them, within `maxItemsPerInjection`).
+   */
+  graphMerge: boolean;
+  /** The user's edge-type weights learn from whether what the graph reached was used (`UserGraph.learn`). */
+  graphLearn: boolean;
+  /** A walk's hard time bound (ms): past it, it returns what it has. */
+  graphBudgetMs: number;
+  /** The least activation a walked item needs. */
+  graphFloor: number;
+  /** A walked item reached by a name is tied, in the conflict test, by the request's own words too. */
+  graphWordTies: boolean;
+  /** The walk starts from the days the request names too (reaching items whose blocking statements cover them). */
+  graphDays: boolean;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
   /** Cost reserved per judge call before the real cost is known: about its worst case at the cap (D45). */
@@ -323,6 +353,16 @@ export const DEFAULT_CONFIG: EngineConfig = {
   probeRoles: false,
   probeShare: false,
   probeSecondSources: 3,
+  graph: false,
+  graphItems: 16,
+  graphSeats: 1,
+  graphGround: 1,
+  graphMerge: false,
+  graphLearn: true,
+  graphBudgetMs: 2,
+  graphFloor: 0.15,
+  graphWordTies: false,
+  graphDays: true,
   probeOff: [],
   judgeConfident: false,
   judgeContested: false,

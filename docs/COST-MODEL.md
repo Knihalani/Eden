@@ -27,6 +27,10 @@ OpenRouter returns the real cost per call (`usage.cost`), and the engine books t
 | Judge | system ≈ 100 tok + window ≤ 4,000 chars (≈ 1,000 tok) + ≤ 6 candidates × ≈ 100 tok ≈ 1,700 tok | 512 tok, reasoning included (D45) | ≈ $0.00051 |
 | Ask answer (only with `askWithModel`, off by default, D43) | ≈ 100 + question ≤ 10,000 chars (≈ 2,500) + window ≤ 2,000 chars (≈ 500) + ≤ 20 items × ≈ 170 tok ≈ 6,500 tok | 1,000 tok, reasoning included (D45) | ≈ $0.0015 |
 
+With `graph` (proposed D56) the judge sees at most `graphSeats` (1) more candidate, about 100 more input tokens per
+call at its cap; no other model call is added and the graph makes no source call. Measured in simulation (realistic,
+4 seeds, perfect judge): $0.0172 → $0.0178 per 1,000 turns, model calls per turn 0.213 → 0.215.
+
 These are arithmetic on list prices, not measurements. Output is billed on tokens used, not the cap: a judge verdict
 is a few tokens plus low-effort reasoning (about 20 tokens on GLM 5.3 Flash in a probe of three calls).
 
