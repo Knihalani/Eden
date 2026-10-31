@@ -100,6 +100,20 @@ export interface ObserveResult {
   pending: boolean;
 }
 
+/**
+ * What the partner says about an action the agent is about to take (`checkAction`, the action firewall): the agent's
+ * tool call is checked, before it runs, against what the partner holds. `proceed` when nothing held bears on it;
+ * `finding` with the held context that does, as data (an `Injection` in the usual envelope). What the integration does
+ * with a finding (hold the call, show it to the agent or the user) is its own choice.
+ */
+export interface ActionCheck {
+  verdict: "proceed" | "finding";
+  finding: Injection | null;
+  /** Short machine-readable reason, for logs and evals ("off", "clear", "conflict", "repeat"). */
+  reason: string;
+  latencyMs: number;
+}
+
 /** How a later turn showed whether the agent used an injection. Feeds source learning. */
 export interface Feedback extends Scope {
   sessionId: string;

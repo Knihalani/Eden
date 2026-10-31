@@ -5,14 +5,21 @@
  *
  *   bun packages/sim/src/lab/cards-enrich.ts --dir DIR [--funnel hidden,heldout] [--seeds 41,42,43,44]
  *     [--sim-seeds 41,42] [--sim-users 6] [--cap 2.80] [--rejected N] [--concurrency 4] [--dry]
+ *     [--model m] [--sort price] [--batch 10] [--spend FILE] [--only N] [--strict]
  *
  * Items are those a sync would read (every source's `listAll`, as the realistic connectors return them), redacted as
  * the cache redacts them. Only items the no-model prefilter passes are sent, in batches of ten, unless `--rejected N`
  * also sends a random N of the rejected (to measure what the prefilter loses). Every call is metered: its OpenRouter
- * cost is appended to DIR/spend.jsonl, and no call starts once the total there (all runs) reaches `--cap`.
+ * cost is appended to DIR/spend.jsonl (or `--spend FILE`, shared by several runs), and no call starts once the total
+ * there (all runs) reaches `--cap`.
+ *
+ * The cheaper shapes of docs/research/econ-background.md: `--strict` (only what `cardsEconomy`'s prefilter passes),
+ * `--sort price` (OpenRouter's cheapest compliant endpoint first; a batch cut off at the output cap is sent once more
+ * with default routing, as the enricher does), `--batch` items per call, `--model`. `--only N` enriches only the
+ * first N items to do (a sample; the order is the items' sorted content hashes).
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { CARD_VERSION, cardKey, ItemCache, ModelCardMaker, worthCarding } from "@eden/engine";
+import { CARD_VERSION, cardKey, ItemCache, ModelCardMaker, worthCarding, worthCardingStrict } from "@eden/engine";
 import { OpenRouterModel, type Model } from "@eden/llm";
 import type { ContextItem } from "@eden/protocol";
 import { Rng } from "../rng";
@@ -39,7 +46,12 @@ const REJECTED = Number(opt("rejected", "0"));
 const CONCURRENCY = Number(opt("concurrency", "4"));
 const DRY = args.includes("--dry");
 const MODEL = opt("model", "z-ai/glm-5.3-flash");
-const SPEND = `${DIR}/spend.jsonl`;
+const SPEND = opt("spend", `${DIR}/spend.jsonl`);
+const SORT = opt("sort", "") as "" | "price";
+const BATCH = Number(opt("batch", "10"));
+const ONLY = Number(opt("only", "0"));
+/** `--strict`: only the items the strict prefilter (`cardsEconomy`) passes. */
+const pass = args.includes("--strict") ? worthCardingStrict : worthCarding;
 
 /** Items a sync would read, redacted as the cache redacts them, deduplicated by content hash. */
 const items = new Map<string, ContextItem>();
@@ -74,11 +86,12 @@ for (const seed of SIM_SEEDS) {
 
 const disk = new DiskCardMaker(`${DIR}/cards-v${CARD_VERSION}.jsonl`);
 const all = [...items.entries()];
-const passed = all.filter(([, it]) => worthCarding(it));
-const rejected = all.filter(([, it]) => !worthCarding(it));
+const passed = all.filter(([, it]) => pass(it));
+const rejected = all.filter(([, it]) => !pass(it));
 const rng = new Rng(7);
 const sample = REJECTED > 0 ? rng.sample(rejected, REJECTED) : [];
-const todo = [...passed, ...sample].filter(([h]) => !disk.cards.has(h));
+const pending = [...passed, ...sample].filter(([h]) => !disk.cards.has(h));
+const todo = ONLY > 0 ? pending.sort((a, b) => (a[0] < b[0] ? -1 : 1)).slice(0, ONLY) : pending;
 const spent = () =>
   existsSync(SPEND)
     ? readFileSync(SPEND, "utf8")
@@ -101,14 +114,16 @@ const startSpend = total;
 let calls = 0;
 let inTok = 0;
 let outTok = 0;
-const inner = new OpenRouterModel({ apiKey: key, model: MODEL, timeoutMs: 120_000 });
-const metered: Model = {
+let cachedTok = 0;
+let retries = 0;
+const metered = (inner: Model, sort: string): Model => ({
   id: inner.id,
   chat: async (req) => {
     const res = await inner.chat(req);
     calls++;
     inTok += res.usage.inputTokens;
     outTok += res.usage.outputTokens;
+    cachedTok += res.usage.cachedInputTokens;
     total += res.costUsd;
     const line = {
       at: new Date().toISOString(),
@@ -116,14 +131,22 @@ const metered: Model = {
       in: res.usage.inputTokens,
       out: res.usage.outputTokens,
       truncated: !!res.truncated,
+      cached: res.usage.cachedInputTokens,
+      provider: res.provider ?? "",
+      model: MODEL,
+      sort,
+      batch: BATCH,
     };
     appendFileSync(SPEND, `${JSON.stringify(line)}\n`);
     return res;
   },
-};
-const maker = new ModelCardMaker(metered);
+});
+const routed = (sort: "" | "price") =>
+  metered(new OpenRouterModel({ apiKey: key, model: MODEL, timeoutMs: 120_000, ...(sort ? { sort } : {}) }), sort);
+// A cut batch's retry goes to default routing (`CardMakerOptions.retry`), as `CardEnricher` sends it.
+const maker = new ModelCardMaker(routed(SORT), { retry: routed("") });
 const batches: [string, ContextItem][][] = [];
-for (let i = 0; i < todo.length; i += 10) batches.push(todo.slice(i, i + 10));
+for (let i = 0; i < todo.length; i += BATCH) batches.push(todo.slice(i, i + BATCH));
 let next = 0;
 let failed = 0;
 let stopped = false;
@@ -135,11 +158,13 @@ const worker = async () => {
     }
     const batch = batches[next++]!;
     try {
-      const got = await maker.make(
-        batch.map(([, it]) => it),
-        "2026-10-27",
-        AbortSignal.timeout(150_000),
-      );
+      const items = batch.map(([, it]) => it);
+      let got = await maker.make(items, "2026-10-27", AbortSignal.timeout(150_000));
+      if (got.truncated && total < CAP) {
+        retries++;
+        const again = await maker.make(items, "2026-10-27", AbortSignal.timeout(150_000), true);
+        got = { ...again, cards: got.cards.map((c, i) => c ?? again.cards[i] ?? null) };
+      }
       batch.forEach(([h], i) => {
         const c = got.cards[i];
         if (c) disk.put(h, c.kind === "none" ? null : c);
@@ -156,12 +181,16 @@ const covered = [...passed, ...sample].filter(([h]) => disk.cards.has(h)).length
 console.log(
   JSON.stringify({
     calls,
+    retries,
     failed,
     stopped,
     spentThisRun: Number((total - startSpend).toFixed(6)),
     spentTotal: Number(spent().toFixed(6)),
     inPerCall: Math.round(inTok / Math.max(1, calls)),
     outPerCall: Math.round(outTok / Math.max(1, calls)),
+    cachedPerCall: Math.round(cachedTok / Math.max(1, calls)),
+    usdPerCall: Number(((total - startSpend) / Math.max(1, calls)).toFixed(7)),
+    usdPerItem: Number(((total - startSpend) / Math.max(1, todo.length)).toFixed(8)),
     covered,
     of: passed.length + sample.length,
   }),

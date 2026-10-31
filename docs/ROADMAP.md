@@ -79,6 +79,17 @@ train / held-out split for tuning, and text not written by templates.
   268 delivered with decoys 21 → 18; blind held-out 5–8 72 → 91 of 316 with decoys 30 → 27. R + sync delivers 128
   blind (36 decoys) but misses the no-model soft fire bar (0.121 against 0.10); the owner's call. Next: a live Pi run
   of R and R + sync against tools; wire cards into the server's `buildPartner`; stress the sync on large mailboxes.
+- Done (2026-10-31): the first full live benchmark on the Pi harness (D64,
+  [research/pi-full-benchmark.md](research/pi-full-benchmark.md)); on the blind suites ALL raises the hidden fact 2.0×
+  as often as tools (0.538 against 0.269) with false concerns 0.019 against 0.025.
+- Done (2026-10-31, in-sample only): the econ plan, seven research tracks on facts found, cost and time, integrated
+  behind flags off by default ([research/econ-lab.md](research/econ-lab.md) and the track notes). Poll behind the
+  lookup (D65), card economy, price-routed cards and push freshness (D66), a found conflict always delivered (D67),
+  whole dates in packets (D68), the action firewall (D69); one-turn packets rejected, `ask_context` kept (D70); cost
+  reported billed and re-priced at a fixed endpoint (D71). A tenant guide, labelled as unmeasured advice:
+  [INTEGRATION.md](INTEGRATION.md). Next: the pre-registered blind run on held-out 5–9 and D72 (whether `ALL2`
+  replaces ALL, with or without `judgeBehind`); an HTTP route for push notices; supersession on graph edges, then a
+  cost-sensitive delivery gate under its own decision.
 - Entity resolution (aliases, email ↔ name), typed relations (person–company–project), freshness per source. A
   first per-user graph is built (D58); learned edge weights are unmeasured (no usage signal in the funnel).
 - Background sync for sources that support it, so the fast path warms without waiting for a lookup. Built (D57),

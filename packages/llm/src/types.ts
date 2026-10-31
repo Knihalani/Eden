@@ -34,6 +34,8 @@ export interface ChatResponse {
   usage: Usage;
   costUsd: number;
   model: string;
+  /** The endpoint that served the call, when the router reports it (research and cost reporting only). */
+  provider?: string;
   latencyMs: number;
   /** The model stopped at `maxTokens`: the text may be cut off (or empty, when reasoning used the cap). */
   truncated?: boolean;
