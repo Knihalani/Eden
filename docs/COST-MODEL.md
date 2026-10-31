@@ -86,6 +86,13 @@ economy starts cold for each new user, so a user's first lookups make the wider 
 learned which to skip (8.4 calls per task in the per-task funnel, which builds a new engine each task). The register's
 background sweep (D51) added calls (10.4 per task) and was removed with it.
 
+D56, proposed (background sync, "Eden Atlas", off by default; docs/research/moon-sync.md) adds no model call: the
+sync makes listing calls only. With a judge it raises model cost, because the judge sees more candidates: simulation,
+realistic, seeds 41–44, perfect judge, $0.0170 (H) → $0.0222–0.0223 (HA, two runs) per 1,000 turns (+31%), at the same input caps
+(≤ 6 candidates of ≤ 200 bytes, ≤ 4k characters of window). Source calls fall: 7.78 → 0.86 request-time calls per
+lookup, 1.72 with backfill and background amortised; in the per-task funnel, 8.5 → 3.04 per task (4.38 amortised).
+A synced user costs about 4 MB of heap per ~1,500 items and ~200 ms of CPU to backfill (`sync-cost.ts`).
+
 The non-model costs (source API calls, hosting) are not modelled yet. Source calls may dominate for some connectors;
 measure them per connector in M2. The query planner (D28), on by default in the server since D33, adds no model call.
 After its iterations it makes 1.36–1.47x planner-off's source calls per lookup in the simulation at time 0 and

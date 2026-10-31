@@ -71,6 +71,8 @@ const MAX_POLL_PAGES = 20;
 /** Background sync calls leave this many of the serving rate limit's tokens for lookups. */
 const SERVING_HEADROOM = 2;
 const HOUR = 3_600_000;
+/** Users a tick works on at once. */
+const USERS_AT_ONCE = 16;
 
 interface SourceSync {
   id: string;
@@ -192,10 +194,12 @@ export class SyncManager {
     try {
       const now = this.deps.now();
       this.evict(now);
-      for (const u of [...this.users.values()]) {
-        if (u.gone) continue;
-        await this.step(u).catch(() => {});
-      }
+      // Users in parallel, `USERS_AT_ONCE` at a time: one user's slow connector must not hold up the rest.
+      const queue = [...this.users.values()];
+      const lane = async () => {
+        for (let u = queue.shift(); u; u = queue.shift()) if (!u.gone) await this.step(u).catch(() => {});
+      };
+      await Promise.all(Array.from({ length: Math.min(USERS_AT_ONCE, queue.length) }, lane));
     } finally {
       this.ticking = false;
     }
@@ -264,14 +268,19 @@ export class SyncManager {
   }
 
   private async step(u: UserSync): Promise<void> {
-    const all = await this.deps.sources(u.scope).catch((): Source[] => []);
-    if (u.gone) return;
+    // A resolver that fails says nothing about which sources the user has: nothing is changed until it answers.
+    const all = await this.deps.sources(u.scope).catch((): null => null);
+    if (u.gone || all === null) return;
     const listable = all.filter((x) => typeof x.list === "function");
     for (const x of listable) {
       if (!u.sources.has(x.id)) u.sources.set(x.id, newSourceSync(x.id));
     }
-    // A source the user no longer has is not synced: its state goes (its items are the partner's forget to drop).
-    for (const id of [...u.sources.keys()]) if (!listable.some((x) => x.id === id)) u.sources.delete(id);
+    // A source the user no longer has (or that no longer lists) is not synced: its state and synced items go.
+    for (const [id, s] of [...u.sources]) {
+      if (listable.some((x) => x.id === id)) continue;
+      u.sources.delete(id);
+      this.stats.deleted += this.deps.cache.dropSynced(u.scope, s.ids);
+    }
     const byId = new Map(listable.map((x) => [x.id, x]));
     await this.backfill(u, byId);
     const now = this.deps.now();
@@ -421,6 +430,8 @@ export class SyncManager {
       if (u.gone) return;
       if (typeof page === "string") {
         if (page !== "limited" && page !== "busy") this.count(demand);
+        // The lookup gave up (its deadline, the session ending): no evidence against the source, no back-off.
+        if (signal?.aborted) return;
         this.failed(s, page);
         return;
       }
@@ -500,7 +511,8 @@ export class SyncManager {
 
   /** Stores a page's (redacted) items as synced; returns how many were new or changed. */
   private store(u: UserSync, s: SourceSync, items: ContextItem[]): number {
-    if (u.gone || items.length === 0 || !this.users.has(u.key) || !u.sources.has(s.id)) return 0;
+    // The same user object and source state: work for a user forgotten and back since must not land.
+    if (u.gone || items.length === 0 || this.users.get(u.key) !== u || u.sources.get(s.id) !== s) return 0;
     const own = items.filter((it) => it.sourceId === s.id);
     const changed = this.deps.cache.put(u.scope, own, this.deps.now(), true, true);
     for (const it of own) {

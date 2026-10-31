@@ -1591,7 +1591,12 @@ export class ContextPartner {
     // question that mentions a release ("did Sam tell you whether the release went out?") is no release.
     const acts = isImperative(cue.raw) || cue.external === true;
     const cls = c.consequenceProbe && !off.has("consequence") ? actionClass(cue.raw, acts) : null;
+    // `syncTermProbes` (D56): with sources answered locally, each of the request's words that few of the user's items
+    // hold (a place, a reference, a product), alone, to those sources: a query per word, which no live budget allows.
+    const synced = local ? all.filter((x) => local.has(x.id)) : [];
+    const terms = synced.length > 0 && c.syncTermProbes > 0 ? this.termProbes(s, cue, c.syncTermProbes) : [];
     await Promise.all([
+      ...terms.map((t) => send("topic", synced, t)),
       ...windows.map((w) => send("day", listers, "", w)),
       byPeople,
       ...roles.map((r) => send("role", found.slice(0, 2), r)),
@@ -2092,6 +2097,31 @@ export class ContextPartner {
    * a name, a reference, a place, rather than words common to their mail. Ids in the user's cache vocabulary; a word
    * no cached item holds has no id and so ties nothing (`judgeTied`).
    */
+  /**
+   * The request's words for `syncTermProbes`: at least four letters, rare in the user's items (`judgeTiedShare`), not
+   * a stopword, a word that only says when, nor part of a name the people probes already send; at most `max`.
+   */
+  private termProbes(s: Session, cue: Cue, max: number): string[] {
+    const vocab = this.deps.cache.peekVocab(s.scope);
+    if (!vocab) return [];
+    const named = new Set(
+      cue.entities.flatMap((e) =>
+        e
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((w) => w.length > 0),
+      ),
+    );
+    const out: string[] = [];
+    for (const id of this.rareTerms(s, cue)) {
+      const w = vocab.term(id);
+      if (w.length < 4 || named.has(w) || TIME_WORD.test(w) || out.includes(w)) continue;
+      out.push(w);
+      if (out.length >= max) break;
+    }
+    return out;
+  }
+
   private rareTerms(s: Session, cue: Cue): number[] {
     const vocab = this.deps.cache.peekVocab(s.scope);
     if (!vocab) return [];
