@@ -364,7 +364,7 @@ export function mentions(name: string, item: ContextItem): boolean {
  * sister"): a person probe has no name to send, so the word itself is sent (the user's items say "your landlord",
  * "Mum", "the school office").
  */
-const ROLES = new Set(
+export const ROLES = new Set(
   (
     "manager boss lead director ceo cfo cto founder cofounder colleague team assistant recruiter hr payroll finance " +
     "accounts legal counsel lawyer solicitor accountant landlord letting agent tenant neighbour neighbor nanny " +

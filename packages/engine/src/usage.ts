@@ -15,6 +15,8 @@ export interface Outstanding {
   situation: string;
   tokens: Set<number>;
   deliveredTurn: number;
+  /** Edge types (`kg.ts` `EDGE`) the knowledge graph reached the injection's items by; 0 when it reached none. */
+  graphMask?: number;
 }
 
 const hasDigit = (t: string) => /\d/.test(t);
