@@ -272,6 +272,23 @@ export interface EngineConfig {
    */
   syncTermProbes: number;
   /**
+   * Push (`SyncManager.notify`, `ContextPartner.sourceChanged`; docs/research/econ-background.md): a synced source
+   * whose connector sends change notices (Gmail watch, Calendar push, Slack Events, relayed by the tenant) is current
+   * until a notice arrives, read with one incremental poll, and swept only every `syncPushSweepMs`. Off: notices are
+   * ignored and every source is polled as D57 says.
+   */
+  syncPush: boolean;
+  /** A pushed source with no notice and no poll for this long (ms) is polled anyway (a lapsed watch). */
+  syncPushMaxStaleMs: number;
+  /**
+   * A pushed source's sweep, for deletes its notices did not name, this often (ms). It is also what re-lists a quiet
+   * source's older items, so it stays at most half the cache's `syncTtlMs` (7 days): a sweep spans many ticks on a
+   * large source, and an item not re-listed within `syncTtlMs` lapses from the cache.
+   */
+  syncPushSweepMs: number;
+  /** A pushed source with an unread notice is polled in the background at most this often (ms; 0: every tick). */
+  syncPushGapMs: number;
+  /**
    * A per-user knowledge graph over every cached item (`kg.ts`; docs/research/moon-graph.md): people, organisations,
    * projects and systems, identifiers, channels, roles and days, joined by typed edges. A lookup walks it from the
    * request's names, ids, roles and days (spreading activation, `graphBudgetMs` at most, no model, no source call);
@@ -310,6 +327,13 @@ export interface EngineConfig {
   cards: boolean;
   /** With `cards` and `groundConflict`, at most this many items delivered on their card alone. */
   cardItems: number;
+  /**
+   * With `cards`: the enrichment's economy preset (`ECONOMY_CARD_LIMITS`, docs/research/econ-background.md). A strict
+   * prefilter (footers and a reply's subject out), one card for items saying the same constraint sentences, and
+   * twenty items per call. The card of every item still read is made by the same prompt; only which items are read,
+   * and how many per call, change.
+   */
+  cardsEconomy: boolean;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
   /**
@@ -441,7 +465,12 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncLocalAll: true,
   syncWide: false,
   syncTermProbes: 0,
+  syncPush: false,
+  syncPushMaxStaleMs: 24 * 3_600_000,
+  syncPushSweepMs: 3 * 24 * 3_600_000,
+  syncPushGapMs: 0,
   cards: false,
+  cardsEconomy: false,
   cardItems: 1,
   maxEventChars: 32_000,
 };

@@ -12,7 +12,7 @@
  *   bun packages/sim/src/lab/hidden-funnel.ts [--suite hidden|heldout|heldout-all|all|a,b] [--seeds 41,42,43,44]
  *     [--time 0]
  *     [--config '{"probes":true}'] [--json out.json] [--label probes] [--no-record] [--judge live [--model m]]
- *     [--sync] [--cards DIR/cards.jsonl]
+ *     [--sync] [--cards DIR/cards.jsonl] [--card-limits '{"batch":20}'] [--planted-age-days N] [--push]
  *     [--lead-in clause|half] [--time 0] [--typing-ms 1500] [--packets out.jsonl]
  *
  * `--judge live` gives Eden its judge (OpenRouter, `OPENROUTER_API_KEY`): the funnel then measures what the judge lets
@@ -33,6 +33,15 @@
  * by `cards-enrich.ts` (no model call here; an item with no cached card is uncovered). They are made as items enter the
  * cache, and used from the next request on; with `--sync`, for every item before the first request. Turn them on with
  * `"cards": true` in `--config`.
+ * `--card-limits` sets the enricher's `CardLimits` (one economy setting at a time; `"cardsEconomy": true` in
+ * `--config` applies the whole preset, docs/research/econ-background.md); the run prints the enrichment's counters
+ * (`cards use`: items sent to the model, calls, reused by sentence) summed over its users.
+ * `--push` (with `"syncPush": true` in `--config`): once backfilled, every source declares a push watch
+ * (`sourcePushes`). The worlds do not change while the tasks run, so no notice follows: the run measures the polls a
+ * quiet pushed source no longer needs.
+ * `--planted-age-days N` dates every planted item (hidden and decoy) N days before the present instead of one: a
+ * stress test for rules that read an item by its age (docs/research/econ-background.md): every suite plants a
+ * day-old item.
  * `--lead-in` gives each request a "user is typing" draft before it (`drafts.ts`: its first clause, or its first
  * half; a simulation assumption, since no suite carries one), sent as a draft user message (`anticipate` reads it, any
  * other configuration ignores it). With `--time 0` the request follows once the engine has settled (typing takes
@@ -94,8 +103,14 @@ const syncUse = {
 const CARDS = opt("cards", "");
 /** One replaying maker for every seed and suite: the disk cache is read once. */
 const cardMaker = CARDS ? new DiskCardMaker(CARDS) : null;
+/** Every lane's enrichment counters, summed (`CardStats`): items read by the model and calls, per simulated user. */
+const cardUse: Record<string, number> = {};
+const cardLanes: CardEnricher[] = [];
 /** No cap on replayed cards: they cost nothing here (the enrichment's spend is `cards-enrich.ts`'s). */
 const UNCAPPED = { callsPerSession: Infinity, usdPerSession: Infinity, usdPerUserDay: Infinity };
+const CARD_LIMITS = JSON.parse(opt("card-limits", "{}")) as Record<string, unknown>;
+const PLANTED_AGE_DAYS = Number(opt("planted-age-days", "0"));
+const PUSH = args.includes("--push");
 const LEAD = opt("lead-in", "") as DraftMode | "";
 if (LEAD && LEAD !== "clause" && LEAD !== "half") throw new Error("--lead-in must be clause or half");
 const TYPING_MS = Number(opt("typing-ms", "1500"));
@@ -204,6 +219,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
   const before = world.items.length;
   const tasks: HiddenTask[] = SUITES[suite]!(world, seed, variant);
   const planted = world.items.slice(before);
+  if (PLANTED_AGE_DAYS > 0) for (const it of planted) it.updatedAt = world.now - PLANTED_AGE_DAYS * 86_400_000;
   for (const it of planted) dress(world, it);
   // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
   const keep = new Set(planted.map((it) => it.id));
@@ -236,8 +252,9 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     }
   };
   const cards = cardMaker
-    ? new CardEnricher({ maker: cardMaker, budget: new Budget(UNCAPPED), now: () => clock })
+    ? new CardEnricher({ maker: cardMaker, budget: new Budget(UNCAPPED), now: () => clock }, CARD_LIMITS)
     : null;
+  if (cards) cardLanes.push(cards);
   const partner = new ContextPartner({
     sources: async () => sources,
     sourceMap: new SourceMap(":memory:", { seed }),
@@ -278,6 +295,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     }
     syncUse.warmMs += performance.now() - t0;
     syncUse.users++;
+    if (PUSH) for (const s of sources) partner.sourcePushes(scope, s.id);
     // Cards for the backfilled items, as a long-running sync would have them before the first request.
     if (cards) await cards.idle();
     clock = world.now;
@@ -444,7 +462,12 @@ if (REAL_SYNC) {
       `local sources ${(syncUse.localSources / Math.max(1, syncUse.lookups)).toFixed(2)}/lookup`,
   );
 }
-if (cardMaker) console.log(`cards: ${cardMaker.hits} replayed, ${cardMaker.misses} uncovered (no cached card)`);
+if (cardMaker) {
+  for (const c of cardLanes) for (const [k, v] of Object.entries(c.stats)) cardUse[k] = (cardUse[k] ?? 0) + v;
+  cardUse.users = cardLanes.length;
+  console.log(`cards: ${cardMaker.hits} replayed, ${cardMaker.misses} uncovered (no cached card)`);
+  console.log(`cards use: ${JSON.stringify(cardUse)}`);
+}
 if (LIVE) {
   const tasks = Math.max(1, grand.hidden.n + grand.control.n);
   console.log(
@@ -517,6 +540,7 @@ if (out) {
         rows,
         total: grand,
         ...(REAL_SYNC ? { sync: syncUse } : {}),
+        ...(cardMaker ? { cards: cardUse } : {}),
         ...(SUITE_LIST.length > 1 ? { suites } : {}),
         // Per task, with the suite: how each planted item was delivered (`why`), for breakdowns by path.
         perTask: runs.flatMap((r) => r.perTask.map((t) => ({ suite: r.suite, ...t }))),

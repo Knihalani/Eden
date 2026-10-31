@@ -1,7 +1,7 @@
 export { ContextPartner, type PartnerDeps } from "./partner";
 export { DEFAULT_CONFIG, type EngineConfig } from "./config";
 export { ItemCache, sanitizeItem, type CacheHit, type CacheLimits } from "./cache";
-export { SyncManager, type SyncOptions, type SyncStats } from "./sync";
+export { SyncManager, type SourceChange, type SyncOptions, type SyncStats } from "./sync";
 export { GATE_MODULE, gateItem, pooledSanitizer } from "./gate";
 export { Ledger } from "./ledger";
 export { inert, renderAnswer, renderPacket } from "./render";
@@ -35,6 +35,9 @@ export {
   parseCards,
   requestActions,
   worthCarding,
+  worthCardingStrict,
+  sentenceKey,
+  ECONOMY_CARD_LIMITS,
   type Action,
   type Card,
   type CardKind,

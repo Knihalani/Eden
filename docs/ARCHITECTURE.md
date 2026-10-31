@@ -130,6 +130,16 @@ experimental and not recommended): with a model, every lookup decides as with no
 then reads only the candidates that answer left out and its picks are queued. The recommended configuration has no
 model judge on the critical path.
 
+**Push** (D66, `syncPush`, off by default, with `sync`): a tenant holding a connector watch (Gmail watch, Calendar
+push, Slack Events) declares it (`ContextPartner.sourcePushes`) and relays each change notice
+(`ContextPartner.sourceChanged`), which carries no content. A pushed source is current until a notice arrives, so a
+lookup neither polls it nor waits for it; a notice is read with one incremental read-only list call (by the next tick,
+at most every `syncPushGapMs`, or by a lookup), a notice naming deleted items drops them at once, and sweeps run every
+`syncPushSweepMs` (3 days: a sweep also re-lists a quiet source's older items, which lapse from the cache 7 days after
+their last listing). Items of a pushed source with no unread notice count as read now for D57's two-hour
+freshness rule. A watch silent for `syncPushMaxStaleMs` (24 h) is not trusted: the source goes stale as any other and,
+with `syncPollBehind`, is polled behind the lookup, never on the path. The server has no notice route yet.
+
 **Knowledge graph** (proposed D58, `graph` off by default; `kg.ts`, docs/research/moon-graph.md): with the flag, the
 item cache keeps a per-user graph over what it holds, built as items are cached and dropped with them: people (names,
 addresses, first names), organisations (an address's domain is the same node as the name "Umbrella Health"), projects
@@ -162,6 +172,15 @@ fixed vocabulary, entities, span, limit). At request time, with no model, the re
 frame (`conflict.ts`) are matched against the cards of cached items: a match is a candidate and a judge seat, and with
 `groundConflict` the best violated card is delivered (grounded "card"). The card's own statement never reaches the
 agent. The server's `buildPartner` does not wire an enricher yet.
+
+**Card economy** (D66, `cardsEconomy`, off by default, with `cards`; docs/research/econ-background.md): the enricher
+reads fewer items with the same prompt. A strict prefilter cuts legal-disclaimer and notification-settings footer
+blocks (from their first words to the end of their paragraph, so a constraint written after one is still read) and
+does not read a reply's or forward's subject; items of one user that say the same deontic sentences (greetings and
+footers aside, none dated relative to their message) share one card; twenty items go per call. The card maker's
+`OpenRouterModel` may route by price (`sort: "price"`, still ZDR); a batch cut off at the output cap, which price
+routing makes more frequent, is sent once more with default routing (`CardMakerOptions.retry`) under its own
+reservation.
 
 **The moonshots together** (proposed D62, [research/moonshots.md](research/moonshots.md)): the flags compose. With
 the sync, synced sources answer the lookup's search, every probe and the prefetch locally, and the graph and the

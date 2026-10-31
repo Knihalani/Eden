@@ -27,7 +27,9 @@
  * `--cards FILE` (alias `--cards-disk`) replays implication cards from a disk cache (`cards-disk.ts`, as the funnel
  * does) and makes only the missing ones live, so the conditions of a run, and later runs, do not each pay for the same
  * enrichment. FILE is only read; new cards go to `--cards-out` (default `<out>.cards.jsonl`), which later runs replay
- * too when they name it. Every stream shares one copy of both.
+ * too when they name it. Every stream shares one copy of both. `--card-sort price` routes the live card maker to
+ * OpenRouter's cheapest compliant endpoint (D66); a batch cut off at its output cap is sent again with default
+ * routing.
  *
  * Every task records a timeline on one monotonic clock (`pi-timeline.ts`): task start; Eden's observe; its slow path,
  * search, probe queries, refresh and judge (the engine's spans, `spans.ts`), each of Eden's source calls, its cache
@@ -41,7 +43,7 @@
  *     [--conditions none,tools,eden,both] [--config H|'{"probes":true}'] [--model z-ai/glm-5.3-flash]
  *     [--grader anthropic/claude-haiku-5.5] [--budget 0.6] [--out pi-ab.json] [--timeline dir] [--time-scale 0]
  *     [--tool-exec parallel|sequential] [--tasks 30] [--offworld 5] [--limit n] [--dry]
- *     [--variant-config '{"name":{...}}'] [--act] [--cards FILE [--cards-out FILE]]
+ *     [--variant-config '{"name":{...}}'] [--act] [--cards FILE [--cards-out FILE]] [--card-sort price]
  *
  * --budget is a hard cap on everything this run spends (agent, Eden's judge, grader): each call reserves its
  * worst case before it is sent and is refused when that could cross the cap. --time-scale 1 gives the sim sources
@@ -132,6 +134,8 @@ const CONFIG_ARG = opt("config", "{}");
 const CONFIG = PRESETS[CONFIG_ARG] ?? (JSON.parse(CONFIG_ARG) as Record<string, unknown>);
 // `cards` makes implication cards with a model in the background (D59), metered and charged to Eden's spend.
 const CARD_MODEL = opt("card-model", "z-ai/glm-5.3-flash");
+const CARD_SORT = opt("card-sort", "");
+if (CARD_SORT && CARD_SORT !== "price") throw new Error("--card-sort must be price");
 const CONFIG_VARIANTS = parseVariants(opt("variant-config", "{}"));
 // Every condition is parsed before anything is spent: a typo fails here, not after the first stream has run.
 const CONDITIONS: Condition[] = CONDITION_NAMES.map((name) =>
@@ -375,12 +379,14 @@ async function runWorld(
     ),
   );
   // `cards`: the enrichment model, metered against the run's cap and booked to Eden's spend like its judge.
-  const liveCards = (): CardMaker =>
-    new ModelCardMaker(
-      meteredModel(new OpenRouterModel({ apiKey: KEY!, model: CARD_MODEL }), (start, end, data) =>
-        current?.span("eden.cards", "eden", "bg", start, end, data),
-      ),
+  const cardModel = (sort: "" | "price") =>
+    meteredModel(
+      new OpenRouterModel({ apiKey: KEY!, model: CARD_MODEL, ...(sort ? { sort } : {}) }),
+      (start, end, data) => current?.span("eden.cards", "eden", "bg", start, end, data),
     );
+  // `--card-sort price` (D66): a batch cut off at the cap is sent again with default routing.
+  const liveCards = (): CardMaker =>
+    CARD_SORT ? new ModelCardMaker(cardModel("price"), { retry: cardModel("") }) : new ModelCardMaker(cardModel(""));
   // With `--cards`, cards on disk are replayed and only the rest made live (their spend booked to Eden as usual).
   const cardMaker = (): CardMaker =>
     diskCards ? new DiskCardMaker(CARDS_FILE, liveCards(), { out: CARDS_OUT, shared: diskCards }) : liveCards();
