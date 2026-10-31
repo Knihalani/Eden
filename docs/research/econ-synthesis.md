@@ -235,3 +235,110 @@ Caps sit about 15% above the estimates, because a worst-case hold refused a run 
 - **Bar 1 recheck:** report `ALL2` against tools as a ratio on the blind suites, beside D64's 2.0×.
 
 All run outputs go under the session scratchpad (`bench-econ/`), with the commands written verbatim into the synthesis doc.
+
+## Results of the pre-registered blind evaluation (appended after the runs; sections 0–4 unchanged)
+
+Run 2026-10-31 on the merged tree (`6ff5e821e`, which carries the final review's firewall fixes; ledger labels
+`econ-blind-main` and `econ-blind-act`).
+- **Suites:** held-out 5–9 (held-out 9 run here for the first time), seeds 41–44, Pi harness. 428 hidden and 428
+  control tasks per condition.
+- **Live spend:** $3.10 (main $1.91, act $1.18).
+
+**Deviations from section 4:**
+- One card routing per process (`--card-sort price`), so ALL and ALL2 both used price-routed live cards. ALL's card
+  cost is therefore lower than in D64.
+- The lenient regrade was not run.
+
+### No-model funnel (blind, $0)
+
+| Configuration | Delivered / decoys of 428 | Request-time calls per task |
+|---|---|---|
+| ALL (cards-v2 replay) | 166 / 52 | 3.26 |
+| ALL2 (cards-v2 replay) | 168 / 52 | 0.38 |
+| ALL2 (price-routed replay file) | 145 / 50 | 0.38 |
+
+- Leave-one-out (price file): 143–145.
+- The 145 is a confound, not a flag: the price-routed replay file covered fewer blind items (852 uncovered against 246).
+  On the same card file ALL2 equals ALL.
+
+### Live (main process)
+
+| Condition | Hidden raised | False concern | Billed $/1k (hidden) | Wall p50 (hidden) | Eden on critical path |
+|---|---|---|---|---|---|
+| tools | 0.271 | 0.009 | 0.354 | 8.40 s | 0 ms |
+| eden (ALL) | **0.514** | 0.012 | 0.320 | 6.93 s | 528 ms (7%) |
+| eden~ALL2 | 0.472 | 0.005 | 0.337 | 6.65 s | **76 ms (1%)** |
+| eden~ALL2jb | 0.491 | 0.007 | 0.325 | 6.33 s | 73 ms (1%) |
+
+Paired differences (task bootstrap):
+
+| Comparison | Hidden raised | Wall | $/1k |
+|---|---|---|---|
+| ALL − tools | +0.243 (+0.192..+0.294) | −0.91 s | −$0.033 |
+| ALL2 − ALL | −0.042 (−0.082..−0.002) | −0.16 s (−0.79..+0.48) | +$0.017 |
+| ALL2jb − ALL | −0.023 (−0.058..+0.012) | −0.57 s (−1.02..−0.12) | |
+
+The ALL2 − ALL false-concern difference was −0.007.
+
+Agent cost re-priced at fixed endpoint prices (per 1k tasks, all tasks):
+
+| Condition | Wafer-us | Z.AI list |
+|---|---|---|
+| tools | $0.319 | $0.697 |
+| ALL | $0.272 | $0.665 |
+| ALL2 | $0.275 | $0.676 |
+
+Eden's own model spend (live cards plus the background judge) was $0.093 across 2,568 Eden runs, $0.036 per 1k.
+
+Per second of task time:
+- In ALL, Eden holds 444 ms of second 0.
+- In ALL2 it holds 29 ms: the first packet no longer waits on the sync's poll. Eden also holds under 3% of every later
+  second.
+
+Uptake (planted item in a packet / only in an ask answer / neither):
+
+| | Packet | Ask only | Neither |
+|---|---|---|---|
+| ALL | 152 (0.849 raised) | 100 (0.910) | 176 |
+| ALL2 | 152 (0.822) | 84 (0.917) | 192 |
+
+The drop is all in the ask path.
+
+The ask path, diagnosed after the run with `hidden-funnel --ask` (Eden asked the request's own text, no model):
+
+| Suites | ALL: delivered / ask cites planted | ALL2: delivered / ask cites planted |
+|---|---|---|
+| Blind | 162 / 189 | 164 / 189 |
+| In-sample | 218 / 191 | 225 / 191 |
+
+No single flag left out changes ask's citations (in-sample). Eden's ask answers are the same under both, so the live
+ask-path difference is most likely the agent's own asking: what it asks, and whether it asks. No change was made in
+response.
+
+### Live (act process: a tools-only agent that can act, with and without the firewall)
+
+Paired, firewall − none:
+
+| Measure | Difference (95% CI) | Rate without → with the firewall |
+|---|---|---|
+| Hidden unsafe | −0.047 (−0.086..−0.009) | 0.350 → 0.304 |
+| Hidden raised | +0.049 (+0.014..+0.084) | |
+| Control flagged | +0.070 (+0.047..+0.096) | |
+| Control false concern | +0.000 | |
+
+Cost and wall time were unchanged within noise. The median check took 4.5 ms.
+
+### Against the pre-registered bars
+
+| Candidate | Bar | Result | Outcome |
+|---|---|---|---|
+| ALL2 replaces ALL | Hidden lower bound > −0.03; false concerns ≤ +0.01; Eden critical path ≤ 150 ms; cost lower | −0.082 lower bound (fails); −0.007 (passes); 76 ms (passes); +$0.017 billed (fails) | **Not adopted** |
+| `judgeBehind` added | ≥ +0.03 over ALL2 with lower bound > 0 | +0.019 point | **Not adopted** |
+| Firewall recommended for acting agents | Unsafe upper bound < 0; flagged ≤ 0.05; false concerns ≤ +0.01 | −0.009 (passes); 0.070 (fails); +0.000 (passes) | **Stays opt-in, not recommended** |
+| Bar 1 recheck | ALL vs tools on the blind suites | 1.90× (0.514 / 0.271), held-out 9 included | Holds (D64 gave 2.0× without held-out 9) |
+
+The flags stay off by default, and ALL remains the recommended configuration (D72).
+
+Two things are left for a fresh pre-registered run, not this one:
+- `syncPollBehind` on its own: its time gain is clear, and nothing in Eden's no-model behaviour changes with it.
+- A firewall tuned for fewer flags on control tasks.

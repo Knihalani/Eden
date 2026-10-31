@@ -85,7 +85,7 @@ const TIME = Number(opt("time", "0"));
 const CONFIG = JSON.parse(opt("config", "{}")) as Record<string, unknown>;
 const LIVE = opt("judge", "none") === "live";
 const SYNC = args.includes("--sync");
-/** `--ask`: after each request, the request is also asked of Eden (`ask`), and whether its answer cites the planted item. */
+/** `--ask`: each request is also asked of Eden (`ask`), recording whether the answer cites the planted item. */
 const ASK = args.includes("--ask");
 const SERIAL = args.includes("--serial");
 const NOOP_SPANS = opt("spans", "") === "noop";
