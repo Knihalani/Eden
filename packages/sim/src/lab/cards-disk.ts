@@ -52,29 +52,33 @@ export class DiskCardMaker implements CardMaker {
     if (!options.shared && options.out) for (const [h, c] of loadCards(options.out)) this.cards.set(h, c);
   }
 
-  async make(items: ContextItem[], today: string, signal: AbortSignal) {
+  async make(items: ContextItem[], today: string, signal: AbortSignal, retry = false) {
     const out: (Card | null)[] = [];
     const missing: number[] = [];
     items.forEach((it, i) => {
       const h = cardKey(it);
       if (this.cards.has(h)) {
-        this.hits++;
+        // A retry (the live call was cut off) re-reads the same batch: counted once.
+        if (!retry) this.hits++;
         // A card the model said was none replays as a none card: covered, nothing to match.
         out[i] = this.cards.get(h) ?? { kind: "none", actions: [], entities: [], statement: "" };
       } else {
-        this.misses++;
+        if (!retry) this.misses++;
         out[i] = null;
         missing.push(i);
       }
     });
     let costUsd = 0;
+    let truncated = false;
     if (this.live && missing.length > 0) {
       const got = await this.live.make(
         missing.map((i) => items[i]!),
         today,
         signal,
+        retry,
       );
       costUsd = got.costUsd;
+      truncated = got.truncated === true;
       missing.forEach((i, k) => {
         const c = got.cards[k];
         if (c === undefined || c === null) return;
@@ -82,7 +86,7 @@ export class DiskCardMaker implements CardMaker {
         this.put(cardKey(items[i]!), c.kind === "none" ? null : c);
       });
     }
-    return { cards: out, costUsd };
+    return { cards: out, costUsd, truncated };
   }
 
   put(h: string, c: Card | null): void {

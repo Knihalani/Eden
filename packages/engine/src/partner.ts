@@ -47,7 +47,7 @@ import {
 } from "@eden/sources";
 import { IntentPatterns, predict, PREDICT_NAMES } from "./anticipate";
 import { nearDuplicate, sanitizedId, sanitizeItem, type CacheHit, type ItemCache, type Sketch } from "./cache";
-import { SyncManager } from "./sync";
+import { SyncManager, type SourceChange } from "./sync";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { assess, frameOf, namesRef, unmeasuredLimit, type Frame, type Verdict } from "./conflict";
@@ -386,6 +386,7 @@ export class ContextPartner {
       deps.cache.onDropped((scope, ids) => (ids ? cards.forgetItems(scope, ids) : cards.forget(scope)));
       // Dates in an item resolve against the user's day, as the request's do (D44).
       cards.offsetOf = (scope) => deps.cache.offsetOf(scope);
+      if (this.config.cardsEconomy) cards.economize();
     }
     this.fanout = new SourceFanout({
       // With spans on, the gate's span is a child of the source call whose page it redacts (`Tracer.page`).
@@ -437,9 +438,33 @@ export class ContextPartner {
             catchupPages: c.syncCatchupPages,
             maxUsersPerTenant: c.syncMaxUsersPerTenant,
             timeoutMs: Math.max(c.sourceTimeoutMs, 5_000),
+            push: c.syncPush,
+            pushMaxStaleMs: c.syncPushMaxStaleMs,
+            pushSweepMs: c.syncPushSweepMs,
+            pushGapMs: c.syncPushGapMs,
           },
         )
       : null;
+  }
+
+  /**
+   * Push (`syncPush`): a tenant that holds a watch on one of the user's sources (Gmail watch, Calendar push channel,
+   * Slack Events) declares it here once the source is synced, and relays each change notice to `sourceChanged`. A
+   * notice carries no content: Eden reads the change with its own read-only list call (D7), or drops the items the
+   * notice names as deleted. No-ops unless `sync` and `syncPush` are on and the user is synced; never throw.
+   */
+  sourcePushes(scope: Scope, sourceId: string): void {
+    if (this.sync && this.config.syncPush) this.sync.pushing(scope, sourceId);
+  }
+
+  /** A change notice for a source that pushes (`sourcePushes`); see above. */
+  sourceChanged(scope: Scope, sourceId: string, change: SourceChange = {}): void {
+    if (!this.sync || !this.config.syncPush) return;
+    try {
+      this.sync.notify(scope, sourceId, change, this.now());
+    } catch {
+      // A malformed notice is the tenant's; the sync stays as it was.
+    }
   }
 
   /**
@@ -2317,7 +2342,16 @@ export class ContextPartner {
     // A synced item counts by when the sync last read it too (D57): its source's copy may be current, but the fast
     // path stays for what was read recently, and the rest goes through the slow path, which answers from the local
     // index at no call and lets the judge, when there is one, rule (the fast path never asks it).
-    return scored.some((x) => now - (this.deps.cache.fetchedAt(s.scope, x.item.id) ?? now) > after);
+    return scored.some((x) => now - this.readAt(s, x.item, now) > after);
+  }
+
+  /**
+   * When an item's copy was last known current: when it was fetched, or now when its source pushes its changes and
+   * has none unread (`syncPush`: a quiet pushed source is not re-listed, and its copy is no older for it).
+   */
+  private readAt(s: Session, item: ContextItem, now: number): number {
+    if (this.sync?.confirmed(s.scope, item.sourceId, now)) return now;
+    return this.deps.cache.fetchedAt(s.scope, item.id) ?? now;
   }
 
   /**
@@ -2347,7 +2381,7 @@ export class ContextPartner {
     const stale = this.rank(s, cue)
       .filter((x) => x.score >= c.candidateScore)
       .slice(0, c.judgeCandidates)
-      .filter((x) => now - (this.deps.cache.fetchedAt(s.scope, x.item.id) ?? now) > c.refreshAfterMs)
+      .filter((x) => now - this.readAt(s, x.item, now) > c.refreshAfterMs)
       .slice(0, c.maxRefreshes);
     if (stale.length === 0) return 0;
     const all = await this.deps.sources(s.scope).catch((): Source[] => []);

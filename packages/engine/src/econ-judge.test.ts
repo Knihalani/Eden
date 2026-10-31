@@ -4,6 +4,7 @@ import { Budget, FakeModel, type ChatRequest, type ChatResponse, type Model } fr
 import { itemId, type AgentEvent, type ContextItem, type Injection, type Scope } from "@eden/protocol";
 import { StaticSource, type ListPage, type SearchQuery, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
+import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner, type PartnerDeps } from "./partner";
 import type { Trace } from "./trace";
 
@@ -391,5 +392,123 @@ describe("syncPollBehind in a changing world: an item arriving during the backgr
     src.release();
     await settle(p);
     expect(ids(p.takePending({ ...scope, sessionId: "s1" }))).toContain(itemId("mail", "offsite"));
+  });
+});
+
+// D66 with D65: a source that pushes its changes (`syncPush`) is current while quiet, so a lookup polls it neither on
+// the path nor behind; poll-behind applies only to a source that is not current: one with an unread notice, or one
+// whose watch has gone quiet past `syncPushMaxStaleMs` (a lapsed watch), which falls back to poll-behind, never to an
+// on-path poll.
+describe("syncPollBehind with syncPush", () => {
+  const setup = (config: Record<string, unknown> = {}) => {
+    let clock = T0;
+    const src = new SlowListSource("mail");
+    src.add("old", "Dana Lee: budget", "Dana Lee says the budget review moved to Friday", T0 - 2 * HOUR);
+    for (let i = 0; i < 4; i++) src.add(`n${i}`, `Note ${i}`, `Note ${i} about lunch orders`, T0 - (3 + i) * HOUR);
+    const p = new ContextPartner({
+      sources: async () => [src],
+      sourceMap: new SourceMap(":memory:", { seed: 1 }),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: {
+        sync: true,
+        syncPush: true,
+        syncPollBehind: true,
+        syncPageSize: 2,
+        syncCallsPerMin: 600,
+        syncMaxStaleMs: 4 * HOUR,
+        ...config,
+      },
+    });
+    const warm = async () => {
+      p.sync!.track(scope);
+      while (!p.sync!.warm(scope)) await p.sync!.tick();
+      p.sourcePushes(scope, "mail");
+    };
+    return { p, src, warm, advance: (ms: number) => (clock += ms), now: () => clock };
+  };
+  /** The observe, and whether it answered within 20 ms (an on-path poll held open would keep it waiting). */
+  const timed = async (p: ContextPartner, text: string, at: number) => {
+    let done = false;
+    const r = p
+      .observe({ ...scope, sessionId: "s1", at, kind: "user_message", text } as AgentEvent, { waitMs: 2_000 })
+      .then((x) => ((done = true), x));
+    await Bun.sleep(20);
+    return { quick: done, r };
+  };
+  const settle = async (p: ContextPartner) => {
+    const table = (p as unknown as { sessions: Map<string, { inflight: unknown; behind?: unknown }> }).sessions;
+    for (let k = 0; k < 500 && [...table.values()].some((x) => x.inflight || x.behind); k++) await Bun.sleep(1);
+  };
+  const arrive = (src: SlowListSource, now: number) =>
+    src.add("new", "Dana Lee: budget review cancelled", "Dana Lee cancelled the budget review entirely", now);
+
+  test("a quiet pushed source is current past syncMaxStaleMs: no poll, on the path or behind", async () => {
+    const { p, src, warm, advance, now } = setup();
+    await warm();
+    advance(5 * HOUR); // Past syncMaxStaleMs: without the watch, the lookup would poll.
+    const lists = src.lists;
+    src.hold();
+    const { quick, r } = await timed(p, "When is the Dana Lee budget review?", now());
+    expect(quick).toBe(true);
+    expect(ids([(await r).injection])).toEqual([itemId("mail", "old")]);
+    src.release();
+    await settle(p);
+    expect(src.lists).toBe(lists);
+  });
+
+  test("an unread notice: the lookup answers from the index and the poll runs behind it", async () => {
+    const { p, src, warm, advance, now } = setup();
+    await warm();
+    // Past syncMaxStaleMs, so the fast path does not answer from the copy it read: the lookup reaches the index.
+    advance(5 * HOUR);
+    arrive(src, now());
+    p.sourceChanged(scope, "mail");
+    expect(p.sync!.current(scope, "mail")).toBe(false);
+    src.hold();
+    const lists = src.lists;
+    const { quick, r } = await timed(p, "When is the Dana Lee budget review?", now());
+    expect(quick).toBe(true);
+    expect(ids([(await r).injection])).toEqual([itemId("mail", "old")]);
+    expect(src.lists - lists).toBe(1);
+    src.release();
+    await settle(p);
+    expect(ids(p.takePending({ ...scope, sessionId: "s1" }))).toContain(itemId("mail", "new"));
+    expect(p.sync!.current(scope, "mail")).toBe(true);
+  });
+
+  test("a lapsed watch falls back to poll-behind, not to an on-path poll", async () => {
+    const { p, src, warm, advance, now } = setup();
+    await warm();
+    // No notice and no poll for longer than syncPushMaxStaleMs: the watch is not trusted any more.
+    advance(DEFAULT_CONFIG.syncPushMaxStaleMs + HOUR);
+    expect(p.sync!.current(scope, "mail")).toBe(false);
+    arrive(src, now());
+    src.hold();
+    const lists = src.lists;
+    const { quick, r } = await timed(p, "When is the Dana Lee budget review?", now());
+    expect(quick).toBe(true);
+    expect(ids([(await r).injection])).toEqual([itemId("mail", "old")]);
+    expect(src.lists - lists).toBe(1);
+    src.release();
+    await settle(p);
+    expect(ids(p.takePending({ ...scope, sessionId: "s1" }))).toContain(itemId("mail", "new"));
+    // Polled now, the pushed source is current again until its next notice.
+    expect(p.sync!.current(scope, "mail")).toBe(true);
+  });
+
+  test("without syncPollBehind, the lapsed watch's poll is on the path (D57's on-demand poll)", async () => {
+    const { p, src, warm, advance, now } = setup({ syncPollBehind: false });
+    await warm();
+    advance(DEFAULT_CONFIG.syncPushMaxStaleMs + HOUR);
+    arrive(src, now());
+    src.hold();
+    const { quick, r } = await timed(p, "When is the Dana Lee budget review?", now());
+    expect(quick).toBe(false);
+    src.release();
+    const got = await r;
+    expect(ids([got.injection, ...p.takePending({ ...scope, sessionId: "s1" })])).toContain(itemId("mail", "new"));
   });
 });
