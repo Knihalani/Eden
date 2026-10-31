@@ -89,6 +89,10 @@ takes the no-model path; it never defers spend.
    user's items): simulation, perfect judge, realistic seeds 41–44, on G (D54): model calls per turn 0.253 → 0.212,
    $0.02025 → $0.0170 per 1,000 turns at recall 0.647 → 0.643 ([research/judge-tied.md](research/judge-tied.md),
    before review). With D55's final H: 0.213 model calls per turn, $0.0172 per 1,000 turns, recall 0.645.
+   `decideConflict` (D67, off by default; docs/research/econ-decide.md) makes no model call: it re-reads the ranked
+   candidates with the engine's own conflict test only when no model decides (+1.6 ms of slow-path CPU per task in
+   the in-sample funnel), at +0.06 delivered items per hidden task (a few dozen agent input tokens). The logistic
+   decision model it was measured beside (+5.5 ms) stays in the lab.
 2. Smaller inputs: shorter windows, candidate snippets, prompt-cache-friendly prompt layout (stable system prefix).
 3. Cheaper model: a fine-tuned small judge (M6).
 

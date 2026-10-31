@@ -76,6 +76,7 @@ import {
   topicOf,
 } from "./probes";
 import { foldEchoes } from "./fold";
+import type { Facts } from "./decide";
 import { Ledger } from "./ledger";
 import { citationsOf, renderAnswer, renderPacket, shownText } from "./render";
 import { classifySituation } from "./situation";
@@ -126,7 +127,25 @@ export interface PartnerDeps {
    * request time with no model. Absent, or the flag off: no card is made or read.
    */
   cards?: CardEnricher;
+  /**
+   * A debug hook for the lab (docs/research/econ-decide.md): each no-model decision's candidates with their facts
+   * (`decide.ts`) and what was delivered. Ids and numbers only, no content. Absent: no facts are computed for it.
+   */
+  onCandidates?: CandidateSink;
 }
+
+/** One no-model decision's candidates, for `PartnerDeps.onCandidates`. */
+export interface CandidateDump {
+  sessionId: string;
+  turn: number;
+  /** Where the decision was made: the fast path, anticipation's early decision, or the lookup. */
+  path: "fast" | "early" | "lookup" | "served";
+  candidates: { id: string; facts: Facts }[];
+  delivered: string[];
+  /** How the rule paths decided (`sure`, `grounded-<how>`, `fallback`, or empty for silence). */
+  how: string;
+}
+export type CandidateSink = (dump: CandidateDump) => void;
 
 /** An outcome already written to the source map, kept so explicit feedback can correct it. */
 interface Recorded {
@@ -311,6 +330,8 @@ interface Scored {
   doc?: number;
   /** Ranked only because the knowledge graph reached it (`graph`): no path but the graph's reads it. */
   walkedOnly?: true;
+  /** A whole cue entity is in the item (`rank`'s entity bonus). */
+  entity?: true;
 }
 
 /** What an injection was built from, kept until it is handed out and usage tracking starts. */
@@ -594,6 +615,10 @@ export class ContextPartner {
     // a judge, the request then goes to the slow path, whose judge sees every candidate the live search adds: a lone
     // sure item from the cache would end the lookup before the second one that makes it the judge's call.
     const judges = this.config.anticipate && this.deps.model !== null && !this.config.judgeBehind;
+    if (this.deps.onCandidates && (!this.deps.model || this.config.judgeBehind)) {
+      const delivered = fast.length > 0 && !this.stale(s, fast) && !judges;
+      this.dump(s, "fast", this.factsOf(s, cue, ranked, event.kind), delivered ? fast : [], delivered ? "sure" : "");
+    }
     if (fast.length > 0 && !this.stale(s, fast) && !judges) {
       this.markCue(s, cue);
       const injection = this.deliver(s, fast, "proactive", `cache:${cue.id}`, cue);
@@ -1158,6 +1183,7 @@ export class ContextPartner {
           const scored: Scored = { item: h.item, matched: h.matched, score, sketch: h.sketch, doc: h.doc };
           if (people.length > 0) scored.beyond = beyondOf(h.doc);
           if (walkedOnly.has(h.item.id)) scored.walkedOnly = true;
+          if (entityHit) scored.entity = true;
           return scored;
         })
         .sort((a, b) => b.score - a.score)
@@ -1215,7 +1241,7 @@ export class ContextPartner {
     const onDay = (x: Scored) => time !== null && time.days.has(startDay(x.item) ?? "");
     const upcoming = (x: Scored) => startMs(x.item) >= cue.at;
     const soonest = (a: Scored, b: Scored) => startMs(a.item) - startMs(b.item);
-    const acts = eventKind === "external" || eventKind === "ask" || ACTING.has(s.situation) || ACTS_ON.test(cue.raw);
+    const acts = this.acts(s, cue, eventKind);
     // A run that starts the sentence may carry the verb with it ("Email Dana Lee"): try it without its first word too.
     const people = cue.entities
       .flatMap((e) => {
@@ -1245,43 +1271,7 @@ export class ContextPartner {
     // With `groundConflict`: what would change the action (or the answer), tied to what the request names or asks
     // (`conflict.ts`): a hold over the day it acts on, a limit below its amount, a thing done already (D49).
     if (this.config.groundConflict) {
-      const hits = pool.filter(
-        (x) => this.about(x, cue) && this.beyondName(x, cue) && this.verdict(x.item, cue) === "conflict",
-      );
-      // A consequence find that conflicts (`bridged`) is about the request by its class's words: for a class whose
-      // constraints bind everyone (a change freeze, the user's own passport), whoever it names; for one whose bind one
-      // party, when the request names no one or the find names someone it does: a legal hold on another client's
-      // records is not this one's. The class's words are a tie beyond a name, so `quietNameOnly` does not gate it.
-      const names = cleanEntities(cue.entities).filter((e) => !e.includes("@"));
-      for (const x of pool) {
-        if (!bridged.has(x.item.id) || hits.includes(x)) continue;
-        if (cls?.scope === "general" || names.length === 0 || names.some((n) => mentions(n, x.item))) hits.push(x);
-      }
-      // With `graph`: an item the knowledge graph reached from what the request names (a person's organisation, the
-      // name a colleague goes by, an identifier, a role) or from a day it names, though it shares none of its words,
-      // tied in the conflict test by the names it was reached through (`conflictTies`); its author speaks for them
-      // when the graph says the author is someone the request names or one of theirs.
-      const viaGraph: Scored[] = [];
-      // Only when the request's own words ground no conflict: the graph widens what is found, not what is said.
-      // Only for a request that acts or asks, or a message arriving: a remark that names someone ("haha Lucía sent me
-      // a meme") is no occasion to raise what binds them or their organisation.
-      const engaged = acts || isImperative(cue.raw) || isAction(cue.raw);
-      if (walked?.size && engaged && (hits.length === 0 || this.config.graphMerge)) {
-        for (const x of graphPool) {
-          const w = walked.get(x.item.id);
-          if (!w || !w.binds || bulkMail(x.item) || !this.beyondName(x, cue)) continue;
-          // A notification's status ("Status: Blocked") is no one's constraint on a person it names, unless the request
-          // names its reference.
-          if (w.automated && w.named && !w.byRef) continue;
-          // A limit on an amount ("travel over £500 needs pre-approval") binds a request that states no amount only
-          // perhaps: with no model's say, not raised on a name alone (as for the consequence probe, D54).
-          if (unmeasuredLimit(this.frame(cue), x.item)) continue;
-          if (this.verdict(x.item, cue, this.conflictTies(cue, w), w.speaks) === "conflict") viaGraph.push(x);
-        }
-      }
-      // The walk's best first: it is the one most tied to what the request names.
-      const by = (x: Scored) => walked!.get(x.item.id)!.score;
-      const best = viaGraph.filter((x) => !hits.includes(x)).sort((a, b) => by(b) - by(a));
+      const { hits, best } = this.conflicts(cue, pool, acts, bridged, cls, walked, graphPool);
       if (hits.length > 0) {
         // With `graphMerge`, the walk's best conflict joins the request's own (it was found another way).
         const extra = this.config.graphMerge ? best.slice(0, this.config.graphGround) : [];
@@ -1352,6 +1342,65 @@ export class ContextPartner {
     return none;
   }
 
+  /** Whether a request acts on someone (scheduling, writing to them, a task) or arrives from outside. */
+  private acts(s: Session, cue: Cue, eventKind: string): boolean {
+    return eventKind === "external" || eventKind === "ask" || ACTING.has(s.situation) || ACTS_ON.test(cue.raw);
+  }
+
+  /**
+   * The conflict ground's finds (`groundConflict`, D49): candidates about what the request names, tied beyond a name,
+   * that `conflict.ts` says conflict with it (`hits`), with the conflicting consequence finds (`bridged`); and the
+   * graph's conflicts (`graph`), best walked first (`best`, those not among the hits).
+   */
+  private conflicts(
+    cue: Cue,
+    pool: Scored[],
+    acts: boolean,
+    bridged: ReadonlySet<string>,
+    cls: ActionClass | undefined,
+    walked: ReadonlyMap<string, Walked> | undefined,
+    graphPool: Scored[],
+  ): { hits: Scored[]; best: Scored[] } {
+    const hits = pool.filter(
+      (x) => this.about(x, cue) && this.beyondName(x, cue) && this.verdict(x.item, cue) === "conflict",
+    );
+    // A consequence find that conflicts (`bridged`) is about the request by its class's words: for a class whose
+    // constraints bind everyone (a change freeze, the user's own passport), whoever it names; for one whose bind one
+    // party, when the request names no one or the find names someone it does: a legal hold on another client's
+    // records is not this one's. The class's words are a tie beyond a name, so `quietNameOnly` does not gate it.
+    const names = cleanEntities(cue.entities).filter((e) => !e.includes("@"));
+    for (const x of pool) {
+      if (!bridged.has(x.item.id) || hits.includes(x)) continue;
+      if (cls?.scope === "general" || names.length === 0 || names.some((n) => mentions(n, x.item))) hits.push(x);
+    }
+    // With `graph`: an item the knowledge graph reached from what the request names (a person's organisation, the
+    // name a colleague goes by, an identifier, a role) or from a day it names, though it shares none of its words,
+    // tied in the conflict test by the names it was reached through (`conflictTies`); its author speaks for them
+    // when the graph says the author is someone the request names or one of theirs.
+    const viaGraph: Scored[] = [];
+    // Only when the request's own words ground no conflict: the graph widens what is found, not what is said.
+    // Only for a request that acts or asks, or a message arriving: a remark that names someone ("haha Lucía sent me
+    // a meme") is no occasion to raise what binds them or their organisation.
+    const engaged = acts || isImperative(cue.raw) || isAction(cue.raw);
+    if (walked?.size && engaged && (hits.length === 0 || this.config.graphMerge)) {
+      for (const x of graphPool) {
+        const w = walked.get(x.item.id);
+        if (!w || !w.binds || bulkMail(x.item) || !this.beyondName(x, cue)) continue;
+        // A notification's status ("Status: Blocked") is no one's constraint on a person it names, unless the request
+        // names its reference.
+        if (w.automated && w.named && !w.byRef) continue;
+        // A limit on an amount ("travel over £500 needs pre-approval") binds a request that states no amount only
+        // perhaps: with no model's say, not raised on a name alone (as for the consequence probe, D54).
+        if (unmeasuredLimit(this.frame(cue), x.item)) continue;
+        if (this.verdict(x.item, cue, this.conflictTies(cue, w), w.speaks) === "conflict") viaGraph.push(x);
+      }
+    }
+    // The walk's best first: it is the one most tied to what the request names.
+    const by = (x: Scored) => walked!.get(x.item.id)!.score;
+    const best = viaGraph.filter((x) => !hits.includes(x)).sort((a, b) => by(b) - by(a));
+    return { hits, best };
+  }
+
   /**
    * With `groundAway`, whether an item says someone is away only on days other than the ones the request names: no
    * reason, with no model's say, to raise it (the person is there then).
@@ -1363,6 +1412,118 @@ export class ContextPartner {
     if (span === null || [...time.days].some((d) => d >= span.from && d <= span.to)) return false;
     // An item that names a day the request names is about that day too ("Offsite Fri 6 Nov … Sam is away 9-10 Nov").
     return !daysNamed(item, cue.at).some((d) => time.days.has(d)) && !time.days.has(startDay(item) ?? "");
+  }
+
+  /**
+   * Each candidate's facts (`decide.ts`), as the rule paths read them, for the lab's candidate dump (`onCandidates`):
+   * computed only when a harness wires it. CPU only; at most `decideCandidates` candidates, best scored first.
+   */
+  private factsOf(
+    s: Session,
+    cue: Cue,
+    scored: Scored[],
+    eventKind: string,
+    ctx: {
+      probed?: ReadonlySet<string>;
+      bridged?: ReadonlySet<string>;
+      walked?: ReadonlyMap<string, Walked>;
+      carded?: ReadonlyMap<string, CardFind>;
+    } = {},
+  ): { x: Scored; facts: Facts }[] {
+    const top = scored[0]?.score ?? 0;
+    const days = cue.time?.days;
+    const hasDays = days !== undefined && days.size > 0;
+    const names = cleanEntities(cue.entities).filter((e) => !e.includes("@"));
+    const people = cue.entities.filter((e) => e.includes("@") || e.trim().split(/\s+/).length >= 2);
+    const acts = this.acts(s, cue, eventKind);
+    const imperative = isImperative(cue.raw);
+    const question = /\?\s*$/.test(cue.raw);
+    const frame = this.frame(cue);
+    const b = (v: boolean) => (v ? 1 : 0);
+    return scored.slice(0, this.config.decideCandidates).map((x, rank) => {
+      const item = x.item;
+      const w = ctx.walked?.get(item.id);
+      const card = ctx.carded?.get(item.id);
+      const day = startDay(item);
+      const at = startMs(item);
+      const span = hasDays ? absenceSpan(item, cue.at) : null;
+      const verdict = this.verdict(item, cue);
+      const beyondName = this.beyondName(x, cue);
+      const about = this.about(x, cue);
+      const unmeasured = unmeasuredLimit(frame, item);
+      const graphConflict =
+        w !== undefined && w.binds && this.verdict(item, cue, this.conflictTies(cue, w), w.speaks) === "conflict";
+      const facts: Facts = {
+        score: x.score,
+        matched: x.matched,
+        rank,
+        relScore: top > 0 ? x.score / top : 0,
+        entity: b(x.entity === true),
+        beyond: x.beyond ?? -1,
+        beyondName: b(beyondName),
+        about: b(about),
+        conflict: b(verdict === "conflict"),
+        clear: b(verdict === "clear"),
+        conflictHit: b(
+          verdict === "conflict" && about && beyondName && !bulkMail(item) && !settled(item) && !unmeasured,
+        ),
+        graphHit: b(graphConflict && beyondName && !bulkMail(item) && w.automated !== true),
+        bulk: b(bulkMail(item)),
+        settled: b(settled(item)),
+        awayElsewhere: b(this.awayElsewhere(item, cue)),
+        onNamedDay: b(hasDays && days!.has(day ?? "")),
+        namesDay: b(hasDays && daysNamed(item, cue.at).some((d) => days!.has(d))),
+        dated: b(day !== null),
+        upcoming: b(day !== null && at >= cue.at),
+        awayOnDay: b(
+          span !== null &&
+            [...days!].some((d) => d >= span.from && d <= span.to) &&
+            names.some((n) => mentions(n, item)),
+        ),
+        probed: b(ctx.probed?.has(item.id) === true),
+        bridged: b(ctx.bridged?.has(item.id) === true),
+        walked: b(w !== undefined),
+        walkScore: w?.score ?? 0,
+        binds: b(w?.binds === true),
+        walkNamed: b(w?.named === true),
+        automated: b(w?.automated === true),
+        graphConflict: b(graphConflict),
+        carded: b(card !== undefined),
+        cardViolated: b(card?.violated === true),
+        cardByName: b(card?.tied === "name"),
+        participant: b(people.some((p) => namesParticipant(p, item))),
+        mentions: b(names.some((n) => mentions(n, item))),
+        namesRef: b(namesRef(frame, item)),
+        unmeasured: b(unmeasured),
+        ageDays: day !== null ? Math.log1p(Math.abs(at - cue.at) / 86_400_000) : 0,
+        acts: b(acts),
+        imperative: b(imperative),
+        question: b(question),
+        hasDays: b(hasDays),
+        external: b(cue.external === true),
+      };
+      return { x, facts };
+    });
+  }
+
+  /** The lab's candidate dump (`onCandidates`), when it is wired: ids and numbers, no content. */
+  private dump(
+    s: Session,
+    path: CandidateDump["path"],
+    facts: { x: Scored; facts: Facts }[],
+    delivered: readonly Scored[],
+    how: string,
+  ): void {
+    const sink = this.deps.onCandidates;
+    if (!sink) return;
+    sink({
+      sessionId: s.id,
+      turn: s.turn,
+      path,
+      candidates: facts.map((f) => ({ id: f.x.item.id, facts: f.facts })),
+      delivered: delivered.map((x) => x.item.id),
+      how,
+    });
   }
 
   /** The request's frame (`conflict.ts`), read once per cue. */
@@ -2768,7 +2929,12 @@ export class ContextPartner {
       items = g.items;
       how = g.how;
     }
-    if (items.length === 0 || this.stale(s, items)) return null;
+    const stale = items.length > 0 && this.stale(s, items);
+    if (this.deps.onCandidates) {
+      const facts = this.factsOf(s, cue, scored, eventKind, { probed, bridged });
+      this.dump(s, "early", facts, stale ? [] : items, items.length > 0 && !stale ? how : "");
+    }
+    if (items.length === 0 || stale) return null;
     const ids = items.map((x) => x.item.id);
     this.trace({
       sessionId: s.id,
@@ -2925,11 +3091,43 @@ export class ContextPartner {
       const confiding = spans?.open("confident", cue.span);
       const sure = this.confident(walked.size > 0 ? scored.filter((x) => !x.walkedOnly) : scored, cue);
       if (confiding) spans!.close(confiding, { sure: sure.length });
+      const probedSet = new Set(probedIds ?? []);
+      const factsNow = () =>
+        this.factsOf(s, cue, scored, eventKind, { probed: probedSet, bridged, walked, carded: carded });
+      // The rule paths decide when no model does: with none, or with `judgeBehind`, whose lookup decides as with none
+      // and leaves the judge only what that answer left out.
+      const noModelSay = !this.deps.model || this.config.judgeBehind;
+      const dumped = (path: CandidateDump["path"], items: readonly Scored[], how: string) => {
+        if (this.deps.onCandidates && noModelSay) this.dump(s, path, factsNow(), items, how);
+      };
+      // `decideConflict` (D67, docs/research/econ-decide.md), with no model's say: whatever path spoke first, or none,
+      // the best conflict among every ranked candidate joins the delivery while it has room (`maxItemsPerInjection`):
+      // it never displaces what a rule path chose. The same pass runs on `syncPollBehind`'s follow-up lookup (a
+      // `served` lookup), so a fresh item the request breaks reaches the agent without its asking.
+      const extend = (items: Scored[]): { items: Scored[]; how: string } => {
+        if (!noModelSay || !this.config.decideConflict || items.length >= this.max()) return { items, how: "" };
+        const pool = scored.slice(0, this.config.decideCandidates).filter((x) => !bulkMail(x.item));
+        const { hits, best } = this.conflicts(
+          cue,
+          pool.filter((x) => !x.walkedOnly),
+          this.acts(s, cue, eventKind),
+          bridged,
+          consequence?.cls,
+          walked,
+          pool.filter((x) => walked.has(x.item.id)),
+        );
+        const frame = this.frame(cue);
+        const x = [...hits, ...best].find(
+          (x) => !items.includes(x) && !settled(x.item) && !unmeasuredLimit(frame, x.item),
+        );
+        return x ? { items: [...items, x], how: "conflict" } : { items, how: "" };
+      };
+      const tagged = (reason: string, how: string) => (how ? `${reason}+decide-${how}` : reason);
       // `anticipate`: the request was answered from what was held (`early`). The live search adds only what is sure,
       // or with no model what the request's structure grounds: never the fallback's best guess or a judge call, which
       // would have had that delivery among their candidates.
       if (served) {
-        const items =
+        const ruled =
           this.deps.model && !this.config.judgeBehind
             ? []
             : sure.length > 0
@@ -2945,6 +3143,12 @@ export class ContextPartner {
                   walked.size > 0 ? scored.filter((x) => walked.has(x.item.id)) : [],
                   carded,
                 ).items;
+        const { items, how } = extend(ruled);
+        dumped(
+          "served",
+          items,
+          items.length > 0 ? (ruled.length === 0 ? "" : sure.length > 0 ? "sure" : "grounded") : "",
+        );
         // `judgeBehind`: the judge reads the best of the rest after this answer, and may only add to it.
         if (this.deps.model && this.config.judgeBehind) {
           const rest = this.eligible(scored, cue, new Set(probedIds ?? []), bridged, carded)
@@ -2958,10 +3162,10 @@ export class ContextPartner {
         }
         done(
           "sources",
-          `after-anticipated:${cue.id}`,
+          tagged(`after-anticipated:${cue.id}`, how),
           items.map((x) => x.item),
         );
-        return this.deliver(s, items, "proactive", `sources:${cue.id}`, cue);
+        return this.deliver(s, items, "proactive", tagged(`sources`, how) + `:${cue.id}`, cue);
       }
       // With `judgeConfident` and a judge to ask, what scores as sure is judged with the rest in the same call: the
       // no-model bar is right about half the time (docs/research/probes.md), the judge more often.
@@ -2978,12 +3182,14 @@ export class ContextPartner {
         sure.length > 0 &&
         !corroborated;
       if (sure.length > 0 && !judgeSure) {
+        const { items, how } = extend(sure);
+        dumped("lookup", items, "sure");
         done(
           "sources",
-          cue.id,
-          sure.map((x) => x.item),
+          tagged(cue.id, how),
+          items.map((x) => x.item),
         );
-        return this.deliver(s, sure, "proactive", `sources:${cue.id}`, cue);
+        return this.deliver(s, items, "proactive", tagged(`sources`, how) + `:${cue.id}`, cue);
       }
       // An event on a day the request names is a candidate whatever it scores on words (D44).
       const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item) ?? "") === true;
@@ -3027,6 +3233,16 @@ export class ContextPartner {
         );
       }
       if (unsure.length === 0) {
+        const { items, how } = extend([]);
+        dumped("lookup", items, "");
+        if (items.length > 0) {
+          done(
+            "sources",
+            `decide-${how}:${cue.id}`,
+            items.map((x) => x.item),
+          );
+          return this.deliver(s, items, "proactive", `decide-${how}:${cue.id}`, cue);
+        }
         done("silent", "no candidates");
         return null;
       }
@@ -3060,20 +3276,28 @@ export class ContextPartner {
         );
         if (grounding) spans!.close(grounding, { grounded: grounded.items.length });
         if (grounded.items.length > 0) {
-          const items = grounded.items;
+          const { items, how } = extend(grounded.items);
+          dumped("lookup", items, `grounded-${grounded.how}`);
           done(
             "sources",
-            `grounded-${grounded.how}${reasonPrefix}:${cue.id}`,
+            tagged(`grounded-${grounded.how}`, how) + `${reasonPrefix}:${cue.id}`,
             items.map((x) => x.item),
           );
-          return this.deliver(s, items, "proactive", `grounded-${grounded.how}:${cue.id}`, cue);
+          return this.deliver(s, items, "proactive", tagged(`grounded-${grounded.how}`, how) + `:${cue.id}`, cue);
         }
         const falling = spans?.open("fallback", cue.span);
         const top = this.fallback(unsure, this.config.fallbackAgree ? agreed(probed, lookedIds) : undefined, named);
         if (falling) spans!.close(falling, { picked: top !== null });
-        if (top) {
-          done("sources", `fallback${reasonPrefix}:${cue.id}`, [top.item]);
-          return this.deliver(s, [top], "proactive", `fallback:${cue.id}`, cue);
+        const { items, how } = extend(top ? [top] : []);
+        dumped("lookup", items, top ? "fallback" : "");
+        if (items.length > 0) {
+          const reason = top ? tagged("fallback", how) : `decide-${how}`;
+          done(
+            "sources",
+            `${reason}${reasonPrefix}:${cue.id}`,
+            items.map((x) => x.item),
+          );
+          return this.deliver(s, items, "proactive", `${reason}:${cue.id}`, cue);
         }
         done("silent", why);
         return null;
