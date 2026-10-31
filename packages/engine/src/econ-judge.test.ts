@@ -426,6 +426,8 @@ describe("syncPollBehind with syncPush", () => {
       p.sync!.track(scope);
       while (!p.sync!.warm(scope)) await p.sync!.tick();
       p.sourcePushes(scope, "mail");
+      // The watch's one poll: what changed before it was declared, no notice will name.
+      await p.sync!.tick();
     };
     return { p, src, warm, advance: (ms: number) => (clock += ms), now: () => clock };
   };

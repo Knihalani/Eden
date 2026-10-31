@@ -30,9 +30,9 @@
  * longer than `syncDropMs` are no longer synced and their synced items are dropped (retention, D57).
  */
 import { Gcra } from "@eden/primitives";
-import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
+import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import type { Source, SourceFanout, SourceResolver } from "@eden/sources";
-import type { ItemCache } from "./cache";
+import { sanitizedId, type ItemCache } from "./cache";
 import type { Tracer } from "./spans";
 
 export interface SyncOptions {
@@ -73,10 +73,21 @@ export interface SyncOptions {
   pushGapMs: number;
 }
 
-/** A change notice from a source's push channel (`SyncManager.notify`). */
+/**
+ * A change notice from a source's push channel (`SyncManager.notify`). A notice with no field, or with `changed`,
+ * says the source has new or changed items; one whose only field is a non-empty `deleted` says only that those went.
+ */
 export interface SourceChange {
-  /** Ids of items the source says were deleted: dropped from the cache at once, with no call. */
+  /**
+   * Items the source says were deleted, dropped from the cache at once with no call: each is Eden's item id
+   * (`itemId(sourceId, ref)`) or the connector's own ref for it (the ref the source's items carry), either form.
+   */
   deleted?: readonly string[];
+  /**
+   * The notice also reports new or changed items (Gmail's history can report both at once): read with a poll, as a
+   * notice without `deleted` is. Needed only beside a non-empty `deleted`.
+   */
+  changed?: boolean;
 }
 
 export interface SyncDeps {
@@ -159,13 +170,22 @@ export interface SyncStats {
   /** Change notices received (`notify`), and polls a notice caused. */
   notices: number;
   pushPolls: number;
+  /** Deleted ids in notices that named no item synced from the source (a wrong id form, or never synced). */
+  unmatchedDeletes: number;
 }
 
 export class SyncManager {
   private readonly users = new Map<string, UserSync>();
   private readonly budget: Gcra<string>;
   private ticking = false;
-  readonly stats: SyncStats = { backgroundCalls: 0, demandCalls: 0, deleted: 0, notices: 0, pushPolls: 0 };
+  readonly stats: SyncStats = {
+    backgroundCalls: 0,
+    demandCalls: 0,
+    deleted: 0,
+    notices: 0,
+    pushPolls: 0,
+    unmatchedDeletes: 0,
+  };
 
   constructor(
     private readonly deps: SyncDeps,
@@ -213,19 +233,21 @@ export class SyncManager {
 
   /**
    * Declares that a source pushes its changes for this user (the tenant holds a watch on it): from now on it is current
-   * until a notice arrives (`notify`). Ignored with `push` off or for a source not synced. O(1), no I/O.
+   * until a notice arrives (`notify`), once a poll that began after this call has read what changed before it.
+   * Ignored with `push` off or for a source not synced. O(1), no I/O.
    */
-  pushing(scope: Scope, sourceId: string): void {
+  pushing(scope: Scope, sourceId: string, now = this.deps.now()): void {
     if (!this.o.push) return;
     const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
-    if (s) s.pushed = true;
+    if (s) this.startPush(s, now);
   }
 
   /**
    * A change notice from a source's push channel (`syncPush`): the source has new or changed items (read by the next
    * tick's poll, or a lookup's), or, with `deleted`, items it no longer has (dropped now, no call). O(1) per notice and
-   * no I/O: a webhook may call it on any thread of the request path. Ignored with `push` off, for a user not synced
-   * (a notice never starts a sync), or for a source not yet backfilled (the backfill reads it).
+   * no I/O: a webhook may call it on any thread of the request path. Ignored with `push` off, or for a user or source
+   * not synced (a notice never starts a sync). A notice during the backfill is kept: the backfill may have read the
+   * item's page before it changed, so the first push check after warm-up polls the source.
    */
   notify(scope: Scope, sourceId: string, change: SourceChange = {}, now = this.deps.now()): void {
     if (!this.o.push) return;
@@ -233,8 +255,14 @@ export class SyncManager {
     const s = u?.sources.get(sourceId);
     if (!u || !s) return;
     this.stats.notices++;
-    s.pushed = true;
-    const deleted = (change.deleted ?? []).filter((id) => s.ids.has(id));
+    this.startPush(s, now);
+    const deleted: string[] = [];
+    for (const raw of change.deleted ?? []) {
+      // Eden's id, or the connector's ref: a ref the gate redacts has a hashed id (`sanitizedId`), never the raw one.
+      const id = s.ids.has(raw) ? raw : sanitizedId({ id: itemId(sourceId, raw), sourceId, ref: raw } as ContextItem);
+      if (s.ids.has(id)) deleted.push(id);
+      else this.stats.unmatchedDeletes++;
+    }
     if (deleted.length > 0) {
       for (const id of deleted) {
         s.ids.delete(id);
@@ -242,7 +270,10 @@ export class SyncManager {
       }
       this.stats.deleted += this.deps.cache.dropSynced(u.scope, deleted);
     }
-    if (change.deleted === undefined && s.phase === "warm") s.dirtyAt = Math.min(s.dirtyAt, now);
+    // Only a notice that names deletions and nothing else leaves the source unchanged; an empty `deleted` list (a
+    // relay that always sends the field) is a change notice like one without it.
+    const deletesOnly = (change.deleted?.length ?? 0) > 0 && change.changed !== true;
+    if (!deletesOnly) s.dirtyAt = Math.min(s.dirtyAt, now);
   }
 
   /** Whether the user's synced copy of a source can answer a lookup now: warm, and probably unchanged since polled. */
@@ -330,6 +361,16 @@ export class SyncManager {
   }
 
   // ── internals ──
+
+  /**
+   * A source starts pushing: what changed between its last poll and the watch no notice will ever name, so it is
+   * dirty as of now, and current only once a poll that began after this point completes.
+   */
+  private startPush(s: SourceSync, now: number): void {
+    if (s.pushed) return;
+    s.pushed = true;
+    s.dirtyAt = Math.min(s.dirtyAt, now);
+  }
 
   private isCurrent(s: SourceSync, now: number): boolean {
     if (s.phase !== "warm") return false;

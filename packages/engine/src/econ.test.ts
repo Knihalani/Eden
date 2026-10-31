@@ -394,7 +394,15 @@ async function synced(config: Record<string, unknown>, users: Scope[] = [{ tenan
   });
   for (const u of users) partner.sync!.track(u, clock);
   for (let i = 0; i < 10 && !users.every((u) => partner.sync!.warm(u)); i++) await partner.sync!.tick();
-  return { partner, cache, src: (u = "u") => srcs.get(u)!, advance: (ms: number) => (clock += ms), now: () => clock };
+  /** Declares the watch, then lets a tick make the one poll that reads what changed before it (no notice names it). */
+  const watch = async (scopes: Scope[] = users) => {
+    for (const u of scopes) partner.sourcePushes(u, "mail");
+    clock += 60_000;
+    for (const u of scopes) partner.sync!.track(u, clock);
+    await partner.sync!.tick();
+  };
+  const advance = (ms: number) => (clock += ms);
+  return { partner, cache, src: (u = "u") => srcs.get(u)!, advance, now: () => clock, watch };
 }
 
 describe("push sync (syncPush)", () => {
@@ -414,8 +422,8 @@ describe("push sync (syncPush)", () => {
   });
 
   test("a pushed source is current while quiet, stale on a notice, and current again after one poll", async () => {
-    const { partner, src, advance, now, cache } = await synced({ syncPush: true });
-    partner.sourcePushes(scope, "mail");
+    const { partner, src, advance, now, cache, watch } = await synced({ syncPush: true });
+    await watch();
     advance(5 * HOUR);
     expect(partner.sync!.current(scope, "mail", now())).toBe(true);
     const before = src().lists;
@@ -434,9 +442,9 @@ describe("push sync (syncPush)", () => {
   });
 
   test("a quiet pushed source's items count as read now (confirmed); a notice or push off ends that", async () => {
-    const { partner, advance, now } = await synced({ syncPush: true });
+    const { partner, advance, now, watch } = await synced({ syncPush: true });
     expect(partner.sync!.confirmed(scope, "mail", now())).toBe(false); // No watch declared yet.
-    partner.sourcePushes(scope, "mail");
+    await watch();
     advance(5 * HOUR);
     expect(partner.sync!.confirmed(scope, "mail", now())).toBe(true);
     partner.sourceChanged(scope, "mail");
@@ -447,8 +455,8 @@ describe("push sync (syncPush)", () => {
   });
 
   test("a notice naming deleted items drops them at once, with no call", async () => {
-    const { partner, src, cache, now } = await synced({ syncPush: true });
-    partner.sourcePushes(scope, "mail");
+    const { partner, src, cache, now, watch } = await synced({ syncPush: true });
+    await watch();
     const id = itemId("mail", "m1");
     expect(cache.get(scope, id, now())).not.toBeNull();
     const before = src().lists;
@@ -461,9 +469,8 @@ describe("push sync (syncPush)", () => {
   test("a notice for one user never touches another's index or freshness", async () => {
     const a: Scope = { tenantId: "t", userId: "a" };
     const b: Scope = { tenantId: "t", userId: "b" };
-    const { partner, cache, now } = await synced({ syncPush: true }, [a, b]);
-    partner.sourcePushes(a, "mail");
-    partner.sourcePushes(b, "mail");
+    const { partner, cache, now, watch } = await synced({ syncPush: true }, [a, b]);
+    await watch([a, b]);
     const id = itemId("mail", "m0");
     partner.sourceChanged(a, "mail", { deleted: [id] });
     partner.sourceChanged(a, "mail");

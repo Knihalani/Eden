@@ -35,24 +35,27 @@ items arriving, $0.003-0.004 per user-month at 50 new items a day (at most about
 call at $0.002 against its own per-user-day `Budget`.
 
 Card economy (proposed D66, `cardsEconomy`, off by default; docs/research/econ-background.md; in-sample, 2026-10-31):
-the strict prefilter and sentence reuse read 70.25 items per simulated user instead of 166.5 (−57.8%) in 12.15 calls
-instead of 24.25 (20 items per call), with the same funnel results. Per item, OpenRouter's endpoint decides the price:
+the strict prefilter and sentence reuse read 74.25 items per simulated user instead of 166.5 (−55.4%) in 12.4 calls
+instead of 24.25 (20 items per call), with the same funnel totals (218/19; the track measured 70.25 items and 12.15
+calls before the sentence key took the subject in, after review). Per item, OpenRouter's endpoint decides the price:
 $0.00013–0.00015 per 20-item call on OpenInference (fp4), $0.00028–0.00031 on Wafer, $0.0004–0.0012 elsewhere. With
 `sort: "price"` on the card maker's model (ZDR kept), $0.0000144 per item pooled against $0.0000245 with default
-routing (−41%). Together: about $0.0010 per user one-time and per user-month (50 items a day) against $0.0041 (−75%).
+routing (−41%). Together: about $0.0011 per user one-time and per user-month (50 items a day) against $0.0041 (−74%;
+the track's $0.0010 was at 70.25 items).
 Price routing cut off 40 of 657 items' batches at the output cap in the track's re-card (617 covered against 637 with
 default routing); the enricher now sends a cut batch once more with default routing (`CardMakerOptions.retry`), under
 its own reservation. At that rate the retries add about 6% of items at the default price, about $0.0001 per user
-(arithmetic from the track's numbers, not a live run): about $0.0011 per user in all. A 20-item call's output cap is
+(arithmetic from the track's numbers, not a live run): about $0.0012 per user in all. A 20-item call's output cap is
 4,000 tokens (200 per item past ten) and its reservation $0.003 (about $0.0024 at the cap on the list-price endpoint:
 2,400 input tokens at $0.15/M, 4,000 output at $0.50/M). On D64's accounting the benchmark's card share would fall
 from $0.156 to about $0.039 per 1,000 tasks, Eden ALL all-in from $0.474 to about $0.36 (an estimate, not a live run).
 
 Sync push (proposed D66, `syncPush`, off by default) adds no model call. In the funnel it takes request-time listing
-calls from 5.55 to 0 per task (amortised 6.89 → 1.34). In an arrival simulation with assumed rates (mail 60, chat 150
-items a working day), D57's on-demand polling makes 104.7 listing calls per user-day; push with `syncPushGapMs` 30
-minutes 79.3, with notices read at every five-minute tick 151 (the busiest source sets it). Over 7 days, with the
-pushed sources' sweep every 3 days (D66): D57 111.6, push with the 30-minute gap 87.9 (−21%).
+calls from 5.55 to 0 per task (amortised 6.89 → 1.46, counting the one poll each watch costs when it is declared).
+In an arrival simulation with assumed rates (mail 60, chat 150 items a working day), D57's on-demand polling makes
+104.7 listing calls per user-day; push with `syncPushGapMs` 30 minutes 80.7, with notices read at every five-minute
+tick 151 (the busiest source sets it). Over 7 days, with the pushed sources' sweep every 3 days (D66): D57 111.6, push
+with the 30-minute gap 88.4 (−21%).
 
 With `graph` (proposed D58) the judge sees at most `graphSeats` (1) more candidate, about 100 more input tokens per
 call at its cap; no other model call is added and the graph makes no source call. Measured in simulation (realistic,
