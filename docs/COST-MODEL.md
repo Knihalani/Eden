@@ -108,6 +108,11 @@ candidates all scored as sure: model calls per turn 0.21 → 0.28 and $0.0180 �
 compaction (about +36%). Live, Eden with probes cost $0.407 per 1,000 held-out tasks against $0.370 for tools (the
 agent's tokens fall, 3,045 → 1,714 input, but Eden's judge calls are added).
 
+`packetDates` (D68, off by default) makes no model call and adds no state: it keeps the year compaction dropped and
+adds an event's start. In-sample funnel (ALL, seeds 41–44, this session): hidden packet bytes 105,331 → 106,949 over
+268 tasks (+1.5%, about 6 bytes or 1–2 agent input tokens a task), control 41,560 → 42,483. The judge's candidates
+are compacted without it, so the judge's input is unchanged.
+
 D48 (docs/research/sharper-grounds.md): shared calls and the topic probe only without people take probes from 11.8 to
 7.9 source calls per lookup (simulation; baseline 5.6). `judgeContested` adds judge calls (0.21 → 0.25 per turn),
 offset by 200-byte judge candidates: $0.0200 against probes' $0.0203 per 1,000 turns. Live, one run: Eden with D48's
