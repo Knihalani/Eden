@@ -11,10 +11,18 @@
  * blocking work, a model request, a tool call or the loop itself), Eden's background work, paired bootstrap
  * differences between conditions, the per-second profile of task time, Eden's internals, and the process's CPU and
  * memory samples. Several files are pooled (a task run under the same condition twice: the later file's).
+ *
+ * Also, from the timelines: the agent's cost re-priced at fixed endpoint prices beside the billed cost, with the
+ * endpoint mix each condition was routed to (`reprice.ts`: routing moves billed cost between conditions), and uptake
+ * on hidden tasks: how often the fact was raised when Eden's packet cited the planted item, when only an
+ * `ask_context` answer did, and when neither did. A variant or flag condition (`eden~ALL2`, `eden+packetDates`) is
+ * paired with the condition it modifies.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { Rng } from "../rng";
 import type { RunResult, Task } from "./ab-common";
+import { pairedWith } from "./pi-conditions";
+import { endpointMix, ENDPOINT_PRICES, FIXED_PRICES, repricedUsd } from "./reprice";
 import {
   bootstrap,
   breakdown,
@@ -50,6 +58,9 @@ interface Record_ {
   firstTokenMs: number | null;
   requests: { startMs: number; firstTokenMs: number | null; endMs: number; in: number; out: number; cost: number }[];
   events: TimelineEvent[];
+  planted?: string;
+  cited?: string[];
+  askCited?: string[];
 }
 interface Sample {
   t: number;
@@ -215,8 +226,11 @@ const PAIRS = [
   ["eden-judge", "tools"],
   ["both-judge", "tools"],
 ] as [string, string][];
-// A wait variant ("both@w0") against its base condition.
-for (const c of conditions) if (c.includes("@")) PAIRS.push([c, c.split("@")[0]!]);
+// A wait, variant or flag condition ("both@w0", "eden~ALL2", "eden+packetDates") against the one it modifies.
+for (const c of conditions) {
+  const base = pairedWith(c);
+  if (base && !PAIRS.some(([a, b]) => a === c && b === base)) PAIRS.push([c, base]);
+}
 console.log("\n== paired differences (a − b), bootstrap 95% interval over tasks");
 for (const [a, b] of PAIRS) {
   for (const kind of ["hidden", "control", "request", "arrival"] as const) {
@@ -273,8 +287,56 @@ for (const c of conditions) {
   }
 }
 
+// ---- Agent cost re-priced at fixed endpoint prices (econ-research R3): routing moves billed cost between conditions.
+const model = runs[0]?.model ?? "";
+if (ENDPOINT_PRICES[model] && records.size) {
+  const fixed = Object.keys(FIXED_PRICES);
+  console.log(`\n== agent $/1k tasks: billed, and re-priced at fixed ${model} endpoint prices; endpoint mix (top 3)`);
+  console.log(`condition       n   billed ${fixed.map((x) => x.padStart(10)).join("")}  mix`);
+  for (const c of conditions) {
+    const recs = [...records.values()].filter((r) => r.condition === c);
+    if (!recs.length) continue;
+    const reqs = recs.flatMap((r) => r.requests);
+    const per1k = (usd: number) => f((1_000 * usd) / recs.length).padStart(10);
+    const mix = endpointMix(model, reqs)
+      .slice(0, 3)
+      .map(([e, share]) => `${e} ${f(share, 2)}`)
+      .join(", ");
+    console.log(
+      `${c.padEnd(12)} ${String(recs.length).padStart(4)} ${per1k(reqs.reduce((n, q) => n + q.cost, 0)).slice(1)}` +
+        `${fixed.map((x) => per1k(repricedUsd(reqs, FIXED_PRICES[x]!))).join("")}  ${mix}`,
+    );
+  }
+}
+
+// ---- Uptake on hidden tasks: was the fact raised when the planted item reached the agent, and by which way.
+const uptakeRows = conditions
+  .map((c) => ({
+    c,
+    rs: ok.filter((r) => r.condition === c && r.facts && tasks.get(r.task)!.kind === "hidden"),
+  }))
+  .filter((x) => x.rs.some((r) => records.get(key(r.task, r.condition))?.planted));
+if (uptakeRows.length) {
+  console.log(
+    "\n== uptake (hidden): raised rate (n) when the planted item was in a packet, only in an ask answer, or neither",
+  );
+  for (const { c, rs } of uptakeRows) {
+    const way = (r: RunResult) => {
+      const rec = records.get(key(r.task, r.condition));
+      if (!rec?.planted) return null;
+      if (rec.cited?.includes(rec.planted)) return "packet";
+      return rec.askCited?.includes(rec.planted) ? "ask" : "neither";
+    };
+    const cells = (["packet", "ask", "neither"] as const).map((w) => {
+      const xs = rs.filter((r) => way(r) === w);
+      return `${w} ${xs.length ? f(mean(xs.map(recall))) : "  -  "} (${xs.length})`;
+    });
+    console.log(`${c.padEnd(12)} ${cells.join("   ")}`);
+  }
+}
+
 // ---- Eden's own work per task: its source calls, probe queries, cache hits, judge calls and slow path.
-const edenConds = conditions.filter((c) => c !== "none" && c !== "tools");
+const edenConds = conditions.filter((c) => !/^(none|tools)(-act)?([~+@]|$)/.test(c));
 if (edenConds.length) {
   console.log("\n== Eden per task: source calls, probe queries (calls), cache hits, judge calls, slow path and ask ms");
   for (const c of edenConds) {

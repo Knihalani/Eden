@@ -4,7 +4,10 @@
  * cost. The worlds are generated, so nothing here is user data; the engine itself never writes a card to disk (D8).
  *
  * `DiskCardMaker` answers a batch from the cache; an item it holds no card for is uncovered (null), as an item the
- * enrichment never reached would be, unless a live maker is given, whose answers are then appended to the cache.
+ * enrichment never reached would be, unless a live maker is given, whose answers are then appended to the cache, or
+ * to `out` when one is given. A run that replays a committed file passes `out`: the replay file is then only ever
+ * read, so a run cannot change its own input halfway (the oneturn track's replay file was mutated during a run), and
+ * the next run that names both files replays both.
  */
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { cardKey, type Card, type CardMaker } from "@eden/engine";
@@ -32,11 +35,21 @@ export class DiskCardMaker implements CardMaker {
   hits = 0;
   misses = 0;
 
+  private readonly out: string;
+
+  /**
+   * `options.out`: where new cards go (its cards are replayed too); default the cache file itself.
+   * `options.shared`: another maker's map of the same files, so several makers read them once and see each other's
+   * new cards (pi-ab's streams).
+   */
   constructor(
-    private readonly file: string,
+    file: string,
     private readonly live?: CardMaker,
+    options: { out?: string; shared?: Map<string, Card | null> } = {},
   ) {
-    this.cards = loadCards(file);
+    this.out = options.out ?? file;
+    this.cards = options.shared ?? loadCards(file);
+    if (!options.shared && options.out) for (const [h, c] of loadCards(options.out)) this.cards.set(h, c);
   }
 
   async make(items: ContextItem[], today: string, signal: AbortSignal) {
@@ -74,6 +87,6 @@ export class DiskCardMaker implements CardMaker {
 
   put(h: string, c: Card | null): void {
     this.cards.set(h, c);
-    appendFileSync(this.file, `${JSON.stringify({ h, c } satisfies Line)}\n`);
+    appendFileSync(this.out, `${JSON.stringify({ h, c } satisfies Line)}\n`);
   }
 }

@@ -13,7 +13,7 @@
  *     [--time 0]
  *     [--config '{"probes":true}'] [--json out.json] [--label probes] [--no-record] [--judge live [--model m]]
  *     [--sync] [--cards DIR/cards.jsonl]
- *     [--lead-in clause|half] [--time 0] [--typing-ms 1500]
+ *     [--lead-in clause|half] [--time 0] [--typing-ms 1500] [--packets out.jsonl]
  *
  * `--judge live` gives Eden its judge (OpenRouter, `OPENROUTER_API_KEY`): the funnel then measures what the judge lets
  * through, hidden and decoy, and its calls, tokens and spend (about $0.03 for the 456 held-out tasks), a cheap screen
@@ -44,7 +44,7 @@
  * `--suite` names any suite of `suites.ts`, or several: each gets its own table, then a TOTAL over all of them.
  * Each suite's run is recorded in the benchmark ledger (bench/, `ledger.ts`) unless `--no-record`.
  */
-import { writeFileSync } from "node:fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 import { CardEnricher, ContextPartner, cpuNow, ItemCache, type Trace } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, OpenRouterModel, type Model } from "@eden/llm";
@@ -80,7 +80,17 @@ const NOOP_SPANS = opt("spans", "") === "noop";
 const REAL_SYNC = CONFIG.sync === true;
 if (REAL_SYNC && SYNC) throw new Error("--sync (the oracle) and the real sync (config sync) are exclusive");
 /** The real sync's listing calls over the whole run (every suite), and the lookups that answered locally. */
-const syncUse = { backfill: 0, background: 0, demand: 0, lookups: 0, localSources: 0, warmMs: 0, users: 0 };
+const syncUse = {
+  backfill: 0,
+  background: 0,
+  demand: 0,
+  // On-demand listing calls as the sync counts them: with `syncPollBehind` a lookup's trace carries none of its poll's.
+  demandAll: 0,
+  lookups: 0,
+  localSources: 0,
+  warmMs: 0,
+  users: 0,
+};
 const CARDS = opt("cards", "");
 /** One replaying maker for every seed and suite: the disk cache is read once. */
 const cardMaker = CARDS ? new DiskCardMaker(CARDS) : null;
@@ -93,6 +103,12 @@ const KEY = process.env.OPENROUTER_API_KEY;
 if (LIVE && !KEY) throw new Error("--judge live needs OPENROUTER_API_KEY");
 const MODEL = opt("model", "z-ai/glm-5.3-flash");
 const TIMELINE = opt("timeline", "");
+/**
+ * `--packets out.jsonl`: each task's packets as the agent would read them (text, reason, cited item ids) and the
+ * planted item's id, a JSON line per task, to study the packet's form (docs/research/econ-lab.md). Sim worlds only.
+ */
+const PACKETS = opt("packets", "");
+if (PACKETS) writeFileSync(PACKETS, "");
 const timeline = TIMELINE
   ? new Timeline(TIMELINE, { tool: "hidden-funnel", suites: SUITE_LIST, seeds: SEEDS, config: CONFIG, sync: SYNC })
   : null;
@@ -236,12 +252,16 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     ...(cards ? { cards } : {}),
   });
   // The harness may read the engine's session table (as `quality.ts` `settle` does; product code may not): whether a
-  // session's lookup or prefetch is still running.
-  const table = (partner as unknown as { sessions: Map<string, { inflight: unknown; ant?: { running: unknown } }> })
-    .sessions;
+  // session's lookup, prefetch or a poll its lookup left running (`behind`, for a poll-behind-the-lookup flag; none
+  // today) is still running.
+  const table = (
+    partner as unknown as {
+      sessions: Map<string, { inflight: unknown; ant?: { running: unknown }; behind?: unknown }>;
+    }
+  ).sessions;
   const busy = (sessionId: string) => {
     const s = table.get(`${scope.tenantId}/${scope.userId}#${sessionId}`);
-    return !!(s?.inflight || s?.ant?.running);
+    return !!(s?.inflight || s?.ant?.running || s?.behind);
   };
   const scope = { tenantId: "funnel", userId: `w${seed}` };
   // The real sync: the backfill runs before the first task, from half an hour before it on the simulated clock (a
@@ -337,6 +357,15 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       [...injections, ...pendingSeen].find((x) => x.citations.some((c) => c.itemId === id))?.reason.split(":")[0] ?? "";
     const first = arrived.find((x) => x.ids.includes(id));
     traced?.end({ template: task.template, delivered: got.includes(id), why, injected: got.length });
+    if (PACKETS) {
+      const packets = [...injections, ...pendingSeen].map((x) => ({
+        reason: x.reason.split(":")[0],
+        text: x.text,
+        ids: x.citations.map((c) => c.itemId),
+      }));
+      const line = { suite, seed, variant, template: task.template, request: task.text, planted: id, packets };
+      appendFileSync(PACKETS, JSON.stringify(line) + "\n");
+    }
     perTask.push({
       seed,
       variant,
@@ -355,6 +384,12 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       ...(prefetched.has(id) ? { prefetched: true } : {}),
       ...(LEAD ? { leadCalls } : {}),
     });
+  }
+  // The polls a lookup left running behind it finish before the count is read.
+  if (sync) {
+    for (let k = 0; k < 5_000 && [...table.values()].some((x) => x.inflight || x.behind); k++) await Bun.sleep(1);
+    await Bun.sleep(TIME > 0 ? 2_000 * TIME : 5);
+    syncUse.demandAll += sync.stats.demandCalls;
   }
   return perTask;
 }
@@ -402,8 +437,10 @@ if (REAL_SYNC) {
     `sync: backfill ${syncUse.backfill} calls (${(syncUse.backfill / Math.max(1, syncUse.users)).toFixed(1)}/user, ` +
       `${(syncUse.warmMs / Math.max(1, syncUse.users)).toFixed(0)} ms/user), background ${syncUse.background} ` +
       `(${(syncUse.background / tasks).toFixed(2)}/task), on-demand ${syncUse.demand} ` +
-      `(${(syncUse.demand / tasks).toFixed(2)}/task, in calls/task); request ${(requestCalls / tasks).toFixed(2)}/task; ` +
-      `amortised total ${((requestCalls + syncUse.background + syncUse.backfill) / tasks).toFixed(2)}/task; ` +
+      `(${(syncUse.demand / tasks).toFixed(2)}/task, in calls/task; ${syncUse.demandAll} by the sync's count); ` +
+      `request ${(requestCalls / tasks).toFixed(2)}/task; amortised total ` +
+      `${((requestCalls + syncUse.demandAll - syncUse.demand + syncUse.background + syncUse.backfill) / tasks).toFixed(2)}` +
+      `/task; ` +
       `local sources ${(syncUse.localSources / Math.max(1, syncUse.lookups)).toFixed(2)}/lookup`,
   );
 }

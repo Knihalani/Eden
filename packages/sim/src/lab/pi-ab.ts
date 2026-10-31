@@ -18,26 +18,40 @@
  * first model request (agent-ab and the client's `withContext` default: 3000). What arrives later is injected before
  * the agent's next request, if it makes one. The report pairs each such condition with its base.
  *
+ * Variants of the configuration run in one process, paired task by task (`pi-conditions.ts` has the grammar):
+ * `--variant-config '{"ALL2":{"syncPollBehind":true}}' --conditions eden,eden~ALL2` gives each name the settings it
+ * adds over `--config`, and `eden+packetDates` is shorthand for one flag on. `--act` is a mode of its own: every
+ * condition gets stub action tools (`act.ts`) and a system prompt that lets the agent act, and each task records its
+ * action calls (`act-report.ts` reads them).
+ *
+ * `--cards FILE` (alias `--cards-disk`) replays implication cards from a disk cache (`cards-disk.ts`, as the funnel
+ * does) and makes only the missing ones live, so the conditions of a run, and later runs, do not each pay for the same
+ * enrichment. FILE is only read; new cards go to `--cards-out` (default `<out>.cards.jsonl`), which later runs replay
+ * too when they name it. Every stream shares one copy of both.
+ *
  * Every task records a timeline on one monotonic clock (`pi-timeline.ts`): task start; Eden's observe; its slow path,
  * search, probe queries, refresh and judge (the engine's spans, `spans.ts`), each of Eden's source calls, its cache
  * hits and decisions (its traces); each model request's start, first token and end with tokens and cost; each tool
  * call; grading; task end. One JSON line per task goes to `<timeline>/tasks.jsonl`, and the process's CPU and RSS every
- * second to `<timeline>/samples.jsonl`. `pi-ab-report.ts` reads both with the results file.
+ * second to `<timeline>/samples.jsonl`. `pi-ab-report.ts` reads both with the results file. Each task's line also
+ * records the packets the agent's requests saw, the item ids they cited, the ids `ask_context` answers cited, and the
+ * task's planted item id (hidden-context suites), so a report can tell delivery from uptake.
  *
  *   OPENROUTER_API_KEY=… bun packages/sim/src/lab/pi-ab.ts [--suite heldout] [--seeds 41] [--variants hidden,control]
  *     [--conditions none,tools,eden,both] [--config H|'{"probes":true}'] [--model z-ai/glm-5.3-flash]
  *     [--grader anthropic/claude-haiku-5.5] [--budget 0.6] [--out pi-ab.json] [--timeline dir] [--time-scale 0]
  *     [--tool-exec parallel|sequential] [--tasks 30] [--offworld 5] [--limit n] [--dry]
+ *     [--variant-config '{"name":{...}}'] [--act] [--cards FILE [--cards-out FILE]]
  *
  * --budget is a hard cap on everything this run spends (agent, Eden's judge, grader): each call reserves its
  * worst case before it is sent and is refused when that could cross the cap. --time-scale 1 gives the sim sources
  * their profiles' assumed latency (agent-ab runs them at 0, instant); the timeline then shows connector time.
  */
-import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { Agent, type AgentEvent as PiEvent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
 import { createModels, createProvider, envApiKeyAuth, Type, type Model as PiModel } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
-import { CardEnricher, ContextPartner, ItemCache, ModelCardMaker } from "@eden/engine";
+import { CardEnricher, ContextPartner, DEFAULT_CONFIG, ItemCache, ModelCardMaker, type CardMaker } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, OpenRouterModel, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
@@ -60,6 +74,9 @@ import {
   type RunResult,
   type Task,
 } from "./ab-common";
+import { ACTIONS, actionParams, coerceArgs, executed, type ActionRecord } from "./act";
+import { DiskCardMaker } from "./cards-disk";
+import { parseCondition, parseVariants, type Condition } from "./pi-conditions";
 import { parseSuites } from "./suites";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
 
@@ -79,7 +96,8 @@ const SUITE = opt("suite", "heldout");
 const LOOKUPS = SUITE === "lookups";
 const SUITE_LIST = LOOKUPS ? ["lookups"] : parseSuites(SUITE);
 const VARIANTS = opt("variants", "hidden,control").split(",") as ("hidden" | "control")[];
-const CONDITIONS = opt("conditions", "none,tools,eden,both").split(",");
+const ACT = args.includes("--act");
+const CONDITION_NAMES = opt("conditions", ACT ? "tools,eden" : "none,tools,eden,both").split(",");
 const OUT = opt("out", "pi-ab.json");
 const TIMELINE = opt("timeline", `${OUT.replace(/\.json$/, "")}.timeline`);
 const TIME_SCALE = Number(opt("time-scale", "0"));
@@ -114,9 +132,28 @@ const CONFIG_ARG = opt("config", "{}");
 const CONFIG = PRESETS[CONFIG_ARG] ?? (JSON.parse(CONFIG_ARG) as Record<string, unknown>);
 // `cards` makes implication cards with a model in the background (D59), metered and charged to Eden's spend.
 const CARD_MODEL = opt("card-model", "z-ai/glm-5.3-flash");
+const CONFIG_VARIANTS = parseVariants(opt("variant-config", "{}"));
+// Every condition is parsed before anything is spent: a typo fails here, not after the first stream has run.
+const CONDITIONS: Condition[] = CONDITION_NAMES.map((name) =>
+  parseCondition(name, {
+    config: CONFIG,
+    variants: CONFIG_VARIANTS,
+    act: ACT,
+    known: new Set(Object.keys(DEFAULT_CONFIG)),
+  }),
+);
 // A flag whose dependency this harness cannot give it would run a different configuration under the flag's name: a
 // run that says R or ALL must be R or ALL (the review of moon/combined). Cards need a model; the sync, list tools.
-if (CONFIG.cards === true && !KEY && !DRY) throw new Error("config.cards needs OPENROUTER_API_KEY for its enrichment");
+if (CONDITIONS.some((c) => c.useEden && c.config.cards === true) && !KEY && !DRY)
+  throw new Error("config.cards needs OPENROUTER_API_KEY for its enrichment");
+// Cards replayed from disk: the replay file is only read, new cards go to their own file (cards-disk.ts).
+const CARDS_FILE = opt("cards", opt("cards-disk", ""));
+const CARDS_OUT = opt("cards-out", `${OUT.replace(/\.json$/, "")}.cards.jsonl`);
+if (CARDS_FILE && CARDS_OUT === CARDS_FILE) throw new Error("--cards-out must differ from the replayed --cards file");
+// A mistyped replay path would otherwise make every card live, at the run's expense.
+if (CARDS_FILE && !existsSync(CARDS_FILE)) throw new Error(`--cards ${CARDS_FILE}: no such file`);
+/** One copy of the disk cards for every stream: read once, and each stream sees the cards the others made. */
+const diskCards = CARDS_FILE ? new DiskCardMaker(CARDS_FILE, undefined, { out: CARDS_OUT }).cards : null;
 
 // ---- Spend: one hard cap over every call, reserved before the call at its worst case and settled at its real cost.
 let spent = 0;
@@ -299,6 +336,13 @@ interface TaskRecord {
   events: Timeline["events"];
   dropped: number;
   error?: string;
+  /** The task's planted item (hidden-context suites): the hidden fact, or the control's decoy. */
+  planted?: string;
+  /** Eden's proactive packets as the agent's requests saw them, joined (cut at 6,000 characters). */
+  packets?: string;
+  /** The items those packets cited, and those `ask_context` answers cited: did the planted one reach the agent. */
+  cited?: string[];
+  askCited?: string[];
 }
 
 const textOf = (m: AgentMessage | undefined) =>
@@ -314,17 +358,12 @@ async function runWorld(
   world: World,
   seed: number,
   tasks: Task[],
-  condition: string,
+  cond: Condition,
   records: TaskRecord[],
   grading: Promise<void>[],
 ): Promise<RunResult[]> {
   const sources = simSources(world, REALISTIC, TIME_SCALE, seed);
-  const [base, variant] = condition.split("@");
-  const waitMs = variant?.startsWith("w") ? Number(variant.slice(1)) : 3_000;
-  if (!Number.isFinite(waitMs) || waitMs < 0) throw new Error(`bad wait in ${condition}: use @w<ms>`);
-  const useEden = base !== "none" && base !== "tools";
-  const useTools = base === "tools" || base!.startsWith("both");
-  const judge = base!.endsWith("-judge");
+  const { name: condition, waitMs, useEden, useTools, judge, act, config } = cond;
   const scope = { tenantId: "ab", userId: `w${seed}` };
   let clock = world.now;
   // The task now running in this stream: Eden's source and model calls carry no session, so they go to its timeline.
@@ -336,17 +375,18 @@ async function runWorld(
     ),
   );
   // `cards`: the enrichment model, metered against the run's cap and booked to Eden's spend like its judge.
+  const liveCards = (): CardMaker =>
+    new ModelCardMaker(
+      meteredModel(new OpenRouterModel({ apiKey: KEY!, model: CARD_MODEL }), (start, end, data) =>
+        current?.span("eden.cards", "eden", "bg", start, end, data),
+      ),
+    );
+  // With `--cards`, cards on disk are replayed and only the rest made live (their spend booked to Eden as usual).
+  const cardMaker = (): CardMaker =>
+    diskCards ? new DiskCardMaker(CARDS_FILE, liveCards(), { out: CARDS_OUT, shared: diskCards }) : liveCards();
   const cards =
-    useEden && CONFIG.cards === true
-      ? new CardEnricher({
-          maker: new ModelCardMaker(
-            meteredModel(new OpenRouterModel({ apiKey: KEY!, model: CARD_MODEL }), (start, end, data) =>
-              current?.span("eden.cards", "eden", "bg", start, end, data),
-            ),
-          ),
-          budget: new Budget(),
-          now: () => clock,
-        })
+    useEden && config.cards === true
+      ? new CardEnricher({ maker: cardMaker(), budget: new Budget(), now: () => clock })
       : undefined;
   const partner = useEden
     ? new ContextPartner({
@@ -361,7 +401,7 @@ async function runWorld(
           : null,
         planner: new QueryPlanner({ seed }),
         now: () => clock,
-        config: CONFIG,
+        config,
         ...(cards ? { cards } : {}),
         // Charged to the task whose session the trace is from: a slow-path verdict can land after it ended.
         onTrace: (t) => {
@@ -439,17 +479,21 @@ async function runWorld(
       requests: [],
       events: tl.events,
       dropped: 0,
+      ...(task.planted ? { planted: task.planted } : {}),
     };
     activeTasks++;
     tl.point("task.start", { condition, kind: task.kind });
     // Eden's packets for this task, oldest first: each a system message before the user turn, as agent-ab places them.
     const packets: string[] = [];
+    const cited: string[] = [];
+    const askCited: string[] = [];
     const takeEden = () => {
       if (!partner) return;
       for (const i of partner.takePending({ ...scope, sessionId })) {
         r.injectedItems += i.citations.length;
         r.injectedChars += i.text.length;
         packets.push(i.text);
+        cited.push(...i.citations.map((c) => c.itemId));
         tl.point("eden.inject", { items: i.citations.length, chars: i.text.length, mode: i.mode });
       }
     };
@@ -466,6 +510,7 @@ async function runWorld(
           r.injectedItems += first.injection.citations.length;
           r.injectedChars += first.injection.text.length;
           packets.push(first.injection.text);
+          cited.push(...first.injection.citations.map((c) => c.itemId));
           tl.point("eden.inject", { items: first.injection.citations.length, chars: first.injection.text.length });
         }
       }
@@ -513,9 +558,29 @@ async function runWorld(
           execute: async (_id, raw) => {
             const params = raw as { question: string };
             const a = await partner.ask({ ...scope, sessionId, question: params.question });
+            askCited.push(...a.citations.map((c) => c.itemId));
             return { content: [{ type: "text", text: a.answer || "Nothing found." }], details: {} };
           },
         });
+      }
+      // `--act`: the stub action tools; each call is recorded and runs (no firewall in these conditions: `off`).
+      if (act) {
+        const actions: ActionRecord[] = [];
+        r.actions = actions;
+        for (const spec of ACTIONS) {
+          tools.push({
+            name: spec.name,
+            description: spec.description,
+            label: spec.name,
+            parameters: actionParams(spec),
+            prepareArguments: (a) => coerceArgs(spec, a),
+            execute: async (_id, raw) => {
+              const args = raw as Record<string, string | string[]>;
+              actions.push({ tool: spec.name, args, verdict: "off", executed: true, checkMs: 0 });
+              return { content: [{ type: "text", text: executed(spec.name, actions.length) }], details: {} };
+            },
+          });
+        }
       }
       let turns = 0;
       let request: { id: number; at: number; first: number | null; in: number; out: number; cost: number } | null =
@@ -523,7 +588,7 @@ async function runWorld(
       let est = 0;
       const agent = new Agent({
         initialState: {
-          systemPrompt: systemPrompt(world, { lookups: LOOKUPS, data: useTools || useEden }),
+          systemPrompt: systemPrompt(world, { lookups: LOOKUPS, data: useTools || useEden, act }),
           model: piModel,
           thinkingLevel: "off",
           tools,
@@ -642,6 +707,8 @@ async function runWorld(
     record.wallMs = Math.round(r.wallMs);
     record.firstTokenMs = record.requests[0]?.firstTokenMs ?? null;
     if (r.error) record.error = r.error.slice(0, 200);
+    if (packets.length > 0) record.packets = packets.join("\n").slice(0, 6_000);
+    if (partner) [record.cited, record.askCited] = [[...new Set(cited)], [...new Set(askCited)]];
     out.push(r);
     records.push(record);
     // Grading runs beside the next task, on this task's timeline (after its end): the agent never waits for it.
@@ -687,8 +754,11 @@ const worlds = SEEDS.flatMap((seed) =>
   ),
 );
 console.error(
-  `pi-ab: ${worlds.reduce((n, w) => n + w.tasks.length, 0)} tasks × ${CONDITIONS.length} conditions, model ${MODEL}, ` +
-    `grader ${GRADER}, cap $${BUDGET}, suites ${SUITE_LIST.join(",")}, config ${JSON.stringify(CONFIG)}`,
+  `pi-ab: ${worlds.reduce((n, w) => n + w.tasks.length, 0)} tasks × ${CONDITIONS.length} conditions ` +
+    `(${CONDITIONS.map((c) => c.name).join(",")}), model ${MODEL}, grader ${GRADER}, cap $${BUDGET}, suites ` +
+    `${SUITE_LIST.join(",")}, config ${JSON.stringify(CONFIG)}` +
+    (Object.keys(CONFIG_VARIANTS).length ? `, variants ${JSON.stringify(CONFIG_VARIANTS)}` : "") +
+    (CARDS_FILE ? `, cards ${CARDS_FILE} (${diskCards!.size} replayed; new → ${CARDS_OUT})` : ""),
 );
 if (DRY) process.exit(0);
 
@@ -721,6 +791,9 @@ writeFileSync(
       harness: "pi",
       harnessVersion: "@earendil-works/pi-agent-core@1.3.0",
       config: CONFIG,
+      ...(Object.keys(CONFIG_VARIANTS).length ? { variantConfig: CONFIG_VARIANTS } : {}),
+      ...(ACT ? { act: true } : {}),
+      ...(CARDS_FILE ? { cards: { replay: CARDS_FILE, out: CARDS_OUT } } : {}),
       timeScale: TIME_SCALE,
       toolExecution: TOOL_EXEC,
       spend,
