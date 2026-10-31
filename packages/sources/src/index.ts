@@ -1,6 +1,13 @@
-export type { SearchQuery, Source, SourceResolver } from "./source";
+export type { ListPage, SearchQuery, Source, SourceResolver } from "./source";
 export { StaticSource, type StaticDoc } from "./static-source";
-export { ArgumentMappingError, McpSource, ReadOnlyViolation, toItems, type McpSourceOptions } from "./mcp-source";
+export {
+  ArgumentMappingError,
+  McpSource,
+  nextCursorOf,
+  ReadOnlyViolation,
+  toItems,
+  type McpSourceOptions,
+} from "./mcp-source";
 export {
   buildArgs,
   buildFetchArgs,
@@ -8,6 +15,10 @@ export {
   mapFetchArgs,
   mapSearchArgs,
   usable,
+  buildListArgs,
+  listUsable,
+  mapListArgs,
+  type ListMapping,
   type ArgMapping,
   type FetchMapping,
   type ToolSchema,

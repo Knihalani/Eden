@@ -26,7 +26,7 @@ import {
 } from "@eden/primitives";
 import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { PlannedSource, type PlanCalls } from "./planner";
-import type { SearchQuery, Source } from "./source";
+import type { ListPage, SearchQuery, Source } from "./source";
 
 /**
  * One lookup's queries in flight or answered, by source and text (`sharedKey`): what the query planner and the probes
@@ -191,6 +191,55 @@ export class SourceFanout {
       return item ?? null;
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * One page of a source's listing through its `list` (a background sync, D57), under the same per-(user, source)
+   * breaker, rate limit and concurrency limit as a search, within `timeoutMs`, sanitized before it is returned. Not
+   * cached here: a listing wants the source's current page. `reserve` rate tokens must be left after this call's own
+   * (background syncing leaves serving its headroom; a lookup's own sync call reserves none). Returns the page, or why
+   * there is none: the guard that skipped the call ("open", "limited", "busy"), or "error"/"timeout". Never throws.
+   */
+  async list(
+    source: Source,
+    scope: Scope,
+    cursor: string | undefined,
+    limit: number,
+    options: { timeoutMs: number; signal?: AbortSignal; reserve?: number },
+  ): Promise<ListPage | Exclude<FanoutStatus, "ok" | "cached" | "stale">> {
+    if (!source.list) return "error";
+    const timeout = AbortSignal.timeout(options.timeoutMs);
+    const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+    const key = `${scopeKey(scope)}|${source.id}`;
+    if ((options.reserve ?? 0) > 0 && this.rate.available(key) < 1 + options.reserve!) return "limited";
+    const s = this.state(key);
+    const epoch = this.admit(key, s);
+    if (typeof epoch !== "number") return epoch;
+    const started = performance.now();
+    let page: ListPage;
+    try {
+      page = await source.list(scope, cursor, limit, signal);
+    } catch (e) {
+      const message = String(e);
+      if (signal.aborted && !timeout.aborted) {
+        s.limiter.release("ignored"); // The caller gave up: no evidence against the source.
+        return "error";
+      }
+      s.latency.record(performance.now() - started);
+      s.limiter.release("dropped");
+      s.breaker.failure(epoch);
+      if (RATE_LIMITED.test(message)) this.rate.penalize(key, retryAfterMs(message) ?? 5_000);
+      return timeout.aborted ? "timeout" : "error";
+    }
+    s.latency.record(performance.now() - started);
+    s.limiter.release("ok");
+    s.breaker.success(epoch);
+    try {
+      return { items: await this.options.sanitize(page.items, signal), next: page.next };
+    } catch {
+      // Our gate failed, not the source: no page, and nothing unredacted held.
+      return "error";
     }
   }
 

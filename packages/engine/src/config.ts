@@ -212,8 +212,111 @@ export interface EngineConfig {
    * Applies to the confident path, the fallback and the conflict ground.
    */
   quietNameOnly: boolean;
+  /**
+   * Span tracing (`spans.ts`): every phase of every event timed in wall and CPU time, totals kept per phase
+   * (`ContextPartner.spanStats`). An `onSpan` sink turns it on too. Off: no span is made.
+   */
+  spans: boolean;
+  /**
+   * Background connector sync, "Eden Atlas" (`sync.ts`, D57): each active user's sources that can list (`Source.list`)
+   * are read into the user's cache in the background, and a lookup answers from that local index the sources whose
+   * synced copy is current, live-calling only the rest. Its probes and its own search of a current source cost no
+   * call. The `sync*` settings below apply only with it on.
+   */
+  sync: boolean;
+  /** Items synced per user, the newest across their sources (the cache's `maxSyncedPerUser` should allow them). */
+  syncMaxItems: number;
+  /** Items asked per listing page. */
+  syncPageSize: number;
+  /** Timed polls of an active user's sources this often (ms); 0 polls only on demand (`syncOnDemand`). */
+  syncEveryMs: number;
+  /** A synced source is stale once the chance it changed since its last poll (its learned rate) reaches this. */
+  syncStaleChance: number;
+  /** ... or once its last poll is this old (ms). */
+  syncMaxStaleMs: number;
+  /** A user with an event this recently (ms) is active: timed polls and sweeps run only for them. */
+  syncActiveMs: number;
+  /** Each source of an active user is re-listed whole this often (ms): what it no longer lists is dropped. */
+  syncSweepMs: number;
+  /** A user idle this long (ms) stops being synced and their synced items are dropped (retention, D57). */
+  syncDropMs: number;
+  /** The sync's own budget, per (user, source): listing calls per minute. */
+  syncCallsPerMin: number;
+  /**
+   * A lookup that finds a synced source stale polls it (at most `syncCatchupPages` pages, within its deadline) and
+   * then answers from the local index, rather than sending the source its search and probes.
+   */
+  syncOnDemand: boolean;
+  syncCatchupPages: number;
+  /** Users synced per tenant; past it the tenant's least recently active user stops being synced. */
+  syncMaxUsersPerTenant: number;
+  /** A local answer holds every word of its query, as a mail or chat search does (false: ranked, any word). */
+  syncLocalAll: boolean;
+  /** Probes of a current synced source go to every synced source (they cost no call), not only the routed ones. */
+  syncWide: boolean;
+  /**
+   * With sources answered locally, up to this many of the request's rare words (a place, a reference: on few of the
+   * user's items) are each sent alone to them as a probe, at no call; their finds get the probes' seats. 0: none.
+   */
+  syncTermProbes: number;
+  /**
+   * A per-user knowledge graph over every cached item (`kg.ts`; docs/research/moon-graph.md): people, organisations,
+   * projects and systems, identifiers, channels, roles and days, joined by typed edges. A lookup walks it from the
+   * request's names, ids, roles and days (spreading activation, `graphBudgetMs` at most, no model, no source call);
+   * what it reaches with zero shared words ("Ahmed Hassan" to "Umbrella Health" through his address) is a candidate:
+   * `graphSeats` seats with the judge, a tie for `judgeTied`, and, with `groundConflict`, the conflict test with the
+   * names it was reached through as ties. Edge-type weights are learned per user from delivered items' use.
+   */
+  graph: boolean;
+  /** Items a graph walk returns at most. */
+  graphItems: number;
+  /** Judge seats for the walk's finds, beyond the best scored and the probes'. */
+  graphSeats: number;
+  /** Items the conflict ground delivers from the walk at most, with no model's say (the best walked first). */
+  graphGround: number;
+  /**
+   * The walk's best conflict is delivered beside the request's own conflicts too, not only when there are none
+   * (`graphGround` of them, within `maxItemsPerInjection`).
+   */
+  graphMerge: boolean;
+  /** The user's edge-type weights learn from whether what the graph reached was used (`UserGraph.learn`). */
+  graphLearn: boolean;
+  /** A walk's hard time bound (ms): past it, it returns what it has. */
+  graphBudgetMs: number;
+  /** The least activation a walked item needs. */
+  graphFloor: number;
+  /** A walked item reached by a name is tied, in the conflict test, by the request's own words too. */
+  graphWordTies: boolean;
+  /** The walk starts from the days the request names too (reaching items whose blocking statements cover them). */
+  graphDays: boolean;
+  /**
+   * Implication cards (`cards.ts`; needs `PartnerDeps.cards`): items entering the cache are read in the background by a
+   * cheap model into small structured cards (the constraint, the actions it affects, its span and limit); at request
+   * time, with no model, a cached item whose card bears on the request's actions is a candidate, and, with
+   * `groundConflict`, one whose span or limit the request violates is delivered (grounded "card").
+   */
+  cards: boolean;
+  /** With `cards` and `groundConflict`, at most this many items delivered on their card alone. */
+  cardItems: number;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
+  /**
+   * Anticipation (`anticipate.ts`; docs/research/moon-anticipate.md): each event (a user message, a draft the user is
+   * still typing, a tool call or result, an arriving message) is read, with no model, for what the agent will need next
+   * (the names it mentions, the days it schedules, its action class, the names that followed that intent before for
+   * this user), and those are fetched in the background through the probes' own queries, so the request's probes find
+   * them in the memo at no call. A request is then first decided from the cache, on the critical path and with no
+   * call (what is sure, or with no model what the request's structure grounds); the live search still runs behind it
+   * and adds only what is sure or grounded. The action class's constraint vocabulary is fetched off the critical path
+   * and read from the cache at the request (`consequence.ts`), whatever `consequenceProbe` says.
+   */
+  anticipate: boolean;
+  /** Source calls one event's anticipation may make (the class query, one call, is counted on top). */
+  anticipateCalls: number;
+  /** Source calls a session's anticipation may make in all. */
+  anticipateSessionCalls: number;
+  /** Anticipation parts switched off, for ablations: "serve", "class", "learn", "names", "days". */
+  anticipateOff: string[];
   /** Cost reserved per judge call before the real cost is known: about its worst case at the cap (D45). */
   estimatedCallUsd: number;
   /** Cost reserved per model-composed ask answer (`askWithModel`): about its worst case at its cap (D45). */
@@ -276,7 +379,21 @@ export const DEFAULT_CONFIG: EngineConfig = {
   probeRoles: false,
   probeShare: false,
   probeSecondSources: 3,
+  graph: false,
+  graphItems: 16,
+  graphSeats: 1,
+  graphGround: 1,
+  graphMerge: false,
+  graphLearn: true,
+  graphBudgetMs: 2,
+  graphFloor: 0.15,
+  graphWordTies: false,
+  graphDays: true,
   probeOff: [],
+  anticipate: false,
+  anticipateCalls: 4,
+  anticipateSessionCalls: 24,
+  anticipateOff: [],
   judgeConfident: false,
   judgeContested: false,
   judgeTied: false,
@@ -293,5 +410,24 @@ export const DEFAULT_CONFIG: EngineConfig = {
   recoverNames: false,
   groundOccasion: false,
   quietNameOnly: false,
+  spans: false,
+  sync: false,
+  syncMaxItems: 3_000,
+  syncPageSize: 100,
+  syncEveryMs: 0,
+  syncStaleChance: 0.15,
+  syncMaxStaleMs: 6 * 3_600_000,
+  syncActiveMs: 2 * 3_600_000,
+  syncSweepMs: 24 * 3_600_000,
+  syncDropMs: 7 * 24 * 3_600_000,
+  syncCallsPerMin: 30,
+  syncOnDemand: true,
+  syncCatchupPages: 2,
+  syncMaxUsersPerTenant: 1_000,
+  syncLocalAll: true,
+  syncWide: false,
+  syncTermProbes: 0,
+  cards: false,
+  cardItems: 1,
   maxEventChars: 32_000,
 };
