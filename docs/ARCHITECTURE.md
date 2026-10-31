@@ -127,8 +127,11 @@ calls), which was most of Eden's time on the agent's critical path in ALL (p50 5
 warm synced source answers the event's lookup from the index as it stands and the poll runs behind; the critical path
 then holds no source call for a synced source, current or polling behind. If the poll stores anything, the lookup is
 made again on the fresh index once both are done (after any lookup still in flight) and what it delivers is queued for
-the agent's next request: after a delivery only what is sure or grounded, after silence as the lookup would have
-decided. The agent's `ask_context` still waits for the poll. **Judge behind the answer** (`judgeBehind`, off by default,
+the agent's next request: after a delivery, or with a model, only what is sure or grounded (so it makes no judge
+call); after silence with no model, as the lookup would have decided. The first answer can carry a copy the poll then
+finds edited; the ledger records each delivered item's words with the flag, and the follow-up delivers the corrected
+copy (the departure from D40 is that the old copy went out first). `ObserveResult.pending` stays true while a poll,
+follow-up or behind-the-answer judge is running. The agent's `ask_context` still waits for the poll. **Judge behind the answer** (`judgeBehind`, off by default,
 experimental and not recommended): with a model, every lookup decides as with no model and answers at once; the judge
 then reads only the candidates that answer left out and its picks are queued. The recommended configuration has no
 model judge on the critical path.

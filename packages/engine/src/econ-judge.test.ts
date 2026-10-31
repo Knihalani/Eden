@@ -512,3 +512,180 @@ describe("syncPollBehind with syncPush", () => {
     expect(ids([got.injection, ...p.takePending({ ...scope, sessionId: "s1" })])).toContain(itemId("mail", "new"));
   });
 });
+
+// Review of D65 (PR 2): a corrected copy reaches the agent, `pending` covers work left behind, and a follow-up never
+// makes a second judge call.
+describe("syncPollBehind and judgeBehind: review regressions", () => {
+  const mk = (config: Record<string, unknown>, model: Model | null = null) => {
+    let clock = T0;
+    const src = new SlowListSource("mail");
+    src.add("old", "Dana Lee: budget", "Dana Lee says the budget review moved to Friday", T0 - 2 * HOUR);
+    for (let i = 0; i < 4; i++) src.add(`n${i}`, `Note ${i}`, `Note ${i} about lunch orders`, T0 - (3 + i) * HOUR);
+    const p = new ContextPartner({
+      sources: async () => [src],
+      sourceMap: new SourceMap(":memory:", { seed: 1 }),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model,
+      now: () => clock,
+      config: { sync: true, syncPageSize: 2, syncCallsPerMin: 600, syncMaxStaleMs: 4 * HOUR, ...config },
+    });
+    const warm = async () => {
+      p.sync!.track(scope);
+      while (!p.sync!.warm(scope)) await p.sync!.tick();
+    };
+    return { p, src, warm, advance: (ms: number) => (clock += ms), now: () => clock };
+  };
+  const say = (p: ContextPartner, text: string, at: number) =>
+    p.observe({ ...scope, sessionId: "s1", at, kind: "user_message", text } as AgentEvent, { waitMs: 2_000 });
+  const settle = async (p: ContextPartner) => {
+    const table = (p as unknown as { sessions: Map<string, { inflight: unknown; behind?: unknown }> }).sessions;
+    for (let k = 0; k < 500 && [...table.values()].some((x) => x.inflight || x.behind); k++) await Bun.sleep(1);
+  };
+  /** Edits the warm item `old` in place at its source: same ref and id, new words. */
+  const edit = (src: SlowListSource, at: number) => {
+    src.items = src.items.filter((i) => i.ref !== "old");
+    src.add("old", "Dana Lee: budget", "Dana Lee says the budget review is CANCELLED", at);
+  };
+
+  test("an item edited in place during the poll: the corrected copy follows the superseded one (D40)", async () => {
+    for (const on of [false, true]) {
+      const { p, src, warm, advance, now } = mk({ syncPollBehind: on });
+      await warm();
+      advance(5 * HOUR);
+      edit(src, now());
+      src.hold();
+      const asked = say(p, "When is the Dana Lee budget review?", now());
+      // Flag on, the answer is out before the release; off, it waits for it.
+      await Bun.sleep(5);
+      src.release();
+      const r = await asked;
+      await settle(p);
+      const all = [r.injection, ...p.takePending({ ...scope, sessionId: "s1" })];
+      const texts = all.map((x) => x?.text ?? "");
+      // Flag off, the lookup waited for the poll: only the current copy. On, the index answered with the old copy at
+      // once, and the follow-up delivers the edit as it now reads; nothing stale is left standing.
+      expect(texts.at(-1)).toContain("CANCELLED");
+      if (!on) expect(texts.join()).not.toContain("moved to Friday");
+      expect(ids(all).filter((id) => id === itemId("mail", "old")).length).toBe(on ? 2 : 1);
+    }
+  });
+
+  test("an unchanged item the follow-up meets again is still not repeated", async () => {
+    const { p, src, warm, advance, now } = mk({ syncPollBehind: true });
+    await warm();
+    advance(5 * HOUR);
+    src.hold();
+    await say(p, "When is the Dana Lee budget review?", now());
+    // The poll stores something (so a follow-up runs) but `old` is listed with the same words.
+    src.add("noise", "Gym schedule", "The gym is closed for cleaning on Sunday", now());
+    src.release();
+    await settle(p);
+    expect(ids(p.takePending({ ...scope, sessionId: "s1" }))).not.toContain(itemId("mail", "old"));
+  });
+
+  test("observe reports pending while a poll-behind follow-up may still queue an injection", async () => {
+    const { p, src, warm, advance, now } = mk({ syncPollBehind: true });
+    await warm();
+    advance(5 * HOUR);
+    src.hold();
+    const r = await say(p, "Is the Priya Raman offsite still on?", now());
+    expect(r.injection).toBeNull();
+    expect(r.pending).toBe(true);
+    src.add("offsite", "Priya Raman: offsite cancelled", "Priya Raman cancelled the offsite on Friday", now());
+    src.release();
+    await settle(p);
+    expect(p.takePending({ ...scope, sessionId: "s1" }).length).toBe(1);
+  });
+
+  test("observe reports pending while judgeBehind's judge may still queue an injection", async () => {
+    const notes = new StaticSource("notes", "notes", [
+      {
+        ref: "qbr",
+        title: "Quarterly budget review",
+        text: "Marketing budget review outcome: approved with travel cuts",
+      },
+      { ref: "memo", title: "Travel memo", text: "After the quarterly marketing budget review, travel is frozen" },
+    ]);
+    const model = new GatedModel('{"pick": [0]}');
+    const p = new ContextPartner({
+      sources: async () => [notes],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model,
+      config: { judgeBehind: true },
+    });
+    const text = "what was the outcome of the quarterly marketing budget review";
+    const r = await p.observe({ ...scope, sessionId: "j", at: T0, kind: "user_message", text } as AgentEvent, {
+      waitMs: 1_000,
+    });
+    expect(r.pending).toBe(true);
+    model.release();
+    await Bun.sleep(5);
+    expect(p.takePending({ ...scope, sessionId: "j" }).length).toBe(1);
+  });
+
+  test("with a model, the follow-up makes no judge call", async () => {
+    const counts: number[] = [];
+    for (const on of [false, true]) {
+      const model = new FakeModel(() => '{"pick": []}');
+      const { p, src, warm, advance, now } = mk({ syncPollBehind: on, judgeConfident: true }, model);
+      await warm();
+      advance(5 * HOUR);
+      src.hold();
+      const asked = say(p, "When is the Dana Lee budget review?", now());
+      await Bun.sleep(5);
+      src.add("new", "Dana Lee: budget review notes", "Dana Lee budget review agenda draft", now());
+      src.release();
+      await asked;
+      await settle(p);
+      counts.push(model.calls.length);
+    }
+    expect(counts).toEqual([1, 1]);
+  });
+
+  test("with a model, a follow-up after a silent judge adds a sure arrival without asking the judge again", async () => {
+    const model = new FakeModel(() => '{"pick": []}');
+    const { p, src, warm, advance, now } = mk({ syncPollBehind: true }, model);
+    await warm();
+    advance(5 * HOUR);
+    src.hold();
+    await say(p, "Is the Priya Raman offsite still on?", now());
+    const before = model.calls.length;
+    src.add("offsite", "Priya Raman: offsite cancelled", "Priya Raman cancelled the offsite on Friday", now());
+    src.release();
+    await settle(p);
+    expect(model.calls.length).toBe(before);
+    expect(ids(p.takePending({ ...scope, sessionId: "s1" }))).toContain(itemId("mail", "offsite"));
+  });
+
+  test("follow-ups run one at a time, with anticipate on or off", async () => {
+    for (const anticipate of [false, true]) {
+      const { p, src, warm, advance, now } = mk({ syncPollBehind: true, anticipate });
+      await warm();
+      advance(5 * HOUR);
+      const open = p as unknown as { slowPath: (...a: unknown[]) => Promise<unknown> };
+      const orig = open.slowPath.bind(p);
+      let live = 0;
+      let max = 0;
+      src.hold();
+      await say(p, "When is the Dana Lee budget review?", now());
+      await say(p, "Is the Priya Raman offsite still on?", now() + 1);
+      open.slowPath = async (...a: unknown[]) => {
+        live++;
+        max = Math.max(max, live);
+        try {
+          await Bun.sleep(5);
+          return await orig(...a);
+        } finally {
+          live--;
+        }
+      };
+      src.add("offsite", "Priya Raman: offsite cancelled", "Priya Raman cancelled the offsite on Friday", now());
+      src.release();
+      await settle(p);
+      expect(max).toBe(1);
+    }
+  });
+});

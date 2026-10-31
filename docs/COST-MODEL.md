@@ -193,8 +193,9 @@ lookup whose no-model answer left candidates out:
 
 At 20 tasks a user a day, that is about $0.012–0.040 per user-month. `syncPollBehind` (off by default) makes no model
 call and no new poll: the poll a lookup used to wait for runs behind it. When that poll stores something, the lookup
-is made again; its synced sources then answer locally, but sources that are not synced are searched live a second
-time. The in-sample worlds are static, so that second lookup never ran in any benchmark and its source calls are
+is made again; it decides as a lookup behind a delivery (what is sure or grounded), so with a model configured it
+makes no second judge call (a test counts one model call per event, flag on or off). Its synced sources then answer
+locally, but sources that are not synced are searched live a second time. The in-sample worlds are static, so that second lookup never ran in any benchmark and its source calls are
 unmeasured; in a live mailbox they scale with how often a poll finds something new.
 
 The non-model costs (source API calls, hosting) are not modelled yet. Source calls may dominate for some connectors;
