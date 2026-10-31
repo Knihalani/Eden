@@ -367,7 +367,9 @@ export class ItemCache {
       this.evictMixed(u);
     }
     if (u.vocab.size > Math.max(MIN_VOCAB_REBUILD, u.baseline * VOCAB_REBUILD_FACTOR)) this.rebuild(scope, u);
-    return changed;
+    // Only what is still held: an item evicted by this same put is not new to the cache (its drop hook already ran,
+    // so a card or a mention made from it now would outlive it).
+    return changed.filter((item) => u.items.get(item.id)?.item === item);
   }
 
   /**
