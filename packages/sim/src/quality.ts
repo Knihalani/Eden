@@ -8,7 +8,14 @@
  * between sessions, so the cache's TTL applies), while real waits (source latency, pacing) are multiplied by
  * `timeScale`, so races between the slow path and the agent's next step keep their shape at any speed.
  */
-import { ContextPartner, ItemCache, type EngineConfig, type ShadowRecord, type Trace } from "@eden/engine";
+import {
+  ContextPartner,
+  ItemCache,
+  type EngineConfig,
+  type ShadowRecord,
+  type SpanSink,
+  type Trace,
+} from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, type Model } from "@eden/llm";
 import { QueryPlanner, type PlannerOptions } from "@eden/sources";
@@ -45,6 +52,8 @@ export interface QualityOptions {
   planner?: PlannerOptions;
   /** With a planner in shadow mode: switch it to serving after this many sessions per user (learned state kept). */
   promoteAfter?: number;
+  /** Engine spans (`spans.ts`) per user: each user's engine is its own lane of a timeline (`lab/timeline.ts`). */
+  spanSink?: (lane: string) => SpanSink;
 }
 
 /**
@@ -384,6 +393,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       now: () => clock,
       planner,
       onShadow: (r) => shadowRecs.push(r),
+      ...(o.spanSink ? { onSpan: o.spanSink(`u${u}`) } : {}),
     });
     const who = { tenantId: "sim", userId: `u${u}` };
     const pace = new Rng(o.seed * 104_729 + u);

@@ -219,16 +219,14 @@ const GENERIC = new Set("me my our us we you your them their they it its need wa
  */
 export function orgsOf(people: string[], items: ContextItem[]): string[] {
   const out: string[] = [];
+  // Each item's addresses, read once for all the request's people.
+  const found = items.map((it) => addresses(`${it.text}\n${it.meta?.people ?? ""}`));
   for (const person of people) {
     const words = person.toLowerCase().split(/\s+/);
     const labels = new Set<string>();
-    for (const it of items) {
-      const hay = `${it.text}\n${it.meta?.people ?? ""}`;
-      for (const m of hay.matchAll(/([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)*)?\s*<?([\w.+-]+)@([\w-]+)\.[\w.-]+/g)) {
-        const local = m[2]!.toLowerCase();
-        const near = (m[1] ?? "").toLowerCase();
+    for (const list of found) {
+      for (const { near, local, label } of list) {
         if (!words.every((w) => near.includes(w) || local.includes(w))) continue;
-        const label = m[3]!.toLowerCase();
         if (!FREE_MAIL.has(label)) labels.add(label);
       }
     }
@@ -239,6 +237,78 @@ export function orgsOf(people: string[], items: ContextItem[]): string[] {
         if (squashed.length >= 4 && labels.has(squashed) && !out.includes(m[1]!)) out.push(m[1]!);
       }
     }
+  }
+  return out;
+}
+
+/** An address and the words before it ("Dana Lee <dana@umbrellahealth.com>"); one `exec` of it reads one address. */
+const ADDRESS = /([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)*)?\s*<?([\w.+-]+)@([\w-]+)\.[\w.-]+/;
+/** Characters read before an "@" for the words beside an address. */
+const NEAR_MAX = 512;
+
+/** `\s` in a JavaScript regex: what `ADDRESS` lets stand between the words before an address. */
+function isSpace(c: number): boolean {
+  return (
+    (c >= 9 && c <= 13) ||
+    c === 32 ||
+    c === 0xa0 ||
+    c === 0x1680 ||
+    (c >= 0x2000 && c <= 0x200a) ||
+    c === 0x2028 ||
+    c === 0x2029 ||
+    c === 0x202f ||
+    c === 0x205f ||
+    c === 0x3000 ||
+    c === 0xfeff
+  );
+}
+
+/** `\w` without the `u` flag: ASCII letters, digits and the underscore. */
+function isWord(c: number): boolean {
+  return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95;
+}
+
+/** A character an `ADDRESS` match may hold before its "@": words, `.'-+<` and spacing. */
+function beforeAt(c: number): boolean {
+  return isWord(c) || c === 46 || c === 39 || c === 45 || c === 43 || c === 60 || isSpace(c);
+}
+
+/**
+ * The addresses in `hay`, each with the words before it and its domain's first label, lowercased: what a global
+ * `ADDRESS` scan finds, in linear time. The global scan tried every position of a run of words with no address at
+ * its end, each reading to the end of the run: quadratic, ~250 ms for an 8 KB item of words ending in "x@nodot"
+ * (connector text is untrusted). Every match holds exactly one "@", and from its start to that "@" only characters
+ * `beforeAt` allows, so the regex is run once per "@" that can match, on that run (at most `NEAR_MAX` before it) and
+ * the domain after it, starting no earlier than the previous match's end: the same matches, except that words further
+ * than `NEAR_MAX` before an address are not read as beside it.
+ */
+export function addresses(hay: string): { near: string; local: string; label: string }[] {
+  const out: { near: string; local: string; label: string }[] = [];
+  let last = 0;
+  for (let at = hay.indexOf("@"); at >= 0; at = hay.indexOf("@", at + 1)) {
+    if (at < last) continue;
+    // No match without a local part's character before the "@" and a `[\w-]+\.[\w.-]` after it: checked first, since
+    // the regex reads each start's every split before failing (cubic in the run: 60 ms for 8 KB of "a" then "@").
+    const before = at > last ? hay.charCodeAt(at - 1) : -1;
+    if (!(isWord(before) || before === 46 || before === 43 || before === 45)) continue;
+    let dot = at + 1;
+    while (dot < hay.length && (isWord(hay.charCodeAt(dot)) || hay.charCodeAt(dot) === 45)) dot++;
+    const after = hay.charCodeAt(dot + 1);
+    if (dot === at + 1 || hay.charCodeAt(dot) !== 46 || !(isWord(after) || after === 46 || after === 45)) continue;
+    const floor = Math.max(last, at - NEAR_MAX);
+    let start = at;
+    while (start > floor && beforeAt(hay.charCodeAt(start - 1))) start--;
+    // The domain's `[\w.-]+` tail, whole: the match's end is where the next one may start.
+    let end = dot + 1;
+    while (end < hay.length) {
+      const c = hay.charCodeAt(end);
+      if (!isWord(c) && c !== 46 && c !== 45) break;
+      end++;
+    }
+    const m = ADDRESS.exec(hay.slice(start, end));
+    if (!m) continue;
+    last = start + m.index + m[0].length;
+    out.push({ near: (m[1] ?? "").toLowerCase(), local: m[2]!.toLowerCase(), label: m[3]!.toLowerCase() });
   }
   return out;
 }

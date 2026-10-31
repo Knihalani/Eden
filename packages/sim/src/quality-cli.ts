@@ -6,11 +6,15 @@
  *   [--planner-mode serve|shadow] [--promote-after N]] [--time 0] [--wait 0]
  *   [--noise 1] [--updates 0] [--refresh-after-hours H] [--max-refreshes 3] [--tool-rate 0.4]
  *   [--judge none|perfect|noisy] [--ask-model] [--live] [--brief] [--config '{"probes":true}']
+ *   [--timeline out.jsonl]
  *
  * Plays generated sessions over simulated sources and prints the quality report as JSON. Without --live no model is
  * used (free, deterministic at --time 0). --time 1 runs source latency and agent pacing in real time.
+ * --timeline records every engine span, per user, with CPU% and RSS each second (`lab/timeline.ts`); read it with
+ * `lab/timeline-report.ts`.
  */
 import { OpenRouterModel } from "@eden/llm";
+import { Timeline } from "./lab/timeline";
 import { runQuality } from "./quality";
 import { IDEAL, REALISTIC, REALISTIC_ENTITIES, ZOO_HELDOUT_A, ZOO_HELDOUT_B, ZOO_TUNE } from "./sources";
 
@@ -33,8 +37,19 @@ const live = args.includes("--live");
 const model = live ? OpenRouterModel.fromEnv() : null;
 if (live && !model) throw new Error("--live needs OPENROUTER_API_KEY");
 
+const timelinePath = arg("timeline", "");
+const timeline = timelinePath
+  ? new Timeline(timelinePath, {
+      tool: "quality-cli",
+      profile: arg("profile", "realistic"),
+      seed: Number(arg("seed", "1")),
+      time: Number(arg("time", "0")),
+      judge: arg("judge", "none"),
+    })
+  : null;
 const t0 = performance.now();
 const report = await runQuality({
+  ...(timeline ? { spanSink: (lane: string) => timeline.sink(lane) } : {}),
   users: Number(arg("users", "6")),
   sessionsPerUser: Number(arg("sessions", "15")),
   seed: Number(arg("seed", "1")),
@@ -77,6 +92,7 @@ const report = await runQuality({
       }
     : undefined,
 });
+await timeline?.close();
 const out = args.includes("--brief")
   ? {
       overall: report.overall,
