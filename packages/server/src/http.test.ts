@@ -50,6 +50,14 @@ describe("HTTP API", () => {
     expect(body.injection?.citations[0]?.itemId).toBe("crm:d1");
   });
 
+  test("check: a tool call is checked (proceed with the firewall off); anything else is a 400", async () => {
+    const res = await post("/v1/check", { ...who, kind: "tool_call", tool: "send_payment", input: { amount: "10" } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ verdict: "proceed", finding: null, reason: "off" });
+    expect((await post("/v1/check", { ...who, kind: "user_message", text: "hi" })).status).toBe(400);
+    expect((await post("/v1/check", { ...who, kind: "tool_call" })).status).toBe(400);
+  });
+
   test("ask answers with citations; pending and forget respond", async () => {
     const ask = (await (await post("/v1/ask", { ...who, question: "What does Dana Lee want?" })).json()) as any;
     expect(ask.citations[0].itemId).toBe("crm:d1");
@@ -247,5 +255,86 @@ describe("EDEN_ASK_MODEL (D43)", () => {
       expect(res.usedModel).toBe(on);
       expect(model.calls.length).toBe(on ? 1 : 0);
     }
+  });
+});
+
+describe("POST /v1/check (the action firewall, D69)", () => {
+  const TOKEN = "ghp_Zq9XvT2mLp8RkW4nJc6YbH1sDf3GtA5uE7iO";
+  const mail = new StaticSource("gmail", "mail", [
+    {
+      ref: "m-paid",
+      title: "Payment sent: INV-4821 to Tyrell Bio",
+      text: "Your bank transfer of £4,200.00 to Tyrell Bio for invoice INV-4821 was sent on Monday 26 October.",
+    },
+  ]);
+  const engine = { actionCheck: true, probes: true, groundConflict: true };
+  const firewall = createHandler(buildPartner({ sources: async () => [mail], model: null, engine }), {
+    keys: new Map([[key, "acme"]]),
+    dev: false,
+  });
+  const send = (h: typeof firewall, path: string, body: unknown, auth = key) =>
+    h(
+      new Request(`http://x${path}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${auth}`, "content-type": "application/json" },
+        body: typeof body === "string" ? body : JSON.stringify(body),
+      }),
+    );
+  const pay = { kind: "tool_call", tool: "send_payment", input: { payee: "Tyrell Bio", reference: "INV-4821" } };
+
+  test("the caller's mistakes are 4xx with a message, never a 5xx", async () => {
+    const bad: unknown[] = [
+      "{not json",
+      [],
+      { ...who, kind: "tool_call" },
+      { ...who, kind: "tool_call", tool: 42, input: {} },
+      { ...who, kind: "tool_call", tool: "t".repeat(201), input: {} },
+      { ...who, kind: "user_message", text: "hi" },
+      { ...who, kind: "bogus" },
+      { userId: "bad id!", sessionId: "s1", ...pay },
+      { ...who, ...pay, input: "x".repeat(1_000_001) },
+    ];
+    for (const body of bad) {
+      const res = await send(firewall, "/v1/check", body);
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error.length).toBeGreaterThan(0);
+    }
+    expect((await send(firewall, "/v1/check", { ...who, ...pay }, "nope")).status).toBe(401);
+    expect((await send(firewall, "/v1/check", { ...who, tenantId: "other", ...pay })).status).toBe(403);
+  });
+
+  test("a finding comes back as data, with nothing of a secret in the arguments", async () => {
+    const u = { userId: "u9", sessionId: "s9" };
+    const asked = "Tyrell Bio says INV-4821 is overdue. Please pay it.";
+    await send(firewall, "/v1/events?waitMs=1000", { ...u, kind: "user_message", text: asked });
+    const res = await send(firewall, "/v1/check", { ...u, ...pay, input: { ...pay.input, token: TOKEN } });
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).not.toContain("Zq9XvT2m");
+    const body = JSON.parse(text) as { verdict: string; finding: { citations: { itemId: string }[] } };
+    expect(body.verdict).toBe("finding");
+    expect(body.finding.citations.map((c) => c.itemId)).toContain("gmail:m-paid");
+  });
+
+  test("an internal failure is a 503 (an integration treats it as proceed), and the log holds no argument", async () => {
+    const broken = {
+      checkAction: async () => {
+        throw new Error("engine down");
+      },
+    } as unknown as Parameters<typeof createHandler>[0];
+    const down = createHandler(broken, { keys: new Map([[key, "acme"]]), dev: false });
+    const errors: unknown[] = [];
+    const original = console.error;
+    console.error = (...a: unknown[]) => errors.push(a);
+    try {
+      const res = await send(down, "/v1/check", { ...who, ...pay, input: { ...pay.input, token: TOKEN } });
+      expect(res.status).toBe(503);
+      expect(await res.text()).not.toContain("Zq9XvT2m");
+    } finally {
+      console.error = original;
+    }
+    expect(errors.length).toBe(1);
+    expect(JSON.stringify(errors)).not.toContain("Zq9XvT2m");
+    expect(JSON.stringify(errors)).not.toContain("INV-4821");
   });
 });

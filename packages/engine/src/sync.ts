@@ -18,14 +18,21 @@
  * copy is current while the chance that something changed since the last poll is below `syncStaleChance` (and the
  * poll is at most `syncMaxStaleMs` old). A busy mailbox goes stale in minutes, a CRM in hours.
  *
+ * Push (`syncPush`, off by default; docs/research/econ-background.md): a source whose connector tells Eden when it
+ * changes (Gmail's watch, Calendar's push channels, Slack's Events API, relayed by the tenant's webhook to `notify`)
+ * is current until a change notice arrives, not by a learned chance: no on-demand poll while it is quiet. A notice
+ * marks it dirty; the next tick (or a lookup) reads the change with one incremental poll, and a notice that names
+ * deleted items drops them at once, so its sweeps (deletes otherwise) run only every `pushSweepMs`. A pushed source
+ * with no notice for `pushMaxStaleMs` is polled anyway (a lapsed watch must not leave it current for ever).
+ *
  * Everything here is keyed by tenant and user, bounded (users per tenant, items per user, ids per source), runs off
  * the fast path (timers or a lookup's slow path), and stores only what the fan-out has already redacted. Users idle
  * longer than `syncDropMs` are no longer synced and their synced items are dropped (retention, D57).
  */
 import { Gcra } from "@eden/primitives";
-import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
+import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import type { Source, SourceFanout, SourceResolver } from "@eden/sources";
-import type { ItemCache } from "./cache";
+import { sanitizedId, type ItemCache } from "./cache";
 import type { Tracer } from "./spans";
 
 export interface SyncOptions {
@@ -53,6 +60,34 @@ export interface SyncOptions {
   maxUsersPerTenant: number;
   /** A sync call's deadline (ms). */
   timeoutMs: number;
+  /** Push (`notify`): sources that have sent a notice are current until the next one, not by a learned chance. */
+  push: boolean;
+  /** A pushed source with no notice and no poll for this long (ms) is polled anyway. */
+  pushMaxStaleMs: number;
+  /** A pushed source's sweep (for deletes its notices did not name) runs this often (ms). */
+  pushSweepMs: number;
+  /**
+   * A pushed source with an unread notice is polled in the background at most this often (ms; 0: at every tick). A
+   * lookup always reads an unread notice first. A larger gap trades background calls on a busy source for delay.
+   */
+  pushGapMs: number;
+}
+
+/**
+ * A change notice from a source's push channel (`SyncManager.notify`). A notice with no field, or with `changed`,
+ * says the source has new or changed items; one whose only field is a non-empty `deleted` says only that those went.
+ */
+export interface SourceChange {
+  /**
+   * Items the source says were deleted, dropped from the cache at once with no call: each is Eden's item id
+   * (`itemId(sourceId, ref)`) or the connector's own ref for it (the ref the source's items carry), either form.
+   */
+  deleted?: readonly string[];
+  /**
+   * The notice also reports new or changed items (Gmail's history can report both at once): read with a poll, as a
+   * notice without `deleted` is. Needed only beside a non-empty `deleted`.
+   */
+  changed?: boolean;
 }
 
 export interface SyncDeps {
@@ -110,6 +145,10 @@ interface SourceSync {
   retryAt: number;
   /** The poll or page read in flight, so two never overlap. */
   busy: Promise<void> | null;
+  /** The source pushes its changes (`notify` was called for it): current while it has no unread notice. */
+  pushed: boolean;
+  /** When the oldest unread notice arrived (+Infinity: none). A complete poll that began after it clears it. */
+  dirtyAt: number;
 }
 
 interface UserSync {
@@ -128,13 +167,25 @@ export interface SyncStats {
   demandCalls: number;
   /** Items dropped because their source no longer lists them. */
   deleted: number;
+  /** Change notices received (`notify`), and polls a notice caused. */
+  notices: number;
+  pushPolls: number;
+  /** Deleted ids in notices that named no item synced from the source (a wrong id form, or never synced). */
+  unmatchedDeletes: number;
 }
 
 export class SyncManager {
   private readonly users = new Map<string, UserSync>();
   private readonly budget: Gcra<string>;
   private ticking = false;
-  readonly stats: SyncStats = { backgroundCalls: 0, demandCalls: 0, deleted: 0 };
+  readonly stats: SyncStats = {
+    backgroundCalls: 0,
+    demandCalls: 0,
+    deleted: 0,
+    notices: 0,
+    pushPolls: 0,
+    unmatchedDeletes: 0,
+  };
 
   constructor(
     private readonly deps: SyncDeps,
@@ -180,10 +231,70 @@ export class SyncManager {
     u.sources.delete(sourceId);
   }
 
+  /**
+   * Declares that a source pushes its changes for this user (the tenant holds a watch on it): from now on it is current
+   * until a notice arrives (`notify`), once a poll that began after this call has read what changed before it.
+   * Ignored with `push` off or for a source not synced. O(1), no I/O.
+   */
+  pushing(scope: Scope, sourceId: string, now = this.deps.now()): void {
+    if (!this.o.push) return;
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    if (s) this.startPush(s, now);
+  }
+
+  /**
+   * A change notice from a source's push channel (`syncPush`): the source has new or changed items (read by the next
+   * tick's poll, or a lookup's), or, with `deleted`, items it no longer has (dropped now, no call). O(1) per notice and
+   * no I/O: a webhook may call it on any thread of the request path. Ignored with `push` off, or for a user or source
+   * not synced (a notice never starts a sync). A notice during the backfill is kept: the backfill may have read the
+   * item's page before it changed, so the first push check after warm-up polls the source.
+   */
+  notify(scope: Scope, sourceId: string, change: SourceChange = {}, now = this.deps.now()): void {
+    if (!this.o.push) return;
+    const u = this.users.get(scopeKey(scope));
+    const s = u?.sources.get(sourceId);
+    if (!u || !s) return;
+    this.stats.notices++;
+    this.startPush(s, now);
+    const deleted: string[] = [];
+    for (const raw of change.deleted ?? []) {
+      // Eden's id, or the connector's ref: a ref the gate redacts has a hashed id (`sanitizedId`), never the raw one.
+      const id = s.ids.has(raw) ? raw : sanitizedId({ id: itemId(sourceId, raw), sourceId, ref: raw } as ContextItem);
+      if (s.ids.has(id)) deleted.push(id);
+      else this.stats.unmatchedDeletes++;
+    }
+    if (deleted.length > 0) {
+      for (const id of deleted) {
+        s.ids.delete(id);
+        s.missed.delete(id);
+      }
+      this.stats.deleted += this.deps.cache.dropSynced(u.scope, deleted);
+    }
+    // Only a notice that names deletions and nothing else leaves the source unchanged; an empty `deleted` list (a
+    // relay that always sends the field) is a change notice like one without it.
+    const deletesOnly = (change.deleted?.length ?? 0) > 0 && change.changed !== true;
+    if (!deletesOnly) s.dirtyAt = Math.min(s.dirtyAt, now);
+  }
+
   /** Whether the user's synced copy of a source can answer a lookup now: warm, and probably unchanged since polled. */
   current(scope: Scope, sourceId: string, now = this.deps.now()): boolean {
     const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
     return s !== undefined && this.isCurrent(s, now);
+  }
+
+  /** Whether the user's copy of a source has finished its backfill, current or not (`syncPollBehind`). */
+  isWarm(scope: Scope, sourceId: string): boolean {
+    return this.users.get(scopeKey(scope))?.sources.get(sourceId)?.phase === "warm";
+  }
+
+  /**
+   * Whether a source pushes its changes and has none unread (`syncPush`): its synced copy is known current, so its
+   * items are as good as read now, however long ago the sync last listed them.
+   */
+  confirmed(scope: Scope, sourceId: string, now = this.deps.now()): boolean {
+    if (!this.o.push) return false;
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    return s !== undefined && s.pushed && this.isCurrent(s, now);
   }
 
   /** Users synced now. */
@@ -225,8 +336,10 @@ export class SyncManager {
    * A lookup's on-demand poll (`syncOnDemand`): every warm source of the user that is not current is polled now,
    * at most `catchupPages` pages each before the lookup goes on (the rest is read in the background), within the
    * lookup's deadline. Returns the listing calls made; the sources it brought current answer the lookup locally.
+   * `tally.fresh` counts the items its polls stored new or changed; a poll it waited on instead (another's) counts
+   * as one, since what that poll stored is not known here.
    */
-  async freshen(scope: Scope, sources: Source[], signal: AbortSignal): Promise<number> {
+  async freshen(scope: Scope, sources: Source[], signal: AbortSignal, tally?: { fresh: number }): Promise<number> {
     const u = this.users.get(scopeKey(scope));
     if (!u) return 0;
     const now = this.deps.now();
@@ -238,9 +351,10 @@ export class SyncManager {
         if (s.busy) {
           // A poll already running (timed, or another lookup's): its answer, not a second call.
           await Promise.race([s.busy, aborted(signal)]);
+          if (tally) tally.fresh++;
           return;
         }
-        await this.run(s, () => this.poll(u, s, source, this.o.catchupPages, true, signal));
+        await this.run(s, () => this.poll(u, s, source, this.o.catchupPages, true, signal, tally));
       }),
     );
     return this.stats.demandCalls - before;
@@ -248,9 +362,21 @@ export class SyncManager {
 
   // ── internals ──
 
+  /**
+   * A source starts pushing: what changed between its last poll and the watch no notice will ever name, so it is
+   * dirty as of now, and current only once a poll that began after this point completes.
+   */
+  private startPush(s: SourceSync, now: number): void {
+    if (s.pushed) return;
+    s.pushed = true;
+    s.dirtyAt = Math.min(s.dirtyAt, now);
+  }
+
   private isCurrent(s: SourceSync, now: number): boolean {
     if (s.phase !== "warm") return false;
     const age = now - s.polledAt;
+    // A pushed source says when it changes: current while no notice is unread (and its watch has not gone quiet).
+    if (this.o.push && s.pushed) return s.dirtyAt === Infinity && age <= this.o.pushMaxStaleMs;
     if (!(age <= this.o.maxStaleMs)) return false;
     const rate = s.alpha / s.beta; // items per hour
     return 1 - Math.exp((-rate * Math.max(0, age)) / HOUR) < this.o.staleChance;
@@ -305,8 +431,16 @@ export class SyncManager {
       [...u.sources.values()].map(async (s) => {
         const source = byId.get(s.id);
         if (!source || s.phase !== "warm" || s.busy || now < s.retryAt) return;
-        if (s.sweep !== null || now - s.sweptAt >= this.o.sweepMs) {
+        const pushed = this.o.push && s.pushed;
+        if (s.sweep !== null || now - s.sweptAt >= (pushed ? this.o.pushSweepMs : this.o.sweepMs)) {
           await this.run(s, () => this.sweep(u, s, source));
+        } else if (
+          pushed &&
+          ((s.dirtyAt !== Infinity && now - s.polledAt >= this.o.pushGapMs) || now - s.polledAt > this.o.pushMaxStaleMs)
+        ) {
+          // A notice to read, or a watch silent too long: one incremental poll.
+          this.stats.pushPolls++;
+          await this.run(s, () => this.poll(u, s, source, MAX_POLL_PAGES, false));
         } else if (this.o.everyMs > 0 && now - s.polledAt >= this.o.everyMs) {
           await this.run(s, () => this.poll(u, s, source, MAX_POLL_PAGES, false));
         }
@@ -430,6 +564,7 @@ export class SyncManager {
     maxPages: number,
     demand: boolean,
     signal?: AbortSignal,
+    tally?: { fresh: number },
   ): Promise<void> {
     const started = this.deps.now();
     let cursor: string | undefined;
@@ -454,6 +589,7 @@ export class SyncManager {
       s.failures = 0;
       const fresh = this.store(u, s, page.items);
       changed += fresh;
+      if (tally) tally.fresh += fresh;
       const boundary = fresh < page.items.length;
       if (boundary || page.next === null || page.items.length === 0) {
         this.polled(s, started, changed);
@@ -480,6 +616,8 @@ export class SyncManager {
       }
     }
     s.polledAt = startedAt;
+    // Every notice that came before this poll began is read by it; one that came during it is not.
+    if (s.dirtyAt <= startedAt) s.dirtyAt = Infinity;
   }
 
   /**
@@ -616,6 +754,8 @@ function newSourceSync(id: string): SourceSync {
     failures: 0,
     retryAt: 0,
     busy: null,
+    pushed: false,
+    dirtyAt: Infinity,
   };
 }
 

@@ -143,6 +143,13 @@ export interface EngineConfig {
    * rather than delivered on their score alone. Costs a judge call on lookups that had only confident items.
    */
   judgeConfident: boolean;
+  /**
+   * With a model: the judge leaves the critical path. Every lookup decides and answers as with no model (the fast
+   * path, anticipation's early answer, grounding and the fallback); the judge then reads the candidates that answer
+   * left out, and what it picks is queued for the agent's next turn. It can add, never hold back
+   * (docs/research/econ-judge.md).
+   */
+  judgeBehind: boolean;
   /** With a judge configured, sure items are judged when more than one scored as sure (a contested set). */
   judgeContested: boolean;
   /**
@@ -193,6 +200,14 @@ export interface EngineConfig {
    * run into a line and the user from attendee lists (`render.ts` `messageParts`).
    */
   densePacket: boolean;
+  /**
+   * Dates said whole in packets and `ask` answers (D68; docs/research/econ-uptake.md): compaction keeps the current
+   * year ("left 9 Oct 2026", which `compactInjection` shortens to "9 Oct"), and an event whose text never names its
+   * day starts with its `meta.start` ("Starts: Thu 29 Oct 2026 13:30 UTC. "), since a calendar connector may keep the
+   * time only there. Wording only: what is delivered, and when, is unchanged; in-sample, packet bytes +1.6%, about 6
+   * bytes (1–2 agent input tokens) a task (docs/COST-MODEL.md).
+   */
+  packetDates: boolean;
   /**
    * With no model's say, names a request types in lowercase ("move my drinks with chen wei") ground it and pick its
    * fallback as capitalised ones do, when the user's own sources have been recorded mentioning them (the source map;
@@ -247,6 +262,13 @@ export interface EngineConfig {
    * then answers from the local index, rather than sending the source its search and probes.
    */
   syncOnDemand: boolean;
+  /**
+   * With `syncOnDemand`: an event's lookup does not wait for that poll. Every warm synced source answers from the
+   * index as it stands while the poll runs behind; the agent's asks still wait for it. If the poll stores anything the
+   * lookup is made again with no judge call, and an item delivered from a copy the poll changed goes out again as it
+   * now reads (D65, docs/research/econ-judge.md).
+   */
+  syncPollBehind: boolean;
   syncCatchupPages: number;
   /** Users synced per tenant; past it the tenant's least recently active user stops being synced. */
   syncMaxUsersPerTenant: number;
@@ -259,6 +281,23 @@ export interface EngineConfig {
    * user's items) are each sent alone to them as a probe, at no call; their finds get the probes' seats. 0: none.
    */
   syncTermProbes: number;
+  /**
+   * Push (`SyncManager.notify`, `ContextPartner.sourceChanged`; docs/research/econ-background.md): a synced source
+   * whose connector sends change notices (Gmail watch, Calendar push, Slack Events, relayed by the tenant) is current
+   * until a notice arrives, read with one incremental poll, and swept only every `syncPushSweepMs`. Off: notices are
+   * ignored and every source is polled as D57 says.
+   */
+  syncPush: boolean;
+  /** A pushed source with no notice and no poll for this long (ms) is polled anyway (a lapsed watch). */
+  syncPushMaxStaleMs: number;
+  /**
+   * A pushed source's sweep, for deletes its notices did not name, this often (ms). It is also what re-lists a quiet
+   * source's older items, so it stays at most half the cache's `syncTtlMs` (7 days): a sweep spans many ticks on a
+   * large source, and an item not re-listed within `syncTtlMs` lapses from the cache.
+   */
+  syncPushSweepMs: number;
+  /** A pushed source with an unread notice is polled in the background at most this often (ms; 0: every tick). */
+  syncPushGapMs: number;
   /**
    * A per-user knowledge graph over every cached item (`kg.ts`; docs/research/moon-graph.md): people, organisations,
    * projects and systems, identifiers, channels, roles and days, joined by typed edges. A lookup walks it from the
@@ -298,6 +337,24 @@ export interface EngineConfig {
   cards: boolean;
   /** With `cards` and `groundConflict`, at most this many items delivered on their card alone. */
   cardItems: number;
+  /**
+   * With `cards`: the enrichment's economy preset (`ECONOMY_CARD_LIMITS`, docs/research/econ-background.md). A strict
+   * prefilter (footers and a reply's subject out), one card for items saying the same constraint sentences, and
+   * twenty items per call. The card of every item still read is made by the same prompt; only which items are read,
+   * and how many per call, change.
+   */
+  cardsEconomy: boolean;
+  /**
+   * `decideConflict` (D67, docs/research/econ-decide.md): with no model's say (none, `judgeBehind`, whose lookup
+   * decides as with none, or a model that failed, was cut off or was over budget, D41), the conflict ground's test (its
+   * request-frame conflicts, consequence finds and the graph's conflicts) is run over every ranked candidate, not only
+   * the eligible ones, whatever path spoke first (the fast path's sure cached match, sure, anticipated, grounded by a
+   * person or a day, the fallback, or none), and its best find joins the delivery while it has room. A sure lexical
+   * match no longer silences a conflict.
+   */
+  decideConflict: boolean;
+  /** With `decideConflict`: the ranked candidates its test reads (and the lab's candidate dump holds), best first. */
+  decideCandidates: number;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
   /**
@@ -327,6 +384,13 @@ export interface EngineConfig {
    * session on the process milliseconds of CPU, and the cue it yields is no better than the head's.
    */
   maxEventChars: number;
+  /**
+   * The action firewall (`checkAction`, `firewall.ts`; docs/research/econ-firewall.md): an agent's tool call is checked
+   * before it runs, with no model and no source call, against what is held: the request and the call's structured
+   * arguments (their days, times, amounts, names and references) read as one cue through the conflict test, the graph,
+   * the cards and the calendar. A finding is returned as data; otherwise `proceed`. Off: `checkAction` always proceeds.
+   */
+  actionCheck: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -395,6 +459,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   anticipateSessionCalls: 24,
   anticipateOff: [],
   judgeConfident: false,
+  judgeBehind: false,
   judgeContested: false,
   judgeTied: false,
   judgeTiedShare: 0.03,
@@ -407,6 +472,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   quietClear: false,
   judgeAgreed: true,
   densePacket: false,
+  packetDates: false,
   recoverNames: false,
   groundOccasion: false,
   quietNameOnly: false,
@@ -422,12 +488,21 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncDropMs: 7 * 24 * 3_600_000,
   syncCallsPerMin: 30,
   syncOnDemand: true,
+  syncPollBehind: false,
   syncCatchupPages: 2,
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,
   syncWide: false,
   syncTermProbes: 0,
+  syncPush: false,
+  syncPushMaxStaleMs: 24 * 3_600_000,
+  syncPushSweepMs: 3 * 24 * 3_600_000,
+  syncPushGapMs: 0,
   cards: false,
+  cardsEconomy: false,
   cardItems: 1,
+  decideConflict: false,
+  decideCandidates: 64,
   maxEventChars: 32_000,
+  actionCheck: false,
 };

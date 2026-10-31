@@ -13,6 +13,7 @@ import { plantHeldout5 } from "./hidden-heldout5";
 import { plantHeldout6 } from "./hidden-heldout6";
 import { plantHeldout7 } from "./hidden-heldout7";
 import { plantHeldout8 } from "./hidden-heldout8";
+import { plantHeldout9 } from "./hidden-heldout9";
 
 export type { HiddenTask };
 export type Variant = "hidden" | "control";
@@ -32,17 +33,29 @@ export const SUITES: Record<string, Plant> = {
   heldout7: plantHeldout7,
   // Written after D55, blind to the engine and to every other suite; measurement only.
   heldout8: plantHeldout8,
+  // Written for the econ tracks, blind to the engine and to every other suite; registered unread, measurement
+  // only: never run it while tuning.
+  heldout9: plantHeldout9,
 };
 export const SUITE_NAMES = Object.keys(SUITES);
 const HELDOUT_ALL = ["heldout", "heldout2", "heldout3", "heldout4"];
+/**
+ * Blind suites that have never been run: left out of `all`, so a tuning command with `--suite all` cannot spend them;
+ * the blind run names them. A suite leaves this list once its blind run is recorded.
+ */
+export const UNRUN_BLIND = ["heldout9"];
+const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n));
 
-/** A `--suite` value: a comma list of suite names, `all`, or `heldout-all`; unknown names throw. Deduplicated. */
+/**
+ * A `--suite` value: a comma list of suite names, `all` (every suite but the unrun blind ones), or `heldout-all`;
+ * unknown names throw. Deduplicated.
+ */
 export function parseSuites(arg: string): string[] {
   const out: string[] = [];
   for (const raw of arg.split(",")) {
     const name = raw.trim();
     if (!name) continue;
-    const names = name === "all" ? SUITE_NAMES : name === "heldout-all" ? HELDOUT_ALL : [name];
+    const names = name === "all" ? ALL : name === "heldout-all" ? HELDOUT_ALL : [name];
     for (const n of names) {
       if (!(n in SUITES)) throw new Error(`unknown suite "${n}" (known: ${SUITE_NAMES.join(", ")}, all, heldout-all)`);
       if (!out.includes(n)) out.push(n);

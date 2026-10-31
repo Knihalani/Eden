@@ -84,7 +84,12 @@ per source at a time; the lookup waits at most `probeGraceMs` for them, and slow
 **Compaction** (`compactInjection`, off by default; D47, `render.ts` `compactText`): a delivered item, and the judge's
 copy of a candidate, is cut to the parts that bear on the request, with no model and in linear time: recipients,
 greetings, pleasantries, signatures, footers and links dropped, and parts that repeat the item's title or an earlier
-item in the packet.
+item in the packet. It drops the current year from dates ("9 Oct"); with `packetDates` (D68, off by default) it keeps
+it ("9 Oct 2026"), and an event whose shown text never names its day, in a packet or an `ask_context` answer, starts
+with its `meta.start` ("Starts: Thu 29 Oct 2026 13:30 UTC. "), built from the timestamp's digits only: the zone as
+written, no time when the stamp has no zone or is at midnight (an all-day event), and only when it fits the line whole.
+Usage learning reads the packet as rendered without the flag (`usageText`), so the flag changes wording, not what Eden
+learns.
 
 **No-model grounds and shared calls** (D48, flags off by default): with probes, a clash is an event overlapping the
 time asked for, never the event the request is about; `groundAway` delivers a named person's absence on a named day;
@@ -117,6 +122,45 @@ change rate, a daily sweep that drops what a source has not listed in two sweeps
 cache. A lookup answers every current synced source (its own search and every probe) from that local index at no
 call, and calls live only the sources that are not synced or still stale. The tick runs on a timer, never on the fast
 path, which only marks the user active.
+
+**Poll behind the lookup** (D65, `syncPollBehind`, off by default; with `sync` and `syncOnDemand`): without it, a
+lookup that finds a synced source stale waits for that source's on-demand poll (`sync.freshen`, one or two listing
+calls), which was most of Eden's time on the agent's critical path in ALL (p50 503 ms where it ran). With it, every
+warm synced source answers the event's lookup from the index as it stands and the poll runs behind; the critical path
+then holds no source call for a synced source, current or polling behind. If the poll stores anything, the lookup is
+made again on the fresh index once both are done (after any lookup still in flight) and what it delivers is queued for
+the agent's next request: after a delivery, or with a model, only what is sure or grounded (so it makes no judge
+call); after silence with no model, as the lookup would have decided. The first answer can carry a copy the poll then
+finds edited; the ledger records each delivered item's words with the flag, and the follow-up delivers the corrected
+copy (the departure from D40 is that the old copy went out first). `ObserveResult.pending` stays true while a poll,
+follow-up or behind-the-answer judge is running. The agent's `ask_context` still waits for the poll. **Judge behind the answer** (`judgeBehind`, off by default,
+experimental and not recommended): with a model, every lookup decides as with no model and answers at once; the judge
+then reads only the candidates that answer left out and its picks are queued. The recommended configuration has no
+model judge on the critical path.
+
+**A found conflict always speaks** (D67, `decideConflict`, off by default; docs/research/econ-decide.md): wherever the
+rule paths decide (no model, `judgeBehind`'s lookup, or a model that failed, was cut off or was over budget, D41),
+after whichever path decided, the conflict ground's test (`joinConflict()` over `conflicts()`: request-frame
+conflicts, conflicting consequence finds, the graph's conflicts) is run over every ranked candidate, and its best find
+joins the packet while it has room; a sure lexical match no longer silences a conflict the engine had found. That
+includes the fast path's sure answer from the cache (the pass then reads the cache's ranking, with no probe or graph
+finds, and adds only a current copy). It runs on `syncPollBehind`'s follow-up lookup too, and before
+`judgeBehind`'s judge, which then reads only what is left. A judge that answered decides alone. No call, no state. The candidates' facts (`decide.ts`) reach the lab only through the
+content-free `PartnerDeps.onCandidates` hook; the engine decides nothing from them.
+
+**Push** (D66, `syncPush`, off by default, with `sync`): a tenant holding a connector watch (Gmail watch, Calendar
+push, Slack Events) declares it (`ContextPartner.sourcePushes`) and relays each change notice
+(`ContextPartner.sourceChanged`), which carries no content. Declaring a watch (or a first notice) leaves the source
+to one more poll, for what changed before the watch, which no notice names; a notice during the backfill is kept and
+read after it. A notice is a change notice unless its only field is a non-empty `deleted` list (`changed: true` says a
+notice also has new items), and `deleted` takes Eden item ids or the connector's refs (mapped through the redaction's
+hashed ids). A pushed source is current until a notice arrives, so a
+lookup neither polls it nor waits for it; a notice is read with one incremental read-only list call (by the next tick,
+at most every `syncPushGapMs`, or by a lookup), a notice naming deleted items drops them at once, and sweeps run every
+`syncPushSweepMs` (3 days: a sweep also re-lists a quiet source's older items, which lapse from the cache 7 days after
+their last listing). Items of a pushed source with no unread notice count as read now for D57's two-hour
+freshness rule. A watch silent for `syncPushMaxStaleMs` (24 h) is not trusted: the source goes stale as any other and,
+with `syncPollBehind`, is polled behind the lookup, never on the path. The server has no notice route yet.
 
 **Knowledge graph** (proposed D58, `graph` off by default; `kg.ts`, docs/research/moon-graph.md): with the flag, the
 item cache keeps a per-user graph over what it holds, built as items are cached and dropped with them: people (names,
@@ -151,6 +195,16 @@ frame (`conflict.ts`) are matched against the cards of cached items: a match is 
 `groundConflict` the best violated card is delivered (grounded "card"). The card's own statement never reaches the
 agent. The server's `buildPartner` does not wire an enricher yet.
 
+**Card economy** (D66, `cardsEconomy`, off by default, with `cards`; docs/research/econ-background.md): the enricher
+reads fewer items with the same prompt. A strict prefilter cuts legal-disclaimer and notification-settings footer
+blocks (from their first words to the end of their paragraph, so a constraint written after one is still read) and
+does not read a reply's or forward's subject; items of one user that say the same deontic sentences under the same
+subject (reply prefixes, greetings and footers aside, none dated relative to their message) share one card, the
+subject included because the model reads it for the card's entities; twenty items go per call. The card maker's
+`OpenRouterModel` may route by price (`sort: "price"`, still ZDR); a batch cut off at the output cap, which price
+routing makes more frequent, is sent once more with default routing (`CardMakerOptions.retry`) under its own
+reservation.
+
 **The moonshots together** (proposed D62, [research/moonshots.md](research/moonshots.md)): the flags compose. With
 the sync, synced sources answer the lookup's search, every probe and the prefetch locally, and the graph and the
 cards cover every synced item; the graph walk and card matching run on the slow path after the lookup's items are
@@ -159,9 +213,33 @@ anticipation's early decision reads what the prefetch, the sync and the cache ho
 engine's spans (`sync.freshen`, `sync.list`, `graph.walk`, `cards.match`, `cards.make`, `anticipate.prefetch`,
 `anticipate.early`), and the Pi harness's timeline reads the same spans.
 
+**The action firewall** (`actionCheck`, off by default; proposed D69, `firewall.ts`,
+[research/econ-firewall.md](research/econ-firewall.md)): `checkAction` (HTTP `POST /v1/check`, client `check`) takes
+the agent's tool call before it runs. The session's request and the call's structured arguments (dates written out,
+amounts, names, references; free-text fields such as an email's body left out) make one cue, decided from what is held
+with no model and no source call: the probes' memo and the class's cached finds offline, the graph walk, the cards and
+the cache, through `grounded` (whose conflicts come from the same `conflicts()` helper `decideConflict` reads). The
+arguments pass the secret gate before they make the cue, each first as `"key": value` so a secret known only by its
+key's name (a password, an api_key) is caught before the call becomes words, and a session keeps only a digest of each
+call it answered with a finding, taken after the gate. Only its action grounds count (a calendar clash for a call with a
+start, a conflict, the graph's or a card's, someone away), and a conflict read from shared words must also be tied by
+structure (a span over the call's day, an expiry before it, a limit on its amount, a standing constraint on someone it
+names, an identifier it names, or the action class's find). A finding the call's own words already account for ("one
+guest has coeliac disease" in the notes) is dropped. The answer is `proceed` or a `finding` in the usual data envelope;
+the same call made again after a finding proceeds (the agent's informed choice). What the integration does with a
+finding is its own: `heldResult` in the client is one choice (hold the call and return the finding as the tool's
+result). The client's `check` fails open (an error, a timeout, a 4xx or 503, or an answer of another shape is
+`proceed`); the route answers 400 for a malformed call and 503 when the engine fails. The stock server turns on no
+engine flag from the environment: an embedding opts in through `buildPartner`'s `engine` settings, with the grounds it
+wants the check to read.
+
 **Ask** always searches (live, or a current synced source locally with D57; more sources), ignores the not-twice ledger (the agent asked), and returns the cited
 items as they are, with no model call: the asker is a model and reads them directly (D43). `askWithModel`
 (`EDEN_ASK_MODEL=1`) has one model call compose a short cited answer instead, when a model and budget are available.
+The ask is part of the design, not a fallback for a thin packet: a packet that also carried the candidates the gate
+held back, so the agent could answer without asking, was measured and rejected (D70,
+[research/econ-oneturn.md](research/econ-oneturn.md)). The agent's own question reaches items the request's words did
+not, and the agent raised a delivered fact more often when it could still ask.
 
 ## Learning loop
 

@@ -3,6 +3,7 @@
  *
  *   POST /v1/events    an AgentEvent              → ObserveResult  (?waitMs= to wait for the slow path)
  *   POST /v1/ask       an AskRequest              → AskResponse
+ *   POST /v1/check     a tool_call AgentEvent     → ActionCheck   (the action firewall, `actionCheck`)
  *   POST /v1/pending   {tenantId,userId,sessionId} → {injections}
  *   POST /v1/feedback  a Feedback (used: boolean)  → {ok, applied}
  *   POST /v1/forget    {tenantId,userId,sourceId?} → {ok}
@@ -66,6 +67,13 @@ export function createHandler(
           if (!checked.ok) return fail(400, checked.error);
           const waitMs = Math.max(0, Math.min(5_000, Number(url.searchParams.get("waitMs") ?? 0) || 0));
           return json(await partner.observe(checked.value, { waitMs }));
+        }
+        case "/v1/check": {
+          // The action firewall: a tool call the agent is about to make, checked against what is held (no model).
+          const checked = checkEvent(body);
+          if (!checked.ok) return fail(400, checked.error);
+          if (checked.value.kind !== "tool_call") return fail(400, "check takes a tool_call event");
+          return json(await partner.checkAction(checked.value));
         }
         case "/v1/ask": {
           const checked = checkAsk(body);
