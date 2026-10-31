@@ -12,7 +12,7 @@ against this history, not against memory. Only simulated data is recorded here.
 | funnel | The hidden-context suites through Eden alone: the planted item followed through retrieval, cache and delivery; the decoy on control tasks | free, ~1 min | `bun packages/sim/src/lab/hidden-funnel.ts --suite hidden\|heldout` |
 | sim | Simulation quality, realistic and held-out connector mixes, no judge and the perfect judge, 4 seeds | free, minutes | `bun packages/sim/src/lab/bench.ts` (runs funnel, sim and eval) |
 | eval | The 27 hand-labelled scenarios, no model | free, seconds | (in `bench.ts`) |
-| agent | A live agent on the tasks under each condition, graded by a second model | ~$0.3–1 per run | `agent-ab.ts` then `agent-ab-report.ts <file> --record <label>` |
+| agent | A live agent on the tasks under each condition, graded by a second model | ~$0.3–1 per run | `pi-ab.ts` (the Pi harness, with per-task timelines) then `pi-ab-report.ts <file>` and `agent-ab-report.ts <file> --record <label>`; `agent-ab.ts` is the earlier in-house loop |
 
 The agent tier's standard agent is the Pi harness (CLAUDE.md); results from the earlier in-house agent loop
 (`agent-ab.ts` up to D55) are labelled as such and are not compared with Pi runs.
