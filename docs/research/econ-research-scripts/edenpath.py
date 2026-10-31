@@ -24,7 +24,8 @@ for f in sorted(glob.glob(base + '/pi-ALL-*.timeline/tasks.jsonl') + glob.glob(b
             elif e.get('ev') == 'eden.observe' and e.get('ph') == 'E' and e['id'] in opened:
                 observe[k].append(e['t'] - opened[e['id']])
         tot[k] += 1
-        if any(e.get('ev', '').startswith('tool') and 'ask' in json.dumps(e.get('data', {})) for e in t.get('events', [])):
+        events = t.get('events', [])
+        if any(e.get('ev', '').startswith('tool') and 'ask' in json.dumps(e.get('data', {})) for e in events):
             asked[k] += 1
 for k in sorted(first_req):
     fr = first_req[k]

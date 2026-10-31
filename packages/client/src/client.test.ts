@@ -62,6 +62,21 @@ describe("withContext", () => {
     expect(out.slice(0, 3)).toEqual(messages.slice(0, 3));
     expect(withContext(messages, [])).toBe(messages);
   });
+
+  test("a packet injected mid-turn lands before the turn's tool messages, so the last request is no prefix", () => {
+    // docs/INTEGRATION.md's cache advice rests on this: the prefix is kept up to the latest user message only.
+    const start = [
+      { role: "system", content: "You are helpful." },
+      { role: "user", content: "pay the invoice" },
+    ];
+    const first = withContext(start, [inj("<context>1</context>")]);
+    const turn = [...first, { role: "assistant", content: "calling pay" }, { role: "tool", content: "ok" }];
+    const second = withContext(turn, [inj("<context>2</context>")]);
+    expect(second.map((m) => m.role)).toEqual(["system", "system", "system", "user", "assistant", "tool"]);
+    expect(second.slice(0, turn.length)).not.toEqual(turn);
+    // Only the messages before the latest user message survive as a prefix.
+    expect(second.slice(0, 2)).toEqual(turn.slice(0, 2));
+  });
 });
 
 test("a throwing onError never throws into the agent's loop", async () => {

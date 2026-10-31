@@ -8,7 +8,8 @@ for f in glob.glob(base + '/pi-ALL-*.timeline/tasks.jsonl') + glob.glob(base + '
         t = json.loads(l)
         for r in t.get('requests', []):
             if r.get('cost') and r.get('in'):
-                rows.append((r['in'], r['out'], r['cost'], r['firstTokenMs'], r['endMs'] - r['startMs'], t['condition']))
+                rows.append((r['in'], r['out'], r['cost'], r['firstTokenMs'],
+                             r['endMs'] - r['startMs'], t['condition']))
 print('requests', len(rows))
 cands = {'OpenInference': (1.72e-8, 3.55e-8), 'Relace': (1.63e-8, 1.479e-7), 'Morph': (4.2e-8, 3e-7),
          'Wafer-us': (4.4e-8, 2e-7), 'Wafer': (5.4e-8, 2e-7), 'Z.AI/std': (1.5e-7, 5e-7), 'Novita': (8.4e-8, 2.8e-7),
@@ -32,4 +33,5 @@ print('share of cost from input at fitted prices %.2f' % (tin * p[0] / (tin * p[
 X = np.array([[1, r[1], r[0]] for r in rows]); y = np.array([r[4] for r in rows])
 print('dur ms = a + b*out + c*in', np.linalg.lstsq(X, y, rcond=None)[0])
 print('ttft p50', s.median(r[3] for r in rows))
-print('in tokens per request p50', s.median(r[0] for r in rows), 'share >=1024', sum(r[0] >= 1024 for r in rows) / len(rows))
+print('in tokens per request p50', s.median(r[0] for r in rows),
+      'share >=1024', sum(r[0] >= 1024 for r in rows) / len(rows))
