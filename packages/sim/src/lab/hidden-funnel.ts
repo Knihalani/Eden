@@ -12,8 +12,8 @@
  *   bun packages/sim/src/lab/hidden-funnel.ts [--suite hidden|heldout|heldout-all|all|a,b] [--seeds 41,42,43,44]
  *     [--time 0]
  *     [--config '{"probes":true}'] [--json out.json] [--label probes] [--no-record] [--judge live [--model m]]
- *     [--sync] [--cards DIR/cards.jsonl]
- *     [--lead-in clause|half] [--time 0] [--typing-ms 1500]
+ *     [--sync] [--cards DIR/cards.jsonl] [--card-limits '{"batch":20}'] [--planted-age-days N] [--push]
+ *     [--lead-in clause|half] [--time 0] [--typing-ms 1500] [--packets out.jsonl]
  *
  * `--judge live` gives Eden its judge (OpenRouter, `OPENROUTER_API_KEY`): the funnel then measures what the judge lets
  * through, hidden and decoy, and its calls, tokens and spend (about $0.03 for the 456 held-out tasks), a cheap screen
@@ -33,6 +33,15 @@
  * by `cards-enrich.ts` (no model call here; an item with no cached card is uncovered). They are made as items enter the
  * cache, and used from the next request on; with `--sync`, for every item before the first request. Turn them on with
  * `"cards": true` in `--config`.
+ * `--card-limits` sets the enricher's `CardLimits` (one economy setting at a time; `"cardsEconomy": true` in
+ * `--config` applies the whole preset, docs/research/econ-background.md); the run prints the enrichment's counters
+ * (`cards use`: items sent to the model, calls, reused by sentence) summed over its users.
+ * `--push` (with `"syncPush": true` in `--config`): once backfilled, every source declares a push watch
+ * (`sourcePushes`). The worlds do not change while the tasks run, so no notice follows: the run measures the polls a
+ * quiet pushed source no longer needs.
+ * `--planted-age-days N` dates every planted item (hidden and decoy) N days before the present instead of one: a
+ * stress test for rules that read an item by its age (docs/research/econ-background.md): every suite plants a
+ * day-old item.
  * `--lead-in` gives each request a "user is typing" draft before it (`drafts.ts`: its first clause, or its first
  * half; a simulation assumption, since no suite carries one), sent as a draft user message (`anticipate` reads it, any
  * other configuration ignores it). With `--time 0` the request follows once the engine has settled (typing takes
@@ -44,8 +53,8 @@
  * `--suite` names any suite of `suites.ts`, or several: each gets its own table, then a TOTAL over all of them.
  * Each suite's run is recorded in the benchmark ledger (bench/, `ledger.ts`) unless `--no-record`.
  */
-import { writeFileSync } from "node:fs";
-import { CardEnricher, ContextPartner, cpuNow, ItemCache, type Trace } from "@eden/engine";
+import { appendFileSync, writeFileSync } from "node:fs";
+import { CardEnricher, ContextPartner, cpuNow, ItemCache, type CandidateDump, type Trace } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, OpenRouterModel, type Model } from "@eden/llm";
 import type { AgentEvent, Injection } from "@eden/protocol";
@@ -58,6 +67,7 @@ import { clearSlot, dress } from "./hidden-context";
 import { record, tidy } from "./ledger";
 import { Timeline } from "./timeline";
 import { parseSuites, SUITES, type HiddenTask } from "./suites";
+import { packetLine } from "./uptake";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -75,17 +85,35 @@ const TIME = Number(opt("time", "0"));
 const CONFIG = JSON.parse(opt("config", "{}")) as Record<string, unknown>;
 const LIVE = opt("judge", "none") === "live";
 const SYNC = args.includes("--sync");
+/** `--ask`: each request is also asked of Eden (`ask`), recording whether the answer cites the planted item. */
+const ASK = args.includes("--ask");
 const SERIAL = args.includes("--serial");
 const NOOP_SPANS = opt("spans", "") === "noop";
 const REAL_SYNC = CONFIG.sync === true;
 if (REAL_SYNC && SYNC) throw new Error("--sync (the oracle) and the real sync (config sync) are exclusive");
 /** The real sync's listing calls over the whole run (every suite), and the lookups that answered locally. */
-const syncUse = { backfill: 0, background: 0, demand: 0, lookups: 0, localSources: 0, warmMs: 0, users: 0 };
+const syncUse = {
+  backfill: 0,
+  background: 0,
+  demand: 0,
+  // On-demand listing calls as the sync counts them: with `syncPollBehind` a lookup's trace carries none of its poll's.
+  demandAll: 0,
+  lookups: 0,
+  localSources: 0,
+  warmMs: 0,
+  users: 0,
+};
 const CARDS = opt("cards", "");
 /** One replaying maker for every seed and suite: the disk cache is read once. */
 const cardMaker = CARDS ? new DiskCardMaker(CARDS) : null;
+/** Every lane's enrichment counters, summed (`CardStats`): items read by the model and calls, per simulated user. */
+const cardUse: Record<string, number> = {};
+const cardLanes: CardEnricher[] = [];
 /** No cap on replayed cards: they cost nothing here (the enrichment's spend is `cards-enrich.ts`'s). */
 const UNCAPPED = { callsPerSession: Infinity, usdPerSession: Infinity, usdPerUserDay: Infinity };
+const CARD_LIMITS = JSON.parse(opt("card-limits", "{}")) as Record<string, unknown>;
+const PLANTED_AGE_DAYS = Number(opt("planted-age-days", "0"));
+const PUSH = args.includes("--push");
 const LEAD = opt("lead-in", "") as DraftMode | "";
 if (LEAD && LEAD !== "clause" && LEAD !== "half") throw new Error("--lead-in must be clause or half");
 const TYPING_MS = Number(opt("typing-ms", "1500"));
@@ -93,6 +121,18 @@ const KEY = process.env.OPENROUTER_API_KEY;
 if (LIVE && !KEY) throw new Error("--judge live needs OPENROUTER_API_KEY");
 const MODEL = opt("model", "z-ai/glm-5.3-flash");
 const TIMELINE = opt("timeline", "");
+/**
+ * `--packets out.jsonl`: each task's packets as the agent would read them (text, reason, cited item ids) and the
+ * planted item's id, a JSON line per task, to study the packet's form (docs/research/econ-lab.md). Sim worlds only.
+ */
+const PACKETS = opt("packets", "");
+if (PACKETS) writeFileSync(PACKETS, "");
+/**
+ * `--candidates out.jsonl`: every no-model decision's candidates with their facts (`decide.ts`), one line per task with
+ * the planted item's id and variant, for the decision analysis (docs/research/econ-decide.md). Ids and numbers only.
+ */
+const CANDIDATES = opt("candidates", "");
+if (CANDIDATES) writeFileSync(CANDIDATES, "");
 const timeline = TIMELINE
   ? new Timeline(TIMELINE, { tool: "hidden-funnel", suites: SUITE_LIST, seeds: SEEDS, config: CONFIG, sync: SYNC })
   : null;
@@ -188,6 +228,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
   const before = world.items.length;
   const tasks: HiddenTask[] = SUITES[suite]!(world, seed, variant);
   const planted = world.items.slice(before);
+  if (PLANTED_AGE_DAYS > 0) for (const it of planted) it.updatedAt = world.now - PLANTED_AGE_DAYS * 86_400_000;
   for (const it of planted) dress(world, it);
   // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
   const keep = new Set(planted.map((it) => it.id));
@@ -209,6 +250,14 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
   let calls = 0;
   const prefetched = new Set<string>();
   const lane = `${suite}/${variant}/${seed}`;
+  const dumps = new Map<string, CandidateDump[]>();
+  const onCandidates = CANDIDATES
+    ? (d: CandidateDump) => {
+        const list = dumps.get(d.sessionId) ?? [];
+        dumps.set(d.sessionId, list);
+        list.push(d);
+      }
+    : undefined;
   const countCalls = (t: Trace) => {
     // A prefetch's calls (`anticipate`) are the task's too.
     calls += t.sourceCalls + (t.anticipateCalls ?? 0);
@@ -220,8 +269,9 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     }
   };
   const cards = cardMaker
-    ? new CardEnricher({ maker: cardMaker, budget: new Budget(UNCAPPED), now: () => clock })
+    ? new CardEnricher({ maker: cardMaker, budget: new Budget(UNCAPPED), now: () => clock }, CARD_LIMITS)
     : null;
+  if (cards) cardLanes.push(cards);
   const partner = new ContextPartner({
     sources: async () => sources,
     sourceMap: new SourceMap(":memory:", { seed }),
@@ -234,14 +284,19 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     onTrace: timeline ? timeline.traceSink(lane, countCalls) : countCalls,
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
+    ...(onCandidates ? { onCandidates } : {}),
   });
   // The harness may read the engine's session table (as `quality.ts` `settle` does; product code may not): whether a
-  // session's lookup or prefetch is still running.
-  const table = (partner as unknown as { sessions: Map<string, { inflight: unknown; ant?: { running: unknown } }> })
-    .sessions;
+  // session's lookup, prefetch or work its lookup left running (`behind`: `syncPollBehind`'s poll and follow-up,
+  // `judgeBehind`'s judge) is still running.
+  const table = (
+    partner as unknown as {
+      sessions: Map<string, { inflight: unknown; ant?: { running: unknown }; behind?: unknown }>;
+    }
+  ).sessions;
   const busy = (sessionId: string) => {
     const s = table.get(`${scope.tenantId}/${scope.userId}#${sessionId}`);
-    return !!(s?.inflight || s?.ant?.running);
+    return !!(s?.inflight || s?.ant?.running || s?.behind);
   };
   const scope = { tenantId: "funnel", userId: `w${seed}` };
   // The real sync: the backfill runs before the first task, from half an hour before it on the simulated clock (a
@@ -258,6 +313,11 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     }
     syncUse.warmMs += performance.now() - t0;
     syncUse.users++;
+    if (PUSH) {
+      for (const s of sources) partner.sourcePushes(scope, s.id);
+      // The watch's one poll (what changed before it, no notice names), as a tenant's sync would make it.
+      syncUse.backfill += await sync.tick();
+    }
     // Cards for the backfilled items, as a long-running sync would have them before the first request.
     if (cards) await cards.idle();
     clock = world.now;
@@ -332,11 +392,33 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     if (cards) await cards.idle();
     const injections = [...(r.injection ? [r.injection] : [])];
     const got = arrived.flatMap((x) => x.ids);
+    const answered = ASK ? await partner.ask({ ...scope, sessionId, question: task.text }) : null;
+    const askCited = answered ? answered.citations.some((c) => c.itemId === id) : undefined;
     // How the planted item was delivered (the injection reason's kind: sources, grounded-…, fallback, model).
     const why =
       [...injections, ...pendingSeen].find((x) => x.citations.some((c) => c.itemId === id))?.reason.split(":")[0] ?? "";
     const first = arrived.find((x) => x.ids.includes(id));
     traced?.end({ template: task.template, delivered: got.includes(id), why, injected: got.length });
+    if (PACKETS) {
+      const line = packetLine({ suite, seed, variant, template: task.template, request: task.text, planted: id }, [
+        ...injections,
+        ...pendingSeen,
+      ]);
+      appendFileSync(PACKETS, JSON.stringify(line) + "\n");
+    }
+    if (CANDIDATES) {
+      const line = {
+        suite,
+        seed,
+        variant,
+        template: task.template,
+        planted: id,
+        delivered: got,
+        dumps: dumps.get(sessionId),
+      };
+      appendFileSync(CANDIDATES, `${JSON.stringify(line)}\n`);
+      dumps.delete(sessionId);
+    }
     perTask.push({
       seed,
       variant,
@@ -344,6 +426,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       returned: returned.has(id),
       cached: !!cache.get(scope, id, clock),
       delivered: got.includes(id),
+      ...(askCited === undefined ? {} : { askCited }),
       why,
       injected: got.length,
       calls: calls - callsBefore,
@@ -355,6 +438,12 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       ...(prefetched.has(id) ? { prefetched: true } : {}),
       ...(LEAD ? { leadCalls } : {}),
     });
+  }
+  // The polls a lookup left running behind it finish before the count is read.
+  if (sync) {
+    for (let k = 0; k < 5_000 && [...table.values()].some((x) => x.inflight || x.behind); k++) await Bun.sleep(1);
+    await Bun.sleep(TIME > 0 ? 2_000 * TIME : 5);
+    syncUse.demandAll += sync.stats.demandCalls;
   }
   return perTask;
 }
@@ -402,12 +491,19 @@ if (REAL_SYNC) {
     `sync: backfill ${syncUse.backfill} calls (${(syncUse.backfill / Math.max(1, syncUse.users)).toFixed(1)}/user, ` +
       `${(syncUse.warmMs / Math.max(1, syncUse.users)).toFixed(0)} ms/user), background ${syncUse.background} ` +
       `(${(syncUse.background / tasks).toFixed(2)}/task), on-demand ${syncUse.demand} ` +
-      `(${(syncUse.demand / tasks).toFixed(2)}/task, in calls/task); request ${(requestCalls / tasks).toFixed(2)}/task; ` +
-      `amortised total ${((requestCalls + syncUse.background + syncUse.backfill) / tasks).toFixed(2)}/task; ` +
+      `(${(syncUse.demand / tasks).toFixed(2)}/task, in calls/task; ${syncUse.demandAll} by the sync's count); ` +
+      `request ${(requestCalls / tasks).toFixed(2)}/task; amortised total ` +
+      `${((requestCalls + syncUse.demandAll - syncUse.demand + syncUse.background + syncUse.backfill) / tasks).toFixed(2)}` +
+      `/task; ` +
       `local sources ${(syncUse.localSources / Math.max(1, syncUse.lookups)).toFixed(2)}/lookup`,
   );
 }
-if (cardMaker) console.log(`cards: ${cardMaker.hits} replayed, ${cardMaker.misses} uncovered (no cached card)`);
+if (cardMaker) {
+  for (const c of cardLanes) for (const [k, v] of Object.entries(c.stats)) cardUse[k] = (cardUse[k] ?? 0) + v;
+  cardUse.users = cardLanes.length;
+  console.log(`cards: ${cardMaker.hits} replayed, ${cardMaker.misses} uncovered (no cached card)`);
+  console.log(`cards use: ${JSON.stringify(cardUse)}`);
+}
 if (LIVE) {
   const tasks = Math.max(1, grand.hidden.n + grand.control.n);
   console.log(
@@ -480,6 +576,7 @@ if (out) {
         rows,
         total: grand,
         ...(REAL_SYNC ? { sync: syncUse } : {}),
+        ...(cardMaker ? { cards: cardUse } : {}),
         ...(SUITE_LIST.length > 1 ? { suites } : {}),
         // Per task, with the suite: how each planted item was delivered (`why`), for breakdowns by path.
         perTask: runs.flatMap((r) => r.perTask.map((t) => ({ suite: r.suite, ...t }))),

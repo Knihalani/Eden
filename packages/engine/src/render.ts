@@ -25,6 +25,10 @@ export function renderPacket(
     self?: string | null;
     /** `densePacket`: compaction drops the title's echo, run-in footers and known attendees (`messageParts`). */
     dense?: boolean;
+    /** `packetDates`: compaction keeps the current year in dates ("9 Oct 2026"), which `year` alone would drop. */
+    keepYear?: boolean;
+    /** `packetDates`: an event whose text never says its day starts with its `meta.start` (`whenOf`). */
+    when?: boolean;
   },
 ): string {
   if (options.focus) {
@@ -42,7 +46,9 @@ export function renderPacket(
         focus,
         each,
         (w) => own.has(w) || shown.has(w) || known(w),
-        options.year,
+        // No year, no drop: dates stay as the source wrote them, since "expires 2 Nov" is ambiguous to an agent
+        // comparing it with the request's dates where "2 Nov 2026" is not.
+        options.keepYear ? undefined : options.year,
         options.self,
         options.dense ? { title: item.title } : undefined,
       );
@@ -62,7 +68,13 @@ export function renderPacket(
     // across an 8 KB item that is then cut to a few hundred bytes (9% of end-to-end CPU; pipeline.bench.ts).
     const prefix = item.text.length > room * 2 + 64 ? item.text.slice(0, room * 2 + 64) : item.text;
     const cut = prefix.length < item.text.length;
-    let line = `- [${item.sourceId}] ${title}${inert(oneLine(prefix))}`;
+    // Read from the text the packet shows (compacted), so a day the compaction cut is a day the agent lacks.
+    let when = options.when ? whenOf(item, prefix) : "";
+    const head = `- [${item.sourceId}] ${title}`;
+    // Said whole or not at all: a start cut mid-way ("Starts: Thu 29 Oct 20…") gives the agent a day with no time,
+    // or no year, presented as the event's start.
+    if (when && utf8Length(head) + utf8Length(when) > room - 3) when = "";
+    let line = `${head}${when}${inert(oneLine(prefix))}`;
     const size = utf8Length(line);
     if (size > room || cut) line = truncateUtf8(line, room - 3) + "…"; // "…" is 3 bytes
     lines.push(line);
@@ -82,6 +94,63 @@ export function shownText(rendered: string): string {
     .filter((line) => line !== HEADER && line !== "</context>")
     .map((line) => line.replace(/^- \[[^\]]*\] /, ""))
     .join("\n");
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const START = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(Z|[+-]\d{2}(?::?\d{2})?)?)?/i;
+
+/**
+ * "Starts: Thu 29 Oct 2026 13:30 UTC. " for an item with a `meta.start` whose `text` (as the packet shows it) never
+ * names that day, or "": a calendar connector may keep an event's time only in its metadata, and an event the agent
+ * cannot place is no clash it can see. The day and time are read from the timestamp as written (its own offset, as
+ * `startDay` reads the day), with the year, since the agent compares it with the request's dates, and with the zone
+ * as written ("UTC", "+01:00"): many connectors store UTC, and a bare "03:30" from "03:30Z" is the evening before for
+ * a user at -07:00. A time with no zone (Microsoft Graph keeps it in a field McpSource does not read), or at midnight
+ * (how many calendars store an all-day event), is left out and only the day said. Built from digits and fixed names
+ * only, so no source text reaches the packet through it.
+ */
+export function whenOf(item: ContextItem, text: string): string {
+  const m = START.exec(item.meta?.start ?? "");
+  if (!m) return "";
+  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  // An impossible date ("2026-02-30") rolls over in `Date`; say nothing rather than a day the source never gave.
+  if (date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return "";
+  const name = MONTHS[month - 1]!;
+  // The text names the day already: "29 Oct", "09 Oct", "29th October", "Oct 29", "29/10", "10/29", or the ISO date.
+  const d = `0?${day}`;
+  const mo = `0?${month}`;
+  const named = new RegExp(
+    `\\b${d}(?:st|nd|rd|th)? ${name}|\\b${name}[a-z]* ${d}\\b|\\b${d}/${mo}\\b|\\b${mo}/${d}\\b|${m[1]}-${m[2]}-${m[3]}`,
+    "i",
+  );
+  if (named.test(text)) return "";
+  const zone = zoneOf(m[6]);
+  const time = m[4] && zone && `${m[4]}:${m[5]}` !== "00:00" ? ` ${m[4]}:${m[5]} ${zone}` : "";
+  return `Starts: ${WEEKDAYS[date.getUTCDay()]} ${day} ${name} ${year}${time}. `;
+}
+
+/** A stamp's offset as said to the agent: "Z" and a zero offset as "UTC", others as "+05:30"; none is "". */
+function zoneOf(offset: string | undefined): string {
+  if (!offset) return "";
+  if (offset.toUpperCase() === "Z") return "UTC";
+  const digits = offset.slice(1).replace(":", "");
+  const hhmm = `${digits.slice(0, 2)}:${digits.slice(2, 4) || "00"}`;
+  return hhmm === "00:00" ? "UTC" : `${offset[0]}${hhmm}`;
+}
+
+/**
+ * The words usage tracking reads for a packet rendered with `options`: its shown text (`shownText`) as it would be
+ * without `packetDates`, rendered again with the flag's options off. The flag changes wording only, so usage learns
+ * from the same words: a kept "2026" is a long term with a digit, which alone counts as use (`showsUse`), and any
+ * reply naming the year would otherwise mark the packet used and teach the source map so. Rendering again rather
+ * than stripping the additions keeps it exact when a line is cut, when a title has a year of its own, and when the
+ * kept year changes which compacted parts fit. Only with the flag on; a second render is linear in the packet.
+ */
+export function usageText(items: ContextItem[], options: Parameters<typeof renderPacket>[1]): string {
+  const { keepYear, when, ...plain } = options;
+  return shownText(renderPacket(items, keepYear || when ? plain : options));
 }
 
 /** An ask answer composed by the model, in the same envelope: it is derived from source text, so it is data too. */

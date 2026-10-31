@@ -1,4 +1,11 @@
-import { ContextPartner, GATE_MODULE, ItemCache, type ShadowSink, type TraceSink } from "@eden/engine";
+import {
+  ContextPartner,
+  GATE_MODULE,
+  ItemCache,
+  type EngineConfig,
+  type ShadowSink,
+  type TraceSink,
+} from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, OpenRouterModel, type Model } from "@eden/llm";
 import { WorkerPool } from "@eden/primitives";
@@ -21,6 +28,12 @@ export interface BuildOptions {
    * active user's cache in the background, on a one-minute timer, and lookups answer them locally.
    */
   sync?: boolean;
+  /**
+   * Engine settings over the production defaults, for an embedding that opts into experimental flags: the action
+   * firewall (`actionCheck`, D69, behind `POST /v1/check`) finds only on the grounds these turn on (`probes`,
+   * `groundConflict`, `groundAway`, `graph`, `cards`). The environment sets none of them.
+   */
+  engine?: Partial<EngineConfig>;
 }
 
 /** Wires a partner from its parts with production defaults. */
@@ -38,7 +51,11 @@ export function buildPartner(options: BuildOptions): ContextPartner {
     planner:
       mode === "off" ? undefined : new QueryPlanner({ seed: (Math.random() * 2 ** 32) >>> 0, store: sourceMap, mode }),
     onShadow: options.onShadow,
-    config: { askWithModel: options.askWithModel ?? false, ...(options.sync ? { sync: true } : {}) },
+    config: {
+      ...options.engine,
+      askWithModel: options.askWithModel ?? options.engine?.askWithModel ?? false,
+      ...(options.sync ? { sync: true } : {}),
+    },
   });
   if (options.sync) partner.startSync();
   return partner;
