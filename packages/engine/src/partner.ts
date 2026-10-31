@@ -86,7 +86,7 @@ import {
   PERSISTABLE_KINDS,
   termIds,
 } from "./text";
-import type { ShadowRecord, ShadowSink, Trace, TraceSink } from "./trace";
+import type { ShadowRecord, ShadowSink, SpanSink, Trace, TraceSink } from "./trace";
 import { distinctiveTokens, showsUse, type Outstanding } from "./usage";
 
 export interface PartnerDeps {
@@ -111,6 +111,8 @@ export interface PartnerDeps {
   planner?: QueryPlanner;
   /** Receives the planner's shadow lookups when `planner.mode` is "shadow". */
   onShadow?: ShadowSink;
+  /** Receives the timed phases of the engine's work (`Span`): lab timelines only, absent in the product. */
+  onSpan?: SpanSink;
 }
 
 /** An outcome already written to the source map, kept so explicit feedback can correct it. */
@@ -357,8 +359,10 @@ export class ContextPartner {
     }
 
     this.markCue(s, cue);
+    const slowAt = performance.now();
     const slow = this.slowPath(s, cue, t0, event.kind).finally(() => {
       s.inflight = null;
+      this.span(s.id, "slow", slowAt);
     });
     s.inflight = slow;
     const queueLater = () => void slow.then((inj) => inj && !s.closed && s.pending.push(inj));
@@ -424,6 +428,7 @@ export class ContextPartner {
         ? this.charge(s, this.config.estimatedAnswerUsd)
         : null;
     if (reservation && this.deps.model) {
+      const answerAt = performance.now();
       try {
         const res = await this.deps.model.chat({
           messages: answerMessages(question, s.window.join("\n"), items),
@@ -440,6 +445,7 @@ export class ContextPartner {
       } catch {
         this.settle(reservation, 0);
       }
+      this.span(s.id, "answer", answerAt);
     }
     if (items.length && !s.closed) {
       const injection = this.deliver(
@@ -453,6 +459,7 @@ export class ContextPartner {
       this.handOut(s, injection);
     }
     const latencyMs = Math.round(performance.now() - t0);
+    this.span(s.id, "ask", t0, sourceCalls);
     this.trace({
       sessionId: s.id,
       turn: s.turn,
@@ -1197,6 +1204,7 @@ export class ContextPartner {
     // A probe that fails is no probe; a session that closes mid-search leaves it to finish on its own (it checks).
     // The lookup's own search starts first: the fan-out admits a call when it starts (a per-source concurrency slot),
     // and probes started before it could take the slots and leave the request itself skipped as busy.
+    const searchAt = performance.now();
     const searching = this.fanout.search(
       chosen,
       {
@@ -1215,6 +1223,7 @@ export class ContextPartner {
         ? this.probe(s, cue, found, all, listing, probed, settled, shared).catch(() => {})
         : null;
     const outcomes = await searching;
+    this.span(s.id, "search", searchAt, chosen.length);
     const plans = planner
       ? chosen.flatMap((x) => {
           const last = (x as PlannedSource).last;
@@ -1244,8 +1253,10 @@ export class ContextPartner {
       // lookup ranks what the probes found by then, and counts the calls they had sent.
       const grace = this.config.probeGraceMs;
       let timer: ReturnType<typeof setTimeout> | undefined;
+      const waitAt = performance.now();
       await Promise.race([probing, new Promise<void>((done) => (timer = setTimeout(done, grace)))]);
       clearTimeout(timer);
+      this.span(s.id, "probe-wait", waitAt);
       // What the request's own search returned, beside the probes' finds: an item both found is twice supported.
       const looked = outcomes.flatMap((o) => o.items.map((i) => i.id));
       // What the lookup's own search found too is not a probe's contribution (`probeYield`).
@@ -1285,7 +1296,9 @@ export class ContextPartner {
     let extra = 0;
     const deadline = performance.now() + this.config.sourceTimeoutMs;
     const kept = out.kept;
-    const send = async (
+    // `made` is this one query's tally of source calls, for its span (`out.calls` is shared by concurrent queries).
+    const query1 = async (
+      made: { calls: number },
       kind: ProbeKind,
       sources: Source[],
       text: string,
@@ -1387,6 +1400,7 @@ export class ContextPartner {
       // A call the fan-out did not make (busy, limited, open, answered from its cache, past the deadline) is no call.
       const unmade = to.length - outcomes.filter((o) => !SKIPPED.has(o.status)).length;
       out.calls -= unmade;
+      made.calls = to.length - unmade;
       if (own) extra -= unmade;
       // A consequence probe's answers are always recorded: which of its terms each source was asked, and when, is
       // what rotates them and what its later lookups recall (`consequence`).
@@ -1425,6 +1439,23 @@ export class ContextPartner {
         );
       }
       return [...items, ...reused];
+    };
+    // Each probe query as a span (`probe:<kind>`), when a lab listens: what it cost in time and calls.
+    const send = async (
+      kind: ProbeKind,
+      sources: Source[],
+      text: string,
+      window?: SearchQuery["window"],
+      keep = true,
+      onAnswer?: (sourceId: string, page: ContextItem[]) => void,
+    ) => {
+      const at = performance.now();
+      const made = { calls: 0 };
+      try {
+        return await query1(made, kind, sources, text, window, keep, onAnswer);
+      } finally {
+        this.span(s.id, `probe:${kind}`, at, made.calls);
+      }
     };
     const c = this.config;
     const off = new Set(c.probeOff);
@@ -1736,7 +1767,10 @@ export class ContextPartner {
         consequence,
       } = await this.searchLive(s, cue, this.config.lookupSources));
       if (s.closed) return null;
-      sourceCalls += await this.refresh(s, cue);
+      const refreshAt = performance.now();
+      const refreshed = await this.refresh(s, cue);
+      this.span(s.id, "refresh", refreshAt, refreshed);
+      sourceCalls += refreshed;
       if (s.closed) return null;
       // This lookup's probe finds, its own (never another turn's or a concurrent ask's).
       const consIds = new Set(consequence?.ids ?? []);
@@ -1868,6 +1902,7 @@ export class ContextPartner {
       if (!this.deps.model || !reservation) return noModel(this.deps.model ? "no model budget" : "no model", "");
       const candidates = unsure.map((x) => x.item);
       let res: Awaited<ReturnType<Model["chat"]>>;
+      const judgeAt = performance.now();
       try {
         res = await this.deps.model.chat({
           messages: judgeMessages(
@@ -1884,12 +1919,14 @@ export class ContextPartner {
           signal: s.abort.signal,
         });
       } catch {
+        this.span(s.id, "judge", judgeAt);
         this.settle(reservation, 0);
         if (s.closed) return null;
         // A failing model (bad key, spend limit, outage) is treated as no model, never worse than none (D41). The
         // reason keeps the cause, so a broken key does not look like a healthy keyless server in traces.
         return noModel("model error", ":model-error");
       }
+      this.span(s.id, "judge", judgeAt);
       modelCalls = 1;
       costUsd = res.costUsd;
       this.settle(reservation, res.costUsd);
@@ -2028,6 +2065,16 @@ export class ContextPartner {
   private trace(t: Trace): void {
     try {
       this.deps.onTrace?.(t);
+    } catch {
+      // A broken sink never breaks a delivery.
+    }
+  }
+
+  /** A phase that started at `start` (`performance.now()`) ends now; to the span sink, if any. */
+  private span(sessionId: string, name: string, start: number, calls?: number): void {
+    if (!this.deps.onSpan) return;
+    try {
+      this.deps.onSpan({ sessionId, name, start, end: performance.now(), ...(calls === undefined ? {} : { calls }) });
     } catch {
       // A broken sink never breaks a delivery.
     }
