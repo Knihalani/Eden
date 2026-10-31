@@ -18,6 +18,12 @@ export interface OpenRouterOptions {
   zdr?: boolean;
   timeoutMs?: number;
   fetch?: typeof fetch;
+  /**
+   * Provider order (OpenRouter's `provider.sort`). Unset: OpenRouter's default balancing (price weighted against
+   * throughput and latency). "price" tries the cheapest compliant endpoint first: for background work no user waits
+   * on (card enrichment; docs/research/econ-background.md). It still honours `zdr` and `data_collection`.
+   */
+  sort?: "price" | "throughput" | "latency";
 }
 
 export class OpenRouterModel implements Model {
@@ -49,7 +55,12 @@ export class OpenRouterModel implements Model {
       ...(request.json ? { response_format: { type: "json_object" } } : {}),
       // The reasoning itself is never read: excluding it keeps it off the wire (it is still billed as output).
       ...(request.reasoning ? { reasoning: { effort: request.reasoning, exclude: true } } : {}),
-      provider: { data_collection: "deny", zdr: this.options.zdr ?? true, allow_fallbacks: true },
+      provider: {
+        data_collection: "deny",
+        zdr: this.options.zdr ?? true,
+        allow_fallbacks: true,
+        ...(this.options.sort ? { sort: this.options.sort } : {}),
+      },
       usage: { include: true },
       // Sticky routing: OpenRouter keeps a session_id on one provider endpoint (10 min idle), so a stable prompt
       // prefix is served from that endpoint's cache
@@ -77,6 +88,7 @@ export class OpenRouterModel implements Model {
       usage,
       costUsd: data.usage?.cost ?? costOf(usage, priceFor(this.options.model)),
       model: data.model ?? this.options.model,
+      ...(data.provider ? { provider: data.provider } : {}),
       latencyMs: Math.round(performance.now() - t0),
       truncated: data.choices?.[0]?.finish_reason === "length",
     };
@@ -85,6 +97,7 @@ export class OpenRouterModel implements Model {
 
 interface OpenRouterResponse {
   model?: string;
+  provider?: string;
   choices?: { message?: { content?: string }; finish_reason?: string }[];
   usage?: {
     prompt_tokens?: number;

@@ -34,9 +34,39 @@ pass the no-model prefilter (11-15% of simulated items), each item read once per
 items arriving, $0.003-0.004 per user-month at 50 new items a day (at most about $0.013 at list prices). Reserved per
 call at $0.002 against its own per-user-day `Budget`.
 
+Card economy (proposed D66, `cardsEconomy`, off by default; docs/research/econ-background.md; in-sample, 2026-10-31):
+the strict prefilter and sentence reuse read 74.25 items per simulated user instead of 166.5 (−55.4%) in 12.4 calls
+instead of 24.25 (20 items per call), with the same funnel totals (218/19; the track measured 70.25 items and 12.15
+calls before the sentence key took the subject in, after review). Per item, OpenRouter's endpoint decides the price:
+$0.00013–0.00015 per 20-item call on OpenInference (fp4), $0.00028–0.00031 on Wafer, $0.0004–0.0012 elsewhere. With
+`sort: "price"` on the card maker's model (ZDR kept), $0.0000144 per item pooled against $0.0000245 with default
+routing (−41%). Together: about $0.0011 per user one-time and per user-month (50 items a day) against $0.0041 (−74%;
+the track's $0.0010 was at 70.25 items).
+Price routing cut off 40 of 657 items' batches at the output cap in the track's re-card (617 covered against 637 with
+default routing); the enricher now sends a cut batch once more with default routing (`CardMakerOptions.retry`), under
+its own reservation. At that rate the retries add about 6% of items at the default price, about $0.0001 per user
+(arithmetic from the track's numbers, not a live run): about $0.0012 per user in all. A 20-item call's output cap is
+4,000 tokens (200 per item past ten) and its reservation $0.003 (about $0.0024 at the cap on the list-price endpoint:
+2,400 input tokens at $0.15/M, 4,000 output at $0.50/M). On D64's accounting the benchmark's card share would fall
+from $0.156 to about $0.039 per 1,000 tasks, Eden ALL all-in from $0.474 to about $0.36 (an estimate, not a live run).
+
+Sync push (proposed D66, `syncPush`, off by default) adds no model call. In the funnel it takes request-time listing
+calls from 5.55 to 0 per task (amortised 6.89 → 1.46, counting the one poll each watch costs when it is declared).
+In an arrival simulation with assumed rates (mail 60, chat 150 items a working day), D57's on-demand polling makes
+104.7 listing calls per user-day; push with `syncPushGapMs` 30 minutes 80.7, with notices read at every five-minute
+tick 151 (the busiest source sets it). Over 7 days, with the pushed sources' sweep every 3 days (D66): D57 111.6, push
+with the 30-minute gap 88.4 (−21%).
+
 With `graph` (proposed D58) the judge sees at most `graphSeats` (1) more candidate, about 100 more input tokens per
 call at its cap; no other model call is added and the graph makes no source call. Measured in simulation (realistic,
 4 seeds, perfect judge): $0.0172 → $0.0178 per 1,000 turns, model calls per turn 0.213 → 0.215.
+
+The action firewall (`actionCheck`, off by default; proposed D69, docs/research/econ-firewall.md) adds no model call
+and no source call: each check of an agent's tool call is CPU on what is held (the cache, the probes' memo, the graph,
+the cards), 4–5 ms p50 and at most 28 ms per check in the no-model replay of the track's recorded calls (seeds 41–43,
+ALL). Its cost is the agent's: a held call costs the agent about one more model request to read the finding and
+answer, +$0.3–0.6 per 1,000 such tasks and +5–7 s on them (the track's live runs, in-sample; agent cost over
+all tasks, within noise).
 
 These are arithmetic on list prices, not measurements. Output is billed on tokens used, not the cap: a judge verdict
 is a few tokens plus low-effort reasoning (about 20 tokens on GLM 5.3 Flash in a probe of three calls).
@@ -56,6 +86,23 @@ is a few tokens plus low-effort reasoning (about 20 tokens on GLM 5.3 Flash in a
 worst case at the cap: $0.0005 for the judge, $0.0015 for a model-composed ask answer (D45). Over budget, the engine
 takes the no-model path; it never defers spend.
 
+## How live cost is reported (D71)
+
+OpenRouter spreads one model over many endpoints up to 10× apart in price, and the mix moved with the condition within
+one concurrent run (D64's runs: the cheapest fp4 endpoint served 29% of no-tool requests, 21% of the Eden agent's and
+9% of the five-tool agent's; docs/research/econ-research.md §1.1). So a live comparison reports agent cost twice: as
+billed, which is what a tenant pays, and re-priced at fixed prices (Z.AI's list price and Wafer-us), with each
+condition's inferred endpoint mix (`reprice.ts`, printed by `pi-ab-report.ts`). A claim that one condition costs less
+holds only if it holds re-priced. Re-priced, D64's Eden agent (ALL) costs 20–23% less than the tools agent ($0.770
+against $0.998 per 1,000 tasks at Z.AI list, $0.272 against $0.342 at Wafer-us), where billed it looked equal ($0.318
+against $0.320). The grader is reported separately and never counts in all-in. The fixed prices are a snapshot from
+2026-10-31.
+
+What a tenant's own agent costs depends mostly on the agent: in D64, 85% of its model time is output tokens, and each
+`ask_context` round trip is one more model request. Removing the ask (D70, rejected) saved $0.070 per 1,000 tasks
+(−27%) but lost 0.12 of hidden facts raised (in-sample). docs/INTEGRATION.md collects the agent-side levers; they are
+unmeasured advice.
+
 ## Levers, in order of leverage
 
 1. Fewer model calls: better cheap scoring (M1 tuning), the graph (M3), learned silence. Done so far: ask answers
@@ -69,6 +116,10 @@ takes the no-model path; it never defers spend.
    user's items): simulation, perfect judge, realistic seeds 41–44, on G (D54): model calls per turn 0.253 → 0.212,
    $0.02025 → $0.0170 per 1,000 turns at recall 0.647 → 0.643 ([research/judge-tied.md](research/judge-tied.md),
    before review). With D55's final H: 0.213 model calls per turn, $0.0172 per 1,000 turns, recall 0.645.
+   `decideConflict` (D67, off by default; docs/research/econ-decide.md) makes no model call: it re-reads the ranked
+   candidates with the engine's own conflict test only when no model decides (+1.6 ms of slow-path CPU per task in
+   the track's in-sample funnel, measured before it also ran on the fast path's cached answers), at +0.06 delivered items per hidden task (a few dozen agent input tokens). The logistic
+   decision model it was measured beside (+5.5 ms) stays in the lab.
 2. Smaller inputs: shorter windows, candidate snippets, prompt-cache-friendly prompt layout (stable system prefix).
 3. Cheaper model: a fine-tuned small judge (M6).
 
@@ -83,6 +134,13 @@ D47 (docs/research/lean-probes.md), simulation, realistic, 4 seeds, perfect judg
 candidates all scored as sure: model calls per turn 0.21 → 0.28 and $0.0180 → $0.0245 per 1,000 turns with probes and
 compaction (about +36%). Live, Eden with probes cost $0.407 per 1,000 held-out tasks against $0.370 for tools (the
 agent's tokens fall, 3,045 → 1,714 input, but Eden's judge calls are added).
+
+`packetDates` (D68, off by default) makes no model call and adds no state: it keeps the year compaction dropped and
+adds an event's start. In-sample funnel (ALL, cards-v2 replayed, hidden and held-out 1–4, seeds 41–44, this session):
+hidden packet bytes 105,331 → 106,993 over 268 tasks (+1.6%, about 6 bytes or 1–2 agent input tokens a task), control
+41,560 → 42,495. A start with a time is 35 bytes (about 9 tokens); 14 of 536 tasks have one. The judge's
+candidates are compacted without it, so the judge's input is unchanged. With the flag on, each delivery is rendered a
+second time without it for usage learning (`usageText`): linear in the packet, no model call.
 
 D48 (docs/research/sharper-grounds.md): shared calls and the topic probe only without people take probes from 11.8 to
 7.9 source calls per lookup (simulation; baseline 5.6). `judgeContested` adds judge calls (0.21 → 0.25 per turn),
@@ -128,6 +186,22 @@ The graph's build cost, measured after the review (D63; 20 users with full cache
 heap 3.38 → 8.16 MB per user and cache-put CPU 120 → 361 ms per 2,000 items, about 48 GB more heap at the cache's
 10,000 users per tenant. Request-time engine CPU stays under 1 ms per lookup at p50 for the graph walk and card
 matching.
+
+The judge, measured on ALL (D65, docs/research/econ-judge.md; in-sample). On the critical path it adds no facts and
+costs time: in the full benchmark (D64), in-sample, paired, eden-judge − eden is −0.026 hidden at +1.10 s and +$0.039
+per 1,000 tasks, so the recommended configuration has no judge. `judgeBehind` (off by default, not recommended) moves
+it behind the no-model answer, where it can only add. It is one bounded judge call (the judge's caps and `Budget`) on a
+lookup whose no-model answer left candidates out:
+- funnel, seed 41: 0.93 calls per task, $0.0088 for 134 tasks ($0.066 per 1,000 tasks);
+- live, seed 43: 0.90 calls per task, about $0.000024 a call (OpenRouter's reported cost), $0.017–0.022 per 1,000
+  tasks against the judge on the path's $0.023.
+
+At 20 tasks a user a day, that is about $0.012–0.040 per user-month. `syncPollBehind` (off by default) makes no model
+call and no new poll: the poll a lookup used to wait for runs behind it. When that poll stores something, the lookup
+is made again; it decides as a lookup behind a delivery (what is sure or grounded), so with a model configured it
+makes no second judge call (a test counts one model call per event, flag on or off). Its synced sources then answer
+locally, but sources that are not synced are searched live a second time. The in-sample worlds are static, so that second lookup never ran in any benchmark and its source calls are
+unmeasured; in a live mailbox they scale with how often a poll finds something new.
 
 The non-model costs (source API calls, hosting) are not modelled yet. Source calls may dominate for some connectors;
 measure them per connector in M2. The query planner (D28), on by default in the server since D33, adds no model call.

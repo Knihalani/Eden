@@ -162,6 +162,62 @@ export function worthCarding(item: ContextItem): boolean {
   return DEONTIC.test(`${item.title.slice(0, 200)}\n${ownText(item)}`);
 }
 
+/**
+ * Footer blocks that say nothing of the message's own: a legal disclaimer ("This email and any attachments are
+ * confidential and may be privileged…") or a notification service's settings footer. Their words ("confidential",
+ * "privileged", "do not") pass `DEONTIC` on most work mail (docs/research/econ-background.md). A cut runs from the
+ * footer's first words to the end of its paragraph (a blank line), not of the message: a constraint written after a
+ * disclaimer (a PS, a forwarded message below it) is still read.
+ */
+const FOOTER =
+  /(?:confidentiality notice|this (?:e-?mail|message) and any attachments?|if you (?:are not|have received this) (?:the )?(?:intended|in error)|notification (?:preferences|settings)|manage (?:your )?(?:notifications|email preferences|subscriptions?)|to (?:stop|change what you) receiv)(?:[^\n]|\n(?![ \t]*\n))*/gi;
+/** A reply or a forward: its title is the thread's, not what this message says. */
+const REPLY_TITLE = /^\s*(?:re|fwd?|aw|sv)\s*:/i;
+
+/**
+ * The strict prefilter (`cardsEconomy`): `worthCarding` on what the item itself says, with each footer block to the
+ * end of its paragraph out, and a reply's or forward's title left out (the thread's first message is read under it).
+ * What it rejects gets no card at no call; what it passes is read by the same prompt as before, so a card is unchanged.
+ */
+export function worthCardingStrict(item: ContextItem): boolean {
+  const own = ownText({ ...item, text: item.text.slice(0, READ_CHARS * 3).replace(FOOTER, "") });
+  const title = REPLY_TITLE.test(item.title) ? "" : item.title.slice(0, 200);
+  return DEONTIC.test(`${title}\n${own}`);
+}
+
+/** A greeting at the head of a sentence ("Hi Robin, …", "Morning all -"): who is greeted is not what is said. */
+const GREETING =
+  /^(?:hi|hello|hey|hiya|dear|morning|good (?:morning|afternoon|evening)|all)\b[^,.!?:;\n]{0,40}[,!:–—-]\s*/;
+
+/** A word that dates a sentence relative to when it was written: its card's dates hold only for that message. */
+const RELATIVE =
+  /\b(?:today|tonight|tomorrow|yesterday|next|this (?:week|weekend|month|morning|afternoon|evening)|last|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:rs(?:day)?)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?|in \d+ (?:days?|weeks?|months?)|end of (?:the )?(?:day|week|month)|eod|eow|asap|soon|later)\b/i;
+
+/**
+ * The key of what an item says that bears on actions (`CardLimits.sentenceReuse`): a hash of its title (reply and
+ * forward prefixes aside) and of its own sentences that hold deontic language, lowercased, greetings and footers out.
+ * Two items with the same key say the same constraint under the same subject in different greetings and sign-offs (a
+ * reminder re-sent by several people, a recurring notice), so one card serves both. The title is part of the key
+ * because the model reads it: "Do not share the deck" under "Atlas pricing" and under "Kestrel pricing" are cards for
+ * two projects. No key (undefined) when no sentence qualifies or one is dated relative to its message ("next Friday",
+ * "tomorrow"): the same words then mean different days.
+ */
+export function sentenceKey(item: ContextItem): string | undefined {
+  const own = ownText({ ...item, text: item.text.slice(0, READ_CHARS * 3).replace(FOOTER, "") }).toLowerCase();
+  const held = own
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((x) => x.replace(GREETING, "").trim())
+    .filter((x) => x.length > 0 && DEONTIC.test(x));
+  if (held.length === 0 || held.some((x) => RELATIVE.test(x))) return undefined;
+  let title = item.title.slice(0, 200);
+  while (REPLY_TITLE.test(title)) title = title.replace(REPLY_TITLE, "");
+  if (RELATIVE.test(title)) return undefined;
+  return createHash("sha256")
+    .update([title.trim().replace(/\s+/g, " ").toLowerCase(), ...[...new Set(held)].sort()].join("\n"))
+    .digest("hex")
+    .slice(0, 32);
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // The model's side: prompt and parse.
 
@@ -328,25 +384,51 @@ function shiftDay(day: string, days: number): string {
 
 /** Makes cards for a batch of items. The engine's is `ModelCardMaker`; the lab replays a disk cache. */
 export interface CardMaker {
-  make(items: ContextItem[], today: string, signal: AbortSignal): Promise<{ cards: (Card | null)[]; costUsd: number }>;
+  /**
+   * `retry`: the batch was cut off at the output cap on a first call and is sent again (the maker may route it
+   * elsewhere). `truncated`: this call was cut off.
+   */
+  make(
+    items: ContextItem[],
+    today: string,
+    signal: AbortSignal,
+    retry?: boolean,
+  ): Promise<{ cards: (Card | null)[]; costUsd: number; truncated?: boolean }>;
 }
 
 /** Output cap per batch: ten short cards and low-effort reasoning (D45's lesson: reasoning spends the cap). */
 const CARD_MAX_TOKENS = 2_000;
+/** ... and per item past ten: a batch of twenty (`cardsEconomy`) gets 4,000, since reasoning grows with the batch. */
+const CARD_TOKENS_PER_ITEM = 200;
+
+export interface CardMakerOptions {
+  /**
+   * The model a batch cut off at the output cap is sent to again (`CardEnricher` asks for it with `retry`). A model
+   * routed by price (OpenRouter `sort: "price"`) sends many calls to an endpoint whose long reasoning can run past
+   * the cap, and a cut batch is unreadable as a whole (617 of 657 items covered against 637 with default routing,
+   * docs/research/econ-background.md): the retry goes to the same model with default routing. Unset: `model`.
+   */
+  retry?: Model;
+}
 
 export class ModelCardMaker implements CardMaker {
-  constructor(private readonly model: Model) {}
+  constructor(
+    private readonly model: Model,
+    private readonly options: CardMakerOptions = {},
+  ) {}
 
-  async make(items: ContextItem[], today: string, signal: AbortSignal) {
-    const res = await this.model.chat({
+  async make(items: ContextItem[], today: string, signal: AbortSignal, retry = false) {
+    const model = retry ? (this.options.retry ?? this.model) : this.model;
+    const res = await model.chat({
       messages: cardMessages(items, today),
-      maxTokens: CARD_MAX_TOKENS,
+      maxTokens: Math.max(CARD_MAX_TOKENS, CARD_TOKENS_PER_ITEM * items.length),
       reasoning: "low",
       json: true,
       signal,
     });
-    // A batch cut off at the cap is unreadable past the cut: what parsed stands, the rest is uncovered.
-    return { cards: parseCards(res.text, items.length), costUsd: res.costUsd };
+    // A batch cut off at the cap is unreadable past the cut: what parsed stands, the rest is uncovered. The enricher
+    // reads `truncated` to send the batch again.
+    return { cards: parseCards(res.text, items.length), costUsd: res.costUsd, truncated: res.truncated === true };
   }
 }
 
@@ -369,6 +451,13 @@ export interface CardLimits {
    * describe (a synced one's `syncTtlMs`). Items leaving the cache drop theirs sooner (`forgetItems`).
    */
   ttlMs: number;
+  /**
+   * Economy (docs/research/econ-background.md; `cardsEconomy` sets them, off by default): the strict prefilter
+   * (`worthCardingStrict`) in place of `worthCarding`.
+   */
+  strict: boolean;
+  /** Items saying the same constraint sentences (`sentenceKey`) share one card: the model reads the first. */
+  sentenceReuse: boolean;
 }
 
 export const DEFAULT_CARD_LIMITS: CardLimits = {
@@ -378,6 +467,17 @@ export const DEFAULT_CARD_LIMITS: CardLimits = {
   batch: 10,
   estimatedCallUsd: 0.002,
   ttlMs: 7 * 24 * 3_600_000,
+  strict: false,
+  sentenceReuse: false,
+};
+
+/** The economy preset `cardsEconomy` applies (docs/research/econ-background.md). */
+export const ECONOMY_CARD_LIMITS: Partial<CardLimits> = {
+  strict: true,
+  sentenceReuse: true,
+  batch: 20,
+  // A 20-item call's worst case at its 4,000-token cap on the list-price endpoint: about $0.0024.
+  estimatedCallUsd: 0.003,
 };
 
 interface Stored {
@@ -396,7 +496,11 @@ class UserCards {
   readonly byItem = new Map<string, string>();
   /** Links per content hash, cards made or not: a card that lands for content no item links to any more is not kept. */
   readonly refs = new Map<string, number>();
-  readonly queue: { item: ContextItem; hash: string }[] = [];
+  readonly queue: { item: ContextItem; hash: string; skey?: string }[] = [];
+  /** Sentence key → the content hash whose card says it (`sentenceReuse`). */
+  readonly bySentence = new Map<string, string>();
+  /** Content hash → its sentence key in `bySentence`: the entry goes when the card does (held no longer, D8). */
+  readonly sentenceOf = new Map<string, string>();
   draining: Promise<void> | null = null;
   readonly abort = new AbortController();
 }
@@ -407,7 +511,13 @@ export interface CardStats {
   prefiltered: number;
   reused: number;
   carded: number;
+  /** Items sent to the model (each batch's size). */
+  sent: number;
+  /** Items given the card of another item saying the same constraint (`sentenceReuse`), with no call. */
+  sentenceReused: number;
   calls: number;
+  /** Batches cut off at the output cap and sent again (`CardMakerOptions.retry`), each one more call. */
+  retries: number;
   costUsd: number;
   failures: number;
   overBudget: number;
@@ -425,13 +535,16 @@ export interface CardStats {
 export class CardEnricher {
   private readonly users = new Map<string, UserCards>();
   private readonly perTenant = new Map<string, number>();
-  private readonly limits: CardLimits;
+  private limits: CardLimits;
   readonly stats: CardStats = {
     enqueued: 0,
     prefiltered: 0,
     reused: 0,
     carded: 0,
+    sent: 0,
+    sentenceReused: 0,
     calls: 0,
+    retries: 0,
     costUsd: 0,
     failures: 0,
     overBudget: 0,
@@ -451,9 +564,17 @@ export class CardEnricher {
 
   constructor(
     private readonly deps: { maker: CardMaker; budget: Budget; now: () => number },
-    limits: Partial<CardLimits> = {},
+    private readonly given: Partial<CardLimits> = {},
   ) {
-    this.limits = { ...DEFAULT_CARD_LIMITS, ...limits };
+    this.limits = { ...DEFAULT_CARD_LIMITS, ...given };
+  }
+
+  /**
+   * Turns on the economy preset (`cardsEconomy`, docs/research/econ-background.md) under the limits the enricher was
+   * built with: a limit given at construction wins, so the lab can vary one setting at a time.
+   */
+  economize(): void {
+    this.limits = { ...DEFAULT_CARD_LIMITS, ...ECONOMY_CARD_LIMITS, ...this.given };
   }
 
   private user(scope: Scope): UserCards {
@@ -530,13 +651,12 @@ export class CardEnricher {
         this.stats.reused++;
         continue;
       }
-      if (!worthCarding(item)) {
+      if (!(this.limits.strict ? worthCardingStrict(item) : worthCarding(item))) {
         this.stats.prefiltered++;
         this.keep(u, hash, { card: null, at: now, seenAt: now });
         continue;
       }
-      u.queue.push({ item, hash });
-      if (u.queue.length > this.limits.maxQueue) u.queue.shift();
+      this.queueItem(u, item, hash, now);
     }
     while (u.byItem.size > this.limits.maxCardsPerUser * 2) unlink(u, u.byItem.keys().next().value as string);
     if (u.queue.length > 0 && !u.draining) {
@@ -544,10 +664,26 @@ export class CardEnricher {
     }
   }
 
+  /** Queues an item for the model, or gives it the card of an item saying the same constraint (`sentenceReuse`). */
+  private queueItem(u: UserCards, item: ContextItem, hash: string, now: number): void {
+    const skey = this.limits.sentenceReuse ? sentenceKey(item) : undefined;
+    if (skey !== undefined) {
+      const twin = u.bySentence.get(skey);
+      const made = twin !== undefined ? u.byHash.get(twin) : undefined;
+      if (made) {
+        this.stats.sentenceReused++;
+        this.keep(u, hash, { card: made.card, at: made.at, seenAt: now });
+        return;
+      }
+    }
+    u.queue.push({ item, hash, ...(skey !== undefined ? { skey } : {}) });
+    if (u.queue.length > this.limits.maxQueue) u.queue.shift();
+  }
+
   private keep(u: UserCards, hash: string, s: Stored): void {
     u.byHash.delete(hash);
     u.byHash.set(hash, s);
-    while (u.byHash.size > this.limits.maxCardsPerUser) u.byHash.delete(u.byHash.keys().next().value as string);
+    while (u.byHash.size > this.limits.maxCardsPerUser) dropCard(u, u.byHash.keys().next().value as string);
   }
 
   private async drain(scope: Scope, u: UserCards): Promise<void> {
@@ -556,7 +692,30 @@ export class CardEnricher {
     // Background work: let the caller's turn finish first.
     await Promise.resolve();
     while (u.queue.length > 0 && !u.abort.signal.aborted) {
-      const batch = u.queue.splice(0, this.limits.batch);
+      // With `sentenceReuse`: an item whose constraint sentences a card already says takes that card; one whose
+      // sentences another item of this batch says waits for that item's card (`followers`), with no call of its own.
+      const batch: { item: ContextItem; hash: string; skey?: string }[] = [];
+      const followers: { item: ContextItem; hash: string; skey: string }[] = [];
+      const inBatch = new Set<string>();
+      while (u.queue.length > 0 && batch.length < this.limits.batch) {
+        const q = u.queue.shift()!;
+        if (q.skey !== undefined) {
+          const twin = u.bySentence.get(q.skey);
+          const made = twin !== undefined ? u.byHash.get(twin) : undefined;
+          if (made) {
+            this.stats.sentenceReused++;
+            if (u.refs.has(q.hash)) this.keep(u, q.hash, { card: made.card, at: made.at, seenAt: this.deps.now() });
+            continue;
+          }
+          if (inBatch.has(q.skey)) {
+            followers.push(q as { item: ContextItem; hash: string; skey: string });
+            continue;
+          }
+          inBatch.add(q.skey);
+        }
+        batch.push(q);
+      }
+      if (batch.length === 0) continue;
       const reservation = this.deps.budget.reserve(key, session, this.limits.estimatedCallUsd);
       // The per-session tally is the enricher's own and never ends otherwise: only the user's day is a cap.
       this.deps.budget.endSession(session);
@@ -570,17 +729,21 @@ export class CardEnricher {
       const tracer = this.tracer;
       const sp = tracer?.open("cards.make", 0, { async: true, items: batch.length });
       try {
-        const { cards, costUsd } = await this.deps.maker.make(
-          batch.map((b) => b.item),
-          today,
-          u.abort.signal,
-        );
+        const items = batch.map((b) => b.item);
+        const made = await this.deps.maker.make(items, today, u.abort.signal);
+        const { costUsd } = made;
+        let { cards } = made;
         if (sp) tracer!.close(sp, { costUsd, cards: cards.length });
         this.deps.budget.settle(reservation, costUsd);
         this.stats.calls++;
+        this.stats.sent += batch.length;
         this.stats.costUsd += costUsd;
         // Forgotten or dropped while the call ran: keep nothing.
         if (u.abort.signal.aborted || this.users.get(key) !== u) return;
+        if (made.truncated) {
+          cards = await this.retry(key, session, items, today, u, cards);
+          if (u.abort.signal.aborted || this.users.get(key) !== u) return;
+        }
         const at = this.deps.now();
         batch.forEach((b, i) => {
           const card = cards[i];
@@ -601,13 +764,66 @@ export class CardEnricher {
           if (!u.refs.has(b.hash)) return;
           this.stats.carded++;
           this.keep(u, b.hash, { card: card.kind === "none" ? null : card, at, seenAt: at });
+          if (b.skey !== undefined) {
+            u.bySentence.set(b.skey, b.hash);
+            u.sentenceOf.set(b.hash, b.skey);
+            while (u.bySentence.size > this.limits.maxCardsPerUser) {
+              const [k, h] = u.bySentence.entries().next().value as [string, string];
+              u.bySentence.delete(k);
+              if (u.sentenceOf.get(h) === k) u.sentenceOf.delete(h);
+            }
+          }
         });
+        // Items saying what a carded item of this batch said take its card; the rest go back to the queue.
+        for (const f of followers) {
+          const twin = u.bySentence.get(f.skey);
+          const made = twin !== undefined ? u.byHash.get(twin) : undefined;
+          if (made) {
+            this.stats.sentenceReused++;
+            if (u.refs.has(f.hash)) this.keep(u, f.hash, { card: made.card, at: made.at, seenAt: at });
+          } else u.queue.push(f);
+        }
       } catch {
         if (sp && sp.endMs === 0) tracer!.close(sp, { error: true });
         this.deps.budget.settle(reservation, 0);
         this.stats.failures++;
         if (u.abort.signal.aborted) return;
       }
+    }
+  }
+
+  /**
+   * A batch cut off at the output cap is unreadable as a whole, so it is sent once more, as `retry` (the maker's
+   * default-routed model: docs/research/econ-background.md), under a reservation of its own. Its cards fill only what
+   * the cut call left unread. Over budget or failing, the cut call's cards stand.
+   */
+  private async retry(
+    key: string,
+    session: string,
+    items: ContextItem[],
+    today: string,
+    u: UserCards,
+    cards: (Card | null)[],
+  ): Promise<(Card | null)[]> {
+    const reservation = this.deps.budget.reserve(key, session, this.limits.estimatedCallUsd);
+    this.deps.budget.endSession(session);
+    if (!reservation) {
+      // Only what the cut call left unread goes uncovered: its other cards stand.
+      this.stats.overBudget += items.filter((_, i) => (cards[i] ?? null) === null).length;
+      return cards;
+    }
+    try {
+      const again = await this.deps.maker.make(items, today, u.abort.signal, true);
+      this.deps.budget.settle(reservation, again.costUsd);
+      this.stats.calls++;
+      this.stats.retries++;
+      this.stats.sent += items.length;
+      this.stats.costUsd += again.costUsd;
+      return cards.map((c, i) => c ?? again.cards[i] ?? null);
+    } catch {
+      this.deps.budget.settle(reservation, 0);
+      this.stats.failures++;
+      return cards;
     }
   }
 
@@ -634,7 +850,7 @@ export class CardEnricher {
       const s = hash ? u.byHash.get(hash) : undefined;
       if (!s?.card || !(s.at < before)) continue;
       if (now - s.seenAt > this.limits.ttlMs) {
-        u.byHash.delete(hash!); // Past its time to live: no item it could describe is held that long.
+        dropCard(u, hash!); // Past its time to live: no item it could describe is held that long.
         continue;
       }
       out.set(id, s.card);
@@ -699,7 +915,16 @@ function unlink(u: UserCards, id: string): void {
     return;
   }
   u.refs.delete(hash);
+  dropCard(u, hash);
+}
+
+/** Drops a content hash's card and the sentence key pointing to it (`sentenceReuse`): neither outlives the other. */
+function dropCard(u: UserCards, hash: string): void {
   u.byHash.delete(hash);
+  const k = u.sentenceOf.get(hash);
+  if (k === undefined) return;
+  u.sentenceOf.delete(hash);
+  if (u.bySentence.get(k) === hash) u.bySentence.delete(k);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
