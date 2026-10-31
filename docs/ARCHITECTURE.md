@@ -222,6 +222,10 @@ an embedding opts in through `buildPartner`'s `engine` settings, with the ground
 **Ask** always searches (live, or a current synced source locally with D57; more sources), ignores the not-twice ledger (the agent asked), and returns the cited
 items as they are, with no model call: the asker is a model and reads them directly (D43). `askWithModel`
 (`EDEN_ASK_MODEL=1`) has one model call compose a short cited answer instead, when a model and budget are available.
+The ask is part of the design, not a fallback for a thin packet: a packet that also carried the candidates the gate
+held back, so the agent could answer without asking, was measured and rejected (D70,
+[research/econ-oneturn.md](research/econ-oneturn.md)). The agent's own question reaches items the request's words did
+not, and the agent raised a delivered fact more often when it could still ask.
 
 ## Learning loop
 

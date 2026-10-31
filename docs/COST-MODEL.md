@@ -83,6 +83,23 @@ is a few tokens plus low-effort reasoning (about 20 tokens on GLM 5.3 Flash in a
 worst case at the cap: $0.0005 for the judge, $0.0015 for a model-composed ask answer (D45). Over budget, the engine
 takes the no-model path; it never defers spend.
 
+## How live cost is reported (D71)
+
+OpenRouter spreads one model over many endpoints up to 10× apart in price, and the mix moved with the condition within
+one concurrent run (D64's runs: the cheapest fp4 endpoint served 29% of no-tool requests, 21% of the Eden agent's and
+9% of the five-tool agent's; docs/research/econ-research.md §1.1). So a live comparison reports agent cost twice: as
+billed, which is what a tenant pays, and re-priced at fixed prices (Z.AI's list price and Wafer-us), with each
+condition's inferred endpoint mix (`reprice.ts`, printed by `pi-ab-report.ts`). A claim that one condition costs less
+holds only if it holds re-priced. Re-priced, D64's Eden agent (ALL) costs 20–23% less than the tools agent ($0.770
+against $0.998 per 1,000 tasks at Z.AI list, $0.272 against $0.342 at Wafer-us), where billed it looked equal ($0.318
+against $0.320). The grader is reported separately and never counts in all-in. The fixed prices are a snapshot from
+2026-10-31.
+
+What a tenant's own agent costs depends mostly on the agent: in D64, 85% of its model time is output tokens, and each
+`ask_context` round trip is one more model request. Removing the ask (D70, rejected) saved $0.070 per 1,000 tasks
+(−27%) but lost 0.12 of hidden facts raised (in-sample). docs/INTEGRATION.md collects the agent-side levers; they are
+unmeasured advice.
+
 ## Levers, in order of leverage
 
 1. Fewer model calls: better cheap scoring (M1 tuning), the graph (M3), learned silence. Done so far: ask answers
