@@ -44,8 +44,10 @@ for f in sorted(glob.glob(base + '/pi-ALL-4?.json')):
         a = by_why[fu['why']]; a[0] += 1; a[1] += r['toolCalls'] > 0
         b = by_chars[min(3, r['injectedChars'] // 200)]; b[0] += 1; b[1] += r['toolCalls'] > 0
 print('P(ask | delivered) by path:', {k: '%d/%d' % (v[1], v[0]) for k, v in by_why.items()})
-print('P(ask | delivered) by packet chars //200 (3 = 600+):', {k: '%d/%d' % (v[1], v[0]) for k, v in sorted(by_chars.items())})
+print('P(ask | delivered) by packet chars //200 (3 = 600+):',
+      {k: '%d/%d' % (v[1], v[0]) for k, v in sorted(by_chars.items())})
 for variant in ('hidden', 'control'):
     for dl in (True, False):
         v = cells[(variant, dl, True)] + cells[(variant, dl, False)]
-        print(variant, 'delivered' if dl else 'not delivered', 'n', len(v), 'rate %.3f' % (sum(x[0] for x in v) / max(1, len(v))))
+        rate = sum(x[0] for x in v) / max(1, len(v))
+        print(variant, 'delivered' if dl else 'not delivered', 'n', len(v), 'rate %.3f' % rate)

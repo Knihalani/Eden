@@ -428,7 +428,9 @@ GraphRAG-style up-front community summaries (cost and rebuilds, §7); batch rout
 
 Run in this session. The scripts are in [econ-research-scripts/](econ-research-scripts/) (`$E` below); `$B` is the
 D64 run directory (`bench/` in that session's scratchpad: `pi-{H,R,ALL}-4{1..4}.json`, their `.timeline/tasks.jsonl`
-and `funnel-ALL.json`). They need Python 3 and numpy (`prices.py` only).
+and `funnel-ALL.json`). They need Python 3 and numpy (`prices.py` only). That run data was not committed (it holds
+the lab's request timelines), so the numbers here cannot be reproduced from this repo alone: a rerun needs a fresh D64
+run (`packages/sim/src/lab/pi-ab.ts`) in its place, and will differ by its own sampling.
 
 ```bash
 curl -sS https://openrouter.ai/api/v1/models/z-ai/glm-5.3-flash/endpoints        # endpoint prices (no key)

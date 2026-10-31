@@ -39,13 +39,18 @@ trip. Eden answers an ask in about 5 ms at p50 (D64), so the cost of asking is t
 ## Keep the provider's prompt cache warm
 
 - **Put Eden's packet after the stable prefix.** `withContext` inserts it as a system message just before the latest
-  user message, so the system prompt, tool definitions and earlier turns stay byte-identical between requests. If you
-  place context yourself, keep it at the end of the context: models use the start and end of a context best ("Lost in
-  the Middle"), and anything placed earlier breaks the cache from that point on.
+  user message, so the system prompt, tool definitions and earlier *turns* stay byte-identical between requests. It
+  does not keep the cache within a turn that calls tools: a packet injected before the turn's next model call lands
+  before the user message, ahead of the assistant's tool call and the tool result, so the previous request is no
+  longer a prefix and the cache misses from that point on. To keep it, append a mid-turn packet at the end of the
+  messages (after the tool result) yourself, or accept the miss. Anything you place earlier than the end breaks the
+  cache from that point on.
 - **Keep the prefix byte-stable.** No timestamps, request ids or reordered tool lists in the system prompt; serialise
   tool definitions deterministically.
 - **Pass a per-user cache key.** On OpenRouter, a `session_id` (or `x-session-id`) per end user starts sticky routing on
-  the first request, so later requests reach the endpoint holding the cache. Eden's own model calls already do this.
+  the first request, so later requests reach the endpoint holding the cache. Make it an opaque id, such as a hash of
+  your user id, never an email or a raw account id: it goes to OpenRouter and the endpoints it routes to. Eden's own
+  model calls send a truncated SHA-256 of the user's scope (`eden-` and 24 hex), never the raw id.
 - **What it is worth depends on the endpoint** (estimate): GLM 5.3 Flash's cheapest routed endpoints barely discount
   cached input, so at routed prices caching saves about nothing on short tasks; at Z.AI's list price the ceiling is
   about 17% of agent cost, more with a long tenant system prompt.
@@ -85,9 +90,10 @@ if (check.verdict === "finding" && check.finding) return heldResult(toolName, ch
   `heldResult` is one choice: hold the call and let the agent call again to go ahead.
 - The check makes no model call and no source call (4–5 ms p50 in the lab). It fails open: an error or a server without
   the flag returns `proceed`.
-- Tool arguments are your user's data. Eden passes them through its secret gate first, leaves free-text fields out of
-  the check, and keeps only a digest of a call it answered with a finding, for the session. See
-  [PRIVACY.md](PRIVACY.md).
+- Tool arguments are your user's data. Eden passes them through its secret gate first and leaves free-text fields out
+  of the check. The redacted argument words join the session's term vocabulary, whatever the answer, and the session
+  keeps a 24-hex digest of each call it answered with a finding; all of it is dropped with the session. The call is not
+  added to the session's window and nothing is sent anywhere. See [PRIVACY.md](PRIVACY.md) (the action firewall row).
 - **Measured** beside a tools-only agent in one in-sample seed (unsafe actions 0.269 → 0.134); beside Eden's full
   configuration its own effect was about one task in 134. Treat it as an option for tool-acting agents, not a default.
 

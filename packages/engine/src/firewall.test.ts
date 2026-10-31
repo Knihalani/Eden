@@ -399,6 +399,20 @@ describe("checkAction: integration", () => {
     expect(actionKey("pay", a)).not.toBe(actionKey("pay", b));
   });
 
+  test("a call answered proceed still adds its redacted words to the session's vocabulary, as INTEGRATION says", async () => {
+    // docs/INTEGRATION.md and PRIVACY.md tell tenants what a check keeps; this pins that statement to the code.
+    const { p } = partner({ actionCheck: true });
+    const u = user("u1");
+    const r = await p.checkAction(ev(u, { kind: "tool_call", tool: "send_email", input: { to: "Dana" } }));
+    expect(r.verdict).toBe("proceed");
+    const sessions = (p as unknown as { sessions: Map<string, { vocab: Vocab; checked?: Set<string> }> }).sessions;
+    const s = [...sessions.values()][0]!;
+    const terms = Array.from({ length: s.vocab.size }, (_, i) => s.vocab.term(i));
+    expect(terms).toContain("dana");
+    // No digest for a call answered proceed: only a call with a finding is remembered.
+    expect(s.checked?.size ?? 0).toBe(0);
+  });
+
   test("a call's key is read through the secret gate: two calls differing only in a secret are one call", () => {
     const other = "ghp_" + "Ab3".repeat(12);
     expect(actionKey("deploy", { service: "api", token: TOKEN })).toBe(

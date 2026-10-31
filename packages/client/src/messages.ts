@@ -1,7 +1,8 @@
 /**
  * Placing injections in an OpenAI-style message list. Context goes in a system message right before the latest
  * user message, so it reads as background for this turn, and the stable prefix (system prompt, earlier turns)
- * stays byte-identical for the model provider's prompt cache.
+ * stays byte-identical for the model provider's prompt cache. Within a turn that calls tools it does not: a second
+ * packet goes ahead of the turn's tool messages, so the cache misses from there (docs/INTEGRATION.md).
  */
 import type { Injection } from "@eden/protocol";
 
