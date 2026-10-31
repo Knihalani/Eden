@@ -85,6 +85,8 @@ const TIME = Number(opt("time", "0"));
 const CONFIG = JSON.parse(opt("config", "{}")) as Record<string, unknown>;
 const LIVE = opt("judge", "none") === "live";
 const SYNC = args.includes("--sync");
+/** `--ask`: after each request, the request is also asked of Eden (`ask`), and whether its answer cites the planted item. */
+const ASK = args.includes("--ask");
 const SERIAL = args.includes("--serial");
 const NOOP_SPANS = opt("spans", "") === "noop";
 const REAL_SYNC = CONFIG.sync === true;
@@ -390,6 +392,8 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     if (cards) await cards.idle();
     const injections = [...(r.injection ? [r.injection] : [])];
     const got = arrived.flatMap((x) => x.ids);
+    const answered = ASK ? await partner.ask({ ...scope, sessionId, question: task.text }) : null;
+    const askCited = answered ? answered.citations.some((c) => c.itemId === id) : undefined;
     // How the planted item was delivered (the injection reason's kind: sources, grounded-…, fallback, model).
     const why =
       [...injections, ...pendingSeen].find((x) => x.citations.some((c) => c.itemId === id))?.reason.split(":")[0] ?? "";
@@ -422,6 +426,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       returned: returned.has(id),
       cached: !!cache.get(scope, id, clock),
       delivered: got.includes(id),
+      ...(askCited === undefined ? {} : { askCited }),
       why,
       injected: got.length,
       calls: calls - callsBefore,
