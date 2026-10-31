@@ -113,7 +113,7 @@ two request words, a rare word or a consequence find.
 **Background sync, "Eden Atlas"** (proposed D57, `sync`, off by default; `sync.ts`): sources with a read-only list
 tool (`Source.list`; `McpSource.listTool`, checked like the search tool) are read into each active user's cache in the
 background: a backfill of the newest items across sources, polls when a lookup finds a source stale by its learned
-change rate, a daily sweep that drops what a source no longer lists. Synced items have their own cap and TTL in the
+change rate, a daily sweep that drops what a source has not listed in two sweeps in a row (about 48 h). Synced items have their own cap and TTL in the
 cache. A lookup answers every current synced source (its own search and every probe) from that local index at no
 call, and calls live only the sources that are not synced or still stale. The tick runs on a timer, never on the fast
 path, which only marks the user active.

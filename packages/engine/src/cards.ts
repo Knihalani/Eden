@@ -292,7 +292,9 @@ const WEAK_WORDS = new Set(
     "today tomorrow yesterday week weeks month months year years time date dates days thing things"
   ).split(" "),
 );
-const weakWord = (w: string) => isStopword(w) || WEAK_WORDS.has(w);
+// Compared with stemmed words (`wordsOf` stems), so the list is stemmed too: "applies" is read as "applie".
+const WEAK_STEMS = new Set([...WEAK_WORDS].map((w) => stem(w)));
+const weakWord = (w: string) => isStopword(w) || WEAK_WORDS.has(w) || WEAK_STEMS.has(w);
 
 /** Actions one card may bear on: a real constraint is about one or two kinds of act; a card claiming many is noise. */
 export const MAX_CARD_ACTIONS = 3;
@@ -316,6 +318,12 @@ export function plausible(card: Card, today: string): boolean {
   if (s !== undefined && Math.abs(s - t) > reach) return false;
   if (e !== undefined && Math.abs(e - t) > reach) return false;
   return s === undefined || e === undefined || e - s <= reach;
+}
+
+/** An ISO day moved by `days` (UTC). */
+function shiftDay(day: string, days: number): string {
+  const t = dayMs(day);
+  return Number.isFinite(t) ? new Date(t + days * DAY_MS).toISOString().slice(0, 10) : day;
 }
 
 /** Makes cards for a batch of items. The engine's is `ModelCardMaker`; the lab replays a disk cache. */
@@ -486,6 +494,21 @@ export class CardEnricher {
    * Items that entered the user's cache (already redacted). Those whose content has a card already are linked to it;
    * those the prefilter rejects get none at no call; the rest wait for the next batch. Returns at once.
    */
+  /**
+   * Items the cache still holds, seen again unchanged (a lookup returned them, a sweep listed them): their cards'
+   * time to live starts again, since the content they describe is still held. Never makes a card.
+   */
+  touch(scope: Scope, ids: Iterable<string>): void {
+    const u = this.users.get(scopeKey(scope));
+    if (!u) return;
+    const now = this.deps.now();
+    for (const id of ids) {
+      const hash = u.byItem.get(id);
+      const s = hash ? u.byHash.get(hash) : undefined;
+      if (s) s.seenAt = now;
+    }
+  }
+
   enqueue(scope: Scope, items: readonly ContextItem[]): void {
     if (items.length === 0) return;
     const u = this.user(scope);
@@ -745,7 +768,9 @@ const dayMs = (d: string) => Date.parse(`${d}T00:00:00Z`);
 /** Words of four letters or more, plural "s" dropped: how a card's entities tie to the request's words. */
 const wordsOf = (s: string) => (s.toLowerCase().match(/[a-z][a-z0-9'-]{3,}/g) ?? []).map(stem);
 /** `conflict.ts`'s stem, so a card's words meet the frame's (`Frame.wordTies`). */
-const stem = (w: string) => (w.length > 4 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
+function stem(w: string): string {
+  return w.length > 4 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w;
+}
 
 /** How a card stands against a request. */
 export interface CardMatch {
@@ -773,7 +798,10 @@ export function cardVerdict(card: Card, frame: Frame, actions: ReadonlySet<Actio
   if (PARTY.has(card.kind) && tied !== "name") return null;
   const days = frame.days;
   const last = days.at(-1)!;
-  const within = (d: string) => (!card.start || d >= card.start) && (!card.end || d <= card.end);
+  // An open end reaches at most `MAX_CARD_REACH_DAYS` past the other: no card holds over every future (or past) day.
+  const end = card.end ?? (card.start ? shiftDay(card.start, MAX_CARD_REACH_DAYS) : undefined);
+  const start = card.start ?? (card.end ? shiftDay(card.end, -MAX_CARD_REACH_DAYS) : undefined);
+  const within = (d: string) => (!start || d >= start) && (!end || d <= end);
   let violated: boolean;
   if (card.limit !== undefined && CAPS.has(card.kind)) {
     // A rule over an amount ("events over £750 need pre-approval"): only an amount over it. Other kinds may carry an

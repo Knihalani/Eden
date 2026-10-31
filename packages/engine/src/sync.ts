@@ -62,6 +62,8 @@ export interface SyncDeps {
   now: () => number;
   /** Items newly synced or changed (already redacted), for the source map's mentions. */
   onStored?: (scope: Scope, items: ContextItem[]) => void;
+  /** Ids of every item a listing returned, changed or not (cards' time to live restarts for content still held). */
+  onListed?: (scope: Scope, ids: string[]) => void;
   /** Span tracing (`spans.ts`): each listing call is a `sync.list` span naming its phase; absent or null when off. */
   tracer?: Tracer | null;
 }
@@ -533,12 +535,18 @@ export class SyncManager {
     const own = items.filter((it) => it.sourceId === s.id);
     const changed = this.deps.cache.put(u.scope, own, this.deps.now(), true, true);
     for (const it of own) {
+      // Listed: not missing, whatever an earlier sweep thought (an offset listing may have skipped it then).
+      s.missed.delete(it.id);
       s.ids.delete(it.id); // Re-insert: the set stays oldest synced first.
       s.ids.add(it.id);
       // Listed while a sweep is under way (by the sweep, or by a poll between its pages): the source has it.
       s.sweep?.seen.add(it.id);
     }
     trimIds(s.ids, this.o.maxItems);
+    this.deps.onListed?.(
+      u.scope,
+      own.map((it) => it.id),
+    );
     if (changed.length > 0) this.deps.onStored?.(u.scope, changed);
     return changed.length;
   }

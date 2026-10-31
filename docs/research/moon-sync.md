@@ -44,8 +44,8 @@ locally, where every probe is free.
      with `sync`): a lookup that finds a synced source stale polls it (one call, at most `syncCatchupPages` pages
      inside the lookup's deadline, the rest in the background) and then answers it locally. Timed polls every
      `syncEveryMs` while the user is active are available and off (0) by default: measured below, they cost far more.
-   - **Sweeps** every `syncSweepMs` (24 h) per active user re-list the source; an item it no longer lists is dropped
-     from the cache (delete propagation). A failing sweep drops nothing.
+   - **Sweeps** every `syncSweepMs` (24 h) per active user re-list the source; an item two sweeps in a row do not list is
+     dropped from the cache (delete propagation, about 48 h; D63). A failing sweep drops nothing.
    - **Budgets**: `syncCallsPerMin` (30) per (user, source) of its own (GCRA), on top of the fan-out's guards;
      background pages leave the serving rate limit two tokens of headroom; failures back off 30 s doubling to 30 min.
    - **Bounds and retention**: users per tenant (`syncMaxUsersPerTenant`, 1,000; the least recently active stops being

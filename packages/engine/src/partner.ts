@@ -408,6 +408,9 @@ export class ContextPartner {
             cache: deps.cache,
             now: this.now,
             // Synced items name people as looked-up ones do: the source map learns which sources mention whom.
+            onListed: (scope, ids) => {
+              if (this.config.cards) this.deps.cards?.touch(scope, ids);
+            },
             onStored: (scope, items) => {
               this.enqueueCards(scope, items);
               this.recordMentions(scope, items);
@@ -2095,6 +2098,12 @@ export class ContextPartner {
     const putting = items.length > 0 ? spans?.open("cache.put", parent, { items: items.length }) : undefined;
     const added = this.deps.cache.put(s.scope, items, this.now(), true);
     if (putting) spans!.close(putting, { added: added.length });
+    // An item seen again unchanged keeps its card alive; one evicted by the same put is not carded at all.
+    if (this.config.cards)
+      this.deps.cards?.touch(
+        s.scope,
+        items.map((i) => i.id),
+      );
     this.enqueueCards(s.scope, added);
     this.recordMentions(s.scope, added, parent);
   }
