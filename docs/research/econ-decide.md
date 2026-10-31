@@ -189,7 +189,8 @@ Integrated after D65 (poll and judge behind) and D66 (card economy), as the econ
   leave-one-suite-out from a candidate dump. Engine-level per-fold runs (`decideModel`) are no longer possible.
 - **With `syncPollBehind`:** the follow-up lookup made once the poll stored something runs as a `served` lookup, which
   adds only sure or grounded items; `decideConflict`'s pass runs there too, so a fresh item the request breaks is
-  queued for the agent's next request instead of waiting for `ask_context` (test: `decide.test.ts`).
+  queued for the agent's next request instead of waiting for `ask_context` (test: `decide.test.ts`). With a model the
+  follow-up decides as with none (D65's review), so the pass runs there too, with no judge call.
 - **With `judgeBehind`:** the lookup decides as with no model, so `decideConflict` runs before the judge, and the judge
   reads only what the answer left out (one fewer candidate when a conflict was added; test: `decide.test.ts`).
 - **With `cardsEconomy`:** re-run in this session on the in-sample funnel (`--lead-in clause`, seeds 41–44, no model):
@@ -208,6 +209,14 @@ Integrated after D65 (poll and judge behind) and D66 (card economy), as the econ
   gets one more item. On the price-routed card file, against D66's run of `cardsEconomy` alone (219/18), the same 7
   gains and nothing else. The 19 decoys of the ALL row (the track measured 18) come from `--lead-in clause`, as in
   D66's funnel. The synthesis expected about 225/18; nothing here needs investigating.
+- **Review fixes:** the pass now also runs (a) on the fast path's sure answer from the cache, which used to return
+  before the slow path's pass (with `anticipate` warming the cache, the common case), reading the cache's ranking and
+  adding only a current copy; and (b) wherever `noModel()` decides, so a model that failed, was cut off or was over
+  budget delivers what no model would (D41), the judge-free `judgeSure` branch included. A judge that answered still
+  decides alone. The pass reads `noModel()`'s cue (with `recoverNames`' names), and the candidate dump labels a
+  delivery only the pass made `decide-conflict`, never silence. Tests: `decide.test.ts`. The in-sample funnel above
+  re-run after the fixes (ECON, cards-v2, `--lead-in clause`): 218/19 without `decideConflict`, 225/19 with it,
+  unchanged: on these suites neither fix changes a delivery.
 - `bun run eval` with every flag off: identical to origin/main's except latency fields.
 
 ```bash
