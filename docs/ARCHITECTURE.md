@@ -118,6 +118,16 @@ cache. A lookup answers every current synced source (its own search and every pr
 call, and calls live only the sources that are not synced or still stale. The tick runs on a timer, never on the fast
 path, which only marks the user active.
 
+**Knowledge graph** (proposed D56, `graph` off by default; `kg.ts`, docs/research/moon-graph.md): with the flag, the
+item cache keeps a per-user graph over what it holds, built as items are cached and dropped with them: people (names,
+addresses, first names), organisations (an address's domain is the same node as the name "Umbrella Health"), projects
+and systems (capitalised runs), identifiers, channels, roles and days, with typed edges (about, authored, attended,
+mentions, ref, channel, role, on, constrains; alias and member between nodes). A slow-path lookup walks it from the
+request's names, ids, roles and days (spreading activation, two link hops, degree-normalised, the user's own name and
+organisation left out, 2 ms bound, no model, no source call). What it reaches gets judge seats, ties the judge, and
+with `groundConflict` is set against the request by `conflict.ts` with the names it was reached through as ties
+(grounded "graph"), only when the request acts or asks and only for an item that blocks, moves or settles something.
+
 **Ask** always searches (live, or a current synced source locally with D56; more sources), ignores the not-twice ledger (the agent asked), and returns the cited
 items as they are, with no model call: the asker is a model and reads them directly (D43). `askWithModel`
 (`EDEN_ASK_MODEL=1`) has one model call compose a short cited answer instead, when a model and budget are available.
