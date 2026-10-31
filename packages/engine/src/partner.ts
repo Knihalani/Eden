@@ -50,6 +50,7 @@ import { SyncManager } from "./sync";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { assess, frameOf, namesRef, unmeasuredLimit, type Frame, type Verdict } from "./conflict";
+import { cardVerdict, requestActions, type CardEnricher } from "./cards";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
 import { ProbeEconomy, type ProbeKind } from "./economy";
 import { seedsOf, tieWords, type Walked } from "./kg";
@@ -119,6 +120,11 @@ export interface PartnerDeps {
    * neither this nor `config.spans`, no span is made: each phase costs one null check.
    */
   onSpan?: SpanSink;
+  /**
+   * Implication cards (`cards.ts`, `config.cards`): made in the background from items entering the cache, matched at
+   * request time with no model. Absent, or the flag off: no card is made or read.
+   */
+  cards?: CardEnricher;
 }
 
 /** An outcome already written to the source map, kept so explicit feedback can correct it. */
@@ -321,6 +327,8 @@ export class ContextPartner {
       ? pooledSanitizer(deps.gatePool, maxText)
       : (items: ContextItem[]) => items.map((i) => sanitizeItem(i, maxText));
     const spans = this.spans;
+    // The card enrichment (`cards`) reports its background calls into the same spans.
+    if (spans && deps.cards && this.config.cards) deps.cards.tracer = spans;
     this.fanout = new SourceFanout({
       // With spans on, the gate's span is a child of the source call whose page it redacts (`Tracer.page`).
       sanitize: spans
@@ -349,7 +357,10 @@ export class ContextPartner {
             cache: deps.cache,
             now: this.now,
             // Synced items name people as looked-up ones do: the source map learns which sources mention whom.
-            onStored: (scope, items) => this.recordMentions(scope, items),
+            onStored: (scope, items) => {
+              this.enqueueCards(scope, items);
+              this.recordMentions(scope, items);
+            },
             tracer: spans,
           },
           {
@@ -651,6 +662,8 @@ export class ContextPartner {
     this.deps.planner?.forget(scope, sourceId);
     this.economy.forget(scope, sourceId);
     this.sync?.forget(scope, sourceId);
+    // Cards are per user, not per source: a source's forget drops them all (they are remade as items come back).
+    this.deps.cards?.forget(scope);
   }
 
   get sessionCount(): number {
@@ -940,6 +953,7 @@ export class ContextPartner {
     cls?: ActionClass,
     walked?: ReadonlyMap<string, Walked>,
     graphPool: Scored[] = [],
+    carded: ReadonlyMap<string, CardFind> = new Map(),
   ): { items: Scored[]; how: string } {
     const none = { items: [] as Scored[], how: "" };
     const pool = candidates.filter((x) => !bulkMail(x.item));
@@ -1020,6 +1034,14 @@ export class ContextPartner {
         return { items: [...hits.slice(0, this.max() - extra.length), ...extra], how: "conflict" };
       }
       if (best.length > 0) return { items: best.slice(0, this.config.graphGround), how: "graph" };
+      // `cards`: an item whose card the request violates (a freeze over its day, an expiry before it, a limit under
+      // its amount, a standing constraint on what it names), read by the model when the item arrived. At most
+      // `cardItems`, the best tied first: a card is a model's reading, and one wrong one is noise.
+      const byCard = pool
+        .filter((x) => carded.get(x.item.id)?.violated)
+        .sort((a, b) => cardRank(carded.get(b.item.id)!) - cardRank(carded.get(a.item.id)!))
+        .slice(0, this.config.cardItems);
+      if (byCard.length > 0) return { items: byCard, how: "card" };
     }
     // With `groundAway`: a person the request names, away on a day it names ("ask Jamie to feed the cat next weekend"
     // and Jamie's "away on Skye 6–9 Nov"), whatever the words: the agent should know before it asks them (D48).
@@ -1915,7 +1937,13 @@ export class ContextPartner {
     const putting = items.length > 0 ? spans?.open("cache.put", parent, { items: items.length }) : undefined;
     const added = this.deps.cache.put(s.scope, items, this.now(), true);
     if (putting) spans!.close(putting, { added: added.length });
+    this.enqueueCards(s.scope, added);
     this.recordMentions(s.scope, added, parent);
+  }
+
+  /** `cards`: what is new to the cache (looked up or synced) is read for constraints in the background, off-path. */
+  private enqueueCards(scope: Scope, added: ContextItem[]): void {
+    if (this.config.cards && this.deps.cards && added.length > 0) this.deps.cards.enqueue(scope, added);
   }
 
   /**
@@ -2179,9 +2207,14 @@ export class ContextPartner {
       const walking = this.config.graph ? spans?.open("graph.walk", cue.span) : undefined;
       const walked = this.config.graph ? this.walkGraph(s, cue) : new Map<string, Walked>();
       if (walking) spans!.close(walking, { reached: walked.size });
+      // `cards`: cached items whose implication card bears on the request's actions (no model, no call).
+      const carding = this.config.cards && this.deps.cards ? spans?.open("cards.match", cue.span) : undefined;
+      const carded = this.cardFinds(s, cue);
+      if (carding) spans!.close(carding, { found: carded.size });
+      const extra = [...consIds, ...carded.keys()];
       const ranking = spans?.open("rank", cue.span);
       const scored = this.rank(s, cue, {
-        probed: consIds.size > 0 ? [...(probedIds ?? []), ...consIds] : probedIds,
+        probed: extra.length > 0 ? [...(probedIds ?? []), ...extra] : probedIds,
         ...(walked.size > 0 ? { walked: [...walked.keys()] } : {}),
       });
       if (ranking) spans!.close(ranking, { candidates: scored.length });
@@ -2231,7 +2264,11 @@ export class ContextPartner {
       const eligible = scored.filter(
         (x) =>
           !x.walkedOnly &&
-          (x.score >= this.config.candidateScore || onNamedDay(x) || probed.has(x.item.id) || bridged.has(x.item.id)),
+          (x.score >= this.config.candidateScore ||
+            onNamedDay(x) ||
+            probed.has(x.item.id) ||
+            bridged.has(x.item.id) ||
+            carded.has(x.item.id)),
       );
       // The walk's finds (`graph`), whatever they score on words: they get seats and the graph's conflict ground,
       // and no other path (what every other path reads stays as it was without the graph).
@@ -2242,13 +2279,20 @@ export class ContextPartner {
         ? [...sure, ...eligible.filter((x) => !sure.includes(x))].slice(0, this.config.judgeCandidates)
         : eligible.slice(0, this.config.judgeCandidates);
       // A conflicting consequence find takes the first of those seats: nothing else would bring it to the judge.
-      const seats =
+      const probeSeats =
         this.config.probes && !this.config.probeOff.includes("seats")
           ? [
               ...eligible.filter((x) => bridged.has(x.item.id) && !top.includes(x)).slice(0, 1),
               ...eligible.filter((x) => probed.has(x.item.id) && !bridged.has(x.item.id) && !top.includes(x)),
             ].slice(0, 3)
           : [];
+      // A carded item the request violates takes a seat of its own: it shares no word with the request, so nothing
+      // else would bring it before the judge (`cards`).
+      const cardSeat = eligible
+        .filter((x) => carded.get(x.item.id)?.violated && !top.includes(x) && !probeSeats.includes(x))
+        .sort((a, b) => cardRank(carded.get(b.item.id)!) - cardRank(carded.get(a.item.id)!))
+        .slice(0, 1);
+      const seats = [...cardSeat, ...probeSeats];
       // With `graph`, the walk's best finds the judge would not otherwise see take seats of their own.
       const graphSeats = graphPool
         .filter((x) => !top.includes(x) && !seats.includes(x))
@@ -2284,7 +2328,17 @@ export class ContextPartner {
         const named = this.config.recoverNames ? this.withRecoveredNames(s, cue) : cue;
         // Grounding reads every candidate, not only the judge's few: a day's events rank after every word match.
         const grounding = spans?.open("ground", cue.span, { candidates: eligible.length });
-        const grounded = this.grounded(s, named, eligible, eventKind, bridged, consequence?.cls, walked, graphPool);
+        const grounded = this.grounded(
+          s,
+          named,
+          eligible,
+          eventKind,
+          bridged,
+          consequence?.cls,
+          walked,
+          graphPool,
+          carded,
+        );
         if (grounding) spans!.close(grounding, { grounded: grounded.items.length });
         if (grounded.items.length > 0) {
           const items = grounded.items;
@@ -2317,6 +2371,7 @@ export class ContextPartner {
           probed.has(x.item.id) ||
           bridged.has(x.item.id) ||
           walked.has(x.item.id) ||
+          carded.get(x.item.id)?.violated === true ||
           onNamedDay(x) ||
           x.matched >= 2 ||
           this.holdsAny(s, x, rare);
@@ -2386,6 +2441,29 @@ export class ContextPartner {
       done("silent", "error");
       return null;
     }
+  }
+
+  /**
+   * `cards`: the user's cached items whose implication card (`cards.ts`) bears on the request: an action of the
+   * request's, and a party it names when the card binds one. Only cards made before the request arrived count: the
+   * enrichment runs in the background, so a card made during this lookup lands at a later one (D4). No model, no call:
+   * a classification by fixed lexicons and a pass over the user's carded items (at most `maxCardsPerUser` twice).
+   */
+  private cardFinds(s: Session, cue: Cue): Map<string, CardFind> {
+    const out = new Map<string, CardFind>();
+    const enricher = this.deps.cards;
+    if (!this.config.cards || !enricher) return out;
+    const actions = requestActions(cue.raw);
+    if (actions.size === 0) return out;
+    const now = this.now();
+    const ids = enricher.carded(s.scope).filter((id) => this.deps.cache.get(s.scope, id, now) !== null);
+    const frame = this.frame(cue);
+    for (const [id, card] of enricher.cardsOf(s.scope, ids, cue.at)) {
+      const m = cardVerdict(card, frame, actions);
+      if (m) out.set(id, { ...m, spanDays: spanDays(card) });
+    }
+    // Bounded: the best matches only, so a user with many constraint cards never floods the candidates.
+    return new Map([...out].sort((a, b) => cardRank(b[1]) - cardRank(a[1])).slice(0, MAX_CARD_FINDS));
   }
 
   /**
@@ -2636,6 +2714,25 @@ function outcomeAttrs(outcomes: readonly FanoutOutcome[]): Record<string, number
   const out: Record<string, number> = { sources: outcomes.length };
   for (const o of outcomes) out[o.status] = (out[o.status] ?? 0) + 1;
   return out;
+}
+
+/** A card's match against a request (`cardVerdict`), with its span's length for ranking. */
+interface CardFind {
+  violated: boolean;
+  tied: "name" | "word" | null;
+  /** Days the card's span covers (Infinity when open or none): a narrower span says more about the day asked. */
+  spanDays: number;
+}
+/** Card finds a lookup ranks at most (`cards`). */
+const MAX_CARD_FINDS = 6;
+/** Violated first, then tied by a name, then by a word, then the narrower span. */
+function cardRank(f: CardFind): number {
+  const span = Number.isFinite(f.spanDays) ? Math.max(0, 1 - f.spanDays / 400) : 0;
+  return (f.violated ? 8 : 0) + (f.tied === "name" ? 4 : f.tied === "word" ? 2 : 0) + span;
+}
+function spanDays(c: { start?: string; end?: string }): number {
+  if (!c.start || !c.end) return Infinity;
+  return (Date.parse(c.end) - Date.parse(c.start)) / 86_400_000 + 1;
 }
 
 /** Fan-out outcomes with no call to the source behind them. */

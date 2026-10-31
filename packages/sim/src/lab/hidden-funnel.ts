@@ -12,6 +12,7 @@
  *   bun packages/sim/src/lab/hidden-funnel.ts [--suite hidden|heldout|heldout-all|all|a,b] [--seeds 41,42,43,44]
  *     [--time 0]
  *     [--config '{"probes":true}'] [--json out.json] [--label probes] [--no-record] [--judge live [--model m]]
+ *     [--sync] [--cards DIR/cards.jsonl]
  *
  * `--judge live` gives Eden its judge (OpenRouter, `OPENROUTER_API_KEY`): the funnel then measures what the judge lets
  * through, hidden and decoy, and its calls, tokens and spend (about $0.03 for the 456 held-out tasks), a cheap screen
@@ -27,18 +28,23 @@
  * ticks every five simulated minutes between tasks. Its listing calls are counted apart from request-time calls
  * (`sync:` line, and `sync` in the JSON): backfill, background polls and sweeps, and on-demand polls (which are
  * request-time calls too). `--sync` is the oracle instead: every item put in the cache at no call.
+ * `--cards FILE` gives Eden implication cards (`cards.ts`, docs/research/moon-cards.md) replayed from a disk cache made
+ * by `cards-enrich.ts` (no model call here; an item with no cached card is uncovered). They are made as items enter the
+ * cache, and used from the next request on; with `--sync`, for every item before the first request. Turn them on with
+ * `"cards": true` in `--config`.
  *
  * `--suite` names any suite of `suites.ts`, or several: each gets its own table, then a TOTAL over all of them.
  * Each suite's run is recorded in the benchmark ledger (bench/, `ledger.ts`) unless `--no-record`.
  */
 import { writeFileSync } from "node:fs";
-import { ContextPartner, cpuNow, ItemCache } from "@eden/engine";
+import { CardEnricher, ContextPartner, cpuNow, ItemCache } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, OpenRouterModel, type Model } from "@eden/llm";
 import type { AgentEvent } from "@eden/protocol";
 import { QueryPlanner } from "@eden/sources";
 import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
+import { DiskCardMaker } from "./cards-disk";
 import { clearSlot, dress } from "./hidden-context";
 import { record, tidy } from "./ledger";
 import { Timeline } from "./timeline";
@@ -66,6 +72,11 @@ const REAL_SYNC = CONFIG.sync === true;
 if (REAL_SYNC && SYNC) throw new Error("--sync (the oracle) and the real sync (config sync) are exclusive");
 /** The real sync's listing calls over the whole run (every suite), and the lookups that answered locally. */
 const syncUse = { backfill: 0, background: 0, demand: 0, lookups: 0, localSources: 0, warmMs: 0, users: 0 };
+const CARDS = opt("cards", "");
+/** One replaying maker for every seed and suite: the disk cache is read once. */
+const cardMaker = CARDS ? new DiskCardMaker(CARDS) : null;
+/** No cap on replayed cards: they cost nothing here (the enrichment's spend is `cards-enrich.ts`'s). */
+const UNCAPPED = { callsPerSession: Infinity, usdPerSession: Infinity, usdPerUserDay: Infinity };
 const KEY = process.env.OPENROUTER_API_KEY;
 if (LIVE && !KEY) throw new Error("--judge live needs OPENROUTER_API_KEY");
 const MODEL = opt("model", "z-ai/glm-5.3-flash");
@@ -177,6 +188,9 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       syncUse.demand += t.syncCalls ?? 0;
     }
   };
+  const cards = cardMaker
+    ? new CardEnricher({ maker: cardMaker, budget: new Budget(UNCAPPED), now: () => clock })
+    : null;
   const partner = new ContextPartner({
     sources: async () => sources,
     sourceMap: new SourceMap(":memory:", { seed }),
@@ -188,6 +202,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     config: CONFIG,
     onTrace: timeline ? timeline.traceSink(lane, countCalls) : countCalls,
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
+    ...(cards ? { cards } : {}),
   });
   const scope = { tenantId: "funnel", userId: `w${seed}` };
   // The real sync: the backfill runs before the first task, from half an hour before it on the simulated clock (a
@@ -204,17 +219,24 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     }
     syncUse.warmMs += performance.now() - t0;
     syncUse.users++;
+    // Cards for the backfilled items, as a long-running sync would have them before the first request.
+    if (cards) await cards.idle();
     clock = world.now;
   }
   // `--sync`: the experiment where Eden has already synced every item of the user's sources into its own index.
   if (SYNC) {
-    const synced = timeline?.task(lane, "sync", "sync");
-    cache.put(
+    const syncing = timeline?.task(lane, "sync", "sync");
+    const synced = cache.put(
       scope,
       sources.flatMap((s) => s.listAll()),
       clock,
     );
-    synced?.end();
+    syncing?.end();
+    // A sync's items are enriched as a sync would enrich them, before the first request.
+    if (cards) {
+      cards.enqueue(scope, synced);
+      await cards.idle();
+    }
   }
   for (const [i, task] of tasks.entries()) {
     if (sync) {
@@ -242,6 +264,8 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     const ms = performance.now() - t0;
     taskCpuUs += cpuNow() - c0;
     const injections = [...(r.injection ? [r.injection] : []), ...partner.takePending({ ...scope, sessionId })];
+    // Enrichment of what this request brought in finishes before the next request (it lands one request later).
+    if (cards) await cards.idle();
     const got = injections.flatMap((x) => x.citations.map((c) => c.itemId));
     // How the planted item was delivered (the injection reason's kind: sources, grounded-…, fallback, model).
     const why = injections.find((x) => x.citations.some((c) => c.itemId === id))?.reason.split(":")[0] ?? "";
@@ -310,6 +334,7 @@ if (REAL_SYNC) {
       `local sources ${(syncUse.localSources / Math.max(1, syncUse.lookups)).toFixed(2)}/lookup`,
   );
 }
+if (cardMaker) console.log(`cards: ${cardMaker.hits} replayed, ${cardMaker.misses} uncovered (no cached card)`);
 if (LIVE) {
   const tasks = Math.max(1, grand.hidden.n + grand.control.n);
   console.log(

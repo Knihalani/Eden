@@ -7,6 +7,7 @@
  *   [--noise 1] [--updates 0] [--refresh-after-hours H] [--max-refreshes 3] [--tool-rate 0.4]
  *   [--judge none|perfect|noisy] [--ask-model] [--live] [--brief] [--config '{"probes":true}']
  *   [--timeline out.jsonl] [--sync]
+ *   [--cards DIR/cards-v2.jsonl]
  *
  * Plays generated sessions over simulated sources and prints the quality report as JSON. Without --live no model is
  * used (free, deterministic at --time 0). --time 1 runs source latency and agent pacing in real time.
@@ -15,6 +16,7 @@
  */
 import { OpenRouterModel } from "@eden/llm";
 import { Timeline } from "./lab/timeline";
+import { DiskCardMaker } from "./lab/cards-disk";
 import { runQuality } from "./quality";
 import { IDEAL, REALISTIC, REALISTIC_ENTITIES, ZOO_HELDOUT_A, ZOO_HELDOUT_B, ZOO_TUNE } from "./sources";
 
@@ -73,6 +75,8 @@ const report = await runQuality({
   promoteAfter: args.includes("--promote-after") ? Number(arg("promote-after", "0")) : undefined,
   // Lab only: every source item synced into Eden's cache before each session (docs/research/moon-graph.md).
   sync: args.includes("--sync"),
+  // Implication cards replayed from a disk cache (`cards-enrich.ts`); `"cards": true` in --config uses them.
+  ...(args.includes("--cards") ? { cardMaker: new DiskCardMaker(arg("cards", "")) } : {}),
   planner: args.includes("--planner")
     ? {
         maxCalls: Number(arg("planner-max-calls", "3")),

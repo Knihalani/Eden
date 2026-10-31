@@ -289,6 +289,15 @@ export interface EngineConfig {
   graphWordTies: boolean;
   /** The walk starts from the days the request names too (reaching items whose blocking statements cover them). */
   graphDays: boolean;
+  /**
+   * Implication cards (`cards.ts`; needs `PartnerDeps.cards`): items entering the cache are read in the background by a
+   * cheap model into small structured cards (the constraint, the actions it affects, its span and limit); at request
+   * time, with no model, a cached item whose card bears on the request's actions is a candidate, and, with
+   * `groundConflict`, one whose span or limit the request violates is delivered (grounded "card").
+   */
+  cards: boolean;
+  /** With `cards` and `groundConflict`, at most this many items delivered on their card alone. */
+  cardItems: number;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
   /** Cost reserved per judge call before the real cost is known: about its worst case at the cap (D45). */
@@ -397,5 +406,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncLocalAll: true,
   syncWide: false,
   syncTermProbes: 0,
+  cards: false,
+  cardItems: 1,
   maxEventChars: 32_000,
 };

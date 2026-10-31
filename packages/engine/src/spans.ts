@@ -78,6 +78,8 @@ export const SPAN_NAMES = [
   "sync.freshen",
   "sync.list",
   "graph.walk",
+  "cards.match",
+  "cards.make",
 ] as const;
 
 const ORIGIN = performance.timeOrigin;
