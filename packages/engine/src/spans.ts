@@ -80,6 +80,8 @@ export const SPAN_NAMES = [
   "graph.walk",
   "cards.match",
   "cards.make",
+  "anticipate.prefetch",
+  "anticipate.early",
 ] as const;
 
 const ORIGIN = performance.timeOrigin;

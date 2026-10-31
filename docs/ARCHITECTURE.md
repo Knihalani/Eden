@@ -128,6 +128,20 @@ organisation left out, 2 ms bound, no model, no source call). What it reaches ge
 with `groundConflict` is set against the request by `conflict.ts` with the names it was reached through as ties
 (grounded "graph"), only when the request acts or asks and only for an item that blocks, moves or settles something.
 
+**Anticipation** (`anticipate`, off by default; proposed D56, `anticipate.ts`,
+[research/moon-anticipate.md](research/moon-anticipate.md)): every event with words (a user message, a draft the user
+is still typing, `user_message` with `draft: true`, a tool call or result, an arriving message) is read, with no model
+and in linear time over its first 600 characters, for what the agent will need next: the names it mentions (from a
+tool's output only people the user's items have as parties, never the user), the days it schedules, its action class
+(`consequence.ts`), and the names that followed that intent before for this user (`IntentPatterns`, per user,
+bounded). A background prefetch, one per session at a time and bounded per event and per session, sends them as the
+request's own probes would (person, organisation, day and the class's constraint vocabulary), so their answers land in
+the user's probe memo and economy. The request's probes then reuse any answer a source gave the same query within
+`probeMemoMs`, at no call; with no model, the request is first decided from what is held (what is sure, or what its
+structure grounds, never the fallback), returned on the observe call itself, and the live search runs behind it and
+adds only what is sure or grounded. With a judge, the request always goes to the slow path (a warm cache would
+otherwise end lookups before the judge sees the second candidate). A draft is ignored when the flag is off.
+
 **Ask** always searches (live, or a current synced source locally with D56; more sources), ignores the not-twice ledger (the agent asked), and returns the cited
 items as they are, with no model call: the asker is a model and reads them directly (D43). `askWithModel`
 (`EDEN_ASK_MODEL=1`) has one model call compose a short cited answer instead, when a model and budget are available.
