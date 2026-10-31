@@ -1219,7 +1219,8 @@ describe("grounding: people, days and intent without a model (D44)", () => {
       search: async (q) => (sent.push({ userId: q.scope.userId, window: q.window }), []),
     };
     const cache = new ItemCache();
-    const { p } = partner({ cache }, [spy]);
+    // The engine on the same clock as the events: on the wall clock, the cached events would have expired since.
+    const { p } = partner({ cache, now: () => Date.parse("2026-10-30T03:00:00Z") }, [spy]);
     const event = (ref: string, start: string) => ({
       id: `calendar:${ref}`,
       sourceId: "calendar",

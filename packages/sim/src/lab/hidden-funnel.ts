@@ -10,11 +10,18 @@
  * - source calls per task, and the engine's wall time per task.
  *
  *   bun packages/sim/src/lab/hidden-funnel.ts [--suite hidden|heldout|heldout-all|all|a,b] [--seeds 41,42,43,44]
+ *     [--time 0]
  *     [--config '{"probes":true}'] [--json out.json] [--label probes] [--no-record] [--judge live [--model m]]
  *
  * `--judge live` gives Eden its judge (OpenRouter, `OPENROUTER_API_KEY`): the funnel then measures what the judge lets
  * through, hidden and decoy, and its calls, tokens and spend (about $0.03 for the 456 held-out tasks), a cheap screen
  * before an agent run. Seeds run concurrently.
+ *
+ * `--config '{"sync":true,...}'` runs Eden's real background sync (`SyncManager`, D56) over the sim connectors: the
+ * user's sources are backfilled through their list calls before the first task (the clock running), and the sync
+ * ticks every five simulated minutes between tasks. Its listing calls are counted apart from request-time calls
+ * (`sync:` line, and `sync` in the JSON): backfill, background polls and sweeps, and on-demand polls (which are
+ * request-time calls too). `--sync` is the oracle instead: every item put in the cache at no call.
  *
  * `--suite` names any suite of `suites.ts`, or several: each gets its own table, then a TOTAL over all of them.
  * Each suite's run is recorded in the benchmark ledger (bench/, `ledger.ts`) unless `--no-record`.
@@ -39,9 +46,18 @@ const opt = (name: string, fallback: string) => {
 const SUITE = opt("suite", "hidden");
 const SUITE_LIST = parseSuites(SUITE);
 const SEEDS = opt("seeds", "41,42,43,44").split(",").map(Number);
+/**
+ * `--time 1`: the connectors answer at their profile's latency in real time (and rate-limit in real time), so `ms/task`
+ * is the delivery latency a user would see; 0 (the default) answers at once.
+ */
+const TIME = Number(opt("time", "0"));
 const CONFIG = JSON.parse(opt("config", "{}")) as Record<string, unknown>;
 const LIVE = opt("judge", "none") === "live";
 const SYNC = args.includes("--sync");
+const REAL_SYNC = CONFIG.sync === true;
+if (REAL_SYNC && SYNC) throw new Error("--sync (the oracle) and the real sync (config sync) are exclusive");
+/** The real sync's listing calls over the whole run (every suite), and the lookups that answered locally. */
+const syncUse = { backfill: 0, background: 0, demand: 0, lookups: 0, localSources: 0, warmMs: 0, users: 0 };
 const KEY = process.env.OPENROUTER_API_KEY;
 if (LIVE && !KEY) throw new Error("--judge live needs OPENROUTER_API_KEY");
 const MODEL = opt("model", "z-ai/glm-5.3-flash");
@@ -119,7 +135,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
   // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
   const keep = new Set(planted.map((it) => it.id));
   for (const task of tasks) clearSlot(world, task.text, keep);
-  const sources = simSources(world, REALISTIC, 0, seed);
+  const sources = simSources(world, REALISTIC, TIME, seed);
   const returned = new Set<string>();
   for (const s of sources) {
     const search = s.search.bind(s);
@@ -141,9 +157,32 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     planner: new QueryPlanner({ seed }),
     now: () => clock,
     config: CONFIG,
-    onTrace: (t) => (calls += t.sourceCalls),
+    onTrace: (t) => {
+      calls += t.sourceCalls;
+      if (t.localSources !== undefined) {
+        syncUse.lookups++;
+        syncUse.localSources += t.localSources;
+        syncUse.demand += t.syncCalls ?? 0;
+      }
+    },
   });
   const scope = { tenantId: "funnel", userId: `w${seed}` };
+  // The real sync: the backfill runs before the first task, from half an hour before it on the simulated clock (a
+  // minute per tick), so the tasks see the same clock as without it.
+  const sync = REAL_SYNC ? partner.sync! : null;
+  if (sync) {
+    clock = world.now - 30 * 60_000;
+    sync.track(scope, clock);
+    const t0 = performance.now();
+    for (let i = 0; i < 120 && !sync.warm(scope); i++) {
+      const n = await sync.tick(); // Read before adding: seeds run concurrently.
+      syncUse.backfill += n;
+      clock += 60_000;
+    }
+    syncUse.warmMs += performance.now() - t0;
+    syncUse.users++;
+    clock = world.now;
+  }
   // `--sync`: the experiment where Eden has already synced every item of the user's sources into its own index.
   if (SYNC)
     cache.put(
@@ -152,7 +191,14 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       clock,
     );
   for (const [i, task] of tasks.entries()) {
-    clock += 3_600_000;
+    if (sync) {
+      // The hour between tasks, on the sync's timer: a tick every five simulated minutes.
+      for (let m = 0; m < 12; m++) {
+        clock += 5 * 60_000;
+        const n = await sync.tick();
+        syncUse.background += n;
+      }
+    } else clock += 3_600_000;
     const id = planted[i]!.id;
     const sessionId = task.id;
     returned.clear();
@@ -221,6 +267,18 @@ if (SUITE_LIST.length > 1) {
   for (const r of runs) console.log(line(r.suite, r.total));
   console.log(line("TOTAL", grand));
 }
+if (REAL_SYNC) {
+  const tasks = Math.max(1, grand.hidden.n + grand.control.n);
+  const requestCalls = grand.hidden.calls + grand.control.calls;
+  console.log(
+    `sync: backfill ${syncUse.backfill} calls (${(syncUse.backfill / Math.max(1, syncUse.users)).toFixed(1)}/user, ` +
+      `${(syncUse.warmMs / Math.max(1, syncUse.users)).toFixed(0)} ms/user), background ${syncUse.background} ` +
+      `(${(syncUse.background / tasks).toFixed(2)}/task), on-demand ${syncUse.demand} ` +
+      `(${(syncUse.demand / tasks).toFixed(2)}/task, in calls/task); request ${(requestCalls / tasks).toFixed(2)}/task; ` +
+      `amortised total ${((requestCalls + syncUse.background + syncUse.backfill) / tasks).toFixed(2)}/task; ` +
+      `local sources ${(syncUse.localSources / Math.max(1, syncUse.lookups)).toFixed(2)}/lookup`,
+  );
+}
 if (LIVE) {
   const tasks = Math.max(1, grand.hidden.n + grand.control.n);
   console.log(
@@ -287,6 +345,7 @@ if (out) {
         config: CONFIG,
         rows,
         total: grand,
+        ...(REAL_SYNC ? { sync: syncUse } : {}),
         ...(SUITE_LIST.length > 1 ? { suites } : {}),
         // Per task, with the suite: how each planted item was delivered (`why`), for breakdowns by path.
         perTask: runs.flatMap((r) => r.perTask.map((t) => ({ suite: r.suite, ...t }))),

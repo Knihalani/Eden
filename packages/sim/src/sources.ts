@@ -13,8 +13,8 @@
  * The latency and error figures in the presets are assumptions (labelled so in reports), chosen to be plausible for
  * third-party APIs called from a server in the same region; they are inputs to vary, not measurements.
  */
-import type { ContextItem } from "@eden/protocol";
-import type { SearchQuery, Source } from "@eden/sources";
+import type { ContextItem, Scope } from "@eden/protocol";
+import type { ListPage, SearchQuery, Source } from "@eden/sources";
 import { Rng } from "./rng";
 import { DAY, type World, type WorldItem } from "./world";
 
@@ -147,6 +147,8 @@ const STOP = new Set("a an and are at be by for from in is it of on or the to wi
 export interface SourceStats {
   /** Every call, fetches included. */
   calls: number;
+  /** Listing pages read (`list`): a background sync's calls, also counted in `calls`. */
+  lists: number;
   /** Read-one calls (`fetch`), to refresh a cached item. */
   fetches: number;
   errors: number;
@@ -322,6 +324,7 @@ export class SimSource implements Source {
   readonly stats: SourceStats = {
     calls: 0,
     fetches: 0,
+    lists: 0,
     errors: 0,
     limited: 0,
     aborted: 0,
@@ -333,6 +336,8 @@ export class SimSource implements Source {
   /** Ids of every item returned, in order (a runner reads the slice for one event). */
   readonly returned: string[] = [];
   private readonly rng: Rng;
+  /** The items newest first, for `list`; rebuilt after a reindex. */
+  private byRecency: WorldItem[] | null = null;
   private tokens: number;
   private lastRefill = performance.now();
 
@@ -348,6 +353,52 @@ export class SimSource implements Source {
     this.description = index.world.sources[index.id] ?? index.id;
     this.rng = new Rng(seed);
     this.tokens = profile.ratePerSec ?? Infinity;
+  }
+
+  /**
+   * One page of the connector's listing (D56): its items most recently updated first, from an offset cursor, at the
+   * cost of one call with the same latency, rate limit, faults and error draws as a search. Counted in `stats.calls`
+   * and apart in `stats.lists`, so a runner can report sync calls separately from request-time ones.
+   */
+  async list(_scope: Scope, cursor: string | undefined, limit: number, signal: AbortSignal): Promise<ListPage> {
+    this.stats.lists++;
+    await this.callGuards(signal);
+    const at = cursor === undefined ? 0 : Math.max(0, Number(cursor) || 0);
+    // Newest first, as a mail or chat list call returns; the order is read at call time, so an update moves an item up.
+    if (this.byRecency === null) this.byRecency = [...this.index.items].sort((a, b) => b.updatedAt - a.updatedAt);
+    const hits = this.byRecency.slice(at, at + limit);
+    const items = hits.map((it) => render(it, this.profile.snippetChars));
+    for (const i of items) this.stats.bytes += i.title.length + i.text.length;
+    return { items, next: at + limit < this.byRecency.length ? String(at + limit) : null };
+  }
+
+  /** A call's latency, rate limit, faults and error draw (search and list share them); throws as a connector would. */
+  private async callGuards(signal: AbortSignal): Promise<void> {
+    this.stats.calls++;
+    const p = this.profile;
+    const now = performance.now();
+    const f = this.fault;
+    const slow = f.slow && (f.slowUntil ?? Infinity) > now ? f.slow : 1;
+    const delay = p.latency.medianMs > 0 ? this.rng.lognormal(p.latency.medianMs, p.latency.sigma) : 0;
+    const scaled = delay * this.timeScale * slow;
+    try {
+      if (scaled > 0) await sleep(scaled, signal);
+      else if (signal.aborted) throw signal.reason;
+    } catch (e) {
+      this.stats.aborted++;
+      throw e;
+    }
+    const rate = f.ratePerSec !== undefined && (f.ratePerSecUntil ?? Infinity) > now ? f.ratePerSec : p.ratePerSec;
+    if (rate !== undefined && !this.take(rate)) {
+      this.stats.limited++;
+      throw new Error("429 Too Many Requests: rate limit exceeded, retry after 2");
+    }
+    if ((f.outageUntil ?? -Infinity) > performance.now() || this.rng.chance(p.errorRate)) {
+      this.stats.errors++;
+      throw new Error(
+        (f.outageUntil ?? -Infinity) > performance.now() ? "503 Service Unavailable" : "500 Internal Server Error",
+      );
+    }
   }
 
   async search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]> {
@@ -428,6 +479,7 @@ export class SimSource implements Source {
 
   /** Rebuilds this connector's index from the world's current items (after an update at the source). */
   reindex(): void {
+    this.byRecency = null;
     this.index = new SimIndex(this.id, this.index.world);
   }
 
