@@ -129,6 +129,21 @@ heap 3.38 → 8.16 MB per user and cache-put CPU 120 → 361 ms per 2,000 items,
 10,000 users per tenant. Request-time engine CPU stays under 1 ms per lookup at p50 for the graph walk and card
 matching.
 
+The judge, measured on ALL (D65, docs/research/econ-judge.md; in-sample). On the critical path it adds no facts and
+costs time: in the full benchmark (D64), in-sample, paired, eden-judge − eden is −0.026 hidden at +1.10 s and +$0.039
+per 1,000 tasks, so the recommended configuration has no judge. `judgeBehind` (off by default, not recommended) moves
+it behind the no-model answer, where it can only add. It is one bounded judge call (the judge's caps and `Budget`) on a
+lookup whose no-model answer left candidates out:
+- funnel, seed 41: 0.93 calls per task, $0.0088 for 134 tasks ($0.066 per 1,000 tasks);
+- live, seed 43: 0.90 calls per task, about $0.000024 a call (OpenRouter's reported cost), $0.017–0.022 per 1,000
+  tasks against the judge on the path's $0.023.
+
+At 20 tasks a user a day, that is about $0.012–0.040 per user-month. `syncPollBehind` (off by default) makes no model
+call and no new poll: the poll a lookup used to wait for runs behind it. When that poll stores something, the lookup
+is made again; its synced sources then answer locally, but sources that are not synced are searched live a second
+time. The in-sample worlds are static, so that second lookup never ran in any benchmark and its source calls are
+unmeasured; in a live mailbox they scale with how often a poll finds something new.
+
 The non-model costs (source API calls, hosting) are not modelled yet. Source calls may dominate for some connectors;
 measure them per connector in M2. The query planner (D28), on by default in the server since D33, adds no model call.
 After its iterations it makes 1.36–1.47x planner-off's source calls per lookup in the simulation at time 0 and

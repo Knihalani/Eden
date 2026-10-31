@@ -252,8 +252,8 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     ...(cards ? { cards } : {}),
   });
   // The harness may read the engine's session table (as `quality.ts` `settle` does; product code may not): whether a
-  // session's lookup, prefetch or a poll its lookup left running (`behind`, for a poll-behind-the-lookup flag; none
-  // today) is still running.
+  // session's lookup, prefetch or work its lookup left running (`behind`: `syncPollBehind`'s poll and follow-up,
+  // `judgeBehind`'s judge) is still running.
   const table = (
     partner as unknown as {
       sessions: Map<string, { inflight: unknown; ant?: { running: unknown }; behind?: unknown }>;

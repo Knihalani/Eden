@@ -118,6 +118,18 @@ cache. A lookup answers every current synced source (its own search and every pr
 call, and calls live only the sources that are not synced or still stale. The tick runs on a timer, never on the fast
 path, which only marks the user active.
 
+**Poll behind the lookup** (D65, `syncPollBehind`, off by default; with `sync` and `syncOnDemand`): without it, a
+lookup that finds a synced source stale waits for that source's on-demand poll (`sync.freshen`, one or two listing
+calls), which was most of Eden's time on the agent's critical path in ALL (p50 503 ms where it ran). With it, every
+warm synced source answers the event's lookup from the index as it stands and the poll runs behind; the critical path
+then holds no source call for a synced source, current or polling behind. If the poll stores anything, the lookup is
+made again on the fresh index once both are done (after any lookup still in flight) and what it delivers is queued for
+the agent's next request: after a delivery only what is sure or grounded, after silence as the lookup would have
+decided. The agent's `ask_context` still waits for the poll. **Judge behind the answer** (`judgeBehind`, off by default,
+experimental and not recommended): with a model, every lookup decides as with no model and answers at once; the judge
+then reads only the candidates that answer left out and its picks are queued. The recommended configuration has no
+model judge on the critical path.
+
 **Knowledge graph** (proposed D58, `graph` off by default; `kg.ts`, docs/research/moon-graph.md): with the flag, the
 item cache keeps a per-user graph over what it holds, built as items are cached and dropped with them: people (names,
 addresses, first names), organisations (an address's domain is the same node as the name "Umbrella Health"), projects

@@ -143,6 +143,13 @@ export interface EngineConfig {
    * rather than delivered on their score alone. Costs a judge call on lookups that had only confident items.
    */
   judgeConfident: boolean;
+  /**
+   * With a model: the judge leaves the critical path. Every lookup decides and answers as with no model (the fast
+   * path, anticipation's early answer, grounding and the fallback); the judge then reads the candidates that answer
+   * left out, and what it picks is queued for the agent's next turn. It can add, never hold back
+   * (docs/research/econ-judge.md).
+   */
+  judgeBehind: boolean;
   /** With a judge configured, sure items are judged when more than one scored as sure (a contested set). */
   judgeContested: boolean;
   /**
@@ -247,6 +254,11 @@ export interface EngineConfig {
    * then answers from the local index, rather than sending the source its search and probes.
    */
   syncOnDemand: boolean;
+  /**
+   * With `syncOnDemand`: an event's lookup does not wait for that poll. Every warm synced source answers from the
+   * index as it stands while the poll runs behind; the agent's asks still wait for it (docs/research/econ-judge.md).
+   */
+  syncPollBehind: boolean;
   syncCatchupPages: number;
   /** Users synced per tenant; past it the tenant's least recently active user stops being synced. */
   syncMaxUsersPerTenant: number;
@@ -395,6 +407,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   anticipateSessionCalls: 24,
   anticipateOff: [],
   judgeConfident: false,
+  judgeBehind: false,
   judgeContested: false,
   judgeTied: false,
   judgeTiedShare: 0.03,
@@ -422,6 +435,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncDropMs: 7 * 24 * 3_600_000,
   syncCallsPerMin: 30,
   syncOnDemand: true,
+  syncPollBehind: false,
   syncCatchupPages: 2,
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,
