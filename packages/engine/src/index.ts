@@ -10,3 +10,20 @@ export type { ShadowRecord, ShadowSink, Trace, TraceSink } from "./trace";
 export { judgeMessages, parseJudge } from "./judge";
 export { timeWindow } from "./grounding";
 export { requestedRange } from "./probes";
+export {
+  ACTIONS,
+  CARD_KINDS,
+  CARD_VERSION,
+  CardEnricher,
+  cardKey,
+  cardMessages,
+  cardVerdict,
+  ModelCardMaker,
+  parseCards,
+  requestActions,
+  worthCarding,
+  type Action,
+  type Card,
+  type CardKind,
+  type CardMaker,
+} from "./cards";

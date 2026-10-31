@@ -1218,7 +1218,8 @@ describe("grounding: people, days and intent without a model (D44)", () => {
       listsByTime: true,
       search: async (q) => (sent.push({ userId: q.scope.userId, window: q.window }), []),
     };
-    const cache = new ItemCache();
+    // Items put at a fixed past instant: a TTL measured from the wall clock would expire them once that day is past.
+    const cache = new ItemCache({ ttlMs: 100 * 365 * 86_400_000 });
     const { p } = partner({ cache }, [spy]);
     const event = (ref: string, start: string) => ({
       id: `calendar:${ref}`,

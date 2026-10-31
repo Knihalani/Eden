@@ -49,6 +49,7 @@ import { nearDuplicate, sanitizedId, sanitizeItem, type ItemCache, type Sketch }
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { assess, frameOf, namesRef, unmeasuredLimit, type Frame, type Verdict } from "./conflict";
+import { cardVerdict, requestActions, type CardEnricher } from "./cards";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
 import { ProbeEconomy, type ProbeKind } from "./economy";
 import { answerMessages, judgeMessages, parseJudge } from "./judge";
@@ -111,6 +112,11 @@ export interface PartnerDeps {
   planner?: QueryPlanner;
   /** Receives the planner's shadow lookups when `planner.mode` is "shadow". */
   onShadow?: ShadowSink;
+  /**
+   * Implication cards (`cards.ts`, `config.cards`): made in the background from items entering the cache, matched at
+   * request time with no model. Absent, or the flag off: no card is made or read.
+   */
+  cards?: CardEnricher;
 }
 
 /** An outcome already written to the source map, kept so explicit feedback can correct it. */
@@ -507,6 +513,8 @@ export class ContextPartner {
     this.fanout.forget(scope, sourceId);
     this.deps.planner?.forget(scope, sourceId);
     this.economy.forget(scope, sourceId);
+    // Cards are per user, not per source: a source's forget drops them all (they are remade as items come back).
+    this.deps.cards?.forget(scope);
   }
 
   get sessionCount(): number {
@@ -771,6 +779,7 @@ export class ContextPartner {
     eventKind: string,
     bridged: ReadonlySet<string> = new Set(),
     cls?: ActionClass,
+    carded: ReadonlyMap<string, CardFind> = new Map(),
   ): { items: Scored[]; how: string } {
     const none = { items: [] as Scored[], how: "" };
     const pool = candidates.filter((x) => !bulkMail(x.item));
@@ -821,6 +830,14 @@ export class ContextPartner {
         if (cls?.scope === "general" || names.length === 0 || names.some((n) => mentions(n, x.item))) hits.push(x);
       }
       if (hits.length > 0) return { items: hits.slice(0, this.max()), how: "conflict" };
+      // `cards`: an item whose card the request violates (a freeze over its day, an expiry before it, a limit under
+      // its amount, a standing constraint on what it names), read by the model when the item arrived. At most
+      // `cardItems`, the best tied first: a card is a model's reading, and one wrong one is noise.
+      const byCard = pool
+        .filter((x) => carded.get(x.item.id)?.violated)
+        .sort((a, b) => cardRank(carded.get(b.item.id)!) - cardRank(carded.get(a.item.id)!))
+        .slice(0, this.config.cardItems);
+      if (byCard.length > 0) return { items: byCard, how: "card" };
     }
     // With `groundAway`: a person the request names, away on a day it names ("ask Jamie to feed the cat next weekend"
     // and Jamie's "away on Skye 6–9 Nov"), whatever the words: the agent should know before it asks them (D48).
@@ -1585,6 +1602,8 @@ export class ContextPartner {
   /** Caches sanitized items and records the entity mentions of those new to the cache or changed. */
   private store(s: Session, items: ContextItem[]): void {
     const added = this.deps.cache.put(s.scope, items, this.now(), true);
+    // `cards`: what is new to the cache is read for constraints in the background, never on this path's clock.
+    if (this.config.cards && this.deps.cards && added.length > 0) this.deps.cards.enqueue(s.scope, added);
     const mentions = added.map((item) => ({
       sourceId: item.sourceId,
       entities: extractTypedEntities(`${item.title}. ${item.text}`)
@@ -1740,8 +1759,11 @@ export class ContextPartner {
       if (s.closed) return null;
       // This lookup's probe finds, its own (never another turn's or a concurrent ask's).
       const consIds = new Set(consequence?.ids ?? []);
+      // `cards`: cached items whose implication card bears on the request's actions (no model, no call).
+      const carded = this.cardFinds(s, cue);
+      const extra = [...consIds, ...carded.keys()];
       const scored = this.rank(s, cue, {
-        probed: consIds.size > 0 ? [...(probedIds ?? []), ...consIds] : probedIds,
+        probed: extra.length > 0 ? [...(probedIds ?? []), ...extra] : probedIds,
       });
       // A consequence find counts only where the conflict test, tied by its class's words, says it conflicts with the
       // request (`consequenceProbe`): a freeze over the day a release is asked for, not one last month; and not a
@@ -1784,7 +1806,11 @@ export class ContextPartner {
       // A consequence find that does not conflict is no candidate: it shares nothing with the request but its class.
       const eligible = scored.filter(
         (x) =>
-          x.score >= this.config.candidateScore || onNamedDay(x) || probed.has(x.item.id) || bridged.has(x.item.id),
+          x.score >= this.config.candidateScore ||
+          onNamedDay(x) ||
+          probed.has(x.item.id) ||
+          bridged.has(x.item.id) ||
+          carded.has(x.item.id),
       );
       // With probes on, up to three of the probes' finds join the judge's candidates beyond the best scored: found for
       // the request's people, organisations or day, they share few of its words and would otherwise never be seen.
@@ -1792,13 +1818,20 @@ export class ContextPartner {
         ? [...sure, ...eligible.filter((x) => !sure.includes(x))].slice(0, this.config.judgeCandidates)
         : eligible.slice(0, this.config.judgeCandidates);
       // A conflicting consequence find takes the first of those seats: nothing else would bring it to the judge.
-      const seats =
+      const probeSeats =
         this.config.probes && !this.config.probeOff.includes("seats")
           ? [
               ...eligible.filter((x) => bridged.has(x.item.id) && !top.includes(x)).slice(0, 1),
               ...eligible.filter((x) => probed.has(x.item.id) && !bridged.has(x.item.id) && !top.includes(x)),
             ].slice(0, 3)
           : [];
+      // A carded item the request violates takes a seat of its own: it shares no word with the request, so nothing
+      // else would bring it before the judge (`cards`).
+      const cardSeat = eligible
+        .filter((x) => carded.get(x.item.id)?.violated && !top.includes(x) && !probeSeats.includes(x))
+        .sort((a, b) => cardRank(carded.get(b.item.id)!) - cardRank(carded.get(a.item.id)!))
+        .slice(0, 1);
+      const seats = [...cardSeat, ...probeSeats];
       const unsure = [...top, ...seats];
       // A probe that brought in what is seated for the judge did its part, whatever the judge then makes of it: the
       // judge rules on relevance, the probe only on finding (`probeYield`).
@@ -1828,7 +1861,7 @@ export class ContextPartner {
         // record of names, ground and fall back as typed ones do. Only here: probes and ranking keep the cue as typed.
         const named = this.config.recoverNames ? this.withRecoveredNames(s, cue) : cue;
         // Grounding reads every candidate, not only the judge's few: a day's events rank after every word match.
-        const grounded = this.grounded(s, named, eligible, eventKind, bridged, consequence?.cls);
+        const grounded = this.grounded(s, named, eligible, eventKind, bridged, consequence?.cls, carded);
         if (grounded.items.length > 0) {
           const items = grounded.items;
           done(
@@ -1856,6 +1889,7 @@ export class ContextPartner {
         const tied = (x: Scored) =>
           probed.has(x.item.id) ||
           bridged.has(x.item.id) ||
+          carded.get(x.item.id)?.violated === true ||
           onNamedDay(x) ||
           x.matched >= 2 ||
           this.holdsAny(s, x, rare);
@@ -1915,6 +1949,29 @@ export class ContextPartner {
       done("silent", "error");
       return null;
     }
+  }
+
+  /**
+   * `cards`: the user's cached items whose implication card (`cards.ts`) bears on the request: an action of the
+   * request's, and a party it names when the card binds one. Only cards made before the request arrived count: the
+   * enrichment runs in the background, so a card made during this lookup lands at a later one (D4). No model, no call:
+   * a classification by fixed lexicons and a pass over the user's carded items (at most `maxCardsPerUser` twice).
+   */
+  private cardFinds(s: Session, cue: Cue): Map<string, CardFind> {
+    const out = new Map<string, CardFind>();
+    const enricher = this.deps.cards;
+    if (!this.config.cards || !enricher) return out;
+    const actions = requestActions(cue.raw);
+    if (actions.size === 0) return out;
+    const now = this.now();
+    const ids = enricher.carded(s.scope).filter((id) => this.deps.cache.get(s.scope, id, now) !== null);
+    const frame = this.frame(cue);
+    for (const [id, card] of enricher.cardsOf(s.scope, ids, cue.at)) {
+      const m = cardVerdict(card, frame, actions);
+      if (m) out.set(id, { ...m, spanDays: spanDays(card) });
+    }
+    // Bounded: the best matches only, so a user with many constraint cards never floods the candidates.
+    return new Map([...out].sort((a, b) => cardRank(b[1]) - cardRank(a[1])).slice(0, MAX_CARD_FINDS));
   }
 
   /**
@@ -2035,6 +2092,25 @@ export class ContextPartner {
 }
 
 const NO_TERMS = new Uint32Array(0);
+
+/** A card's match against a request (`cardVerdict`), with its span's length for ranking. */
+interface CardFind {
+  violated: boolean;
+  tied: "name" | "word" | null;
+  /** Days the card's span covers (Infinity when open or none): a narrower span says more about the day asked. */
+  spanDays: number;
+}
+/** Card finds a lookup ranks at most (`cards`). */
+const MAX_CARD_FINDS = 6;
+/** Violated first, then tied by a name, then by a word, then the narrower span. */
+function cardRank(f: CardFind): number {
+  const span = Number.isFinite(f.spanDays) ? Math.max(0, 1 - f.spanDays / 400) : 0;
+  return (f.violated ? 8 : 0) + (f.tied === "name" ? 4 : f.tied === "word" ? 2 : 0) + span;
+}
+function spanDays(c: { start?: string; end?: string }): number {
+  if (!c.start || !c.end) return Infinity;
+  return (Date.parse(c.end) - Date.parse(c.start)) / 86_400_000 + 1;
+}
 
 /** Fan-out outcomes with no call to the source behind them. */
 const SKIPPED = new Set<string>(["busy", "limited", "open", "cached"]);

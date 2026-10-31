@@ -8,7 +8,15 @@
  * between sessions, so the cache's TTL applies), while real waits (source latency, pacing) are multiplied by
  * `timeScale`, so races between the slow path and the agent's next step keep their shape at any speed.
  */
-import { ContextPartner, ItemCache, type EngineConfig, type ShadowRecord, type Trace } from "@eden/engine";
+import {
+  CardEnricher,
+  ContextPartner,
+  ItemCache,
+  type CardMaker,
+  type EngineConfig,
+  type ShadowRecord,
+  type Trace,
+} from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, type Model } from "@eden/llm";
 import { QueryPlanner, type PlannerOptions } from "@eden/sources";
@@ -45,6 +53,11 @@ export interface QualityOptions {
   planner?: PlannerOptions;
   /** With a planner in shadow mode: switch it to serving after this many sessions per user (learned state kept). */
   promoteAfter?: number;
+  /**
+   * Makes implication cards (`cards.ts`) for each user's items as they enter the cache; the lab replays them from a
+   * disk cache (`cards-disk.ts`). Used only with `config.cards`.
+   */
+  cardMaker?: CardMaker;
 }
 
 /**
@@ -370,6 +383,11 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       ? new QueryPlanner({ seed: o.seed * 7_919 + u, store: sourceMap, ...o.planner })
       : undefined;
     const shadowRecs: ShadowRecord[] = [];
+    // Replayed cards cost nothing here: no cap (the enrichment's spend is `cards-enrich.ts`'s).
+    const uncapped = { callsPerSession: Infinity, usdPerSession: Infinity, usdPerUserDay: Infinity };
+    const cards = o.cardMaker
+      ? new CardEnricher({ maker: o.cardMaker, budget: new Budget(uncapped), now: () => clock })
+      : undefined;
     const partner = new ContextPartner({
       sources: async () => sources,
       sourceMap,
@@ -384,6 +402,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       now: () => clock,
       planner,
       onShadow: (r) => shadowRecs.push(r),
+      ...(cards ? { cards } : {}),
     });
     const who = { tenantId: "sim", userId: `u${u}` };
     const pace = new Rng(o.seed * 104_729 + u);
@@ -391,6 +410,8 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       clock += ms;
       await sleep(ms * o.timeScale);
       if (o.timeScale === 0) await settle(partner, `${who.tenantId}/${who.userId}#${sessionId}`);
+      // Background card enrichment lands before the next event (it is instant when replayed).
+      if (cards && o.timeScale === 0) await cards.idle();
     };
 
     for (let si = 0; si < sessions.length; si++) {
