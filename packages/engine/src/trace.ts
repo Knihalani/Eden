@@ -24,6 +24,12 @@ export interface Trace {
    * Shape names and counts only, never the query (D19).
    */
   plans?: { sourceId: string; shapes: string[]; calls: number; found: number }[];
+  /**
+   * With the background sync on (D56): the sources this lookup answered from the user's local index, at no call, and
+   * the listing calls of its on-demand polls (counted in `sourceCalls`).
+   */
+  localSources?: number;
+  syncCalls?: number;
 }
 
 export type TraceSink = (trace: Trace) => void;

@@ -212,6 +212,43 @@ export interface EngineConfig {
    * Applies to the confident path, the fallback and the conflict ground.
    */
   quietNameOnly: boolean;
+  /**
+   * Background connector sync, "Eden Atlas" (`sync.ts`, D56): each active user's sources that can list (`Source.list`)
+   * are read into the user's cache in the background, and a lookup answers from that local index the sources whose
+   * synced copy is current, live-calling only the rest. Its probes and its own search of a current source cost no
+   * call. The `sync*` settings below apply only with it on.
+   */
+  sync: boolean;
+  /** Items synced per user, the newest across their sources (the cache's `maxSyncedPerUser` should allow them). */
+  syncMaxItems: number;
+  /** Items asked per listing page. */
+  syncPageSize: number;
+  /** Timed polls of an active user's sources this often (ms); 0 polls only on demand (`syncOnDemand`). */
+  syncEveryMs: number;
+  /** A synced source is stale once the chance it changed since its last poll (its learned rate) reaches this. */
+  syncStaleChance: number;
+  /** ... or once its last poll is this old (ms). */
+  syncMaxStaleMs: number;
+  /** A user with an event this recently (ms) is active: timed polls and sweeps run only for them. */
+  syncActiveMs: number;
+  /** Each source of an active user is re-listed whole this often (ms): what it no longer lists is dropped. */
+  syncSweepMs: number;
+  /** A user idle this long (ms) stops being synced and their synced items are dropped (retention, D56). */
+  syncDropMs: number;
+  /** The sync's own budget, per (user, source): listing calls per minute. */
+  syncCallsPerMin: number;
+  /**
+   * A lookup that finds a synced source stale polls it (at most `syncCatchupPages` pages, within its deadline) and
+   * then answers from the local index, rather than sending the source its search and probes.
+   */
+  syncOnDemand: boolean;
+  syncCatchupPages: number;
+  /** Users synced per tenant; past it the tenant's least recently active user stops being synced. */
+  syncMaxUsersPerTenant: number;
+  /** A local answer holds every word of its query, as a mail or chat search does (false: ranked, any word). */
+  syncLocalAll: boolean;
+  /** Probes of a current synced source go to every synced source (they cost no call), not only the routed ones. */
+  syncWide: boolean;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
   /** Cost reserved per judge call before the real cost is known: about its worst case at the cap (D45). */
@@ -293,5 +330,20 @@ export const DEFAULT_CONFIG: EngineConfig = {
   recoverNames: false,
   groundOccasion: false,
   quietNameOnly: false,
+  sync: false,
+  syncMaxItems: 3_000,
+  syncPageSize: 100,
+  syncEveryMs: 0,
+  syncStaleChance: 0.15,
+  syncMaxStaleMs: 6 * 3_600_000,
+  syncActiveMs: 2 * 3_600_000,
+  syncSweepMs: 24 * 3_600_000,
+  syncDropMs: 7 * 24 * 3_600_000,
+  syncCallsPerMin: 30,
+  syncOnDemand: true,
+  syncCatchupPages: 2,
+  syncMaxUsersPerTenant: 1_000,
+  syncLocalAll: true,
+  syncWide: false,
   maxEventChars: 32_000,
 };
