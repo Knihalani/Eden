@@ -121,4 +121,20 @@ describe("engine spans in the Pi timeline", () => {
     expect(got).toContainEqual(["b", 12]);
     expect(got.filter(([s]) => s === "a").map(([, id]) => id)).not.toContain(12);
   });
+
+  test("a sessionless root drops what waited on it; many waiting cost each span its depth, not their number", () => {
+    const got: [string, number][] = [];
+    const route = spanRouter((session, s) => got.push([session, s.id]));
+    // 20k children of open roots, each root a background call (sync.list) that closes with no session.
+    const t0 = performance.now();
+    for (let i = 0; i < 20_000; i++) route(sp(100_000 + i, 1_000 + i, "search"));
+    for (let i = 0; i < 20_000; i++) route(sp(1_000 + i, 0, "sync.list"));
+    expect(performance.now() - t0).toBeLessThan(1_000);
+    expect(got).toEqual([]);
+    // A deep chain under a prefetch whose root names the session at its close.
+    route(sp(3, 2, "probe.person"));
+    route(sp(2, 1, "probes"));
+    route(sp(1, 0, "anticipate.prefetch", { session: "s" }));
+    expect(got.map(([s, id]) => `${s}:${id}`).sort()).toEqual(["s:1", "s:2", "s:3"]);
+  });
 });

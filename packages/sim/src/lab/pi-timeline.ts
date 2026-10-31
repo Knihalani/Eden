@@ -193,19 +193,29 @@ export function piName(sp: EdenSpan): string | null {
  * Routes each engine span to the task whose session it belongs to. A span names its parent, and a root span (an
  * observe, an ask, a prefetch) names its session when it closes, which may be after its children close: a span whose
  * root is not known yet waits (bounded) until it is. A slow path that lands after its task ended is still its task's.
+ *
+ * Waiting spans are kept by the open ancestor they wait on, so a span's arrival re-reads only those waiting on it
+ * (each span costs its depth, not the number waiting); a root that closes naming no session (the sync's listings, the
+ * card enrichment) drops what waited on it rather than holding it to the bound.
  */
 export function spanRouter(deliver: (session: string, sp: EdenSpan) => void): (sp: EdenSpan) => void {
   const parentOf = new Map<number, number>();
   const sessionOf = new Map<number, string>();
-  let waiting: EdenSpan[] = [];
+  /** Open span id: the closed spans whose nearest unclosed ancestor it is. */
+  const waiting = new Map<number, EdenSpan[]>();
+  let held = 0;
   const LIMIT = 20_000;
-  const rootSession = (id: number): string | undefined => {
-    for (let k = 0, at = id; k < 64 && at; k++) {
+  /** A session, or the open ancestor to wait on, or null when the span's root closed with none (or is lost). */
+  const resolve = (id: number): string | number | null => {
+    for (let k = 0, at = id; k < 64; k++) {
       const known = sessionOf.get(at);
       if (known) return known;
-      at = parentOf.get(at) ?? 0;
+      const parent = parentOf.get(at);
+      if (parent === undefined) return at;
+      if (parent === 0) return null;
+      at = parent;
     }
-    return undefined;
+    return null;
   };
   return (sp) => {
     parentOf.set(sp.id, sp.parent);
@@ -213,14 +223,24 @@ export function spanRouter(deliver: (session: string, sp: EdenSpan) => void): (s
     if (typeof own === "string") sessionOf.set(sp.id, own);
     if (parentOf.size > LIMIT) parentOf.delete(parentOf.keys().next().value!);
     if (sessionOf.size > LIMIT) sessionOf.delete(sessionOf.keys().next().value!);
-    waiting.push(sp);
-    if (waiting.length > LIMIT) waiting = waiting.slice(-LIMIT / 2);
-    const still: EdenSpan[] = [];
-    for (const w of waiting) {
-      const session = rootSession(w.id);
-      if (session) deliver(session, w);
-      else still.push(w);
+    const ready = waiting.get(sp.id) ?? [];
+    waiting.delete(sp.id);
+    held -= ready.length;
+    for (const w of [sp, ...ready]) {
+      const r = resolve(w.id);
+      if (typeof r === "string") deliver(r, w);
+      else if (r !== null) {
+        const list = waiting.get(r);
+        if (list) list.push(w);
+        else waiting.set(r, [w]);
+        held++;
+      }
     }
-    waiting = still;
+    // Bounded: past the limit, the spans waiting longest go (their root never closed).
+    while (held > LIMIT) {
+      const [k, list] = waiting.entries().next().value!;
+      waiting.delete(k);
+      held -= list.length;
+    }
   };
 }

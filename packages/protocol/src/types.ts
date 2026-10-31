@@ -26,6 +26,8 @@ export type AgentEvent =
   /**
    * `draft`: the user is still typing it (a chat box's text before it is sent). Never a request: Eden only reads it
    * ahead for what the agent will need (`anticipate`), and ignores it otherwise. The sent message follows as usual.
+   * Before this field existed the server stripped unknown fields, so a client that already sent `draft: true` had its
+   * draft handled as a sent message; now it is dropped whatever the flags (D60, D63).
    */
   | (EventBase & { kind: "user_message"; text: string; draft?: boolean })
   | (EventBase & { kind: "agent_message"; text: string })

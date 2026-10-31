@@ -63,8 +63,14 @@ export const FOLLOW_MIN = 2;
 interface UserPatterns {
   tenantId: string;
   /** Intent → name (lower case) → how often a delivery after that intent named it; least recently noted first. */
-  follows: Map<string, Map<string, { name: string; n: number; sources: Set<string> }>>;
+  follows: Map<string, Map<string, { name: string; n: number; sources: Set<string>; at: number }>>;
 }
+
+/**
+ * How long a learned name is kept without being noted again (ms): as long as the longest-lived item it could have come
+ * from is held (a synced item's 7 days), so no name outlives the items that taught it by more than that.
+ */
+export const PATTERN_TTL_MS = 7 * 24 * 3_600_000;
 
 /**
  * The user's recurring patterns: which names (and the sources that held them) followed which intents, learned from
@@ -76,8 +82,10 @@ export class IntentPatterns {
   private readonly users = new Map<string, UserPatterns>();
   private readonly perTenant = new Map<string, number>();
 
+  constructor(private readonly ttlMs = PATTERN_TTL_MS) {}
+
   /** Notes that a delivery after a request of `intent` named `names` and came from `sourceIds`. */
-  note(scope: Scope, intent: string, names: readonly string[], sourceIds: readonly string[]): void {
+  note(scope: Scope, intent: string, names: readonly string[], sourceIds: readonly string[], now = Date.now()): void {
     if (!intent || names.length === 0) return;
     const u = this.user(scope);
     let follows = u.follows.get(intent);
@@ -89,8 +97,11 @@ export class IntentPatterns {
     u.follows.set(intent, follows);
     for (const name of names.slice(0, MAX_NAMES)) {
       const key = name.toLowerCase();
-      const had = follows.get(key) ?? { name, n: 0, sources: new Set<string>() };
+      const had = follows.get(key) ?? { name, n: 0, sources: new Set<string>(), at: now };
+      // A name past its time to live starts again: what taught it is no longer held.
+      if (now - had.at > this.ttlMs) had.n = 0;
       had.n++;
+      had.at = now;
       for (const id of sourceIds) if (had.sources.size < MAX_NAMES) had.sources.add(id);
       follows.delete(key);
       follows.set(key, had);
@@ -99,9 +110,10 @@ export class IntentPatterns {
   }
 
   /** The names that followed `intent` at least `FOLLOW_MIN` times for this user, most often first; at most `max`. */
-  follows(scope: Scope, intent: string, max = 1): string[] {
+  follows(scope: Scope, intent: string, max = 1, now = Date.now()): string[] {
     const f = this.users.get(scopeKey(scope))?.follows.get(intent);
     if (!f) return [];
+    for (const [k, x] of f) if (now - x.at > this.ttlMs) f.delete(k);
     return [...f.values()]
       .filter((x) => x.n >= FOLLOW_MIN)
       .sort((a, b) => b.n - a.n)

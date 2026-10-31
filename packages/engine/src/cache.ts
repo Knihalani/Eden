@@ -59,6 +59,7 @@ const VOCAB_REBUILD_FACTOR = 4;
 const MIN_VOCAB_REBUILD = 50_000;
 
 class UserCache {
+  constructor(readonly scope: Scope) {}
   /** Vocabulary size after the last rebuild. */
   baseline = 0;
   readonly items = new Map<string, Entry>();
@@ -196,6 +197,8 @@ export class ItemCache {
   private readonly limits: CacheLimits;
   /** Whether each user's items are also put in a knowledge graph (`enableGraph`). */
   private graphs = false;
+  /** Told of every item that leaves (`onDropped`); null ids: the whole user. */
+  private dropped: ((scope: Scope, ids: string[] | null) => void) | null = null;
 
   constructor(limits: Partial<CacheLimits> = {}) {
     this.limits = { ...DEFAULT_CACHE_LIMITS, ...limits };
@@ -222,14 +225,16 @@ export class ItemCache {
         break;
       }
     }
-    const u = new UserCache();
+    const u = new UserCache({ tenantId: scope.tenantId, userId: scope.userId });
     this.users.set(key, u);
     this.perTenant.set(scope.tenantId, (this.perTenant.get(scope.tenantId) ?? 0) + 1);
     return u;
   }
 
   private dropUser(key: string, tenantId: string): void {
-    if (!this.users.delete(key)) return;
+    const u = this.users.get(key);
+    if (!u || !this.users.delete(key)) return;
+    this.dropped?.(u.scope, null);
     const n = (this.perTenant.get(tenantId) ?? 1) - 1;
     if (n <= 0) this.perTenant.delete(tenantId);
     else this.perTenant.set(tenantId, n);
@@ -241,6 +246,15 @@ export class ItemCache {
    */
   enableGraph(): void {
     this.graphs = true;
+  }
+
+  /**
+   * Calls `fn` whenever items leave a user's cache (expired, evicted, replaced by a changed copy, deleted by the
+   * sync, forgotten) with their ids, or null when the whole user goes: what is derived from an item (its implication
+   * card) is held no longer than the item.
+   */
+  onDropped(fn: (scope: Scope, ids: string[] | null) => void): void {
+    this.dropped = fn;
   }
 
   /** The user's graph, built from their live items if it does not exist yet; undefined without one. */
@@ -270,7 +284,8 @@ export class ItemCache {
       .walk(seeds, { ...opt, limit: opt.limit * 2 })
       .filter((w) => {
         const e = u.items.get(w.id);
-        return e !== undefined && now - e.fetchedAt <= this.limits.ttlMs;
+        // Its own time to live: a synced item's is `syncTtlMs`, as every other read has it.
+        return e !== undefined && this.alive(e, now);
       })
       .slice(0, opt.limit);
   }
@@ -413,7 +428,7 @@ export class ItemCache {
    * numbers change; nothing outside holds them across calls. Sketches are kept (they do not depend on term ids).
    */
   private rebuild(scope: Scope, old: UserCache): void {
-    const u = new UserCache();
+    const u = new UserCache(old.scope);
     for (const e of old.items.values()) {
       const doc = this.index(u, e.item);
       const entry = { ...e, doc };
@@ -464,6 +479,7 @@ export class ItemCache {
     if (e.item.meta?.start) u.offset = undefined; // An event gone (evicted, expired, forgotten) may change the mode.
     tally(u, e.item, -1);
     u.graph?.remove(e.item.id);
+    this.dropped?.(u.scope, [e.item.id]);
   }
 
   /** When the cached item was last fetched or seen in a lookup (ms), or undefined if it is not cached. */
