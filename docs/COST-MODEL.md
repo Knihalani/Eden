@@ -8,12 +8,12 @@ input.
 `z-ai/glm-5.3-flash` is served by 38 OpenRouter endpoints at different prices (OpenRouter endpoints API, queried
 2026-10-27 in the fast-primitives research; [docs/research/fast-primitives.md](research/fast-primitives.md)):
 
-| Endpoint | Input $/M | Output $/M | Cache read $/M | Note |
-|---|---|---|---|---|
-| Z.AI and most US hosts | 0.15 | 0.50 | 0.03 | Z.AI caches automatically |
-| Relace | 0.0513 | 0.0701 | 0.03 | The founder's figure; no `response_format` support |
-| Wafer | 0.054 | 0.20 | 0.053 | Almost no cache discount |
-| OpenInference (fp4) | 0.082 | 0.06 | 0.0064 | Quantized |
+| Endpoint               | Input $/M | Output $/M | Cache read $/M | Note                                               |
+| ---------------------- | --------- | ---------- | -------------- | -------------------------------------------------- |
+| Z.AI and most US hosts | 0.15      | 0.50       | 0.03           | Z.AI caches automatically                          |
+| Relace                 | 0.0513    | 0.0701     | 0.03           | The founder's figure; no `response_format` support |
+| Wafer                  | 0.054     | 0.20       | 0.053          | Almost no cache discount                           |
+| OpenInference (fp4)    | 0.082     | 0.06       | 0.0064         | Quantized                                          |
 
 Many endpoints are fp4/nvfp4 quantized; whether that hurts judge precision is unmeasured. With default load
 balancing, prompt-cache hits are unlikely: caching pays only with sticky routing (a per-user `session_id`, a
@@ -22,10 +22,17 @@ OpenRouter returns the real cost per call (`usage.cost`), and the engine books t
 
 ## Per call (upper bounds from the engine's caps)
 
-| Call | Input bound | Output bound | Cost at $0.15 / $0.50, uncached |
-|---|---|---|---|
-| Judge | system ≈ 100 tok + window ≤ 4,000 chars (≈ 1,000 tok) + ≤ 6 candidates × ≈ 100 tok ≈ 1,700 tok | 512 tok, reasoning included (D45) | ≈ $0.00051 |
-| Ask answer (only with `askWithModel`, off by default, D43) | ≈ 100 + question ≤ 10,000 chars (≈ 2,500) + window ≤ 2,000 chars (≈ 500) + ≤ 20 items × ≈ 170 tok ≈ 6,500 tok | 1,000 tok, reasoning included (D45) | ≈ $0.0015 |
+| Call                                                                                           | Input bound                                                                                                   | Output bound                        | Cost at $0.15 / $0.50, uncached |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------- |
+| Judge                                                                                          | system ≈ 100 tok + window ≤ 4,000 chars (≈ 1,000 tok) + ≤ 6 candidates × ≈ 100 tok ≈ 1,700 tok                | 512 tok, reasoning included (D45)   | ≈ $0.00051                      |
+| Ask answer (only with `askWithModel`, off by default, D43)                                     | ≈ 100 + question ≤ 10,000 chars (≈ 2,500) + window ≤ 2,000 chars (≈ 500) + ≤ 20 items × ≈ 170 tok ≈ 6,500 tok | 1,000 tok, reasoning included (D45) | ≈ $0.0015                       |
+| Card enrichment (only with `cards`, off by default, D56 proposed; background, never per event) | system ≈ 700 tok + ≤ 10 items × (title ≤ 160 + own text ≤ 900 chars) ≈ 3,400 tok                              | 2,000 tok, reasoning included       | ≈ $0.0015                       |
+
+Card enrichment, measured (docs/research/moon-cards.md, 572 calls on simulated worlds, 2026-10-31): 1,599 input and
+677 output tokens per call on average, $0.000181 per call as OpenRouter reported it. One call per ten new items that
+pass the no-model prefilter (11-15% of simulated items), each item read once per content hash: about $0.002 per 1,000
+items arriving, $0.003-0.004 per user-month at 50 new items a day (at most about $0.013 at list prices). Reserved per
+call at $0.002 against its own per-user-day `Budget`.
 
 With `graph` (proposed D56) the judge sees at most `graphSeats` (1) more candidate, about 100 more input tokens per
 call at its cap; no other model call is added and the graph makes no source call. Measured in simulation (realistic,

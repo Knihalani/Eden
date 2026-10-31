@@ -9,8 +9,10 @@
  * `timeScale`, so races between the slow path and the agent's next step keep their shape at any speed.
  */
 import {
+  CardEnricher,
   ContextPartner,
   ItemCache,
+  type CardMaker,
   type EngineConfig,
   type ShadowRecord,
   type SpanSink,
@@ -59,6 +61,11 @@ export interface QualityOptions {
    * them (the funnel's `--sync`; docs/research/moon-graph.md). Off: the cache holds what lookups returned.
    */
   sync?: boolean;
+  /**
+   * Makes implication cards (`cards.ts`) for each user's items as they enter the cache; the lab replays them from a
+   * disk cache (`cards-disk.ts`). Used only with `config.cards`.
+   */
+  cardMaker?: CardMaker;
 }
 
 /**
@@ -401,6 +408,11 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       : undefined;
     const shadowRecs: ShadowRecord[] = [];
     const cache = new ItemCache();
+    // Replayed cards cost nothing here: no cap (the enrichment's spend is `cards-enrich.ts`'s).
+    const uncapped = { callsPerSession: Infinity, usdPerSession: Infinity, usdPerUserDay: Infinity };
+    const cards = o.cardMaker
+      ? new CardEnricher({ maker: o.cardMaker, budget: new Budget(uncapped), now: () => clock })
+      : undefined;
     const partner = new ContextPartner({
       sources: async () => sources,
       sourceMap,
@@ -416,6 +428,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       planner,
       onShadow: (r) => shadowRecs.push(r),
       ...(o.spanSink ? { onSpan: o.spanSink(`u${u}`) } : {}),
+      ...(cards ? { cards } : {}),
     });
     const who = { tenantId: "sim", userId: `u${u}` };
     const pace = new Rng(o.seed * 104_729 + u);
@@ -443,6 +456,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         syncUse.backfill += n;
         clock += 60_000;
       }
+      if (cards) await cards.idle();
       clock = start;
       nextTick = start + 5 * 60_000;
     }
@@ -450,6 +464,8 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
       await runTo(clock + ms);
       await sleep(ms * o.timeScale);
       if (o.timeScale === 0) await settle(partner, `${who.tenantId}/${who.userId}#${sessionId}`);
+      // Background card enrichment lands before the next event (it is instant when replayed).
+      if (cards && o.timeScale === 0) await cards.idle();
     };
 
     for (let si = 0; si < sessions.length; si++) {
@@ -462,12 +478,18 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
         updatesApplied++;
         for (const s of sources) if (touched.has(s.id)) s.reindex();
       }
-      if (o.sync)
-        cache.put(
+      if (o.sync) {
+        const added = cache.put(
           who,
           sources.flatMap((s) => s.listAll()),
           clock,
         );
+        // Cards for what the oracle sync put in, as a real sync's items get them (before the session's requests).
+        if (cards && o.config?.cards && added.length > 0) {
+          cards.enqueue(who, added);
+          await cards.idle();
+        }
+      }
       const third = Math.min(2, Math.floor((si * 3) / sessions.length));
       const callsBefore = sum(sources, (s) => s.stats.calls) - syncUse.background;
       const lookupsBefore = userTraces.filter(isLookup).length;
