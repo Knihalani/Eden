@@ -118,7 +118,7 @@ unmeasured advice.
    before review). With D55's final H: 0.213 model calls per turn, $0.0172 per 1,000 turns, recall 0.645.
    `decideConflict` (D67, off by default; docs/research/econ-decide.md) makes no model call: it re-reads the ranked
    candidates with the engine's own conflict test only when no model decides (+1.6 ms of slow-path CPU per task in
-   the in-sample funnel), at +0.06 delivered items per hidden task (a few dozen agent input tokens). The logistic
+   the track's in-sample funnel, measured before it also ran on the fast path's cached answers), at +0.06 delivered items per hidden task (a few dozen agent input tokens). The logistic
    decision model it was measured beside (+5.5 ms) stays in the lab.
 2. Smaller inputs: shorter windows, candidate snippets, prompt-cache-friendly prompt layout (stable system prefix).
 3. Cheaper model: a fine-tuned small judge (M6).

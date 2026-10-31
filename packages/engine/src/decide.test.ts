@@ -26,13 +26,21 @@ const POLICY = {
 
 const run = async (
   config: Record<string, unknown>,
-  opts: { model?: Model; onCandidates?: (d: CandidateDump) => void; users?: string[] } = {},
+  opts: {
+    model?: Model | null;
+    onCandidates?: (d: CandidateDump) => void;
+    users?: string[];
+    /** Sessions asked in turn, per user: each answer is kept as `user/session`, the first one as `user` too. */
+    sessions?: string[];
+    sources?: (scope: Scope) => Promise<Source[]>;
+    budget?: Budget;
+  } = {},
 ) => {
   const p = new ContextPartner({
-    sources: async () => [new StaticSource("drive", "Notes", [NOTE, POLICY])],
+    sources: opts.sources ?? (async () => [new StaticSource("drive", "Notes", [NOTE, POLICY])]),
     sourceMap: new SourceMap(),
     cache: new ItemCache(),
-    budget: new Budget(),
+    budget: opts.budget ?? new Budget(),
     model: opts.model ?? null,
     now: () => NOW,
     config: { probes: true, probeGraceMs: 1_000, ...config },
@@ -41,12 +49,18 @@ const run = async (
   const out: Record<string, string[]> = {};
   for (const userId of opts.users ?? ["u1"]) {
     const scope = { tenantId: "t", userId };
-    const r = await p.observe({ ...scope, sessionId: "s", at: NOW, kind: "user_message", text: TEXT } as AgentEvent, {
-      waitMs: 1_000,
-    });
-    out[userId] = [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId: "s" })].flatMap((i) =>
-      i.citations.map((c) => `${c.itemId} ${i.reason.split(":")[0]}`),
-    );
+    for (const [k, sessionId] of (opts.sessions ?? ["s"]).entries()) {
+      const r = await p.observe({ ...scope, sessionId, at: NOW, kind: "user_message", text: TEXT } as AgentEvent, {
+        waitMs: 1_000,
+      });
+      // What a lookup behind the answer queues (`judgeBehind`'s judge) lands a tick later.
+      await Bun.sleep(5);
+      const got = [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId })].flatMap((i) =>
+        i.citations.map((c) => `${c.itemId} ${i.reason.split(":")[0]}`),
+      );
+      if (k === 0) out[userId] = got;
+      out[`${userId}/${sessionId}`] = got;
+    }
   }
   return out;
 };
@@ -110,10 +124,77 @@ describe("decideConflict: a sure match no longer silences a conflict", () => {
     expect(calls).toBe(0);
   });
 
-  test("isolation: each user's addition comes from their own lookup", async () => {
-    const out = await run({ decideConflict: true }, { users: ["u1", "u2"] });
-    expect(out.u1).toEqual(out.u2);
+  test("isolation: each user's addition comes from their own sources", async () => {
+    // u2 holds no policy: a lookup that read u1's cache or index would add u1's.
+    const sources = async (scope: Scope) => [
+      new StaticSource("drive", "Notes", scope.userId === "u1" ? [NOTE, POLICY] : [NOTE]),
+    ];
+    const out = await run({ decideConflict: true }, { users: ["u1", "u2"], sources });
     expect(out.u1).toContain("drive:p1 sources+decide-conflict");
+    expect(out.u2).toEqual(["drive:n1 sources"]);
+  });
+
+  test("the fast path too: a sure match from the cache no longer silences the conflict", async () => {
+    // Session s1 fills the cache; s2's same request is then sure from it and answered on the fast path.
+    const twice = async (config: Record<string, unknown>) =>
+      run({ decideConflict: true, ...config }, { sessions: ["s1", "s2"] });
+    const on = await twice({});
+    expect(on["u1/s1"]).toEqual(["drive:n1 sources+decide-conflict", "drive:p1 sources+decide-conflict"]);
+    expect(on["u1/s2"]).toEqual(["drive:n1 cache+decide-conflict", "drive:p1 cache+decide-conflict"]);
+    // Off, the fast path answers as it always has.
+    expect((await twice({ decideConflict: false }))["u1/s2"]).toEqual(["drive:n1 cache"]);
+    // A full packet stays as it is on the fast path as well.
+    expect((await twice({ maxItemsPerInjection: 1 }))["u1/s2"]).toEqual(["drive:n1 cache"]);
+  });
+});
+
+// D41: a failing or unaffordable model is never worse than none. With `decideConflict`, the conflict pass runs
+// whenever the no-model path decides: with no model, and when the model failed, was cut off or was over budget.
+describe("decideConflict when the model cannot decide (D41)", () => {
+  const OTHER = { ref: "o1", title: "Aperture Labs onboarding", text: "Aperture Labs onboarding call notes." };
+  const sources = async () => [new StaticSource("drive", "Notes", [POLICY, OTHER])];
+  const usage = { inputTokens: 1, outputTokens: 1, cachedInputTokens: 0 };
+  const answering = (text: string, truncated = false, calls = { n: 0 }): Model => ({
+    id: "stub",
+    chat: async () => {
+      calls.n++;
+      return { text, usage, costUsd: 0, truncated, model: "stub", latencyMs: 0 };
+    },
+  });
+
+  test("no model: the policy the request breaks is delivered", async () => {
+    expect((await run({ decideConflict: true }, { sources })).u1).toEqual(["drive:p1 decide-conflict"]);
+  });
+
+  test("a failing model delivers what no model does", async () => {
+    const failing: Model = {
+      id: "stub",
+      chat: async () => {
+        throw new Error("402 over limit");
+      },
+    };
+    const out = await run({ decideConflict: true }, { sources, model: failing });
+    expect(out.u1).toEqual(["drive:p1 decide-conflict"]);
+  });
+
+  test("a verdict cut off at the token cap delivers what no model does", async () => {
+    const out = await run({ decideConflict: true }, { sources, model: answering(`{"pi`, true) });
+    expect(out.u1).toEqual(["drive:p1 decide-conflict"]);
+  });
+
+  test("a model over budget delivers what no model does, with no call", async () => {
+    const calls = { n: 0 };
+    const budget = new Budget({ callsPerSession: 0, usdPerSession: 0, usdPerUserDay: 0 });
+    const out = await run(
+      { decideConflict: true },
+      { sources, model: answering(`{"pick": []}`, false, calls), budget },
+    );
+    expect(out.u1).toEqual(["drive:p1 decide-conflict"]);
+    expect(calls.n).toBe(0);
+  });
+
+  test("a working judge that picks nothing has decided: nothing is added", async () => {
+    expect((await run({ decideConflict: true }, { sources, model: answering(`{"pick": []}`) })).u1).toEqual([]);
   });
 });
 
@@ -133,6 +214,18 @@ describe("the candidate hook (`onCandidates`)", () => {
     const json = JSON.stringify(dumps);
     expect(json).not.toContain("Aperture");
     expect(json).not.toContain("Procurement");
+  });
+
+  test("a delivery is never dumped as silence, a conflict-only one included", async () => {
+    const OTHER = { ref: "o1", title: "Aperture Labs onboarding", text: "Aperture Labs onboarding call notes." };
+    const sources = async () => [new StaticSource("drive", "Notes", [POLICY, OTHER])];
+    const dumps: CandidateDump[] = [];
+    const out = await run({ decideConflict: true }, { sources, onCandidates: (d) => dumps.push(d) });
+    expect(out.u1).toEqual(["drive:p1 decide-conflict"]);
+    const delivering = dumps.filter((d) => d.delivered.length > 0);
+    expect(delivering.length).toBeGreaterThan(0);
+    for (const d of delivering) expect(d.how).toBe("decide-conflict");
+    for (const d of dumps.filter((d) => d.delivered.length === 0)) expect(d.how).toBe("");
   });
 
   test("unwired, the engine decides the same", async () => {
@@ -178,7 +271,7 @@ class HeldListSource implements Source {
 describe("decideConflict on syncPollBehind's follow-up lookup", () => {
   const HOUR = 3_600_000;
   const scope = { tenantId: "t", userId: "u" };
-  const follow = async (config: Record<string, unknown>) => {
+  const follow = async (config: Record<string, unknown>, model: Model | null = null) => {
     let clock = NOW - 6 * HOUR;
     const src = new HeldListSource("drive");
     src.add(NOTE, clock - HOUR);
@@ -187,7 +280,7 @@ describe("decideConflict on syncPollBehind's follow-up lookup", () => {
       sourceMap: new SourceMap(":memory:", { seed: 1 }),
       cache: new ItemCache(),
       budget: new Budget(),
-      model: null,
+      model,
       now: () => clock,
       config: {
         sync: true,
@@ -225,6 +318,27 @@ describe("decideConflict on syncPollBehind's follow-up lookup", () => {
     const on = await follow({ decideConflict: true });
     expect(on.first).toEqual(["drive:n1 sources"]);
     expect(on.later).toEqual(["drive:p1 sources+decide-conflict"]);
+  });
+
+  test("with a model, the follow-up decides as with none (D65), so the conflict pass runs there too", async () => {
+    let calls = 0;
+    const model: Model = {
+      id: "stub",
+      chat: async () => {
+        calls++;
+        const usage = { inputTokens: 1, outputTokens: 1, cachedInputTokens: 0 };
+        return { text: `{"pick": []}`, usage, costUsd: 0, truncated: false, model: "stub", latencyMs: 0 };
+      },
+    };
+    const off = await follow({}, model);
+    const offCalls = calls;
+    expect(off.later).toEqual([]);
+    calls = 0;
+    const on = await follow({ decideConflict: true }, model);
+    expect(on.first).toEqual(["drive:n1 sources"]);
+    expect(on.later).toEqual(["drive:p1 sources+decide-conflict"]);
+    // The follow-up makes no judge call of its own either way.
+    expect(calls).toBe(offCalls);
   });
 });
 

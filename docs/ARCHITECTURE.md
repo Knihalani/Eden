@@ -136,12 +136,14 @@ experimental and not recommended): with a model, every lookup decides as with no
 then reads only the candidates that answer left out and its picks are queued. The recommended configuration has no
 model judge on the critical path.
 
-**A found conflict always speaks** (D67, `decideConflict`, off by default; docs/research/econ-decide.md): with no
-model's say (no model, or `judgeBehind`'s lookup), after whichever path decided, the conflict ground's test
-(`conflicts()`: request-frame conflicts, conflicting consequence finds, the graph's conflicts) is run over every ranked
-candidate, and its best find joins the packet while it has room; a sure lexical match no longer silences a conflict
-the engine had found. It runs on `syncPollBehind`'s follow-up lookup too, and before `judgeBehind`'s judge, which then
-reads only what is left. No call, no state. The candidates' facts (`decide.ts`) reach the lab only through the
+**A found conflict always speaks** (D67, `decideConflict`, off by default; docs/research/econ-decide.md): wherever the
+rule paths decide (no model, `judgeBehind`'s lookup, or a model that failed, was cut off or was over budget, D41),
+after whichever path decided, the conflict ground's test (`joinConflict()` over `conflicts()`: request-frame
+conflicts, conflicting consequence finds, the graph's conflicts) is run over every ranked candidate, and its best find
+joins the packet while it has room; a sure lexical match no longer silences a conflict the engine had found. That
+includes the fast path's sure answer from the cache (the pass then reads the cache's ranking, with no probe or graph
+finds, and adds only a current copy). It runs on `syncPollBehind`'s follow-up lookup too, and before
+`judgeBehind`'s judge, which then reads only what is left. A judge that answered decides alone. No call, no state. The candidates' facts (`decide.ts`) reach the lab only through the
 content-free `PartnerDeps.onCandidates` hook; the engine decides nothing from them.
 
 **Push** (D66, `syncPush`, off by default, with `sync`): a tenant holding a connector watch (Gmail watch, Calendar

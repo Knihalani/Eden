@@ -153,7 +153,10 @@ export interface CandidateDump {
   path: "fast" | "early" | "lookup" | "served";
   candidates: { id: string; facts: Facts }[];
   delivered: string[];
-  /** How the rule paths decided (`sure`, `grounded-<how>`, `fallback`, or empty for silence). */
+  /**
+   * How the rule paths decided (`sure`, `grounded-<how>`, `fallback`, `decide-conflict` when only `decideConflict`'s
+   * pass delivered, or empty for silence).
+   */
   how: string;
 }
 export type CandidateSink = (dump: CandidateDump) => void;
@@ -648,14 +651,22 @@ export class ContextPartner {
     // a judge, the request then goes to the slow path, whose judge sees every candidate the live search adds: a lone
     // sure item from the cache would end the lookup before the second one that makes it the judge's call.
     const judges = this.config.anticipate && this.deps.model !== null && !this.config.judgeBehind;
-    if (this.deps.onCandidates && (!this.deps.model || this.config.judgeBehind)) {
-      const delivered = fast.length > 0 && !this.stale(s, fast) && !judges;
-      this.dump(s, "fast", this.factsOf(s, cue, ranked, event.kind), delivered ? fast : [], delivered ? "sure" : "");
+    const answers = fast.length > 0 && !this.stale(s, fast) && !judges;
+    // With no model's say, `decideConflict`'s pass runs here too (D67): a sure match from the cache would otherwise
+    // end the request before the slow path's pass, silencing a conflict the cache holds. Only a current copy joins.
+    const noModelSay = !this.deps.model || this.config.judgeBehind;
+    const { items: packet, how } =
+      answers && noModelSay
+        ? this.joinConflict(s, cue, ranked, event.kind, fast, { keep: (x) => !this.stale(s, [x]) })
+        : { items: fast, how: "" };
+    if (this.deps.onCandidates && noModelSay) {
+      this.dump(s, "fast", this.factsOf(s, cue, ranked, event.kind), answers ? packet : [], answers ? "sure" : "");
     }
-    if (fast.length > 0 && !this.stale(s, fast) && !judges) {
+    if (answers) {
       this.markCue(s, cue);
-      const injection = this.deliver(s, fast, "proactive", `cache:${cue.id}`, cue);
-      const ids = fast.map((x) => x.item.id);
+      const reason = how ? `cache+decide-${how}` : "cache";
+      const injection = this.deliver(s, packet, "proactive", `${reason}:${cue.id}`, cue);
+      const ids = packet.map((x) => x.item.id);
       trace("fast", cue.id, { itemIds: ids, ...this.prefetchedOf(s, ids) });
       if (queued) s.pending.unshift(queued);
       return reply(injection);
@@ -1598,6 +1609,50 @@ export class ContextPartner {
     const by = (x: Scored) => walked!.get(x.item.id)!.score;
     const best = viaGraph.filter((x) => !hits.includes(x)).sort((a, b) => by(b) - by(a));
     return { hits, best };
+  }
+
+  /**
+   * `decideConflict` (D67, docs/research/econ-decide.md), where the rule paths decide: whatever path spoke first, or
+   * none, the best conflict among the ranked candidates (`conflicts()` over the top `decideCandidates`) joins `items`
+   * while the packet has room (`maxItemsPerInjection`); it never displaces what a rule path chose. CPU only. `keep`
+   * vetoes a find (the fast path's: a stale copy is the slow path's to re-read, D40). Off: `items` as they are.
+   */
+  private joinConflict(
+    s: Session,
+    cue: Cue,
+    scored: Scored[],
+    eventKind: string,
+    items: Scored[],
+    ctx: {
+      bridged?: ReadonlySet<string>;
+      cls?: ActionClass;
+      walked?: ReadonlyMap<string, Walked>;
+      keep?: (x: Scored) => boolean;
+    } = {},
+  ): { items: Scored[]; how: string } {
+    if (!this.config.decideConflict || items.length >= this.max()) return { items, how: "" };
+    const walked = ctx.walked ?? new Map<string, Walked>();
+    const pool = scored.slice(0, this.config.decideCandidates).filter((x) => !bulkMail(x.item));
+    const { hits, best } = this.conflicts(
+      cue,
+      pool.filter((x) => !x.walkedOnly),
+      this.acts(s, cue, eventKind),
+      ctx.bridged ?? new Set<string>(),
+      ctx.cls,
+      walked,
+      pool.filter((x) => walked.has(x.item.id)),
+    );
+    const frame = this.frame(cue);
+    // An item is in a packet once, whichever entry holds it.
+    const have = new Set(items.map((x) => x.item.id));
+    const x = [...hits, ...best].find(
+      (x) =>
+        !have.has(x.item.id) &&
+        !settled(x.item) &&
+        !unmeasuredLimit(frame, x.item) &&
+        (ctx.keep === undefined || ctx.keep(x)),
+    );
+    return x ? { items: [...items, x], how: "conflict" } : { items, how: "" };
   }
 
   /**
@@ -3296,31 +3351,22 @@ export class ContextPartner {
       // The rule paths decide when no model does: with none, or with `judgeBehind`, whose lookup decides as with none
       // and leaves the judge only what that answer left out.
       const noModelSay = !this.deps.model || this.config.judgeBehind;
-      const dumped = (path: CandidateDump["path"], items: readonly Scored[], how: string) => {
-        if (this.deps.onCandidates && noModelSay) this.dump(s, path, factsNow(), items, how);
+      // A delivery is dumped with how it was made, never as silence: one only the conflict pass made is
+      // `decide-conflict`, which the lab must not read as a rule path's (`decide-fit.ts` reads `fallback`).
+      const dumped = (path: CandidateDump["path"], items: readonly Scored[], how: string, say = noModelSay) => {
+        if (this.deps.onCandidates && say) this.dump(s, path, factsNow(), items, items.length > 0 ? how : "");
       };
       // `decideConflict` (D67, docs/research/econ-decide.md), with no model's say: whatever path spoke first, or none,
       // the best conflict among every ranked candidate joins the delivery while it has room (`maxItemsPerInjection`):
       // it never displaces what a rule path chose. The same pass runs on `syncPollBehind`'s follow-up lookup (a
       // `served` lookup), so a fresh item the request breaks reaches the agent without its asking.
-      const extend = (items: Scored[]): { items: Scored[]; how: string } => {
-        if (!noModelSay || !this.config.decideConflict || items.length >= this.max()) return { items, how: "" };
-        const pool = scored.slice(0, this.config.decideCandidates).filter((x) => !bulkMail(x.item));
-        const { hits, best } = this.conflicts(
-          cue,
-          pool.filter((x) => !x.walkedOnly),
-          this.acts(s, cue, eventKind),
-          bridged,
-          consequence?.cls,
-          walked,
-          pool.filter((x) => walked.has(x.item.id)),
-        );
-        const frame = this.frame(cue);
-        const x = [...hits, ...best].find(
-          (x) => !items.includes(x) && !settled(x.item) && !unmeasuredLimit(frame, x.item),
-        );
-        return x ? { items: [...items, x], how: "conflict" } : { items, how: "" };
-      };
+      // `say` is whether the rule paths decide here: `noModel()` passes true, since a model that failed, was cut off
+      // or was over budget leaves the decision to them (D41: never worse than none). `at` is the cue they read
+      // (`noModel()`'s carries the names `recoverNames` found), so a name that grounds an item ties a conflict too.
+      const extend = (items: Scored[], say = noModelSay, at = cue): { items: Scored[]; how: string } =>
+        say
+          ? this.joinConflict(s, at, scored, eventKind, items, { bridged, cls: consequence?.cls, walked })
+          : { items, how: "" };
       const tagged = (reason: string, how: string) => (how ? `${reason}+decide-${how}` : reason);
       // `anticipate`: the request was answered from what was held (`early`). The live search adds only what is sure,
       // or with no model what the request's structure grounds: never the fallback's best guess or a judge call, which
@@ -3347,19 +3393,20 @@ export class ContextPartner {
         // A follow-up corrects: an item the agent was given whose words its poll changed goes out again, as it now
         // reads, whatever it scores (the agent holds the superseded copy).
         const corrected = cue.followUp ? scored.filter((x) => x.revised && !ruled.includes(x)) : [];
-        const { items, how } = extend([...ruled, ...corrected]);
+        // A follow-up decides as with no model whatever is configured, so the conflict pass runs there too.
+        const say = noModelSay || cue.followUp === true;
+        const { items, how } = extend([...ruled, ...corrected], say);
         dumped(
           "served",
           items,
-          items.length > 0
-            ? ruled.length > 0
-              ? sure.length > 0
-                ? "sure"
-                : "grounded"
-              : corrected.length > 0
-                ? "corrected"
-                : ""
-            : "",
+          ruled.length > 0
+            ? sure.length > 0
+              ? "sure"
+              : "grounded"
+            : corrected.length > 0
+              ? "corrected"
+              : `decide-${how}`,
+          say,
         );
         // `judgeBehind`: the judge reads the best of the rest after this answer, and may only add to it.
         if (this.deps.model && this.config.judgeBehind && !cue.followUp) {
@@ -3446,7 +3493,7 @@ export class ContextPartner {
       }
       if (unsure.length === 0) {
         const { items, how } = extend([]);
-        dumped("lookup", items, "");
+        dumped("lookup", items, `decide-${how}`);
         if (items.length > 0) {
           done(
             "sources",
@@ -3462,13 +3509,16 @@ export class ContextPartner {
       const noModel = (why: string, reasonPrefix: string): Injection | null => {
         // What scored as sure is delivered as it would have been with no judge to ask (`judgeConfident`): a failing
         // or unaffordable model is never worse than none (D41).
+        // Here the rule paths decide, whatever the model's state: the conflict pass runs as it would with none.
         if (judgeSure) {
+          const { items, how } = extend(sure, true);
+          dumped("lookup", items, "sure", true);
           done(
             "sources",
-            `${cue.id}${reasonPrefix}`,
-            sure.map((x) => x.item),
+            tagged(cue.id, how) + reasonPrefix,
+            items.map((x) => x.item),
           );
-          return this.deliver(s, sure, "proactive", `sources:${cue.id}`, cue);
+          return this.deliver(s, items, "proactive", tagged(`sources`, how) + `:${cue.id}`, cue);
         }
         // `recoverNames`: names the request typed in lowercase ("move my drinks with chen wei"), from the user's own
         // record of names, ground and fall back as typed ones do. Only here: probes and ranking keep the cue as typed.
@@ -3488,8 +3538,8 @@ export class ContextPartner {
         );
         if (grounding) spans!.close(grounding, { grounded: grounded.items.length });
         if (grounded.items.length > 0) {
-          const { items, how } = extend(grounded.items);
-          dumped("lookup", items, `grounded-${grounded.how}`);
+          const { items, how } = extend(grounded.items, true, named);
+          dumped("lookup", items, `grounded-${grounded.how}`, true);
           done(
             "sources",
             tagged(`grounded-${grounded.how}`, how) + `${reasonPrefix}:${cue.id}`,
@@ -3500,8 +3550,8 @@ export class ContextPartner {
         const falling = spans?.open("fallback", cue.span);
         const top = this.fallback(unsure, this.config.fallbackAgree ? agreed(probed, lookedIds) : undefined, named);
         if (falling) spans!.close(falling, { picked: top !== null });
-        const { items, how } = extend(top ? [top] : []);
-        dumped("lookup", items, top ? "fallback" : "");
+        const { items, how } = extend(top ? [top] : [], true, named);
+        dumped("lookup", items, top ? "fallback" : `decide-${how}`, true);
         if (items.length > 0) {
           const reason = top ? tagged("fallback", how) : `decide-${how}`;
           done(
