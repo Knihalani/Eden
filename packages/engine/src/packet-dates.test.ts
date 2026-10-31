@@ -5,7 +5,7 @@ import type { AgentEvent, ContextItem, Injection } from "@eden/protocol";
 import { StaticSource } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
-import { renderPacket, shownText, whenOf, withoutAddedDates } from "./render";
+import { renderPacket, shownText, usageText, whenOf } from "./render";
 
 /**
  * `packetDates` (D68; docs/research/econ-uptake.md): compaction keeps the current year in dates, and an event whose
@@ -41,12 +41,15 @@ describe("renderPacket with packet dates", () => {
   });
 
   test("an event whose text never says its day gets its start; one that does is left as it is", () => {
-    expect(whenOf(hold, hold.text)).toBe("Starts: Thu 29 Oct 2026 13:30. ");
+    // A stamp's zone is said as written: "Z" (or +00:00) is UTC, an offset is given as it is.
+    expect(whenOf(hold, hold.text)).toBe("Starts: Thu 29 Oct 2026 13:30 UTC. ");
     for (const said of [
       "When: Thu 29 Oct, 13:30.",
       "On 29th October at 13:30.",
       "Oct 29, 13:30.",
       "2026-10-29 13:30",
+      "When: 29/10 at 13:30.",
+      "When: 10/29 at 13:30.",
     ]) {
       expect(whenOf({ ...hold, text: said }, said)).toBe("");
     }
@@ -55,25 +58,93 @@ describe("renderPacket with packet dates", () => {
     expect(whenOf({ ...hold, meta: { start: "2026-10-29" } }, hold.text)).toBe("Starts: Thu 29 Oct 2026. ");
     expect(whenOf({ ...hold, meta: { start: "next week" } }, hold.text)).toBe("");
     expect(whenOf({ ...hold, meta: { start: "2026-02-30T10:00:00Z" } }, hold.text)).toBe("");
-    // The day is the timestamp's own (its offset as written), as `startDay` reads it.
+    // The day is the timestamp's own (its offset as written), as `startDay` reads it, and the offset is said with it.
     expect(whenOf({ ...hold, meta: { start: "2026-10-29T23:30:00-07:00" } }, hold.text)).toBe(
-      "Starts: Thu 29 Oct 2026 23:30. ",
+      "Starts: Thu 29 Oct 2026 23:30 -07:00. ",
     );
     const out = renderPacket([hold], { maxBytes: 2_000, when: true });
-    expect(out).toContain("- [calendar] Hold: drive mum to hospital: Starts: Thu 29 Oct 2026 13:30. When: Outpatient");
+    expect(out).toContain(
+      "- [calendar] Hold: drive mum to hospital: Starts: Thu 29 Oct 2026 13:30 UTC. When: Outpatient",
+    );
     expect(renderPacket([hold], { maxBytes: 2_000 })).not.toContain("Starts:");
   });
 
-  test("usage reads a packet without the added dates: the start gone, the kept year dropped as compaction would", () => {
-    const focus = new Set(["christopher", "vandelay"]);
-    const plain = shownText(renderPacket([crm, hold], { maxBytes: 2_000, focus, year: 2026 }));
-    const dated = shownText(
-      renderPacket([crm, hold], { maxBytes: 2_000, focus, year: 2026, keepYear: true, when: true }),
+  test("a start is never shown as a wall-clock time without its zone", () => {
+    // Review finding 2: "03:30" from a UTC stamp is Thu 20:30 for a user at -07:00; the zone must travel with it.
+    expect(whenOf({ ...hold, meta: { start: "2026-10-30T03:30:00Z" } }, hold.text)).toBe(
+      "Starts: Fri 30 Oct 2026 03:30 UTC. ",
     );
-    expect(dated).toContain("2026");
-    expect(withoutAddedDates(dated, 2026)).toBe(plain);
-    // Uncompacted (an ask's answer) the year was the source's own: only the start goes.
-    expect(withoutAddedDates("Starts: Thu 29 Oct 2026 13:30. Effective 1 Oct 2026.")).toBe("Effective 1 Oct 2026.");
+    expect(whenOf({ ...hold, meta: { start: "2026-10-09T13:30:00+01:00" } }, hold.text)).toBe(
+      "Starts: Fri 9 Oct 2026 13:30 +01:00. ",
+    );
+    expect(whenOf({ ...hold, meta: { start: "2026-10-09T13:30:00+0530" } }, hold.text)).toBe(
+      "Starts: Fri 9 Oct 2026 13:30 +05:30. ",
+    );
+    // No offset (Microsoft Graph's `dateTime` keeps its zone in a field McpSource does not read): the day as written,
+    // no time, since a time with no zone cannot be placed.
+    expect(whenOf({ ...hold, meta: { start: "2026-10-30T03:30:00" } }, hold.text)).toBe("Starts: Fri 30 Oct 2026. ");
+    // Midnight is how many calendars store an all-day event: its day, no "00:00 UTC" for the agent to shift.
+    expect(whenOf({ ...hold, meta: { start: "2026-11-16T00:00:00.000Z" } }, hold.text)).toBe(
+      "Starts: Mon 16 Nov 2026. ",
+    );
+  });
+
+  test("a zero-padded or numeric day counts as named", () => {
+    // Review finding 4: "\b9 Oct" did not match "09 Oct", so a redundant start was added.
+    const start = { start: "2026-10-09T13:30:00+01:00" };
+    for (const said of ["When: 09 Oct 13:30", "When: Oct 09, 13:30", "When: 09/10 13:30", "When: 10/09 13:30"]) {
+      expect(whenOf({ ...hold, text: said, meta: start }, said)).toBe("");
+    }
+    // A different day is not the same day.
+    expect(whenOf({ ...hold, text: "When: 19 Oct", meta: start }, "When: 19 Oct")).toBe(
+      "Starts: Fri 9 Oct 2026 13:30 +01:00. ",
+    );
+  });
+
+  test("usage reads the packet as it would be without the flag: no start, the year dropped as compaction does", () => {
+    const focus = new Set(["christopher", "vandelay"]);
+    const base = { maxBytes: 2_000, focus, year: 2026 };
+    const plain = shownText(renderPacket([crm, hold], base));
+    const dated = { ...base, keepYear: true, when: true };
+    expect(shownText(renderPacket([crm, hold], dated))).toContain("2026");
+    expect(usageText([crm, hold], dated)).toBe(plain);
+    // Without the flag's options it is the packet's own shown text.
+    expect(usageText([crm, hold], base)).toBe(plain);
+    // Uncompacted (an ask's answer) the year is the source's own: only the start goes.
+    const answer = { maxBytes: 4_000 };
+    expect(usageText([crm, hold], { ...answer, when: true })).toBe(shownText(renderPacket([crm, hold], answer)));
+  });
+
+  test("a start that does not fit whole is left out, and a cut line teaches nothing the flag added", () => {
+    // Review finding 1: the start was added before the line was cut, leaving "…: Starts: Thu 29 Oct 2026…", which a
+    // regex then failed to strip, so "2026" counted as use.
+    const long = {
+      ...hold,
+      title: "Hold: drive mum to the Royal Infirmary outpatient clinic, then pick up the prescription, be back by five",
+    };
+    for (let maxBytes = 150; maxBytes <= 300; maxBytes += 2) {
+      const line = renderPacket([long], { maxBytes, when: true }).split("\n")[1] ?? "";
+      if (line.includes("Starts:")) expect(line).toContain("Starts: Thu 29 Oct 2026 13:30 UTC. ");
+      const learned = usageText([long], { maxBytes, when: true });
+      expect(learned).not.toContain("2026");
+      expect(learned).toBe(shownText(renderPacket([long], { maxBytes })));
+    }
+    expect(renderPacket([long], { maxBytes: 216, when: true })).not.toContain("Starts:");
+  });
+
+  test("a title's own year stays in what usage learns, as without the flag", () => {
+    // Review finding 3: stripping the current year from the whole packet also took it from titles, never compacted.
+    const offsite: ContextItem = {
+      id: "drive:o1",
+      sourceId: "drive",
+      ref: "o1",
+      title: "Offsite 9 Oct 2026",
+      text: "Agenda: pricing review, then the 2027 plan. Venue booked from 9 Oct 2026 for two days.",
+    };
+    const base = { maxBytes: 2_000, focus: new Set(["pricing", "agenda"]), year: 2026 };
+    const off = shownText(renderPacket([offsite], base));
+    expect(off).toContain("Offsite 9 Oct 2026:");
+    expect(usageText([offsite], { ...base, keepYear: true, when: true })).toBe(off);
   });
 
   test("the start is source-derived data inside the item's line and fits the byte budget", () => {
@@ -142,7 +213,7 @@ describe("packetDates through the engine, with ALL's packet flags (compactInject
     expect(on.reasons).toEqual(["grounded-clash"]);
     expect(off.reasons).toEqual(["grounded-clash"]);
     expect(on.citations).toEqual(off.citations);
-    expect(on.packets).toContain("- [calendar] Hold: drive mum to hospital: Starts: Thu 29 Oct 2026 13:30. ");
+    expect(on.packets).toContain("- [calendar] Hold: drive mum to hospital: Starts: Thu 29 Oct 2026 13:30 UTC. ");
     expect(off.packets).toContain("- [calendar] Hold: drive mum to hospital: When: Outpatient");
     expect(off.packets).not.toContain("Starts:");
   });
@@ -156,7 +227,7 @@ describe("packetDates through the engine, with ALL's packet flags (compactInject
     expect(on.packets).toContain("- [drive] Procurement policy v4: Effective 1 Oct 2026");
     expect(off.packets).toContain("- [drive] Procurement policy v4: Effective 1 Oct:");
     const askOn = await run({ packetDates: true }, request, [hold]);
-    expect(askOn.asked.answer).toContain("Hold: drive mum to hospital: Starts: Thu 29 Oct 2026 13:30. ");
+    expect(askOn.asked.answer).toContain("Hold: drive mum to hospital: Starts: Thu 29 Oct 2026 13:30 UTC. ");
     const askOff = await run({}, request, [hold]);
     expect(askOff.asked.answer).not.toContain("Starts:");
   });
@@ -195,6 +266,36 @@ describe("packetDates through the engine, with ALL's packet flags (compactInject
     const uses = "That needs two quotes and CFO sign-off first, so I will collect quotes.";
     expect(await usedAfter({}, uses)).toBe(true);
     expect(await usedAfter({ packetDates: true }, uses)).toBe(true);
+  });
+
+  test("usage learning: a clash whose line the packet cuts adds no year to what is learnt", async () => {
+    // Review finding 1 through the engine: a long title and a small packet cut the line near its start.
+    const long: ContextItem = {
+      ...hold,
+      title: "Hold: drive mum to the Royal Infirmary outpatient clinic, then pick up the prescription, be back by five",
+    };
+    const learnt = async (config: Record<string, unknown>) => {
+      const p = new ContextPartner({
+        sources: async () => [new StaticSource("calendar", "Calendar", [long])],
+        sourceMap: new SourceMap(),
+        cache: new ItemCache(),
+        budget: new Budget(),
+        model: null,
+        now: () => at,
+        config: { probes: true, probeGraceMs: 1_000, maxInjectionBytes: 216, ...config },
+      });
+      const scope = { tenantId: "t", userId: "u", sessionId: "s" };
+      const r = await p.observe({ ...scope, at, kind: "user_message", text: request } as AgentEvent, {
+        waitMs: 1_000,
+      });
+      const got = r.injection ?? p.takePending(scope)[0];
+      expect(got?.reason.split(":")[0]).toBe("grounded-clash");
+      return (p as any).built.get(got).text as string;
+    };
+    const off = await learnt({});
+    const on = await learnt({ packetDates: true });
+    expect(on).not.toContain("2026");
+    expect(on).toBe(off);
   });
 
   test("isolation: one user's dates come from their own items only", async () => {

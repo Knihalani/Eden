@@ -10,11 +10,16 @@ The track's flag was `packetVerdicts` (below). The econ synthesis kept only its 
 the engine has **`packetDates`** (off by default) and no `packetVerdicts`, `itemTag` or `verdictsOf`:
 
 - compaction keeps the current year ("9 Oct 2026"), in proactive packets with `compactInjection`/`densePacket`;
-- an event whose shown text never names its day starts with its `meta.start` ("Starts: Thu 29 Oct 2026 13:30. "), in
-  proactive packets and `ask_context` answers;
-- usage learning reads the packet without what the flag added (`withoutAddedDates`): "2026" is a long term with a
-  digit, which alone counts as use, so with the year kept any reply naming the year would have marked the packet used
-  and taught the source map so. The track's branch had that gap; a test reproduced it first.
+- an event whose shown text never names its day starts with its `meta.start` ("Starts: Thu 29 Oct 2026 13:30 UTC. "),
+  in proactive packets and `ask_context` answers. The zone is said as written ("UTC", "+01:00"); a stamp with no zone,
+  or at midnight (how many calendars store an all-day event), gives the day only; the start is added only when it fits
+  the line whole; a zero-padded ("09 Oct") or numeric ("29/10", "10/29") day counts as already named;
+- usage learning reads the packet as it is rendered without the flag (`usageText`, a second render with the flag's
+  options off): "2026" is a long term with a digit, which alone counts as use, so with the year kept any reply naming
+  the year would have marked the packet used and taught the source map so. The track's branch had that gap; a test
+  reproduced it first. The first integration stripped the additions with a regex afterwards, which missed a start cut
+  with its line and took a title's own year; review found both, and rendering again makes the words exactly those of
+  the flag off.
 
 Why the tags went: they measured neutral (0.91 against 0.91 on facts without a year), they could make a co-delivered
 noise item look important, and their one planned second user, the oneturn "also found" section, was rejected by the econ
@@ -23,8 +28,9 @@ path; that is dead weight for no measured effect.
 
 Re-measured at integration (this session, no model): the in-sample funnel (hidden and held-out 1–4, seeds 41–44, ALL
 with cards-v2 replayed) delivers identically with `packetDates` on, task by task (218/268 hidden, 18/268 decoys; every
-task's reasons and cited ids equal). 291 of 536 tasks' packet texts change; 14 gain a "Starts:". Packet bytes over the
-268 hidden tasks 105,331 → 106,949 (+1.5%, about 6 bytes a task); over the 268 control tasks 41,560 → 42,483. The
+task's reasons and cited ids equal). 291 of 536 tasks' packet texts change; 14 gain a "Starts:" (every one from a
+"Z" stamp, so "UTC"). Packet bytes over the 268 hidden tasks 105,331 → 106,993 (+1.6%, about 6 bytes a task); over the
+268 control tasks 41,560 → 42,495 (re-run after review's fixes). The
 track's +10% bytes were mostly its tags. The live A/B below measured tags and dates together; its gain sat entirely on
 year-bearing facts and the calendar hold, which is what `packetDates` keeps. The blind effect is unmeasured.
 
