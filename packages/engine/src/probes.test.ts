@@ -13,6 +13,7 @@ import {
   isScheduling,
   isSubject,
   mentions,
+  addresses,
   orgsOf,
   overlaps,
   requestedRange,
@@ -169,6 +170,51 @@ describe("probes: what a request implies", () => {
     // Free mail names no organisation, and another person's address is not theirs.
     expect(orgsOf(["Sam Ortiz"], [item("From: Sam Ortiz <sam@gmail.com>"), item("Gmail tips")])).toEqual([]);
     expect(orgsOf(["Dana Lee"], items)).toEqual([]);
+  });
+
+  test("addresses are read as the global regex read them, in linear time (moon-telemetry)", () => {
+    // The scan `addresses` replaced: every match of the global regex, as `orgsOf` read it.
+    const reference = (hay: string) =>
+      [...hay.matchAll(/([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)*)?\s*<?([\w.+-]+)@([\w-]+)\.[\w.-]+/g)].map((m) => ({
+        near: (m[1] ?? "").toLowerCase(),
+        local: m[2]!.toLowerCase(),
+        label: m[3]!.toLowerCase(),
+      }));
+    const cases = [
+      "From: Sam Ortiz <sam.ortiz@globexventures.example>\nTo: Robin",
+      "Dana Lee dana@x.com, cc: Bo Li <bo@y.co.uk> and a@b.c@d.e",
+      "write to   Dana Lee   <dana+ops@umbrella-health.com>.",
+      "no address here, just words",
+      "x@nodot then y@ok.io",
+      "3pm Dana dana@x.com",
+      "@@@ a@@b.c a.@b.c -a@-b.c 'q@r.s",
+    ];
+    // Random text over the characters that matter, runs shorter than the window.
+    let seed = 7;
+    const rand = () => (seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31) / 2 ** 31;
+    const alphabet = "abDL0_.'-+<> \n\t,@@@..";
+    for (let i = 0; i < 2_000; i++) {
+      const n = 1 + Math.floor(rand() * 120);
+      let s = "";
+      for (let j = 0; j < n; j++) s += alphabet[Math.floor(rand() * alphabet.length)];
+      cases.push(s);
+    }
+    for (const hay of cases) expect(addresses(hay)).toEqual(reference(hay));
+    // Hostile: an 8 KB run of words ending in an address with no dot, and one "@" after another.
+    for (const hostile of [
+      `${Array.from({ length: 1_400 }, (_, i) => `word${i % 7}`).join(" ")} dana@nodot`,
+      "a@".repeat(4_000),
+      `${"a".repeat(8_000)}@`,
+      `${"Dana Lee ".repeat(900)}<dana@x`,
+      `${"a".repeat(8_000)}@x.y`,
+      `${"a ".repeat(4_000)}'x@y.z`,
+      `${"a <".repeat(2_600)}b@c.d`,
+      `${"a1 ".repeat(2_600)}b@c.d `.repeat(2),
+    ]) {
+      const t0 = performance.now();
+      orgsOf(["Dana Lee"], [item(hostile), item(hostile)]);
+      expect(performance.now() - t0).toBeLessThan(50);
+    }
   });
 
   test("a weekday written with its date is that date, not the coming one", () => {

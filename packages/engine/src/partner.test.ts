@@ -1219,7 +1219,9 @@ describe("grounding: people, days and intent without a model (D44)", () => {
       search: async (q) => (sent.push({ userId: q.scope.userId, window: q.window }), []),
     };
     const cache = new ItemCache();
-    const { p } = partner({ cache }, [spy]);
+    const evening = Date.parse("2026-10-30T03:00:00Z"); // Thursday 20:00 at UTC-7, Friday 04:00 at UTC+1
+    // The engine's clock is the event's: on the wall clock these items expire a day after `evening` (24 h TTL).
+    const { p } = partner({ cache, now: () => evening }, [spy]);
     const event = (ref: string, start: string) => ({
       id: `calendar:${ref}`,
       sourceId: "calendar",
@@ -1228,7 +1230,6 @@ describe("grounding: people, days and intent without a model (D44)", () => {
       text: ref,
       meta: { start },
     });
-    const evening = Date.parse("2026-10-30T03:00:00Z"); // Thursday 20:00 at UTC-7, Friday 04:00 at UTC+1
     cache.put({ tenantId: scope.tenantId, userId: "west" }, [event("w", "2026-11-02T09:00:00-07:00")], evening);
     cache.put({ tenantId: scope.tenantId, userId: "east" }, [event("e", "2026-11-02T09:00:00+01:00")], evening);
     for (const userId of ["west", "east"]) {

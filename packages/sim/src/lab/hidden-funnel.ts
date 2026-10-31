@@ -16,11 +16,17 @@
  * through, hidden and decoy, and its calls, tokens and spend (about $0.03 for the 456 held-out tasks), a cheap screen
  * before an agent run. Seeds run concurrently.
  *
+ * `--timeline out.jsonl` records every engine span, each task and the process's CPU% and RSS per second
+ * (`timeline.ts`); `timeline-report.ts out.jsonl` says where the time went. Spans change no decision.
+ * `--spans noop` turns spans on into a sink that drops them (the tracer's own cost, for overhead runs); `--serial`
+ * plays the seeds one after another (same results; a task's wall time is then its own, not shared with other seeds).
+ * With either, or `--timeline`, the process CPU of the suites' runs is printed to stderr.
+ *
  * `--suite` names any suite of `suites.ts`, or several: each gets its own table, then a TOTAL over all of them.
  * Each suite's run is recorded in the benchmark ledger (bench/, `ledger.ts`) unless `--no-record`.
  */
 import { writeFileSync } from "node:fs";
-import { ContextPartner, ItemCache } from "@eden/engine";
+import { ContextPartner, cpuNow, ItemCache } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, OpenRouterModel, type Model } from "@eden/llm";
 import type { AgentEvent } from "@eden/protocol";
@@ -29,6 +35,7 @@ import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
 import { clearSlot, dress } from "./hidden-context";
 import { record, tidy } from "./ledger";
+import { Timeline } from "./timeline";
 import { parseSuites, SUITES, type HiddenTask } from "./suites";
 
 const args = process.argv.slice(2);
@@ -42,11 +49,23 @@ const SEEDS = opt("seeds", "41,42,43,44").split(",").map(Number);
 const CONFIG = JSON.parse(opt("config", "{}")) as Record<string, unknown>;
 const LIVE = opt("judge", "none") === "live";
 const SYNC = args.includes("--sync");
+const SERIAL = args.includes("--serial");
+const NOOP_SPANS = opt("spans", "") === "noop";
 const KEY = process.env.OPENROUTER_API_KEY;
 if (LIVE && !KEY) throw new Error("--judge live needs OPENROUTER_API_KEY");
 const MODEL = opt("model", "z-ai/glm-5.3-flash");
+const TIMELINE = opt("timeline", "");
+const timeline = TIMELINE
+  ? new Timeline(TIMELINE, { tool: "hidden-funnel", suites: SUITE_LIST, seeds: SEEDS, config: CONFIG, sync: SYNC })
+  : null;
 /** The live judge's use over the whole run (every suite): calls, tokens and OpenRouter's reported cost. */
 const usage = { calls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
+/**
+ * Main-thread CPU spent inside the tasks' engine calls (`observe`, `takePending`), apart from building worlds and
+ * connector indexes: the engine's own cost, and the in-process connectors' searches. Exact with `--serial`; with seeds
+ * running concurrently a task's figure also holds what other seeds' tasks ran while it waited.
+ */
+let taskCpuUs = 0;
 const metered = (inner: Model): Model => ({
   id: inner.id,
   chat: async (request) => {
@@ -76,7 +95,9 @@ async function runSuite(suite: string): Promise<{ rows: Rows; perTask: Record<st
   const perTask: Record<string, unknown>[] = [];
   const started = performance.now();
   for (const variant of ["hidden", "control"] as const) {
-    const results = await Promise.all(SEEDS.map((seed) => runSeed(suite, variant, seed)));
+    const results: TaskRow[][] = [];
+    if (SERIAL) for (const seed of SEEDS) results.push(await runSeed(suite, variant, seed));
+    else results.push(...(await Promise.all(SEEDS.map((seed) => runSeed(suite, variant, seed)))));
     for (const r of results) {
       for (const t of r) {
         const both = rows.get(t.template) ?? { hidden: row(), control: row() };
@@ -132,6 +153,8 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
   let clock = world.now;
   const cache = new ItemCache();
   let calls = 0;
+  const lane = `${suite}/${variant}/${seed}`;
+  const countCalls = (t: { sourceCalls: number }) => (calls += t.sourceCalls);
   const partner = new ContextPartner({
     sources: async () => sources,
     sourceMap: new SourceMap(":memory:", { seed }),
@@ -141,16 +164,20 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     planner: new QueryPlanner({ seed }),
     now: () => clock,
     config: CONFIG,
-    onTrace: (t) => (calls += t.sourceCalls),
+    onTrace: timeline ? timeline.traceSink(lane, countCalls) : countCalls,
+    ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
   });
   const scope = { tenantId: "funnel", userId: `w${seed}` };
   // `--sync`: the experiment where Eden has already synced every item of the user's sources into its own index.
-  if (SYNC)
+  if (SYNC) {
+    const synced = timeline?.task(lane, "sync", "sync");
     cache.put(
       scope,
       sources.flatMap((s) => s.listAll()),
       clock,
     );
+    synced?.end();
+  }
   for (const [i, task] of tasks.entries()) {
     clock += 3_600_000;
     const id = planted[i]!.id;
@@ -158,6 +185,8 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     returned.clear();
     const callsBefore = calls;
     const t0 = performance.now();
+    const c0 = cpuNow();
+    const traced = timeline?.task(lane, sessionId, `${lane}/${task.template}`);
     const at = clock;
     await partner.observe({ ...scope, sessionId, at, kind: "session_start" } as AgentEvent);
     const r = await partner.observe(
@@ -166,10 +195,12 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       { waitMs: LIVE ? 30_000 : 3_000 },
     );
     const ms = performance.now() - t0;
+    taskCpuUs += cpuNow() - c0;
     const injections = [...(r.injection ? [r.injection] : []), ...partner.takePending({ ...scope, sessionId })];
     const got = injections.flatMap((x) => x.citations.map((c) => c.itemId));
     // How the planted item was delivered (the injection reason's kind: sources, grounded-…, fallback, model).
     const why = injections.find((x) => x.citations.some((c) => c.itemId === id))?.reason.split(":")[0] ?? "";
+    traced?.end({ template: task.template, delivered: got.includes(id), why, injected: got.length });
     perTask.push({
       seed,
       variant,
@@ -202,6 +233,7 @@ console.log(`suite ${SUITE_LIST.join(",")}, seeds ${SEEDS.join(",")}, config ${J
 const header = "template                 hidden: returned delivered   control: decoy delivered   calls/task  ms/task";
 const grand = { hidden: row(), control: row() };
 const runs: { suite: string; rows: Rows; perTask: Record<string, unknown>[]; wall: number; total: typeof grand }[] = [];
+const cpu0 = process.cpuUsage();
 for (const suite of SUITE_LIST) {
   const { rows, perTask, wall } = await runSuite(suite);
   const total = { hidden: row(), control: row() };
@@ -271,6 +303,11 @@ if (!args.includes("--no-record")) {
     console.log(`recorded ${e.id}`);
   }
 }
+if (TIMELINE || NOOP_SPANS || SERIAL || args.includes("--cpu")) {
+  const c = process.cpuUsage(cpu0);
+  console.error(`cpu suites ${((c.user + c.system) / 1e6).toFixed(3)} s, tasks ${(taskCpuUs / 1e6).toFixed(3)} s`);
+}
+await timeline?.close();
 const out = opt("json", "");
 if (out) {
   // One suite keeps the original shape; several add `suites`, and `rows`/`total` are over all of them.
