@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cardKey, type Card, type CardMaker } from "@eden/engine";
 import type { ContextItem } from "@eden/protocol";
-import { DiskCardMaker, loadCards } from "./cards-disk";
+import { DiskCardMaker, loadCards, samePath } from "./cards-disk";
 
 const item = (n: number): ContextItem => ({
   id: `i${n}`,
@@ -61,7 +61,7 @@ describe("DiskCardMaker", () => {
     const first = liveMaker();
     const a = new DiskCardMaker(replay, first.maker, { out });
     const second = liveMaker();
-    const b = new DiskCardMaker(replay, second.maker, { out, shared: a.cards });
+    const b = new DiskCardMaker(replay, second.maker, { out, shared: a });
     await a.make([item(3)], "2026-10-31", signal);
     await b.make([item(3)], "2026-10-31", signal);
     expect([first.asked, second.asked]).toEqual([["i3"], []]);
@@ -74,5 +74,74 @@ describe("DiskCardMaker", () => {
     const { maker } = liveMaker();
     await new DiskCardMaker(file, maker).make([item(4)], "2026-10-31", signal);
     expect([...loadCards(file).keys()]).toEqual([cardKey(item(4))]);
+  });
+
+  test("makers sharing one map make a card once when they miss it at the same time (pi-ab's paired arms)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cards-"));
+    const replay = join(dir, "cards.jsonl");
+    const out = join(dir, "new.jsonl");
+    // A slow live maker, so both streams miss the item before either has its card.
+    const asked: string[] = [];
+    const slow: CardMaker = {
+      async make(items) {
+        asked.push(...items.map((i) => i.id));
+        await Bun.sleep(5);
+        return { cards: items.map((i) => card(Number(i.id.slice(1)))), costUsd: 0.001 * items.length };
+      },
+    };
+    const a = new DiskCardMaker(replay, slow, { out });
+    const b = new DiskCardMaker(replay, slow, { out, shared: a });
+    const [x, y] = await Promise.all([
+      a.make([item(5)], "2026-10-31", signal),
+      b.make([item(5), item(6), item(5)], "2026-10-31", signal),
+    ]);
+    // Asked once per item; the stream that waited on the other's card pays nothing for it, and both get the same card.
+    expect(asked.sort()).toEqual(["i5", "i6"]);
+    expect(x.cards.map((c) => c?.statement)).toEqual(["s5"]);
+    expect(y.cards.map((c) => c?.statement)).toEqual(["s5", "s6", "s5"]);
+    expect(x.costUsd + y.costUsd).toBeCloseTo(0.002);
+    expect(readFileSync(out, "utf8").trim().split("\n")).toHaveLength(2);
+  });
+
+  test("a live maker that fails leaves the waiting streams uncovered, and a later call asks again", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cards-"));
+    let calls = 0;
+    const flaky: CardMaker = {
+      async make(items) {
+        calls++;
+        await Bun.sleep(2);
+        if (calls === 1) throw new Error("down");
+        return { cards: items.map((i) => card(Number(i.id.slice(1)))), costUsd: 0 };
+      },
+    };
+    const a = new DiskCardMaker(join(dir, "c.jsonl"), flaky);
+    const b = new DiskCardMaker(join(dir, "c.jsonl"), flaky, { shared: a });
+    const [x, y] = await Promise.allSettled([
+      a.make([item(7)], "2026-10-31", signal),
+      b.make([item(7)], "2026-10-31", signal),
+    ]);
+    expect(x.status).toBe("rejected");
+    expect(y.status === "fulfilled" && y.value.cards).toEqual([null]);
+    expect((await b.make([item(7)], "2026-10-31", signal)).cards.map((c) => c?.statement)).toEqual(["s7"]);
+    expect(calls).toBe(2);
+  });
+});
+
+describe("samePath", () => {
+  test("two spellings of one file are the same path, whether or not it exists yet", () => {
+    const dir = mkdtempSync(join(tmpdir(), "cards-"));
+    const file = join(dir, "a.cards.jsonl");
+    writeFileSync(file, "");
+    expect(samePath(file, join(dir, ".", "a.cards.jsonl"))).toBe(true);
+    expect(samePath(file, join(dir, "sub", "..", "a.cards.jsonl"))).toBe(true);
+    const link = join(dir, "link.jsonl");
+    symlinkSync(file, link);
+    expect(samePath(link, file)).toBe(true);
+    mkdirSync(join(dir, "d"));
+    symlinkSync(join(dir, "d"), join(dir, "dl"));
+    expect(samePath(join(dir, "d", "new.jsonl"), join(dir, "dl", "new.jsonl"))).toBe(true);
+    expect(samePath(file, join(dir, "b.cards.jsonl"))).toBe(false);
+    // Relative to the working directory, as the command line gives them.
+    expect(samePath("./x.jsonl", "x.jsonl")).toBe(true);
   });
 });

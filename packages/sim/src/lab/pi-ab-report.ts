@@ -23,6 +23,7 @@ import { Rng } from "../rng";
 import type { RunResult, Task } from "./ab-common";
 import { pairedWith } from "./pi-conditions";
 import { endpointMix, ENDPOINT_PRICES, FIXED_PRICES, repricedUsd } from "./reprice";
+import { uptakeWay } from "./uptake";
 import {
   bootstrap,
   breakdown,
@@ -56,7 +57,15 @@ interface Record_ {
   kind: Task["kind"];
   wallMs: number;
   firstTokenMs: number | null;
-  requests: { startMs: number; firstTokenMs: number | null; endMs: number; in: number; out: number; cost: number }[];
+  requests: {
+    startMs: number;
+    firstTokenMs: number | null;
+    endMs: number;
+    in: number;
+    out: number;
+    cost: number;
+    cached?: number;
+  }[];
   events: TimelineEvent[];
   planted?: string;
   cited?: string[];
@@ -292,6 +301,10 @@ const model = runs[0]?.model ?? "";
 if (ENDPOINT_PRICES[model] && records.size) {
   const fixed = Object.keys(FIXED_PRICES);
   console.log(`\n== agent $/1k tasks: billed, and re-priced at fixed ${model} endpoint prices; endpoint mix (top 3)`);
+  // A timeline from before pi-ab recorded cached tokens prices every token as uncached (reprice.ts): say so.
+  const uncached = [...records.values()].every((r) => r.requests.every((q) => q.cached === undefined));
+  if (uncached)
+    console.log("(no cached-token counts recorded: cache hits are unmatched, re-priced cost is an upper bound)");
   console.log(`condition       n   billed ${fixed.map((x) => x.padStart(10)).join("")}  mix`);
   for (const c of conditions) {
     const recs = [...records.values()].filter((r) => r.condition === c);
@@ -321,12 +334,7 @@ if (uptakeRows.length) {
     "\n== uptake (hidden): raised rate (n) when the planted item was in a packet, only in an ask answer, or neither",
   );
   for (const { c, rs } of uptakeRows) {
-    const way = (r: RunResult) => {
-      const rec = records.get(key(r.task, r.condition));
-      if (!rec?.planted) return null;
-      if (rec.cited?.includes(rec.planted)) return "packet";
-      return rec.askCited?.includes(rec.planted) ? "ask" : "neither";
-    };
+    const way = (r: RunResult) => uptakeWay(records.get(key(r.task, r.condition)) ?? {});
     const cells = (["packet", "ask", "neither"] as const).map((w) => {
       const xs = rs.filter((r) => way(r) === w);
       return `${w} ${xs.length ? f(mean(xs.map(recall))) : "  -  "} (${xs.length})`;
