@@ -354,6 +354,51 @@ describe("checkAction: integration", () => {
     expect(kept).not.toContain("Zq9XvT2m");
   });
 
+  test("a secret named only by its key (a password, an api_key) is gated before the call becomes words", async () => {
+    // `actionText` turns {"password": "x"} into the line "password x", which the gate does not read as a secret; the
+    // gate must see each argument as key and value first, as `observe` does with the JSON.
+    const { p, traces } = partner({ actionCheck: true });
+    const u = user("u1");
+    await p.observe(
+      ev(u, { kind: "user_message", text: "Tyrell Bio says invoice INV-4821 is overdue. Please pay it." }),
+      { waitMs: 1_000 },
+    );
+    const input = {
+      payee: "Tyrell Bio",
+      reference: "INV-4821",
+      password: "hunter2swordfish",
+      api_key: "zzqqxxkey99887766",
+    };
+    const r = await p.checkAction(ev(u, { kind: "tool_call", tool: "send_payment", input }));
+    expect([r.verdict, r.reason]).toEqual(["finding", "conflict"]);
+    const sessions = (p as unknown as { sessions: Map<string, { window: string[]; vocab: Vocab }> }).sessions;
+    const s = [...sessions.values()][0]!;
+    const terms = Array.from({ length: s.vocab.size }, (_, i) => s.vocab.term(i));
+    const kept = JSON.stringify({ window: s.window, terms, traces, r });
+    expect(kept).not.toContain("hunter2swordfish");
+    expect(kept).not.toContain("zzqqxxkey99887766");
+  });
+
+  test("a key-named secret is gated in the call's words, nested or listed; other arguments are kept", () => {
+    const input = { payee: "Tyrell Bio", auth: { password: "hunter2swordfish" }, token: ["zzqqxxkey99887766"] };
+    for (const prose of [true, false]) {
+      const text = actionText("send_payment", input, { prose });
+      expect(text).not.toContain("hunter2swordfish");
+      expect(text).not.toContain("zzqqxxkey99887766");
+      expect(text).toContain("payee Tyrell Bio");
+    }
+  });
+
+  test("a call whose arguments JSON cannot hold (a BigInt, a cycle) still has a key that tells calls apart", () => {
+    expect(actionKey("pay", { amount: 10n, to: "A" })).not.toBe(actionKey("pay", { amount: 99n, to: "B" }));
+    expect(actionKey("pay", { amount: 10n, to: "A" })).toBe(actionKey("pay", { to: "A", amount: 10n }));
+    const a: Record<string, unknown> = { to: "A" };
+    a.self = a;
+    const b: Record<string, unknown> = { to: "B" };
+    b.self = b;
+    expect(actionKey("pay", a)).not.toBe(actionKey("pay", b));
+  });
+
   test("a call's key is read through the secret gate: two calls differing only in a secret are one call", () => {
     const other = "ghp_" + "Ab3".repeat(12);
     expect(actionKey("deploy", { service: "api", token: TOKEN })).toBe(

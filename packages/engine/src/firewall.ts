@@ -7,7 +7,7 @@
  * Nothing here calls a model or a source, and nothing in the arguments is followed: they are data, matched by fixed,
  * linear patterns over a bounded head.
  */
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { sanitizeForStore } from "@eden/redact";
 import { datesIn } from "./conflict";
 import { orgLabel } from "./kg";
@@ -66,6 +66,23 @@ const words = (key: string) =>
     .trim();
 
 /**
+ * An argument's value as the secret gate reads it beside its key. Read as words ("password hunter2"), a secret the
+ * gate knows only by its key's name is no longer one, so each argument is gated as `"key": value` first: a value
+ * the gate redacts there and not alone (it was a secret by its key) is replaced whole; one it redacts alone too is
+ * kept, as the later gate over the whole text will redact it the same way.
+ */
+function gated(key: string, value: unknown, text: string): string {
+  let pair: string;
+  try {
+    pair = `${JSON.stringify(key)}: ${JSON.stringify(value)}`;
+  } catch {
+    pair = `${JSON.stringify(key)}: ${JSON.stringify(text)}`;
+  }
+  if (sanitizeForStore(pair) === pair) return text;
+  return sanitizeForStore(text) === text ? "[REDACTED]" : text;
+}
+
+/**
  * A tool call read as words: the tool's name, then each argument as "name value", dates written out (`writtenDates`).
  * A date and a time given apart ("date": "2026-10-31", "time": "19:30") are joined ("on Saturday 31 October 2026 at
  * 19:30"), so the time is read as the day's. Bounded: `VALUE_CHARS` per value, `ACTION_CHARS` in all.
@@ -81,12 +98,12 @@ export function actionText(tool: string, input: unknown, options: { prose?: bool
       if (flat.length >= 32 || depth > MAX_DEPTH || v === null || v === undefined || v === "") return;
       if (Array.isArray(v)) {
         const items = v.slice(0, 16).filter((x) => typeof x !== "object" || x === null);
-        if (items.length) flat.push([key, items.map(String).join(", ")]);
+        if (items.length) flat.push([key, gated(key, items, items.map(String).join(", "))]);
         for (const x of v.slice(0, 16)) if (x && typeof x === "object") walk(key, x, depth + 1);
       } else if (typeof v === "object") {
         for (const [k, x] of Object.entries(v as Record<string, unknown>).slice(0, 32)) walk(k, x, depth + 1);
       } else if (prose || !PROSE.test(key)) {
-        flat.push([key, String(v)]);
+        flat.push([key, gated(key, v, String(v))]);
       }
     };
     walk("", input, 0);
@@ -294,20 +311,26 @@ export function structuralTie(
  * finding and the agent then makes again unchanged is the agent's informed choice: it proceeds.
  */
 export function actionKey(tool: string, input: unknown): string {
-  const stable = (v: unknown, depth = 0): unknown => {
+  // What JSON cannot hold is written so it still tells calls apart: an in-process caller can pass a BigInt or a
+  // cycle, and a constant fallback ("[object Object]") would make every such call to a tool a repeat of the first.
+  const stable = (v: unknown, depth = 0, seen: object[] = []): unknown => {
+    if (typeof v === "bigint") return `${v}n`;
     if (depth > MAX_DEPTH || v === null || typeof v !== "object") return v;
-    if (Array.isArray(v)) return v.slice(0, 64).map((x) => stable(x, depth + 1));
+    if (seen.includes(v)) return "[cycle]";
+    const path = [...seen, v];
+    if (Array.isArray(v)) return v.slice(0, 64).map((x) => stable(x, depth + 1, path));
     return Object.fromEntries(
       Object.entries(v as Record<string, unknown>)
         .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-        .map(([k, x]) => [k, stable(x, depth + 1)]),
+        .map(([k, x]) => [k, stable(x, depth + 1, path)]),
     );
   };
   let body = "";
   try {
     body = JSON.stringify(stable(input)) ?? "";
   } catch {
-    body = String(input);
+    // A value whose own toJSON throws: a key no other call shares, so the call is never taken for a repeat.
+    body = randomUUID();
   }
   return createHash("sha256")
     .update(`${tool}\u0000${sanitizeForStore(body.slice(0, KEY_CHARS))}`)
