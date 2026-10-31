@@ -334,6 +334,16 @@ export interface EngineConfig {
    * and how many per call, change.
    */
   cardsEconomy: boolean;
+  /**
+   * `decideConflict` (D67, docs/research/econ-decide.md): with no model's say (none, or `judgeBehind`, whose lookup
+   * decides as with none), the conflict ground's test (its
+   * request-frame conflicts, consequence finds and the graph's conflicts) is run over every ranked candidate, not only
+   * the eligible ones, whatever path spoke first (sure, anticipated, grounded by a person or a day, the fallback, or
+   * none), and its best find joins the delivery while it has room. A sure lexical match no longer silences a conflict.
+   */
+  decideConflict: boolean;
+  /** With `decideConflict`: the ranked candidates its test reads (and the lab's candidate dump holds), best first. */
+  decideCandidates: number;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
   /**
@@ -472,5 +482,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cards: false,
   cardsEconomy: false,
   cardItems: 1,
+  decideConflict: false,
+  decideCandidates: 64,
   maxEventChars: 32_000,
 };

@@ -54,7 +54,7 @@
  * Each suite's run is recorded in the benchmark ledger (bench/, `ledger.ts`) unless `--no-record`.
  */
 import { appendFileSync, writeFileSync } from "node:fs";
-import { CardEnricher, ContextPartner, cpuNow, ItemCache, type Trace } from "@eden/engine";
+import { CardEnricher, ContextPartner, cpuNow, ItemCache, type CandidateDump, type Trace } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, OpenRouterModel, type Model } from "@eden/llm";
 import type { AgentEvent, Injection } from "@eden/protocol";
@@ -124,6 +124,12 @@ const TIMELINE = opt("timeline", "");
  */
 const PACKETS = opt("packets", "");
 if (PACKETS) writeFileSync(PACKETS, "");
+/**
+ * `--candidates out.jsonl`: every no-model decision's candidates with their facts (`decide.ts`), one line per task with
+ * the planted item's id and variant, for the decision analysis (docs/research/econ-decide.md). Ids and numbers only.
+ */
+const CANDIDATES = opt("candidates", "");
+if (CANDIDATES) writeFileSync(CANDIDATES, "");
 const timeline = TIMELINE
   ? new Timeline(TIMELINE, { tool: "hidden-funnel", suites: SUITE_LIST, seeds: SEEDS, config: CONFIG, sync: SYNC })
   : null;
@@ -241,6 +247,14 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
   let calls = 0;
   const prefetched = new Set<string>();
   const lane = `${suite}/${variant}/${seed}`;
+  const dumps = new Map<string, CandidateDump[]>();
+  const onCandidates = CANDIDATES
+    ? (d: CandidateDump) => {
+        const list = dumps.get(d.sessionId) ?? [];
+        dumps.set(d.sessionId, list);
+        list.push(d);
+      }
+    : undefined;
   const countCalls = (t: Trace) => {
     // A prefetch's calls (`anticipate`) are the task's too.
     calls += t.sourceCalls + (t.anticipateCalls ?? 0);
@@ -267,6 +281,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     onTrace: timeline ? timeline.traceSink(lane, countCalls) : countCalls,
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
+    ...(onCandidates ? { onCandidates } : {}),
   });
   // The harness may read the engine's session table (as `quality.ts` `settle` does; product code may not): whether a
   // session's lookup, prefetch or work its lookup left running (`behind`: `syncPollBehind`'s poll and follow-up,
@@ -383,6 +398,19 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       }));
       const line = { suite, seed, variant, template: task.template, request: task.text, planted: id, packets };
       appendFileSync(PACKETS, JSON.stringify(line) + "\n");
+    }
+    if (CANDIDATES) {
+      const line = {
+        suite,
+        seed,
+        variant,
+        template: task.template,
+        planted: id,
+        delivered: got,
+        dumps: dumps.get(sessionId),
+      };
+      appendFileSync(CANDIDATES, `${JSON.stringify(line)}\n`);
+      dumps.delete(sessionId);
     }
     perTask.push({
       seed,
