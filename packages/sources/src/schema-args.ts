@@ -255,3 +255,71 @@ export function buildFetchArgs(m: FetchMapping, ref: string): Record<string, unk
 }
 
 const pad = (n: number) => String(Math.floor(n)).padStart(2, "0");
+
+/** How a listing page becomes a call to a list tool (`McpSource.list`, D56). */
+export interface ListMapping {
+  /**
+   * The argument that takes the page cursor: a server's own opaque token (`token`), or a count of items to skip
+   * (`offset`), for which Eden computes the next page itself. Null when the tool cannot page: only its first page.
+   */
+  cursor: { name: string; kind: "token" | "offset" } | null;
+  /** The argument that bounds the page size, if any. */
+  limit: string | null;
+  /** Required arguments with no value: the mapping cannot be used until the operator fixes them. */
+  missing: string[];
+  fixed: Record<string, unknown>;
+}
+
+/** Names that take a server's page token, best first. */
+const CURSOR_NAMES = [
+  "cursor",
+  "pageToken",
+  "page_token",
+  "nextPageToken",
+  "next_page_token",
+  "continuation",
+  "continuationToken",
+  "starting_after",
+  "after",
+];
+/** Names that take a count of items to skip. */
+const OFFSET_NAMES = ["offset", "skip", "start_index", "startIndex"];
+
+/**
+ * The argument mapping for a list tool, given its input schema and the operator's fixed values: where the cursor
+ * and the page size go. Nothing is guessed beyond known names: a list call needs no query, so a tool whose required
+ * arguments the mapper cannot fill is unusable until the operator sets them (`fixed`).
+ */
+export function mapListArgs(schema: ToolSchema, fixed: Record<string, unknown> = {}): ListMapping {
+  const props = schema.properties ?? {};
+  const names = Object.keys(props).filter((n) => !(n in fixed));
+  const required = new Set(schema.required ?? []);
+  const find = (wanted: string[]) =>
+    wanted.map((w) => names.find((n) => n.toLowerCase() === w.toLowerCase())).find(Boolean);
+  const token = find(CURSOR_NAMES);
+  const offset = token ? undefined : find(OFFSET_NAMES);
+  const cursor: ListMapping["cursor"] = token
+    ? { name: token, kind: "token" }
+    : offset && typesOf(props[offset]!).some((t) => t === "integer" || t === "number")
+      ? { name: offset, kind: "offset" }
+      : null;
+  const limit = LIMIT_NAMES.map((want) => names.find((n) => n === want)).find(Boolean) ?? null;
+  // The cursor is not sent on a first page: a tool that requires one is one the mapper cannot start.
+  const filled = new Set([limit, ...Object.keys(fixed)].filter(Boolean));
+  const missing = [...required].filter((n) => !filled.has(n) && props[n]?.default === undefined);
+  return { cursor, limit, missing, fixed };
+}
+
+/** Whether list calls can be made with this mapping. */
+export const listUsable = (m: ListMapping) => m.missing.length === 0;
+
+/** Longest cursor Eden keeps and hands back: a page token is short; anything longer is not taken as a cursor. */
+export const MAX_CURSOR_CHARS = 2_048;
+
+/** The arguments for one list call: the operator's values, the page size and, past the first page, the cursor. */
+export function buildListArgs(m: ListMapping, cursor: string | undefined, limit: number): Record<string, unknown> {
+  const args: Record<string, unknown> = { ...m.fixed };
+  if (m.limit) args[m.limit] = limit;
+  if (cursor !== undefined && m.cursor) args[m.cursor.name] = m.cursor.kind === "offset" ? Number(cursor) : cursor;
+  return args;
+}

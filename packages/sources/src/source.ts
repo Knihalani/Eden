@@ -19,6 +19,15 @@ export interface SearchQuery {
   window?: { start: string; end: string; offsetMinutes?: number };
 }
 
+/**
+ * One page of a source's listing (`Source.list`): its items, most recently updated first, and the cursor of the next
+ * page (null on the last). A cursor is the source's own and opaque: it is only ever handed back to the same source.
+ */
+export interface ListPage {
+  items: ContextItem[];
+  next: string | null;
+}
+
 export interface Source {
   /** Unique within a user's set: "gmail", "notion", "crm". */
   readonly id: string;
@@ -31,6 +40,11 @@ export interface Source {
   search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]>;
   /** One item by its source ref, for refreshing a cached item. */
   fetch?(ref: string, scope: Scope, signal: AbortSignal): Promise<ContextItem | null>;
+  /**
+   * One page of everything the source holds for the user, most recently updated first, from `cursor` (undefined: the
+   * first page), at most `limit` items: what a background sync reads into a local index (D56). Read-only like search.
+   */
+  list?(scope: Scope, cursor: string | undefined, limit: number, signal: AbortSignal): Promise<ListPage>;
   close?(): Promise<void>;
 }
 
