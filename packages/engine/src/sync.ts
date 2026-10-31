@@ -186,6 +186,11 @@ export class SyncManager {
     return s !== undefined && this.isCurrent(s, now);
   }
 
+  /** Whether the user's copy of a source has finished its backfill, current or not (`syncPollBehind`). */
+  isWarm(scope: Scope, sourceId: string): boolean {
+    return this.users.get(scopeKey(scope))?.sources.get(sourceId)?.phase === "warm";
+  }
+
   /** Users synced now. */
   get userCount(): number {
     return this.users.size;
@@ -225,8 +230,10 @@ export class SyncManager {
    * A lookup's on-demand poll (`syncOnDemand`): every warm source of the user that is not current is polled now,
    * at most `catchupPages` pages each before the lookup goes on (the rest is read in the background), within the
    * lookup's deadline. Returns the listing calls made; the sources it brought current answer the lookup locally.
+   * `tally.fresh` counts the items its polls stored new or changed; a poll it waited on instead (another's) counts
+   * as one, since what that poll stored is not known here.
    */
-  async freshen(scope: Scope, sources: Source[], signal: AbortSignal): Promise<number> {
+  async freshen(scope: Scope, sources: Source[], signal: AbortSignal, tally?: { fresh: number }): Promise<number> {
     const u = this.users.get(scopeKey(scope));
     if (!u) return 0;
     const now = this.deps.now();
@@ -238,9 +245,10 @@ export class SyncManager {
         if (s.busy) {
           // A poll already running (timed, or another lookup's): its answer, not a second call.
           await Promise.race([s.busy, aborted(signal)]);
+          if (tally) tally.fresh++;
           return;
         }
-        await this.run(s, () => this.poll(u, s, source, this.o.catchupPages, true, signal));
+        await this.run(s, () => this.poll(u, s, source, this.o.catchupPages, true, signal, tally));
       }),
     );
     return this.stats.demandCalls - before;
@@ -430,6 +438,7 @@ export class SyncManager {
     maxPages: number,
     demand: boolean,
     signal?: AbortSignal,
+    tally?: { fresh: number },
   ): Promise<void> {
     const started = this.deps.now();
     let cursor: string | undefined;
@@ -454,6 +463,7 @@ export class SyncManager {
       s.failures = 0;
       const fresh = this.store(u, s, page.items);
       changed += fresh;
+      if (tally) tally.fresh += fresh;
       const boundary = fresh < page.items.length;
       if (boundary || page.next === null || page.items.length === 0) {
         this.polled(s, started, changed);
