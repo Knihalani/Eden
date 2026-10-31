@@ -72,8 +72,17 @@ train / held-out split for tuning, and text not written by templates.
   ([research/connector-lab.md](research/connector-lab.md)).
 
 ## M3 — The graph, layer 2
-- Entity resolution (aliases, email ↔ name), typed relations (person–company–project), freshness per source.
-- Background sync for sources that support it, so the fast path warms without waiting for a lookup.
+- Moonshots, built and combined behind flags (D56–D62, [research/moonshots.md](research/moonshots.md)): engine-wide
+  spans (D56), a background sync into a per-user local index (D57), a per-user knowledge graph with a graph walk
+  (D58), model-made implication cards matched with no model (D59), anticipation from drafts and events (D60), and the
+  Pi harness as the live agent (D61). Recommended experimental configuration R (D62): in-sample funnel 128 → 152 of
+  268 delivered with decoys 21 → 18; blind held-out 5–8 72 → 91 of 316 with decoys 30 → 27. R + sync delivers 128
+  blind (36 decoys) but misses the no-model soft fire bar (0.121 against 0.10); the owner's call. Next: a live Pi run
+  of R and R + sync against tools; wire cards into the server's `buildPartner`; stress the sync on large mailboxes.
+- Entity resolution (aliases, email ↔ name), typed relations (person–company–project), freshness per source. A
+  first per-user graph is built (D58); learned edge weights are unmeasured (no usage signal in the funnel).
+- Background sync for sources that support it, so the fast path warms without waiting for a lookup. Built (D57),
+  off by default; its retention departs from D8.
 - Situation classifier learned from labelled traffic (replace keyword rules).
 
 ## M4 — Learning per agent

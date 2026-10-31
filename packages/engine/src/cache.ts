@@ -18,6 +18,7 @@ import { dedupText, hamming64, SparseIndex, TextSketcher, Vocab } from "@eden/pr
 import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import { userOffset } from "./grounding";
+import { squash, UserGraph, type Seed, type Walked, type WalkOptions } from "./kg";
 import { head, termIds } from "./text";
 
 const NO_TERMS = new Uint32Array(0);
@@ -27,6 +28,11 @@ interface Entry {
   fetchedAt: number;
   doc: number;
   sketch: Sketch | null;
+  /**
+   * Held by the user's background sync (D57): counted against `maxSyncedPerUser`, not `maxItemsPerUser`, kept for
+   * `syncTtlMs`, and dropped by the sync when its source no longer lists it. A lookup that returns it keeps it synced.
+   */
+  synced?: true;
 }
 
 /**
@@ -53,9 +59,12 @@ const VOCAB_REBUILD_FACTOR = 4;
 const MIN_VOCAB_REBUILD = 50_000;
 
 class UserCache {
+  constructor(readonly scope: Scope) {}
   /** Vocabulary size after the last rebuild. */
   baseline = 0;
   readonly items = new Map<string, Entry>();
+  /** How many of `items` are synced (D57). */
+  synced = 0;
   readonly byDoc: (Entry | undefined)[] = [];
   readonly vocab = new Vocab(256); // Grows by doubling: most users hold few terms.
   readonly index = new SparseIndex({ fields: 2, weights: [2, 1] });
@@ -71,6 +80,8 @@ class UserCache {
   partied = 0;
   /** The parties' names and first names, lowercased (`isPerson`), computed on demand; reset as the tally changes. */
   personNames: Set<string> | undefined;
+  /** The user's knowledge graph (`kg.ts`), when the cache keeps one (`enableGraph`); built on first use. */
+  graph: UserGraph | undefined;
 }
 
 /** Header lines naming who takes part in an item: a mail's From, To and Cc, an event's attendees, an owner. */
@@ -132,6 +143,13 @@ export interface CacheLimits {
   maxUsersPerTenant: number;
   ttlMs: number;
   maxTextChars: number;
+  /**
+   * Items a user's background sync may hold (D57), apart from `maxItemsPerUser`: lookups never evict what the sync
+   * keeps, nor the sync what lookups brought. Past it, the least recently synced is dropped.
+   */
+  maxSyncedPerUser: number;
+  /** How long a synced item is kept without a sync seeing it again (a re-listing refreshes it). */
+  syncTtlMs: number;
 }
 
 export const DEFAULT_CACHE_LIMITS: CacheLimits = {
@@ -139,6 +157,8 @@ export const DEFAULT_CACHE_LIMITS: CacheLimits = {
   maxUsersPerTenant: 10_000,
   ttlMs: 24 * 3_600_000,
   maxTextChars: 8_000,
+  maxSyncedPerUser: 5_000,
+  syncTtlMs: 7 * 24 * 3_600_000,
 };
 
 /**
@@ -175,6 +195,10 @@ export class ItemCache {
   private readonly users = new Map<string, UserCache>();
   private readonly perTenant = new Map<string, number>();
   private readonly limits: CacheLimits;
+  /** Whether each user's items are also put in a knowledge graph (`enableGraph`). */
+  private graphs = false;
+  /** Told of every item that leaves (`onDropped`); null ids: the whole user. */
+  private dropped: ((scope: Scope, ids: string[] | null) => void) | null = null;
 
   constructor(limits: Partial<CacheLimits> = {}) {
     this.limits = { ...DEFAULT_CACHE_LIMITS, ...limits };
@@ -201,17 +225,79 @@ export class ItemCache {
         break;
       }
     }
-    const u = new UserCache();
+    const u = new UserCache({ tenantId: scope.tenantId, userId: scope.userId });
     this.users.set(key, u);
     this.perTenant.set(scope.tenantId, (this.perTenant.get(scope.tenantId) ?? 0) + 1);
     return u;
   }
 
   private dropUser(key: string, tenantId: string): void {
-    if (!this.users.delete(key)) return;
+    const u = this.users.get(key);
+    if (!u || !this.users.delete(key)) return;
+    this.dropped?.(u.scope, null);
     const n = (this.perTenant.get(tenantId) ?? 1) - 1;
     if (n <= 0) this.perTenant.delete(tenantId);
     else this.perTenant.set(tenantId, n);
+  }
+
+  /**
+   * Keeps a knowledge graph per user from now on (`kg.ts`, the engine's `graph` flag). A user's graph is built from
+   * their cached items on first use, then kept as items come and go; it is dropped with them and with the user.
+   */
+  enableGraph(): void {
+    this.graphs = true;
+  }
+
+  /**
+   * Calls `fn` whenever items leave a user's cache (expired, evicted, replaced by a changed copy, deleted by the
+   * sync, forgotten) with their ids, or null when the whole user goes: what is derived from an item (its implication
+   * card) is held no longer than the item.
+   */
+  onDropped(fn: (scope: Scope, ids: string[] | null) => void): void {
+    this.dropped = fn;
+  }
+
+  /** The user's graph, built from their live items if it does not exist yet; undefined without one. */
+  private graphOf(u: UserCache, now: number): UserGraph | undefined {
+    if (!this.graphs) return undefined;
+    if (!u.graph) {
+      u.graph = new UserGraph();
+      for (const e of u.items.values()) u.graph.add(e.item, e.fetchedAt || now);
+    }
+    return u.graph;
+  }
+
+  /**
+   * Items the user's knowledge graph reaches from `seeds` (`UserGraph.walk`), fresh ones only. Empty without a graph.
+   * Reads never allocate a cache for a user who has none.
+   */
+  walk(scope: Scope, seeds: Seed[], opt: WalkOptions, now = Date.now()): Walked[] {
+    const u = this.peek(scope);
+    if (!u || seeds.length === 0) return [];
+    const g = this.graphOf(u, now);
+    if (!g) return [];
+    // The user themself is on nearly everything they hold: their name, addresses and organisation spread nothing.
+    const self = this.selfOf(scope);
+    if (self && !opt.exclude) opt = { ...opt, exclude: g.around(`n:${squash(self)}`) };
+    // Asked for a few more than wanted: an expired item is skipped, not counted.
+    return g
+      .walk(seeds, { ...opt, limit: opt.limit * 2 })
+      .filter((w) => {
+        const e = u.items.get(w.id);
+        // Its own time to live: a synced item's is `syncTtlMs`, as every other read has it.
+        return e !== undefined && this.alive(e, now);
+      })
+      .slice(0, opt.limit);
+  }
+
+  /** Teaches the user's graph an outcome of items reached through `mask`'s edge types (`UserGraph.learn`). */
+  learnGraph(scope: Scope, mask: number, used: boolean): void {
+    this.peek(scope)?.graph?.learn(mask, used);
+  }
+
+  /** Nodes in the user's graph (0 without one), for tests and bounds. */
+  graphSize(scope: Scope): number {
+    return this.peek(scope)?.graph?.size ?? 0;
   }
 
   /** The user's vocabulary (creating the user's cache if needed). */
@@ -236,13 +322,19 @@ export class ItemCache {
    * recency): most lookups return items the cache already holds, and re-indexing them was ~12% of server CPU at
    * saturation (packages/sim perf-cli, docs/research/simulation.md).
    */
-  put(scope: Scope, items: ContextItem[], now = Date.now(), sanitized = false): ContextItem[] {
+  put(scope: Scope, items: ContextItem[], now = Date.now(), sanitized = false, synced = false): ContextItem[] {
     const u = this.touch(scope);
     this.sweep(u, now);
     const changed: ContextItem[] = [];
     for (const raw of items) {
       const item = sanitized ? raw : sanitizeItem(raw, this.limits.maxTextChars);
       const old = u.items.get(item.id);
+      if (old && synced && !old.synced) {
+        old.synced = true;
+        u.synced++;
+      }
+      // A lookup's copy of a synced item leaves it synced: the sync still lists it, and drops it once it does not.
+      const isSynced = synced || old?.synced === true;
       if (old && old.item.text === item.text && old.item.title === item.title) {
         // Same words, so the index and sketch stand; the rest (url, meta, updatedAt) is taken from the new copy. Its
         // people are counted again: its meta may name others.
@@ -257,15 +349,80 @@ export class ItemCache {
       if (old) this.drop(u, old);
       if (item.meta?.start) u.offset = undefined;
       tally(u, item, 1);
+      // Added before the item is: a graph built on first use (`graphOf`) must not read it twice.
+      this.graphOf(u, now)?.add(item, now);
       const doc = this.index(u, item);
-      const entry = { item, fetchedAt: now, doc, sketch: sketchOf(u, item) };
+      const entry: Entry = { item, fetchedAt: now, doc, sketch: sketchOf(u, item) };
+      if (isSynced) {
+        entry.synced = true;
+        u.synced++;
+      }
       u.items.set(item.id, entry); // Map order stays oldest-first for eviction (old entry was removed above).
       u.byDoc[doc] = entry;
       changed.push(item);
     }
-    while (u.items.size > this.limits.maxItemsPerUser) this.drop(u, u.items.values().next().value as Entry);
+    if (u.synced === 0) {
+      while (u.items.size > this.limits.maxItemsPerUser) this.drop(u, u.items.values().next().value as Entry);
+    } else {
+      this.evictMixed(u);
+    }
     if (u.vocab.size > Math.max(MIN_VOCAB_REBUILD, u.baseline * VOCAB_REBUILD_FACTOR)) this.rebuild(scope, u);
-    return changed;
+    // Only what is still held: an item evicted by this same put is not new to the cache (its drop hook already ran,
+    // so a card or a mention made from it now would outlive it).
+    return changed.filter((item) => u.items.get(item.id)?.item === item);
+  }
+
+  /**
+   * Eviction when some items are synced (D57): lookups' items over `maxItemsPerUser` and synced ones over
+   * `maxSyncedPerUser` go, each class oldest first, in one pass over the oldest-first order.
+   */
+  private evictMixed(u: UserCache): void {
+    let loose = u.items.size - u.synced - this.limits.maxItemsPerUser;
+    let synced = u.synced - this.limits.maxSyncedPerUser;
+    if (loose <= 0 && synced <= 0) return;
+    for (const e of [...u.items.values()]) {
+      if (loose <= 0 && synced <= 0) break;
+      if (e.synced && synced > 0) {
+        this.drop(u, e);
+        synced--;
+      } else if (!e.synced && loose > 0) {
+        this.drop(u, e);
+        loose--;
+      }
+    }
+  }
+
+  /** Whether the cached item is held by the user's sync (D57). */
+  isSynced(scope: Scope, id: string): boolean {
+    return this.peek(scope)?.items.get(id)?.synced === true;
+  }
+
+  /**
+   * Drops synced items by id (a sync's delete propagation: its source no longer lists them, D57). An item a lookup
+   * also brought is dropped too: the source no longer has it. Returns how many were dropped.
+   */
+  dropSynced(scope: Scope, ids: Iterable<string>): number {
+    const u = this.peek(scope);
+    if (!u) return 0;
+    let n = 0;
+    for (const id of ids) {
+      const e = u.items.get(id);
+      if (e?.synced) {
+        this.drop(u, e);
+        n++;
+      }
+    }
+    return n;
+  }
+
+  /** Synced items the user's cache holds (D57). */
+  syncedCount(scope: Scope): number {
+    return this.peek(scope)?.synced ?? 0;
+  }
+
+  /** Whether an entry is still within its time to live: a synced item's is `syncTtlMs` (D57). */
+  private alive(e: Entry, now: number): boolean {
+    return now - e.fetchedAt <= (e.synced ? this.limits.syncTtlMs : this.limits.ttlMs);
   }
 
   /**
@@ -273,7 +430,7 @@ export class ItemCache {
    * numbers change; nothing outside holds them across calls. Sketches are kept (they do not depend on term ids).
    */
   private rebuild(scope: Scope, old: UserCache): void {
-    const u = new UserCache();
+    const u = new UserCache(old.scope);
     for (const e of old.items.values()) {
       const doc = this.index(u, e.item);
       const entry = { ...e, doc };
@@ -285,6 +442,9 @@ export class ItemCache {
     u.parties = old.parties;
     u.partied = old.partied;
     u.self = old.self;
+    u.synced = old.synced;
+    // Keyed by item id, not doc number: the graph stands as it is.
+    u.graph = old.graph;
     this.users.set(scopeKey(scope), u); // Same key: the user's place in the eviction order is unchanged.
   }
 
@@ -298,20 +458,30 @@ export class ItemCache {
     return u.index.addFields([titleIds, b.ids], [nt, b.n]);
   }
 
-  /** Removes expired items. Map order is oldest-first, so the scan stops at the first fresh one. */
+  /**
+   * Removes expired items. Map order is oldest-first, so the scan stops at the first fresh one; a synced item (its
+   * own, longer time to live) is passed over, and reads check its time on their own.
+   */
   private sweep(u: UserCache, now: number): void {
     for (const e of u.items.values()) {
+      if (e.synced) {
+        if (!this.alive(e, now)) this.drop(u, e);
+        continue;
+      }
       if (now - e.fetchedAt <= this.limits.ttlMs) break;
       this.drop(u, e);
     }
   }
 
   private drop(u: UserCache, e: Entry): void {
+    if (e.synced) u.synced--;
     u.items.delete(e.item.id);
     u.index.remove(e.doc);
     if (u.byDoc[e.doc] === e) u.byDoc[e.doc] = undefined;
     if (e.item.meta?.start) u.offset = undefined; // An event gone (evicted, expired, forgotten) may change the mode.
     tally(u, e.item, -1);
+    u.graph?.remove(e.item.id);
+    this.dropped?.(u.scope, [e.item.id]);
   }
 
   /** When the cached item was last fetched or seen in a lookup (ms), or undefined if it is not cached. */
@@ -321,7 +491,7 @@ export class ItemCache {
 
   get(scope: Scope, id: string, now = Date.now()): ContextItem | null {
     const e = this.peek(scope)?.items.get(id);
-    return e && now - e.fetchedAt <= this.limits.ttlMs ? e.item : null;
+    return e && this.alive(e, now) ? e.item : null;
   }
 
   /** Top items for the query's term ids (`ids[0..n)` in the user's vocabulary), fresh only. */
@@ -332,7 +502,7 @@ export class ItemCache {
     const out: CacheHit[] = [];
     for (let j = 0; j < res.count && out.length < limit; j++) {
       const e = u.byDoc[res.docs[j]!];
-      if (!e || now - e.fetchedAt > this.limits.ttlMs) continue;
+      if (!e || !this.alive(e, now)) continue;
       out.push({
         item: e.item,
         sketch: e.sketch,
@@ -346,6 +516,48 @@ export class ItemCache {
   }
 
   /**
+   * Top fresh items of the given sources for the query's term ids, at most `limit` per source: a synced source
+   * answered from the local index (D57). With `all`, only items holding every query term, newest first (as a mail
+   * or chat search answers); otherwise the best scored. Reads the best `depth` of the whole index, so a source whose
+   * matches all rank below it answers fewer.
+   */
+  searchIn(
+    scope: Scope,
+    ids: ArrayLike<number>,
+    n: number,
+    limit: number,
+    sources: ReadonlySet<string>,
+    all: boolean,
+    now = Date.now(),
+    depth = 400,
+  ): CacheHit[] {
+    const u = this.peek(scope);
+    if (!u || n === 0) return [];
+    const res = u.index.search(ids, n, depth);
+    const hits: CacheHit[] = [];
+    for (let j = 0; j < res.count; j++) {
+      const e = u.byDoc[res.docs[j]!];
+      if (!e || !sources.has(e.item.sourceId) || !this.alive(e, now)) continue;
+      if (all && res.matched[j]! < n) continue;
+      hits.push({
+        item: e.item,
+        sketch: e.sketch,
+        doc: e.doc,
+        score: res.scores[j]!,
+        coverage: res.coverage[j]!,
+        matched: res.matched[j]!,
+      });
+    }
+    if (all) hits.sort((a, b) => (b.item.updatedAt ?? 0) - (a.item.updatedAt ?? 0));
+    const per = new Map<string, number>();
+    return hits.filter((h) => {
+      const k = per.get(h.item.sourceId) ?? 0;
+      per.set(h.item.sourceId, k + 1);
+      return k < limit;
+    });
+  }
+
+  /**
    * Fresh cached items that start on one of `days` (YYYY-MM-DD of their `meta.start`: events), soonest first, at most
    * `limit`: for requests that name a day rather than words the item holds (D44). A scan of the user's items (at most
    * `maxItemsPerUser`), run only for such requests; the cap keeps what is scored after it small.
@@ -356,7 +568,7 @@ export class ItemCache {
     const out: CacheHit[] = [];
     for (const e of u.items.values()) {
       const start = e.item.meta?.start;
-      if (!start || !days.has(start.slice(0, 10)) || now - e.fetchedAt > this.limits.ttlMs) continue;
+      if (!start || !days.has(start.slice(0, 10)) || !this.alive(e, now)) continue;
       out.push({ item: e.item, sketch: e.sketch, doc: e.doc, score: 0, coverage: 0, matched: 0 });
     }
     return out.sort((a, b) => Date.parse(a.item.meta!.start!) - Date.parse(b.item.meta!.start!)).slice(0, limit);
@@ -385,7 +597,7 @@ export class ItemCache {
     const out: CacheHit[] = [];
     for (const id of ids) {
       const e = u.items.get(id);
-      if (e && now - e.fetchedAt <= this.limits.ttlMs) {
+      if (e && this.alive(e, now)) {
         out.push({ item: e.item, sketch: e.sketch, doc: e.doc, score: 0, coverage: 0, matched: 0 });
       }
     }

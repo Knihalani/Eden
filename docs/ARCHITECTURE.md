@@ -31,7 +31,7 @@
 | `packages/sources` | `Source` interface; `McpSource` (any MCP server's read tools, read-only enforced; arguments from the tool's schema when no mapping is given; an optional fetch tool that reads one record by id, D35, used through `SourceFanout.fetch` for refresh, D40; reconnects after a dropped connection, re-checking read-only, and waits 30 s after one that closes within 5 s of connecting; reads every page of `tools/list`); `StaticSource`; `QueryPlanner` (what each lookup sends to each connector, learned per user; D28, on by default in the server since D33); `SourceFanout`: per-source deadlines, coalescing, a result cache that serves stale on failure, rate limits, circuit breakers and adaptive concurrency, redacting before anything is held. A call is admitted only when every guard allows it, so a skip spends no rate token and no half-open probe; a failure of our own redaction says nothing against the source; a breaker ignores reports from calls allowed before it last opened. |
 | `packages/graph` | The source map (knowledge graph layer 1): which sources mention which entities, and learned usefulness per situation. SQLite. |
 | `packages/llm` | `Model` interface, OpenRouter client (ZDR, no data collection), pricing, `Budget`, `FakeModel`. |
-| `packages/engine` | `ContextPartner`: cues, a per-user BM25F item cache (title, body), near-duplicate suppression, ledger, two-speed pipeline, model judge, usage inference, traces. Each event is tokenized once, into a per-session vocabulary. |
+| `packages/engine` | `ContextPartner`: cues, a per-user BM25F item cache (title, body), near-duplicate suppression, ledger, two-speed pipeline, model judge, usage inference, traces; span tracing of every phase in wall and CPU time, off by default (`spans.ts`, `onSpan`, `config.spans`; content-free; [research/moon-telemetry.md](research/moon-telemetry.md)). Each event is tokenized once, into a per-session vocabulary. |
 | `packages/server` | HTTP API (tenant API keys, per-tenant rate limit: `EDEN_TENANT_RPS`, `EDEN_TENANT_BURST`), MCP server exposing `ask_context`, config, wiring; an optional worker pool that redacts lookup results (`EDEN_GATE_WORKERS`, D26). |
 | `packages/client` | SDK for agent builders: `EdenClient` (fail-open) and `withContext` for message lists. |
 | `packages/eval` | Scenario harness over 26 hand-written scenarios (docs/research/eval-suite.md): precision, recall, false-fire rate, overall and per category; a privacy check (planted secrets, inert framing); direct asks; model calls and cost per turn, latency. |
@@ -110,7 +110,56 @@ share) by fixed verb lexicons and sends one query of the class's fixed constrain
 only by a person's name. `judgeTied` skips the judge when no candidate is tied to the request by a probe, a named day,
 two request words, a rare word or a consequence find.
 
-**Ask** always searches live (more sources), ignores the not-twice ledger (the agent asked), and returns the cited
+**Background sync, "Eden Atlas"** (proposed D57, `sync`, off by default; `sync.ts`): sources with a read-only list
+tool (`Source.list`; `McpSource.listTool`, checked like the search tool) are read into each active user's cache in the
+background: a backfill of the newest items across sources, polls when a lookup finds a source stale by its learned
+change rate, a daily sweep that drops what a source has not listed in two sweeps in a row (about 48 h). Synced items have their own cap and TTL in the
+cache. A lookup answers every current synced source (its own search and every probe) from that local index at no
+call, and calls live only the sources that are not synced or still stale. The tick runs on a timer, never on the fast
+path, which only marks the user active.
+
+**Knowledge graph** (proposed D58, `graph` off by default; `kg.ts`, docs/research/moon-graph.md): with the flag, the
+item cache keeps a per-user graph over what it holds, built as items are cached and dropped with them: people (names,
+addresses, first names), organisations (an address's domain is the same node as the name "Umbrella Health"), projects
+and systems (capitalised runs), identifiers, channels, roles and days, with typed edges (about, authored, attended,
+mentions, ref, channel, role, on, constrains; alias and member between nodes). A slow-path lookup walks it from the
+request's names, ids, roles and days (spreading activation, two link hops, degree-normalised, the user's own name and
+organisation left out, 2 ms bound, no model, no source call). What it reaches gets judge seats, ties the judge, and
+with `groundConflict` is set against the request by `conflict.ts` with the names it was reached through as ties
+(grounded "graph"), only when the request acts or asks and only for an item that blocks, moves or settles something.
+
+**Anticipation** (`anticipate`, off by default; proposed D60, `anticipate.ts`,
+[research/moon-anticipate.md](research/moon-anticipate.md)): every event with words (a user message, a draft the user
+is still typing, `user_message` with `draft: true`, a tool call or result, an arriving message) is read, with no model
+and in linear time over its first 600 characters, for what the agent will need next: the names it mentions (from a
+tool's output only people the user's items have as parties, never the user), the days it schedules, its action class
+(`consequence.ts`), and the names that followed that intent before for this user (`IntentPatterns`, per user,
+bounded). A background prefetch, one per session at a time and bounded per event and per session, sends them as the
+request's own probes would (person, organisation, day and the class's constraint vocabulary), so their answers land in
+the user's probe memo and economy. The request's probes then reuse any answer a source gave the same query within
+`probeMemoMs`, at no call; with no model, the request is first decided from what is held (what is sure, or what its
+structure grounds, never the fallback), returned on the observe call itself, and the live search runs behind it and
+adds only what is sure or grounded. With a judge, the request always goes to the slow path (a warm cache would
+otherwise end lookups before the judge sees the second candidate). A draft is ignored when the flag is off.
+
+**Implication cards** (`cards`, off by default; proposed D59, `cards.ts`,
+[research/moon-cards.md](research/moon-cards.md)): items new to a user's cache, looked up or synced, that pass a
+no-model deontic prefilter are queued for a `CardEnricher` (`PartnerDeps.cards`), which reads them ten per call
+through the model, under its own per-user-day `Budget`, into small validated cards (constraint kind, actions from a
+fixed vocabulary, entities, span, limit). At request time, with no model, the request's actions (fixed lexicons) and
+frame (`conflict.ts`) are matched against the cards of cached items: a match is a candidate and a judge seat, and with
+`groundConflict` the best violated card is delivered (grounded "card"). The card's own statement never reaches the
+agent. The server's `buildPartner` does not wire an enricher yet.
+
+**The moonshots together** (proposed D62, [research/moonshots.md](research/moonshots.md)): the flags compose. With
+the sync, synced sources answer the lookup's search, every probe and the prefetch locally, and the graph and the
+cards cover every synced item; the graph walk and card matching run on the slow path after the lookup's items are
+cached; the
+anticipation's early decision reads what the prefetch, the sync and the cache hold. Every subsystem reports into the
+engine's spans (`sync.freshen`, `sync.list`, `graph.walk`, `cards.match`, `cards.make`, `anticipate.prefetch`,
+`anticipate.early`), and the Pi harness's timeline reads the same spans.
+
+**Ask** always searches (live, or a current synced source locally with D57; more sources), ignores the not-twice ledger (the agent asked), and returns the cited
 items as they are, with no model call: the asker is a model and reads them directly (D43). `askWithModel`
 (`EDEN_ASK_MODEL=1`) has one model call compose a short cited answer instead, when a model and budget are available.
 

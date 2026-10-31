@@ -24,6 +24,19 @@ export interface Trace {
    * Shape names and counts only, never the query (D19).
    */
   plans?: { sourceId: string; shapes: string[]; calls: number; found: number }[];
+  /**
+   * With the background sync on (D57): the sources this lookup answered from the user's local index, at no call, and
+   * the listing calls of its on-demand polls (counted in `sourceCalls`).
+   */
+  localSources?: number;
+  syncCalls?: number;
+  /**
+   * With `anticipate`: source calls an event's background prefetch made (a "skipped" trace with reason "anticipate";
+   * they are not `sourceCalls`, which count a lookup's own), and, on a delivery, the delivered item ids the session's
+   * anticipation had fetched or held ready before the request (ids only, as `itemIds`).
+   */
+  anticipateCalls?: number;
+  prefetched?: string[];
 }
 
 export type TraceSink = (trace: Trace) => void;

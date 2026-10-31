@@ -16,13 +16,18 @@ export interface BuildOptions {
   onShadow?: ShadowSink;
   /** Ask answers rewritten by the model (D43); off by default. */
   askWithModel?: boolean;
+  /**
+   * Background connector sync (D57, experimental, off by default): sources with a list tool are read into each
+   * active user's cache in the background, on a one-minute timer, and lookups answer them locally.
+   */
+  sync?: boolean;
 }
 
 /** Wires a partner from its parts with production defaults. */
 export function buildPartner(options: BuildOptions): ContextPartner {
   const sourceMap = new SourceMap(options.sourceMapPath);
   const mode = options.queryPlanner ?? "serve";
-  return new ContextPartner({
+  const partner = new ContextPartner({
     sources: options.sources,
     sourceMap,
     cache: new ItemCache(),
@@ -33,8 +38,10 @@ export function buildPartner(options: BuildOptions): ContextPartner {
     planner:
       mode === "off" ? undefined : new QueryPlanner({ seed: (Math.random() * 2 ** 32) >>> 0, store: sourceMap, mode }),
     onShadow: options.onShadow,
-    config: { askWithModel: options.askWithModel ?? false },
+    config: { askWithModel: options.askWithModel ?? false, ...(options.sync ? { sync: true } : {}) },
   });
+  if (options.sync) partner.startSync();
+  return partner;
 }
 
 /**
