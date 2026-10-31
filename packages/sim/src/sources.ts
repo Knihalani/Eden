@@ -400,6 +400,11 @@ export class SimSource implements Source {
    * The source's current copy of one item by its ref (a connector's read-one tool), at the cost of one call: the same
    * latency, faults and error draws as a search.
    */
+  /** Every item, as a background sync paging through the connector would read it (lab experiments only). */
+  listAll(): ContextItem[] {
+    return this.index.items.map((it) => render(it, this.profile.snippetChars));
+  }
+
   async fetch(ref: string, _scope: unknown, signal: AbortSignal): Promise<ContextItem | null> {
     this.stats.calls++;
     this.stats.fetches++;
