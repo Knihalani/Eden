@@ -78,7 +78,7 @@ import {
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger } from "./ledger";
-import { citationsOf, renderAnswer, renderPacket, shownText } from "./render";
+import { citationsOf, renderAnswer, renderPacket, shownText, withoutAddedDates } from "./render";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -842,7 +842,10 @@ export class ContextPartner {
       .slice(0, limit)
       .map((x) => x.item);
     const rendering = spans?.open("render", cue.span);
-    let answer = items.length ? renderPacket(items, { maxBytes: 4_000 }) : "Nothing in the connected sources.";
+    // `packetDates`: an answer is not compacted, so only an event's missing day needs saying.
+    let answer = items.length
+      ? renderPacket(items, { maxBytes: 4_000, ...(this.config.packetDates ? { when: true } : {}) })
+      : "Nothing in the connected sources.";
     if (rendering) spans!.close(rendering, { items: items.length });
     let usedModel = false;
     let costUsd = 0;
@@ -3563,6 +3566,7 @@ export class ContextPartner {
               ...(this.config.compactNovel ? { known: (w: string) => s.seen.has(s.vocab.lookup(w)) } : {}),
             }
           : {}),
+        ...(this.config.packetDates ? { keepYear: true, when: true } : {}),
       }),
       citations: citationsOf(items),
       reason,
@@ -3577,8 +3581,14 @@ export class ContextPartner {
       graphMask,
       sourceIds: [...new Set(items.map((i) => i.sourceId))],
       items: items.map((i) => ({ sourceId: i.sourceId, id: i.id })),
-      // Only the words the agent received: an item's text past the packet's cut is not evidence of use.
-      text: shownText(shown ?? injection.text),
+      // Only the words the agent received: an item's text past the packet's cut is not evidence of use. Nor are the
+      // dates `packetDates` says whole: usage learns from the same words as without the flag.
+      text: this.config.packetDates
+        ? withoutAddedDates(
+            shownText(shown ?? injection.text),
+            this.config.compactInjection && shown === undefined ? new Date(this.now()).getUTCFullYear() : undefined,
+          )
+        : shownText(shown ?? injection.text),
     });
     return injection;
   }

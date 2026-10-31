@@ -201,6 +201,13 @@ export interface EngineConfig {
    */
   densePacket: boolean;
   /**
+   * Dates said whole in packets and `ask` answers (D68; docs/research/econ-uptake.md): compaction keeps the current
+   * year ("left 9 Oct 2026", which `compactInjection` shortens to "9 Oct"), and an event whose text never names its
+   * day starts with its `meta.start` ("Starts: Thu 29 Oct 2026 13:30. "), since a calendar connector may keep the time
+   * only there. Wording only: what is delivered, and when, is unchanged; about 10 tokens more per packet.
+   */
+  packetDates: boolean;
+  /**
    * With no model's say, names a request types in lowercase ("move my drinks with chen wei") ground it and pick its
    * fallback as capitalised ones do, when the user's own sources have been recorded mentioning them (the source map;
    * `Partner.withRecoveredNames`). Probes and ranking keep the request as typed: no source call is added.
@@ -454,6 +461,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   quietClear: false,
   judgeAgreed: true,
   densePacket: false,
+  packetDates: false,
   recoverNames: false,
   groundOccasion: false,
   quietNameOnly: false,
