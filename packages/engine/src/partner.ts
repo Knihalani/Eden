@@ -934,6 +934,9 @@ export class ContextPartner {
       // statement binding a party it names), an identifier or qualified reference the call names, or the action
       // class's find about a party it names.
       const frame = this.frame(cue);
+      // Identifiers the CALL names: in a request of several steps ("pay INV-4821, then email Jamie"), an identifier
+      // only the request names ties the payment, not the email.
+      const callFrame = frameOf(call, null, localNow(cue));
       const named = cleanEntities(cue.entities).filter((e) => !e.includes("@"));
       // The parties: names of two words or more and the user's people the call and request name ("Team" and "Open" in
       // a call's title are not parties), and the organisations of the addresses the call writes to. Never the user,
@@ -955,7 +958,7 @@ export class ContextPartner {
       const tied = (x: Scored) =>
         g.how === "clash" ||
         g.how === "away" ||
-        namesRef(frame, x.item, true) ||
+        namesRef(callFrame, x.item, true) ||
         (bridged.has(x.item.id) && whole.some((n) => names.includes(n) && mentions(n, x.item))) ||
         structuralTie(`${x.item.title}. ${x.item.text}`, topical, names, localNow(cue), call);
       const held = g.items.filter(tied);
@@ -965,7 +968,15 @@ export class ContextPartner {
       const items = held.filter((x) => !accounts(x.item.text, written, request));
       if (items.length === 0) return proceed("accounted");
       const checked = (s.checked ??= new Set());
+      // The same tool held for the same items before: the agent has been told and acts anyway (its new attempt may
+      // differ only in a fresh request id or timestamp, so the exact-arguments key alone would hold it every time).
+      const informed = `${event.tool}\u0000${items
+        .map((x) => x.item.id)
+        .sort()
+        .join(",")}`;
+      if (checked.has(informed)) return proceed("repeat");
       checked.add(key);
+      checked.add(informed);
       while (checked.size > MAX_CHECKED) checked.delete(checked.values().next().value as string);
       const finding = this.deliver(s, items, "proactive", `action-${g.how}:${cue.id}`, cue);
       this.handOut(s, finding);

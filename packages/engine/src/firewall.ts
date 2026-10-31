@@ -78,8 +78,17 @@ function gated(key: string, value: unknown, text: string): string {
   } catch {
     pair = `${JSON.stringify(key)}: ${JSON.stringify(text)}`;
   }
-  if (sanitizeForStore(pair) === pair) return text;
-  return sanitizeForStore(text) === text ? "[REDACTED]" : text;
+  // Redacted here, before any cut: a secret straddling `VALUE_CHARS` or `ACTION_CHARS` would leave a prefix the later
+  // gate over the cut text no longer recognises.
+  // Bounded first: only `VALUE_CHARS` of a value are kept, and a huge value must not cost the gate a megabyte.
+  const bounded = text.slice(0, VALUE_CHARS * 4);
+  const own = sanitizeForStore(bounded);
+  if (
+    sanitizeForStore(pair.slice(0, VALUE_CHARS * 4 + key.length + 8)) ===
+    pair.slice(0, VALUE_CHARS * 4 + key.length + 8)
+  )
+    return own;
+  return own === bounded ? "[REDACTED]" : own;
 }
 
 /**
@@ -91,7 +100,7 @@ export function actionText(tool: string, input: unknown, options: { prose?: bool
   const prose = options.prose ?? true;
   const parts: string[] = [words(tool.slice(0, 100))];
   if (typeof input === "string") {
-    parts.push(input.slice(0, VALUE_CHARS));
+    parts.push(sanitizeForStore(input.slice(0, VALUE_CHARS * 4)).slice(0, VALUE_CHARS));
   } else if (input && typeof input === "object") {
     const flat: [string, string][] = [];
     const walk = (key: string, v: unknown, depth: number) => {

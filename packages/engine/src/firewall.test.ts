@@ -62,6 +62,21 @@ describe("firewall: reading a tool call", () => {
   });
 });
 
+describe("firewall: secrets in arguments", () => {
+  test("a secret straddling the value cut leaves no prefix behind", () => {
+    const { sanitizeForStore } = require("@eden/redact") as typeof import("@eden/redact");
+    for (const [secret, prefix] of [
+      ["AKIAIOSFODNN7EXAMPLE", "AKIA"],
+      ["xoxb-123456789012-123456789012-abcdefghijklmnopqrstuvwx", "xoxb-1234"],
+    ] as const) {
+      for (const n of [380, 388, 395]) {
+        const text = sanitizeForStore(actionText("pay", { reference: `${"x".repeat(n)} ${secret}` }, { prose: false }));
+        expect(text).not.toContain(prefix);
+      }
+    }
+  });
+});
+
 describe("firewall: when a call accounts for a finding", () => {
   test("its own words name the decisive fact, which the request did not", () => {
     const allergy = "Jamie Fox: severe shellfish allergy, carries an EpiPen.";
@@ -246,6 +261,52 @@ describe("checkAction", () => {
       }),
     );
     expect(email.verdict).toBe("proceed");
+  });
+
+  test("in a request of several steps, an identifier only the request names ties none of the other calls", async () => {
+    const { p } = partner({ actionCheck: true });
+    const u = user("u1");
+    await p.observe(
+      ev(u, {
+        kind: "user_message",
+        text: "Tyrell Bio says INV-4821 is overdue, pay it, then email Jamie Fox to confirm Thursday's dinner.",
+      }),
+      { waitMs: 1_000 },
+    );
+    const email = await p.checkAction(
+      ev(u, {
+        kind: "tool_call",
+        tool: "send_email",
+        input: { to: "jamie.fox@gmail.com", subject: "Dinner Thursday", body: "See you Thursday at 7!" },
+      }),
+    );
+    expect(email.verdict).toBe("proceed");
+    const reminder = await p.checkAction(
+      ev(u, { kind: "tool_call", tool: "create_reminder", input: { title: "Buy flowers", due: "2026-10-29" } }),
+    );
+    expect(reminder.verdict).toBe("proceed");
+    // The step the identifier belongs to is still checked.
+    const pay = await p.checkAction(
+      ev(u, { kind: "tool_call", tool: "send_payment", input: { payee: "Tyrell Bio", reference: "INV-4821" } }),
+    );
+    expect(pay.verdict).toBe("finding");
+  });
+
+  test("a retry that differs only in a fresh request id is the agent's informed choice", async () => {
+    const { p } = partner({ actionCheck: true });
+    const u = user("u1");
+    await p.observe(
+      ev(u, { kind: "user_message", text: "Tyrell Bio says invoice INV-4821 is overdue. Please pay it." }),
+      { waitMs: 1_000 },
+    );
+    const call = (id: string) =>
+      ev(u, {
+        kind: "tool_call",
+        tool: "send_payment",
+        input: { payee: "Tyrell Bio", reference: "INV-4821", request_id: id },
+      });
+    expect((await p.checkAction(call("r0"))).verdict).toBe("finding");
+    expect(await p.checkAction(call("r1"))).toMatchObject({ verdict: "proceed", reason: "repeat" });
   });
 
   test("paying an invoice already paid is a finding; one that names it as paid proceeds", async () => {
