@@ -142,7 +142,24 @@ call); that bar is not among this choice's constraints.
 
 ### Latency tier (realistic, 3 users × 6 sessions, real time, drafts, seeds 41–44) — in-sample
 
-LATENCY_TABLE
+`bench.ts --latency` shape (`quality-cli.ts --users 3 --sessions 6 --planner --time 1`, perfect judge modelled at
+900 ms), 139 must facts per configuration; delivery percentiles are per-seed means. Runs went 4–5 at a time on a
+shared 4-CPU machine; five ALL runs were cut by a time limit and rerun alone. Small samples: read the medians, not
+the tails.
+
+| Config | Judge | Delivery p50 / p95 (ms) | Observe p50 (ms) | Recall | Precision | Calls / lookup | Process CPU (4 seeds) |
+|---|---|---|---|---|---|---|---|
+| H | none | 2,725 / 5,368 | 0.31 | .338 (47) | .639 | 7.76 | 21.4 s |
+| H | perfect | 3,153 / 33,769 | 0.34 | .460 (64) | .948 | 7.87 | 21.1 s |
+| R | none | 8 / 5,024 | 0.46 | .381 (53) | .659 | 8.65 | 23.7 s |
+| R | perfect | 2,762 / 21,560 | 0.46 | .540 (75) | .962 | 8.15 | 25.3 s |
+| ALL | none | 683 / 5,153 | 0.48 | .446 (62) | .601 | 0.81 | 28.0 s |
+| ALL | perfect | 2,596 / 6,261 | 0.47 | .784 (109) | .990 | 0.87 | 28.1 s |
+
+H matches the anticipation track's tier (2,723 / 5,367 ms with no model). With no model, R's median delivery is on
+the observe call itself (anticipation's early decision from what the draft's prefetch brought); with a judge the slow
+path decides, and the median moves little. ALL's p95 with a judge falls 33.8 s → 6.3 s: with sources answered
+locally, judged lookups no longer wait on connectors.
 
 ### Where the time goes (telemetry spans, funnel, H and ALL) — in-sample
 
