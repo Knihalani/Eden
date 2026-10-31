@@ -86,6 +86,13 @@ economy starts cold for each new user, so a user's first lookups make the wider 
 learned which to skip (8.4 calls per task in the per-task funnel, which builds a new engine each task). The register's
 background sweep (D51) added calls (10.4 per task) and was removed with it.
 
+Anticipation (proposed D56, `anticipate`, off by default; docs/research/moon-anticipate.md) adds no model call on any
+path: its predictions are fixed linear reads of an event's head, and its prefetches are source calls within
+`anticipateCalls` (4 per event, `probeCalls` for a draft) and `anticipateSessionCalls` (24 per session). Measured
+in-sample: source calls +1.0% to +3.5% in simulation, +3.9% connector searches per task in the dev funnel with a draft
+lead-in; with the perfect judge, model calls per turn 0.213 → 0.226 and $0.0170 → $0.0182 per 1,000 turns (realistic,
+seeds 41–44: more lookups reach the judge with candidates).
+
 The non-model costs (source API calls, hosting) are not modelled yet. Source calls may dominate for some connectors;
 measure them per connector in M2. The query planner (D28), on by default in the server since D33, adds no model call.
 After its iterations it makes 1.36–1.47x planner-off's source calls per lookup in the simulation at time 0 and

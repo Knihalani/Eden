@@ -12,6 +12,17 @@ describe("checkEvent", () => {
     expect(checkEvent({ ...scope, kind: "external", source: "gmail", text: "New mail from Dana" }).ok).toBe(true);
   });
 
+  test("a user message is a draft only when draft is true; an agent message never is", () => {
+    const d = checkEvent({ ...scope, kind: "user_message", text: "move my lunch with", draft: true });
+    expect(d.ok && d.value.kind === "user_message" && d.value.draft).toBe(true);
+    for (const draft of ["true", 1, false, null]) {
+      const r = checkEvent({ ...scope, kind: "user_message", text: "hi", draft });
+      expect(r.ok && "draft" in r.value).toBe(false);
+    }
+    const a = checkEvent({ ...scope, kind: "agent_message", text: "hi", draft: true });
+    expect(a.ok && "draft" in a.value).toBe(false);
+  });
+
   test("rejects unknown kinds, bad ids and missing text with a message", () => {
     expect(checkEvent({ ...scope, kind: "nope" })).toEqual({ ok: false, error: "unknown event kind: nope" });
     expect(checkEvent({ ...scope, tenantId: "a b", kind: "session_end" }).ok).toBe(false);

@@ -10,3 +10,4 @@ export type { ShadowRecord, ShadowSink, Trace, TraceSink } from "./trace";
 export { judgeMessages, parseJudge } from "./judge";
 export { timeWindow } from "./grounding";
 export { requestedRange } from "./probes";
+export { predict } from "./anticipate";
