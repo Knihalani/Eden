@@ -86,6 +86,7 @@ import {
   PERSISTABLE_KINDS,
   termIds,
 } from "./text";
+import { SpanStats, Tracer, type SpanSink, type SpanStat } from "./spans";
 import type { ShadowRecord, ShadowSink, Trace, TraceSink } from "./trace";
 import { distinctiveTokens, showsUse, type Outstanding } from "./usage";
 
@@ -111,6 +112,11 @@ export interface PartnerDeps {
   planner?: QueryPlanner;
   /** Receives the planner's shadow lookups when `planner.mode` is "shadow". */
   onShadow?: ShadowSink;
+  /**
+   * Receives each finished span (`spans.ts`): every phase of every event, with wall and CPU time, content-free. With
+   * neither this nor `config.spans`, no span is made: each phase costs one null check.
+   */
+  onSpan?: SpanSink;
 }
 
 /** An outcome already written to the source map, kept so explicit feedback can correct it. */
@@ -172,6 +178,8 @@ interface Cue {
   offset: number;
   /** The request arrived from outside the conversation (a new email): probed whatever its wording (`probeWhen`). */
   external?: boolean;
+  /** With spans on, the span this lookup's phases are children of (`spans.ts`). */
+  span?: number;
 }
 
 /**
@@ -276,15 +284,43 @@ export class ContextPartner {
   private readonly fanout: SourceFanout;
   /** What each user's probes bring back (`probeFresh`, `probeYield`). */
   private readonly economy = new ProbeEconomy();
+  /** Span tracing (`spans.ts`): null when off, so each phase's call site is one null check. */
+  private readonly spans: Tracer | null;
+  private readonly stats: SpanStats | null;
 
   constructor(private readonly deps: PartnerDeps) {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
     this.now = deps.now ?? Date.now;
     const maxText = deps.cache.maxTextChars;
+    const stats = this.config.spans ? new SpanStats() : null;
+    const sink = deps.onSpan;
+    this.stats = stats;
+    this.spans =
+      stats || sink
+        ? new Tracer((x) => {
+            stats?.record(x);
+            sink?.(x);
+          })
+        : null;
+    const gate = deps.gatePool
+      ? pooledSanitizer(deps.gatePool, maxText)
+      : (items: ContextItem[]) => items.map((i) => sanitizeItem(i, maxText));
+    const spans = this.spans;
     this.fanout = new SourceFanout({
-      sanitize: deps.gatePool
-        ? pooledSanitizer(deps.gatePool, maxText)
-        : (items) => items.map((i) => sanitizeItem(i, maxText)),
+      // With spans on, the gate's span is a child of the source call whose page it redacts (`Tracer.page`).
+      sanitize: spans
+        ? (items, signal) => {
+            // An empty page is no work: no span (the gate's spans are the most numerous, half of them empty).
+            if (items.length === 0) return gate(items, signal);
+            const sp = spans.open("sanitize", spans.pageOf(items), { items: items.length });
+            const out = gate(items, signal);
+            if (!(out instanceof Promise)) {
+              spans.close(sp);
+              return out;
+            }
+            return out.finally(() => spans.close(sp, { async: true }));
+          }
+        : gate,
       // One clock for the whole engine: rate limits, result freshness and breakers run on the same time as the
       // cache and sessions (an injected clock that skipped the fan-out made simulated time hit real-time limits).
       now: this.now,
@@ -293,20 +329,29 @@ export class ContextPartner {
 
   async observe(event: AgentEvent, options: { waitMs?: number } = {}): Promise<ObserveResult> {
     const t0 = performance.now();
+    const spans = this.spans;
+    const root = spans?.open("observe", 0, { kind: event.kind });
     if (event.kind === "session_end") {
       const ended = this.sessions.get(sessionKey(event));
       if (ended) this.close(ended, true);
+      if (root) spans!.close(root);
       return { injection: null, pending: false };
     }
     const s = this.session(event);
     s.turn++;
+    const prep = spans?.open("observe.prep", root!.id);
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const text = sanitizeForStore(head(eventText(event), this.config.maxEventChars));
     const terms = text ? distinctTermIds(text, s.vocab) : NO_TERMS;
     this.checkUsage(s, event, terms);
     this.remember(s, event, text, terms);
+    if (prep) spans!.close(prep, { terms: terms.length });
+    // The decision this event's trace records, for the root span (a fixed word, no content).
+    let decided = "";
+    let waited = false;
 
-    const trace = (decision: Trace["decision"], reason: string, extra: Partial<Trace> = {}) =>
+    const trace = (decision: Trace["decision"], reason: string, extra: Partial<Trace> = {}) => {
+      decided = decision;
       this.trace({
         sessionId: s.id,
         turn: s.turn,
@@ -320,8 +365,18 @@ export class ContextPartner {
         itemIds: [],
         ...extra,
       });
+    };
     const reply = (injection: Injection | null): ObserveResult => {
       if (injection) this.handOut(s, injection);
+      if (root) {
+        spans!.close(root, {
+          session: s.id,
+          turn: s.turn,
+          decision: decided || "lookup",
+          delivered: injection !== null,
+          ...(waited ? { async: true } : {}),
+        });
+      }
       return { injection, pending: s.inflight !== null || s.pending.length > 0 };
     };
 
@@ -333,10 +388,16 @@ export class ContextPartner {
     if (event.kind === "user_message") s.situation = classifySituation(text);
     const cue = buildCue(text, terms, s.vocab, event.at, this.deps.cache.offsetOf(s.scope), this.config.probes);
     if (event.kind === "external") cue.external = true;
+    if (root) cue.span = root.id;
     const last = s.cues.get(cue.key);
     const repeat = last !== undefined && s.turn - last < this.config.cueCooldownTurns;
 
-    const fast = this.confident(this.rank(s, cue), cue);
+    const ranking = spans?.open("fast.rank", cue.span);
+    const ranked = this.rank(s, cue);
+    if (ranking) spans!.close(ranking, { candidates: ranked.length });
+    const sure = spans?.open("fast.confident", cue.span);
+    const fast = this.confident(ranked, cue);
+    if (sure) spans!.close(sure, { sure: fast.length });
     // A stale cached copy is not delivered from here: the slow path re-reads it first (D40). A cue in cooldown is not
     // looked up again, but the cache may hold something new for it (another question about the same person).
     if (fast.length > 0 && !this.stale(s, fast)) {
@@ -369,6 +430,7 @@ export class ContextPartner {
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
     const late = new Promise<"late">((r) => (timer = setTimeout(() => r("late"), waitMs)));
+    waited = true;
     const result = await Promise.race([slow, late]);
     clearTimeout(timer);
     if (result === "late") {
@@ -389,6 +451,8 @@ export class ContextPartner {
 
   async ask(request: AskRequest): Promise<AskResponse> {
     const t0 = performance.now();
+    const spans = this.spans;
+    const root = spans?.open("ask", 0, { async: true });
     const s = this.session(request);
     // An ask-only session (an MCP client) never runs observe, which keeps the session vocabulary bounded.
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
@@ -401,9 +465,13 @@ export class ContextPartner {
       this.deps.cache.offsetOf(s.scope),
       this.config.probes,
     );
+    if (root) cue.span = root.id;
     const limit = request.maxItems ?? 5;
     const { calls: sourceCalls, plans, probed } = await this.searchLive(s, cue, this.config.askSources);
+    const ranking = spans?.open("rank", cue.span);
     const scored = this.rank(s, cue, { ignoreLedger: true, probed });
+    if (ranking) spans!.close(ranking, { candidates: scored.length });
+    const grounding = spans?.open("ground", cue.span);
     // What the question's people and days ground comes first (D44); a named day's other events only through it, so
     // a question about a topic is not padded with that day's calendar.
     const onDay = (x: Scored) => cue.time?.days.has(startDay(x.item) ?? "") === true;
@@ -413,10 +481,13 @@ export class ContextPartner {
       scored.filter((x) => x.score >= this.config.candidateScore || onDay(x)),
       "ask",
     ).items;
+    if (grounding) spans!.close(grounding, { grounded: grounded.length });
     const items = [...grounded, ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x))]
       .slice(0, limit)
       .map((x) => x.item);
+    const rendering = spans?.open("render", cue.span);
     let answer = items.length ? renderPacket(items, { maxBytes: 4_000 }) : "Nothing in the connected sources.";
+    if (rendering) spans!.close(rendering, { items: items.length });
     let usedModel = false;
     let costUsd = 0;
     const reservation =
@@ -424,6 +495,7 @@ export class ContextPartner {
         ? this.charge(s, this.config.estimatedAnswerUsd)
         : null;
     if (reservation && this.deps.model) {
+      const calling = spans?.open("model", cue.span, { async: true, role: "answer" });
       try {
         const res = await this.deps.model.chat({
           messages: answerMessages(question, s.window.join("\n"), items),
@@ -437,8 +509,10 @@ export class ContextPartner {
         if (res.text.trim() && !res.truncated) answer = renderAnswer(res.text);
         usedModel = true;
         costUsd = res.costUsd;
+        if (calling) spans!.close(calling, modelAttrs(res));
       } catch {
         this.settle(reservation, 0);
+        if (calling) spans!.close(calling, { error: true });
       }
     }
     if (items.length && !s.closed) {
@@ -466,6 +540,7 @@ export class ContextPartner {
       itemIds: items.map((i) => i.id),
       ...(plans ? { plans } : {}),
     });
+    if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "answer", delivered: items.length > 0 });
     return { answer, citations: citationsOf(items), usedModel, costUsd, latencyMs };
   }
 
@@ -1139,6 +1214,7 @@ export class ContextPartner {
   }> {
     const all = await this.deps.sources(s.scope).catch((): Source[] => []);
     if (all.length === 0 || s.closed) return { calls: 0 };
+    const routing = this.spans?.open("route", cue.span);
     const ranked = this.deps.sourceMap.route({
       scope: s.scope,
       entities: cue.entities,
@@ -1146,6 +1222,7 @@ export class ContextPartner {
       sourceIds: all.map((x) => x.id),
       limit,
     });
+    if (routing) this.spans!.close(routing, { sources: ranked.length });
     const found = ranked.map((r) => all.find((x) => x.id === r.sourceId)!).filter(Boolean);
     // Serving through the planner only in "serve" mode; in "shadow" the lookup is served as without one.
     const planner = this.deps.planner?.mode === "serve" ? this.deps.planner : undefined;
@@ -1170,11 +1247,15 @@ export class ContextPartner {
     // The fan-out's deadline for this lookup, so the planner's cascade sends only the calls that can still answer. A
     // listing goes to each source as it is: the planner's shapes are ways of sending words, and it has none.
     const deadlineAt = performance.now() + this.config.sourceTimeoutMs;
+    const spans = this.spans;
+    const searchSpan = spans?.open("search", cue.span, { async: true, listing });
+    // With spans on, each call a source answers is a child span of this search (`traced`).
+    const sendTo = searchSpan ? (xs: Source[]) => xs.map((x) => this.traced(x, searchSpan.id)) : (xs: Source[]) => xs;
     // With `probeShare`: what the planner and the probes of this lookup send alike is sent once (`SharedCalls`).
     const shared: SharedCalls | undefined = this.config.probeShare ? new Map() : undefined;
     const chosen =
       planner && !listing
-        ? found.map(
+        ? sendTo(found).map(
             (x) =>
               new PlannedSource(
                 x,
@@ -1185,8 +1266,8 @@ export class ContextPartner {
               ),
           )
         : listing
-          ? listers
-          : found;
+          ? sendTo(listers)
+          : sendTo(found);
     // Probes (`probe`) go out with the lookup, not after it: the slow path waits for the slower of the two, not both.
     const probeThis =
       this.config.probeWhen === "always" ||
@@ -1215,6 +1296,7 @@ export class ContextPartner {
         ? this.probe(s, cue, found, all, listing, probed, settled, shared).catch(() => {})
         : null;
     const outcomes = await searching;
+    if (searchSpan) spans!.close(searchSpan, outcomeAttrs(outcomes));
     const plans = planner
       ? chosen.flatMap((x) => {
           const last = (x as PlannedSource).last;
@@ -1225,7 +1307,11 @@ export class ContextPartner {
     if (s.closed) return result; // Forgotten or ended mid-search: keep nothing.
     // One shadow lookup per session at a time: shadowing must not pile up work behind a slow connector.
     if (this.deps.planner?.mode === "shadow" && !s.shadowing) {
-      s.shadowing = this.shadowLookup(s, found, cue, outcomes).finally(() => (s.shadowing = undefined));
+      const shadowSpan = spans?.open("shadow", cue.span, { async: true });
+      s.shadowing = this.shadowLookup(s, found, cue, outcomes).finally(() => {
+        s.shadowing = undefined;
+        if (shadowSpan) spans!.close(shadowSpan);
+      });
     }
     for (let k = 0; k < outcomes.length; k++) {
       const o = outcomes[k]!;
@@ -1236,9 +1322,10 @@ export class ContextPartner {
       // Mentions are recorded for items new to the cache or changed, so an item many lookups return is not counted
       // each time (that let one item dominate routing, and was ~10% of server CPU). They are written with the put,
       // before the next yield: a session closing in between must not leave items cached whose mentions never land.
-      this.store(s, o.items);
+      this.store(s, o.items, cue.span);
     }
     if (probing) {
+      const graceSpan = spans?.open("probes.grace", cue.span, { async: true });
       // The lookup waits at most `probeGraceMs` past its own search for the probes: a slow probe must not hold up
       // what the lookup found. One still running finishes on its own and caches what it finds for later turns; this
       // lookup ranks what the probes found by then, and counts the calls they had sent.
@@ -1246,6 +1333,7 @@ export class ContextPartner {
       let timer: ReturnType<typeof setTimeout> | undefined;
       await Promise.race([probing, new Promise<void>((done) => (timer = setTimeout(done, grace)))]);
       clearTimeout(timer);
+      if (graceSpan) spans!.close(graceSpan);
       // What the request's own search returned, beside the probes' finds: an item both found is twice supported.
       const looked = outcomes.flatMap((o) => o.items.map((i) => i.id));
       // What the lookup's own search found too is not a probe's contribution (`probeYield`).
@@ -1281,6 +1369,8 @@ export class ContextPartner {
   ): Promise<void> {
     const lanes = new Map<string, Promise<unknown>>();
     const budget = this.config.probeCalls;
+    const spans = this.spans;
+    const probesSpan = spans?.open("probes", cue.span, { async: true });
     // Calls the consequence probe made (outside `budget`).
     let extra = 0;
     const deadline = performance.now() + this.config.sourceTimeoutMs;
@@ -1292,7 +1382,25 @@ export class ContextPartner {
       window?: SearchQuery["window"],
       keep = true,
       onAnswer?: (sourceId: string, page: ContextItem[]) => void,
-    ) => {
+    ): Promise<ContextItem[]> => {
+      if (!spans) return sendOne(kind, sources, text, window, keep, onAnswer, 0);
+      const sp = spans.open(`probe.${kind}`, probesSpan!.id, { async: true, sources: sources.length });
+      const callsBefore = out.calls;
+      try {
+        return await sendOne(kind, sources, text, window, keep, onAnswer, sp.id);
+      } finally {
+        spans.close(sp, { calls: out.calls - callsBefore });
+      }
+    };
+    const sendOne = async (
+      kind: ProbeKind,
+      sources: Source[],
+      text: string,
+      window: SearchQuery["window"] | undefined,
+      keep: boolean,
+      onAnswer: ((sourceId: string, page: ContextItem[]) => void) | undefined,
+      parent: number,
+    ): Promise<ContextItem[]> => {
       const key = `${text}|${window ? `${window.start}/${window.end}` : ""}|${sources.map((x) => x.id).join(",")}`;
       // Probed recently by this user (any of their sessions): its finds at no call, while every one is still cached.
       const hits = this.deps.cache.probeHits(s.scope, key, this.config.probeMemoMs, this.now());
@@ -1353,7 +1461,10 @@ export class ContextPartner {
           const items = await had.catch(() => null);
           if (items) return { sourceId: source.id, status: "cached", items, latencyMs: 0 };
         }
-        const run = this.fanout.search([source], query, { timeoutMs: left, signal: s.abort.signal });
+        const run = this.fanout.search([parent ? this.traced(source, parent) : source], query, {
+          timeoutMs: left,
+          signal: s.abort.signal,
+        });
         if (sk) {
           const answered = new Set(["ok", "cached", "stale"]);
           shared!.set(
@@ -1412,7 +1523,7 @@ export class ContextPartner {
           this.economy.called(s.scope, kind, o.sourceId, fresh);
         }
       }
-      if (!s.closed) this.store(s, items);
+      if (!s.closed) this.store(s, items, parent);
       if (keep) for (const i of items) if (!kept.includes(i.id)) kept.push(i.id);
       // Only a complete answer is remembered: a source that failed or timed out is asked again next time.
       if (outcomes.length === to.length && live.length === to.length && outcomes.every((o) => o.status === "ok")) {
@@ -1472,7 +1583,10 @@ export class ContextPartner {
           send(i === 0 ? "person" : "second", routeFor(q, i === 0 ? wide : c.probeSecondSources), q),
         ),
       );
-      for (const org of off.has("org") ? [] : orgsOf(people, first.flat()).slice(0, 1)) {
+      const reading = off.has("org") ? undefined : spans?.open("orgs", probesSpan!.id);
+      const orgs = off.has("org") ? [] : orgsOf(people, first.flat()).slice(0, 1);
+      if (reading) spans!.close(reading, { orgs: orgs.length });
+      for (const org of orgs) {
         if (!cue.entities.includes(org)) await send("org", routeFor(org), org);
       }
     })();
@@ -1493,6 +1607,7 @@ export class ContextPartner {
       // Last: a source's probe calls go one at a time, and the request's own probes go first.
       ...(cls ? [this.consequence(s, cls, all, found, send, out)] : []),
     ]);
+    if (probesSpan) spans!.close(probesSpan, { calls: out.calls });
   }
 
   /**
@@ -1583,8 +1698,13 @@ export class ContextPartner {
   }
 
   /** Caches sanitized items and records the entity mentions of those new to the cache or changed. */
-  private store(s: Session, items: ContextItem[]): void {
+  private store(s: Session, items: ContextItem[], parent = 0): void {
+    const spans = this.spans;
+    const putting = items.length > 0 ? spans?.open("cache.put", parent, { items: items.length }) : undefined;
     const added = this.deps.cache.put(s.scope, items, this.now(), true);
+    if (putting) spans!.close(putting, { added: added.length });
+    if (added.length === 0) return;
+    const noting = spans?.open("mentions", parent, { items: added.length });
     const mentions = added.map((item) => ({
       sourceId: item.sourceId,
       entities: extractTypedEntities(`${item.title}. ${item.text}`)
@@ -1593,6 +1713,7 @@ export class ContextPartner {
         .map((e) => e.text),
     }));
     if (mentions.length > 0) this.deps.sourceMap.recordMentionsMany(s.scope, mentions, this.now());
+    if (noting) spans!.close(noting);
   }
 
   /** Whether any of these cached items was fetched longer ago than `refreshAfterMs` (refreshing on). */
@@ -1612,6 +1733,20 @@ export class ContextPartner {
   private async refresh(s: Session, cue: Cue): Promise<number> {
     const c = this.config;
     if (c.refreshAfterMs <= 0 || c.maxRefreshes <= 0 || s.closed) return 0;
+    const spans = this.spans;
+    if (!spans) return this.refreshOnce(s, cue, 0);
+    const sp = spans.open("refresh", cue.span, { async: true });
+    let fetched = 0;
+    try {
+      fetched = await this.refreshOnce(s, cue, sp.id);
+      return fetched;
+    } finally {
+      spans.close(sp, { fetches: fetched });
+    }
+  }
+
+  private async refreshOnce(s: Session, cue: Cue, parent: number): Promise<number> {
+    const c = this.config;
     const now = this.now();
     const stale = this.rank(s, cue)
       .filter((x) => x.score >= c.candidateScore)
@@ -1624,7 +1759,9 @@ export class ContextPartner {
       const source = all.find((a) => a.id === x.item.sourceId);
       // A ref the gate redacted, or Eden's own content hash, cannot be asked for again: no call, no rate token.
       const fetchable = !x.item.ref.includes(REDACTED) && !x.item.ref.startsWith("eden-h-");
-      return source?.fetch && fetchable ? [{ source, ref: x.item.ref }] : [];
+      return source?.fetch && fetchable
+        ? [{ source: parent ? this.traced(source, parent) : source, ref: x.item.ref }]
+        : [];
     });
     if (jobs.length === 0 || s.closed) return 0;
     const fresh = await Promise.all(
@@ -1636,6 +1773,7 @@ export class ContextPartner {
     this.store(
       s,
       fresh.filter((x): x is ContextItem => x !== null),
+      parent,
     );
     return jobs.length;
   }
@@ -1702,7 +1840,26 @@ export class ContextPartner {
     );
   }
 
+  /** The slow path (`lookup`), under its own span when spans are on: its phases are that span's children. */
   private async slowPath(s: Session, cue: Cue, t0: number, eventKind: string): Promise<Injection | null> {
+    const spans = this.spans;
+    if (!spans) return this.lookup(s, cue, t0, eventKind);
+    const sp = spans.open("slow", cue.span, { async: true });
+    cue.span = sp.id;
+    let injection: Injection | null = null;
+    try {
+      injection = await this.lookup(s, cue, t0, eventKind);
+      return injection;
+    } finally {
+      // The path that delivered (sources, grounded-…, fallback, model): the reason's fixed prefix, no cue id.
+      spans.close(sp, {
+        delivered: injection !== null,
+        ...(injection ? { how: injection.reason.split(":")[0]! } : {}),
+      });
+    }
+  }
+
+  private async lookup(s: Session, cue: Cue, t0: number, eventKind: string): Promise<Injection | null> {
     // The turn that triggered the lookup. Traces report it, not the turn current when the lookup finishes: later
     // events may arrive meanwhile, and evals attribute deliveries by this field.
     const turn = s.turn;
@@ -1738,15 +1895,19 @@ export class ContextPartner {
       if (s.closed) return null;
       sourceCalls += await this.refresh(s, cue);
       if (s.closed) return null;
+      const spans = this.spans;
       // This lookup's probe finds, its own (never another turn's or a concurrent ask's).
       const consIds = new Set(consequence?.ids ?? []);
+      const ranking = spans?.open("rank", cue.span);
       const scored = this.rank(s, cue, {
         probed: consIds.size > 0 ? [...(probedIds ?? []), ...consIds] : probedIds,
       });
+      if (ranking) spans!.close(ranking, { candidates: scored.length });
       // A consequence find counts only where the conflict test, tied by its class's words, says it conflicts with the
       // request (`consequenceProbe`): a freeze over the day a release is asked for, not one last month; and not a
       // limit on an amount the request does not state ("travel over £500 needs pre-approval" for printer paper).
       const ties = consequence ? classTies(consequence.cls) : undefined;
+      const conflicting = consIds.size > 0 ? spans?.open("conflict", cue.span) : undefined;
       const bridged = new Set(
         consIds.size > 0
           ? scored
@@ -1759,7 +1920,10 @@ export class ContextPartner {
               .map((x) => x.item.id)
           : [],
       );
+      if (conflicting) spans!.close(conflicting, { bridged: bridged.size });
+      const confiding = spans?.open("confident", cue.span);
       const sure = this.confident(scored, cue);
+      if (confiding) spans!.close(confiding, { sure: sure.length });
       // With `judgeConfident` and a judge to ask, what scores as sure is judged with the rest in the same call: the
       // no-model bar is right about half the time (docs/research/probes.md), the judge more often.
       // One sure item both the request's search and a probe found is corroborated: delivered without the call
@@ -1828,7 +1992,9 @@ export class ContextPartner {
         // record of names, ground and fall back as typed ones do. Only here: probes and ranking keep the cue as typed.
         const named = this.config.recoverNames ? this.withRecoveredNames(s, cue) : cue;
         // Grounding reads every candidate, not only the judge's few: a day's events rank after every word match.
+        const grounding = spans?.open("ground", cue.span, { candidates: eligible.length });
         const grounded = this.grounded(s, named, eligible, eventKind, bridged, consequence?.cls);
+        if (grounding) spans!.close(grounding, { grounded: grounded.items.length });
         if (grounded.items.length > 0) {
           const items = grounded.items;
           done(
@@ -1838,7 +2004,9 @@ export class ContextPartner {
           );
           return this.deliver(s, items, "proactive", `grounded-${grounded.how}:${cue.id}`, cue);
         }
+        const falling = spans?.open("fallback", cue.span);
         const top = this.fallback(unsure, this.config.fallbackAgree ? agreed(probed, lookedIds) : undefined, named);
+        if (falling) spans!.close(falling, { picked: top !== null });
         if (top) {
           done("sources", `fallback${reasonPrefix}:${cue.id}`, [top.item]);
           return this.deliver(s, [top], "proactive", `fallback:${cue.id}`, cue);
@@ -1850,6 +2018,7 @@ export class ContextPartner {
       // "week", "calendar") says "none" almost always, so the call is not made and the lookup ends silent. A candidate
       // is tied by a probe's find, a day the request names, two of its words, or one word few of the user's items hold.
       if (this.deps.model && this.config.judgeTied) {
+        const tying = spans?.open("judge.tied", cue.span);
         const rare = this.rareTerms(s, cue);
         // A consequence find that conflicts with the request (`bridged`) is tied by its class's words, which the
         // request never uses: without this, the judge never sees the constraint the probe was sent to find.
@@ -1859,7 +2028,9 @@ export class ContextPartner {
           onNamedDay(x) ||
           x.matched >= 2 ||
           this.holdsAny(s, x, rare);
-        if (!unsure.some(tied)) {
+        const any = unsure.some(tied);
+        if (tying) spans!.close(tying, { tied: any });
+        if (!any) {
           done("silent", "judge: untied");
           return null;
         }
@@ -1868,15 +2039,19 @@ export class ContextPartner {
       if (!this.deps.model || !reservation) return noModel(this.deps.model ? "no model budget" : "no model", "");
       const candidates = unsure.map((x) => x.item);
       let res: Awaited<ReturnType<Model["chat"]>>;
+      const building = spans?.open("judge.build", cue.span, { candidates: candidates.length });
+      const messages = judgeMessages(
+        s.window.join("\n"),
+        candidates,
+        this.config.probes,
+        this.config.compactInjection ? focusOf(cue) : undefined,
+        { windowChars: this.config.judgeWindowChars, itemBytes: this.config.judgeItemBytes },
+      );
+      if (building) spans!.close(building, { chars: messages.reduce((n, m) => n + m.content.length, 0) });
+      const calling = spans?.open("model", cue.span, { async: true, role: "judge" });
       try {
         res = await this.deps.model.chat({
-          messages: judgeMessages(
-            s.window.join("\n"),
-            candidates,
-            this.config.probes,
-            this.config.compactInjection ? focusOf(cue) : undefined,
-            { windowChars: this.config.judgeWindowChars, itemBytes: this.config.judgeItemBytes },
-          ),
+          messages,
           cacheKey: userCacheKey(s.scope),
           maxTokens: JUDGE_MAX_TOKENS,
           reasoning: "low",
@@ -1884,19 +2059,23 @@ export class ContextPartner {
           signal: s.abort.signal,
         });
       } catch {
+        if (calling) spans!.close(calling, { error: true });
         this.settle(reservation, 0);
         if (s.closed) return null;
         // A failing model (bad key, spend limit, outage) is treated as no model, never worse than none (D41). The
         // reason keeps the cause, so a broken key does not look like a healthy keyless server in traces.
         return noModel("model error", ":model-error");
       }
+      if (calling) spans!.close(calling, modelAttrs(res));
       modelCalls = 1;
       costUsd = res.costUsd;
       this.settle(reservation, res.costUsd);
       if (s.closed) return null;
+      const parsing = spans?.open("judge.parse", cue.span);
       const picked = parseJudge(res.text, candidates.length)
         .slice(0, this.config.maxItemsPerInjection)
         .map((i) => unsure[i]!);
+      if (parsing) spans!.close(parsing, { picked: picked.length });
       // A verdict cut off at the token cap is no verdict: the no-model path decides, as for a failing call (D41,
       // D45), rather than reading the cut-off text as "none".
       if (picked.length === 0 && res.truncated) return noModel("model truncated", ":model-truncated");
@@ -1967,6 +2146,23 @@ export class ContextPartner {
     cue: Cue,
     shown?: string,
   ): Injection {
+    const spans = this.spans;
+    const sp = spans?.open("deliver", cue.span, { items: scored.length });
+    const injection = this.build(s, scored, mode, reason, cue, sp?.id ?? 0, shown);
+    if (sp) spans!.close(sp, { bytes: injection.text.length });
+    return injection;
+  }
+
+  private build(
+    s: Session,
+    scored: Scored[],
+    mode: InjectionMode,
+    reason: string,
+    cue: Cue,
+    parent: number,
+    shown?: string,
+  ): Injection {
+    const spans = this.spans;
     // Whatever path delivered them, a probe that first brought one in paid for its call (`probeYield`).
     if (this.config.probeYield) {
       this.economy.reached(
@@ -1983,6 +2179,7 @@ export class ContextPartner {
     );
     const dense = this.config.densePacket && this.config.compactInjection;
     const self = this.config.compactInjection ? this.deps.cache.selfOf(s.scope) : null;
+    const folding = dense ? spans?.open("fold", parent) : undefined;
     const shownItems = dense
       ? foldEchoes(scored, {
           focus: focusOf(cue),
@@ -1991,7 +2188,9 @@ export class ContextPartner {
           rare: (w) => this.deps.cache.isRare(s.scope, w, RARE_SHARE),
         })
       : scored;
+    if (folding) spans!.close(folding, { kept: shownItems.length });
     const items = shownItems.map((x) => x.item);
+    const rendering = spans?.open("render", parent, { items: items.length });
     const injection: Injection = {
       ...s.scope,
       id: newId("inj", this.now()),
@@ -2016,6 +2215,7 @@ export class ContextPartner {
       score: Math.max(...scored.map((x) => x.score)),
       createdAt: this.now(),
     };
+    if (rendering) spans!.close(rendering);
     this.built.set(injection, {
       sourceIds: [...new Set(items.map((i) => i.sourceId))],
       items: items.map((i) => ({ sourceId: i.sourceId, id: i.id })),
@@ -2023,6 +2223,64 @@ export class ContextPartner {
       text: shownText(shown ?? injection.text),
     });
     return injection;
+  }
+
+  /** Per-phase totals of the spans so far (`config.spans`); empty when it is off. */
+  spanStats(): SpanStat[] {
+    return this.stats?.snapshot() ?? [];
+  }
+
+  /**
+   * `source` with each call it answers recorded as a span under `parent` (spans on only): a `source.search` or
+   * `source.fetch` span per call that reaches the connector, so a planner's several calls and a probe's are each seen.
+   * The connector id, the page size and whether it failed: never the query. A call the fan-out answers from its cache
+   * never reaches this, and has no span.
+   */
+  private traced(source: Source, parent: number): Source {
+    const spans = this.spans!;
+    const fetch = source.fetch?.bind(source);
+    return {
+      id: source.id,
+      kind: source.kind,
+      description: source.description,
+      ...(source.listsByTime !== undefined ? { listsByTime: source.listsByTime } : {}),
+      // One `then`, no async frame of its own: a source call is the most frequent span (tracing overhead).
+      search: (query, signal) => {
+        const sp = spans.open("source.search", parent, { async: true, source: source.id, window: !!query.window });
+        const failed = (e: unknown): never => {
+          spans.close(sp, { error: true });
+          throw e;
+        };
+        let pending: Promise<ContextItem[]>;
+        try {
+          pending = source.search(query, signal);
+        } catch (e) {
+          return Promise.reject(e).catch(failed);
+        }
+        return pending.then((page) => {
+          if (page && typeof page === "object") spans.page(page, sp.id);
+          spans.close(sp, { items: Array.isArray(page) ? page.length : 0 });
+          return page;
+        }, failed);
+      },
+      ...(fetch
+        ? {
+            fetch: async (ref: string, scope: Scope, signal: AbortSignal) => {
+              const sp = spans.open("source.fetch", parent, { async: true, source: source.id });
+              try {
+                const item = await fetch(ref, scope, signal);
+                // The fan-out gates `[item]`, a new array: the item names the call.
+                if (item) spans.page(item, sp.id);
+                spans.close(sp, { items: item ? 1 : 0 });
+                return item;
+              } catch (e) {
+                spans.close(sp, { error: true });
+                throw e;
+              }
+            },
+          }
+        : {}),
+    };
   }
 
   private trace(t: Trace): void {
@@ -2035,6 +2293,27 @@ export class ContextPartner {
 }
 
 const NO_TERMS = new Uint32Array(0);
+
+/** A model call's span attributes: tokens, cost and whether it was cut off. Counts only. */
+function modelAttrs(res: {
+  usage: { inputTokens: number; outputTokens: number };
+  costUsd: number;
+  truncated?: boolean;
+}) {
+  return {
+    inputTokens: res.usage.inputTokens,
+    outputTokens: res.usage.outputTokens,
+    costUsd: res.costUsd,
+    truncated: res.truncated === true,
+  };
+}
+
+/** A search's span attributes: how many sources answered each way. */
+function outcomeAttrs(outcomes: readonly FanoutOutcome[]): Record<string, number> {
+  const out: Record<string, number> = { sources: outcomes.length };
+  for (const o of outcomes) out[o.status] = (out[o.status] ?? 0) + 1;
+  return out;
+}
 
 /** Fan-out outcomes with no call to the source behind them. */
 const SKIPPED = new Set<string>(["busy", "limited", "open", "cached"]);
