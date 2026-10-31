@@ -45,6 +45,7 @@ import {
   type Source,
   type SourceResolver,
 } from "@eden/sources";
+import { IntentPatterns, predict, PREDICT_NAMES } from "./anticipate";
 import { nearDuplicate, sanitizedId, sanitizeItem, type ItemCache, type Sketch } from "./cache";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
@@ -154,7 +155,26 @@ interface Session {
   closed: boolean;
   /** The planner's shadow lookup in flight, if any (shadow mode). */
   shadowing?: Promise<void>;
+  /** With `anticipate`: the session's background prefetch, made on its first event. */
+  ant?: Anticipation;
 }
+
+/** A session's anticipation (`anticipate`): its prefetch in flight, the next one waiting, and what it has fetched. */
+interface Anticipation {
+  /** Source calls this session's prefetches made, against `anticipateSessionCalls`. */
+  calls: number;
+  running: Promise<void> | null;
+  /** The latest event that arrived while a prefetch ran: only it is read next (older ones are superseded). */
+  queued: { kind: string; text: string; at: number; lookup: boolean } | null;
+  /** Item ids the prefetches fetched or held ready, newest last (bounded: `MAX_PREFETCHED`). */
+  prefetched: Set<string>;
+  /** Names and days already prefetched in this session (lower case), so each is fetched once per session. */
+  asked: Set<string>;
+}
+
+/** Item ids a session's anticipation remembers as prefetched, and names and days it remembers as asked. */
+const MAX_PREFETCHED = 256;
+const MAX_ASKED = 64;
 
 interface Cue {
   text: string;
@@ -201,6 +221,21 @@ type ProbeSend = (
   keep?: boolean,
   onAnswer?: (sourceId: string, page: ContextItem[]) => void,
 ) => Promise<ContextItem[]>;
+/** How a probe run differs from a lookup's own (`Partner.probe`); `anticipate` uses every one. */
+interface ProbeOpts {
+  /** Source calls it may make (default `probeCalls`). */
+  budget?: number;
+  /** No call at all: what the memo and the economy hold for each query. */
+  offline?: boolean;
+  /** The action class to read or ask (default: `consequenceProbe`'s own). */
+  cls?: ActionClass | null;
+  /** The class is read from what is cached, with no call. */
+  classOffline?: boolean;
+  /** No topic probe (a prefetch has only an event's words, not a request's). */
+  noTopic?: boolean;
+  /** Waited for (at most `probeGraceMs`) before any probe goes out: a prefetch of the same names still running. */
+  after?: Promise<void>;
+}
 const ANSWER_MAX_TOKENS = 1_000;
 /** `densePacket`: a word on fewer than this share of the user's items is rare; an item adding one is no echo. */
 const RARE_SHARE = 0.03;
@@ -276,6 +311,8 @@ export class ContextPartner {
   private readonly fanout: SourceFanout;
   /** What each user's probes bring back (`probeFresh`, `probeYield`). */
   private readonly economy = new ProbeEconomy();
+  /** Which names followed which intents, per user (`anticipate`). */
+  private readonly patterns = new IntentPatterns();
 
   constructor(private readonly deps: PartnerDeps) {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
@@ -297,6 +334,15 @@ export class ContextPartner {
       const ended = this.sessions.get(sessionKey(event));
       if (ended) this.close(ended, true);
       return { injection: null, pending: false };
+    }
+    // A draft the user is still typing is never a request, and moves no turn: with `anticipate` it is read ahead for
+    // what the sent message will need; otherwise it is ignored (no session is even opened for it).
+    if (event.kind === "user_message" && event.draft === true) {
+      if (!this.config.anticipate) return { injection: null, pending: false };
+      const s = this.session(event);
+      const text = sanitizeForStore(head(event.text, this.config.maxEventChars));
+      if (text) this.anticipate(s, "draft", text, event.at, false);
+      return { injection: null, pending: s.inflight !== null || s.pending.length > 0 };
     }
     const s = this.session(event);
     s.turn++;
@@ -326,23 +372,46 @@ export class ContextPartner {
     };
 
     const queued = s.pending.shift() ?? null;
-    if (!wantsLookup(event, text, terms, s.vocab)) {
+    const lookup = wantsLookup(event, text, terms, s.vocab);
+    // `anticipate`: every event with words is read for what the agent will need next, in the background. A request's
+    // own names and days are its lookup's to probe; read from it are its intent's (class, learned names).
+    const tool = event.kind === "tool_call" || event.kind === "tool_result";
+    if (
+      this.config.anticipate &&
+      text &&
+      event.kind !== "agent_message" &&
+      !(tool && this.config.anticipateOff.includes("tools"))
+    ) {
+      this.anticipate(s, event.kind, text, event.at, lookup);
+    }
+    if (!lookup) {
       trace("skipped", event.kind);
       return reply(queued);
     }
     if (event.kind === "user_message") s.situation = classifySituation(text);
     const cue = buildCue(text, terms, s.vocab, event.at, this.deps.cache.offsetOf(s.scope), this.config.probes);
     if (event.kind === "external") cue.external = true;
+    // The request's names are its own lookup's to probe: a later event naming them again prefetches nothing.
+    if (s.ant)
+      this.markAsked(
+        s.ant,
+        cue.entities.map((e) => `n:${e.toLowerCase()}`),
+      );
     const last = s.cues.get(cue.key);
     const repeat = last !== undefined && s.turn - last < this.config.cueCooldownTurns;
 
     const fast = this.confident(this.rank(s, cue), cue);
     // A stale cached copy is not delivered from here: the slow path re-reads it first (D40). A cue in cooldown is not
     // looked up again, but the cache may hold something new for it (another question about the same person).
-    if (fast.length > 0 && !this.stale(s, fast)) {
+    // `anticipate` warms the cache before the request, so the fast path meets what only the slow path met before. With
+    // a judge, the request then goes to the slow path, whose judge sees every candidate the live search adds: a lone
+    // sure item from the cache would end the lookup before the second one that makes it the judge's call.
+    const judges = this.config.anticipate && this.deps.model !== null;
+    if (fast.length > 0 && !this.stale(s, fast) && !judges) {
       this.markCue(s, cue);
       const injection = this.deliver(s, fast, "proactive", `cache:${cue.id}`, cue);
-      trace("fast", cue.id, { itemIds: fast.map((x) => x.item.id) });
+      const ids = fast.map((x) => x.item.id);
+      trace("fast", cue.id, { itemIds: ids, ...this.prefetchedOf(s, ids) });
       if (queued) s.pending.unshift(queued);
       return reply(injection);
     }
@@ -357,11 +426,28 @@ export class ContextPartner {
     }
 
     this.markCue(s, cue);
-    const slow = this.slowPath(s, cue, t0, event.kind).finally(() => {
+    // `anticipate`, with no model: the request is first decided from what is held (the cache, the answers the
+    // prefetches warmed), with no call, and what that delivers is returned now; the slow path runs behind it either way
+    // and, after such a delivery, adds only what is sure or grounded (`slowPath`'s `served`).
+    const early =
+      this.config.anticipate && !this.config.anticipateOff.includes("serve")
+        ? this.early(s, cue, event.kind, t0).catch((): Injection | null => null)
+        : null;
+    const slow = (
+      early
+        ? early.then((pre) => (s.closed ? null : this.slowPath(s, cue, t0, event.kind, pre !== null)))
+        : this.slowPath(s, cue, t0, event.kind)
+    ).finally(() => {
       s.inflight = null;
     });
     s.inflight = slow;
     const queueLater = () => void slow.then((inj) => inj && !s.closed && s.pending.push(inj));
+    const pre = early ? await early : null;
+    if (pre && !s.closed) {
+      queueLater();
+      if (queued) s.pending.unshift(queued);
+      return reply(pre);
+    }
     const waitMs = options.waitMs ?? 0;
     if (queued || waitMs <= 0) {
       queueLater();
@@ -507,6 +593,7 @@ export class ContextPartner {
     this.fanout.forget(scope, sourceId);
     this.deps.planner?.forget(scope, sourceId);
     this.economy.forget(scope, sourceId);
+    this.patterns.forget(scope, sourceId);
   }
 
   get sessionCount(): number {
@@ -1172,6 +1259,9 @@ export class ContextPartner {
     const deadlineAt = performance.now() + this.config.sourceTimeoutMs;
     // With `probeShare`: what the planner and the probes of this lookup send alike is sent once (`SharedCalls`).
     const shared: SharedCalls | undefined = this.config.probeShare ? new Map() : undefined;
+    // `anticipate`: what a prefetch already asked a source for the request's names answers the planner too (its
+    // query per name), as it answers the probes (`probe`'s `recent`).
+    if (shared && this.config.anticipate && s.ant) this.seedShared(s, shared, cue, all);
     const chosen =
       planner && !listing
         ? found.map(
@@ -1212,7 +1302,7 @@ export class ContextPartner {
     const probed: ProbeOut = { calls: 0, kept: [] };
     const probing =
       this.config.probes && probeThis
-        ? this.probe(s, cue, found, all, listing, probed, settled, shared).catch(() => {})
+        ? this.probe(s, cue, found, all, listing, probed, settled, shared, this.lookupOpts(s, cue)).catch(() => {})
         : null;
     const outcomes = await searching;
     const plans = planner
@@ -1278,9 +1368,18 @@ export class ContextPartner {
     out: ProbeOut,
     searched: Promise<unknown>,
     shared?: SharedCalls,
+    opts: ProbeOpts = {},
   ): Promise<void> {
+    if (opts.after) {
+      // A prefetch of the same names still running (`anticipate`): its answers, once in, stand in for these calls.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const grace = new Promise<void>((done) => (timer = setTimeout(done, this.config.probeGraceMs)));
+      await Promise.race([opts.after.catch(() => {}), grace]);
+      clearTimeout(timer);
+      if (s.closed) return;
+    }
     const lanes = new Map<string, Promise<unknown>>();
-    const budget = this.config.probeCalls;
+    const budget = opts.budget ?? this.config.probeCalls;
     // Calls the consequence probe made (outside `budget`).
     let extra = 0;
     const deadline = performance.now() + this.config.sourceTimeoutMs;
@@ -1292,8 +1391,13 @@ export class ContextPartner {
       window?: SearchQuery["window"],
       keep = true,
       onAnswer?: (sourceId: string, page: ContextItem[]) => void,
+      offline = opts.offline === true,
     ) => {
-      const key = `${text}|${window ? `${window.start}/${window.end}` : ""}|${sources.map((x) => x.id).join(",")}`;
+      // With `anticipate`, the same sources in another order are the same probe: an event's prefetch and the request
+      // route a name at different moments (the situation, the mentions recorded in between), and should share it.
+      const ids = sources.map((x) => x.id);
+      if (this.config.anticipate) ids.sort();
+      const key = `${text}|${window ? `${window.start}/${window.end}` : ""}|${ids.join(",")}`;
       // Probed recently by this user (any of their sessions): its finds at no call, while every one is still cached.
       const hits = this.deps.cache.probeHits(s.scope, key, this.config.probeMemoMs, this.now());
       if (hits) {
@@ -1304,14 +1408,30 @@ export class ContextPartner {
       // kind of probe has not been yielding, is not called; its last answer, while still cached, stands in.
       const asked = `${text}|${window ? `${window.start}/${window.end}` : ""}`;
       const reused: ContextItem[] = [];
+      // Offline (`anticipate`'s read at the request, and its class read): what each source last answered to this
+      // query, while still cached, and no call.
+      if (offline) {
+        const now = this.now();
+        for (const source of sources) {
+          const last = this.economy.lastIds(s.scope, source.id, asked);
+          if (last) for (const h of this.deps.cache.hits(s.scope, last, now)) reused.push(h.item);
+        }
+        if (keep) for (const i of reused) if (!kept.includes(i.id)) kept.push(i.id);
+        return reused;
+      }
       let live = sources;
-      if (this.config.probeFresh || this.config.probeYield) {
+      if (this.config.probeFresh || this.config.probeYield || this.config.anticipate) {
         live = [];
         const now = this.now();
         for (const source of sources) {
+          // `anticipate`: asked live at this source within the memo's age (an event's prefetch, most often), its last
+          // answer stands in as the memo's would; the memo itself keeps only answers every source gave in full.
+          const at = this.config.anticipate ? this.economy.askedAt(s.scope, source.id, asked) : null;
+          const recent = at !== null && now - at <= this.config.probeMemoMs;
           const unchanged =
-            this.config.probeFresh &&
-            this.economy.changeChance(s.scope, source.id, asked, now) < this.config.probeFreshFloor;
+            recent ||
+            (this.config.probeFresh &&
+              this.economy.changeChance(s.scope, source.id, asked, now) < this.config.probeFreshFloor);
           const idle =
             !unchanged &&
             this.config.probeYield &&
@@ -1384,18 +1504,22 @@ export class ContextPartner {
       // A page of the probe's own size from each source, even when the call was the planner's (8 items): more would
       // crowd the probes' seats with the judge (live, the judge passed fewer planted items with them).
       const items = outcomes.flatMap((o) => o.items.slice(0, window ? 20 : 5));
+      // `anticipate` with shared calls: the whole answer (the planner's page size) is cached and recorded, so it can
+      // stand in for the planner's own query of the name later (`seedShared`); the probe's finds stay its first five.
+      const whole = window ? 20 : this.config.anticipate && shared ? 8 : 5;
       // A call the fan-out did not make (busy, limited, open, answered from its cache, past the deadline) is no call.
       const unmade = to.length - outcomes.filter((o) => !SKIPPED.has(o.status)).length;
       out.calls -= unmade;
       if (own) extra -= unmade;
       // A consequence probe's answers are always recorded: which of its terms each source was asked, and when, is
       // what rotates them and what its later lookups recall (`consequence`).
-      const learn = this.config.probeFresh || this.config.probeYield || this.config.consequenceProbe;
+      const learn =
+        this.config.probeFresh || this.config.probeYield || this.config.consequenceProbe || this.config.anticipate;
       if (!s.closed && learn) {
         const now = this.now();
         for (const o of outcomes) {
           if (o.status !== "ok") continue;
-          const page = o.items.slice(0, window ? 20 : 5);
+          const page = o.items.slice(0, whole);
           this.economy.answered(s.scope, o.sourceId, asked, page, now, kind === "consequence");
           onAnswer?.(o.sourceId, page);
           // A name of several words teaches how the source searches them (`consequenceProbe` picks its query by it).
@@ -1412,7 +1536,7 @@ export class ContextPartner {
           this.economy.called(s.scope, kind, o.sourceId, fresh);
         }
       }
-      if (!s.closed) this.store(s, items);
+      if (!s.closed) this.store(s, whole > 5 && !window ? outcomes.flatMap((o) => o.items.slice(0, whole)) : items);
       if (keep) for (const i of items) if (!kept.includes(i.id)) kept.push(i.id);
       // Only a complete answer is remembered: a source that failed or timed out is asked again next time.
       if (outcomes.length === to.length && live.length === to.length && outcomes.every((o) => o.status === "ok")) {
@@ -1445,21 +1569,25 @@ export class ContextPartner {
     // A person or organisation goes to the sources most likely to hold them, by the source map's own record of which
     // sources mention which names (any source may, not only the lookup's): three per name, not every source.
     const routeFor = (name: string, limit = c.probePeopleSources) =>
-      this.deps.sourceMap
-        .route({
-          scope: s.scope,
-          entities: [name],
-          situation: s.situation,
-          sourceIds: all.map((x) => x.id),
-          limit,
-        })
-        .map((r) => all.find((x) => x.id === r.sourceId)!)
-        .filter(Boolean);
+      opts.offline
+        ? all
+        : this.deps.sourceMap
+            .route({
+              scope: s.scope,
+              entities: [name],
+              situation: s.situation,
+              sourceIds: all.map((x) => x.id),
+              limit,
+            })
+            .map((r) => all.find((x) => x.id === r.sourceId)!)
+            .filter(Boolean);
     const people = off.has("people") ? [] : cue.entities.slice(0, 2);
     // `probeTopicAlone`: the topic only for a request that names no one (with people, their probes find what the topic
     // would: held-out funnels returned as many planted items without it, at fewer calls).
     const topic =
-      off.has("topic") || (c.probeTopicAlone && people.length > 0) ? "" : topicOf(cue.text.split(" "), cue.entities);
+      opts.noTopic || off.has("topic") || (c.probeTopicAlone && people.length > 0)
+        ? ""
+        : topicOf(cue.text.split(" "), cue.entities);
     // The organisations of the request's people, from what came back for them; what is said of someone's
     // organisation (a hold, a policy) applies to them.
     const byPeople = (async () => {
@@ -1483,7 +1611,14 @@ export class ContextPartner {
     // An imperative or an arriving message, not `isAction` or `ACTS_ON` (which match "tell", "ping" anywhere): a
     // question that mentions a release ("did Sam tell you whether the release went out?") is no release.
     const acts = isImperative(cue.raw) || cue.external === true;
-    const cls = c.consequenceProbe && !off.has("consequence") ? actionClass(cue.raw, acts) : null;
+    const cls =
+      opts.cls !== undefined
+        ? opts.cls
+        : c.consequenceProbe && !off.has("consequence")
+          ? actionClass(cue.raw, acts)
+          : null;
+    // The class read with no call (`anticipate`): the class's queries an event's prefetch sent, as cached.
+    const offlineSend: ProbeSend = (k, src, t, w, keep, on) => send(k, src, t, w, keep, on, true);
     await Promise.all([
       ...windows.map((w) => send("day", listers, "", w)),
       byPeople,
@@ -1491,7 +1626,7 @@ export class ContextPartner {
       // The topic's finds share the request's words, and rank on them; the others get seats of their own.
       ...(topic ? [send("topic", found.slice(0, this.config.probeTopicSources), topic, undefined, false)] : []),
       // Last: a source's probe calls go one at a time, and the request's own probes go first.
-      ...(cls ? [this.consequence(s, cls, all, found, send, out)] : []),
+      ...(cls ? [this.consequence(s, cls, all, found, opts.classOffline ? offlineSend : send, out)] : []),
     ]);
   }
 
@@ -1702,7 +1837,302 @@ export class ContextPartner {
     );
   }
 
-  private async slowPath(s: Session, cue: Cue, t0: number, eventKind: string): Promise<Injection | null> {
+  /** Which candidates a lookup may deliver or seat with the judge: scored above `candidateScore`, or tied otherwise. */
+  private eligible(scored: Scored[], cue: Cue, probed: ReadonlySet<string>, bridged: ReadonlySet<string>): Scored[] {
+    // An event on a day the request names is a candidate whatever it scores on words (D44).
+    const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item) ?? "") === true;
+    // A consequence find that does not conflict is no candidate: it shares nothing with the request but its class.
+    return scored.filter(
+      (x) => x.score >= this.config.candidateScore || onNamedDay(x) || probed.has(x.item.id) || bridged.has(x.item.id),
+    );
+  }
+
+  /**
+   * The consequence finds that conflict with the request (`consequenceProbe`, or `anticipate`'s class read): a freeze
+   * over the day a release is asked for, not one last month; and not a limit on an amount the request does not state
+   * ("travel over £500 needs pre-approval" for printer paper).
+   */
+  private bridgedOf(scored: Scored[], cue: Cue, consequence?: { cls: ActionClass; ids: string[] }): Set<string> {
+    if (!consequence || consequence.ids.length === 0) return new Set();
+    const ids = new Set(consequence.ids);
+    const ties = classTies(consequence.cls);
+    return new Set(
+      scored
+        .filter(
+          (x) =>
+            ids.has(x.item.id) &&
+            !unmeasuredLimit(this.frame(cue), x.item) &&
+            this.verdict(x.item, cue, ties) === "conflict",
+        )
+        .map((x) => x.item.id),
+    );
+  }
+
+  // ── anticipation (`anticipate`, `anticipate.ts`) ──
+
+  /**
+   * Reads an event for what the agent will need next and prefetches it in the background (`prefetch`). One prefetch
+   * per session at a time: an event arriving meanwhile waits, and a later one replaces it (the newest is what the
+   * next request will be closest to). Never throws and never blocks the event.
+   */
+  private anticipate(s: Session, kind: string, text: string, at: number, lookup: boolean): void {
+    const ant = (s.ant ??= { calls: 0, running: null, queued: null, prefetched: new Set(), asked: new Set() });
+    if (s.closed || ant.calls >= this.config.anticipateSessionCalls) return;
+    if (ant.running) {
+      ant.queued = { kind, text, at, lookup };
+      return;
+    }
+    ant.running = this.prefetch(s, ant, kind, text, at, lookup)
+      .catch(() => {})
+      .finally(() => {
+        ant.running = null;
+        const next = ant.queued;
+        ant.queued = null;
+        if (next && !s.closed) this.anticipate(s, next.kind, next.text, next.at, next.lookup);
+      });
+  }
+
+  /**
+   * One event's prefetch: the names it mentions and the days it schedules, as the request's own probes would send
+   * them (person, organisation and day probes, through `probe`, so their answers land in the user's probe memo and
+   * economy), the names the user's history says follow its intent, and its action class's constraint vocabulary.
+   * A request's own names and days are left to its lookup. At most `anticipateCalls` calls (the class query, one
+   * call to one source, on top), and `anticipateSessionCalls` for the session.
+   */
+  private async prefetch(
+    s: Session,
+    ant: Anticipation,
+    kind: string,
+    text: string,
+    at: number,
+    lookup: boolean,
+  ): Promise<void> {
+    const off = this.config.anticipateOff;
+    const offset = this.deps.cache.offsetOf(s.scope);
+    const p = predict(text, at, offset, kind === "external");
+    const fresh = (key: string) => !ant.asked.has(key);
+    // The user's own name is on everything of theirs: never a need. A tool's output names whoever its items do (the
+    // senders, a signature's colleagues, a company): only people the user's items have as parties are worth a call.
+    const self = this.deps.cache.selfOf(s.scope)?.toLowerCase();
+    const tool = kind === "tool_call" || kind === "tool_result";
+    const names =
+      lookup || off.includes("names")
+        ? []
+        : p.names.filter(
+            (n) =>
+              fresh(`n:${n.toLowerCase()}`) &&
+              n.toLowerCase() !== self &&
+              (!tool || this.deps.cache.isPerson(s.scope, n)),
+          );
+    if (!off.includes("learn")) {
+      for (const n of this.patterns.follows(s.scope, p.intent)) {
+        if (names.length < PREDICT_NAMES && fresh(`n:${n.toLowerCase()}`) && !names.includes(n)) names.push(n);
+      }
+    }
+    const days = lookup || off.includes("days") ? [] : p.days.filter((d) => fresh(`d:${d}`));
+    // A class's vocabulary once per session: the draft and the message it becomes are one action.
+    const cls = off.includes("class") || !p.cls || !fresh(`c:${p.cls.id}`) ? null : p.cls;
+    if (names.length === 0 && days.length === 0 && !cls) return;
+    const all = await this.deps.sources(s.scope).catch((): Source[] => []);
+    if (all.length === 0 || s.closed) return;
+    this.markAsked(ant, [
+      ...names.map((n) => `n:${n.toLowerCase()}`),
+      ...days.map((d) => `d:${d}`),
+      ...(cls ? [`c:${cls.id}`] : []),
+    ]);
+    // A cue of the event's head, with only the names and days still to fetch: `probe` sends what a request with them
+    // would, so the request's own probes later find the same queries answered.
+    const cue = buildCue(p.head, distinctTermIds(p.head, s.vocab), s.vocab, at, offset, true);
+    cue.entities = names;
+    if (days.length === 0) cue.time = null;
+    else if (cue.time) cue.time = { ...cue.time, days: new Set(days) };
+    // Only the class's query ranks sources by the lookup's routing; routing draws from the source map's sampler, so
+    // it is not consulted for nothing.
+    const found = cls ? this.routed(s, cue, all, this.config.lookupSources) : [];
+    const out: ProbeOut = { calls: 0, kept: [] };
+    const left = this.config.anticipateSessionCalls - ant.calls;
+    // A draft's names are the request's own, probed early: the request's probe budget. Any other event's are a guess.
+    const budget = kind === "draft" ? this.config.probeCalls : this.config.anticipateCalls;
+    await this.probe(
+      s,
+      cue,
+      found,
+      all,
+      false,
+      out,
+      Promise.resolve(),
+      this.config.probeShare ? new Map() : undefined,
+      { budget: Math.min(budget, left), cls, noTopic: true },
+    );
+    ant.calls += out.calls;
+    for (const id of [...out.kept, ...(out.consequence?.ids ?? [])]) {
+      ant.prefetched.delete(id);
+      ant.prefetched.add(id);
+    }
+    while (ant.prefetched.size > MAX_PREFETCHED) ant.prefetched.delete(ant.prefetched.values().next().value!);
+    this.trace({
+      sessionId: s.id,
+      turn: s.turn,
+      event: kind,
+      decision: "skipped",
+      reason: "anticipate",
+      latencyMs: 0,
+      sourceCalls: 0,
+      modelCalls: 0,
+      costUsd: 0,
+      itemIds: [],
+      anticipateCalls: out.calls,
+    });
+  }
+
+  /**
+   * Puts into a lookup's shared calls (`SharedCalls`, `probeShare`) the answers a source gave this user's prefetch
+   * for the request's names, while recent (within `probeMemoMs`) and still wholly cached: the planner's query for a
+   * name is then answered at no call, as the probe's is.
+   */
+  private seedShared(s: Session, shared: SharedCalls, cue: Cue, all: Source[]): void {
+    const now = this.now();
+    for (const name of cue.entities.slice(0, 2)) {
+      const asked = `${name}|`;
+      for (const source of all) {
+        const at = this.economy.askedAt(s.scope, source.id, asked);
+        if (at === null || now - at > this.config.probeMemoMs) continue;
+        const last = this.economy.lastIds(s.scope, source.id, asked);
+        const held = last ? this.deps.cache.hits(s.scope, last, now) : [];
+        if (!last || held.length < last.length) continue;
+        const key = sharedKey(source.id, { scope: s.scope, text: name, entities: [name], limit: 8 });
+        if (!shared.has(key)) shared.set(key, Promise.resolve(held.map((h) => h.item)));
+      }
+    }
+  }
+
+  /** Notes names ("n:…"), days ("d:…") and classes ("c:…") as fetched for the session (bounded: `MAX_ASKED`). */
+  private markAsked(ant: Anticipation, keys: readonly string[]): void {
+    for (const k of keys) {
+      ant.asked.delete(k);
+      ant.asked.add(k);
+    }
+    while (ant.asked.size > MAX_ASKED) ant.asked.delete(ant.asked.values().next().value!);
+  }
+
+  /**
+   * The request decided from what is held, with no call and no model (`anticipate`): the economy's last answers for
+   * its names and days at every source (which the prefetches warmed), the class's cached finds, and the cache. What is
+   * sure is delivered, else what the request's structure grounds (a conflict, a clash, an absence, the event it
+   * names). Never the fallback: its best guess among what happens to be held is no better than among what the live
+   * search returns. A stale copy is never delivered from here (D40). With a judge, nothing: the slow path decides.
+   */
+  private async early(s: Session, cue: Cue, eventKind: string, t0: number): Promise<Injection | null> {
+    // With a judge, the slow path decides (see the fast path): what is held only makes it faster.
+    if (this.deps.model !== null) return null;
+    const all = await this.deps.sources(s.scope).catch((): Source[] => []);
+    if (all.length === 0 || s.closed) return null;
+    const out: ProbeOut = { calls: 0, kept: [] };
+    if (this.config.probes) {
+      const cls = this.config.anticipateOff.includes("class")
+        ? null
+        : actionClass(cue.raw, isImperative(cue.raw) || cue.external === true);
+      // Offline, every source's last answer is read (no routing: it would draw from the source map's sampler).
+      await this.probe(s, cue, all, all, false, out, Promise.resolve(), undefined, {
+        offline: true,
+        cls,
+        classOffline: true,
+      });
+    }
+    if (s.closed) return null;
+    const probed = new Set(out.kept);
+    const scored = this.rank(s, cue, { probed: [...out.kept, ...(out.consequence?.ids ?? [])] });
+    const bridged = this.bridgedOf(scored, cue, out.consequence);
+    const sure = this.confident(scored, cue);
+    let items: Scored[] = [];
+    let how = "sure";
+    if (sure.length > 0) {
+      items = sure;
+    } else {
+      const g = this.grounded(
+        s,
+        cue,
+        this.eligible(scored, cue, probed, bridged),
+        eventKind,
+        bridged,
+        out.consequence?.cls,
+      );
+      items = g.items;
+      how = g.how;
+    }
+    if (items.length === 0 || this.stale(s, items)) return null;
+    const ids = items.map((x) => x.item.id);
+    this.trace({
+      sessionId: s.id,
+      turn: s.turn,
+      event: eventKind,
+      decision: "fast",
+      reason: `anticipated-${how}`,
+      latencyMs: Math.round(performance.now() - t0),
+      sourceCalls: 0,
+      modelCalls: 0,
+      costUsd: 0,
+      itemIds: ids,
+      ...this.prefetchedOf(s, ids),
+    });
+    return this.deliver(s, items, "proactive", `anticipated-${how}:${cue.id}`, cue);
+  }
+
+  /**
+   * The options a lookup's own probes run with under `anticipate`: they first wait (at most `probeGraceMs`) for the
+   * session's running prefetch, whose answers they would otherwise ask again, and read the request's action class
+   * from what the prefetches cached, with no call (unless `consequenceProbe` sends it live).
+   */
+  private lookupOpts(s: Session, cue: Cue): ProbeOpts {
+    if (!this.config.anticipate) return {};
+    const cls =
+      this.config.consequenceProbe || this.config.anticipateOff.includes("class")
+        ? undefined
+        : actionClass(cue.raw, isImperative(cue.raw) || cue.external === true);
+    return {
+      ...(cls !== undefined ? { cls, classOffline: true } : {}),
+      ...(s.ant?.running ? { after: s.ant.running } : {}),
+    };
+  }
+
+  /** The delivered ids the session's anticipation had fetched or held ready (`Trace.prefetched`); {} when none. */
+  private prefetchedOf(s: Session, ids: readonly string[]): Partial<Trace> {
+    const pre = s.ant?.prefetched;
+    if (!pre || pre.size === 0) return {};
+    const hit = ids.filter((id) => pre.has(id));
+    return hit.length > 0 ? { prefetched: hit } : {};
+  }
+
+  /**
+   * Learns what followed the request's intent (`IntentPatterns`): the names in the titles of what was delivered for
+   * it, other than those it named itself. Its action class, else its situation.
+   */
+  private learnFollows(s: Session, cue: Cue, scored: Scored[]): void {
+    const own = new Set(cue.entities.map((e) => e.toLowerCase()));
+    const intent = actionClass(cue.raw, isImperative(cue.raw) || cue.external === true)?.id ?? s.situation;
+    for (const x of scored) {
+      const names = cleanEntities(extractEntities(x.item.title.slice(0, 200)))
+        .filter((n) => !own.has(n.toLowerCase()))
+        .slice(0, 2);
+      this.patterns.note(s.scope, intent, names, [x.item.sourceId]);
+    }
+  }
+
+  /** The sources the source map ranks first for a cue's names and the session's situation. */
+  private routed(s: Session, cue: Cue, all: Source[], limit: number): Source[] {
+    return this.deps.sourceMap
+      .route({ scope: s.scope, entities: cue.entities, situation: s.situation, sourceIds: all.map((x) => x.id), limit })
+      .map((r) => all.find((x) => x.id === r.sourceId)!)
+      .filter(Boolean);
+  }
+
+  private async slowPath(
+    s: Session,
+    cue: Cue,
+    t0: number,
+    eventKind: string,
+    served = false,
+  ): Promise<Injection | null> {
     // The turn that triggered the lookup. Traces report it, not the turn current when the lookup finishes: later
     // events may arrive meanwhile, and evals attribute deliveries by this field.
     const turn = s.turn;
@@ -1723,6 +2153,10 @@ export class ContextPartner {
         costUsd,
         itemIds: items.map((i) => i.id),
         ...(plans ? { plans } : {}),
+        ...this.prefetchedOf(
+          s,
+          items.map((i) => i.id),
+        ),
       });
     try {
       let probedIds: string[] | undefined;
@@ -1760,6 +2194,33 @@ export class ContextPartner {
           : [],
       );
       const sure = this.confident(scored, cue);
+      // `anticipate`: the request was answered from what was held (`early`). The live search adds only what is sure,
+      // or with no model what the request's structure grounds: never the fallback's best guess or a judge call, which
+      // would have had that delivery among their candidates.
+      if (served) {
+        const items = this.deps.model
+          ? []
+          : sure.length > 0
+            ? sure
+            : this.grounded(
+                s,
+                cue,
+                this.eligible(scored, cue, new Set(probedIds ?? []), bridged),
+                eventKind,
+                bridged,
+                consequence?.cls,
+              ).items;
+        if (items.length === 0) {
+          done("silent", "anticipated");
+          return null;
+        }
+        done(
+          "sources",
+          `after-anticipated:${cue.id}`,
+          items.map((x) => x.item),
+        );
+        return this.deliver(s, items, "proactive", `sources:${cue.id}`, cue);
+      }
       // With `judgeConfident` and a judge to ask, what scores as sure is judged with the rest in the same call: the
       // no-model bar is right about half the time (docs/research/probes.md), the judge more often.
       // One sure item both the request's search and a probe found is corroborated: delivered without the call
@@ -1781,11 +2242,7 @@ export class ContextPartner {
       // An event on a day the request names is a candidate whatever it scores on words (D44).
       const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item) ?? "") === true;
       const probed = new Set(probedIds ?? []);
-      // A consequence find that does not conflict is no candidate: it shares nothing with the request but its class.
-      const eligible = scored.filter(
-        (x) =>
-          x.score >= this.config.candidateScore || onNamedDay(x) || probed.has(x.item.id) || bridged.has(x.item.id),
-      );
+      const eligible = this.eligible(scored, cue, probed, bridged);
       // With probes on, up to three of the probes' finds join the judge's candidates beyond the best scored: found for
       // the request's people, organisations or day, they share few of its words and would otherwise never be seen.
       const top = judgeSure
@@ -1976,6 +2433,9 @@ export class ContextPartner {
     }
     for (const x of scored) if (x.sketch) s.delivered.push(x.sketch);
     if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
+    if (this.config.anticipate && mode === "proactive" && !this.config.anticipateOff.includes("learn")) {
+      this.learnFollows(s, cue, scored);
+    }
     // Every item counts as delivered, an echo folded out of the packet too: the agent has its occurrence.
     s.ledger.mark(
       scored.map((x) => x.item.id),

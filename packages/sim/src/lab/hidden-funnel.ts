@@ -11,10 +11,19 @@
  *
  *   bun packages/sim/src/lab/hidden-funnel.ts [--suite hidden|heldout|heldout-all|all|a,b] [--seeds 41,42,43,44]
  *     [--config '{"probes":true}'] [--json out.json] [--label probes] [--no-record] [--judge live [--model m]]
+ *     [--lead-in clause|half] [--time 0] [--typing-ms 1500]
  *
  * `--judge live` gives Eden its judge (OpenRouter, `OPENROUTER_API_KEY`): the funnel then measures what the judge lets
  * through, hidden and decoy, and its calls, tokens and spend (about $0.03 for the 456 held-out tasks), a cheap screen
  * before an agent run. Seeds run concurrently.
+ *
+ * `--lead-in` gives each request a "user is typing" draft before it (`drafts.ts`: its first clause, or its first
+ * half; a simulation assumption, since no suite carries one), sent as a draft user message (`anticipate` reads it, any
+ * other configuration ignores it). With `--time 0` the request follows once the engine has settled (typing takes
+ * seconds, a prefetch milliseconds of CPU); with `--time T` the connectors answer at their realistic latencies times T
+ * and the request follows `--typing-ms` × T later. Each task then records when the planted item reached the agent
+ * (`deliveryMs`, from the request), whether it came with the request's own reply (`immediate`), whether the session's
+ * anticipation had prefetched it (`prefetched`), and the calls the lead-in made (`leadCalls`).
  *
  * `--suite` names any suite of `suites.ts`, or several: each gets its own table, then a TOTAL over all of them.
  * Each suite's run is recorded in the benchmark ledger (bench/, `ledger.ts`) unless `--no-record`.
@@ -23,8 +32,9 @@ import { writeFileSync } from "node:fs";
 import { ContextPartner, ItemCache } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, OpenRouterModel, type Model } from "@eden/llm";
-import type { AgentEvent } from "@eden/protocol";
+import type { AgentEvent, Injection } from "@eden/protocol";
 import { QueryPlanner } from "@eden/sources";
+import { draftOf, type DraftMode } from "../drafts";
 import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
 import { clearSlot, dress } from "./hidden-context";
@@ -42,6 +52,10 @@ const SEEDS = opt("seeds", "41,42,43,44").split(",").map(Number);
 const CONFIG = JSON.parse(opt("config", "{}")) as Record<string, unknown>;
 const LIVE = opt("judge", "none") === "live";
 const SYNC = args.includes("--sync");
+const LEAD = opt("lead-in", "") as DraftMode | "";
+if (LEAD && LEAD !== "clause" && LEAD !== "half") throw new Error("--lead-in must be clause or half");
+const TIME = Number(opt("time", "0"));
+const TYPING_MS = Number(opt("typing-ms", "1500"));
 const KEY = process.env.OPENROUTER_API_KEY;
 if (LIVE && !KEY) throw new Error("--judge live needs OPENROUTER_API_KEY");
 const MODEL = opt("model", "z-ai/glm-5.3-flash");
@@ -106,6 +120,20 @@ interface TaskRow {
   injected: number;
   calls: number;
   ms: number;
+  /** When the planted item reached the agent, from the request (ms of wall time); absent when it did not. */
+  deliveryMs?: number;
+  /** It came with the request's own reply (the observe call), not later. */
+  immediate?: boolean;
+  /** The session's anticipation had fetched or held it before the request (`Trace.prefetched`). */
+  prefetched?: boolean;
+  /** Source calls made between the lead-in and the request (the prefetch's). */
+  leadCalls?: number;
+  /**
+   * Searches the connectors served for this task, counted at the connector: `calls` is what the engine's traces
+   * report, and a lookup's trace counts only the probe calls sent within its grace (`probeGraceMs`), not those that
+   * finish later; a prefetch counts all of its own.
+   */
+  served: number;
 }
 
 /** One suite's tasks in one seed's world, in order, as one user would bring them. */
@@ -119,11 +147,13 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
   // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
   const keep = new Set(planted.map((it) => it.id));
   for (const task of tasks) clearSlot(world, task.text, keep);
-  const sources = simSources(world, REALISTIC, 0, seed);
+  const sources = simSources(world, REALISTIC, TIME, seed);
   const returned = new Set<string>();
+  let served = 0;
   for (const s of sources) {
     const search = s.search.bind(s);
     s.search = async (q, signal) => {
+      served++;
       const items = await search(q, signal);
       for (const i of items) returned.add(i.id);
       return items;
@@ -132,6 +162,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
   let clock = world.now;
   const cache = new ItemCache();
   let calls = 0;
+  const prefetched = new Set<string>();
   const partner = new ContextPartner({
     sources: async () => sources,
     sourceMap: new SourceMap(":memory:", { seed }),
@@ -140,9 +171,20 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     model: LIVE ? metered(new OpenRouterModel({ apiKey: KEY!, model: MODEL })) : null,
     planner: new QueryPlanner({ seed }),
     now: () => clock,
-    config: CONFIG,
-    onTrace: (t) => (calls += t.sourceCalls),
+    config: TIME > 0 ? { sourceTimeoutMs: 1_500 * TIME, ...CONFIG } : CONFIG,
+    onTrace: (t) => {
+      calls += t.sourceCalls + (t.anticipateCalls ?? 0);
+      for (const id of t.prefetched ?? []) prefetched.add(id);
+    },
   });
+  // The harness may read the engine's session table (as `quality.ts` `settle` does; product code may not): whether a
+  // session's lookup or prefetch is still running.
+  const table = (partner as unknown as { sessions: Map<string, { inflight: unknown; ant?: { running: unknown } }> })
+    .sessions;
+  const busy = (sessionId: string) => {
+    const s = table.get(`${scope.tenantId}/${scope.userId}#${sessionId}`);
+    return !!(s?.inflight || s?.ant?.running);
+  };
   const scope = { tenantId: "funnel", userId: `w${seed}` };
   // `--sync`: the experiment where Eden has already synced every item of the user's sources into its own index.
   if (SYNC)
@@ -156,20 +198,48 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     const id = planted[i]!.id;
     const sessionId = task.id;
     returned.clear();
+    prefetched.clear();
     const callsBefore = calls;
-    const t0 = performance.now();
+    const servedBefore = served;
     const at = clock;
     await partner.observe({ ...scope, sessionId, at, kind: "session_start" } as AgentEvent);
+    if (LEAD) {
+      const text = draftOf(task.text, LEAD);
+      await partner.observe({ ...scope, sessionId, at, kind: "user_message", text, draft: true } as AgentEvent);
+      if (TIME > 0) await Bun.sleep(TYPING_MS * TIME);
+      else for (let k = 0; k < 5_000 && busy(sessionId); k++) await Bun.sleep(1);
+    }
+    const leadCalls = calls - callsBefore;
+    const t0 = performance.now();
     const r = await partner.observe(
       { ...scope, sessionId, at, kind: "user_message", text: task.text } as AgentEvent,
       // A live judge answers in seconds: the slow path is waited for, so what it lets through counts here.
-      { waitMs: LIVE ? 30_000 : 3_000 },
+      { waitMs: LIVE ? 30_000 : 3_000 * Math.max(1, TIME) },
     );
     const ms = performance.now() - t0;
-    const injections = [...(r.injection ? [r.injection] : []), ...partner.takePending({ ...scope, sessionId })];
-    const got = injections.flatMap((x) => x.citations.map((c) => c.itemId));
+    // What arrives after the reply (a lookup still running behind a delivery made from what was held), with when.
+    const arrived: { ids: string[]; at: number }[] = [];
+    const pendingSeen: Injection[] = [];
+    if (r.injection) arrived.push({ ids: r.injection.citations.map((c) => c.itemId), at: ms });
+    const deadline = performance.now() + (LIVE ? 30_000 : 3_000 * Math.max(1, TIME));
+    for (;;) {
+      for (const x of partner.takePending({ ...scope, sessionId })) {
+        pendingSeen.push(x);
+        arrived.push({ ids: x.citations.map((c) => c.itemId), at: performance.now() - t0 });
+      }
+      if (!busy(sessionId) || performance.now() > deadline) break;
+      await Bun.sleep(1);
+    }
+    for (const x of partner.takePending({ ...scope, sessionId })) {
+      pendingSeen.push(x);
+      arrived.push({ ids: x.citations.map((c) => c.itemId), at: performance.now() - t0 });
+    }
+    const injections = [...(r.injection ? [r.injection] : [])];
+    const got = arrived.flatMap((x) => x.ids);
     // How the planted item was delivered (the injection reason's kind: sources, grounded-…, fallback, model).
-    const why = injections.find((x) => x.citations.some((c) => c.itemId === id))?.reason.split(":")[0] ?? "";
+    const why =
+      [...injections, ...pendingSeen].find((x) => x.citations.some((c) => c.itemId === id))?.reason.split(":")[0] ?? "";
+    const first = arrived.find((x) => x.ids.includes(id));
     perTask.push({
       seed,
       variant,
@@ -180,7 +250,13 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       why,
       injected: got.length,
       calls: calls - callsBefore,
+      served: served - servedBefore,
       ms: Number(ms.toFixed(2)),
+      ...(first
+        ? { deliveryMs: Number(first.at.toFixed(2)), immediate: r.injection?.citations.some((c) => c.itemId === id) }
+        : {}),
+      ...(prefetched.has(id) ? { prefetched: true } : {}),
+      ...(LEAD ? { leadCalls } : {}),
     });
   }
   return perTask;

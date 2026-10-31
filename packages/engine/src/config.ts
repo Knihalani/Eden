@@ -214,6 +214,23 @@ export interface EngineConfig {
   quietNameOnly: boolean;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
+  /**
+   * Anticipation (`anticipate.ts`; docs/research/moon-anticipate.md): each event (a user message, a draft the user is
+   * still typing, a tool call or result, an arriving message) is read, with no model, for what the agent will need next
+   * (the names it mentions, the days it schedules, its action class, the names that followed that intent before for
+   * this user), and those are fetched in the background through the probes' own queries, so the request's probes find
+   * them in the memo at no call. A request is then first decided from the cache, on the critical path and with no
+   * call (what is sure, or with no model what the request's structure grounds); the live search still runs behind it
+   * and adds only what is sure or grounded. The action class's constraint vocabulary is fetched off the critical path
+   * and read from the cache at the request (`consequence.ts`), whatever `consequenceProbe` says.
+   */
+  anticipate: boolean;
+  /** Source calls one event's anticipation may make (the class query, one call, is counted on top). */
+  anticipateCalls: number;
+  /** Source calls a session's anticipation may make in all. */
+  anticipateSessionCalls: number;
+  /** Anticipation parts switched off, for ablations: "serve", "class", "learn", "names", "days". */
+  anticipateOff: string[];
   /** Cost reserved per judge call before the real cost is known: about its worst case at the cap (D45). */
   estimatedCallUsd: number;
   /** Cost reserved per model-composed ask answer (`askWithModel`): about its worst case at its cap (D45). */
@@ -277,6 +294,10 @@ export const DEFAULT_CONFIG: EngineConfig = {
   probeShare: false,
   probeSecondSources: 3,
   probeOff: [],
+  anticipate: false,
+  anticipateCalls: 4,
+  anticipateSessionCalls: 24,
+  anticipateOff: [],
   judgeConfident: false,
   judgeContested: false,
   judgeTied: false,

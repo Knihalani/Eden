@@ -23,7 +23,11 @@ interface EventBase extends Scope {
 /** Something that happened in the agent's session, as the integration reports it. */
 export type AgentEvent =
   | (EventBase & { kind: "session_start"; agent?: string; metadata?: Record<string, string> })
-  | (EventBase & { kind: "user_message"; text: string })
+  /**
+   * `draft`: the user is still typing it (a chat box's text before it is sent). Never a request: Eden only reads it
+   * ahead for what the agent will need (`anticipate`), and ignores it otherwise. The sent message follows as usual.
+   */
+  | (EventBase & { kind: "user_message"; text: string; draft?: boolean })
   | (EventBase & { kind: "agent_message"; text: string })
   | (EventBase & { kind: "tool_call"; tool: string; input: unknown })
   | (EventBase & { kind: "tool_result"; tool: string; output: string; isError?: boolean })
