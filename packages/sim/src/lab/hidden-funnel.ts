@@ -24,7 +24,7 @@
  * `--spans noop` turns spans on into a sink that drops them (the tracer's own cost, for overhead runs); `--serial`
  * plays the seeds one after another (same results; a task's wall time is then its own, not shared with other seeds).
  * With either, or `--timeline`, the process CPU of the suites' runs is printed to stderr.
- * `--config '{"sync":true,...}'` runs Eden's real background sync (`SyncManager`, D56) over the sim connectors: the
+ * `--config '{"sync":true,...}'` runs Eden's real background sync (`SyncManager`, D57) over the sim connectors: the
  * user's sources are backfilled through their list calls before the first task (the clock running), and the sync
  * ticks every five simulated minutes between tasks. Its listing calls are counted apart from request-time calls
  * (`sync:` line, and `sync` in the JSON): backfill, background polls and sweeps, and on-demand polls (which are

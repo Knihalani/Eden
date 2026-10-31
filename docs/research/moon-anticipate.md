@@ -1,4 +1,4 @@
-# Anticipation: context ready before the request (track moon/anticipate, proposed D56)
+# Anticipation: context ready before the request (track moon/anticipate, proposed D60)
 
 Eden waited for a request before it looked anything up, so the request paid for every source call on its critical
 path (about 0.7 s at the median and 1.5 s at the 95th percentile in the real-time funnel below), and the request's

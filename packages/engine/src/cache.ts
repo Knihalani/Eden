@@ -29,7 +29,7 @@ interface Entry {
   doc: number;
   sketch: Sketch | null;
   /**
-   * Held by the user's background sync (D56): counted against `maxSyncedPerUser`, not `maxItemsPerUser`, kept for
+   * Held by the user's background sync (D57): counted against `maxSyncedPerUser`, not `maxItemsPerUser`, kept for
    * `syncTtlMs`, and dropped by the sync when its source no longer lists it. A lookup that returns it keeps it synced.
    */
   synced?: true;
@@ -62,7 +62,7 @@ class UserCache {
   /** Vocabulary size after the last rebuild. */
   baseline = 0;
   readonly items = new Map<string, Entry>();
-  /** How many of `items` are synced (D56). */
+  /** How many of `items` are synced (D57). */
   synced = 0;
   readonly byDoc: (Entry | undefined)[] = [];
   readonly vocab = new Vocab(256); // Grows by doubling: most users hold few terms.
@@ -143,7 +143,7 @@ export interface CacheLimits {
   ttlMs: number;
   maxTextChars: number;
   /**
-   * Items a user's background sync may hold (D56), apart from `maxItemsPerUser`: lookups never evict what the sync
+   * Items a user's background sync may hold (D57), apart from `maxItemsPerUser`: lookups never evict what the sync
    * keeps, nor the sync what lookups brought. Past it, the least recently synced is dropped.
    */
   maxSyncedPerUser: number;
@@ -356,7 +356,7 @@ export class ItemCache {
   }
 
   /**
-   * Eviction when some items are synced (D56): lookups' items over `maxItemsPerUser` and synced ones over
+   * Eviction when some items are synced (D57): lookups' items over `maxItemsPerUser` and synced ones over
    * `maxSyncedPerUser` go, each class oldest first, in one pass over the oldest-first order.
    */
   private evictMixed(u: UserCache): void {
@@ -375,13 +375,13 @@ export class ItemCache {
     }
   }
 
-  /** Whether the cached item is held by the user's sync (D56). */
+  /** Whether the cached item is held by the user's sync (D57). */
   isSynced(scope: Scope, id: string): boolean {
     return this.peek(scope)?.items.get(id)?.synced === true;
   }
 
   /**
-   * Drops synced items by id (a sync's delete propagation: its source no longer lists them, D56). An item a lookup
+   * Drops synced items by id (a sync's delete propagation: its source no longer lists them, D57). An item a lookup
    * also brought is dropped too: the source no longer has it. Returns how many were dropped.
    */
   dropSynced(scope: Scope, ids: Iterable<string>): number {
@@ -398,12 +398,12 @@ export class ItemCache {
     return n;
   }
 
-  /** Synced items the user's cache holds (D56). */
+  /** Synced items the user's cache holds (D57). */
   syncedCount(scope: Scope): number {
     return this.peek(scope)?.synced ?? 0;
   }
 
-  /** Whether an entry is still within its time to live: a synced item's is `syncTtlMs` (D56). */
+  /** Whether an entry is still within its time to live: a synced item's is `syncTtlMs` (D57). */
   private alive(e: Entry, now: number): boolean {
     return now - e.fetchedAt <= (e.synced ? this.limits.syncTtlMs : this.limits.ttlMs);
   }
@@ -499,7 +499,7 @@ export class ItemCache {
 
   /**
    * Top fresh items of the given sources for the query's term ids, at most `limit` per source: a synced source
-   * answered from the local index (D56). With `all`, only items holding every query term, newest first (as a mail
+   * answered from the local index (D57). With `all`, only items holding every query term, newest first (as a mail
    * or chat search answers); otherwise the best scored. Reads the best `depth` of the whole index, so a source whose
    * matches all rank below it answers fewer.
    */

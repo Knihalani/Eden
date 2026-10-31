@@ -218,7 +218,7 @@ export interface EngineConfig {
    */
   spans: boolean;
   /**
-   * Background connector sync, "Eden Atlas" (`sync.ts`, D56): each active user's sources that can list (`Source.list`)
+   * Background connector sync, "Eden Atlas" (`sync.ts`, D57): each active user's sources that can list (`Source.list`)
    * are read into the user's cache in the background, and a lookup answers from that local index the sources whose
    * synced copy is current, live-calling only the rest. Its probes and its own search of a current source cost no
    * call. The `sync*` settings below apply only with it on.
@@ -238,7 +238,7 @@ export interface EngineConfig {
   syncActiveMs: number;
   /** Each source of an active user is re-listed whole this often (ms): what it no longer lists is dropped. */
   syncSweepMs: number;
-  /** A user idle this long (ms) stops being synced and their synced items are dropped (retention, D56). */
+  /** A user idle this long (ms) stops being synced and their synced items are dropped (retention, D57). */
   syncDropMs: number;
   /** The sync's own budget, per (user, source): listing calls per minute. */
   syncCallsPerMin: number;

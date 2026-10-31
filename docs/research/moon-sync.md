@@ -1,4 +1,4 @@
-# Eden Atlas: background connector sync into a per-user local index (track sync, proposed D56)
+# Eden Atlas: background connector sync into a per-user local index (track sync, proposed D57)
 
 Every number below comes from a command run in this session on the final tree (branch `moon/sync`), with no model
 unless a judge is named. The simulated judge is the quality runner's oracle ("perfect"), not a live model; the funnel
@@ -128,7 +128,7 @@ but precision falls 3.4 points and the soft fire rate rises 3.5 points (the mean
 handful of soft turns: H 0, 0.2, 0.143, 0 against HA 0.167, 0.133, 0.095, 0.091, so a few events; hard false fires
 stay 0 in both). The no-model loss comes from more confident and
 conflict-grounded deliveries (no-model "sources" path 371 → 394 items at 0.57–0.58 precision, conflict ground 72 → 104
-at 0.82 → 0.64): local probes reach every synced source, so more items qualify. This needs the decision D56 records.
+at 0.82 → 0.64): local probes reach every synced source, so more items qualify. This needs the decision D57 records.
 
 **Staleness**, realistic with `--updates 0.3` (140 source-side updates over the 4 seeds): stale copies delivered, H 2
 (no model) and 5 (perfect judge), HA 3 and 5, `syncStaleChance` 0.5 3 and 5 (with 0.67 instead of 0.84 on-demand

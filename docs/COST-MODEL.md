@@ -26,7 +26,7 @@ OpenRouter returns the real cost per call (`usage.cost`), and the engine books t
 | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------- |
 | Judge                                                                                          | system ≈ 100 tok + window ≤ 4,000 chars (≈ 1,000 tok) + ≤ 6 candidates × ≈ 100 tok ≈ 1,700 tok                | 512 tok, reasoning included (D45)   | ≈ $0.00051                      |
 | Ask answer (only with `askWithModel`, off by default, D43)                                     | ≈ 100 + question ≤ 10,000 chars (≈ 2,500) + window ≤ 2,000 chars (≈ 500) + ≤ 20 items × ≈ 170 tok ≈ 6,500 tok | 1,000 tok, reasoning included (D45) | ≈ $0.0015                       |
-| Card enrichment (only with `cards`, off by default, D56 proposed; background, never per event) | system ≈ 700 tok + ≤ 10 items × (title ≤ 160 + own text ≤ 900 chars) ≈ 3,400 tok                              | 2,000 tok, reasoning included       | ≈ $0.0015                       |
+| Card enrichment (only with `cards`, off by default, D59 proposed; background, never per event) | system ≈ 700 tok + ≤ 10 items × (title ≤ 160 + own text ≤ 900 chars) ≈ 3,400 tok                              | 2,000 tok, reasoning included       | ≈ $0.0015                       |
 
 Card enrichment, measured (docs/research/moon-cards.md, 572 calls on simulated worlds, 2026-10-31): 1,599 input and
 677 output tokens per call on average, $0.000181 per call as OpenRouter reported it. One call per ten new items that
@@ -34,7 +34,7 @@ pass the no-model prefilter (11-15% of simulated items), each item read once per
 items arriving, $0.003-0.004 per user-month at 50 new items a day (at most about $0.013 at list prices). Reserved per
 call at $0.002 against its own per-user-day `Budget`.
 
-With `graph` (proposed D56) the judge sees at most `graphSeats` (1) more candidate, about 100 more input tokens per
+With `graph` (proposed D58) the judge sees at most `graphSeats` (1) more candidate, about 100 more input tokens per
 call at its cap; no other model call is added and the graph makes no source call. Measured in simulation (realistic,
 4 seeds, perfect judge): $0.0172 → $0.0178 per 1,000 turns, model calls per turn 0.213 → 0.215.
 
@@ -97,19 +97,31 @@ economy starts cold for each new user, so a user's first lookups make the wider 
 learned which to skip (8.4 calls per task in the per-task funnel, which builds a new engine each task). The register's
 background sweep (D51) added calls (10.4 per task) and was removed with it.
 
-D56, proposed (background sync, "Eden Atlas", off by default; docs/research/moon-sync.md) adds no model call: the
+D57, proposed (background sync, "Eden Atlas", off by default; docs/research/moon-sync.md) adds no model call: the
 sync makes listing calls only. With a judge it raises model cost, because the judge sees more candidates: simulation,
 realistic, seeds 41–44, perfect judge, $0.0170 (H) → $0.0222–0.0223 (HA, two runs) per 1,000 turns (+31%), at the same input caps
 (≤ 6 candidates of ≤ 200 bytes, ≤ 4k characters of window). Source calls fall: 7.78 → 0.86 request-time calls per
 lookup, 1.72 with backfill and background amortised; in the per-task funnel, 8.5 → 3.04 per task (4.38 amortised).
 A synced user costs about 4 MB of heap per ~1,500 items and ~200 ms of CPU to backfill (`sync-cost.ts`).
 
-Anticipation (proposed D56, `anticipate`, off by default; docs/research/moon-anticipate.md) adds no model call on any
+Anticipation (proposed D60, `anticipate`, off by default; docs/research/moon-anticipate.md) adds no model call on any
 path: its predictions are fixed linear reads of an event's head, and its prefetches are source calls within
 `anticipateCalls` (4 per event, `probeCalls` for a draft) and `anticipateSessionCalls` (24 per session). Measured
 in-sample: source calls +1.0% to +3.5% in simulation, +3.9% connector searches per task in the dev funnel with a draft
 lead-in; with the perfect judge, model calls per turn 0.213 → 0.226 and $0.0170 → $0.0182 per 1,000 turns (realistic,
 seeds 41–44: more lookups reach the judge with candidates).
+
+Combined (proposed D62, docs/research/moonshots.md; one session, in-sample, realistic seeds 41–44, perfect judge
+modelled): R (H + `consequenceProbe`, `probeRoles`, `graph`, `graphMerge`, `cards`, `anticipate`) costs $0.0195 per
+1,000 turns against H's $0.0170 (+15%), 0.231 model calls per turn (0.213), 7.88 source calls per lookup (7.78; 8.76
+with no model); in the per-task funnel 9.94 calls per task against 8.49 (a draft's prefetch and the class query). R +
+`sync` (ALL) costs $0.0243 (+43%, the judge sees more tied candidates) at 1.25 request-time calls per lookup, 2.10
+with the sync's backfill and background; in the funnel 5.55 request-time calls per task, 6.89 amortised, with 18
+listing calls to backfill each simulated user. Cards add the background enrichment above: on the blind suites' new
+items this session, 41 calls at $0.000212 each ($0.0087), consistent with $0.003–0.004 per user-month at 50 new items
+a day. Process CPU in the funnel (40 simulated users) rises 7.8 s → 24.7 s with ALL, almost all of it the sync's
+backfill redacting and recording mentions for every listed item (telemetry spans); request-time engine CPU stays
+under 1 ms per lookup at p50 for the graph walk and card matching.
 
 The non-model costs (source API calls, hosting) are not modelled yet. Source calls may dominate for some connectors;
 measure them per connector in M2. The query planner (D28), on by default in the server since D33, adds no model call.

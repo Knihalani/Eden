@@ -195,7 +195,7 @@ export class SourceFanout {
   }
 
   /**
-   * One page of a source's listing through its `list` (a background sync, D56), under the same per-(user, source)
+   * One page of a source's listing through its `list` (a background sync, D57), under the same per-(user, source)
    * breaker, rate limit and concurrency limit as a search, within `timeoutMs`, sanitized before it is returned. Not
    * cached here: a listing wants the source's current page. `reserve` rate tokens must be left after this call's own
    * (background syncing leaves serving its headroom; a lookup's own sync call reserves none). Returns the page, or why

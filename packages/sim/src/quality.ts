@@ -250,7 +250,7 @@ export interface QualityReport {
   /** By session ordinal (in thirds of each user's sessions): does routing learn? */
   learning: { sessions: string; rates: Rates; sourceCallsPerLookup: number }[];
   /**
-   * With the background sync (D56): its listing calls (backfill, background ticks, on-demand polls inside lookups,
+   * With the background sync (D57): its listing calls (backfill, background ticks, on-demand polls inside lookups,
    * which `sources.callsPerLookup` also counts), the lookups and the sources they answered locally.
    */
   sync?: {
@@ -368,7 +368,7 @@ export async function runQuality(o: QualityOptions): Promise<QualityReport> {
   let staleDelivered = 0;
   let notInert = 0;
   let sourceCalls = 0;
-  /** With the background sync (`sync`, D56): its listing calls, apart from request-time ones, and local answers. */
+  /** With the background sync (`sync`, D57): its listing calls, apart from request-time ones, and local answers. */
   const syncUse = { backfill: 0, background: 0, demand: 0, localSources: 0, lookups: 0 };
   let useful = 0;
   let results = 0;
@@ -998,7 +998,7 @@ function get(m: Map<string, Counter>, k: string): Counter {
   return c;
 }
 
-/** A lookup: a trace that called a source, or (with the sync, D56) answered from the local index. */
+/** A lookup: a trace that called a source, or (with the sync, D57) answered from the local index. */
 function isLookup(t: Trace): boolean {
   return t.sourceCalls > 0 || t.localSources !== undefined;
 }

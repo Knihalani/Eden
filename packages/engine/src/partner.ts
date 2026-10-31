@@ -251,7 +251,7 @@ interface ProbeOpts {
   noTopic?: boolean;
   /** Waited for (at most `probeGraceMs`) before any probe goes out: a prefetch of the same names still running. */
   after?: Promise<void>;
-  /** Synced sources whose copy is current (`sync`, D56): they answer from the local index, at no call. */
+  /** Synced sources whose copy is current (`sync`, D57): they answer from the local index, at no call. */
   local?: ReadonlySet<string> | null;
 }
 const ANSWER_MAX_TOKENS = 1_000;
@@ -339,7 +339,7 @@ export class ContextPartner {
   private readonly spans: Tracer | null;
   private readonly stats: SpanStats | null;
   /**
-   * The background sync (`sync`, D56), or null when off. Its `tick` does the background work: a server runs it on a
+   * The background sync (`sync`, D57), or null when off. Its `tick` does the background work: a server runs it on a
    * timer (`startSync`), a simulation calls it on its own clock.
    */
   readonly sync: SyncManager | null;
@@ -456,7 +456,7 @@ export class ContextPartner {
       return { injection: null, pending: s.inflight !== null || s.pending.length > 0 };
     }
     const s = this.session(event);
-    // The user is active: their sources are synced (and polled) while they are (D56). O(1), no I/O.
+    // The user is active: their sources are synced (and polled) while they are (D57). O(1), no I/O.
     this.sync?.track(s.scope, this.now());
     s.turn++;
     const prep = spans?.open("observe.prep", root!.id);
@@ -1486,7 +1486,7 @@ export class ContextPartner {
   }> {
     const all = await this.deps.sources(s.scope).catch((): Source[] => []);
     if (all.length === 0 || s.closed) return { calls: 0 };
-    // The background sync (D56): a source whose synced copy is current answers from the user's local index, at no
+    // The background sync (D57): a source whose synced copy is current answers from the user's local index, at no
     // call; with `syncOnDemand`, a stale one is polled first (one listing call, rather than its search and probes).
     let local: Set<string> | null = null;
     let syncCalls = 0;
@@ -1589,7 +1589,7 @@ export class ContextPartner {
             local,
           }).catch(() => {})
         : null;
-    // The same query answered by the synced sources from the local index (D56): no call, nothing to store.
+    // The same query answered by the synced sources from the local index (D57): no call, nothing to store.
     const answeredHere = local
       ? this.localAnswer(
           s,
@@ -1721,7 +1721,7 @@ export class ContextPartner {
       offline: boolean,
       parent: number,
     ): Promise<ContextItem[]> => {
-      // Synced sources whose copy is current answer from the local index (D56), at no call and outside `probeCalls`;
+      // Synced sources whose copy is current answer from the local index (D57), at no call and outside `probeCalls`;
       // with `syncWide`, every such source does, not only the ones this probe was routed to (a person or a topic).
       let here: ContextItem[] = [];
       if (local) {
@@ -1968,7 +1968,7 @@ export class ContextPartner {
           : null;
     // The class read with no call (`anticipate`): the class's queries an event's prefetch sent, as cached.
     const offlineSend: ProbeSend = (k, src, t, w, keep, on) => send(k, src, t, w, keep, on, true);
-    // `syncTermProbes` (D56): with sources answered locally, each of the request's words that few of the user's items
+    // `syncTermProbes` (D57): with sources answered locally, each of the request's words that few of the user's items
     // hold (a place, a reference, a product), alone, to those sources: a query per word, which no live budget allows.
     const synced = local ? all.filter((x) => local.has(x.id)) : [];
     const terms = synced.length > 0 && c.syncTermProbes > 0 ? this.termProbes(s, cue, c.syncTermProbes) : [];
@@ -2088,7 +2088,7 @@ export class ContextPartner {
   }
 
   /**
-   * A query answered from the user's synced items of the given sources (D56), as their live search would answer it
+   * A query answered from the user's synced items of the given sources (D57), as their live search would answer it
    * but with no call: at most `limit` per source, holding every word of the query (`syncLocalAll`: a mail or chat
    * search) or ranked on any; a listing (a window and no words) is the events that start on its days, soonest first.
    */
@@ -2138,7 +2138,7 @@ export class ContextPartner {
     return cache.searchIn(s.scope, ids, ids.length, limit, sourceIds, all, now).map((h) => h.item);
   }
 
-  /** Records the entity mentions of items new to the user's cache or changed (lookups and the sync, D56). */
+  /** Records the entity mentions of items new to the user's cache or changed (lookups and the sync, D57). */
   private recordMentions(scope: Scope, added: ContextItem[], parent = 0): void {
     if (added.length === 0) return;
     const spans = this.spans;
@@ -2159,7 +2159,7 @@ export class ContextPartner {
     const after = this.config.refreshAfterMs;
     if (after <= 0) return false;
     const now = this.now();
-    // A synced item counts by when the sync last read it too (D56): its source's copy may be current, but the fast
+    // A synced item counts by when the sync last read it too (D57): its source's copy may be current, but the fast
     // path stays for what was read recently, and the rest goes through the slow path, which answers from the local
     // index at no call and lets the judge, when there is one, rule (the fast path never asks it).
     return scored.some((x) => now - (this.deps.cache.fetchedAt(s.scope, x.item.id) ?? now) > after);
@@ -2350,7 +2350,7 @@ export class ContextPartner {
     );
   }
 
-  /** The sources whose synced copy is current (`sync`, D56), which answer from the local index; null when none. */
+  /** The sources whose synced copy is current (`sync`, D57), which answer from the local index; null when none. */
   private localOf(s: Session, all: readonly Source[]): Set<string> | null {
     if (!this.sync) return null;
     const now = this.now();
@@ -3146,7 +3146,7 @@ export class ContextPartner {
       kind: source.kind,
       description: source.description,
       ...(source.listsByTime !== undefined ? { listsByTime: source.listsByTime } : {}),
-      // A listing (the sync, D56) is traced by the sync itself (`sync.list`): passed through as it is.
+      // A listing (the sync, D57) is traced by the sync itself (`sync.list`): passed through as it is.
       ...(source.list ? { list: source.list.bind(source) } : {}),
       // One `then`, no async frame of its own: a source call is the most frequent span (tracing overhead).
       search: (query, signal) => {

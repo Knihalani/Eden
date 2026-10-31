@@ -58,7 +58,7 @@ export interface McpSourceOptions {
   };
   /**
    * The read tool that lists the user's records most recently updated first, page by page, for a background sync
-   * (`list`, D56), if the server has one: an `args` function, or a mapping read from its input schema (its cursor and
+   * (`list`, D57), if the server has one: an `args` function, or a mapping read from its input schema (its cursor and
    * page-size arguments), with `fixed` values as for search. It passes the same read-only check as the search tool,
    * and one that fails it fails the connect. Without it, the source is not synced and is searched live.
    */
@@ -109,7 +109,7 @@ export class McpSource implements Source {
   private mapping: ArgMapping | null = null;
   private fetchMapping: FetchMapping | null = null;
   private listMapping: ListMapping | null = null;
-  /** `list`, when a list tool is configured (D56); undefined otherwise, so the source is never synced. */
+  /** `list`, when a list tool is configured (D57); undefined otherwise, so the source is never synced. */
   readonly list?: Source["list"];
 
   constructor(private readonly options: McpSourceOptions) {
@@ -249,7 +249,7 @@ export class McpSource implements Source {
   }
 
   /**
-   * One page of the user's records through the list tool, most recently updated first (D56), and the cursor of the
+   * One page of the user's records through the list tool, most recently updated first (D57), and the cursor of the
    * next. The next cursor is the server's (`nextCursor`, `nextPageToken`, Slack's `response_metadata.next_cursor`
    * and the like) or, for a tool that pages by offset, this one plus the rows returned while a page comes back full.
    * An error result throws, so a sync never reads a failed page as an empty listing (which would drop every item).
