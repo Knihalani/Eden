@@ -175,9 +175,9 @@ const FOOTER =
 const REPLY_TITLE = /^\s*(?:re|fwd?|aw|sv)\s*:/i;
 
 /**
- * The strict prefilter (`cardsEconomy`): `worthCarding` on what the item itself says, with footers to the end of the
- * message out, and a reply's or forward's title left out (the thread's first message is read under it). What it
- * rejects gets no card at no call; what it passes is read by the same prompt as before, so a card is unchanged.
+ * The strict prefilter (`cardsEconomy`): `worthCarding` on what the item itself says, with each footer block to the
+ * end of its paragraph out, and a reply's or forward's title left out (the thread's first message is read under it).
+ * What it rejects gets no card at no call; what it passes is read by the same prompt as before, so a card is unchanged.
  */
 export function worthCardingStrict(item: ContextItem): boolean {
   const own = ownText({ ...item, text: item.text.slice(0, READ_CHARS * 3).replace(FOOTER, "") });
@@ -194,12 +194,13 @@ const RELATIVE =
   /\b(?:today|tonight|tomorrow|yesterday|next|this (?:week|weekend|month|morning|afternoon|evening)|last|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:rs(?:day)?)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?|in \d+ (?:days?|weeks?|months?)|end of (?:the )?(?:day|week|month)|eod|eow|asap|soon|later)\b/i;
 
 /**
- * The key of what an item says that bears on actions (`CardLimits.sentenceReuse`): a hash of its own sentences that
- * hold deontic language, lowercased, greetings and footers out. Two items with the same key say the same constraint
- * in different greetings and sign-offs (a reminder re-sent by several people, a recurring notice), so one card serves
- * both. No key
- * (undefined) when no sentence qualifies or one is dated relative to its message ("next Friday", "tomorrow"): the same
- * words then mean different days.
+ * The key of what an item says that bears on actions (`CardLimits.sentenceReuse`): a hash of its title (reply and
+ * forward prefixes aside) and of its own sentences that hold deontic language, lowercased, greetings and footers out.
+ * Two items with the same key say the same constraint under the same subject in different greetings and sign-offs (a
+ * reminder re-sent by several people, a recurring notice), so one card serves both. The title is part of the key
+ * because the model reads it: "Do not share the deck" under "Atlas pricing" and under "Kestrel pricing" are cards for
+ * two projects. No key (undefined) when no sentence qualifies or one is dated relative to its message ("next Friday",
+ * "tomorrow"): the same words then mean different days.
  */
 export function sentenceKey(item: ContextItem): string | undefined {
   const own = ownText({ ...item, text: item.text.slice(0, READ_CHARS * 3).replace(FOOTER, "") }).toLowerCase();
@@ -208,8 +209,11 @@ export function sentenceKey(item: ContextItem): string | undefined {
     .map((x) => x.replace(GREETING, "").trim())
     .filter((x) => x.length > 0 && DEONTIC.test(x));
   if (held.length === 0 || held.some((x) => RELATIVE.test(x))) return undefined;
+  let title = item.title.slice(0, 200);
+  while (REPLY_TITLE.test(title)) title = title.replace(REPLY_TITLE, "");
+  if (RELATIVE.test(title)) return undefined;
   return createHash("sha256")
-    .update([...new Set(held)].sort().join("\n"))
+    .update([title.trim().replace(/\s+/g, " ").toLowerCase(), ...[...new Set(held)].sort()].join("\n"))
     .digest("hex")
     .slice(0, 32);
 }
@@ -495,6 +499,8 @@ class UserCards {
   readonly queue: { item: ContextItem; hash: string; skey?: string }[] = [];
   /** Sentence key → the content hash whose card says it (`sentenceReuse`). */
   readonly bySentence = new Map<string, string>();
+  /** Content hash → its sentence key in `bySentence`: the entry goes when the card does (held no longer, D8). */
+  readonly sentenceOf = new Map<string, string>();
   draining: Promise<void> | null = null;
   readonly abort = new AbortController();
 }
@@ -677,7 +683,7 @@ export class CardEnricher {
   private keep(u: UserCards, hash: string, s: Stored): void {
     u.byHash.delete(hash);
     u.byHash.set(hash, s);
-    while (u.byHash.size > this.limits.maxCardsPerUser) u.byHash.delete(u.byHash.keys().next().value as string);
+    while (u.byHash.size > this.limits.maxCardsPerUser) dropCard(u, u.byHash.keys().next().value as string);
   }
 
   private async drain(scope: Scope, u: UserCards): Promise<void> {
@@ -760,8 +766,11 @@ export class CardEnricher {
           this.keep(u, b.hash, { card: card.kind === "none" ? null : card, at, seenAt: at });
           if (b.skey !== undefined) {
             u.bySentence.set(b.skey, b.hash);
+            u.sentenceOf.set(b.hash, b.skey);
             while (u.bySentence.size > this.limits.maxCardsPerUser) {
-              u.bySentence.delete(u.bySentence.keys().next().value as string);
+              const [k, h] = u.bySentence.entries().next().value as [string, string];
+              u.bySentence.delete(k);
+              if (u.sentenceOf.get(h) === k) u.sentenceOf.delete(h);
             }
           }
         });
@@ -799,7 +808,8 @@ export class CardEnricher {
     const reservation = this.deps.budget.reserve(key, session, this.limits.estimatedCallUsd);
     this.deps.budget.endSession(session);
     if (!reservation) {
-      this.stats.overBudget += items.length;
+      // Only what the cut call left unread goes uncovered: its other cards stand.
+      this.stats.overBudget += items.filter((_, i) => (cards[i] ?? null) === null).length;
       return cards;
     }
     try {
@@ -840,7 +850,7 @@ export class CardEnricher {
       const s = hash ? u.byHash.get(hash) : undefined;
       if (!s?.card || !(s.at < before)) continue;
       if (now - s.seenAt > this.limits.ttlMs) {
-        u.byHash.delete(hash!); // Past its time to live: no item it could describe is held that long.
+        dropCard(u, hash!); // Past its time to live: no item it could describe is held that long.
         continue;
       }
       out.set(id, s.card);
@@ -905,7 +915,16 @@ function unlink(u: UserCards, id: string): void {
     return;
   }
   u.refs.delete(hash);
+  dropCard(u, hash);
+}
+
+/** Drops a content hash's card and the sentence key pointing to it (`sentenceReuse`): neither outlives the other. */
+function dropCard(u: UserCards, hash: string): void {
   u.byHash.delete(hash);
+  const k = u.sentenceOf.get(hash);
+  if (k === undefined) return;
+  u.sentenceOf.delete(hash);
+  if (u.bySentence.get(k) === hash) u.bySentence.delete(k);
 }
 
 // ---------------------------------------------------------------------------------------------------------------

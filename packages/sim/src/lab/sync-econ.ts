@@ -145,9 +145,11 @@ async function run(mode: Mode) {
     await sync.tick();
     clock += MIN;
   }
+  // The watch's one poll (what changed before it, no notice names) counts with the backfill.
+  if (push) for (const [id, , pushes] of RATES) if (pushes) partner.sourcePushes(scope, id);
+  if (push) await sync.tick();
   const backfill = sources.reduce((a, s) => a + s.lists, 0);
   for (const s of sources) s.lists = 0;
-  if (push) for (const [id, , pushes] of RATES) if (pushes) partner.sourcePushes(scope, id);
   sync.stats.backgroundCalls = 0;
   sync.stats.demandCalls = 0;
   // Lookups through each working day; events between ticks, as a webhook would deliver them.

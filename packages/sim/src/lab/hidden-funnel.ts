@@ -311,7 +311,11 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     }
     syncUse.warmMs += performance.now() - t0;
     syncUse.users++;
-    if (PUSH) for (const s of sources) partner.sourcePushes(scope, s.id);
+    if (PUSH) {
+      for (const s of sources) partner.sourcePushes(scope, s.id);
+      // The watch's one poll (what changed before it, no notice names), as a tenant's sync would make it.
+      syncUse.backfill += await sync.tick();
+    }
     // Cards for the backfilled items, as a long-running sync would have them before the first request.
     if (cards) await cards.idle();
     clock = world.now;

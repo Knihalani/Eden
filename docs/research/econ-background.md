@@ -238,3 +238,28 @@ session, no model, `--lead-in clause`, cards replayed from `cards-v2.jsonl`:
   nor behind; a source with an unread notice, or whose watch has lapsed (`syncPushMaxStaleMs`), is polled behind the
   lookup with `syncPollBehind`, never on the path (tests).
 
+### After review
+
+A review found four defects, each fixed with a test (`econ-review.test.ts`, failing before the fix):
+
+- **A watch made a stale source current at once.** What changed between the last poll and the watch no notice ever
+  names, so declaring a watch (or a first notice) now leaves the source dirty until one poll that began after it
+  completes. The funnel's and `sync-econ.ts`'s harnesses make that poll when they declare the watch: push in the
+  funnel is 218/21 with 0 request-time calls as before, amortised 1.46 calls per task (1.34 before, 50 more listing
+  calls over 40 users); `sync-econ.ts --days 3` push with the 30-minute gap 80.7 listing calls per user-day (79.3
+  before, 1.84 per lookup, 0.4% of deletes still held), `--days 7` 88.4 against D57's 111.6 (−21%).
+- **A notice during the backfill was lost** (the backfill may have read the item's page before it changed): it is now
+  kept, and the source is read once more after warm-up.
+- **A notice with `deleted: []` was ignored.** A notice is now a change notice unless its only field is a non-empty
+  `deleted` list; `changed: true` marks a notice that reports deletions and new items at once (Gmail's history can).
+  `deleted` takes Eden item ids or the connector's refs (mapped through the redaction's hashed ids); ids that match
+  no synced item are counted (`unmatchedDeletes`).
+- **Sentence reuse lent one subject's card to another** ("Do not share the deck externally" under "Atlas pricing" and
+  under "Kestrel pricing"): the model reads the subject for the card's entities, so the subject (reply and forward
+  prefixes aside) is now in `sentenceKey`. In-sample funnel, economy preset, same command as above: 218/19 as before,
+  2,970 items sent (74.25 per user, −55.4% against 166.5) and 496 calls (12.4 per user, −48.9%), 580 items reused by
+  sentence against 740. Totals only: no task-level diff was run.
+
+Also: a sentence key now goes with the card it points to (it outlived the card before), an over-budget retry counts
+only the items its cut call left uncovered, and `worthCardingStrict`'s comment describes the footer-block cut.
+

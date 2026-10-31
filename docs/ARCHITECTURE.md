@@ -146,7 +146,11 @@ content-free `PartnerDeps.onCandidates` hook; the engine decides nothing from th
 
 **Push** (D66, `syncPush`, off by default, with `sync`): a tenant holding a connector watch (Gmail watch, Calendar
 push, Slack Events) declares it (`ContextPartner.sourcePushes`) and relays each change notice
-(`ContextPartner.sourceChanged`), which carries no content. A pushed source is current until a notice arrives, so a
+(`ContextPartner.sourceChanged`), which carries no content. Declaring a watch (or a first notice) leaves the source
+to one more poll, for what changed before the watch, which no notice names; a notice during the backfill is kept and
+read after it. A notice is a change notice unless its only field is a non-empty `deleted` list (`changed: true` says a
+notice also has new items), and `deleted` takes Eden item ids or the connector's refs (mapped through the redaction's
+hashed ids). A pushed source is current until a notice arrives, so a
 lookup neither polls it nor waits for it; a notice is read with one incremental read-only list call (by the next tick,
 at most every `syncPushGapMs`, or by a lookup), a notice naming deleted items drops them at once, and sweeps run every
 `syncPushSweepMs` (3 days: a sweep also re-lists a quiet source's older items, which lapse from the cache 7 days after
@@ -190,8 +194,9 @@ agent. The server's `buildPartner` does not wire an enricher yet.
 **Card economy** (D66, `cardsEconomy`, off by default, with `cards`; docs/research/econ-background.md): the enricher
 reads fewer items with the same prompt. A strict prefilter cuts legal-disclaimer and notification-settings footer
 blocks (from their first words to the end of their paragraph, so a constraint written after one is still read) and
-does not read a reply's or forward's subject; items of one user that say the same deontic sentences (greetings and
-footers aside, none dated relative to their message) share one card; twenty items go per call. The card maker's
+does not read a reply's or forward's subject; items of one user that say the same deontic sentences under the same
+subject (reply prefixes, greetings and footers aside, none dated relative to their message) share one card, the
+subject included because the model reads it for the card's entities; twenty items go per call. The card maker's
 `OpenRouterModel` may route by price (`sort: "price"`, still ZDR); a batch cut off at the output cap, which price
 routing makes more frequent, is sent once more with default routing (`CardMakerOptions.retry`) under its own
 reservation.

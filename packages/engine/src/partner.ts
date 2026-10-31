@@ -500,13 +500,18 @@ export class ContextPartner {
    * Push (`syncPush`): a tenant that holds a watch on one of the user's sources (Gmail watch, Calendar push channel,
    * Slack Events) declares it here once the source is synced, and relays each change notice to `sourceChanged`. A
    * notice carries no content: Eden reads the change with its own read-only list call (D7), or drops the items the
-   * notice names as deleted. No-ops unless `sync` and `syncPush` are on and the user is synced; never throw.
+   * notice names as deleted. No-ops unless `sync` and `syncPush` are on and the user is synced; never throw. The
+   * source is read once more after the watch is declared (what changed before it, no notice names).
    */
   sourcePushes(scope: Scope, sourceId: string): void {
-    if (this.sync && this.config.syncPush) this.sync.pushing(scope, sourceId);
+    if (this.sync && this.config.syncPush) this.sync.pushing(scope, sourceId, this.now());
   }
 
-  /** A change notice for a source that pushes (`sourcePushes`); see above. */
+  /**
+   * A change notice for a source that pushes (`sourcePushes`; see above). `{}` (or `{ deleted: [] }`) says the source
+   * changed; `{ deleted: [...] }` with Eden item ids (`itemId(sourceId, ref)`) or the connector's refs says only that
+   * those items went, unless `changed: true` says it also has new or changed items.
+   */
   sourceChanged(scope: Scope, sourceId: string, change: SourceChange = {}): void {
     if (!this.sync || !this.config.syncPush) return;
     try {
