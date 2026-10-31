@@ -212,6 +212,11 @@ export interface EngineConfig {
    * Applies to the confident path, the fallback and the conflict ground.
    */
   quietNameOnly: boolean;
+  /**
+   * Span tracing (`spans.ts`): every phase of every event timed in wall and CPU time, totals kept per phase
+   * (`ContextPartner.spanStats`). An `onSpan` sink turns it on too. Off: no span is made.
+   */
+  spans: boolean;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
   probeOff: string[];
   /** Cost reserved per judge call before the real cost is known: about its worst case at the cap (D45). */
@@ -293,5 +298,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   recoverNames: false,
   groundOccasion: false,
   quietNameOnly: false,
+  spans: false,
   maxEventChars: 32_000,
 };

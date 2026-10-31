@@ -130,17 +130,15 @@ export const REALISTIC_ENTITIES: ProfileSet = Object.fromEntries(
   Object.entries(REALISTIC).map(([k, v]) => [k, { ...v, adapter: "entities-or-text" as Adapter }]),
 );
 
-const words = (s: string) =>
-  (
-    s
-      .normalize("NFKD")
-      .replace(/\p{M}/gu, "")
-      .toLowerCase()
-      .match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu) ?? []
-  ).map((w) => w.replace(/['’]s$/, ""));
+/** Accents dropped, lower case: what `words` and `fold` both start from. */
+const plain = (s: string) => s.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
+const wordsOfPlain = (p: string) =>
+  (p.match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu) ?? []).map((w) => w.replace(/['’]s$/, ""));
+const words = (s: string) => wordsOfPlain(plain(s));
 
 /** Lower case, accents dropped, whitespace collapsed: how a substring search compares text. */
-const fold = (s: string) => s.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
+const foldOfPlain = (p: string) => p.replace(/\s+/g, " ").trim();
+const fold = (s: string) => foldOfPlain(plain(s));
 
 const STOP = new Set("a an and are at be by for from in is it of on or the to with".split(" "));
 
@@ -193,22 +191,26 @@ export class SimIndex {
     readonly world: World,
   ) {
     this.items = world.items.filter((i) => i.sourceId === id);
+    // Each text normalized once for its words and its folded copy, and the title's words read once: building indexes
+    // was over half the CPU of a held-out funnel run (timeline spans and a profile, docs/research/moon-telemetry.md).
     for (const it of this.items) {
-      const ws = words(`${it.title}\n${it.text}`);
+      const whole = plain(`${it.title}\n${it.text}`);
+      const ws = wordsOfPlain(whole);
+      const titleWords = words(it.title);
       const tf = new Map<string, number>();
       for (const w of ws) tf.set(w, (tf.get(w) ?? 0) + 1);
-      for (const w of words(it.title)) tf.set(w, (tf.get(w) ?? 0) + 2); // Titles weigh more, as every engine does.
+      for (const w of titleWords) tf.set(w, (tf.get(w) ?? 0) + 2); // Titles weigh more, as every engine does.
       for (const w of tf.keys()) this.df.set(w, (this.df.get(w) ?? 0) + 1);
       this.tf.push(tf);
       this.lens.push(ws.length);
       const termSet = new Set(ws);
-      const titleSet = new Set(words(it.title));
+      const titleSet = new Set(titleWords);
       const i = this.terms.length;
       for (const w of termSet) push(this.postings, w, i);
       for (const w of titleSet) push(this.titlePostings, w, i);
       this.terms.push(termSet);
       this.titleTerms.push(titleSet);
-      this.folded.push(fold(`${it.title}\n${it.text}`));
+      this.folded.push(foldOfPlain(whole));
     }
     this.avgLen = this.lens.reduce((s, x) => s + x, 0) / Math.max(1, this.lens.length);
   }
