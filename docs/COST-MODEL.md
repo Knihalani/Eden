@@ -58,6 +58,13 @@ With `graph` (proposed D58) the judge sees at most `graphSeats` (1) more candida
 call at its cap; no other model call is added and the graph makes no source call. Measured in simulation (realistic,
 4 seeds, perfect judge): $0.0172 → $0.0178 per 1,000 turns, model calls per turn 0.213 → 0.215.
 
+The action firewall (`actionCheck`, off by default; proposed D69, docs/research/econ-firewall.md) adds no model call
+and no source call: each check of an agent's tool call is CPU on what is held (the cache, the probes' memo, the graph,
+the cards), 4–5 ms p50 and at most 28 ms per check in the no-model replay of the track's recorded calls (seeds 41–43,
+ALL). Its cost is the agent's: a held call costs the agent about one more model request to read the finding and
+answer, +$0.3–0.6 per 1,000 such tasks and +5–7 s on them (the track's live runs, in-sample; agent cost over
+all tasks, within noise).
+
 These are arithmetic on list prices, not measurements. Output is billed on tokens used, not the cap: a judge verdict
 is a few tokens plus low-effort reasoning (about 20 tokens on GLM 5.3 Flash in a probe of three calls).
 

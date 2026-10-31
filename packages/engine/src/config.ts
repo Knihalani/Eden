@@ -380,6 +380,13 @@ export interface EngineConfig {
    * session on the process milliseconds of CPU, and the cue it yields is no better than the head's.
    */
   maxEventChars: number;
+  /**
+   * The action firewall (`checkAction`, `firewall.ts`; docs/research/econ-firewall.md): an agent's tool call is checked
+   * before it runs, with no model and no source call, against what is held: the request and the call's structured
+   * arguments (their days, times, amounts, names and references) read as one cue through the conflict test, the graph,
+   * the cards and the calendar. A finding is returned as data; otherwise `proceed`. Off: `checkAction` always proceeds.
+   */
+  actionCheck: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -493,4 +500,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   decideConflict: false,
   decideCandidates: 64,
   maxEventChars: 32_000,
+  actionCheck: false,
 };

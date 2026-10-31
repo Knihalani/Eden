@@ -385,12 +385,15 @@ const RESTRICTION_ENDED =
 const BOILER =
   /\b(?:do not reply|don't reply|no-?reply|automated (?:message|email)|you are receiving|you're receiving|notification (?:settings|preferences)|unsubscribe|intended recipient|confidentiality notice|legally privileged|this email and any attachments)\b/;
 
-/** Whether an item names an identifier the request names ("INV-5842"): then it is about the same thing. */
-export function namesRef(frame: Frame, item: ContextItem): boolean {
-  const ids = frame.refs.filter((r) => r.noun === "");
+/**
+ * Whether an item names an identifier the request names ("INV-5842"): then it is about the same thing. `qualified`
+ * also counts a qualified reference ("Q3 report"), as the action firewall does (`firewall.ts`).
+ */
+export function namesRef(frame: Frame, item: ContextItem, qualified = false): boolean {
+  const ids = frame.refs.filter((r) => qualified || r.noun === "");
   if (ids.length === 0) return false;
   const said = refsOf(`${item.title} ${item.text}`.slice(0, MAX_TEXT));
-  return ids.some((a) => said.some((r) => r.kind === a.kind && r.value === a.value));
+  return ids.some((a) => said.some((r) => r.kind === a.kind && r.value === a.value && r.noun === a.noun));
 }
 
 /** Words too common to tie two statements to one matter. */

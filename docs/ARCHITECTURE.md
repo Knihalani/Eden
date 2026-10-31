@@ -201,6 +201,24 @@ anticipation's early decision reads what the prefetch, the sync and the cache ho
 engine's spans (`sync.freshen`, `sync.list`, `graph.walk`, `cards.match`, `cards.make`, `anticipate.prefetch`,
 `anticipate.early`), and the Pi harness's timeline reads the same spans.
 
+**The action firewall** (`actionCheck`, off by default; proposed D69, `firewall.ts`,
+[research/econ-firewall.md](research/econ-firewall.md)): `checkAction` (HTTP `POST /v1/check`, client `check`) takes
+the agent's tool call before it runs. The session's request and the call's structured arguments (dates written out,
+amounts, names, references; free-text fields such as an email's body left out) make one cue, decided from what is held
+with no model and no source call: the probes' memo and the class's cached finds offline, the graph walk, the cards and
+the cache, through `grounded` (whose conflicts come from the same `conflicts()` helper `decideConflict` reads). The
+arguments pass the secret gate before they make the cue, and a session keeps only a digest of each call it answered
+with a finding, taken after the gate. Only its action grounds count (a calendar clash for a call with a start, a conflict, the
+graph's or a card's, someone away), and a conflict read from shared words must also be tied by structure (a span over
+the call's day, an expiry before it, a limit on its amount, a standing constraint on someone it names, an identifier it
+names, or the action class's find). A finding the call's own words already account for ("one guest has coeliac
+disease" in the notes) is dropped. The answer is `proceed` or a `finding` in the usual data envelope; the same call
+made again after a finding proceeds (the agent's informed choice). What the integration does with a finding is its
+own: `heldResult` in the client is one choice (hold the call and return the finding as the tool's result). The client's
+`check` fails open (an error, a timeout, a 4xx or 503, or an answer of another shape is `proceed`); the route answers
+400 for a malformed call and 503 when the engine fails. The stock server turns on no engine flag from the environment:
+an embedding opts in through `buildPartner`'s `engine` settings, with the grounds it wants the check to read.
+
 **Ask** always searches (live, or a current synced source locally with D57; more sources), ignores the not-twice ledger (the agent asked), and returns the cited
 items as they are, with no model call: the asker is a model and reads them directly (D43). `askWithModel`
 (`EDEN_ASK_MODEL=1`) has one model call compose a short cited answer instead, when a model and budget are available.

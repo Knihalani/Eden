@@ -1,12 +1,15 @@
 /**
  * The conditions of `pi-ab.ts`, one grammar for every A/B the econ tracks ran (docs/research/econ-lab.md):
  *
- *   <base>[-act][~variant][+flag ...][@w<ms>]
+ *   <base>[-act[-firewall]][~variant][+flag ...][@w<ms>]
  *
  * - base: none, tools, eden, both, eden-judge or both-judge (see pi-ab.ts);
  * - `-act`: the stub action tools (`act.ts`); only in `--act` runs, a mode of its own because it changes the system
  *   prompt and the tools, and there every condition gets it (`--act --conditions tools,eden` runs tools-act and
  *   eden-act);
+ * - `-act-firewall`: and the engine's action firewall (`actionCheck`, D69) checks each action call before it runs; a
+ *   finding holds the call and is the tool's result (`heldResult`). Beside `tools`, Eden runs only as that check: it
+ *   observes the request but injects nothing and gives no tool;
  * - `~variant`: the settings `--variant-config` gives that name, over `--config`, so a configuration's A/B runs both
  *   arms in one process, concurrently and paired task by task (the machine's load falls on both alike);
  * - `+flag`: shorthand for one engine flag on, `eden+packetDates`; it stacks on a variant (`eden~ALL2+judgeBehind`);
@@ -23,16 +26,21 @@ export interface Condition {
   name: string;
   base: "none" | "tools" | "eden" | "both" | "eden-judge" | "both-judge";
   act: boolean;
+  /** `-act-firewall`: Eden checks each action call first (`actionCheck` on in `config`). */
+  firewall: boolean;
   /** The engine configuration of this condition: `--config` with its variant's settings and flags over it. */
   config: Record<string, unknown>;
   waitMs: number;
+  /** Eden's context reaches the agent (packets and `ask_context`): not in `tools-act-firewall`. */
   useEden: boolean;
+  /** A `ContextPartner` runs in this condition: Eden's context, or the firewall alone. */
+  withPartner: boolean;
   useTools: boolean;
   judge: boolean;
 }
 
 const BASES = ["none", "tools", "eden", "both", "eden-judge", "both-judge"] as const;
-const SHAPE = /^([a-z-]+?)(-act)?(?:~([A-Za-z0-9_.-]+))?((?:\+[^+@~]+)*)(?:@(.*))?$/;
+const SHAPE = /^([a-z-]+?)(-act(?:-firewall)?)?(?:~([A-Za-z0-9_.-]+))?((?:\+[^+@~]+)*)(?:@(.*))?$/;
 
 /** `--variant-config`: a JSON object mapping each variant name to the settings it adds. */
 export function parseVariants(json: string): Variants {
@@ -53,9 +61,6 @@ export function parseCondition(
     known?: ReadonlySet<string>;
   },
 ): Condition {
-  // The firewall conditions (`-act-firewall`) call the engine's action check, which arrives with the firewall's own
-  // change (actionCheck); until then they would run as their base under the firewall's name.
-  if (/-act-firewall/.test(name)) throw new Error(`condition ${name}: needs the engine's actionCheck, not here yet`);
   const m = SHAPE.exec(name);
   const base = m?.[1] as Condition["base"] | undefined;
   if (!m || !base || !BASES.includes(base)) {
@@ -76,13 +81,22 @@ export function parseCondition(
   const waitMs = wait === undefined ? 3_000 : wait.startsWith("w") ? Number(wait.slice(1)) : NaN;
   if (!Number.isFinite(waitMs) || waitMs < 0) throw new Error(`bad wait in ${name}: use @w<ms>`);
   const act = !!options.act;
+  const firewall = actTag === "-act-firewall";
+  const useEden = base !== "none" && base !== "tools";
   return {
     name: act && !actTag ? name.replace(base, `${base}-act`) : name,
     base,
     act,
-    config: { ...options.config, ...extra, ...Object.fromEntries(flags.map((f) => [f, true])) },
+    firewall,
+    config: {
+      ...options.config,
+      ...extra,
+      ...Object.fromEntries(flags.map((f) => [f, true])),
+      ...(firewall ? { actionCheck: true } : {}),
+    },
     waitMs,
-    useEden: base !== "none" && base !== "tools",
+    useEden,
+    withPartner: useEden || firewall,
     useTools: base === "tools" || base.startsWith("both"),
     judge: base.endsWith("-judge"),
   };
