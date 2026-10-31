@@ -166,7 +166,7 @@ describe("background sync (D57)", () => {
     expect(src.searches).toBeGreaterThan(0);
   });
 
-  test("a sweep drops what the source no longer lists (delete propagation)", async () => {
+  test("two sweeps in a row that miss an item drop it (delete propagation)", async () => {
     const src = new ListSource("mail", mail(5));
     const { partner, cache, advance, now } = setup([src], { syncSweepMs: HOUR });
     partner.sync!.track(scope);
@@ -175,6 +175,12 @@ describe("background sync (D57)", () => {
     src.items = src.items.filter((i) => i.ref !== "m3");
     advance(2 * HOUR);
     partner.sync!.track(scope); // Still active: sweeps run for active users only.
+    for (let i = 0; i < 5; i++) await partner.sync!.tick();
+    // One sweep's miss may be an offset listing shifting between pages: kept until the next sweep misses it too.
+    expect(cache.get(scope, itemId("mail", "m3"), now())).not.toBeNull();
+    expect(partner.sync!.stats.deleted).toBe(0);
+    advance(2 * HOUR);
+    partner.sync!.track(scope);
     for (let i = 0; i < 5; i++) await partner.sync!.tick();
     expect(cache.get(scope, itemId("mail", "m3"), now())).toBeNull();
     expect(cache.isSynced(scope, itemId("mail", "m2"))).toBe(true);

@@ -8,7 +8,8 @@
  *   mailbox does not crowd out a quiet calendar's newest), then
  * - incremental polls: the listing read newest first until a page holds an item already synced and unchanged, every
  *   `syncEveryMs` while the user is active (0: no timed polls), or on demand when a lookup finds the source stale;
- * - a sweep every `syncSweepMs` (while active) that re-lists everything and drops what the source no longer lists;
+ * - a sweep every `syncSweepMs` (while active) that re-lists everything and drops what two sweeps in a row did not
+ *   list (one can skip an item: an offset listing shifts under a delete between its pages);
  * - a per-(user, source) budget of `syncCallsPerMin`, on top of the fan-out's own guards (breaker, AIMD concurrency,
  *   the serving rate limit, which background calls leave headroom in).
  *
@@ -90,7 +91,16 @@ interface SourceSync {
   /** When the last complete poll (or the backfill) ended; -Infinity before. */
   polledAt: number;
   sweptAt: number;
+  /**
+   * The sweep under way, read across ticks: its next page and every id it (or any other read of the source since it
+   * began: a poll, a lookup's on-demand poll) has seen listed.
+   */
   sweep: { cursor: string | undefined; seen: Set<string> } | null;
+  /**
+   * Ids the last complete sweep did not list. An item is dropped only when two sweeps in a row miss it: an offset
+   * listing shifts under a delete or an update between pages, so one sweep can skip an item the source still has.
+   */
+  missed: Set<string>;
   /** The change rate's Gamma posterior: new or changed items (alpha) over hours watched (beta). */
   alpha: number;
   beta: number;
@@ -501,7 +511,11 @@ export class SyncManager {
       if (first) this.polled(s, started, fresh);
       const full = sw.seen.size >= this.o.maxItems;
       if (page.next === null || page.items.length === 0 || full) {
-        const gone = [...s.ids].filter((id) => !sw.seen.has(id));
+        // Missed by this sweep and the one before: gone. Missed by this one only: perhaps skipped (an offset listing
+        // shifted, a short page ended the listing early), so kept and checked again by the next sweep.
+        const missed = [...s.ids].filter((id) => !sw.seen.has(id));
+        const gone = missed.filter((id) => s.missed.has(id));
+        s.missed = new Set(missed.filter((id) => !s.missed.has(id)));
         for (const id of gone) s.ids.delete(id);
         this.stats.deleted += this.deps.cache.dropSynced(u.scope, gone);
         s.sweep = null;
@@ -521,6 +535,8 @@ export class SyncManager {
     for (const it of own) {
       s.ids.delete(it.id); // Re-insert: the set stays oldest synced first.
       s.ids.add(it.id);
+      // Listed while a sweep is under way (by the sweep, or by a poll between its pages): the source has it.
+      s.sweep?.seen.add(it.id);
     }
     trimIds(s.ids, this.o.maxItems);
     if (changed.length > 0) this.deps.onStored?.(u.scope, changed);
@@ -585,6 +601,7 @@ function newSourceSync(id: string): SourceSync {
     polledAt: -Infinity,
     sweptAt: -Infinity,
     sweep: null,
+    missed: new Set(),
     // Before anything is known: one change an hour.
     alpha: 1,
     beta: 1,

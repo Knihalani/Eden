@@ -3,7 +3,7 @@ import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import type { Source } from "@eden/sources";
-import { FOLLOW_MIN, IntentPatterns, predict } from "./anticipate";
+import { FOLLOW_MIN, IntentPatterns, PATTERN_TTL_MS, predict } from "./anticipate";
 import { ItemCache } from "./cache";
 import { hasWord } from "./consequence";
 import { ContextPartner } from "./partner";
@@ -64,6 +64,17 @@ describe("IntentPatterns", () => {
     // Another intent, another user: nothing.
     expect(p.follows(a, "pay")).toEqual([]);
     expect(p.follows(b, "release")).toEqual([]);
+  });
+
+  test("a learned name expires PATTERN_TTL_MS after it was last noted, as the items that taught it do", () => {
+    const p = new IntentPatterns();
+    const t0 = Date.UTC(2026, 9, 20);
+    for (let i = 0; i < FOLLOW_MIN; i++) p.note(a, "release", ["Platform Team"], ["chat"], t0);
+    expect(p.follows(a, "release", 1, t0 + PATTERN_TTL_MS)).toEqual(["Platform Team"]);
+    expect(p.follows(a, "release", 1, t0 + PATTERN_TTL_MS + 1)).toEqual([]);
+    // Noted again after expiry: it counts from one, not from where it stood.
+    p.note(a, "release", ["Platform Team"], ["chat"], t0 + 2 * PATTERN_TTL_MS);
+    expect(p.follows(a, "release", 1, t0 + 2 * PATTERN_TTL_MS)).toEqual([]);
   });
 
   test("forget drops the user, or what one source alone held", () => {

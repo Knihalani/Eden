@@ -43,6 +43,63 @@ Checks on the final tree: `bun run check` green (format, typecheck, tests); `bun
 `5ce8f93de`'s except the latency fields (diffed). With spans on, the funnel's results equal spans off (H 148/128/21,
 ALL 218/19).
 
+## After review (D63)
+
+Three reviews of this tree (correctness, privacy and security, numbers) found defects; each was reproduced by a test
+that failed on `666031394` and passes after its fix (`packages/engine/src/moon-review.test.ts`, plus tests in
+`cards.test.ts`, `sync.test.ts`, `anticipate.test.ts` and `pi-timeline.test.ts`). Fixed:
+
+- **Sync sweep** (D57): an item a poll stored while a sweep was part-way was deleted when the sweep ended, though
+  the source counted as current; and with offset cursors, a delete between two pages shifted the listing so the
+  sweep dropped a live item and kept the deleted one. Now anything listed while a sweep runs counts as seen, and an
+  item is dropped only when two sweeps in a row miss it (delete propagation within about 48 h, not 24 h).
+- **Graph walk**: dropped synced items after the 24 h lookup TTL though they live 7 days; it now uses each item's own.
+- **D17**: a prefetch in flight at `session_end` still traced afterwards; it now stops at the session's end.
+- **Fast path**: with `anticipate` and no model, `observe` awaited the source resolver (422 ms behind a 400 ms
+  resolver); the early decision now waits at most 5 ms for it, then leaves the request to the slow path.
+- **Cards** (D59): a card is now kept only while a cached item has its content (the cache tells the enricher what
+  leaves it), at most 7 days after an item last carried it; a revoked source drops only its own items' cards (it
+  dropped every card of the user, and unchanged items never got theirs back); "made before the request" reads the
+  engine's clock, not the caller's; the prompt's "today" is the user's day; a card is anchored to its item by a
+  content word, not a stopword; and a card naming more than 3 actions, a date over a year from the day it was made,
+  or a span over a year is dropped (`plausible`), so one item steering the enrichment model can no longer make
+  itself a conflict for every request on every day.
+- **Anticipation patterns** expire 7 days after a delivery last taught them.
+- **Spans**: a draft's root span now closes, and a prefetch's probes are children of `anticipate.prefetch`, so
+  pi-timeline routes them; its span router keeps waiting spans by the open ancestor they wait on and drops what
+  waited on a root that closed with no session (20k waiting roots now cost each span its depth).
+- **pi-ab**: `cards` and `sync` now run as configured (list tools passed through, a metered card enricher charged to
+  Eden's spend, the sync backfilled and ticked, a run refused when a flag's dependency is missing). Before, a run
+  labelled R or ALL measured R without cards, or ALL without sync and cards. A live plumbing check (ALL, held-out
+  seed 41, 2 hidden tasks, eden only, Pi harness) spent $0.0029, $0.0020 of it the cards' enrichment booked to Eden,
+  with `sync.freshen`, `graph.walk`, `cards.match` and `anticipate.*` spans in each task's timeline: wiring only, not a
+  measurement.
+
+Tried and taken out: delivering an untied card (one naming nothing the request names) with no model only over a
+closed span of at most 62 days. It rejected real constraints (a litigation hold, "staging is down until Thursday",
+an approval needed over £500), lost one planted delivery in ALL's funnel and let the fallback deliver a decoy in R's
+and ALL's; `plausible` alone closes the reported case.
+
+Numbers after the fixes, same commands and card file as below:
+
+- **Funnel, in-sample** (hidden, held-out 1–4, seeds 41–44): H 128 / 21, R 152 / 18, ALL 218 / 19 (delivered /
+  decoys of 268), every task identical to `666031394`'s run, calls per task included. A rerun of R on
+  `666031394` itself gave the same per-task results twice: the funnel is deterministic.
+- **Realistic simulation, R** (seeds 41–44): with no model recall .433 → .432 (327 of 757 must facts, one fewer, in
+  seed 43), precision .635, soft fire rate .057; with the perfect judge unchanged at .679 / .972, 421 B per needed
+  fact, 7.88 calls per lookup, $0.0195 per 1,000 turns. Seeds 42 and 44 are identical; 41 and 43 move by one
+  delivery each. The cause is a card no longer outliving its content: when an item's content leaves the cache and
+  comes back, its card is read again and lands later.
+- `bun run eval`: identical to `5ce8f93de`'s JSON except `latencyP50Ms` and `latencyP95Ms`.
+
+The configuration does not change: R stays the recommendation, ALL the stronger one waiting on the soft fire bar.
+
+Deferred, with reasons, in D63: the graph's memory (2.4× heap, 3× put CPU per user; measured, below) is documented,
+not reduced; a cache `put` costs O(synced items) once a user is synced (sync only, not in R); synced items' names in
+the source map outlive the items (PRIVACY.md now says so); and a card that stays within `plausible`'s bounds (three
+actions, a span under a year) can still make its item a no-model conflict for unrelated requests with those actions:
+no rule tried separates such a card from a real standing constraint without losing real ones.
+
 ## Experiment matrix (in-sample, free, this session)
 
 Configurations: H (D55); H plus each helping track alone, as its track recommended — **S** = `sync` +
@@ -144,8 +201,11 @@ call); that bar is not among this choice's constraints.
 
 `bench.ts --latency` shape (`quality-cli.ts --users 3 --sessions 6 --planner --time 1`, perfect judge modelled at
 900 ms), 139 must facts per configuration; delivery percentiles are per-seed means. Runs went 4–5 at a time on a
-shared 4-CPU machine; five ALL runs were cut by a time limit and rerun alone. Small samples: read the medians, not
-the tails.
+shared 4-CPU machine; five ALL runs (no model 43, 44; perfect 42, 43, 44) were cut by a time limit and rerun
+together, five at a time on the 4 CPUs (`latrest.sh`, `xargs -P 5`), not alone as first written: ALL's tails were
+measured under different contention from H's and R's, and H's own p95 ranges 5.0–70.4 s across seeds. The latency
+jobs replayed an earlier card file (4,239 cards, sha256 `509a8624…`) than the funnel's (below). Small samples: read the
+medians, not the tails; the p95 comparison below is not a like-for-like measurement.
 
 | Config | Judge | Delivery p50 / p95 (ms) | Observe p50 (ms) | Recall | Precision | Calls / lookup | Process CPU (4 seeds) |
 |---|---|---|---|---|---|---|---|
@@ -169,8 +229,11 @@ Recorded with `hidden-funnel --timeline` and read with `timeline-report.ts` (spa
   critical path is the slow path's waiting on searches and probes (73% in `slow` itself, `probe.second` 6%, `ground`
   4%); traced engine CPU 1.5 s of 7.8 s process CPU, led by mentions, grounding, cache puts and the gate.
 - **ALL**: 26,707 spans; lookup-to-delivery p50 8.9 ms, p95 14.9 ms. `sync.freshen` (the on-demand poll before a
-  lookup) is 64.5% of the critical path. Process CPU rises 7.8 s → 24.7 s for the 40 simulated users: the sync's
-  backfill redacts (`sanitize` 2.9 s) and records mentions for (`mentions` 2.4 s) every listed item; `cards.match`
+  lookup) is 64.5% of the critical path. Process CPU rises 7.8 s → 24.7 s for the 40 simulated users. The sync's
+  backfill redacting (`sanitize` 2.9 s) and recording mentions for (`mentions` 2.4 s) every listed item is about a
+  third of that rise, not most of it as first written: the review measured ALL 31.5 s against ALL − `graph` 24.3 s
+  and H 11.2 s (one run each, four at a time on 4 CPUs; not re-run here), so the graph's building on every cache put
+  is about 35% of it (Costs). `cards.match`
   0.2 s and `graph.walk` 0.1 s of request-time CPU (p50 0.37 ms and 0.16 ms per lookup). 2,316 listing calls
   (`sync.list`), 970 replayed card batches (`cards.make`).
 
@@ -240,8 +303,13 @@ in-sample and +19 (26%) blind; ALL is +90 (70%) in-sample, +56 (78%) blind.
 - **Cards** (D59): $0.000181 per call of 10 items in the cards track's 572 calls; $0.000212 per call in this session's
   41 (more output per batch); about $0.003–0.004 per user-month at 50 new items a day (cards track's estimate, not
   re-measured).
-- **Graph** (D58) and **anticipation** (D60): no model call; request-time CPU p50 0.16 ms (walk) and the prefetch's
-  source calls (funnel +0.7 calls per task with a draft lead-in).
+- **Graph** (D58): no model call; request-time CPU p50 0.16 ms per walk. Building it is not free: measured after the
+  review (20 users, full caches of 2,000 realistic items each from worlds 41–43 at `noiseScale` 1.5, `ItemCache.put`
+  in batches of ten, nothing else running), heap 3.38 → 8.16 MB per user and put CPU 120 → 361 ms per 2,000 items
+  (2.4× and 3×); at the cache's 10,000 users per tenant that is about 48 GB more heap. `MAX_NODES` (120,000) is not
+  what bounds it (1,161 nodes for 2,000 items here): the links and postings are. Not yet reduced (D63).
+- **Anticipation** (D60): no model call; the prefetch's source calls (funnel +0.7 calls per task with a draft
+  lead-in).
 - Telemetry (D56) off costs one null check per phase.
 
 ## What is not known
@@ -251,11 +319,24 @@ in-sample and +19 (26%) blind; ALL is +90 (70%) in-sample, +56 (78%) blind.
   the synced blind one); zoo-a and zoo-b items were not enriched, so cards there are mostly absent.
 - The soft fire bar's reading (per-seed mean over 6–21 soft turns) decides between R and ALL; pooled, ALL equals H.
 - The simulated worlds are small and static; the sync's caps, staleness model and memory are not stressed (D57).
-- The reviewer subagent was not run (no agent tool in this session); the merge was reviewed by hand.
+- The reviewer subagent was not run in the combining session; three reviews followed it (D63, "After review").
 
 ## Reproduce
 
-Scripts in the session scratchpad (`comb/exp`): `mkcfg.ts` writes the configs; `job.sh` runs one funnel or simulation
-(`hidden-funnel.ts --lead-in clause`, `quality-cli.ts --planner --drafts clause`, `--cards` when the config has cards);
-`funnels.sh`, `sims.sh`, `latency.sh`, `spans.sh` and `blind.sh` run the matrix; `aggf.ts`, `agg3.ts` and the workflow's
-`agg2.ts` aggregate.
+The card replay file the funnel, simulation and blind rows used is committed: `packages/sim/lab/cards/cards-v2.jsonl`
+(4,634 cards of simulated items, sha256 `5bf3482a6b5799f935a42b7d1b7e62022da92f760aab9b7150ab34e912510472`; 395 of
+them were added for the blind run by `cards-enrich.ts --funnel heldout5,heldout6,heldout7,heldout8`). Each row, from
+the repo root, with `CFG` the configuration's JSON (R is the block above; H is pi-ab's `H` preset):
+
+```bash
+# Funnel (in-sample), cards replayed when the config has cards:
+bun packages/sim/src/lab/hidden-funnel.ts --suite hidden,heldout,heldout2,heldout3,heldout4 --no-record \
+  --lead-in clause --config "$CFG" --json out.json --cards packages/sim/lab/cards/cards-v2.jsonl
+# Realistic simulation, one seed and judge (none or perfect):
+bun packages/sim/src/quality-cli.ts --profile realistic --seed 41 --planner --judge none --drafts clause \
+  --config "$CFG" --cards packages/sim/lab/cards/cards-v2.jsonl > out.json
+```
+
+The session's batch scripts (`mkcfg.ts`, `job.sh`, `funnels.sh`, `sims.sh`, `latency.sh`, `spans.sh`, `blind.sh`, and
+the aggregators `aggf.ts`, `agg3.ts`, `agg2.ts`) loop these two commands over configs and seeds; they stayed in the
+session scratchpad.

@@ -397,6 +397,56 @@ describe("cards in the engine (config.cards)", () => {
     expect(out.u1).toEqual([]);
   });
 
+  // An item carded in one session, then a deploy request; `revoke` revokes another source in between, `lag` is how far
+  // the caller's clock runs behind the engine's.
+  const revokeOrLag = async (revoke: boolean, lag: number) => {
+    let clock = NOW;
+    const cards = new CardEnricher({
+      maker: new TableMaker(cardFor("2026-11-04", "2026-11-09")),
+      budget: new Budget(),
+      now: () => clock,
+    });
+    const mail: Source = { id: "mail", kind: "test", description: "Mail", search: async () => [] };
+    let sources: Source[] = [anySource([kestrel("from 4 Nov until 9 Nov")]), mail];
+    const p = new ContextPartner({
+      sources: async () => sources,
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: { confidentScore: 99, fallbackMatchedTerms: 0, groundConflict: true, cards: true },
+      cards,
+    });
+    const scope = { tenantId: "t", userId: "u1" };
+    const say = async (text: string, sessionId: string) => {
+      const ev = { ...scope, sessionId, at: clock - lag, kind: "user_message", text } as AgentEvent;
+      const r = await p.observe(ev, { waitMs: 1_000 });
+      return [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId })].flatMap((i) =>
+        i.citations.map((c) => `${c.itemId} ${i.reason.split(":")[0]}`),
+      );
+    };
+    await say("Any news on the Kestrel cluster?", "s1");
+    await cards.idle();
+    if (revoke) {
+      p.forget(scope, "mail");
+      sources = [sources[0]!];
+    }
+    clock += HOUR;
+    await say("Any update on the Kestrel cluster snapshot?", "s2"); // the item comes back unchanged from a lookup
+    await cards.idle();
+    clock += HOUR;
+    return say("Deploy the billing migration on Thursday 5 November.", "s3");
+  };
+
+  test("revoking one source keeps the cards of the user's other items", async () => {
+    expect(await revokeOrLag(true, 0)).toEqual(["chat:k1 grounded-card"]);
+  });
+
+  test("a card counts by the engine's clock, whatever the caller's: a client 2 h behind still sees it", async () => {
+    expect(await revokeOrLag(false, 2 * HOUR)).toEqual(["chat:k1 grounded-card"]);
+  });
+
   test("one user's cards never serve another, and forget drops them", async () => {
     const { out, cards, partner } = await run({ cards: true }, cardFor("2026-11-04", "2026-11-09"), ["u1", "u2"]);
     expect(out.u1).toEqual(["chat:k1 grounded-card"]);

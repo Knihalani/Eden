@@ -19,7 +19,9 @@
  *   the item a candidate; one whose span or limit the request violates is a conflict the engine may deliver.
  *
  * What the model writes never reaches the agent: a card is a key for matching, and the item itself is what is
- * delivered (D19). Cards live in memory, per user, bounded, and are dropped with the user (D8, D9).
+ * delivered (D19). Cards live in memory, per user, bounded, and are dropped with the user (D8, D9), with the items
+ * they describe (an item leaving the cache unlinks its card: `forgetItems`), with a revoked source's items, and after
+ * `ttlMs` unseen.
  */
 import { createHash } from "node:crypto";
 import type { Budget, ChatMessage, Model } from "@eden/llm";
@@ -28,6 +30,7 @@ import { sanitizeForStore } from "@eden/redact";
 import type { Frame } from "./conflict";
 import { CLASSES, hasWord } from "./consequence";
 import { inert } from "./render";
+import { isStopword } from "./text";
 import type { Tracer } from "./spans";
 
 /**
@@ -279,7 +282,40 @@ export function parseCards(text: string, count: number): (Card | null)[] {
  */
 export function anchored(card: Card, item: ContextItem): boolean {
   const own = new Set(wordsOf(`${item.title.slice(0, 200)} ${ownText(item)}`));
-  return wordsOf(`${card.statement} ${card.entities.join(" ")}`).some((w) => own.has(w));
+  // A word every item may hold ("with", "this", "from", "everyone") says nothing of which item a card is about.
+  return wordsOf(`${card.statement} ${card.entities.join(" ")}`).some((w) => own.has(w) && !weakWord(w));
+}
+
+const WEAK_WORDS = new Set(
+  (
+    "anyone everyone someone nobody everything anything something applies apply item items note message email mail " +
+    "today tomorrow yesterday week weeks month months year years time date dates days thing things"
+  ).split(" "),
+);
+const weakWord = (w: string) => isStopword(w) || WEAK_WORDS.has(w);
+
+/** Actions one card may bear on: a real constraint is about one or two kinds of act; a card claiming many is noise. */
+export const MAX_CARD_ACTIONS = 3;
+/** How far from the day it is made a card's dates may reach (days), and how long its span may run. */
+export const MAX_CARD_REACH_DAYS = 366;
+
+/**
+ * Whether a card is within what a real constraint looks like, whatever the model (or an item steering it) wrote: at
+ * most `MAX_CARD_ACTIONS` actions, and dates within `MAX_CARD_REACH_DAYS` of `today` (YYYY-MM-DD) with a span no
+ * longer than that, so no card can hold over every day (a span reaching to the far past or future would make its
+ * item a conflict for any request with its action). A card outside is dropped: uncovered rather than wrong.
+ */
+export function plausible(card: Card, today: string): boolean {
+  if (card.kind === "none") return true;
+  if (card.actions.length > MAX_CARD_ACTIONS) return false;
+  const t = dayMs(today);
+  if (!Number.isFinite(t)) return true;
+  const reach = MAX_CARD_REACH_DAYS * DAY_MS;
+  const s = card.start ? dayMs(card.start) : undefined;
+  const e = card.end ? dayMs(card.end) : undefined;
+  if (s !== undefined && Math.abs(s - t) > reach) return false;
+  if (e !== undefined && Math.abs(e - t) > reach) return false;
+  return s === undefined || e === undefined || e - s <= reach;
 }
 
 /** Makes cards for a batch of items. The engine's is `ModelCardMaker`; the lab replays a disk cache. */
@@ -320,6 +356,11 @@ export interface CardLimits {
   batch: number;
   /** Reserved per call before its cost is known: about its worst case at the output cap. */
   estimatedCallUsd: number;
+  /**
+   * A card no item has linked to for this long (ms) is dropped: never held longer than the longest-lived item it can
+   * describe (a synced one's `syncTtlMs`). Items leaving the cache drop theirs sooner (`forgetItems`).
+   */
+  ttlMs: number;
 }
 
 export const DEFAULT_CARD_LIMITS: CardLimits = {
@@ -328,12 +369,15 @@ export const DEFAULT_CARD_LIMITS: CardLimits = {
   maxQueue: 200,
   batch: 10,
   estimatedCallUsd: 0.002,
+  ttlMs: 7 * 24 * 3_600_000,
 };
 
 interface Stored {
   card: Card | null;
   /** When the card was made (the partner's clock): a lookup uses only cards made before it began. */
   at: number;
+  /** When an item last linked to it (made, or an item with this content enqueued): its time to live runs from here. */
+  seenAt: number;
 }
 
 class UserCards {
@@ -342,6 +386,8 @@ class UserCards {
   readonly byHash = new Map<string, Stored>();
   /** Item id → content hash of the copy last enqueued. */
   readonly byItem = new Map<string, string>();
+  /** Links per content hash, cards made or not: a card that lands for content no item links to any more is not kept. */
+  readonly refs = new Map<string, number>();
   readonly queue: { item: ContextItem; hash: string }[] = [];
   draining: Promise<void> | null = null;
   readonly abort = new AbortController();
@@ -359,6 +405,8 @@ export interface CardStats {
   overBudget: number;
   /** Cards dropped for sharing no word with their item (`anchored`). */
   unanchored: number;
+  /** Cards dropped as too wide for one constraint (`plausible`). */
+  implausible: number;
 }
 
 /**
@@ -380,12 +428,18 @@ export class CardEnricher {
     failures: 0,
     overBudget: 0,
     unanchored: 0,
+    implausible: 0,
   };
   /**
    * Span tracing (`spans.ts`): each enrichment call is a `cards.make` span (counts only, D19). The partner sets it
    * when its spans are on; null otherwise.
    */
   tracer: Tracer | null = null;
+  /**
+   * The user's UTC offset (minutes, east positive): "today" in the prompt is the user's day, not UTC's (D44, D55).
+   * The partner sets it from its cache; 0 (UTC) when unset.
+   */
+  offsetOf: ((scope: Scope) => number) | null = null;
 
   constructor(
     private readonly deps: { maker: CardMaker; budget: Budget; now: () => number },
@@ -439,21 +493,29 @@ export class CardEnricher {
     for (const item of items) {
       this.stats.enqueued++;
       const hash = cardKey(item);
-      u.byItem.delete(item.id);
-      u.byItem.set(item.id, hash);
-      if (u.byHash.has(hash) || u.queue.some((q) => q.hash === hash)) {
+      if (u.byItem.get(item.id) === hash) {
+        // The same content again: only its place in the order moves (unlinking it first would drop its card).
+        u.byItem.delete(item.id);
+        u.byItem.set(item.id, hash);
+      } else {
+        unlink(u, item.id);
+        link(u, item.id, hash);
+      }
+      const known = u.byHash.get(hash);
+      if (known) known.seenAt = now;
+      if (known || u.queue.some((q) => q.hash === hash)) {
         this.stats.reused++;
         continue;
       }
       if (!worthCarding(item)) {
         this.stats.prefiltered++;
-        this.keep(u, hash, { card: null, at: now });
+        this.keep(u, hash, { card: null, at: now, seenAt: now });
         continue;
       }
       u.queue.push({ item, hash });
       if (u.queue.length > this.limits.maxQueue) u.queue.shift();
     }
-    while (u.byItem.size > this.limits.maxCardsPerUser * 2) u.byItem.delete(u.byItem.keys().next().value as string);
+    while (u.byItem.size > this.limits.maxCardsPerUser * 2) unlink(u, u.byItem.keys().next().value as string);
     if (u.queue.length > 0 && !u.draining) {
       u.draining = this.drain(scope, u).finally(() => (u.draining = null));
     }
@@ -481,7 +543,7 @@ export class CardEnricher {
         u.queue.length = 0;
         return;
       }
-      const today = new Date(this.deps.now()).toISOString().slice(0, 10);
+      const today = new Date(this.deps.now() + (this.offsetOf?.(scope) ?? 0) * 60_000).toISOString().slice(0, 10);
       const tracer = this.tracer;
       const sp = tracer?.open("cards.make", 0, { async: true, items: batch.length });
       try {
@@ -506,8 +568,16 @@ export class CardEnricher {
             this.stats.unanchored++;
             return;
           }
+          // Too wide to be a reading of one constraint (many actions, a span over every day): uncovered.
+          if (!plausible(card, today)) {
+            this.stats.implausible++;
+            return;
+          }
+          // The item left the cache (or its source was forgotten) while the call ran: its content is not held, nor
+          // is what the model read from it.
+          if (!u.refs.has(b.hash)) return;
           this.stats.carded++;
-          this.keep(u, b.hash, { card: card.kind === "none" ? null : card, at });
+          this.keep(u, b.hash, { card: card.kind === "none" ? null : card, at, seenAt: at });
         });
       } catch {
         if (sp && sp.endMs === 0) tracer!.close(sp, { error: true });
@@ -535,12 +605,28 @@ export class CardEnricher {
     const out = new Map<string, Card>();
     const u = this.users.get(scopeKey(scope));
     if (!u) return out;
+    const now = this.deps.now();
     for (const id of ids) {
       const hash = u.byItem.get(id);
       const s = hash ? u.byHash.get(hash) : undefined;
-      if (s?.card && s.at < before) out.set(id, s.card);
+      if (!s?.card || !(s.at < before)) continue;
+      if (now - s.seenAt > this.limits.ttlMs) {
+        u.byHash.delete(hash!); // Past its time to live: no item it could describe is held that long.
+        continue;
+      }
+      out.set(id, s.card);
     }
     return out;
+  }
+
+  /**
+   * Items that left the user's cache (expired, evicted, deleted at the source, dropped with an idle user): their links
+   * go, and a card whose content no cached item still has goes with them. A card is never held longer than its item.
+   */
+  forgetItems(scope: Scope, ids: Iterable<string>): void {
+    const u = this.users.get(scopeKey(scope));
+    if (!u) return;
+    for (const id of ids) unlink(u, id);
   }
 
   /** The ids of the user's items with a constraint card, newest last (bounded by `maxCardsPerUser` twice). */
@@ -552,14 +638,45 @@ export class CardEnricher {
     return out;
   }
 
-  /** Drops a user's cards and queue, and stops their enrichment in flight. A source's forget drops them all too. */
-  forget(scope: Scope): void {
-    this.drop(scopeKey(scope), scope.tenantId);
+  /**
+   * Drops a user's cards and queue and stops their enrichment in flight; with `sourceId`, only what that source's items
+   * brought (their links, their cards, their place in the queue; a batch in flight keeps nothing of theirs).
+   */
+  forget(scope: Scope, sourceId?: string): void {
+    if (sourceId === undefined) {
+      this.drop(scopeKey(scope), scope.tenantId);
+      return;
+    }
+    const u = this.users.get(scopeKey(scope));
+    if (!u) return;
+    const prefix = `${sourceId}:`;
+    for (const id of [...u.byItem.keys()]) if (id.startsWith(prefix)) unlink(u, id);
+    for (let i = u.queue.length - 1; i >= 0; i--) if (u.queue[i]!.item.sourceId === sourceId) u.queue.splice(i, 1);
   }
 
   get userCount(): number {
     return this.users.size;
   }
+}
+
+/** Links an item to the content hash of its copy. */
+function link(u: UserCards, id: string, hash: string): void {
+  u.byItem.set(id, hash);
+  u.refs.set(hash, (u.refs.get(hash) ?? 0) + 1);
+}
+
+/** Unlinks an item; content no item links to any more loses its card (held no longer than its items, D8). */
+function unlink(u: UserCards, id: string): void {
+  const hash = u.byItem.get(id);
+  if (hash === undefined) return;
+  u.byItem.delete(id);
+  const n = (u.refs.get(hash) ?? 1) - 1;
+  if (n > 0) {
+    u.refs.set(hash, n);
+    return;
+  }
+  u.refs.delete(hash);
+  u.byHash.delete(hash);
 }
 
 // ---------------------------------------------------------------------------------------------------------------

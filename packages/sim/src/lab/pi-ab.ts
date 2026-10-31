@@ -37,11 +37,11 @@ import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { Agent, type AgentEvent as PiEvent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
 import { createModels, createProvider, envApiKeyAuth, Type, type Model as PiModel } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
-import { ContextPartner, ItemCache } from "@eden/engine";
+import { CardEnricher, ContextPartner, ItemCache, ModelCardMaker } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, OpenRouterModel, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
-import { QueryPlanner, type Source } from "@eden/sources";
+import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { REALISTIC, simSources, type SimSource } from "../sources";
 import type { World } from "../world";
 import {
@@ -112,6 +112,11 @@ const PRESETS: Record<string, Record<string, unknown>> = {
 };
 const CONFIG_ARG = opt("config", "{}");
 const CONFIG = PRESETS[CONFIG_ARG] ?? (JSON.parse(CONFIG_ARG) as Record<string, unknown>);
+// `cards` makes implication cards with a model in the background (D59), metered and charged to Eden's spend.
+const CARD_MODEL = opt("card-model", "z-ai/glm-5.3-flash");
+// A flag whose dependency this harness cannot give it would run a different configuration under the flag's name: a
+// run that says R or ALL must be R or ALL (the review of moon/combined). Cards need a model; the sync, list tools.
+if (CONFIG.cards === true && !KEY && !DRY) throw new Error("config.cards needs OPENROUTER_API_KEY for its enrichment");
 
 // ---- Spend: one hard cap over every call, reserved before the call at its worst case and settled at its real cost.
 let spent = 0;
@@ -233,6 +238,13 @@ function watched(
         () => source.fetch(ref, scope, signal),
         (item: ContextItem | null) => (item ? 1 : 0),
       ),
+    // The sync (D57) reads sources through their list tools: without this a `sync` run never warms.
+    list: (scope, cursor, limit, signal) =>
+      timed(
+        "list",
+        () => source.list(scope, cursor, limit, signal),
+        (page: ListPage) => page.items.length,
+      ),
   };
 }
 
@@ -323,6 +335,19 @@ async function runWorld(
       current?.span("eden.source", "eden", "bg", start, end, { source: id, op, status, items }),
     ),
   );
+  // `cards`: the enrichment model, metered against the run's cap and booked to Eden's spend like its judge.
+  const cards =
+    useEden && CONFIG.cards === true
+      ? new CardEnricher({
+          maker: new ModelCardMaker(
+            meteredModel(new OpenRouterModel({ apiKey: KEY!, model: CARD_MODEL }), (start, end, data) =>
+              current?.span("eden.cards", "eden", "bg", start, end, data),
+            ),
+          ),
+          budget: new Budget(),
+          now: () => clock,
+        })
+      : undefined;
   const partner = useEden
     ? new ContextPartner({
         sources: async () => edenSources,
@@ -337,6 +362,7 @@ async function runWorld(
         planner: new QueryPlanner({ seed }),
         now: () => clock,
         config: CONFIG,
+        ...(cards ? { cards } : {}),
         // Charged to the task whose session the trace is from: a slow-path verdict can land after it ended.
         onTrace: (t) => {
           const owner = bySession.get(t.sessionId);
@@ -364,6 +390,24 @@ async function runWorld(
         }),
       })
     : null;
+  // `sync`: the user's sources are backfilled before the first task, as a long-running sync would have them, and the
+  // sync ticks once per task (an hour of the world's clock). Cards for what it stored are made before tasks start.
+  const sync = partner?.sync ?? null;
+  if (sync) {
+    // As the simulation does: the backfill runs from half an hour before the first task, a minute per tick (the
+    // sync's own per-source budget paces it), and the tasks then start on the same clock as without it.
+    const start = clock;
+    clock -= 30 * 60_000;
+    sync.track(scope, clock);
+    for (let i = 0; i < 120 && !sync.warm(scope); i++) {
+      await sync.tick();
+      clock += 60_000;
+    }
+    clock = start;
+    if (!sync.warm(scope))
+      throw new Error(`sync never warmed for ${scope.userId}: a run without it is not this config`);
+  }
+  if (cards) await cards.idle();
   const out: RunResult[] = [];
   let previous: { sessionId: string; r: RunResult } | null = null;
   const closePrevious = async () => {
@@ -376,6 +420,7 @@ async function runWorld(
   for (const task of tasks) {
     if (exhausted()) break;
     clock += 3_600_000; // an hour between tasks: Eden's clock, for its caches and planner
+    if (sync) await sync.tick();
     const sessionId = task.id;
     const ev = (e: Record<string, unknown>) => ({ ...scope, sessionId, at: clock, ...e }) as AgentEvent;
     const r: RunResult = emptyResult(task.id, condition);

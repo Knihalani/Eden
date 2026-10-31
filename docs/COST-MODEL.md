@@ -102,7 +102,9 @@ sync makes listing calls only. With a judge it raises model cost, because the ju
 realistic, seeds 41–44, perfect judge, $0.0170 (H) → $0.0222–0.0223 (HA, two runs) per 1,000 turns (+31%), at the same input caps
 (≤ 6 candidates of ≤ 200 bytes, ≤ 4k characters of window). Source calls fall: 7.78 → 0.86 request-time calls per
 lookup, 1.72 with backfill and background amortised; in the per-task funnel, 8.5 → 3.04 per task (4.38 amortised).
-A synced user costs about 4 MB of heap per ~1,500 items and ~200 ms of CPU to backfill (`sync-cost.ts`).
+A synced user costs about 4 MB of heap per ~1,500 items and ~200 ms of CPU to backfill (`sync-cost.ts`, the sync track's
+measurement, not re-run). The combined funnel implies more, about 420 ms per user (16.9 s of extra process CPU over 40
+users with ALL), because there the graph and the cards are built on every synced item too (below).
 
 Anticipation (proposed D60, `anticipate`, off by default; docs/research/moon-anticipate.md) adds no model call on any
 path: its predictions are fixed linear reads of an event's head, and its prefetches are source calls within
@@ -119,9 +121,13 @@ with no model); in the per-task funnel 9.94 calls per task against 8.49 (a draft
 with the sync's backfill and background; in the funnel 5.55 request-time calls per task, 6.89 amortised, with 18
 listing calls to backfill each simulated user. Cards add the background enrichment above: on the blind suites' new
 items this session, 41 calls at $0.000212 each ($0.0087), consistent with $0.003–0.004 per user-month at 50 new items
-a day. Process CPU in the funnel (40 simulated users) rises 7.8 s → 24.7 s with ALL, almost all of it the sync's
-backfill redacting and recording mentions for every listed item (telemetry spans); request-time engine CPU stays
-under 1 ms per lookup at p50 for the graph walk and card matching.
+a day. Process CPU in the funnel (40 simulated users) rises 7.8 s → 24.7 s with ALL. The sync's backfill redacting
+and recording mentions for every listed item is about a third of the rise (`sanitize` 2.9 s, `mentions` 2.4 s in the
+telemetry spans), and the graph about 35% (the review's runs: ALL 31.5 s, ALL − `graph` 24.3 s; not re-run here).
+The graph's build cost, measured after the review (D63; 20 users with full caches of 2,000 realistic items each):
+heap 3.38 → 8.16 MB per user and cache-put CPU 120 → 361 ms per 2,000 items, about 48 GB more heap at the cache's
+10,000 users per tenant. Request-time engine CPU stays under 1 ms per lookup at p50 for the graph walk and card
+matching.
 
 The non-model costs (source API calls, hosting) are not modelled yet. Source calls may dominate for some connectors;
 measure them per connector in M2. The query planner (D28), on by default in the server since D33, adds no model call.

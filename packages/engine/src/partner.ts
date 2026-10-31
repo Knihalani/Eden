@@ -200,6 +200,11 @@ interface Cue {
   time: TimeWindow | null;
   /** When the triggering event happened (ms): "the next one" is the first at or after this. */
   at: number;
+  /**
+   * When the request reached the engine, on the engine's own clock (`now`): what was made in the background before it
+   * (a card) counts, whatever the caller's clock says (`at` is the caller's, and may be behind, ahead or replayed).
+   */
+  arrived?: number;
   /** The request's own (redacted) text, for questions about the calendar itself. */
   raw: string;
   /** The user's UTC offset (minutes) the days were resolved at. */
@@ -368,6 +373,13 @@ export class ContextPartner {
     const spans = this.spans;
     // The card enrichment (`cards`) reports its background calls into the same spans.
     if (spans && deps.cards && this.config.cards) deps.cards.tracer = spans;
+    // A card is held no longer than its item: an item leaving the cache (or the whole user) takes its card along.
+    if (deps.cards && this.config.cards) {
+      const cards = deps.cards;
+      deps.cache.onDropped((scope, ids) => (ids ? cards.forgetItems(scope, ids) : cards.forget(scope)));
+      // Dates in an item resolve against the user's day, as the request's do (D44).
+      cards.offsetOf = (scope) => deps.cache.offsetOf(scope);
+    }
     this.fanout = new SourceFanout({
       // With spans on, the gate's span is a child of the source call whose page it redacts (`Tracer.page`).
       sanitize: spans
@@ -449,10 +461,14 @@ export class ContextPartner {
     // A draft the user is still typing is never a request, and moves no turn: with `anticipate` it is read ahead for
     // what the sent message will need; otherwise it is ignored (no session is even opened for it).
     if (event.kind === "user_message" && event.draft === true) {
-      if (!this.config.anticipate) return { injection: null, pending: false };
+      if (!this.config.anticipate) {
+        if (root) spans!.close(root, { decision: "draft" });
+        return { injection: null, pending: false };
+      }
       const s = this.session(event);
       const text = sanitizeForStore(head(event.text, this.config.maxEventChars));
       if (text) this.anticipate(s, "draft", text, event.at, false);
+      if (root) spans!.close(root, { session: s.id, decision: "draft" });
       return { injection: null, pending: s.inflight !== null || s.pending.length > 0 };
     }
     const s = this.session(event);
@@ -520,6 +536,7 @@ export class ContextPartner {
     if (event.kind === "user_message") s.situation = classifySituation(text);
     const cue = buildCue(text, terms, s.vocab, event.at, this.deps.cache.offsetOf(s.scope), this.config.probes);
     if (event.kind === "external") cue.external = true;
+    cue.arrived = this.now();
     if (root) cue.span = root.id;
     // The request's names are its own lookup's to probe: a later event naming them again prefetches nothing.
     if (s.ant)
@@ -750,8 +767,8 @@ export class ContextPartner {
     this.deps.planner?.forget(scope, sourceId);
     this.economy.forget(scope, sourceId);
     this.sync?.forget(scope, sourceId);
-    // Cards are per user, not per source: a source's forget drops them all (they are remade as items come back).
-    this.deps.cards?.forget(scope);
+    // A source's forget drops only what its items brought: the user's other items keep their cards.
+    this.deps.cards?.forget(scope, sourceId);
     this.patterns.forget(scope, sourceId);
   }
 
@@ -2374,7 +2391,7 @@ export class ContextPartner {
     }
     const spans = this.spans;
     const sp = spans?.open("anticipate.prefetch", 0, { async: true, event: kind });
-    ant.running = this.prefetch(s, ant, kind, text, at, lookup)
+    ant.running = this.prefetch(s, ant, kind, text, at, lookup, sp?.id)
       .catch(() => {})
       .finally(() => {
         if (sp) spans!.close(sp, { session: s.id, calls: ant.calls });
@@ -2399,6 +2416,7 @@ export class ContextPartner {
     text: string,
     at: number,
     lookup: boolean,
+    span?: number,
   ): Promise<void> {
     const off = this.config.anticipateOff;
     const offset = this.deps.cache.offsetOf(s.scope);
@@ -2418,7 +2436,7 @@ export class ContextPartner {
               (!tool || this.deps.cache.isPerson(s.scope, n)),
           );
     if (!off.includes("learn")) {
-      for (const n of this.patterns.follows(s.scope, p.intent)) {
+      for (const n of this.patterns.follows(s.scope, p.intent, 1, this.now())) {
         if (names.length < PREDICT_NAMES && fresh(`n:${n.toLowerCase()}`) && !names.includes(n)) names.push(n);
       }
     }
@@ -2437,6 +2455,8 @@ export class ContextPartner {
     // would, so the request's own probes later find the same queries answered.
     const cue = buildCue(p.head, distinctTermIds(p.head, s.vocab), s.vocab, at, offset, true);
     cue.entities = names;
+    // Its probes are the `anticipate.prefetch` span's children: they reach the session through it (D56).
+    if (span !== undefined) cue.span = span;
     if (days.length === 0) cue.time = null;
     else if (cue.time) cue.time = { ...cue.time, days: new Set(days) };
     // Only the class's query ranks sources by the lookup's routing; routing draws from the source map's sampler, so
@@ -2457,6 +2477,8 @@ export class ContextPartner {
       this.config.probeShare ? new Map() : undefined,
       { budget: Math.min(budget, left), cls, noTopic: true, local: this.localOf(s, all) },
     );
+    // The session ended while the probes ran: nothing of it is learned or traced after its end (D17).
+    if (s.closed) return;
     ant.calls += out.calls;
     for (const id of [...out.kept, ...(out.consequence?.ids ?? [])]) {
       ant.prefetched.delete(id);
@@ -2532,8 +2554,11 @@ export class ContextPartner {
   private async early(s: Session, cue: Cue, eventKind: string, t0: number): Promise<Injection | null> {
     // With a judge, the slow path decides (see the fast path): what is held only makes it faster.
     if (this.deps.model !== null) return null;
-    const all = await this.deps.sources(s.scope).catch((): Source[] => []);
-    if (all.length === 0 || s.closed) return null;
+    // The observe call waits on this: a resolver doing I/O (an MCP connect, a token refresh) must not hold it. Past
+    // `EARLY_SOURCES_MS` the request goes to the slow path, which waits for the sources as it always has.
+    // (A resolver that fails throws here; `observe` reads that as no early answer, as it reads an empty list.)
+    const all = await within(this.deps.sources(s.scope), EARLY_SOURCES_MS);
+    if (all === null || all.length === 0 || s.closed) return null;
     const out: ProbeOut = { calls: 0, kept: [] };
     if (this.config.probes) {
       const cls = this.config.anticipateOff.includes("class")
@@ -2622,7 +2647,7 @@ export class ContextPartner {
       const names = cleanEntities(extractEntities(x.item.title.slice(0, 200)))
         .filter((n) => !own.has(n.toLowerCase()))
         .slice(0, 2);
-      this.patterns.note(s.scope, intent, names, [x.item.sourceId]);
+      this.patterns.note(s.scope, intent, names, [x.item.sourceId], this.now());
     }
   }
 
@@ -2958,7 +2983,7 @@ export class ContextPartner {
     const now = this.now();
     const ids = enricher.carded(s.scope).filter((id) => this.deps.cache.get(s.scope, id, now) !== null);
     const frame = this.frame(cue);
-    for (const [id, card] of enricher.cardsOf(s.scope, ids, cue.at)) {
+    for (const [id, card] of enricher.cardsOf(s.scope, ids, cue.arrived ?? now)) {
       const m = cardVerdict(card, frame, actions);
       if (m) out.set(id, { ...m, spanDays: spanDays(card) });
     }
@@ -3226,6 +3251,21 @@ interface CardFind {
   /** Days the card's span covers (Infinity when open or none): a narrower span says more about the day asked. */
   spanDays: number;
 }
+/** How long anticipation's early decision waits for the source resolver (ms): an answer held, or none at once. */
+const EARLY_SOURCES_MS = 5;
+
+/**
+ * `p`'s value if it settles within `ms`, else null (it runs on; a rejection after the bound is swallowed). Not an
+ * async function: an answer already in settles as soon as awaiting `p` itself would, so the early decision keeps its
+ * place among the session's other work (the prefetch it races with).
+ */
+function within<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>((r) => (timer = setTimeout(() => r(null), ms)));
+  p.catch(() => {}).finally(() => clearTimeout(timer));
+  return Promise.race([p, late]);
+}
+
 /** Card finds a lookup ranks at most (`cards`). */
 const MAX_CARD_FINDS = 6;
 /** Violated first, then tied by a name, then by a word, then the narrower span. */
