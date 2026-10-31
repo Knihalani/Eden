@@ -14,6 +14,9 @@ against this history, not against memory. Only simulated data is recorded here.
 | eval | The 27 hand-labelled scenarios, no model | free, seconds | (in `bench.ts`) |
 | agent | A live agent on the tasks under each condition, graded by a second model | ~$0.3–1 per run | `agent-ab.ts` then `agent-ab-report.ts <file> --record <label>` |
 
+The agent tier's standard agent is the Pi harness (CLAUDE.md); results from the earlier in-house agent loop
+(`agent-ab.ts` up to D55) are labelled as such and are not compared with Pi runs.
+
 Run the free tiers on every change to retrieval or delivery, under a label (`--label probes --config '{...}'`); run
 the agent tier when the free tiers say a change is worth its cost.
 

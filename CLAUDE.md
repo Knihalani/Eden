@@ -29,6 +29,10 @@ bun run check   # = format:check (prettier + 120-col line check) && typecheck &&
 bun run eval    # no-model metrics; paste the JSON in the PR when engine behaviour changes
 ```
 
+The standard agent for live agent tests (`agent-ab.ts`, any "Eden against tools" comparison) is the **Pi harness**
+(pi-mono's agent loop, `earendil-works/pi`, formerly `badlogic/pi-mono`): its minimal loop and tools, with Eden added
+as a tool or as injected context. Until the lab runs on Pi, label any agent result from the older in-house loop as such.
+
 `bun run format` fixes formatting except long comments. Engine changes that touch scoring, thresholds or
 delivery also run `bun run eval --live` (needs `OPENROUTER_API_KEY`; costs fractions of a cent) and report both runs.
 
