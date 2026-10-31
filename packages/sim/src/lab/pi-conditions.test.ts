@@ -65,8 +65,19 @@ describe("pi-ab conditions", () => {
     expect(() => parseCondition("eden-act", { config: {} })).toThrow(/--act/);
   });
 
-  test("the firewall conditions need the engine's action check, which this harness does not have yet", () => {
-    expect(() => parseCondition("tools-act-firewall", { config: {}, act: true })).toThrow(/actionCheck/);
+  test("-act-firewall turns the engine's action check on; beside tools, Eden runs only as the check", () => {
+    const t = parseCondition("tools-act-firewall", { config: { probes: true }, act: true });
+    expect(t).toMatchObject({ name: "tools-act-firewall", base: "tools", act: true, firewall: true });
+    expect([t.useEden, t.withPartner, t.useTools]).toEqual([false, true, true]);
+    expect(t.config).toEqual({ probes: true, actionCheck: true });
+    const e = parseCondition("eden-act-firewall~v", { config: {}, act: true, variants: { v: { cards: true } } });
+    expect([e.base, e.firewall, e.useEden, e.withPartner]).toEqual(["eden", true, true, true]);
+    expect(e.config).toEqual({ cards: true, actionCheck: true });
+    // Without the firewall tag, nothing turns the check on, and a firewall outside --act throws.
+    const plain = parseCondition("eden-act", { config: {}, act: true });
+    expect([plain.firewall, plain.config.actionCheck]).toEqual([false, undefined]);
+    expect(() => parseCondition("tools-act-firewall", { config: {} })).toThrow(/--act/);
+    expect(pairedWith("eden-act-firewall~v")).toBe("eden-act-firewall");
   });
 
   test("--variant-config must be an object of objects", () => {

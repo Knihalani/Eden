@@ -21,6 +21,7 @@ import type { Budget, Model, Reservation } from "@eden/llm";
 import {
   newId,
   scopeKey,
+  type ActionCheck,
   type AgentEvent,
   type AskRequest,
   type AskResponse,
@@ -52,6 +53,16 @@ import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { assess, frameOf, namesRef, unmeasuredLimit, type Frame, type Verdict } from "./conflict";
 import { cardVerdict, requestActions, type CardEnricher } from "./cards";
+import {
+  accounts,
+  actionKey,
+  actionText,
+  FIREWALL_GROUNDS,
+  domainsOf,
+  MAX_CHECKED,
+  setsTime,
+  structuralTie,
+} from "./firewall";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
 import { ProbeEconomy, type ProbeKind } from "./economy";
 import { seedsOf, tieWords, type Walked } from "./kg";
@@ -192,6 +203,11 @@ interface Session {
   ant?: Anticipation;
   /** Work lookups left running behind their answers: a poll and its follow-up (`afterPoll`), a judge (`judgeLater`). */
   behind?: Promise<void> | null;
+  /**
+   * With `actionCheck`: the keys of the calls the firewall answered with a finding (`actionKey`, bounded by
+   * `MAX_CHECKED`, oldest first). The same call made again is the agent's informed choice, and proceeds.
+   */
+  checked?: Set<string>;
 }
 
 /** A session's anticipation (`anticipate`): its prefetch in flight, the next one waiting, and what it has fetched. */
@@ -288,6 +304,8 @@ interface ProbeOpts {
 const ANSWER_MAX_TOKENS = 1_000;
 /** `densePacket`: a word on fewer than this share of the user's items is rare; an item adding one is no echo. */
 const RARE_SHARE = 0.03;
+/** The action firewall: a party named on more than this share of a user's items is the user's own organisation. */
+const SELF_DOMAIN_SHARE = 0.1;
 /** `recoverNames`: names taken from one request at most, and the words of it read for them. */
 const MAX_RECOVERED = 2;
 const RECOVER_WORDS = 24;
@@ -797,6 +815,146 @@ export class ContextPartner {
     const out = s.pending.splice(0);
     for (const injection of out) this.handOut(s, injection);
     return out;
+  }
+
+  /**
+   * The action firewall (`actionCheck`; docs/research/econ-firewall.md): an agent's tool call, before it runs, checked
+   * against what is held, with no model and no source call. The session's request and the call's arguments read as
+   * words (`actionText`: its days written out, its amounts, names and references) make one cue; what the request's
+   * structure grounds against it (`grounded`: a clash at the time it books, a conflict the conflict test reads, the
+   * graph's, a card's, someone away that day; `FIREWALL_GROUNDS`) is the finding, delivered already or not: the agent
+   * is about to act as if it were not there. Anything else proceeds, as does a call made again unchanged after a
+   * finding (the agent's informed choice). A finding is data in the usual envelope; what the integration does with it
+   * is its own. With the flag off, every call proceeds and no state is touched. Never throws: a failure proceeds.
+   */
+  async checkAction(event: AgentEvent): Promise<ActionCheck> {
+    const t0 = performance.now();
+    const proceed = (reason: string): ActionCheck => ({
+      verdict: "proceed",
+      finding: null,
+      reason,
+      latencyMs: Math.round(performance.now() - t0),
+    });
+    if (!this.config.actionCheck || event.kind !== "tool_call") return proceed("off");
+    try {
+      const s = this.session(event);
+      const key = actionKey(event.tool, event.input);
+      if (s.checked?.has(key)) return proceed("repeat");
+      // The request the call serves: the session's latest user message or arriving message, as remembered.
+      const asked = [...s.window].reverse().find((w) => w.startsWith("user_message: ") || w.startsWith("external: "));
+      const request = asked ? asked.slice(asked.indexOf(": ") + 2) : "";
+      // What the call commits to (its days, amounts, names, references), without what the agent wrote in it.
+      const call = sanitizeForStore(actionText(event.tool, event.input, { prose: false }));
+      // The call first: its time is the one the clash test reads (`requestedSpan` reads the first).
+      const text = sanitizeForStore(head(`${call}\n${request}`, this.config.maxEventChars));
+      if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
+      const terms = distinctTermIds(text, s.vocab);
+      const offset = this.deps.cache.offsetOf(s.scope);
+      const cue = buildCue(text, terms, s.vocab, event.at, offset, this.config.probes);
+      // The days the call acts on are its own when it names any: an agent that moved the dinner to another evening
+      // acts on that evening, not the one the request asked for.
+      const own = timeWindow(call, event.at, offset);
+      if (own && own.days.size > 0) cue.time = own;
+      cue.arrived = this.now();
+      // The probes' last answers and the class's cached finds, with no call (as `early` reads them).
+      const out: ProbeOut = { calls: 0, kept: [] };
+      if (this.config.probes) {
+        const all = await within(this.deps.sources(s.scope), EARLY_SOURCES_MS);
+        if (all && all.length > 0 && !s.closed) {
+          await this.probe(s, cue, all, all, false, out, Promise.resolve(), undefined, {
+            offline: true,
+            cls: actionClass(cue.raw, true),
+            classOffline: true,
+            local: this.localOf(s, all),
+          });
+        }
+      }
+      if (s.closed) return proceed("closed");
+      const walked = this.config.graph ? this.walkGraph(s, cue) : new Map<string, Walked>();
+      const carded = this.cardFinds(s, cue);
+      const extra = [...out.kept, ...(out.consequence?.ids ?? []), ...carded.keys()];
+      // Delivered already or not: what the agent is about to do is checked, not whether it was told.
+      const scored = this.rank(s, cue, {
+        ignoreLedger: true,
+        probed: extra,
+        ...(walked.size > 0 ? { walked: [...walked.keys()] } : {}),
+      });
+      const bridged = this.bridgedOf(scored, cue, out.consequence);
+      const g = this.grounded(
+        s,
+        cue,
+        this.eligible(scored, cue, new Set(out.kept), bridged, carded),
+        "action",
+        bridged,
+        out.consequence?.cls,
+        walked,
+        walked.size > 0 ? scored.filter((x) => walked.has(x.item.id)) : [],
+        carded,
+      );
+      if (g.items.length === 0) return proceed("clear");
+      if (!FIREWALL_GROUNDS.has(g.how)) return proceed(`quiet-${g.how}`);
+      // Only a call that commits the user at a time clashes with the calendar: one with a start, or one serving a
+      // request to schedule ("accept the invite … at 10:00" as a generic action).
+      if (g.how === "clash" && !setsTime(event.input) && !isScheduling(request)) return proceed("untimed");
+      // And only at a time the user asked for: a reminder or a task the agent placed at a slot of its own choosing
+      // overlaps a meeting without clashing with anything the user asked (it would be held at every slot it tries).
+      if (g.how === "clash" && requestedSpan(request) === null) return proceed("agent-timed");
+      // Read from shared words, a conflict (the conflict test's, the graph's, a card's) holds the action only on a tie
+      // the words cannot fake (`structuralTie`: a span over its day, an expiry before it, a limit on its amount, a
+      // statement binding a party it names), an identifier or qualified reference the call names, or the action
+      // class's find about a party it names.
+      const frame = this.frame(cue);
+      const named = cleanEntities(cue.entities).filter((e) => !e.includes("@"));
+      // The parties: names of two words or more and the user's people the call and request name ("Team" and "Open" in
+      // a call's title are not parties), and the organisations of the addresses the call writes to. Never the user,
+      // whose name is on everything they hold, nor anything on more than a tenth of their items (their organisation).
+      const self = this.deps.cache.selfOf(s.scope)?.toLowerCase().split(/\s+/) ?? [];
+      const rare = (n: string) => n.split(/\s+/).some((w) => this.deps.cache.isRare(s.scope, w, SELF_DOMAIN_SHARE));
+      const parties = named.filter((e) => e.trim().includes(" ") || this.deps.cache.isPerson(s.scope, e));
+      const full = parties.map((e) => e.toLowerCase());
+      // A first name alone is a party only when no fuller name has it: "Sam" beside "Sam Ortiz" is Sam Ortiz, and Sam
+      // Patel's diet is not his.
+      const whole = full.filter((n) => n.includes(" ") || !full.some((m) => m !== n && m.split(/\s+/).includes(n)));
+      const names = [...whole, ...domainsOf(call)].filter(
+        (n) => rare(n) && !self.some((w) => w.length > 2 && n.split(/\s+/).includes(w)),
+      );
+      // The call's topic words, without the user's own name (on every item they hold).
+      const topical = { ...frame, wordTies: new Set([...frame.wordTies].filter((w) => !self.includes(w))) };
+      // The action class's find binds the call when it names a party the call names: "a payment to Cyberdyne was sent"
+      // does not bind a payment to the gym, nor a client's no-gifts policy flowers for a sister.
+      const tied = (x: Scored) =>
+        g.how === "clash" ||
+        g.how === "away" ||
+        namesRef(frame, x.item, true) ||
+        (bridged.has(x.item.id) && whole.some((n) => names.includes(n) && mentions(n, x.item))) ||
+        structuralTie(`${x.item.title}. ${x.item.text}`, topical, names, localNow(cue), call);
+      const held = g.items.filter(tied);
+      if (held.length === 0) return proceed("untied");
+      // What the call already takes into account (its notes name the allergy, its email the absence) is not repeated.
+      const written = sanitizeForStore(actionText(event.tool, event.input));
+      const items = held.filter((x) => !accounts(x.item.text, written, request));
+      if (items.length === 0) return proceed("accounted");
+      const checked = (s.checked ??= new Set());
+      checked.add(key);
+      while (checked.size > MAX_CHECKED) checked.delete(checked.values().next().value as string);
+      const finding = this.deliver(s, items, "proactive", `action-${g.how}:${cue.id}`, cue);
+      this.handOut(s, finding);
+      this.trace({
+        sessionId: s.id,
+        turn: s.turn,
+        event: "tool_call",
+        decision: "fast",
+        reason: `action-${g.how}`,
+        latencyMs: Math.round(performance.now() - t0),
+        sourceCalls: 0,
+        modelCalls: 0,
+        costUsd: 0,
+        itemIds: items.map((x) => x.item.id),
+      });
+      return { verdict: "finding", finding, reason: g.how, latencyMs: Math.round(performance.now() - t0) };
+    } catch {
+      return proceed("error");
+    }
   }
 
   async ask(request: AskRequest): Promise<AskResponse> {
@@ -1345,9 +1503,18 @@ export class ContextPartner {
     return none;
   }
 
-  /** Whether a request acts on someone (scheduling, writing to them, a task) or arrives from outside. */
+  /**
+   * Whether a request acts on someone (scheduling, writing to them, a task), arrives from outside, or is a tool call
+   * the action firewall checks (`checkAction`, "action").
+   */
   private acts(s: Session, cue: Cue, eventKind: string): boolean {
-    return eventKind === "external" || eventKind === "ask" || ACTING.has(s.situation) || ACTS_ON.test(cue.raw);
+    return (
+      eventKind === "external" ||
+      eventKind === "ask" ||
+      eventKind === "action" ||
+      ACTING.has(s.situation) ||
+      ACTS_ON.test(cue.raw)
+    );
   }
 
   /**

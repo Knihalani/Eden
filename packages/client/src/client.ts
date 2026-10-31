@@ -5,11 +5,12 @@
  *   const { injection } = await eden.observe({ kind: "user_message", text });   // each event
  *   messages = withContext(messages, await eden.collect(injection));            // before each model call
  *   await eden.ask("When is Dana's flight?");                                   // or expose ask as a tool
+ *   const check = await eden.check("send_payment", args);                        // before an action runs
  *
  * Fails open by design: a network error, a timeout or a non-2xx response yields "no context", never an exception
  * in the agent's loop. Timeouts are short (default 800 ms) because the agent is waiting.
  */
-import type { AgentEvent, AskResponse, Injection, ObserveResult } from "@eden/protocol";
+import type { ActionCheck, AgentEvent, AskResponse, Injection, ObserveResult } from "@eden/protocol";
 
 export interface EdenClientOptions {
   /** The tenant's API key. Omit it against a dev server (`EDEN_DEV=1`), which refuses any key. */
@@ -56,12 +57,16 @@ export class EdenClient {
       if (!res.ok) throw new Error(`eden ${path}: ${res.status}`);
       return (await res.json()) as T;
     } catch (e) {
-      try {
-        this.options.onError?.(e);
-      } catch {
-        // The integrator's logger failing is no reason to throw into the agent's loop.
-      }
+      this.report(e);
       return null;
+    }
+  }
+
+  private report(e: unknown): void {
+    try {
+      this.options.onError?.(e);
+    } catch {
+      // The integrator's logger failing is no reason to throw into the agent's loop.
     }
   }
 
@@ -89,6 +94,27 @@ export class EdenClient {
       { ...this.who, question, maxItems: options.maxItems },
       options.timeoutMs ?? 8_000,
     );
+  }
+
+  /**
+   * The action firewall (`actionCheck` on the server): a tool call the agent is about to make, checked against what
+   * Eden holds before it runs. `finding` carries held context that bears on it, as data; what to do with it is the
+   * integration's choice (`heldResult` is one: hold the call and show the agent the finding). Fails open: any error,
+   * timeout or a server without the flag is `proceed`.
+   */
+  async check(tool: string, input: unknown, options: { timeoutMs?: number } = {}): Promise<ActionCheck> {
+    const body = { ...this.who, at: Date.now(), kind: "tool_call", tool, input };
+    const unavailable: ActionCheck = { verdict: "proceed", finding: null, reason: "unavailable", latencyMs: 0 };
+    const check = await this.post<ActionCheck>("/v1/check", body, options.timeoutMs);
+    if (check === null) return unavailable;
+    // An answer of another shape (a proxy's page, an older server) is no check: an integration that reads
+    // `finding.text` on a finding must not throw in the agent's loop.
+    const finding = check?.verdict === "finding" && typeof check.finding?.text === "string";
+    if (!finding && check?.verdict !== "proceed") {
+      this.report(new Error("eden /v1/check: not a check"));
+      return unavailable;
+    }
+    return check;
   }
 
   /** Tells the partner whether the agent used an injection. Better than the partner's own inference. */

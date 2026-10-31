@@ -22,7 +22,10 @@
  * `--variant-config '{"ALL2":{"syncPollBehind":true}}' --conditions eden,eden~ALL2` gives each name the settings it
  * adds over `--config`, and `eden+packetDates` is shorthand for one flag on. `--act` is a mode of its own: every
  * condition gets stub action tools (`act.ts`) and a system prompt that lets the agent act, and each task records its
- * action calls (`act-report.ts` reads them).
+ * action calls (`act-report.ts` reads them). `-act-firewall` conditions (`tools-act-firewall`, `eden-act-firewall`)
+ * also turn on the engine's `actionCheck` (D69) and send each action call to `checkAction` before it runs (Pi's
+ * `beforeToolCall`): a finding holds the call and is the tool's result (`heldResult`), and the same call made again
+ * runs. Beside tools, Eden runs only as that check: it observes the request but injects nothing and gives no tool.
  *
  * `--cards FILE` (alias `--cards-disk`) replays implication cards from a disk cache (`cards-disk.ts`, as the funnel
  * does) and makes only the missing ones live, so the conditions of a run, and later runs, do not each pay for the same
@@ -53,6 +56,7 @@ import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { Agent, type AgentEvent as PiEvent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
 import { createModels, createProvider, envApiKeyAuth, Type, type Model as PiModel } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
+import { heldResult } from "@eden/client";
 import { CardEnricher, ContextPartner, DEFAULT_CONFIG, ItemCache, ModelCardMaker, type CardMaker } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, OpenRouterModel, priceFor, type Model } from "@eden/llm";
@@ -99,7 +103,7 @@ const LOOKUPS = SUITE === "lookups";
 const SUITE_LIST = LOOKUPS ? ["lookups"] : parseSuites(SUITE);
 const VARIANTS = opt("variants", "hidden,control").split(",") as ("hidden" | "control")[];
 const ACT = args.includes("--act");
-const CONDITION_NAMES = opt("conditions", ACT ? "tools,eden" : "none,tools,eden,both").split(",");
+const CONDITION_NAMES = opt("conditions", ACT ? "tools,eden,eden-act-firewall" : "none,tools,eden,both").split(",");
 const OUT = opt("out", "pi-ab.json");
 const TIMELINE = opt("timeline", `${OUT.replace(/\.json$/, "")}.timeline`);
 const TIME_SCALE = Number(opt("time-scale", "0"));
@@ -148,7 +152,7 @@ const CONDITIONS: Condition[] = CONDITION_NAMES.map((name) =>
 );
 // A flag whose dependency this harness cannot give it would run a different configuration under the flag's name: a
 // run that says R or ALL must be R or ALL (the review of moon/combined). Cards need a model; the sync, list tools.
-if (CONDITIONS.some((c) => c.useEden && c.config.cards === true) && !KEY && !DRY)
+if (CONDITIONS.some((c) => c.withPartner && c.config.cards === true) && !KEY && !DRY)
   throw new Error("config.cards needs OPENROUTER_API_KEY for its enrichment");
 // Cards replayed from disk: the replay file is only read, new cards go to their own file (cards-disk.ts).
 const CARDS_FILE = opt("cards", opt("cards-disk", ""));
@@ -367,7 +371,7 @@ async function runWorld(
   grading: Promise<void>[],
 ): Promise<RunResult[]> {
   const sources = simSources(world, REALISTIC, TIME_SCALE, seed);
-  const { name: condition, waitMs, useEden, useTools, judge, act, config } = cond;
+  const { name: condition, waitMs, useEden, withPartner, useTools, judge, act, firewall, config } = cond;
   const scope = { tenantId: "ab", userId: `w${seed}` };
   let clock = world.now;
   // The task now running in this stream: Eden's source and model calls carry no session, so they go to its timeline.
@@ -391,10 +395,10 @@ async function runWorld(
   const cardMaker = (): CardMaker =>
     diskCards ? new DiskCardMaker(CARDS_FILE, liveCards(), { out: CARDS_OUT, shared: diskCards }) : liveCards();
   const cards =
-    useEden && config.cards === true
+    withPartner && config.cards === true
       ? new CardEnricher({ maker: cardMaker(), budget: new Budget(), now: () => clock })
       : undefined;
-  const partner = useEden
+  const partner = withPartner
     ? new ContextPartner({
         sources: async () => edenSources,
         sourceMap: new SourceMap(":memory:", { seed }),
@@ -459,7 +463,9 @@ async function runWorld(
   const closePrevious = async () => {
     if (!partner || !previous) return;
     const who = { ...scope, sessionId: previous.sessionId };
-    previous.r.lateItems = partner.takePending(who).reduce((n, i) => n + i.citations.length, 0);
+    // Late items reach the agent only where Eden delivers; beside tools-act-firewall they are drained, not counted.
+    const late = partner.takePending(who).reduce((n, i) => n + i.citations.length, 0);
+    previous.r.lateItems = useEden ? late : 0;
     await partner.observe({ ...who, at: clock, kind: "session_end" });
     previous = null;
   };
@@ -494,7 +500,8 @@ async function runWorld(
     const cited: string[] = [];
     const askCited: string[] = [];
     const takeEden = () => {
-      if (!partner) return;
+      // `tools-act-firewall`: Eden only checks actions; what it would have delivered never reaches the agent.
+      if (!partner || !useEden) return;
       for (const i of partner.takePending({ ...scope, sessionId })) {
         r.injectedItems += i.citations.length;
         r.injectedChars += i.text.length;
@@ -512,7 +519,7 @@ async function runWorld(
         const o2 = tl.begin("eden.observe", "eden", "path", { event: task.event });
         const first = await partner.observe(ev({ kind: task.event, text: task.text, ...arriving }), { waitMs });
         tl.end(o2, { injected: first.injection?.citations.length ?? 0, pending: first.pending });
-        if (first.injection) {
+        if (first.injection && useEden) {
           r.injectedItems += first.injection.citations.length;
           r.injectedChars += first.injection.text.length;
           packets.push(first.injection.text);
@@ -569,9 +576,11 @@ async function runWorld(
           },
         });
       }
-      // `--act`: the stub action tools; each call is recorded and runs (no firewall in these conditions: `off`).
+      // `--act`: the stub action tools; each call is recorded and runs. With the firewall, Eden checks each call
+      // first (`beforeToolCall` below) and the check's record waits here for the call to run; without it, `off`.
+      const actions: ActionRecord[] = [];
+      const checkedCalls = new Map<string, ActionRecord>();
       if (act) {
-        const actions: ActionRecord[] = [];
         r.actions = actions;
         for (const spec of ACTIONS) {
           tools.push({
@@ -580,9 +589,18 @@ async function runWorld(
             label: spec.name,
             parameters: actionParams(spec),
             prepareArguments: (a) => coerceArgs(spec, a),
-            execute: async (_id, raw) => {
+            execute: async (id, raw) => {
               const args = raw as Record<string, string | string[]>;
-              actions.push({ tool: spec.name, args, verdict: "off", executed: true, checkMs: 0 });
+              const rec = checkedCalls.get(id) ?? {
+                tool: spec.name,
+                args,
+                verdict: "off",
+                executed: false,
+                checkMs: 0,
+              };
+              checkedCalls.delete(id);
+              rec.executed = true;
+              actions.push(rec);
               return { content: [{ type: "text", text: executed(spec.name, actions.length) }], details: {} };
             },
           });
@@ -650,6 +668,37 @@ async function runWorld(
             },
           });
         },
+        // The firewall: an action call goes to Eden before it runs; a finding holds it and is the tool's result.
+        ...(firewall && partner
+          ? {
+              beforeToolCall: async (ctx: { toolCall: { id: string; name: string }; args: unknown }) => {
+                if (!ACTIONS.some((a) => a.name === ctx.toolCall.name)) return undefined;
+                const o = tl.begin("eden.check", "eden", "path", { tool: ctx.toolCall.name });
+                const check = await partner.checkAction(
+                  ev({ kind: "tool_call", tool: ctx.toolCall.name, input: ctx.args }),
+                );
+                tl.end(o, { verdict: check.verdict, reason: check.reason });
+                const rec: ActionRecord = {
+                  tool: ctx.toolCall.name,
+                  args: ctx.args as ActionRecord["args"],
+                  verdict: check.verdict,
+                  executed: false,
+                  checkMs: check.latencyMs,
+                  reason: check.reason,
+                  ...(check.finding ? { cited: check.finding.citations.map((c) => c.itemId) } : {}),
+                };
+                if (check.verdict === "proceed" || !check.finding) {
+                  checkedCalls.set(ctx.toolCall.id, rec);
+                  return undefined;
+                }
+                actions.push(rec);
+                r.injectedItems += check.finding.citations.length;
+                r.injectedChars += check.finding.text.length;
+                cited.push(...check.finding.citations.map((c) => c.itemId));
+                return { block: true, reason: heldResult(ctx.toolCall.name, check.finding) };
+              },
+            }
+          : {}),
         finishTurn: async () => {
           turns++;
           // agent-ab's cap: six model calls, the last one's text the answer even if it asked for more tools.
