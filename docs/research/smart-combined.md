@@ -111,6 +111,57 @@ and the other three groups fell). A narrowed ask costs about 2.3–2.7 ms more: 
 the cache. That is within "a few ms" per lookup, but it is +45–50% of the ask's own CPU; the agent's model call it
 precedes takes seconds.
 
+## Review fixes
+
+A review of the merged branch (REQUEST_CHANGES) found that `supersede` could hide a block that still stands, and four
+smaller issues. Fixed, each with a test that failed first:
+
+1. **A newer item about another point no longer supersedes** (`supersede.ts`, `conflict.ts` `matterWords`). Before,
+   any newer decisive item in a matter's group won: "Re: Globex account: billing address change done, all resolved"
+   (read as `clear`) or "invoice INV-12 paid in full" (read as `conflict`) hid "Globex is on credit hold until 30 Nov,
+   no new orders", and an ask about a Globex order cited nothing (or only the address reply). Now a newer item
+   supersedes only when its deciding statement shares a word with what the older one says, the request's names left
+   out and a constraint's irregular forms folded ("frozen"/"freeze"). `assess` reports the words of the statements
+   behind its verdict (`said`), memoised with the verdict per cue.
+2. **A packet left with only the clearance is not sent** (`deliver`). A proactive packet drops a clearance that
+   replaced one of its items (the agent never saw the block it lifts), and a packet left empty is silence. Before,
+   "Ship the Kestrel release on Tuesday 3 November" with `groundConflict` + `supersede` delivered only "Kestrel release
+   freeze lifted". `deliver` returns null for such a proactive packet; its two callers that pushed or handed out the
+   result skip it (the action check proceeds, reason `superseded`).
+3. **The request's order is ranked once per request, not once per ask** (`requestOrder`). The session keeps the
+   request's `askOrder` keyed to the request's cue, the user's cache revision (`ItemCache.revision`, which changes when
+   an item is added, changed or dropped, not when a lookup only refreshes it) and a minute. Later asks about the same
+   request reuse it. The first narrowed ask after a request still pays for it: the funnel asks once per task, so its
+   ask times do not move (below).
+4. **An item the ranker seats drops what it supersedes.** After `askRank` seats an outsider, the order is read by
+   `supersede` again, so the outsider and the older item it replaces are never both cited.
+5. **The ranker's weights carry a fingerprint of the facts' definition** (`facts-fingerprint.ts`, `rank-weights.json`
+   `facts`), checked by `rank.test.ts`; `rank-fit.ts` writes it. smart-rank.md now says that the shipped weights are
+   in-sample on every suite here, and that ask dumps from main and from this branch are not comparable (`bridged`).
+
+Re-run of ALL4 on the same suites, seeds, cards and fold weights (`askRank` LOSO), three runs at a time:
+
+| ask | group | hidden either | hidden delivered | hidden ask-cited | control delivered | control ask-cited | bytes/ask |
+|---|---|---|---|---|---|---|---|
+| request | dev | 127 → 127 | 97 → 97 | 127 → 127 | 10 → 10 | 53 → 53 | 655 → 656 |
+| request | in-sample | 245 → 245 | 216 → 216 | 239 → 239 | 17 → 17 | 50 → 49 | 625 → 628 |
+| narrow | dev | 121 → 121 | 97 → 97 | 114 → 114 | 10 → 10 | 52 → 52 | 733 → 733 |
+| narrow | in-sample | 240 → 240 | 216 → 216 | 220 → 219 | 17 → 17 | 101 → 101 | 676 → 676 |
+
+Task by task: one control task stopped citing its decoy (heldout3 `drinks-surprise-party`, request), one hidden ask
+lost its planted item (hidden `calendar-clash` seed 42, narrow; still delivered proactively, so "either" holds), and
+19 request-mode answers keep one more item (inferred, not traced: an item the old grouping rule dropped). No packet changed:
+the funnel's suites hold no packet of a lifted block alone. The fixes cost the funnel nothing measurable and close the
+missed-warning cases above, which the suites do not contain.
+
+**Ask latency.** End to end as the funnel times an ask (its sources are in-process, so this is nearly all Eden CPU),
+from the serial ALL3 and ALL4 timing runs of the merge: narrowed asks p50 3.72 → 5.64 ms dev and 4.04 → 6.46 ms
+in-sample, p95 15.77 → 22.01 and 12.20 → 15.59; request-text asks are not slower (p50 7.20 → 6.19, 8.77 → 8.49). That
+is far over +5% of Eden's own ask time. The fix above removes it for every ask after the first about one request; it
+does not for the first. Against a real source round trip it is under 5% only if that round trip is at least about
+50 ms (2.5 ms / 0.05; derived, not measured here). The live Pi measure must report the ask's end-to-end p50/p95 with
+real sources before `askContext` is adopted.
+
 ## Risks
 
 - **Narrow is a simulation.** The question narrower is the askctx track's assumption; how live agents word

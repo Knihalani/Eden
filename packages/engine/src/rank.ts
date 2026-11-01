@@ -14,6 +14,8 @@ import WEIGHTS from "./rank-weights.json";
 export interface RankModel {
   names: readonly (keyof Facts)[];
   weights: readonly number[];
+  /** The fingerprint of the facts' definition it was fitted on (`facts-fingerprint.ts`); checked by `rank.test.ts`. */
+  facts?: string;
 }
 
 export const RANK_MODEL: RankModel = WEIGHTS as unknown as RankModel;

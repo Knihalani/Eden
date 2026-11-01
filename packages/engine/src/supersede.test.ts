@@ -40,7 +40,10 @@ describe("supersededIn", () => {
   const hold = mail("hold", "Globex credit hold", "Mon, 5 Oct 2026 09:00", "Globex is on credit hold.");
   const lifted = mail("lift", "Re: Globex credit hold", "Mon, 12 Oct 2026 09:00", "Credit hold lifted.");
   const thanks = mail("thx", "Re: Globex credit hold", "Tue, 13 Oct 2026 09:00", "Thanks!");
-  const decisive = (i: ContextItem) => /hold|lifted/i.test(i.text.split("\n\n")[1] ?? "");
+  const decisive = (i: ContextItem) => {
+    const body = (i.text.split("\n\n")[1] ?? "").toLowerCase();
+    return { decisive: /hold|lifted|resolved|paid/.test(body), words: new Set(body.match(/[a-z]+/g)) };
+  };
 
   test("an older item is superseded by the newest decisive one about its matter", () => {
     const out = supersededIn([hold, lifted], decisive);
@@ -51,6 +54,16 @@ describe("supersededIn", () => {
   test("a newer reply that says nothing decisive supersedes nothing; the decisive one before it still does", () => {
     const out = supersededIn([thanks, hold, lifted], decisive);
     expect(out.has(thanks.id)).toBe(false);
+    expect(out.get(hold.id)?.by).toBe(lifted.id);
+    expect(out.has(lifted.id)).toBe(false);
+  });
+
+  test("a newer decisive item about another point of the matter supersedes nothing", () => {
+    const address = mail("addr", "Re: Globex credit hold", "Mon, 12 Oct 2026 09:00", "Billing address resolved.");
+    const paid = mail("paid", "Re: Globex credit hold", "Tue, 13 Oct 2026 09:00", "Invoice paid in full.");
+    expect(supersededIn([hold, address, paid], decisive).size).toBe(0);
+    // The one that speaks to the hold still does, past the unrelated ones.
+    const out = supersededIn([hold, lifted, address, paid], decisive);
     expect(out.get(hold.id)?.by).toBe(lifted.id);
     expect(out.has(lifted.id)).toBe(false);
   });
@@ -263,5 +276,101 @@ describe("supersede in a packet", () => {
     const on = await packet({ groundConflict: true, supersede: true });
     expect(on).toContain(moved.id);
     expect(on).not.toContain(hold.id);
+  });
+});
+
+/** Review regressions (smart/combined): a newer item on another point of a matter never hides a block that stands. */
+describe("supersede reads the constraint, not only the matter", () => {
+  const ALL4 = { supersede: true, askRank: true, askContext: true, askVerdicts: true, groundConflict: true };
+  const scope = { tenantId: "t", userId: "u1", sessionId: "s" };
+  const partner = (items: ContextItem[], config: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+    new ContextPartner({
+      sources: async () => [source(items)],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => NOW,
+      config,
+      ...extra,
+    });
+  const hold = mail(
+    "hold",
+    "Globex account",
+    "Mon, 19 Oct 2026 09:00",
+    "Globex is on credit hold until 30 Nov, no new orders.",
+  );
+  const address = mail(
+    "addr",
+    "Re: Globex account",
+    "Thu, 22 Oct 2026 09:00",
+    "The Globex billing address change is done, all resolved, thanks.",
+  );
+  const paid = mail("paid", "Re: Globex account", "Fri, 23 Oct 2026 09:00", "Globex invoice INV-12 was paid in full.");
+  const cites = async (items: ContextItem[], config: Record<string, unknown>, question: string) =>
+    (await partner(items, config).ask({ ...scope, question })).citations.map((c) => c.itemId);
+
+  test("a reply resolving another point does not hide a live credit hold from an action's ask", async () => {
+    const q = "Confirm the Globex pallets order for Friday.";
+    expect(await cites([hold, address], {}, q)).toContain(hold.id);
+    for (const config of [ALL4, { supersede: true }])
+      expect(await cites([hold, address], config, q)).toContain(hold.id);
+  });
+
+  test("nor from a question's ask", async () => {
+    const q = "Can we take a new Globex pallets order this Friday?";
+    expect(await cites([hold, address], {}, q)).toContain(hold.id);
+    expect(await cites([hold, address], { supersede: true }, q)).toContain(hold.id);
+  });
+
+  test("a newer conflict about another point (an invoice paid) does not hide the hold either", async () => {
+    const q = "Confirm the Globex pallets order for Friday.";
+    for (const config of [ALL4, { supersede: true }]) {
+      expect(await cites([hold, address, paid], config, q)).toContain(hold.id);
+    }
+  });
+
+  test("a packet that fired on a hold does not deliver only the clearance that replaced it", async () => {
+    const frozen = mail("hold", "Kestrel release", "Mon, 19 Oct 2026 09:00", "Kestrel release is frozen until 9 Nov.");
+    const lifted = mail(
+      "lift",
+      "Re: Kestrel release",
+      "Thu, 22 Oct 2026 09:00",
+      "Kestrel release freeze lifted, go ahead any day.",
+    );
+    const text = "Ship the Kestrel release on Tuesday 3 November.";
+    const delivered = async (config: Record<string, unknown>) => {
+      const p = partner([frozen, lifted], config);
+      const ev = { ...scope, at: NOW, kind: "user_message" as const, text };
+      const r = await p.observe(ev, { waitMs: 1_000 });
+      return [r.injection, ...p.takePending(ev)].flatMap((x) => x?.citations.map((c) => c.itemId) ?? []);
+    };
+    expect(await delivered({ groundConflict: true })).toContain(frozen.id);
+    // Silence by default: with the block lifted, nothing is left to raise.
+    expect(await delivered({ groundConflict: true, supersede: true })).toEqual([]);
+  });
+
+  test("an item the ranker seats drops the pool item it supersedes", async () => {
+    const frozen = mail("hold", "Kestrel release", "Mon, 19 Oct 2026 09:00", "Kestrel release is frozen until 9 Nov.");
+    const qa = mail("qa", "Kestrel QA", "Mon, 19 Oct 2026 09:00", "Kestrel release requires QA sign-off first.");
+    const lifted = mail("lift", "Re: Kestrel release", "Thu, 22 Oct 2026 09:00", "Freeze lifted.");
+    const all: Source = { id: "gmail", kind: "test", description: "Mail", search: async () => [frozen, qa, lifted] };
+    // The pool is the two conflicts (nothing else clears `candidateScore`); a ranker that favours clearances seats
+    // the lift from outside it.
+    const config = { supersede: true, askRank: true, askVerdicts: true, candidateScore: 100 };
+    const p = new ContextPartner({
+      sources: async () => [all],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => NOW,
+      config,
+      rankModel: { names: ["clear"], weights: [10] },
+    });
+    const a = await p.ask({ ...scope, question: "Can we ship the Kestrel release on Tuesday 3 November?" });
+    const ids = a.citations.map((c) => c.itemId);
+    expect(ids).toContain(lifted.id);
+    expect(ids).not.toContain(frozen.id);
   });
 });

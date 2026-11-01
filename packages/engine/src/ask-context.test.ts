@@ -98,3 +98,53 @@ describe("askContext", () => {
     expect(out.s1!.ids.length).toBe(1);
   });
 });
+
+describe("askContext: the request's order is ranked once per request", () => {
+  test("later asks reuse it until the request or the user's items change; never across sessions", async () => {
+    let now = NOW;
+    const cache = new ItemCache();
+    const p = new ContextPartner({
+      sources: async () => [source([hoppers, guide])],
+      sourceMap: new SourceMap(),
+      cache,
+      budget: new Budget(),
+      model: null,
+      now: () => now,
+      config: { askContext: true },
+    });
+    // Counts the request's rankings (`askOrder`, a private method) without changing what it returns.
+    let ranked = 0;
+    const own = p as unknown as { askOrder: (...a: unknown[]) => unknown };
+    const real = own.askOrder.bind(p);
+    own.askOrder = (...a: unknown[]) => {
+      ranked++;
+      return real(...a);
+    };
+    const scope = { tenantId: "t", userId: "u1" };
+    const request = (sessionId: string, text = REQUEST) =>
+      p.observe({ ...scope, sessionId, at: now, kind: "user_message", text } as AgentEvent, { waitMs: 1_000 });
+    const ask = async (sessionId: string) =>
+      (await p.ask({ ...scope, sessionId, question: NARROW })).citations.map((c) => c.itemId);
+    await request("s1");
+    const first = await ask("s1");
+    expect(ranked).toBe(1);
+    expect(await ask("s1")).toEqual(first);
+    expect(ranked).toBe(1);
+    // Another session's request is its own: ranked for it, not reused from s1.
+    await request("s2");
+    await ask("s2");
+    expect(ranked).toBe(2);
+    // A new item in the user's cache: the order is ranked again.
+    cache.put(scope, [item("h2", "Hoppers table", "Hoppers table for six is confirmed for the 31st.")], now);
+    expect(await ask("s1")).toContain("mail:h2");
+    expect(ranked).toBe(3);
+    // A minute later the order is ranked again (recency and the graph move).
+    now += 61_000;
+    await ask("s1");
+    expect(ranked).toBe(4);
+    // A new request: ranked for it.
+    await request("s1", "Book Hoppers for six on the 31st.");
+    await ask("s1");
+    expect(ranked).toBe(5);
+  });
+});
