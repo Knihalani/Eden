@@ -218,3 +218,29 @@ Re-run of ALL3 after the fixes (same funnel, seeds 41–44, cards replayed, $0):
    raised, false concerns, agent input tokens and cost.
 2. Make cards live for the blind suites first, so card-dependent verdicts are not under-measured.
 3. Mark D73–D79 accepted or rejected from that measure.
+
+## Pre-registration of the last live measure (written before the run)
+
+- **Suites:**
+  - Primary: held-out 10, 32 templates. It was written after D79 by an author who saw no other suite, and its themes
+    avoid the stock scenarios the earlier suites shared. Never run before this measure.
+  - Secondary: held-out 5–9, reported as contaminated. dev6a/dev6b copy some of their templates, and they were used in
+    D72.
+- **Harness:** Pi, agent `z-ai/glm-5.3-flash`, grader `deepseek/deepseek-v4.1-flash`, `--time-scale 1`,
+  `--card-sort price`.
+- **Seeds:** held-out 10: 41–46. Held-out 5–9: 41–44.
+- **Conditions:** `tools`, `eden` (ALL, D64), and `eden~ALL3`. ALL3 is ALL plus `askVerdicts`, `conflictVocab`,
+  `compactAsk`, `askDedup`, `compactParts` and `cardsEconomy`.
+- **Bar.** ALL3 replaces ALL as the recommended experimental configuration if all of these hold on held-out 10:
+  - hidden raised, ALL3 − ALL: the lower bound of the paired 95% interval is above −0.03;
+  - false concern: the point estimate is ≤ +0.01;
+  - all-in cost per 1,000 tasks is lower.
+
+  Held-out 5–9 are reported beside the bar but do not decide it.
+- **Metrics:**
+  - hidden raised and false concern;
+  - uptake: packet, ask only, or neither;
+  - billed and re-priced cost;
+  - input and output tokens;
+  - wall time p50/p90/p99;
+  - Eden's critical path, and per-second profiles.
