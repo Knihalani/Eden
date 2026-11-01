@@ -438,6 +438,22 @@ export interface EngineConfig {
    * sign-off ("— O") hides the rest of a thread, and a one-line table longer than an item's room is dropped whole.
    */
   compactParts: boolean;
+  /**
+   * `ask` reads the conversation it is asked in (docs/research/smart-askctx.md): an agent's question is often narrower
+   * or worded otherwise than the user's request ("Globex discount approval?"), so the answer's candidates are ranked
+   * for the question and for the session's latest user request (its names and days), and fused question first by
+   * weighted reciprocal rank (`askContextWeight`), a verdict hit of either first. No source call and no model call:
+   * the request was looked up when it arrived, and its ranking is over what is cached. An ask whose question holds
+   * every word of the request is answered as without the flag. Off: an answer is ranked for the question alone.
+   */
+  askContext: boolean;
+  /** The request's weight in `askContext`'s fusion, against the question's 1 (equal: the question leads ties). */
+  askContextWeight: number;
+  /**
+   * The most items a fused `askContext` answer holds (the ask's own `maxItems` caps it too): fusion fills slots a
+   * narrow question leaves empty, and four keeps an answer's bytes at or under the question's own.
+   */
+  askContextItems: number;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -562,4 +578,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   compactAsk: false,
   askDedup: false,
   compactParts: false,
+  askContext: false,
+  askContextWeight: 1,
+  askContextItems: 4,
 };
