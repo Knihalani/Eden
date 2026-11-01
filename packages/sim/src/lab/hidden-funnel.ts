@@ -426,7 +426,9 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     if (cards) await cards.idle();
     const injections = [...(r.injection ? [r.injection] : [])];
     const got = arrived.flatMap((x) => x.ids);
+    const a0 = performance.now();
     const answered = ASK ? await partner.ask({ ...scope, sessionId, question: task.text }) : null;
+    const askMs = performance.now() - a0;
     const askCited = answered ? answered.citations.some((c) => c.itemId === id) : undefined;
     if (ASK_DIAG && answered) {
       const d = askDumps.get(sessionId);
@@ -495,6 +497,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
             askBytes: Buffer.byteLength(answered!.answer),
             ...(askCited ? { askKept: kept(task.detail, planted[i]!, answered!.answer) } : {}),
             askItems: answered!.citations.length,
+            askMs: Number(askMs.toFixed(2)),
           }),
       why,
       injected: got.length,

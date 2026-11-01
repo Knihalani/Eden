@@ -105,6 +105,7 @@ import {
 } from "./text";
 import { SpanStats, Tracer, type SpanSink, type SpanStat } from "./spans";
 import type { ShadowRecord, ShadowSink, Trace, TraceSink } from "./trace";
+import { chronological, supersededIn } from "./supersede";
 import { distinctiveTokens, showsUse, type Outstanding } from "./usage";
 
 export interface PartnerDeps {
@@ -330,6 +331,18 @@ const RECOVER_WORDS = 24;
 
 /** Each cue's frame (`conflict.ts`), read once and dropped with the cue. */
 const FRAMES = new WeakMap<Cue, Frame>();
+/** `supersede`: each cue's plain verdicts by item (a refreshed copy is another item), read once. */
+const VERDICTS = new WeakMap<Cue, WeakMap<ContextItem, Verdict>>();
+/** `supersedeThreads`: each item read with its quoted messages oldest first (`chronological`), made once per item. */
+const OLDEST_FIRST = new WeakMap<ContextItem, ContextItem>();
+function oldestFirst(item: ContextItem): ContextItem {
+  let x = OLDEST_FIRST.get(item);
+  if (!x) {
+    const text = chronological(item.text);
+    OLDEST_FIRST.set(item, (x = text === item.text ? item : { ...item, text }));
+  }
+  return x;
+}
 /** A lookup's knowledge-graph finds (`graph`), by item id, kept with its cue for delivery's learning. */
 const WALKS = new WeakMap<Cue, Map<string, Walked>>();
 
@@ -1063,11 +1076,12 @@ export class ContextPartner {
       "ask",
     ).items;
     if (grounding) spans!.close(grounding, { grounded: grounded.length });
-    const chosen = [
+    const pool = [
       ...hits,
       ...grounded.filter((x) => !hits.includes(x)),
       ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x) && !hits.includes(x)),
-    ].slice(0, limit);
+    ];
+    const chosen = this.config.supersede ? this.latest(cue, pool, true, limit) : pool.slice(0, limit);
     // `askCompact` with `densePacket`: an echo of an occurrence the answer already shows (the invitation beside its
     // event) is folded out, as in a packet (`fold.ts`).
     const items = (
@@ -1886,6 +1900,36 @@ export class ContextPartner {
     });
   }
 
+  /**
+   * `supersede` (D81): the candidates as they stand now. An item a newer one about the same matter supersedes is
+   * dropped (`supersededIn`; the newer one is decisive: it conflicts with the request or clears it). For an `ask`
+   * that is not a question, an item about the request whose latest state is settled (the conflict test clears it, or
+   * it says the matter is done or resolved and nothing in it conflicts) is dropped too: the action meets nothing
+   * there, and a lifted hold read by the agent is a concern raised for nothing. A question keeps it: it is the answer.
+   */
+  private latest(cue: Cue, pool: Scored[], ask: boolean, limit = Number.MAX_SAFE_INTEGER): Scored[] {
+    const verdict = (item: ContextItem) => this.verdict(item, cue);
+    const gone = supersededIn(
+      pool.map((x) => x.item),
+      (item) => verdict(item) !== "none",
+    );
+    const question = /\?\s*$/.test(cue.raw);
+    // Settled: cleared by the conflict test, or said done or resolved with nothing in it that conflicts.
+    const settledNow = (x: Scored) => {
+      if (!this.about(x, cue)) return false;
+      const v = verdict(x.item);
+      return v === "clear" || (v === "none" && settled(x.item));
+    };
+    // Read in rank order until `limit` are kept: what is past it is never shown.
+    const out: Scored[] = [];
+    for (const x of pool) {
+      if (out.length >= limit) break;
+      if (gone.has(x.item.id) || (ask && !question && settledNow(x))) continue;
+      out.push(x);
+    }
+    return out;
+  }
+
   /** The request's frame (`conflict.ts`), read once per cue. */
   private frame(cue: Cue): Frame {
     let f = FRAMES.get(cue);
@@ -1899,7 +1943,25 @@ export class ContextPartner {
 
   /** What an item says about the request's frame: conflict, clear or none (`conflict.ts` `assess`). */
   private verdict(item: ContextItem, cue: Cue, ties?: ReadonlySet<string>, speaks = false): Verdict {
-    return assess(this.frame(cue), item, localNow(cue), ties, speaks);
+    // `supersede` reads the verdicts the ask's facts already read: kept per cue (the plain reading, no ties).
+    if (this.config.supersede && !ties && !speaks) {
+      let seen = VERDICTS.get(cue);
+      if (!seen) VERDICTS.set(cue, (seen = new WeakMap()));
+      let v = seen.get(item);
+      if (v === undefined) seen.set(item, (v = this.assessed(item, cue)));
+      return v;
+    }
+    return this.assessed(item, cue, ties, speaks);
+  }
+
+  private assessed(item: ContextItem, cue: Cue, ties?: ReadonlySet<string>, speaks = false): Verdict {
+    return assess(
+      this.frame(cue),
+      this.config.supersedeThreads ? oldestFirst(item) : item,
+      localNow(cue),
+      ties,
+      speaks,
+    );
   }
 
   /**
@@ -3941,6 +4003,8 @@ export class ContextPartner {
     learnt?: string,
   ): Injection {
     const spans = this.spans;
+    // `supersede`: a packet does not carry an item and the newer one that decides its matter, only the newer one.
+    if (this.config.supersede && mode === "proactive" && scored.length > 1) scored = this.latest(cue, scored, false);
     const sp = spans?.open("deliver", cue.span, { items: scored.length });
     const injection = this.build(s, scored, mode, reason, cue, sp?.id ?? 0, shown, learnt);
     if (sp) spans!.close(sp, { bytes: injection.text.length });

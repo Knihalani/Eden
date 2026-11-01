@@ -438,6 +438,19 @@ export interface EngineConfig {
    * sign-off ("— O") hides the rest of a thread, and a one-line table longer than an item's room is dropped whole.
    */
   compactParts: boolean;
+  /**
+   * Supersession (D81, docs/research/smart-supersede.md): surface what the user's items say now. Among a lookup's or
+   * an `ask`'s candidates, an item a newer item about the same matter supersedes (same subject once "Re:" is
+   * stripped, or the same identifier; the newer one says something decisive: a conflict or a clearance) is dropped,
+   * and an `ask` that is not a question leaves out an item about it whose latest state is settled (cleared by the
+   * conflict test, or said done or resolved with no conflict): the agent has nothing to raise. Questions keep them.
+   */
+  supersede: boolean;
+  /**
+   * The conflict test reads a reply's quoted messages oldest first (`chronological`), so a later statement is the
+   * later one written: a hold lifted in the newest reply clears, a hold re-imposed after a quoted "lifted" stands.
+   */
+  supersedeThreads: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -562,4 +575,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   compactAsk: false,
   askDedup: false,
   compactParts: false,
+  supersede: false,
+  supersedeThreads: false,
 };
