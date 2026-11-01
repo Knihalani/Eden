@@ -62,6 +62,8 @@ class UserCache {
   constructor(readonly scope: Scope) {}
   /** Vocabulary size after the last rebuild. */
   baseline = 0;
+  /** Changes whenever an item is added, changed or dropped (`ItemCache.revision`); unique across rebuilds. */
+  revision = 0;
   readonly items = new Map<string, Entry>();
   /** How many of `items` are synced (D57). */
   synced = 0;
@@ -199,6 +201,8 @@ export class ItemCache {
   private graphs = false;
   /** Told of every item that leaves (`onDropped`); null ids: the whole user. */
   private dropped: ((scope: Scope, ids: string[] | null) => void) | null = null;
+  /** The last revision handed out: every user's revisions are drawn from it, so one never repeats. */
+  private revisions = 0;
 
   constructor(limits: Partial<CacheLimits> = {}) {
     this.limits = { ...DEFAULT_CACHE_LIMITS, ...limits };
@@ -226,6 +230,7 @@ export class ItemCache {
       }
     }
     const u = new UserCache({ tenantId: scope.tenantId, userId: scope.userId });
+    u.revision = ++this.revisions;
     this.users.set(key, u);
     this.perTenant.set(scope.tenantId, (this.perTenant.get(scope.tenantId) ?? 0) + 1);
     return u;
@@ -338,6 +343,7 @@ export class ItemCache {
       if (old && old.item.text === item.text && old.item.title === item.title) {
         // Same words, so the index and sketch stand; the rest (url, meta, updatedAt) is taken from the new copy. Its
         // people are counted again: its meta may name others.
+        if (!sameDetails(old.item, item)) u.revision = ++this.revisions;
         tally(u, old.item, -1);
         old.item = item;
         tally(u, item, 1);
@@ -359,6 +365,7 @@ export class ItemCache {
       }
       u.items.set(item.id, entry); // Map order stays oldest-first for eviction (old entry was removed above).
       u.byDoc[doc] = entry;
+      u.revision = ++this.revisions;
       changed.push(item);
     }
     if (u.synced === 0) {
@@ -390,6 +397,15 @@ export class ItemCache {
         loose--;
       }
     }
+  }
+
+  /**
+   * A number that changes whenever the user's cached items do (one added, its words or details changed, or one
+   * dropped), and not when a lookup only refreshes what is held: what is derived from the items can be kept until it
+   * changes. 0 for a user with no cache.
+   */
+  revision(scope: Scope): number {
+    return this.peek(scope)?.revision ?? 0;
   }
 
   /** Whether the cached item is held by the user's sync (D57). */
@@ -431,6 +447,7 @@ export class ItemCache {
    */
   private rebuild(scope: Scope, old: UserCache): void {
     const u = new UserCache(old.scope);
+    u.revision = ++this.revisions;
     for (const e of old.items.values()) {
       const doc = this.index(u, e.item);
       const entry = { ...e, doc };
@@ -474,6 +491,7 @@ export class ItemCache {
   }
 
   private drop(u: UserCache, e: Entry): void {
+    u.revision = ++this.revisions;
     if (e.synced) u.synced--;
     u.items.delete(e.item.id);
     u.index.remove(e.doc);
@@ -693,6 +711,13 @@ export class ItemCache {
   get userCount(): number {
     return this.users.size;
   }
+}
+
+/** Whether a refreshed copy carries the same details as the one held (its link, its source's time, its metadata). */
+function sameDetails(a: ContextItem, b: ContextItem): boolean {
+  if (a.url !== b.url || a.updatedAt !== b.updatedAt) return false;
+  if (a.meta === b.meta) return true;
+  return a.meta !== undefined && b.meta !== undefined && JSON.stringify(a.meta) === JSON.stringify(b.meta);
 }
 
 function sketchOf(u: UserCache, item: ContextItem): Sketch | null {
