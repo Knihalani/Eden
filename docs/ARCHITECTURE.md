@@ -240,6 +240,12 @@ The ask is part of the design, not a fallback for a thin packet: a packet that a
 held back, so the agent could answer without asking, was measured and rejected (D70,
 [research/econ-oneturn.md](research/econ-oneturn.md)). The agent's own question reaches items the request's words did
 not, and the agent raised a delivered fact more often when it could still ask.
+With `askVerdicts` (D73, off by default) an ask also gathers what a lookup gathers (the consequence probe's finds,
+the graph walk and the card finds) and answers first with the candidates a rule path found in conflict; no model call
+and no extra source call. With `askDedup` (D77, off by default) each session keeps `Session.shown`: the words its
+packets and answers showed the agent, per item id and version (at most 64 items, never shared across sessions or
+users), so a later answer says an unchanged item by its new parts only, or "(shown above)"; an item whose words
+changed at its source counts as not shown.
 
 ## Learning loop
 

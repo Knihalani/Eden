@@ -46,6 +46,8 @@ export interface Frame {
    * tie a statement to a request that names no one ("schedule the billing release" and "no production changes").
    */
   wordTies: Set<string>;
+  /** `conflictVocab` (D75): the wider vocabulary, possessive ties, more date forms and party-tied clearances. */
+  vocab?: boolean;
 }
 
 interface Amount {
@@ -101,6 +103,64 @@ const MOVES =
 /** A standing constraint on what can be served, given or shared: when it was said does not matter. */
 const STANDING =
   /\b(?:allerg[a-z]*|anaphyla[a-z]*|intoleran[a-z]*|coeliac|celiac|(?:gone|now|fully|strictly|is|am|i'm) (?:vegan|vegetarian)|no-gifts?|confidential|strictly internal|internal only|recused)\b/gi;
+/**
+ * `conflictVocab` (D75): more of the ordinary ways to say an action is blocked, written from general usage: an open
+ * end ("until further notice"), a thing not signed or refused, access revoked, someone off ("I'm off from 26 Oct",
+ * "off sick", parental leave), a hold on an account or an order to hold ("credit hold", "hold every send"), a
+ * prohibition on new commitments ("no new spend", "no further orders"), a plan dropped ("scrapped", "shelved",
+ * "dropped in favour of"), something not possible, a thing out of action ("in the garage", "out of service"),
+ * and someone travelling ("Mum's off to Málaga"). Most of these phrases were taken from the dev6a/dev6b suites the
+ * flag was measured on, so its dev gains are in-sample (D75).
+ */
+const BLOCKS_MORE = new RegExp(
+  `\\b(?:${[
+    "until further notice|not (?:yet )?signed|unsigned|not (?:yet )?approved|unapproved|not authori[sz]ed",
+    "revoked|revoking|barred|banned|blacklisted|struck off",
+    "(?:i'm|i am|i'll be|he's|she's|they're|we're|is|are|will be) off (?:from|until|till|between|for|sick|work)",
+    "off sick|maternity leave|paternity leave|on (?:maternity|paternity|sabbatical|holiday|vacation)",
+    "(?:credit|account|payment|legal|spending|hiring) (?:hold|freeze)|hold (?:every|all|any|off)",
+    "no (?:new|further|more) (?:[a-z-]+ )?(?:permissions?|access|spend|spending|orders?|purchases?|hires?|hiring)",
+    "no (?:new|further|more) (?:[a-z-]+ )?(?:accounts?|contracts?|commitments?|bookings?|deals?|work|projects?)",
+    "no (?:[a-z-]+ ){0,2}[a-z]+s? (?:until|before|during|while)",
+    "scrapped|shelved|axed|dropped in favou?r of|dropped from|not going ahead|no longer going ahead|not happening",
+    "(?:aren't|isn't|is not|are not|not) possible|impossible",
+    "in the garage|in for (?:repairs?|a service|service)|off the road|out of action|out of (?:service|order)",
+    "broken down|being repaired|written off",
+    "(?:'s|is|are|i'm|they're|we're) off to|flies out|flying out",
+  ].join("|")})\\b`,
+  "gi",
+);
+/**
+ * `conflictVocab`: block words with no object of their own ("declined", "rejected", "impossible"): a card declined
+ * at the shop or a proposal rejected by the board says nothing about dinner on Friday. They block only in a
+ * statement that holds one of the request's own words other than a name ("the booking was declined").
+ */
+const BLOCKS_OBJECT = /\b(?:rejected|declined|denied|refused|impossible)\b/gi;
+/**
+ * `conflictVocab`: more ways to say a block is gone. "Released" alone is not one ("the hotfix was released to
+ * staging" lifts no freeze): only a hold, freeze or block released is.
+ */
+const LIFTED_MORE =
+  // Lookbehind: the mark is at "released", after the block's own word, so it reads as the later statement.
+  "(?<=(?:hold|freeze|block|embargo|suspension|ban|restriction)s? (?:has been |have been |was |were |is |are |now )?)" +
+  "released|" +
+  "released (?:the |its |our |their )?(?:hold|freeze|block|embargo|suspension|ban|restriction)s?|" +
+  "back to normal|resumed|reopened|up and running|now signed";
+const CLEARS_MORE = new RegExp(`\\b(?:${LIFTED_MORE})\\b`, "gi");
+const REVERSAL_MORE = new RegExp(`\\b(?:${LIFTED_MORE})\\b`);
+/**
+ * `conflictVocab`: more standing constraints on what can be served or given, and security alerts ("changed from a
+ * device we don't recognise"): when an alert was raised does not matter, it stands until something clears it.
+ */
+const STANDING_MORE =
+  /\b(?:(?:don't|do not|didn't) recogni[sz]e|unrecogni[sz]ed|compromised|fraudulent|teetotal|(?:stopped|quit|given up|giving up) (?:drinking|alcohol|booze|meat|dairy|gluten)|(?:not|no longer|don't|doesn't) drink(?:ing)?|pregnant|halal|kosher|nut-free|gluten-free|dairy-free)\b/gi;
+/** `conflictVocab`: sign-off courtesies, which state nothing about the matter. */
+const COURTESY =
+  /\b(?:happy to (?:jump|hop) on a (?:quick )?(?:call|chat)|if easier|shout if you have|let me know (?:what you think|if you have any questions)|any questions)\b/;
+/** `conflictVocab`: idioms whose negation blocks nothing ("can't wait for Friday", "no worries"). */
+const IDIOMS =
+  /\b(?:can't wait|cannot wait|can not wait|can't believe|no worries|no problem|not a problem|never mind|don't worry|no rush|no hurry)\b/g;
+
 /**
  * Statements that the action is done already: paying, sending or filing again is the mistake. When it was done does
  * not matter, unlike a block's dates.
@@ -189,6 +249,17 @@ const DEADLINE =
 /** A limit word and a bare year ("valid to 2036"). */
 const YEAR_LIMIT = /\b(valid to|valid until|expires|expiring|until|till|through)\s(20\d\d)\b/g;
 
+/** `conflictVocab`: "back 9 Nov", "back on 9 November": the day someone returns. */
+const BACK_DATED = new RegExp(`\\bback (?:on )?(\\d{1,2})(?:st|nd|rd|th)? ${MONTH}`, "g");
+/** `conflictVocab`: a day of the month alone after a date word ("till the 10th"), no month after it. */
+const ORDINAL = new RegExp(
+  `\\b(from|since|after|until|till|through|thru|by|before|back|on)(?: on)? the (\\d{1,2})(?:st|nd|rd|th)\\b(?! of)(?! ${MONTH})`,
+  "g",
+);
+/** `conflictVocab`: a weekday after an end word ("until Sunday", "back Thursday", "by Friday"), no date after it. */
+const WEEKDAY_END =
+  /\b(until|till|through|thru|back|by|before)(?: on)? ((?:mon|tues|wednes|thurs|fri|satur|sun)day)\b(?!,? \d)/g;
+
 /** One sentence's dated statements. */
 interface Dates {
   spans: { from: string; to: string }[];
@@ -196,18 +267,30 @@ interface Dates {
 }
 
 /** The request's frame: its days, amounts and references (`Frame`). */
-export function frameOf(raw: string, days: Iterable<string> | null, now: number, names: string[] = []): Frame {
+export function frameOf(
+  raw: string,
+  days: Iterable<string> | null,
+  now: number,
+  names: string[] = [],
+  vocab = false,
+): Frame {
   const text = raw.slice(0, 2_000).replace(/[\u2013\u2014]/g, "-");
   const named = days !== null && [...days].length > 0;
-  const refs = refsOf(text);
+  const refs = refsOf(text, vocab);
   // Names as names: capitalised words, at most four (an entity run can be a quoted subject line).
-  const lower = names.filter((n) => NAME.test(n.trim())).map((n) => n.trim().toLowerCase());
+  const lower = names
+    .filter((n) => NAME.test(n.trim()))
+    .map((n) => n.trim().toLowerCase())
+    .map((n) => (vocab ? n.split(/\s+/).map(unpossess).join(" ") : n));
   const nameTies = new Set<string>([
     ...lower.flatMap((n) => n.split(/\s+/)).filter((w) => w.length > 1),
     ...refs.filter((r) => r.noun === "").map((r) => `${r.kind}-${r.value}`),
   ]);
   const wordTies = new Set(
-    (text.toLowerCase().match(/[a-z][a-z0-9'-]{3,}/g) ?? []).filter((w) => !UNTIED.test(w)).map(stem),
+    (text.toLowerCase().match(/[a-z][a-z0-9'-]{3,}/g) ?? [])
+      .map((w) => (vocab ? unpossess(w) : w))
+      .filter((w) => !UNTIED.test(w))
+      .map(stem),
   );
   return {
     days: named ? [...days!].sort() : [iso(now)],
@@ -218,6 +301,7 @@ export function frameOf(raw: string, days: Iterable<string> | null, now: number,
     names: lower,
     nameTies,
     wordTies,
+    vocab,
   };
 }
 
@@ -253,6 +337,11 @@ export function assess(
   // A consequence probe's find (`consequence.ts`) is tied to the request by its action class's own words: "freeze"
   // and "production" tie a release request that says neither. Plural "s" dropped, as for the request's own words.
   const extra = extraTies ? new Set([...extraTies].map(stem)) : null;
+  const V = frame.vocab;
+  const blocks = V ? [BLOCKS, BLOCKS_MORE] : [BLOCKS];
+  const clears = V ? [CLEARS, CLEARS_MORE] : [CLEARS];
+  const standing = V ? [STANDING, STANDING_MORE] : [STANDING];
+  const marksOf = (x: string, res: RegExp[], blocking: boolean) => res.flatMap((re) => marks(x, re, blocking));
   // A message from someone the request names speaks for them: its "I" is them ("I'm vegetarian" from Sam).
   const sender = /^from:\s*([^<\n]{2,80})/im.exec(item.text.slice(0, 2_000))?.[1]?.toLowerCase() ?? "";
   // `speaks`: the knowledge graph (`kg.ts`) says the item's author is someone the request names, or one of their
@@ -268,7 +357,7 @@ export function assess(
   const tied = (line: string) => {
     const said = SPEAKER.exec(line);
     const s = said ? line.slice(said[0].length) : line;
-    const words = (s.match(/[a-z][a-z0-9'-]{1,}/g) ?? []).map(stem);
+    const words = (s.match(/[a-z][a-z0-9'-]{1,}/g) ?? []).map((w) => stem(V ? unpossess(w) : w));
     const ties = frame.names.length > 0 ? [frame.nameTies] : [frame.nameTies, frame.wordTies];
     if (extra) ties.push(extra);
     if (words.some((w) => ties.some((t) => t.has(w)))) return true;
@@ -278,8 +367,11 @@ export function assess(
   // ("This email and any attachments are confidential" is no constraint on anything).
   const whole = `${item.title}. ${compactText(item.text.slice(0, MAX_TEXT).replace(HEADERS, ""), NO_FOCUS, MAX_TEXT)}`;
   // A sibling reference: the item is about Q2 where the request says Q3, another invoice than the one named.
-  if (twin(frame.refs, refsOf(whole))) return "clear";
+  if (twin(frame.refs, refsOf(whole, V && hasDomain(frame)))) return "clear";
   const body = whole.toLowerCase().replace(/[\u2013\u2014]/g, "-");
+  // `conflictVocab`: a relative date ("until Monday", "till the 10th") counts from when the item was written, not
+  // from the request: "back Monday" sent on 1 Oct meant 5 Oct. With no known date it is read as no date.
+  const anchor = V ? sentAt(item) : null;
   let state: Verdict = "none";
   // Whether a statement behind the current conflict is tied to the request.
   let tiedConflict = false;
@@ -292,42 +384,67 @@ export function assess(
   const conflict = (s: string, isFirm: boolean, money = false) => {
     // A conflict on an amount is tied by the amount itself; a statement is also tied by the sentence before it, or by
     // the item's title, naming what it is about ("Rebecca Stone (Soylent Foods)". "Status: no longer at …").
-    const t = money || tied(s) || tied(before) || titled;
+    // With `conflictVocab`, a table's row is not tied by the row above it: that is another record.
+    const t = money || tied(s) || (!(V && s.startsWith("|")) && tied(before)) || titled;
     tiedConflict = state === "conflict" ? tiedConflict || t : t;
     state = "conflict";
     if (isFirm) firm = wordsOf(s);
+    if (V && t) conflictWords = wordsOf(s);
   };
   // A clearance is a near-miss twin's mark only where something could have blocked: after a blocking statement in
   // the item, or in words that say a block is gone ("lifted", "back from leave", "unchanged"). "Happy to jump on a
   // call" clears nothing.
   let blockSeen = false;
+  // `conflictVocab`: the words of the last tied conflicting statement. A table's row about another party ("| Pied Piper
+  // | Approved |" after "| Aperture Labs | Suspended |") does not undo a conflict tied to the one the request names:
+  // a row clears only when it is tied to the request too, or shares a word with the conflicting statement. (In prose
+  // a clearance need not repeat the name: "SSO was blocked, but the cert came through and the date holds".)
+  let conflictWords: Set<string> | null = null;
   const clear = (s: string) => {
-    if (!blockSeen && !REVERSAL.test(s)) return;
+    if (!blockSeen && !REVERSAL.test(s) && !(V && REVERSAL_MORE.test(s))) return;
     if (firm && ![...wordsOf(s)].some((w) => firm!.has(w))) return;
+    if (V && s.startsWith("|") && state === "conflict" && tiedConflict && frame.names.length > 0 && conflictWords) {
+      const cw: Set<string> = conflictWords;
+      if (!tied(s) && ![...wordsOf(s)].some((w) => cw.has(w))) return;
+    }
     state = "clear";
     firm = null;
+    conflictWords = null;
     elsewhere = false;
   };
   const titled = tied(item.title.toLowerCase());
+  // A statement that holds one of the request's own words other than a name (`BLOCKS_OBJECT`).
+  const objectTied = (line: string) =>
+    (line.match(/[a-z][a-z0-9'-]{1,}/g) ?? [])
+      .map((w) => stem(unpossess(w)))
+      .some((w) => frame.wordTies.has(w) && !frame.nameTies.has(w));
   let before = "";
   let s = "";
-  for (const sentence of body.split(/[.!?;\n]+\s|\n+|,? but |\s(?=\[\d{1,2}:\d{2}\])/)) {
+  // `conflictVocab`: a table's rows are statements of their own ("| Aperture Labs | Suspended |" and "| Pied Piper |
+  // Approved |"), also when the text was flattened onto one line (a row ends where the next begins: "| |").
+  for (const sentence of body.split(V ? SENTENCES_ROWS : SENTENCES)) {
     before = s;
     // A restriction that has ended is lifted: "the minimum term ended on 30 Jun" frees the request, unlike "the
     // passport expired on 30 Sep", where what ended is the thing the request needs.
     s = sentence.trim().replace(RESTRICTION_ENDED, "$1 lifted");
     if (s.length < 3 || BOILER.test(s)) continue;
+    // `conflictVocab`: a sign-off courtesy is no statement ("happy to jump on a call"), and an idiom is no block
+    // ("can't wait for Friday").
+    if (V) {
+      if (COURTESY.test(s)) continue;
+      s = s.replace(IDIOMS, (m) => " ".repeat(m.length));
+    }
     const money = amountVerdict(frame, s);
     if (money === "conflict") conflict(s, true, true);
     else if (money === "clear") [state, firm] = ["clear", null];
     if (money !== "none") continue;
-    const blocks = marks(s, BLOCKS, true);
-    const lastBlock = Math.max(-1, ...blocks);
+    const blocked = [...marksOf(s, blocks, true), ...(V && objectTied(s) ? marks(s, BLOCKS_OBJECT, true) : [])];
+    const lastBlock = Math.max(-1, ...blocked);
     // A reaffirming word after a block or move in the sentence confirms it, so it clears only before the first.
-    const firstBlock = Math.min(Number.MAX_SAFE_INTEGER, ...blocks, ...marks(s, MOVES, true));
+    const firstBlock = Math.min(Number.MAX_SAFE_INTEGER, ...blocked, ...marks(s, MOVES, true));
     const lastClear = Math.max(
       -1,
-      ...marks(s, CLEARS, false),
+      ...marksOf(s, clears, false),
       ...marks(s, REAFFIRMS, false).filter((at) => at < firstBlock),
     );
     // Something done already, or a standing constraint (an allergy, a confidentiality): when does not matter, and
@@ -336,7 +453,7 @@ export function assess(
     const lastDone = Math.max(
       -1,
       ...marks(s, DONE, true),
-      ...marks(s, STANDING, true),
+      ...marksOf(s, standing, true),
       ...(frame.routine ? marks(s, CHANGES, true) : []),
     );
     const lastMove = Math.max(-1, ...marks(s, MOVES, true));
@@ -344,13 +461,13 @@ export function assess(
     if (lastDone > lastClear) conflict(s, true);
     else if (lastClear > Math.max(lastBlock, lastMove)) {
       // A clearing statement with a date of its own ("EHIC valid to 2029") is about its own matter.
-      if (!(firm && dateVerdict(frame, s, now, false) !== "none")) clear(s);
+      if (!(firm && dateVerdict(frame, s, now, false, V, anchor) !== "none")) clear(s);
     } else {
-      const dated = dateVerdict(frame, s, now, lastBlock >= 0);
+      const dated = dateVerdict(frame, s, now, lastBlock >= 0, V, anchor);
       if (dated === "conflict") conflict(s, true);
       else if (lastMove >= 0) {
         // Moved: unless the request acts on the new day, it acts on the old one. Days after "from" are the old ones.
-        const fresh = datesOf(s.replace(/\bfrom (?:[a-z]+,? )?\d{1,2}(?:st|nd|rd|th)? [a-z]+/g, " "), now);
+        const fresh = datesOf(s.replace(/\bfrom (?:[a-z]+,? )?\d{1,2}(?:st|nd|rd|th)? [a-z]+/g, " "), now, V, anchor);
         // The day it moved to is the end of what is read as a span ("to Friday 30 October").
         const onNew = frame.named && fresh.spans.some((sp) => frame.days.includes(sp.to));
         if (onNew) clear(s);
@@ -368,6 +485,11 @@ export function assess(
   const verdict = state as Verdict;
   return verdict === "conflict" && !tiedConflict ? "none" : verdict;
 }
+
+/** Where a statement ends: a sentence's end, a line, a "but", a chat line's time. */
+const SENTENCES = /[.!?;\n]+\s|\n+|,? but |\s(?=\[\d{1,2}:\d{2}\])/;
+/** `conflictVocab`: and a table row's end. */
+const SENTENCES_ROWS = /[.!?;\n]+\s|\n+|,? but |\s(?=\[\d{1,2}:\d{2}\])|\|\s+(?=\|)/;
 
 /** A chat line's time and speaker ("[09:14] lars nilsen: "). */
 const SPEAKER = /^\[\d{1,2}:\d{2}\]\s?([^:\n]{2,40}):\s?/;
@@ -392,7 +514,7 @@ const BOILER =
 export function namesRef(frame: Frame, item: ContextItem, qualified = false): boolean {
   const ids = frame.refs.filter((r) => qualified || r.noun === "");
   if (ids.length === 0) return false;
-  const said = refsOf(`${item.title} ${item.text}`.slice(0, MAX_TEXT));
+  const said = refsOf(`${item.title} ${item.text}`.slice(0, MAX_TEXT), frame.vocab === true && hasDomain(frame));
   return ids.some((a) => said.some((r) => r.kind === a.kind && r.value === a.value && r.noun === a.noun));
 }
 
@@ -440,8 +562,15 @@ function marks(s: string, re: RegExp, blocking: boolean): number[] {
  * stated day or span that misses every day the request names, is `clear` (the caller reads that as "about other
  * days", not as a clearance). `none` when the sentence states no date.
  */
-function dateVerdict(frame: Frame, s: string, now: number, blocked: boolean): Verdict {
-  const d = datesOf(s, now);
+function dateVerdict(
+  frame: Frame,
+  s: string,
+  now: number,
+  blocked: boolean,
+  vocab = false,
+  anchor: number | null = null,
+): Verdict {
+  const d = datesOf(s, now, vocab, anchor);
   if (d.spans.length === 0 && d.limits.length === 0) return "none";
   const late = d.limits.some((l) => frame.days.some((day) => day > l));
   const covered = d.spans.some((sp) => frame.days.some((day) => day >= sp.from && day <= sp.to));
@@ -468,8 +597,11 @@ export function datesIn(s: string, now: number): { spans: { from: string; to: st
   return datesOf(s.slice(0, MAX_TEXT).replace(/[\u2013\u2014]/g, "-"), now);
 }
 
-/** The spans and limits a sentence states (`Dates`). */
-function datesOf(s: string, now: number): Dates {
+/**
+ * The spans and limits a sentence states (`Dates`). With `vocab`, relative dates ("until Sunday", "till the 10th")
+ * count from `anchor`, when the item was written; with no anchor they are not read.
+ */
+function datesOf(s: string, now: number, vocab = false, anchor: number | null = null): Dates {
   const spans: { from: string; to: string }[] = [];
   const limits: string[] = [];
   // Ranges first ("6-9 nov", "26 oct to 6 nov"); their text is blanked so their end is not read again as "until".
@@ -516,6 +648,20 @@ function datesOf(s: string, now: number): Dates {
     if (day) take(word, day, Boolean(g.y1 ?? g.y2 ?? g.y3));
   }
   for (const m of rest.matchAll(YEAR_LIMIT)) take(m[1]!, `${m[2]}-12-31`, true);
+  if (vocab) {
+    // "Back 9 Nov", "back on the 10th", "back Thursday": away until the day before. A day of the month alone ("till
+    // the 10th") is the next such day; a weekday after an end word ("until Sunday") the next such weekday.
+    const end = (word: string, day: string | null) => {
+      if (!day) return;
+      if (word === "back") take("until", iso(Date.parse(`${day}T00:00:00Z`) - DAY));
+      else take(word, day);
+    };
+    for (const m of rest.matchAll(BACK_DATED)) end("back", dayOf(Number(m[1]), m[2]!, undefined, now));
+    if (anchor !== null) {
+      for (const m of rest.matchAll(ORDINAL)) end(m[1]!, nextMonthDay(Number(m[2]), anchor));
+      for (const m of rest.matchAll(WEEKDAY_END)) end(m[1]!, nextWeekday(m[2]!, anchor));
+    }
+  }
   // A start with no end: from then on ("pausing headcount from 19 Oct until Q1 planning").
   if (start) spans.push({ from: start, to: "9999-12-31" });
   return { spans, limits };
@@ -581,7 +727,7 @@ const scale = (s: string | undefined) => (s === "k" ? 1_000 : s === "m" ? 1_000_
  * References a text names: identifiers (letters, an optional hyphen, digits: "INV-5842", "SOW-123") and nouns
  * qualified by a quarter, a half, a month or a year ("Q3 report", "October invoice", "2027 roadmap").
  */
-function refsOf(text: string): Ref[] {
+function refsOf(text: string, domains = false): Ref[] {
   const out: Ref[] = [];
   // An identifier: two to six letters, a hyphen or not, two digits or more ("INV-5842", "SOW-123", "PO4471").
   for (const m of text.matchAll(/\b([A-Za-z]{2,6})-?(\d{2,9})\b/g)) {
@@ -596,8 +742,18 @@ function refsOf(text: string): Ref[] {
     const kind = /^q\d$/.test(q) ? "quarter" : /^h\d$/.test(q) ? "half" : /^\d/.test(q) ? "year" : "month";
     out.push({ kind, value: kind === "month" ? q.slice(0, 3) : q, noun: m[2]! });
   }
+  // `conflictVocab`: a domain is an identifier too ("renew northwind-events.com" is not "northwind-promo.com"). Not
+  // an address's domain ("@northwind.co") nor a host inside a longer name or path.
+  if (domains) for (const m of lower.matchAll(DOMAIN)) out.push({ kind: "domain", value: m[1]!, noun: "" });
   return out;
 }
+
+/** Whether a request names a domain: only then is an item's text searched for domains (the scan is not free). */
+const hasDomain = (frame: Frame) => frame.refs.some((r) => r.kind === "domain");
+
+/** A domain name: labels and a common top-level domain, not after "@", "/", "." or a word character. */
+const DOMAIN =
+  /(?<![@/.\w-])((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|net|org|io|co|uk|dev|app|ai|eu|de|fr|nl|us|info|biz))(?![\w-]|\.\w)/g;
 
 /**
  * Whether an item is about a sibling of a reference the request names: the same kind and noun with another value,
@@ -648,4 +804,34 @@ function lastOfMonth(month: string, year: string): string | null {
 /** A word without its plural "s" ("releases" ties to "release"); short words as they are. */
 const stem = (w: string) => (w.length > 4 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
 
+/** When an item was written: its `Date:` header, else its `updatedAt`; null when neither is known. */
+export function sentAt(item: ContextItem): number | null {
+  const m = /^date:\s*([^\n]{0,60})$/im.exec(item.text.slice(0, 600));
+  const t = m ? Date.parse(m[1]!.replace(/,/g, "")) : NaN;
+  if (Number.isFinite(t)) return t;
+  return item.updatedAt ?? null;
+}
+
 const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
+/** A word without a possessive ("leila's" is "leila", "mum's" is "mum"). */
+const unpossess = (w: string) => w.replace(/['\u2019]s$/, "").replace(/['\u2019]$/, "");
+
+/** The next day (today included) whose day of the month is `day`; null if none within two months. */
+function nextMonthDay(day: number, now: number): string | null {
+  const d = new Date(now);
+  for (let k = 0; k < 3; k++) {
+    const t = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + k, day);
+    if (new Date(t).getUTCDate() === day && iso(t) >= iso(now)) return iso(t);
+  }
+  return null;
+}
+
+const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+/** The next such weekday, today included. */
+function nextWeekday(name: string, now: number): string | null {
+  const want = WEEKDAYS.indexOf(name.slice(0, 3));
+  if (want < 0) return null;
+  const today = new Date(now).getUTCDay();
+  return iso(now + ((want - today + 7) % 7) * DAY);
+}
