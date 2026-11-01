@@ -5,7 +5,7 @@
  * chat call. `agent-ab.ts` (the in-house loop) and `pi-ab.ts` (the Pi harness) both run on these.
  */
 import { inert } from "@eden/engine";
-import type { AgentEvent } from "@eden/protocol";
+import { ASK_CONTEXT_DESCRIPTION, ASK_CONTEXT_GUIDED, type AgentEvent } from "@eden/protocol";
 import { buildSessions } from "../sessions";
 import type { ActionRecord } from "./act";
 import type { SimSource } from "../sources";
@@ -37,6 +37,21 @@ export interface Meter {
   after(costUsd: number): void;
 }
 
+/**
+ * How `chat` reaches OpenRouter. The default is what every earlier run did: the global fetch, retried here, and no
+ * provider preferences (the account's own settings apply). The lab's free-model runs (`free.ts`) pass a paced fetch,
+ * which does the retrying (so this loop does not retry HTTP errors again), and `allowLogging`.
+ */
+export interface ChatOptions {
+  /** A `Pacer`'s fetch: paced, capped, and retried on 429 and 5xx. */
+  fetch?: typeof fetch;
+  /** LAB ONLY: say explicitly that endpoints may log the prompt (free models need it). */
+  allowLogging?: boolean;
+}
+
+/** OpenRouter's refusal of `response_format` (a model or endpoint without JSON mode): the call is sent without it. */
+const NO_JSON_MODE = /response_format|json[_ ]?(mode|object|schema)|structured output/i;
+
 /** One chat call through OpenRouter, retried on rate limits and server errors; its cost is booked on the meter. */
 export async function chat(
   key: string,
@@ -45,10 +60,13 @@ export async function chat(
   messages: Msg[],
   tools?: unknown[],
   json = false,
+  options: ChatOptions = {},
 ): Promise<{ msg: Msg; usage: Usage }> {
   meter.before();
+  const paced = options.fetch !== undefined;
+  const send = options.fetch ?? fetch;
   for (let attempt = 0; ; attempt++) {
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const res = await send("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
       body: JSON.stringify({
@@ -59,9 +77,14 @@ export async function chat(
         temperature: 0,
         max_tokens: 2_000,
         usage: { include: true },
+        ...(options.allowLogging ? { provider: { data_collection: "allow", zdr: false } } : {}),
       }),
       signal: AbortSignal.timeout(90_000),
-    }).catch((e: unknown) => ({ ok: false, status: 0, text: async () => String(e) }) as Response);
+    }).catch((e: unknown) => {
+      // The pacer's cap is final: it is not a network failure to retry.
+      if (e instanceof Error && e.name === "RequestCapReached") throw e;
+      return { ok: false, status: 0, text: async () => String(e) } as Response;
+    });
     if (res.ok) {
       // A connection reset while reading the body is retried like a server error.
       const body = (await res.json().catch(() => ({}))) as {
@@ -71,12 +94,21 @@ export async function chat(
       };
       if (body.choices?.[0]) {
         const usage = body.usage ?? { prompt_tokens: 0, completion_tokens: 0 };
+        // A free model reports cost 0, which stands (`??`, not `||`).
         meter.after(usage.cost ?? 0);
         return { msg: body.choices[0].message, usage };
       }
       if (attempt >= 3) throw new Error(`no choice: ${body.error?.message ?? "empty"}`);
-    } else if (attempt >= 3 || (res.status >= 400 && res.status < 500 && res.status !== 429)) {
-      throw new Error(`${model} ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    } else {
+      const text = await res.text();
+      // A model with no JSON mode: ask again without it; the grader's reply is read leniently (`parseGrade`).
+      if (json && res.status === 400 && NO_JSON_MODE.test(text)) {
+        json = false;
+        continue;
+      }
+      const retryable = res.status === 0 || res.status === 429 || res.status >= 500;
+      // A paced fetch has already retried what was worth retrying; a network failure it gave up on is final too.
+      if (attempt >= 3 || !retryable || paced) throw new Error(`${model} ${res.status}: ${text.slice(0, 300)}`);
     }
     await Bun.sleep(1_000 * 2 ** attempt);
   }
@@ -188,22 +220,16 @@ export const searchToolSpec = (s: SimSource) => ({
   description: `Search ${s.description}. Returns up to ${TOOL_ITEMS} matching items.`,
 });
 
-// Eden's own description of the tool, as its MCP server gives it (packages/server/src/mcp.ts).
-export const ASK_DESCRIPTION =
-  "Ask the user's context partner a question. It searches the user's connected sources (mail, calendar, " +
-  "documents, CRM and more) and answers with citations. Use it when you need a fact about the user, their " +
-  "people, projects or history that is not in the conversation.";
+// Eden's own description of the tool, as its MCP server gives it (packages/server/src/mcp.ts, @eden/protocol).
+export const ASK_DESCRIPTION = ASK_CONTEXT_DESCRIPTION;
 
 /**
- * A tenant-side variant of the tool description (`pi-ab --ask-description guided`): it asks the agent to question the
- * partner about what could block or change an action, in the words of the things involved. Lab only: measured, not
- * Eden's behaviour.
+ * The guided description (`pi-ab --ask-description guided`): what the MCP server gives with `askGuard` (D88). It asks
+ * the agent to question the partner about what could block or change an action, in the words of the things involved,
+ * and to raise only what the answer shows. Read from the product, so the lab measures what ships. (Before D88 it was a
+ * lab-only text without its last sentence: docs/research/path-to-90.md measured that one.)
  */
-export const ASK_DESCRIPTION_GUIDED =
-  ASK_DESCRIPTION +
-  " Before you act on a request, ask it what could block, constrain or change the action: rules, limits, approvals, " +
-  "holds, people's availability, recent changes or things already done. Name the people, organisations, systems, " +
-  "places, dates and amounts involved.";
+export const ASK_DESCRIPTION_GUIDED = ASK_CONTEXT_GUIDED;
 
 /** The agent's system prompt: who it works for, when it is, and (with any tool) to look things up. */
 export function systemPrompt(world: World, options: { lookups: boolean; data: boolean; act?: boolean }): string {
@@ -261,14 +287,44 @@ export function gradeMessages(task: Task, answer: string): Msg[] {
   ];
 }
 
-/** The grader's reply read as a verdict per needed fact; anything unreadable is false. */
+/**
+ * The grader's reply read as a verdict per needed fact; anything unreadable is false. Free and reasoning models do
+ * not always keep to JSON mode: a reply may wrap the object in a fence or prose, or think aloud first (`<think>`), so
+ * the verdict is the reply's last JSON object that parses and has numbered keys, and failing that its last
+ * `"n": true|false` pair per fact. Only `true` (or the string "true") counts.
+ */
 export function parseGrade(task: Task, content: string | null): Record<string, boolean> {
-  const text = (content ?? "{}").replace(/^```(json)?|```$/g, "");
-  let parsed: Record<string, unknown> = {};
-  try {
-    parsed = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
-  } catch {}
-  return Object.fromEntries(task.must.map((f, i) => [f.id, parsed[String(i + 1)] === true]));
+  const verdicts = readVerdicts(content ?? "");
+  return Object.fromEntries(task.must.map((f, i) => [f.id, verdicts.get(String(i + 1)) === true]));
+}
+
+/** Every numbered verdict a grader reply states, by fact number (1-based), read as `parseGrade` reads it. */
+export function readVerdicts(content: string): Map<string, boolean> {
+  const text = content.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<think>[\s\S]*$/i, "");
+  const out = new Map<string, boolean>();
+  // From the last closing brace back: the verdict follows any reasoning.
+  for (let end = text.lastIndexOf("}"); end >= 0; end = end > 0 ? text.lastIndexOf("}", end - 1) : -1) {
+    for (
+      let start = text.lastIndexOf("{", end);
+      start >= 0;
+      start = start > 0 ? text.lastIndexOf("{", start - 1) : -1
+    ) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text.slice(start, end + 1));
+      } catch {
+        continue;
+      }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+      const entries = Object.entries(parsed as Record<string, unknown>).filter(([k]) => /^\d+$/.test(k));
+      if (!entries.length) continue;
+      for (const [k, v] of entries) out.set(k, v === true || v === "true");
+      return out;
+    }
+  }
+  for (const m of text.matchAll(/"?(\d+)"?\s*[:=]\s*"?(true|false)\b/gi))
+    out.set(m[1]!, m[2]!.toLowerCase() === "true");
+  return out;
 }
 
 /** The grader's verdict for one answer: an empty answer or a task with no needed facts is graded with no call. */
@@ -278,11 +334,12 @@ export async function grade(
   grader: string,
   task: Task,
   answer: string,
+  options: ChatOptions = {},
 ): Promise<{ facts: Record<string, boolean>; usage?: Usage }> {
   if (task.must.length === 0 || !answer.trim()) {
     return { facts: Object.fromEntries(task.must.map((f) => [f.id, false])) };
   }
-  const { msg, usage } = await chat(key, meter, grader, gradeMessages(task, answer), undefined, true);
+  const { msg, usage } = await chat(key, meter, grader, gradeMessages(task, answer), undefined, true, options);
   return { facts: parseGrade(task, msg.content), usage };
 }
 

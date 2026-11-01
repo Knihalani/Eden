@@ -480,6 +480,73 @@ export interface EngineConfig {
    * narrow question leaves empty, and four keeps an answer's bytes at or under the question's own.
    */
   askContextItems: number;
+  /**
+   * The intent index (D87, docs/research/edge-intent.md; needs `cards` and `PartnerDeps.cards`): the background card
+   * call also writes, per item, up to four requests the item would change, in a user's words, and items the card
+   * prefilter rejects are read for theirs. They are indexed per user apart from the item's text (`intent.ts`). At
+   * request time, with no model, the request is matched against them: the best matches (`intentHits`) join the
+   * candidates a lookup ranks and the judge's seats (`intentSeats`), and an `ask` fuses them into its answer by
+   * reciprocal rank (`intentWeight`). An item found only so is a candidate, never a no-model delivery: the rule paths
+   * still read its own words, and its card if it has one.
+   */
+  intent: boolean;
+  /** Items the intent index may add to a request's candidates, best first. */
+  intentHits: number;
+  /** The least share of the request's (known) idf an item's requests must hold to count as a hit. */
+  intentMinCoverage: number;
+  /** ... and the least distinct request terms they must hold. */
+  intentMinMatched: number;
+  /** The intent list's weight in an ask's reciprocal-rank fusion, against the lexical order's 1. */
+  intentWeight: number;
+  /** Judge seats kept for intent hits the lexical ranking did not seat (with a model). */
+  intentSeats: number;
+  /**
+   * Guided asking with a precision guard (D88, docs/research/edge-ask.md). An `ask` about an action (the question or
+   * the session's request acts, or the question asks what could block it) answers with its verdicts said: an item a
+   * verdict reads as binding leads, marked "May block or change this", and when none of the answer's items reads as a
+   * block, no item or candidate has constraint wording (`mayConstrain`) and every source was searched (each synced and
+   * current, `sync`), a line of fixed words says so ("Checked mail, calendar: none of the items found states a rule,
+   * hold, limit, absence or change for Dana, 5 Nov."), so a cautious agent has grounds to go ahead (D93). The MCP
+   * server's `ask_context` then gives the guided description (`ASK_CONTEXT_GUIDED`). No source call, no model call.
+   * Off: answers as before, and the standard description.
+   */
+  askGuard: boolean;
+  /**
+   * Answer-shaped packets (D88): a proactive packet says each item's bearing on the request before the item, from the
+   * conflict test's verdict and the item's card ("May block or change this", "Says this is clear"), in fixed words,
+   * and puts an item that may block first. No source call, no model call.
+   */
+  packetBearing: boolean;
+  /**
+   * The request-time bridging query (docs/research/edge-bridge.md, `bridge.ts`): for a request that acts, on the slow
+   * path only, one small budgeted model call (`PartnerDeps.bridge`) rewrites the request into two or three queries in
+   * the words a constraint on it would use; they are run against the user's own index with no source call, and what
+   * they find joins the lookup's and the ask's candidates, a verdict hit only where the conflict test, tied by the
+   * queries' words, says it conflicts with the request. Queries are cached per user by request; an `ask` reads them
+   * and never calls. Needs a bridge in the deps; with none, nothing changes.
+   */
+  bridgeQuery: boolean;
+  /** How long a lookup waits for the bridge's call after its own search is done (ms); past it, it goes without. */
+  bridgeWaitMs: number;
+  /** The most items each bridging query brings in from the index. */
+  bridgeHits: number;
+  /**
+   * `bridgeQuery`: seats in an `ask` answer, after the verdict hits, for the bridge's best finds the conflict test does
+   * not read as conflicts (nor clears): the agent's model judges them. 0: only verdict hits count.
+   */
+  bridgeAskSeats: number;
+  /** `bridgeQuery` also asks about a question for permission ("Can I…", "Is it fine if I…", "Should I…"). */
+  bridgeQuestions: boolean;
+  /**
+   * The active-constraints digest (docs/research/edge-bridge.md, `digest.ts`): per user, the items whose card
+   * (`cards`) is a standing constraint (a freeze or hold, a limit, an absence, a deadline, a prohibition) over today
+   * or later, at most `digestLines` lines of the items' own words (`digestBytes` in all), ranked by recency and the
+   * user's own people, delivered once at `session_start` as data and on request (`ContextPartner.digest`). The same
+   * constraints give the same bytes (no clock in the text), so a provider's prompt cache holds it. Needs `cards`.
+   */
+  constraintDigest: boolean;
+  digestLines: number;
+  digestBytes: number;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -612,4 +679,20 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askContext: false,
   askContextWeight: 1,
   askContextItems: 4,
+  intent: false,
+  intentHits: 6,
+  intentMinCoverage: 0.35,
+  intentMinMatched: 2,
+  intentWeight: 1,
+  intentSeats: 1,
+  askGuard: false,
+  packetBearing: false,
+  bridgeQuery: false,
+  bridgeWaitMs: 4_000,
+  bridgeHits: 3,
+  bridgeQuestions: false,
+  bridgeAskSeats: 0,
+  constraintDigest: false,
+  digestLines: 12,
+  digestBytes: 1_600,
 };

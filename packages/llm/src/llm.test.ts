@@ -83,6 +83,40 @@ describe("OpenRouterModel", () => {
     expect(sent.reasoning).toBeUndefined();
   });
 
+  test("data collection is denied unless the caller (the lab, on free models) explicitly allows it", async () => {
+    const sent: any[] = [];
+    const fake = (async (_url: string, init: RequestInit) => {
+      sent.push(JSON.parse(String(init.body)));
+      return Response.json({ choices: [{ message: { content: "ok" } }], usage: {} });
+    }) as unknown as typeof fetch;
+    const req = { messages: [{ role: "user" as const, content: "hi" }], maxTokens: 5 };
+    await new OpenRouterModel({ apiKey: "k", model: "m", fetch: fake }).chat(req);
+    await new OpenRouterModel({ apiKey: "k", model: "m:free", fetch: fake, allowLogging: true }).chat(req);
+    expect(sent[0].provider).toMatchObject({ data_collection: "deny", zdr: true });
+    expect(sent[1].provider).toMatchObject({ data_collection: "allow", zdr: false });
+  });
+
+  test("a free model (OpenRouter's :free suffix) is priced at zero; an unknown one stays priced high", () => {
+    expect(priceFor("nvidia/nemotron-3.5-super-vl:free", {})).toEqual({ input: 0, output: 0 });
+    expect(priceFor("someone/unknown-model", {})).toEqual({ input: 1, output: 4 });
+  });
+
+  test("fromEnv denies data collection whatever the environment says; only the lab's explicit option allows it", async () => {
+    const sent: any[] = [];
+    const fake = (async (_url: string, init: RequestInit) => {
+      sent.push(JSON.parse(String(init.body)));
+      return Response.json({ choices: [{ message: { content: "{}" } }], usage: {} });
+    }) as unknown as typeof fetch;
+    const env = { OPENROUTER_API_KEY: "k", EDEN_MODEL_ZDR: "off", EDEN_LAB_DATA_COLLECTION: "allow" };
+    const prod = OpenRouterModel.fromEnv(env)!;
+    (prod as unknown as { options: { fetch: typeof fetch } }).options.fetch = fake;
+    await prod.chat({ messages: [{ role: "user", content: "hi" }], maxTokens: 5 });
+    expect(sent[0].provider.data_collection).toBe("deny");
+    const lab = new OpenRouterModel({ apiKey: "k", model: "m:free", allowLogging: true, fetch: fake });
+    await lab.chat({ messages: [{ role: "user", content: "hi" }], maxTokens: 5 });
+    expect(sent[1].provider).toMatchObject({ data_collection: "allow", zdr: false });
+  });
+
   test("asks for low reasoning effort when told, and reports a reply cut off at the cap (D45)", async () => {
     let sent: any;
     const fake = (async (_url: string, init: RequestInit) => {

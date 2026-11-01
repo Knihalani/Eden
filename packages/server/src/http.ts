@@ -5,6 +5,7 @@
  *   POST /v1/ask       an AskRequest              → AskResponse
  *   POST /v1/check     a tool_call AgentEvent     → ActionCheck   (the action firewall, `actionCheck`)
  *   POST /v1/pending   {tenantId,userId,sessionId} → {injections}
+ *   POST /v1/digest    {tenantId,userId,sessionId?} → {digest}  (active constraints, `constraintDigest`; null when off)
  *   POST /v1/feedback  a Feedback (used: boolean)  → {ok, applied}
  *   POST /v1/forget    {tenantId,userId,sourceId?} → {ok}
  *   GET  /healthz
@@ -85,6 +86,15 @@ export function createHandler(
           if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
           const who = { tenantId: tenant, userId: body.userId as string, sessionId: body.sessionId as string };
           return json({ injections: partner.takePending(who) });
+        }
+        case "/v1/digest": {
+          const bad = badId(body, ["userId"]);
+          if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
+          if (body.sessionId !== undefined && !isId(body.sessionId)) {
+            return fail(400, "sessionId must be 1-128 characters of [A-Za-z0-9._:@-]");
+          }
+          const who = { tenantId: tenant, userId: body.userId as string };
+          return json({ digest: partner.digest({ ...who, sessionId: (body.sessionId as string | undefined) ?? "" }) });
         }
         case "/v1/feedback": {
           const bad = badId(body, ["userId", "sessionId", "injectionId"]);
