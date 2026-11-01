@@ -5,6 +5,8 @@
  */
 import type { World } from "../world";
 import { plantHidden, type HiddenTask } from "./hidden-context";
+import { plantDev6a } from "./hidden-dev6a";
+import { plantDev6b } from "./hidden-dev6b";
 import { plantHeldout } from "./hidden-heldout";
 import { plantHeldout2 } from "./hidden-heldout2";
 import { plantHeldout3 } from "./hidden-heldout3";
@@ -14,6 +16,7 @@ import { plantHeldout6 } from "./hidden-heldout6";
 import { plantHeldout7 } from "./hidden-heldout7";
 import { plantHeldout8 } from "./hidden-heldout8";
 import { plantHeldout9 } from "./hidden-heldout9";
+import { plantHeldout10 } from "./hidden-heldout10";
 
 export type { HiddenTask };
 export type Variant = "hidden" | "control";
@@ -36,6 +39,11 @@ export const SUITES: Record<string, Plant> = {
   // Written for the econ tracks, blind to the engine and to every other suite; registered unread, measurement
   // only: never run it while tuning.
   heldout9: plantHeldout9,
+  // development suites, written after D72; tune on them.
+  dev6a: plantDev6a,
+  dev6b: plantDev6b,
+  // Blind, written after D79 by an author who saw no other suite; measurement only.
+  heldout10: plantHeldout10,
 };
 export const SUITE_NAMES = Object.keys(SUITES);
 const HELDOUT_ALL = ["heldout", "heldout2", "heldout3", "heldout4"];
@@ -43,7 +51,7 @@ const HELDOUT_ALL = ["heldout", "heldout2", "heldout3", "heldout4"];
  * Blind suites that have never been run: left out of `all`, so a tuning command with `--suite all` cannot spend them;
  * the blind run names them. A suite leaves this list once its blind run is recorded.
  */
-export const UNRUN_BLIND = ["heldout9"];
+export const UNRUN_BLIND = ["heldout9", "heldout10"];
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n));
 
 /**
