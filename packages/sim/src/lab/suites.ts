@@ -5,6 +5,7 @@
  */
 import type { World } from "../world";
 import { plantHidden, type HiddenTask } from "./hidden-context";
+import { plantDev6b } from "./hidden-dev6b";
 import { plantHeldout } from "./hidden-heldout";
 import { plantHeldout2 } from "./hidden-heldout2";
 import { plantHeldout3 } from "./hidden-heldout3";
@@ -36,6 +37,8 @@ export const SUITES: Record<string, Plant> = {
   // Written for the econ tracks, blind to the engine and to every other suite; registered unread, measurement
   // only: never run it while tuning.
   heldout9: plantHeldout9,
+  // development suite, written after D72; tune on it.
+  dev6b: plantDev6b,
 };
 export const SUITE_NAMES = Object.keys(SUITES);
 const HELDOUT_ALL = ["heldout", "heldout2", "heldout3", "heldout4"];
