@@ -74,6 +74,7 @@ import {
   daysNamed,
   isAction,
   isImperative,
+  MORE_VERBS,
   LEADING,
   isScheduling,
   isSubject,
@@ -1704,7 +1705,7 @@ export class ContextPartner {
     // Only when the request's own words ground no conflict: the graph widens what is found, not what is said.
     // Only for a request that acts or asks, or a message arriving: a remark that names someone ("haha Lucía sent me
     // a meme") is no occasion to raise what binds them or their organisation.
-    const engaged = acts || isImperative(cue.raw) || isAction(cue.raw);
+    const engaged = acts || this.imperative(cue) || isAction(cue.raw);
     if (walked?.size && engaged && (hits.length === 0 || this.config.graphMerge)) {
       for (const x of graphPool) {
         const w = walked.get(x.item.id);
@@ -1899,7 +1900,7 @@ export class ContextPartner {
     if (!f) {
       const names = cleanEntities(cue.entities).filter((e) => !e.includes("@"));
       // The user's wall clock, so "today" and a date's nearest year are their own (D44), as `cue.time.days` are.
-      FRAMES.set(cue, (f = frameOf(cue.raw, cue.time?.days ?? null, localNow(cue), names)));
+      FRAMES.set(cue, (f = frameOf(cue.raw, cue.time?.days ?? null, localNow(cue), names, this.config.conflictVocab)));
     }
     return f;
   }
@@ -1962,7 +1963,7 @@ export class ContextPartner {
     if (!this.config.quietNameOnly || x.beyond === undefined || x.beyond > 0) return true;
     // A message arriving from someone is their act, and a request to act on someone ("Book a table for me and Sam",
     // "Send Priya a hamper") is the user's: what bears on that person bears on the act (D44). Neither is a mention.
-    if (cue.external || isImperative(cue.raw)) return true;
+    if (cue.external || this.imperative(cue)) return true;
     const days = cue.time?.days;
     if (days && days.size > 0) {
       if (days.has(startDay(x.item) ?? "") || daysNamed(x.item, cue.at).some((d) => days.has(d))) return true;
@@ -1973,6 +1974,11 @@ export class ContextPartner {
   /** The people a request names: its names that someone in the user's items goes by (`ItemCache.isPerson`). */
   private peopleOf(s: Session, cue: Cue): string[] {
     return cleanEntities(cue.entities).filter((e) => !e.includes("@") && this.deps.cache.isPerson(s.scope, e));
+  }
+
+  /** Whether a request is in the imperative; with `conflictVocab`, by its wider verbs too (`MORE_VERBS`). */
+  private imperative(cue: Cue): boolean {
+    return isImperative(cue.raw, this.config.conflictVocab ? MORE_VERBS : undefined);
   }
 
   /** With `quietClear`, whether an item is about the request and says its decisive value does not conflict. */
