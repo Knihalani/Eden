@@ -83,6 +83,15 @@ export class EdenClient {
     return (await this.post<{ injections: Injection[] }>("/v1/pending", this.who))?.injections ?? [];
   }
 
+  /**
+   * The user's active-constraints digest (`constraintDigest` on the server), as data for the agent's prompt; the same
+   * constraints give the same bytes, so it can sit in a cached prefix. Null when there is none, the flag is off, or
+   * on any error (fails open).
+   */
+  async digest(): Promise<Injection | null> {
+    return (await this.post<{ digest: Injection | null }>("/v1/digest", this.who))?.digest ?? null;
+  }
+
   /** `observe`'s injection plus anything pending, in one list. */
   async collect(injection: Injection | null): Promise<Injection[]> {
     return [...(injection ? [injection] : []), ...(await this.pending())];

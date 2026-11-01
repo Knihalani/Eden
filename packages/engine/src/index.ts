@@ -50,3 +50,17 @@ export {
 } from "./cards";
 export { cleanRequests, IntentIndex, intentTerms, stemWord, INTENT_VERSION } from "./intent";
 export { predict } from "./anticipate";
+export {
+  BRIDGE_VERSION,
+  bridgeKey,
+  bridgeMessages,
+  bridgeWants,
+  DEFAULT_BRIDGE_LIMITS,
+  ModelBridgeMaker,
+  parseBridge,
+  QueryBridge,
+  type BridgeLimits,
+  type BridgeMaker,
+  type BridgeStats,
+} from "./bridge";
+export { activeOn, buildDigest, DIGEST_KINDS, personalSender, type Digest, type DigestOptions } from "./digest";

@@ -46,6 +46,26 @@ tokens per ten-item call over 184 calls (24 of them retries of a batch cut off a
 that would be $0.0021 per call, $0.00021 per item, about $0.32 per user-month, an upper bound for a model that
 reasons that much. Request time adds one BM25 search over the user's requests (no model, no call).
 
+Bridging query (proposed D86, `bridgeQuery`, off by default; docs/research/edge-bridge.md). One call per request
+that acts (in the imperative, or an `external` message; with `bridgeQuestions`, also a question for permission), on the
+slow path beside the lookup's search, never per event and never on the fast path; cached per user by request, so a
+repeated request and every `ask` about it make none. Input: the system prompt and the redacted request, at most 400
+characters: about 300 tokens (301 measured for one request on the lab's free model). Output: three queries of at most
+eight words (about 40 tokens) after the model's reasoning, capped at 2,000 tokens. Measured on the free lab model
+(nvidia/nemotron-3.5-super-vl:free): 1,375 output tokens for one request, 762 for two; its reasoning ignores "low".
+Not measured on glm-5.3-flash. Estimate at $0.15/$0.50 per M: $0.00005 input plus $0.00005 to $0.0007 output, so
+$0.0001 to $0.00075 per bridged request; reserved at $0.0005 against its own `Budget`. On the dev suites 0.73
+requests per task are bridged (352 of 480; 0.82 with `bridgeQuestions`): about $0.00007 to $0.0006 per task, against an
+agent cost of about $0.0005 per task (docs/research/path-to-90.md), so +15% to +110% of the agent's cost at list
+prices, mostly reasoning tokens. A model or setting with no reasoning would sit at the low end (an estimate: not
+measured).
+
+Active-constraints digest (proposed D87, `constraintDigest`, off by default): no model call and no source call. Its
+cost is the agent's: at most `digestBytes` (1,600 bytes; 1,377 on average on dev, 1,414 in-sample), about 350 tokens,
+once per session as data. The same constraints give the same bytes across sessions (one distinct digest per simulated
+user over 30 sessions on dev), so in a stable prompt prefix a provider's cache reads it at the cached price ($0.03 per
+M at Z.AI): about $0.00001 per agent model request cached, $0.00005 uncached. An estimate, not measured live.
+
 Card economy (proposed D66, `cardsEconomy`, off by default; docs/research/econ-background.md; in-sample, 2026-10-31):
 the strict prefilter and sentence reuse read 74.25 items per simulated user instead of 166.5 (−55.4%) in 12.4 calls
 instead of 24.25 (20 items per call), with the same funnel totals (218/19; the track measured 70.25 items and 12.15
