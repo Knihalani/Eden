@@ -171,6 +171,54 @@ describe("supersede in ask", () => {
     expect(on).not.toContain(hold.id);
   });
 
+  test("with askRank and askContext on too, what supersede drops stays out of the answer", async () => {
+    // The combined configuration (docs/research/smart-combined.md): the ranker's swap seat and the request's fused
+    // finds are read against the same supersession, so neither brings a settled or replaced item back.
+    const hold = mail("hold", "Kestrel release", "Mon, 19 Oct 2026 09:00", "Kestrel release is on hold until 9 Nov.");
+    const moved = mail(
+      "move",
+      "Re: Kestrel release",
+      "Thu, 22 Oct 2026 09:00",
+      "Update: the Kestrel release hold is lifted, go ahead.",
+    );
+    const all = { supersede: true, askRank: true, askContext: true, askVerdicts: true };
+    const q = "Is the Kestrel release still on hold?";
+    const on = await ask([hold, moved], q, all);
+    expect(on).toContain(moved.id);
+    expect(on).not.toContain(hold.id);
+    const action = "Confirm the Globex pallets order on our usual terms.";
+    const cited = await ask([lifted, other], action, all);
+    expect(cited).not.toContain(lifted.id);
+    expect(cited).toContain(other.id);
+  });
+
+  test("with askContext, a settled item only the request's words found stays out of a narrow question's answer", async () => {
+    const p = (config: Record<string, unknown>) =>
+      new ContextPartner({
+        sources: async () => [source([lifted, other])],
+        sourceMap: new SourceMap(),
+        cache: new ItemCache(),
+        budget: new Budget(),
+        model: null,
+        now: () => NOW,
+        config,
+      });
+    const scope = { tenantId: "t", userId: "u1", sessionId: "s" };
+    const run = async (config: Record<string, unknown>) => {
+      const partner = p(config);
+      const text = "Confirm the Globex account order on our usual terms.";
+      await partner.observe({ ...scope, at: NOW, kind: "user_message", text }, { waitMs: 1_000 });
+      const a = await partner.ask({ ...scope, question: "pallets order notes?" });
+      return a.citations.map((c) => c.itemId);
+    };
+    // The request's words ("Globex account") pull in the cleared hold; the narrow question never asked about it.
+    const fused = await run({ askContext: true });
+    expect(fused).toContain(lifted.id);
+    const both = await run({ askContext: true, supersede: true });
+    expect(both).not.toContain(lifted.id);
+    expect(both).toContain(other.id);
+  });
+
   test("per user: another user's items never reach this user's answer", async () => {
     const q = "Is the Globex credit hold still on?";
     expect(await ask([lifted, other], q, { supersede: true }, "u2")).toEqual([]);
