@@ -213,6 +213,19 @@ anticipation's early decision reads what the prefetch, the sync and the cache ho
 engine's spans (`sync.freshen`, `sync.list`, `graph.walk`, `cards.match`, `cards.make`, `anticipate.prefetch`,
 `anticipate.early`), and the Pi harness's timeline reads the same spans.
 
+**The bridging query and the constraints digest** (`bridgeQuery`, `constraintDigest`, off by default; proposed D86
+and D87, `bridge.ts`, `digest.ts`, [research/edge-bridge.md](research/edge-bridge.md)). For a request that acts, the
+slow path starts one small budgeted model call beside its search (`QueryBridge`, its own `Budget` and per-user cache
+of queries): the redacted request is rewritten into two or three short queries in a constraint's words. Once the
+search has cached what it brought, the queries run against the user's own index with no source call; a find the
+conflict test, tied by the queries' words, reads as a conflict counts as a consequence find in conflict does (a seat,
+the conflict ground, an `ask` verdict hit), and with `bridgeAskSeats` the best other finds take seats in an `ask`
+answer. An `ask` reads the cached queries and never calls. The digest is the user's items whose card is a standing
+constraint in force (a freeze, limit, absence, deadline, prohibition or dependency ending today or later), a line
+each in the items' own words, ranked by when written with the user's own people a week newer, deduplicated by card,
+at most twelve lines; it opens a session (`session_start`) as data and is served on request (`POST /v1/digest`, client
+`digest`). It holds no clock, so its bytes change only when a constraint does.
+
 **The action firewall** (`actionCheck`, off by default; proposed D69, `firewall.ts`,
 [research/econ-firewall.md](research/econ-firewall.md)): `checkAction` (HTTP `POST /v1/check`, client `check`) takes
 the agent's tool call before it runs. The session's request and the call's structured arguments (dates written out,

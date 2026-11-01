@@ -47,3 +47,17 @@ export {
   type CardMaker,
 } from "./cards";
 export { predict } from "./anticipate";
+export {
+  BRIDGE_VERSION,
+  bridgeKey,
+  bridgeMessages,
+  bridgeWants,
+  DEFAULT_BRIDGE_LIMITS,
+  ModelBridgeMaker,
+  parseBridge,
+  QueryBridge,
+  type BridgeLimits,
+  type BridgeMaker,
+  type BridgeStats,
+} from "./bridge";
+export { activeOn, buildDigest, DIGEST_KINDS, personalSender, type Digest, type DigestOptions } from "./digest";

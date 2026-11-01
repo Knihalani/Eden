@@ -480,6 +480,36 @@ export interface EngineConfig {
    * narrow question leaves empty, and four keeps an answer's bytes at or under the question's own.
    */
   askContextItems: number;
+  /**
+   * The request-time bridging query (docs/research/edge-bridge.md, `bridge.ts`): for a request that acts, on the slow
+   * path only, one small budgeted model call (`PartnerDeps.bridge`) rewrites the request into two or three queries in
+   * the words a constraint on it would use; they are run against the user's own index with no source call, and what
+   * they find joins the lookup's and the ask's candidates, a verdict hit only where the conflict test, tied by the
+   * queries' words, says it conflicts with the request. Queries are cached per user by request; an `ask` reads them
+   * and never calls. Needs a bridge in the deps; with none, nothing changes.
+   */
+  bridgeQuery: boolean;
+  /** How long a lookup waits for the bridge's call after its own search is done (ms); past it, it goes without. */
+  bridgeWaitMs: number;
+  /** The most items each bridging query brings in from the index. */
+  bridgeHits: number;
+  /**
+   * `bridgeQuery`: seats in an `ask` answer, after the verdict hits, for the bridge's best finds the conflict test does
+   * not read as conflicts (nor clears): the agent's model judges them. 0: only verdict hits count.
+   */
+  bridgeAskSeats: number;
+  /** `bridgeQuery` also asks about a question for permission ("Can I…", "Is it fine if I…", "Should I…"). */
+  bridgeQuestions: boolean;
+  /**
+   * The active-constraints digest (docs/research/edge-bridge.md, `digest.ts`): per user, the items whose card
+   * (`cards`) is a standing constraint (a freeze or hold, a limit, an absence, a deadline, a prohibition) over today
+   * or later, at most `digestLines` lines of the items' own words (`digestBytes` in all), ranked by recency and the
+   * user's own people, delivered once at `session_start` as data and on request (`ContextPartner.digest`). The same
+   * constraints give the same bytes (no clock in the text), so a provider's prompt cache holds it. Needs `cards`.
+   */
+  constraintDigest: boolean;
+  digestLines: number;
+  digestBytes: number;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -612,4 +642,12 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askContext: false,
   askContextWeight: 1,
   askContextItems: 4,
+  bridgeQuery: false,
+  bridgeWaitMs: 4_000,
+  bridgeHits: 3,
+  bridgeQuestions: false,
+  bridgeAskSeats: 0,
+  constraintDigest: false,
+  digestLines: 12,
+  digestBytes: 1_600,
 };
