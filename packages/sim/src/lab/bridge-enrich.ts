@@ -99,5 +99,7 @@ for (let i = 0; i < todo.length; i += BATCH) {
   cost += got.costUsd;
   const lines = batch.map(([h, r], k): BridgeLine => ({ h, r, q: got!.queries[k] ?? null }));
   appendFileSync(OUT, lines.map((l) => `${JSON.stringify(l)}\n`).join(""));
-  console.log(`${Math.min(i + BATCH, todo.length)}/${todo.length} ($${cost.toFixed(5)}, ${ACCESS.pacer.sent} requests)`);
+  console.log(
+    `${Math.min(i + BATCH, todo.length)}/${todo.length} ($${cost.toFixed(5)}, ${ACCESS.pacer.sent} requests)`,
+  );
 }
