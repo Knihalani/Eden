@@ -60,6 +60,7 @@ import { Budget, OpenRouterModel, type Model } from "@eden/llm";
 import type { AgentEvent, Injection } from "@eden/protocol";
 import { QueryPlanner } from "@eden/sources";
 import { draftOf, type DraftMode } from "../drafts";
+import { narrowQuestion } from "../narrow";
 import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
 import { DiskCardMaker } from "./cards-disk";
@@ -87,6 +88,12 @@ const LIVE = opt("judge", "none") === "live";
 const SYNC = args.includes("--sync");
 /** `--ask`: each request is also asked of Eden (`ask`), recording whether the answer cites the planted item. */
 const ASK = args.includes("--ask");
+/**
+ * `--ask-question narrow` (with `--ask`): the ask's question is the request narrowed as an agent would word it
+ * (`narrow.ts`, "<name> <object> <action noun>?"; a simulation assumption) instead of the request's own text.
+ */
+const ASK_Q = opt("ask-question", "request");
+if (ASK_Q !== "request" && ASK_Q !== "narrow") throw new Error("--ask-question must be request or narrow");
 const SERIAL = args.includes("--serial");
 const NOOP_SPANS = opt("spans", "") === "noop";
 const REAL_SYNC = CONFIG.sync === true;
@@ -230,8 +237,17 @@ interface TaskRow {
   delivered: boolean;
   why: string;
   injected: number;
+  /** Bytes of every packet the task delivered (the agent's input), and how many packets. */
+  packetBytes: number;
+  packets: number;
   calls: number;
   ms: number;
+  /** With `--ask`: whether the answer cites the planted item, its bytes and items, and the ask's wall time. */
+  askCited?: boolean;
+  askBytes?: number;
+  askKept?: number;
+  askItems?: number;
+  askMs?: number;
   /** When the planted item reached the agent, from the request (ms of wall time); absent when it did not. */
   deliveryMs?: number;
   /** It came with the request's own reply (the observe call), not later. */
@@ -426,7 +442,10 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     if (cards) await cards.idle();
     const injections = [...(r.injection ? [r.injection] : [])];
     const got = arrived.flatMap((x) => x.ids);
-    const answered = ASK ? await partner.ask({ ...scope, sessionId, question: task.text }) : null;
+    const question = ASK_Q === "narrow" ? narrowQuestion(task.text) : task.text;
+    const a0 = performance.now();
+    const answered = ASK ? await partner.ask({ ...scope, sessionId, question }) : null;
+    const askMs = performance.now() - a0;
     const askCited = answered ? answered.citations.some((c) => c.itemId === id) : undefined;
     if (ASK_DIAG && answered) {
       const d = askDumps.get(sessionId);
@@ -437,6 +456,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
         variant,
         template: task.template,
         request: task.text,
+        question,
         planted: id,
         cached: !!cache.get(scope, id, clock),
         delivered: got.includes(id),
@@ -495,9 +515,12 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
             askBytes: Buffer.byteLength(answered!.answer),
             ...(askCited ? { askKept: kept(task.detail, planted[i]!, answered!.answer) } : {}),
             askItems: answered!.citations.length,
+            askMs: Number(askMs.toFixed(2)),
           }),
       why,
       injected: got.length,
+      packetBytes: [...injections, ...pendingSeen].reduce((n, x) => n + Buffer.byteLength(x.text), 0),
+      packets: injections.length + pendingSeen.length,
       calls: calls - callsBefore,
       served: served - servedBefore,
       ms: Number(ms.toFixed(2)),

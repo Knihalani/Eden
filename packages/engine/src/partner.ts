@@ -218,6 +218,11 @@ interface Session {
    * most `MAX_SHOWN` items (oldest dropped first), so an answer does not repeat them.
    */
   shown?: Map<string, Set<string>>;
+  /**
+   * With `askContext`: the cue of the session's latest user request (its redacted words, names and days), so an ask
+   * is also ranked for what the user asked.
+   */
+  request?: Cue;
 }
 
 /** Items whose shown words a session keeps (`askDedup`). */
@@ -320,6 +325,10 @@ interface ProbeOpts {
   local?: ReadonlySet<string> | null;
 }
 const ANSWER_MAX_TOKENS = 1_000;
+/** `askContext`'s reciprocal-rank constant: rank 0 scores 1/k (the usual 60 flattens a five-item list to a tie). */
+const ASK_FUSE_K = 2;
+/** `askContext`: the request's best-ranked candidates whose verdicts are read (with any its graph or cards found). */
+const ASK_CONTEXT_FACTS = 16;
 /** `densePacket`: a word on fewer than this share of the user's items is rare; an item adding one is no echo. */
 const RARE_SHARE = 0.03;
 /** The action firewall: a party named on more than this share of a user's items is the user's own organisation. */
@@ -332,6 +341,8 @@ const RECOVER_WORDS = 24;
 const FRAMES = new WeakMap<Cue, Frame>();
 /** A lookup's knowledge-graph finds (`graph`), by item id, kept with its cue for delivery's learning. */
 const WALKS = new WeakMap<Cue, Map<string, Walked>>();
+/** `askContext`: each cue's verdicts by item object (`Partner.verdict`), dropped with the cue. */
+const VERDICTS = new WeakMap<Cue, WeakMap<ContextItem, Verdict>>();
 
 /** Requests that act on someone, where an item they take part in is context (D44). */
 const ACTING = new Set<string>(["scheduling", "communication", "task", "travel"]);
@@ -640,6 +651,8 @@ export class ContextPartner {
     if (event.kind === "external") cue.external = true;
     cue.arrived = this.now();
     if (root) cue.span = root.id;
+    // `askContext`: the request's own cue, kept so an ask reads what its frame, graph walk and verdicts already hold.
+    if (event.kind === "user_message" && this.config.askContext) s.request = cue;
     // The request's names are its own lookup's to probe: a later event naming them again prefetches nothing.
     if (s.ant)
       this.markAsked(
@@ -1063,11 +1076,15 @@ export class ContextPartner {
       "ask",
     ).items;
     if (grounding) spans!.close(grounding, { grounded: grounded.length });
-    const chosen = [
+    const ordered = [
       ...hits,
       ...grounded.filter((x) => !hits.includes(x)),
       ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x) && !hits.includes(x)),
-    ].slice(0, limit);
+    ];
+    // `askContext`: the session's latest request, ranked as an ask of its own over what is cached, fused in.
+    const context = this.config.askContext ? this.requestCue(s, cue, ordered.length > 0) : null;
+    const fused = context ? this.fuseAsk({ order: ordered, hits }, this.askOrder(s, context), limit * 2) : null;
+    const chosen = fused ? fused.slice(0, Math.min(limit, this.config.askContextItems)) : ordered.slice(0, limit);
     // `askCompact` with `densePacket`: an echo of an occurrence the answer already shows (the invitation beside its
     // event) is folded out, as in a packet (`fold.ts`).
     const items = (
@@ -1196,6 +1213,104 @@ export class ContextPartner {
       carded: ctx.carded,
     });
     return facts.filter(({ facts: f }) => f.conflictHit || f.graphHit || f.bridged || f.cardViolated).map(({ x }) => x);
+  }
+
+  /**
+   * `askContext`: the cue of the session's latest user request, when an ask's question is about it in other words (an
+   * agent asking narrowly). Null when there is none; when the question holds every content word the request does (it
+   * is the request, or more), so an ask made with the request's own text is answered as without the flag; and when
+   * the question shares no content word with the request while finding something of its own (it asks about something
+   * else, and the request's items would only crowd its answer).
+   */
+  private requestCue(s: Session, question: Cue, found: boolean): Cue | null {
+    const cue = s.request;
+    if (!cue) return null;
+    const asked = new Set(question.text.split(" ").filter(Boolean));
+    const words = cue.text.split(" ").filter(Boolean);
+    if (words.every((t) => asked.has(t))) return null;
+    if (found && !words.some((t) => asked.has(t))) return null;
+    return cue;
+  }
+
+  /**
+   * An ask's candidates for `cue` in answer order, as `ask` orders its own (verdict hits, then what its people and
+   * days ground, then the rest above `candidateScore`), with no source call: what is cached, its graph and its cards.
+   */
+  private askOrder(s: Session, cue: Cue): { order: Scored[]; hits: Scored[] } {
+    const verdicts = this.config.askVerdicts;
+    // The request's lookup walked the graph from its cue already: its finds are kept with it (`WALKS`).
+    const walked =
+      verdicts && this.config.graph ? (WALKS.get(cue) ?? this.walkGraph(s, cue)) : new Map<string, Walked>();
+    const carded = verdicts ? this.cardFinds(s, cue) : new Map<string, CardFind>();
+    const scored = this.rank(s, cue, {
+      ignoreLedger: true,
+      ...(carded.size > 0 ? { probed: [...carded.keys()] } : {}),
+      ...(walked.size > 0 ? { walked: [...walked.keys()] } : {}),
+    });
+    // The request's verdicts are read on its best few and what its graph and cards found, cheapest test first: a
+    // hit ranked lower would not reach a five-item answer.
+    const read = scored.filter((x, i) => i < ASK_CONTEXT_FACTS || walked.has(x.item.id) || carded.has(x.item.id));
+    const hits = verdicts ? read.filter((x) => this.contextHit(x, cue, walked, carded)) : [];
+    const onDay = (x: Scored) => cue.time?.days.has(startDay(x.item) ?? "") === true;
+    const grounded = this.grounded(
+      s,
+      cue,
+      scored.filter((x) => x.score >= this.config.candidateScore || onDay(x)),
+      "ask",
+    ).items;
+    const order = [
+      ...hits,
+      ...grounded.filter((x) => !hits.includes(x)),
+      ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x) && !hits.includes(x)),
+    ];
+    return { order, hits };
+  }
+
+  /**
+   * `askContext`: whether a candidate of the request carries a verdict `askHits` reads (a card its actions violate, a
+   * binding graph-walked item in conflict, a conflict about the request tied beyond a name), as `factsOf` defines
+   * `cardViolated`, `graphHit` and `conflictHit`, with the cheap tests first and no other fact computed.
+   */
+  private contextHit(
+    x: Scored,
+    cue: Cue,
+    walked: ReadonlyMap<string, Walked>,
+    carded: ReadonlyMap<string, CardFind>,
+  ): boolean {
+    const item = x.item;
+    if (carded.get(item.id)?.violated === true) return true;
+    if (bulkMail(item) || !this.beyondName(x, cue)) return false;
+    const w = walked.get(item.id);
+    if (w?.binds && w.automated !== true && this.verdict(item, cue, this.conflictTies(cue, w), w.speaks) === "conflict")
+      return true;
+    if (settled(item) || !this.about(x, cue) || unmeasuredLimit(this.frame(cue), item)) return false;
+    return this.verdict(item, cue) === "conflict";
+  }
+
+  /**
+   * Weighted reciprocal-rank fusion of an ask's own order and its request's (`askContext`): each item scores
+   * 1/(k+rank) for the question plus `askContextWeight`/(k+rank) for the request, over the first `depth` of each; ties
+   * keep the question's order. An item is kept once (the question's copy, which carries its scores).
+   */
+  private fuseAsk(
+    own: { order: Scored[]; hits: Scored[] },
+    request: { order: Scored[]; hits: Scored[] },
+    depth: number,
+  ): Scored[] {
+    const k = ASK_FUSE_K;
+    const w = this.config.askContextWeight;
+    // A verdict hit of either ranks above every item without one: a structural verdict outweighs word overlap,
+    // whichever of the two found it.
+    const hit = new Set([...own.hits, ...request.hits].map((x) => x.item.id));
+    const fused = new Map<string, { x: Scored; score: number; first: number }>();
+    own.order.slice(0, depth).forEach((x, i) => fused.set(x.item.id, { x, score: 1 / (k + i), first: i }));
+    request.order.slice(0, depth).forEach((x, i) => {
+      const f = fused.get(x.item.id);
+      if (f) f.score += w / (k + i);
+      else fused.set(x.item.id, { x, score: w / (k + i), first: depth + i });
+    });
+    for (const f of fused.values()) if (hit.has(f.x.item.id)) f.score += 1;
+    return [...fused.values()].sort((a, b) => b.score - a.score || a.first - b.first).map((f) => f.x);
   }
 
   /**
@@ -1899,7 +2014,14 @@ export class ContextPartner {
 
   /** What an item says about the request's frame: conflict, clear or none (`conflict.ts` `assess`). */
   private verdict(item: ContextItem, cue: Cue, ties?: ReadonlySet<string>, speaks = false): Verdict {
-    return assess(this.frame(cue), item, localNow(cue), ties, speaks);
+    // `askContext`: an ask reads the request's verdicts again, on the request's own cue; the lookup read most of them
+    // already. Kept per cue and item object (a changed item is a new object), so a memo is never stale.
+    if (!this.config.askContext || ties || speaks) return assess(this.frame(cue), item, localNow(cue), ties, speaks);
+    let memo = VERDICTS.get(cue);
+    if (!memo) VERDICTS.set(cue, (memo = new WeakMap()));
+    let v = memo.get(item);
+    if (v === undefined) memo.set(item, (v = assess(this.frame(cue), item, localNow(cue))));
+    return v;
   }
 
   /**
