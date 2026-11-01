@@ -54,7 +54,7 @@
  * Each suite's run is recorded in the benchmark ledger (bench/, `ledger.ts`) unless `--no-record`.
  */
 import { appendFileSync, writeFileSync } from "node:fs";
-import { CardEnricher, ContextPartner, cpuNow, ItemCache, type CandidateDump, type Trace } from "@eden/engine";
+import { CardEnricher, cardKey, ContextPartner, cpuNow, ItemCache, type CandidateDump, type Trace } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, OpenRouterModel, type Model } from "@eden/llm";
 import type { AgentEvent, Injection } from "@eden/protocol";
@@ -106,6 +106,27 @@ const syncUse = {
 const CARDS = opt("cards", "");
 /** One replaying maker for every seed and suite: the disk cache is read once. */
 const cardMaker = CARDS ? new DiskCardMaker(CARDS) : null;
+/**
+ * `--card-log out.jsonl`: every item the enrichment sent for a card (its content hash, title, the head of its text
+ * the prefilter reads, and the replayed card's kind: "none", or "uncovered" when not replayed), to study the
+ * prefilter offline (docs/research/gen-tokens.md). Sim worlds only.
+ */
+const CARD_LOG = opt("card-log", "");
+if (CARD_LOG && cardMaker) {
+  writeFileSync(CARD_LOG, "");
+  const make = cardMaker.make.bind(cardMaker);
+  cardMaker.make = async (items, today, signal, retry) => {
+    const got = await make(items, today, signal, retry);
+    if (!retry) {
+      const lines = items.map((it, k) => {
+        const kind = got.cards[k]?.kind ?? (cardMaker.cards.has(cardKey(it)) ? "none" : "uncovered");
+        return JSON.stringify({ h: cardKey(it), title: it.title, text: it.text.slice(0, 2_700), kind });
+      });
+      appendFileSync(CARD_LOG, lines.map((l) => `${l}\n`).join(""));
+    }
+    return got;
+  };
+}
 /** Every lane's enrichment counters, summed (`CardStats`): items read by the model and calls, per simulated user. */
 const cardUse: Record<string, number> = {};
 const cardLanes: CardEnricher[] = [];
@@ -404,7 +425,14 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
         ...injections,
         ...pendingSeen,
       ]);
-      appendFileSync(PACKETS, JSON.stringify(line) + "\n");
+      // The ask's answer as the agent reads it, and the planted item's own words and the detail a good answer raises,
+      // so a byte cut can be checked for the fact it keeps (docs/research/gen-tokens.md).
+      const extra = {
+        detail: task.detail,
+        plantedText: `${planted[i]!.title} ${planted[i]!.text}`,
+        ...(answered ? { answer: answered.answer, answerIds: answered.citations.map((c) => c.itemId) } : {}),
+      };
+      appendFileSync(PACKETS, JSON.stringify({ ...line, ...extra }) + "\n");
     }
     if (CANDIDATES) {
       const line = {

@@ -391,6 +391,25 @@ export interface EngineConfig {
    * the cards and the calendar. A finding is returned as data; otherwise `proceed`. Off: `checkAction` always proceeds.
    */
   actionCheck: boolean;
+  /**
+   * `ask` answers compacted as packets are (D73; docs/research/gen-tokens.md): each item cut to the parts that bear on
+   * the question (`compactText`), at most `askItemBytes`, rather than said whole up to the answer's 4 KB. The items and
+   * their order are unchanged; only how much of each the agent reads. Off: answers say each item whole.
+   */
+  compactAsk: boolean;
+  askItemBytes: number;
+  /**
+   * An `ask` answer does not repeat what this session's packets and answers already showed the agent (D73): an item
+   * shown before is said by its title alone with "(shown above)", or with only the parts not shown before. Words shown
+   * are kept per session (`Session.shown`, bounded), never across sessions or users.
+   */
+  askDedup: boolean;
+  /**
+   * Compaction (packets and `compactAsk` answers) reads a quoted thread's earlier messages past the signature of the
+   * message quoting them, and a table flattened to one line by its rows (D73, `messageParts`). Without it a quoted
+   * sign-off ("— O") hides the rest of a thread, and a one-line table longer than an item's room is dropped whole.
+   */
+  compactParts: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -505,4 +524,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   decideCandidates: 64,
   maxEventChars: 32_000,
   actionCheck: false,
+  compactAsk: false,
+  askItemBytes: 320,
+  askDedup: false,
+  compactParts: false,
 };

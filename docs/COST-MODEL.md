@@ -142,6 +142,14 @@ hidden packet bytes 105,331 → 106,993 over 268 tasks (+1.6%, about 6 bytes or 
 candidates are compacted without it, so the judge's input is unchanged. With the flag on, each delivery is rendered a
 second time without it for usage learning (`usageText`): linear in the packet, no model call.
 
+D73 (proposed, docs/research/gen-tokens.md; `compactAsk`, `askDedup`, `compactParts`, off by default) makes no model
+call. No-model funnel, ALL, one ask per task, this session: bytes the agent reads per task 1,528 → 900 in-sample and
+1,328 → 801 on dev6a/dev6b (ask answers 1,254 → 625 and 1,195 → 669), every task's delivered and askCited unchanged.
+At 4 bytes a token and $0.053 per million input tokens that is about −$0.008 per 1,000 tasks, per read of each
+packet and answer (an agent re-sending its context on later turns multiplies it). With `cardsEconomy` card sends fall
+54–55% and card calls 48–49% (replayed; about −$0.019 per 1,000 tasks scaled from the measured $0.036, an estimate).
+`askDedup` keeps per session the words each item's line showed (at most 64 items).
+
 D48 (docs/research/sharper-grounds.md): shared calls and the topic probe only without people take probes from 11.8 to
 7.9 source calls per lookup (simulation; baseline 5.6). `judgeContested` adds judge calls (0.21 → 0.25 per turn),
 offset by 200-byte judge candidates: $0.0200 against probes' $0.0203 per 1,000 turns. Live, one run: Eden with D48's
