@@ -480,6 +480,22 @@ export interface EngineConfig {
    * narrow question leaves empty, and four keeps an answer's bytes at or under the question's own.
    */
   askContextItems: number;
+  /**
+   * Guided asking with a precision guard (D86, docs/research/edge-ask.md). An `ask` about an action (the question or
+   * the session's request acts, or the question asks what could block it) answers with its verdicts said: an item a
+   * verdict reads as binding leads, marked "May block or change this", and when none of the answer's items reads as a
+   * block and every source was searched (each synced and current, `sync`), a line of fixed words says so ("Checked
+   * mail, calendar: no rule, hold, limit, absence or change found for Dana, 5 Nov."), so a cautious agent has grounds
+   * to go ahead. The MCP server's `ask_context` then gives the guided description (`ASK_CONTEXT_GUIDED`). No source
+   * call, no model call. Off: answers as before, and the standard description.
+   */
+  askGuard: boolean;
+  /**
+   * Answer-shaped packets (D86): a proactive packet says each item's bearing on the request before the item, from the
+   * conflict test's verdict and the item's card ("May block or change this", "Says this is clear"), in fixed words,
+   * and puts an item that may block first. No source call, no model call.
+   */
+  packetBearing: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -612,4 +628,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askContext: false,
   askContextWeight: 1,
   askContextItems: 4,
+  askGuard: false,
+  packetBearing: false,
 };
