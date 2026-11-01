@@ -333,6 +333,7 @@ export function assess(
   now: number,
   extraTies?: ReadonlySet<string>,
   speaks = false,
+  said?: { words: Set<string> | null },
 ): Verdict {
   // A consequence probe's find (`consequence.ts`) is tied to the request by its action class's own words: "freeze"
   // and "production" tie a release request that says neither. Plural "s" dropped, as for the request's own words.
@@ -373,6 +374,9 @@ export function assess(
   // from the request: "back Monday" sent on 1 Oct meant 5 Oct. With no known date it is read as no date.
   const anchor = V ? sentAt(item) : null;
   let state: Verdict = "none";
+  // `said`: the words of the statements behind the current state (a conflict and what repeats it, or the clearance),
+  // so a newer item can be checked to speak to the same constraint (`supersede.ts`).
+  let deciding: Set<string> | null = null;
   // Whether a statement behind the current conflict is tied to the request.
   let tiedConflict = false;
   // A conflict read from a date, an amount, a thing done or a standing constraint is firm: only a clearing
@@ -387,6 +391,7 @@ export function assess(
     // With `conflictVocab`, a table's row is not tied by the row above it: that is another record.
     const t = money || tied(s) || (!(V && s.startsWith("|")) && tied(before)) || titled;
     tiedConflict = state === "conflict" ? tiedConflict || t : t;
+    if (said) deciding = state === "conflict" && deciding ? new Set([...deciding, ...matterWords(s)]) : matterWords(s);
     state = "conflict";
     if (isFirm) firm = wordsOf(s);
     if (V && t) conflictWords = wordsOf(s);
@@ -408,6 +413,7 @@ export function assess(
       if (!tied(s) && ![...wordsOf(s)].some((w) => cw.has(w))) return;
     }
     state = "clear";
+    if (said) deciding = matterWords(s);
     firm = null;
     conflictWords = null;
     elsewhere = false;
@@ -436,7 +442,10 @@ export function assess(
     }
     const money = amountVerdict(frame, s);
     if (money === "conflict") conflict(s, true, true);
-    else if (money === "clear") [state, firm] = ["clear", null];
+    else if (money === "clear") {
+      [state, firm] = ["clear", null];
+      if (said) deciding = matterWords(s);
+    }
     if (money !== "none") continue;
     const blocked = [...marksOf(s, blocks, true), ...(V && objectTied(s) ? marks(s, BLOCKS_OBJECT, true) : [])];
     const lastBlock = Math.max(-1, ...blocked);
@@ -483,7 +492,28 @@ export function assess(
   }
   // (`state` is set in the closures above, which narrowing does not see.)
   const verdict = state as Verdict;
-  return verdict === "conflict" && !tiedConflict ? "none" : verdict;
+  const out = verdict === "conflict" && !tiedConflict ? "none" : verdict;
+  if (said) said.words = out === "none" ? null : deciding;
+  return out;
+}
+
+/**
+ * Irregular forms of the words that name a constraint, folded to one stem so "frozen" and "freeze lifted" are about
+ * one matter (`wordsOf` keeps five letters: "froze" and "freez" would differ).
+ */
+const CONSTRAINT_FORMS: Record<string, string> = {
+  froze: "freez",
+  held: "hold",
+  holds: "hold",
+  pausi: "pause",
+  postp: "postp",
+  resch: "postp",
+  delay: "postp",
+};
+
+/** A statement's matter words (`wordsOf`), with a constraint's irregular forms folded to one stem. */
+export function matterWords(s: string): Set<string> {
+  return new Set([...wordsOf(s)].map((w) => CONSTRAINT_FORMS[w] ?? w));
 }
 
 /** Where a statement ends: a sentence's end, a line, a "but", a chat line's time. */

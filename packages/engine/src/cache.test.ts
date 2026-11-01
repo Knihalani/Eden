@@ -87,3 +87,41 @@ describe("selfOf: the user's own name, read from their items", () => {
     expect(cache.selfOf(u1)).toBe("Robin Carter");
   });
 });
+
+describe("revision: changes with the user's items, not with a refresh", () => {
+  const scope = { tenantId: "t", userId: "u1" };
+  const it = (id: string, text: string, meta?: Record<string, string>): ContextItem => ({
+    id,
+    sourceId: "mail",
+    ref: id,
+    title: id,
+    text,
+    ...(meta ? { meta } : {}),
+  });
+
+  test("an added, changed or dropped item changes it; a refresh of the same copy does not", () => {
+    const c = new ItemCache();
+    expect(c.revision(scope)).toBe(0);
+    c.put(scope, [it("a", "alpha")], 1_000);
+    const r1 = c.revision(scope);
+    expect(r1).toBeGreaterThan(0);
+    c.put(scope, [it("a", "alpha")], 2_000);
+    expect(c.revision(scope)).toBe(r1);
+    c.put(scope, [it("a", "alpha", { start: "2026-11-02" })], 3_000);
+    const r2 = c.revision(scope);
+    expect(r2).not.toBe(r1);
+    c.put(scope, [it("a", "alpha changed", { start: "2026-11-02" })], 4_000);
+    const r3 = c.revision(scope);
+    expect(r3).not.toBe(r2);
+    c.forget(scope, "mail");
+    expect(c.revision(scope)).not.toBe(r3);
+  });
+
+  test("per user: another user's items do not change it", () => {
+    const c = new ItemCache();
+    c.put(scope, [it("a", "alpha")], 1_000);
+    const r = c.revision(scope);
+    c.put({ tenantId: "t", userId: "u2" }, [it("b", "beta")], 1_000);
+    expect(c.revision(scope)).toBe(r);
+  });
+});
