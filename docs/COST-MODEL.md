@@ -34,6 +34,18 @@ pass the no-model prefilter (11-15% of simulated items), each item read once per
 items arriving, $0.003-0.004 per user-month at 50 new items a day (at most about $0.013 at list prices). Reserved per
 call at $0.002 against its own per-user-day `Budget`.
 
+Intent index (proposed D86, `intent`, off by default; docs/research/edge-intent.md). No new call: the card call also
+writes up to four requests per item, and every new item is read, not only the 11–15% the prefilter passes. The cap per
+call rises from 2,000 to 3,000 output tokens (300 per item past ten); the reservation is unchanged. Estimates from
+measured per-item prices, not a live run of the combined prompt on the default model: requests alone cost $0.0000091
+per item (path-to-90's doc2query run, glm-5.3-flash, cheapest endpoint, 1,607 items for $0.0147) and cards $0.0000134;
+reading every item for both is about $0.000023 per item, so about $0.035 per user once (a 1,500-item backfill) and
+about $0.035 per user-month at 50 new items a day, against about $0.0011 with `cardsEconomy` alone. The free lab model
+(nemotron-3.5-super-vl, which reasons at length whatever effort it is asked for) used 1,855 input and 3,720 output
+tokens per ten-item call over 184 calls (24 of them retries of a batch cut off at 8,000 tokens): at the list price
+that would be $0.0021 per call, $0.00021 per item, about $0.32 per user-month, an upper bound for a model that
+reasons that much. Request time adds one BM25 search over the user's requests (no model, no call).
+
 Card economy (proposed D66, `cardsEconomy`, off by default; docs/research/econ-background.md; in-sample, 2026-10-31):
 the strict prefilter and sentence reuse read 74.25 items per simulated user instead of 166.5 (−55.4%) in 12.4 calls
 instead of 24.25 (20 items per call), with the same funnel totals (218/19; the track measured 70.25 items and 12.15

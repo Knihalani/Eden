@@ -480,6 +480,26 @@ export interface EngineConfig {
    * narrow question leaves empty, and four keeps an answer's bytes at or under the question's own.
    */
   askContextItems: number;
+  /**
+   * The intent index (D86, docs/research/edge-intent.md; needs `cards` and `PartnerDeps.cards`): the background card
+   * call also writes, per item, up to four requests the item would change, in a user's words, and items the card
+   * prefilter rejects are read for theirs. They are indexed per user apart from the item's text (`intent.ts`). At
+   * request time, with no model, the request is matched against them: the best matches (`intentHits`) join the
+   * candidates a lookup ranks and the judge's seats (`intentSeats`), and an `ask` fuses them into its answer by
+   * reciprocal rank (`intentWeight`). An item found only so is a candidate, never a no-model delivery: the rule paths
+   * still read its own words, and its card if it has one.
+   */
+  intent: boolean;
+  /** Items the intent index may add to a request's candidates, best first. */
+  intentHits: number;
+  /** The least share of the request's (known) idf an item's requests must hold to count as a hit. */
+  intentMinCoverage: number;
+  /** ... and the least distinct request terms they must hold. */
+  intentMinMatched: number;
+  /** The intent list's weight in an ask's reciprocal-rank fusion, against the lexical order's 1. */
+  intentWeight: number;
+  /** Judge seats kept for intent hits the lexical ranking did not seat (with a model). */
+  intentSeats: number;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -612,4 +632,10 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askContext: false,
   askContextWeight: 1,
   askContextItems: 4,
+  intent: false,
+  intentHits: 6,
+  intentMinCoverage: 0.35,
+  intentMinMatched: 2,
+  intentWeight: 1,
+  intentSeats: 1,
 };
