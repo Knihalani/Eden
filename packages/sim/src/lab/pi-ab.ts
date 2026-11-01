@@ -47,19 +47,40 @@
  *     [--grader anthropic/claude-haiku-5.5] [--budget 0.6] [--out pi-ab.json] [--timeline dir] [--time-scale 0]
  *     [--tool-exec parallel|sequential] [--tasks 30] [--offworld 5] [--limit n] [--dry]
  *     [--variant-config '{"name":{...}}'] [--act] [--cards FILE [--cards-out FILE]] [--card-sort price]
+ *     [--allow-logging] [--rpm 18] [--max-requests N] [--intent FILE] [--bridge FILE] [--bridge-model m]
+ *
+ * `--templates a,b` runs only those hidden-context templates; `--ask-description guided` gives the agent the MCP
+ * server's guided description (`askGuard`, docs/research/edge-ask.md). Free models go through `free.ts` (above).
  *
  * --budget is a hard cap on everything this run spends (agent, Eden's judge, grader): each call reserves its
  * worst case before it is sent and is refused when that could cross the cap. --time-scale 1 gives the sim sources
  * their profiles' assumed latency (agent-ab runs them at 0, instant); the timeline then shows connector time.
+ *
+ * Free models (`<model>:free`, docs/research/edge-freelab.md): every OpenRouter request of the run (agent, Eden's
+ * judge and cards, grader) goes through one `Pacer` (`free.ts`): `--rpm` (default 18 a minute with a free model),
+ * `--max-requests` (retries count), and 429/5xx backoff honouring Retry-After. A free model needs `--allow-logging`
+ * (its endpoints log prompts; lab only). A task starts only while the cap leaves room for a whole task and its grading
+ * (`MAX_STEPS` + 1 requests); once it does not, the run stops starting tasks, grades what it has, and says it is
+ * partial (`partial` and `requests` in the results file).
  */
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { Agent, type AgentEvent as PiEvent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
-import { createModels, createProvider, envApiKeyAuth, Type, type Model as PiModel } from "@earendil-works/pi-ai";
-import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
+import { Type, type Model as PiModel } from "@earendil-works/pi-ai";
 import { heldResult } from "@eden/client";
-import { CardEnricher, ContextPartner, DEFAULT_CONFIG, ItemCache, ModelCardMaker, type CardMaker } from "@eden/engine";
+import {
+  CardEnricher,
+  ContextPartner,
+  DEFAULT_CONFIG,
+  ItemCache,
+  bridgeKey,
+  ModelBridgeMaker,
+  ModelCardMaker,
+  QueryBridge,
+  type BridgeMaker,
+  type CardMaker,
+} from "@eden/engine";
 import { SourceMap } from "@eden/graph";
-import { Budget, OpenRouterModel, priceFor, type Model } from "@eden/llm";
+import { Budget, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { REALISTIC, simSources, type SimSource } from "../sources";
@@ -82,7 +103,9 @@ import {
   type Task,
 } from "./ab-common";
 import { ACTIONS, actionParams, coerceArgs, executed, type ActionRecord } from "./act";
+import { DiskBridgeMaker } from "./bridge-disk";
 import { DiskCardMaker, samePath } from "./cards-disk";
+import { isCapError, labAccess, labModel, piModelFor, piRegistry, providerPrefs } from "./free";
 import { parseConditions, parseVariants, type Condition } from "./pi-conditions";
 import { parseSuites } from "./suites";
 import { QUESTION_CHARS, UptakeLog } from "./uptake";
@@ -95,8 +118,16 @@ const opt = (name: string, fallback: string) => {
   return i >= 0 && args[i + 1] ? args[i + 1]! : fallback;
 };
 const DRY = args.includes("--dry");
-/** `--ask-description guided`: the tenant-side tool description that asks for what could block the action. */
-const ASK_GUIDED = opt("ask-description", "standard") === "guided";
+/**
+ * `--ask-description auto|guided|standard`: which `ask_context` description the agent gets. `auto` (the default) does
+ * as the MCP server does: the guided one (`ASK_CONTEXT_GUIDED`) for a condition whose config has `askGuard`, else the
+ * standard one. `guided` and `standard` force one for every condition.
+ */
+const ASK_DESC = opt("ask-description", "auto");
+if (!["auto", "guided", "standard"].includes(ASK_DESC))
+  throw new Error("--ask-description must be auto|guided|standard");
+const ASK_GUIDED = ASK_DESC === "guided";
+const guidedFor = (config: Record<string, unknown>) => ASK_GUIDED || (ASK_DESC === "auto" && config.askGuard === true);
 const KEY = process.env.OPENROUTER_API_KEY;
 if (!KEY && !DRY) throw new Error("needs OPENROUTER_API_KEY");
 const SEEDS = opt("seeds", "41").split(",").map(Number);
@@ -116,6 +147,8 @@ const TOOL_EXEC = opt("tool-exec", "parallel") as "parallel" | "sequential";
 const LIMITS = { maxTasks: Number(opt("tasks", "30")), maxOffworld: Number(opt("offworld", "5")) };
 // The first N tasks of each world only: a plumbing check before a real run.
 const LIMIT = Number(opt("limit", "0"));
+// `--templates a,b`: only the hidden-context tasks of these templates (both variants), for a small targeted smoke.
+const TEMPLATES = opt("templates", "") ? new Set(opt("templates", "").split(",")) : null;
 
 // D55's recommended experimental configuration, by name, so the documented commands stay short.
 const PRESETS: Record<string, Record<string, unknown>> = {
@@ -139,11 +172,40 @@ const PRESETS: Record<string, Record<string, unknown>> = {
     judgeTied: true,
   },
 };
+// D80's ALL3, and ALL5 (docs/research/edge-combined.md, proposed): ALL3 plus the intent index, the bridging query and
+// guarded, answer-shaped asks and packets. ALL5 needs `--cards` (with `--intent` to replay requests) and a bridge
+// model.
+PRESETS.ALL3 = {
+  ...PRESETS.H,
+  consequenceProbe: true,
+  probeRoles: true,
+  graph: true,
+  graphMerge: true,
+  cards: true,
+  anticipate: true,
+  sync: true,
+  askVerdicts: true,
+  conflictVocab: true,
+  compactAsk: true,
+  askDedup: true,
+  compactParts: true,
+  cardsEconomy: true,
+};
+PRESETS.ALL5 = {
+  ...PRESETS.ALL3,
+  intent: true,
+  bridgeQuery: true,
+  bridgeQuestions: true,
+  bridgeAskSeats: 2,
+  askGuard: true,
+  packetBearing: true,
+};
 const CONFIG_ARG = opt("config", "{}");
 const CONFIG = PRESETS[CONFIG_ARG] ?? (JSON.parse(CONFIG_ARG) as Record<string, unknown>);
 // `cards` makes implication cards with a model in the background (D59), metered and charged to Eden's spend.
 const CARD_MODEL = opt("card-model", "z-ai/glm-5.3-flash");
 const CARD_SORT = opt("card-sort", "");
+const BRIDGE_MODEL = opt("bridge-model", CARD_MODEL);
 if (CARD_SORT && CARD_SORT !== "price") throw new Error("--card-sort must be price");
 const CONFIG_VARIANTS = parseVariants(opt("variant-config", "{}"));
 // Every condition is parsed before anything is spent: a typo fails here, not after the first stream has run.
@@ -157,6 +219,16 @@ const CONDITIONS: Condition[] = parseConditions(CONDITION_NAMES, {
 // run that says R or ALL must be R or ALL (the review of moon/combined). Cards need a model; the sync, list tools.
 if (CONDITIONS.some((c) => c.withPartner && c.config.cards === true) && !KEY && !DRY)
   throw new Error("config.cards needs OPENROUTER_API_KEY for its enrichment");
+// Every OpenRouter request of the run goes through one pacer: rate, cap, retries, and the logging choice (free.ts).
+const ACCESS = labAccess(args, [
+  MODEL,
+  GRADER,
+  ...(CONDITIONS.some((c) => c.withPartner && c.config.cards === true) ? [CARD_MODEL] : []),
+]);
+const PACER = ACCESS.pacer;
+/** A task starts only while the cap leaves room for all of it: its model requests and its grading. */
+const TASK_REQUESTS = MAX_STEPS + 1;
+let capStopped = 0;
 // Cards replayed from disk: the replay file is only read, new cards go to their own file (cards-disk.ts).
 const CARDS_FILE = opt("cards", opt("cards-disk", ""));
 const CARDS_OUT = opt("cards-out", `${OUT.replace(/\.json$/, "")}.cards.jsonl`);
@@ -170,7 +242,20 @@ if (CARDS_FILE && !existsSync(CARDS_FILE)) throw new Error(`--cards ${CARDS_FILE
  * One copy of the disk cards for every stream: read once, each stream sees the cards the others made, and a card
  * another stream is making now is waited for rather than made twice.
  */
-const diskCards = CARDS_FILE ? new DiskCardMaker(CARDS_FILE, undefined, { out: CARDS_OUT }) : null;
+const INTENT_FILES = opt("intent", "").split(",").filter(Boolean);
+if (INTENT_FILES.length && !CARDS_FILE) throw new Error("--intent needs --cards");
+for (const f of INTENT_FILES) if (!existsSync(f)) throw new Error(`--intent ${f}: no such file`);
+const diskCards = CARDS_FILE
+  ? new DiskCardMaker(CARDS_FILE, undefined, { out: CARDS_OUT, requests: INTENT_FILES })
+  : null;
+/**
+ * `--bridge FILE` (with `"bridgeQuery": true`; docs/research/edge-bridge.md): bridging queries replayed from
+ * `bridge-enrich.ts`'s cache; a request with no line is sent live to `--bridge-model` (default `--card-model`),
+ * metered and paced like Eden's other calls. Without `--bridge`, `bridgeQuery` makes every call live.
+ */
+const BRIDGE_FILE = opt("bridge", "");
+if (BRIDGE_FILE && !existsSync(BRIDGE_FILE)) throw new Error(`--bridge ${BRIDGE_FILE}: no such file`);
+const diskBridge = BRIDGE_FILE ? new DiskBridgeMaker(BRIDGE_FILE) : null;
 
 // ---- Spend: one hard cap over every call, reserved before the call at its worst case and settled at its real cost.
 let spent = 0;
@@ -195,37 +280,8 @@ const exhausted = () => spent + held >= BUDGET * 0.98;
 
 // ---- Pi: the agent's model on OpenRouter, through pi-ai's OpenAI-compatible chat completions.
 const AGENT_MAX_TOKENS = 2_000;
-const piModel: PiModel<"openai-completions"> = {
-  id: MODEL,
-  name: MODEL,
-  api: "openai-completions",
-  provider: "openrouter-lab",
-  baseUrl: "https://openrouter.ai/api/v1",
-  // No reasoning parameter is sent, as agent-ab sends none: the model's default applies to both harnesses.
-  reasoning: false,
-  input: ["text"],
-  cost: { input: priceFor(MODEL).input, output: priceFor(MODEL).output, cacheRead: 0, cacheWrite: 0 },
-  contextWindow: 128_000,
-  maxTokens: AGENT_MAX_TOKENS,
-  compat: {
-    // Eden's packet goes in as a system message before the user turn, where agent-ab puts it (withContext's place).
-    supportsMidConvoSystemMessages: true,
-    supportsDeveloperRole: false,
-    supportsStore: false,
-    maxTokensField: "max_tokens",
-  },
-};
-const models = createModels();
-models.setProvider(
-  createProvider({
-    id: "openrouter-lab",
-    name: "OpenRouter",
-    baseUrl: "https://openrouter.ai/api/v1",
-    auth: { apiKey: envApiKeyAuth("OpenRouter", ["OPENROUTER_API_KEY"]) },
-    models: [piModel],
-    api: openAICompletionsApi(),
-  }),
-);
+const piModel: PiModel<"openai-completions"> = piModelFor(MODEL, AGENT_MAX_TOKENS);
+const models = piRegistry([piModel]);
 
 // ---- Per-second process samples: CPU (of one core) and memory, with how many tasks and requests are in flight.
 let activeTasks = 0;
@@ -402,9 +458,8 @@ async function runWorld(
   );
   // `cards`: the enrichment model, metered against the run's cap and booked to Eden's spend like its judge.
   const cardModel = (sort: "" | "price") =>
-    meteredModel(
-      new OpenRouterModel({ apiKey: KEY!, model: CARD_MODEL, ...(sort ? { sort } : {}) }),
-      (start, end, data) => current?.span("eden.cards", "eden", "bg", start, end, data),
+    meteredModel(labModel(ACCESS, { apiKey: KEY!, model: CARD_MODEL, ...(sort ? { sort } : {}) }), (start, end, data) =>
+      current?.span("eden.cards", "eden", "bg", start, end, data),
     );
   // `--card-sort price` (D66): a batch cut off at the cap is sent again with default routing.
   const liveCards = (): CardMaker =>
@@ -416,6 +471,34 @@ async function runWorld(
     withPartner && config.cards === true
       ? new CardEnricher({ maker: cardMaker(), budget: new Budget(), now: () => clock })
       : undefined;
+  // `bridgeQuery`: replayed queries first, the rest made live (booked to Eden like its judge).
+  const liveBridge = () =>
+    new ModelBridgeMaker(
+      meteredModel(labModel(ACCESS, { apiKey: KEY!, model: BRIDGE_MODEL }), (start, end, data) =>
+        current?.span("eden.bridge", "eden", "bg", start, end, data),
+      ),
+    );
+  const bridgeMaker = (): BridgeMaker => {
+    if (!diskBridge) return liveBridge();
+    const live = liveBridge();
+    return {
+      async make(requests: string[], signal: AbortSignal) {
+        const replayed = await diskBridge.make(requests);
+        const missing = requests.filter((_, i) => !diskBridge.queries.has(bridgeKey(requests[i]!)));
+        if (missing.length === 0) return replayed;
+        const got = await live.make(missing, signal);
+        let k = 0;
+        const queries = requests.map((r, i) =>
+          diskBridge.queries.has(bridgeKey(r)) ? replayed.queries[i]! : (got.queries[k++] ?? null),
+        );
+        return { ...got, queries };
+      },
+    };
+  };
+  const bridge =
+    withPartner && config.bridgeQuery === true
+      ? new QueryBridge({ maker: bridgeMaker(), budget: new Budget(), now: () => clock })
+      : undefined;
   const partner = withPartner
     ? new ContextPartner({
         sources: async () => edenSources,
@@ -423,7 +506,7 @@ async function runWorld(
         cache: new ItemCache(),
         budget: new Budget(),
         model: judge
-          ? meteredModel(new OpenRouterModel({ apiKey: KEY!, model: MODEL }), (start, end, data) =>
+          ? meteredModel(labModel(ACCESS, { apiKey: KEY!, model: MODEL }), (start, end, data) =>
               current?.span("eden.model", "eden", "bg", start, end, data),
             )
           : null,
@@ -431,6 +514,7 @@ async function runWorld(
         now: () => clock,
         config,
         ...(cards ? { cards } : {}),
+        ...(bridge ? { bridge } : {}),
         // Charged to the task whose session the trace is from: a slow-path verdict can land after it ended.
         onTrace: (t) => {
           const owner = bySession.get(t.sessionId);
@@ -489,6 +573,10 @@ async function runWorld(
   };
   for (const task of tasks) {
     if (exhausted()) break;
+    if (PACER.remaining < TASK_REQUESTS) {
+      capStopped++;
+      break;
+    }
     clock += 3_600_000; // an hour between tasks: Eden's clock, for its caches and planner
     if (sync) await sync.tick();
     const sessionId = task.id;
@@ -577,7 +665,7 @@ async function runWorld(
       if (useEden && !useTools && partner) {
         tools.push({
           name: "ask_context",
-          description: ASK_GUIDED ? ASK_DESCRIPTION_GUIDED : ASK_DESCRIPTION,
+          description: guidedFor(config) ? ASK_DESCRIPTION_GUIDED : ASK_DESCRIPTION,
           label: "ask_context",
           parameters: askParams,
           prepareArguments: (a) => {
@@ -633,6 +721,8 @@ async function runWorld(
         in: number;
         out: number;
         cost: number;
+        /** OpenRouter reported a cost (a free model's is 0, which stands). */
+        costed: boolean;
         cached: number;
       } | null = null;
       let est = 0;
@@ -665,6 +755,7 @@ async function runWorld(
             in: 0,
             out: 0,
             cost: 0,
+            costed: false,
             cached: 0,
           };
           activeRequests++;
@@ -673,10 +764,12 @@ async function runWorld(
             ...options,
             temperature: 0,
             maxTokens: AGENT_MAX_TOKENS,
-            maxRetries: 3,
+            // The pacer retries 429 and 5xx (honouring Retry-After) and counts each attempt against the cap.
+            fetch: ACCESS.fetch,
+            maxRetries: 0,
             timeoutMs: 90_000,
             // OpenRouter's own cost on the final chunk: what agent-ab books, not pi-ai's catalog estimate.
-            onPayload: (payload) => ({ ...(payload as object), usage: { include: true } }),
+            onPayload: (payload) => ({ ...(payload as object), usage: { include: true }, ...providerPrefs(ACCESS) }),
             onProviderStreamEvent: (chunk) => {
               const c = chunk as {
                 choices?: { delta?: { content?: string; tool_calls?: unknown[]; reasoning?: string } }[];
@@ -696,6 +789,7 @@ async function runWorld(
                 mine.in = c.usage.prompt_tokens ?? 0;
                 mine.out = c.usage.completion_tokens ?? 0;
                 mine.cost = c.usage.cost ?? 0;
+                mine.costed = c.usage.cost !== undefined;
                 // Billed at the endpoint's cache-read price: re-pricing needs them (reprice.ts).
                 mine.cached = c.usage.prompt_tokens_details?.cached_tokens ?? 0;
               }
@@ -746,8 +840,9 @@ async function runWorld(
           request = null;
           activeRequests--;
           const end = performance.now();
-          // A usage chunk with no cost (it should not happen on OpenRouter) is priced at the list price.
-          const cost = q.cost || (q.in || q.out ? worstCase(MODEL, q.in * 4, q.out) : 0);
+          // A usage chunk with no cost (it should not happen on OpenRouter) is priced at the list price; a reported
+          // cost stands, a free model's $0 included.
+          const cost = q.costed ? q.cost : q.in || q.out ? worstCase(MODEL, q.in * 4, q.out) : 0;
           settle(est, cost, "agent");
           r.modelCalls++;
           r.promptTokens += q.in;
@@ -790,6 +885,8 @@ async function runWorld(
     } catch (e) {
       r.error = e instanceof Error ? e.message : String(e);
     }
+    // A task cut off by the request cap (pi-ai reports it as a connection error): said so, not as a model failure.
+    if (r.error && PACER.exhausted) r.error = `request cap reached: ${r.error.slice(0, 120)}`;
     r.wallMs = performance.now() - tl.origin;
     r.leaked = task.secrets.some((s) => r.answer.includes(s));
     tl.point("task.end", { error: !!r.error });
@@ -815,11 +912,12 @@ async function runWorld(
               reserved = true;
             }
             const meter: Meter = { before: () => {}, after: (c) => (cost = c) };
-            r.facts = (await grade(KEY!, meter, GRADER, task, r.answer)).facts;
+            const via = { fetch: ACCESS.fetch, allowLogging: ACCESS.allowLogging };
+            r.facts = (await grade(KEY!, meter, GRADER, task, r.answer, via)).facts;
           } catch (e) {
             // A failed grading call leaves the result ungraded (reported), never scored as a miss. The status line
             // only: an error body can quote the request.
-            failure = e instanceof Error ? e.message.slice(0, 60) : "error";
+            failure = isCapError(e) ? "request cap reached" : e instanceof Error ? e.message.slice(0, 60) : "error";
           } finally {
             if (reserved) settle(est, cost, "grader");
             tl.end(g, { cost, ...(failure ? { error: failure } : {}) });
@@ -838,7 +936,8 @@ const worlds = SEEDS.flatMap((seed) =>
   SUITE_LIST.flatMap((suite) =>
     (LOOKUPS ? ["hidden" as const] : VARIANTS).map((variant) => {
       const w = worldOf(seed, suite, variant, LIMITS);
-      return LIMIT > 0 ? { ...w, tasks: w.tasks.slice(0, LIMIT) } : w;
+      const picked = TEMPLATES ? { ...w, tasks: w.tasks.filter((t) => TEMPLATES.has(t.type)) } : w;
+      return LIMIT > 0 ? { ...picked, tasks: picked.tasks.slice(0, LIMIT) } : picked;
     }),
   ),
 );
@@ -847,7 +946,9 @@ console.error(
     `(${CONDITIONS.map((c) => c.name).join(",")}), model ${MODEL}, grader ${GRADER}, cap $${BUDGET}, suites ` +
     `${SUITE_LIST.join(",")}, config ${JSON.stringify(CONFIG)}` +
     (Object.keys(CONFIG_VARIANTS).length ? `, variants ${JSON.stringify(CONFIG_VARIANTS)}` : "") +
-    (CARDS_FILE ? `, cards ${CARDS_FILE} (${diskCards!.cards.size} replayed; new → ${CARDS_OUT})` : ""),
+    (CARDS_FILE ? `, cards ${CARDS_FILE} (${diskCards!.cards.size} replayed; new → ${CARDS_OUT})` : "") +
+    (ACCESS.allowLogging ? ", ALLOW-LOGGING (lab only)" : "") +
+    `, requests ≤${PACER.remaining === Infinity ? "∞" : PACER.remaining}`,
 );
 if (DRY) process.exit(0);
 
@@ -884,7 +985,12 @@ writeFileSync(
       ...(ACT ? { act: true } : {}),
       ...(CARDS_FILE ? { cards: { replay: CARDS_FILE, out: CARDS_OUT } } : {}),
       timeScale: TIME_SCALE,
+      ...(ACCESS.allowLogging ? { allowLogging: true } : {}),
+      // Every HTTP request the run sent (retries included), and whether the cap cut it short.
+      requests: PACER.summary(),
+      partial: capStopped > 0 || PACER.refused > 0,
       toolExecution: TOOL_EXEC,
+      askDescription: ASK_DESC,
       spend,
       timeline: TIMELINE,
       wallSeconds: Math.round((performance.now() - t0) / 100) / 10,
@@ -898,5 +1004,7 @@ writeFileSync(
 const ungraded = results.filter((r) => !r.error && !r.facts && tasks.find((t) => t.id === r.task)!.must.length).length;
 console.error(
   `spent $${spent.toFixed(4)} (agent $${spend.agent.toFixed(4)}, eden $${spend.eden.toFixed(4)}, grader ` +
-    `$${spend.grader.toFixed(4)}); ${results.length} runs, ${ungraded} ungraded → ${OUT}, timeline ${TIMELINE}`,
+    `$${spend.grader.toFixed(4)}); ${results.length} runs, ${ungraded} ungraded → ${OUT}, timeline ${TIMELINE}; ` +
+    `${PACER.sent} requests (${PACER.retried} retried, ${JSON.stringify(PACER.statuses)})` +
+    (capStopped || PACER.refused ? `; PARTIAL: request cap reached (${capStopped} streams stopped early)` : ""),
 );

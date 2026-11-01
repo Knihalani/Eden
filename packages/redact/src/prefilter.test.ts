@@ -29,6 +29,7 @@ const SECRETS = [
   `postgres://admin:${alnum(12)}@db.internal:5432/app`,
   "the staging PASSWORD is Tr0ub4dor-x9",
   `deploy secret ${alnum(40, 5)}3 rotates`,
+  `[REDACTED] / ${alnum(19, 5)}+${alnum(20, 3)}`,
   `${"xox" + "b-"}${"1234567890"}-${"1234567890123"}-${alnum(24)}`,
   `Authorization: Bearer ${alnum(30)}`,
   `"api_key": "${alnum(32, 11)}"`,

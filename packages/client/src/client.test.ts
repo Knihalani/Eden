@@ -20,7 +20,8 @@ describe("EdenClient", () => {
     expect(await eden.ask("x")).toBeNull();
     expect(await eden.pending()).toEqual([]);
     expect(await eden.check("send_payment", { amount: "10" })).toMatchObject({ verdict: "proceed", finding: null });
-    expect(errors.length).toBe(4);
+    expect(await eden.digest()).toBeNull();
+    expect(errors.length).toBe(5);
   });
 
   test("sends the user and session with each event", async () => {

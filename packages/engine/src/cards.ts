@@ -29,6 +29,7 @@ import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import type { Frame } from "./conflict";
 import { CLASSES, hasWord } from "./consequence";
+import { cleanRequests, IntentIndex, MAX_REQUESTS, type IntentHit } from "./intent";
 import { inert } from "./render";
 import { isStopword } from "./text";
 import type { Tracer } from "./spans";
@@ -233,7 +234,7 @@ function datedOf(item: ContextItem): string {
  * The enrichment prompt: the action vocabulary, the card schema, and the items fenced as data (`inert`: no item can
  * close its fence). Items are redacted again here: every model-bound text passes the gate, whatever its caller did.
  */
-export function cardMessages(items: ContextItem[], today: string): ChatMessage[] {
+export function cardMessages(items: ContextItem[], today: string, intent = false): ChatMessage[] {
   const vocab = ACTION_NAMES.map((a) => `- ${a}: ${ACTIONS[a]}`).join("\n");
   const list = items.map((it, i) => {
     const title = inert(sanitizeForStore(it.title.slice(0, 160)));
@@ -264,11 +265,26 @@ export function cardMessages(items: ContextItem[], today: string): ChatMessage[]
         'that amount in "limit", whatever the kind. Omit what the item does not state.\n' +
         'Reply with JSON only: {"cards":[{"i":0,"kind":"freeze","actions":["deploy"],"entities":["production"],' +
         '"start":"2026-11-04","end":"2026-11-09","limit":null,"unit":"","statement":"production change freeze 4-9 ' +
-        'Nov"}]}. One card per item at most, for the most important constraint; leave out items whose kind is none.',
+        'Nov"}]}. One card per item at most, for the most important constraint; leave out items whose kind is none.' +
+        (intent ? INTENT_INSTRUCTIONS : ""),
     },
     { role: "user", content: `<items>\n${list.join("\n")}\n</items>` },
   ];
 }
+
+/**
+ * With `intent` (docs/research/edge-intent.md): the same call also writes, for every item whatever its kind, the
+ * requests it would change, in a user's words rather than the item's, for the intent index (`intent.ts`).
+ */
+const INTENT_INSTRUCTIONS =
+  `\nSeparately, for EVERY item, whatever its kind and even when it states no constraint (kind none), write up to ` +
+  `${MAX_REQUESTS} short requests or questions the user might give the assistant where this item would change what ` +
+  "the assistant should do or say, in the user's everyday words, not the item's own (an item saying spending over " +
+  '£5,000 needs a second signature: "approve the laptop order", "buy new monitors for the team"). Most items ' +
+  "qualify: an event bears on scheduling around it, a thread on decisions about its subject, a person's message on " +
+  "replies to them, a document on the work it describes. Write [] only for bulk mail, newsletters and marketing. " +
+  'Put them in "requests", one entry per item: {"cards":[...],"requests":[{"i":0,"q":["deploy the migration on ' +
+  'Thursday","ship the release this week"]},{"i":1,"q":["move my 1:1 with Sam","am I free Friday afternoon?"]}]}.';
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 /** A real calendar day: "2026-11-31" parses in some engines (as 1 December), so the day must round-trip. */
@@ -332,6 +348,33 @@ export function parseCards(text: string, count: number): (Card | null)[] {
 }
 
 /**
+ * The model's requests for a batch of `count` items (`intent`): index → requests (`cleanRequests`), [] for an item it
+ * left out. Unreadable output, or output with no "requests" list, is null for every item: uncovered, may be read again.
+ */
+export function parseRequests(text: string, count: number): (string[] | null)[] {
+  const out: (string[] | null)[] = Array.from({ length: count }, () => null);
+  let v: { requests?: unknown };
+  try {
+    v = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as { requests?: unknown };
+  } catch {
+    return out;
+  }
+  if (!v || !Array.isArray(v.requests)) return out;
+  const seen = new Set<number>();
+  for (let i = 0; i < count; i++) out[i] = [];
+  for (const raw of v.requests.slice(0, count * 2)) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    const i = r.i;
+    if (typeof i !== "number" || !Number.isInteger(i) || i < 0 || i >= count || seen.has(i)) continue;
+    // The first entry for an item stands: a second one cannot widen what one item is found by.
+    seen.add(i);
+    out[i] = cleanRequests(r.q);
+  }
+  return out;
+}
+
+/**
  * Whether a card is about its item: its statement or entities share a word of four letters or more with the item's
  * title or own text. A model reading ten items at once can attach one item's card to another's index; such a card
  * shares nothing with the item it landed on.
@@ -386,20 +429,27 @@ function shiftDay(day: string, days: number): string {
 export interface CardMaker {
   /**
    * `retry`: the batch was cut off at the output cap on a first call and is sent again (the maker may route it
-   * elsewhere). `truncated`: this call was cut off.
+   * elsewhere). `truncated`: this call was cut off. `intent`: the call also writes each item's requests
+   * (`requests`: index → requests, null where unread; absent when not asked for).
    */
-  make(
-    items: ContextItem[],
-    today: string,
-    signal: AbortSignal,
-    retry?: boolean,
-  ): Promise<{ cards: (Card | null)[]; costUsd: number; truncated?: boolean }>;
+  make(items: ContextItem[], today: string, signal: AbortSignal, retry?: boolean, intent?: boolean): Promise<CardBatch>;
+}
+
+/** What a maker returns for a batch. */
+export interface CardBatch {
+  cards: (Card | null)[];
+  requests?: (string[] | null)[];
+  costUsd: number;
+  truncated?: boolean;
 }
 
 /** Output cap per batch: ten short cards and low-effort reasoning (D45's lesson: reasoning spends the cap). */
 const CARD_MAX_TOKENS = 2_000;
 /** ... and per item past ten: a batch of twenty (`cardsEconomy`) gets 4,000, since reasoning grows with the batch. */
 const CARD_TOKENS_PER_ITEM = 200;
+/** With `intent`, up to four short requests per item ride along (about 80 tokens each item), so the cap grows. */
+const INTENT_MAX_TOKENS = 3_000;
+const INTENT_TOKENS_PER_ITEM = 300;
 
 export interface CardMakerOptions {
   /**
@@ -409,6 +459,11 @@ export interface CardMakerOptions {
    * docs/research/econ-background.md): the retry goes to the same model with default routing. Unset: `model`.
    */
   retry?: Model;
+  /**
+   * The output cap per call, in place of the batch-size rule: a model that reasons at length whatever effort it is
+   * asked for (the free models the lab uses: docs/research/edge-intent.md) needs more room than the default model.
+   */
+  maxTokens?: number;
 }
 
 export class ModelCardMaker implements CardMaker {
@@ -417,18 +472,27 @@ export class ModelCardMaker implements CardMaker {
     private readonly options: CardMakerOptions = {},
   ) {}
 
-  async make(items: ContextItem[], today: string, signal: AbortSignal, retry = false) {
+  async make(items: ContextItem[], today: string, signal: AbortSignal, retry = false, intent = false) {
     const model = retry ? (this.options.retry ?? this.model) : this.model;
     const res = await model.chat({
-      messages: cardMessages(items, today),
-      maxTokens: Math.max(CARD_MAX_TOKENS, CARD_TOKENS_PER_ITEM * items.length),
+      messages: cardMessages(items, today, intent),
+      maxTokens:
+        this.options.maxTokens ??
+        (intent
+          ? Math.max(INTENT_MAX_TOKENS, INTENT_TOKENS_PER_ITEM * items.length)
+          : Math.max(CARD_MAX_TOKENS, CARD_TOKENS_PER_ITEM * items.length)),
       reasoning: "low",
       json: true,
       signal,
     });
     // A batch cut off at the cap is unreadable past the cut: what parsed stands, the rest is uncovered. The enricher
     // reads `truncated` to send the batch again.
-    return { cards: parseCards(res.text, items.length), costUsd: res.costUsd, truncated: res.truncated === true };
+    return {
+      cards: parseCards(res.text, items.length),
+      ...(intent ? { requests: parseRequests(res.text, items.length) } : {}),
+      costUsd: res.costUsd,
+      truncated: res.truncated === true,
+    };
   }
 }
 
@@ -458,6 +522,12 @@ export interface CardLimits {
   strict: boolean;
   /** Items saying the same constraint sentences (`sentenceKey`) share one card: the model reads the first. */
   sentenceReuse: boolean;
+  /**
+   * The intent index (`intent`, docs/research/edge-intent.md; `intend()` sets it): each call also writes the requests
+   * its items would change, and items the prefilter rejects are read too, for their requests only (their card stays
+   * none, as the prefilter said).
+   */
+  intent: boolean;
 }
 
 export const DEFAULT_CARD_LIMITS: CardLimits = {
@@ -469,7 +539,11 @@ export const DEFAULT_CARD_LIMITS: CardLimits = {
   ttlMs: 7 * 24 * 3_600_000,
   strict: false,
   sentenceReuse: false,
+  intent: false,
 };
+
+/** The queue bound with `intent` (`CardEnricher.intend`), unless one was given. */
+const INTENT_MAX_QUEUE = 2_000;
 
 /** The economy preset `cardsEconomy` applies (docs/research/econ-background.md). */
 export const ECONOMY_CARD_LIMITS: Partial<CardLimits> = {
@@ -482,10 +556,20 @@ export const ECONOMY_CARD_LIMITS: Partial<CardLimits> = {
 
 interface Stored {
   card: Card | null;
+  /** With `intent`: the requests the item would change (`intent.ts`), indexed in the user's `IntentIndex`. */
+  requests?: string[];
   /** When the card was made (the partner's clock): a lookup uses only cards made before it began. */
   at: number;
   /** When an item last linked to it (made, or an item with this content enqueued): its time to live runs from here. */
   seenAt: number;
+}
+
+/** An item waiting for the model. `only`: rejected by the prefilter, read for its requests only (`intent`). */
+interface Queued {
+  item: ContextItem;
+  hash: string;
+  skey?: string;
+  only?: true;
 }
 
 class UserCards {
@@ -494,9 +578,14 @@ class UserCards {
   readonly byHash = new Map<string, Stored>();
   /** Item id → content hash of the copy last enqueued. */
   readonly byItem = new Map<string, string>();
-  /** Links per content hash, cards made or not: a card that lands for content no item links to any more is not kept. */
-  readonly refs = new Map<string, number>();
-  readonly queue: { item: ContextItem; hash: string; skey?: string }[] = [];
+  /**
+   * The items linked to each content hash, cards made or not: a card that lands for content no item links to any more
+   * is not kept, and an intent search names the items a hash stands for.
+   */
+  readonly holders = new Map<string, Set<string>>();
+  readonly queue: Queued[] = [];
+  /** With `intent`: the user's requests, indexed (`intent.ts`); created with the first. */
+  intent: IntentIndex | undefined;
   /** Sentence key → the content hash whose card says it (`sentenceReuse`). */
   readonly bySentence = new Map<string, string>();
   /** Content hash → its sentence key in `bySentence`: the entry goes when the card does (held no longer, D8). */
@@ -525,6 +614,10 @@ export interface CardStats {
   unanchored: number;
   /** Cards dropped as too wide for one constraint (`plausible`). */
   implausible: number;
+  /** With `intent`: items the prefilter rejected, sent for their requests only (counted in `sent` too). */
+  requestOnly: number;
+  /** With `intent`: items given one request or more. */
+  requested: number;
 }
 
 /**
@@ -550,6 +643,8 @@ export class CardEnricher {
     overBudget: 0,
     unanchored: 0,
     implausible: 0,
+    requestOnly: 0,
+    requested: 0,
   };
   /**
    * Span tracing (`spans.ts`): each enrichment call is a `cards.make` span (counts only, D19). The partner sets it
@@ -574,7 +669,25 @@ export class CardEnricher {
    * built with: a limit given at construction wins, so the lab can vary one setting at a time.
    */
   economize(): void {
-    this.limits = { ...DEFAULT_CARD_LIMITS, ...ECONOMY_CARD_LIMITS, ...this.given };
+    // `intend()` before or after: what it set stands.
+    const { intent, maxQueue } = this.limits;
+    this.limits = {
+      ...DEFAULT_CARD_LIMITS,
+      ...ECONOMY_CARD_LIMITS,
+      ...this.given,
+      intent,
+      ...(intent ? { maxQueue } : {}),
+    };
+  }
+
+  /**
+   * Turns on the intent index (`intent`, docs/research/edge-intent.md): from now on each enrichment call also writes
+   * its items' requests, and items the prefilter rejects are queued for theirs.
+   */
+  intend(): void {
+    // Every item is read now, not the prefilter's 11–15%: a backfill's items would overrun the card queue's bound
+    // (oldest dropped, uncovered). The queue holds references to cached items, so a longer one costs little.
+    this.limits = { ...this.limits, intent: true, maxQueue: this.given.maxQueue ?? INTENT_MAX_QUEUE };
   }
 
   private user(scope: Scope): UserCards {
@@ -653,7 +766,10 @@ export class CardEnricher {
       }
       if (!(this.limits.strict ? worthCardingStrict(item) : worthCarding(item))) {
         this.stats.prefiltered++;
-        this.keep(u, hash, { card: null, at: now, seenAt: now });
+        // With `intent`, an item with no constraint language may still bear on a request (an event, a thread about
+        // a project): it is read for its requests, and its card stays none.
+        if (this.limits.intent) this.enlist(u, { item, hash, only: true });
+        else this.keep(u, hash, { card: null, at: now, seenAt: now });
         continue;
       }
       this.queueItem(u, item, hash, now);
@@ -672,17 +788,24 @@ export class CardEnricher {
       const made = twin !== undefined ? u.byHash.get(twin) : undefined;
       if (made) {
         this.stats.sentenceReused++;
-        this.keep(u, hash, { card: made.card, at: made.at, seenAt: now });
+        this.keep(u, hash, reused(made, now));
         return;
       }
     }
-    u.queue.push({ item, hash, ...(skey !== undefined ? { skey } : {}) });
+    this.enlist(u, { item, hash, ...(skey !== undefined ? { skey } : {}) });
+  }
+
+  private enlist(u: UserCards, q: Queued): void {
+    u.queue.push(q);
     if (u.queue.length > this.limits.maxQueue) u.queue.shift();
   }
 
   private keep(u: UserCards, hash: string, s: Stored): void {
     u.byHash.delete(hash);
     u.byHash.set(hash, s);
+    // The requests are indexed while their card is held, and go with it (`dropCard`).
+    if (s.requests?.length) (u.intent ??= new IntentIndex()).set(hash, s.requests);
+    else u.intent?.delete(hash);
     while (u.byHash.size > this.limits.maxCardsPerUser) dropCard(u, u.byHash.keys().next().value as string);
   }
 
@@ -694,8 +817,8 @@ export class CardEnricher {
     while (u.queue.length > 0 && !u.abort.signal.aborted) {
       // With `sentenceReuse`: an item whose constraint sentences a card already says takes that card; one whose
       // sentences another item of this batch says waits for that item's card (`followers`), with no call of its own.
-      const batch: { item: ContextItem; hash: string; skey?: string }[] = [];
-      const followers: { item: ContextItem; hash: string; skey: string }[] = [];
+      const batch: Queued[] = [];
+      const followers: (Queued & { skey: string })[] = [];
       const inBatch = new Set<string>();
       while (u.queue.length > 0 && batch.length < this.limits.batch) {
         const q = u.queue.shift()!;
@@ -704,11 +827,11 @@ export class CardEnricher {
           const made = twin !== undefined ? u.byHash.get(twin) : undefined;
           if (made) {
             this.stats.sentenceReused++;
-            if (u.refs.has(q.hash)) this.keep(u, q.hash, { card: made.card, at: made.at, seenAt: this.deps.now() });
+            if (u.holders.has(q.hash)) this.keep(u, q.hash, reused(made, this.deps.now()));
             continue;
           }
           if (inBatch.has(q.skey)) {
-            followers.push(q as { item: ContextItem; hash: string; skey: string });
+            followers.push(q as Queued & { skey: string });
             continue;
           }
           inBatch.add(q.skey);
@@ -730,26 +853,31 @@ export class CardEnricher {
       const sp = tracer?.open("cards.make", 0, { async: true, items: batch.length });
       try {
         const items = batch.map((b) => b.item);
-        const made = await this.deps.maker.make(items, today, u.abort.signal);
+        const intent = this.limits.intent;
+        let made = await this.deps.maker.make(items, today, u.abort.signal, false, intent);
         const { costUsd } = made;
-        let { cards } = made;
-        if (sp) tracer!.close(sp, { costUsd, cards: cards.length });
+        if (sp) tracer!.close(sp, { costUsd, cards: made.cards.length });
         this.deps.budget.settle(reservation, costUsd);
         this.stats.calls++;
         this.stats.sent += batch.length;
+        this.stats.requestOnly += batch.filter((b) => b.only).length;
         this.stats.costUsd += costUsd;
         // Forgotten or dropped while the call ran: keep nothing.
         if (u.abort.signal.aborted || this.users.get(key) !== u) return;
         if (made.truncated) {
-          cards = await this.retry(key, session, items, today, u, cards);
+          made = await this.retry(key, session, items, today, u, made);
           if (u.abort.signal.aborted || this.users.get(key) !== u) return;
         }
+        const { cards, requests } = made;
         const at = this.deps.now();
         batch.forEach((b, i) => {
-          const card = cards[i];
+          const asked = intent ? (requests?.[i] ?? null) : null;
+          // An item read for its requests only keeps the card the prefilter gave it (none), whatever the model wrote;
+          // with its requests unread it is uncovered.
+          const card = b.only ? (asked ? NONE_CARD : null) : cards[i];
           if (card === undefined || card === null) return; // Unreadable: uncovered, may be read again later.
           // A card that shares no word with its item was written for another one (a batch's indexes crossed):
-          // uncovered rather than wrong.
+          // uncovered rather than wrong, and so are the requests written beside it.
           if (card.kind !== "none" && !anchored(card, b.item)) {
             this.stats.unanchored++;
             return;
@@ -761,9 +889,15 @@ export class CardEnricher {
           }
           // The item left the cache (or its source was forgotten) while the call ran: its content is not held, nor
           // is what the model read from it.
-          if (!u.refs.has(b.hash)) return;
-          this.stats.carded++;
-          this.keep(u, b.hash, { card: card.kind === "none" ? null : card, at, seenAt: at });
+          if (!u.holders.has(b.hash)) return;
+          if (!b.only) this.stats.carded++;
+          if (asked?.length) this.stats.requested++;
+          this.keep(u, b.hash, {
+            card: card.kind === "none" ? null : card,
+            at,
+            seenAt: at,
+            ...(asked?.length ? { requests: asked } : {}),
+          });
           if (b.skey !== undefined) {
             u.bySentence.set(b.skey, b.hash);
             u.sentenceOf.set(b.hash, b.skey);
@@ -780,7 +914,7 @@ export class CardEnricher {
           const made = twin !== undefined ? u.byHash.get(twin) : undefined;
           if (made) {
             this.stats.sentenceReused++;
-            if (u.refs.has(f.hash)) this.keep(u, f.hash, { card: made.card, at: made.at, seenAt: at });
+            if (u.holders.has(f.hash)) this.keep(u, f.hash, reused(made, at));
           } else u.queue.push(f);
         }
       } catch {
@@ -795,7 +929,7 @@ export class CardEnricher {
   /**
    * A batch cut off at the output cap is unreadable as a whole, so it is sent once more, as `retry` (the maker's
    * default-routed model: docs/research/econ-background.md), under a reservation of its own. Its cards fill only what
-   * the cut call left unread. Over budget or failing, the cut call's cards stand.
+   * the cut call left unread (its requests likewise). Over budget or failing, the cut call's cards stand.
    */
   private async retry(
     key: string,
@@ -803,27 +937,35 @@ export class CardEnricher {
     items: ContextItem[],
     today: string,
     u: UserCards,
-    cards: (Card | null)[],
-  ): Promise<(Card | null)[]> {
+    cut: CardBatch,
+  ): Promise<CardBatch> {
     const reservation = this.deps.budget.reserve(key, session, this.limits.estimatedCallUsd);
     this.deps.budget.endSession(session);
     if (!reservation) {
       // Only what the cut call left unread goes uncovered: its other cards stand.
-      this.stats.overBudget += items.filter((_, i) => (cards[i] ?? null) === null).length;
-      return cards;
+      this.stats.overBudget += items.filter((_, i) => (cut.cards[i] ?? null) === null).length;
+      return cut;
     }
     try {
-      const again = await this.deps.maker.make(items, today, u.abort.signal, true);
+      const again = await this.deps.maker.make(items, today, u.abort.signal, true, this.limits.intent);
       this.deps.budget.settle(reservation, again.costUsd);
       this.stats.calls++;
       this.stats.retries++;
       this.stats.sent += items.length;
       this.stats.costUsd += again.costUsd;
-      return cards.map((c, i) => c ?? again.cards[i] ?? null);
+      const requests =
+        cut.requests || again.requests
+          ? items.map((_, i) => cut.requests?.[i] ?? again.requests?.[i] ?? null)
+          : undefined;
+      return {
+        cards: cut.cards.map((c, i) => c ?? again.cards[i] ?? null),
+        ...(requests ? { requests } : {}),
+        costUsd: cut.costUsd + again.costUsd,
+      };
     } catch {
       this.deps.budget.settle(reservation, 0);
       this.stats.failures++;
-      return cards;
+      return cut;
     }
   }
 
@@ -856,6 +998,53 @@ export class CardEnricher {
       out.set(id, s.card);
     }
     return out;
+  }
+
+  /**
+   * `intent`: the user's items whose requests (`intent.ts`) best match `text`, best first, at most `k` hashes' worth:
+   * each with the ids of the items it stands for (`accept` filters them: the items still cached) and its match. Only
+   * requests made before `before` (ms, the partner's clock) count, as for cards. No model and no call: one BM25
+   * search over the user's requests.
+   */
+  intentFinds(
+    scope: Scope,
+    text: string,
+    before: number,
+    k: number,
+    accept: (id: string) => boolean,
+  ): { ids: string[]; hit: IntentHit }[] {
+    const u = this.users.get(scopeKey(scope));
+    if (!u?.intent || k <= 0) return [];
+    const now = this.deps.now();
+    const out: { ids: string[]; hit: IntentHit }[] = [];
+    // A few more than wanted: a hash made too late, past its time to live or with no cached item is skipped.
+    for (const hit of u.intent.search(text, k * 2)) {
+      const s = u.byHash.get(hit.hash);
+      if (!s || !(s.at < before)) continue;
+      if (now - s.seenAt > this.limits.ttlMs) {
+        dropCard(u, hit.hash);
+        continue;
+      }
+      const ids = [...(u.holders.get(hit.hash) ?? [])].filter(accept);
+      if (ids.length === 0) continue;
+      out.push({ ids, hit });
+      if (out.length >= k) break;
+    }
+    return out;
+  }
+
+  /** The requests written for an item's content before `before` (ms); none when unread, unmade or past its TTL. */
+  requestsOf(scope: Scope, id: string, before: number): readonly string[] {
+    const u = this.users.get(scopeKey(scope));
+    const hash = u?.byItem.get(id);
+    const s = hash ? u!.byHash.get(hash) : undefined;
+    if (!s?.requests || !(s.at < before) || this.deps.now() - s.seenAt > this.limits.ttlMs) return [];
+    return s.requests;
+  }
+
+  /** Items holding requests in the user's intent index (tests and bounds). */
+  intentSize(scope: Scope): number {
+    return this.users.get(scopeKey(scope))?.intent?.size ?? 0;
   }
 
   /**
@@ -901,7 +1090,9 @@ export class CardEnricher {
 /** Links an item to the content hash of its copy. */
 function link(u: UserCards, id: string, hash: string): void {
   u.byItem.set(id, hash);
-  u.refs.set(hash, (u.refs.get(hash) ?? 0) + 1);
+  const ids = u.holders.get(hash);
+  if (ids) ids.add(id);
+  else u.holders.set(hash, new Set([id]));
 }
 
 /** Unlinks an item; content no item links to any more loses its card (held no longer than its items, D8). */
@@ -909,18 +1100,28 @@ function unlink(u: UserCards, id: string): void {
   const hash = u.byItem.get(id);
   if (hash === undefined) return;
   u.byItem.delete(id);
-  const n = (u.refs.get(hash) ?? 1) - 1;
-  if (n > 0) {
-    u.refs.set(hash, n);
-    return;
-  }
-  u.refs.delete(hash);
+  const ids = u.holders.get(hash);
+  ids?.delete(id);
+  if (ids && ids.size > 0) return;
+  u.holders.delete(hash);
   dropCard(u, hash);
 }
 
-/** Drops a content hash's card and the sentence key pointing to it (`sentenceReuse`): neither outlives the other. */
+/** A card made for one item, taken by another saying the same constraint sentences (`sentenceReuse`). */
+function reused(made: Stored, seenAt: number): Stored {
+  return { card: made.card, at: made.at, seenAt, ...(made.requests ? { requests: made.requests } : {}) };
+}
+
+/** The card of an item read for its requests only: the prefilter found no constraint language in it. */
+const NONE_CARD: Card = { kind: "none", actions: [], entities: [], statement: "" };
+
+/**
+ * Drops a content hash's card, its requests (`intent`) and the sentence key pointing to it (`sentenceReuse`): none
+ * outlives the others.
+ */
 function dropCard(u: UserCards, hash: string): void {
   u.byHash.delete(hash);
+  u.intent?.delete(hash);
   const k = u.sentenceOf.get(hash);
   if (k === undefined) return;
   u.sentenceOf.delete(hash);

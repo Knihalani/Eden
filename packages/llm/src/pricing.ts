@@ -25,6 +25,9 @@ export function priceFor(model: string, env = process.env): Price {
   if (override?.length === 2 && override.every((n) => Number.isFinite(n) && n >= 0)) {
     return { input: override[0]!, output: override[1]! };
   }
+  // OpenRouter's free variants (`<model>:free`) bill nothing; a worst case at the unknown-model price would make a
+  // run's budget refuse calls that cost $0.
+  if (model.endsWith(":free")) return { input: 0, output: 0 };
   return PRICES[model] ?? { input: 1, output: 4 }; // Unknown model: price it high so budgets stay conservative.
 }
 
