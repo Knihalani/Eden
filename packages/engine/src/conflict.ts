@@ -622,6 +622,25 @@ export function constrains(s: string): boolean {
   );
 }
 
+/**
+ * `askGuard`: words that may state a limit or condition on an action though no verdict reads one ("withdrawals
+ * aren't possible before maturity", "transfers are capped at", "pending approval"). Read only to withhold the guard's
+ * "nothing found" line, so it errs wide: a missed limit there is a false all-clear, an extra one only drops the line.
+ */
+const GUARD_WORDING =
+  /\b(?:must|has to|have to|limit(?:ed|s)?|capped|maximum|minimum|deadline|matur(?:es|ity)|locked|lock-?in|restrict(?:ed|ions?)?|pending|awaiting|notice period|penalt(?:y|ies)|not (?:yet|until))\b/;
+
+/**
+ * Whether a text (lower case) may state a constraint, in any of the verdict paths' words (`constrains`, the
+ * `conflictVocab` lists) or the guard's own (`GUARD_WORDING`), ignoring idioms ("can't wait"). Wider than any verdict:
+ * `askGuard` withholds its "nothing found" line when an answer item or a candidate reads so (D92).
+ */
+export function mayConstrain(s: string): boolean {
+  const t = s.slice(0, MAX_TEXT).replace(IDIOMS, " ");
+  // `search` ignores the shared lists' global `lastIndex`.
+  return constrains(t) || [BLOCKS_MORE, BLOCKS_OBJECT, STANDING_MORE, GUARD_WORDING].some((re) => t.search(re) >= 0);
+}
+
 /** The spans and limits a sentence (lower case) states, as ISO days (`datesOf`), for the knowledge graph. */
 export function datesIn(s: string, now: number): { spans: { from: string; to: string }[]; limits: string[] } {
   return datesOf(s.slice(0, MAX_TEXT).replace(/[\u2013\u2014]/g, "-"), now);

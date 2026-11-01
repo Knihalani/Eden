@@ -177,6 +177,9 @@ export interface BridgeStats {
   costUsd: number;
 }
 
+/** How often `keep` sweeps expired entries from every user (ms). */
+const SWEEP_MS = 3_600_000;
+
 interface Entry {
   queries: string[];
   at: number;
@@ -190,6 +193,10 @@ export class QueryBridge {
   private readonly users = new Map<string, { tenantId: string; byKey: Map<string, Entry> }>();
   private readonly perTenant = new Map<string, number>();
   private readonly running = new Map<string, Promise<string[] | null>>();
+  /** Each call in flight's own abort, so a user's forget stops it and its answer is never kept. */
+  private readonly aborts = new Map<string, AbortController>();
+  /** When expired entries were last dropped from every user (`sweep`). */
+  private swept = 0;
   private readonly limits: BridgeLimits;
   readonly stats: BridgeStats = { asked: 0, cached: 0, calls: 0, overBudget: 0, failures: 0, costUsd: 0 };
 
@@ -202,8 +209,17 @@ export class QueryBridge {
 
   /** The request's queries if this user's cache holds them, with no call (an `ask`, a follow-up lookup). */
   peek(scope: Scope, request: string): string[] | undefined {
-    const e = this.users.get(scopeKey(scope))?.byKey.get(bridgeKey(request));
-    if (!e || this.deps.now() - e.at > this.limits.ttlMs) return undefined;
+    const key = scopeKey(scope);
+    const u = this.users.get(key);
+    const k = bridgeKey(request);
+    const e = u?.byKey.get(k);
+    if (!e) return undefined;
+    // An expired entry is dropped when read, not only skipped: it is held no longer than PRIVACY says.
+    if (this.deps.now() - e.at > this.limits.ttlMs) {
+      u!.byKey.delete(k);
+      if (u!.byKey.size === 0) this.drop(key, scope.tenantId);
+      return undefined;
+    }
     return e.queries;
   }
 
@@ -226,12 +242,24 @@ export class QueryBridge {
     const key = `${scopeKey(scope)}\n${bridgeKey(request)}`;
     const running = this.running.get(key);
     if (running) return running;
-    const p = this.call(scope, session, request, signal).finally(() => this.running.delete(key));
+    const abort = new AbortController();
+    const p = this.call(scope, session, request, AbortSignal.any([signal, abort.signal]), abort.signal).finally(() => {
+      // A forget may have dropped this call and a newer one taken its key.
+      if (this.running.get(key) === p) this.running.delete(key);
+      if (this.aborts.get(key) === abort) this.aborts.delete(key);
+    });
     this.running.set(key, p);
+    this.aborts.set(key, abort);
     return p;
   }
 
-  private async call(scope: Scope, session: string, request: string, signal: AbortSignal): Promise<string[] | null> {
+  private async call(
+    scope: Scope,
+    session: string,
+    request: string,
+    signal: AbortSignal,
+    forgotten: AbortSignal,
+  ): Promise<string[] | null> {
     const reservation = this.deps.budget.reserve(scopeKey(scope), session, this.limits.estimateUsd);
     if (!reservation) {
       this.stats.overBudget++;
@@ -243,6 +271,8 @@ export class QueryBridge {
       this.deps.budget.settle(reservation, got.costUsd);
       this.stats.costUsd += got.costUsd;
       const queries = got.queries[0];
+      // The user was forgotten while the call ran: its answer is discarded, never kept.
+      if (forgotten.aborted) return null;
       if (!queries) {
         this.stats.failures++;
         return null;
@@ -258,6 +288,7 @@ export class QueryBridge {
 
   /** Stores a request's queries for the user (the lab's replay fills the cache through `make`, as a call would). */
   private keep(scope: Scope, request: string, queries: string[]): void {
+    this.sweep();
     const key = scopeKey(scope);
     let u = this.users.get(key);
     if (u) {
@@ -289,9 +320,31 @@ export class QueryBridge {
     else this.perTenant.delete(tenantId);
   }
 
-  /** Drops everything held for a user. */
+  /**
+   * Drops expired entries from every user, and users left with none, at most once an hour (from `keep`): an idle
+   * user's queries go after the TTL even if never read again. Bounded by the users held (`maxUsersPerTenant`).
+   */
+  private sweep(): void {
+    const now = this.deps.now();
+    if (now - this.swept < SWEEP_MS) return;
+    this.swept = now;
+    for (const [key, u] of [...this.users]) {
+      for (const [k, e] of [...u.byKey]) if (now - e.at > this.limits.ttlMs) u.byKey.delete(k);
+      if (u.byKey.size === 0) this.drop(key, u.tenantId);
+    }
+  }
+
+  /** Drops everything held for a user, and aborts their calls in flight, whose answers are then discarded. */
   forget(scope: Scope): void {
-    this.drop(scopeKey(scope), scope.tenantId);
+    const key = scopeKey(scope);
+    this.drop(key, scope.tenantId);
+    const prefix = `${key}\n`;
+    for (const [k, abort] of [...this.aborts]) {
+      if (!k.startsWith(prefix)) continue;
+      abort.abort();
+      this.aborts.delete(k);
+      this.running.delete(k);
+    }
   }
 
   get userCount(): number {

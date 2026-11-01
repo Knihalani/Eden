@@ -153,15 +153,17 @@ const GUARD = "Checked ";
 
 /**
  * `askGuard`'s line, for an ask about an action whose sources were all searched (synced and current) and in whose
- * answer no verdict reads a block: it says so, so a cautious agent has grounds to go ahead. Built from the source ids
- * (the tenant's configuration) and the question's own names and days (the agent's words, a few, each cut short),
- * never from an item; `renderPacket` makes it inert.
+ * answer no verdict reads a block: it says so, so a cautious agent has grounds to go ahead. It speaks of what was
+ * found ("none of the items found states …"), not of the sources as a whole: the engine read the answer's items and
+ * the ask's candidates, not everything the user holds (D92). Built from the source ids (the tenant's configuration)
+ * and the question's own names and days (the agent's words, a few, each cut short), never from an item;
+ * `renderPacket` makes it inert.
  */
 export function guardLine(sourceIds: readonly string[], names: readonly string[], days: readonly string[]): string {
   const ids = sourceIds.map((id) => id.replace(/[^\w.-]/g, "").slice(0, 24)).filter(Boolean);
   const what = [...names.map((n) => oneLine(n).slice(0, 40)), ...days.map(dayName)].filter(Boolean).slice(0, 4);
   return (
-    `${GUARD}${ids.join(", ")}: no rule, hold, limit, absence or change found` +
+    `${GUARD}${ids.join(", ")}: none of the items found states a rule, hold, limit, absence or change` +
     (what.length > 0 ? ` for ${what.join(", ")}.` : ".")
   );
 }

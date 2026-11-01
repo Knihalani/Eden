@@ -96,9 +96,11 @@ async function setup(config: Record<string, unknown>) {
 
 describe("askGuard with the intent index", () => {
   test("an item only the intent index chose withholds the 'nothing found' line; without intent it is said", async () => {
+    // Without intent the saver shares no word with the question and is no candidate: the line speaks only of the
+    // items found ("none of the items found states …"), which is so; it no longer claims the sources hold nothing.
     const guardOnly = await (await setup({ askGuard: true })).ask();
     expect(guardOnly.citations.map((c) => c.itemId)).not.toContain(itemId("mail", "s1"));
-    expect(guardOnly.answer).toContain("Checked mail: no rule, hold, limit, absence or change found");
+    expect(guardOnly.answer).toContain("Checked mail: none of the items found states a rule, hold, limit");
 
     const both = await (await setup({ askGuard: true, intent: true })).ask();
     expect(both.citations.map((c) => c.itemId)).toContain(itemId("mail", "s1"));

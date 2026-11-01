@@ -135,7 +135,13 @@ for (const char of "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01234567
   BASE64_CHAR[char.charCodeAt(0)] = 1;
 }
 const AWS_SECRET_LENGTH = 40;
-const AWS_SECRET_ANCHOR = /(?:AKIA|ASIA)[0-9A-Z]{16}|\[REDACTED\]|[Ss][Ee][Cc][Rr][Ee][Tt]/;
+const AWS_SECRET_ANCHOR = /(?:AKIA|ASIA)[0-9A-Z]{16}|\[REDACTED\]/;
+/**
+ * The word "secret" as a word of its own or a key's name ("secret key", `aws_secret_access_key`, `secretAccessKey`),
+ * never inside another word ("Secretary", "secretly", "secretariat"). Its own regex, as it folds case and the key id
+ * (`AKIA`) must not ("Asia").
+ */
+const AWS_SECRET_WORD = /(?<![a-z])secrets?(?:[_ -]?access)?(?:[_ -]?key)?(?![a-z])/i;
 const HEX = /^[0-9A-Fa-f]+$/;
 /**
  * A random 40-character base64 string has Shannon entropy ≥ 4.04 bits a character in 10^6 draws (median 4.78); a
@@ -499,7 +505,8 @@ function awsSecret(text: string): Span[] {
     if (shannon(token) < AWS_SECRET_ENTROPY || isPath(token)) continue;
     const before = text.slice(Math.max(0, start - KEYWORD_REACH), start);
     const after = text.slice(end, end + KEYWORD_REACH);
-    if (AWS_SECRET_ANCHOR.test(before) || AWS_SECRET_ANCHOR.test(after)) out.push([start, end]);
+    const anchored = (w: string) => AWS_SECRET_ANCHOR.test(w) || AWS_SECRET_WORD.test(w);
+    if (anchored(before) || anchored(after)) out.push([start, end]);
   }
   return out;
 }

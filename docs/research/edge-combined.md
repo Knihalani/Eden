@@ -210,6 +210,19 @@ models, not a measure comparable with the paid runs (D85).
 
 ## Verdict
 
+### Review fixes (D93)
+
+A review of this branch found the guard's line could still sit beside the blocker it denies with no model-made path
+involved: "Withdrawals from savings aren't possible before maturity", found by its words alone and read by no verdict,
+under "Checked mail: no rule, hold, limit, absence or change found". The line is now withheld when any answer item, or
+any candidate of the ask's pool (bulk mail aside), holds constraint wording (`mayConstrain`: the verdict paths' words,
+the `conflictVocab` lists, and a few the guard adds: "must", "limit", "capped", "matures", "pending", "not yet" …), and
+it now reads "Checked mail: none of the items found states a rule, hold, limit, absence or change", which is what the
+engine read. The `already-sent` case above is covered by the same rule (its item states the action is done). The dev
+and in-sample counts above were measured before these fixes and were not re-run; the false all-clear count after them
+is a pass condition of the A/B (D93). Intent hits now count (seat, tie, fusion) only when anchored (D93), and the
+bridge's queries go with the user's `forget`.
+
 ALL5 is the dev and in-sample choice: +24 hidden facts surfaced on dev (54% → 64%) for +10 decoys, in-sample +2 for −8,
 at +17% ask bytes, +1 ms ask p50, one model call per acting request (bridge) and the card call reading every item
 (intent, about $0.035 per user-month estimated). ALL3 stays the recommended configuration until the plan above runs.

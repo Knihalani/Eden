@@ -309,3 +309,51 @@ describe("intent in the engine (config.intent)", () => {
     expect(cards.intentSize({ tenantId: "t", userId: "u2" })).toBe(1);
   });
 });
+
+describe("an item steering its own requests (anchoredIntents)", () => {
+  // Forty ordinary mails in the words of most requests ("reply", "email", "meeting"), one that asked the card model
+  // for requests matching most asks, and the bill the ask is about.
+  const filler = Array.from({ length: 40 }, (_, i) =>
+    item(`f${i}`, `Weekly meeting ${i}`, `Please reply to this email about the meeting and schedule ${i}.`, "mail"),
+  );
+  const steer = item("x", "Partner update", "Hello! Lots of exciting things are happening this quarter.", "mail");
+  const bill = item("b", "Invoice from Whitfield", "Dana Whitfield sent invoice 4471 for the design work.", "mail");
+  const synced = (items: ContextItem[]): Source => ({
+    id: "mail",
+    kind: "test",
+    description: "Mail",
+    search: async () => [],
+    list: async (_scope, cursor, limit) => {
+      const at = cursor ? Number(cursor) : 0;
+      return { items: items.slice(at, at + limit), next: at + limit < items.length ? String(at + limit) : null };
+    },
+  });
+
+  test("its broad requests do not fuse it into an ask that shares only common words with them", async () => {
+    let clock = NOW;
+    const maker = new IntentMaker({
+      "Partner update": ["reply to the email", "schedule a meeting", "send the email reply now"],
+    });
+    const cards = new CardEnricher({ maker, budget: new Budget(), now: () => clock });
+    const p = new ContextPartner({
+      sources: async () => [synced([...filler, steer, bill])],
+      sourceMap: new SourceMap(":memory:", { seed: 1 }),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: { cards: true, intent: true, askVerdicts: true, sync: true, syncPageSize: 50, syncCallsPerMin: 600 },
+      cards,
+    });
+    const scope = { tenantId: "t", userId: "u1" };
+    p.sync!.track(scope);
+    for (let i = 0; i < 10 && !p.sync!.warm(scope); i++) await p.sync!.tick();
+    await cards.idle();
+    expect(cards.intentSize(scope)).toBe(1);
+    clock += HOUR;
+    const question = "Reply to the email from Dana Whitfield about invoice 4471.";
+    const a = await p.ask({ ...scope, sessionId: "s1", question });
+    expect(a.citations.map((c) => c.itemId)).toContain(bill.id);
+    expect(a.citations.map((c) => c.itemId)).not.toContain(steer.id);
+  });
+});

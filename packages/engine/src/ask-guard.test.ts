@@ -89,7 +89,9 @@ describe("askGuard", () => {
     const { partner } = setup({ sync: true, askGuard: true });
     await warm(partner, scope);
     const a = await ask(partner, BOOK);
-    expect(a.answer).toContain("Checked mail, calendar: no rule, hold, limit, absence or change found for Priya Shah");
+    expect(a.answer).toContain(
+      "Checked mail, calendar: none of the items found states a rule, hold, limit, absence or change for Priya Shah",
+    );
     expect(a.answer).toContain("30 Oct");
     // The guard is the answer's first line, inside the data envelope.
     expect(a.answer.split("\n")[1]!.startsWith("Checked ")).toBe(true);
@@ -131,6 +133,35 @@ describe("askGuard", () => {
     expect(a.answer).not.toContain("Checked ");
   });
 
+  test("a cited item found by its words alone, whose limit no verdict reads, withholds the line (D92)", async () => {
+    // "Aren't possible before maturity": no verdict reads it, so no mark; the line beside it would be a false
+    // all-clear.
+    const saver = {
+      ref: "s1",
+      title: "Savings account",
+      text: "Your savings account matures in December. Withdrawals from savings aren't possible before maturity.",
+    };
+    const { partner } = setup({ sync: true, askGuard: true }, [saver]);
+    await warm(partner, scope);
+    const a = await ask(partner, "Move £3,000 from my savings into the current account tomorrow.");
+    expect(a.citations.map((c) => c.itemId)).toContain("mail:s1");
+    expect(a.answer).not.toContain("Checked ");
+  });
+
+  test("a candidate with limit wording withholds the line though the answer does not show it", async () => {
+    // Asked for one item, the answer shows lunch; the cap on Priya's team budget is a candidate, not shown.
+    const cap = {
+      ref: "b1",
+      title: "Team lunches",
+      text: "Lunch spend for Priya Shah's team is capped at £20 a head.",
+    };
+    const { partner } = setup({ sync: true, askGuard: true }, [cap]);
+    await warm(partner, scope);
+    const a = await partner.ask({ ...scope, sessionId: "s1", question: BOOK, maxItems: 1 });
+    expect(a.citations.map((c) => c.itemId)).not.toContain("mail:b1");
+    expect(a.answer).not.toContain("Checked ");
+  });
+
   test("no guard for a question that is not about an action", async () => {
     const { partner } = setup({ sync: true, askGuard: true });
     await warm(partner, scope);
@@ -142,7 +173,7 @@ describe("askGuard", () => {
     const { partner } = setup({ sync: true, askGuard: true });
     await warm(partner, scope);
     const a = await ask(partner, "Any rules or holds affecting lunch with Priya Shah on Friday 30 October?");
-    expect(a.answer).toContain("no rule, hold, limit, absence or change found for Priya Shah");
+    expect(a.answer).toContain("none of the items found states a rule, hold, limit, absence or change for Priya Shah");
   });
 
   test("per user: the guard reads the asking user's own sync, never another's", async () => {

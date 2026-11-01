@@ -54,6 +54,7 @@ import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import {
   assess,
   constrains,
+  mayConstrain,
   frameOf,
   matterWords,
   namesRef,
@@ -62,8 +63,9 @@ import {
   type Verdict,
 } from "./conflict";
 import { cardVerdict, requestActions, type CardEnricher } from "./cards";
+import { intentTerms, stemWord } from "./intent";
 import { bridgeWants, type QueryBridge } from "./bridge";
-import { buildDigest, personalSender } from "./digest";
+import { buildDigest, digestAdmits, personalSender } from "./digest";
 import {
   accounts,
   actionKey,
@@ -1151,12 +1153,12 @@ export class ContextPartner {
     const walked = verdicts && this.config.graph ? this.walkGraph(s, cue) : new Map<string, Walked>();
     const carded = verdicts ? this.cardFinds(s, cue) : new Map<string, CardFind>();
     // `intent`: what the question would change, by the requests written for each item (no model, no call).
-    const intents = this.intentFinds(s, cue);
+    const intentFound = this.intentFinds(s, cue);
     // `bridgeQuery`: the bridging queries of the question, or of the session's latest bridged request, from the user's
     // cache only (an ask never makes the call), run against the index.
     const bridgeQueries = this.config.bridgeQuery && this.deps.bridge ? await this.askBridge(s, question) : undefined;
     const bridgeFound = bridgeQueries?.length ? this.bridgeFinds(s, bridgeQueries) : null;
-    const extra = [...consIds, ...carded.keys(), ...intents.keys(), ...(bridgeFound?.ids ?? [])];
+    const extra = [...consIds, ...carded.keys(), ...intentFound.keys(), ...(bridgeFound?.ids ?? [])];
     const ranking = spans?.open("rank", cue.span);
     const scored = this.rank(s, cue, {
       ignoreLedger: true,
@@ -1164,6 +1166,8 @@ export class ContextPartner {
       ...(walked.size > 0 ? { walked: [...walked.keys()] } : {}),
     });
     if (ranking) spans!.close(ranking, { candidates: scored.length });
+    // Only anchored intent hits are fused in (`anchoredIntents`); every hit still withholds the guard's line.
+    const intents = this.anchoredIntents(s, cue, intentFound);
     // The candidates' facts (`decide.ts`), read once: by `askVerdicts` for its hits, by `askRank` for its order, and by
     // the lab's dump.
     const ranked = this.config.askRank;
@@ -1267,8 +1271,16 @@ export class ContextPartner {
     const rendering = spans?.open("render", cue.span);
     const answering = this.answering(s, cue);
     // What the intent index or the bridging queries chose for this request is not evidence that nothing binds.
-    const modelChosen = bearing ? new Set([...intents.keys(), ...(bridgeFound?.ids ?? [])]) : undefined;
-    const blocks = bearing !== null && this.mayBlock(cue, items, bearing, modelChosen);
+    const modelChosen = bearing ? new Set([...intentFound.keys(), ...(bridgeFound?.ids ?? [])]) : undefined;
+    const blocks =
+      bearing !== null &&
+      this.mayBlock(
+        cue,
+        items,
+        bearing,
+        modelChosen,
+        pool.map((x) => x.item),
+      );
     const lead =
       bearing && !blocks && covered
         ? guardLine(
@@ -1439,20 +1451,28 @@ export class ContextPartner {
    * for this request (`chosen`: the intent index's hits, the bridging queries' finds), which the verdicts did not
    * read: "Withdrawals aren't possible before maturity", found by the intent index, beside "no rule, hold, limit …
    * found" would contradict the line, and the rule paths read it as clear (docs/research/edge-combined.md).
+   * Nor is the line said beside an item, or over a candidate of the ask's pool (`pool`, bulk mail aside), whose words
+   * may state a constraint the verdicts did not read (`mayConstrain`): the same sentence found by its words alone
+   * would otherwise sit under "nothing found" (a false all-clear, D92).
    */
   private mayBlock(
     cue: Cue,
     items: readonly ContextItem[],
     bearing: ReadonlyMap<string, Bearing>,
     chosen: ReadonlySet<string> = new Set(),
+    pool: readonly ContextItem[] = [],
   ): boolean {
     const days = cue.time?.days;
-    return items.some(
-      (i) =>
-        bearing.get(i.id) === "conflict" ||
-        chosen.has(i.id) ||
-        (days !== undefined && (days.has(startDay(i) ?? "") || daysNamed(i, cue.at).some((d) => days.has(d)))) ||
-        (!bulkMail(i) && !settled(i) && this.verdict(i, cue) === "conflict"),
+    const worded = (i: ContextItem) => mayConstrain(`${i.title}. ${i.text}`.toLowerCase());
+    return (
+      items.some(
+        (i) =>
+          bearing.get(i.id) === "conflict" ||
+          chosen.has(i.id) ||
+          (days !== undefined && (days.has(startDay(i) ?? "") || daysNamed(i, cue.at).some((d) => days.has(d)))) ||
+          (!bulkMail(i) && !settled(i) && this.verdict(i, cue) === "conflict") ||
+          worded(i),
+      ) || pool.some((i) => !bulkMail(i) && worded(i))
     );
   }
 
@@ -1667,6 +1687,9 @@ export class ContextPartner {
     // A source's forget drops only what its items brought: the user's other items keep their cards.
     this.deps.cards?.forget(scope, sourceId);
     this.patterns.forget(scope, sourceId);
+    // Bridging queries are made from the user's requests, not from a source's items: only the user's forget drops
+    // them, with any call in flight (D89).
+    if (sourceId === undefined) this.deps.bridge?.forget(scope);
   }
 
   get sessionCount(): number {
@@ -3978,15 +4001,17 @@ export class ContextPartner {
       if (carding) spans!.close(carding, { found: carded.size });
       // `intent`: cached items whose requests (written with their cards) match the request's words (no model).
       const intending = this.config.intent && this.deps.cards ? spans?.open("intent.match", cue.span) : undefined;
-      const intents = this.intentFinds(s, cue);
-      if (intending) spans!.close(intending, { found: intents.size });
-      const extra = [...consIds, ...carded.keys(), ...intents.keys(), ...(bridgeFound?.ids ?? [])];
+      const intentFound = this.intentFinds(s, cue);
+      if (intending) spans!.close(intending, { found: intentFound.size });
+      const extra = [...consIds, ...carded.keys(), ...intentFound.keys(), ...(bridgeFound?.ids ?? [])];
       const ranking = spans?.open("rank", cue.span);
       const scored = this.rank(s, cue, {
         probed: extra.length > 0 ? [...(probedIds ?? []), ...extra] : probedIds,
         ...(walked.size > 0 ? { walked: [...walked.keys()] } : {}),
       });
       if (ranking) spans!.close(ranking, { candidates: scored.length });
+      // Only anchored intent hits are eligible as such, take seats or tie the judge (`anchoredIntents`).
+      const intents = this.anchoredIntents(s, cue, intentFound);
       // A consequence find counts only where the conflict test, tied by its class's words, says it conflicts with the
       // request (`consequenceProbe`): a freeze over the day a release is asked for, not one last month; and not a
       // limit on an amount the request does not state ("travel over £500 needs pre-approval" for printer paper).
@@ -4374,6 +4399,10 @@ export class ContextPartner {
       lines: this.config.digestLines,
       bytes: this.config.digestBytes,
       personal: (item) => !bulkMail(item) && personalSender(item, (name) => cache.isPerson(scope, name)),
+      // An external sender's mail is never a standing line in every session (D90): known senders, the user, or none.
+      // Known is named in another of the user's items too: every sender is a party of their own mail (`isPerson`).
+      admits: (item) =>
+        !bulkMail(item) && digestAdmits(item, (name) => cache.partyCount(scope, name) >= DIGEST_KNOWN_ITEMS, self),
       year: local.getUTCFullYear(),
       self,
     });
@@ -4578,6 +4607,38 @@ export class ContextPartner {
         if (out.size >= c.intentHits) return out;
         if (!out.has(id)) out.set(id, { rank: out.size, coverage: hit.coverage, matched: hit.matched });
       }
+    }
+    return out;
+  }
+
+  /**
+   * `intent`: the hits (`intentFinds`) that count as intent hits: eligible, a judge seat (`intentSeats`), a tie
+   * (`judgeTied`), fused into an ask. The model writes an item's requests from the item's own text, so an inbound
+   * message can word itself to be matched by most requests ("reply to the email", "approve the payment"). A hit counts
+   * only when its item also holds a card, whose words the anchor check tied to the item (`anchored`), or when its
+   * requests hold one of the request's rare words (fewer than `judgeTiedShare` of the user's items hold it, or none):
+   * a request in words common to the user's mail ("reply", "email", "meeting") is no anchor, a name, a thing or a
+   * verb the mail rarely uses is ("savings", "laptop"). Any other hit stays a candidate as the ranking found it.
+   * Re-ranked from 0. No model, no call.
+   */
+  private anchoredIntents(s: Session, cue: Cue, found: ReadonlyMap<string, IntentFind>): Map<string, IntentFind> {
+    const out = new Map<string, IntentFind>();
+    const enricher = this.deps.cards;
+    if (found.size === 0 || !enricher) return out;
+    const before = cue.arrived ?? this.now();
+    const cards = enricher.cardsOf(s.scope, found.keys(), before);
+    const rare = new Set<string>();
+    for (const w of cue.raw
+      .slice(0, INTENT_QUERY_CHARS)
+      .toLowerCase()
+      .match(/[\p{L}\p{N}]+/gu) ?? []) {
+      if (w.length < 3 || isStopword(w)) continue;
+      if (this.deps.cache.isRare(s.scope, w, this.config.judgeTiedShare)) rare.add(stemWord(w));
+    }
+    for (const [id, f] of found) {
+      const carded = (cards.get(id)?.kind ?? "none") !== "none";
+      const tied = () => intentTerms(enricher.requestsOf(s.scope, id, before).join("\n")).some((t) => rare.has(t));
+      if (carded || tied()) out.set(id, { ...f, rank: out.size });
     }
     return out;
   }
@@ -4991,6 +5052,11 @@ interface CardFind {
 }
 /** The head of a request matched against the intent index (`intent`): where its action and objects are named. */
 const INTENT_QUERY_CHARS = 400;
+/**
+ * `constraintDigest`: the items a sender must be a party of for their mail to be said (D90): their own and one more.
+ * A stranger's single message is not; two from one stranger still are (a recorded limit of the rule, D90).
+ */
+const DIGEST_KNOWN_ITEMS = 2;
 
 /** An item the intent index found for a request (`intent`): its place among the hits, and how its requests matched. */
 interface IntentFind {

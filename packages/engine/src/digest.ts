@@ -50,6 +50,8 @@ export interface DigestOptions {
   bytes: number;
   /** Whether an item is from someone the user deals with (ranked as a week newer). */
   personal: (item: ContextItem) => boolean;
+  /** Whether an item may be said at all (`digestAdmits`); omitted, every item may. */
+  admits?: (item: ContextItem) => boolean;
   /** The current year, dropped from dates as packets drop it; omit to keep every year. */
   year?: number;
   self?: string | null;
@@ -65,7 +67,9 @@ export interface Digest {
  * the same text.
  */
 export function buildDigest(entries: readonly { item: ContextItem; card: Card }[], o: DigestOptions): Digest | null {
-  const live = entries.filter(({ card }) => DIGEST_KINDS.has(card.kind) && activeOn(card, o.today));
+  const live = entries.filter(
+    ({ item, card }) => DIGEST_KINDS.has(card.kind) && activeOn(card, o.today) && (o.admits?.(item) ?? true),
+  );
   if (live.length === 0 || o.lines <= 0) return null;
   const key = (item: ContextItem) => (item.updatedAt ?? 0) + (o.personal(item) ? 7 * DAY_MS : 0);
   live.sort((a, b) => key(b.item) - key(a.item) || (a.item.id < b.item.id ? -1 : a.item.id > b.item.id ? 1 : 0));
@@ -109,9 +113,31 @@ export function buildDigest(entries: readonly { item: ContextItem; card: Card }[
  * name, a chat line's speaker) is a person in the user's items (`isPerson`), and not a no-reply address.
  */
 export function personalSender(item: ContextItem, isPerson: (name: string) => boolean): boolean {
+  const sender = senderOf(item);
+  return sender !== null && !sender.automated && isPerson(sender.name);
+}
+
+/**
+ * Whether the digest may say an item (`constraintDigest`, D90): one injected email must not become a standing line in
+ * every session. An item that names a sender (a message's `From:`, a chat line's speaker) is admitted only from
+ * someone the user deals with (`isPerson`) or the user themself (`self`), never from a no-reply address; an item
+ * that names none (a calendar entry, a note, a document) is admitted, as no third party speaks in it.
+ */
+export function digestAdmits(item: ContextItem, isPerson: (name: string) => boolean, self?: string | null): boolean {
+  const sender = senderOf(item);
+  if (sender === null) return true;
+  if (sender.automated) return false;
+  const own = self ? sender.name.toLowerCase() === self.toLowerCase() : false;
+  return own || isPerson(sender.name);
+}
+
+/** An item's stated sender: a message's `From:` name (automated when a no-reply address), or a chat line's speaker. */
+function senderOf(item: ContextItem): { name: string; automated: boolean } | null {
   const head = item.text.slice(0, 600);
   const from = /^from:\s*([^<\n]{2,80}?)\s*(?:<([^>\n]{3,120})>)?\s*$/im.exec(head);
-  if (from) return !/no-?reply|notifications?@|alerts?@/i.test(from[2] ?? from[1]!) && isPerson(from[1]!.trim());
+  if (from) {
+    return { name: from[1]!.trim(), automated: /no-?reply|notifications?@|alerts?@/i.test(from[2] ?? from[1]!) };
+  }
   const said = /\]\s*([\p{Lu}][\p{L}'’.-]*(?:\s+[\p{Lu}][\p{L}'’.-]*){0,2}):/u.exec(head);
-  return said !== null && isPerson(said[1]!);
+  return said ? { name: said[1]!, automated: false } : null;
 }
