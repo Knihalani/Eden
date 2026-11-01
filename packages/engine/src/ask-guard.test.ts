@@ -8,7 +8,7 @@ import { ContextPartner } from "./partner";
 import { guardLine, renderPacket, shownText } from "./render";
 
 /**
- * `askGuard` and `packetBearing` (D86, docs/research/edge-ask.md): an ask about an action says what may block it
+ * `askGuard` and `packetBearing` (D88, docs/research/edge-ask.md): an ask about an action says what may block it
  * first, or, when every source was searched and nothing reads as a block, that nothing was found; a proactive packet
  * says each item's bearing before it.
  */

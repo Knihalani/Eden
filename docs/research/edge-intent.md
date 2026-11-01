@@ -1,6 +1,6 @@
 # The intent index: synthetic requests per item, matched with no model (track "intent")
 
-Status: experiment behind `intent` (off by default; needs `cards`). Proposed decision D86. Every number below comes
+Status: experiment behind `intent` (off by default; needs `cards`). Proposed decision D87. Every number below comes
 from a command run in this session, on dev6a and dev6b, seed 41, no model at request time (`hidden-funnel.ts --ask`).
 Held-out 5–12 were not run or read. The old in-sample suites were not run: requests exist only for the dev worlds.
 

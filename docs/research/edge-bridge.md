@@ -191,7 +191,7 @@ Bridged requests acting only (`bridgeQuestions` was not enriched in-sample).
 
 ## Verdict
 
-- **Bridge (D86): proposed, off, not for ALL3 yet.**
+- **Bridge (D89): proposed, off, not for ALL3 yet.**
   - It reaches facts no other path reaches: the model, not the query shape, does the work (v2 against the no-model
     control: 30 new against 8 offline, 138 against 126 in the funnel).
   - The gain is real but concentrated: +15 to +17 hidden on dev, all in dev6a, for +5 to +6 decoys; in-sample +2
@@ -199,7 +199,7 @@ Bridged requests acting only (`bridgeQuestions` was not enriched in-sample).
   - It costs one model call per acting request, plausibly +15% to +110% of the agent's cost at list prices, and its
     latency on a reasoning model exceeds the lookup's wait.
   - It needs a live A/B with the agent, and a cheaper, faster non-reasoning setting, before it can be recommended.
-- **Digest (D87): proposed, off, the better candidate.**
+- **Digest (D90): proposed, off, the better candidate.**
   - +16 hidden for +8 decoys on dev, with no model call and a byte-stable, cacheable prefix.
   - In-sample it adds few facts (+8) and many decoys (+33): those suites' decoys are near-miss constraints that are
     really in force, and the suites are already 91% reached.

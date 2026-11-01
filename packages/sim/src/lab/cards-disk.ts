@@ -22,7 +22,7 @@ interface Line {
 
 /**
  * The requests of `cards-enrich.ts --intent` (`intent-v<N>.jsonl`, lines `{h, r, c}`): an item's hash → the requests
- * it would change (D86, docs/research/edge-intent.md). Several files merge, the later winning.
+ * it would change (D87, docs/research/edge-intent.md). Several files merge, the later winning.
  */
 export function loadRequests(...files: string[]): Map<string, string[]> {
   const out = new Map<string, string[]>();
@@ -84,7 +84,7 @@ export class DiskCardMaker implements CardMaker {
 
   private readonly out: string;
   /**
-   * Replayed requests (`intent`, D86), by hash: a call that asks for them (`make`'s `intent`) gets each item's from
+   * Replayed requests (`intent`, D87), by hash: a call that asks for them (`make`'s `intent`) gets each item's from
    * here (null when none was made). A live miss's requests are kept here too, in memory only.
    */
   readonly requests: Map<string, string[]>;
@@ -92,7 +92,7 @@ export class DiskCardMaker implements CardMaker {
   /**
    * `options.out`: where new cards go (its cards are replayed too); default the cache file itself.
    * `options.shared`: another maker of the same files, whose cards and calls in flight this one shares, so several
-   * makers read the files once and see each other's new cards (pi-ab's streams).
+   * makers read the files once and see each other's new cards (pi-ab's streams), and its replayed requests.
    * `options.requests`: requests files (`loadRequests`) replayed when a call asks for requests. An item with requests
    * but no replayed card is given a none card, so the cards a run matches are exactly the card files' (the requests'
    * files may hold cards of their own, from another model: they are not read here).
@@ -102,14 +102,14 @@ export class DiskCardMaker implements CardMaker {
     private readonly live?: CardMaker,
     options: {
       out?: string;
-      shared?: { cards: Map<string, Card | null>; inflight: Inflight };
+      shared?: { cards: Map<string, Card | null>; inflight: Inflight; requests?: Map<string, string[]> };
       requests?: string[];
     } = {},
   ) {
     this.out = options.out ?? file;
     this.cards = options.shared?.cards ?? loadCards(file);
     this.inflight = options.shared?.inflight ?? new Map();
-    this.requests = loadRequests(...(options.requests ?? []));
+    this.requests = options.shared?.requests ?? loadRequests(...(options.requests ?? []));
     if (!options.shared && options.out) for (const [h, c] of loadCards(options.out)) this.cards.set(h, c);
   }
 

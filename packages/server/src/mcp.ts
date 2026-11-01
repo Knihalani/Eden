@@ -13,7 +13,7 @@ export function createMcpServer(partner: ContextPartner, who: Scope & { sessionI
   server.registerTool(
     "ask_context",
     {
-      // With `askGuard` the answers say what may block and when nothing does, so the agent is asked to probe (D86).
+      // With `askGuard` the answers say what may block and when nothing does, so the agent is asked to probe (D88).
       description: partner.config.askGuard ? ASK_CONTEXT_GUIDED : ASK_CONTEXT_DESCRIPTION,
       inputSchema: { question: z.string().min(1).max(2_000) },
       annotations: { readOnlyHint: true },

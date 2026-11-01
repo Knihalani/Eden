@@ -11,7 +11,7 @@ export const ASK_CONTEXT_DESCRIPTION =
   "people, projects or history that is not in the conversation.";
 
 /**
- * The guided description (D86, docs/research/edge-ask.md), given with `askGuard`: before acting, ask what could block
+ * The guided description (D88, docs/research/edge-ask.md), given with `askGuard`: before acting, ask what could block
  * or change the action, naming what it involves; raise only what the answer shows, and go ahead when it says nothing
  * binds. Measured with a guard on Eden's side, which says plainly when its sources hold nothing that binds: without
  * it the guided agent grew more cautious (docs/research/path-to-90.md).

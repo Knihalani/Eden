@@ -1,6 +1,6 @@
 # Guided asking with a precision guard, and answer-shaped packets (track ask)
 
-Status: 2026-11-01. Two flags, off by default (`askGuard`, `packetBearing`), proposed as D86. Every number comes
+Status: 2026-11-01. Two flags, off by default (`askGuard`, `packetBearing`), proposed as D88. Every number comes
 from a command run this session; the live smoke is labelled for what it is (16 runs, not a measure).
 
 ## The problem
@@ -118,7 +118,7 @@ this run.
   claws back the guided description's +0.078 false concerns without losing its +0.110 facts. It needs the usual
   pre-registered paired A/B: dev first, then a fresh blind suite, `eden~ALL3` against `eden~ALL3+askGuard+
   packetBearing`, both guided. The 60-request budget could not hold that.
-- Recommendation: keep both off; propose D86. Do not add to ALL3 until the live A/B shows false concerns at or below
+- Recommendation: keep both off; propose D88. Do not add to ALL3 until the live A/B shows false concerns at or below
   ALL3-guided with facts held.
 
 ## Cost

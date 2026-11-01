@@ -22,7 +22,7 @@
  * retried on 429/5xx, and `--max-requests N` caps the run's HTTP requests; at the cap the workers stop and the run
  * ends with the cards it made (`stopped`, `requests` in its summary line).
  *
- * `--intent` (D86, docs/research/edge-intent.md): the intent index's enrichment. Every item is sent, the prefilter's
+ * `--intent` (D87, docs/research/edge-intent.md): the intent index's enrichment. Every item is sent, the prefilter's
  * rejects too, with the prompt that also asks for the requests each item would change; each item's requests, the
  * model's card and whether the prefilter passed it go to DIR/intent-v<N>.jsonl (`{h, r, c, p}`), which the funnel
  * replays with `--intent` (its cards still come from `--cards`). Items already in that file are skipped.
