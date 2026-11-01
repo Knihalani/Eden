@@ -10,9 +10,10 @@ export interface Trace {
    * - fast: delivered from the cache with no source call and no model;
    * - sources: delivered after a live source search, no model;
    * - model: delivered after the model judged the candidates;
-   * - answer: answered an ask.
+   * - answer: answered an ask;
+   * - digest: opened a session with the active-constraints digest (`constraintDigest`), no call.
    */
-  decision: "skipped" | "repeat" | "silent" | "fast" | "sources" | "model" | "answer";
+  decision: "skipped" | "repeat" | "silent" | "fast" | "sources" | "model" | "answer" | "digest";
   reason: string;
   latencyMs: number;
   sourceCalls: number;

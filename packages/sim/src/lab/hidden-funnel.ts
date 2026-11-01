@@ -17,7 +17,10 @@
  *
  * `--judge live` gives Eden its judge (OpenRouter, `OPENROUTER_API_KEY`): the funnel then measures what the judge lets
  * through, hidden and decoy, and its calls, tokens and spend (about $0.03 for the 456 held-out tasks), a cheap screen
- * before an agent run. Seeds run concurrently.
+ * before an agent run. Seeds run concurrently. With a free judge (`--model <id>:free --allow-logging`, lab only;
+ * `free.ts`) its calls are paced (`--rpm`, default 18) and capped (`--max-requests`); a judge call refused at the cap
+ * takes the engine's no-model path, so such a run is reported as PARTIAL and not recorded in the ledger. A judge call
+ * waits for its turn inside its own deadline (the engine's), so keep a free run small (`--serial`, one seed).
  *
  * `--timeline out.jsonl` records every engine span, each task and the process's CPU% and RSS per second
  * (`timeline.ts`); `timeline-report.ts out.jsonl` says where the time went. Spans change no decision.
@@ -50,6 +53,12 @@
  * (`deliveryMs`, from the request), whether it came with the request's own reply (`immediate`), whether the session's
  * anticipation had prefetched it (`prefetched`), and the calls the lead-in made (`leadCalls`).
  *
+ * `--bridge FILE` gives Eden bridging queries (`bridge.ts`, docs/research/edge-bridge.md) replayed from a disk cache
+ * made by `bridge-enrich.ts` (no model call here; a request with no cached line goes without). Turn them on with
+ * `"bridgeQuery": true` in `--config`. The run prints the requests the bridge was asked about: the calls production
+ * would make. With `"constraintDigest": true` (and cards), each task's session opens with the digest: the task records
+ * whether it cited the planted item (`digestCited`) and its bytes.
+ *
  * `--suite` names any suite of `suites.ts`, or several: each gets its own table, then a TOTAL over all of them.
  * Each suite's run is recorded in the benchmark ledger (bench/, `ledger.ts`) unless `--no-record`.
  */
@@ -58,6 +67,7 @@ import {
   CardEnricher,
   cardKey,
   ContextPartner,
+  QueryBridge,
   cpuNow,
   ItemCache,
   type CandidateDump,
@@ -65,14 +75,16 @@ import {
   type Trace,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
-import { Budget, OpenRouterModel, type Model } from "@eden/llm";
+import { Budget, type Model } from "@eden/llm";
 import type { AgentEvent, Injection } from "@eden/protocol";
 import { QueryPlanner } from "@eden/sources";
 import { draftOf, type DraftMode } from "../drafts";
 import { narrowQuestion } from "../narrow";
 import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
+import { DiskBridgeMaker } from "./bridge-disk";
 import { DiskCardMaker } from "./cards-disk";
+import { labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
 import { record, tidy } from "./ledger";
 import { Timeline } from "./timeline";
@@ -120,8 +132,14 @@ const syncUse = {
   users: 0,
 };
 const CARDS = opt("cards", "");
+/**
+ * `--intent FILE[,FILE]` (with `"intent": true` in `--config`): the requests `cards-enrich.ts --intent` wrote, replayed
+ * into the intent index (D87, docs/research/edge-intent.md). Cards still come from `--cards` alone.
+ */
+const INTENT_FILES = opt("intent", "").split(",").filter(Boolean);
 /** One replaying maker for every seed and suite: the disk cache is read once. */
-const cardMaker = CARDS ? new DiskCardMaker(CARDS) : null;
+const cardMaker = CARDS ? new DiskCardMaker(CARDS, undefined, { requests: INTENT_FILES }) : null;
+if (INTENT_FILES.length && !cardMaker) throw new Error("--intent needs --cards");
 /**
  * `--card-log out.jsonl`: every item the enrichment sent for a card (its content hash, title, the head of its text
  * the prefilter reads, and the replayed card's kind: "none", or "uncovered" when not replayed), to study the
@@ -131,8 +149,8 @@ const CARD_LOG = opt("card-log", "");
 if (CARD_LOG && cardMaker) {
   writeFileSync(CARD_LOG, "");
   const make = cardMaker.make.bind(cardMaker);
-  cardMaker.make = async (items, today, signal, retry) => {
-    const got = await make(items, today, signal, retry);
+  cardMaker.make = async (items, today, signal, retry, intent) => {
+    const got = await make(items, today, signal, retry, intent);
     if (!retry) {
       const lines = items.map((it, k) => {
         const kind = got.cards[k]?.kind ?? (cardMaker.cards.has(cardKey(it)) ? "none" : "uncovered");
@@ -148,6 +166,10 @@ const cardUse: Record<string, number> = {};
 const cardLanes: CardEnricher[] = [];
 /** No cap on replayed cards: they cost nothing here (the enrichment's spend is `cards-enrich.ts`'s). */
 const UNCAPPED = { callsPerSession: Infinity, usdPerSession: Infinity, usdPerUserDay: Infinity };
+const BRIDGE = opt("bridge", "");
+/** One replaying bridge maker for every seed and suite; each lane gets its own per-user cache (`QueryBridge`). */
+const bridgeMaker = BRIDGE ? new DiskBridgeMaker(BRIDGE) : null;
+const bridgeLanes: QueryBridge[] = [];
 const CARD_LIMITS = JSON.parse(opt("card-limits", "{}")) as Record<string, unknown>;
 const PLANTED_AGE_DAYS = Number(opt("planted-age-days", "0"));
 const PUSH = args.includes("--push");
@@ -157,6 +179,8 @@ const TYPING_MS = Number(opt("typing-ms", "1500"));
 const KEY = process.env.OPENROUTER_API_KEY;
 if (LIVE && !KEY) throw new Error("--judge live needs OPENROUTER_API_KEY");
 const MODEL = opt("model", "z-ai/glm-5.3-flash");
+/** The judge's requests: paced, capped and retried, with the run's logging choice (free.ts). */
+const ACCESS = labAccess(args, LIVE ? [MODEL] : []);
 const TIMELINE = opt("timeline", "");
 /**
  * `--packets out.jsonl`: each task's packets as the agent would read them (text, reason, cited item ids) and the
@@ -263,6 +287,9 @@ interface TaskRow {
   askKept?: number;
   askItems?: number;
   askMs?: number;
+  /** With `constraintDigest`: whether the session's opening digest cited the planted item, and its bytes. */
+  digestCited?: boolean;
+  digestBytes?: number;
   /** When the planted item reached the agent, from the request (ms of wall time); absent when it did not. */
   deliveryMs?: number;
   /** It came with the request's own reply (the observe call), not later. */
@@ -337,18 +364,23 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     ? new CardEnricher({ maker: cardMaker, budget: new Budget(UNCAPPED), now: () => clock }, CARD_LIMITS)
     : null;
   if (cards) cardLanes.push(cards);
+  const bridge = bridgeMaker
+    ? new QueryBridge({ maker: bridgeMaker, budget: new Budget(UNCAPPED), now: () => clock })
+    : null;
+  if (bridge) bridgeLanes.push(bridge);
   const partner = new ContextPartner({
     sources: async () => sources,
     sourceMap: new SourceMap(":memory:", { seed }),
     cache,
     budget: new Budget(),
-    model: LIVE ? metered(new OpenRouterModel({ apiKey: KEY!, model: MODEL })) : null,
+    model: LIVE ? metered(labModel(ACCESS, { apiKey: KEY!, model: MODEL })) : null,
     planner: new QueryPlanner({ seed }),
     now: () => clock,
     config: TIME > 0 ? { sourceTimeoutMs: 1_500 * TIME, ...CONFIG } : CONFIG,
     onTrace: timeline ? timeline.traceSink(lane, countCalls) : countCalls,
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
+    ...(bridge ? { bridge } : {}),
     ...(onCandidates ? { onCandidates } : {}),
     ...(rankModel ? { rankModel } : {}),
   });
@@ -421,7 +453,8 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     const c0 = cpuNow();
     const traced = timeline?.task(lane, sessionId, `${lane}/${task.template}`);
     const at = clock;
-    await partner.observe({ ...scope, sessionId, at, kind: "session_start" } as AgentEvent);
+    const opened = await partner.observe({ ...scope, sessionId, at, kind: "session_start" } as AgentEvent);
+    const digest = opened.injection?.reason === "digest" ? opened.injection : null;
     if (LEAD) {
       const text = draftOf(task.text, LEAD);
       await partner.observe({ ...scope, sessionId, at, kind: "user_message", text, draft: true } as AgentEvent);
@@ -501,6 +534,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       const extra = {
         detail: task.detail,
         plantedText: `${planted[i]!.title} ${planted[i]!.text}`,
+        ...(digest ? { digest: digest.text, digestIds: digest.citations.map((c) => c.itemId) } : {}),
         ...(answered ? { answer: answered.answer, answerIds: answered.citations.map((c) => c.itemId) } : {}),
       };
       appendFileSync(PACKETS, JSON.stringify({ ...line, ...extra }) + "\n");
@@ -534,6 +568,12 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
             askItems: answered!.citations.length,
             askMs: Number(askMs.toFixed(2)),
           }),
+      ...(CONFIG.constraintDigest
+        ? {
+            digestCited: digest?.citations.some((c) => c.itemId === id) ?? false,
+            digestBytes: digest ? Buffer.byteLength(digest.text) : 0,
+          }
+        : {}),
       why,
       injected: got.length,
       packetBytes: [...injections, ...pendingSeen].reduce((n, x) => n + Buffer.byteLength(x.text), 0),
@@ -626,6 +666,14 @@ if (cardMaker) {
   console.log(`cards: ${cardMaker.hits} replayed, ${cardMaker.misses} uncovered (no cached card)`);
   console.log(`cards use: ${JSON.stringify(cardUse)}`);
 }
+if (bridgeMaker) {
+  const use: Record<string, number> = {};
+  for (const b of bridgeLanes) for (const [k, v] of Object.entries(b.stats)) use[k] = (use[k] ?? 0) + v;
+  console.log(
+    `bridge: ${bridgeMaker.hits} replayed, ${bridgeMaker.misses} uncovered; per user ${JSON.stringify(use)} ` +
+      `(${bridgeLanes.length} users; calls = what production would send)`,
+  );
+}
 if (LIVE) {
   const tasks = Math.max(1, grand.hidden.n + grand.control.n);
   console.log(
@@ -634,8 +682,12 @@ if (LIVE) {
       `${(usage.outputTokens / Math.max(1, usage.calls)).toFixed(0)} out tokens per call, ` +
       `$${usage.costUsd.toFixed(4)} ($${((1000 * usage.costUsd) / tasks).toFixed(4)} per 1k tasks)`,
   );
+  const r = ACCESS.pacer.summary();
+  console.log(`judge requests: ${r.sent} sent, ${r.retried} retried, ${r.refused} refused at the cap`);
+  if (r.refused) console.log("PARTIAL: the request cap refused judge calls; those tasks ran with no judge");
 }
-if (!args.includes("--no-record")) {
+// A run the cap cut short is not this configuration's result: it stays out of the ledger.
+if (!args.includes("--no-record") && ACCESS.pacer.refused === 0) {
   for (const { suite, rows, perTask, wall, total: t } of runs) {
     const n = (k: keyof Row, v: "hidden" | "control") => t[v][k] / Math.max(1, t[v].n);
     const metrics: Record<string, number> = {

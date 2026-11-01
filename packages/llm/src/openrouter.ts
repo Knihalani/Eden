@@ -6,6 +6,9 @@
  * Both narrow which providers may serve the call; a call no compliant provider can serve fails rather than falling
  * back to one that retains data. Verify both fields against OpenRouter's current provider-routing docs before
  * launch: this file was written without a live check (see docs/PRIVACY.md).
+ *
+ * `allowLogging` lifts both, for the lab's runs on free models only (free endpoints log prompts and none is ZDR;
+ * docs/research/edge-freelab.md). Nothing reads it from the environment: `fromEnv`, and so the server, never sets it.
  */
 import { costOf, priceFor } from "./pricing";
 import type { ChatRequest, ChatResponse, Model } from "./types";
@@ -24,6 +27,11 @@ export interface OpenRouterOptions {
    * on (card enrichment; docs/research/econ-background.md). It still honours `zdr` and `data_collection`.
    */
   sort?: "price" | "throughput" | "latency";
+  /**
+   * LAB ONLY: route to endpoints that may log or retain prompts (`data_collection: "allow"`, no ZDR), which free
+   * models need. Never set it where real user data flows; the server has no way to.
+   */
+  allowLogging?: boolean;
 }
 
 export class OpenRouterModel implements Model {
@@ -56,8 +64,8 @@ export class OpenRouterModel implements Model {
       // The reasoning itself is never read: excluding it keeps it off the wire (it is still billed as output).
       ...(request.reasoning ? { reasoning: { effort: request.reasoning, exclude: true } } : {}),
       provider: {
-        data_collection: "deny",
-        zdr: this.options.zdr ?? true,
+        data_collection: this.options.allowLogging ? "allow" : "deny",
+        zdr: this.options.allowLogging ? false : (this.options.zdr ?? true),
         allow_fallbacks: true,
         ...(this.options.sort ? { sort: this.options.sort } : {}),
       },

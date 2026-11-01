@@ -170,6 +170,8 @@ describe("no input makes the gate super-linear", () => {
     ["curl-auth-user", "curl "],
     ["curl-auth-header", "curl="],
     ["eden-url-userinfo", "a-"],
+    // Every token a candidate (40 base64 characters, mixed case, an anchor beside it): one pass each (D86).
+    ["eden-aws-secret", `secret ${"aB3dE5gH7jK9mN2pQ4sT"}+${"6vW8yZaB3dE5gH7jK9m"} `],
   ];
   for (const [rule, unit] of attacks) {
     test(`128 KB built against ${rule}`, () => {

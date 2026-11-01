@@ -20,6 +20,27 @@ interface Line {
   c: Card | null;
 }
 
+/**
+ * The requests of `cards-enrich.ts --intent` (`intent-v<N>.jsonl`, lines `{h, r, c}`): an item's hash → the requests
+ * it would change (D87, docs/research/edge-intent.md). Several files merge, the later winning.
+ */
+export function loadRequests(...files: string[]): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const file of files) {
+    if (!existsSync(file)) continue;
+    for (const line of readFileSync(file, "utf8").split("\n")) {
+      if (!line.trim()) continue;
+      const l = JSON.parse(line) as { h: string; r?: unknown };
+      if (Array.isArray(l.r))
+        out.set(
+          l.h,
+          l.r.filter((x): x is string => typeof x === "string"),
+        );
+    }
+  }
+  return out;
+}
+
 export function loadCards(file: string): Map<string, Card | null> {
   const out = new Map<string, Card | null>();
   if (!existsSync(file)) return out;
@@ -46,6 +67,8 @@ export function samePath(a: string, b: string): boolean {
   return real(a) === real(b);
 }
 
+const NONE: Card = { kind: "none", actions: [], entities: [], statement: "" };
+
 /** Cards a live call is making now, by hash (undefined when the call failed or the model gave none back). */
 type Inflight = Map<string, Promise<Card | undefined>>;
 
@@ -60,24 +83,46 @@ export class DiskCardMaker implements CardMaker {
   misses = 0;
 
   private readonly out: string;
+  /**
+   * Replayed requests (`intent`, D87), by hash: a call that asks for them (`make`'s `intent`) gets each item's from
+   * here (null when none was made). A live miss's requests are kept here too, in memory only.
+   */
+  readonly requests: Map<string, string[]>;
 
   /**
    * `options.out`: where new cards go (its cards are replayed too); default the cache file itself.
    * `options.shared`: another maker of the same files, whose cards and calls in flight this one shares, so several
-   * makers read the files once and see each other's new cards (pi-ab's streams).
+   * makers read the files once and see each other's new cards (pi-ab's streams), and its replayed requests.
+   * `options.requests`: requests files (`loadRequests`) replayed when a call asks for requests. An item with requests
+   * but no replayed card is given a none card, so the cards a run matches are exactly the card files' (the requests'
+   * files may hold cards of their own, from another model: they are not read here).
    */
   constructor(
     file: string,
     private readonly live?: CardMaker,
-    options: { out?: string; shared?: { cards: Map<string, Card | null>; inflight: Inflight } } = {},
+    options: {
+      out?: string;
+      shared?: { cards: Map<string, Card | null>; inflight: Inflight; requests?: Map<string, string[]> };
+      requests?: string[];
+    } = {},
   ) {
     this.out = options.out ?? file;
     this.cards = options.shared?.cards ?? loadCards(file);
     this.inflight = options.shared?.inflight ?? new Map();
+    this.requests = options.shared?.requests ?? loadRequests(...(options.requests ?? []));
     if (!options.shared && options.out) for (const [h, c] of loadCards(options.out)) this.cards.set(h, c);
   }
 
-  async make(items: ContextItem[], today: string, signal: AbortSignal, retry = false) {
+  async make(items: ContextItem[], today: string, signal: AbortSignal, retry = false, intent = false) {
+    const got = await this.makeCards(items, today, signal, retry, intent);
+    if (!intent) return got;
+    const requests = items.map((it) => this.requests.get(cardKey(it)) ?? null);
+    // Requests with no card: the item is covered, with no constraint (as a card file's uncovered item matches none).
+    const cards = got.cards.map((c, i) => c ?? (requests[i] ? NONE : null));
+    return { ...got, cards, requests };
+  }
+
+  private async makeCards(items: ContextItem[], today: string, signal: AbortSignal, retry: boolean, intent: boolean) {
     const out: (Card | null)[] = [];
     const missing: number[] = [];
     // Items whose card a call (this one's, or another stream's) is making: filled in when it settles.
@@ -114,10 +159,13 @@ export class DiskCardMaker implements CardMaker {
           today,
           signal,
           retry,
+          intent,
         );
         costUsd = got.costUsd;
         truncated = got.truncated === true;
         missing.forEach((i, k) => {
+          const r = got.requests?.[k];
+          if (r) this.requests.set(cardKey(items[i]!), r);
           const c = got.cards[k];
           if (c === undefined || c === null) return;
           const h = cardKey(items[i]!);
