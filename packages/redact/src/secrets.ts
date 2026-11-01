@@ -15,6 +15,9 @@
  * - (a′) provider shapes gitleaks lacks or gates on context: `cfat_` tokens (R9 §R5.2, R3 E12); OpenAI project
  *   keys without the `T3BlbkFJ` marker; Mailgun `key-` and Telegram bot tokens without the provider's name nearby;
  *   AWS key ids below gitleaks' entropy floor. Each makes the gate stricter, never looser;
+ * - (a″) an AWS secret access key (40 base64 characters, not pure hex, mixed case, high entropy, not a path) within
+ *   40 characters of an `AKIA`/`ASIA` key id, of a `[REDACTED]` sentinel (a key id an earlier pass replaced), or
+ *   of the word "secret" (D86);
  * - (b) D13's keyword rule, whatever the value's entropy, with `is` read as a word ("secrets in this" assigns
  *   nothing) and an already redacted value left alone;
  * - (c) URL userinfo, `scheme://user:pass@`;
@@ -116,6 +119,34 @@ const PROVIDER_SHAPES: [string, RegExp][] = [
 const ENTROPY_TOKEN = /\S{32,}/g;
 /** How far from a long token rule (d) looks for a secret keyword. */
 const KEYWORD_REACH = 40;
+/**
+ * (a″) An AWS secret access key: 40 characters of base64's alphabet, unpadded. Alone the shape is too common to
+ * redact (a SHA-1, a long name), so it needs an anchor within KEYWORD_REACH: its key id (`AKIA`/`ASIA`), a key id an
+ * earlier pass already replaced by `[REDACTED]`, or the word "secret". Rule (d) missed it beside a bare key id (no
+ * keyword) and whenever it holds `/` (as most real ones do); the sim world's "AWS access" mail leaked it so.
+ *
+ * Runs of the alphabet are found by one walk over the text's char codes (`BASE64_CHAR`), and only a run of exactly 40
+ * is sliced, so a token inside a longer run never qualifies. A regex was slower on the texts that reach the rule:
+ * `matchAll` over every run allocated a match per word (doubling the gate's cost there), and `{40,}` retried up to 40
+ * steps at each position (~8.6 µs a 2 KB text; docs/research/edge-secret.md).
+ */
+const BASE64_CHAR = new Uint8Array(128);
+for (const char of "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/+") {
+  BASE64_CHAR[char.charCodeAt(0)] = 1;
+}
+const AWS_SECRET_LENGTH = 40;
+const AWS_SECRET_ANCHOR = /(?:AKIA|ASIA)[0-9A-Z]{16}|\[REDACTED\]|[Ss][Ee][Cc][Rr][Ee][Tt]/;
+const HEX = /^[0-9A-Fa-f]+$/;
+/**
+ * A random 40-character base64 string has Shannon entropy ≥ 4.04 bits a character in 10^6 draws (median 4.78); a
+ * 40-character path or CamelCase name sits near 3.8–4.0. Measured for docs/research/edge-secret.md.
+ */
+const AWS_SECRET_ENTROPY = 4.0;
+/**
+ * A path segment: a word, CamelCase words, then digits. Written without nested ambiguous repeats (each group opens
+ * on a capital), so it cannot backtrack. A random key with two slashes whose every segment is so: about 5 in 10^5.
+ */
+const PATH_SEGMENT = /^(?:[A-Za-z][a-z]*(?:[A-Z][a-z]*)*[0-9]*)?$/;
 
 /** The POSIX classes the vendored rules use, as JavaScript class contents; any other throws. */
 const POSIX: Record<string, string> = { alnum: "a-zA-Z0-9" };
@@ -435,6 +466,44 @@ function entropyWithKeyword(text: string): Span[] {
   return out;
 }
 
+/** Whether a token reads as a file path: two or more slashes, no `+`, and every segment a word (PATH_SEGMENT). */
+function isPath(token: string): boolean {
+  if (token.includes("+")) return false;
+  const segments = token.split("/");
+  return segments.length >= 3 && segments.every((segment) => PATH_SEGMENT.test(segment));
+}
+
+/**
+ * (a″) AWS secret access keys beside an anchor. Pure hex (git SHAs, SHA-1 digests) never qualifies; the token must
+ * mix upper and lower case (a random one fails that about once in 10^9) and clear AWS_SECRET_ENTROPY.
+ */
+function awsSecret(text: string): Span[] {
+  const out: Span[] = [];
+  const length = text.length;
+  const inAlphabet = (at: number) => {
+    const code = text.charCodeAt(at);
+    return code < 128 && BASE64_CHAR[code] === 1;
+  };
+  let at = 0;
+  while (at < length) {
+    if (!inAlphabet(at)) {
+      at++;
+      continue;
+    }
+    const start = at;
+    while (at < length && inAlphabet(at)) at++;
+    const end = at;
+    if (end - start !== AWS_SECRET_LENGTH) continue;
+    const token = text.slice(start, end);
+    if (HEX.test(token) || !/[A-Z]/.test(token) || !/[a-z]/.test(token)) continue;
+    if (shannon(token) < AWS_SECRET_ENTROPY || isPath(token)) continue;
+    const before = text.slice(Math.max(0, start - KEYWORD_REACH), start);
+    const after = text.slice(end, end + KEYWORD_REACH);
+    if (AWS_SECRET_ANCHOR.test(before) || AWS_SECRET_ANCHOR.test(after)) out.push([start, end]);
+  }
+  return out;
+}
+
 /** Every match of a global regex: group 1 when the regex has one, else the whole match. */
 function matchSpans(regex: RegExp, text: string): Span[] {
   return [...text.matchAll(regex)].map((found) => found.indices?.[1] ?? [found.index, found.index + found[0].length]);
@@ -523,6 +592,8 @@ export function rulesWith(choice: EngineChoice): SecretRule[] {
     plain("eden-keyword", SECRET_WORDS, (text) => matchSpans(KEYWORD_RULE, text)),
     plain("eden-url-userinfo", ["://"], (text) => matchSpans(URL_USERINFO, text)),
     plain("eden-entropy-keyword", SECRET_WORDS, entropyWithKeyword),
+    // Every anchor holds one of these literals ("[redacted]" folded, as the matcher folds case).
+    plain("eden-aws-secret", ["akia", "asia", "[redacted]", "secret"], awsSecret),
     plain("eden-legacy-keyword", ["passw", "passphrase", "api"], (text) => matchSpans(LEGACY_KEYWORD, text)),
     plain("eden-legacy-token", ["sk-", "ghp_", "gho_", "github_pat_", "akia"], (text) =>
       matchSpans(LEGACY_TOKEN, text),
