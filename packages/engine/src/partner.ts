@@ -1142,7 +1142,16 @@ export class ContextPartner {
     // is cached, fused in; with `supersede`, the request's finds are read against the question's pool too.
     if (context) {
       let fused = this.fuseAsk({ order, hits }, this.askOrder(s, context), limit * 2);
-      if (this.config.supersede) fused = this.latest(cue, fused, true);
+      if (this.config.supersede) {
+        fused = this.latest(cue, fused, true);
+        // What only the request found is read as the request reads it: a narrow question keeps a settled item it
+        // asked about (it is the answer), but a settled twin the request's words pulled in is not what was asked.
+        const own = new Set(order);
+        if (fused.some((x) => !own.has(x))) {
+          const kept = new Set(this.latest(context, fused, true));
+          fused = fused.filter((x) => own.has(x) || kept.has(x));
+        }
+      }
       chosen = fused.slice(0, Math.min(limit, this.config.askContextItems));
     }
     // `askCompact` with `densePacket`: an echo of an occurrence the answer already shows (the invitation beside its
