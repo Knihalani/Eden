@@ -373,13 +373,13 @@ export interface EngineConfig {
   /**
    * An ask's answer is the rule paths' pool (verdict hits, grounded items, the lexically likely) in a learned no-model
    * ranker's order (`rank.ts`), and the ranker's best candidate outside the pool takes the weakest seat when it
-   * outscores it by more than `askRankMargin` (D81, docs/research/smart-rank.md). Same item limit. Off by default.
+   * outscores it by more than `askRankMargin` (D82, docs/research/smart-rank.md). Same item limit. Off by default.
    */
   askRank: boolean;
   askRankMargin: number;
   /**
    * The learned ranker breaks ties at a proactive cut: where a rule path keeps the best few of equally scored items,
-   * the ranker says which (D81). It never adds an item nor lowers a gate. Off by default, and rejected: inert on the
+   * the ranker says which (D82). It never adds an item nor lowers a gate. Off by default, and rejected: inert on the
    * funnel at +5% engine CPU per lookup (docs/research/smart-rank.md).
    */
   rankTies: boolean;
@@ -464,6 +464,22 @@ export interface EngineConfig {
    * later one written: a hold lifted in the newest reply clears, a hold re-imposed after a quoted "lifted" stands.
    */
   supersedeThreads: boolean;
+  /**
+   * `ask` reads the conversation it is asked in (docs/research/smart-askctx.md): an agent's question is often narrower
+   * or worded otherwise than the user's request ("Globex discount approval?"), so the answer's candidates are ranked
+   * for the question and for the session's latest user request (its names and days), and fused question first by
+   * weighted reciprocal rank (`askContextWeight`), a verdict hit of either first. No source call and no model call:
+   * the request was looked up when it arrived, and its ranking is over what is cached. An ask whose question holds
+   * every word of the request is answered as without the flag. Off: an answer is ranked for the question alone.
+   */
+  askContext: boolean;
+  /** The request's weight in `askContext`'s fusion, against the question's 1 (equal: the question leads ties). */
+  askContextWeight: number;
+  /**
+   * The most items a fused `askContext` answer holds (the ask's own `maxItems` caps it too): fusion fills slots a
+   * narrow question leaves empty, and four keeps an answer's bytes at or under the question's own.
+   */
+  askContextItems: number;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -593,4 +609,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   compactParts: false,
   supersede: false,
   supersedeThreads: false,
+  askContext: false,
+  askContextWeight: 1,
+  askContextItems: 4,
 };
