@@ -17,6 +17,7 @@ import { plantHeldout7 } from "./hidden-heldout7";
 import { plantHeldout8 } from "./hidden-heldout8";
 import { plantHeldout9 } from "./hidden-heldout9";
 import { plantHeldout10 } from "./hidden-heldout10";
+import { plantHeldout11 } from "./hidden-heldout11";
 
 export type { HiddenTask };
 export type Variant = "hidden" | "control";
@@ -44,6 +45,8 @@ export const SUITES: Record<string, Plant> = {
   dev6b: plantDev6b,
   // Blind, written after D79 by an author who saw no other suite; measurement only.
   heldout10: plantHeldout10,
+  // blind, written after D80; measurement only
+  heldout11: plantHeldout11,
 };
 export const SUITE_NAMES = Object.keys(SUITES);
 const HELDOUT_ALL = ["heldout", "heldout2", "heldout3", "heldout4"];
@@ -51,7 +54,7 @@ const HELDOUT_ALL = ["heldout", "heldout2", "heldout3", "heldout4"];
  * Blind suites that have never been run: left out of `all`, so a tuning command with `--suite all` cannot spend them;
  * the blind run names them. A suite leaves this list once its blind run is recorded.
  */
-export const UNRUN_BLIND = ["heldout9", "heldout10"];
+export const UNRUN_BLIND = ["heldout9", "heldout10", "heldout11"];
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n));
 
 /**
