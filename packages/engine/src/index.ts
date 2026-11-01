@@ -1,5 +1,7 @@
 export { ContextPartner, type CandidateDump, type CandidateSink, type PartnerDeps } from "./partner";
 export { FACT_NAMES, vectorOf, type Facts } from "./decide";
+export { RANK_MODEL, rankAnswer, rankScore, type RankModel } from "./rank";
+export { factsFingerprint } from "./facts-fingerprint";
 export { DEFAULT_CONFIG, type EngineConfig } from "./config";
 export { ItemCache, sanitizeItem, type CacheHit, type CacheLimits } from "./cache";
 export { SyncManager, type SourceChange, type SyncOptions, type SyncStats } from "./sync";

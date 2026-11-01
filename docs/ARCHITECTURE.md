@@ -246,6 +246,25 @@ and no extra source call. With `askDedup` (D77, off by default) each session kee
 packets and answers showed the agent, per item id and version (at most 64 items, never shared across sessions or
 users), so a later answer says an unchanged item by its new parts only, or "(shown above)"; an item whose words
 changed at its source counts as not shown.
+With `askRank` (D82, off by default) the answer's pool (the verdict hits, the grounded items, the lexically likely) is
+ordered by a learned no-model ranker (`rank.ts`): a linear score over the facts `decide.ts` already computes for each
+candidate, with weights fitted offline (`rank-fit.ts`, pairwise logistic, leave-one-suite-out) and shipped as
+`rank-weights.json`. The ranker's best candidate outside the pool may take the weakest seat by a margin; the answer
+never grows. `rankTies` (D82, off by default) lets the same ranker say which of equally scored items a proactive cut
+keeps (the sure items, the conflict ground's hits, the person ground's pick); it never adds an item or lowers a gate.
+Neither holds state.
+With `supersede` (D81, off by default) candidates are grouped by matter (subject without "Re:"/"Fwd:" per source, or a
+title identifier) and an item is dropped from answers and multi-item packets when a newer item of its group is decisive
+(conflict or clear) and speaks to the same constraint (their statements share a word beyond the request's names); a
+packet left with only the clearance of a block is not sent; an ask that is not a question also leaves out an item
+whose latest state is settled. With
+`askContext` (D83, off by default) the session keeps its latest request's cue, and an ask worded otherwise is ranked
+for both its question and that request (weighted reciprocal-rank fusion over what is cached; at most
+`askContextItems`; the request's order is kept on the session while the request, the user's cache revision and the
+minute stand). Together (ALL4, D84) an ask runs in this order: the pool is built; `supersede` filters it; `askRank`
+orders it and may seat one outsider (dropped again if `supersede` would drop it); `askContext` fuses the request's
+order; and `supersede` reads the fused answer, judging what only the request found as the request would (a settled twin
+the request's words pulled in is not what a narrow question asked).
 
 ## Learning loop
 
