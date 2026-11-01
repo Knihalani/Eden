@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { packetLine, PACKETS_CHARS, UptakeLog, uptakeWay } from "./uptake";
+import { packetLine, PACKETS_CHARS, QUESTION_CHARS, UptakeLog, uptakeWay } from "./uptake";
 
 const cites = (...ids: string[]) => ids.map((itemId) => ({ itemId }));
 
@@ -12,6 +12,19 @@ describe("uptake recording", () => {
     log.answer({ citations: cites("c", "a") });
     expect(log.packets).toEqual(["p1", "p2"]);
     expect(log.fields()).toEqual({ packets: "p1\np2", cited: ["a", "b", "d"], askCited: ["c", "a"] });
+  });
+
+  test("an ask recorded with its question keeps the question, its cited ids and the answer's bytes", () => {
+    const log = new UptakeLog();
+    log.answer({ citations: cites("c"), answer: "héllo" }, "Is Sam around on Friday?");
+    log.answer({ citations: cites("a") });
+    log.answer({ citations: [], answer: "" }, "q".repeat(QUESTION_CHARS + 10));
+    const f = log.fields();
+    expect(f.askCited).toEqual(["c", "a"]);
+    expect(f.asks).toEqual([
+      { question: "Is Sam around on Friday?", cited: ["c"], bytes: 6 },
+      { question: "q".repeat(QUESTION_CHARS), cited: [], bytes: 0 },
+    ]);
   });
 
   test("a firewall finding counts its ids with the packets' but places no packet", () => {
