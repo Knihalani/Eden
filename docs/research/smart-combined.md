@@ -205,3 +205,42 @@ done
   - wall time p50 and billed agent cost per task: within +5%.
 
   If ALL4 fails the bar only on false concerns, `askContext` stays off (D84).
+
+## Results of the live A/B (appended after the run; the pre-registration above is unchanged)
+
+Run 2026-11-01. Ledger label `smart-h11`. Live spend $0.71. 12 seeds, 1,523 runs, 0 errors, 1 ungraded. A few runs
+were refused by the per-seed spend cap.
+
+| Condition | Hidden raised (n) | False concern (n) | Billed agent $/1k (hidden / control) | Input tokens (hidden) | Wall p50 (hidden) |
+|---|---|---|---|---|---|
+| ALL3 | 0.588 (382) | 0.016 (384) | 0.273 / 0.294 | 1,450 | 5.56 s |
+| ALL4 | 0.564 (376) | 0.018 (381) | 0.253 / 0.269 | 1,361 | 5.57 s |
+
+Paired ALL4 − ALL3:
+
+| Measure | Hidden tasks (n = 373) | Control tasks (n = 381) |
+|---|---|---|
+| Raised (hidden) / false concern (control) | −0.019 (−0.054..+0.019) | +0.003 (−0.013..+0.018) |
+| Billed agent $/1k | −0.020 (−0.032..−0.009) | −0.024 (−0.040..−0.008) |
+| Wall time | +0.04 s (−0.35..+0.44) | −0.20 s (−0.69..+0.29) |
+
+- Clustering the bootstrap by template gives a hidden interval of −0.065..+0.034.
+- Uptake (packet / ask only / neither): ALL3 102 / 135 / 144, ALL4 99 / 129 / 148.
+- When the planted item reached the agent it was raised 0.88 (packet) and 0.97–0.99 (ask). 38% of hidden facts
+  (144–148 of 382) never reached the agent under either configuration.
+
+**Against the bar:**
+- The lower bound of the hidden difference is −0.054, below −0.03: **fails**.
+- False concerns +0.003: passes.
+- Cost −7% (hidden) and −8% (control): passes.
+- Wall time: passes.
+
+**ALL4 is not adopted. ALL3 stays the recommended experimental configuration (D85).** `supersede`, `askRank` and
+`askContext` stay in the code, off by default.
+
+What this round shows:
+- The ranking and precision mechanisms make the agent's input about 6% smaller and its cost about 7–8% lower.
+- They do not raise facts found live.
+- The binding limit is retrieval. In the lab, about three in four missed facts are never among Eden's candidates
+  although they are synced (requests that share no words with the item). On held-out 11, 38% of hidden facts never
+  reached the agent. Ranking, supersession and ask context cannot reach those.
