@@ -186,4 +186,30 @@ describe("compactAsk and askDedup through the engine", () => {
     expect(second.answer).toContain(SHOWN);
     expect(second.citations).toEqual(first.citations);
   });
+
+  test("askDedup: an item changed at its source under the same id is not shown, though its words are", async () => {
+    // Only a stopword changes ("need" to "do not need"): every content word was shown, the fact is new. The items
+    // are in the cache (as a sync puts them) and no source is asked.
+    const cache = new ItemCache();
+    cache.put(scope, [short], at);
+    const p = new ContextPartner({
+      sources: async () => [],
+      sourceMap: new SourceMap(),
+      cache,
+      budget: new Budget(),
+      model: null,
+      now: () => at,
+      config: { compactAsk: true, askDedup: true },
+    });
+    const first = await p.ask({ ...scope, sessionId: "v", question: po });
+    expect(first.answer).toContain("CFO sign-off");
+    // A sync brings the new version under the same id.
+    cache.put(scope, [{ ...short, text: short.text.replace("need two quotes", "do not need two quotes") }], at);
+    const second = await p.ask({ ...scope, sessionId: "v", question: po });
+    expect(second.citations.map((c) => c.itemId)).toEqual(["drive:p1"]);
+    expect(second.answer).not.toContain(SHOWN);
+    expect(second.answer).toContain("do not need");
+    // Asked again, the new version was shown.
+    expect((await p.ask({ ...scope, sessionId: "v", question: po })).answer).toContain(SHOWN);
+  });
 });

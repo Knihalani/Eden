@@ -214,7 +214,8 @@ interface Session {
   checked?: Set<string>;
   /**
    * With `askDedup`: the words each item's line showed the agent in this session's packets and answers (lowercase),
-   * by item id, at most `MAX_SHOWN` items (oldest dropped first), so an answer does not repeat them.
+   * by item id and version (`shownKey`: an item changed at its source under the same id counts as not shown), at
+   * most `MAX_SHOWN` items (oldest dropped first), so an answer does not repeat them.
    */
   shown?: Map<string, Set<string>>;
 }
@@ -3865,7 +3866,7 @@ export class ContextPartner {
   private answering(s: Session, cue: Cue): Parameters<typeof renderPacket>[1] {
     const shown = this.config.askDedup ? s.shown : undefined;
     const after = {
-      ...(shown ? { shownBefore: (item: ContextItem) => shown.get(item.id) } : {}),
+      ...(shown ? { shownBefore: (item: ContextItem) => shown.get(shownKey(item)) } : {}),
       ...(this.config.compactParts ? { split: true } : {}),
     };
     // `askCompact` (docs/research/gen-ask.md), the alternative to `compactAsk` (docs/research/gen-combined.md says
@@ -3899,7 +3900,7 @@ export class ContextPartner {
           }
         : {}),
       ...(this.config.packetDates ? { when: true } : {}),
-      ...(shown ? { shownBefore: (item: ContextItem) => shown.get(item.id) } : {}),
+      ...(shown ? { shownBefore: (item: ContextItem) => shown.get(shownKey(item)) } : {}),
       ...(this.config.compactParts ? { split: true } : {}),
     };
   }
@@ -3916,10 +3917,11 @@ export class ContextPartner {
     for (const [k, line] of lines.entries()) {
       const item = items[k];
       if (!item || !line.startsWith(`- [${item.sourceId}] `)) break;
-      const words = shown.get(item.id) ?? new Set<string>([year]);
+      const key = shownKey(item);
+      const words = shown.get(key) ?? new Set<string>([year]);
       for (const w of line.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []) words.add(w);
-      shown.delete(item.id); // re-inserted last: the most recently shown is dropped last
-      shown.set(item.id, words);
+      shown.delete(key); // re-inserted last: the most recently shown is dropped last
+      shown.set(key, words);
     }
     while (shown.size > MAX_SHOWN) shown.delete(shown.keys().next().value!);
   }
@@ -4122,6 +4124,14 @@ function pendingOf(s: Session): boolean {
 /** An item's words as the ledger records them (`Ledger.revised`): a copy edited at its source hashes otherwise. */
 function versionOf(item: ContextItem): number {
   return hashString(`${item.title}\n${item.text}`, 0);
+}
+
+/**
+ * An item's key in `Session.shown`: its id and its words' version. A sync that changes an item's words ("approved"
+ * to "not approved", two rows swapped) makes it a new item to the agent, which a bag of shown words cannot see.
+ */
+function shownKey(item: ContextItem): string {
+  return `${item.id}\u0000${versionOf(item)}`;
 }
 
 /** A model call's span attributes: tokens, cost and whether it was cut off. Counts only. */

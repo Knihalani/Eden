@@ -3,8 +3,9 @@
 Branch `gen/combined`, from `main` (`0bc877deb`) with the two development suites (`gen/dev6a`, `gen/dev6b`) and the
 three tracks whose verdict was adopt behind a flag: `gen/ask` (docs/research/gen-ask.md), `gen/proactive`
 (docs/research/gen-proactive.md) and `gen/tokens` (docs/research/gen-tokens.md). Every flag stays off by default. ALL3
-is chosen on the development suites (dev6a, dev6b) and the old in-sample suites (hidden, held-out 1–4) only. Held-out
-5–9 were neither run nor read, and no model was called ($0).
+is chosen on the development suites (dev6a, dev6b) and the old in-sample suites (hidden, held-out 1–4) only, and no
+model was called ($0). Held-out 5–9 were not run for it, but they are **contaminated** (see "What this does not
+show"): they were used in D72, and dev6a/dev6b copy some of their templates.
 
 ## Merging
 
@@ -23,8 +24,8 @@ is chosen on the development suites (dev6a, dev6b) and the old in-sample suites 
   cite those numbers.
 
 Checks on the final tree: `bun run check` green (1,090 tests). `bun run eval` with every flag off equals `main`'s
-(`0bc877deb`, run in a separate worktree this session) except latency (p50 0.392 → 0.357 ms, p95 4.06 → 3.58 ms
-on the final tree).
+(`0bc877deb`, run in a separate worktree this session) except latency, which is noise between runs: the reviewer's
+runs gave main p50 0.381 ms / p95 2.96 ms against the branch's 0.390 / 3.60 ms, so no latency change is claimed.
 
 ## Method
 
@@ -158,10 +159,40 @@ Every flag in ALL3 earns its place in the leave-one-out on the evidence allowed:
 It is proposed, not recommended. ALL stays the recommended experimental configuration (D64, D72) until a
 pre-registered live measure of ALL3 against ALL passes.
 
+## Review fixes
+
+A review of this branch (REQUEST_CHANGES) found three false fires in `conflictVocab` and a stale fact in `askDedup`;
+each is fixed with a regression test that failed before the fix (`conflict-vocab.test.ts`, `tokens.test.ts`):
+
+- **Relative dates read from the request's day.** "Back Monday" sent on 1 Oct was read as the Monday after the
+  request. "Until Sunday", "back Monday", "till the 10th" now count from when the item was written (its `Date:`
+  header, else `updatedAt`, `sentAt`); with neither known they are not read.
+- **A bare "released" lifted a block.** "The billing hotfix was released to staging" cleared a production freeze, and
+  with `quietClear` the engine stayed silent. Only a hold, freeze, block, embargo, suspension, ban or restriction
+  released lifts one now.
+- **Object-less block words fired on prose.** "My card was declined at the shop" from Priya blocked dinner with
+  Priya. "Declined", "rejected", "denied", "refused" and "impossible" now block only in a statement holding one of the
+  request's own words other than a name; "abroad" is dropped.
+- **`askDedup` could hide a changed item.** `Session.shown` was keyed by item id, so an item synced under the same id
+  whose change was a stopword or a word order ("approved" to "not approved") read "(shown above)". It is keyed by id
+  and version (a hash of title and text) now.
+
+Re-run of ALL3 after the fixes (same funnel, seeds 41–44, cards replayed, $0): dev delivered 97, askCited 122, either
+122, decoys 10 / 91; in-sample 216 / 244 / 244, decoys 17 / 148; bytes per packet 353.5 and 340.6, per ask 660.7 and
+637.6. Identical to the numbers above: none of the funnel's tasks rested on what the fixes removed.
+
 ## What this does not show
 
+- **Held-out 5–9 are contaminated.** dev6a and dev6b, written after D72 and the suites ALL3 was tuned on, hold
+  near-copies of held-out 5–9 templates: the landlord who already paid the plumber's boiler bill (`hidden-dev6b.ts`
+  and `hidden-heldout8.ts`), an expired photocard driving licence (`hidden-dev6a.ts`, `hidden-heldout9.ts`), someone
+  six months off drink (`hidden-dev6b.ts`, `hidden-heldout6.ts`), no DPA signed so no personal data
+  (`hidden-dev6a.ts`, `hidden-heldout6.ts`); `conflictVocab`'s "back to normal" appears in `hidden-heldout9.ts`. Gains
+  tuned on dev carry to held-out 5–9 by construction, and those suites were already used in D72. They cannot be the
+  blind measure of ALL3.
 - **No generalisation evidence for the facts gains.**
-  - `conflictVocab`'s dev gain is on the suites its fixes were read from.
+  - `conflictVocab`'s dev gain is in-sample: most of `BLOCKS_MORE`'s phrases are verbatim from dev6a/dev6b ("credit
+    hold", "until further notice", "in the garage", "no new spend", "Málaga").
   - `askVerdicts`' gain is in-sample, where its verdicts were studied.
   - On the other suite group each is neutral: `askVerdicts` +1 dev fact; `conflictVocab` −2 in-sample deliveries.
   - Only a blind measure says whether either generalises.
@@ -174,11 +205,16 @@ pre-registered live measure of ALL3 against ALL passes.
 - **Uncovered dev cards.** 312 of 1,294 dev sends had no replayed card under ALL3 (339 of 2,785 under ALL). Dev items
   were not enriched live, so card-dependent verdicts are under-measured on dev.
 - **No reviewer pass.** None of the three tracks, nor this combination, ran the `reviewer` subagent (no subagent tool
-  in these sessions). It should run on the merged diff before `main`.
+  in these sessions). It should run on the merged diff before `main`. A review of this branch did run (below); the
+  `reviewer` subagent itself is still required.
+- **The lab's ask dump runs with every flag off.** Whenever `onCandidates` is set (the lab hook only; no
+  integration sets it), `ask()` now computes `factsOf` and reports the ask (path `ask`) to the candidate dump, so the
+  dump receives more than on `main`. Engine behaviour is unchanged.
 
 ## Next
 
-1. The pre-registered live measure: ALL3 against ALL on the Pi harness over blind suites, reading hidden facts
+1. The pre-registered live measure: ALL3 against ALL on the Pi harness over newly written blind suites, whose authors
+   have seen neither held-out 5–9 nor dev6a/dev6b (held-out 5–9 are contaminated, above), reading hidden facts
    raised, false concerns, agent input tokens and cost.
 2. Make cards live for the blind suites first, so card-dependent verdicts are not under-measured.
 3. Mark D73–D79 accepted or rejected from that measure.

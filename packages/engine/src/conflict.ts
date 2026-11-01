@@ -109,12 +109,13 @@ const STANDING =
  * "off sick", parental leave), a hold on an account or an order to hold ("credit hold", "hold every send"), a
  * prohibition on new commitments ("no new spend", "no further orders"), a plan dropped ("scrapped", "shelved",
  * "dropped in favour of"), something not possible, a thing out of action ("in the garage", "out of service"),
- * and someone travelling ("Mum's off to Málaga").
+ * and someone travelling ("Mum's off to Málaga"). Most of these phrases were taken from the dev6a/dev6b suites the
+ * flag was measured on, so its dev gains are in-sample (D75).
  */
 const BLOCKS_MORE = new RegExp(
   `\\b(?:${[
     "until further notice|not (?:yet )?signed|unsigned|not (?:yet )?approved|unapproved|not authori[sz]ed",
-    "rejected|declined|denied|refused|revoked|revoking|barred|banned|blacklisted|struck off",
+    "revoked|revoking|barred|banned|blacklisted|struck off",
     "(?:i'm|i am|i'll be|he's|she's|they're|we're|is|are|will be) off (?:from|until|till|between|for|sick|work)",
     "off sick|maternity leave|paternity leave|on (?:maternity|paternity|sabbatical|holiday|vacation)",
     "(?:credit|account|payment|legal|spending|hiring) (?:hold|freeze)|hold (?:every|all|any|off)",
@@ -125,13 +126,28 @@ const BLOCKS_MORE = new RegExp(
     "(?:aren't|isn't|is not|are not|not) possible|impossible",
     "in the garage|in for (?:repairs?|a service|service)|off the road|out of action|out of (?:service|order)",
     "broken down|being repaired|written off",
-    "(?:'s|is|are|i'm|they're|we're) off to|flies out|flying out|abroad",
+    "(?:'s|is|are|i'm|they're|we're) off to|flies out|flying out",
   ].join("|")})\\b`,
   "gi",
 );
-/** `conflictVocab`: more ways to say a block is gone. */
-const CLEARS_MORE = /\b(?:released|back to normal|resumed|reopened|up and running|now signed)\b/gi;
-const REVERSAL_MORE = /\b(?:released|back to normal|resumed|reopened|up and running|now signed)\b/;
+/**
+ * `conflictVocab`: block words with no object of their own ("declined", "rejected", "impossible"): a card declined
+ * at the shop or a proposal rejected by the board says nothing about dinner on Friday. They block only in a
+ * statement that holds one of the request's own words other than a name ("the booking was declined").
+ */
+const BLOCKS_OBJECT = /\b(?:rejected|declined|denied|refused|impossible)\b/gi;
+/**
+ * `conflictVocab`: more ways to say a block is gone. "Released" alone is not one ("the hotfix was released to
+ * staging" lifts no freeze): only a hold, freeze or block released is.
+ */
+const LIFTED_MORE =
+  // Lookbehind: the mark is at "released", after the block's own word, so it reads as the later statement.
+  "(?<=(?:hold|freeze|block|embargo|suspension|ban|restriction)s? (?:has been |have been |was |were |is |are |now )?)" +
+  "released|" +
+  "released (?:the |its |our |their )?(?:hold|freeze|block|embargo|suspension|ban|restriction)s?|" +
+  "back to normal|resumed|reopened|up and running|now signed";
+const CLEARS_MORE = new RegExp(`\\b(?:${LIFTED_MORE})\\b`, "gi");
+const REVERSAL_MORE = new RegExp(`\\b(?:${LIFTED_MORE})\\b`);
 /**
  * `conflictVocab`: more standing constraints on what can be served or given, and security alerts ("changed from a
  * device we don't recognise"): when an alert was raised does not matter, it stands until something clears it.
@@ -353,6 +369,9 @@ export function assess(
   // A sibling reference: the item is about Q2 where the request says Q3, another invoice than the one named.
   if (twin(frame.refs, refsOf(whole, V && hasDomain(frame)))) return "clear";
   const body = whole.toLowerCase().replace(/[\u2013\u2014]/g, "-");
+  // `conflictVocab`: a relative date ("until Monday", "till the 10th") counts from when the item was written, not
+  // from the request: "back Monday" sent on 1 Oct meant 5 Oct. With no known date it is read as no date.
+  const anchor = V ? sentAt(item) : null;
   let state: Verdict = "none";
   // Whether a statement behind the current conflict is tied to the request.
   let tiedConflict = false;
@@ -394,6 +413,11 @@ export function assess(
     elsewhere = false;
   };
   const titled = tied(item.title.toLowerCase());
+  // A statement that holds one of the request's own words other than a name (`BLOCKS_OBJECT`).
+  const objectTied = (line: string) =>
+    (line.match(/[a-z][a-z0-9'-]{1,}/g) ?? [])
+      .map((w) => stem(unpossess(w)))
+      .some((w) => frame.wordTies.has(w) && !frame.nameTies.has(w));
   let before = "";
   let s = "";
   // `conflictVocab`: a table's rows are statements of their own ("| Aperture Labs | Suspended |" and "| Pied Piper |
@@ -414,7 +438,7 @@ export function assess(
     if (money === "conflict") conflict(s, true, true);
     else if (money === "clear") [state, firm] = ["clear", null];
     if (money !== "none") continue;
-    const blocked = marksOf(s, blocks, true);
+    const blocked = [...marksOf(s, blocks, true), ...(V && objectTied(s) ? marks(s, BLOCKS_OBJECT, true) : [])];
     const lastBlock = Math.max(-1, ...blocked);
     // A reaffirming word after a block or move in the sentence confirms it, so it clears only before the first.
     const firstBlock = Math.min(Number.MAX_SAFE_INTEGER, ...blocked, ...marks(s, MOVES, true));
@@ -437,13 +461,13 @@ export function assess(
     if (lastDone > lastClear) conflict(s, true);
     else if (lastClear > Math.max(lastBlock, lastMove)) {
       // A clearing statement with a date of its own ("EHIC valid to 2029") is about its own matter.
-      if (!(firm && dateVerdict(frame, s, now, false, V) !== "none")) clear(s);
+      if (!(firm && dateVerdict(frame, s, now, false, V, anchor) !== "none")) clear(s);
     } else {
-      const dated = dateVerdict(frame, s, now, lastBlock >= 0, V);
+      const dated = dateVerdict(frame, s, now, lastBlock >= 0, V, anchor);
       if (dated === "conflict") conflict(s, true);
       else if (lastMove >= 0) {
         // Moved: unless the request acts on the new day, it acts on the old one. Days after "from" are the old ones.
-        const fresh = datesOf(s.replace(/\bfrom (?:[a-z]+,? )?\d{1,2}(?:st|nd|rd|th)? [a-z]+/g, " "), now, V);
+        const fresh = datesOf(s.replace(/\bfrom (?:[a-z]+,? )?\d{1,2}(?:st|nd|rd|th)? [a-z]+/g, " "), now, V, anchor);
         // The day it moved to is the end of what is read as a span ("to Friday 30 October").
         const onNew = frame.named && fresh.spans.some((sp) => frame.days.includes(sp.to));
         if (onNew) clear(s);
@@ -538,8 +562,15 @@ function marks(s: string, re: RegExp, blocking: boolean): number[] {
  * stated day or span that misses every day the request names, is `clear` (the caller reads that as "about other
  * days", not as a clearance). `none` when the sentence states no date.
  */
-function dateVerdict(frame: Frame, s: string, now: number, blocked: boolean, vocab = false): Verdict {
-  const d = datesOf(s, now, vocab);
+function dateVerdict(
+  frame: Frame,
+  s: string,
+  now: number,
+  blocked: boolean,
+  vocab = false,
+  anchor: number | null = null,
+): Verdict {
+  const d = datesOf(s, now, vocab, anchor);
   if (d.spans.length === 0 && d.limits.length === 0) return "none";
   const late = d.limits.some((l) => frame.days.some((day) => day > l));
   const covered = d.spans.some((sp) => frame.days.some((day) => day >= sp.from && day <= sp.to));
@@ -566,8 +597,11 @@ export function datesIn(s: string, now: number): { spans: { from: string; to: st
   return datesOf(s.slice(0, MAX_TEXT).replace(/[\u2013\u2014]/g, "-"), now);
 }
 
-/** The spans and limits a sentence states (`Dates`). */
-function datesOf(s: string, now: number, vocab = false): Dates {
+/**
+ * The spans and limits a sentence states (`Dates`). With `vocab`, relative dates ("until Sunday", "till the 10th")
+ * count from `anchor`, when the item was written; with no anchor they are not read.
+ */
+function datesOf(s: string, now: number, vocab = false, anchor: number | null = null): Dates {
   const spans: { from: string; to: string }[] = [];
   const limits: string[] = [];
   // Ranges first ("6-9 nov", "26 oct to 6 nov"); their text is blanked so their end is not read again as "until".
@@ -623,8 +657,10 @@ function datesOf(s: string, now: number, vocab = false): Dates {
       else take(word, day);
     };
     for (const m of rest.matchAll(BACK_DATED)) end("back", dayOf(Number(m[1]), m[2]!, undefined, now));
-    for (const m of rest.matchAll(ORDINAL)) end(m[1]!, nextMonthDay(Number(m[2]), now));
-    for (const m of rest.matchAll(WEEKDAY_END)) end(m[1]!, nextWeekday(m[2]!, now));
+    if (anchor !== null) {
+      for (const m of rest.matchAll(ORDINAL)) end(m[1]!, nextMonthDay(Number(m[2]), anchor));
+      for (const m of rest.matchAll(WEEKDAY_END)) end(m[1]!, nextWeekday(m[2]!, anchor));
+    }
   }
   // A start with no end: from then on ("pausing headcount from 19 Oct until Q1 planning").
   if (start) spans.push({ from: start, to: "9999-12-31" });
@@ -767,6 +803,14 @@ function lastOfMonth(month: string, year: string): string | null {
 
 /** A word without its plural "s" ("releases" ties to "release"); short words as they are. */
 const stem = (w: string) => (w.length > 4 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
+
+/** When an item was written: its `Date:` header, else its `updatedAt`; null when neither is known. */
+export function sentAt(item: ContextItem): number | null {
+  const m = /^date:\s*([^\n]{0,60})$/im.exec(item.text.slice(0, 600));
+  const t = m ? Date.parse(m[1]!.replace(/,/g, "")) : NaN;
+  if (Number.isFinite(t)) return t;
+  return item.updatedAt ?? null;
+}
 
 const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
