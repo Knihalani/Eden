@@ -51,7 +51,16 @@ import { nearDuplicate, sanitizedId, sanitizeItem, type CacheHit, type ItemCache
 import { SyncManager, type SourceChange } from "./sync";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
-import { assess, frameOf, matterWords, namesRef, unmeasuredLimit, type Frame, type Verdict } from "./conflict";
+import {
+  assess,
+  constrains,
+  frameOf,
+  matterWords,
+  namesRef,
+  unmeasuredLimit,
+  type Frame,
+  type Verdict,
+} from "./conflict";
 import { cardVerdict, requestActions, type CardEnricher } from "./cards";
 import {
   accounts,
@@ -91,7 +100,17 @@ import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger } from "./ledger";
 import { rankAnswer, rankScore, type RankModel } from "./rank";
-import { citationsOf, renderAnswer, renderPacket, shownText, usageText } from "./render";
+import {
+  citationsOf,
+  guardLine,
+  renderAnswer,
+  renderPacket,
+  SHOWN,
+  shownText,
+  unbear,
+  usageText,
+  type Bearing,
+} from "./render";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -698,7 +717,7 @@ export class ContextPartner {
     cue.arrived = this.now();
     if (root) cue.span = root.id;
     // `askContext`: the request's own cue, kept so an ask reads what its frame, graph walk and verdicts already hold.
-    if (event.kind === "user_message" && this.config.askContext) s.request = cue;
+    if (event.kind === "user_message" && (this.config.askContext || this.config.askGuard)) s.request = cue;
     // The request's names are its own lookup's to probe: a later event naming them again prefetches nothing.
     if (s.ant)
       this.markAsked(
@@ -1096,6 +1115,7 @@ export class ContextPartner {
       local,
       syncCalls,
       consequence,
+      covered,
     } = await this.searchLive(s, cue, this.config.askSources);
     // `askVerdicts` (docs/research/gen-ask.md): an ask gathers what a lookup gathers (the consequence probe's finds,
     // the graph walk's, the card finds), not only what shares the question's words, and reads each with the verdicts
@@ -1183,6 +1203,11 @@ export class ContextPartner {
       }
       chosen = fused.slice(0, Math.min(limit, this.config.askContextItems));
     }
+    // `askGuard` (docs/research/edge-ask.md): an ask about an action is answered with its verdicts said. What may block
+    // leads, marked; with nothing that may block and every source searched, a line says so.
+    const guarded = this.config.askGuard && this.acting(s, cue);
+    const bearing = guarded ? this.bearings(s, cue, chosen, hits) : null;
+    if (bearing) chosen = leadBinding(chosen, bearing);
     // `askCompact` with `densePacket`: an echo of an occurrence the answer already shows (the invitation beside its
     // event) is folded out, as in a packet (`fold.ts`).
     const items = (
@@ -1197,7 +1222,18 @@ export class ContextPartner {
     ).map((x) => x.item);
     const rendering = spans?.open("render", cue.span);
     const answering = this.answering(s, cue);
-    let answer = items.length ? renderPacket(items, answering) : "Nothing in the connected sources.";
+    const blocks = bearing !== null && this.mayBlock(cue, items, bearing);
+    const lead =
+      bearing && !blocks && covered
+        ? guardLine(
+            covered,
+            cleanEntities(cue.entities).filter((e) => !e.includes("@")),
+            [...(cue.time?.days ?? [])].sort(),
+          )
+        : undefined;
+    if (bearing) answering.bearing = (shown) => this.shownBearing(cue, shown, bearing);
+    if (lead) answering.lead = lead;
+    let answer = items.length || lead ? renderPacket(items, answering) : "Nothing in the connected sources.";
     // What usage learns from the answer: the packet without the flag's additions, unless the model composed it.
     let learnt = this.config.packetDates && items.length ? usageText(items, answering) : undefined;
     if (rendering) spans!.close(rendering, { items: items.length });
@@ -1311,6 +1347,82 @@ export class ContextPartner {
       walked: ctx.walked,
       carded: ctx.carded,
     });
+  }
+
+  /**
+   * `askGuard`: whether an ask is about an action, so that what blocks it, or that nothing does, is the answer's point:
+   * the question acts or asks what could stop or change an act, or the session's latest request acts.
+   */
+  private acting(s: Session, cue: Cue): boolean {
+    // In the imperative (`isImperative`): `isAction` also takes a scheduling word anywhere ("when is lunch?").
+    const acts = (raw: string) => isImperative(raw, MORE_VERBS);
+    return acts(cue.raw) || ASKS_BLOCKERS.test(cue.raw) || (s.request !== undefined && acts(s.request.raw));
+  }
+
+  /**
+   * Each item's bearing on `cue` (`packetBearing`, `askGuard`), from the verdicts the rule paths read, no model and no
+   * call: "conflict" for a verdict hit of the ask (`hits`), a card the request's actions violate, or the conflict
+   * test's conflict; "clear" for its clearance. Bulk mail and a settled update are vetoed by the rule paths, and say
+   * nothing here either.
+   */
+  private bearings(s: Session, cue: Cue, xs: readonly Scored[], hits: readonly Scored[] = []): Map<string, Bearing> {
+    const out = new Map<string, Bearing>();
+    const hit = new Set(hits.map((x) => x.item.id));
+    const violated = this.violatedCards(
+      s,
+      cue,
+      xs.map((x) => x.item.id),
+    );
+    for (const { item } of xs) {
+      if (hit.has(item.id) || violated.has(item.id)) out.set(item.id, "conflict");
+      else if (!bulkMail(item) && !settled(item)) {
+        const v = this.verdict(item, cue);
+        if (v !== "none") out.set(item.id, v);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * `askGuard`: whether any of `items` may bear on `cue`, so that "nothing found" would be wrong: its bearing says it
+   * may block; the conflict test reads a conflict in it; or it is on, or names, a day the question names (a clash is
+   * the agent's to judge: an appointment that day has no word of a block, and is one).
+   */
+  private mayBlock(cue: Cue, items: readonly ContextItem[], bearing: ReadonlyMap<string, Bearing>): boolean {
+    const days = cue.time?.days;
+    return items.some(
+      (i) =>
+        bearing.get(i.id) === "conflict" ||
+        (days !== undefined && (days.has(startDay(i) ?? "") || daysNamed(i, cue.at).some((d) => days.has(d)))) ||
+        (!bulkMail(i) && !settled(i) && this.verdict(i, cue) === "conflict"),
+    );
+  }
+
+  /**
+   * An item's bearing as a packet or answer says it: "conflict" only when the item as shown (its compacted text,
+   * `shown`) still states a constraint (`constrains`) or still reads as a conflict, so a mark never stands on a line
+   * that says none (a sender and date with the rest cut). "clear" as read.
+   */
+  private shownBearing(cue: Cue, shown: ContextItem, bearing: ReadonlyMap<string, Bearing>): Bearing | undefined {
+    const b = bearing.get(shown.id);
+    // An item said "(shown above)" (`askDedup`) keeps its mark: the agent has its words, and the mark says it answers.
+    if (b !== "conflict" || shown.text === SHOWN) return b;
+    const said = constrains(`${shown.title}. ${shown.text}`.toLowerCase()) || this.assessed(shown, cue) === "conflict";
+    return said ? b : undefined;
+  }
+
+  /** Which of `ids` hold a card that the request's actions violate (`cardVerdict`); none without cards. */
+  private violatedCards(s: Session, cue: Cue, ids: readonly string[]): Set<string> {
+    const out = new Set<string>();
+    const enricher = this.deps.cards;
+    if (!this.config.cards || !enricher || ids.length === 0) return out;
+    const actions = requestActions(cue.raw);
+    if (actions.size === 0) return out;
+    const frame = this.frame(cue);
+    for (const [id, card] of enricher.cardsOf(s.scope, ids, cue.arrived ?? this.now())) {
+      if (cardVerdict(card, frame, actions)?.violated) out.add(id);
+    }
+    return out;
   }
 
   /**
@@ -2538,6 +2650,8 @@ export class ContextPartner {
     /** With `sync`: sources answered from the local index, and listing calls of on-demand polls (in `calls`). */
     local?: number;
     syncCalls?: number;
+    /** With `sync`: the ids of the user's sources when every one was answered from a current synced copy. */
+    covered?: string[];
   }> {
     const all = await this.deps.sources(s.scope).catch((): Source[] => []);
     if (all.length === 0 || s.closed) return { calls: 0 };
@@ -2674,6 +2788,8 @@ export class ContextPartner {
       calls: chosen.length + syncCalls,
       ...(plans ? { plans } : {}),
       ...(this.sync ? { local: local?.size ?? 0, syncCalls } : {}),
+      // Every source of the user synced and current: the cache this lookup ranks holds all they have (`askGuard`).
+      ...(local && all.every((x) => local!.has(x.id)) ? { covered: all.map((x) => x.id) } : {}),
     };
     if (s.closed) return result; // Forgotten or ended mid-search: keep nothing.
     // One shadow lookup per session at a time: shadowing must not pile up work behind a slow connector.
@@ -4335,7 +4451,12 @@ export class ContextPartner {
    * showed the agent. A line is matched to its item by its `[source]` tag; a packet cut short has fewer lines.
    */
   private noteShown(s: Session, items: readonly ContextItem[], text: string): void {
-    const lines = text.split("\n").slice(1, -1);
+    // Item lines only: `askGuard`'s line before them is the engine's, and a bearing is not the item's words.
+    const lines = text
+      .split("\n")
+      .slice(1, -1)
+      .filter((line) => line.startsWith("- ["))
+      .map(unbear);
     const shown = (s.shown ??= new Map());
     // A packet's dates leave out the current year ("9 Oct"), meaning this one: an answer saying it is no news.
     const year = String(new Date(this.now()).getUTCFullYear());
@@ -4445,7 +4566,10 @@ export class ContextPartner {
         })
       : scored;
     if (folding) spans!.close(folding, { kept: shownItems.length });
-    const items = shownItems.map((x) => x.item);
+    // `packetBearing` (docs/research/edge-ask.md): a packet reads as an answer to the request, each item's bearing said
+    // before it, what may block first.
+    const bearing = this.config.packetBearing && mode === "proactive" ? this.bearings(s, cue, shownItems) : null;
+    const items = (bearing ? leadBinding(shownItems, bearing) : shownItems).map((x) => x.item);
     const rendering = spans?.open("render", parent, { items: items.length });
     const options: Parameters<typeof renderPacket>[1] = {
       maxBytes: this.config.maxInjectionBytes,
@@ -4462,6 +4586,7 @@ export class ContextPartner {
         : {}),
       ...(this.config.packetDates ? { keepYear: true, when: true } : {}),
       ...(this.config.compactParts ? { split: true } : {}),
+      ...(bearing ? { bearing: (shown: ContextItem) => this.shownBearing(cue, shown, bearing) } : {}),
     };
     const injection: Injection = {
       ...s.scope,
@@ -4799,6 +4924,19 @@ function pairsOf(text: string, vocab: Vocab): number[] {
  */
 const BULK_CATEGORY = /^promotions?$/i;
 const BULK_TITLE = /\b(newsletter|top stories|you appeared in)\b/i;
+
+/**
+ * A question about what could stop or change an act (`askGuard`): the guided description's own words, and the usual
+ * ways to ask whether something is fine to do.
+ */
+const ASKS_BLOCKERS =
+  /\b(?:block(?:s|ed|ing|er|ers)?|constrain(?:s|t|ts)?|rules?|limits?|holds?|approvals?|policy|policies|availab(?:le|ility)|allowed|permitted|conflicts?|clash(?:es)?|freezes?|frozen|restrictions?|ok(?:ay)? to|safe to|fine to|go ahead)\b/i;
+
+/** `askGuard`: what may block leads the answer, the rest in their order. */
+function leadBinding(xs: Scored[], bearing: ReadonlyMap<string, Bearing>): Scored[] {
+  const binds = (x: Scored) => bearing.get(x.item.id) === "conflict";
+  return [...xs.filter(binds), ...xs.filter((x) => !binds(x))];
+}
 
 /**
  * Whether an item looks like bulk mail. Such items are never pushed without a model: their words overlap with real

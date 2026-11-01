@@ -42,6 +42,13 @@ export function renderPacket(
     shownBefore?: (item: ContextItem) => ReadonlySet<string> | undefined;
     /** `compactParts`: a quoted thread read past a signature, a one-line table by its rows (`messageParts`). */
     split?: boolean;
+    /**
+     * `packetBearing` and `askGuard`: an item's bearing on the request, from the engine's verdicts, said before its
+     * title in fixed words (`BEARINGS`), never in the item's own: "- [mail] May block or change this: Title: …".
+     */
+    bearing?: (item: ContextItem) => Bearing | undefined;
+    /** `askGuard`: a line of the engine's own, in fixed words, said before the items (`guardLine`). */
+    lead?: string;
   },
 ): string {
   const before = options.shownBefore;
@@ -84,12 +91,14 @@ export function renderPacket(
     });
   }
   const lines = [HEADER];
+  if (options.lead) lines.push(inert(oneLine(options.lead)));
   const footer = "</context>";
   let bytes = utf8Length(lines.join("\n")) + utf8Length(footer) + 2;
   for (const item of items) {
     const room = options.maxBytes - bytes - 1;
     if (room < 40) break;
-    const title = item.title ? `${inert(item.title)}: ` : "";
+    const bears = options.bearing?.(item);
+    const title = (bears ? BEARINGS[bears] : "") + (item.title ? `${inert(item.title)}: ` : "");
     // Collapse whitespace only in a prefix that can fill the room (a char is at least one byte once collapsed), not
     // across an 8 KB item that is then cut to a few hundred bytes (9% of end-to-end CPU; pipeline.bench.ts).
     const prefix = item.text.length > room * 2 + 64 ? item.text.slice(0, room * 2 + 64) : item.text;
@@ -117,9 +126,50 @@ export function renderPacket(
 export function shownText(rendered: string): string {
   return rendered
     .split("\n")
-    .filter((line) => line !== HEADER && line !== "</context>")
-    .map((line) => line.replace(/^- \[[^\]]*\] /, ""))
+    .filter((line) => line !== HEADER && line !== "</context>" && !line.startsWith(GUARD))
+    .map((line) => line.replace(/^- \[[^\]]*\] /, "").replace(BEARING_PREFIX, ""))
     .join("\n");
+}
+
+/** An item's bearing on the request (`packetBearing`, `askGuard`): what the engine's verdicts read in it. */
+export type Bearing = "conflict" | "clear";
+
+/**
+ * How a bearing is said, before the item's title. Fixed words: the agent reads the engine's reading of the item, and
+ * no source text reaches the packet through it. Short, since it is on every such item of every packet.
+ */
+export const BEARINGS: Record<Bearing, string> = {
+  conflict: "May block or change this: ",
+  clear: "Says this is clear: ",
+};
+const BEARING_PREFIX = /^(?:May block or change this|Says this is clear): /;
+const TAGGED_BEARING = /^(- \[[^\]]*\] )(?:May block or change this|Says this is clear): /;
+
+/** An item's packet line without its bearing (`BEARINGS`): the item's own words, after its `[source]` tag. */
+export const unbear = (line: string) => line.replace(TAGGED_BEARING, "$1");
+
+/** How `guardLine` starts; `shownText` drops the line (it is the engine's, not the user's sources'). */
+const GUARD = "Checked ";
+
+/**
+ * `askGuard`'s line, for an ask about an action whose sources were all searched (synced and current) and in whose
+ * answer no verdict reads a block: it says so, so a cautious agent has grounds to go ahead. Built from the source ids
+ * (the tenant's configuration) and the question's own names and days (the agent's words, a few, each cut short),
+ * never from an item; `renderPacket` makes it inert.
+ */
+export function guardLine(sourceIds: readonly string[], names: readonly string[], days: readonly string[]): string {
+  const ids = sourceIds.map((id) => id.replace(/[^\w.-]/g, "").slice(0, 24)).filter(Boolean);
+  const what = [...names.map((n) => oneLine(n).slice(0, 40)), ...days.map(dayName)].filter(Boolean).slice(0, 4);
+  return (
+    `${GUARD}${ids.join(", ")}: no rule, hold, limit, absence or change found` +
+    (what.length > 0 ? ` for ${what.join(", ")}.` : ".")
+  );
+}
+
+/** "2026-11-05" as "5 Nov"; anything else as it is. */
+function dayName(day: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  return m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]}` : day;
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

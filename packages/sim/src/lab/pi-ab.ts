@@ -49,6 +49,9 @@
  *     [--variant-config '{"name":{...}}'] [--act] [--cards FILE [--cards-out FILE]] [--card-sort price]
  *     [--allow-logging] [--rpm 18] [--max-requests N]
  *
+ * `--templates a,b` runs only those hidden-context templates; `--ask-description guided` gives the agent the MCP
+ * server's guided description (`askGuard`, docs/research/edge-ask.md). Free models go through `free.ts` (above).
+ *
  * --budget is a hard cap on everything this run spends (agent, Eden's judge, grader): each call reserves its
  * worst case before it is sent and is refused when that could cross the cap. --time-scale 1 gives the sim sources
  * their profiles' assumed latency (agent-ab runs them at 0, instant); the timeline then shows connector time.
@@ -103,7 +106,7 @@ const opt = (name: string, fallback: string) => {
   return i >= 0 && args[i + 1] ? args[i + 1]! : fallback;
 };
 const DRY = args.includes("--dry");
-/** `--ask-description guided`: the tenant-side tool description that asks for what could block the action. */
+/** `--ask-description guided`: the MCP server's guided description (`ASK_CONTEXT_GUIDED`, given with `askGuard`). */
 const ASK_GUIDED = opt("ask-description", "standard") === "guided";
 const KEY = process.env.OPENROUTER_API_KEY;
 if (!KEY && !DRY) throw new Error("needs OPENROUTER_API_KEY");
@@ -124,6 +127,8 @@ const TOOL_EXEC = opt("tool-exec", "parallel") as "parallel" | "sequential";
 const LIMITS = { maxTasks: Number(opt("tasks", "30")), maxOffworld: Number(opt("offworld", "5")) };
 // The first N tasks of each world only: a plumbing check before a real run.
 const LIMIT = Number(opt("limit", "0"));
+// `--templates a,b`: only the hidden-context tasks of these templates (both variants), for a small targeted smoke.
+const TEMPLATES = opt("templates", "") ? new Set(opt("templates", "").split(",")) : null;
 
 // D55's recommended experimental configuration, by name, so the documented commands stay short.
 const PRESETS: Record<string, Record<string, unknown>> = {
@@ -840,7 +845,8 @@ const worlds = SEEDS.flatMap((seed) =>
   SUITE_LIST.flatMap((suite) =>
     (LOOKUPS ? ["hidden" as const] : VARIANTS).map((variant) => {
       const w = worldOf(seed, suite, variant, LIMITS);
-      return LIMIT > 0 ? { ...w, tasks: w.tasks.slice(0, LIMIT) } : w;
+      const picked = TEMPLATES ? { ...w, tasks: w.tasks.filter((t) => TEMPLATES.has(t.type)) } : w;
+      return LIMIT > 0 ? { ...picked, tasks: picked.tasks.slice(0, LIMIT) } : picked;
     }),
   ),
 );
@@ -893,6 +899,7 @@ writeFileSync(
       requests: PACER.summary(),
       partial: capStopped > 0 || PACER.refused > 0,
       toolExecution: TOOL_EXEC,
+      ...(ASK_GUIDED ? { askDescription: "guided" } : {}),
       spend,
       timeline: TIMELINE,
       wallSeconds: Math.round((performance.now() - t0) / 100) / 10,
