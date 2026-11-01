@@ -17,7 +17,10 @@
  *
  * `--judge live` gives Eden its judge (OpenRouter, `OPENROUTER_API_KEY`): the funnel then measures what the judge lets
  * through, hidden and decoy, and its calls, tokens and spend (about $0.03 for the 456 held-out tasks), a cheap screen
- * before an agent run. Seeds run concurrently.
+ * before an agent run. Seeds run concurrently. With a free judge (`--model <id>:free --allow-logging`, lab only;
+ * `free.ts`) its calls are paced (`--rpm`, default 18) and capped (`--max-requests`); a judge call refused at the cap
+ * takes the engine's no-model path, so such a run is reported as PARTIAL and not recorded in the ledger. A judge call
+ * waits for its turn inside its own deadline (the engine's), so keep a free run small (`--serial`, one seed).
  *
  * `--timeline out.jsonl` records every engine span, each task and the process's CPU% and RSS per second
  * (`timeline.ts`); `timeline-report.ts out.jsonl` says where the time went. Spans change no decision.
@@ -65,7 +68,7 @@ import {
   type Trace,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
-import { Budget, OpenRouterModel, type Model } from "@eden/llm";
+import { Budget, type Model } from "@eden/llm";
 import type { AgentEvent, Injection } from "@eden/protocol";
 import { QueryPlanner } from "@eden/sources";
 import { draftOf, type DraftMode } from "../drafts";
@@ -73,6 +76,7 @@ import { narrowQuestion } from "../narrow";
 import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
 import { DiskCardMaker } from "./cards-disk";
+import { labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
 import { record, tidy } from "./ledger";
 import { Timeline } from "./timeline";
@@ -157,6 +161,8 @@ const TYPING_MS = Number(opt("typing-ms", "1500"));
 const KEY = process.env.OPENROUTER_API_KEY;
 if (LIVE && !KEY) throw new Error("--judge live needs OPENROUTER_API_KEY");
 const MODEL = opt("model", "z-ai/glm-5.3-flash");
+/** The judge's requests: paced, capped and retried, with the run's logging choice (free.ts). */
+const ACCESS = labAccess(args, LIVE ? [MODEL] : []);
 const TIMELINE = opt("timeline", "");
 /**
  * `--packets out.jsonl`: each task's packets as the agent would read them (text, reason, cited item ids) and the
@@ -342,7 +348,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     sourceMap: new SourceMap(":memory:", { seed }),
     cache,
     budget: new Budget(),
-    model: LIVE ? metered(new OpenRouterModel({ apiKey: KEY!, model: MODEL })) : null,
+    model: LIVE ? metered(labModel(ACCESS, { apiKey: KEY!, model: MODEL })) : null,
     planner: new QueryPlanner({ seed }),
     now: () => clock,
     config: TIME > 0 ? { sourceTimeoutMs: 1_500 * TIME, ...CONFIG } : CONFIG,
@@ -634,8 +640,12 @@ if (LIVE) {
       `${(usage.outputTokens / Math.max(1, usage.calls)).toFixed(0)} out tokens per call, ` +
       `$${usage.costUsd.toFixed(4)} ($${((1000 * usage.costUsd) / tasks).toFixed(4)} per 1k tasks)`,
   );
+  const r = ACCESS.pacer.summary();
+  console.log(`judge requests: ${r.sent} sent, ${r.retried} retried, ${r.refused} refused at the cap`);
+  if (r.refused) console.log("PARTIAL: the request cap refused judge calls; those tasks ran with no judge");
 }
-if (!args.includes("--no-record")) {
+// A run the cap cut short is not this configuration's result: it stays out of the ledger.
+if (!args.includes("--no-record") && ACCESS.pacer.refused === 0) {
   for (const { suite, rows, perTask, wall, total: t } of runs) {
     const n = (k: keyof Row, v: "hidden" | "control") => t[v][k] / Math.max(1, t[v].n);
     const metrics: Record<string, number> = {

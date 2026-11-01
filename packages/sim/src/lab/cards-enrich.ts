@@ -17,15 +17,20 @@
  * `--sort price` (OpenRouter's cheapest compliant endpoint first; a batch cut off at the output cap is sent once more
  * with default routing, as the enricher does), `--batch` items per call, `--model`. `--only N` enriches only the
  * first N items to do (a sample; the order is the items' sorted content hashes).
+ *
+ * Free models (`--model <id>:free --allow-logging`, lab only; `free.ts`): calls are paced (`--rpm`, default 18) and
+ * retried on 429/5xx, and `--max-requests N` caps the run's HTTP requests; at the cap the workers stop and the run
+ * ends with the cards it made (`stopped`, `requests` in its summary line).
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { CARD_VERSION, cardKey, ItemCache, ModelCardMaker, worthCarding, worthCardingStrict } from "@eden/engine";
-import { OpenRouterModel, type Model } from "@eden/llm";
+import { type Model } from "@eden/llm";
 import type { ContextItem } from "@eden/protocol";
 import { Rng } from "../rng";
 import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
 import { DiskCardMaker } from "./cards-disk";
+import { isCapError, labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
 import { parseSuites, SUITES } from "./suites";
 
@@ -50,6 +55,7 @@ const SPEND = opt("spend", `${DIR}/spend.jsonl`);
 const SORT = opt("sort", "") as "" | "price";
 const BATCH = Number(opt("batch", "10"));
 const ONLY = Number(opt("only", "0"));
+const ACCESS = labAccess(args, [MODEL]);
 /** `--strict`: only the items the strict prefilter (`cardsEconomy`) passes. */
 const pass = args.includes("--strict") ? worthCardingStrict : worthCarding;
 
@@ -142,7 +148,7 @@ const metered = (inner: Model, sort: string): Model => ({
   },
 });
 const routed = (sort: "" | "price") =>
-  metered(new OpenRouterModel({ apiKey: key, model: MODEL, timeoutMs: 120_000, ...(sort ? { sort } : {}) }), sort);
+  metered(labModel(ACCESS, { apiKey: key, model: MODEL, timeoutMs: 120_000, ...(sort ? { sort } : {}) }), sort);
 // A cut batch's retry goes to default routing (`CardMakerOptions.retry`), as `CardEnricher` sends it.
 const maker = new ModelCardMaker(routed(SORT), { retry: routed("") });
 const batches: [string, ContextItem][][] = [];
@@ -152,7 +158,7 @@ let failed = 0;
 let stopped = false;
 const worker = async () => {
   while (next < batches.length) {
-    if (total >= CAP) {
+    if (total >= CAP || ACCESS.pacer.exhausted) {
       stopped = true;
       return;
     }
@@ -170,6 +176,10 @@ const worker = async () => {
         if (c) disk.put(h, c.kind === "none" ? null : c);
       });
     } catch (e) {
+      if (isCapError(e)) {
+        stopped = true;
+        return;
+      }
       failed++;
       console.error(`batch failed: ${String(e).slice(0, 200)}`);
     }
@@ -193,5 +203,6 @@ console.log(
     usdPerItem: Number(((total - startSpend) / Math.max(1, todo.length)).toFixed(8)),
     covered,
     of: passed.length + sample.length,
+    requests: ACCESS.pacer.summary(),
   }),
 );

@@ -4,3 +4,4 @@ export { PRICES, priceFor, costOf, type Price } from "./pricing";
 export { Budget, DEFAULT_LIMITS, type BudgetLimits, type Reservation } from "./budget";
 export { FakeModel } from "./fake";
 export { estimateTokens } from "./tokens";
+export { Pacer, RequestCapReached, retryAfterMs, type PacingOptions } from "./pacing";
