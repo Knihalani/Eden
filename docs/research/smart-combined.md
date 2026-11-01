@@ -189,3 +189,19 @@ done
 ```
 
 `folds/` is `rank-fit.ts --folds` output (docs/research/smart-rank.md).
+
+## Pre-registration of the live A/B (written before the run)
+
+- **Suite:** held-out 11, 32 templates, never run. It was written after D80 by an author who saw no other suite, with
+  every earlier theme banned.
+- **Seeds:** 41–52.
+- **Harness:** Pi, agent `z-ai/glm-5.3-flash`, grader `deepseek/deepseek-v4.1-flash`, `--time-scale 1`,
+  `--card-sort price`.
+- **Conditions:** `eden~ALL3` and `eden~ALL4` (ALL3 plus `supersede`, `askRank`, `askContext`). Paired, in the same
+  processes. Tools are not re-run: the credit is nearly spent.
+- **Bar.** ALL4 replaces ALL3 if all of these hold:
+  - hidden raised, ALL4 − ALL3: the lower bound of the paired 95% interval is above −0.03;
+  - false concern: no more than +0.01;
+  - wall time p50 and billed agent cost per task: within +5%.
+
+  If ALL4 fails the bar only on false concerns, `askContext` stays off (D84).
