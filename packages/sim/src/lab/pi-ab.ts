@@ -66,6 +66,7 @@ import { REALISTIC, simSources, type SimSource } from "../sources";
 import type { World } from "../world";
 import {
   ASK_DESCRIPTION,
+  ASK_DESCRIPTION_GUIDED,
   emptyResult,
   grade,
   MAX_STEPS,
@@ -94,6 +95,8 @@ const opt = (name: string, fallback: string) => {
   return i >= 0 && args[i + 1] ? args[i + 1]! : fallback;
 };
 const DRY = args.includes("--dry");
+/** `--ask-description guided`: the tenant-side tool description that asks for what could block the action. */
+const ASK_GUIDED = opt("ask-description", "standard") === "guided";
 const KEY = process.env.OPENROUTER_API_KEY;
 if (!KEY && !DRY) throw new Error("needs OPENROUTER_API_KEY");
 const SEEDS = opt("seeds", "41").split(",").map(Number);
@@ -574,7 +577,7 @@ async function runWorld(
       if (useEden && !useTools && partner) {
         tools.push({
           name: "ask_context",
-          description: ASK_DESCRIPTION,
+          description: ASK_GUIDED ? ASK_DESCRIPTION_GUIDED : ASK_DESCRIPTION,
           label: "ask_context",
           parameters: askParams,
           prepareArguments: (a) => {

@@ -194,6 +194,17 @@ export const ASK_DESCRIPTION =
   "documents, CRM and more) and answers with citations. Use it when you need a fact about the user, their " +
   "people, projects or history that is not in the conversation.";
 
+/**
+ * A tenant-side variant of the tool description (`pi-ab --ask-description guided`): it asks the agent to question the
+ * partner about what could block or change an action, in the words of the things involved. Lab only: measured, not
+ * Eden's behaviour.
+ */
+export const ASK_DESCRIPTION_GUIDED =
+  ASK_DESCRIPTION +
+  " Before you act on a request, ask it what could block, constrain or change the action: rules, limits, approvals, " +
+  "holds, people's availability, recent changes or things already done. Name the people, organisations, systems, " +
+  "places, dates and amounts involved.";
+
 /** The agent's system prompt: who it works for, when it is, and (with any tool) to look things up. */
 export function systemPrompt(world: World, options: { lookups: boolean; data: boolean; act?: boolean }): string {
   const today = new Date(world.now).toUTCString().replace(" GMT", " UTC");
