@@ -120,8 +120,14 @@ const syncUse = {
   users: 0,
 };
 const CARDS = opt("cards", "");
+/**
+ * `--intent FILE[,FILE]` (with `"intent": true` in `--config`): the requests `cards-enrich.ts --intent` wrote, replayed
+ * into the intent index (D86, docs/research/edge-intent.md). Cards still come from `--cards` alone.
+ */
+const INTENT_FILES = opt("intent", "").split(",").filter(Boolean);
 /** One replaying maker for every seed and suite: the disk cache is read once. */
-const cardMaker = CARDS ? new DiskCardMaker(CARDS) : null;
+const cardMaker = CARDS ? new DiskCardMaker(CARDS, undefined, { requests: INTENT_FILES }) : null;
+if (INTENT_FILES.length && !cardMaker) throw new Error("--intent needs --cards");
 /**
  * `--card-log out.jsonl`: every item the enrichment sent for a card (its content hash, title, the head of its text
  * the prefilter reads, and the replayed card's kind: "none", or "uncovered" when not replayed), to study the
@@ -131,8 +137,8 @@ const CARD_LOG = opt("card-log", "");
 if (CARD_LOG && cardMaker) {
   writeFileSync(CARD_LOG, "");
   const make = cardMaker.make.bind(cardMaker);
-  cardMaker.make = async (items, today, signal, retry) => {
-    const got = await make(items, today, signal, retry);
+  cardMaker.make = async (items, today, signal, retry, intent) => {
+    const got = await make(items, today, signal, retry, intent);
     if (!retry) {
       const lines = items.map((it, k) => {
         const kind = got.cards[k]?.kind ?? (cardMaker.cards.has(cardKey(it)) ? "none" : "uncovered");

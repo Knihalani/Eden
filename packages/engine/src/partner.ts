@@ -504,6 +504,8 @@ export class ContextPartner {
       // Dates in an item resolve against the user's day, as the request's do (D44).
       cards.offsetOf = (scope) => deps.cache.offsetOf(scope);
       if (this.config.cardsEconomy) cards.economize();
+      // `intent`: the same calls write each item's requests, and what the prefilter rejects is read for them.
+      if (this.config.intent) cards.intend();
     }
     this.fanout = new SourceFanout({
       // With spans on, the gate's span is a child of the source call whose page it redacts (`Tracer.page`).
@@ -1102,7 +1104,9 @@ export class ContextPartner {
     const consIds = verdicts ? (consequence?.ids ?? []) : [];
     const walked = verdicts && this.config.graph ? this.walkGraph(s, cue) : new Map<string, Walked>();
     const carded = verdicts ? this.cardFinds(s, cue) : new Map<string, CardFind>();
-    const extra = [...consIds, ...carded.keys()];
+    // `intent`: what the question would change, by the requests written for each item (no model, no call).
+    const intents = this.intentFinds(s, cue);
+    const extra = [...consIds, ...carded.keys(), ...intents.keys()];
     const ranking = spans?.open("rank", cue.span);
     const scored = this.rank(s, cue, {
       ignoreLedger: true,
@@ -1131,11 +1135,12 @@ export class ContextPartner {
       "ask",
     ).items;
     if (grounding) spans!.close(grounding, { grounded: grounded.length });
-    const pool = [
+    const lexical = [
       ...hits,
       ...grounded.filter((x) => !hits.includes(x)),
       ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x) && !hits.includes(x)),
     ];
+    const pool = intents.size > 0 ? this.fuseIntent(lexical, hits, scored, intents) : lexical;
     // `supersede` (docs/research/smart-supersede.md): what a newer decisive item replaced, and (for an action) what is
     // settled, leaves the pool before any seat is given.
     const context = this.config.askContext ? this.requestCue(s, cue, pool.length > 0) : null;
@@ -1419,6 +1424,35 @@ export class ContextPartner {
     });
     for (const f of fused.values()) if (hit.has(f.x.item.id)) f.score += 1;
     return [...fused.values()].sort((a, b) => b.score - a.score || a.first - b.first).map((f) => f.x);
+  }
+
+  /**
+   * `intent` (D86): an ask's pool with its intent hits fused in. Verdict hits keep the lead (a structural verdict
+   * outweighs any word overlap); the rest of the pool (its rule paths' order) and the intent hits (their requests'
+   * order) are fused by weighted reciprocal rank, 1/(k+rank) for the pool and `intentWeight`/(k+rank) for the intent
+   * list, ties in the pool's order. An item in both lists is kept once and scores both.
+   */
+  private fuseIntent(
+    pool: Scored[],
+    lead: readonly Scored[],
+    scored: readonly Scored[],
+    intents: ReadonlyMap<string, IntentFind>,
+  ): Scored[] {
+    const k = ASK_FUSE_K;
+    const w = this.config.intentWeight;
+    const rest = pool.filter((x) => !lead.includes(x));
+    const fused = new Map<Scored, { score: number; first: number }>();
+    rest.forEach((x, i) => fused.set(x, { score: 1 / (k + i), first: i }));
+    for (const x of scored) {
+      const f = intents.get(x.item.id);
+      if (!f || lead.includes(x)) continue;
+      const add = w / (k + f.rank);
+      const e = fused.get(x);
+      if (e) e.score += add;
+      else fused.set(x, { score: add, first: rest.length + f.rank });
+    }
+    const order = [...fused].sort((a, b) => b[1].score - a[1].score || a[1].first - b[1].first).map(([x]) => x);
+    return [...lead, ...order];
   }
 
   /**
@@ -3357,11 +3391,15 @@ export class ContextPartner {
     probed: ReadonlySet<string>,
     bridged: ReadonlySet<string>,
     carded: ReadonlyMap<string, CardFind> = new Map(),
+    intents: ReadonlyMap<string, IntentFind> = new Map(),
   ): Scored[] {
     // An event on a day the request names is a candidate whatever it scores on words (D44).
     const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item) ?? "") === true;
     // A consequence find that does not conflict is no candidate: it shares nothing with the request but its class.
     // A graph walk's own finds (`graph`) are not either: they have their seats and ground, and no other path.
+    // An intent hit (`intent`) is: its requests say the request is one it would change. The rule paths still read
+    // its own words (its lexical score and terms are unchanged), so it is delivered with no model's say only where a
+    // structural verdict (the conflict test, a violated card) binds it.
     return scored.filter(
       (x) =>
         !x.walkedOnly &&
@@ -3369,7 +3407,8 @@ export class ContextPartner {
           onNamedDay(x) ||
           probed.has(x.item.id) ||
           bridged.has(x.item.id) ||
-          carded.has(x.item.id)),
+          carded.has(x.item.id) ||
+          intents.has(x.item.id)),
     );
   }
 
@@ -3758,7 +3797,11 @@ export class ContextPartner {
       const carding = this.config.cards && this.deps.cards ? spans?.open("cards.match", cue.span) : undefined;
       const carded = this.cardFinds(s, cue);
       if (carding) spans!.close(carding, { found: carded.size });
-      const extra = [...consIds, ...carded.keys()];
+      // `intent`: cached items whose requests (written with their cards) match the request's words (no model).
+      const intending = this.config.intent && this.deps.cards ? spans?.open("intent.match", cue.span) : undefined;
+      const intents = this.intentFinds(s, cue);
+      if (intending) spans!.close(intending, { found: intents.size });
+      const extra = [...consIds, ...carded.keys(), ...intents.keys()];
       const ranking = spans?.open("rank", cue.span);
       const scored = this.rank(s, cue, {
         probed: extra.length > 0 ? [...(probedIds ?? []), ...extra] : probedIds,
@@ -3827,7 +3870,7 @@ export class ContextPartner {
               : this.grounded(
                   s,
                   cue,
-                  this.eligible(scored, cue, new Set(probedIds ?? []), bridged, carded),
+                  this.eligible(scored, cue, new Set(probedIds ?? []), bridged, carded, intents),
                   eventKind,
                   bridged,
                   consequence?.cls,
@@ -3855,7 +3898,7 @@ export class ContextPartner {
         );
         // `judgeBehind`: the judge reads the best of the rest after this answer, and may only add to it.
         if (this.deps.model && this.config.judgeBehind && !cue.followUp) {
-          const rest = this.eligible(scored, cue, new Set(probedIds ?? []), bridged, carded)
+          const rest = this.eligible(scored, cue, new Set(probedIds ?? []), bridged, carded, intents)
             .filter((x) => !items.includes(x))
             .slice(0, this.config.judgeCandidates);
           this.judgeLater(s, cue, t0, eventKind, rest);
@@ -3898,7 +3941,7 @@ export class ContextPartner {
       // An event on a day the request names is a candidate whatever it scores on words (D44).
       const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item) ?? "") === true;
       const probed = new Set(probedIds ?? []);
-      const eligible = this.eligible(scored, cue, probed, bridged, carded);
+      const eligible = this.eligible(scored, cue, probed, bridged, carded, intents);
       // The walk's finds (`graph`), whatever they score on words: they get seats and the graph's conflict ground,
       // and no other path (what every other path reads stays as it was without the graph).
       const graphPool = walked.size > 0 ? scored.filter((x) => walked.has(x.item.id)) : [];
@@ -3921,7 +3964,17 @@ export class ContextPartner {
         .filter((x) => carded.get(x.item.id)?.violated && !top.includes(x) && !probeSeats.includes(x))
         .sort((a, b) => cardRank(carded.get(b.item.id)!) - cardRank(carded.get(a.item.id)!))
         .slice(0, 1);
-      const seats = [...cardSeat, ...probeSeats];
+      // `intent`: the best intent hits the lexical order left out take seats of their own (`intentSeats`), for the
+      // judge to read: their requests say the request is one they would change, though they share few of its words.
+      const intentSeats = this.deps.model
+        ? eligible
+            .filter(
+              (x) => intents.has(x.item.id) && !top.includes(x) && !probeSeats.includes(x) && !cardSeat.includes(x),
+            )
+            .sort((a, b) => intents.get(a.item.id)!.rank - intents.get(b.item.id)!.rank)
+            .slice(0, this.config.intentSeats)
+        : [];
+      const seats = [...cardSeat, ...intentSeats, ...probeSeats];
       // With `graph`, the walk's best finds the judge would not otherwise see take seats of their own.
       const graphSeats = graphPool
         .filter((x) => !top.includes(x) && !seats.includes(x))
@@ -4026,6 +4079,7 @@ export class ContextPartner {
           bridged.has(x.item.id) ||
           walked.has(x.item.id) ||
           carded.get(x.item.id)?.violated === true ||
+          intents.has(x.item.id) ||
           onNamedDay(x) ||
           x.matched >= 2 ||
           this.holdsAny(s, x, rare);
@@ -4132,6 +4186,38 @@ export class ContextPartner {
     }
     // Bounded: the best matches only, so a user with many constraint cards never floods the candidates.
     return new Map([...out].sort((a, b) => cardRank(b[1]) - cardRank(a[1])).slice(0, MAX_CARD_FINDS));
+  }
+
+  /**
+   * `intent` (D86, docs/research/edge-intent.md): the user's cached items whose requests, written by the card call in
+   * the background, best match the request, best first: item id → its place (0-based) and match. A hit holds at least
+   * `intentMinMatched` of the request's terms and `intentMinCoverage` of their idf; at most `intentHits` items. Only
+   * requests made before the request arrived count (as for cards). No model, no call: one BM25 search over the user's
+   * requests (at most four per carded item).
+   */
+  private intentFinds(s: Session, cue: Cue): Map<string, IntentFind> {
+    const out = new Map<string, IntentFind>();
+    const enricher = this.deps.cards;
+    if (!this.config.cards || !this.config.intent || !enricher) return out;
+    const now = this.now();
+    const c = this.config;
+    // The request as written (redacted), not its content terms: the requests the model wrote are whole sentences in
+    // the user's words, verbs included ("approve", "book"), which the cue's terms may leave out.
+    const found = enricher.intentFinds(
+      s.scope,
+      cue.raw.slice(0, INTENT_QUERY_CHARS),
+      cue.arrived ?? now,
+      c.intentHits,
+      (id) => this.deps.cache.get(s.scope, id, now) !== null,
+    );
+    for (const { ids, hit } of found) {
+      if (hit.matched < c.intentMinMatched || hit.coverage < c.intentMinCoverage) continue;
+      for (const id of ids) {
+        if (out.size >= c.intentHits) return out;
+        if (!out.has(id)) out.set(id, { rank: out.size, coverage: hit.coverage, matched: hit.matched });
+      }
+    }
+    return out;
   }
 
   /**
@@ -4532,6 +4618,16 @@ interface CardFind {
   /** Days the card's span covers (Infinity when open or none): a narrower span says more about the day asked. */
   spanDays: number;
 }
+/** The head of a request matched against the intent index (`intent`): where its action and objects are named. */
+const INTENT_QUERY_CHARS = 400;
+
+/** An item the intent index found for a request (`intent`): its place among the hits, and how its requests matched. */
+interface IntentFind {
+  rank: number;
+  coverage: number;
+  matched: number;
+}
+
 /** How long anticipation's early decision waits for the source resolver (ms): an answer held, or none at once. */
 const EARLY_SOURCES_MS = 5;
 
