@@ -35,8 +35,25 @@ export function renderPacket(
      */
     fullItems?: number;
     tailBytes?: number;
+    /**
+     * `askDedup`: the words this session already showed the agent for an item (`Session.shown`), or undefined for
+     * one not shown. Such an item says only its parts with a word not shown, or `SHOWN` when it has none.
+     */
+    shownBefore?: (item: ContextItem) => ReadonlySet<string> | undefined;
+    /** `compactParts`: a quoted thread read past a signature, a one-line table by its rows (`messageParts`). */
+    split?: boolean;
   },
 ): string {
+  const before = options.shownBefore;
+  if (before && !options.focus) {
+    // Not compacted: an item shown before keeps its message's parts with something new, in its own words and order.
+    items = items.map((item) => {
+      const prior = before(item);
+      if (!prior) return item;
+      const parts = messageParts(item.text, (w) => prior.has(w), undefined, undefined, undefined, options.split);
+      return { ...item, text: saysNew(parts) ? parts.map((p) => p.text).join(" ") : SHOWN };
+    });
+  }
   if (options.focus) {
     const focus = options.focus;
     const each = options.itemBytes ?? 320;
@@ -48,17 +65,19 @@ export function renderPacket(
     items = items.map((item, i) => {
       const title = item.title.toLowerCase().match(WORDS) ?? [];
       const own = new Set(title);
-      const text = compactText(
+      const prior = before?.(item);
+      const parts = messageParts(
         item.text,
-        focus,
-        i < full ? each : (options.tailBytes ?? each),
-        (w) => own.has(w) || shown.has(w) || known(w),
+        (w) => own.has(w) || shown.has(w) || known(w) || prior?.has(w) === true,
         // No year, no drop: dates stay as the source wrote them, since "expires 2 Nov" is ambiguous to an agent
         // comparing it with the request's dates where "2 Nov 2026" is not.
         options.keepYear ? undefined : options.year,
         options.self,
         options.dense ? { title: item.title } : undefined,
+        options.split,
       );
+      // `compactText`, with what this session showed of the item before as known too.
+      const text = prior && !saysNew(parts) ? SHOWN : pick(parts, focus, i < full ? each : (options.tailBytes ?? each));
       for (const w of title) shown.add(w);
       for (const w of text.toLowerCase().match(WORDS) ?? []) shown.add(w);
       return { ...item, text };
@@ -160,6 +179,17 @@ export function usageText(items: ContextItem[], options: Parameters<typeof rende
   return shownText(renderPacket(items, keepYear || when ? plain : options));
 }
 
+/** What an item shown before says in its place when it has nothing new (`askDedup`): its title and source stay. */
+export const SHOWN = "(shown above)";
+
+/**
+ * Whether an item's parts, read with what was shown as known (`messageParts` drops a part whose every content word is
+ * known), still say something: a part beyond the sender, which `messageParts` keeps whatever was shown.
+ */
+function saysNew(parts: readonly Part[]): boolean {
+  return parts.some((p) => !/^from:/i.test(p.text));
+}
+
 /** An ask answer composed by the model, in the same envelope: it is derived from source text, so it is data too. */
 export function renderAnswer(answer: string): string {
   return `${HEADER}\n${inert(answer.trim())}\n</context>`;
@@ -215,6 +245,8 @@ const ATTENDEES = /^(attendees|guests|participants|invitees):/i;
 // A notification footer run into the line before it (a connector's one-line snippet): the part ends where it starts.
 const FOOTER =
   /\s(join with google meet|join zoom meeting|join (the )?(teams )?meeting|invitation from google calendar|you are receiving this|you('re| are)? received this|this (message|email) was sent|view (it|this|issue) (in|on)\b|unsubscribe\b)/i;
+// Between two rows of a table flattened to one line: "| Ana | yes | | Ben | no |" ("|---|" rows too).
+const TABLE_ROW = /(?<=\|) (?=\|)/;
 // A run of at least this many of the title's words, in its order, is an echo of the title in the text.
 const ECHO_RUN = 4;
 // The title's first words are the ones a notification repeats; a longer title is cut, which bounds the echo search.
@@ -305,8 +337,9 @@ export function compactText(
   year?: number,
   self?: string | null,
   dense?: { title: string },
+  split?: boolean,
 ): string {
-  return pick(messageParts(text, known, year, self, dense), focus, maxBytes);
+  return pick(messageParts(text, known, year, self, dense, split), focus, maxBytes);
 }
 
 /** One part of a message (`messageParts`): a sentence or a line, whether it is quoted, whether it is a header. */
@@ -322,7 +355,10 @@ export interface Part {
  * `dense` (`densePacket`) also drops what the item's own title already says (a notification repeating its subject:
  * "Invitation: Lunch with Nadia @ Wed 4 Nov 10:30" over "Lunch with Nadia Wed 4 Nov ⋅ 10:30 Padella"), a footer run
  * into a line ("… Padella, London Join with Google Meet: …"), and the user from an attendee list (their calendar is
- * theirs); and a sentence does not end at "St." or "Dr." ("booked St. John").
+ * theirs); and a sentence does not end at "St." or "Dr." ("booked St. John"). `split` (`compactParts`) reads a
+ * nested quote's earlier messages past the signature of the one quoting them (without it, the first quoted signature,
+ * "— O", silences the rest of the thread, where a reply often carries the ask it answers), and a table a connector
+ * flattened to one line ("| Ana | yes | | Ben | no |") by its rows, so one row can be kept rather than none.
  */
 export function messageParts(
   text: string,
@@ -330,6 +366,7 @@ export function messageParts(
   year?: number,
   self?: string | null,
   dense?: { title: string },
+  split = false,
 ): Part[] {
   // The user goes by their first name: their full name is on most of their own items and tells the agent nothing new
   // ("you" would read as the agent itself).
@@ -344,6 +381,7 @@ export function messageParts(
   let own = true; // before the message's sign-off
   let signed = false; // in a quoted message's signature: until the next quoted message starts
   let first = true; // the message's first sentence, past its headers
+  let sentBySelf = false; // `split`: the message's own From is the user, so its To names who it went to
   // A connector's snippet is often one line: the thread's markers are put back on lines of their own first.
   // Whitespace is collapsed first, in linear passes: every pattern below then sees runs of one character at most (a
   // long run would make their leading `\s+` rescan it from every start, quadratic on hostile text).
@@ -357,21 +395,29 @@ export function messageParts(
   for (const raw of lines) {
     const quoted = QUOTED.test(raw);
     let line = (quoted ? raw.replace(QUOTED, "") : raw).trim();
+    // `split`: a nested quote's "On … wrote:" is put on a line of its own, unquoted, by the split above, so it is
+    // where the next quoted message starts: the signature of the one before ends there too.
+    if (split && !quoted && WROTE.test(line)) signed = false;
     if (!quoted && !own) continue;
     if (quoted && (WROTE.test(line) || /^from:/i.test(line))) signed = false;
-    if (!line || (quoted && signed) || RECIPIENTS.test(line)) continue;
+    // `split`: the user's own sent message says who it went to only in its To (`Re: 2025/26 return` to Owen Price).
+    const sentTo = split && sentBySelf && !quoted && /^to:/i.test(line);
+    if (!line || (quoted && signed) || (RECIPIENTS.test(line) && !sentTo)) continue;
     if (WROTE.test(line)) {
       if (!quoted) own = false;
       continue;
     }
-    if (/^from:/i.test(line)) line = line.replace(/ ?<[^<>\n]*>/g, "");
+    if (/^(from|to):/i.test(line)) line = line.replace(/ ?<[^<>\n]*>/g, "");
+    if (split && !quoted && /^from:/i.test(line))
+      sentBySelf = !!self && line.toLowerCase().includes(self.toLowerCase());
     if (dense && !quoted && ATTENDEES.test(line)) {
       line = attendeesBeyond(line, self, titleWords);
       if (!line) continue;
     }
     if (you) line = line.replace(you, selfFirst);
     if (thisYear) line = line.replace(thisYear, "$1").replace(WEEKDAY_COMMA, "$1 $2");
-    for (let part of line.split(dense ? SENTENCE_DENSE : SENTENCE)) {
+    const sentences = line.split(dense ? SENTENCE_DENSE : SENTENCE);
+    for (let part of split ? sentences.flatMap((x) => x.split(TABLE_ROW)) : sentences) {
       if (SIGNOFF.test(part) || SIGNED.test(part)) {
         if (quoted) signed = true;
         else own = false;
@@ -379,7 +425,7 @@ export function messageParts(
       }
       if (GREETING.test(part)) continue;
       // "Sam, Hope your week…": a greeting run into the message's first sentence ("Hi Sam, …" anywhere).
-      const header = /^(from|date|subject):/i.test(part);
+      const header = /^(from|date|subject):/i.test(part) || (sentTo && /^to:/i.test(part));
       part = part.replace(first && !quoted && !header ? SALUTED : GREETED, "");
       if (!quoted && !header) first = false;
       part = part.replace(URL, "").trim();

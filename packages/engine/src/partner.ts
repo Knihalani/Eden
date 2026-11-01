@@ -212,7 +212,15 @@ interface Session {
    * `MAX_CHECKED`, oldest first). The same call made again is the agent's informed choice, and proceeds.
    */
   checked?: Set<string>;
+  /**
+   * With `askDedup`: the words each item's line showed the agent in this session's packets and answers (lowercase),
+   * by item id, at most `MAX_SHOWN` items (oldest dropped first), so an answer does not repeat them.
+   */
+  shown?: Map<string, Set<string>>;
 }
+
+/** Items whose shown words a session keeps (`askDedup`). */
+const MAX_SHOWN = 64;
 
 /** A session's anticipation (`anticipate`): its prefetch in flight, the next one waiting, and what it has fetched. */
 interface Anticipation {
@@ -1072,24 +1080,7 @@ export class ContextPartner {
         : chosen
     ).map((x) => x.item);
     const rendering = spans?.open("render", cue.span);
-    // `packetDates`: an answer is not compacted (without `askCompact`), so only an event's missing day needs saying.
-    // `askCompact` (docs/research/gen-ask.md): it is, as a packet is, around the question's words; past the first
-    // `askFullItems` items each is cut to a line (`askLineBytes`), and a part that only repeats what the answer already
-    // shows (an invitation, its event and the reply confirming it) is dropped.
-    const compact = this.config.askCompact;
-    const answering: Parameters<typeof renderPacket>[1] = compact
-      ? {
-          maxBytes: this.config.askMaxBytes,
-          focus: focusOf(cue),
-          itemBytes: this.config.askItemBytes,
-          fullItems: this.config.askFullItems,
-          tailBytes: this.config.askLineBytes,
-          year: new Date(this.now()).getUTCFullYear(),
-          self: this.deps.cache.selfOf(s.scope),
-          dense: this.config.densePacket,
-          ...(this.config.packetDates ? { keepYear: true, when: true } : {}),
-        }
-      : { maxBytes: 4_000, ...(this.config.packetDates ? { when: true } : {}) };
+    const answering = this.answering(s, cue);
     let answer = items.length ? renderPacket(items, answering) : "Nothing in the connected sources.";
     // What usage learns from the answer: the packet without the flag's additions, unless the model composed it.
     let learnt = this.config.packetDates && items.length ? usageText(items, answering) : undefined;
@@ -3867,6 +3858,73 @@ export class ContextPartner {
   }
 
   /**
+   * How an ask's answer is rendered. Not compacted, it says each item whole, so with `packetDates` only an event's
+   * missing day needs saying; `compactAsk` cuts each item to what bears on the question as a packet's are, and
+   * `askDedup` says an item this session already showed by what is new in it, or by its title alone.
+   */
+  private answering(s: Session, cue: Cue): Parameters<typeof renderPacket>[1] {
+    const shown = this.config.askDedup ? s.shown : undefined;
+    const after = {
+      ...(shown ? { shownBefore: (item: ContextItem) => shown.get(item.id) } : {}),
+      ...(this.config.compactParts ? { split: true } : {}),
+    };
+    // `askCompact` (docs/research/gen-ask.md), the alternative to `compactAsk` (docs/research/gen-combined.md says
+    // which ALL3 takes): past the first `askFullItems` items each is cut to a line (`askLineBytes`), the answer is at
+    // most `askMaxBytes`, and dates drop the current year unless `packetDates` keeps it, as a packet's do.
+    if (this.config.askCompact) {
+      return {
+        maxBytes: this.config.askMaxBytes,
+        focus: focusOf(cue),
+        itemBytes: this.config.askItemBytes,
+        fullItems: this.config.askFullItems,
+        tailBytes: this.config.askLineBytes,
+        year: new Date(this.now()).getUTCFullYear(),
+        self: this.deps.cache.selfOf(s.scope),
+        dense: this.config.densePacket,
+        ...(this.config.packetDates ? { keepYear: true, when: true } : {}),
+        ...after,
+      };
+    }
+    const compact = this.config.compactAsk;
+    const dense = compact && this.config.densePacket;
+    return {
+      maxBytes: 4_000,
+      ...(compact
+        ? {
+            focus: focusOf(cue),
+            itemBytes: this.config.askItemBytes,
+            // No `year`: an answer's dates stay as the source wrote them, as they did whole ("9 Oct 2026").
+            self: this.deps.cache.selfOf(s.scope),
+            dense,
+          }
+        : {}),
+      ...(this.config.packetDates ? { when: true } : {}),
+      ...(shown ? { shownBefore: (item: ContextItem) => shown.get(item.id) } : {}),
+      ...(this.config.compactParts ? { split: true } : {}),
+    };
+  }
+
+  /**
+   * With `askDedup`, keeps the words each item's line in `text` (a rendered packet or answer of `items`, in order)
+   * showed the agent. A line is matched to its item by its `[source]` tag; a packet cut short has fewer lines.
+   */
+  private noteShown(s: Session, items: readonly ContextItem[], text: string): void {
+    const lines = text.split("\n").slice(1, -1);
+    const shown = (s.shown ??= new Map());
+    // A packet's dates leave out the current year ("9 Oct"), meaning this one: an answer saying it is no news.
+    const year = String(new Date(this.now()).getUTCFullYear());
+    for (const [k, line] of lines.entries()) {
+      const item = items[k];
+      if (!item || !line.startsWith(`- [${item.sourceId}] `)) break;
+      const words = shown.get(item.id) ?? new Set<string>([year]);
+      for (const w of line.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []) words.add(w);
+      shown.delete(item.id); // re-inserted last: the most recently shown is dropped last
+      shown.set(item.id, words);
+    }
+    while (shown.size > MAX_SHOWN) shown.delete(shown.keys().next().value!);
+  }
+
+  /**
    * `shown` is what the agent receives when it is not the injection's own text (an ask's answer), and `learnt` the
    * words usage tracking reads for it when they differ (`usageText`, with `packetDates`). With
    * `compactInjection`, each item is cut to what bears on `cue` (`compactText`) rather than to its first bytes.
@@ -3945,6 +4003,7 @@ export class ContextPartner {
           }
         : {}),
       ...(this.config.packetDates ? { keepYear: true, when: true } : {}),
+      ...(this.config.compactParts ? { split: true } : {}),
     };
     const injection: Injection = {
       ...s.scope,
@@ -3958,6 +4017,11 @@ export class ContextPartner {
       createdAt: this.now(),
     };
     if (rendering) spans!.close(rendering);
+    // What the agent was shown of each item: an answer's lines are its items' in order (not folded); a model's
+    // composed answer has no item lines and is attributed to none.
+    if (this.config.askDedup) {
+      this.noteShown(s, shown === undefined ? items : scored.map((x) => x.item), shown ?? injection.text);
+    }
     const walks = WALKS.get(cue);
     let graphMask = 0;
     for (const x of scored) graphMask |= walks?.get(x.item.id)?.mask ?? 0;
