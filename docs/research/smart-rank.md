@@ -1,6 +1,6 @@
 # A learned no-model ranker for what Eden surfaces (track rank)
 
-Decision: D81 (proposed until the live measure), `askRank` adopted as an experimental flag and `rankTies` rejected; both
+Decision: D82 (proposed until the live measure), `askRank` adopted as an experimental flag and `rankTies` rejected; both
 off by default. Development used only the development suites `dev6a` and `dev6b` and the old in-sample suites
 (`hidden`, `heldout`, `heldout2`–`heldout4`). Held-out 5–11 were not run or read. $0 model spend: no OpenRouter call was
 made; cards are replayed from `packages/sim/lab/cards/cards-v2.jsonl`. Every number below comes from a command run in

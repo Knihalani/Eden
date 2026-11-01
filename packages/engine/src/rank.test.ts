@@ -8,7 +8,7 @@ import { FACT_NAMES, type Facts } from "./decide";
 import { ContextPartner } from "./partner";
 import { RANK_MODEL, rankAnswer, rankScore, type RankModel } from "./rank";
 
-/** `askRank` and `rankTies` (D81, docs/research/smart-rank.md): a learned no-model ranker over `decide.ts` facts. */
+/** `askRank` and `rankTies` (D82, docs/research/smart-rank.md): a learned no-model ranker over `decide.ts` facts. */
 const facts = (over: Partial<Facts> = {}): Facts =>
   ({ ...Object.fromEntries(FACT_NAMES.map((n) => [n, 0])), ...over }) as Facts;
 

@@ -246,11 +246,11 @@ and no extra source call. With `askDedup` (D77, off by default) each session kee
 packets and answers showed the agent, per item id and version (at most 64 items, never shared across sessions or
 users), so a later answer says an unchanged item by its new parts only, or "(shown above)"; an item whose words
 changed at its source counts as not shown.
-With `askRank` (D81, off by default) the answer's pool (the verdict hits, the grounded items, the lexically likely) is
+With `askRank` (D82, off by default) the answer's pool (the verdict hits, the grounded items, the lexically likely) is
 ordered by a learned no-model ranker (`rank.ts`): a linear score over the facts `decide.ts` already computes for each
 candidate, with weights fitted offline (`rank-fit.ts`, pairwise logistic, leave-one-suite-out) and shipped as
 `rank-weights.json`. The ranker's best candidate outside the pool may take the weakest seat by a margin; the answer
-never grows. `rankTies` (D81, off by default) lets the same ranker say which of equally scored items a proactive cut
+never grows. `rankTies` (D82, off by default) lets the same ranker say which of equally scored items a proactive cut
 keeps (the sure items, the conflict ground's hits, the person ground's pick); it never adds an item or lowers a gate.
 Neither holds state.
 
