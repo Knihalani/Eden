@@ -1,4 +1,7 @@
-# Tokens: what Eden makes the agent read, and what Eden's cards cost (D73, proposed)
+# Tokens: what Eden makes the agent read, and what Eden's cards cost (D76–D78, proposed)
+
+The track proposed one row, D73, kept below as written; when the tracks were combined it became D76 (`compactAsk`),
+D77 (`askDedup`) and D78 (`compactParts`), and TOK became part of ALL3 (D79; docs/research/gen-combined.md).
 
 Track `gen/tokens`. Goal: cut the agent input tokens Eden causes (packet bytes and `ask` answer bytes) and Eden's own
 card spend, without losing a fact. Every number below comes from a no-model funnel run in this session

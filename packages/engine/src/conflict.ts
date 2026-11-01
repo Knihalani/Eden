@@ -46,7 +46,7 @@ export interface Frame {
    * tie a statement to a request that names no one ("schedule the billing release" and "no production changes").
    */
   wordTies: Set<string>;
-  /** `conflictVocab` (D73): the wider vocabulary, possessive ties, more date forms and party-tied clearances. */
+  /** `conflictVocab` (D75): the wider vocabulary, possessive ties, more date forms and party-tied clearances. */
   vocab?: boolean;
 }
 
@@ -104,7 +104,7 @@ const MOVES =
 const STANDING =
   /\b(?:allerg[a-z]*|anaphyla[a-z]*|intoleran[a-z]*|coeliac|celiac|(?:gone|now|fully|strictly|is|am|i'm) (?:vegan|vegetarian)|no-gifts?|confidential|strictly internal|internal only|recused)\b/gi;
 /**
- * `conflictVocab` (D73): more of the ordinary ways to say an action is blocked, written from general usage: an open
+ * `conflictVocab` (D75): more of the ordinary ways to say an action is blocked, written from general usage: an open
  * end ("until further notice"), a thing not signed or refused, access revoked, someone off ("I'm off from 26 Oct",
  * "off sick", parental leave), a hold on an account or an order to hold ("credit hold", "hold every send"), a
  * prohibition on new commitments ("no new spend", "no further orders"), a plan dropped ("scrapped", "shelved",

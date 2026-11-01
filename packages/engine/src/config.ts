@@ -228,7 +228,7 @@ export interface EngineConfig {
    */
   quietNameOnly: boolean;
   /**
-   * `conflictVocab` (D73, docs/research/gen-proactive.md): the conflict test (`conflict.ts`) reads a wider, general
+   * `conflictVocab` (D75, docs/research/gen-proactive.md): the conflict test (`conflict.ts`) reads a wider, general
    * vocabulary: more ways to say a thing is blocked ("until further notice", "not signed", "revoked", "I'm off from",
    * "hold every send", "no new spend", "scrapped"), a standing constraint ("stopped drinking"), lifted ("released",
    * "back to normal"); idioms that are not blocks ("can't wait for Friday") and sign-off courtesies ("happy to jump on
@@ -367,13 +367,13 @@ export interface EngineConfig {
   /**
    * An ask gathers the lookup's candidates (consequence probe, graph walk, card finds) and answers first with those
    * carrying a rule path's verdict: a conflict about the question, a binding graph conflict, a consequence find in
-   * conflict, a violated card (docs/research/gen-ask.md). Off by default.
+   * conflict, a violated card (D73, docs/research/gen-ask.md). Off by default.
    */
   askVerdicts: boolean;
   /**
    * An ask's answer is compacted as a packet is (`compactText` around the question's words, `askItemBytes` each),
    * items past the first `askFullItems` cut to `askLineBytes`, the whole at most `askMaxBytes`, and with
-   * `densePacket` an echo folded out (docs/research/gen-ask.md). Off by default: the answer is each item's first
+   * `densePacket` an echo folded out (D74, docs/research/gen-ask.md). Off by default: the answer is each item's first
    * bytes, at most 4,000.
    */
   askCompact: boolean;
@@ -420,21 +420,21 @@ export interface EngineConfig {
    */
   actionCheck: boolean;
   /**
-   * `ask` answers compacted as packets are (D73; docs/research/gen-tokens.md): each item cut to the parts that bear on
+   * `ask` answers compacted as packets are (D76; docs/research/gen-tokens.md): each item cut to the parts that bear on
    * the question (`compactText`), at most `askItemBytes`, rather than said whole up to the answer's 4 KB. The items and
    * their order are unchanged; only how much of each the agent reads. Off: answers say each item whole. Shares
    * `askItemBytes` with `askCompact`, its alternative (docs/research/gen-combined.md), which wins if both are on.
    */
   compactAsk: boolean;
   /**
-   * An `ask` answer does not repeat what this session's packets and answers already showed the agent (D73): an item
+   * An `ask` answer does not repeat what this session's packets and answers already showed the agent (D77): an item
    * shown before is said by its title alone with "(shown above)", or with only the parts not shown before. Words shown
    * are kept per session (`Session.shown`, bounded), never across sessions or users.
    */
   askDedup: boolean;
   /**
    * Compaction (packets and `compactAsk` answers) reads a quoted thread's earlier messages past the signature of the
-   * message quoting them, and a table flattened to one line by its rows (D73, `messageParts`). Without it a quoted
+   * message quoting them, and a table flattened to one line by its rows (D78, `messageParts`). Without it a quoted
    * sign-off ("— O") hides the rest of a thread, and a one-line table longer than an item's room is dropped whole.
    */
   compactParts: boolean;

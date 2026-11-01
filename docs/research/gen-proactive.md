@@ -1,7 +1,7 @@
 # Proactive delivery on new templates (track gen/proactive)
 
-Proposed decision: D73 (`conflictVocab`, off by default). Branch `gen/proactive`, from `main` (0bc877deb) with the
-two new development suites merged in (`gen/dev6a`, `gen/dev6b`). No model call and no OpenRouter spend in this
+Proposed decision: D75 (`conflictVocab`, off by default; the track's D73, renumbered in
+docs/research/gen-combined.md). Branch `gen/proactive`, from `main` (0bc877deb) with the two new development suites merged in (`gen/dev6a`, `gen/dev6b`). No model call and no OpenRouter spend in this
 track. Held-out 5–9 were not run or read.
 
 ## The question
