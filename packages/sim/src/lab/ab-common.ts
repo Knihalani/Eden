@@ -5,7 +5,7 @@
  * chat call. `agent-ab.ts` (the in-house loop) and `pi-ab.ts` (the Pi harness) both run on these.
  */
 import { inert } from "@eden/engine";
-import type { AgentEvent } from "@eden/protocol";
+import { ASK_CONTEXT_DESCRIPTION, ASK_CONTEXT_GUIDED, type AgentEvent } from "@eden/protocol";
 import { buildSessions } from "../sessions";
 import type { ActionRecord } from "./act";
 import type { SimSource } from "../sources";
@@ -220,22 +220,16 @@ export const searchToolSpec = (s: SimSource) => ({
   description: `Search ${s.description}. Returns up to ${TOOL_ITEMS} matching items.`,
 });
 
-// Eden's own description of the tool, as its MCP server gives it (packages/server/src/mcp.ts).
-export const ASK_DESCRIPTION =
-  "Ask the user's context partner a question. It searches the user's connected sources (mail, calendar, " +
-  "documents, CRM and more) and answers with citations. Use it when you need a fact about the user, their " +
-  "people, projects or history that is not in the conversation.";
+// Eden's own description of the tool, as its MCP server gives it (packages/server/src/mcp.ts, @eden/protocol).
+export const ASK_DESCRIPTION = ASK_CONTEXT_DESCRIPTION;
 
 /**
- * A tenant-side variant of the tool description (`pi-ab --ask-description guided`): it asks the agent to question the
- * partner about what could block or change an action, in the words of the things involved. Lab only: measured, not
- * Eden's behaviour.
+ * The guided description (`pi-ab --ask-description guided`): what the MCP server gives with `askGuard` (D86). It asks
+ * the agent to question the partner about what could block or change an action, in the words of the things involved,
+ * and to raise only what the answer shows. Read from the product, so the lab measures what ships. (Before D86 it was a
+ * lab-only text without its last sentence: docs/research/path-to-90.md measured that one.)
  */
-export const ASK_DESCRIPTION_GUIDED =
-  ASK_DESCRIPTION +
-  " Before you act on a request, ask it what could block, constrain or change the action: rules, limits, approvals, " +
-  "holds, people's availability, recent changes or things already done. Name the people, organisations, systems, " +
-  "places, dates and amounts involved.";
+export const ASK_DESCRIPTION_GUIDED = ASK_CONTEXT_GUIDED;
 
 /** The agent's system prompt: who it works for, when it is, and (with any tool) to look things up. */
 export function systemPrompt(world: World, options: { lookups: boolean; data: boolean; act?: boolean }): string {
