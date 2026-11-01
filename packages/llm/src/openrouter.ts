@@ -16,6 +16,12 @@ export interface OpenRouterOptions {
   baseUrl?: string;
   /** Route only to zero-data-retention endpoints. Default true. */
   zdr?: boolean;
+  /**
+   * OpenRouter's `provider.data_collection`. Default "deny", and never set otherwise by Eden itself (`fromEnv` does
+   * not read it): "allow" exists for the lab's runs on free models over simulated data (`pi-ab --lab-routing open`),
+   * whose providers may retain prompts.
+   */
+  dataCollection?: "deny" | "allow";
   timeoutMs?: number;
   fetch?: typeof fetch;
   /**
@@ -56,7 +62,7 @@ export class OpenRouterModel implements Model {
       // The reasoning itself is never read: excluding it keeps it off the wire (it is still billed as output).
       ...(request.reasoning ? { reasoning: { effort: request.reasoning, exclude: true } } : {}),
       provider: {
-        data_collection: "deny",
+        data_collection: this.options.dataCollection ?? "deny",
         zdr: this.options.zdr ?? true,
         allow_fallbacks: true,
         ...(this.options.sort ? { sort: this.options.sort } : {}),

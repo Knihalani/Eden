@@ -5,7 +5,7 @@
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { renderAnswer, type ContextPartner } from "@eden/engine";
-import type { Scope } from "@eden/protocol";
+import { ASK_CONTEXT_DESCRIPTION, ASK_CONTEXT_GUIDED, type Scope } from "@eden/protocol";
 import { z } from "zod";
 
 export function createMcpServer(partner: ContextPartner, who: Scope & { sessionId: string }): McpServer {
@@ -13,10 +13,8 @@ export function createMcpServer(partner: ContextPartner, who: Scope & { sessionI
   server.registerTool(
     "ask_context",
     {
-      description:
-        "Ask the user's context partner a question. It searches the user's connected sources (mail, calendar, " +
-        "documents, CRM and more) and answers with citations. Use it when you need a fact about the user, their " +
-        "people, projects or history that is not in the conversation.",
+      // With `askGuard` the answers say what may block and when nothing does, so the agent is asked to probe (D86).
+      description: partner.config.askGuard ? ASK_CONTEXT_GUIDED : ASK_CONTEXT_DESCRIPTION,
       inputSchema: { question: z.string().min(1).max(2_000) },
       annotations: { readOnlyHint: true },
     },

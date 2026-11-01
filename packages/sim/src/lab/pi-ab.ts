@@ -48,6 +48,12 @@
  *     [--tool-exec parallel|sequential] [--tasks 30] [--offworld 5] [--limit n] [--dry]
  *     [--variant-config '{"name":{...}}'] [--act] [--cards FILE [--cards-out FILE]] [--card-sort price]
  *
+ * Free models (docs/research/edge-ask.md): `--max-requests N --min-gap-ms G` caps and paces every chat request of the
+ * run (`request-cap.ts`; free limits count requests, and a free model costs $0, so `--budget` never binds);
+ * `--lab-routing open` lets Eden's own calls (cards, judge) reach endpoints that are not zero-retention, only when
+ * every model of the run ends in ":free" (production always sends D12's routing); `--templates a,b` runs only those
+ * hidden-context templates; `--ask-description guided` gives the agent the MCP server's guided description (D86).
+ *
  * --budget is a hard cap on everything this run spends (agent, Eden's judge, grader): each call reserves its
  * worst case before it is sent and is refused when that could cross the cap. --time-scale 1 gives the sim sources
  * their profiles' assumed latency (agent-ab runs them at 0, instant); the timeline then shows connector time.
@@ -88,6 +94,7 @@ import { parseSuites } from "./suites";
 import { QUESTION_CHARS, UptakeLog } from "./uptake";
 import { sanitizeForStore } from "@eden/redact";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
+import { capped, type RequestCap } from "./request-cap";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -95,7 +102,7 @@ const opt = (name: string, fallback: string) => {
   return i >= 0 && args[i + 1] ? args[i + 1]! : fallback;
 };
 const DRY = args.includes("--dry");
-/** `--ask-description guided`: the tenant-side tool description that asks for what could block the action. */
+/** `--ask-description guided`: the MCP server's guided description (`ASK_CONTEXT_GUIDED`, given with `askGuard`). */
 const ASK_GUIDED = opt("ask-description", "standard") === "guided";
 const KEY = process.env.OPENROUTER_API_KEY;
 if (!KEY && !DRY) throw new Error("needs OPENROUTER_API_KEY");
@@ -116,6 +123,8 @@ const TOOL_EXEC = opt("tool-exec", "parallel") as "parallel" | "sequential";
 const LIMITS = { maxTasks: Number(opt("tasks", "30")), maxOffworld: Number(opt("offworld", "5")) };
 // The first N tasks of each world only: a plumbing check before a real run.
 const LIMIT = Number(opt("limit", "0"));
+// `--templates a,b`: only the hidden-context tasks of these templates (both variants), for a small targeted smoke.
+const TEMPLATES = opt("templates", "") ? new Set(opt("templates", "").split(",")) : null;
 
 // D55's recommended experimental configuration, by name, so the documented commands stay short.
 const PRESETS: Record<string, Record<string, unknown>> = {
@@ -145,6 +154,25 @@ const CONFIG = PRESETS[CONFIG_ARG] ?? (JSON.parse(CONFIG_ARG) as Record<string, 
 const CARD_MODEL = opt("card-model", "z-ai/glm-5.3-flash");
 const CARD_SORT = opt("card-sort", "");
 if (CARD_SORT && CARD_SORT !== "price") throw new Error("--card-sort must be price");
+/**
+ * `--lab-routing open`: Eden's own model calls in this run (cards, the judge) drop the zero-retention and no-data-
+ * collection routing that production always sends (D12), which no free endpoint serves. Lab only, simulated data
+ * only, and only when every model of the run is a free one (":free"): a paid model never gets it.
+ */
+const LAB_ROUTING = opt("lab-routing", "zdr");
+if (LAB_ROUTING !== "zdr" && LAB_ROUTING !== "open") throw new Error("--lab-routing must be zdr or open");
+if (LAB_ROUTING === "open" && ![MODEL, GRADER, CARD_MODEL].every((m) => m.endsWith(":free")))
+  throw new Error("--lab-routing open is for free models only (--model, --grader and --card-model end in :free)");
+const ROUTING = LAB_ROUTING === "open" ? { zdr: false, dataCollection: "allow" as const } : {};
+/**
+ * `--max-requests N` (with `--min-gap-ms`): a hard cap on the chat requests the whole run sends, retries included, and
+ * a pace between their starts (`request-cap.ts`). For free models, whose limits are counted in requests, not dollars.
+ */
+const REQUEST_CAP: RequestCap | null =
+  Number(opt("max-requests", "0")) > 0
+    ? { max: Number(opt("max-requests", "0")), gapMs: Number(opt("min-gap-ms", "0")), sent: 0, refused: 0 }
+    : null;
+if (REQUEST_CAP) globalThis.fetch = capped(globalThis.fetch, REQUEST_CAP);
 const CONFIG_VARIANTS = parseVariants(opt("variant-config", "{}"));
 // Every condition is parsed before anything is spent: a typo fails here, not after the first stream has run.
 const CONDITIONS: Condition[] = parseConditions(CONDITION_NAMES, {
@@ -403,7 +431,7 @@ async function runWorld(
   // `cards`: the enrichment model, metered against the run's cap and booked to Eden's spend like its judge.
   const cardModel = (sort: "" | "price") =>
     meteredModel(
-      new OpenRouterModel({ apiKey: KEY!, model: CARD_MODEL, ...(sort ? { sort } : {}) }),
+      new OpenRouterModel({ apiKey: KEY!, model: CARD_MODEL, ...ROUTING, ...(sort ? { sort } : {}) }),
       (start, end, data) => current?.span("eden.cards", "eden", "bg", start, end, data),
     );
   // `--card-sort price` (D66): a batch cut off at the cap is sent again with default routing.
@@ -423,7 +451,7 @@ async function runWorld(
         cache: new ItemCache(),
         budget: new Budget(),
         model: judge
-          ? meteredModel(new OpenRouterModel({ apiKey: KEY!, model: MODEL }), (start, end, data) =>
+          ? meteredModel(new OpenRouterModel({ apiKey: KEY!, model: MODEL, ...ROUTING }), (start, end, data) =>
               current?.span("eden.model", "eden", "bg", start, end, data),
             )
           : null,
@@ -675,6 +703,8 @@ async function runWorld(
             maxTokens: AGENT_MAX_TOKENS,
             maxRetries: 3,
             timeoutMs: 90_000,
+            // `--max-requests`: the capped fetch, so each attempt (retries too) is counted and paced.
+            ...(REQUEST_CAP ? { fetch: globalThis.fetch } : {}),
             // OpenRouter's own cost on the final chunk: what agent-ab books, not pi-ai's catalog estimate.
             onPayload: (payload) => ({ ...(payload as object), usage: { include: true } }),
             onProviderStreamEvent: (chunk) => {
@@ -838,7 +868,8 @@ const worlds = SEEDS.flatMap((seed) =>
   SUITE_LIST.flatMap((suite) =>
     (LOOKUPS ? ["hidden" as const] : VARIANTS).map((variant) => {
       const w = worldOf(seed, suite, variant, LIMITS);
-      return LIMIT > 0 ? { ...w, tasks: w.tasks.slice(0, LIMIT) } : w;
+      const picked = TEMPLATES ? { ...w, tasks: w.tasks.filter((t) => TEMPLATES.has(t.type)) } : w;
+      return LIMIT > 0 ? { ...picked, tasks: picked.tasks.slice(0, LIMIT) } : picked;
     }),
   ),
 );
@@ -885,6 +916,9 @@ writeFileSync(
       ...(CARDS_FILE ? { cards: { replay: CARDS_FILE, out: CARDS_OUT } } : {}),
       timeScale: TIME_SCALE,
       toolExecution: TOOL_EXEC,
+      ...(ASK_GUIDED ? { askDescription: "guided" } : {}),
+      ...(LAB_ROUTING === "open" ? { labRouting: "open" } : {}),
+      ...(REQUEST_CAP ? { requests: REQUEST_CAP } : {}),
       spend,
       timeline: TIMELINE,
       wallSeconds: Math.round((performance.now() - t0) / 100) / 10,
@@ -898,5 +932,6 @@ writeFileSync(
 const ungraded = results.filter((r) => !r.error && !r.facts && tasks.find((t) => t.id === r.task)!.must.length).length;
 console.error(
   `spent $${spent.toFixed(4)} (agent $${spend.agent.toFixed(4)}, eden $${spend.eden.toFixed(4)}, grader ` +
-    `$${spend.grader.toFixed(4)}); ${results.length} runs, ${ungraded} ungraded → ${OUT}, timeline ${TIMELINE}`,
+    `$${spend.grader.toFixed(4)}); ${results.length} runs, ${ungraded} ungraded → ${OUT}, timeline ${TIMELINE}` +
+    (REQUEST_CAP ? `; requests ${REQUEST_CAP.sent}/${REQUEST_CAP.max} sent, ${REQUEST_CAP.refused} refused` : ""),
 );
