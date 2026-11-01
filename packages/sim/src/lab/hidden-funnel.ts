@@ -134,7 +134,7 @@ const syncUse = {
 const CARDS = opt("cards", "");
 /**
  * `--intent FILE[,FILE]` (with `"intent": true` in `--config`): the requests `cards-enrich.ts --intent` wrote, replayed
- * into the intent index (D86, docs/research/edge-intent.md). Cards still come from `--cards` alone.
+ * into the intent index (D87, docs/research/edge-intent.md). Cards still come from `--cards` alone.
  */
 const INTENT_FILES = opt("intent", "").split(",").filter(Boolean);
 /** One replaying maker for every seed and suite: the disk cache is read once. */

@@ -1266,7 +1266,9 @@ export class ContextPartner {
     ).map((x) => x.item);
     const rendering = spans?.open("render", cue.span);
     const answering = this.answering(s, cue);
-    const blocks = bearing !== null && this.mayBlock(cue, items, bearing);
+    // What the intent index or the bridging queries chose for this request is not evidence that nothing binds.
+    const modelChosen = bearing ? new Set([...intents.keys(), ...(bridgeFound?.ids ?? [])]) : undefined;
+    const blocks = bearing !== null && this.mayBlock(cue, items, bearing, modelChosen);
     const lead =
       bearing && !blocks && covered
         ? guardLine(
@@ -1433,13 +1435,22 @@ export class ContextPartner {
   /**
    * `askGuard`: whether any of `items` may bear on `cue`, so that "nothing found" would be wrong: its bearing says it
    * may block; the conflict test reads a conflict in it; or it is on, or names, a day the question names (a clash is
-   * the agent's to judge: an appointment that day has no word of a block, and is one).
+   * the agent's to judge: an appointment that day has no word of a block, and is one); or a model-made path chose it
+   * for this request (`chosen`: the intent index's hits, the bridging queries' finds), which the verdicts did not
+   * read: "Withdrawals aren't possible before maturity", found by the intent index, beside "no rule, hold, limit …
+   * found" would contradict the line, and the rule paths read it as clear (docs/research/edge-combined.md).
    */
-  private mayBlock(cue: Cue, items: readonly ContextItem[], bearing: ReadonlyMap<string, Bearing>): boolean {
+  private mayBlock(
+    cue: Cue,
+    items: readonly ContextItem[],
+    bearing: ReadonlyMap<string, Bearing>,
+    chosen: ReadonlySet<string> = new Set(),
+  ): boolean {
     const days = cue.time?.days;
     return items.some(
       (i) =>
         bearing.get(i.id) === "conflict" ||
+        chosen.has(i.id) ||
         (days !== undefined && (days.has(startDay(i) ?? "") || daysNamed(i, cue.at).some((d) => days.has(d)))) ||
         (!bulkMail(i) && !settled(i) && this.verdict(i, cue) === "conflict"),
     );
@@ -1586,7 +1597,7 @@ export class ContextPartner {
   }
 
   /**
-   * `intent` (D86): an ask's pool with its intent hits fused in. Verdict hits keep the lead (a structural verdict
+   * `intent` (D87): an ask's pool with its intent hits fused in. Verdict hits keep the lead (a structural verdict
    * outweighs any word overlap); the rest of the pool (its rule paths' order) and the intent hits (their requests'
    * order) are fused by weighted reciprocal rank, 1/(k+rank) for the pool and `intentWeight`/(k+rank) for the intent
    * list, ties in the pool's order. An item in both lists is kept once and scores both.
@@ -4540,7 +4551,7 @@ export class ContextPartner {
   }
 
   /**
-   * `intent` (D86, docs/research/edge-intent.md): the user's cached items whose requests, written by the card call in
+   * `intent` (D87, docs/research/edge-intent.md): the user's cached items whose requests, written by the card call in
    * the background, best match the request, best first: item id → its place (0-based) and match. A hit holds at least
    * `intentMinMatched` of the request's terms and `intentMinCoverage` of their idf; at most `intentHits` items. Only
    * requests made before the request arrived count (as for cards). No model, no call: one BM25 search over the user's

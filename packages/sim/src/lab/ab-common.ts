@@ -224,9 +224,9 @@ export const searchToolSpec = (s: SimSource) => ({
 export const ASK_DESCRIPTION = ASK_CONTEXT_DESCRIPTION;
 
 /**
- * The guided description (`pi-ab --ask-description guided`): what the MCP server gives with `askGuard` (D86). It asks
+ * The guided description (`pi-ab --ask-description guided`): what the MCP server gives with `askGuard` (D88). It asks
  * the agent to question the partner about what could block or change an action, in the words of the things involved,
- * and to raise only what the answer shows. Read from the product, so the lab measures what ships. (Before D86 it was a
+ * and to raise only what the answer shows. Read from the product, so the lab measures what ships. (Before D88 it was a
  * lab-only text without its last sentence: docs/research/path-to-90.md measured that one.)
  */
 export const ASK_DESCRIPTION_GUIDED = ASK_CONTEXT_GUIDED;

@@ -44,7 +44,7 @@ test("source titles reach the agent only inside a data envelope", async () => {
   await client.close();
 });
 
-test("ask_context gives the guided description only with askGuard (D86)", async () => {
+test("ask_context gives the guided description only with askGuard (D88)", async () => {
   const description = async (engine: Record<string, unknown>) => {
     const partner = buildPartner({ sources: async () => [], model: null, engine });
     const server = createMcpServer(partner, { tenantId: "t", userId: "u", sessionId: "s" });

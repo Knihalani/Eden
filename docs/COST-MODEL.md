@@ -34,7 +34,7 @@ pass the no-model prefilter (11-15% of simulated items), each item read once per
 items arriving, $0.003-0.004 per user-month at 50 new items a day (at most about $0.013 at list prices). Reserved per
 call at $0.002 against its own per-user-day `Budget`.
 
-Intent index (proposed D86, `intent`, off by default; docs/research/edge-intent.md). No new call: the card call also
+Intent index (proposed D87, `intent`, off by default; docs/research/edge-intent.md). No new call: the card call also
 writes up to four requests per item, and every new item is read, not only the 11–15% the prefilter passes. The cap per
 call rises from 2,000 to 3,000 output tokens (300 per item past ten); the reservation is unchanged. Estimates from
 measured per-item prices, not a live run of the combined prompt on the default model: requests alone cost $0.0000091
@@ -46,7 +46,7 @@ tokens per ten-item call over 184 calls (24 of them retries of a batch cut off a
 that would be $0.0021 per call, $0.00021 per item, about $0.32 per user-month, an upper bound for a model that
 reasons that much. Request time adds one BM25 search over the user's requests (no model, no call).
 
-Bridging query (proposed D86, `bridgeQuery`, off by default; docs/research/edge-bridge.md). One call per request
+Bridging query (proposed D89, `bridgeQuery`, off by default; docs/research/edge-bridge.md). One call per request
 that acts (in the imperative, or an `external` message; with `bridgeQuestions`, also a question for permission), on the
 slow path beside the lookup's search, never per event and never on the fast path; cached per user by request, so a
 repeated request and every `ask` about it make none. Input: the system prompt and the redacted request, at most 400
@@ -60,11 +60,20 @@ agent cost of about $0.0005 per task (docs/research/path-to-90.md), so +15% to +
 prices, mostly reasoning tokens. A model or setting with no reasoning would sit at the low end (an estimate: not
 measured).
 
-Active-constraints digest (proposed D87, `constraintDigest`, off by default): no model call and no source call. Its
+Active-constraints digest (proposed D90, `constraintDigest`, off by default): no model call and no source call. Its
 cost is the agent's: at most `digestBytes` (1,600 bytes; 1,377 on average on dev, 1,414 in-sample), about 350 tokens,
 once per session as data. The same constraints give the same bytes across sessions (one distinct digest per simulated
 user over 30 sessions on dev), so in a stable prompt prefix a provider's cache reads it at the cached price ($0.03 per
 M at Z.AI): about $0.00001 per agent model request cached, $0.00005 uncached. An estimate, not measured live.
+
+ALL5 (proposed D92; docs/research/edge-combined.md): ALL3 plus `intent` (D87) and `bridgeQuery` (D89) adds two
+model costs, both off the fast path and each through its own `Budget`; `askGuard`/`packetBearing` (D88) add none. On
+the dev funnel (16 simulated users, replayed, so counted but not sent): the card enrichment read 23,782 items in 1,220
+calls instead of 1,294 in 215 (about 76 calls per user instead of 13, a backfill of every synced item): at D87's
+measured per-item price that is the estimated $0.035 per user once and per month at 50 new items a day. The bridge
+asked 392 times in 480 tasks (0.82 per task): $0.00006–0.0006 per task at D89's estimate. Agent-side, answers grow:
+ask bytes +17% (dev 683 → 800, in-sample 638 → 750), packet bytes +19% and +12%. Estimates, not measured on the
+default model; the lab's free runs cost $0 and are no price guide.
 
 Card economy (proposed D66, `cardsEconomy`, off by default; docs/research/econ-background.md; in-sample, 2026-10-31):
 the strict prefilter and sentence reuse read 74.25 items per simulated user instead of 166.5 (−55.4%) in 12.4 calls

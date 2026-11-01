@@ -47,7 +47,7 @@
  *     [--grader anthropic/claude-haiku-5.5] [--budget 0.6] [--out pi-ab.json] [--timeline dir] [--time-scale 0]
  *     [--tool-exec parallel|sequential] [--tasks 30] [--offworld 5] [--limit n] [--dry]
  *     [--variant-config '{"name":{...}}'] [--act] [--cards FILE [--cards-out FILE]] [--card-sort price]
- *     [--allow-logging] [--rpm 18] [--max-requests N]
+ *     [--allow-logging] [--rpm 18] [--max-requests N] [--intent FILE] [--bridge FILE] [--bridge-model m]
  *
  * `--templates a,b` runs only those hidden-context templates; `--ask-description guided` gives the agent the MCP
  * server's guided description (`askGuard`, docs/research/edge-ask.md). Free models go through `free.ts` (above).
@@ -67,7 +67,18 @@ import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { Agent, type AgentEvent as PiEvent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
 import { Type, type Model as PiModel } from "@earendil-works/pi-ai";
 import { heldResult } from "@eden/client";
-import { CardEnricher, ContextPartner, DEFAULT_CONFIG, ItemCache, ModelCardMaker, type CardMaker } from "@eden/engine";
+import {
+  CardEnricher,
+  ContextPartner,
+  DEFAULT_CONFIG,
+  ItemCache,
+  bridgeKey,
+  ModelBridgeMaker,
+  ModelCardMaker,
+  QueryBridge,
+  type BridgeMaker,
+  type CardMaker,
+} from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
@@ -92,6 +103,7 @@ import {
   type Task,
 } from "./ab-common";
 import { ACTIONS, actionParams, coerceArgs, executed, type ActionRecord } from "./act";
+import { DiskBridgeMaker } from "./bridge-disk";
 import { DiskCardMaker, samePath } from "./cards-disk";
 import { isCapError, labAccess, labModel, piModelFor, piRegistry, providerPrefs } from "./free";
 import { parseConditions, parseVariants, type Condition } from "./pi-conditions";
@@ -106,8 +118,16 @@ const opt = (name: string, fallback: string) => {
   return i >= 0 && args[i + 1] ? args[i + 1]! : fallback;
 };
 const DRY = args.includes("--dry");
-/** `--ask-description guided`: the MCP server's guided description (`ASK_CONTEXT_GUIDED`, given with `askGuard`). */
-const ASK_GUIDED = opt("ask-description", "standard") === "guided";
+/**
+ * `--ask-description auto|guided|standard`: which `ask_context` description the agent gets. `auto` (the default) does
+ * as the MCP server does: the guided one (`ASK_CONTEXT_GUIDED`) for a condition whose config has `askGuard`, else the
+ * standard one. `guided` and `standard` force one for every condition.
+ */
+const ASK_DESC = opt("ask-description", "auto");
+if (!["auto", "guided", "standard"].includes(ASK_DESC))
+  throw new Error("--ask-description must be auto|guided|standard");
+const ASK_GUIDED = ASK_DESC === "guided";
+const guidedFor = (config: Record<string, unknown>) => ASK_GUIDED || (ASK_DESC === "auto" && config.askGuard === true);
 const KEY = process.env.OPENROUTER_API_KEY;
 if (!KEY && !DRY) throw new Error("needs OPENROUTER_API_KEY");
 const SEEDS = opt("seeds", "41").split(",").map(Number);
@@ -152,11 +172,40 @@ const PRESETS: Record<string, Record<string, unknown>> = {
     judgeTied: true,
   },
 };
+// D80's ALL3, and ALL5 (docs/research/edge-combined.md, proposed): ALL3 plus the intent index, the bridging query and
+// guarded, answer-shaped asks and packets. ALL5 needs `--cards` (with `--intent` to replay requests) and a bridge
+// model.
+PRESETS.ALL3 = {
+  ...PRESETS.H,
+  consequenceProbe: true,
+  probeRoles: true,
+  graph: true,
+  graphMerge: true,
+  cards: true,
+  anticipate: true,
+  sync: true,
+  askVerdicts: true,
+  conflictVocab: true,
+  compactAsk: true,
+  askDedup: true,
+  compactParts: true,
+  cardsEconomy: true,
+};
+PRESETS.ALL5 = {
+  ...PRESETS.ALL3,
+  intent: true,
+  bridgeQuery: true,
+  bridgeQuestions: true,
+  bridgeAskSeats: 2,
+  askGuard: true,
+  packetBearing: true,
+};
 const CONFIG_ARG = opt("config", "{}");
 const CONFIG = PRESETS[CONFIG_ARG] ?? (JSON.parse(CONFIG_ARG) as Record<string, unknown>);
 // `cards` makes implication cards with a model in the background (D59), metered and charged to Eden's spend.
 const CARD_MODEL = opt("card-model", "z-ai/glm-5.3-flash");
 const CARD_SORT = opt("card-sort", "");
+const BRIDGE_MODEL = opt("bridge-model", CARD_MODEL);
 if (CARD_SORT && CARD_SORT !== "price") throw new Error("--card-sort must be price");
 const CONFIG_VARIANTS = parseVariants(opt("variant-config", "{}"));
 // Every condition is parsed before anything is spent: a typo fails here, not after the first stream has run.
@@ -193,7 +242,20 @@ if (CARDS_FILE && !existsSync(CARDS_FILE)) throw new Error(`--cards ${CARDS_FILE
  * One copy of the disk cards for every stream: read once, each stream sees the cards the others made, and a card
  * another stream is making now is waited for rather than made twice.
  */
-const diskCards = CARDS_FILE ? new DiskCardMaker(CARDS_FILE, undefined, { out: CARDS_OUT }) : null;
+const INTENT_FILES = opt("intent", "").split(",").filter(Boolean);
+if (INTENT_FILES.length && !CARDS_FILE) throw new Error("--intent needs --cards");
+for (const f of INTENT_FILES) if (!existsSync(f)) throw new Error(`--intent ${f}: no such file`);
+const diskCards = CARDS_FILE
+  ? new DiskCardMaker(CARDS_FILE, undefined, { out: CARDS_OUT, requests: INTENT_FILES })
+  : null;
+/**
+ * `--bridge FILE` (with `"bridgeQuery": true`; docs/research/edge-bridge.md): bridging queries replayed from
+ * `bridge-enrich.ts`'s cache; a request with no line is sent live to `--bridge-model` (default `--card-model`),
+ * metered and paced like Eden's other calls. Without `--bridge`, `bridgeQuery` makes every call live.
+ */
+const BRIDGE_FILE = opt("bridge", "");
+if (BRIDGE_FILE && !existsSync(BRIDGE_FILE)) throw new Error(`--bridge ${BRIDGE_FILE}: no such file`);
+const diskBridge = BRIDGE_FILE ? new DiskBridgeMaker(BRIDGE_FILE) : null;
 
 // ---- Spend: one hard cap over every call, reserved before the call at its worst case and settled at its real cost.
 let spent = 0;
@@ -409,6 +471,34 @@ async function runWorld(
     withPartner && config.cards === true
       ? new CardEnricher({ maker: cardMaker(), budget: new Budget(), now: () => clock })
       : undefined;
+  // `bridgeQuery`: replayed queries first, the rest made live (booked to Eden like its judge).
+  const liveBridge = () =>
+    new ModelBridgeMaker(
+      meteredModel(labModel(ACCESS, { apiKey: KEY!, model: BRIDGE_MODEL }), (start, end, data) =>
+        current?.span("eden.bridge", "eden", "bg", start, end, data),
+      ),
+    );
+  const bridgeMaker = (): BridgeMaker => {
+    if (!diskBridge) return liveBridge();
+    const live = liveBridge();
+    return {
+      async make(requests: string[], signal: AbortSignal) {
+        const replayed = await diskBridge.make(requests);
+        const missing = requests.filter((_, i) => !diskBridge.queries.has(bridgeKey(requests[i]!)));
+        if (missing.length === 0) return replayed;
+        const got = await live.make(missing, signal);
+        let k = 0;
+        const queries = requests.map((r, i) =>
+          diskBridge.queries.has(bridgeKey(r)) ? replayed.queries[i]! : (got.queries[k++] ?? null),
+        );
+        return { ...got, queries };
+      },
+    };
+  };
+  const bridge =
+    withPartner && config.bridgeQuery === true
+      ? new QueryBridge({ maker: bridgeMaker(), budget: new Budget(), now: () => clock })
+      : undefined;
   const partner = withPartner
     ? new ContextPartner({
         sources: async () => edenSources,
@@ -424,6 +514,7 @@ async function runWorld(
         now: () => clock,
         config,
         ...(cards ? { cards } : {}),
+        ...(bridge ? { bridge } : {}),
         // Charged to the task whose session the trace is from: a slow-path verdict can land after it ended.
         onTrace: (t) => {
           const owner = bySession.get(t.sessionId);
@@ -574,7 +665,7 @@ async function runWorld(
       if (useEden && !useTools && partner) {
         tools.push({
           name: "ask_context",
-          description: ASK_GUIDED ? ASK_DESCRIPTION_GUIDED : ASK_DESCRIPTION,
+          description: guidedFor(config) ? ASK_DESCRIPTION_GUIDED : ASK_DESCRIPTION,
           label: "ask_context",
           parameters: askParams,
           prepareArguments: (a) => {
@@ -899,7 +990,7 @@ writeFileSync(
       requests: PACER.summary(),
       partial: capStopped > 0 || PACER.refused > 0,
       toolExecution: TOOL_EXEC,
-      ...(ASK_GUIDED ? { askDescription: "guided" } : {}),
+      askDescription: ASK_DESC,
       spend,
       timeline: TIMELINE,
       wallSeconds: Math.round((performance.now() - t0) / 100) / 10,

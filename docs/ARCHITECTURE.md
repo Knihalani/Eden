@@ -213,8 +213,8 @@ anticipation's early decision reads what the prefetch, the sync and the cache ho
 engine's spans (`sync.freshen`, `sync.list`, `graph.walk`, `cards.match`, `cards.make`, `anticipate.prefetch`,
 `anticipate.early`), and the Pi harness's timeline reads the same spans.
 
-**The bridging query and the constraints digest** (`bridgeQuery`, `constraintDigest`, off by default; proposed D86
-and D87, `bridge.ts`, `digest.ts`, [research/edge-bridge.md](research/edge-bridge.md)). For a request that acts, the
+**The bridging query and the constraints digest** (`bridgeQuery`, `constraintDigest`, off by default; proposed D89
+and D90, `bridge.ts`, `digest.ts`, [research/edge-bridge.md](research/edge-bridge.md)). For a request that acts, the
 slow path starts one small budgeted model call beside its search (`QueryBridge`, its own `Budget` and per-user cache
 of queries): the redacted request is rewritten into two or three short queries in a constraint's words. Once the
 search has cached what it brought, the queries run against the user's own index with no source call; a find the
@@ -225,6 +225,30 @@ constraint in force (a freeze, limit, absence, deadline, prohibition or dependen
 each in the items' own words, ranked by when written with the user's own people a week newer, deduplicated by card,
 at most twelve lines; it opens a session (`session_start`) as data and is served on request (`POST /v1/digest`, client
 `digest`). It holds no clock, so its bytes change only when a constraint does.
+
+**The intent index** (`intent`, needs `cards`, off by default; proposed D87, `intent.ts`,
+[research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four
+requests the item would change, in a user's words (validated, at most 120 characters each, redacted); items the card
+prefilter rejects are read for their requests only. They live in a per-user BM25 index apart from the item text,
+keyed by content hash and dropped with the card. At request time, with no model, the request's words are searched in
+it: the best hits join the lookup's candidates and one judge seat, and are fused into an `ask` by reciprocal rank
+after the verdict hits. An intent hit alone is never a no-model delivery.
+
+**Guarded asks and answer-shaped packets** (`askGuard`, `packetBearing`, off by default; proposed D88,
+[research/edge-ask.md](research/edge-ask.md)). An `ask` about an action leads with what a verdict reads as binding,
+marked "May block or change this:", and, when nothing in the answer may block and every source answered from a warm,
+current sync, opens with a fixed "Checked …: no rule, hold, limit, absence or change found for …" line. An item the
+intent index or the bridging queries chose for the request withholds that line, since no verdict read it
+([research/edge-combined.md](research/edge-combined.md)). The MCP `ask_context` tool gives the guided description
+(`ASK_CONTEXT_GUIDED`) with `askGuard`. Packets say each item's bearing the same way.
+
+**ALL5** (proposed D92, [research/edge-combined.md](research/edge-combined.md)): ALL3 (D80) plus `intent`,
+`bridgeQuery` (with `bridgeQuestions` and two `bridgeAskSeats`), `askGuard` and `packetBearing`. In an `ask` the
+paths compose in this order: the search and the verdict paths (consequence probe, graph, cards) gather candidates,
+the intent hits and the bridge's finds join them, the verdict hits lead, the bridge's seats follow, the rest is fused
+with the intent list, and the guard reads the final answer. Model use stays off the fast path: the card call (now
+with requests) runs in the background, the bridge's one call per acting request on the slow path, both through their
+own `Budget`. `constraintDigest` (D90) is left out of ALL5 (its in-sample decoys).
 
 **The action firewall** (`actionCheck`, off by default; proposed D69, `firewall.ts`,
 [research/econ-firewall.md](research/econ-firewall.md)): `checkAction` (HTTP `POST /v1/check`, client `check`) takes
