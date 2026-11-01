@@ -74,6 +74,7 @@ import {
   daysNamed,
   isAction,
   isImperative,
+  MORE_VERBS,
   LEADING,
   isScheduling,
   isSubject,
@@ -150,7 +151,7 @@ export interface CandidateDump {
   sessionId: string;
   turn: number;
   /** Where the decision was made: the fast path, anticipation's early decision, or the lookup. */
-  path: "fast" | "early" | "lookup" | "served";
+  path: "fast" | "early" | "lookup" | "served" | "ask";
   candidates: { id: string; facts: Facts }[];
   delivered: string[];
   /**
@@ -211,7 +212,16 @@ interface Session {
    * `MAX_CHECKED`, oldest first). The same call made again is the agent's informed choice, and proceeds.
    */
   checked?: Set<string>;
+  /**
+   * With `askDedup`: the words each item's line showed the agent in this session's packets and answers (lowercase),
+   * by item id and version (`shownKey`: an item changed at its source under the same id counts as not shown), at
+   * most `MAX_SHOWN` items (oldest dropped first), so an answer does not repeat them.
+   */
+  shown?: Map<string, Set<string>>;
 }
+
+/** Items whose shown words a session keeps (`askDedup`). */
+const MAX_SHOWN = 64;
 
 /** A session's anticipation (`anticipate`): its prefetch in flight, the next one waiting, and what it has fetched. */
 interface Anticipation {
@@ -1022,10 +1032,26 @@ export class ContextPartner {
       probed,
       local,
       syncCalls,
+      consequence,
     } = await this.searchLive(s, cue, this.config.askSources);
+    // `askVerdicts` (docs/research/gen-ask.md): an ask gathers what a lookup gathers (the consequence probe's finds,
+    // the graph walk's, the card finds), not only what shares the question's words, and reads each with the verdicts
+    // the lookup's rule paths read, so an item the question runs into answers it ahead of a merely similar one.
+    const verdicts = this.config.askVerdicts;
+    const consIds = verdicts ? (consequence?.ids ?? []) : [];
+    const walked = verdicts && this.config.graph ? this.walkGraph(s, cue) : new Map<string, Walked>();
+    const carded = verdicts ? this.cardFinds(s, cue) : new Map<string, CardFind>();
+    const extra = [...consIds, ...carded.keys()];
     const ranking = spans?.open("rank", cue.span);
-    const scored = this.rank(s, cue, { ignoreLedger: true, probed });
+    const scored = this.rank(s, cue, {
+      ignoreLedger: true,
+      probed: extra.length > 0 ? [...(probed ?? []), ...extra] : probed,
+      ...(walked.size > 0 ? { walked: [...walked.keys()] } : {}),
+    });
     if (ranking) spans!.close(ranking, { candidates: scored.length });
+    const hits = verdicts
+      ? this.askHits(s, cue, scored, { probed, consIds, cls: consequence?.cls, walked, carded })
+      : [];
     const grounding = spans?.open("ground", cue.span);
     // What the question's people and days ground comes first (D44); a named day's other events only through it, so
     // a question about a topic is not padded with that day's calendar.
@@ -1037,16 +1063,39 @@ export class ContextPartner {
       "ask",
     ).items;
     if (grounding) spans!.close(grounding, { grounded: grounded.length });
-    const items = [...grounded, ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x))]
-      .slice(0, limit)
-      .map((x) => x.item);
+    const chosen = [
+      ...hits,
+      ...grounded.filter((x) => !hits.includes(x)),
+      ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x) && !hits.includes(x)),
+    ].slice(0, limit);
+    // `askCompact` with `densePacket`: an echo of an occurrence the answer already shows (the invitation beside its
+    // event) is folded out, as in a packet (`fold.ts`).
+    const items = (
+      this.config.askCompact && this.config.densePacket
+        ? foldEchoes(chosen, {
+            focus: focusOf(cue),
+            year: new Date(this.now()).getUTCFullYear(),
+            self: this.deps.cache.selfOf(s.scope),
+            rare: (w) => this.deps.cache.isRare(s.scope, w, RARE_SHARE),
+          })
+        : chosen
+    ).map((x) => x.item);
     const rendering = spans?.open("render", cue.span);
-    // `packetDates`: an answer is not compacted, so only an event's missing day needs saying.
-    const answering = { maxBytes: 4_000, ...(this.config.packetDates ? { when: true } : {}) };
+    const answering = this.answering(s, cue);
     let answer = items.length ? renderPacket(items, answering) : "Nothing in the connected sources.";
     // What usage learns from the answer: the packet without the flag's additions, unless the model composed it.
     let learnt = this.config.packetDates && items.length ? usageText(items, answering) : undefined;
     if (rendering) spans!.close(rendering, { items: items.length });
+    if (this.deps.onCandidates) {
+      const facts = this.factsOf(s, cue, scored, "ask", { probed: new Set(probed ?? []), walked, carded });
+      this.dump(
+        s,
+        "ask",
+        facts,
+        scored.filter((x) => items.includes(x.item)),
+        items.length > 0 ? "answer" : "",
+      );
+    }
     let usedModel = false;
     let costUsd = 0;
     const reservation =
@@ -1106,6 +1155,47 @@ export class ContextPartner {
     });
     if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "answer", delivered: items.length > 0 });
     return { answer, citations: citationsOf(items), usedModel, costUsd, latencyMs };
+  }
+
+  /**
+   * `askVerdicts`: the ask's candidates that carry a verdict the lookup's rule paths deliver on, best scored first: a
+   * conflict with the question's frame that is about it and tied beyond a name (`groundConflict`'s test), a binding
+   * graph-walked item in conflict (the graph's ground), a consequence find in conflict tied by its class's words, or
+   * a card the question's actions violate. No model, no call: the facts `decide.ts` reads, over what is cached.
+   */
+  private askHits(
+    s: Session,
+    cue: Cue,
+    scored: Scored[],
+    ctx: {
+      probed?: readonly string[];
+      consIds: readonly string[];
+      cls?: ActionClass;
+      walked: ReadonlyMap<string, Walked>;
+      carded: ReadonlyMap<string, CardFind>;
+    },
+  ): Scored[] {
+    const cons = new Set(ctx.consIds);
+    const ties = ctx.cls ? classTies(ctx.cls) : undefined;
+    const bridged = new Set(
+      cons.size > 0
+        ? scored
+            .filter(
+              (x) =>
+                cons.has(x.item.id) &&
+                !unmeasuredLimit(this.frame(cue), x.item) &&
+                this.verdict(x.item, cue, ties) === "conflict",
+            )
+            .map((x) => x.item.id)
+        : [],
+    );
+    const facts = this.factsOf(s, cue, scored, "ask", {
+      probed: new Set(ctx.probed ?? []),
+      bridged,
+      walked: ctx.walked,
+      carded: ctx.carded,
+    });
+    return facts.filter(({ facts: f }) => f.conflictHit || f.graphHit || f.bridged || f.cardViolated).map(({ x }) => x);
   }
 
   /**
@@ -1607,7 +1697,7 @@ export class ContextPartner {
     // Only when the request's own words ground no conflict: the graph widens what is found, not what is said.
     // Only for a request that acts or asks, or a message arriving: a remark that names someone ("haha Lucía sent me
     // a meme") is no occasion to raise what binds them or their organisation.
-    const engaged = acts || isImperative(cue.raw) || isAction(cue.raw);
+    const engaged = acts || this.imperative(cue) || isAction(cue.raw);
     if (walked?.size && engaged && (hits.length === 0 || this.config.graphMerge)) {
       for (const x of graphPool) {
         const w = walked.get(x.item.id);
@@ -1802,7 +1892,7 @@ export class ContextPartner {
     if (!f) {
       const names = cleanEntities(cue.entities).filter((e) => !e.includes("@"));
       // The user's wall clock, so "today" and a date's nearest year are their own (D44), as `cue.time.days` are.
-      FRAMES.set(cue, (f = frameOf(cue.raw, cue.time?.days ?? null, localNow(cue), names)));
+      FRAMES.set(cue, (f = frameOf(cue.raw, cue.time?.days ?? null, localNow(cue), names, this.config.conflictVocab)));
     }
     return f;
   }
@@ -1865,7 +1955,7 @@ export class ContextPartner {
     if (!this.config.quietNameOnly || x.beyond === undefined || x.beyond > 0) return true;
     // A message arriving from someone is their act, and a request to act on someone ("Book a table for me and Sam",
     // "Send Priya a hamper") is the user's: what bears on that person bears on the act (D44). Neither is a mention.
-    if (cue.external || isImperative(cue.raw)) return true;
+    if (cue.external || this.imperative(cue)) return true;
     const days = cue.time?.days;
     if (days && days.size > 0) {
       if (days.has(startDay(x.item) ?? "") || daysNamed(x.item, cue.at).some((d) => days.has(d))) return true;
@@ -1876,6 +1966,11 @@ export class ContextPartner {
   /** The people a request names: its names that someone in the user's items goes by (`ItemCache.isPerson`). */
   private peopleOf(s: Session, cue: Cue): string[] {
     return cleanEntities(cue.entities).filter((e) => !e.includes("@") && this.deps.cache.isPerson(s.scope, e));
+  }
+
+  /** Whether a request is in the imperative; with `conflictVocab`, by its wider verbs too (`MORE_VERBS`). */
+  private imperative(cue: Cue): boolean {
+    return isImperative(cue.raw, this.config.conflictVocab ? MORE_VERBS : undefined);
   }
 
   /** With `quietClear`, whether an item is about the request and says its decisive value does not conflict. */
@@ -3764,6 +3859,74 @@ export class ContextPartner {
   }
 
   /**
+   * How an ask's answer is rendered. Not compacted, it says each item whole, so with `packetDates` only an event's
+   * missing day needs saying; `compactAsk` cuts each item to what bears on the question as a packet's are, and
+   * `askDedup` says an item this session already showed by what is new in it, or by its title alone.
+   */
+  private answering(s: Session, cue: Cue): Parameters<typeof renderPacket>[1] {
+    const shown = this.config.askDedup ? s.shown : undefined;
+    const after = {
+      ...(shown ? { shownBefore: (item: ContextItem) => shown.get(shownKey(item)) } : {}),
+      ...(this.config.compactParts ? { split: true } : {}),
+    };
+    // `askCompact` (docs/research/gen-ask.md), the alternative to `compactAsk` (docs/research/gen-combined.md says
+    // which ALL3 takes): past the first `askFullItems` items each is cut to a line (`askLineBytes`), the answer is at
+    // most `askMaxBytes`, and dates drop the current year unless `packetDates` keeps it, as a packet's do.
+    if (this.config.askCompact) {
+      return {
+        maxBytes: this.config.askMaxBytes,
+        focus: focusOf(cue),
+        itemBytes: this.config.askItemBytes,
+        fullItems: this.config.askFullItems,
+        tailBytes: this.config.askLineBytes,
+        year: new Date(this.now()).getUTCFullYear(),
+        self: this.deps.cache.selfOf(s.scope),
+        dense: this.config.densePacket,
+        ...(this.config.packetDates ? { keepYear: true, when: true } : {}),
+        ...after,
+      };
+    }
+    const compact = this.config.compactAsk;
+    const dense = compact && this.config.densePacket;
+    return {
+      maxBytes: 4_000,
+      ...(compact
+        ? {
+            focus: focusOf(cue),
+            itemBytes: this.config.askItemBytes,
+            // No `year`: an answer's dates stay as the source wrote them, as they did whole ("9 Oct 2026").
+            self: this.deps.cache.selfOf(s.scope),
+            dense,
+          }
+        : {}),
+      ...(this.config.packetDates ? { when: true } : {}),
+      ...(shown ? { shownBefore: (item: ContextItem) => shown.get(shownKey(item)) } : {}),
+      ...(this.config.compactParts ? { split: true } : {}),
+    };
+  }
+
+  /**
+   * With `askDedup`, keeps the words each item's line in `text` (a rendered packet or answer of `items`, in order)
+   * showed the agent. A line is matched to its item by its `[source]` tag; a packet cut short has fewer lines.
+   */
+  private noteShown(s: Session, items: readonly ContextItem[], text: string): void {
+    const lines = text.split("\n").slice(1, -1);
+    const shown = (s.shown ??= new Map());
+    // A packet's dates leave out the current year ("9 Oct"), meaning this one: an answer saying it is no news.
+    const year = String(new Date(this.now()).getUTCFullYear());
+    for (const [k, line] of lines.entries()) {
+      const item = items[k];
+      if (!item || !line.startsWith(`- [${item.sourceId}] `)) break;
+      const key = shownKey(item);
+      const words = shown.get(key) ?? new Set<string>([year]);
+      for (const w of line.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []) words.add(w);
+      shown.delete(key); // re-inserted last: the most recently shown is dropped last
+      shown.set(key, words);
+    }
+    while (shown.size > MAX_SHOWN) shown.delete(shown.keys().next().value!);
+  }
+
+  /**
    * `shown` is what the agent receives when it is not the injection's own text (an ask's answer), and `learnt` the
    * words usage tracking reads for it when they differ (`usageText`, with `packetDates`). With
    * `compactInjection`, each item is cut to what bears on `cue` (`compactText`) rather than to its first bytes.
@@ -3842,6 +4005,7 @@ export class ContextPartner {
           }
         : {}),
       ...(this.config.packetDates ? { keepYear: true, when: true } : {}),
+      ...(this.config.compactParts ? { split: true } : {}),
     };
     const injection: Injection = {
       ...s.scope,
@@ -3855,6 +4019,11 @@ export class ContextPartner {
       createdAt: this.now(),
     };
     if (rendering) spans!.close(rendering);
+    // What the agent was shown of each item: an answer's lines are its items' in order (not folded); a model's
+    // composed answer has no item lines and is attributed to none.
+    if (this.config.askDedup) {
+      this.noteShown(s, shown === undefined ? items : scored.map((x) => x.item), shown ?? injection.text);
+    }
     const walks = WALKS.get(cue);
     let graphMask = 0;
     for (const x of scored) graphMask |= walks?.get(x.item.id)?.mask ?? 0;
@@ -3955,6 +4124,14 @@ function pendingOf(s: Session): boolean {
 /** An item's words as the ledger records them (`Ledger.revised`): a copy edited at its source hashes otherwise. */
 function versionOf(item: ContextItem): number {
   return hashString(`${item.title}\n${item.text}`, 0);
+}
+
+/**
+ * An item's key in `Session.shown`: its id and its words' version. A sync that changes an item's words ("approved"
+ * to "not approved", two rows swapped) makes it a new item to the agent, which a bag of shown words cannot see.
+ */
+function shownKey(item: ContextItem): string {
+  return `${item.id}\u0000${versionOf(item)}`;
 }
 
 /** A model call's span attributes: tokens, cost and whether it was cut off. Counts only. */

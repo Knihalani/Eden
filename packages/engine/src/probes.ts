@@ -60,7 +60,7 @@ const OPENERS = new Set("please pls can could would will you hi hey ok okay so a
  * "Please give Dana access…", "can you send…"). Stricter than `isAction`, which also takes a scheduling word anywhere
  * ("a great book on negotiation"). Reads at most the first eight words.
  */
-export function isImperative(raw: string): boolean {
+export function isImperative(raw: string, more?: ReadonlySet<string>): boolean {
   const words = raw.trim().split(/\s+/, 8);
   for (let i = 0; i < words.length; i++) {
     const word = words[i]!.toLowerCase().replace(/[^a-z-]/g, "");
@@ -68,10 +68,21 @@ export function isImperative(raw: string): boolean {
     // "Can you tell me if the migration finished?" asks to be told, not for the migration: a question.
     const next = words[i + 1]?.toLowerCase().replace(/[^a-z]/g, "");
     if (TELL_ME.has(word) && (next === "me" || next === "us") && /\?\s*$/.test(raw)) return false;
-    return LEADING.has(word);
+    return LEADING.has(word) || more?.has(word) === true;
   }
   return false;
 }
+
+/**
+ * `conflictVocab` (D75): more verbs that open a request to act, beside `LEADING` (which also cleans names, so it
+ * is not widened): moving money, renewing, raising, reserving, granting or removing, releasing.
+ */
+export const MORE_VERBS: ReadonlySet<string> = new Set(
+  (
+    "pick transfer wire refund raise renew reserve grant revoke remove delete submit file upload deploy release " +
+    "launch publish post bring lend return sell rent hire issue sponsor donate subscribe cover"
+  ).split(" "),
+);
 
 /** Verbs that, with "me" and a question mark, ask to be told something ("let me know", "show me", "tell me"). */
 const TELL_ME = new Set(["tell", "let", "show", "remind"]);
