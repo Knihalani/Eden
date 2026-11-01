@@ -7,7 +7,8 @@
  * - Across items: items about the same matter (the same subject once "Re:"/"Fwd:" are stripped, or the same
  *   identifier such as a ticket's "OPS-142") form a group; ordered by when each was written, an item is superseded
  *   when a newer one in its group says something decisive about the request (`conflict.ts`: a conflict or a clearance,
- *   which covers lifted, extended, moved and cancelled). Only the newest decisive state is surfaced.
+ *   which covers lifted, extended, moved and cancelled) and, when the older one states something too, speaks to the
+ *   same constraint. Only the newest decisive state of each constraint is surfaced.
  * - Within a thread: a reply quotes the messages before it under it, newest first. `chronological` puts them oldest
  *   first, so a statement's "later" is its real later (`assess` lets a clearance after a block win, and a block after
  *   a clearance stand).
@@ -41,15 +42,28 @@ function writtenAt(item: ContextItem): number | null {
   return sentAt(item) ?? item.updatedAt ?? null;
 }
 
+/** What an item says about the request, as `supersededIn` reads it. */
+export interface Said {
+  /** It states something about the request (`conflict.ts`: a conflict or a clearance). */
+  decisive: boolean;
+  /**
+   * The words of what it says: the statements behind its verdict when it is decisive, else its own words. The names
+   * the request gives are left out (two statements about one party are not about one constraint).
+   */
+  words: ReadonlySet<string>;
+}
+
 /**
- * The items superseded by a newer item about the same matter, each with the item and time that supersede it.
- * `decisive` says whether an item states something about the request (a conflict or a clearance): only such a newer
- * item supersedes, so a "thanks, will do" reply does not hide the notice it answers. Items with no time are left
- * alone. Linear in the items and their keys.
+ * The items superseded by a newer item about the same matter, each with the item and time that supersede it. Only a
+ * decisive newer item supersedes, so a "thanks, will do" reply does not hide the notice it answers; and only one that
+ * speaks to the older item's constraint (its statement shares a word with what the older one says): "billing address
+ * change resolved" does not lift "on credit hold, no new orders" though both are replies about one account. Items
+ * with no time are left alone. Linear in the items and their keys, quadratic in a group (a thread's few items);
+ * `said` is read only for items in a group of two or more.
  */
 export function supersededIn(
   items: readonly ContextItem[],
-  decisive: (item: ContextItem) => boolean,
+  said: (item: ContextItem) => Said,
 ): Map<string, { by: string; at: number }> {
   const groups = new Map<string, { item: ContextItem; at: number }[]>();
   for (const item of items) {
@@ -62,21 +76,29 @@ export function supersededIn(
     }
   }
   const out = new Map<string, { by: string; at: number }>();
-  const known = new Map<string, boolean>();
-  const isDecisive = (item: ContextItem) => {
+  const known = new Map<string, Said>();
+  const saidBy = (item: ContextItem) => {
     let d = known.get(item.id);
-    if (d === undefined) known.set(item.id, (d = decisive(item)));
+    if (d === undefined) known.set(item.id, (d = said(item)));
     return d;
+  };
+  const shares = (a: ReadonlySet<string>, b: ReadonlySet<string>) => {
+    for (const w of a) if (b.has(w)) return true;
+    return false;
   };
   for (const g of groups.values()) {
     if (g.length < 2) continue;
     g.sort((a, b) => b.at - a.at);
-    const newest = g.find((x) => isDecisive(x.item));
-    if (!newest) continue;
     for (const x of g) {
-      if (x.at >= newest.at || x.item.id === newest.item.id) continue;
+      // The newest newer item that states something about the request and speaks to what this one says.
+      const newer = g.find((y) => {
+        if (y.at <= x.at || y.item.id === x.item.id) return false;
+        const theirs = saidBy(y.item);
+        return theirs.decisive && shares(saidBy(x.item).words, theirs.words);
+      });
+      if (!newer) continue;
       const had = out.get(x.item.id);
-      if (!had || had.at < newest.at) out.set(x.item.id, { by: newest.item.id, at: newest.at });
+      if (!had || had.at < newer.at) out.set(x.item.id, { by: newer.item.id, at: newer.at });
     }
   }
   return out;

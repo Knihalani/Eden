@@ -168,7 +168,18 @@ cited either way, the answer keeps as much of its detail (`askKept` 0.381 → 0.
   gains. The margin is the one tuned knob, chosen on the same LOSO folds it is reported on (a mild selection effect).
 - **Fact drift.** The weights are bound to `decide.ts`'s facts as computed today; a change to the conflict test or the
   graph changes their meaning. Refit (`rank-fit.ts --out`) after any change that moves the ask dump's facts, and keep
-  `FACT_NAMES` stable.
+  `FACT_NAMES` stable. `rank-weights.json` carries `facts`, a fingerprint of the facts' definition (`Facts`,
+  `FACT_NAMES` and `partner.ts`'s `rank`, `factsOf` and `askFacts`, comments and whitespace ignored;
+  `facts-fingerprint.ts`), written by `rank-fit.ts`; `rank.test.ts` fails when it no longer matches, so a change to
+  what `score`, `relScore` or `ageDays` hold cannot leave the weights silently stale. It does not see helpers those
+  methods call (the conflict test, the graph): a change there still needs a judgement call.
+- **The shipped weights are in-sample for every suite here.** `rank-weights.json` is the full fit on dev6a, dev6b,
+  hidden and heldout–heldout4. Any number taken on those suites with the default weights (no `--rank-model`) is
+  in-sample, dev included; only the fold runs (`--rank-model folds/<suite>.json`) are honest for them, and every
+  number in this note and in smart-combined.md is a fold run.
+- **Dumps are not comparable across the merge.** On this branch the lab's `ask` dump computes its facts through
+  `askFacts`, which sets `bridged`; main's dump did not. Engine output with every flag off is unchanged, but rank-fit
+  data dumped on main and on this branch must not be pooled.
 - **The ask's own question.** The funnel asks the request's text; a live agent asks its own questions, which the ranker
   never saw.
 

@@ -5,6 +5,7 @@ import type { AgentEvent, ContextItem } from "@eden/protocol";
 import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { FACT_NAMES, type Facts } from "./decide";
+import { factsFingerprint } from "./facts-fingerprint";
 import { ContextPartner } from "./partner";
 import { RANK_MODEL, rankAnswer, rankScore, type RankModel } from "./rank";
 
@@ -18,6 +19,14 @@ describe("rank model", () => {
     expect(RANK_MODEL.weights).toHaveLength(RANK_MODEL.names.length);
     for (const n of RANK_MODEL.names) expect(FACT_NAMES).toContain(n);
     for (const w of RANK_MODEL.weights) expect(Number.isFinite(w)).toBe(true);
+  });
+
+  test("the shipped weights were fitted on the facts as they are defined now", () => {
+    // A change to `Facts`, `FACT_NAMES` or how `partner.ts` computes them (`rank`, `factsOf`, `askFacts`: what
+    // `score`, `relScore` or `ageDays` hold and how they scale) leaves fitted weights wrong. Refit them
+    // (`packages/sim/src/lab/rank-fit.ts`, which writes the new fingerprint), or, for a change that cannot move a fact,
+    // set `facts` in rank-weights.json to the fingerprint below.
+    expect(RANK_MODEL.facts).toBe(factsFingerprint());
   });
 
   test("a score is the weighted sum of the facts it reads", () => {

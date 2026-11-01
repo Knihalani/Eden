@@ -42,10 +42,17 @@ Requests in the suites are almost all actions: of the 125 control `clear` cites,
 
 1. **Across items** (`supersede.ts` `supersededIn`): the candidates are grouped by matter, the subject once
    "Re:"/"Fwd:" prefixes are stripped (per source, at least 8 characters) and each identifier the title names
-   ("OPS-142"); each group is ordered by when its items were written (the message's `Date:`, else `updatedAt`); every
-   item older than the group's newest decisive item (the conflict test says `conflict` or `clear`: lifted, extended,
-   moved, cancelled, re-imposed) is superseded and dropped. A newer "thanks, will do" reply decides nothing and hides
-   nothing. Applied to the `ask` pool and to every proactive packet of more than one item.
+   ("OPS-142"); each group is ordered by when its items were written (the message's `Date:`, else `updatedAt`); an
+   item is superseded and dropped by the newest newer item that is decisive (the conflict test says `conflict` or
+   `clear`: lifted, extended, moved, cancelled, re-imposed) **and speaks to the same constraint**: its deciding
+   statement shares a word with the older item's (the statements behind its verdict when it has one, else its own
+   words), the request's names left out and a constraint's irregular forms folded ("frozen"/"freeze", "held"/"hold";
+   `conflict.ts` `matterWords`). A newer "thanks, will do" reply decides nothing and hides nothing; a newer "billing
+   address change resolved" or "invoice INV-12 paid" in the same thread is decisive but about another point, and does
+   not hide "on credit hold, no new orders" (review fix: before it, any decisive newer item in the group won).
+   Applied to the `ask` pool and to every proactive packet of more than one item. In a packet, a clearance that
+   replaced an item is dropped too (the agent never saw the block it lifts), and a packet left empty is not sent:
+   silence, not a fire carrying only "freeze lifted" (review fix).
 2. **Latest state of one item, for an action** (`ask` only): an item about the request whose latest state is settled
    (the conflict test clears it, or it says done/resolved and nothing in it conflicts) is dropped when the request is
    not a question. The action meets nothing there, and a lifted hold read by an agent is a concern raised for nothing.

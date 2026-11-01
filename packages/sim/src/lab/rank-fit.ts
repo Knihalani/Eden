@@ -19,7 +19,7 @@
  * fold (`hidden-funnel.ts --suite <suite> --rank-model DIR/<suite>.json`).
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { FACT_NAMES, rankAnswer, type Facts, type RankModel } from "@eden/engine";
+import { FACT_NAMES, factsFingerprint, rankAnswer, type Facts, type RankModel } from "@eden/engine";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -185,6 +185,8 @@ for (const [set, t] of Object.entries(out)) {
 /** A fitted model as `rank.ts` reads it, with what it was fitted on. */
 const save = (file: string, train: Line[]) => {
   const model: RankModel & { fitted: Record<string, unknown> } = {
+    // What the facts meant when the dump was made: `rank.test.ts` fails once they change, until a refit.
+    facts: factsFingerprint(),
     names: NAMES,
     weights: fit(train).map((v) => Number(v.toPrecision(4))),
     fitted: {
