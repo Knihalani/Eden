@@ -53,8 +53,17 @@
  * `--suite` names any suite of `suites.ts`, or several: each gets its own table, then a TOTAL over all of them.
  * Each suite's run is recorded in the benchmark ledger (bench/, `ledger.ts`) unless `--no-record`.
  */
-import { appendFileSync, writeFileSync } from "node:fs";
-import { CardEnricher, cardKey, ContextPartner, cpuNow, ItemCache, type CandidateDump, type Trace } from "@eden/engine";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  CardEnricher,
+  cardKey,
+  ContextPartner,
+  cpuNow,
+  ItemCache,
+  type CandidateDump,
+  type RankModel,
+  type Trace,
+} from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, OpenRouterModel, type Model } from "@eden/llm";
 import type { AgentEvent, Injection } from "@eden/protocol";
@@ -159,6 +168,12 @@ if (CANDIDATES) writeFileSync(CANDIDATES, "");
  * the planted item's id and rank among them, and whether it was cached, one line per task (docs/research/gen-ask.md).
  */
 const ASK_DIAG = opt("ask-diag", "");
+/**
+ * `--rank-model weights.json`: the learned ranker's weights for `askRank`/`rankTies` instead of the engine's own
+ * (`rank-fit.ts --out`), to run a cross-validation fold on the suite its weights were not fitted on.
+ */
+const RANK_FILE = opt("rank-model", "");
+const rankModel = RANK_FILE ? (JSON.parse(readFileSync(RANK_FILE, "utf8")) as RankModel) : undefined;
 if (ASK_DIAG) writeFileSync(ASK_DIAG, "");
 const timeline = TIMELINE
   ? new Timeline(TIMELINE, { tool: "hidden-funnel", suites: SUITE_LIST, seeds: SEEDS, config: CONFIG, sync: SYNC })
@@ -319,6 +334,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
     ...(onCandidates ? { onCandidates } : {}),
+    ...(rankModel ? { rankModel } : {}),
   });
   // The harness may read the engine's session table (as `quality.ts` `settle` does; product code may not): whether a
   // session's lookup, prefetch or work its lookup left running (`behind`: `syncPollBehind`'s poll and follow-up,
@@ -448,6 +464,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
         answer: answered.answer,
         detail: task.detail,
         candidates: d?.candidates ?? [],
+        pool: d?.pool ?? [],
       };
       appendFileSync(ASK_DIAG, `${JSON.stringify(line)}\n`);
     }

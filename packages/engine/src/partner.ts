@@ -90,6 +90,7 @@ import {
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger } from "./ledger";
+import { rankAnswer, rankScore, type RankModel } from "./rank";
 import { citationsOf, renderAnswer, renderPacket, shownText, usageText } from "./render";
 import { classifySituation } from "./situation";
 import {
@@ -145,6 +146,11 @@ export interface PartnerDeps {
    * (`decide.ts`) and what was delivered. Ids and numbers only, no content. Absent: no facts are computed for it.
    */
   onCandidates?: CandidateSink;
+  /**
+   * The learned ranker's weights (`rank.ts`) for `askRank` and `rankTies`, for the lab's cross-validation folds
+   * (`hidden-funnel.ts --rank-model`). Absent: the fitted weights the engine carries (`rank-weights.json`).
+   */
+  rankModel?: RankModel;
 }
 
 /** One no-model decision's candidates, for `PartnerDeps.onCandidates`. */
@@ -160,6 +166,8 @@ export interface CandidateDump {
    * pass delivered, or empty for silence).
    */
   how: string;
+  /** The ask's pool before its cut to the item limit: what the rule paths would cite, in their order (path "ask"). */
+  pool?: string[];
 }
 export type CandidateSink = (dump: CandidateDump) => void;
 
@@ -343,6 +351,11 @@ function oldestFirst(item: ContextItem): ContextItem {
   }
   return x;
 }
+/**
+ * `rankTies`: the learned ranker's score for a request's candidates (`rank.ts`), set by the lookup for its cue and
+ * computed on first use, which is only when a cut ties.
+ */
+const RANKERS = new WeakMap<Cue, (x: Scored) => number>();
 /** A lookup's knowledge-graph finds (`graph`), by item id, kept with its cue for delivery's learning. */
 const WALKS = new WeakMap<Cue, Map<string, Walked>>();
 
@@ -666,6 +679,7 @@ export class ContextPartner {
     const ranked = this.rank(s, cue);
     if (ranking) spans!.close(ranking, { candidates: ranked.length });
     const sure = spans?.open("fast.confident", cue.span);
+    this.rankTiesFor(cue, () => this.factsOf(s, cue, ranked, event.kind));
     const fast = this.confident(ranked, cue);
     if (sure) spans!.close(sure, { sure: fast.length });
     // A stale cached copy is not delivered from here: the slow path re-reads it first (D40). A cue in cooldown is not
@@ -1062,8 +1076,15 @@ export class ContextPartner {
       ...(walked.size > 0 ? { walked: [...walked.keys()] } : {}),
     });
     if (ranking) spans!.close(ranking, { candidates: scored.length });
+    // The candidates' facts (`decide.ts`), read once: by `askVerdicts` for its hits, by `askRank` for its order, and by
+    // the lab's dump.
+    const ranked = this.config.askRank;
+    const facts =
+      verdicts || ranked || this.deps.onCandidates
+        ? this.askFacts(s, cue, scored, { probed, consIds, cls: consequence?.cls, walked, carded })
+        : [];
     const hits = verdicts
-      ? this.askHits(s, cue, scored, { probed, consIds, cls: consequence?.cls, walked, carded })
+      ? facts.filter(({ facts: f }) => f.conflictHit || f.graphHit || f.bridged || f.cardViolated).map(({ x }) => x)
       : [];
     const grounding = spans?.open("ground", cue.span);
     // What the question's people and days ground comes first (D44); a named day's other events only through it, so
@@ -1081,7 +1102,24 @@ export class ContextPartner {
       ...grounded.filter((x) => !hits.includes(x)),
       ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x) && !hits.includes(x)),
     ];
-    const chosen = this.config.supersede ? this.latest(cue, pool, true, limit) : pool.slice(0, limit);
+    // `supersede` (docs/research/smart-supersede.md): what a newer decisive item replaced, and (for an action) what is
+    // settled, leaves the pool before any seat is given.
+    const live = this.config.supersede ? this.latest(cue, pool, true, ranked ? undefined : limit) : pool;
+    // `askRank` (docs/research/smart-rank.md): the same pool in the learned ranker's order, and one seat open to its
+    // best candidate outside the pool by a margin. Same limit: what is cited changes, not how much.
+    let chosen = live.slice(0, limit);
+    if (ranked && facts.length > 0) {
+      const by = new Map(facts.map(({ x, facts: f }) => [x, rankScore(f, this.deps.rankModel)]));
+      const inPool = new Set(pool);
+      const outside = facts.filter(({ x }) => !inPool.has(x)).map(({ x }) => x);
+      chosen = rankAnswer(live, outside, limit, this.config.askRankMargin, (x) => by.get(x));
+      // With `supersede`, the outsider that took a seat is read against the pool it joins: if it is superseded or
+      // settled there, the seat stays with the pool.
+      const joined = chosen.find((x) => !inPool.has(x));
+      if (joined && this.config.supersede && !this.latest(cue, [...live, joined], true).includes(joined)) {
+        chosen = rankAnswer(live, [], limit, this.config.askRankMargin, (x) => by.get(x));
+      }
+    }
     // `askCompact` with `densePacket`: an echo of an occurrence the answer already shows (the invitation beside its
     // event) is folded out, as in a packet (`fold.ts`).
     const items = (
@@ -1101,13 +1139,13 @@ export class ContextPartner {
     let learnt = this.config.packetDates && items.length ? usageText(items, answering) : undefined;
     if (rendering) spans!.close(rendering, { items: items.length });
     if (this.deps.onCandidates) {
-      const facts = this.factsOf(s, cue, scored, "ask", { probed: new Set(probed ?? []), walked, carded });
       this.dump(
         s,
         "ask",
         facts,
         scored.filter((x) => items.includes(x.item)),
         items.length > 0 ? "answer" : "",
+        pool.map((x) => x.item.id),
       );
     }
     let usedModel = false;
@@ -1172,12 +1210,13 @@ export class ContextPartner {
   }
 
   /**
-   * `askVerdicts`: the ask's candidates that carry a verdict the lookup's rule paths deliver on, best scored first: a
-   * conflict with the question's frame that is about it and tied beyond a name (`groundConflict`'s test), a binding
-   * graph-walked item in conflict (the graph's ground), a consequence find in conflict tied by its class's words, or
-   * a card the question's actions violate. No model, no call: the facts `decide.ts` reads, over what is cached.
+   * The ask's candidates with their facts (`decide.ts`), best scored first, at most `decideCandidates`. `askVerdicts`
+   * answers first with those that carry a verdict the lookup's rule paths deliver on: a conflict with the question's
+   * frame that is about it and tied beyond a name (`groundConflict`'s test), a binding graph-walked item in conflict
+   * (the graph's ground), a consequence find in conflict tied by its class's words (`bridged`), or a card the
+   * question's actions violate. No model, no call: what is cached.
    */
-  private askHits(
+  private askFacts(
     s: Session,
     cue: Cue,
     scored: Scored[],
@@ -1188,7 +1227,7 @@ export class ContextPartner {
       walked: ReadonlyMap<string, Walked>;
       carded: ReadonlyMap<string, CardFind>;
     },
-  ): Scored[] {
+  ): { x: Scored; facts: Facts }[] {
     const cons = new Set(ctx.consIds);
     const ties = ctx.cls ? classTies(ctx.cls) : undefined;
     const bridged = new Set(
@@ -1203,13 +1242,12 @@ export class ContextPartner {
             .map((x) => x.item.id)
         : [],
     );
-    const facts = this.factsOf(s, cue, scored, "ask", {
+    return this.factsOf(s, cue, scored, "ask", {
       probed: new Set(ctx.probed ?? []),
       bridged,
       walked: ctx.walked,
       carded: ctx.carded,
     });
-    return facts.filter(({ facts: f }) => f.conflictHit || f.graphHit || f.bridged || f.cardViolated).map(({ x }) => x);
   }
 
   /**
@@ -1518,21 +1556,49 @@ export class ContextPartner {
   }
 
   private confident(scored: Scored[], cue: Cue): Scored[] {
-    return (
-      scored
-        .filter((x) => x.score >= this.config.confidentScore && x.matched >= this.config.minMatchedTerms)
-        // Bulk mail is never pushed without a model's say: a newsletter arriving is no reason to speak.
-        .filter((x) => !bulkMail(x.item))
-        // Nor, with `quietSettled`, an item that only says things stand as expected (`settled`); nor, with
-        // `groundAway`, an absence on other days than the request names (`awayElsewhere`).
-        .filter((x) => !this.config.quietSettled || !settled(x.item))
-        .filter((x) => !this.awayElsewhere(x.item, cue))
-        // Nor, with `quietClear`, one about what the request names whose decisive value does not conflict with it.
-        .filter((x) => !this.cleared(x, cue))
-        // Nor, with `quietNameOnly`, one only a name ties to the request.
-        .filter((x) => this.beyondName(x, cue))
-        .slice(0, Math.min(this.config.maxItemsPerInjection, this.config.confidentItems))
-    );
+    const sure = scored
+      .filter((x) => x.score >= this.config.confidentScore && x.matched >= this.config.minMatchedTerms)
+      // Bulk mail is never pushed without a model's say: a newsletter arriving is no reason to speak.
+      .filter((x) => !bulkMail(x.item))
+      // Nor, with `quietSettled`, an item that only says things stand as expected (`settled`); nor, with
+      // `groundAway`, an absence on other days than the request names (`awayElsewhere`).
+      .filter((x) => !this.config.quietSettled || !settled(x.item))
+      .filter((x) => !this.awayElsewhere(x.item, cue))
+      // Nor, with `quietClear`, one about what the request names whose decisive value does not conflict with it.
+      .filter((x) => !this.cleared(x, cue))
+      // Nor, with `quietNameOnly`, one only a name ties to the request.
+      .filter((x) => this.beyondName(x, cue));
+    return this.cut(cue, sure, Math.min(this.config.maxItemsPerInjection, this.config.confidentItems));
+  }
+
+  /**
+   * The first `n` of `xs` (in a rule path's order), with `rankTies` the ones tied with the last kept (`same`, equal
+   * scores by default) in the learned ranker's order: which of equals is kept, never how many nor whether.
+   */
+  private cut(cue: Cue, xs: Scored[], n: number, same = (a: Scored, b: Scored) => a.score === b.score): Scored[] {
+    const rank = RANKERS.get(cue);
+    if (!rank || n <= 0 || xs.length <= n || !same(xs[n - 1]!, xs[n]!)) return xs.slice(0, n);
+    const last = xs[n - 1]!;
+    let from = n - 1;
+    while (from > 0 && same(xs[from - 1]!, last)) from--;
+    let to = n + 1;
+    while (to < xs.length && same(xs[to]!, last)) to++;
+    const tied = xs
+      .slice(from, to)
+      .map((x, i) => ({ x, i, v: rank(x) }))
+      .sort((a, b) => b.v - a.v || a.i - b.i)
+      .map((t) => t.x);
+    return [...xs.slice(0, from), ...tied].slice(0, n);
+  }
+
+  /** `rankTies`: the ranker's scores for this cue's candidates, from their facts, computed on first use. */
+  private rankTiesFor(cue: Cue, facts: () => { x: Scored; facts: Facts }[]): void {
+    if (!this.config.rankTies) return;
+    let by: Map<Scored, number> | null = null;
+    RANKERS.set(cue, (x) => {
+      by ??= new Map(facts().map((f) => [f.x, rankScore(f.facts, this.deps.rankModel)]));
+      return by.get(x) ?? -Infinity;
+    });
   }
 
   /**
@@ -1596,7 +1662,7 @@ export class ContextPartner {
       if (hits.length > 0) {
         // With `graphMerge`, the walk's best conflict joins the request's own (it was found another way).
         const extra = this.config.graphMerge ? best.slice(0, this.config.graphGround) : [];
-        return { items: [...hits.slice(0, this.max() - extra.length), ...extra], how: "conflict" };
+        return { items: [...this.cut(cue, hits, this.max() - extra.length), ...extra], how: "conflict" };
       }
       if (best.length > 0) return { items: best.slice(0, this.config.graphGround), how: "graph" };
       // `cards`: an item whose card the request violates (a freeze over its day, an expiry before it, a limit under
@@ -1635,7 +1701,9 @@ export class ContextPartner {
       }
       // Equal scores: the one nearer in time (a meeting this week over one in March); undated items keep their order.
       const near = (x: Scored) => Math.abs((startMs(x.item) || cue.at) - cue.at);
-      return { items: [[...withPerson].sort((a, b) => b.score - a.score || near(a) - near(b))[0]!], how: "person" };
+      const byPerson = [...withPerson].sort((a, b) => b.score - a.score || near(a) - near(b));
+      const same = (a: Scored, b: Scored) => a.score === b.score && near(a) === near(b);
+      return { items: this.cut(cue, byPerson, 1, same), how: "person" };
     }
     if (!time) return none;
     const events = pool.filter((x) => (time.days.size > 0 ? onDay(x) : time.next && upcoming(x)));
@@ -1887,6 +1955,7 @@ export class ContextPartner {
     facts: { x: Scored; facts: Facts }[],
     delivered: readonly Scored[],
     how: string,
+    pool?: string[],
   ): void {
     const sink = this.deps.onCandidates;
     if (!sink) return;
@@ -1897,6 +1966,7 @@ export class ContextPartner {
       candidates: facts.map((f) => ({ id: f.x.item.id, facts: f.facts })),
       delivered: delivered.map((x) => x.item.id),
       how,
+      ...(pool ? { pool } : {}),
     });
   }
 
@@ -3339,6 +3409,7 @@ export class ContextPartner {
     const probed = new Set(out.kept);
     const scored = this.rank(s, cue, { probed: [...out.kept, ...(out.consequence?.ids ?? [])] });
     const bridged = this.bridgedOf(scored, cue, out.consequence);
+    this.rankTiesFor(cue, () => this.factsOf(s, cue, scored, eventKind, { probed, bridged }));
     const sure = this.confident(scored, cue);
     let items: Scored[] = [];
     let how = "sure";
@@ -3515,6 +3586,10 @@ export class ContextPartner {
           : [],
       );
       if (conflicting) spans!.close(conflicting, { bridged: bridged.size });
+      // `rankTies`: a cut among equals below reads the learned ranker, from the facts the dump reads.
+      this.rankTiesFor(cue, () =>
+        this.factsOf(s, cue, scored, eventKind, { probed: new Set(probedIds ?? []), bridged, walked, carded }),
+      );
       const confiding = spans?.open("confident", cue.span);
       const sure = this.confident(walked.size > 0 ? scored.filter((x) => !x.walkedOnly) : scored, cue);
       if (confiding) spans!.close(confiding, { sure: sure.length });
@@ -3696,6 +3771,11 @@ export class ContextPartner {
         // `recoverNames`: names the request typed in lowercase ("move my drinks with chen wei"), from the user's own
         // record of names, ground and fall back as typed ones do. Only here: probes and ranking keep the cue as typed.
         const named = this.config.recoverNames ? this.withRecoveredNames(s, cue) : cue;
+        if (named !== cue) {
+          this.rankTiesFor(named, () =>
+            this.factsOf(s, named, scored, eventKind, { probed: new Set(probedIds ?? []), bridged, walked, carded }),
+          );
+        }
         // Grounding reads every candidate, not only the judge's few: a day's events rank after every word match.
         const grounding = spans?.open("ground", cue.span, { candidates: eligible.length });
         const grounded = this.grounded(
