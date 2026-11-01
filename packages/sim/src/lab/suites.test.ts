@@ -34,6 +34,17 @@ describe("suite registry", () => {
     expect(parseSuites("all")).not.toContain("heldout10");
   });
 
+  test("heldout11 plants 32 tasks per variant, keeps the request text, and is left out of `all`", () => {
+    const [hidden, control] = (["hidden", "control"] as const).map((v) =>
+      SUITES.heldout11!(buildWorld({ seed: 41_000 }), 41, v),
+    );
+    expect(hidden!.length).toBe(32);
+    expect(control!.map((t) => t.text)).toEqual(hidden!.map((t) => t.text));
+    expect(hidden!.every((t) => t.id.startsWith("w41:heldout11:"))).toBe(true);
+    expect(control!.every((t) => t.id.startsWith("w41:heldout11-control:"))).toBe(true);
+    expect(parseSuites("all")).not.toContain("heldout11");
+  });
+
   test("heldout9 plants tasks under its own name (counts and ids only: its templates are not read here)", () => {
     for (const v of ["hidden", "control"] as const) {
       const tasks = SUITES.heldout9!(buildWorld({ seed: 41_000 }), 41, v);
