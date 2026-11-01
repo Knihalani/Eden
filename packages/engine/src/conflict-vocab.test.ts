@@ -127,13 +127,77 @@ describe("conflictVocab: what is not a block or a clearance", () => {
 });
 
 describe("conflictVocab: dates", () => {
+  /** The verdict with the flag on for an item written at `sent` (none: no date known). */
+  const dated = (request: string, text: string, sent?: number) =>
+    assess(frame(request, true), { ...item("Room", text), ...(sent ? { updatedAt: sent } : {}) }, NOW);
+
   test("a day of the month alone and a weekday after an end word", () => {
     const ordinal = "The meeting room is unavailable until the 3rd for the audit.";
-    // Today is 27 Oct: "the 3rd" is 3 Nov, so a visit on Friday 30 Oct falls inside.
-    expect(both("Book the meeting room for Friday 30 October", "Room", ordinal)[1]).toBe("conflict");
+    // Written today, 27 Oct: "the 3rd" is 3 Nov, so a visit on Friday 30 Oct falls inside.
+    expect(dated("Book the meeting room for Friday 30 October", ordinal, NOW)).toBe("conflict");
     const weekday = "The meeting room is unavailable until Thursday for the audit.";
-    expect(both("Book the meeting room for Monday 2 November", "Room", weekday)[1]).not.toBe("conflict");
-    expect(both("Book the meeting room for Wednesday 28 October", "Room", weekday)[1]).toBe("conflict");
+    expect(dated("Book the meeting room for Monday 2 November", weekday, NOW)).not.toBe("conflict");
+    expect(dated("Book the meeting room for Wednesday 28 October", weekday, NOW)).toBe("conflict");
+  });
+
+  test("a relative date counts from when the message was written, not from the request", () => {
+    // Sent Thursday 1 Oct: "back Monday" meant 5 Oct, not the Monday after the request.
+    const sent = Date.parse("2026-10-01T09:00:00Z");
+    const weekday = "From: Leila Haddad\nI'm off until Monday, back Monday.";
+    const ask = "Ask Leila Haddad to approve the invoice on Friday";
+    expect(assess(frame(ask, false), { ...item("Re: invoices", weekday), updatedAt: sent }, NOW)).toBe("none");
+    expect(assess(frame(ask, true), { ...item("Re: invoices", weekday), updatedAt: sent }, NOW)).not.toBe("conflict");
+    // Sent 1 Sep: "till the 10th" was 10 Sep.
+    const ordinal = "From: Leila Haddad\nI'm off till the 10th.";
+    const sign = "Ask Leila Haddad to sign the contract on Thursday 5 November";
+    const old = { ...item("Holiday", ordinal), updatedAt: Date.parse("2026-09-01T09:00:00Z") };
+    expect(assess(frame(sign, true), old, NOW)).not.toBe("conflict");
+    // The Date: header says when it was sent, ahead of `updatedAt`.
+    const headed = item("Room", "Date: Thu, 1 Oct 2026 09:00:00 +0000\nThe meeting room is unavailable until the 3rd.");
+    expect(assess(frame("Book the meeting room for Friday 30 October", true), headed, NOW)).not.toBe("conflict");
+    // No date known: the relative date is not read, so the verdict is the one without the flag's dates.
+    const undated = "The meeting room is unavailable until the 3rd.";
+    const room = "Book the meeting room for Monday 9 November";
+    expect(dated(room, undated)).toBe(assess(frame(room, false), item("Room", undated), NOW));
+  });
+});
+
+describe("conflictVocab: precision", () => {
+  test("something released is not a block lifted; a hold released is", () => {
+    const freeze =
+      "Production change freeze for billing until 6 November. The billing hotfix was released to staging yesterday.";
+    expect(both("Deploy the billing service to production on Thursday 29 October", "Change freeze", freeze)).toEqual([
+      "conflict",
+      "conflict",
+    ]);
+    const lifted = "Production change freeze for billing until 6 November. Update: the freeze was released today.";
+    expect(both("Deploy the billing service to production on Thursday 29 October", "Change freeze", lifted)[1]).toBe(
+      "clear",
+    );
+  });
+
+  test("a word with no object of its own blocks only what the request names", () => {
+    const from = (text: string) => `From: Priya Shah <priya@example.com>\n${text}`;
+    expect(
+      both(
+        "Book dinner with Priya Shah on Friday",
+        "Re",
+        from("My card was declined at the shop, ha. See you Friday!"),
+      )[1],
+    ).not.toBe("conflict");
+    const sam = (text: string) => `From: Sam Lee <sam@example.com>\n${text}`;
+    const table = "Book a table for me and Sam on Friday";
+    expect(both(table, "Re", sam("Sam declined the second helping, Friday dinner is on."))[1]).not.toBe("conflict");
+    expect(both(table, "Re", sam("The proposal was rejected by the board but Sam is free Friday."))[1]).not.toBe(
+      "conflict",
+    );
+    expect(both("Send Priya the Q4 deck on Friday", "Re", from("Our partners abroad loved the Q3 deck."))[1]).not.toBe(
+      "conflict",
+    );
+    // Tied to the request's own thing, it still blocks.
+    expect(both("Book a table for four on Friday", "Re", "Your table booking request was declined.")[1]).toBe(
+      "conflict",
+    );
   });
 });
 
