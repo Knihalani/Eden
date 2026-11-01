@@ -657,6 +657,15 @@ export class ItemCache {
    * attendees, an owner): their full name, or a first name one of them goes by ("Zoë" for Zoë Müller). A place, a
    * company or a project is not, unless someone is called that. Case-insensitive.
    */
+  /** How many of the user's cached items name `name` (full name, case-insensitive) as a party (`partiesOf`). */
+  partyCount(scope: Scope, name: string): number {
+    const u = this.peek(scope);
+    if (!u) return 0;
+    const want = name.trim().replace(/\s+/g, " ").toLowerCase();
+    for (const [full, n] of u.parties) if (full.toLowerCase() === want) return n;
+    return 0;
+  }
+
   isPerson(scope: Scope, name: string): boolean {
     const u = this.peek(scope);
     if (!u) return false;
