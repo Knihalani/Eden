@@ -133,6 +133,12 @@ if (PACKETS) writeFileSync(PACKETS, "");
  */
 const CANDIDATES = opt("candidates", "");
 if (CANDIDATES) writeFileSync(CANDIDATES, "");
+/**
+ * `--ask-diag out.jsonl` (with `--ask`): each task's ask candidates with their facts (`CandidateDump`, path "ask"),
+ * the planted item's id and rank among them, and whether it was cached, one line per task (docs/research/gen-ask.md).
+ */
+const ASK_DIAG = opt("ask-diag", "");
+if (ASK_DIAG) writeFileSync(ASK_DIAG, "");
 const timeline = TIMELINE
   ? new Timeline(TIMELINE, { tool: "hidden-funnel", suites: SUITE_LIST, seeds: SEEDS, config: CONFIG, sync: SYNC })
   : null;
@@ -251,13 +257,20 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
   const prefetched = new Set<string>();
   const lane = `${suite}/${variant}/${seed}`;
   const dumps = new Map<string, CandidateDump[]>();
-  const onCandidates = CANDIDATES
-    ? (d: CandidateDump) => {
-        const list = dumps.get(d.sessionId) ?? [];
-        dumps.set(d.sessionId, list);
-        list.push(d);
-      }
-    : undefined;
+  const askDumps = new Map<string, CandidateDump>();
+  const onCandidates =
+    CANDIDATES || ASK_DIAG
+      ? (d: CandidateDump) => {
+          if (d.path === "ask") {
+            askDumps.set(d.sessionId, d);
+            return;
+          }
+          if (!CANDIDATES) return;
+          const list = dumps.get(d.sessionId) ?? [];
+          dumps.set(d.sessionId, list);
+          list.push(d);
+        }
+      : undefined;
   const countCalls = (t: Trace) => {
     // A prefetch's calls (`anticipate`) are the task's too.
     calls += t.sourceCalls + (t.anticipateCalls ?? 0);
@@ -394,6 +407,27 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     const got = arrived.flatMap((x) => x.ids);
     const answered = ASK ? await partner.ask({ ...scope, sessionId, question: task.text }) : null;
     const askCited = answered ? answered.citations.some((c) => c.itemId === id) : undefined;
+    if (ASK_DIAG && answered) {
+      const d = askDumps.get(sessionId);
+      askDumps.delete(sessionId);
+      const line = {
+        suite,
+        seed,
+        variant,
+        template: task.template,
+        request: task.text,
+        planted: id,
+        cached: !!cache.get(scope, id, clock),
+        delivered: got.includes(id),
+        askCited,
+        rank: d ? d.candidates.findIndex((c) => c.id === id) : -1,
+        cited: answered.citations.map((c) => c.itemId),
+        answer: answered.answer,
+        detail: task.detail,
+        candidates: d?.candidates ?? [],
+      };
+      appendFileSync(ASK_DIAG, `${JSON.stringify(line)}\n`);
+    }
     // How the planted item was delivered (the injection reason's kind: sources, grounded-…, fallback, model).
     const why =
       [...injections, ...pendingSeen].find((x) => x.citations.some((c) => c.itemId === id))?.reason.split(":")[0] ?? "";
@@ -426,7 +460,14 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       returned: returned.has(id),
       cached: !!cache.get(scope, id, clock),
       delivered: got.includes(id),
-      ...(askCited === undefined ? {} : { askCited }),
+      ...(askCited === undefined
+        ? {}
+        : {
+            askCited,
+            askBytes: Buffer.byteLength(answered!.answer),
+            ...(askCited ? { askKept: kept(task.detail, planted[i]!, answered!.answer) } : {}),
+            askItems: answered!.citations.length,
+          }),
       why,
       injected: got.length,
       calls: calls - callsBefore,
@@ -446,6 +487,19 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     syncUse.demandAll += sync.stats.demandCalls;
   }
   return perTask;
+}
+
+/**
+ * A proxy for whether an answer says the hidden detail, not only cites its item: of the detail's key words (numbers,
+ * and words of four letters or more) that the planted item holds, the share the answer's text holds too.
+ */
+function kept(detail: string, item: { title: string; text: string }, answer: string): number {
+  const words = (t: string) => new Set(t.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []);
+  const has = words(`${item.title} ${item.text}`);
+  const shown = words(answer);
+  const keys = [...words(detail)].filter((w) => (/\d/.test(w) || w.length >= 4) && has.has(w));
+  if (keys.length === 0) return 1;
+  return Number((keys.filter((w) => shown.has(w)).length / keys.length).toFixed(3));
 }
 
 const pct = (a: number, n: number) => `${a}/${n}`;

@@ -353,6 +353,23 @@ export interface EngineConfig {
    * match no longer silences a conflict.
    */
   decideConflict: boolean;
+  /**
+   * An ask gathers the lookup's candidates (consequence probe, graph walk, card finds) and answers first with those
+   * carrying a rule path's verdict: a conflict about the question, a binding graph conflict, a consequence find in
+   * conflict, a violated card (docs/research/gen-ask.md). Off by default.
+   */
+  askVerdicts: boolean;
+  /**
+   * An ask's answer is compacted as a packet is (`compactText` around the question's words, `askItemBytes` each),
+   * items past the first `askFullItems` cut to `askLineBytes`, the whole at most `askMaxBytes`, and with
+   * `densePacket` an echo folded out (docs/research/gen-ask.md). Off by default: the answer is each item's first
+   * bytes, at most 4,000.
+   */
+  askCompact: boolean;
+  askItemBytes: number;
+  askFullItems: number;
+  askLineBytes: number;
+  askMaxBytes: number;
   /** With `decideConflict`: the ranked candidates its test reads (and the lab's candidate dump holds), best first. */
   decideCandidates: number;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
@@ -502,6 +519,12 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cardsEconomy: false,
   cardItems: 1,
   decideConflict: false,
+  askVerdicts: false,
+  askCompact: false,
+  askItemBytes: 320,
+  askFullItems: 5,
+  askLineBytes: 200,
+  askMaxBytes: 4_000,
   decideCandidates: 64,
   maxEventChars: 32_000,
   actionCheck: false,

@@ -29,6 +29,12 @@ export function renderPacket(
     keepYear?: boolean;
     /** `packetDates`: an event whose text never says its day starts with its `meta.start` (`whenOf`). */
     when?: boolean;
+    /**
+     * `askCompact`: items past the first `fullItems` are compacted to `tailBytes` (a line each, the parts that bear
+     * most on the request) instead of `itemBytes`, so a lower-ranked item stays in the answer, shorter.
+     */
+    fullItems?: number;
+    tailBytes?: number;
   },
 ): string {
   if (options.focus) {
@@ -38,13 +44,14 @@ export function renderPacket(
     // calendar event, its invitation and the reply confirming it do, says nothing more. Its own title too.
     const shown = new Set<string>();
     const known = options.known ?? (() => false);
-    items = items.map((item) => {
+    const full = options.fullItems ?? Infinity;
+    items = items.map((item, i) => {
       const title = item.title.toLowerCase().match(WORDS) ?? [];
       const own = new Set(title);
       const text = compactText(
         item.text,
         focus,
-        each,
+        i < full ? each : (options.tailBytes ?? each),
         (w) => own.has(w) || shown.has(w) || known(w),
         // No year, no drop: dates stay as the source wrote them, since "expires 2 Nov" is ambiguous to an agent
         // comparing it with the request's dates where "2 Nov 2026" is not.

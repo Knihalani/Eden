@@ -150,7 +150,7 @@ export interface CandidateDump {
   sessionId: string;
   turn: number;
   /** Where the decision was made: the fast path, anticipation's early decision, or the lookup. */
-  path: "fast" | "early" | "lookup" | "served";
+  path: "fast" | "early" | "lookup" | "served" | "ask";
   candidates: { id: string; facts: Facts }[];
   delivered: string[];
   /**
@@ -1022,10 +1022,26 @@ export class ContextPartner {
       probed,
       local,
       syncCalls,
+      consequence,
     } = await this.searchLive(s, cue, this.config.askSources);
+    // `askVerdicts` (docs/research/gen-ask.md): an ask gathers what a lookup gathers (the consequence probe's finds,
+    // the graph walk's, the card finds), not only what shares the question's words, and reads each with the verdicts
+    // the lookup's rule paths read, so an item the question runs into answers it ahead of a merely similar one.
+    const verdicts = this.config.askVerdicts;
+    const consIds = verdicts ? (consequence?.ids ?? []) : [];
+    const walked = verdicts && this.config.graph ? this.walkGraph(s, cue) : new Map<string, Walked>();
+    const carded = verdicts ? this.cardFinds(s, cue) : new Map<string, CardFind>();
+    const extra = [...consIds, ...carded.keys()];
     const ranking = spans?.open("rank", cue.span);
-    const scored = this.rank(s, cue, { ignoreLedger: true, probed });
+    const scored = this.rank(s, cue, {
+      ignoreLedger: true,
+      probed: extra.length > 0 ? [...(probed ?? []), ...extra] : probed,
+      ...(walked.size > 0 ? { walked: [...walked.keys()] } : {}),
+    });
     if (ranking) spans!.close(ranking, { candidates: scored.length });
+    const hits = verdicts
+      ? this.askHits(s, cue, scored, { probed, consIds, cls: consequence?.cls, walked, carded })
+      : [];
     const grounding = spans?.open("ground", cue.span);
     // What the question's people and days ground comes first (D44); a named day's other events only through it, so
     // a question about a topic is not padded with that day's calendar.
@@ -1037,16 +1053,56 @@ export class ContextPartner {
       "ask",
     ).items;
     if (grounding) spans!.close(grounding, { grounded: grounded.length });
-    const items = [...grounded, ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x))]
-      .slice(0, limit)
-      .map((x) => x.item);
+    const chosen = [
+      ...hits,
+      ...grounded.filter((x) => !hits.includes(x)),
+      ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x) && !hits.includes(x)),
+    ].slice(0, limit);
+    // `askCompact` with `densePacket`: an echo of an occurrence the answer already shows (the invitation beside its
+    // event) is folded out, as in a packet (`fold.ts`).
+    const items = (
+      this.config.askCompact && this.config.densePacket
+        ? foldEchoes(chosen, {
+            focus: focusOf(cue),
+            year: new Date(this.now()).getUTCFullYear(),
+            self: this.deps.cache.selfOf(s.scope),
+            rare: (w) => this.deps.cache.isRare(s.scope, w, RARE_SHARE),
+          })
+        : chosen
+    ).map((x) => x.item);
     const rendering = spans?.open("render", cue.span);
-    // `packetDates`: an answer is not compacted, so only an event's missing day needs saying.
-    const answering = { maxBytes: 4_000, ...(this.config.packetDates ? { when: true } : {}) };
+    // `packetDates`: an answer is not compacted (without `askCompact`), so only an event's missing day needs saying.
+    // `askCompact` (docs/research/gen-ask.md): it is, as a packet is, around the question's words; past the first
+    // `askFullItems` items each is cut to a line (`askLineBytes`), and a part that only repeats what the answer already
+    // shows (an invitation, its event and the reply confirming it) is dropped.
+    const compact = this.config.askCompact;
+    const answering: Parameters<typeof renderPacket>[1] = compact
+      ? {
+          maxBytes: this.config.askMaxBytes,
+          focus: focusOf(cue),
+          itemBytes: this.config.askItemBytes,
+          fullItems: this.config.askFullItems,
+          tailBytes: this.config.askLineBytes,
+          year: new Date(this.now()).getUTCFullYear(),
+          self: this.deps.cache.selfOf(s.scope),
+          dense: this.config.densePacket,
+          ...(this.config.packetDates ? { keepYear: true, when: true } : {}),
+        }
+      : { maxBytes: 4_000, ...(this.config.packetDates ? { when: true } : {}) };
     let answer = items.length ? renderPacket(items, answering) : "Nothing in the connected sources.";
     // What usage learns from the answer: the packet without the flag's additions, unless the model composed it.
     let learnt = this.config.packetDates && items.length ? usageText(items, answering) : undefined;
     if (rendering) spans!.close(rendering, { items: items.length });
+    if (this.deps.onCandidates) {
+      const facts = this.factsOf(s, cue, scored, "ask", { probed: new Set(probed ?? []), walked, carded });
+      this.dump(
+        s,
+        "ask",
+        facts,
+        scored.filter((x) => items.includes(x.item)),
+        items.length > 0 ? "answer" : "",
+      );
+    }
     let usedModel = false;
     let costUsd = 0;
     const reservation =
@@ -1106,6 +1162,47 @@ export class ContextPartner {
     });
     if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "answer", delivered: items.length > 0 });
     return { answer, citations: citationsOf(items), usedModel, costUsd, latencyMs };
+  }
+
+  /**
+   * `askVerdicts`: the ask's candidates that carry a verdict the lookup's rule paths deliver on, best scored first: a
+   * conflict with the question's frame that is about it and tied beyond a name (`groundConflict`'s test), a binding
+   * graph-walked item in conflict (the graph's ground), a consequence find in conflict tied by its class's words, or
+   * a card the question's actions violate. No model, no call: the facts `decide.ts` reads, over what is cached.
+   */
+  private askHits(
+    s: Session,
+    cue: Cue,
+    scored: Scored[],
+    ctx: {
+      probed?: readonly string[];
+      consIds: readonly string[];
+      cls?: ActionClass;
+      walked: ReadonlyMap<string, Walked>;
+      carded: ReadonlyMap<string, CardFind>;
+    },
+  ): Scored[] {
+    const cons = new Set(ctx.consIds);
+    const ties = ctx.cls ? classTies(ctx.cls) : undefined;
+    const bridged = new Set(
+      cons.size > 0
+        ? scored
+            .filter(
+              (x) =>
+                cons.has(x.item.id) &&
+                !unmeasuredLimit(this.frame(cue), x.item) &&
+                this.verdict(x.item, cue, ties) === "conflict",
+            )
+            .map((x) => x.item.id)
+        : [],
+    );
+    const facts = this.factsOf(s, cue, scored, "ask", {
+      probed: new Set(ctx.probed ?? []),
+      bridged,
+      walked: ctx.walked,
+      carded: ctx.carded,
+    });
+    return facts.filter(({ facts: f }) => f.conflictHit || f.graphHit || f.bridged || f.cardViolated).map(({ x }) => x);
   }
 
   /**

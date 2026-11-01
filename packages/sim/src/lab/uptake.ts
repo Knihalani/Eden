@@ -10,6 +10,15 @@ interface Cited {
 
 /** The longest a task line's joined packets get: enough to read a task's packets, not a run's worth per line. */
 export const PACKETS_CHARS = 6_000;
+/** The longest an agent's recorded `ask_context` question gets. */
+export const QUESTION_CHARS = 500;
+
+/** One `ask_context` call: the agent's question, the ids its answer cited, and the answer's size in bytes. */
+export interface AskRecord {
+  question: string;
+  cited: string[];
+  bytes: number;
+}
 
 /** One pi-ab task's packets, the item ids they cited, and the ids `ask_context` answers cited, in arrival order. */
 export class UptakeLog {
@@ -33,16 +42,35 @@ export class UptakeLog {
   }
 
   /** An `ask_context` answer the agent read. */
-  answer(a: Cited): void {
-    this.askCited.push(...a.citations.map((c) => c.itemId));
+  /**
+   * An `ask_context` answer the agent read. With `question`, the agent's own question is kept with the answer's size
+   * and cited ids, so a later run can replay the questions agents really ask (docs/research/gen-ask.md); sim worlds
+   * only, whose data is fake.
+   */
+  answer(a: Cited & { answer?: string }, question?: string): void {
+    const ids = a.citations.map((c) => c.itemId);
+    this.askCited.push(...ids);
+    if (question !== undefined) {
+      this.asks.push({
+        question: question.slice(0, QUESTION_CHARS),
+        cited: ids,
+        bytes: Buffer.byteLength(a.answer ?? ""),
+      });
+    }
   }
 
-  /** The task line's fields: the joined packets (when any, cut), and each way's cited ids, deduplicated. */
-  fields(): { packets?: string; cited: string[]; askCited: string[] } {
+  private readonly asks: AskRecord[] = [];
+
+  /**
+   * The task line's fields: the joined packets (when any, cut), each way's cited ids, deduplicated, and the asks
+   * (when any were recorded with their question).
+   */
+  fields(): { packets?: string; cited: string[]; askCited: string[]; asks?: AskRecord[] } {
     return {
       ...(this.packets.length ? { packets: this.packets.join("\n").slice(0, PACKETS_CHARS) } : {}),
       cited: [...new Set(this.cited)],
       askCited: [...new Set(this.askCited)],
+      ...(this.asks.length ? { asks: this.asks } : {}),
     };
   }
 }
