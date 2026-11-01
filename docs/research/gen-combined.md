@@ -244,3 +244,52 @@ Re-run of ALL3 after the fixes (same funnel, seeds 41–44, cards replayed, $0):
   - input and output tokens;
   - wall time p50/p90/p99;
   - Eden's critical path, and per-second profiles.
+
+## Results of the last live measure (appended after the run; the pre-registration above is unchanged)
+
+Run 2026-11-01 (ledger `final-h10`, `final-h59`). Live spend $2.00 in all: held-out 10 $0.67, held-out 5–9 $1.32.
+
+### Held-out 10 (primary, fresh)
+
+6 seeds, 192 hidden and 192 control tasks per condition.
+
+| Condition | Hidden raised | False concern | Billed agent $/1k (hidden / control) | Input tokens (hidden) | Wall p50 / p90 (hidden) |
+|---|---|---|---|---|---|
+| tools | 0.318 | 0.042 | 0.339 / 0.344 | 3,123 | 6.85 / 9.84 s |
+| eden (ALL) | 0.516 | 0.042 | 0.323 / 0.342 | 2,093 | 5.27 / 10.39 s |
+| **eden~ALL3** | **0.557** | 0.052 | **0.300 / 0.288** | **1,741** | 5.63 / **9.46 s** |
+
+Paired differences:
+
+| Comparison | Hidden raised | False concern | Billed agent $/1k (hidden / control) |
+|---|---|---|---|
+| ALL3 − ALL | +0.042 (−0.021..+0.104) | +0.010 (−0.010..+0.031) | −0.023 (−0.042..−0.004) / −0.054 (−0.079..−0.031) |
+| ALL − tools | +0.198 (+0.135..+0.260) | | |
+
+- **Re-priced at Wafer-us:** tools $0.281, ALL $0.246, ALL3 $0.222 per 1k tasks.
+- **Uptake:** the planted item was in a packet in 55 → 62 tasks; raised when in a packet 0.636 → 0.710. Never surfaced:
+  65 → 59.
+- **Eden's model spend** (cards) over both Eden conditions was $0.079. `cardsEconomy` halves card calls in ALL3.
+
+### Held-out 5–9 (secondary, contaminated: reported, not deciding)
+
+4 seeds, 428 + 428 tasks.
+
+| Comparison | Hidden raised | False concern | Billed agent $/1k (hidden / control) |
+|---|---|---|---|
+| ALL3 − ALL | −0.019 (−0.056..+0.019) | −0.002 | −0.022 / −0.028 |
+| ALL − tools | +0.234 (+0.185..+0.283) | | |
+
+Hidden raised: tools 0.266, ALL 0.500, ALL3 0.481. Input tokens (hidden): 1,975 → 1,661.
+
+### Against the bar
+
+All three conditions hold on held-out 10:
+- the lower bound of the hidden difference is −0.021 > −0.03;
+- the false-concern point estimate is +0.010, at the +0.01 limit;
+- the cost is lower: agent billed −$0.023 and −$0.054 per 1k, and fewer card calls.
+
+**ALL3 replaces ALL as the recommended experimental configuration (D80).** Every flag stays off by default.
+
+Against tools on held-out 10, ALL3 raises the hidden fact 1.75× as often (0.557 / 0.318) and costs 12–16% less per
+task in agent tokens.
