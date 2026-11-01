@@ -228,6 +228,17 @@ export interface EngineConfig {
    */
   quietNameOnly: boolean;
   /**
+   * `conflictVocab` (D75, docs/research/gen-proactive.md): the conflict test (`conflict.ts`) reads a wider, general
+   * vocabulary: more ways to say a thing is blocked ("until further notice", "not signed", "revoked", "I'm off from",
+   * "hold every send", "no new spend", "scrapped"), a standing constraint ("stopped drinking"), lifted ("released",
+   * "back to normal"); idioms that are not blocks ("can't wait for Friday") and sign-off courtesies ("happy to jump on
+   * a call") are not read as statements; possessives tie ("Leila's" is Leila); a day of the month alone ("till the
+   * 10th") and a weekday after a date word ("until Sunday", "back Thursday") are dates; a clearance about another
+   * party does not undo a conflict tied to the one the request names (a table's other rows); and more leading verbs
+   * make a request an imperative for `quietNameOnly` ("Transfer", "Renew", "Raise"). Off: as D49-D55.
+   */
+  conflictVocab: boolean;
+  /**
    * Span tracing (`spans.ts`): every phase of every event timed in wall and CPU time, totals kept per phase
    * (`ContextPartner.spanStats`). An `onSpan` sink turns it on too. Off: no span is made.
    */
@@ -353,6 +364,23 @@ export interface EngineConfig {
    * match no longer silences a conflict.
    */
   decideConflict: boolean;
+  /**
+   * An ask gathers the lookup's candidates (consequence probe, graph walk, card finds) and answers first with those
+   * carrying a rule path's verdict: a conflict about the question, a binding graph conflict, a consequence find in
+   * conflict, a violated card (D73, docs/research/gen-ask.md). Off by default.
+   */
+  askVerdicts: boolean;
+  /**
+   * An ask's answer is compacted as a packet is (`compactText` around the question's words, `askItemBytes` each),
+   * items past the first `askFullItems` cut to `askLineBytes`, the whole at most `askMaxBytes`, and with
+   * `densePacket` an echo folded out (D74, docs/research/gen-ask.md). Off by default: the answer is each item's first
+   * bytes, at most 4,000.
+   */
+  askCompact: boolean;
+  askItemBytes: number;
+  askFullItems: number;
+  askLineBytes: number;
+  askMaxBytes: number;
   /** With `decideConflict`: the ranked candidates its test reads (and the lab's candidate dump holds), best first. */
   decideCandidates: number;
   /** Probe parts switched off, for ablations: "day", "people", "org", "topic", "seats", "clash". */
@@ -391,6 +419,25 @@ export interface EngineConfig {
    * the cards and the calendar. A finding is returned as data; otherwise `proceed`. Off: `checkAction` always proceeds.
    */
   actionCheck: boolean;
+  /**
+   * `ask` answers compacted as packets are (D76; docs/research/gen-tokens.md): each item cut to the parts that bear on
+   * the question (`compactText`), at most `askItemBytes`, rather than said whole up to the answer's 4 KB. The items and
+   * their order are unchanged; only how much of each the agent reads. Off: answers say each item whole. Shares
+   * `askItemBytes` with `askCompact`, its alternative (docs/research/gen-combined.md), which wins if both are on.
+   */
+  compactAsk: boolean;
+  /**
+   * An `ask` answer does not repeat what this session's packets and answers already showed the agent (D77): an item
+   * shown before is said by its title alone with "(shown above)", or with only the parts not shown before. Words shown
+   * are kept per session (`Session.shown`, bounded), never across sessions or users.
+   */
+  askDedup: boolean;
+  /**
+   * Compaction (packets and `compactAsk` answers) reads a quoted thread's earlier messages past the signature of the
+   * message quoting them, and a table flattened to one line by its rows (D78, `messageParts`). Without it a quoted
+   * sign-off ("— O") hides the rest of a thread, and a one-line table longer than an item's room is dropped whole.
+   */
+  compactParts: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -476,6 +523,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   recoverNames: false,
   groundOccasion: false,
   quietNameOnly: false,
+  conflictVocab: false,
   spans: false,
   sync: false,
   syncMaxItems: 3_000,
@@ -502,7 +550,16 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cardsEconomy: false,
   cardItems: 1,
   decideConflict: false,
+  askVerdicts: false,
+  askCompact: false,
+  askItemBytes: 320,
+  askFullItems: 5,
+  askLineBytes: 200,
+  askMaxBytes: 4_000,
   decideCandidates: 64,
   maxEventChars: 32_000,
   actionCheck: false,
+  compactAsk: false,
+  askDedup: false,
+  compactParts: false,
 };

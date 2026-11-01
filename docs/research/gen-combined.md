@@ -1,0 +1,295 @@
+# The generalise tracks combined: ALL3 (D73–D79, proposed)
+
+Branch `gen/combined`, from `main` (`0bc877deb`) with the two development suites (`gen/dev6a`, `gen/dev6b`) and the
+three tracks whose verdict was adopt behind a flag: `gen/ask` (docs/research/gen-ask.md), `gen/proactive`
+(docs/research/gen-proactive.md) and `gen/tokens` (docs/research/gen-tokens.md). Every flag stays off by default. ALL3
+is chosen on the development suites (dev6a, dev6b) and the old in-sample suites (hidden, held-out 1–4) only, and no
+model was called ($0). Held-out 5–9 were not run for it, but they are **contaminated** (see "What this does not
+show"): they were used in D72, and dev6a/dev6b copy some of their templates.
+
+## Merging
+
+- `suites.ts` conflicted on each merge (each branch added the other dev suite or a comment); both suites are kept.
+- `ask` and `tokens` both compact the ask's answer, under two flags that share `askItemBytes` (320):
+  - `askCompact` (ask): drops the current year from dates as packets do, unless `packetDates` keeps it; has a tail cut
+    (`askFullItems`, `askLineBytes`, off at its defaults); caps the answer at `askMaxBytes`; with `densePacket`, folds
+    echoes out of the answer before rendering.
+  - `compactAsk` (tokens): keeps dates as written, with their year; no tail cut.
+  - Both are kept as alternatives. `ContextPartner.answering` builds the render options for both; `askCompact` wins if
+    both are on. `renderPacket` takes the ask track's `fullItems`/`tailBytes` and the tokens track's `shownBefore`
+    (`askDedup`) and `split` (`compactParts`) together, so `askDedup` and `compactParts` work under either.
+- `config.ts` merged with `askItemBytes` declared twice; it is declared once.
+- The tracks each took D73. Here they are one row per flag: D73 `askVerdicts`, D74 `askCompact`, D75 `conflictVocab`,
+  D76 `compactAsk`, D77 `askDedup`, D78 `compactParts`, and D79 for ALL3. Code comments and the track write-ups now
+  cite those numbers.
+
+Checks on the final tree: `bun run check` green (1,090 tests). `bun run eval` with every flag off equals `main`'s
+(`0bc877deb`, run in a separate worktree this session) except latency, which is noise between runs: the reviewer's
+runs gave main p50 0.381 ms / p95 2.96 ms against the branch's 0.390 / 3.60 ms, so no latency change is claimed.
+
+## Method
+
+No-model funnel, seeds 41–44, real sync, cards replayed from `packages/sim/lab/cards/cards-v2.jsonl` (no live
+enrichment: dev items with no card stay uncovered), `--ask`, `--packets`:
+
+```bash
+bun packages/sim/src/lab/hidden-funnel.ts --suite dev6a,dev6b --no-record --config "$CFG" \
+  --cards packages/sim/lab/cards/cards-v2.jsonl --ask --packets out.jsonl
+# and --suite hidden,heldout,heldout2,heldout3,heldout4
+```
+
+ALL is D64's (R plus `sync`). ALL3 is ALL plus the adopted flags that earn their place below. Measures are read from
+the packets file, per task:
+
+- **delivered**: a packet cited the planted item (hidden tasks).
+- **askCited**: the ask's answer cited it.
+- **either**: one or the other.
+- **decoys**: the same two on control tasks (the decoy planted instead).
+- **bytes per packet**: mean over packets.
+- **bytes per ask**: mean answer over all tasks.
+- **bytes per task**: packets plus one answer.
+- **retention**: the evidence-word proxy of gen-tokens.md. Of the detail's key words (numbers, words of four letters or
+  more) that the planted item holds, the share the packets and answer hold, over hidden tasks where either cites the
+  planted item. "Lower" counts tasks cited in both runs whose retention fell.
+- **card sends and calls**: the enricher's counters.
+
+The ALL baseline reproduces every track's (in-sample 218 / 191 / 240, decoys 18; dev 49 / 108 / 109, decoys 14).
+
+## ALL against ALL3
+
+ALL3 = ALL + `askVerdicts` + `conflictVocab` + `compactAsk` + `askDedup` + `compactParts` + `cardsEconomy`.
+
+| | dev6a ALL | dev6a ALL3 | dev6b ALL | dev6b ALL3 | dev ALL | dev ALL3 | in-sample ALL | in-sample ALL3 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| hidden tasks | 120 | 120 | 120 | 120 | 240 | 240 | 268 | 268 |
+| delivered | 25 | 38 | 24 | 59 | 49 | **97** | 218 | 216 |
+| askCited | 58 | 61 | 50 | 61 | 108 | **122** | 191 | **244** |
+| either | 59 | 61 | 50 | 61 | 109 | **122** | 240 | **244** |
+| decoys delivered | 6 | 6 | 8 | 4 | 14 | 10 | 18 | 17 |
+| decoys askCited | 53 | 52 | 42 | 39 | 95 | 91 | 143 | 148 |
+| bytes per packet | 306.6 | 335.4 | 312.6 | 375.9 | 309.1 | 353.5 | 339.8 | 340.6 |
+| bytes per ask | 1,229.5 | 678.8 | 1,161.5 | 642.7 | 1,195.5 | **660.7** | 1,253.6 | **637.6** |
+| bytes per task | 1,381.5 | 877.2 | 1,273.5 | 821.3 | 1,327.5 | **849.3** | 1,528.2 | **915.3** |
+| retention | 0.945 | 0.939 | 0.982 | 0.985 | 0.962 | 0.962 | 1.000 | 0.995 |
+| card sends | | | | | 2,785 | 1,294 | 6,660 | 2,970 |
+| card calls | | | | | 411 | 215 | 970 | 496 |
+
+### Task by task, ALL3 against ALL
+
+- **Dev hidden**:
+  - 48 delivery gains, 0 losses.
+  - 14 askCited gains, 0 losses.
+  - either +13, −0.
+- **Dev decoys**: 4 fewer delivered and 4 fewer cited by the ask; none added.
+- **In-sample hidden**:
+  - 2 deliveries lost, the `po-threshold` pair gen-proactive.md traced.
+  - 53 askCited gains, 0 losses.
+  - either +4, −0.
+- **In-sample decoys**: 1 fewer delivered; the ask cites 6 more and 1 fewer.
+- **Retention fell** in 3 dev and 9 in-sample tasks cited in both runs:
+  - 2 tasks: the year "2026" (`askDedup`, as in gen-tokens.md).
+  - 10 tasks: the user's own first name "robin" (the agent's user, whom compaction names as the sender's self or
+    drops).
+  - No other word of a planted fact was lost.
+- **Bytes the agent reads per task**: −36% on dev, −40% in-sample.
+  - At 4 bytes a token and $0.053/M input (gen-tokens.md's figures), that is about −$0.006 per 1,000 tasks on dev
+    and −$0.008 in-sample. Estimate from measured bytes; not tokenised.
+- **Card calls**: −48% on dev and −49% in-sample. Replayed cards cost nothing here; gen-tokens.md's estimate of what
+  that saves is about −$0.019 per 1,000 tasks.
+- **Bytes per packet** rise on dev (309 → 354) because `conflictVocab` delivers 48 more conflict packets. Those
+  packets are longer than the average; packets per task rise too. In-sample bytes per packet are flat.
+
+## Leave one out (from ALL3)
+
+Each row is ALL3 without one flag; the change is what that flag adds to ALL3, read task by task.
+
+| ALL3 without | dev delivered | dev askCited | dev either | dev decoys del / ask | in delivered | in askCited | in either | in decoys del / ask | dev bytes per ask / task | in bytes per ask / task | retention lower (dev / in) | card calls (dev / in) |
+|---|---:|---:|---:|---|---:|---:|---:|---|---|---|---|---|
+| (ALL3) | 97 | 122 | 122 | 10 / 91 | 216 | 244 | 244 | 17 / 148 | 660.7 / 849.3 | 637.6 / 915.3 | 3 / 9 vs ALL | 215 / 496 |
+| `askVerdicts` | 97 | 121 | 122 | 10 / 95 | 216 | 191 | 239 | 17 / 143 | 652.2 / 840.7 | 624.3 / 902.0 | 3 / 10 vs ALL | 215 / 496 |
+| `conflictVocab` | 49 | 109 | 109 | 14 / 91 | 218 | 244 | 244 | 18 / 148 | 682.8 / 814.7 | 637.6 / 912.4 | 4 / 9 vs ALL | 215 / 496 |
+| `compactAsk` | 97 | 122 | 122 | 10 / 91 | 216 | 244 | 244 | 17 / 148 | 1,099.7 / 1,288.2 | 1,074.6 / 1,352.3 | 3 / 3 vs ALL | 215 / 496 |
+| `askDedup` | 97 | 122 | 122 | 10 / 91 | 216 | 244 | 244 | 17 / 148 | 767.7 / 956.2 | 795.1 / 1,072.8 | 3 / 7 vs ALL | 215 / 496 |
+| `compactParts` | 97 | 122 | 122 | 10 / 91 | 216 | 244 | 244 | 17 / 148 | 643.9 / 833.8 | 636.6 / 914.0 | 11 / 9 vs ALL | 215 / 496 |
+| `cardsEconomy` | 97 | 122 | 122 | 10 / 91 | 216 | 244 | 244 | 17 / 148 | 659.2 / 847.7 | 637.6 / 915.3 | 3 / 9 vs ALL | 411 / 970 |
+| `compactAsk` → `askCompact` | 97 | 122 | 122 | 10 / 91 | 216 | 244 | 244 | 17 / 148 | 646.6 / 835.2 | 623.0 / 900.7 | 3 / 24 vs ALL | 215 / 496 |
+
+What each flag adds to ALL3, task by task:
+
+- **`askVerdicts`**:
+  - dev: askCited +1, and 4 fewer decoys cited by the ask.
+  - in-sample: askCited +53, either +5, decoys cited by the ask +6 / −1.
+  - Retention: 1 task lower, 2 higher.
+  - Cost: +8–13 bytes per answer.
+- **`conflictVocab`**:
+  - dev: +48 delivered, +13 askCited and +13 either, 4 fewer decoys delivered.
+  - in-sample: −2 delivered, −1 decoy, either unchanged.
+  - dev retention: 1 task higher.
+- **`compactAsk`**:
+  - Answers −40% (dev −439 B, in-sample −437 B).
+  - Facts unchanged.
+  - 6 in-sample tasks lower in retention (the user's own name, above).
+- **`askDedup`**:
+  - Answers −107 B on dev and −158 B in-sample.
+  - Facts unchanged.
+  - 2 in-sample tasks lower (the year).
+- **`compactParts`**:
+  - +17 B per answer on dev, +1 B in-sample.
+  - Facts unchanged.
+  - Keeps more evidence: 8 dev tasks higher in retention (dev retention 0.948 → 0.962).
+- **`cardsEconomy`**:
+  - Card sends −54% and −55%, card calls −48% and −49%.
+  - Facts, decoys and bytes unchanged.
+- **`askCompact` in place of `compactAsk`**:
+  - Facts the same.
+  - 14 to 15 bytes per answer fewer.
+  - 15 more in-sample tasks lose evidence words (the year, which it drops from dates).
+  - So ALL3 takes `compactAsk`, and `askCompact` stays a flag outside it.
+
+## ALL3
+
+Every flag in ALL3 earns its place in the leave-one-out on the evidence allowed: facts (`askVerdicts`,
+`conflictVocab`), bytes at no fact (`compactAsk`, `askDedup`), evidence kept (`compactParts`) or card spend at no fact
+(`cardsEconomy`).
+
+```json
+{"probes":true,"compactInjection":true,"quietSettled":true,"groundAway":true,"judgeContested":true,"judgeItemBytes":200,"probeShare":true,"probeTopicAlone":true,"fallbackAsks":true,"groundConflict":true,"quietClear":true,"probeFresh":true,"probeYield":true,"densePacket":true,"groundOccasion":true,"quietNameOnly":true,"judgeTied":true,"consequenceProbe":true,"probeRoles":true,"graph":true,"graphMerge":true,"cards":true,"anticipate":true,"sync":true,"askVerdicts":true,"conflictVocab":true,"compactAsk":true,"askDedup":true,"compactParts":true,"cardsEconomy":true}
+```
+
+It is proposed, not recommended. ALL stays the recommended experimental configuration (D64, D72) until a
+pre-registered live measure of ALL3 against ALL passes.
+
+## Review fixes
+
+A review of this branch (REQUEST_CHANGES) found three false fires in `conflictVocab` and a stale fact in `askDedup`;
+each is fixed with a regression test that failed before the fix (`conflict-vocab.test.ts`, `tokens.test.ts`):
+
+- **Relative dates read from the request's day.** "Back Monday" sent on 1 Oct was read as the Monday after the
+  request. "Until Sunday", "back Monday", "till the 10th" now count from when the item was written (its `Date:`
+  header, else `updatedAt`, `sentAt`); with neither known they are not read.
+- **A bare "released" lifted a block.** "The billing hotfix was released to staging" cleared a production freeze, and
+  with `quietClear` the engine stayed silent. Only a hold, freeze, block, embargo, suspension, ban or restriction
+  released lifts one now.
+- **Object-less block words fired on prose.** "My card was declined at the shop" from Priya blocked dinner with
+  Priya. "Declined", "rejected", "denied", "refused" and "impossible" now block only in a statement holding one of the
+  request's own words other than a name; "abroad" is dropped.
+- **`askDedup` could hide a changed item.** `Session.shown` was keyed by item id, so an item synced under the same id
+  whose change was a stopword or a word order ("approved" to "not approved") read "(shown above)". It is keyed by id
+  and version (a hash of title and text) now.
+
+Re-run of ALL3 after the fixes (same funnel, seeds 41–44, cards replayed, $0): dev delivered 97, askCited 122, either
+122, decoys 10 / 91; in-sample 216 / 244 / 244, decoys 17 / 148; bytes per packet 353.5 and 340.6, per ask 660.7 and
+637.6. Identical to the numbers above: none of the funnel's tasks rested on what the fixes removed.
+
+## What this does not show
+
+- **Held-out 5–9 are contaminated.** dev6a and dev6b, written after D72 and the suites ALL3 was tuned on, hold
+  near-copies of held-out 5–9 templates: the landlord who already paid the plumber's boiler bill (`hidden-dev6b.ts`
+  and `hidden-heldout8.ts`), an expired photocard driving licence (`hidden-dev6a.ts`, `hidden-heldout9.ts`), someone
+  six months off drink (`hidden-dev6b.ts`, `hidden-heldout6.ts`), no DPA signed so no personal data
+  (`hidden-dev6a.ts`, `hidden-heldout6.ts`); `conflictVocab`'s "back to normal" appears in `hidden-heldout9.ts`. Gains
+  tuned on dev carry to held-out 5–9 by construction, and those suites were already used in D72. They cannot be the
+  blind measure of ALL3.
+- **No generalisation evidence for the facts gains.**
+  - `conflictVocab`'s dev gain is in-sample: most of `BLOCKS_MORE`'s phrases are verbatim from dev6a/dev6b ("credit
+    hold", "until further notice", "in the garage", "no new spend", "Málaga").
+  - `askVerdicts`' gain is in-sample, where its verdicts were studied.
+  - On the other suite group each is neutral: `askVerdicts` +1 dev fact; `conflictVocab` −2 in-sample deliveries.
+  - Only a blind measure says whether either generalises.
+- **ALL2 precedent.** ALL2 (D72) passed the no-model funnel and lost live (−0.042 hidden). ALL3 contains
+  `cardsEconomy`, one of ALL2's four flags, and changes what the agent reads, which the funnel cannot grade.
+- **Live uptake of compacted answers is unmeasured.** An answer is about half its old size; whether an agent raises
+  the fact from it as often is the live measure's question.
+- **`askDedup` assumes the earlier packet is still in the agent's context.** A harness that trims context would read
+  "(shown above)" for an item it no longer holds.
+- **Uncovered dev cards.** 312 of 1,294 dev sends had no replayed card under ALL3 (339 of 2,785 under ALL). Dev items
+  were not enriched live, so card-dependent verdicts are under-measured on dev.
+- **No reviewer pass.** None of the three tracks, nor this combination, ran the `reviewer` subagent (no subagent tool
+  in these sessions). It should run on the merged diff before `main`. A review of this branch did run (below); the
+  `reviewer` subagent itself is still required.
+- **The lab's ask dump runs with every flag off.** Whenever `onCandidates` is set (the lab hook only; no
+  integration sets it), `ask()` now computes `factsOf` and reports the ask (path `ask`) to the candidate dump, so the
+  dump receives more than on `main`. Engine behaviour is unchanged.
+
+## Next
+
+1. The pre-registered live measure: ALL3 against ALL on the Pi harness over newly written blind suites, whose authors
+   have seen neither held-out 5–9 nor dev6a/dev6b (held-out 5–9 are contaminated, above), reading hidden facts
+   raised, false concerns, agent input tokens and cost.
+2. Make cards live for the blind suites first, so card-dependent verdicts are not under-measured.
+3. Mark D73–D79 accepted or rejected from that measure.
+
+## Pre-registration of the last live measure (written before the run)
+
+- **Suites:**
+  - Primary: held-out 10, 32 templates. It was written after D79 by an author who saw no other suite, and its themes
+    avoid the stock scenarios the earlier suites shared. Never run before this measure.
+  - Secondary: held-out 5–9, reported as contaminated. dev6a/dev6b copy some of their templates, and they were used in
+    D72.
+- **Harness:** Pi, agent `z-ai/glm-5.3-flash`, grader `deepseek/deepseek-v4.1-flash`, `--time-scale 1`,
+  `--card-sort price`.
+- **Seeds:** held-out 10: 41–46. Held-out 5–9: 41–44.
+- **Conditions:** `tools`, `eden` (ALL, D64), and `eden~ALL3`. ALL3 is ALL plus `askVerdicts`, `conflictVocab`,
+  `compactAsk`, `askDedup`, `compactParts` and `cardsEconomy`.
+- **Bar.** ALL3 replaces ALL as the recommended experimental configuration if all of these hold on held-out 10:
+  - hidden raised, ALL3 − ALL: the lower bound of the paired 95% interval is above −0.03;
+  - false concern: the point estimate is ≤ +0.01;
+  - all-in cost per 1,000 tasks is lower.
+
+  Held-out 5–9 are reported beside the bar but do not decide it.
+- **Metrics:**
+  - hidden raised and false concern;
+  - uptake: packet, ask only, or neither;
+  - billed and re-priced cost;
+  - input and output tokens;
+  - wall time p50/p90/p99;
+  - Eden's critical path, and per-second profiles.
+
+## Results of the last live measure (appended after the run; the pre-registration above is unchanged)
+
+Run 2026-11-01 (ledger `final-h10`, `final-h59`). Live spend $2.00 in all: held-out 10 $0.67, held-out 5–9 $1.32.
+
+### Held-out 10 (primary, fresh)
+
+6 seeds, 192 hidden and 192 control tasks per condition.
+
+| Condition | Hidden raised | False concern | Billed agent $/1k (hidden / control) | Input tokens (hidden) | Wall p50 / p90 (hidden) |
+|---|---|---|---|---|---|
+| tools | 0.318 | 0.042 | 0.339 / 0.344 | 3,123 | 6.85 / 9.84 s |
+| eden (ALL) | 0.516 | 0.042 | 0.323 / 0.342 | 2,093 | 5.27 / 10.39 s |
+| **eden~ALL3** | **0.557** | 0.052 | **0.300 / 0.288** | **1,741** | 5.63 / **9.46 s** |
+
+Paired differences:
+
+| Comparison | Hidden raised | False concern | Billed agent $/1k (hidden / control) |
+|---|---|---|---|
+| ALL3 − ALL | +0.042 (−0.021..+0.104) | +0.010 (−0.010..+0.031) | −0.023 (−0.042..−0.004) / −0.054 (−0.079..−0.031) |
+| ALL − tools | +0.198 (+0.135..+0.260) | | |
+
+- **Re-priced at Wafer-us:** tools $0.281, ALL $0.246, ALL3 $0.222 per 1k tasks.
+- **Uptake:** the planted item was in a packet in 55 → 62 tasks; raised when in a packet 0.636 → 0.710. Never surfaced:
+  65 → 59.
+- **Eden's model spend** (cards) over both Eden conditions was $0.079. `cardsEconomy` halves card calls in ALL3.
+
+### Held-out 5–9 (secondary, contaminated: reported, not deciding)
+
+4 seeds, 428 + 428 tasks.
+
+| Comparison | Hidden raised | False concern | Billed agent $/1k (hidden / control) |
+|---|---|---|---|
+| ALL3 − ALL | −0.019 (−0.056..+0.019) | −0.002 | −0.022 / −0.028 |
+| ALL − tools | +0.234 (+0.185..+0.283) | | |
+
+Hidden raised: tools 0.266, ALL 0.500, ALL3 0.481. Input tokens (hidden): 1,975 → 1,661.
+
+### Against the bar
+
+All three conditions hold on held-out 10:
+- the lower bound of the hidden difference is −0.021 > −0.03;
+- the false-concern point estimate is +0.010, at the +0.01 limit;
+- the cost is lower: agent billed −$0.023 and −$0.054 per 1k, and fewer card calls.
+
+**ALL3 replaces ALL as the recommended experimental configuration (D80).** Every flag stays off by default.
+
+Against tools on held-out 10, ALL3 raises the hidden fact 1.75× as often (0.557 / 0.318) and costs 12–16% less per
+task in agent tokens.
