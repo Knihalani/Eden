@@ -64,6 +64,13 @@ describe("HTTP API", () => {
     expect(await (await post("/v1/pending", who)).json()).toEqual({ injections: [] });
     expect((await post("/v1/forget", { userId: "u1" })).status).toBe(200);
   });
+
+  test("digest: null with the flag off; ids are checked", async () => {
+    expect(await (await post("/v1/digest", { userId: "u1" })).json()).toEqual({ digest: null });
+    expect((await post("/v1/digest", { userId: "a/b" })).status).toBe(400);
+    expect((await post("/v1/digest", { userId: "u1", sessionId: 7 })).status).toBe(400);
+    expect((await post("/v1/digest", { userId: "u1", tenantId: "other" })).status).toBe(403);
+  });
 });
 
 describe("input checks (review finding 12)", () => {

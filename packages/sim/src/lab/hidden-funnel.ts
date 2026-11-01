@@ -53,6 +53,12 @@
  * (`deliveryMs`, from the request), whether it came with the request's own reply (`immediate`), whether the session's
  * anticipation had prefetched it (`prefetched`), and the calls the lead-in made (`leadCalls`).
  *
+ * `--bridge FILE` gives Eden bridging queries (`bridge.ts`, docs/research/edge-bridge.md) replayed from a disk cache
+ * made by `bridge-enrich.ts` (no model call here; a request with no cached line goes without). Turn them on with
+ * `"bridgeQuery": true` in `--config`. The run prints the requests the bridge was asked about: the calls production
+ * would make. With `"constraintDigest": true` (and cards), each task's session opens with the digest: the task records
+ * whether it cited the planted item (`digestCited`) and its bytes.
+ *
  * `--suite` names any suite of `suites.ts`, or several: each gets its own table, then a TOTAL over all of them.
  * Each suite's run is recorded in the benchmark ledger (bench/, `ledger.ts`) unless `--no-record`.
  */
@@ -61,6 +67,7 @@ import {
   CardEnricher,
   cardKey,
   ContextPartner,
+  QueryBridge,
   cpuNow,
   ItemCache,
   type CandidateDump,
@@ -75,6 +82,7 @@ import { draftOf, type DraftMode } from "../drafts";
 import { narrowQuestion } from "../narrow";
 import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
+import { DiskBridgeMaker } from "./bridge-disk";
 import { DiskCardMaker } from "./cards-disk";
 import { labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
@@ -158,6 +166,10 @@ const cardUse: Record<string, number> = {};
 const cardLanes: CardEnricher[] = [];
 /** No cap on replayed cards: they cost nothing here (the enrichment's spend is `cards-enrich.ts`'s). */
 const UNCAPPED = { callsPerSession: Infinity, usdPerSession: Infinity, usdPerUserDay: Infinity };
+const BRIDGE = opt("bridge", "");
+/** One replaying bridge maker for every seed and suite; each lane gets its own per-user cache (`QueryBridge`). */
+const bridgeMaker = BRIDGE ? new DiskBridgeMaker(BRIDGE) : null;
+const bridgeLanes: QueryBridge[] = [];
 const CARD_LIMITS = JSON.parse(opt("card-limits", "{}")) as Record<string, unknown>;
 const PLANTED_AGE_DAYS = Number(opt("planted-age-days", "0"));
 const PUSH = args.includes("--push");
@@ -275,6 +287,9 @@ interface TaskRow {
   askKept?: number;
   askItems?: number;
   askMs?: number;
+  /** With `constraintDigest`: whether the session's opening digest cited the planted item, and its bytes. */
+  digestCited?: boolean;
+  digestBytes?: number;
   /** When the planted item reached the agent, from the request (ms of wall time); absent when it did not. */
   deliveryMs?: number;
   /** It came with the request's own reply (the observe call), not later. */
@@ -349,6 +364,10 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     ? new CardEnricher({ maker: cardMaker, budget: new Budget(UNCAPPED), now: () => clock }, CARD_LIMITS)
     : null;
   if (cards) cardLanes.push(cards);
+  const bridge = bridgeMaker
+    ? new QueryBridge({ maker: bridgeMaker, budget: new Budget(UNCAPPED), now: () => clock })
+    : null;
+  if (bridge) bridgeLanes.push(bridge);
   const partner = new ContextPartner({
     sources: async () => sources,
     sourceMap: new SourceMap(":memory:", { seed }),
@@ -361,6 +380,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     onTrace: timeline ? timeline.traceSink(lane, countCalls) : countCalls,
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
+    ...(bridge ? { bridge } : {}),
     ...(onCandidates ? { onCandidates } : {}),
     ...(rankModel ? { rankModel } : {}),
   });
@@ -433,7 +453,8 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     const c0 = cpuNow();
     const traced = timeline?.task(lane, sessionId, `${lane}/${task.template}`);
     const at = clock;
-    await partner.observe({ ...scope, sessionId, at, kind: "session_start" } as AgentEvent);
+    const opened = await partner.observe({ ...scope, sessionId, at, kind: "session_start" } as AgentEvent);
+    const digest = opened.injection?.reason === "digest" ? opened.injection : null;
     if (LEAD) {
       const text = draftOf(task.text, LEAD);
       await partner.observe({ ...scope, sessionId, at, kind: "user_message", text, draft: true } as AgentEvent);
@@ -513,6 +534,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
       const extra = {
         detail: task.detail,
         plantedText: `${planted[i]!.title} ${planted[i]!.text}`,
+        ...(digest ? { digest: digest.text, digestIds: digest.citations.map((c) => c.itemId) } : {}),
         ...(answered ? { answer: answered.answer, answerIds: answered.citations.map((c) => c.itemId) } : {}),
       };
       appendFileSync(PACKETS, JSON.stringify({ ...line, ...extra }) + "\n");
@@ -546,6 +568,12 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
             askItems: answered!.citations.length,
             askMs: Number(askMs.toFixed(2)),
           }),
+      ...(CONFIG.constraintDigest
+        ? {
+            digestCited: digest?.citations.some((c) => c.itemId === id) ?? false,
+            digestBytes: digest ? Buffer.byteLength(digest.text) : 0,
+          }
+        : {}),
       why,
       injected: got.length,
       packetBytes: [...injections, ...pendingSeen].reduce((n, x) => n + Buffer.byteLength(x.text), 0),
@@ -637,6 +665,14 @@ if (cardMaker) {
   cardUse.users = cardLanes.length;
   console.log(`cards: ${cardMaker.hits} replayed, ${cardMaker.misses} uncovered (no cached card)`);
   console.log(`cards use: ${JSON.stringify(cardUse)}`);
+}
+if (bridgeMaker) {
+  const use: Record<string, number> = {};
+  for (const b of bridgeLanes) for (const [k, v] of Object.entries(b.stats)) use[k] = (use[k] ?? 0) + v;
+  console.log(
+    `bridge: ${bridgeMaker.hits} replayed, ${bridgeMaker.misses} uncovered; per user ${JSON.stringify(use)} ` +
+      `(${bridgeLanes.length} users; calls = what production would send)`,
+  );
 }
 if (LIVE) {
   const tasks = Math.max(1, grand.hidden.n + grand.control.n);

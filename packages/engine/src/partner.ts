@@ -62,6 +62,8 @@ import {
   type Verdict,
 } from "./conflict";
 import { cardVerdict, requestActions, type CardEnricher } from "./cards";
+import { bridgeWants, type QueryBridge } from "./bridge";
+import { buildDigest, personalSender } from "./digest";
 import {
   accounts,
   actionKey,
@@ -161,6 +163,11 @@ export interface PartnerDeps {
    */
   cards?: CardEnricher;
   /**
+   * The request-time bridging query (`bridge.ts`, `config.bridgeQuery`): its own model, budget and per-user cache of
+   * queries. Absent, or the flag off: no call is made.
+   */
+  bridge?: QueryBridge;
+  /**
    * A debug hook for the lab (docs/research/econ-decide.md): each no-model decision's candidates with their facts
    * (`decide.ts`) and what was delivered. Ids and numbers only, no content. Absent: no facts are computed for it.
    */
@@ -256,6 +263,13 @@ interface Session {
    * user's cached items (`ItemCache.revision`) and the minute stand, so a run of narrow asks ranks the request once.
    */
   requestOrder?: { cue: Cue; revision: number; at: number; order: { order: Scored[]; hits: Scored[] } };
+  /**
+   * With `bridgeQuery`: the bridging queries of the session's latest request that had some (`bridge.ts`), so an ask
+   * about it in other words reads them too, with no call.
+   */
+  bridge?: string[];
+  /** With `bridgeQuery`: the latest request the bridge was asked about, whose call an ask may wait for. */
+  bridgeAsked?: string;
 }
 
 /** Items whose shown words a session keeps (`askDedup`). */
@@ -415,6 +429,9 @@ const ACTING = new Set<string>(["scheduling", "communication", "task", "travel"]
  */
 const ABOUT_MEETING =
   /\b(meet(ing)?|plans?|push|reschedul\w*|postpone|cancel|still on|running late|late|lunch|coffee|dinner|drinks|call|catch(ing)? up|slot|1:1)\b/i;
+/** A question asking leave to act (`bridgeQuestions`): "Can I share…", "Is it fine if I…", "Should we…". */
+const PERMISSION =
+  /^\s*(?:(?:can|could|may|should|shall)\s+(?:i|we)\b|is\s+it\s+(?:ok|okay|fine|alright|all right|safe)\b|(?:are|am)\s+(?:we|i)\s+(?:ok|okay|fine|allowed|clear)\b|is\s+(?:the|this|next)\b[^?]{0,60}\bgood\s+time\b)/i;
 /** Words of a request that only say when or ask about the calendar: with nothing else, it is a listing (D44). */
 const TIME_WORD =
   /^(|calendar|schedule|diary|agenda|plans?|busy|free|happening|booked|today|tonight|tomorrow|yesterday|week|weekend|next|coming|upcoming|morning|afternoon|evening|(mon|tues|wednes|thurs|fri|satur|sun)day|jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sept?(ember)?|oct(ober)?|nov(ember)?|dec(ember)?|\d{1,2}(st|nd|rd|th)?)$/;
@@ -695,6 +712,15 @@ export class ContextPartner {
     };
 
     const queued = s.pending.shift() ?? null;
+    // `constraintDigest`: a session opens with the user's standing constraints, once, as data. It is not news (the
+    // ledger does not mark its items, so a lookup may still deliver one with its bearing on a request).
+    if (event.kind === "session_start" && this.config.constraintDigest && !queued) {
+      const digest = this.digestFor(s.scope, s.id);
+      if (digest) {
+        trace("digest", "digest", { itemIds: digest.citations.map((c) => c.itemId) });
+        return reply(digest);
+      }
+    }
     const lookup = wantsLookup(event, text, terms, s.vocab);
     // `anticipate`: every event with words is read for what the agent will need next, in the background. A request's
     // own names and days are its lookup's to probe; read from it are its intent's (class, learned names).
@@ -1126,7 +1152,11 @@ export class ContextPartner {
     const carded = verdicts ? this.cardFinds(s, cue) : new Map<string, CardFind>();
     // `intent`: what the question would change, by the requests written for each item (no model, no call).
     const intents = this.intentFinds(s, cue);
-    const extra = [...consIds, ...carded.keys(), ...intents.keys()];
+    // `bridgeQuery`: the bridging queries of the question, or of the session's latest bridged request, from the user's
+    // cache only (an ask never makes the call), run against the index.
+    const bridgeQueries = this.config.bridgeQuery && this.deps.bridge ? await this.askBridge(s, question) : undefined;
+    const bridgeFound = bridgeQueries?.length ? this.bridgeFinds(s, bridgeQueries) : null;
+    const extra = [...consIds, ...carded.keys(), ...intents.keys(), ...(bridgeFound?.ids ?? [])];
     const ranking = spans?.open("rank", cue.span);
     const scored = this.rank(s, cue, {
       ignoreLedger: true,
@@ -1139,7 +1169,14 @@ export class ContextPartner {
     const ranked = this.config.askRank;
     const facts =
       verdicts || ranked || this.deps.onCandidates
-        ? this.askFacts(s, cue, scored, { probed, consIds, cls: consequence?.cls, walked, carded })
+        ? this.askFacts(s, cue, scored, {
+            probed,
+            consIds,
+            cls: consequence?.cls,
+            walked,
+            carded,
+            bridgedAlso: this.bridgeConflicts(scored, cue, bridgeFound),
+          })
         : [];
     const hits = verdicts
       ? facts.filter(({ facts: f }) => f.conflictHit || f.graphHit || f.bridged || f.cardViolated).map(({ x }) => x)
@@ -1155,10 +1192,17 @@ export class ContextPartner {
       "ask",
     ).items;
     if (grounding) spans!.close(grounding, { grounded: grounded.length });
+    // `bridgeAskSeats`: the bridge's best finds the conflict test did not clear take seats after the verdict hits, so
+    // a constraint in words the test does not read still reaches the answer (the agent's model reads it).
+    const seated = bridgeFound ? this.bridgeSeats(scored, cue, bridgeFound, hits) : [];
     const lexical = [
       ...hits,
-      ...grounded.filter((x) => !hits.includes(x)),
-      ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x) && !hits.includes(x)),
+      ...seated,
+      ...grounded.filter((x) => !hits.includes(x) && !seated.includes(x)),
+      ...scored.filter(
+        (x) =>
+          x.score >= this.config.candidateScore && !grounded.includes(x) && !hits.includes(x) && !seated.includes(x),
+      ),
     ];
     const pool = intents.size > 0 ? this.fuseIntent(lexical, hits, scored, intents) : lexical;
     // `supersede` (docs/research/smart-supersede.md): what a newer decisive item replaced, and (for an action) what is
@@ -1325,6 +1369,8 @@ export class ContextPartner {
       cls?: ActionClass;
       walked: ReadonlyMap<string, Walked>;
       carded: ReadonlyMap<string, CardFind>;
+      /** The bridge's finds in conflict (`bridgeConflicts`): verdict hits as a consequence find in conflict is. */
+      bridgedAlso?: readonly string[];
     },
   ): { x: Scored; facts: Facts }[] {
     const cons = new Set(ctx.consIds);
@@ -1341,6 +1387,7 @@ export class ContextPartner {
             .map((x) => x.item.id)
         : [],
     );
+    for (const id of ctx.bridgedAlso ?? []) bridged.add(id);
     return this.factsOf(s, cue, scored, "ask", {
       probed: new Set(ctx.probed ?? []),
       bridged,
@@ -3880,6 +3927,8 @@ export class ContextPartner {
         ),
       });
     try {
+      // `bridgeQuery`: the bridge's call runs beside the search, never before it (the slow path only).
+      const bridging = this.bridgeStart(s, cue);
       let probedIds: string[] | undefined;
       let lookedIds: string[] | undefined;
       let consequence: { cls: ActionClass; ids: string[] } | undefined;
@@ -3903,6 +3952,9 @@ export class ContextPartner {
       sourceCalls += await this.refresh(s, cue);
       if (s.closed) return null;
       const spans = this.spans;
+      // What the bridging queries find in the user's index, read once the search has cached what it brought.
+      const bridgeFound = bridging ? await this.bridgeFound(s, cue, bridging) : null;
+      if (s.closed) return null;
       // This lookup's probe finds, its own (never another turn's or a concurrent ask's).
       const consIds = new Set(consequence?.ids ?? []);
       // With `graph`: what the user's knowledge graph reaches from the request, after the lookup's items are cached.
@@ -3917,7 +3969,7 @@ export class ContextPartner {
       const intending = this.config.intent && this.deps.cards ? spans?.open("intent.match", cue.span) : undefined;
       const intents = this.intentFinds(s, cue);
       if (intending) spans!.close(intending, { found: intents.size });
-      const extra = [...consIds, ...carded.keys(), ...intents.keys()];
+      const extra = [...consIds, ...carded.keys(), ...intents.keys(), ...(bridgeFound?.ids ?? [])];
       const ranking = spans?.open("rank", cue.span);
       const scored = this.rank(s, cue, {
         probed: extra.length > 0 ? [...(probedIds ?? []), ...extra] : probedIds,
@@ -3941,6 +3993,9 @@ export class ContextPartner {
               .map((x) => x.item.id)
           : [],
       );
+      // A bridging query's find in conflict with the request, tied by the queries' words, counts as a consequence
+      // find does: a seat, the conflict ground and a verdict hit.
+      for (const id of this.bridgeConflicts(scored, cue, bridgeFound)) bridged.add(id);
       if (conflicting) spans!.close(conflicting, { bridged: bridged.size });
       // `rankTies`: a cut among equals below reads the learned ranker, from the facts the dump reads.
       this.rankTiesFor(cue, () =>
@@ -4279,6 +4334,186 @@ export class ContextPartner {
       done("silent", "error");
       return null;
     }
+  }
+
+  /**
+   * The user's active-constraints digest (`constraintDigest`, `digest.ts`): the items whose card states a standing
+   * constraint over today or later, a line each in their own words, as data. Null when the flag or cards are off, or
+   * nothing is in force. No model, no source call; the same constraints give the same bytes (prompt caching).
+   */
+  digest(request: Scope & { sessionId?: string }): Injection | null {
+    return this.digestFor({ tenantId: request.tenantId, userId: request.userId }, request.sessionId ?? "");
+  }
+
+  private digestFor(scope: Scope, sessionId: string): Injection | null {
+    const enricher = this.deps.cards;
+    if (!this.config.constraintDigest || !this.config.cards || !enricher) return null;
+    const now = this.now();
+    const cache = this.deps.cache;
+    const ids = enricher.carded(scope).filter((id) => cache.get(scope, id, now) !== null);
+    const entries = [...enricher.cardsOf(scope, ids, now)].map(([id, card]) => ({
+      item: cache.get(scope, id, now)!,
+      card,
+    }));
+    // The user's own day (D44), and their year, which compaction drops from dates as packets do.
+    const local = new Date(now + cache.offsetOf(scope) * 60_000);
+    const self = cache.selfOf(scope);
+    const digest = buildDigest(entries, {
+      today: local.toISOString().slice(0, 10),
+      lines: this.config.digestLines,
+      bytes: this.config.digestBytes,
+      personal: (item) => !bulkMail(item) && personalSender(item, (name) => cache.isPerson(scope, name)),
+      year: local.getUTCFullYear(),
+      self,
+    });
+    if (!digest) return null;
+    const items = digest.ids.map((id) => cache.get(scope, id, now)!);
+    return {
+      ...scope,
+      id: newId("inj", now),
+      sessionId,
+      mode: "proactive",
+      text: digest.text,
+      citations: citationsOf(items),
+      reason: "digest",
+      score: 0,
+      createdAt: now,
+    };
+  }
+
+  /**
+   * `bridgeQuery` (`bridge.ts`): the request's bridging queries, one budgeted call or the user's cache, started beside
+   * the lookup's search. Null when the flag or the bridge is off, the request does not act (`bridgeWants`; with
+   * `bridgeQuestions`, a question for permission too), or the lookup is a follow-up (its request was bridged).
+   */
+  private bridgeStart(s: Session, cue: Cue): Promise<string[] | null> | null {
+    const bridge = this.deps.bridge;
+    if (!this.config.bridgeQuery || !bridge || cue.followUp) return null;
+    // A new request's asks are about it: the queries of an earlier one no longer answer them.
+    s.bridge = undefined;
+    s.bridgeAsked = undefined;
+    const acts = bridgeWants(cue.raw, cue.external === true, this.config.conflictVocab);
+    if (!acts && !(this.config.bridgeQuestions && PERMISSION.test(cue.raw))) return null;
+    s.bridgeAsked = cue.raw;
+    return bridge.queriesFor(s.scope, s.key, cue.raw, s.abort.signal).catch(() => null);
+  }
+
+  /**
+   * The bridge's finds for a lookup: its queries, waited for at most `bridgeWaitMs` past the search (a call still
+   * running then is kept for the asks that follow, through the user's cache), run against the user's index.
+   */
+  private async bridgeFound(
+    s: Session,
+    cue: Cue,
+    bridging: Promise<string[] | null>,
+  ): Promise<{ ids: string[]; ties: Set<string> } | null> {
+    const spans = this.spans;
+    const sp = spans?.open("bridge", cue.span, { async: true });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<null>((r) => (timer = setTimeout(() => r(null), this.config.bridgeWaitMs)));
+    const queries = await Promise.race([bridging, late]);
+    clearTimeout(timer);
+    if (!queries || queries.length === 0 || s.closed) {
+      if (sp) spans!.close(sp, { queries: 0 });
+      return null;
+    }
+    s.bridge = queries;
+    const found = this.bridgeFinds(s, queries);
+    if (sp) spans!.close(sp, { queries: queries.length, found: found.ids.length });
+    return found;
+  }
+
+  /**
+   * The bridging queries an `ask` reads, with no call of its own: the question's own if the user's cache holds them,
+   * else the session's latest bridged request's, waiting at most `bridgeWaitMs` for its call when it is still running
+   * (an agent often asks while the lookup's call is out).
+   */
+  private async askBridge(s: Session, question: string): Promise<string[] | undefined> {
+    const bridge = this.deps.bridge!;
+    const held = bridge.peek(s.scope, question) ?? s.bridge;
+    if (held || !s.bridgeAsked) return held;
+    const running = bridge.inflight(s.scope, s.bridgeAsked);
+    if (!running) return bridge.peek(s.scope, s.bridgeAsked);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<null>((r) => (timer = setTimeout(() => r(null), this.config.bridgeWaitMs)));
+    const got = await Promise.race([running.catch(() => null), late]);
+    clearTimeout(timer);
+    return got ?? undefined;
+  }
+
+  /**
+   * What bridging queries find in the user's own index, with no source call: each query's best `bridgeHits` cached
+   * items holding two of its words (its one, for a query of one), and the queries' words (four letters or more, no
+   * stopword) that tie a find's statements to the request in the conflict test (`assess`'s extra ties).
+   */
+  private bridgeFinds(s: Session, queries: readonly string[]): { ids: string[]; ties: Set<string> } {
+    const ids: string[] = [];
+    const ties = new Set<string>();
+    const vocab = this.deps.cache.peekVocab(s.scope);
+    if (!vocab) return { ids, ties };
+    const now = this.now();
+    for (const q of queries) {
+      for (const w of q.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}'-]*/gu) ?? []) {
+        if (w.length >= 4 && !isStopword(w)) ties.add(w);
+      }
+      const t = termIds(q, vocab, false);
+      const terms: number[] = [];
+      for (let i = 0; i < t.n; i++) {
+        const id = t.ids[i]!;
+        if (!isStopword(vocab.term(id)) && !terms.includes(id)) terms.push(id);
+      }
+      if (terms.length === 0) continue;
+      const need = Math.min(2, terms.length);
+      let kept = 0;
+      for (const h of this.deps.cache.search(s.scope, terms, terms.length, this.config.bridgeHits * 2, now)) {
+        if (h.matched < need) continue;
+        if (!ids.includes(h.item.id)) ids.push(h.item.id);
+        if (++kept >= this.config.bridgeHits) break;
+      }
+    }
+    return { ids, ties };
+  }
+
+  /**
+   * `bridgeAskSeats`: the bridge's finds in the queries' order (each query's best first), that are not verdict hits
+   * already, not bulk mail and not cleared by the conflict test, at most `bridgeAskSeats`.
+   */
+  private bridgeSeats(
+    scored: readonly Scored[],
+    cue: Cue,
+    found: { ids: string[]; ties: Set<string> },
+    hits: readonly Scored[],
+  ): Scored[] {
+    const n = this.config.bridgeAskSeats;
+    if (n <= 0) return [];
+    const by = new Map(scored.map((x) => [x.item.id, x]));
+    const out: Scored[] = [];
+    for (const id of found.ids) {
+      const x = by.get(id);
+      if (!x || hits.includes(x) || bulkMail(x.item)) continue;
+      if (this.verdict(x.item, cue, found.ties) === "clear") continue;
+      out.push(x);
+      if (out.length >= n) break;
+    }
+    return out;
+  }
+
+  /** The bridge's finds the conflict test, tied by the queries' words, says conflict with the request. */
+  private bridgeConflicts(
+    scored: readonly Scored[],
+    cue: Cue,
+    found: { ids: string[]; ties: Set<string> } | null,
+  ): string[] {
+    if (!found || found.ids.length === 0) return [];
+    const ids = new Set(found.ids);
+    return scored
+      .filter(
+        (x) =>
+          ids.has(x.item.id) &&
+          !unmeasuredLimit(this.frame(cue), x.item) &&
+          this.verdict(x.item, cue, found.ties) === "conflict",
+      )
+      .map((x) => x.item.id);
   }
 
   /**
