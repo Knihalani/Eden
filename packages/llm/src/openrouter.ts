@@ -24,6 +24,12 @@ export interface OpenRouterOptions {
    * on (card enrichment; docs/research/econ-background.md). It still honours `zdr` and `data_collection`.
    */
   sort?: "price" | "throughput" | "latency";
+  /**
+   * LAB ONLY. "allow" lets OpenRouter route to providers that may keep or train on the data (its free models need
+   * it). Never set by the engine or the server: `fromEnv` always sends "deny" (D12). The lab sets it only for
+   * simulated worlds' text, with no user data (docs/research/edge-bridge.md).
+   */
+  labDataCollection?: "deny" | "allow";
 }
 
 export class OpenRouterModel implements Model {
@@ -56,7 +62,7 @@ export class OpenRouterModel implements Model {
       // The reasoning itself is never read: excluding it keeps it off the wire (it is still billed as output).
       ...(request.reasoning ? { reasoning: { effort: request.reasoning, exclude: true } } : {}),
       provider: {
-        data_collection: "deny",
+        data_collection: this.options.labDataCollection ?? "deny",
         zdr: this.options.zdr ?? true,
         allow_fallbacks: true,
         ...(this.options.sort ? { sort: this.options.sort } : {}),

@@ -83,6 +83,28 @@ describe("OpenRouterModel", () => {
     expect(sent.reasoning).toBeUndefined();
   });
 
+  test("production routing always denies data collection; only the lab's explicit option allows it", async () => {
+    const sent: any[] = [];
+    const fake = (async (_url: string, init: RequestInit) => {
+      sent.push(JSON.parse(String(init.body)));
+      return Response.json({ choices: [{ message: { content: "{}" } }], usage: {} });
+    }) as unknown as typeof fetch;
+    const env = { OPENROUTER_API_KEY: "k", EDEN_MODEL_ZDR: "off", EDEN_LAB_DATA_COLLECTION: "allow" };
+    const prod = OpenRouterModel.fromEnv(env)!;
+    (prod as unknown as { options: { fetch: typeof fetch } }).options.fetch = fake;
+    await prod.chat({ messages: [{ role: "user", content: "hi" }], maxTokens: 5 });
+    expect(sent[0].provider.data_collection).toBe("deny");
+    const lab = new OpenRouterModel({
+      apiKey: "k",
+      model: "m:free",
+      zdr: false,
+      labDataCollection: "allow",
+      fetch: fake,
+    });
+    await lab.chat({ messages: [{ role: "user", content: "hi" }], maxTokens: 5 });
+    expect(sent[1].provider).toMatchObject({ data_collection: "allow", zdr: false });
+  });
+
   test("asks for low reasoning effort when told, and reports a reply cut off at the cap (D45)", async () => {
     let sent: any;
     const fake = (async (_url: string, init: RequestInit) => {
