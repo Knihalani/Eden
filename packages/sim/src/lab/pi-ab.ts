@@ -84,7 +84,8 @@ import { ACTIONS, actionParams, coerceArgs, executed, type ActionRecord } from "
 import { DiskCardMaker, samePath } from "./cards-disk";
 import { parseConditions, parseVariants, type Condition } from "./pi-conditions";
 import { parseSuites } from "./suites";
-import { UptakeLog } from "./uptake";
+import { QUESTION_CHARS, UptakeLog } from "./uptake";
+import { sanitizeForStore } from "@eden/redact";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
 
 const args = process.argv.slice(2);
@@ -583,7 +584,10 @@ async function runWorld(
           execute: async (_id, raw) => {
             const params = raw as { question: string };
             const a = await partner.ask({ ...scope, sessionId, question: params.question });
-            uptake.answer(a);
+            // The agent's question is recorded with the answer (sim data is fake), for replays of real questions.
+            const question = sanitizeForStore(params.question);
+            uptake.answer(a, question);
+            tl.point("eden.ask", { question: question.slice(0, QUESTION_CHARS), items: a.citations.length });
             return { content: [{ type: "text", text: a.answer || "Nothing found." }], details: {} };
           },
         });
