@@ -23,6 +23,7 @@ describe("the vendored gitleaks rules", () => {
     expect(ids.filter((id) => !id.startsWith("eden-")).length).toBe(221);
     expect(ids.filter((id) => id.startsWith("eden-")).sort()).toEqual([
       "eden-aws-key-id",
+      "eden-aws-secret",
       "eden-cfat",
       "eden-entropy-keyword",
       "eden-keyword",
