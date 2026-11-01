@@ -237,9 +237,11 @@ after the verdict hits. An intent hit alone is never a no-model delivery.
 **Guarded asks and answer-shaped packets** (`askGuard`, `packetBearing`, off by default; proposed D88,
 [research/edge-ask.md](research/edge-ask.md)). An `ask` about an action leads with what a verdict reads as binding,
 marked "May block or change this:", and, when nothing in the answer may block and every source answered from a warm,
-current sync, opens with a fixed "Checked …: no rule, hold, limit, absence or change found for …" line. An item the
-intent index or the bridging queries chose for the request withholds that line, since no verdict read it
-([research/edge-combined.md](research/edge-combined.md)). The MCP `ask_context` tool gives the guided description
+current sync, opens with a fixed "Checked …: none of the items found states a rule, hold, limit, absence or change
+for …" line: a claim about what was found, not about the sources as a whole. An item the intent index or the bridging
+queries chose for the request withholds that line, since no verdict read it
+([research/edge-combined.md](research/edge-combined.md)), and so does any answer item or candidate whose words may
+state a constraint (`mayConstrain`, wider than any verdict; D93). The MCP `ask_context` tool gives the guided description
 (`ASK_CONTEXT_GUIDED`) with `askGuard`. Packets say each item's bearing the same way.
 
 **ALL5** (proposed D92, [research/edge-combined.md](research/edge-combined.md)): ALL3 (D80) plus `intent`,

@@ -37,6 +37,7 @@ describe("an AWS secret access key is redacted", () => {
     ["holding / and +", `secret ${SLASHED}`, SLASHED],
     ["in a CSV row", `user,${KEY_ID},${token(9)}`, token(9)],
     ["in YAML", `Credentials:\n  SecretAccessKey: ${token(10)}\n  Expiration: soon`, token(10)],
+    ["in camelCase", `secretAccessKey=${token(19)}`, token(19)],
     ["holding a slash after a redacted id", `[REDACTED]\t/${token(18).slice(1)}`, `/${token(18).slice(1)}`],
   ];
   for (const [name, text, secret] of positives) {
@@ -71,6 +72,10 @@ describe("what eden-aws-secret leaves alone", () => {
     ["all upper case", `secret ${token(16, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")}`],
     ["Asia in prose", `flights to Asia ${token(17)}`],
     ["prose about secrets", "the secrets manager rotates every key on the first Monday of each month"],
+    // "Secret" inside another word is no anchor (review of edge/combined): only the word, or a key's name, is.
+    ["beside Secretary", `The Secretary signed; doc id ${token(20)}`],
+    ["beside secretly", `she secretly kept the id ${token(21)}`],
+    ["beside SECRETARIAT", `SECRETARIAT ref ${token(22)}`],
   ];
   for (const [name, text] of negatives) {
     test(name, () => expect(secretHits(text)).not.toContain("eden-aws-secret"));

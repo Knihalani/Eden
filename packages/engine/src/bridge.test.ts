@@ -152,6 +152,44 @@ describe("the query cache (QueryBridge)", () => {
     expect(failing.peek(a, "Approve it")).toBeUndefined();
     expect(failing.stats.failures).toBe(1);
   });
+
+  test("forget aborts the user's call in flight and its answer is never kept; other users' calls run on", async () => {
+    const seen: AbortSignal[] = [];
+    // Answers after a tick, ignoring its signal (a model client may not honour it): the discard must not rely on it.
+    const maker: BridgeMaker = {
+      make: async (rs, sig) => {
+        seen.push(sig);
+        await Bun.sleep(5);
+        return { queries: rs.map(() => ["q"]), costUsd: 0 };
+      },
+    };
+    const bridge = new QueryBridge({ maker, budget: new Budget(), now: () => NOW });
+    const ofA = bridge.queriesFor(a, "s", "Approve it", signal);
+    const ofB = bridge.queriesFor(b, "s", "Approve it", signal);
+    bridge.forget(a);
+    expect(seen[0]!.aborted).toBe(true);
+    expect(seen[1]!.aborted).toBe(false);
+    expect(bridge.inflight(a, "Approve it")).toBeUndefined();
+    expect(await ofA).toBeNull();
+    expect(await ofB).toEqual(["q"]);
+    expect(bridge.peek(a, "Approve it")).toBeUndefined();
+    expect(bridge.peek(b, "Approve it")).toEqual(["q"]);
+  });
+
+  test("expired entries are dropped, on read and by the sweep of idle users", async () => {
+    let clock = NOW;
+    const bridge = new QueryBridge({ maker: new FixedMaker(["q"]), budget: new Budget(), now: () => clock });
+    await bridge.queriesFor(a, "s", "one", signal);
+    clock += 8 * 86_400_000;
+    expect(bridge.peek(a, "one")).toBeUndefined();
+    expect(bridge.userCount).toBe(0);
+    // `b` is never read again: a later keep for another user sweeps it once its entries pass the TTL.
+    await bridge.queriesFor(b, "s", "one", signal);
+    clock += 8 * 86_400_000;
+    await bridge.queriesFor(a, "s", "two", signal);
+    expect(bridge.userCount).toBe(1);
+    expect(bridge.peek(a, "two")).toEqual(["q"]);
+  });
 });
 
 describe("bridging in the engine (config.bridgeQuery)", () => {
@@ -228,7 +266,7 @@ describe("bridging in the engine (config.bridgeQuery)", () => {
         out[userId]!.later = later.citations.map((c) => c.itemId);
       }
     }
-    return { out, maker, bridge };
+    return { out, maker, bridge, partner: p };
   };
 
   test("flag off: no call, and the rule sharing no word with the request is not reached", async () => {
@@ -251,6 +289,18 @@ describe("bridging in the engine (config.bridgeQuery)", () => {
     const { maker, bridge } = await run({ bridgeQuery: true }, ["u1", "u2"]);
     expect(maker.calls.length).toBe(2);
     expect(bridge.userCount).toBe(2);
+  });
+
+  test("the partner's forget of a user drops their bridging queries (D89); a source's forget keeps them", async () => {
+    const { bridge, partner } = await run({ bridgeQuery: true }, ["u1", "u2"]);
+    const u1 = { tenantId: "t", userId: "u1" };
+    const u2 = { tenantId: "t", userId: "u2" };
+    expect(bridge.peek(u1, ORDER)).toBeDefined();
+    partner.forget(u1, "chat");
+    expect(bridge.peek(u1, ORDER)).toBeDefined();
+    partner.forget(u1);
+    expect(bridge.peek(u1, ORDER)).toBeUndefined();
+    expect(bridge.peek(u2, ORDER)).toBeDefined();
   });
 
   test("an ask in other words reads the session's request's queries, until a new request replaces them", async () => {

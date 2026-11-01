@@ -47,7 +47,8 @@ that would be $0.0021 per call, $0.00021 per item, about $0.32 per user-month, a
 reasons that much. Request time adds one BM25 search over the user's requests (no model, no call).
 
 Bridging query (proposed D89, `bridgeQuery`, off by default; docs/research/edge-bridge.md). One call per request
-that acts (in the imperative, or an `external` message; with `bridgeQuestions`, also a question for permission), on the
+that acts (in the imperative, or an `external` message, so a third party's inbound message can cause a call, bounded by
+the bridge's own `Budget`; with `bridgeQuestions`, also a question for permission), on the
 slow path beside the lookup's search, never per event and never on the fast path; cached per user by request, so a
 repeated request and every `ask` about it make none. Input: the system prompt and the redacted request, at most 400
 characters: about 300 tokens (301 measured for one request on the lab's free model). Output: three queries of at most

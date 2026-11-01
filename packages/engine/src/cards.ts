@@ -1033,6 +1033,15 @@ export class CardEnricher {
     return out;
   }
 
+  /** The requests written for an item's content before `before` (ms); none when unread, unmade or past its TTL. */
+  requestsOf(scope: Scope, id: string, before: number): readonly string[] {
+    const u = this.users.get(scopeKey(scope));
+    const hash = u?.byItem.get(id);
+    const s = hash ? u!.byHash.get(hash) : undefined;
+    if (!s?.requests || !(s.at < before) || this.deps.now() - s.seenAt > this.limits.ttlMs) return [];
+    return s.requests;
+  }
+
   /** Items holding requests in the user's intent index (tests and bounds). */
   intentSize(scope: Scope): number {
     return this.users.get(scopeKey(scope))?.intent?.size ?? 0;
