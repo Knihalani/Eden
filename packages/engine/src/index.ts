@@ -36,6 +36,7 @@ export {
   cardVerdict,
   ModelCardMaker,
   parseCards,
+  parseRequests,
   requestActions,
   worthCarding,
   worthCardingStrict,
@@ -43,7 +44,9 @@ export {
   ECONOMY_CARD_LIMITS,
   type Action,
   type Card,
+  type CardBatch,
   type CardKind,
   type CardMaker,
 } from "./cards";
+export { cleanRequests, IntentIndex, intentTerms, stemWord, INTENT_VERSION } from "./intent";
 export { predict } from "./anticipate";
