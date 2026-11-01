@@ -371,6 +371,19 @@ export interface EngineConfig {
    */
   askVerdicts: boolean;
   /**
+   * An ask's answer is the rule paths' pool (verdict hits, grounded items, the lexically likely) in a learned no-model
+   * ranker's order (`rank.ts`), and the ranker's best candidate outside the pool takes the weakest seat when it
+   * outscores it by more than `askRankMargin` (D81, docs/research/smart-rank.md). Same item limit. Off by default.
+   */
+  askRank: boolean;
+  askRankMargin: number;
+  /**
+   * The learned ranker breaks ties at a proactive cut: where a rule path keeps the best few of equally scored items,
+   * the ranker says which (D81). It never adds an item nor lowers a gate. Off by default, and rejected: inert on the
+   * funnel at +5% engine CPU per lookup (docs/research/smart-rank.md).
+   */
+  rankTies: boolean;
+  /**
    * An ask's answer is compacted as a packet is (`compactText` around the question's words, `askItemBytes` each),
    * items past the first `askFullItems` cut to `askLineBytes`, the whole at most `askMaxBytes`, and with
    * `densePacket` an echo folded out (D74, docs/research/gen-ask.md). Off by default: the answer is each item's first
@@ -564,6 +577,9 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cardItems: 1,
   decideConflict: false,
   askVerdicts: false,
+  askRank: false,
+  askRankMargin: 5,
+  rankTies: false,
   askCompact: false,
   askItemBytes: 320,
   askFullItems: 5,
