@@ -228,6 +228,17 @@ export interface EngineConfig {
    */
   quietNameOnly: boolean;
   /**
+   * `conflictVocab` (D73, docs/research/gen-proactive.md): the conflict test (`conflict.ts`) reads a wider, general
+   * vocabulary: more ways to say a thing is blocked ("until further notice", "not signed", "revoked", "I'm off from",
+   * "hold every send", "no new spend", "scrapped"), a standing constraint ("stopped drinking"), lifted ("released",
+   * "back to normal"); idioms that are not blocks ("can't wait for Friday") and sign-off courtesies ("happy to jump on
+   * a call") are not read as statements; possessives tie ("Leila's" is Leila); a day of the month alone ("till the
+   * 10th") and a weekday after a date word ("until Sunday", "back Thursday") are dates; a clearance about another
+   * party does not undo a conflict tied to the one the request names (a table's other rows); and more leading verbs
+   * make a request an imperative for `quietNameOnly` ("Transfer", "Renew", "Raise"). Off: as D49-D55.
+   */
+  conflictVocab: boolean;
+  /**
    * Span tracing (`spans.ts`): every phase of every event timed in wall and CPU time, totals kept per phase
    * (`ContextPartner.spanStats`). An `onSpan` sink turns it on too. Off: no span is made.
    */
@@ -476,6 +487,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   recoverNames: false,
   groundOccasion: false,
   quietNameOnly: false,
+  conflictVocab: false,
   spans: false,
   sync: false,
   syncMaxItems: 3_000,
