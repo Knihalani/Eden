@@ -142,7 +142,7 @@ hidden packet bytes 105,331 → 106,993 over 268 tasks (+1.6%, about 6 bytes or 
 candidates are compacted without it, so the judge's input is unchanged. With the flag on, each delivery is rendered a
 second time without it for usage learning (`usageText`): linear in the packet, no model call.
 
-D73 (proposed, docs/research/gen-tokens.md; `compactAsk`, `askDedup`, `compactParts`, off by default) makes no model
+D76–D78 (proposed, docs/research/gen-tokens.md; `compactAsk`, `askDedup`, `compactParts`, off by default) makes no model
 call. No-model funnel, ALL, one ask per task, this session: bytes the agent reads per task 1,528 → 900 in-sample and
 1,328 → 801 on dev6a/dev6b (ask answers 1,254 → 625 and 1,195 → 669), every task's delivered and askCited unchanged.
 At 4 bytes a token and $0.053 per million input tokens that is about −$0.008 per 1,000 tasks, per read of each

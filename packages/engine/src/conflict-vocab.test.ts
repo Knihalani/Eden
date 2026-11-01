@@ -25,7 +25,7 @@ const frame = (request: string, vocab: boolean) =>
 const both = (request: string, title: string, text: string) =>
   [false, true].map((v) => assess(frame(request, v), item(title, text), NOW));
 
-describe("conflictVocab: more ways to say an action is blocked (D73)", () => {
+describe("conflictVocab: more ways to say an action is blocked (D75)", () => {
   test("an open end: until further notice", () => {
     const text = "Until further notice, no site visits to Initech; all contact goes through legal.";
     expect(both("Arrange a site visit to Initech next week", "Legal", text)).toEqual(["none", "conflict"]);

@@ -74,7 +74,7 @@ export function isImperative(raw: string, more?: ReadonlySet<string>): boolean {
 }
 
 /**
- * `conflictVocab` (D73): more verbs that open a request to act, beside `LEADING` (which also cleans names, so it
+ * `conflictVocab` (D75): more verbs that open a request to act, beside `LEADING` (which also cleans names, so it
  * is not widened): moving money, renewing, raising, reserving, granting or removing, releasing.
  */
 export const MORE_VERBS: ReadonlySet<string> = new Set(

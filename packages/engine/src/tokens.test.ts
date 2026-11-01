@@ -9,7 +9,7 @@ import { ContextPartner } from "./partner";
 import { compactText, messageParts, renderPacket, SHOWN } from "./render";
 
 /**
- * The tokens track (D73; docs/research/gen-tokens.md): `compactAsk` cuts an ask's answer as packets are cut,
+ * The tokens track (D76–D78; docs/research/gen-tokens.md): `compactAsk` cuts an ask's answer as packets are cut,
  * `askDedup` does not repeat in an answer what the session already showed, and `compactParts` reads a quoted thread
  * past a quoted signature, a one-line table by its rows, and who the user's own sent mail went to. Flags off: as
  * before.

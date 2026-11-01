@@ -1,6 +1,7 @@
 # Ask answers that cite what the question runs into (track ask)
 
-Decision: D73 (proposed; `askVerdicts`, `askCompact`, both off by default). Development used the two new development
+Decisions: D73 (`askVerdicts`) and D74 (`askCompact`), proposed, both off by default (the track's single D73,
+renumbered when the tracks were combined: docs/research/gen-combined.md). Development used the two new development
 suites `dev6a` and `dev6b` and the old in-sample suites (`hidden`, `heldout`, `heldout2`–`heldout4`). Held-out 5–9 were
 not run or read. $0 model spend: no OpenRouter call was made, and cards are replayed from
 `packages/sim/lab/cards/cards-v2.jsonl` only. Dev results and in-sample results are reported apart; dev is the
