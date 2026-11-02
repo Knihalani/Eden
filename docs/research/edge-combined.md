@@ -168,7 +168,7 @@ made live on `--bridge-model`, default `--card-model`, through the pacer), the `
 `--ask-description auto` (the default: the guided description for a condition whose config has `askGuard`, as the MCP
 server does; `guided` and `standard` force one). A `--dry` run of the plan's first command parsed (0 requests).
 
-## Free-model live test plan (≤ 600 free requests, not run)
+## Free-model live test plan (≤ 600 free requests; run 2026-11-01/02, results below)
 
 Agent `nvidia/nemotron-3.5-super-vl:free`, grader `dots-studio/dots-3-note-preview:free` (D91), Eden's judge, cards
 and bridge on `nvidia/nemotron-3.5-super-vl:free`. Requests per task measured by `edge-freelab` on the `eden`
@@ -208,6 +208,57 @@ Failing either bar, ALL5 is not adopted: the leave-one-out rows above say which 
 to test alone: it changes only words). The samples are small (dev 32 tasks an arm, 16 hidden and 16 control; blind 8 an arm): a directional check on free
 models, not a measure comparable with the paid runs (D85).
 
+## Free-model live results (2026-11-01/02)
+
+The plan above ran on free models with ZDR off for the lab account (`--allow-logging`, lab only; production defaults
+are unchanged, D12). It cost $0 and spread over two free days because of the 1,000-request daily cap. The ALL3 dev
+arm ran first. The ALL5 dev arm hit the cap (every request returned 429), so it re-ran after the 00:00 UTC reset with
+the same command. Paired differences are on the same tasks, with bootstrap 95% intervals.
+
+### Dev (dev6a + dev6b, seed 41, `--limit 8`: 16 hidden and 16 control tasks per arm)
+
+| | ALL3 | ALL5 | Paired difference |
+|---|---|---|---|
+| Hidden fact raised | 0.125 | 0.250 | +0.125 (+0.000..+0.312) |
+| False concern (control) | 0.000 | 0.000 | 0 |
+| Wall p50 | 56 s | 39 s | |
+| `ask_context` calls per task | 2.12 | 1.81 | |
+
+This passes the pre-registered bar (hidden ≥ +0.05, false concerns ≤ +0.02), but the interval touches zero. Free
+models put the absolute rates far below the paid runs: nemotron raises the planted fact only an eighth of the time
+under ALL3.
+
+### Blind (heldout12, seed 41, `--limit 6`: 6 hidden and 6 control tasks per arm, 283 requests)
+
+| | ALL3 | ALL5 |
+|---|---|---|
+| Hidden fact raised | 0.333 (2/6) | 0.167 (1/6) |
+| False concern (control) | 0 | 0 |
+| Wall p50 | 37 s | 18 s |
+
+Inconclusive: one task in six separates the arms, and ALL5 was not tested whole.
+- **Intent did not run.** The blind world had no replayed intent requests. The card replay (`cards-v2`) carries none,
+  and the 36 new cards the free model was asked for came back null (`blind12.cards.jsonl`: 36 lines, all `"c":null`).
+  So ALL5's intent index was empty.
+- **The bridge mostly failed.** It ran live on 10 of the 12 ALL5 tasks. Four calls hit the 2,000-token output cap
+  (nemotron reasons at length), and the other two timed out. Its queries were therefore missing or partial on at least
+  half the tasks.
+
+This blind run measured ALL3 plus the guard, packet bearing and a weakened bridge. It did not measure ALL5.
+
+### What this settles
+
+- **The lab path works end to end on free models:** pacing, backoff, caps, card and bridge replay, and grading, at
+  $0.
+- **Direction on dev:** ALL5 found more facts on the same tasks, with no false concerns. ALL5 was also faster and
+  asked less, on a model where every turn is slow.
+- **Nothing on blind:** the sample is too small, and intent and the bridge did not run as designed.
+- **A real cost found:** the bridge on a reasoning model can spend up to 2,000 output tokens on one call. A production
+  bridge model needs a non-reasoning model, or reasoning off, and a tight output cap. COST-MODEL's estimate assumes
+  about 150 output tokens.
+- **ALL3 stays the recommended configuration.** Adopting ALL5 needs a powered paid run with intent enriched for the
+  blind world (the card call over every item) and the bridge on a non-reasoning model.
+
 ## Verdict
 
 ### Review fixes (D93)
@@ -225,5 +276,6 @@ bridge's queries go with the user's `forget`.
 
 ALL5 is the dev and in-sample choice: +24 hidden facts surfaced on dev (54% → 64%) for +10 decoys, in-sample +2 for −8,
 at +17% ask bytes, +1 ms ask p50, one model call per acting request (bridge) and the card call reading every item
-(intent, about $0.035 per user-month estimated). ALL3 stays the recommended configuration until the plan above runs.
+(intent, about $0.035 per user-month estimated). ALL3 stays the recommended configuration:
+the free-model run (above) was directional on dev and inconclusive on blind.
 Every flag stays off by default.
