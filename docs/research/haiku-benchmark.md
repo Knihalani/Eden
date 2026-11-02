@@ -79,8 +79,8 @@ from a command run in this session. The spend is the campaign's spend ledger, su
   - held-out 12 had never been read by a strong model before this run.
 - **Rates:** the grader's verdict on each planted fact (`gradeWith`). "Hidden fact raised" on hidden tasks; "false
   concern" on control tasks, where a decoy that does not apply was planted instead.
-- **Grader check:** across all 28,544 graded runs (one planted fact each; blind and train), the grader and the lexical cross-check (70% of a fact's distinctive tokens
-  in the answer) agree on 26,026 of 28,544 facts (91.2%).
+- **Grader check:** across all 28,544 graded runs (one planted fact each; blind and train), the grader and the
+  lexical cross-check (70% of a fact's distinctive tokens in the answer) agree on 26,026 of 28,544 facts (91.2%).
 - **Paired differences:** the same task (world, seed, template) under two conditions, with a 2,000-sample bootstrap
   over tasks for the 95% interval (`haiku-bench.py`).
 - **Machine and load:** a 4-core, 15 GB container. Three processes at a time, each running its conditions'
