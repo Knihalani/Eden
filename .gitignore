@@ -71,3 +71,4 @@ benchmarks/memory-cues/nim/cache/
 
 # Agent worktrees
 .claude/worktrees/
+.claude/worktrees/
