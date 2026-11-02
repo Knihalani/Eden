@@ -1,0 +1,21 @@
+
+== pi / train
+condition            kind     n   rate  wall p50  p90  ttft p50  in/req out/req cacheRd% cacheWr%  asks  chars  src/task
+both~NEW2            hidden   192 0.672     4.63  6.24      510    1413    319    77.1    22.8  0.00    612    3.94
+both~NEW2            control  192 0.021     4.74  6.31      508    1366    286    79.7    20.1  0.00    354    3.91
+eden~NEW2            hidden   192 0.724     4.03  7.72      507    1033    337    56.2    43.6  0.53    610    3.87
+eden~NEW2            control  192 0.000     5.86  7.51      543    1012    294    59.5    40.2  1.04    347    3.97
+both~NEW2N           hidden   192 0.708     4.41  6.32      514    1440    329    76.3    23.6  0.00    685    3.88
+both~NEW2N           control  192 0.010     4.88  6.54      510    1382    282    79.5    20.3  0.00    358    3.88
+eden~NEW2N           hidden   192 0.724     3.98  7.02      521    1024    342    43.8    56.0  0.42    668    3.90
+eden~NEW2N           control  192 0.016     5.71  7.82      528    1008    293    59.9    39.9  0.99    367    3.99
+paired (a - b), 95% bootstrap over tasks:
+  eden~NEW2N       - eden~NEW2    hidden  n= 192 +0.000 (-0.057..+0.052)
+  eden~NEW2N       - eden~NEW2    control n= 192 +0.016 (+0.000..+0.036)
+  both~NEW2N       - both~NEW2    hidden  n= 192 +0.036 (-0.016..+0.089)
+  both~NEW2N       - both~NEW2    control n= 192 -0.010 (-0.026..+0.000)
+
+== spend by harness and role (ledger; Phase 2 main matrix: run labels p2-pi-*, p2-h-*)
+harness  role          calls      usd   in/call  out/call cacheRd% cacheWr%  ttft p50  p90  $/1k runs
+
+ungraded hidden/control runs (no grader verdict, left out above): 0

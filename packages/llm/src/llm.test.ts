@@ -69,11 +69,13 @@ describe("OpenRouterModel", () => {
     }) as unknown as typeof fetch;
     const model = new OpenRouterModel({ apiKey: "k", model: "z-ai/glm-5.3-flash", fetch: fake });
     const out = await model.chat({
-      messages: [{ role: "user", content: "hi" }],
+      messages: [{ role: "user", content: "hi", cache: true }],
       maxTokens: 50,
       json: true,
       cacheKey: "u-3f9a",
     });
+    // The prompt-cache marker is Anthropic's (`ChatMessage.cache`): never sent to an OpenAI-compatible endpoint.
+    expect(sent.messages).toEqual([{ role: "user", content: "hi" }]);
     expect(sent.provider).toMatchObject({ data_collection: "deny", zdr: true });
     expect(sent.session_id).toBe("u-3f9a");
     expect(sent.response_format).toEqual({ type: "json_object" });

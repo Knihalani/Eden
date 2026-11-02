@@ -1,0 +1,31 @@
+
+== hermes / train
+condition            kind     n   rate  wall p50  p90  ttft p50  in/req out/req cacheRd% cacheWr%  asks  chars  src/task
+hermes+eden~NEW      hidden   384 0.638     3.85  7.26      499    4479    296    86.2    13.7  0.18    569    3.78
+hermes+eden~NEW      control  384 0.000     4.56  7.49      501    4455    271    87.0    13.0  0.26    331    3.86
+hermes+eden~NEW2     hidden   384 0.706     3.90  7.21      505    4475    309    85.7    14.2  0.15    631    3.86
+hermes+eden~NEW2     control  384 0.016     4.77  7.65      490    4445    273    87.3    12.6  0.22    341    3.87
+paired (a - b), 95% bootstrap over tasks:
+  hermes+eden~NEW2 - hermes+eden~NEW hidden  n= 384 +0.068 (+0.018..+0.117)
+  hermes+eden~NEW2 - hermes+eden~NEW control n= 384 +0.016 (+0.005..+0.029)
+
+== pi / train
+condition            kind     n   rate  wall p50  p90  ttft p50  in/req out/req cacheRd% cacheWr%  asks  chars  src/task
+both~NEW             hidden   384 0.625     4.43  6.24      533    1434    311    73.5    26.4  0.00    560    3.80
+both~NEW             control  384 0.008     4.75  6.30      536    1368    283    76.3    23.6  0.00    329    3.87
+eden~NEW             hidden   384 0.695     3.98  6.88      538    1018    334    29.7    70.1  0.57    564    3.81
+eden~NEW             control  384 0.021     5.25  7.66      530    1011    297    47.8    51.9  1.03    325    3.82
+both~NEW2            hidden   384 0.688     4.76  6.31      514    1442    318    79.1    20.7  0.00    617    3.82
+both~NEW2            control  384 0.010     4.88  6.50      521    1371    283    79.6    20.2  0.00    337    3.94
+eden~NEW2            hidden   384 0.724     4.06  7.41      528    1020    349    51.4    48.4  0.48    625    3.81
+eden~NEW2            control  384 0.018     5.67  7.55      531     995    295    57.8    42.0  0.97    352    3.99
+paired (a - b), 95% bootstrap over tasks:
+  eden~NEW2        - eden~NEW     hidden  n= 384 +0.029 (-0.018..+0.078)
+  eden~NEW2        - eden~NEW     control n= 384 -0.003 (-0.016..+0.010)
+  both~NEW2        - both~NEW     hidden  n= 384 +0.062 (+0.016..+0.107)
+  both~NEW2        - both~NEW     control n= 384 +0.003 (-0.010..+0.016)
+
+== spend by harness and role (ledger; Phase 2 main matrix: run labels p2-pi-*, p2-h-*)
+harness  role          calls      usd   in/call  out/call cacheRd% cacheWr%  ttft p50  p90  $/1k runs
+
+ungraded hidden/control runs (no grader verdict, left out above): 0

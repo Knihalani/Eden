@@ -570,6 +570,32 @@ export interface EngineConfig {
    */
   readerPush: boolean;
   /**
+   * With `askReader` and `cards`: up to this many of the user's standing constraints on file (a carded freeze, limit,
+   * absence, deadline, prohibition or dependency still in force), newest first, join the reader's pool after the
+   * ask's ranked candidates, whatever their words. 0 (default): none.
+   */
+  askReaderStanding: number;
+  /** The characters of each item's most relevant parts the reader reads (`READER_ITEM_CHARS`, 400, is the most). */
+  askReaderItemChars: number;
+  /** The card kinds `askReaderStanding` takes; empty (default): the digest's standing kinds (`DIGEST_KINDS`). */
+  askReaderStandingKinds: string[];
+  /** With `readerPush`: the reader's kinds pushed unasked (`askReader` still shows every kind in an ask's answer). */
+  readerPushKinds: string[];
+  /** With `readerPush`: the pushed packet says the reader's bearing before each item, as an ask's answer does. */
+  readerPushNotes: boolean;
+  /**
+   * With `readerPush`: the most `observe` waits for the push (ms), within the caller's own wait. 0: never; the reading
+   * runs beside the agent's first model request and its packet is taken before the next one.
+   */
+  readerPushWaitMs: number;
+  /**
+   * With `askReader`: no reader call when none of the request's candidates could constrain it (no card of a
+   * constraint, state-change or already-done kind, no constraint wording). Standing items (`askReaderStanding`) do not
+   * open the gate, so with both on, a request whose candidates hold nothing constraint-like is not read even when a
+   * standing constraint would bind it.
+   */
+  readerGate: boolean;
+  /**
    * The active-constraints digest (docs/research/edge-bridge.md, `digest.ts`): per user, the items whose card
    * (`cards`) is a standing constraint (a freeze or hold, a limit, an absence, a deadline, a prohibition) over today
    * or later, at most `digestLines` lines of the items' own words (`digestBytes` in all), ranked by recency and the
@@ -731,6 +757,13 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askReaderClear: false,
   askReaderDrop: false,
   readerPush: false,
+  askReaderStanding: 0,
+  askReaderItemChars: 400,
+  askReaderStandingKinds: [],
+  readerPushKinds: ["blocks", "limits", "changes", "done"],
+  readerPushNotes: false,
+  readerPushWaitMs: 60_000,
+  readerGate: false,
   constraintDigest: false,
   digestLines: 12,
   digestBytes: 1_600,

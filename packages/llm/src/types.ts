@@ -1,6 +1,11 @@
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
+  /**
+   * The prompt up to and including this message is a stable prefix: a provider with prompt caching ends a cached
+   * prefix here (Anthropic: a `cache_control` breakpoint). Others ignore it.
+   */
+  cache?: boolean;
 }
 
 export interface ChatRequest {
