@@ -36,11 +36,15 @@ export interface LabAccess {
 /** Models served by Anthropic's Messages API directly (`AnthropicModel`), not OpenRouter. */
 export const isAnthropic = (model: string) => model.startsWith("claude-");
 
-/** The key a model's provider needs, or a clear error naming the variable. */
+/**
+ * The key a model's provider needs, or a clear error naming the variable. An Anthropic key is read from
+ * `HAIKU_API_KEY` first: cloud sessions whose model provider the host manages may not pass a user-set
+ * `ANTHROPIC_API_KEY` through to the session, so the lab accepts a name with no reserved prefix.
+ */
 export function keyFor(model: string, env = process.env): string {
-  const name = isAnthropic(model) ? "ANTHROPIC_API_KEY" : "OPENROUTER_API_KEY";
-  const key = env[name];
-  if (!key) throw new Error(`${model} needs ${name}`);
+  const names = isAnthropic(model) ? ["HAIKU_API_KEY", "ANTHROPIC_API_KEY"] : ["OPENROUTER_API_KEY"];
+  const key = names.map((n) => env[n]).find(Boolean);
+  if (!key) throw new Error(`${model} needs ${names.join(" or ")}`);
   return key;
 }
 
