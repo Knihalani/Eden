@@ -557,6 +557,12 @@ export interface EngineConfig {
    */
   askReaderClear: boolean;
   /**
+   * With `askReader`: the items the reader named and judged not to bind (a lookalike, another thing of the same kind,
+   * or a rule lifted or ended) leave the ask's answer, so a decoy the search found is not handed to the agent beside
+   * the item that binds. Only items the model read and rejected by name; an item it did not mention stays.
+   */
+  askReaderDrop: boolean;
+  /**
    * The active-constraints digest (docs/research/edge-bridge.md, `digest.ts`): per user, the items whose card
    * (`cards`) is a standing constraint (a freeze or hold, a limit, an absence, a deadline, a prohibition) over today
    * or later, at most `digestLines` lines of the items' own words (`digestBytes` in all), ranked by recency and the
@@ -716,6 +722,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askReaderWaitMs: 2_500,
   askReaderQuestions: false,
   askReaderClear: false,
+  askReaderDrop: false,
   constraintDigest: false,
   digestLines: 12,
   digestBytes: 1_600,

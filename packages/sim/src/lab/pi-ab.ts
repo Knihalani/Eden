@@ -76,6 +76,8 @@ import {
   ModelBridgeMaker,
   ModelCardMaker,
   QueryBridge,
+  AskReader,
+  ModelReaderMaker,
   type BridgeMaker,
   type CardMaker,
 } from "@eden/engine";
@@ -172,10 +174,14 @@ const CONDITIONS: Condition[] = parseConditions(CONDITION_NAMES, {
 if (CONDITIONS.some((c) => c.withPartner && c.config.cards === true) && !KEY && !DRY)
   throw new Error("config.cards needs OPENROUTER_API_KEY for its enrichment");
 // Every OpenRouter request of the run goes through one pacer: rate, cap, retries, and the logging choice (free.ts).
+/** `askReader` (D95): the ask-time reader's model, `--reader-model` (default Haiku 5.5, on the spend ledger). */
+const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
+const USES_READER = CONDITIONS.some((c) => c.withPartner && c.config.askReader === true);
 const ACCESS = labAccess(args, [
   MODEL,
   GRADER,
   ...(CONDITIONS.some((c) => c.withPartner && c.config.cards === true) ? [CARD_MODEL] : []),
+  ...(USES_READER ? [READER_MODEL] : []),
 ]);
 const PACER = ACCESS.pacer;
 /** A task starts only while the cap leaves room for all of it: its model requests and its grading. */
@@ -459,6 +465,27 @@ async function runWorld(
     withPartner && config.bridgeQuery === true
       ? new QueryBridge({ maker: bridgeMaker(), budget: new Budget(), now: () => clock })
       : undefined;
+  // `askReader`: one budgeted call per ask about an action, on the running task's timeline and charged to it (D95).
+  let readerTask: RunResult | null = null;
+  const reader =
+    withPartner && config.askReader === true
+      ? new AskReader({
+          maker: new ModelReaderMaker(
+            meteredModel(
+              labModel(ACCESS, { apiKey: KEY ?? "", model: READER_MODEL, timeoutMs: 60_000 }, "eden.reader"),
+              (start, end, data) => {
+                current?.span("eden.reader", "eden", "path", start, end, data);
+                if (readerTask && typeof data.cost === "number") {
+                  readerTask.edenModelCalls++;
+                  readerTask.edenCostUsd += data.cost;
+                }
+              },
+            ),
+          ),
+          budget: new Budget(),
+          now: () => clock,
+        })
+      : undefined;
   const partner = withPartner
     ? new ContextPartner({
         sources: async () => edenSources,
@@ -475,6 +502,7 @@ async function runWorld(
         config,
         ...(cards ? { cards } : {}),
         ...(bridge ? { bridge } : {}),
+        ...(reader ? { reader } : {}),
         // Charged to the task whose session the trace is from: a slow-path verdict can land after it ended.
         onTrace: (t) => {
           const owner = bySession.get(t.sessionId);
@@ -546,6 +574,7 @@ async function runWorld(
     const tl = new Timeline();
     current = tl;
     bySession.set(sessionId, { r, tl });
+    readerTask = r;
     const record: TaskRecord = {
       task: task.id,
       condition,

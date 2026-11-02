@@ -94,7 +94,12 @@ export function labAccess(args: string[], models: string[], pacing: { now?: () =
  * `claude-*` id is Anthropic's API, metered against the run's spend ledger under `role`; anything else is OpenRouter
  * with the run's logging choice.
  */
-export function labModel(access: LabAccess, options: OpenRouterOptions, role = "eden"): Model {
+export function labModel(
+  access: LabAccess,
+  options: OpenRouterOptions,
+  role = "eden",
+  anthropic: { thinking?: "off" | "adaptive" } = {},
+): Model {
   if (isAnthropic(options.model)) {
     if (!access.ledger) throw new Error(`${options.model}: no spend ledger (pass it among labAccess's models)`);
     return new AnthropicModel({
@@ -103,6 +108,7 @@ export function labModel(access: LabAccess, options: OpenRouterOptions, role = "
       fetch: access.fetch,
       timeoutMs: options.timeoutMs ?? 60_000,
       meter: access.ledger.meter(role),
+      ...(anthropic.thinking ? { thinking: anthropic.thinking } : {}),
     });
   }
   return new OpenRouterModel({
