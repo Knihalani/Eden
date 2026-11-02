@@ -695,13 +695,17 @@ export class ContextPartner {
     const t0 = performance.now();
     const result = await this.observeEvent(event, options);
     if (!push) return result;
+    let settled = false;
+    void push.then(() => (settled = true));
     const left = (options.waitMs ?? 0) - (performance.now() - t0);
     if (left > 0) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       await Promise.race([push, new Promise((r) => (timer = setTimeout(r, left)))]);
       clearTimeout(timer);
     }
-    return result;
+    // A push still running, or one that queued its packet, is pending work the integration should poll for.
+    const queued = (this.sessions.get(sessionKey(event))?.pending.length ?? 0) > 0;
+    return { ...result, pending: result.pending || !settled || queued };
   }
 
   private async observeEvent(event: AgentEvent, options: { waitMs?: number } = {}): Promise<ObserveResult> {

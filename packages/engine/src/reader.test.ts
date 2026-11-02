@@ -516,6 +516,14 @@ describe("the reader in the engine (config.askReader)", () => {
     const packets = on.partner.takePending({ tenantId: "t", userId: "u1", sessionId: "s1" });
     expect(packets.flatMap((p) => p.citations.map((c) => c.itemId))).toContain("mail:hold");
     expect(packets.find((p) => p.reason.startsWith("reader:"))).toBeDefined();
+    expect(on.reports.length).toBe(1);
+    // A failing reader queues nothing and leaves the observe as it was.
+    const failing = await run(
+      { askReader: true, readerPush: true },
+      { asks: 0, maker: new ScriptedReader(flags("mail:hold"), { fail: true }) },
+    );
+    const none = failing.partner.takePending({ tenantId: "t", userId: "u1", sessionId: "s1" });
+    expect(none.find((p) => p.reason.startsWith("reader:"))).toBeUndefined();
     // Off (and with askReader alone), observing makes no reader call.
     const off = await run({ askReader: true }, { asks: 0 });
     expect(off.maker.calls.length).toBe(0);
