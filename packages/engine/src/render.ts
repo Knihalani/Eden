@@ -49,6 +49,11 @@ export function renderPacket(
     bearing?: (item: ContextItem) => Bearing | undefined;
     /** `askGuard`: a line of the engine's own, in fixed words, said before the items (`guardLine`). */
     lead?: string;
+    /**
+     * `askReader` (D95): the reader's bearing on an item ("blocks: …"), said before its title after `READER_TAG`, so
+     * the agent reads it as Eden's reading and not the item's words. Validated and bounded by `parseReader`.
+     */
+    note?: (item: ContextItem) => string | undefined;
   },
 ): string {
   const before = options.shownBefore;
@@ -98,7 +103,9 @@ export function renderPacket(
     const room = options.maxBytes - bytes - 1;
     if (room < 40) break;
     const bears = options.bearing?.(item);
-    const title = (bears ? BEARINGS[bears] : "") + (item.title ? `${inert(item.title)}: ` : "");
+    const note = options.note?.(item);
+    const said = note ? `${READER_TAG}${inert(oneLine(note).replace(/\|/g, "/"))} | ` : "";
+    const title = said + (bears ? BEARINGS[bears] : "") + (item.title ? `${inert(item.title)}: ` : "");
     // Collapse whitespace only in a prefix that can fill the room (a char is at least one byte once collapsed), not
     // across an 8 KB item that is then cut to a few hundred bytes (9% of end-to-end CPU; pipeline.bench.ts).
     const prefix = item.text.length > room * 2 + 64 ? item.text.slice(0, room * 2 + 64) : item.text;
@@ -127,9 +134,18 @@ export function shownText(rendered: string): string {
   return rendered
     .split("\n")
     .filter((line) => line !== HEADER && line !== "</context>" && !line.startsWith(GUARD))
-    .map((line) => line.replace(/^- \[[^\]]*\] /, "").replace(BEARING_PREFIX, ""))
+    .map((line) =>
+      line
+        .replace(/^- \[[^\]]*\] /, "")
+        .replace(READER_PREFIX, "")
+        .replace(BEARING_PREFIX, ""),
+    )
     .join("\n");
 }
+
+/** How the reader's bearing on an item starts (`askReader`, D95); `shownText` drops it with the bearing. */
+export const READER_TAG = "Eden's reader: ";
+const READER_PREFIX = /^Eden's reader: [^|\n]*\| /;
 
 /** An item's bearing on the request (`packetBearing`, `askGuard`): what the engine's verdicts read in it. */
 export type Bearing = "conflict" | "clear";

@@ -61,6 +61,28 @@ agent cost of about $0.0005 per task (docs/research/path-to-90.md), so +15% to +
 prices, mostly reasoning tokens. A model or setting with no reasoning would sit at the low end (an estimate: not
 measured).
 
+Ask-time reader (proposed D95, `askReader`, off by default; `reader.ts`). One call per `ask` about an action (an
+imperative question, a question about blockers, or an ask while the session's latest request acts; any ask with
+`askReaderQuestions`), never per event, never on the fast path, cached per user and session by request and pool, so a
+repeated ask makes none. Input: the system prompt (about 450 tokens) and up to 30 candidates (at most 40) of at most
+400 characters each plus title, sender and card fields. Measured on simulated worlds (train1–6, seed 41,
+glm-5.3-flash, 2026-11-02, OpenRouter's reported cost): 0.86 calls per task (124 asks read in 144 tasks). Two
+endpoints, with very different reasoning lengths:
+
+| Routing (`sort`)            | Endpoint      | Calls | Tokens in / out per call | $ per call (reported) | Latency p50 / p90 | Over 2.5 s |
+| --------------------------- | ------------- | ----- | ------------------------ | --------------------- | ----------------- | ---------- |
+| `price`                     | OpenInference | 124   | 2,551 / 800              | $0.000205             | 4.39 s / 6.76 s   | 117        |
+| `throughput`                | Parasail      | 42    | 2,666 / 135              | $0.000455             | 0.86 s / 2.36 s   | 4          |
+| `throughput`, blind suites  | Parasail      | 10    | 1,894 / 49               | $0.000309             | 0.61 s / 1.18 s   | 0          |
+
+At the Z.AI list price ($0.15/$0.50 per M) a call is about $0.00046 (135 tokens out) to $0.0008 (800 out); it is
+reserved at $0.002 against the reader's own `Budget`. Per task: about $0.0002 (price routing) to $0.0004 (throughput
+routing), comparable to the agent's own cost per task (about $0.0005, docs/research/path-to-90.md), so a tenant
+turning it on roughly doubles the model cost of an acting task. The price-routed endpoint reasons about 800 tokens
+whatever effort it is asked for, which puts 94% of its calls past the default 2.5 s wait (the ask then answers
+without it, and the call only fills the cache); throughput routing is what makes the reader fit its wait. Small
+samples on one seed: not statistics.
+
 Active-constraints digest (proposed D90, `constraintDigest`, off by default): no model call and no source call. Its
 cost is the agent's: at most `digestBytes` (1,600 bytes; 1,377 on average on dev, 1,414 in-sample), about 350 tokens,
 once per session as data. The same constraints give the same bytes across sessions (one distinct digest per simulated
