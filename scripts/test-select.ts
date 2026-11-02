@@ -107,7 +107,7 @@ if (mode === "changed") {
 }
 
 if (dirs && dirs.length === 0) {
-  console.log("test:changed: no package code changed since origin/main; nothing to test");
+  console.log(`test:changed: no package code changed since ${baseRef ?? "origin/main"}; nothing to test`);
   process.exit(0);
 }
 // Packages with no test file of their own (protocol's types-only edits still reach their dependents' tests).

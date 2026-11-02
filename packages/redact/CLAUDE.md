@@ -28,7 +28,7 @@ first (D10). See [README.md](README.md).
 ## Test
 
 ```bash
-bun run test:pkg redact          # ~10 s CPU over 7 files; redos.test.ts (~6.5 s) and linear.test.ts (~4 s) dominate
+bun run test:pkg redact          # 7 files, ~6 s wall in parallel; redos.test.ts (~6.5 s) and linear.test.ts (~4 s) lead
 ```
 
 ## Pitfalls
