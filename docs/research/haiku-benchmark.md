@@ -39,12 +39,14 @@ from a command run in this session. The spend is the campaign's spend ledger, su
   - Cutting the wait to 1 s does not pay: it loses 7.6 points in Pi's eden arm and 18.1 in the both arm, and wall time
     barely drops (0.0–0.15 s at p50).
 - **What did not work, or is weaker.**
-  - In both harnesses, an agent with source tools rarely calls `ask_context`. NEW's gain for such agents comes from
-    `readerPush` (Phase 1).
+  - Hermes offers `ask_context` beside its tools and calls it only 0.17–0.24 times a task. Pi's both arm is never
+    offered `ask_context` (`pi-ab.ts` gives it only without tools). So for tool-using agents NEW's gain is likely
+    `readerPush`'s. That is inferred: no arm runs NEW without the push.
   - Gains are smaller on held-out 10 (+12.1 points Pi, +14.1 Hermes) and held-out 11 (+16.4, +19.5) than on held-out
     5–8 (+25.9, +25.6) and 12 (+32.0, +34.0).
-  - In Pi, giving the agent its tools beside NEW lowered the hidden rate against NEW alone, 63.0% vs 70.7%. The agent
-    leans on its own searches.
+  - In Pi, the both arm (tools plus NEW) raised less than the eden arm, 63.0% vs 70.7%. The both arm has no
+    `ask_context`; in the eden arm, 151 hidden tasks reached the agent only through an ask answer, raised 92% of the
+    time. The two arms differ in more than the tools, so the cause is not measured.
 - **Spend.** $24.36 of the $40 cap for the whole campaign:
   - Phase 1 $1.42;
   - benchmark preparation $0.75;
@@ -77,7 +79,7 @@ from a command run in this session. The spend is the campaign's spend ledger, su
   - held-out 12 had never been read by a strong model before this run.
 - **Rates:** the grader's verdict on each planted fact (`gradeWith`). "Hidden fact raised" on hidden tasks; "false
   concern" on control tasks, where a decoy that does not apply was planted instead.
-- **Grader check:** across all graded runs, the grader and the lexical cross-check (70% of a fact's distinctive tokens
+- **Grader check:** across all 28,544 graded runs (one planted fact each; blind and train), the grader and the lexical cross-check (70% of a fact's distinctive tokens
   in the answer) agree on 26,026 of 28,544 facts (91.2%).
 - **Paired differences:** the same task (world, seed, template) under two conditions, with a 2,000-sample bootstrap
   over tasks for the 95% interval (`haiku-bench.py`).
@@ -168,7 +170,7 @@ arm), 25% (Pi, both arm) and 29% (Hermes). The full profiles are in `report-pi.t
   - RSS max 3.35 GB;
   - up to 40 tasks in flight.
 
-  hermes-ab does not sample its process; its workers were about 220 MB each.
+  hermes-ab does not sample its process (not measured for Hermes).
 - **Uptake:** once the planted item reached the agent, it was raised:
   - in a packet: 90–92% (Pi), 88–89% (Hermes);
   - only in an ask answer: 90–92% (Pi).
@@ -193,14 +195,16 @@ The differences:
 The reader's reading is what the agent uses, and the agent's own requests dominate wall time, so the 3 s wait is the
 right default for NEW.
 
-## Tokens, caching and cost by role (ledger, all Phase 2 runs)
+## Tokens, caching and cost by role (ledger; the main matrix, run labels `p2-pi-*` and `p2-h-*`)
+
+The pilots ($0.15) and the wait test ($3.73) are not in this table.
 
 | Harness | Role | Calls | $ | In / call | Out / call | Cache read | Cache write | TTFT p50 / p90 ms |
 |---|---|---|---|---|---|---|---|---|
-| Pi | agent | 30,128 | 5.734 | 1,067 | 280 | 67.3% | 30.8% | 515 / 859 |
-| Pi | Eden reader | 8,082 | 3.196 | 3,574 | 239 | 25.3% | 0.0% | 525 / 853 |
-| Pi | Eden cards (live, amortised) | 5,640 | 1.063 | 1,797 | 255 | 73.4% | 0.1% | 497 / 888 |
-| Pi | grader | 17,920 | 1.175 | 616 | 8 | 0.0% | 0.0% | 515 / 1,010 |
+| Pi | agent | 30,000 | 5.708 | 1,067 | 280 | 67.4% | 30.8% | 515 / 859 |
+| Pi | Eden reader | 8,069 | 3.190 | 3,573 | 239 | 25.3% | 0.0% | 525 / 853 |
+| Pi | Eden cards (live, amortised) | 5,563 | 1.013 | 1,776 | 246 | 74.2% | 0.1% | 496 / 888 |
+| Pi | grader | 17,840 | 1.170 | 616 | 8 | 0.0% | 0.0% | 515 / 1,011 |
 | Hermes | agent | 19,257 | 4.520 | 4,308 | 254 | 86.9% | 13.0% | 506 / 779 |
 | Hermes | Eden reader | 3,265 | 1.296 | 3,579 | 240 | 25.2% | 0.0% | 519 / 855 |
 | Hermes | Eden cards (live, amortised) | 3,064 | 0.927 | 2,139 | 415 | 61.7% | 0.0% | 496 / 832 |
@@ -220,16 +224,23 @@ right default for NEW.
   - the grader agrees with the lexical cross-check on 91% of facts;
   - the same model plays agent, grader and Eden's models.
 - **Train:** in-sample. Its NEW prompt and intent requests were tuned and made on train.
-  - Held-out 10 and 11 were each read once in Phase 1's blind check (the funnel, not an agent run).
-  - Held-out 5–8 and 12 were not read in this campaign before the benchmark.
+- **Held-out 10 and 11 are not untouched.** In Phase 1 they were run several times in the no-model funnel:
+  - NEW before and after the review fixes;
+  - ALL3 + intent;
+  - the `readerPush` packet check.
+
+  Those runs informed the decision to keep `readerPush`. Held-out 5–8 and 12 were not read in this campaign before
+  the benchmark, and NEW's gain there is the largest (+25.9 and +32.0 points in Pi).
+- **Bootstrap:** the intervals resample tasks as independent. Tasks share worlds, seeds and templates, so the true
+  intervals may be somewhat wider.
 - **Shared intent requests:** the Haiku intent requests for the benchmark worlds were made before the runs and shared
   by every NEW condition.
 - **Load:** latency is measured under the container's shared load (three processes, many concurrent streams). Absolute
   times are this machine's, not a production deployment's; the differences between conditions are paired.
 - **Seeds:** Pi and Hermes ran the same seeds (41–48). Hermes ran 4 concurrent streams for seed 41 and 6 for every
-  later seed and train, which changes load, not tasks.
-- **Grader prompts:** grading runs beside the agent; a grader failure would leave a run ungraded. None was (0 of
-  28,544).
+  later seed and train (`packages/sim/lab/haiku/hermes-concurrency.txt`), which changes load, not tasks.
+- **Grader prompts:** grading runs beside the agent; a grader failure would leave a run ungraded. None was: the
+  aggregator counts 0 ungraded hidden or control runs over every file, train included (last line of `agg.txt`).
 
 ## Reproduce
 
