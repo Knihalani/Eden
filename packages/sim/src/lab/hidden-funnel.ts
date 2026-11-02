@@ -196,6 +196,8 @@ if (!["none", "live", "replay"].includes(READER)) throw new Error("--reader must
 const READER_MODEL = opt("reader-model", "z-ai/glm-5.3-flash");
 const READER_SORT = opt("reader-sort", "") as "" | "price" | "throughput" | "latency";
 const READER_CACHE = opt("reader-cache", "");
+/** `--reader-thinking adaptive`: a `claude-*` reader thinks (at the reader's low effort); default off. */
+const READER_THINKING = opt("reader-thinking", "off") as "off" | "adaptive";
 const READER_KEY = READER === "live" ? keyFor(READER_MODEL) : undefined;
 if (READER !== "none" && !ASK) throw new Error("--reader needs --ask");
 const LIMIT = Number(opt("limit", "0"));

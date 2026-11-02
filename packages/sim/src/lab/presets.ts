@@ -50,3 +50,11 @@ PRESETS.ALL5 = {
   askGuard: true,
   packetBearing: true,
 };
+// docs/research/haiku-opt.md (D96, proposed): ALL3 plus the intent index (D87) and the ask-time reader (D95, prompt
+// v5) with `askReaderDrop`. Needs `--cards` and `--intent` (requests replayed) and a reader model (`--reader-model`).
+PRESETS.NEW = {
+  ...PRESETS.ALL3,
+  intent: true,
+  askReader: true,
+  askReaderDrop: true,
+};

@@ -49,6 +49,8 @@ import {
   ModelBridgeMaker,
   ModelCardMaker,
   QueryBridge,
+  AskReader,
+  ModelReaderMaker,
   type BridgeMaker,
   type CardMaker,
 } from "@eden/engine";
@@ -134,11 +136,15 @@ const CONDITIONS: HermesCondition[] = parseHermesConditions(CONDITION_NAMES, {
 });
 const usesCards = CONDITIONS.some((c) => c.withPartner && c.config.cards === true);
 const usesBridge = CONDITIONS.some((c) => c.withPartner && c.config.bridgeQuery === true);
+/** `askReader` (D95): the ask-time reader's model, `--reader-model` (default Haiku 5.5, on the spend ledger). */
+const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
+const USES_READER = CONDITIONS.some((c) => c.withPartner && c.config.askReader === true);
 const ACCESS = labAccess(args, [
   MODEL,
   GRADER,
   ...(usesCards ? [CARD_MODEL] : []),
   ...(usesBridge ? [BRIDGE_MODEL] : []),
+  ...(USES_READER ? [READER_MODEL] : []),
 ]);
 const PACER = ACCESS.pacer;
 /** A task starts only while the cap leaves room for all of it: its model requests (one spare) and its grading. */
@@ -381,6 +387,27 @@ async function runWorld(
     withPartner && config.bridgeQuery === true
       ? new QueryBridge({ maker: bridgeMaker(), budget: new Budget(), now: () => clock })
       : undefined;
+  // `askReader`: one budgeted call per ask about an action, on the running task's timeline and charged to it (D95).
+  let readerTask: RunResult | null = null;
+  const reader =
+    withPartner && config.askReader === true
+      ? new AskReader({
+          maker: new ModelReaderMaker(
+            meteredModel(
+              labModel(ACCESS, { apiKey: KEY ?? "", model: READER_MODEL, timeoutMs: 60_000 }, "eden.reader"),
+              (start, end, data) => {
+                current?.span("eden.reader", "eden", "path", start, end, data);
+                if (readerTask && typeof data.cost === "number") {
+                  readerTask.edenModelCalls++;
+                  readerTask.edenCostUsd += data.cost;
+                }
+              },
+            ),
+          ),
+          budget: new Budget(),
+          now: () => clock,
+        })
+      : undefined;
   const partner = withPartner
     ? new ContextPartner({
         sources: async () => edenSources,
@@ -393,6 +420,7 @@ async function runWorld(
         config,
         ...(cards ? { cards } : {}),
         ...(bridge ? { bridge } : {}),
+        ...(reader ? { reader } : {}),
         onTrace: (t) => {
           const owner = bySession.get(t.sessionId);
           if (!owner) return;
@@ -535,6 +563,7 @@ async function runWorld(
       const tl = new Timeline();
       current = tl;
       bySession.set(sessionId, { r, tl });
+      readerTask = r;
       const record: TaskRecord = {
         task: t.id,
         condition,

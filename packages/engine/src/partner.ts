@@ -1552,8 +1552,11 @@ export class ContextPartner {
       verdict.bears.filter((b) => notes.has(b.id)).map((b) => ({ id: b.id, kind: b.kind })),
       clear,
     );
+    // `askReaderDrop`: what the reader read and rejected by name leaves the answer (never what it flagged).
+    const rejected = this.config.askReaderDrop ? new Set(verdict.rejected ?? []) : new Set<string>();
+    const rest = chosen.filter((x) => !lead.includes(x) && !rejected.has(x.item.id));
     return {
-      chosen: [...lead, ...chosen.filter((x) => !lead.includes(x))].slice(0, limit),
+      chosen: [...lead, ...rest].slice(0, limit),
       notes,
       read: true,
       clear,

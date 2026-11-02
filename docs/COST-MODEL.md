@@ -69,6 +69,11 @@ repeated ask makes none. Input: the system prompt (about 450 tokens) and up to 3
 glm-5.3-flash, 2026-11-02, OpenRouter's reported cost): 0.86 calls per task (124 asks read in 144 tasks). Two
 endpoints, with very different reasoning lengths:
 
+Measured on Claude Haiku 5.5 (lab, D96, docs/research/haiku-opt.md): prompt v5 over a 30-item pool is about 3,770
+tokens in and 250 out, 24% of the prompt read from the cache (the instructions), $0.00042 per call ($0.10 / $0.50 per
+million, cache reads at a tenth), p50 1.41 s and p90 1.99 s with thinking off. The intent index's requests for every
+item of a world (D87) cost $0.0000501 per item on Haiku 5.5 (3,331 items, 355 calls, $0.177), once per item version.
+
 | Routing (`sort`)            | Endpoint      | Calls | Tokens in / out per call | $ per call (reported) | Latency p50 / p90 | Over 2.5 s |
 | --------------------------- | ------------- | ----- | ------------------------ | --------------------- | ----------------- | ---------- |
 | `price`                     | OpenInference | 124   | 2,551 / 800              | $0.000205             | 4.39 s / 6.76 s   | 117        |

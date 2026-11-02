@@ -240,6 +240,10 @@ per user and session by a hash of the request and the pool; any `forget` of the 
 bridge, it is wired by the embedder (`PartnerDeps.reader`); the lab's funnel wires it (`--reader`), the server does not
 yet.
 
+The reader's prompt v5 (D96) has the model label every item that looks relevant, a lookalike included, writing what
+the item means before deciding whether it is about the same thing and binds. With `askReaderDrop` (off by default),
+the items it rejected by name leave the ask's answer; an item it flagged never does.
+
 **The intent index** (`intent`, needs `cards`, off by default; proposed D87, `intent.ts`,
 [research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four
 requests the item would change, in a user's words (validated, at most 120 characters each, redacted); items the card

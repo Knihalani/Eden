@@ -9,7 +9,9 @@ import {
   AskReader,
   ModelReaderMaker,
   parseReader,
+  parseReaderFull,
   READER_ITEM_CHARS,
+  READER_SYSTEM,
   READER_MAX_ITEMS,
   READER_WHY_WORDS,
   readerFocus,
@@ -42,7 +44,7 @@ class ScriptedReader implements ReaderMaker {
   calls: ReaderInput[] = [];
   constructor(
     private readonly pick: (input: ReaderInput) => { i: number; kind: ReaderKind; why: string }[] | null,
-    private readonly opts: { delayMs?: number; fail?: boolean } = {},
+    private readonly opts: { delayMs?: number; fail?: boolean; reject?: (input: ReaderInput) => number[] } = {},
   ) {}
   async read(input: ReaderInput, signal: AbortSignal) {
     this.calls.push(input);
@@ -58,6 +60,7 @@ class ScriptedReader implements ReaderMaker {
     if (this.opts.fail) throw new Error("model down");
     return {
       bears: this.pick(input),
+      ...(this.opts.reject ? { rejected: this.opts.reject(input) } : {}),
       costUsd: 0.0002,
       usage: { inputTokens: 100, outputTokens: 10, cachedInputTokens: 0 },
     };
@@ -118,6 +121,36 @@ describe("the reader's prompt and output (reader.ts)", () => {
     // At most five entries.
     const many = JSON.stringify({ bears: Array.from({ length: 12 }, (_, i) => ({ i, k: "limits", why: "x" })) });
     expect(parseReader(many, 12)!.length).toBe(5);
+  });
+
+  test("v5 entries: an entry judged another thing, not binding or a lookalike is rejected by index, not a bearing", () => {
+    const text = JSON.stringify({
+      bears: [
+        { i: 0, why: "freeze on payments to Harlow", same: true, binds: true, k: "blocks" },
+        { i: 1, why: "about another fine", same: false, binds: true, k: "blocks" },
+        { i: 2, why: "hold lifted", same: true, binds: false, k: "blocks" },
+        { i: 3, why: "shares the topic", k: "lookalike" },
+        { i: 0, why: "repeated", same: false, binds: false, k: "lookalike" },
+        { i: 9, why: "out of range", same: false, binds: false, k: "lookalike" },
+      ],
+    });
+    const got = parseReaderFull(text, 5)!;
+    expect(got.bears).toEqual([{ i: 0, kind: "blocks", why: "freeze on payments to Harlow" }]);
+    // Item 0 binds (its later rejection does not undo that); 9 is out of range.
+    expect(got.rejected).toEqual([1, 2, 3]);
+    expect(parseReader(text, 5)).toEqual(got.bears);
+    // Rejections after five binding entries are still read.
+    const many = [0, 1, 2, 3, 4, 5].map((i) => ({ i, why: "binds", same: true, binds: true, k: "limits" }));
+    const capped = parseReaderFull(JSON.stringify({ bears: [...many, { i: 6, k: "lookalike" }] }), 8)!;
+    expect(capped.bears.length).toBe(5);
+    expect(capped.rejected).toEqual([6]);
+  });
+
+  test("the instructions hold no date or data, so a provider can cache them", () => {
+    const m = readerMessages(input());
+    expect(m[0]!.content).toBe(READER_SYSTEM);
+    expect(m[0]!.content).not.toContain("2026");
+    expect(m[1]!.content).toContain("<today>2026-10-27</today>");
   });
 
   test("the prompt is bounded: at most 40 items of at most 400 characters each, whatever the pool", () => {
@@ -432,6 +465,26 @@ describe("the reader in the engine (config.askReader)", () => {
     };
     expect(await mk({})).toBe(0);
     expect(await mk({ askReaderQuestions: true })).toBe(1);
+  });
+
+  test("askReaderDrop: what the reader rejected by name leaves the answer; what it flagged never does", async () => {
+    // The reader flags the hold and rejects two items by name: n0, and the hold itself (a contradictory reply).
+    const reject = (input: ReaderInput) =>
+      ["mail:n0", "mail:hold"].map((id) => input.items.findIndex((x) => x.id === id)).filter((i) => i >= 0);
+    const on = await run(
+      { askReader: true, askReaderDrop: true },
+      { maker: new ScriptedReader(flags("mail:hold"), { reject }) },
+    );
+    const off = await run({ askReader: true }, { maker: new ScriptedReader(flags("mail:hold"), { reject }) });
+    expect(off.answers.u1![0]!.ids).toContain("mail:n0");
+    expect(on.answers.u1![0]!.ids).not.toContain("mail:n0");
+    expect(on.answers.u1![0]!.ids[0]).toBe("mail:hold");
+    // Without a reading (the reader failed), nothing is dropped.
+    const failed = await run(
+      { askReader: true, askReaderDrop: true },
+      { maker: new ScriptedReader(flags("mail:hold"), { reject, fail: true }) },
+    );
+    expect(failed.answers.u1![0]!.ids).toContain("mail:n0");
   });
 
   test("askReaderClear: a read pool with nothing binding says so in fixed words", async () => {
