@@ -74,7 +74,7 @@ import {
   type ReaderInput,
   type ReaderKind,
 } from "./reader";
-import { buildDigest, digestAdmits, personalSender } from "./digest";
+import { activeOn, buildDigest, DIGEST_KINDS, digestAdmits, personalSender } from "./digest";
 import {
   accounts,
   actionKey,
@@ -689,7 +689,9 @@ export class ContextPartner {
       this.deps.reader &&
       event.kind === "user_message" &&
       event.draft !== true &&
-      isImperative(event.text, MORE_VERBS)
+      // With `askReaderQuestions` every request is read: the verb list behind `isImperative` misses many actions
+      // ("Cash in…", "RSVP yes…", "Open a Junior ISA…"), and the reader itself says when nothing binds.
+      (this.config.askReaderQuestions || isImperative(event.text, MORE_VERBS))
         ? this.ask({ ...event, question: event.text, maxItems: 5 }, { push: true }).catch(() => null)
         : null;
     const t0 = performance.now();
@@ -1325,7 +1327,11 @@ export class ContextPartner {
     // `readerPush`: the ask was the engine's own, for the user's request. What the reader flagged goes to the agent as
     // a proactive packet (queued, taken before its next model request); nothing else is answered or handed out.
     if (internal.push) {
-      const flagged = reading ? chosen.filter((x) => reading.notes.has(x.item.id)) : [];
+      // `readerPushKinds`: only the kinds pushed unasked (a "changes" bearing is the reader's least precise).
+      const pushes = new Set<string>(this.config.readerPushKinds);
+      const flagged = reading
+        ? chosen.filter((x) => reading.notes.has(x.item.id) && pushes.has(reading.kinds.get(x.item.id) ?? ""))
+        : [];
       const fresh = flagged.filter((x) => s.ledger.isFresh(x.item.id, s.turn));
       const injection =
         fresh.length > 0 && !s.closed ? this.deliver(s, fresh, "proactive", `reader:${cue.id}`, cue) : null;
@@ -1511,6 +1517,7 @@ export class ContextPartner {
   ): Promise<{
     chosen: Scored[];
     notes: Map<string, string>;
+    kinds: Map<string, ReaderKind>;
     read: boolean;
     clear: boolean;
     checked: number;
@@ -1522,9 +1529,32 @@ export class ContextPartner {
     if (!request && !this.config.askReaderQuestions && !ASKS_BLOCKERS.test(cue.raw)) return null;
     const pool: Scored[] = [];
     const seen = new Set<string>();
-    const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
+    // `askReaderStanding`: the user's standing constraints on file (a carded freeze, limit, absence, deadline,
+    // prohibition or dependency still in force), newest first, lead the pool whatever their words: the item that binds
+    // a request often shares none of its words, so the ask's ranking never seats it (docs/research/haiku-phase3.md).
+    // The list depends on the user's cache alone, not the request, so the reader can send it as a cached prefix.
+    let standingCount = 0;
+    const standing = this.config.askReaderStanding;
+    if (standing > 0 && this.config.cards && this.deps.cards) {
+      const now = this.now();
+      const cache = this.deps.cache;
+      const today = localDay(now, cache.offsetOf(s.scope));
+      const ids = this.deps.cards.carded(s.scope);
+      const extra = [...this.deps.cards.cardsOf(s.scope, ids, now)]
+        .filter(([, card]) => DIGEST_KINDS.has(card.kind) && activeOn(card, today))
+        .map(([id]) => cache.get(s.scope, id, now))
+        .filter((item): item is ContextItem => item !== null && !bulkMail(item))
+        .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0) || (a.id < b.id ? -1 : 1))
+        .slice(0, Math.min(standing, READER_POOL_CAP));
+      for (const item of extra) {
+        seen.add(item.id);
+        pool.push({ item, score: 0, matched: 0, sketch: null });
+      }
+      standingCount = extra.length;
+    }
+    const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP - standingCount));
     for (const x of ranked) {
-      if (pool.length >= cap) break;
+      if (pool.length - standingCount >= cap) break;
       if (seen.has(x.item.id)) continue;
       seen.add(x.item.id);
       pool.push(x);
@@ -1557,7 +1587,9 @@ export class ContextPartner {
     const input: ReaderInput = {
       request: main,
       ...(request && cue.raw !== request ? { question: cue.raw } : {}),
-      items: pool.map((x) => readerItem(x.item, focus, cards.get(x.item.id))),
+      // A standing item is read without the request's focus, so its text is the same for every request of the user.
+      items: pool.map((x, i) => readerItem(x.item, i < standingCount ? NO_FOCUS : focus, cards.get(x.item.id))),
+      ...(standingCount > 0 ? { standing: standingCount } : {}),
       today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
     };
     const called = reader.peek(s.scope, s.key, input) === undefined;
@@ -1573,19 +1605,29 @@ export class ContextPartner {
     } finally {
       clearTimeout(timer);
     }
-    const unchanged = { chosen, notes: new Map<string, string>(), read: false, clear: false, checked: 0, called };
+    const unchanged = {
+      chosen,
+      notes: new Map<string, string>(),
+      kinds: new Map<string, ReaderKind>(),
+      read: false,
+      clear: false,
+      checked: 0,
+      called,
+    };
     if (verdict === "late" || verdict === null) {
       report(verdict === "late" ? "late" : "none");
       return unchanged;
     }
     const byId = new Map(pool.map((x) => [x.item.id, x]));
     const notes = new Map<string, string>();
+    const kinds = new Map<string, ReaderKind>();
     const lead: Scored[] = [];
     for (const b of verdict.bears) {
       const x = byId.get(b.id);
       if (!x || lead.includes(x) || lead.length >= limit) continue;
       lead.push(x);
       notes.set(b.id, readerNote(b.kind, b.why));
+      kinds.set(b.id, b.kind);
     }
     const clear = this.config.askReaderClear && verdict.bears.length === 0;
     report(
@@ -1602,6 +1644,7 @@ export class ContextPartner {
     return {
       chosen: [...lead, ...rest].slice(0, limit),
       notes,
+      kinds,
       read: true,
       clear,
       checked: verdict.checked,
@@ -5447,6 +5490,7 @@ const ASKS_BLOCKERS =
 
 /** The most candidates an ask's reader reads, whatever `askReaderPool` says. */
 const READER_POOL_CAP = READER_MAX_ITEMS;
+const NO_FOCUS: ReadonlySet<string> = new Set();
 
 /** `askReaderClear`'s line: what the reader read, in fixed words. `shownText` drops it as it drops the guard's. */
 const READER_CLEAR = (checked: number) =>

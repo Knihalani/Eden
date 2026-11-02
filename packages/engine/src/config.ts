@@ -570,6 +570,14 @@ export interface EngineConfig {
    */
   readerPush: boolean;
   /**
+   * With `askReader` and `cards`: up to this many of the user's standing constraints on file (a carded freeze, limit,
+   * absence, deadline, prohibition or dependency still in force), newest first, join the reader's pool after the
+   * ask's ranked candidates, whatever their words. 0 (default): none.
+   */
+  askReaderStanding: number;
+  /** With `readerPush`: the reader's kinds pushed unasked (`askReader` still shows every kind in an ask's answer). */
+  readerPushKinds: string[];
+  /**
    * The active-constraints digest (docs/research/edge-bridge.md, `digest.ts`): per user, the items whose card
    * (`cards`) is a standing constraint (a freeze or hold, a limit, an absence, a deadline, a prohibition) over today
    * or later, at most `digestLines` lines of the items' own words (`digestBytes` in all), ranked by recency and the
@@ -731,6 +739,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askReaderClear: false,
   askReaderDrop: false,
   readerPush: false,
+  askReaderStanding: 0,
+  readerPushKinds: ["blocks", "limits", "changes", "done"],
   constraintDigest: false,
   digestLines: 12,
   digestBytes: 1_600,

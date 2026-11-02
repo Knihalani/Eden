@@ -19,6 +19,7 @@ import { plantHeldout9 } from "./hidden-heldout9";
 import { plantHeldout10 } from "./hidden-heldout10";
 import { plantHeldout11 } from "./hidden-heldout11";
 import { plantHeldout12 } from "./hidden-heldout12";
+import { plantHeldout13 } from "./hidden-heldout13";
 import { plantTrain1 } from "./hidden-train1";
 import { plantTrain2 } from "./hidden-train2";
 import { plantTrain3 } from "./hidden-train3";
@@ -56,6 +57,9 @@ export const SUITES: Record<string, Plant> = {
   heldout11: plantHeldout11,
   // blind, written after D85; measurement only
   heldout12: plantHeldout12,
+  // blind, written for the Haiku phase 3 by an author who saw only the world generator, the text helpers and the
+  // HiddenTask interface; registered unread, measurement only: run once, at the end of phase 3
+  heldout13: plantHeldout13,
   // The broad tuning set: six suites written blind (each author saw only the world generator, the text helpers and
   // the HiddenTask interface), one life area each, so a change must generalise across authors to show up. Tune on them.
   train1: plantTrain1,
@@ -72,7 +76,7 @@ const TRAIN = ["train1", "train2", "train3", "train4", "train5", "train6"];
  * Blind suites that have never been run: left out of `all`, so a tuning command with `--suite all` cannot spend them;
  * the blind run names them. A suite leaves this list once its blind run is recorded.
  */
-export const UNRUN_BLIND = ["heldout9", "heldout10", "heldout11", "heldout12"];
+export const UNRUN_BLIND = ["heldout9", "heldout10", "heldout11", "heldout12", "heldout13"];
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n));
 
 /**

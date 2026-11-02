@@ -7,6 +7,7 @@ import { ItemCache } from "./cache";
 import { CardEnricher, type Card, type CardMaker } from "./cards";
 import { activeOn, buildDigest, digestAdmits, personalSender } from "./digest";
 import { ContextPartner } from "./partner";
+import { AskReader, type ReaderInput, type ReaderMaker } from "./reader";
 
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -199,5 +200,73 @@ describe("the digest in the engine (config.constraintDigest)", () => {
     const { p, start } = await run({ constraintDigest: true }, external);
     expect((await start("a", "s1")).injection).toBeNull();
     expect(p.digest({ tenantId: "t", userId: "a" })).toBeNull();
+  });
+});
+
+describe("askReaderStanding: the user's standing constraints lead the reader's pool", () => {
+  test("a constraint sharing no word with the request is read, first, the same for every request, per user", async () => {
+    let clock = NOW;
+    const held = item(
+      "k1",
+      "Kestrel snapshot",
+      "Kestrel cluster stays read-only from 4 Nov until 9 Nov for the audit.",
+    );
+    const other = item("o1", "Team dinner", "Dinner booking for the platform team at Rosa's, table for eight.");
+    const cards = new CardEnricher({
+      maker: {
+        async make(items: ContextItem[]) {
+          return {
+            cards: items.map((i) =>
+              i.title === "Kestrel snapshot"
+                ? card({ start: "2026-11-04", end: "2026-11-09", entities: ["Kestrel"], statement: "read-only" })
+                : { kind: "none" as const, actions: [], entities: [], statement: "" },
+            ),
+            costUsd: 0,
+          };
+        },
+      },
+      budget: new Budget(),
+      now: () => clock,
+    });
+    const inputs: ReaderInput[] = [];
+    const maker: ReaderMaker = {
+      async read(input) {
+        inputs.push(input);
+        return { bears: [], costUsd: 0 };
+      },
+    };
+    const source: Source = { id: "chat", kind: "test", description: "Team chat", search: async () => [held, other] };
+    const p = new ContextPartner({
+      sources: async () => [source],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: { cards: true, askReader: true, askReaderStanding: 5, askReaderWaitMs: 500 },
+      cards,
+      reader: new AskReader({ maker, budget: new Budget(), now: () => clock }),
+    });
+    const a = { tenantId: "t", userId: "a" };
+    await p.observe(
+      { ...a, sessionId: "s0", at: clock, kind: "user_message", text: "Any news on Kestrel?" },
+      {
+        waitMs: 1_000,
+      },
+    );
+    await cards.idle();
+    clock += DAY / 24;
+    await p.ask({ ...a, sessionId: "s1", question: "Book the platform team dinner at Rosa's for Friday." });
+    await p.ask({ ...a, sessionId: "s2", question: "Order the platform team dinner from Rosa's tonight." });
+    expect(inputs.length).toBe(2);
+    for (const input of inputs) {
+      expect(input.standing).toBe(1);
+      expect(input.items[0]!.id).toBe("chat:k1");
+    }
+    // Read without the request's focus: the same text for both requests (a cacheable prefix).
+    expect(inputs[1]!.items[0]!.text).toBe(inputs[0]!.items[0]!.text);
+    // Another user never gets this user's constraints.
+    await p.ask({ tenantId: "t", userId: "b", sessionId: "s1", question: "Book the platform team dinner at Rosa's." });
+    expect(inputs.slice(2).every((i) => !i.items.some((x) => x.id === "chat:k1"))).toBe(true);
   });
 });

@@ -115,13 +115,23 @@ export function anthropicBody(options: AnthropicOptions, request: ChatRequest, s
   const system: SystemBlock[] = systemTexts.map((text) => ({ type: "text", text }));
   const last = system.at(-1);
   if (last) last.cache_control = options.cacheTtl === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" };
-  // The API wants alternating turns starting with a user turn: consecutive same-role messages are joined.
-  const messages: { role: "user" | "assistant"; content: string }[] = [];
+  // The API wants alternating turns starting with a user turn: consecutive same-role messages are joined. When a
+  // message is marked `cache`, each keeps its own text block, so the cached prefix ends at that block.
+  const blocks = request.messages.some((m) => m.cache && m.role !== "system");
+  const messages: { role: "user" | "assistant"; content: string | SystemBlock[] }[] = [];
   for (const m of request.messages) {
     if (m.role === "system") continue;
     const prev = messages.at(-1);
-    if (prev && prev.role === m.role) prev.content += `\n\n${m.content}`;
-    else messages.push({ role: m.role, content: m.content });
+    if (!blocks) {
+      if (prev && prev.role === m.role) prev.content += `\n\n${m.content}`;
+      else messages.push({ role: m.role, content: m.content });
+      continue;
+    }
+    const block: SystemBlock = { type: "text", text: m.content };
+    if (m.cache)
+      block.cache_control = options.cacheTtl === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" };
+    if (prev && prev.role === m.role && Array.isArray(prev.content)) prev.content.push(block);
+    else messages.push({ role: m.role, content: [block] });
   }
   if (messages[0]?.role !== "user") messages.unshift({ role: "user", content: "(begin)" });
   const thinking = options.thinking ?? "off";

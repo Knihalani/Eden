@@ -161,6 +161,19 @@ describe("the reader's prompt and output (reader.ts)", () => {
     expect(got.rejected).toEqual([]);
   });
 
+  test("standing items lead as a cached user prefix with the day; the request and its candidates follow", () => {
+    const m = readerMessages({ ...input(4), standing: 2 });
+    expect(m.length).toBe(3);
+    expect(m[1]!.cache).toBe(true);
+    expect(m[1]!.content).toContain("<standing>");
+    expect(m[1]!.content).toContain('<item i="0"');
+    expect(m[1]!.content).toContain('<item i="1"');
+    expect(m[1]!.content).not.toContain("Harlow invoice today");
+    expect(m[2]!.content).toContain("<request>Pay the Harlow invoice today</request>");
+    expect(m[2]!.content).toContain('<item i="2"');
+    expect(m[2]!.cache).toBeUndefined();
+  });
+
   test("the instructions hold no date or data, so a provider can cache them", () => {
     const m = readerMessages(input());
     expect(m[0]!.content).toBe(READER_SYSTEM);
@@ -527,6 +540,19 @@ describe("the reader in the engine (config.askReader)", () => {
     // Off (and with askReader alone), observing makes no reader call.
     const off = await run({ askReader: true }, { asks: 0 });
     expect(off.maker.calls.length).toBe(0);
+  });
+
+  test("readerPush with askReaderQuestions reads a request the verb list misses; readerPushKinds filters", async () => {
+    const quiet = await run({ askReader: true, readerPush: true }, { asks: 0 });
+    expect(quiet.maker.calls.length).toBe(1);
+    const p = await run(
+      { askReader: true, readerPush: true, askReaderQuestions: true, readerPushKinds: ["blocks"] },
+      { asks: 0, maker: new ScriptedReader(flags("mail:hold", "changes")) },
+    );
+    expect(p.maker.calls.length).toBe(1);
+    // A "changes" bearing is not pushed when only "blocks" is.
+    const packets = p.partner.takePending({ tenantId: "t", userId: "u1", sessionId: "s1" });
+    expect(packets.find((x) => x.reason.startsWith("reader:"))).toBeUndefined();
   });
 
   test("askReaderClear: a read pool with nothing binding says so in fixed words", async () => {
