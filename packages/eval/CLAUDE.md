@@ -28,7 +28,7 @@ privacy check (planted secrets, inert framing), direct asks, model calls and cos
 
 ```bash
 bun run test:pkg eval            # ~0.6 s (run.test.ts: the harness itself, no model)
-bun run eval                     # ~2 s, no model, deterministic: the metrics JSON
+bun run eval                     # < 1 s, no model, deterministic: the metrics JSON
 bun run eval --config '{"probes":true}'   # the same scenarios under engine flags
 ```
 

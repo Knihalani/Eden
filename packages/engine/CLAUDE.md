@@ -49,7 +49,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 ## Test
 
 ```bash
-bun run test:pkg engine          # ~15 s CPU over 41 files (parallel: a few s); partner.test.ts and reader.test.ts lead
+bun run test:pkg engine          # 41 files, ~4 s wall in parallel (~15 s one by one); partner and reader lead
 bun test ./packages/engine/src/conflict.test.ts      # one file, from the repo root (the preload is read from cwd)
 bun run eval                     # the scenario metrics; paste the JSON in the PR when behaviour changes
 bun run funnel                   # the lab's no-model screen on train (docs/LAB.md), ~40 s

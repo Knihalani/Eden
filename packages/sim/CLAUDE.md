@@ -36,7 +36,7 @@ Outside `src/`: `lab/` holds the connector-lab Dockerfiles and `servers.json` (p
 ## Test
 
 ```bash
-bun run test:pkg sim             # ~9 s CPU over 19 files; sim.test.ts (~3.5 s) and lab/suites.test.ts lead
+bun run test:pkg sim             # 19 files, ~4 s wall in parallel; sim.test.ts (~3.5 s alone) leads
 bun run sim --users 2 --sessions 5         # a small quality run (JSON), no model, ~1 s
 ```
 
