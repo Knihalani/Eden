@@ -146,6 +146,21 @@ describe("the reader's prompt and output (reader.ts)", () => {
     expect(capped.rejected).toEqual([6]);
   });
 
+  test("a list named for rejections, or a bare string calling an item a lookalike, never yields a bearing", () => {
+    expect(parseReaderFull(JSON.stringify({ lookalikes: [{ i: 0, why: "x" }] }), 3)).toEqual({
+      bears: [],
+      rejected: [0],
+    });
+    expect(parseReaderFull(JSON.stringify({ rejected: [1] }), 3)).toEqual({ bears: [], rejected: [1] });
+    expect(parseReaderFull(JSON.stringify({ bears: ["i=2 lookalike"] }), 3)).toEqual({ bears: [], rejected: [2] });
+    // An unknown list name is unreadable (the usual answer), not bearings.
+    expect(parseReaderFull(JSON.stringify({ thoughts: [{ i: 0 }] }), 3)).toBeNull();
+    // A sixth binding entry is past the cap, but is never rejected for a later lookalike entry.
+    const six = [0, 1, 2, 3, 4, 5].map((i) => ({ i, why: "binds", same: true, binds: true, k: "limits" }));
+    const got = parseReaderFull(JSON.stringify({ bears: [...six, { i: 5, k: "lookalike" }] }), 8)!;
+    expect(got.rejected).toEqual([]);
+  });
+
   test("the instructions hold no date or data, so a provider can cache them", () => {
     const m = readerMessages(input());
     expect(m[0]!.content).toBe(READER_SYSTEM);
@@ -479,6 +494,14 @@ describe("the reader in the engine (config.askReader)", () => {
     expect(off.answers.u1![0]!.ids).toContain("mail:n0");
     expect(on.answers.u1![0]!.ids).not.toContain("mail:n0");
     expect(on.answers.u1![0]!.ids[0]).toBe("mail:hold");
+    // A drop that would empty the answer is not made: an empty answer would say nothing was found.
+    const all = (input: ReaderInput) => input.items.map((_, i) => i);
+    const empty = await run(
+      { askReader: true, askReaderDrop: true },
+      { maker: new ScriptedReader(() => [], { reject: all }) },
+    );
+    expect(empty.answers.u1![0]!.ids.length).toBeGreaterThan(0);
+    expect(empty.answers.u1![0]!.answer).not.toContain("Nothing in the connected sources");
     // Without a reading (the reader failed), nothing is dropped.
     const failed = await run(
       { askReader: true, askReaderDrop: true },

@@ -151,3 +151,115 @@ describe("hermes-ab's model proxy", () => {
     expect(seen).toHaveLength(0);
   });
 });
+
+describe("hermes-ab's model proxy on Anthropic (claude-* agent, D97)", () => {
+  const AKEY = "sk-ant-test-SECRET-456";
+  /** A proxy over a fake Messages endpoint; its ledger reservations and bookings recorded. */
+  function setupA(upstream: (init: RequestInit) => Promise<Response>, refuse = false) {
+    const ledger: string[] = [];
+    const booked: { usage: { outputTokens: number; cachedInputTokens: number }; costUsd: number }[] = [];
+    const sent: unknown[] = [];
+    const options: ProxyOptions = {
+      key: "",
+      fetch: (async (_url: string, init: RequestInit) => {
+        sent.push(JSON.parse(String(init.body)));
+        return upstream(init);
+      }) as unknown as typeof fetch,
+      model: "claude-haiku-5-5",
+      maxTokens: 2_000,
+      reserve: (est) => ledger.push(`reserve ${est}`),
+      settle: (est, cost) => ledger.push(`settle ${est} ${cost}`),
+      price: () => 0.5,
+      anthropic: {
+        key: AKEY,
+        url: "https://anthropic.test/v1/messages",
+        reserveLedger: () => {
+          if (refuse) throw new Error("spend cap $1 reached");
+          ledger.push("ledger reserve");
+        },
+        releaseLedger: () => ledger.push("ledger release"),
+        book: (r) => booked.push(r as never),
+      },
+    };
+    return { proxy: modelProxy(options), ledger, booked, sent };
+  }
+  const events = [
+    { type: "message_start", message: { id: "m", usage: { input_tokens: 10, cache_read_input_tokens: 90 } } },
+    { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+    { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Hello" } },
+    { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 500 } },
+    { type: "message_stop" },
+  ];
+  /** A Messages SSE stream, one event per pull, that stops (and says so) when its request is aborted. */
+  function msse(init: RequestInit, list: unknown[], state: { reads: number; aborted: boolean }): Response {
+    let i = 0;
+    const body = new ReadableStream<Uint8Array>({
+      async pull(ctl) {
+        await Bun.sleep(5);
+        if (init.signal?.aborted) {
+          state.aborted = true;
+          ctl.error(new DOMException("aborted", "AbortError"));
+          return;
+        }
+        if (i < list.length) {
+          state.reads++;
+          ctl.enqueue(new TextEncoder().encode(`event: x\ndata: ${JSON.stringify(list[i++])}\n\n`));
+        } else ctl.close();
+      },
+    });
+    return new Response(body, { headers: { "content-type": "text/event-stream" } });
+  }
+
+  test("a stream is translated, booked once from the reported usage, the key only in the header", async () => {
+    const state = { reads: 0, aborted: false };
+    let headers: Headers | null = null;
+    const { proxy, ledger, booked, sent } = setupA(async (init) => {
+      headers = new Headers(init.headers);
+      return msse(init, events, state);
+    });
+    const t = task();
+    const res = await proxy("chat/completions", chat(), () => t);
+    const text = await res.text();
+    await Bun.sleep(20);
+    expect(text).toContain('"content":"Hello"');
+    expect(text).toContain('"cached_tokens":90');
+    expect(text.endsWith("data: [DONE]\n\n")).toBe(true);
+    expect(headers!.get("x-api-key")).toBe(AKEY);
+    expect(JSON.stringify(sent)).not.toContain(AKEY);
+    expect(booked.length).toBe(1);
+    expect(booked[0]!.usage.outputTokens).toBe(500);
+    expect(ledger.filter((l) => l.startsWith("settle")).length).toBe(1);
+    expect(t.r.modelCalls).toBe(1);
+    expect(t.record.requests[0]!.cached).toBe(90);
+  });
+
+  test("Hermes cancelling the stream aborts the upstream request, then books once", async () => {
+    const state = { reads: 0, aborted: false };
+    const long = [...events.slice(0, 3), ...Array.from({ length: 50 }, () => events[2]!), ...events.slice(3)];
+    const { proxy, booked } = setupA(async (init) => msse(init, long, state));
+    const res = await proxy("chat/completions", chat(), () => task());
+    const reader = res.body!.getReader();
+    await reader.read();
+    await reader.read();
+    await reader.cancel();
+    await Bun.sleep(60);
+    expect(state.aborted).toBe(true);
+    expect(state.reads).toBeLessThan(long.length);
+    expect(booked.length).toBe(1);
+    // The output's usage never arrived: what was passed on is the estimate, not zero.
+    expect(booked[0]!.usage.outputTokens).toBeGreaterThan(0);
+  });
+
+  test("the spend ledger's refusal is a 402 and nothing is sent; an upstream error is redacted", async () => {
+    const refused = setupA(async () => new Response("{}"), true);
+    const r1 = await refused.proxy("chat/completions", chat(), () => task());
+    expect(r1.status).toBe(402);
+    expect(refused.sent.length).toBe(0);
+    expect(refused.ledger).toEqual(["reserve 0.5", "settle 0.5 0"]);
+    const failing = setupA(async () => new Response(`bad key ${AKEY}`, { status: 401 }));
+    const r2 = await failing.proxy("chat/completions", chat(), () => task());
+    expect(r2.status).toBe(401);
+    expect(await r2.text()).not.toContain(AKEY);
+    expect(failing.booked.length).toBe(1);
+  });
+});
