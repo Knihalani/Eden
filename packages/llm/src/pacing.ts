@@ -36,8 +36,8 @@ export interface PacingOptions {
   fetch?: typeof fetch;
 }
 
-/** Statuses worth sending again: rate limited, or a gateway or upstream failure. */
-const RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+/** Statuses worth sending again: rate limited, or a gateway or upstream failure (529: Anthropic overloaded). */
+const RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504, 529]);
 
 const abortError = () => Object.assign(new Error("The operation was aborted."), { name: "AbortError" });
 

@@ -44,7 +44,7 @@ import { Rng } from "../rng";
 import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
 import { DiskCardMaker, loadRequests } from "./cards-disk";
-import { isCapError, labAccess, labModel } from "./free";
+import { isCapError, keyFor, labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
 import { parseSuites, SUITES } from "./suites";
 
@@ -134,8 +134,7 @@ console.log(
     `to enrich ${todo.length} (${Math.ceil(todo.length / BATCH)} calls); spent so far $${spent().toFixed(4)} of cap $${CAP}`,
 );
 if (DRY || todo.length === 0) process.exit(0);
-const key = process.env.OPENROUTER_API_KEY;
-if (!key) throw new Error("OPENROUTER_API_KEY is not set");
+const key = keyFor(MODEL);
 // Metered: every call's reported cost goes to the spend ledger before its cards are kept.
 let total = spent();
 const startSpend = total;
@@ -171,7 +170,10 @@ const metered = (inner: Model, sort: string): Model => ({
   },
 });
 const routed = (sort: "" | "price") =>
-  metered(labModel(ACCESS, { apiKey: key, model: MODEL, timeoutMs: 120_000, ...(sort ? { sort } : {}) }), sort);
+  metered(
+    labModel(ACCESS, { apiKey: key, model: MODEL, timeoutMs: 120_000, ...(sort ? { sort } : {}) }, "eden.cards"),
+    sort,
+  );
 // A cut batch's retry goes to default routing (`CardMakerOptions.retry`), as `CardEnricher` sends it.
 const MAX_TOKENS = Number(opt("max-tokens", FREE ? "8000" : "0"));
 const maker = new ModelCardMaker(routed(SORT), {

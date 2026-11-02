@@ -15,7 +15,8 @@
  *
  * 429 and 5xx answers are retried with jittered backoff, honouring Retry-After (`Pacer` in @eden/llm).
  */
-import { Pacer, priceFor, OpenRouterModel, type OpenRouterOptions } from "@eden/llm";
+import { AnthropicModel, Pacer, priceFor, OpenRouterModel, type Model, type OpenRouterOptions } from "@eden/llm";
+import { SpendLedger } from "./spend";
 import { createModels, createProvider, envApiKeyAuth, type Model as PiModel } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 
@@ -28,6 +29,19 @@ export interface LabAccess {
   fetch: typeof fetch;
   /** True when any of the run's models is a free one. */
   free: boolean;
+  /** The hard spend cap for Anthropic calls (`--spend-ledger`, `--spend-cap`); required when a model is `claude-*`. */
+  ledger: SpendLedger | null;
+}
+
+/** Models served by Anthropic's Messages API directly (`AnthropicModel`), not OpenRouter. */
+export const isAnthropic = (model: string) => model.startsWith("claude-");
+
+/** The key a model's provider needs, or a clear error naming the variable. */
+export function keyFor(model: string, env = process.env): string {
+  const name = isAnthropic(model) ? "ANTHROPIC_API_KEY" : "OPENROUTER_API_KEY";
+  const key = env[name];
+  if (!key) throw new Error(`${model} needs ${name}`);
+  return key;
 }
 
 export const isFree = (model: string) => model.endsWith(":free");
@@ -56,11 +70,36 @@ export function labAccess(args: string[], models: string[], pacing: { now?: () =
     maxRequests: count("max-requests", 0),
     ...pacing,
   });
-  return { allowLogging, pacer, fetch: pacer.fetch, free };
+  // Anthropic calls are capped in dollars, across every process of a campaign, by one ledger file (spend.ts).
+  let ledger: SpendLedger | null = null;
+  if (models.some(isAnthropic)) {
+    const path = opt("spend-ledger");
+    const cap = Number(opt("spend-cap"));
+    if (!path || !Number.isFinite(cap) || cap <= 0) {
+      throw new Error("a claude-* model needs --spend-ledger FILE and --spend-cap USD (the hard spend cap)");
+    }
+    const headroom = Number(opt("spend-headroom") ?? 0.5);
+    ledger = new SpendLedger(path, cap, opt("run-label") ?? "run", headroom);
+  }
+  return { allowLogging, pacer, fetch: pacer.fetch, free, ledger };
 }
 
-/** An `OpenRouterModel` (Eden's judge, the card maker) that goes through the run's pacer and logging choice. */
-export function labModel(access: LabAccess, options: OpenRouterOptions): OpenRouterModel {
+/**
+ * A model for one of the run's roles (Eden's judge, the card maker, ...) that goes through the run's pacer. A
+ * `claude-*` id is Anthropic's API, metered against the run's spend ledger under `role`; anything else is OpenRouter
+ * with the run's logging choice.
+ */
+export function labModel(access: LabAccess, options: OpenRouterOptions, role = "eden"): Model {
+  if (isAnthropic(options.model)) {
+    if (!access.ledger) throw new Error(`${options.model}: no spend ledger (pass it among labAccess's models)`);
+    return new AnthropicModel({
+      apiKey: keyFor(options.model),
+      model: options.model,
+      fetch: access.fetch,
+      timeoutMs: options.timeoutMs ?? 60_000,
+      meter: access.ledger.meter(role),
+    });
+  }
   return new OpenRouterModel({
     ...options,
     fetch: access.fetch,
@@ -121,7 +160,8 @@ export const providerPrefs = (access: LabAccess) =>
 /** An error that is the pacer's cap, however a library wrapped it. */
 export function isCapError(e: unknown): boolean {
   for (let x: unknown = e, depth = 0; x && depth < 5; depth++) {
-    if (x instanceof Error && (x.name === "RequestCapReached" || /request cap of \d+ reached/.test(x.message))) {
+    const capped = x instanceof Error && (x.name === "RequestCapReached" || x.name === "SpendCapReached");
+    if (capped || (x instanceof Error && /request cap of \d+ reached|spend cap \$[\d.]+ reached/.test(x.message))) {
       return true;
     }
     x = (x as { cause?: unknown }).cause;
