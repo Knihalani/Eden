@@ -128,7 +128,8 @@ export function readerFocus(...texts: (string | undefined)[]): Set<string> {
  * subject is the one kept.
  */
 export function relevantText(text: string, focus: ReadonlySet<string>, max = READER_ITEM_CHARS): string {
-  const clean = sanitizeForStore(text.slice(0, 8_000));
+  // Redacted with a margin before the cut, so a secret straddling the cut is not left as an unredacted fragment.
+  const clean = sanitizeForStore(text.slice(0, 16_000)).slice(0, 8_000);
   let parts = messageParts(clean, undefined, undefined, undefined, undefined, true)
     .filter((p) => !p.header)
     .map((p) => p.text.replace(/\s+/g, " ").trim());
@@ -240,7 +241,7 @@ export function readerMessages(input: ReaderInput): ChatMessage[] {
   const items = input.items.slice(0, READER_MAX_ITEMS).map((it, i) => {
     const card = it.card ? ` | card: ${inert(it.card)}` : "";
     return (
-      `<item i="${i}" source="${inert(it.source).replace(/"/g, "")}" date="${inert(it.date)}"` +
+      `<item i="${i}" source="${inert(it.source).replace(/"/g, "")}" date="${inert(it.date).replace(/"/g, "")}"` +
       `${it.from ? ` from="${inert(it.from)}"` : ""}>` +
       `${inert(it.title)}: ${inert(it.text)}${card}</item>`
     );
@@ -340,9 +341,14 @@ export function parseReaderFull(
     key = arrays[0]!;
   }
   const list = v[key] as unknown[];
+  // A list named for not binding ("lookalikes", "rejected") holds rejections, never bearings; another name than a
+  // kind or a neutral one ("items") is not read as bearings either.
+  const keyNotBinding = key !== "bears" && (NOT_BINDING_LIST.test(key) || NOT_BINDING.test(key));
+  if (key !== "bears" && !keyNotBinding && !kindOf(key) && !NEUTRAL_LIST.test(key)) return null;
   const fallback = kindOf(key) ?? "changes";
   const out: { i: number; kind: ReaderKind; why: string }[] = [];
   const rejected: number[] = [];
+  const binding = new Set<number>();
   for (const raw of list.slice(0, 20)) {
     // An entry written as a bare reference ("item i=5", 5) is read by its index alone.
     const ref = typeof raw === "number" ? raw : typeof raw === "string" ? /\bi\s*[=:]\s*(\d+)/.exec(raw)?.[1] : null;
@@ -356,6 +362,8 @@ export function parseReaderFull(
     const idx = typeof r.i === "string" && /^\d+$/.test(r.i) ? Number(r.i) : r.i;
     const valid = typeof idx === "number" && Number.isInteger(idx) && idx >= 0 && idx < count;
     const notBinding =
+      keyNotBinding ||
+      (typeof raw === "string" && NOT_BINDING_WORD.test(raw)) ||
       r.same === false ||
       r.same === "false" ||
       r.same === "no" ||
@@ -369,14 +377,20 @@ export function parseReaderFull(
     }
     const i = typeof r.i === "string" && /^\d+$/.test(r.i) ? Number(r.i) : r.i;
     if (typeof i !== "number" || !Number.isInteger(i) || i < 0 || i >= count) continue;
+    binding.add(i);
     if (out.some((x) => x.i === i)) continue;
     // A kind outside the set is read as the mildest that still leads ("changes"), never as an instruction.
     const kind = (typeof r.k === "string" ? kindOf(r.k) : undefined) ?? fallback;
     if (out.length < 5) out.push({ i, kind, why: cleanWhy(r.why) });
   }
-  // An item named twice keeps its binding entry: it is not also rejected.
-  return { bears: out, rejected: rejected.filter((i) => !out.some((x) => x.i === i)) };
+  // An item named as binding anywhere (past the fifth too) is never also rejected.
+  return { bears: out, rejected: rejected.filter((i) => !binding.has(i)) };
 }
+
+/** List names for rejections, a not-binding word inside a bare string entry, and list names read as bearings. */
+const NOT_BINDING_LIST = /^(lookalikes?|look-alikes?|rejected|rejects|not[ _-]?binding|non[ _-]?binding|irrelevant)$/i;
+const NOT_BINDING_WORD = /\b(lookalike|look-alike|not binding|irrelevant|unrelated)\b/i;
+const NEUTRAL_LIST = /^(items|entries|results|list|bearings|binding)$/i;
 
 /** The kinds that say an item does not bind. */
 const NOT_BINDING = /^(lookalike|look-alike|none|no|irrelevant|unrelated|allows|not[ _-]?binding)$/i;

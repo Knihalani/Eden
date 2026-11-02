@@ -8,11 +8,11 @@ run in this session; the spend is from the campaign's spend ledger (`packages/si
 
 - **What improved.** NEW = ALL3 + the intent index (D87) + the ask-time reader (D95), with prompt v5 and
   `askReaderDrop`. On the broad train set (train1–6, seeds 41–42, 384 hidden and 384 control tasks):
-  - planted hidden items surfaced rose from 214 to 282 (+17.7 points);
-  - decoys surfaced fell from 211 to 124 (−22.7 points);
-  - both at the real 2.5 s wait.
-- **Blind check** (held-out 10–11, seeds 41–42, 128 + 128 tasks, run once at the end): hidden 72 → 85 (+10 points),
-  decoys 60 → 43 (−13 points).
+  - planted hidden items surfaced rose from 214 to 286 (+18.8 points);
+  - decoys surfaced fell from 211 to 150 (−15.9 points);
+  - both at the real 2.5 s wait, on the reviewed code (below).
+- **Blind check** (held-out 10–11, seeds 41–42, 128 + 128 tasks): hidden 72 → 87 (+11.7 points), decoys 60 → 50
+  (−7.8 points).
 - **What made it work.** The fix is the output's shape, not more rules. Asked only for binding items, Haiku flagged
   the lookalike decoy almost as often as the planted item: 105 of 192 decoys against 118 of 192 hidden, seed 41.
   Three changes cut decoy flags to 7 of 192 while it still flagged 118 of 192 hidden:
@@ -84,16 +84,24 @@ The `same` field asks the model to check that first.
 | train (384 + 384) | ALL3 | 214 | 211 | | | |
 | | ALL3 + intent | 247 | 234 | | | |
 | | + reader v5 | 296 | 233 | 20 (5.2%) / 10 (2.6%) | 1413 / 1992 | 0.000420 |
-| | **NEW: + reader v5 + drop** | **282** | **124** | 20 (5.2%) / 10 (2.6%) | 1413 / 1992 | 0.000420 |
+| | NEW, before review fixes | 282 | 124 | 20 (5.2%) / 10 (2.6%) | 1413 / 1992 | 0.000420 |
+| | **NEW (final)** | **286** | **150** | 22 (5.7%) / 11 (2.9%) | 1407 / 2000 | |
 | held-out 10–11 (128 + 128) | ALL3 | 72 | 60 | | | |
 | | ALL3 + intent | 77 | 64 | | | |
-| | **NEW** | **85** | **43** | 4 (3.1%) / 3 (2.3%) | 1214 / 1730 | 0.000322 |
+| | NEW, before review fixes | 85 | 43 | 4 (3.1%) / 3 (2.3%) | 1214 / 1730 | 0.000322 |
+| | **NEW (final)** | **87** | **50** | 4 (3.1%) / 3 (2.3%) | 1214 / 1730 | |
 
 The train and held-out NEW rows count a call slower than 2.5 s as not made (`reader-score.py`'s capped column).
 
+The final rows are the code as merged, after the review. Two fixes changed the numbers:
+- a drop that would empty an answer is not made, since an empty answer reads "Nothing in the connected sources";
+- items are redacted before they are cut, which changed 38 + 7 prompts, read again live.
+
+The guard gives back some of the decoy cut, 124 → 150 on train.
+
 The merge bar set for this phase:
-- hidden ≥ +5 points on train: +17.7;
-- harmful decoys ≤ 5%: 2.6% counting the blocking kinds as the brief defines harm (D95's "blocking bearing"), 5.2%
+- hidden ≥ +5 points on train: +18.8;
+- harmful decoys ≤ 5%: 2.9% counting the blocking kinds as D95 defines harm (a "blocking bearing"), 5.7%
   counting "changes" too;
 - blind not worse: better on both counts.
 
@@ -102,15 +110,16 @@ The "changes" kind carries half the decoy flags, so it is the next thing to tigh
 ## What `askReaderDrop` does, and its cost
 
 Only items the reader named and rejected (`same: false`, `binds: false`, or kind `lookalike`) leave the ask's
-answer. An item it did not mention stays, and an item it flagged is never dropped (`reader.test.ts`). On train:
-- it removes 109 decoys from asks (233 → 124);
-- it costs 14 hidden items (296 → 282): the reader read the planted item and wrongly called it a lookalike.
+answer. An item it did not mention stays, and an item it flagged is never dropped (`reader.test.ts`). Before the empty-answer guard, on train:
+- it removed 109 decoys from asks (233 → 124);
+- it cost 14 hidden items (296 → 282): the reader read the planted item and wrongly called it a lookalike.
 
 Under "precision over recall" that trade is the right one, but it is a recall cost, said here.
 
 ## Spend
 
-Phase 1 Anthropic spend, all roles (reader, intent requests, smokes): **$1.37** of the $40 cap, every call in the
+Phase 1 Anthropic spend, all roles (reader, intent requests for train and held-out 10–11, smokes, the final
+re-reads): **$1.39** of the $40 cap, every call in the
 ledger (`.local/haiku/ledger.jsonl` during the run; the summary is above).
 
 ## Reproduce

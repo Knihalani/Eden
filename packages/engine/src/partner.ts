@@ -1554,7 +1554,10 @@ export class ContextPartner {
     );
     // `askReaderDrop`: what the reader read and rejected by name leaves the answer (never what it flagged).
     const rejected = this.config.askReaderDrop ? new Set(verdict.rejected ?? []) : new Set<string>();
-    const rest = chosen.filter((x) => !lead.includes(x) && !rejected.has(x.item.id));
+    let rest = chosen.filter((x) => !lead.includes(x) && !rejected.has(x.item.id));
+    // A drop that would leave the answer empty is not made: an empty answer reads "Nothing in the connected
+    // sources", a false all-clear (D93) when the search found items.
+    if (lead.length === 0 && rest.length === 0) rest = chosen.filter((x) => !lead.includes(x));
     return {
       chosen: [...lead, ...rest].slice(0, limit),
       notes,

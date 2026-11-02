@@ -358,6 +358,25 @@ function meteredModel(
 const queryParams = Type.Object({ query: Type.String({ description: "What to search for" }) });
 const askParams = Type.Object({ question: Type.String() });
 
+/**
+ * A model whose calls are charged to the task that started them (`owner()` read when the call starts): a call that
+ * outlives its ask's wait lands after that task ended, and must not be charged to the next one.
+ */
+function ownedModel(inner: Model, owner: () => RunResult | null): Model {
+  return {
+    id: inner.id,
+    async chat(request) {
+      const r = owner();
+      const res = await inner.chat(request);
+      if (r) {
+        r.edenModelCalls++;
+        r.edenCostUsd += res.costUsd;
+      }
+      return res;
+    },
+  };
+}
+
 /** What a task records beside its result: its timeline and the per-request detail. */
 interface TaskRecord {
   task: string;
@@ -472,14 +491,11 @@ async function runWorld(
       ? new AskReader({
           maker: new ModelReaderMaker(
             meteredModel(
-              labModel(ACCESS, { apiKey: KEY ?? "", model: READER_MODEL, timeoutMs: 60_000 }, "eden.reader"),
-              (start, end, data) => {
-                current?.span("eden.reader", "eden", "path", start, end, data);
-                if (readerTask && typeof data.cost === "number") {
-                  readerTask.edenModelCalls++;
-                  readerTask.edenCostUsd += data.cost;
-                }
-              },
+              ownedModel(
+                labModel(ACCESS, { apiKey: KEY ?? "", model: READER_MODEL, timeoutMs: 60_000 }, "eden.reader"),
+                () => readerTask,
+              ),
+              (start, end, data) => current?.span("eden.reader", "eden", "path", start, end, data),
             ),
           ),
           budget: new Budget(),

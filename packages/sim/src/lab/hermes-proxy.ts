@@ -336,13 +336,15 @@ function anthropicProxy(o: ProxyOptions, a: NonNullable<ProxyOptions["anthropic"
         ...(outcome.cancelled ? { cancelled: true } : {}),
       });
     };
+    // Hermes cancelling its stream aborts the upstream request too, so generation stops where booking does.
+    const abort = new AbortController();
     let res: Response;
     try {
       res = await o.fetch(url, {
         method: "POST",
         headers: { "x-api-key": a.key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
         body: JSON.stringify(sent),
-        signal: AbortSignal.timeout(o.timeoutMs ?? 120_000),
+        signal: AbortSignal.any([AbortSignal.timeout(o.timeoutMs ?? 120_000), abort.signal]),
       });
     } catch (e) {
       book(undefined, null, { error: e instanceof Error ? e.name : "error", status: 0 });
@@ -369,11 +371,10 @@ function anthropicProxy(o: ProxyOptions, a: NonNullable<ProxyOptions["anthropic"
     const tr = new StreamTranslator(o.model);
     const encoder = new TextEncoder();
     const upstreamBody = res.body;
-    let ctlRef: ReadableStreamDefaultController<Uint8Array> | null = null;
-    const abort = new AbortController();
+    /** Characters of model output passed on: the output's estimate when a cancel cuts the usage report off. */
+    let streamedChars = 0;
     const passed = new ReadableStream<Uint8Array>({
       start(ctl) {
-        ctlRef = ctl;
         void (async () => {
           try {
             await readSse(upstreamBody, (event) => {
@@ -382,20 +383,28 @@ function anthropicProxy(o: ProxyOptions, a: NonNullable<ProxyOptions["anthropic"
                 first = performance.now();
                 t?.tl.point("model.first-token", { turn }, first);
               }
-              if (text && !abort.signal.aborted) ctl.enqueue(encoder.encode(text));
+              if (text && !abort.signal.aborted) {
+                streamedChars += text.length;
+                ctl.enqueue(encoder.encode(text));
+              }
             });
             book(tr.usage, tr.stopReason);
             if (!abort.signal.aborted) ctl.close();
           } catch (e) {
-            book(tr.usage, tr.stopReason, { error: e instanceof Error ? e.name : "stream error" });
-            if (!abort.signal.aborted) ctlRef?.error(e);
+            if (abort.signal.aborted) {
+              // Cancelled: booked once the upstream has stopped. Output usage only comes at the end, so what was
+              // passed on is the estimate (about four characters a token, the chunks' JSON around it overcounting).
+              const usage = { ...tr.usage, output: Math.max(tr.usage.output, Math.ceil(streamedChars / 4)) };
+              book(usage, tr.stopReason, { cancelled: true });
+            } else {
+              book(tr.usage, tr.stopReason, { error: e instanceof Error ? e.name : "stream error" });
+              ctl.error(e);
+            }
           }
         })();
       },
       cancel() {
         abort.abort();
-        book(tr.usage, tr.stopReason, { cancelled: true });
-        return upstreamBody.cancel().catch(() => {});
       },
     });
     return new Response(passed, { status: 200, headers: { "content-type": "text/event-stream" } });
