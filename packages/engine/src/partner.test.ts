@@ -1280,7 +1280,8 @@ describe("grounding: people, days and intent without a model (D44)", () => {
   });
 
   test("ask grounds too: a question about a day's calendar answers with that day's events", async () => {
-    const { p } = partner({}, [calendar, mail]);
+    // The clock is pinned: unpinned, "this Sunday" follows the real date and the test breaks after 1 Nov 2026.
+    const { p } = partner({ now: () => at }, [calendar, mail]);
     const res = await p.ask({ ...scope, sessionId: "a1", question: "What's on my calendar this Sunday?" });
     expect(res.citations.map((c) => c.itemId)).toEqual(["calendar:weekly-32"]);
   });
