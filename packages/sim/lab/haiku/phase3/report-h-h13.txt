@@ -1,0 +1,115 @@
+harness hermes, model claude-haiku-5-5, grader claude-haiku-5-5, time scale 0, tools sequential
+spent $1.0270 (agent $0.4882, Eden $0.4635, grader $0.0752); 1280 runs, errors 0, ungraded 0
+config {"probes":true,"compactInjection":true,"quietSettled":true,"groundAway":true,"judgeContested":true,"judgeItemBytes":200,"probeShare":true,"probeTopicAlone":true,"fallbackAsks":true,"groundConflict":true,"quietClear":true,"probeFresh":true,"probeYield":true,"densePacket":true,"groundOccasion":true,"quietNameOnly":true,"judgeTied":true,"consequenceProbe":true,"probeRoles":true,"graph":true,"graphMerge":true,"cards":true,"anticipate":true,"sync":true,"askVerdicts":true,"conflictVocab":true,"compactAsk":true,"askDedup":true,"compactParts":true,"cardsEconomy":true}
+
+== hidden: hidden fact raised
+condition     n   rate   $/1k  (Eden)  calls  tools   in tok  out tok   p50 s   p90 s   p99 s  ttft p50 ms
+hermes       128  0.086  0.358   0.000   1.74   2.55     6946      409    3.08    4.14    5.58          520
+hermes+eden  128  0.336  0.396   0.000   1.65   1.98     7235      426    3.09    4.75    6.66          495
+hermes+eden~NEWL 128  0.711  0.628   0.276   1.46   1.38     6392      385    3.05    6.44    8.92          486
+hermes+eden~NEW 128  0.719  0.750   0.403   1.42   1.22     6229      381    3.34    6.99    8.49          506
+hermes+eden~NEW2 128  0.781  0.830   0.456   1.52   1.51     6704      407    3.79    7.08    8.32          508
+
+== control: false concern
+condition     n   rate   $/1k  (Eden)  calls  tools   in tok  out tok   p50 s   p90 s   p99 s  ttft p50 ms
+hermes       128  0.000  0.347   0.000   1.73   2.42     6903      391    3.00    4.02    5.41          516
+hermes+eden  128  0.008  0.423   0.000   1.82   2.49     7974      450    3.27    4.91    5.70          496
+hermes+eden~NEWL 128  0.000  0.692   0.291   1.77   2.31     7738      434    4.16    6.91    9.01          499
+hermes+eden~NEW 128  0.008  0.831   0.422   1.75   2.34     7690      438    4.35    7.16    8.53          491
+hermes+eden~NEW2 128  0.039  0.863   0.455   1.76   2.24     7740      431    4.36    6.99    9.36          484
+
+== critical path, mean ms per task (share of wall time); Eden beside the loop and grading after it
+condition     n             eden         model          tool         other    eden-bg  grading
+hermes       256           0 (0%)    2654 (94%)        0 (0%)      183 (6%)          0      698
+hermes+eden  256          19 (1%)    2834 (93%)        0 (0%)      186 (6%)         21      710
+hermes+eden~NEWL 256       1236 (30%)    2670 (65%)        0 (0%)      202 (5%)       1229      701
+hermes+eden~NEW 256       1344 (32%)    2706 (64%)        0 (0%)      202 (5%)       1331      703
+hermes+eden~NEW2 256       1548 (35%)    2734 (61%)        0 (0%)      205 (5%)       1538      720
+
+== paired differences (a − b), bootstrap 95% interval over tasks
+hermes+eden - hermes hidden   n=128 rate +0.250 (+0.172..+0.336)  wall +0.10 s (-0.12..+0.32)  $/1k +0.038 (+0.006..+0.069)
+hermes+eden - hermes control  n=128 rate +0.008 (+0.000..+0.023)  wall +0.31 s (+0.10..+0.51)  $/1k +0.076 (+0.044..+0.107)
+hermes+eden~NEWL - hermes hidden   n=128 rate +0.625 (+0.539..+0.703)  wall +0.96 s (+0.68..+1.25)  $/1k +0.270 (+0.219..+0.320)
+hermes+eden~NEWL - hermes control  n=128 rate +0.000 (+0.000..+0.000)  wall +1.58 s (+1.33..+1.84)  $/1k +0.345 (+0.301..+0.391)
+hermes+eden~NEW - hermes hidden   n=128 rate +0.633 (+0.547..+0.719)  wall +1.15 s (+0.84..+1.46)  $/1k +0.391 (+0.328..+0.454)
+hermes+eden~NEW - hermes control  n=128 rate +0.008 (+0.000..+0.023)  wall +1.69 s (+1.41..+1.97)  $/1k +0.485 (+0.421..+0.553)
+hermes+eden~NEW2 - hermes hidden   n=128 rate +0.695 (+0.609..+0.773)  wall +1.46 s (+1.19..+1.74)  $/1k +0.472 (+0.414..+0.532)
+hermes+eden~NEW2 - hermes control  n=128 rate +0.039 (+0.008..+0.078)  wall +1.84 s (+1.55..+2.14)  $/1k +0.516 (+0.462..+0.572)
+
+== per-second profile: mean ms of each second of task time by phase, over tasks still running
+-- hermes (256 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%      0   900     0    99        0
+   1     99%      0   749     0    64        0
+   2     71%      0   920     0    16        0
+   3     53%      0   484     0    13        0
+   4     11%      0   749     0    13        0
+   5      4%      0   497     0    10        0
+   6      0%      0   114     0     9        0
+-- hermes+eden (256 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%     13   885     0   102       16
+   1    100%      4   778     0    65        4
+   2     71%      1   885     0    14        1
+   3     56%      1   649     0    12        1
+   4     20%      0   683     0     7        0
+   5      7%      0   489     0    10        1
+   6      1%      0   826     0     5        0
+   7      0%      0  1000     0     0        0
+   8      0%      0   323     0     9        0
+-- hermes+eden~NEWL (256 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%    783   120     0    97      783
+   1    100%    196   759     0    37      196
+   2     96%     84   708     0    32       77
+   3     62%    105   717     0    32      105
+   4     45%    149   648     0    21      149
+   5     29%    133   606     0    14      133
+   6     16%     42   699     0    13       42
+   7      8%      0   725     0     7        0
+   8      4%      0   716     0     7        0
+   9      1%      0   202     0     8        0
+-- hermes+eden~NEW (256 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%    806    98     0    96      806
+   1    100%    230   726     0    37      229
+   2     97%     89   727     0    35       85
+   3     69%    156   654     0    27      148
+   4     48%    145   641     0    19      136
+   5     29%    134   655     0    15      133
+   6     17%     41   804     0    10       41
+   7     11%      0   628     0     8        0
+   8      3%      0   496     0    11        0
+   9      0%      0  1000     0     0        0
+  10      0%      0  1000     0     0        0
+  11      0%      0   108     0    13        0
+-- hermes+eden~NEW2 (256 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%    883    22     0    94      883
+   1    100%    298   664     0    38      298
+   2    100%     83   776     0    34       82
+   3     73%    176   659     0    31      171
+   4     55%    150   652     0    13      151
+   5     35%    126   590     0    16      126
+   6     18%    100   703     0     8       95
+   7     11%     63   600     0     7       23
+   8      4%     22   522     0    13       22
+   9      2%    145   264     0    12      145
+  10      0%      0  1000     0     0        0
+  11      0%      0  1000     0     0        0
+  12      0%      0  1000     0     0        0
+  13      0%      0   199     0     9        5
+
+== uptake (hidden): raised rate (n) when the planted item was in a packet, only in an ask answer, or neither
+hermes       packet   -   (0)   ask   -   (0)   neither 0.086 (128)
+hermes+eden  packet 0.903 (31)   ask 0.778 (18)   neither 0.013 (79)
+hermes+eden~NEWL packet 0.924 (92)   ask 1.000 (6)   neither 0.000 (30)
+hermes+eden~NEW packet 0.880 (100)   ask 1.000 (4)   neither 0.000 (24)
+hermes+eden~NEW2 packet 0.958 (96)   ask 1.000 (8)   neither 0.000 (24)
+
+== Eden per task: source calls, probe queries (calls), cache hits, judge calls, slow path and ask ms
+hermes       sources 0.00  probes 0.00 (0.00 calls)  cache hits 0.00  judge 0.00 (p50 0 ms)  injected 0.00  slow p50 0 p90 0  ask p50 0 ms
+hermes+eden  sources 3.67  probes 5.38 (0.38 calls)  cache hits 0.21  judge 0.00 (p50 0 ms)  injected 0.65  slow p50 12 p90 18  ask p50 11 ms
+hermes+eden~NEWL sources 3.63  probes 7.19 (0.33 calls)  cache hits 0.25  judge 0.00 (p50 0 ms)  injected 1.02  slow p50 12 p90 19  ask p50 969 ms
+hermes+eden~NEW sources 3.74  probes 7.26 (0.39 calls)  cache hits 0.24  judge 0.00 (p50 0 ms)  injected 1.09  slow p50 12 p90 19  ask p50 1031 ms
+hermes+eden~NEW2 sources 3.67  probes 7.43 (0.30 calls)  cache hits 0.24  judge 0.00 (p50 0 ms)  injected 1.05  slow p50 14 p90 23  ask p50 1147 ms
