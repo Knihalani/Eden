@@ -10,7 +10,8 @@
  * `test:changed` runs everything when it cannot tell what changed (no origin/main) or when a change is outside
  * packages/ and examples/ (scripts, bun.lock, tsconfig, bunfig), and nothing when only Markdown changed. It is a
  * fast loop, not a gate: `bun run check` runs every test before a merge. Arguments after `--` go to `bun test`;
- * `--dry` prints the directories it would test and runs nothing.
+ * `--dry` prints the directories it would test and runs nothing; `--base REF` diffs against REF instead (`--base
+ * HEAD`: only what is not committed yet).
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -19,9 +20,11 @@ import { join } from "node:path";
 const root = join(import.meta.dir, "..");
 const argv = process.argv.slice(2);
 const dash = argv.indexOf("--");
-const own = (dash >= 0 ? argv.slice(0, dash) : argv).filter((a) => a !== "--dry");
-const dry = argv.slice(0, dash >= 0 ? dash : argv.length).includes("--dry");
-const [mode, ...names] = own;
+const head = dash >= 0 ? argv.slice(0, dash) : argv;
+const dry = head.includes("--dry");
+const baseAt = head.indexOf("--base");
+const baseRef = baseAt >= 0 ? head[baseAt + 1] : undefined;
+const [mode, ...names] = head.filter((a, i) => a !== "--dry" && (baseAt < 0 || (i !== baseAt && i !== baseAt + 1)));
 const extra = dash >= 0 ? argv.slice(dash + 1) : [];
 
 interface Pkg {
@@ -53,9 +56,9 @@ const git = (...args: string[]) => {
 
 /** The workspace directories to test, or null for everything. */
 function changedDirs(pkgs: Pkg[]): string[] | null {
-  const base = git("merge-base", "HEAD", "origin/main")?.trim();
+  const base = git("merge-base", "HEAD", baseRef ?? "origin/main")?.trim();
   if (!base) {
-    console.error("test:changed: no merge base with origin/main (run `git fetch origin main`); running every test");
+    console.error(`test:changed: no merge base with ${baseRef ?? "origin/main"} (git fetch?); running every test`);
     return null;
   }
   const files = new Set<string>();
