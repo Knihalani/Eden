@@ -575,8 +575,14 @@ export interface EngineConfig {
    * ask's ranked candidates, whatever their words. 0 (default): none.
    */
   askReaderStanding: number;
+  /** The card kinds `askReaderStanding` takes; empty (default): the digest's standing kinds (`DIGEST_KINDS`). */
+  askReaderStandingKinds: string[];
   /** With `readerPush`: the reader's kinds pushed unasked (`askReader` still shows every kind in an ask's answer). */
   readerPushKinds: string[];
+  /** With `readerPush`: the pushed packet says the reader's bearing before each item, as an ask's answer does. */
+  readerPushNotes: boolean;
+  /** With `askReader` and `intent`: every item the intent index matched for the request leads the reader's pool. */
+  askReaderIntent: boolean;
   /**
    * The active-constraints digest (docs/research/edge-bridge.md, `digest.ts`): per user, the items whose card
    * (`cards`) is a standing constraint (a freeze or hold, a limit, an absence, a deadline, a prohibition) over today
@@ -740,7 +746,10 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askReaderDrop: false,
   readerPush: false,
   askReaderStanding: 0,
+  askReaderStandingKinds: [],
   readerPushKinds: ["blocks", "limits", "changes", "done"],
+  readerPushNotes: false,
+  askReaderIntent: false,
   constraintDigest: false,
   digestLines: 12,
   digestBytes: 1_600,
