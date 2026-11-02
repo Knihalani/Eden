@@ -73,7 +73,10 @@ Measured on Claude Haiku 5.5 (lab, D96, docs/research/haiku-opt.md): prompt v5 o
 tokens in and 250 out, 24% of the prompt read from the cache (the instructions), $0.00042 per call ($0.10 / $0.50 per
 million, cache reads at a tenth), p50 1.41 s and p90 1.99 s with thinking off. With `readerPush` (D96) the same call is also made
 once per user request that acts (an imperative request), whether or not the agent asks: at about $0.00042 a call,
-$0.42 per thousand acting requests. The intent index's requests for every
+$0.42 per thousand acting requests. Phase 3 (D99): prompt v7 is about 3,900 tokens in and 190 out, $0.00040 a call;
+the leaner operating point (pool 15, 240-character snippets, `readerGate`) about 2,900 in and 180 out, $0.00029 a call
+(30% less Eden cost per task live). `askReaderStanding` 20 adds about 3,000 input tokens, 60–74% of the prompt then
+read from the cache ($0.00043–0.00047 a call). The intent index's requests for every
 item of a world (D87) cost $0.0000501 per item on Haiku 5.5 (3,331 items, 355 calls, $0.177), once per item version.
 
 | Routing (`sort`)            | Endpoint      | Calls | Tokens in / out per call | $ per call (reported) | Latency p50 / p90 | Over 2.5 s |

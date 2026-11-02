@@ -244,7 +244,11 @@ The reader's prompt v5 (D96) has the model label every item that looks relevant,
 the item means before deciding whether it is about the same thing and binds. With `askReaderDrop` (off by default),
 the items it rejected by name leave the ask's answer; an item it flagged never does. With `readerPush` (off by default), a user
 request that acts is read the same way when it is observed, as an ask of the engine's own, and the items the reader
-flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading.
+flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading. Phase 3's
+options (D99, all off): `askReaderStanding` puts the user's in-force standing constraints first in the reader's pool,
+read without the request's focus so the same text forms a cached user-turn prefix (`ChatMessage.cache`); `readerGate`
+skips the call when no candidate could constrain the request; `readerPushWaitMs` bounds how long `observe` waits for
+the push (0 measured badly: the reading must land before the agent answers).
 
 **The intent index** (`intent`, needs `cards`, off by default; proposed D87, `intent.ts`,
 [research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four
