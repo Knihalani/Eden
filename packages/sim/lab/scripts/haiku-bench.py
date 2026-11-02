@@ -89,7 +89,8 @@ def pairs(sel, a, b, kind):
 
 COMPARE = {
     "pi": [("eden~NEW", "eden"), ("eden~NEW", "tools"), ("eden~NEW", "none"), ("both~NEW", "tools"),
-           ("both~NEW", "eden"), ("eden", "tools"), ("eden", "none"), ("tools", "none")],
+           ("both~NEW", "eden"), ("eden", "tools"), ("eden", "none"), ("tools", "none"),
+           ("eden~NEW@w1000", "eden~NEW"), ("both~NEW@w1000", "both~NEW")],
     "hermes": [("hermes+eden~NEW", "hermes+eden"), ("hermes+eden~NEW", "hermes"), ("hermes+eden", "hermes")],
 }
 for h in sorted({r["harness"] for r in rows}):
