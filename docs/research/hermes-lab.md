@@ -91,6 +91,40 @@ Also seen:
 **Unverified:** in one smoke, Hermes sent 3 requests but 2 were booked. A stream Hermes stops reading never reached
 the booking code. The proxy now books a request when its stream ends, fails or is cancelled. That fix has not run live.
 
+## Blind run on free models (2026-11-02, 312 requests, $0)
+
+Hermes alone against Hermes with Eden (ALL3), on the blind suites (held-out 5–8: written by agents that never saw the
+engine, never tuned on).
+- Tasks: seed 41, the first 5 tasks of each suite and variant, giving 20 hidden and 20 control tasks per arm.
+- Agent `nvidia/nemotron-3.5-super-vl:free`, grader `dots-studio/dots-3-note-preview:free`, `--allow-logging` (lab
+  only).
+- Cards replayed from `cards-v2.jsonl`. The run was not cut short (`partial: false`), with 0 errors and 0 ungraded.
+
+| | Hermes | Hermes + Eden | Paired difference (95% bootstrap) |
+|---|---|---|---|
+| Hidden fact raised | 0.150 (3/20) | 0.500 (10/20) | +0.350 (+0.150..+0.550) |
+| False concern (control) | 0.050 (1/20) | 0.000 (0/20) | −0.050 (−0.150..+0.000) |
+| Model requests per task (hidden / control) | 2.80 / 2.80 | 2.75 / 3.20 | |
+| Tool calls per task (hidden / control) | 6.80 / 6.35 | 5.30 / 7.35 | |
+| Input tokens per task (hidden / control) | 9,747 / 9,884 | 10,781 / 12,443 | |
+| Wall p50, hidden / control | 22.3 s / 17.6 s | 17.4 s / 22.8 s | hidden −0.1 s, control +7.4 s |
+| Eden on the critical path | | 24 ms a task (0%) | |
+
+How to read it:
+- **Facts:** Hermes with Eden raised the planted fact 3.3× as often as Hermes searching the same sources itself, with
+  no false concerns.
+- **Checked by hand:** all 40 hidden answers were read against the grader's verdicts, and no grading error was found.
+  - Eden's wins are the blocker cases, for example a deploy freeze, a colleague on leave, a legal hold, the office
+    shut on the planned day, and a treasury cutover freeze.
+  - In each, Hermes alone found the named people and things, but not the constraint.
+- **Cost:** Eden adds 11% input tokens on hidden tasks and 26% on control tasks, where the agent asks more. On control
+  tasks it adds 7.4 s of wall time (paired), from the extra model turns. Eden's own time on the critical path is 24 ms
+  a task.
+- **Limits:**
+  - one seed, n = 20 per variant, free models;
+  - Eden ran ALL3, and its card replay was made on paid models;
+  - the absolute rates are not comparable with the paid Pi runs (D64).
+
 ## Estimates for the full bench
 
 These are estimates from the smoke, not measurements.
