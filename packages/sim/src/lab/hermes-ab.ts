@@ -62,6 +62,7 @@ import type { World } from "../world";
 import {
   emptyResult,
   grade,
+  gradeWith,
   MAX_STEPS,
   OverBudget,
   render,
@@ -76,7 +77,7 @@ import {
 } from "./ab-common";
 import { DiskBridgeMaker } from "./bridge-disk";
 import { DiskCardMaker, samePath } from "./cards-disk";
-import { isCapError, labAccess, labModel, providerPrefs } from "./free";
+import { isAnthropic, isCapError, keyFor, labAccess, labModel, providerPrefs } from "./free";
 import { parseHermesConditions, type HermesCondition } from "./hermes-conditions";
 import { edenMcpServer, labRouter, type StreamHost, type TaskBinding } from "./hermes-host";
 import { modelProxy, type RequestRecord } from "./hermes-proxy";
@@ -668,9 +669,10 @@ async function gradeTask(t: Task, r: RunResult, tl: Timeline): Promise<void> {
       reserved = true;
     }
     const meter: Meter = { before: () => {}, after: (c) => (cost = c) };
-    r.facts = (
-      await grade(KEY!, meter, GRADER, t, r.answer, { fetch: ACCESS.fetch, allowLogging: ACCESS.allowLogging })
-    ).facts;
+    r.facts = GRADER_MODEL
+      ? await gradeWith(GRADER_MODEL, t, r.answer, (c) => (cost = c))
+      : (await grade(KEY!, meter, GRADER, t, r.answer, { fetch: ACCESS.fetch, allowLogging: ACCESS.allowLogging }))
+          .facts;
   } catch (e) {
     failure = isCapError(e) ? "request cap reached" : e instanceof Error ? e.message.slice(0, 60) : "error";
   } finally {
@@ -680,6 +682,9 @@ async function gradeTask(t: Task, r: RunResult, tl: Timeline): Promise<void> {
 }
 
 let orphanRequests = 0;
+/** A `claude-*` grader goes through `AnthropicModel` on the spend ledger; any other through OpenRouter (`grade`). */
+const GRADER_MODEL = isAnthropic(GRADER) ? labModel(ACCESS, { apiKey: "", model: GRADER }, "grader") : null;
+const AGENT_METER = isAnthropic(MODEL) ? ACCESS.ledger!.meter("agent") : null;
 /** Hermes' model endpoint (hermes-proxy.ts): the pacer, the run's budget, and the key kept in this process. */
 const proxy = modelProxy({
   key: KEY ?? "",
@@ -693,6 +698,16 @@ const proxy = modelProxy({
   isCapError,
   ...(DUMP ? { dump: (line: unknown) => appendFileSync(DUMP, `${JSON.stringify(line)}\n`) } : {}),
   onOrphan: () => orphanRequests++,
+  ...(AGENT_METER
+    ? {
+        anthropic: {
+          key: keyFor(MODEL),
+          reserveLedger: (est: number) => AGENT_METER.reserve(est),
+          releaseLedger: (est: number) => AGENT_METER.release(est),
+          book: (record) => ACCESS.ledger!.write("agent", record),
+        },
+      }
+    : {}),
 });
 
 const worlds = SEEDS.flatMap((seed) =>
