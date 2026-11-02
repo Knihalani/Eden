@@ -680,6 +680,31 @@ export class ContextPartner {
   }
 
   async observe(event: AgentEvent, options: { waitMs?: number } = {}): Promise<ObserveResult> {
+    // `readerPush`: a request that acts is also read by the ask-time reader, as an ask of the engine's own; what it
+    // flags is queued as a packet. The observe waits for it within its own wait, so an agent that never calls
+    // `ask_context` gets the reading before its first model request when it is ready in time.
+    const push =
+      this.config.readerPush &&
+      this.config.askReader &&
+      this.deps.reader &&
+      event.kind === "user_message" &&
+      event.draft !== true &&
+      isImperative(event.text, MORE_VERBS)
+        ? this.ask({ ...event, question: event.text, maxItems: 5 }, { push: true }).catch(() => null)
+        : null;
+    const t0 = performance.now();
+    const result = await this.observeEvent(event, options);
+    if (!push) return result;
+    const left = (options.waitMs ?? 0) - (performance.now() - t0);
+    if (left > 0) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([push, new Promise((r) => (timer = setTimeout(r, left)))]);
+      clearTimeout(timer);
+    }
+    return result;
+  }
+
+  private async observeEvent(event: AgentEvent, options: { waitMs?: number } = {}): Promise<ObserveResult> {
     const t0 = performance.now();
     const spans = this.spans;
     const root = spans?.open("observe", 0, { kind: event.kind });
@@ -1154,7 +1179,7 @@ export class ContextPartner {
     }
   }
 
-  async ask(request: AskRequest): Promise<AskResponse> {
+  async ask(request: AskRequest, internal: { push?: boolean } = {}): Promise<AskResponse> {
     const t0 = performance.now();
     const spans = this.spans;
     const root = spans?.open("ask", 0, { async: true });
@@ -1293,6 +1318,18 @@ export class ContextPartner {
         ? await this.readAsk(s, cue, [...order, ...scored], chosen, limit)
         : null;
     if (reading) chosen = reading.chosen;
+    // `readerPush`: the ask was the engine's own, for the user's request. What the reader flagged goes to the agent as
+    // a proactive packet (queued, taken before its next model request); nothing else is answered or handed out.
+    if (internal.push) {
+      const flagged = reading ? chosen.filter((x) => reading.notes.has(x.item.id)) : [];
+      const fresh = flagged.filter((x) => s.ledger.isFresh(x.item.id, s.turn));
+      const injection =
+        fresh.length > 0 && !s.closed ? this.deliver(s, fresh, "proactive", `reader:${cue.id}`, cue) : null;
+      if (injection) s.pending.push(injection);
+      const latencyMs = Math.round(performance.now() - t0);
+      if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "reader-push", delivered: !!injection });
+      return { answer: "", citations: [], usedModel: reading?.called === true, costUsd: 0, latencyMs };
+    }
     // `askGuard` (docs/research/edge-ask.md): an ask about an action is answered with its verdicts said. What may block
     // leads, marked; with nothing that may block and every source searched, a line says so. A reader's verdict, when
     // there is one, is the answer's reading instead.

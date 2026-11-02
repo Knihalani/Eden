@@ -199,7 +199,7 @@ const READER_CACHE = opt("reader-cache", "");
 /** `--reader-thinking adaptive`: a `claude-*` reader thinks (at the reader's low effort); default off. */
 const READER_THINKING = opt("reader-thinking", "off") as "off" | "adaptive";
 const READER_KEY = READER === "live" ? keyFor(READER_MODEL) : undefined;
-if (READER !== "none" && !ASK) throw new Error("--reader needs --ask");
+if (READER !== "none" && !ASK && CONFIG.readerPush !== true) throw new Error("--reader needs --ask (or readerPush)");
 const LIMIT = Number(opt("limit", "0"));
 /** `--reader-log out.jsonl`: each reader call's prompt (the items as the model read them) and reply, sim data only. */
 const READER_LOG = opt("reader-log", "");

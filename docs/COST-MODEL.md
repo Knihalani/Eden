@@ -71,7 +71,9 @@ endpoints, with very different reasoning lengths:
 
 Measured on Claude Haiku 5.5 (lab, D96, docs/research/haiku-opt.md): prompt v5 over a 30-item pool is about 3,770
 tokens in and 250 out, 24% of the prompt read from the cache (the instructions), $0.00042 per call ($0.10 / $0.50 per
-million, cache reads at a tenth), p50 1.41 s and p90 1.99 s with thinking off. The intent index's requests for every
+million, cache reads at a tenth), p50 1.41 s and p90 1.99 s with thinking off. With `readerPush` (D96) the same call is also made
+once per user request that acts (an imperative request), whether or not the agent asks: at about $0.00042 a call,
+$0.42 per thousand acting requests. The intent index's requests for every
 item of a world (D87) cost $0.0000501 per item on Haiku 5.5 (3,331 items, 355 calls, $0.177), once per item version.
 
 | Routing (`sort`)            | Endpoint      | Calls | Tokens in / out per call | $ per call (reported) | Latency p50 / p90 | Over 2.5 s |

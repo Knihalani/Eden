@@ -242,7 +242,9 @@ yet.
 
 The reader's prompt v5 (D96) has the model label every item that looks relevant, a lookalike included, writing what
 the item means before deciding whether it is about the same thing and binds. With `askReaderDrop` (off by default),
-the items it rejected by name leave the ask's answer; an item it flagged never does.
+the items it rejected by name leave the ask's answer; an item it flagged never does. With `readerPush` (off by default), a user
+request that acts is read the same way when it is observed, as an ask of the engine's own, and the items the reader
+flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading.
 
 **The intent index** (`intent`, needs `cards`, off by default; proposed D87, `intent.ts`,
 [research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four

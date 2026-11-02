@@ -510,6 +510,17 @@ describe("the reader in the engine (config.askReader)", () => {
     expect(failed.answers.u1![0]!.ids).toContain("mail:n0");
   });
 
+  test("readerPush: an acting request is read on observe and what binds is queued as a packet", async () => {
+    const on = await run({ askReader: true, readerPush: true }, { asks: 0 });
+    expect(on.maker.calls.length).toBe(1);
+    const packets = on.partner.takePending({ tenantId: "t", userId: "u1", sessionId: "s1" });
+    expect(packets.flatMap((p) => p.citations.map((c) => c.itemId))).toContain("mail:hold");
+    expect(packets.find((p) => p.reason.startsWith("reader:"))).toBeDefined();
+    // Off (and with askReader alone), observing makes no reader call.
+    const off = await run({ askReader: true }, { asks: 0 });
+    expect(off.maker.calls.length).toBe(0);
+  });
+
   test("askReaderClear: a read pool with nothing binding says so in fixed words", async () => {
     const { answers } = await run({ askReader: true, askReaderClear: true }, { maker: new ScriptedReader(() => []) });
     expect(answers.u1![0]!.answer).toContain("Checked the 8 items found most related: none reads as blocking");
