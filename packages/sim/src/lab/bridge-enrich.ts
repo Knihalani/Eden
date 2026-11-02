@@ -16,7 +16,7 @@ import { appendFileSync } from "node:fs";
 import { bridgeKey, bridgeWants, ModelBridgeMaker } from "@eden/engine";
 import { buildWorld } from "../world";
 import { loadBridge, type BridgeLine } from "./bridge-disk";
-import { isCapError, labAccess, labModel } from "./free";
+import { isCapError, keyFor, labAccess, labModel } from "./free";
 import { parseSuites, SUITES } from "./suites";
 
 const args = process.argv.slice(2);
@@ -54,9 +54,8 @@ if (DRY) {
   for (const [, r] of todo) console.log(`  ${r}`);
   process.exit(0);
 }
-const key = process.env.OPENROUTER_API_KEY;
-if (!key) throw new Error("needs OPENROUTER_API_KEY");
-const model = labModel(ACCESS, { apiKey: key, model: MODEL, timeoutMs: 120_000 });
+const key = keyFor(MODEL);
+const model = labModel(ACCESS, { apiKey: key, model: MODEL, timeoutMs: 120_000 }, "eden.bridge");
 // The last reply's end and head, printed when a batch is unreadable.
 let last = "";
 const maker = new ModelBridgeMaker({
