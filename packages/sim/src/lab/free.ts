@@ -15,9 +15,11 @@
  *
  * 429 and 5xx answers are retried with jittered backoff, honouring Retry-After (`Pacer` in @eden/llm).
  */
-import { Pacer, priceFor, OpenRouterModel, type OpenRouterOptions } from "@eden/llm";
+import { AnthropicModel, Pacer, priceFor, OpenRouterModel, type Model, type OpenRouterOptions } from "@eden/llm";
+import { SpendLedger } from "./spend";
 import { createModels, createProvider, envApiKeyAuth, type Model as PiModel } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
+import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
 
 export const FREE_RPM = 18;
 
@@ -28,6 +30,23 @@ export interface LabAccess {
   fetch: typeof fetch;
   /** True when any of the run's models is a free one. */
   free: boolean;
+  /** The hard spend cap for Anthropic calls (`--spend-ledger`, `--spend-cap`); required when a model is `claude-*`. */
+  ledger: SpendLedger | null;
+}
+
+/** Models served by Anthropic's Messages API directly (`AnthropicModel`), not OpenRouter. */
+export const isAnthropic = (model: string) => model.startsWith("claude-");
+
+/**
+ * The key a model's provider needs, or a clear error naming the variable. An Anthropic key is read from
+ * `HAIKU_API_KEY` first: cloud sessions whose model provider the host manages may not pass a user-set
+ * `ANTHROPIC_API_KEY` through to the session, so the lab accepts a name with no reserved prefix.
+ */
+export function keyFor(model: string, env = process.env): string {
+  const names = isAnthropic(model) ? ["HAIKU_API_KEY", "ANTHROPIC_API_KEY"] : ["OPENROUTER_API_KEY"];
+  const key = names.map((n) => env[n]).find(Boolean);
+  if (!key) throw new Error(`${model} needs ${names.join(" or ")}`);
+  return key;
 }
 
 export const isFree = (model: string) => model.endsWith(":free");
@@ -56,11 +75,42 @@ export function labAccess(args: string[], models: string[], pacing: { now?: () =
     maxRequests: count("max-requests", 0),
     ...pacing,
   });
-  return { allowLogging, pacer, fetch: pacer.fetch, free };
+  // Anthropic calls are capped in dollars, across every process of a campaign, by one ledger file (spend.ts).
+  let ledger: SpendLedger | null = null;
+  if (models.some(isAnthropic)) {
+    const path = opt("spend-ledger");
+    const cap = Number(opt("spend-cap"));
+    if (!path || !Number.isFinite(cap) || cap <= 0) {
+      throw new Error("a claude-* model needs --spend-ledger FILE and --spend-cap USD (the hard spend cap)");
+    }
+    const headroom = Number(opt("spend-headroom") ?? 0.5);
+    ledger = new SpendLedger(path, cap, opt("run-label") ?? "run", headroom);
+  }
+  return { allowLogging, pacer, fetch: pacer.fetch, free, ledger };
 }
 
-/** An `OpenRouterModel` (Eden's judge, the card maker) that goes through the run's pacer and logging choice. */
-export function labModel(access: LabAccess, options: OpenRouterOptions): OpenRouterModel {
+/**
+ * A model for one of the run's roles (Eden's judge, the card maker, ...) that goes through the run's pacer. A
+ * `claude-*` id is Anthropic's API, metered against the run's spend ledger under `role`; anything else is OpenRouter
+ * with the run's logging choice.
+ */
+export function labModel(
+  access: LabAccess,
+  options: OpenRouterOptions,
+  role = "eden",
+  anthropic: { thinking?: "off" | "adaptive" } = {},
+): Model {
+  if (isAnthropic(options.model)) {
+    if (!access.ledger) throw new Error(`${options.model}: no spend ledger (pass it among labAccess's models)`);
+    return new AnthropicModel({
+      apiKey: keyFor(options.model),
+      model: options.model,
+      fetch: access.fetch,
+      timeoutMs: options.timeoutMs ?? 60_000,
+      meter: access.ledger.meter(role),
+      ...(anthropic.thinking ? { thinking: anthropic.thinking } : {}),
+    });
+  }
   return new OpenRouterModel({
     ...options,
     fetch: access.fetch,
@@ -68,13 +118,17 @@ export function labModel(access: LabAccess, options: OpenRouterOptions): OpenRou
   });
 }
 
+/** The Pi model the lab defines for an id: OpenRouter's chat completions, or Anthropic's Messages API (`claude-*`). */
+export type LabPiModel = PiModel<"openai-completions"> | PiModel<"anthropic-messages">;
+
 /**
  * A Pi model definition for any OpenRouter id, free ones included: pi-ai's generated catalog does not list every
  * OpenRouter model (and no `:free` variant), so the lab defines its own and registers it on its own provider. Cost is
  * the lab's price (`priceFor`: $0 for a free model), used only as pi-ai's estimate; runs book OpenRouter's reported
- * cost.
+ * cost. A `claude-*` id is Anthropic's own API (`piAnthropicModel`).
  */
-export function piModelFor(id: string, maxTokens: number): PiModel<"openai-completions"> {
+export function piModelFor(id: string, maxTokens: number): LabPiModel {
+  if (isAnthropic(id)) return piAnthropicModel(id, maxTokens);
   const p = priceFor(id);
   return {
     id,
@@ -98,19 +152,69 @@ export function piModelFor(id: string, maxTokens: number): PiModel<"openai-compl
   };
 }
 
-/** pi-ai's model registry with the lab's OpenRouter provider and these models on it (key: OPENROUTER_API_KEY). */
-export function piRegistry(models: PiModel<"openai-completions">[]) {
+/**
+ * A Claude model on Anthropic's Messages API through pi-ai's native provider (not in its catalog under this id).
+ * pi-ai puts a 5-minute `cache_control` breakpoint on the last tool, the system prompt and the last user turn, so a
+ * task's repeated prefix (tools, system, earlier turns) is read from the cache on every later step. Thinking stays off,
+ * as the OpenRouter agent sends no reasoning: `reasoning: true` makes "off" an explicit `{type: "disabled"}`, which
+ * Haiku 5.5 accepts at its default effort. Sampling parameters are never sent (Haiku 5.5 rejects them).
+ */
+export function piAnthropicModel(id: string, maxTokens: number): PiModel<"anthropic-messages"> {
+  const p = priceFor(id);
+  return {
+    id,
+    name: id,
+    api: "anthropic-messages",
+    provider: "anthropic-lab",
+    baseUrl: "https://api.anthropic.com",
+    reasoning: true,
+    input: ["text"],
+    cost: { input: p.input, output: p.output, cacheRead: p.input * 0.1, cacheWrite: p.input * 1.25 },
+    contextWindow: 1_000_000,
+    maxTokens,
+    compat: {
+      supportsTemperature: false,
+      // Eden's packets go in as system messages before the user turn, as on the OpenRouter agent.
+      supportsMidConvoSystemMessages: true,
+      supportsLongCacheRetention: true,
+      supportsCacheControlOnTools: true,
+      supportsEagerToolInputStreaming: false,
+    },
+  } as PiModel<"anthropic-messages">;
+}
+
+/**
+ * pi-ai's model registry with the lab's providers and these models on them: OpenRouter (key OPENROUTER_API_KEY) and
+ * Anthropic (key HAIKU_API_KEY, else ANTHROPIC_API_KEY; `keyFor`).
+ */
+export function piRegistry(models: LabPiModel[]) {
   const registry = createModels();
-  registry.setProvider(
-    createProvider({
-      id: "openrouter-lab",
-      name: "OpenRouter",
-      baseUrl: "https://openrouter.ai/api/v1",
-      auth: { apiKey: envApiKeyAuth("OpenRouter", ["OPENROUTER_API_KEY"]) },
-      models,
-      api: openAICompletionsApi(),
-    }),
-  );
+  const openrouter = models.filter((m): m is PiModel<"openai-completions"> => m.api === "openai-completions");
+  const anthropic = models.filter((m): m is PiModel<"anthropic-messages"> => m.api === "anthropic-messages");
+  if (openrouter.length) {
+    registry.setProvider(
+      createProvider({
+        id: "openrouter-lab",
+        name: "OpenRouter",
+        baseUrl: "https://openrouter.ai/api/v1",
+        auth: { apiKey: envApiKeyAuth("OpenRouter", ["OPENROUTER_API_KEY"]) },
+        models: openrouter,
+        api: openAICompletionsApi(),
+      }),
+    );
+  }
+  if (anthropic.length) {
+    registry.setProvider(
+      createProvider({
+        id: "anthropic-lab",
+        name: "Anthropic",
+        baseUrl: "https://api.anthropic.com",
+        auth: { apiKey: envApiKeyAuth("Anthropic", ["HAIKU_API_KEY", "ANTHROPIC_API_KEY"]) },
+        models: anthropic,
+        api: anthropicMessagesApi(),
+      }),
+    );
+  }
   return registry;
 }
 
@@ -121,7 +225,8 @@ export const providerPrefs = (access: LabAccess) =>
 /** An error that is the pacer's cap, however a library wrapped it. */
 export function isCapError(e: unknown): boolean {
   for (let x: unknown = e, depth = 0; x && depth < 5; depth++) {
-    if (x instanceof Error && (x.name === "RequestCapReached" || /request cap of \d+ reached/.test(x.message))) {
+    const capped = x instanceof Error && (x.name === "RequestCapReached" || x.name === "SpendCapReached");
+    if (capped || (x instanceof Error && /request cap of \d+ reached|spend cap \$[\d.]+ reached/.test(x.message))) {
       return true;
     }
     x = (x as { cause?: unknown }).cause;

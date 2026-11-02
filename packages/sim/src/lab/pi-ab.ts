@@ -76,11 +76,13 @@ import {
   ModelBridgeMaker,
   ModelCardMaker,
   QueryBridge,
+  AskReader,
+  ModelReaderMaker,
   type BridgeMaker,
   type CardMaker,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
-import { Budget, priceFor, type Model } from "@eden/llm";
+import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { REALISTIC, simSources, type SimSource } from "../sources";
@@ -90,6 +92,7 @@ import {
   ASK_DESCRIPTION_GUIDED,
   emptyResult,
   grade,
+  gradeWith,
   MAX_STEPS,
   OverBudget,
   render,
@@ -105,7 +108,7 @@ import {
 import { ACTIONS, actionParams, coerceArgs, executed, type ActionRecord } from "./act";
 import { DiskBridgeMaker } from "./bridge-disk";
 import { DiskCardMaker, samePath } from "./cards-disk";
-import { isCapError, labAccess, labModel, piModelFor, piRegistry, providerPrefs } from "./free";
+import { isAnthropic, isCapError, labAccess, labModel, piModelFor, piRegistry, providerPrefs } from "./free";
 import { parseConditions, parseVariants, type Condition } from "./pi-conditions";
 import { PRESETS } from "./presets";
 import { parseSuites } from "./suites";
@@ -171,10 +174,14 @@ const CONDITIONS: Condition[] = parseConditions(CONDITION_NAMES, {
 if (CONDITIONS.some((c) => c.withPartner && c.config.cards === true) && !KEY && !DRY)
   throw new Error("config.cards needs OPENROUTER_API_KEY for its enrichment");
 // Every OpenRouter request of the run goes through one pacer: rate, cap, retries, and the logging choice (free.ts).
+/** `askReader` (D95): the ask-time reader's model, `--reader-model` (default Haiku 5.5, on the spend ledger). */
+const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
+const USES_READER = CONDITIONS.some((c) => c.withPartner && c.config.askReader === true);
 const ACCESS = labAccess(args, [
   MODEL,
   GRADER,
   ...(CONDITIONS.some((c) => c.withPartner && c.config.cards === true) ? [CARD_MODEL] : []),
+  ...(USES_READER ? [READER_MODEL] : []),
 ]);
 const PACER = ACCESS.pacer;
 /** A task starts only while the cap leaves room for all of it: its model requests and its grading. */
@@ -231,8 +238,13 @@ const exhausted = () => spent + held >= BUDGET * 0.98;
 
 // ---- Pi: the agent's model on OpenRouter, through pi-ai's OpenAI-compatible chat completions.
 const AGENT_MAX_TOKENS = 2_000;
-const piModel: PiModel<"openai-completions"> = piModelFor(MODEL, AGENT_MAX_TOKENS);
+const piModel = piModelFor(MODEL, AGENT_MAX_TOKENS);
 const models = piRegistry([piModel]);
+/** A `claude-*` agent is Anthropic's API: each request is reserved in and booked to the campaign's spend ledger. */
+const AGENT_ANTHROPIC = isAnthropic(MODEL);
+const AGENT_METER = AGENT_ANTHROPIC ? ACCESS.ledger!.meter("agent") : null;
+/** A `claude-*` grader goes through `AnthropicModel` on the ledger; any other through OpenRouter (`grade`). */
+const GRADER_MODEL = isAnthropic(GRADER) ? labModel(ACCESS, { apiKey: "", model: GRADER }, "grader") : null;
 
 // ---- Per-second process samples: CPU (of one core) and memory, with how many tasks and requests are in flight.
 let activeTasks = 0;
@@ -346,6 +358,25 @@ function meteredModel(
 const queryParams = Type.Object({ query: Type.String({ description: "What to search for" }) });
 const askParams = Type.Object({ question: Type.String() });
 
+/**
+ * A model whose calls are charged to the task that started them (`owner()` read when the call starts): a call that
+ * outlives its ask's wait lands after that task ended, and must not be charged to the next one.
+ */
+function ownedModel(inner: Model, owner: () => RunResult | null): Model {
+  return {
+    id: inner.id,
+    async chat(request) {
+      const r = owner();
+      const res = await inner.chat(request);
+      if (r) {
+        r.edenModelCalls++;
+        r.edenCostUsd += res.costUsd;
+      }
+      return res;
+    },
+  };
+}
+
 /** What a task records beside its result: its timeline and the per-request detail. */
 interface TaskRecord {
   task: string;
@@ -365,6 +396,8 @@ interface TaskRecord {
     cost: number;
     /** Of `in`, the tokens the endpoint read from its prompt cache (billed at its cache-read price). */
     cached?: number;
+    /** Of `in`, the tokens written to the prompt cache (Anthropic: billed at 1.25x input). */
+    cacheWrite?: number;
   }[];
   events: Timeline["events"];
   dropped: number;
@@ -409,8 +442,9 @@ async function runWorld(
   );
   // `cards`: the enrichment model, metered against the run's cap and booked to Eden's spend like its judge.
   const cardModel = (sort: "" | "price") =>
-    meteredModel(labModel(ACCESS, { apiKey: KEY!, model: CARD_MODEL, ...(sort ? { sort } : {}) }), (start, end, data) =>
-      current?.span("eden.cards", "eden", "bg", start, end, data),
+    meteredModel(
+      labModel(ACCESS, { apiKey: KEY!, model: CARD_MODEL, ...(sort ? { sort } : {}) }, "eden.cards"),
+      (start, end, data) => current?.span("eden.cards", "eden", "bg", start, end, data),
     );
   // `--card-sort price` (D66): a batch cut off at the cap is sent again with default routing.
   const liveCards = (): CardMaker =>
@@ -425,7 +459,7 @@ async function runWorld(
   // `bridgeQuery`: replayed queries first, the rest made live (booked to Eden like its judge).
   const liveBridge = () =>
     new ModelBridgeMaker(
-      meteredModel(labModel(ACCESS, { apiKey: KEY!, model: BRIDGE_MODEL }), (start, end, data) =>
+      meteredModel(labModel(ACCESS, { apiKey: KEY!, model: BRIDGE_MODEL }, "eden.bridge"), (start, end, data) =>
         current?.span("eden.bridge", "eden", "bg", start, end, data),
       ),
     );
@@ -450,6 +484,24 @@ async function runWorld(
     withPartner && config.bridgeQuery === true
       ? new QueryBridge({ maker: bridgeMaker(), budget: new Budget(), now: () => clock })
       : undefined;
+  // `askReader`: one budgeted call per ask about an action, on the running task's timeline and charged to it (D95).
+  let readerTask: RunResult | null = null;
+  const reader =
+    withPartner && config.askReader === true
+      ? new AskReader({
+          maker: new ModelReaderMaker(
+            meteredModel(
+              ownedModel(
+                labModel(ACCESS, { apiKey: KEY ?? "", model: READER_MODEL, timeoutMs: 60_000 }, "eden.reader"),
+                () => readerTask,
+              ),
+              (start, end, data) => current?.span("eden.reader", "eden", "path", start, end, data),
+            ),
+          ),
+          budget: new Budget(),
+          now: () => clock,
+        })
+      : undefined;
   const partner = withPartner
     ? new ContextPartner({
         sources: async () => edenSources,
@@ -457,7 +509,7 @@ async function runWorld(
         cache: new ItemCache(),
         budget: new Budget(),
         model: judge
-          ? meteredModel(labModel(ACCESS, { apiKey: KEY!, model: MODEL }), (start, end, data) =>
+          ? meteredModel(labModel(ACCESS, { apiKey: KEY!, model: MODEL }, "eden.judge"), (start, end, data) =>
               current?.span("eden.model", "eden", "bg", start, end, data),
             )
           : null,
@@ -466,6 +518,7 @@ async function runWorld(
         config,
         ...(cards ? { cards } : {}),
         ...(bridge ? { bridge } : {}),
+        ...(reader ? { reader } : {}),
         // Charged to the task whose session the trace is from: a slow-path verdict can land after it ended.
         onTrace: (t) => {
           const owner = bySession.get(t.sessionId);
@@ -537,6 +590,7 @@ async function runWorld(
     const tl = new Timeline();
     current = tl;
     bySession.set(sessionId, { r, tl });
+    readerTask = r;
     const record: TaskRecord = {
       task: task.id,
       condition,
@@ -675,8 +729,10 @@ async function runWorld(
         /** OpenRouter reported a cost (a free model's is 0, which stands). */
         costed: boolean;
         cached: number;
+        cacheWrite: number;
       } | null = null;
       let est = 0;
+      let ledgerEst = 0;
       const agent = new Agent({
         initialState: {
           systemPrompt: systemPrompt(world, { lookups: LOOKUPS, data: useTools || useEden, act }),
@@ -698,6 +754,15 @@ async function runWorld(
           const chars = JSON.stringify(context.messages).length;
           est = worstCase(MODEL, chars, AGENT_MAX_TOKENS);
           reserve(est);
+          if (AGENT_METER) {
+            ledgerEst = anthropicWorstCase(MODEL, chars, AGENT_MAX_TOKENS);
+            try {
+              AGENT_METER.reserve(ledgerEst);
+            } catch (e) {
+              settle(est, 0, "agent");
+              throw e;
+            }
+          }
           const at = performance.now();
           request = {
             id: tl.begin("model.request", "model", "path", { turn: turns + 1 }),
@@ -708,9 +773,28 @@ async function runWorld(
             cost: 0,
             costed: false,
             cached: 0,
+            cacheWrite: 0,
           };
           activeRequests++;
           const mine = request;
+          if (AGENT_ANTHROPIC) {
+            // Anthropic's events: the first content block's start is the first token; usage comes on message_end.
+            return models.streamSimple(model, context, {
+              ...options,
+              maxTokens: AGENT_MAX_TOKENS,
+              fetch: ACCESS.fetch,
+              maxRetries: 0,
+              timeoutMs: 90_000,
+              cacheRetention: "short",
+              onProviderStreamEvent: (event) => {
+                const e = event as { type?: string };
+                if (mine.first === null && (e.type === "content_block_start" || e.type === "content_block_delta")) {
+                  mine.first = performance.now();
+                  tl.point("model.first-token", { turn: turns + 1 }, mine.first);
+                }
+              },
+            });
+          }
           return models.streamSimple(model, context, {
             ...options,
             temperature: 0,
@@ -791,6 +875,31 @@ async function runWorld(
           request = null;
           activeRequests--;
           const end = performance.now();
+          if (AGENT_METER) {
+            // pi-ai's usage splits the prompt: uncached input, cache reads, cache writes.
+            const u = e.message.usage;
+            q.in = u.input + u.cacheRead + u.cacheWrite;
+            q.out = u.output;
+            q.cached = u.cacheRead;
+            q.cacheWrite = u.cacheWrite;
+            const usage = {
+              inputTokens: q.in,
+              cachedInputTokens: q.cached,
+              cacheWriteTokens: q.cacheWrite,
+              outputTokens: q.out,
+            };
+            q.cost = anthropicCost(usage, anthropicPrice(MODEL));
+            q.costed = true;
+            AGENT_METER.release(ledgerEst);
+            ACCESS.ledger!.write("agent", {
+              model: MODEL,
+              usage,
+              costUsd: q.cost,
+              latencyMs: Math.round(end - q.at),
+              ttftMs: q.first === null ? null : Math.round(q.first - q.at),
+              stopReason: e.message.stopReason ?? null,
+            });
+          }
           // A usage chunk with no cost (it should not happen on OpenRouter) is priced at the list price; a reported
           // cost stands, a free model's $0 included.
           const cost = q.costed ? q.cost : q.in || q.out ? worstCase(MODEL, q.in * 4, q.out) : 0;
@@ -808,6 +917,7 @@ async function runWorld(
             out: q.out,
             cost,
             ...(q.cached ? { cached: q.cached } : {}),
+            ...(q.cacheWrite ? { cacheWrite: q.cacheWrite } : {}),
           });
         } else if (e.type === "tool_execution_start") {
           r.toolCalls++;
@@ -826,6 +936,7 @@ async function runWorld(
         const q = request as { id: number };
         tl.end(q.id, { error: true });
         settle(est, 0, "agent");
+        AGENT_METER?.release(ledgerEst);
         activeRequests--;
         request = null;
       }
@@ -864,7 +975,9 @@ async function runWorld(
             }
             const meter: Meter = { before: () => {}, after: (c) => (cost = c) };
             const via = { fetch: ACCESS.fetch, allowLogging: ACCESS.allowLogging };
-            r.facts = (await grade(KEY!, meter, GRADER, task, r.answer, via)).facts;
+            r.facts = GRADER_MODEL
+              ? await gradeWith(GRADER_MODEL, task, r.answer, (c) => (cost = c))
+              : (await grade(KEY!, meter, GRADER, task, r.answer, via)).facts;
           } catch (e) {
             // A failed grading call leaves the result ungraded (reported), never scored as a miss. The status line
             // only: an error body can quote the request.

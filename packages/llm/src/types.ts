@@ -27,6 +27,8 @@ export interface Usage {
   outputTokens: number;
   /** Input tokens served from the provider's prompt cache, when it reports them. */
   cachedInputTokens: number;
+  /** Input tokens written to the prompt cache, when the provider bills them apart (Anthropic). */
+  cacheWriteTokens?: number;
 }
 
 export interface ChatResponse {
@@ -37,6 +39,8 @@ export interface ChatResponse {
   /** The endpoint that served the call, when the router reports it (research and cost reporting only). */
   provider?: string;
   latencyMs: number;
+  /** Time to the first answer token, ms, when the call was streamed. */
+  ttftMs?: number;
   /** The model stopped at `maxTokens`: the text may be cut off (or empty, when reasoning used the cap). */
   truncated?: boolean;
 }

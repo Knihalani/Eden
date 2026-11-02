@@ -65,6 +65,15 @@ import {
 import { cardVerdict, requestActions, type CardEnricher } from "./cards";
 import { intentTerms, stemWord } from "./intent";
 import { bridgeWants, type QueryBridge } from "./bridge";
+import {
+  READER_MAX_ITEMS,
+  readerFocus,
+  readerItem,
+  readerNote,
+  type AskReader,
+  type ReaderInput,
+  type ReaderKind,
+} from "./reader";
 import { buildDigest, digestAdmits, personalSender } from "./digest";
 import {
   accounts,
@@ -170,6 +179,15 @@ export interface PartnerDeps {
    */
   bridge?: QueryBridge;
   /**
+   * The ask-time model reader (`reader.ts`, `config.askReader`): its own model, budget and per-user, per-session cache
+   * of verdicts. Absent, or the flag off: no call is made.
+   */
+  reader?: AskReader;
+  /**
+   * A lab hook (`hidden-funnel.ts`): what the reader did for each ask, content-free (item ids, kinds, counts, timing).
+   */
+  onReader?: ReaderSink;
+  /**
    * A debug hook for the lab (docs/research/econ-decide.md): each no-model decision's candidates with their facts
    * (`decide.ts`) and what was delivered. Ids and numbers only, no content. Absent: no facts are computed for it.
    */
@@ -198,6 +216,22 @@ export interface CandidateDump {
   pool?: string[];
 }
 export type CandidateSink = (dump: CandidateDump) => void;
+
+/** What the reader did for one ask (`PartnerDeps.onReader`): ids, kinds and counts, no content. */
+export interface ReaderReport {
+  sessionId: string;
+  /** Items it was given, the items it said bear (with their kind), and whether it answered in time. */
+  checked: number;
+  /** The ids it was given, in order. */
+  pool: string[];
+  flagged: { id: string; kind: ReaderKind }[];
+  /** "read" (a verdict, from a call or the cache), "late" (the wait ran out), "none" (refused, failed, unreadable). */
+  outcome: "read" | "late" | "none";
+  waitedMs: number;
+  /** Whether the answer said the reader found nothing that binds (`askReaderClear`). */
+  clear: boolean;
+}
+export type ReaderSink = (report: ReaderReport) => void;
 
 /** An outcome already written to the source map, kept so explicit feedback can correct it. */
 interface Recorded {
@@ -646,6 +680,35 @@ export class ContextPartner {
   }
 
   async observe(event: AgentEvent, options: { waitMs?: number } = {}): Promise<ObserveResult> {
+    // `readerPush`: a request that acts is also read by the ask-time reader, as an ask of the engine's own; what it
+    // flags is queued as a packet. The observe waits for it within its own wait, so an agent that never calls
+    // `ask_context` gets the reading before its first model request when it is ready in time.
+    const push =
+      this.config.readerPush &&
+      this.config.askReader &&
+      this.deps.reader &&
+      event.kind === "user_message" &&
+      event.draft !== true &&
+      isImperative(event.text, MORE_VERBS)
+        ? this.ask({ ...event, question: event.text, maxItems: 5 }, { push: true }).catch(() => null)
+        : null;
+    const t0 = performance.now();
+    const result = await this.observeEvent(event, options);
+    if (!push) return result;
+    let settled = false;
+    void push.then(() => (settled = true));
+    const left = (options.waitMs ?? 0) - (performance.now() - t0);
+    if (left > 0) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([push, new Promise((r) => (timer = setTimeout(r, left)))]);
+      clearTimeout(timer);
+    }
+    // A push still running, or one that queued its packet, is pending work the integration should poll for.
+    const queued = (this.sessions.get(sessionKey(event))?.pending.length ?? 0) > 0;
+    return { ...result, pending: result.pending || !settled || queued };
+  }
+
+  private async observeEvent(event: AgentEvent, options: { waitMs?: number } = {}): Promise<ObserveResult> {
     const t0 = performance.now();
     const spans = this.spans;
     const root = spans?.open("observe", 0, { kind: event.kind });
@@ -745,7 +808,9 @@ export class ContextPartner {
     cue.arrived = this.now();
     if (root) cue.span = root.id;
     // `askContext`: the request's own cue, kept so an ask reads what its frame, graph walk and verdicts already hold.
-    if (event.kind === "user_message" && (this.config.askContext || this.config.askGuard)) s.request = cue;
+    if (event.kind === "user_message" && (this.config.askContext || this.config.askGuard || this.config.askReader)) {
+      s.request = cue;
+    }
     // The request's names are its own lookup's to probe: a later event naming them again prefetches nothing.
     if (s.ant)
       this.markAsked(
@@ -1118,7 +1183,7 @@ export class ContextPartner {
     }
   }
 
-  async ask(request: AskRequest): Promise<AskResponse> {
+  async ask(request: AskRequest, internal: { push?: boolean } = {}): Promise<AskResponse> {
     const t0 = performance.now();
     const spans = this.spans;
     const root = spans?.open("ask", 0, { async: true });
@@ -1251,9 +1316,28 @@ export class ContextPartner {
       }
       chosen = fused.slice(0, Math.min(limit, this.config.askContextItems));
     }
+    // `askReader` (D95): one budgeted model call reads the widened pool; the items it says bind lead, with its bearing.
+    const reading =
+      this.config.askReader && this.deps.reader
+        ? await this.readAsk(s, cue, [...order, ...scored], chosen, limit)
+        : null;
+    if (reading) chosen = reading.chosen;
+    // `readerPush`: the ask was the engine's own, for the user's request. What the reader flagged goes to the agent as
+    // a proactive packet (queued, taken before its next model request); nothing else is answered or handed out.
+    if (internal.push) {
+      const flagged = reading ? chosen.filter((x) => reading.notes.has(x.item.id)) : [];
+      const fresh = flagged.filter((x) => s.ledger.isFresh(x.item.id, s.turn));
+      const injection =
+        fresh.length > 0 && !s.closed ? this.deliver(s, fresh, "proactive", `reader:${cue.id}`, cue) : null;
+      if (injection) s.pending.push(injection);
+      const latencyMs = Math.round(performance.now() - t0);
+      if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "reader-push", delivered: !!injection });
+      return { answer: "", citations: [], usedModel: reading?.called === true, costUsd: 0, latencyMs };
+    }
     // `askGuard` (docs/research/edge-ask.md): an ask about an action is answered with its verdicts said. What may block
-    // leads, marked; with nothing that may block and every source searched, a line says so.
-    const guarded = this.config.askGuard && this.acting(s, cue);
+    // leads, marked; with nothing that may block and every source searched, a line says so. A reader's verdict, when
+    // there is one, is the answer's reading instead.
+    const guarded = this.config.askGuard && !reading?.read && this.acting(s, cue);
     const bearing = guarded ? this.bearings(s, cue, chosen, hits) : null;
     if (bearing) chosen = leadBinding(chosen, bearing);
     // `askCompact` with `densePacket`: an echo of an occurrence the answer already shows (the invitation beside its
@@ -1291,6 +1375,8 @@ export class ContextPartner {
         : undefined;
     if (bearing) answering.bearing = (shown) => this.shownBearing(cue, shown, bearing);
     if (lead) answering.lead = lead;
+    if (reading?.notes.size) answering.note = (item) => reading.notes.get(item.id);
+    if (reading?.clear) answering.lead = READER_CLEAR(reading.checked);
     let answer = items.length || lead ? renderPacket(items, answering) : "Nothing in the connected sources.";
     // What usage learns from the answer: the packet without the flag's additions, unless the model composed it.
     let learnt = this.config.packetDates && items.length ? usageText(items, answering) : undefined;
@@ -1305,7 +1391,7 @@ export class ContextPartner {
         pool.map((x) => x.item.id),
       );
     }
-    let usedModel = false;
+    let usedModel = reading?.called === true;
     let costUsd = 0;
     const reservation =
       this.config.askWithModel && items.length && this.deps.model && !s.closed
@@ -1408,6 +1494,119 @@ export class ContextPartner {
       walked: ctx.walked,
       carded: ctx.carded,
     });
+  }
+
+  /**
+   * `askReader` (D95, `reader.ts`): the reader's verdict on an ask about an action (or any ask, with
+   * `askReaderQuestions`), over the first `askReaderPool` distinct candidates of `ranked` (the ask's pool in its order,
+   * then the rest it scored). The items it says bind lead the answer, at most `limit`, the usual `chosen` fill what is
+   * left. Null when the reader is not asked; `read` false when it gave no verdict in time (fail open: `chosen` as is).
+   */
+  private async readAsk(
+    s: Session,
+    cue: Cue,
+    ranked: readonly Scored[],
+    chosen: Scored[],
+    limit: number,
+  ): Promise<{
+    chosen: Scored[];
+    notes: Map<string, string>;
+    read: boolean;
+    clear: boolean;
+    checked: number;
+    called: boolean;
+  } | null> {
+    const reader = this.deps.reader!;
+    const acts = (raw: string) => isImperative(raw, MORE_VERBS);
+    const request = acts(cue.raw) ? cue.raw : s.request && acts(s.request.raw) ? s.request.raw : undefined;
+    if (!request && !this.config.askReaderQuestions && !ASKS_BLOCKERS.test(cue.raw)) return null;
+    const pool: Scored[] = [];
+    const seen = new Set<string>();
+    const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
+    for (const x of ranked) {
+      if (pool.length >= cap) break;
+      if (seen.has(x.item.id)) continue;
+      seen.add(x.item.id);
+      pool.push(x);
+    }
+    const t0 = performance.now();
+    const report = (outcome: ReaderReport["outcome"], flagged: ReaderReport["flagged"] = [], clear = false) =>
+      this.deps.onReader?.({
+        sessionId: s.id,
+        checked: pool.length,
+        pool: pool.map((x) => x.item.id),
+        flagged,
+        outcome,
+        waitedMs: Math.round(performance.now() - t0),
+        clear,
+      });
+    if (pool.length === 0) {
+      report("none");
+      return null;
+    }
+    const main = request ?? cue.raw;
+    const focus = readerFocus(main, cue.raw);
+    const cards =
+      this.config.cards && this.deps.cards
+        ? this.deps.cards.cardsOf(
+            s.scope,
+            pool.map((x) => x.item.id),
+            cue.arrived ?? this.now(),
+          )
+        : new Map();
+    const input: ReaderInput = {
+      request: main,
+      ...(request && cue.raw !== request ? { question: cue.raw } : {}),
+      items: pool.map((x) => readerItem(x.item, focus, cards.get(x.item.id))),
+      today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
+    };
+    const called = reader.peek(s.scope, s.key, input) === undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<"late">((resolve) => {
+      timer = setTimeout(() => resolve("late"), Math.max(0, this.config.askReaderWaitMs));
+    });
+    let verdict: Awaited<ReturnType<AskReader["verdictFor"]>> | "late";
+    try {
+      verdict = await Promise.race([reader.verdictFor(s.scope, s.key, input, s.abort.signal), late]);
+    } catch {
+      verdict = null;
+    } finally {
+      clearTimeout(timer);
+    }
+    const unchanged = { chosen, notes: new Map<string, string>(), read: false, clear: false, checked: 0, called };
+    if (verdict === "late" || verdict === null) {
+      report(verdict === "late" ? "late" : "none");
+      return unchanged;
+    }
+    const byId = new Map(pool.map((x) => [x.item.id, x]));
+    const notes = new Map<string, string>();
+    const lead: Scored[] = [];
+    for (const b of verdict.bears) {
+      const x = byId.get(b.id);
+      if (!x || lead.includes(x) || lead.length >= limit) continue;
+      lead.push(x);
+      notes.set(b.id, readerNote(b.kind, b.why));
+    }
+    const clear = this.config.askReaderClear && verdict.bears.length === 0;
+    report(
+      "read",
+      verdict.bears.filter((b) => notes.has(b.id)).map((b) => ({ id: b.id, kind: b.kind })),
+      clear,
+    );
+    // `askReaderDrop`: what the reader read and rejected by name leaves the answer (never what it flagged).
+    const rejected = this.config.askReaderDrop ? new Set(verdict.rejected ?? []) : new Set<string>();
+    let rest = chosen.filter((x) => !lead.includes(x) && !rejected.has(x.item.id));
+    // A drop that would leave the answer empty is not made: an empty answer reads "Nothing in the connected
+    // sources", a false all-clear (D93) when the search found items.
+    if (lead.length === 0 && rest.length === 0) rest = chosen.filter((x) => !lead.includes(x));
+    return {
+      chosen: [...lead, ...rest].slice(0, limit),
+      notes,
+      read: true,
+      clear,
+      checked: verdict.checked,
+      called,
+    };
   }
 
   /**
@@ -1690,6 +1889,8 @@ export class ContextPartner {
     // Bridging queries are made from the user's requests, not from a source's items: only the user's forget drops
     // them, with any call in flight (D89).
     if (sourceId === undefined) this.deps.bridge?.forget(scope);
+    // The reader's bearings are made from the items' text: any forget, of the user or of one source, drops them.
+    this.deps.reader?.forget(scope);
   }
 
   get sessionCount(): number {
@@ -5243,6 +5444,18 @@ const BULK_TITLE = /\b(newsletter|top stories|you appeared in)\b/i;
  */
 const ASKS_BLOCKERS =
   /\b(?:block(?:s|ed|ing|er|ers)?|constrain(?:s|t|ts)?|rules?|limits?|holds?|approvals?|policy|policies|availab(?:le|ility)|allowed|permitted|conflicts?|clash(?:es)?|freezes?|frozen|restrictions?|ok(?:ay)? to|safe to|fine to|go ahead)\b/i;
+
+/** The most candidates an ask's reader reads, whatever `askReaderPool` says. */
+const READER_POOL_CAP = READER_MAX_ITEMS;
+
+/** `askReaderClear`'s line: what the reader read, in fixed words. `shownText` drops it as it drops the guard's. */
+const READER_CLEAR = (checked: number) =>
+  `Checked the ${checked} items found most related: none reads as blocking, limiting or changing this request.`;
+
+/** The user's day as YYYY-MM-DD, at their offset from UTC (minutes). */
+function localDay(at: number, offsetMin: number): string {
+  return new Date(at + offsetMin * 60_000).toISOString().slice(0, 10);
+}
 
 /** `askGuard`: what may block leads the answer, the rest in their order. */
 function leadBinding(xs: Scored[], bearing: ReadonlyMap<string, Bearing>): Scored[] {

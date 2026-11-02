@@ -226,6 +226,26 @@ each in the items' own words, ranked by when written with the user's own people 
 at most twelve lines; it opens a session (`session_start`) as data and is served on request (`POST /v1/digest`, client
 `digest`). It holds no clock, so its bytes change only when a constraint does.
 
+**The ask-time reader** (`askReader`, off by default; proposed D95, `reader.ts`). An `ask` about an action (or
+any ask, with `askReaderQuestions`) is answered as usual, and then, before rendering, one budgeted model call
+(`AskReader`, its own `ReaderMaker`, model and `Budget`) reads the first `askReaderPool` (30) distinct candidates of
+the ask's ranking (its pool in order, then the rest it scored), each rendered compactly (`readerItem`: title, source,
+date, sender, the ≤ 400 characters of its parts that bear most on the request, its card's fields), all redacted and
+fenced as data. It returns the items that block, limit or change the request or show it done, each with a kind and a
+≤ 15-word bearing (`parseReader` validates both); those lead the answer, marked "Eden's reader: <kind>: <bearing> |",
+and the usual items fill the seats left. With `askReaderClear` a read pool with nothing binding opens the answer with
+a fixed "Checked the N items found most related: …" line. The ask waits at most `askReaderWaitMs` (2.5 s); late, over
+budget, failed or unreadable, the answer is the usual one, and a late call still fills the cache. Verdicts are cached
+per user and session by a hash of the request and the pool; any `forget` of the user or a source drops them. Like the
+bridge, it is wired by the embedder (`PartnerDeps.reader`); the lab's funnel wires it (`--reader`), the server does not
+yet.
+
+The reader's prompt v5 (D96) has the model label every item that looks relevant, a lookalike included, writing what
+the item means before deciding whether it is about the same thing and binds. With `askReaderDrop` (off by default),
+the items it rejected by name leave the ask's answer; an item it flagged never does. With `readerPush` (off by default), a user
+request that acts is read the same way when it is observed, as an ask of the engine's own, and the items the reader
+flags are queued as a proactive packet, so an agent that never calls `ask_context` still gets the reading.
+
 **The intent index** (`intent`, needs `cards`, off by default; proposed D87, `intent.ts`,
 [research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four
 requests the item would change, in a user's words (validated, at most 120 characters each, redacted); items the card
