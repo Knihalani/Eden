@@ -76,7 +76,7 @@ const TRAIN = ["train1", "train2", "train3", "train4", "train5", "train6"];
  * Blind suites that have never been run: left out of `all`, so a tuning command with `--suite all` cannot spend them;
  * the blind run names them. A suite leaves this list once its blind run is recorded.
  */
-export const UNRUN_BLIND = ["heldout13"];
+export const UNRUN_BLIND = ["heldout9", "heldout10", "heldout11", "heldout12", "heldout13"];
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n));
 
 /**
