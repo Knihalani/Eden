@@ -76,6 +76,7 @@ def run(req):
     )
     tool_names = [t["function"]["name"] for t in (agent.tools or [])]
     result = agent.run_conversation(req["prompt"])
+    # Hermes' built prompt once it has one; before (a turn that failed early), the part the lab gives it.
     system = getattr(agent, "_cached_system_prompt", None) or ""
     messages = result.get("messages") or []
     # The tool calls as the transcript has them (the callbacks' shapes vary between Hermes versions).
@@ -92,7 +93,9 @@ def run(req):
         "apiCalls": result.get("api_calls"),
         "completed": result.get("completed"),
         "toolCalls": calls if len(calls) == len(from_messages) else [{"name": n, "ms": None} for n in from_messages],
-        "systemChars": len(system) + len(req["system"]) if system and req["system"] not in system else len(system),
+        "systemChars": (
+            len(system) + (0 if req["system"] in system else len(req["system"])) if system else len(req["system"])
+        ),
         "toolNames": tool_names,
     }
 

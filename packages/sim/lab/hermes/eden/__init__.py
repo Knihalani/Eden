@@ -56,7 +56,11 @@ def pre_llm_call(user_message=None, **kwargs):
 def post_tool_call(tool_name=None, result=None, **kwargs):
     if not isinstance(tool_name, str) or tool_name.endswith(ASK_TOOL_SUFFIX):
         return None
-    output = result if isinstance(result, str) else json.dumps(result)
+    try:
+        # A result that is not text is sent as JSON; anything JSON cannot encode, as its text.
+        output = result if isinstance(result, str) else json.dumps(result, default=str)
+    except Exception:
+        return None
     _call("tool", {"tool": tool_name, "output": output}, QUICK_TIMEOUT_S)
     return None
 

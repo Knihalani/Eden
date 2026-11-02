@@ -15,7 +15,9 @@ source personal agent. The bench compares two arms on the same tasks.
   The agent is read-only, and the arms differ only in Eden.
 
 **`hermes+eden`:** the same Hermes, plus Eden through Hermes' own two extension surfaces.
-- **Eden's MCP server** (`createMcpServer`, `ask_context`; the guided description with `askGuard`).
+- **Eden's MCP server** (`createMcpServer`, `ask_context`).
+  - It gives the standard description, `ASK_CONTEXT_DESCRIPTION`, unless the config has `askGuard`.
+  - ALL5 has `askGuard` and ALL3 does not, so the blind run below (ALL3) used the standard description.
 - **The Eden plugin** (`packages/sim/lab/hermes/eden`), with three hooks:
   - `pre_llm_call` observes the turn and injects Eden's packet into the user message, as Hermes does with any plugin
     context;
@@ -82,14 +84,23 @@ Checked in the forwarded requests (`--dump`):
 - **No cross-task leakage:** a stream's second task starts from two messages (system and user).
 
 Also seen:
-- **Fresh agents cost time:** about 4.8 s of each task's wall time, before the first request, in both arms, is Hermes
-  building a fresh agent.
+- **Startup is per stream, not per task:** the first task of each stream waits for the worker's Python start and its
+  MCP connection.
+  - Measured in the blind run: the first request starts 3,916 ms (Hermes) and 4,176 ms (Hermes + Eden) into a stream's
+    first task, against 67 ms and 88 ms on later tasks.
+  - The runner now waits for the worker before the first task's clock starts, so later runs leave it out of task
+    time. The blind run's wall times below are re-derived without first tasks.
 - **Hermes' fixed prompt:** about 8,100 characters, plus the tool schemas. Its first request is about 2,800 tokens,
   against Pi's whole-task mean of 3,579 (D64).
 - **A rerun differs:** on a rerun of the same task in the Eden arm the fact was not raised (n=1 each, free model).
 
-**Unverified:** in one smoke, Hermes sent 3 requests but 2 were booked. A stream Hermes stops reading never reached
-the booking code. The proxy now books a request when its stream ends, fails or is cancelled. That fix has not run live.
+**Request booking:**
+- **The bug:** in one smoke, Hermes sent 3 requests but 2 were booked, because a stream Hermes stopped reading never
+  reached the booking code.
+- **The fix:** the proxy now books a request once, when its stream ends, fails or is cancelled.
+- **Live check:** the fix ran in the blind run, which booked 231 requests for Hermes' 231 API calls, with 0 errors.
+  The count of Hermes' calls is the coordinator's; the harness now records it per task (`apiCalls`) beside the
+  booked `requests`.
 
 ## Blind run on free models (2026-11-02, 312 requests, $0)
 
@@ -107,8 +118,17 @@ engine, never tuned on).
 | Model requests per task (hidden / control) | 2.80 / 2.80 | 2.75 / 3.20 | |
 | Tool calls per task (hidden / control) | 6.80 / 6.35 | 5.30 / 7.35 | |
 | Input tokens per task (hidden / control) | 9,747 / 9,884 | 10,781 / 12,443 | |
-| Wall p50, hidden / control | 22.3 s / 17.6 s | 17.4 s / 22.8 s | hidden −0.1 s, control +7.4 s |
+| Wall p50, hidden / control (first tasks excluded) | 23.3 s / 18.5 s | 17.8 s / 24.0 s | hidden +1.1 s (−6.7..+9.5), control +6.0 s (+0.7..+10.8) |
 | Eden on the critical path | | 24 ms a task (0%) | |
+
+How the wall-time row was derived:
+- From `blind.json`'s per-task `wallMs`, leaving out each stream's first task.
+- A stream is one suite and variant under one condition, so 8 first tasks per arm are left out, 16 tasks per variant
+  remain, and the same tasks are left out of both arms.
+- **p50:** the median.
+- **Paired difference:** the mean of (Eden − Hermes) over those 16 tasks, with a bootstrap 95% interval (2,000
+  resamples).
+- With first tasks included, the paired means were −0.1 s (hidden) and +7.4 s (control).
 
 How to read it:
 - **Facts:** Hermes with Eden raised the planted fact 3.3× as often as Hermes searching the same sources itself, with
@@ -118,7 +138,8 @@ How to read it:
     shut on the planned day, and a treasury cutover freeze.
   - In each, Hermes alone found the named people and things, but not the constraint.
 - **Cost:** Eden adds 11% input tokens on hidden tasks and 26% on control tasks, where the agent asks more. On control
-  tasks it adds 7.4 s of wall time (paired), from the extra model turns. Eden's own time on the critical path is 24 ms
+  tasks it adds 6.0 s of wall time (paired, +0.7..+10.8 s), from the extra model turns. On hidden tasks the difference
+  (+1.1 s) is within noise. Eden's own time on the critical path is 24 ms
   a task.
 - **Limits:**
   - one seed, n = 20 per variant, free models;
@@ -139,6 +160,14 @@ These are estimates from the smoke, not measurements.
   - grading on deepseek-v4.1-flash adds about $0.00016 a task (D64);
   - about $4–6 for the whole bench, from token counts measured on a different model.
 - **Pi comparison:** Hermes' prompt makes each request about 3× Pi's input tokens.
+- **Wall time, from the blind run's free-model timings:**
+  - Tasks after a stream's first average 22.2 s (Hermes) and 25.8 s (Hermes + Eden): about 56,000 task-seconds for
+    2,336 tasks.
+  - Starting the 144 streams' workers adds about 4 s each.
+  - At `--concurrency 6` that is about 2.6 hours, if the rate limit does not bind.
+  - On free models it binds: about 8,200 requests at 18 a minute is about 7.6 hours, and the 1,000-a-day cap spreads
+    the bench over days.
+  - A paid model's speed will differ.
 
 ## Full bench command
 

@@ -17,6 +17,9 @@
  */
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { ContextPartner } from "@eden/engine";
+import type { Scope } from "@eden/protocol";
+import { createMcpServer } from "@eden/server";
 
 /** The task a stream is running now, and what its routes call. */
 export interface TaskBinding {
@@ -34,7 +37,7 @@ export interface StreamHost {
   current: TaskBinding | null;
   /** A fresh MCP server for one request (stateless transport), bound to the current task. */
   sourcesServer(): McpServer;
-  /** Eden's MCP server for one request, or null in a condition without Eden. */
+  /** Eden's MCP server for one request (`edenMcpServer`), or null in a condition without Eden. */
   edenServer(): McpServer | null;
   /** The model endpoint: `path` after `/v1/`. */
   model(path: string, req: Request): Promise<Response>;
@@ -108,4 +111,31 @@ export function labRouter(streams: ReadonlyMap<string, StreamHost>): (req: Reque
       return json(503, { error: e instanceof Error ? e.message.slice(0, 200) : "internal error" });
     }
   };
+}
+
+/** The running task as Eden's MCP server sees it: its session, and what to record about each answer. */
+export interface AskTask {
+  sessionId: string;
+  answered(a: Awaited<ReturnType<ContextPartner["ask"]>>, question: string, startedAt: number): void;
+}
+
+/**
+ * Eden's own MCP server (`createMcpServer`) for one request of a stream. It answers `initialize` and `tools/list` with
+ * no task running: Hermes connects at worker start, before the first task, and a refusal then would drop
+ * `ask_context` from the agent's tools. A `tools/call` reads the running task when it arrives and is refused (a tool
+ * error, nothing asked of Eden) when there is none: an answer must belong to the task that asked.
+ */
+export function edenMcpServer(partner: ContextPartner, scope: Scope, current: () => AskTask | null): McpServer {
+  const view = {
+    config: partner.config,
+    ask: async (q: Parameters<ContextPartner["ask"]>[0]) => {
+      const task = current();
+      if (!task) throw new Error("no task is running");
+      const startedAt = performance.now();
+      const a = await partner.ask({ ...q, sessionId: task.sessionId });
+      task.answered(a, q.question, startedAt);
+      return a;
+    },
+  } as unknown as ContextPartner;
+  return createMcpServer(view, { ...scope, sessionId: "unbound" });
 }

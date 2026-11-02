@@ -3,7 +3,8 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { labRouter, type StreamHost, type TaskBinding } from "./hermes-host";
+import type { ContextPartner } from "@eden/engine";
+import { edenMcpServer, labRouter, type AskTask, type StreamHost, type TaskBinding } from "./hermes-host";
 
 /** A stream whose task records what its Eden routes received. */
 function stream(token: string, log: string[]): StreamHost {
@@ -92,6 +93,51 @@ describe("hermes-ab's localhost routes", () => {
     );
     expect(res.status).toBe(200);
     expect(((await res.json()) as { result: { serverInfo: { name: string } } }).result.serverInfo.name).toBe("sources");
+  });
+
+  test("Eden's MCP server lists ask_context with no task running, and answers only for the running task", async () => {
+    const asked: string[] = [];
+    const partner = {
+      config: { askGuard: false },
+      ask: async (q: { question: string; sessionId: string }) => {
+        asked.push(`${q.sessionId}:${q.question}`);
+        return { answer: "the freeze runs to Friday", citations: [] };
+      },
+    } as unknown as ContextPartner;
+    let running: AskTask | null = null;
+    const answered: string[] = [];
+    const s = stream("tok", []);
+    s.current = null;
+    s.edenServer = () => edenMcpServer(partner, { tenantId: "t", userId: "u" }, () => running);
+    const route = labRouter(new Map([["a", s]]));
+    const rpc = async (method: string, params: unknown) => {
+      const res = await route(
+        new Request("http://127.0.0.1/s/a/mcp/eden", {
+          method: "POST",
+          headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { result: Record<string, unknown> }).result;
+    };
+    // Hermes connects at worker start, before any task: initialize and tools/list must answer then.
+    const init = await rpc("initialize", {
+      protocolVersion: "2025-03-26",
+      capabilities: {},
+      clientInfo: { name: "hermes", version: "0" },
+    });
+    expect((init.serverInfo as { name: string }).name).toBe("eden-context");
+    const tools = (await rpc("tools/list", {})).tools as { name: string }[];
+    expect(tools.map((t) => t.name)).toEqual(["ask_context"]);
+    const call = { name: "ask_context", arguments: { question: "can I deploy?" } };
+    expect((await rpc("tools/call", call)).isError).toBe(true);
+    expect(asked).toEqual([]);
+    running = { sessionId: "task-7", answered: (a, q) => answered.push(`${q}→${a.answer}`) };
+    const ok = await rpc("tools/call", call);
+    expect(ok.isError).toBeFalsy();
+    expect(asked).toEqual(["task-7:can I deploy?"]);
+    expect(answered).toEqual(["can I deploy?→the freeze runs to Friday"]);
   });
 
   // The Hermes plugin is plain stdlib Python: its fail-open test runs wherever a python3 is on the PATH.
