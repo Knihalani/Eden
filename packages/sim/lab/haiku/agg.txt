@@ -1,0 +1,291 @@
+
+== hermes / blind5-8
+condition            kind     n   rate  wall p50  p90  ttft p50  in/req out/req cacheRd% cacheWr%  asks  chars  src/task
+hermes               hidden   632 0.133     3.30  5.14      513    4107    253    86.6    13.3  0.00      0    0.00
+hermes               control  632 0.003     3.29  5.25      512    4137    251    86.7    13.2  0.00      0    0.00
+hermes+eden          hidden   632 0.465     3.23  5.16      502    4412    271    85.3    14.6  0.18    335    3.32
+hermes+eden          control  632 0.027     3.36  5.46      508    4416    264    85.7    14.3  0.22    190    3.35
+hermes+eden~NEW      hidden   632 0.722     4.06  7.52      503    4444    294    84.5    15.4  0.13    546    3.55
+hermes+eden~NEW      control  632 0.035     4.96  8.26      511    4464    274    85.4    14.5  0.22    287    3.49
+paired (a - b), 95% bootstrap over tasks:
+  hermes+eden~NEW  - hermes+eden  hidden  n= 632 +0.256 (+0.217..+0.297)
+  hermes+eden~NEW  - hermes+eden  control n= 632 +0.008 (-0.009..+0.025)
+  hermes+eden~NEW  - hermes       hidden  n= 632 +0.589 (+0.549..+0.628)
+  hermes+eden~NEW  - hermes       control n= 632 +0.032 (+0.019..+0.047)
+  hermes+eden      - hermes       hidden  n= 632 +0.332 (+0.291..+0.373)
+  hermes+eden      - hermes       control n= 632 +0.024 (+0.011..+0.038)
+
+== hermes / heldout10
+condition            kind     n   rate  wall p50  p90  ttft p50  in/req out/req cacheRd% cacheWr%  asks  chars  src/task
+hermes               hidden   256 0.176     3.17  5.10      515    4103    231    88.7    11.3  0.00      0    0.00
+hermes               control  256 0.023     3.04  4.97      517    4115    228    88.5    11.5  0.00      0    0.00
+hermes+eden          hidden   256 0.438     3.23  4.72      513    4391    252    86.9    13.1  0.23    269    3.46
+hermes+eden          control  256 0.023     3.15  5.06      521    4394    235    87.7    12.3  0.25    187    3.54
+hermes+eden~NEW      hidden   256 0.578     3.42  6.25      501    4407    249    87.1    12.9  0.22    376    3.50
+hermes+eden~NEW      control  256 0.039     3.90  6.83      506    4433    238    87.5    12.4  0.27    217    3.51
+paired (a - b), 95% bootstrap over tasks:
+  hermes+eden~NEW  - hermes+eden  hidden  n= 256 +0.141 (+0.086..+0.195)
+  hermes+eden~NEW  - hermes+eden  control n= 256 +0.016 (-0.012..+0.043)
+  hermes+eden~NEW  - hermes       hidden  n= 256 +0.402 (+0.344..+0.461)
+  hermes+eden~NEW  - hermes       control n= 256 +0.016 (-0.008..+0.039)
+  hermes+eden      - hermes       hidden  n= 256 +0.262 (+0.207..+0.316)
+  hermes+eden      - hermes       control n= 256 +0.000 (-0.020..+0.020)
+
+== hermes / heldout11
+condition            kind     n   rate  wall p50  p90  ttft p50  in/req out/req cacheRd% cacheWr%  asks  chars  src/task
+hermes               hidden   256 0.168     3.04  4.56      507    4046    222    89.1    10.8  0.00      0    0.00
+hermes               control  256 0.000     3.05  4.37      509    4031    221    89.3    10.6  0.00      0    0.00
+hermes+eden          hidden   256 0.406     2.71  4.75      520    4308    228    88.2    11.7  0.20    189    3.45
+hermes+eden          control  256 0.039     2.95  4.98      501    4327    227    88.3    11.6  0.27    131    3.46
+hermes+eden~NEW      hidden   256 0.602     3.50  5.69      505    4308    239    87.9    12.0  0.18    340    3.71
+hermes+eden~NEW      control  256 0.031     3.92  6.76      510    4325    226    88.2    11.7  0.24    193    3.70
+paired (a - b), 95% bootstrap over tasks:
+  hermes+eden~NEW  - hermes+eden  hidden  n= 256 +0.195 (+0.137..+0.258)
+  hermes+eden~NEW  - hermes+eden  control n= 256 -0.008 (-0.035..+0.020)
+  hermes+eden~NEW  - hermes       hidden  n= 256 +0.434 (+0.367..+0.492)
+  hermes+eden~NEW  - hermes       control n= 256 +0.031 (+0.012..+0.055)
+  hermes+eden      - hermes       hidden  n= 256 +0.238 (+0.180..+0.293)
+  hermes+eden      - hermes       control n= 256 +0.039 (+0.016..+0.062)
+
+== hermes / heldout12
+condition            kind     n   rate  wall p50  p90  ttft p50  in/req out/req cacheRd% cacheWr%  asks  chars  src/task
+hermes               hidden   256 0.141     3.25  4.99      518    4211    247    85.8    14.1  0.00      0    0.00
+hermes               control  256 0.000     3.18  4.95      511    4189    243    86.1    13.8  0.00      0    0.00
+hermes+eden          hidden   256 0.215     3.35  5.09      507    4490    239    86.3    13.7  0.22    170    3.48
+hermes+eden          control  256 0.000     3.37  4.87      507    4511    245    85.5    14.4  0.23    130    3.51
+hermes+eden~NEW      hidden   256 0.555     4.29  7.19      496    4487    258    86.5    13.5  0.20    323    3.57
+hermes+eden~NEW      control  256 0.000     4.45  7.72      510    4476    241    86.3    13.7  0.23    190    3.55
+paired (a - b), 95% bootstrap over tasks:
+  hermes+eden~NEW  - hermes+eden  hidden  n= 256 +0.340 (+0.277..+0.402)
+  hermes+eden~NEW  - hermes+eden  control n= 256 +0.000 (+0.000..+0.000)
+  hermes+eden~NEW  - hermes       hidden  n= 256 +0.414 (+0.348..+0.477)
+  hermes+eden~NEW  - hermes       control n= 256 +0.000 (+0.000..+0.000)
+  hermes+eden      - hermes       hidden  n= 256 +0.074 (+0.031..+0.121)
+  hermes+eden      - hermes       control n= 256 +0.000 (+0.000..+0.000)
+
+== hermes / train
+condition            kind     n   rate  wall p50  p90  ttft p50  in/req out/req cacheRd% cacheWr%  asks  chars  src/task
+hermes               hidden   384 0.086     3.29  4.79      508    4040    248    89.3    10.6  0.00      0    0.00
+hermes               control  384 0.000     3.28  4.79      516    4029    248    89.5    10.5  0.00      0    0.00
+hermes+eden          hidden   384 0.344     3.05  5.09      498    4372    274    87.6    12.3  0.21    313    3.65
+hermes+eden          control  384 0.005     3.42  5.35      499    4411    269    87.5    12.4  0.27    253    3.73
+hermes+eden~NEW      hidden   384 0.651     4.05  7.16      498    4449    302    86.3    13.6  0.17    569    3.79
+hermes+eden~NEW      control  384 0.005     4.61  7.79      502    4408    273    87.5    12.4  0.27    314    3.82
+paired (a - b), 95% bootstrap over tasks:
+  hermes+eden~NEW  - hermes+eden  hidden  n= 384 +0.307 (+0.253..+0.359)
+  hermes+eden~NEW  - hermes+eden  control n= 384 +0.000 (-0.010..+0.010)
+  hermes+eden~NEW  - hermes       hidden  n= 384 +0.565 (+0.513..+0.617)
+  hermes+eden~NEW  - hermes       control n= 384 +0.005 (+0.000..+0.013)
+  hermes+eden      - hermes       hidden  n= 384 +0.258 (+0.211..+0.307)
+  hermes+eden      - hermes       control n= 384 +0.005 (+0.000..+0.013)
+
+== hermes / ALL BLIND (5-8, 10, 11, 12)
+condition            kind     n   rate  wall p50  p90  ttft p50  in/req out/req cacheRd% cacheWr%  asks  chars  src/task
+hermes               hidden  1400 0.149     3.22  5.01      514    4115    242    87.3    12.6  0.00      0    0.00
+hermes               control 1400 0.006     3.17  4.92      512    4124    240    87.4    12.6  0.00      0    0.00
+hermes+eden          hidden  1400 0.404     3.19  5.07      508    4407    254    86.3    13.6  0.20    266    3.40
+hermes+eden          control 1400 0.024     3.29  5.30      509    4415    248    86.5    13.5  0.24    167    3.43
+hermes+eden~NEW      hidden  1400 0.643     3.84  7.01      501    4423    268    86.0    13.9  0.17    437    3.57
+hermes+eden~NEW      control 1400 0.029     4.45  7.68      510    4437    253    86.4    13.5  0.23    240    3.54
+paired (a - b), 95% bootstrap over tasks:
+  hermes+eden~NEW  - hermes+eden  hidden  n=1400 +0.239 (+0.214..+0.265)
+  hermes+eden~NEW  - hermes+eden  control n=1400 +0.005 (-0.005..+0.016)
+  hermes+eden~NEW  - hermes       hidden  n=1400 +0.494 (+0.469..+0.521)
+  hermes+eden~NEW  - hermes       control n=1400 +0.023 (+0.014..+0.031)
+  hermes+eden      - hermes       hidden  n=1400 +0.255 (+0.229..+0.280)
+  hermes+eden      - hermes       control n=1400 +0.018 (+0.010..+0.026)
+
+== pi / blind5-8
+condition            kind     n   rate  wall p50  p90  ttft p50  in/req out/req cacheRd% cacheWr%  asks  chars  src/task
+eden                 hidden   632 0.522     3.13  4.92      535    1015    302    36.3    63.5  0.95    321    3.37
+eden                 control  632 0.035     3.64  5.30      547    1036    295    44.0    55.8  1.36    189    3.41
+none                 hidden   632 0.006     2.40  4.29      488     146    360     0.0     0.0  0.00      0    0.00
+none                 control  632 0.008     2.39  4.13      493     146    355     0.0     0.0  0.00      0    0.00
+tools                hidden   632 0.163     3.65  5.56      522    1313    268    75.4    24.4  0.00      0    0.00
+tools                control  632 0.005     3.65  5.80      523    1326    267    74.8    25.0  0.00      0    0.00
+both~NEW             hidden   632 0.733     4.62  6.52      512    1423    304    75.7    24.2  0.00    530    3.56
+both~NEW             control  632 0.024     4.92  6.56      508    1406    282    75.8    24.0  0.00    282    3.44
+eden~NEW             hidden   632 0.782     4.17  7.92      526    1005    333    72.8    27.0  0.59    527    3.57
+eden~NEW             control  632 0.046     6.02  8.35      523    1000    292    68.9    30.9  1.17    281    3.47
+paired (a - b), 95% bootstrap over tasks:
+  eden~NEW         - eden         hidden  n= 632 +0.259 (+0.217..+0.299)
+  eden~NEW         - eden         control n= 632 +0.011 (-0.008..+0.032)
+  eden~NEW         - tools        hidden  n= 632 +0.619 (+0.578..+0.657)
+  eden~NEW         - tools        control n= 632 +0.041 (+0.024..+0.059)
+  eden~NEW         - none         hidden  n= 632 +0.775 (+0.744..+0.807)
+  eden~NEW         - none         control n= 632 +0.038 (+0.021..+0.057)
+  both~NEW         - tools        hidden  n= 632 +0.570 (+0.528..+0.608)
+  both~NEW         - tools        control n= 632 +0.019 (+0.008..+0.032)
+  both~NEW         - eden         hidden  n= 632 +0.210 (+0.169..+0.253)
+  both~NEW         - eden         control n= 632 -0.011 (-0.030..+0.006)
+  eden             - tools        hidden  n= 632 +0.359 (+0.313..+0.407)
+  eden             - tools        control n= 632 +0.030 (+0.016..+0.046)
+  eden             - none         hidden  n= 632 +0.516 (+0.476..+0.554)
+  eden             - none         control n= 632 +0.027 (+0.013..+0.043)
+  tools            - none         hidden  n= 632 +0.157 (+0.128..+0.187)
+  tools            - none         control n= 632 -0.003 (-0.011..+0.005)
+
+== pi / heldout10
+condition            kind     n   rate  wall p50  p90  ttft p50  in/req out/req cacheRd% cacheWr%  asks  chars  src/task
+eden                 hidden   256 0.531     3.08  4.40      530    1014    269    44.3    55.5  0.94    265    3.50
+eden                 control  256 0.023     3.14  4.22      519     969    245    51.1    48.6  1.14    198    3.56
+none                 hidden   256 0.004     2.16  3.98      494     145    318     0.0     0.0  0.00      0    0.00
+none                 control  256 0.000     2.25  4.60      509     145    324     0.0     0.0  0.00      0    0.00
+tools                hidden   256 0.188     3.30  5.18      515    1269    242    77.8    21.9  0.00      0    0.00
+tools                control  256 0.016     3.30  5.01      517    1269    238    77.5    22.2  0.00      0    0.00
+both~NEW             hidden   256 0.555     3.92  5.82      523    1358    252    78.9    21.0  0.00    380    3.57
+both~NEW             control  256 0.020     4.04  6.14      531    1341    242    78.7    21.1  0.00    211    3.55
+eden~NEW             hidden   256 0.652     3.39  6.72      529     976    267    73.0    26.8  0.66    378    3.51
+eden~NEW             control  256 0.055     4.36  7.19      516     971    246    69.9    29.8  1.16    218    3.59
+paired (a - b), 95% bootstrap over tasks:
+  eden~NEW         - eden         hidden  n= 256 +0.121 (+0.078..+0.172)
+  eden~NEW         - eden         control n= 256 +0.031 (-0.004..+0.066)
+  eden~NEW         - tools        hidden  n= 256 +0.465 (+0.406..+0.527)
+  eden~NEW         - tools        control n= 256 +0.039 (+0.012..+0.070)
+  eden~NEW         - none         hidden  n= 256 +0.648 (+0.590..+0.707)
+  eden~NEW         - none         control n= 256 +0.055 (+0.027..+0.086)
+  both~NEW         - tools        hidden  n= 256 +0.367 (+0.309..+0.426)
+  both~NEW         - tools        control n= 256 +0.004 (-0.012..+0.023)
+  both~NEW         - eden         hidden  n= 256 +0.023 (-0.031..+0.082)
+  both~NEW         - eden         control n= 256 -0.004 (-0.023..+0.020)
+  eden             - tools        hidden  n= 256 +0.344 (+0.277..+0.410)
+  eden             - tools        control n= 256 +0.008 (-0.012..+0.027)
+  eden             - none         hidden  n= 256 +0.527 (+0.461..+0.590)
+  eden             - none         control n= 256 +0.023 (+0.008..+0.043)
+  tools            - none         hidden  n= 256 +0.184 (+0.141..+0.234)
+  tools            - none         control n= 256 +0.016 (+0.004..+0.031)
+
+== pi / heldout11
+condition            kind     n   rate  wall p50  p90  ttft p50  in/req out/req cacheRd% cacheWr%  asks  chars  src/task
+eden                 hidden   256 0.543     3.15  4.48      513     956    247    46.4    53.4  1.06    190    3.52
+eden                 control  256 0.070     3.24  4.44      528     950    237    52.0    47.7  1.10    130    3.52
+none                 hidden   256 0.000     2.01  3.12      481     142    282     0.0     0.0  0.00      0    0.00
+none                 control  256 0.000     2.01  3.45      482     142    283     0.0     0.0  0.00      0    0.00
+tools                hidden   256 0.207     3.33  4.95      514    1254    242    77.6    22.1  0.00      0    0.00
+tools                control  256 0.004     3.45  5.07      497    1288    239    77.3    22.5  0.00      0    0.00
+both~NEW             hidden   256 0.539     4.33  6.09      513    1346    253    79.4    20.5  0.00    345    3.61
+both~NEW             control  256 0.027     4.38  6.15      504    1331    244    79.4    20.4  0.00    193    3.70
+eden~NEW             hidden   256 0.707     3.69  6.85      523     934    250    72.6    27.2  0.70    335    3.81
+eden~NEW             control  256 0.066     5.00  7.62      540     944    241    69.8    30.0  1.02    198    3.92
+paired (a - b), 95% bootstrap over tasks:
+  eden~NEW         - eden         hidden  n= 256 +0.164 (+0.117..+0.215)
+  eden~NEW         - eden         control n= 256 -0.004 (-0.035..+0.027)
+  eden~NEW         - tools        hidden  n= 256 +0.500 (+0.434..+0.566)
+  eden~NEW         - tools        control n= 256 +0.062 (+0.031..+0.094)
+  eden~NEW         - none         hidden  n= 256 +0.707 (+0.648..+0.762)
+  eden~NEW         - none         control n= 256 +0.066 (+0.039..+0.098)
+  both~NEW         - tools        hidden  n= 256 +0.332 (+0.273..+0.395)
+  both~NEW         - tools        control n= 256 +0.023 (+0.004..+0.047)
+  both~NEW         - eden         hidden  n= 256 -0.004 (-0.062..+0.051)
+  both~NEW         - eden         control n= 256 -0.043 (-0.074..-0.016)
+  eden             - tools        hidden  n= 256 +0.336 (+0.270..+0.398)
+  eden             - tools        control n= 256 +0.066 (+0.035..+0.098)
+  eden             - none         hidden  n= 256 +0.543 (+0.480..+0.605)
+  eden             - none         control n= 256 +0.070 (+0.043..+0.105)
+  tools            - none         hidden  n= 256 +0.207 (+0.160..+0.258)
+  tools            - none         control n= 256 +0.004 (+0.000..+0.012)
+
+== pi / heldout12
+condition            kind     n   rate  wall p50  p90  ttft p50  in/req out/req cacheRd% cacheWr%  asks  chars  src/task
+eden                 hidden   256 0.258     3.37  4.47      533    1015    255    45.6    54.2  1.36    169    3.62
+eden                 control  256 0.000     3.43  4.64      527    1024    255    46.9    52.9  1.47    131    3.62
+none                 hidden   256 0.000     2.14  3.13      481     143    314     0.0     0.0  0.00      0    0.00
+none                 control  256 0.000     2.10  3.43      478     143    311     0.0     0.0  0.00      0    0.00
+tools                hidden   256 0.129     3.61  5.42      514    1369    249    72.6    27.2  0.00      0    0.00
+tools                control  256 0.000     3.54  5.49      521    1384    248    70.9    28.9  0.00      0    0.00
+both~NEW             hidden   256 0.543     4.68  6.34      518    1474    265    73.7    26.2  0.00    330    3.48
+both~NEW             control  256 0.000     4.62  6.15      519    1429    251    74.1    25.7  0.00    201    3.54
+eden~NEW             hidden   256 0.578     4.88  7.69      526    1032    274    67.0    32.8  1.15    330    3.61
+eden~NEW             control  256 0.000     5.53  7.89      541    1010    252    66.4    33.4  1.35    194    3.66
+paired (a - b), 95% bootstrap over tasks:
+  eden~NEW         - eden         hidden  n= 256 +0.320 (+0.258..+0.387)
+  eden~NEW         - eden         control n= 256 +0.000 (+0.000..+0.000)
+  eden~NEW         - tools        hidden  n= 256 +0.449 (+0.379..+0.520)
+  eden~NEW         - tools        control n= 256 +0.000 (+0.000..+0.000)
+  eden~NEW         - none         hidden  n= 256 +0.578 (+0.520..+0.641)
+  eden~NEW         - none         control n= 256 +0.000 (+0.000..+0.000)
+  both~NEW         - tools        hidden  n= 256 +0.414 (+0.348..+0.480)
+  both~NEW         - tools        control n= 256 +0.000 (+0.000..+0.000)
+  both~NEW         - eden         hidden  n= 256 +0.285 (+0.211..+0.355)
+  both~NEW         - eden         control n= 256 +0.000 (+0.000..+0.000)
+  eden             - tools        hidden  n= 256 +0.129 (+0.059..+0.199)
+  eden             - tools        control n= 256 +0.000 (+0.000..+0.000)
+  eden             - none         hidden  n= 256 +0.258 (+0.203..+0.312)
+  eden             - none         control n= 256 +0.000 (+0.000..+0.000)
+  tools            - none         hidden  n= 256 +0.129 (+0.086..+0.172)
+  tools            - none         control n= 256 +0.000 (+0.000..+0.000)
+
+== pi / train
+condition            kind     n   rate  wall p50  p90  ttft p50  in/req out/req cacheRd% cacheWr%  asks  chars  src/task
+eden                 hidden   384 0.401     3.17  4.61      523     998    310    30.1    69.7  0.88    309    3.67
+eden                 control  384 0.013     3.45  4.80      529    1016    292    37.2    62.5  1.08    252    3.77
+none                 hidden   384 0.003     2.48  3.33      482     153    379     0.0     0.0  0.00      0    0.00
+none                 control  384 0.003     2.47  3.45      484     153    375     0.0     0.0  0.00      0    0.00
+tools                hidden   384 0.133     3.62  5.21      512    1274    266    76.4    23.3  0.00      0    0.00
+tools                control  384 0.005     3.64  5.43      499    1262    263    78.5    21.3  0.00      0    0.00
+both~NEW             hidden   384 0.630     4.49  6.31      513    1428    316    76.1    23.7  0.00    566    3.80
+both~NEW             control  384 0.010     4.76  6.53      501    1373    281    78.3    21.6  0.00    322    3.85
+eden~NEW             hidden   384 0.706     4.21  7.40      519    1008    338    72.4    27.3  0.56    564    3.73
+eden~NEW             control  384 0.016     5.32  7.88      521    1009    290    70.2    29.6  1.03    317    3.84
+paired (a - b), 95% bootstrap over tasks:
+  eden~NEW         - eden         hidden  n= 384 +0.305 (+0.253..+0.357)
+  eden~NEW         - eden         control n= 384 +0.003 (-0.016..+0.021)
+  eden~NEW         - tools        hidden  n= 384 +0.573 (+0.518..+0.625)
+  eden~NEW         - tools        control n= 384 +0.010 (+0.000..+0.023)
+  eden~NEW         - none         hidden  n= 384 +0.703 (+0.661..+0.747)
+  eden~NEW         - none         control n= 384 +0.013 (+0.000..+0.026)
+  both~NEW         - tools        hidden  n= 384 +0.497 (+0.440..+0.552)
+  both~NEW         - tools        control n= 384 +0.005 (-0.008..+0.018)
+  both~NEW         - eden         hidden  n= 384 +0.229 (+0.174..+0.286)
+  both~NEW         - eden         control n= 384 -0.003 (-0.016..+0.010)
+  eden             - tools        hidden  n= 384 +0.268 (+0.211..+0.326)
+  eden             - tools        control n= 384 +0.008 (-0.005..+0.021)
+  eden             - none         hidden  n= 384 +0.398 (+0.352..+0.448)
+  eden             - none         control n= 384 +0.010 (+0.000..+0.023)
+  tools            - none         hidden  n= 384 +0.130 (+0.096..+0.167)
+  tools            - none         control n= 384 +0.003 (-0.005..+0.013)
+
+== pi / ALL BLIND (5-8, 10, 11, 12)
+condition            kind     n   rate  wall p50  p90  ttft p50  in/req out/req cacheRd% cacheWr%  asks  chars  src/task
+eden                 hidden  1400 0.479     3.19  4.70      528    1004    275    41.5    58.2  1.04    259    3.47
+eden                 control 1400 0.033     3.40  4.92      533    1006    267    47.2    52.6  1.29    169    3.50
+none                 hidden  1400 0.004     2.25  3.89      487     145    330     0.0     0.0  0.00      0    0.00
+none                 control 1400 0.004     2.24  4.00      491     145    328     0.0     0.0  0.00      0    0.00
+tools                hidden  1400 0.169     3.51  5.35      517    1305    255    75.7    24.1  0.00      0    0.00
+tools                control 1400 0.006     3.50  5.41      517    1320    253    74.9    24.8  0.00      0    0.00
+both~NEW             hidden  1400 0.630     4.46  6.29      516    1406    277    76.5    23.3  0.00    432    3.56
+both~NEW             control 1400 0.019     4.67  6.35      512    1385    262    76.6    23.2  0.00    238    3.53
+eden~NEW             hidden  1400 0.707     4.03  7.48      526     992    292    71.5    28.3  0.73    429    3.61
+eden~NEW             control 1400 0.043     5.47  7.94      528     986    267    68.7    31.0  1.17    239    3.61
+paired (a - b), 95% bootstrap over tasks:
+  eden~NEW         - eden         hidden  n=1400 +0.228 (+0.204..+0.254)
+  eden~NEW         - eden         control n=1400 +0.010 (-0.003..+0.023)
+  eden~NEW         - tools        hidden  n=1400 +0.538 (+0.509..+0.566)
+  eden~NEW         - tools        control n=1400 +0.037 (+0.026..+0.049)
+  eden~NEW         - none         hidden  n=1400 +0.704 (+0.680..+0.727)
+  eden~NEW         - none         control n=1400 +0.039 (+0.029..+0.051)
+  both~NEW         - tools        hidden  n=1400 +0.461 (+0.434..+0.487)
+  both~NEW         - tools        control n=1400 +0.014 (+0.006..+0.021)
+  both~NEW         - eden         hidden  n=1400 +0.151 (+0.124..+0.178)
+  both~NEW         - eden         control n=1400 -0.014 (-0.023..-0.003)
+  eden             - tools        hidden  n=1400 +0.310 (+0.280..+0.340)
+  eden             - tools        control n=1400 +0.027 (+0.017..+0.038)
+  eden             - none         hidden  n=1400 +0.476 (+0.449..+0.503)
+  eden             - none         control n=1400 +0.029 (+0.019..+0.039)
+  tools            - none         hidden  n=1400 +0.166 (+0.146..+0.186)
+  tools            - none         control n=1400 +0.002 (-0.003..+0.007)
+
+== spend by harness and role (ledger; Phase 2 main matrix: run labels p2-pi-*, p2-h-*)
+harness  role          calls      usd   in/call  out/call cacheRd% cacheWr%  ttft p50  p90  $/1k runs
+pi       agent         30000   5.7082     1067      280    67.4    30.8      515   859     0.320
+pi       eden.cards     5563   1.0126     1776      246    74.2     0.1      496   888     0.057
+pi       eden.reader    8069   3.1903     3573      239    25.3     0.0      525   853     0.179
+pi       grader        17840   1.1700      616        8     0.0     0.0      515  1011     0.066
+pi       TOTAL         61472  11.0810   (17840 graded hidden/control runs)
+hermes   agent         19257   4.5199     4308      254    86.9    13.0      506   779     0.422
+hermes   eden.cards     3064   0.9273     2139      415    61.7     0.0      496   832     0.087
+hermes   eden.reader    3265   1.2955     3579      240    25.2     0.0      519   855     0.121
+hermes   grader        10704   0.6328      551        8     0.0     0.0      518   986     0.059
+hermes   TOTAL         36290   7.3755   (10704 graded hidden/control runs)
+
+ungraded hidden/control runs (no grader verdict, left out above): 0
