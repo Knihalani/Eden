@@ -19,6 +19,12 @@ import { plantHeldout9 } from "./hidden-heldout9";
 import { plantHeldout10 } from "./hidden-heldout10";
 import { plantHeldout11 } from "./hidden-heldout11";
 import { plantHeldout12 } from "./hidden-heldout12";
+import { plantTrain1 } from "./hidden-train1";
+import { plantTrain2 } from "./hidden-train2";
+import { plantTrain3 } from "./hidden-train3";
+import { plantTrain4 } from "./hidden-train4";
+import { plantTrain5 } from "./hidden-train5";
+import { plantTrain6 } from "./hidden-train6";
 
 export type { HiddenTask };
 export type Variant = "hidden" | "control";
@@ -50,9 +56,18 @@ export const SUITES: Record<string, Plant> = {
   heldout11: plantHeldout11,
   // blind, written after D85; measurement only
   heldout12: plantHeldout12,
+  // The broad tuning set: six suites written blind (each author saw only the world generator, the text helpers and
+  // the HiddenTask interface), one life area each, so a change must generalise across authors to show up. Tune on them.
+  train1: plantTrain1,
+  train2: plantTrain2,
+  train3: plantTrain3,
+  train4: plantTrain4,
+  train5: plantTrain5,
+  train6: plantTrain6,
 };
 export const SUITE_NAMES = Object.keys(SUITES);
 const HELDOUT_ALL = ["heldout", "heldout2", "heldout3", "heldout4"];
+const TRAIN = ["train1", "train2", "train3", "train4", "train5", "train6"];
 /**
  * Blind suites that have never been run: left out of `all`, so a tuning command with `--suite all` cannot spend them;
  * the blind run names them. A suite leaves this list once its blind run is recorded.
@@ -61,7 +76,8 @@ export const UNRUN_BLIND = ["heldout9", "heldout10", "heldout11", "heldout12"];
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n));
 
 /**
- * A `--suite` value: a comma list of suite names, `all` (every suite but the unrun blind ones), or `heldout-all`;
+ * A `--suite` value: a comma list of suite names, `all` (every suite but the unrun blind ones), `heldout-all`, or
+ * `train` (the six broad tuning suites);
  * unknown names throw. Deduplicated.
  */
 export function parseSuites(arg: string): string[] {
@@ -69,9 +85,10 @@ export function parseSuites(arg: string): string[] {
   for (const raw of arg.split(",")) {
     const name = raw.trim();
     if (!name) continue;
-    const names = name === "all" ? ALL : name === "heldout-all" ? HELDOUT_ALL : [name];
+    const names = name === "all" ? ALL : name === "heldout-all" ? HELDOUT_ALL : name === "train" ? TRAIN : [name];
     for (const n of names) {
-      if (!(n in SUITES)) throw new Error(`unknown suite "${n}" (known: ${SUITE_NAMES.join(", ")}, all, heldout-all)`);
+      if (!(n in SUITES))
+        throw new Error(`unknown suite "${n}" (known: ${SUITE_NAMES.join(", ")}, all, heldout-all, train)`);
       if (!out.includes(n)) out.push(n);
     }
   }
