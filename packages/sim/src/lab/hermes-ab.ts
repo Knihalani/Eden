@@ -8,7 +8,8 @@
  *                `tools`). Hermes' own toolsets (terminal, files, web, browser, code, memory, skills, delegation, cron)
  *                are all off: `enabled_toolsets` is the MCP toolsets only, so the agent is read-only.
  * - hermes+eden: the same, plus Eden as two integration points, both Hermes' own extension surfaces:
- *                Eden's MCP server (`createMcpServer`: `ask_context`, guided with `askGuard`), and the Eden plugin
+ *                Eden's MCP server (`createMcpServer`: `ask_context` with the standard description; the guided one only
+ *                when the config has `askGuard`, as ALL5 does and ALL3 does not), and the Eden plugin
  *                (packages/sim/lab/hermes/eden): `pre_llm_call` observes the turn and injects Eden's packet,
  *                `post_tool_call` reports each tool result, `transform_tool_result` appends packets queued since.
  *                `~variant`, `+flag` and `@w<ms>` as in pi-conditions.ts (hermes-conditions.ts).
@@ -34,10 +35,9 @@
  * `--hermes-src` is a hermes-agent checkout with its dependencies in `<src>/.venv` (`uv sync --frozen
  * --no-install-project`); the run records its commit.
  */
-import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { appendFileSync, cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { createInterface } from "node:readline";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
@@ -56,7 +56,6 @@ import { SourceMap } from "@eden/graph";
 import { Budget, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
-import { createMcpServer } from "@eden/server";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { REALISTIC, simSources, type SimSource } from "../sources";
 import type { World } from "../world";
@@ -79,7 +78,9 @@ import { DiskBridgeMaker } from "./bridge-disk";
 import { DiskCardMaker, samePath } from "./cards-disk";
 import { isCapError, labAccess, labModel, providerPrefs } from "./free";
 import { parseHermesConditions, type HermesCondition } from "./hermes-conditions";
-import { labRouter, type StreamHost, type TaskBinding } from "./hermes-host";
+import { edenMcpServer, labRouter, type StreamHost, type TaskBinding } from "./hermes-host";
+import { modelProxy, type RequestRecord } from "./hermes-proxy";
+import { Worker } from "./hermes-worker";
 import { parseVariants } from "./pi-conditions";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
 import { PRESETS } from "./presets";
@@ -241,7 +242,7 @@ interface TaskRecord {
   seed: number;
   wallMs: number;
   firstTokenMs: number | null;
-  requests: { startMs: number; firstTokenMs: number | null; endMs: number; in: number; out: number; cost: number }[];
+  requests: RequestRecord[];
   events: Timeline["events"];
   dropped: number;
   error?: string;
@@ -252,89 +253,55 @@ interface TaskRecord {
   /** Hermes' system prompt, in characters, and the tools it sent: the fixed cost of every request. */
   systemChars?: number;
   toolNames?: string[];
-}
-
-/** The usage a chat completion reports: a JSON body, or the last SSE chunk carrying `usage`. */
-interface Usage {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  cost?: number;
-}
-
-/** One Hermes worker: a Python process running one task at a time over JSON lines. */
-class Worker {
-  private proc: ChildProcessWithoutNullStreams;
-  private waiting: ((line: Record<string, unknown>) => void)[] = [];
-  private ready: Promise<void>;
-  private dead: string | null = null;
-
-  constructor(home: string, baseUrl: string, edenUrl: string, log: string) {
-    this.proc = spawn(HERMES_PY, ["-I", join(LAB_DIR, "worker.py")], {
-      env: {
-        PATH: process.env.PATH ?? "",
-        HOME: home,
-        HERMES_HOME: home,
-        HERMES_SRC,
-        HERMES_TIMEZONE: "UTC",
-        HERMES_LAB_BASE_URL: baseUrl,
-        EDEN_LAB_URL: edenUrl,
-        // Hermes' own TLS/proxy settings, if the machine needs them for anything it fetches on its own; the runner's
-        // routes are local and must not go through a proxy.
-        ...(process.env.HTTPS_PROXY ? { HTTPS_PROXY: process.env.HTTPS_PROXY } : {}),
-        NO_PROXY: "127.0.0.1,localhost",
-        no_proxy: "127.0.0.1,localhost",
-        ...(process.env.SSL_CERT_FILE ? { SSL_CERT_FILE: process.env.SSL_CERT_FILE } : {}),
-      },
-    });
-    this.proc.stderr.on("data", (d: Buffer) => appendFileSync(log, d));
-    const lines = createInterface({ input: this.proc.stdout });
-    let onReady: () => void = () => {};
-    this.ready = new Promise((r) => (onReady = r));
-    lines.on("line", (line) => {
-      let msg: Record<string, unknown>;
-      try {
-        msg = JSON.parse(line) as Record<string, unknown>;
-      } catch {
-        return;
-      }
-      if (msg.op === "ready") return onReady();
-      this.waiting.shift()?.(msg);
-    });
-    this.proc.on("exit", (code) => {
-      this.dead = `worker exited (${code}); see ${log}`;
-      onReady();
-      for (const w of this.waiting.splice(0)) w({ error: this.dead });
-    });
-  }
-
-  async run(req: Record<string, unknown>, timeoutMs: number): Promise<Record<string, unknown>> {
-    await this.ready;
-    if (this.dead) return { error: this.dead };
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        // A hung task takes its worker with it: the next task of the stream would read its late reply.
-        this.proc.kill("SIGKILL");
-        resolve({ error: `task timed out after ${timeoutMs} ms` });
-      }, timeoutMs);
-      this.waiting.push((msg) => {
-        clearTimeout(timer);
-        resolve(msg);
-      });
-      this.proc.stdin.write(`${JSON.stringify(req)}\n`);
-    });
-  }
-
-  get alive(): boolean {
-    return this.dead === null;
-  }
-
-  close(): void {
-    this.proc.stdin.end();
-    setTimeout(() => this.proc.kill("SIGKILL"), 5_000).unref();
-  }
+  /** Hermes' own count of its API calls for the task, beside the requests the proxy booked (`requests`). */
+  apiCalls?: number;
 }
 
 const TASK_TIMEOUT_MS = 10 * 60_000;
+/** A worker that died is started again this many times in a stream before the stream stops. */
+const RESPAWNS = 2;
+let stoppedStreams = 0;
+
+/** A Hermes worker for one stream, with its own HERMES_HOME and the stream's local routes. */
+function startWorker(id: string, home: string): Worker {
+  const base = `http://127.0.0.1:${port}/s/${id}`;
+  return new Worker(
+    [HERMES_PY, "-I", join(LAB_DIR, "worker.py")],
+    {
+      PATH: process.env.PATH ?? "",
+      HOME: home,
+      HERMES_HOME: home,
+      HERMES_SRC,
+      HERMES_TIMEZONE: "UTC",
+      HERMES_LAB_BASE_URL: `${base}/v1`,
+      EDEN_LAB_URL: `${base}/eden`,
+      // Hermes' own TLS/proxy settings, if the machine needs them for anything it fetches on its own; the runner's
+      // routes are local and must not go through a proxy.
+      ...(process.env.HTTPS_PROXY ? { HTTPS_PROXY: process.env.HTTPS_PROXY } : {}),
+      NO_PROXY: "127.0.0.1,localhost",
+      no_proxy: "127.0.0.1,localhost",
+      ...(process.env.SSL_CERT_FILE ? { SSL_CERT_FILE: process.env.SSL_CERT_FILE } : {}),
+    },
+    // Beside the home, not in it: Hermes tidies its home on start.
+    `${home}.log`,
+  );
+}
+
+/**
+ * Starts a stream's worker and waits for it to be ready, before any task's timeline starts (its Python start and MCP
+ * connection are the stream's cost, not the first task's). In an Eden condition the worker must have Eden's
+ * `ask_context`: a stream without it would run the Eden arm without Eden's tool.
+ */
+async function readyWorker(id: string, home: string, eden: boolean): Promise<Worker> {
+  const worker = startWorker(id, home);
+  const ready = await worker.started();
+  if (!ready.ok) throw new Error(`stream ${id}: the Hermes worker did not start: ${ready.error}`);
+  if (eden && !ready.mcpTools.some((t) => t.endsWith("ask_context"))) {
+    worker.close();
+    throw new Error(`stream ${id}: Hermes has no ask_context (MCP tools: ${ready.mcpTools.join(", ") || "none"})`);
+  }
+  return worker;
+}
 const streams = new Map<string, StreamHost>();
 let port = 0;
 
@@ -504,24 +471,23 @@ async function runWorld(
       return server;
     },
     edenServer() {
-      const t = task;
-      if (!eden || !partner || !t) return null;
-      // Eden's own MCP server, over a view of the partner that records what each answer cited (uptake).
-      const view = {
-        config: partner.config,
-        ask: async (q: Parameters<ContextPartner["ask"]>[0]) => {
-          const span = t.tl.begin("tool.ask_context", "eden", "path", { tool: "ask_context" });
-          const a = await partner.ask(q);
-          const question = sanitizeForStore(q.question);
-          t.uptake.answer(a, question);
-          t.tl.end(span, { items: a.citations.length });
-          t.tl.point("eden.ask", { question: question.slice(0, QUESTION_CHARS), items: a.citations.length });
-          return a;
-        },
-      } as unknown as ContextPartner;
-      return createMcpServer(view, { ...scope, sessionId: t.sessionId });
+      if (!eden || !partner) return null;
+      // Eden's own MCP server; each answer is recorded on the task that asked (uptake), and refused between tasks.
+      return edenMcpServer(partner, scope, () => {
+        const t = task;
+        if (!t) return null;
+        return {
+          sessionId: t.sessionId,
+          answered(a, q, startedAt) {
+            const question = sanitizeForStore(q);
+            t.uptake.answer(a, question);
+            t.tl.span("tool.ask_context", "eden", "path", startedAt, performance.now(), { items: a.citations.length });
+            t.tl.point("eden.ask", { question: question.slice(0, QUESTION_CHARS), items: a.citations.length });
+          },
+        };
+      });
     },
-    model: (path, req) => proxyModel(path, req, () => task),
+    model: (path, req) => proxy(path, req, () => task),
   };
   streams.set(id, host);
 
@@ -530,13 +496,6 @@ async function runWorld(
   mkdirSync(home, { recursive: true });
   writeFileSync(join(home, "config.yaml"), hermesConfig(id, eden));
   if (eden) cpSync(join(LAB_DIR, "eden"), join(home, "plugins/eden"), { recursive: true });
-  const worker = new Worker(
-    home,
-    `http://127.0.0.1:${port}/s/${id}/v1`,
-    `http://127.0.0.1:${port}/s/${id}/eden`,
-    // Beside the home, not in it: Hermes tidies its home on start.
-    `${home}.log`,
-  );
   const toolsets = ["mcp-sources", ...(eden ? ["mcp-eden"] : [])];
 
   const out: RunResult[] = [];
@@ -548,14 +507,25 @@ async function runWorld(
     await partner.observe({ ...who, at: clock, kind: "session_end" });
     previous = null;
   };
+  let worker: Worker | null = null;
+  let respawns = 0;
   try {
-    for (const t of tasks) {
+    worker = await readyWorker(id, home, eden);
+    const queue = [...tasks];
+    while (queue.length > 0) {
+      const t = queue.shift()!;
       if (exhausted()) break;
       if (PACER.remaining < TASK_REQUESTS) {
         capStopped++;
         break;
       }
-      if (!worker.alive) throw new Error(`stream ${id}: the Hermes worker died`);
+      // A worker that died (a crash, or a timeout that killed it) is started again before the next task is bound.
+      if (!worker.alive) {
+        if (respawns++ >= RESPAWNS) throw new Error(`the Hermes worker died ${respawns} times`);
+        console.error(`stream ${id} (${condition}): the Hermes worker died; starting it again`);
+        worker.close();
+        worker = await readyWorker(id, home, eden);
+      }
       clock += 3_600_000;
       if (sync) await sync.tick();
       await closePrevious();
@@ -619,7 +589,7 @@ async function runWorld(
       };
       task = { binding, tl, record, r, sessionId, uptake };
       tl.point("task.start", { condition, kind: t.kind });
-      const reply = await worker.run(
+      const sent = await worker.run(
         {
           op: "run",
           task: t.id,
@@ -635,6 +605,19 @@ async function runWorld(
         TASK_TIMEOUT_MS,
       );
       task = null;
+      // Never sent (the worker died between its last task and this one): not a task, not an error. Its timeline is
+      // dropped and the loop tries again on a fresh worker.
+      if (!sent.ran) {
+        if (respawns++ >= RESPAWNS) throw new Error(`the Hermes worker died ${respawns} times`);
+        console.error(`stream ${id} (${condition}): ${t.id} was not sent (worker dead); starting it again`);
+        worker.close();
+        worker = await readyWorker(id, home, eden);
+        bySession.delete(sessionId);
+        clock -= 3_600_000; // its hour is given back: the retry takes it
+        queue.unshift(t);
+        continue;
+      }
+      const reply = sent.msg;
       const error = typeof reply.error === "string" && reply.error ? reply.error : undefined;
       if (error) r.error = PACER.exhausted ? `request cap reached: ${error.slice(0, 120)}` : error;
       r.answer = typeof reply.answer === "string" ? reply.answer : "";
@@ -648,6 +631,7 @@ async function runWorld(
       record.firstTokenMs = record.requests[0]?.firstTokenMs ?? null;
       if (typeof reply.systemChars === "number") record.systemChars = reply.systemChars;
       if (Array.isArray(reply.toolNames)) record.toolNames = reply.toolNames as string[];
+      if (typeof reply.apiCalls === "number") record.apiCalls = reply.apiCalls;
       if (r.error) record.error = r.error.slice(0, 200);
       if (partner) Object.assign(record, uptake.fields());
       out.push(r);
@@ -656,9 +640,16 @@ async function runWorld(
       previous = { sessionId, r };
     }
     await closePrevious();
+  } catch (e) {
+    // A stopped stream keeps what it ran: its results stand, the run is marked partial and says why.
+    stoppedStreams++;
+    console.error(
+      `stream ${id} (${condition}) stopped after ${out.length} tasks: ${e instanceof Error ? e.message : e}`,
+    );
   } finally {
     current = null;
-    worker.close();
+    task = null;
+    worker?.close();
     streams.delete(id);
   }
   return out;
@@ -689,167 +680,20 @@ async function gradeTask(t: Task, r: RunResult, tl: Timeline): Promise<void> {
 }
 
 let orphanRequests = 0;
-/**
- * Hermes' model endpoint. A chat completion goes to OpenRouter through the pacer, with the run's usage accounting
- * and provider preferences added and `max_tokens` held to the agent's allowance; it is reserved against the budget at
- * its worst case and settled at OpenRouter's reported cost. Its tokens, cost, first token and end go on the running
- * task's timeline; a request outside any task (none is expected) is counted as an orphan. Anything else Hermes asks
- * the endpoint (the model list) is forwarded as is, without the key.
- */
-async function proxyModel(
-  path: string,
-  req: Request,
-  running: () => { tl: Timeline; record: TaskRecord; r: RunResult } | null,
-): Promise<Response> {
-  const upstream = `https://openrouter.ai/api/v1/${path}`;
-  if (!(req.method === "POST" && path === "chat/completions")) {
-    const res = await fetch(upstream, { method: req.method });
-    return new Response(res.body, {
-      status: res.status,
-      headers: { "content-type": res.headers.get("content-type") ?? "" },
-    });
-  }
-  let body: Record<string, unknown>;
-  try {
-    body = (await req.json()) as Record<string, unknown>;
-  } catch {
-    return new Response(JSON.stringify({ error: { message: "body must be JSON" } }), { status: 400 });
-  }
-  const t = running();
-  if (!t) orphanRequests++;
-  const asked = typeof body.max_tokens === "number" ? body.max_tokens : AGENT_MAX_TOKENS;
-  const sent = {
-    ...body,
-    model: MODEL,
-    max_tokens: Math.min(asked, AGENT_MAX_TOKENS),
-    usage: { include: true },
-    ...providerPrefs(ACCESS),
-  };
-  delete (sent as Record<string, unknown>).max_completion_tokens;
-  if (DUMP) appendFileSync(DUMP, `${JSON.stringify({ task: t?.record.task ?? null, body: sent })}\n`);
-  const est = worstCase(MODEL, JSON.stringify(body.messages ?? "").length, AGENT_MAX_TOKENS);
-  try {
-    reserve(est);
-  } catch (e) {
-    return new Response(JSON.stringify({ error: { message: e instanceof Error ? e.message : "budget" } }), {
-      status: 402,
-    });
-  }
-  const at = performance.now();
-  const turn = (t?.record.requests.length ?? 0) + 1;
-  const span = t?.tl.begin("model.request", "model", "path", { turn });
-  let first: number | null = null;
-  const finish = (usage: Usage | undefined, error?: string) => {
-    const cost =
-      usage?.cost ?? (usage ? worstCase(MODEL, (usage.prompt_tokens ?? 0) * 4, usage.completion_tokens ?? 0) : 0);
-    settle(est, cost, "agent");
-    if (!t || span === undefined) return;
-    const end = performance.now();
-    const inTok = usage?.prompt_tokens ?? 0;
-    const outTok = usage?.completion_tokens ?? 0;
-    t.r.modelCalls++;
-    t.r.promptTokens += inTok;
-    t.r.completionTokens += outTok;
-    t.r.costUsd += cost;
-    t.tl.end(span, { in: inTok, out: outTok, cost, ...(error ? { error } : {}) });
-    t.record.requests.push({
-      startMs: t.tl.at(at),
-      firstTokenMs: first === null ? null : Math.round(first - at),
-      endMs: t.tl.at(end),
-      in: inTok,
-      out: outTok,
-      cost,
-    });
-  };
-  let res: Response;
-  try {
-    res = await ACCESS.fetch(upstream, {
-      method: "POST",
-      headers: { authorization: `Bearer ${KEY}`, "content-type": "application/json" },
-      body: JSON.stringify(sent),
-      signal: AbortSignal.timeout(120_000),
-    });
-  } catch (e) {
-    finish(undefined, e instanceof Error ? e.name : "error");
-    return new Response(
-      JSON.stringify({ error: { message: isCapError(e) ? "request cap reached" : "upstream failed" } }),
-      {
-        status: 503,
-      },
-    );
-  }
-  const type = res.headers.get("content-type") ?? "application/json";
-  if (!res.ok || !res.body) {
-    const text = await res.text();
-    finish(undefined, `http ${res.status}`);
-    return new Response(text, { status: res.status, headers: { "content-type": type } });
-  }
-  if (!type.includes("text/event-stream")) {
-    const text = await res.text();
-    first = performance.now();
-    let usage: Usage | undefined;
-    try {
-      usage = (JSON.parse(text) as { usage?: Usage }).usage;
-    } catch {}
-    finish(usage);
-    return new Response(text, { status: res.status, headers: { "content-type": type } });
-  }
-  // A stream: passed through as it arrives, read on the side for the first token and the final usage. It is booked
-  // once, when it ends, fails or is cancelled (Hermes may stop reading a stream it has finished with).
-  let usage: Usage | undefined;
-  let buffer = "";
-  let booked = false;
-  const book = (error?: string) => {
-    if (booked) return;
-    booked = true;
-    finish(usage, error);
-  };
-  const decoder = new TextDecoder();
-  const read = (chunk: Uint8Array) => {
-    buffer += decoder.decode(chunk, { stream: true });
-    let nl: number;
-    while ((nl = buffer.indexOf("\n")) >= 0) {
-      const line = buffer.slice(0, nl).trim();
-      buffer = buffer.slice(nl + 1);
-      if (!line.startsWith("data:") || line === "data: [DONE]") continue;
-      try {
-        const c = JSON.parse(line.slice(5)) as {
-          usage?: Usage;
-          choices?: { delta?: { content?: string; tool_calls?: unknown[]; reasoning?: string } }[];
-        };
-        const d = c.choices?.[0]?.delta;
-        if (first === null && d && (d.content || d.tool_calls?.length || d.reasoning)) {
-          first = performance.now();
-          if (t) t.tl.point("model.first-token", { turn }, first);
-        }
-        if (c.usage) usage = c.usage;
-      } catch {}
-    }
-  };
-  const reader = res.body.getReader();
-  const passed = new ReadableStream<Uint8Array>({
-    async pull(ctl) {
-      try {
-        const { done, value } = await reader.read();
-        if (done) {
-          book();
-          ctl.close();
-          return;
-        }
-        read(value);
-        ctl.enqueue(value);
-      } catch (e) {
-        book(e instanceof Error ? e.name : "stream error");
-        ctl.error(e);
-      }
-    },
-    cancel(reason) {
-      book("cancelled");
-      return reader.cancel(reason);
-    },
-  });
-  return new Response(passed, { status: res.status, headers: { "content-type": type } });
-}
+/** Hermes' model endpoint (hermes-proxy.ts): the pacer, the run's budget, and the key kept in this process. */
+const proxy = modelProxy({
+  key: KEY ?? "",
+  fetch: ACCESS.fetch,
+  model: MODEL,
+  maxTokens: AGENT_MAX_TOKENS,
+  extraBody: providerPrefs(ACCESS),
+  reserve,
+  settle: (est, cost) => settle(est, cost, "agent"),
+  price: (chars, out) => worstCase(MODEL, chars, out),
+  isCapError,
+  ...(DUMP ? { dump: (line: unknown) => appendFileSync(DUMP, `${JSON.stringify(line)}\n`) } : {}),
+  onOrphan: () => orphanRequests++,
+});
 
 const worlds = SEEDS.flatMap((seed) =>
   SUITE_LIST.flatMap((suite) =>
@@ -888,6 +732,8 @@ const lanes = Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, async (
     try {
       results.push(...(await runWorld(job.id, job.w.world, job.w.seed, job.w.tasks, job.c, records, grading)));
     } catch (e) {
+      // Before its first task (its Eden could not be set up): stopped with nothing run.
+      stoppedStreams++;
       console.error(`stream ${job.id} (${job.c.name}) stopped: ${e instanceof Error ? e.message : e}`);
     }
   }
@@ -915,7 +761,8 @@ writeFileSync(
       ...(ACCESS.allowLogging ? { allowLogging: true } : {}),
       requests: PACER.summary(),
       orphanRequests,
-      partial: capStopped > 0 || PACER.refused > 0,
+      partial: capStopped > 0 || PACER.refused > 0 || stoppedStreams > 0,
+      stoppedStreams,
       maxIterations: MAX_ITERATIONS,
       spend,
       timeline: TIMELINE,
@@ -932,5 +779,6 @@ console.error(
   `spent $${spent.toFixed(4)} (agent $${spend.agent.toFixed(4)}, eden $${spend.eden.toFixed(4)}, grader ` +
     `$${spend.grader.toFixed(4)}); ${results.length} runs, ${ungraded} ungraded → ${OUT}, timeline ${TIMELINE}; ` +
     `${PACER.sent} requests (${PACER.retried} retried, ${JSON.stringify(PACER.statuses)}), ${orphanRequests} orphan` +
-    (capStopped || PACER.refused ? `; PARTIAL: request cap reached (${capStopped} streams stopped early)` : ""),
+    (capStopped || PACER.refused ? `; PARTIAL: request cap reached (${capStopped} streams stopped early)` : "") +
+    (stoppedStreams ? `; PARTIAL: ${stoppedStreams} streams stopped on a failure (logged above)` : ""),
 );

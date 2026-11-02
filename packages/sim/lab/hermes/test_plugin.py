@@ -57,7 +57,8 @@ class PluginTest(unittest.TestCase):
         self.assertEqual(plugin.transform_tool_result(tool_name="mcp_sources_search_gmail", result="R"), "R\n\nLATER")
         self.assertIsNone(plugin.post_tool_call(tool_name="mcp_sources_search_gmail", result={"a": 1}))
         self.assertEqual([b["token"] for _, b in Eden.seen], ["tok", "tok", "tok"])
-        self.assertEqual(Eden.seen[2], ("tool", {"tool": "mcp_sources_search_gmail", "output": '{"a": 1}', "token": "tok"}))
+        want = {"tool": "mcp_sources_search_gmail", "output": '{"a": 1}', "token": "tok"}
+        self.assertEqual(Eden.seen[2], ("tool", want))
 
     def test_eden_own_answers_are_not_reported_back(self):
         plugin.post_tool_call(tool_name="mcp_eden_ask_context", result="answer")
@@ -76,6 +77,11 @@ class PluginTest(unittest.TestCase):
         self.assertIsNone(plugin.transform_tool_result(tool_name="t", result="R"))
         del os.environ["EDEN_LAB_URL"]
         self.assertIsNone(plugin.pre_llm_call(user_message="x"))
+
+    def test_a_result_json_cannot_encode_is_sent_as_text(self):
+        self.assertIsNone(plugin.post_tool_call(tool_name="t", result={"when": object()}))
+        self.assertEqual(Eden.seen[0][0], "tool")
+        self.assertIn("object object", Eden.seen[0][1]["output"])
 
     def test_odd_inputs_from_the_host_are_ignored(self):
         self.assertIsNone(plugin.pre_llm_call(user_message=None))
