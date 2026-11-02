@@ -242,6 +242,19 @@ describe("the reader's prompt and output (reader.ts)", () => {
     expect(model.calls[0]!.json).toBe(true);
     expect(model.calls[0]!.maxTokens).toBeGreaterThanOrEqual(1_000);
   });
+
+  test("a reply in lines: why, same, kind; a lookalike or another thing is rejected; none is a readable nothing", () => {
+    const got = parseReaderFull(
+      "2|payments to Harlow on hold until 9 Nov|y|blocks\n0|about another invoice|n|blocks\n1|hold lifted|y|lookalike",
+      3,
+    )!;
+    expect(got.bears).toEqual([{ i: 2, kind: "blocks", why: "payments to Harlow on hold until 9 Nov" }]);
+    expect(got.rejected).toEqual([0, 1]);
+    expect(parseReaderFull("none", 3)).toEqual({ bears: [], rejected: [] });
+    expect(parseReaderFull("I cannot tell.", 3)).toBeNull();
+    // An older JSON reply is still read.
+    expect(parseReaderFull('{"bears":[{"i":1,"k":"done","why":"paid"}]}', 3)!.bears[0]!.kind).toBe("done");
+  });
 });
 
 describe("the verdict cache (AskReader)", () => {

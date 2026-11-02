@@ -207,7 +207,12 @@ export function cardLine(card: Card): string {
 }
 
 /** One candidate, rendered for the reader: redacted and bounded. */
-export function readerItem(item: ContextItem, focus: ReadonlySet<string>, card?: Card): ReaderItem {
+export function readerItem(
+  item: ContextItem,
+  focus: ReadonlySet<string>,
+  card?: Card,
+  chars = READER_ITEM_CHARS,
+): ReaderItem {
   const date = item.meta?.start ?? (item.updatedAt !== undefined ? new Date(item.updatedAt).toISOString() : "");
   return {
     id: item.id,
@@ -217,7 +222,7 @@ export function readerItem(item: ContextItem, focus: ReadonlySet<string>, card?:
       .slice(0, READER_TITLE_CHARS),
     date: sanitizeForStore(date).slice(0, 16),
     from: senderOf(item.text),
-    text: relevantText(item.text, focus),
+    text: relevantText(item.text, focus, chars),
     ...(card && card.kind !== "none" ? { card: cardLine(card) } : {}),
     hash: cardKey(item),
   };
@@ -340,6 +345,21 @@ export function parseReaderFull(
   count: number,
 ): { bears: { i: number; kind: ReaderKind; why: string }[]; rejected: number[] } | null {
   let v: Record<string, unknown>;
+  // A reply in lines (`i|why|same|kind`, or `none`), a format tried and dropped (free lines rambled without JSON
+  // mode, docs/research/haiku-phase3.md), is still read rather than thrown away.
+  if (!text.includes("{")) {
+    const lines = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (lines.length === 1 && /^none\.?$/i.test(lines[0]!)) return { bears: [], rejected: [] };
+    const entries = lines
+      .map((l) => l.split("|").map((x) => x.trim()))
+      .filter((f) => f.length >= 4 && /^\d+$/.test(f[0]!))
+      .map((f) => ({ i: Number(f[0]), why: f[1], same: /^y/i.test(f[2]!), k: f[3]!.toLowerCase() }));
+    if (entries.length === 0) return null;
+    text = JSON.stringify({ bears: entries });
+  }
   try {
     const start = text.indexOf("{");
     if (start < 0) return null;

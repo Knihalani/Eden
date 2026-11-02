@@ -226,7 +226,7 @@ export interface ReaderReport {
   pool: string[];
   flagged: { id: string; kind: ReaderKind }[];
   /** "read" (a verdict, from a call or the cache), "late" (the wait ran out), "none" (refused, failed, unreadable). */
-  outcome: "read" | "late" | "none";
+  outcome: "read" | "late" | "none" | "gated";
   waitedMs: number;
   /** Whether the answer said the reader found nothing that binds (`askReaderClear`). */
   clear: boolean;
@@ -699,7 +699,7 @@ export class ContextPartner {
     if (!push) return result;
     let settled = false;
     void push.then(() => (settled = true));
-    const left = (options.waitMs ?? 0) - (performance.now() - t0);
+    const left = Math.min(options.waitMs ?? 0, this.config.readerPushWaitMs) - (performance.now() - t0);
     if (left > 0) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       await Promise.race([push, new Promise((r) => (timer = setTimeout(r, left)))]);
@@ -1601,11 +1601,30 @@ export class ContextPartner {
             cue.arrived ?? this.now(),
           )
         : new Map();
+    // `readerGate`: no call when none of the request's own candidates could constrain it: no card of a constraint kind
+    // (or a state change or a thing done) and no constraint wording. Bulk mail never counts. Standing items do not
+    // open the gate: they are on file for every request.
+    if (this.config.readerGate) {
+      const constraintLike = (x: Scored) => {
+        if (bulkMail(x.item)) return false;
+        const card = cards.get(x.item.id);
+        if (card && (DIGEST_KINDS.has(card.kind) || card.kind === "status-change" || card.kind === "already-done")) {
+          return true;
+        }
+        return mayConstrain(`${x.item.title}. ${x.item.text}`.toLowerCase());
+      };
+      if (!pool.slice(standingCount).some(constraintLike)) {
+        report("gated");
+        return null;
+      }
+    }
     const input: ReaderInput = {
       request: main,
       ...(request && cue.raw !== request ? { question: cue.raw } : {}),
       // A standing item is read without the request's focus, so its text is the same for every request of the user.
-      items: pool.map((x, i) => readerItem(x.item, i < standingCount ? NO_FOCUS : focus, cards.get(x.item.id))),
+      items: pool.map((x, i) =>
+        readerItem(x.item, i < standingCount ? NO_FOCUS : focus, cards.get(x.item.id), this.config.askReaderItemChars),
+      ),
       ...(standingCount > 0 ? { standing: standingCount } : {}),
       today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
     };
