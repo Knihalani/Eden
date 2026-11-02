@@ -84,7 +84,7 @@ import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
 import { DiskBridgeMaker } from "./bridge-disk";
 import { DiskCardMaker } from "./cards-disk";
-import { labAccess, labModel } from "./free";
+import { keyFor, labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
 import { record, tidy } from "./ledger";
 import { Timeline } from "./timeline";
@@ -176,9 +176,8 @@ const PUSH = args.includes("--push");
 const LEAD = opt("lead-in", "") as DraftMode | "";
 if (LEAD && LEAD !== "clause" && LEAD !== "half") throw new Error("--lead-in must be clause or half");
 const TYPING_MS = Number(opt("typing-ms", "1500"));
-const KEY = process.env.OPENROUTER_API_KEY;
-if (LIVE && !KEY) throw new Error("--judge live needs OPENROUTER_API_KEY");
 const MODEL = opt("model", "z-ai/glm-5.3-flash");
+const KEY = LIVE ? keyFor(MODEL) : undefined;
 /** The judge's requests: paced, capped and retried, with the run's logging choice (free.ts). */
 const ACCESS = labAccess(args, LIVE ? [MODEL] : []);
 const TIMELINE = opt("timeline", "");
@@ -373,7 +372,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     sourceMap: new SourceMap(":memory:", { seed }),
     cache,
     budget: new Budget(),
-    model: LIVE ? metered(labModel(ACCESS, { apiKey: KEY!, model: MODEL })) : null,
+    model: LIVE ? metered(labModel(ACCESS, { apiKey: KEY!, model: MODEL }, "eden.judge")) : null,
     planner: new QueryPlanner({ seed }),
     now: () => clock,
     config: TIME > 0 ? { sourceTimeoutMs: 1_500 * TIME, ...CONFIG } : CONFIG,

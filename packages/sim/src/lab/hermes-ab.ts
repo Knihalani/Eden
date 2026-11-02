@@ -342,7 +342,7 @@ async function runWorld(
     ),
   );
   const cardModel = () =>
-    meteredModel(labModel(ACCESS, { apiKey: KEY!, model: CARD_MODEL }), (start, end, data) =>
+    meteredModel(labModel(ACCESS, { apiKey: KEY!, model: CARD_MODEL }, "eden.cards"), (start, end, data) =>
       current?.span("eden.cards", "eden", "bg", start, end, data),
     );
   const cardMaker = (): CardMaker =>
@@ -355,7 +355,7 @@ async function runWorld(
       : undefined;
   const liveBridge = () =>
     new ModelBridgeMaker(
-      meteredModel(labModel(ACCESS, { apiKey: KEY!, model: BRIDGE_MODEL }), (start, end, data) =>
+      meteredModel(labModel(ACCESS, { apiKey: KEY!, model: BRIDGE_MODEL }, "eden.bridge"), (start, end, data) =>
         current?.span("eden.bridge", "eden", "bg", start, end, data),
       ),
     );

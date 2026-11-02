@@ -409,8 +409,9 @@ async function runWorld(
   );
   // `cards`: the enrichment model, metered against the run's cap and booked to Eden's spend like its judge.
   const cardModel = (sort: "" | "price") =>
-    meteredModel(labModel(ACCESS, { apiKey: KEY!, model: CARD_MODEL, ...(sort ? { sort } : {}) }), (start, end, data) =>
-      current?.span("eden.cards", "eden", "bg", start, end, data),
+    meteredModel(
+      labModel(ACCESS, { apiKey: KEY!, model: CARD_MODEL, ...(sort ? { sort } : {}) }, "eden.cards"),
+      (start, end, data) => current?.span("eden.cards", "eden", "bg", start, end, data),
     );
   // `--card-sort price` (D66): a batch cut off at the cap is sent again with default routing.
   const liveCards = (): CardMaker =>
@@ -425,7 +426,7 @@ async function runWorld(
   // `bridgeQuery`: replayed queries first, the rest made live (booked to Eden like its judge).
   const liveBridge = () =>
     new ModelBridgeMaker(
-      meteredModel(labModel(ACCESS, { apiKey: KEY!, model: BRIDGE_MODEL }), (start, end, data) =>
+      meteredModel(labModel(ACCESS, { apiKey: KEY!, model: BRIDGE_MODEL }, "eden.bridge"), (start, end, data) =>
         current?.span("eden.bridge", "eden", "bg", start, end, data),
       ),
     );
@@ -457,7 +458,7 @@ async function runWorld(
         cache: new ItemCache(),
         budget: new Budget(),
         model: judge
-          ? meteredModel(labModel(ACCESS, { apiKey: KEY!, model: MODEL }), (start, end, data) =>
+          ? meteredModel(labModel(ACCESS, { apiKey: KEY!, model: MODEL }, "eden.judge"), (start, end, data) =>
               current?.span("eden.model", "eden", "bg", start, end, data),
             )
           : null,
