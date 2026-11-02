@@ -44,11 +44,12 @@ comes from a command run in this session. The committed outputs are in `packages
     - Not adopted.
 - **Measured and dropped:**
   - reader notes inside pushed packets (+3.6 points, noise);
-  - intent hits leading the pool (no change);
+  - intent hits leading the pool (+8 hidden and +2 decoys against NEW2 v7: the pool already held them, so a
+    reordering; the flag was removed);
   - standing items of every card kind (more decoys flagged);
   - a 40-item standing list (worse);
-  - a line-format reply in place of JSON. Without JSON mode Haiku rambled and mislabelled, and hidden fell from 258
-    to about 200 on train.
+  - a line-format reply in place of JSON. Without JSON mode Haiku rambled and mislabelled, and NEW2's hidden fell
+    from 291 (JSON, prompt v7) to 198–210 on train.
 - **Spend:** $18.04 of the phase's $30 cap. The campaign total is $42.40 across both ledgers: $24.36 for Phases 1 and
   2 (cap $40) and $18.04 here (cap $30).
 
@@ -75,7 +76,7 @@ Three measured facts bound what is possible here:
    - Per call, about 2,800 uncached input tokens (the request's candidates) cost about $0.00028; about 200 output
      tokens cost about $0.0001.
    - Fewer and shorter candidates (NEWL) cut 28%. A cached per-user prefix helps only for what repeats across
-     requests (NEW2's standing list read 60–74% of its prompt from the cache).
+     requests (with a 20-item standing list, 55–68% of the prompt was read from the cache; 74% with 40 items).
    - The gate skips a request whose candidates hold nothing constraint-like. Every simulated request has such
      candidates by design, so it skipped 2–10 of 768 on train. Its saving on real traffic, where most requests have
      no constraint, is not measured here.
@@ -93,7 +94,7 @@ reader flagged.
 | + standing 20, cached prefix (v6; questions read in asks only) | 269 | 88 | 19 | 7,128 / 263 | 1,508 / 2,038 | 0.000469 |
 | + every request read (NEW2, v6) | 299 | 96 | 29 | 7,063 / 259 | 1,501 / 2,020 | 0.000473 |
 | NEW2, prompt v7 | 291 | 94 | 26 | 7,062 / 204 | 1,302 / 1,818 | 0.000427 |
-| NEW2, push only blocks/limits/done | 276 | 86 | 29 | (replayed) | | |
+| NEW2 (v6), push only blocks/limits/done: compare with the v6 row (299) | 276 | 86 | 29 | (replayed) | | |
 | NEW2 + intent hits lead the pool | 299 | 96 | 28 | 7,064 / 204 | 1,265 / 1,742 | 0.000424 |
 | NEW2, standing of every card kind, 20 / 30 | 287 / 291 | 101 / 100 | 34 / 32 | 6,851 / 209 | 1,277 / 1,745 | 0.000421 |
 | NEW2, line-format reply (v8), 3 pool sizes | 198–210 | 96–98 | 32–34 | 5,582–7,047 / 180–204 | 1,329–1,410 | 0.000295–0.000427 |
@@ -172,11 +173,16 @@ Points, held-out 13: hidden fact raised, and agent + Eden cost per 1k hidden tas
   - `askReaderStanding` (with the cached standing prefix);
   - `askReaderStandingKinds`, `askReaderItemChars`;
   - `readerPushKinds`, `readerPushNotes`, `readerPushWaitMs`;
-  - `readerGate`, `askReaderIntent`.
+  - `readerGate`.
+
+  `askReaderIntent` (intent hits leading the pool) was tried and removed.
 
   `askReaderQuestions` now also widens `readerPush` to every request.
 
 ## Not done, and why
+
+- **Held-out 13 is still listed in `UNRUN_BLIND`** beside held-out 9–12, all now run. The registry tests rely on
+  that list, so moving them out is a separate change.
 
 - **The ingest-time cascade:** sync-time constraint records, a distilled scorer, batch backfill. Its first tier is
   what ALL3's cards already do with no model at request time (ALL3: 53.1% on held-out 13). The tier above it is the

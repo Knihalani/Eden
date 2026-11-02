@@ -174,6 +174,23 @@ describe("the reader's prompt and output (reader.ts)", () => {
     expect(m[2]!.cache).toBeUndefined();
   });
 
+  test("askReaderItemChars: an item is read in at most that many characters; the key changes with it", () => {
+    const long = item(
+      "x",
+      "Harlow",
+      Array.from(
+        { length: 30 },
+        (_, n) => `Harlow invoice ${n} for the venue deposit is on hold until review ${n}.`,
+      ).join(" "),
+    );
+    expect(readerItem(long, new Set(["harlow"]), undefined, 120).text.length).toBeLessThanOrEqual(120);
+    expect(readerItem(long, new Set(["harlow"])).text.length).toBeGreaterThan(120);
+    const a = { ...input(1), items: [readerItem(long, new Set())] };
+    const b = { ...input(1), items: [readerItem(long, new Set(), undefined, 120)] };
+    expect(readerKey(a)).not.toBe(readerKey(b));
+    expect(readerKey(a)).not.toBe(readerKey({ ...a, standing: 1 }));
+  });
+
   test("the instructions hold no date or data, so a provider can cache them", () => {
     const m = readerMessages(input());
     expect(m[0]!.content).toBe(READER_SYSTEM);
@@ -241,19 +258,6 @@ describe("the reader's prompt and output (reader.ts)", () => {
     expect(got.bears).toBeNull();
     expect(model.calls[0]!.json).toBe(true);
     expect(model.calls[0]!.maxTokens).toBeGreaterThanOrEqual(1_000);
-  });
-
-  test("a reply in lines: why, same, kind; a lookalike or another thing is rejected; none is a readable nothing", () => {
-    const got = parseReaderFull(
-      "2|payments to Harlow on hold until 9 Nov|y|blocks\n0|about another invoice|n|blocks\n1|hold lifted|y|lookalike",
-      3,
-    )!;
-    expect(got.bears).toEqual([{ i: 2, kind: "blocks", why: "payments to Harlow on hold until 9 Nov" }]);
-    expect(got.rejected).toEqual([0, 1]);
-    expect(parseReaderFull("none", 3)).toEqual({ bears: [], rejected: [] });
-    expect(parseReaderFull("I cannot tell.", 3)).toBeNull();
-    // An older JSON reply is still read.
-    expect(parseReaderFull('{"bears":[{"i":1,"k":"done","why":"paid"}]}', 3)!.bears[0]!.kind).toBe("done");
   });
 });
 
@@ -375,6 +379,8 @@ describe("the reader in the engine (config.askReader)", () => {
       asks?: number;
       forgetBetween?: boolean;
       pauseMs?: number;
+      request?: string;
+      waitMs?: number;
     } = {},
   ) => {
     const clock = NOW;
@@ -396,9 +402,10 @@ describe("the reader in the engine (config.askReader)", () => {
     for (const userId of opts.users ?? ["u1"]) {
       const scope = { tenantId: "t", userId };
       const sessionId = "s1";
-      await p.observe({ ...scope, sessionId, at: clock, kind: "user_message", text: REQUEST } as AgentEvent, {
-        waitMs: 1_000,
-      });
+      await p.observe(
+        { ...scope, sessionId, at: clock, kind: "user_message", text: opts.request ?? REQUEST } as AgentEvent,
+        { waitMs: opts.waitMs ?? 1_000 },
+      );
       answers[userId] = [];
       for (let k = 0; k < (opts.asks ?? 1); k++) {
         if (k > 0 && opts.pauseMs) await Bun.sleep(opts.pauseMs);
@@ -561,8 +568,12 @@ describe("the reader in the engine (config.askReader)", () => {
   });
 
   test("readerPush with askReaderQuestions reads a request the verb list misses; readerPushKinds filters", async () => {
-    const quiet = await run({ askReader: true, readerPush: true }, { asks: 0 });
-    expect(quiet.maker.calls.length).toBe(1);
+    // "RSVP" is not in the verb list: without askReaderQuestions the push does not read it, with it, it does.
+    const RSVP = "RSVP yes for the Harlow venue dinner on Friday.";
+    const quiet = await run({ askReader: true, readerPush: true }, { asks: 0, request: RSVP });
+    expect(quiet.maker.calls.length).toBe(0);
+    const wide = await run({ askReader: true, readerPush: true, askReaderQuestions: true }, { asks: 0, request: RSVP });
+    expect(wide.maker.calls.length).toBe(1);
     const p = await run(
       { askReader: true, readerPush: true, askReaderQuestions: true, readerPushKinds: ["blocks"] },
       { asks: 0, maker: new ScriptedReader(flags("mail:hold", "changes")) },
@@ -571,6 +582,20 @@ describe("the reader in the engine (config.askReader)", () => {
     // A "changes" bearing is not pushed when only "blocks" is.
     const packets = p.partner.takePending({ tenantId: "t", userId: "u1", sessionId: "s1" });
     expect(packets.find((x) => x.reason.startsWith("reader:"))).toBeUndefined();
+  });
+
+  test("readerPushWaitMs 0: observe returns before a slow reader; its packet is queued when it lands", async () => {
+    const slow = new ScriptedReader(flags("mail:hold"), { delayMs: 400 });
+    const t0 = performance.now();
+    const r = await run(
+      { askReader: true, readerPush: true, readerPushWaitMs: 0, askReaderWaitMs: 2_000 },
+      { asks: 0, maker: slow, waitMs: 3_000 },
+    );
+    expect(performance.now() - t0).toBeLessThan(400);
+    expect(r.partner.takePending({ tenantId: "t", userId: "u1", sessionId: "s1" }).length).toBe(0);
+    await Bun.sleep(600);
+    const later = r.partner.takePending({ tenantId: "t", userId: "u1", sessionId: "s1" });
+    expect(later.find((x) => x.reason.startsWith("reader:"))).toBeDefined();
   });
 
   test("askReaderClear: a read pool with nothing binding says so in fixed words", async () => {

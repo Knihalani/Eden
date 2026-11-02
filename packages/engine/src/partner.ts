@@ -1321,17 +1321,7 @@ export class ContextPartner {
     // `askReader` (D95): one budgeted model call reads the widened pool; the items it says bind lead, with its bearing.
     const reading =
       this.config.askReader && this.deps.reader
-        ? await this.readAsk(
-            s,
-            cue,
-            // `askReaderIntent`: what the intent index matched for this request leads the reader's pool (its own
-            // ranking keeps only anchored matches; the reader judges the rest).
-            this.config.askReaderIntent && intentFound.size > 0
-              ? [...scored.filter((x) => intentFound.has(x.item.id)), ...order, ...scored]
-              : [...order, ...scored],
-            chosen,
-            limit,
-          )
+        ? await this.readAsk(s, cue, [...order, ...scored], chosen, limit)
         : null;
     if (reading) chosen = reading.chosen;
     // `readerPush`: the ask was the engine's own, for the user's request. What the reader flagged goes to the agent as
