@@ -192,8 +192,10 @@ The differences:
 - 1 s − 3 s: −7.6 points (−11.0..−4.0) eden, −18.1 (−21.9..−14.3) both.
 - Wall p50: within 0.15 s.
 
-The reader's reading is what the agent uses, and the agent's own requests dominate wall time, so the 3 s wait is the
-right default for NEW.
+The reader's reading is what the agent uses, and the agent's own requests dominate wall time, so an integration
+running NEW should wait about 3 s on the user message's observe. That wait is the caller's `waitMs`, not an engine
+setting: the client sends none by default and the server defaults it to 0 (capped at 5 s). The lab harnesses pass
+3,000 ms.
 
 ## Tokens, caching and cost by role (ledger; the main matrix, run labels `p2-pi-*` and `p2-h-*`)
 
