@@ -1,4 +1,11 @@
-export { ContextPartner, type CandidateDump, type CandidateSink, type PartnerDeps } from "./partner";
+export {
+  ContextPartner,
+  type CandidateDump,
+  type CandidateSink,
+  type PartnerDeps,
+  type ReaderReport,
+  type ReaderSink,
+} from "./partner";
 export { FACT_NAMES, vectorOf, type Facts } from "./decide";
 export { RANK_MODEL, rankAnswer, rankScore, type RankModel } from "./rank";
 export { factsFingerprint } from "./facts-fingerprint";
@@ -63,4 +70,28 @@ export {
   type BridgeMaker,
   type BridgeStats,
 } from "./bridge";
+export {
+  AskReader,
+  cardLine,
+  DEFAULT_READER_LIMITS,
+  ModelReaderMaker,
+  parseReader,
+  READER_ITEM_CHARS,
+  READER_KINDS,
+  READER_MAX_ITEMS,
+  READER_VERSION,
+  readerFocus,
+  readerItem,
+  readerKey,
+  readerMessages,
+  readerNote,
+  relevantText,
+  type ReaderInput,
+  type ReaderItem,
+  type ReaderKind,
+  type ReaderLimits,
+  type ReaderMaker,
+  type ReaderStats,
+  type ReaderVerdict,
+} from "./reader";
 export { activeOn, buildDigest, DIGEST_KINDS, personalSender, type Digest, type DigestOptions } from "./digest";

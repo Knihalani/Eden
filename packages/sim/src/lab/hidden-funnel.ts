@@ -59,13 +59,24 @@
  * would make. With `"constraintDigest": true` (and cards), each task's session opens with the digest: the task records
  * whether it cited the planted item (`digestCited`) and its bytes.
  *
+ * `--reader live|replay` (with `"askReader": true` in `--config` and `--ask`) gives Eden its ask-time reader (D95,
+ * `reader.ts`) on `--reader-model` (default z-ai/glm-5.3-flash; `--reader-sort price` for the cheapest compliant
+ * endpoint; a `:free` model through `free.ts` with `--allow-logging --rpm --max-requests`). `--reader-cache FILE`
+ * keeps every call under its prompt's hash (`reader-disk.ts`), so a rerun replays it at no cost; `replay` never
+ * calls (a prompt not cached fails open). The run prints the reader's calls, tokens, spend and latency p50/p90 as
+ * made, and each task records what the reader did (`reader*`). `--limit N` plays only the first N tasks of each suite,
+ * variant and seed (a sample; run the baseline with the same N).
+ *
  * `--suite` names any suite of `suites.ts`, or several: each gets its own table, then a TOTAL over all of them.
  * Each suite's run is recorded in the benchmark ledger (bench/, `ledger.ts`) unless `--no-record`.
  */
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import {
+  AskReader,
   CardEnricher,
   cardKey,
+  ModelReaderMaker,
+  type ReaderReport,
   ContextPartner,
   QueryBridge,
   cpuNow,
@@ -84,6 +95,7 @@ import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
 import { DiskBridgeMaker } from "./bridge-disk";
 import { DiskCardMaker } from "./cards-disk";
+import { ReplayModel } from "./reader-disk";
 import { keyFor, labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
 import { record, tidy } from "./ledger";
@@ -178,8 +190,41 @@ if (LEAD && LEAD !== "clause" && LEAD !== "half") throw new Error("--lead-in mus
 const TYPING_MS = Number(opt("typing-ms", "1500"));
 const MODEL = opt("model", "z-ai/glm-5.3-flash");
 const KEY = LIVE ? keyFor(MODEL) : undefined;
-/** The judge's requests: paced, capped and retried, with the run's logging choice (free.ts). */
-const ACCESS = labAccess(args, LIVE ? [MODEL] : []);
+/** `--reader live|replay`: the ask-time reader (D95); its model, routing and disk replay cache. */
+const READER = opt("reader", "none");
+if (!["none", "live", "replay"].includes(READER)) throw new Error("--reader must be live or replay");
+const READER_MODEL = opt("reader-model", "z-ai/glm-5.3-flash");
+const READER_SORT = opt("reader-sort", "") as "" | "price" | "throughput" | "latency";
+const READER_CACHE = opt("reader-cache", "");
+const READER_KEY = READER === "live" ? keyFor(READER_MODEL) : undefined;
+if (READER !== "none" && !ASK) throw new Error("--reader needs --ask");
+const LIMIT = Number(opt("limit", "0"));
+/** `--reader-log out.jsonl`: each reader call's prompt (the items as the model read them) and reply, sim data only. */
+const READER_LOG = opt("reader-log", "");
+if (READER_LOG) writeFileSync(READER_LOG, "");
+/** The judge's and the reader's requests: paced, capped and retried, with the run's logging choice (free.ts). */
+const ACCESS = labAccess(args, [...(LIVE ? [MODEL] : []), ...(READER === "live" ? [READER_MODEL] : [])]);
+/** One replaying reader model for every seed and suite (each lane keeps its own verdict cache, `AskReader`). */
+const readerModel =
+  READER === "none"
+    ? null
+    : new ReplayModel(
+        READER_CACHE,
+        READER === "live"
+          ? labModel(
+              ACCESS,
+              {
+                apiKey: READER_KEY!,
+                model: READER_MODEL,
+                timeoutMs: 60_000,
+                ...(READER_SORT ? { sort: READER_SORT } : {}),
+              },
+              "eden.reader",
+            )
+          : null,
+        READER_MODEL,
+      );
+const readerLanes: AskReader[] = [];
 const TIMELINE = opt("timeline", "");
 /**
  * `--packets out.jsonl`: each task's packets as the agent would read them (text, reason, cited item ids) and the
@@ -310,7 +355,8 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
   const perTask: TaskRow[] = [];
   const world = buildWorld({ seed: seed * 1_000 });
   const before = world.items.length;
-  const tasks: HiddenTask[] = SUITES[suite]!(world, seed, variant);
+  const all: HiddenTask[] = SUITES[suite]!(world, seed, variant);
+  const tasks = LIMIT > 0 ? all.slice(0, LIMIT) : all;
   const planted = world.items.slice(before);
   if (PLANTED_AGE_DAYS > 0) for (const it of planted) it.updatedAt = world.now - PLANTED_AGE_DAYS * 86_400_000;
   for (const it of planted) dress(world, it);
@@ -367,6 +413,35 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     ? new QueryBridge({ maker: bridgeMaker, budget: new Budget(UNCAPPED), now: () => clock })
     : null;
   if (bridge) bridgeLanes.push(bridge);
+  // The lane's asks run one at a time: the model's latency for this task's call (as made, when replayed) is kept so a
+  // run can say what a wait of `askReaderWaitMs` would have cut.
+  let readerMs: number | undefined;
+  let readerTask = "";
+  const laneModel: Model | null = readerModel && {
+    id: readerModel.id,
+    chat: async (request) => {
+      const log = (reply: string | null, ms?: number) => {
+        if (!READER_LOG) return;
+        const line = { task: readerTask, prompt: request.messages[1]?.content, reply, ms };
+        appendFileSync(READER_LOG, `${JSON.stringify(line)}\n`);
+      };
+      let res: Awaited<ReturnType<Model["chat"]>>;
+      try {
+        res = await readerModel.chat(request);
+      } catch (e) {
+        log(null);
+        throw e;
+      }
+      readerMs = res.latencyMs;
+      log(res.text, res.latencyMs);
+      return res;
+    },
+  };
+  const reader = laneModel
+    ? new AskReader({ maker: new ModelReaderMaker(laneModel), budget: new Budget(UNCAPPED), now: () => clock })
+    : null;
+  if (reader) readerLanes.push(reader);
+  const readerReports = new Map<string, ReaderReport>();
   const partner = new ContextPartner({
     sources: async () => sources,
     sourceMap: new SourceMap(":memory:", { seed }),
@@ -380,6 +455,7 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
     ...(bridge ? { bridge } : {}),
+    ...(reader ? { reader, onReader: (r: ReaderReport) => readerReports.set(r.sessionId, r) } : {}),
     ...(onCandidates ? { onCandidates } : {}),
     ...(rankModel ? { rankModel } : {}),
   });
@@ -491,10 +567,14 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     const injections = [...(r.injection ? [r.injection] : [])];
     const got = arrived.flatMap((x) => x.ids);
     const question = ASK_Q === "narrow" ? narrowQuestion(task.text) : task.text;
+    readerMs = undefined;
+    readerTask = `${suite}/${variant}/${seed}/${task.template}/${id}`;
     const a0 = performance.now();
     const answered = ASK ? await partner.ask({ ...scope, sessionId, question }) : null;
     const askMs = performance.now() - a0;
     const askCited = answered ? answered.citations.some((c) => c.itemId === id) : undefined;
+    const rr = readerReports.get(sessionId);
+    readerReports.delete(sessionId);
     if (ASK_DIAG && answered) {
       const d = askDumps.get(sessionId);
       askDumps.delete(sessionId);
@@ -567,6 +647,22 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
             askItems: answered!.citations.length,
             askMs: Number(askMs.toFixed(2)),
           }),
+      ...(rr
+        ? {
+            readerOutcome: rr.outcome,
+            readerChecked: rr.checked,
+            readerInPool: rr.pool.includes(id),
+            readerAt: rr.pool.indexOf(id),
+            readerFlags: rr.flagged.length,
+            readerFlagged: rr.flagged.some((f) => f.id === id),
+            ...(rr.flagged.some((f) => f.id === id) ? { readerKind: rr.flagged.find((f) => f.id === id)!.kind } : {}),
+            readerClear: rr.clear,
+            readerWaitMs: rr.waitedMs,
+            ...(readerMs !== undefined ? { readerModelMs: readerMs } : {}),
+          }
+        : READER !== "none" && answered
+          ? { readerOutcome: "skipped" }
+          : {}),
       ...(CONFIG.constraintDigest
         ? {
             digestCited: digest?.citations.some((c) => c.itemId === id) ?? false,
@@ -672,6 +768,26 @@ if (bridgeMaker) {
     `bridge: ${bridgeMaker.hits} replayed, ${bridgeMaker.misses} uncovered; per user ${JSON.stringify(use)} ` +
       `(${bridgeLanes.length} users; calls = what production would send)`,
   );
+}
+if (readerModel) {
+  const use: Record<string, number> = {};
+  for (const r of readerLanes) for (const [k, v] of Object.entries(r.stats)) use[k] = (use[k] ?? 0) + v;
+  const m = readerModel;
+  const n = Math.max(1, m.calls.length);
+  const sum = (f: (c: (typeof m.calls)[number]) => number) => m.calls.reduce((a, c) => a + f(c), 0);
+  const { p50, p90 } = m.quantiles();
+  const made = sum((c) => c.costUsd);
+  console.log(
+    `reader ${READER_MODEL}: ${m.calls.length} calls answered (${m.sent} sent now, ${m.replayed} replayed, ` +
+      `${m.missed} not cached, ${m.failed} failed), ${(sum((c) => c.inputTokens) / n).toFixed(0)} in / ` +
+      `${(sum((c) => c.outputTokens) / n).toFixed(0)} out tokens per call, ${sum((c) => (c.truncated ? 1 : 0))} cut off; ` +
+      `$${made.toFixed(5)} as made ($${(made / n).toFixed(6)} per call), $${sum((c) => (c.live ? c.costUsd : 0)).toFixed(5)} ` +
+      `spent this run; latency as made p50 ${p50} ms, p90 ${p90} ms, ` +
+      `${m.latencies.filter((x) => x > 2_500).length} over 2.5 s`,
+  );
+  console.log(`reader use: ${JSON.stringify(use)}`);
+  const r = ACCESS.pacer.summary();
+  console.log(`reader requests: ${r.sent} sent, ${r.retried} retried, ${r.refused} refused at the cap`);
 }
 if (LIVE) {
   const tasks = Math.max(1, grand.hidden.n + grand.control.n);
