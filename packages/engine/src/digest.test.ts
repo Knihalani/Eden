@@ -203,8 +203,8 @@ describe("the digest in the engine (config.constraintDigest)", () => {
   });
 });
 
-describe("askReaderStanding: the user's standing constraints lead the reader's pool", () => {
-  test("a constraint sharing no word with the request is read, first, the same for every request, per user", async () => {
+describe("askReaderStanding and readerGate: the reader's pool and whether it is read", () => {
+  const setup = async (config: Record<string, unknown>) => {
     let clock = NOW;
     const held = item(
       "k1",
@@ -243,7 +243,7 @@ describe("askReaderStanding: the user's standing constraints lead the reader's p
       budget: new Budget(),
       model: null,
       now: () => clock,
-      config: { cards: true, askReader: true, askReaderStanding: 5, askReaderWaitMs: 500 },
+      config: { cards: true, askReader: true, askReaderWaitMs: 500, ...config },
       cards,
       reader: new AskReader({ maker, budget: new Budget(), now: () => clock }),
     });
@@ -256,6 +256,11 @@ describe("askReaderStanding: the user's standing constraints lead the reader's p
     );
     await cards.idle();
     clock += DAY / 24;
+    return { p, a, inputs };
+  };
+
+  test("a constraint sharing no word with the request is read, first, the same for every request, per user", async () => {
+    const { p, a, inputs } = await setup({ askReaderStanding: 5 });
     await p.ask({ ...a, sessionId: "s1", question: "Book the platform team dinner at Rosa's for Friday." });
     await p.ask({ ...a, sessionId: "s2", question: "Order the platform team dinner from Rosa's tonight." });
     expect(inputs.length).toBe(2);
@@ -268,5 +273,24 @@ describe("askReaderStanding: the user's standing constraints lead the reader's p
     // Another user never gets this user's constraints.
     await p.ask({ tenantId: "t", userId: "b", sessionId: "s1", question: "Book the platform team dinner at Rosa's." });
     expect(inputs.slice(2).every((i) => !i.items.some((x) => x.id === "chat:k1"))).toBe(true);
+  });
+
+  test("askReaderStandingKinds: only the kinds named stand in the pool", async () => {
+    const { p, a, inputs } = await setup({ askReaderStanding: 5, askReaderStandingKinds: ["absence"] });
+    await p.ask({ ...a, sessionId: "s1", question: "Book the platform team dinner at Rosa's for Friday." });
+    expect(inputs.length).toBe(1);
+    expect(inputs[0]!.standing ?? 0).toBe(0);
+  });
+
+  test("readerGate: no call when no candidate could constrain the request; a carded freeze among them opens it", async () => {
+    const open = await setup({ readerGate: true });
+    // A request whose candidates include the carded freeze is read.
+    await open.p.ask({ ...open.a, sessionId: "s1", question: "Deploy the Kestrel cluster upgrade on Friday." });
+    expect(open.inputs.length).toBe(1);
+    // The dinner request's candidates are the dinner note only (no card, no constraint words): no call, and the
+    // standing list does not open the gate.
+    const shut = await setup({ readerGate: true, askReaderStanding: 5 });
+    await shut.p.ask({ ...shut.a, sessionId: "s1", question: "Book the platform team dinner at Rosa's tonight." });
+    expect(shut.inputs.length).toBe(0);
   });
 });

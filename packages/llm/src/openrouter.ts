@@ -57,7 +57,7 @@ export class OpenRouterModel implements Model {
     const signal = request.signal ? AbortSignal.any([request.signal, timeout]) : timeout;
     const body = {
       model: this.options.model,
-      messages: request.messages,
+      messages: request.messages.map(({ role, content }) => ({ role, content })),
       max_tokens: request.maxTokens,
       temperature: request.temperature ?? 0,
       ...(request.json ? { response_format: { type: "json_object" } } : {}),

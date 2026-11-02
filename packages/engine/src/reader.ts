@@ -242,7 +242,9 @@ export function readerKey(input: ReaderInput): string {
   const h = createHash("sha256").update(`v${READER_VERSION}\n${input.today}\n`);
   h.update(head(input.request).toLowerCase()).update("\n");
   h.update(head(input.question ?? "").toLowerCase()).update("\n");
-  for (const it of input.items.slice(0, READER_MAX_ITEMS)) h.update(`${it.id}\t${it.hash}\n`);
+  // The standing count and each item's text as read: the same items rendered another way are another prompt.
+  h.update(`standing ${input.standing ?? 0}\n`);
+  for (const it of input.items.slice(0, READER_MAX_ITEMS)) h.update(`${it.id}\t${it.hash}\t${it.text}\n`);
   return h.digest("hex").slice(0, 32);
 }
 
@@ -345,21 +347,6 @@ export function parseReaderFull(
   count: number,
 ): { bears: { i: number; kind: ReaderKind; why: string }[]; rejected: number[] } | null {
   let v: Record<string, unknown>;
-  // A reply in lines (`i|why|same|kind`, or `none`), a format tried and dropped (free lines rambled without JSON
-  // mode, docs/research/haiku-phase3.md), is still read rather than thrown away.
-  if (!text.includes("{")) {
-    const lines = text
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
-    if (lines.length === 1 && /^none\.?$/i.test(lines[0]!)) return { bears: [], rejected: [] };
-    const entries = lines
-      .map((l) => l.split("|").map((x) => x.trim()))
-      .filter((f) => f.length >= 4 && /^\d+$/.test(f[0]!))
-      .map((f) => ({ i: Number(f[0]), why: f[1], same: /^y/i.test(f[2]!), k: f[3]!.toLowerCase() }));
-    if (entries.length === 0) return null;
-    text = JSON.stringify({ bears: entries });
-  }
   try {
     const start = text.indexOf("{");
     if (start < 0) return null;

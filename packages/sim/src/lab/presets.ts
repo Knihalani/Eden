@@ -67,3 +67,11 @@ PRESETS.NEW2 = {
   askReaderQuestions: true,
   askReaderStanding: 20,
 };
+// docs/research/haiku-phase3.md (D99): NEW's cheaper operating point. The reader is skipped when no candidate could
+// constrain the request, and reads 15 candidates of at most 240 characters.
+PRESETS.NEWL = {
+  ...PRESETS.NEW,
+  readerGate: true,
+  askReaderPool: 15,
+  askReaderItemChars: 240,
+};

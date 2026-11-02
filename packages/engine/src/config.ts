@@ -590,11 +590,11 @@ export interface EngineConfig {
   readerPushWaitMs: number;
   /**
    * With `askReader`: no reader call when none of the request's candidates could constrain it (no card of a
-   * constraint, state-change or already-done kind, no constraint wording).
+   * constraint, state-change or already-done kind, no constraint wording). Standing items (`askReaderStanding`) do not
+   * open the gate, so with both on, a request whose candidates hold nothing constraint-like is not read even when a
+   * standing constraint would bind it.
    */
   readerGate: boolean;
-  /** With `askReader` and `intent`: every item the intent index matched for the request leads the reader's pool. */
-  askReaderIntent: boolean;
   /**
    * The active-constraints digest (docs/research/edge-bridge.md, `digest.ts`): per user, the items whose card
    * (`cards`) is a standing constraint (a freeze or hold, a limit, an absence, a deadline, a prohibition) over today
@@ -764,7 +764,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerPushNotes: false,
   readerPushWaitMs: 60_000,
   readerGate: false,
-  askReaderIntent: false,
   constraintDigest: false,
   digestLines: 12,
   digestBytes: 1_600,
