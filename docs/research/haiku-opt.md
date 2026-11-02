@@ -24,8 +24,28 @@ run in this session; the spend is from the campaign's spend ledger (`packages/si
 - **What did not help:**
   - adaptive thinking at low effort (Haiku did not think: same output tokens, same result);
   - a 40-item pool (one more planted item in the pool, four more decoy flags).
-- **Not done:** the reader gating proactive packets (Phase 1's item c) was not tried; the agent benchmark (Phase 2)
-  measures NEW as is.
+- **The reader on the proactive path** (`readerPush`, below): an agent with tools never asked, so the reader now also
+  reads each acting request on `observe` and pushes what it flags. Packets alone, blind held-out 10–11: hidden
+  delivered 32 → 65 of 128, decoys 25 → 30.
+
+## The reader on the proactive path (`readerPush`)
+
+In the agent pilots (Pi and Hermes on Haiku), an agent that had source tools never called `ask_context`, so the
+reader never ran for it. `readerPush` reads every acting request on `observe`, as an ask of the engine's own, and
+queues the items it flags as a packet, taken before the agent's next model request.
+
+Measured on packets alone (no ask), with the same cached reader:
+
+| Suite | Configuration | Hidden delivered | Decoys delivered | Decoy pushed by the reader |
+|---|---|---|---|---|
+| train, seeds 41–42 (384 + 384) | ALL3 | 97 | 72 | |
+| | ALL3 + intent | 97 | 72 | |
+| | NEW + `readerPush` | 251 | 89 | 21 (5.5%) |
+| held-out 10–11, seeds 41–42 (128 + 128) | ALL3 | 32 | 25 | |
+| | NEW + `readerPush` | 65 | 30 | 5 (3.9%) |
+
+The funnel lets the engine settle, so the reader's latency is not cut here. An agent gets a packet that is ready
+before its next model request; Phase 2 measures that with the agent.
 
 ## Setup
 

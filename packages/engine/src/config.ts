@@ -563,6 +563,13 @@ export interface EngineConfig {
    */
   askReaderDrop: boolean;
   /**
+   * With `askReader`: a user request that acts is also read by the reader, as an ask of the engine's own over the
+   * request, and the items it flags are queued as a proactive packet (an agent that never calls `ask_context` still
+   * gets the reading). The observe waits for it within its own wait; later, it is taken before the next model request.
+   * One reader call per acting request, budgeted and cached as an ask's; off by default.
+   */
+  readerPush: boolean;
+  /**
    * The active-constraints digest (docs/research/edge-bridge.md, `digest.ts`): per user, the items whose card
    * (`cards`) is a standing constraint (a freeze or hold, a limit, an absence, a deadline, a prohibition) over today
    * or later, at most `digestLines` lines of the items' own words (`digestBytes` in all), ranked by recency and the
@@ -723,6 +730,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askReaderQuestions: false,
   askReaderClear: false,
   askReaderDrop: false,
+  readerPush: false,
   constraintDigest: false,
   digestLines: 12,
   digestBytes: 1_600,

@@ -3,7 +3,7 @@ def score(f):
   d=json.load(open(f)); pt=d['perTask']
   agg=collections.defaultdict(lambda:[0,0,0,0])
   for t in pt:
-    s=t['suite']; v=t['variant']; hit=bool(t['delivered'] or t['askCited'])
+    s=t['suite']; v=t['variant']; hit=bool(t['delivered'] or t.get('askCited'))
     a=agg[s]
     if v=='hidden': a[0]+=hit; a[1]+=1
     else: a[2]+=hit; a[3]+=1
