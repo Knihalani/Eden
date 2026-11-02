@@ -18,6 +18,7 @@ GROUP = {"heldout5": "blind5-8", "heldout6": "blind5-8", "heldout7": "blind5-8",
          "heldout10": "heldout10", "heldout11": "heldout11", "heldout12": "heldout12"}
 group_of = lambda suite: GROUP.get(suite, "train" if suite.startswith("train") else suite)
 
+UNGRADED = defaultdict(int)
 rows = []  # one per run: harness, group, condition, kind, task, rate, ...
 for f in FILES:
     d = json.load(open(f))
@@ -35,6 +36,7 @@ for f in FILES:
             continue
         facts = r.get("facts")
         if facts is None:
+            UNGRADED[harness] += 1
             continue
         ev = t.get("events", [])
         reqs = t.get("requests", [])
@@ -84,6 +86,10 @@ def table(sel, title):
 def pairs(sel, a, b, kind):
     A = {r["task"]: r["rate"] for r in sel if r["cond"] == a and r["kind"] == kind}
     B = {r["task"]: r["rate"] for r in sel if r["cond"] == b and r["kind"] == kind}
+    # A task id (world seed, suite, template) is one run per condition: a second would overwrite the first.
+    for c, m in ((a, A), (b, B)):
+        n = sum(1 for r in sel if r["cond"] == c and r["kind"] == kind)
+        assert n == len(m), f"{c} {kind}: {n} runs for {len(m)} task ids (a task given twice)"
     return [A[t] - B[t] for t in A if t in B]
 
 
@@ -96,8 +102,9 @@ COMPARE = {
 for h in sorted({r["harness"] for r in rows}):
     hs = [r for r in rows if r["harness"] == h]
     groups = sorted({r["group"] for r in hs})
+    BLIND = {"blind5-8", "heldout10", "heldout11", "heldout12"}
     for g in groups + ["ALL BLIND (5-8, 10, 11, 12)"]:
-        sel = [r for r in hs if (r["group"] == g if not g.startswith("ALL") else r["group"] != "train")]
+        sel = [r for r in hs if (r["group"] == g if not g.startswith("ALL") else r["group"] in BLIND)]
         if not sel:
             continue
         table(sel, f"{h} / {g}")
@@ -114,7 +121,9 @@ by = defaultdict(lambda: defaultdict(lambda: [0, 0.0, 0, 0, 0, 0, []]))
 for line in open(LEDGER):
     d = json.loads(line)
     run = d["run"]
-    h = "pi" if run.startswith("p2-pi") else "hermes" if run.startswith("p2-h-") else None
+    # The main matrix only: `p2-pi-` and `p2-h-` (the pilots, `p2-pilot` and `p2-hpilot`, and the wait test, `p2-w-`,
+    # are not in it).
+    h = "pi" if run.startswith("p2-pi-") else "hermes" if run.startswith("p2-h-") else None
     if h is None:
         continue
     x = by[h][d["role"]]
@@ -127,7 +136,7 @@ for line in open(LEDGER):
     x[5] += u["outputTokens"]
     if d.get("ttftMs") is not None:
         x[6].append(d["ttftMs"])
-print("\n== spend by harness and role (ledger; Phase 2 runs)")
+print("\n== spend by harness and role (ledger; Phase 2 main matrix: run labels p2-pi-*, p2-h-*)")
 print("harness  role          calls      usd   in/call  out/call cacheRd% cacheWr%  ttft p50  p90  $/1k runs")
 for h, roles in by.items():
     nruns = len([r for r in rows if r["harness"] == h])
@@ -137,3 +146,5 @@ for h, roles in by.items():
               f"  {q(x[6], .5):7.0f} {q(x[6], .9):5.0f}  {1000 * x[1] / max(1, nruns):8.3f}")
     print(f"{h:8s} {'TOTAL':12s} {sum(x[0] for x in roles.values()):6d} {sum(x[1] for x in roles.values()):8.4f}"
           f"   ({nruns} graded hidden/control runs)")
+
+print(f"\nungraded hidden/control runs (no grader verdict, left out above): {dict(UNGRADED) or 0}")

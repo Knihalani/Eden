@@ -79,15 +79,17 @@ paired (a - b), 95% bootstrap over tasks:
   both~NEW@w1000   - both~NEW     hidden  n= 525 -0.181 (-0.219..-0.143)
   both~NEW@w1000   - both~NEW     control n= 525 -0.013 (-0.029..+0.000)
 
-== spend by harness and role (ledger; Phase 2 runs)
+== spend by harness and role (ledger; Phase 2 main matrix: run labels p2-pi-*, p2-h-*)
 harness  role          calls      usd   in/call  out/call cacheRd% cacheWr%  ttft p50  p90  $/1k runs
-pi       agent         30128   5.7341     1067      280    67.3    30.8      515   859     1.365
-pi       eden.cards     5640   1.0630     1797      255    73.4     0.1      497   888     0.253
-pi       eden.reader    8082   3.1960     3574      239    25.3     0.0      525   853     0.761
-pi       grader        17920   1.1753      616        8     0.0     0.0      515  1010     0.280
-pi       TOTAL         61770  11.1685   (4200 graded hidden/control runs)
+pi       agent         30000   5.7082     1067      280    67.4    30.8      515   859     1.359
+pi       eden.cards     5563   1.0126     1776      246    74.2     0.1      496   888     0.241
+pi       eden.reader    8069   3.1903     3573      239    25.3     0.0      525   853     0.760
+pi       grader        17840   1.1700      616        8     0.0     0.0      515  1011     0.279
+pi       TOTAL         61472  11.0810   (4200 graded hidden/control runs)
 hermes   agent         19257   4.5199     4308      254    86.9    13.0      506   779  4519.902
 hermes   eden.cards     3064   0.9273     2139      415    61.7     0.0      496   832   927.308
 hermes   eden.reader    3265   1.2955     3579      240    25.2     0.0      519   855  1295.483
 hermes   grader        10704   0.6328      551        8     0.0     0.0      518   986   632.828
 hermes   TOTAL         36290   7.3755   (0 graded hidden/control runs)
+
+ungraded hidden/control runs (no grader verdict, left out above): 0
