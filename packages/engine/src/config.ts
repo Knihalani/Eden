@@ -538,6 +538,25 @@ export interface EngineConfig {
   /** `bridgeQuery` also asks about a question for permission ("Can I…", "Is it fine if I…", "Should I…"). */
   bridgeQuestions: boolean;
   /**
+   * The ask-time model reader (D95, `reader.ts`): for an `ask` about an action, one budgeted model call reads the top
+   * `askReaderPool` candidates the ask already ranked (compact, redacted, fenced as data) and says which would block,
+   * limit or change the request, or show it done; those lead the answer, each with a short bearing, and the usual
+   * items fill the seats left. Fails open (budget, error, unreadable output, `askReaderWaitMs`): the usual answer.
+   * Verdicts are cached per user and session. Needs a reader in the deps; with none, nothing changes.
+   */
+  askReader: boolean;
+  /** How many of the ask's ranked candidates the reader reads (capped at `READER_MAX_ITEMS`, 40). */
+  askReaderPool: number;
+  /** How long an ask waits for the reader (ms); past it, the usual answer (the call still fills the cache). */
+  askReaderWaitMs: number;
+  /** `askReader` also reads an ask that is not about an action (a question for information). */
+  askReaderQuestions: boolean;
+  /**
+   * `askReader`: when the reader read the pool and found nothing that binds, the answer's first line says so, in fixed
+   * words. Off by default: a reader's miss would read as an all-clear (D93's false all-clear).
+   */
+  askReaderClear: boolean;
+  /**
    * The active-constraints digest (docs/research/edge-bridge.md, `digest.ts`): per user, the items whose card
    * (`cards`) is a standing constraint (a freeze or hold, a limit, an absence, a deadline, a prohibition) over today
    * or later, at most `digestLines` lines of the items' own words (`digestBytes` in all), ranked by recency and the
@@ -692,6 +711,11 @@ export const DEFAULT_CONFIG: EngineConfig = {
   bridgeHits: 3,
   bridgeQuestions: false,
   bridgeAskSeats: 0,
+  askReader: false,
+  askReaderPool: 30,
+  askReaderWaitMs: 2_500,
+  askReaderQuestions: false,
+  askReaderClear: false,
   constraintDigest: false,
   digestLines: 12,
   digestBytes: 1_600,
