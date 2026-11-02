@@ -575,12 +575,24 @@ export interface EngineConfig {
    * ask's ranked candidates, whatever their words. 0 (default): none.
    */
   askReaderStanding: number;
+  /** The characters of each item's most relevant parts the reader reads (`READER_ITEM_CHARS`, 400, is the most). */
+  askReaderItemChars: number;
   /** The card kinds `askReaderStanding` takes; empty (default): the digest's standing kinds (`DIGEST_KINDS`). */
   askReaderStandingKinds: string[];
   /** With `readerPush`: the reader's kinds pushed unasked (`askReader` still shows every kind in an ask's answer). */
   readerPushKinds: string[];
   /** With `readerPush`: the pushed packet says the reader's bearing before each item, as an ask's answer does. */
   readerPushNotes: boolean;
+  /**
+   * With `readerPush`: the most `observe` waits for the push (ms), within the caller's own wait. 0: never; the reading
+   * runs beside the agent's first model request and its packet is taken before the next one.
+   */
+  readerPushWaitMs: number;
+  /**
+   * With `askReader`: no reader call when none of the request's candidates could constrain it (no card of a
+   * constraint, state-change or already-done kind, no constraint wording).
+   */
+  readerGate: boolean;
   /** With `askReader` and `intent`: every item the intent index matched for the request leads the reader's pool. */
   askReaderIntent: boolean;
   /**
@@ -746,9 +758,12 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askReaderDrop: false,
   readerPush: false,
   askReaderStanding: 0,
+  askReaderItemChars: 400,
   askReaderStandingKinds: [],
   readerPushKinds: ["blocks", "limits", "changes", "done"],
   readerPushNotes: false,
+  readerPushWaitMs: 60_000,
+  readerGate: false,
   askReaderIntent: false,
   constraintDigest: false,
   digestLines: 12,
