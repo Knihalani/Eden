@@ -20,6 +20,20 @@ Dependencies are deliberately few (the MCP SDK, zod, and re2js for the secret ga
 PR. `native/` is the measured Rust experiment behind D22 (hot kernels stay TypeScript), not product code: nothing in
 `packages/` imports it.
 
+## Where things are
+
+- Each package has a `CLAUDE.md` (files, rules with decision numbers, quick tests, pitfalls):
+  `packages/<name>/CLAUDE.md`, and `packages/sim/src/lab/CLAUDE.md` for the lab.
+- [docs/LAB.md](docs/LAB.md): suites, presets, harnesses (funnel, Pi, Hermes), replay caches, providers, recipes
+  with costs. [docs/research/INDEX.md](docs/research/INDEX.md): every research note, its decisions and status.
+  [docs/TESTING.md](docs/TESTING.md): test commands, timings, the slowest files.
+- Fast loop: `bun run test:changed` (touched packages and their dependents), `bun run test:pkg <name>`,
+  `bun run check:fast` (format, types, changed tests); `bun run check` is still the gate before a merge.
+- `bun run funnel`: the no-model screen on train (preset ALL3, replayed cards, `--ask`, the funnel score;
+  `--baseline F` diffs task by task; held-out suites need `--blind`).
+- `/deep-audit`: full audit → verified findings → fixes on branches with review → re-audit → plain-language report
+  (`.claude/skills/deep-audit/`).
+
 ## CI is local
 
 GitHub Actions is off (the user does not pay for minutes). Before every merge, on the final tree:
