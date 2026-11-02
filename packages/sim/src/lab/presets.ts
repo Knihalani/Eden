@@ -60,3 +60,18 @@ PRESETS.NEW = {
   askReaderDrop: true,
   readerPush: true,
 };
+// docs/research/haiku-phase3.md (proposed): NEW plus every request read (`askReaderQuestions`, which `readerPush` also
+// follows) and the user's standing constraints in the reader's pool, sent as a cached prefix (`askReaderStanding`).
+PRESETS.NEW2 = {
+  ...PRESETS.NEW,
+  askReaderQuestions: true,
+  askReaderStanding: 20,
+};
+// docs/research/haiku-phase3.md (D99): NEW's cheaper operating point. The reader is skipped when no candidate could
+// constrain the request, and reads 15 candidates of at most 240 characters.
+PRESETS.NEWL = {
+  ...PRESETS.NEW,
+  readerGate: true,
+  askReaderPool: 15,
+  askReaderItemChars: 240,
+};

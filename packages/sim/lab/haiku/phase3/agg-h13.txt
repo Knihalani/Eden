@@ -1,0 +1,85 @@
+
+== hermes / heldout13
+condition            kind     n   rate  wall p50  p90  ttft p50  in/req out/req cacheRd% cacheWr%  asks  chars  src/task
+hermes               hidden   128 0.086     3.09  4.14      521    3987    235    89.4    10.5  0.00      0    0.00
+hermes               control  128 0.000     3.01  4.02      524    3980    225    89.6    10.3  0.00      0    0.00
+hermes+eden          hidden   128 0.336     3.12  4.75      495    4389    258    86.7    13.2  0.34    297    3.62
+hermes+eden          control  128 0.008     3.28  4.91      503    4381    247    87.1    12.8  0.29    210    3.71
+hermes+eden~NEW      hidden   128 0.719     3.35  6.99      511    4381    268    86.9    13.0  0.21    536    3.71
+hermes+eden~NEW      control  128 0.008     4.36  7.16      491    4394    250    87.1    12.8  0.27    298    3.77
+hermes+eden~NEW2     hidden   128 0.781     3.88  7.08      508    4423    269    86.6    13.4  0.29    518    3.68
+hermes+eden~NEW2     control  128 0.039     4.38  6.99      485    4403    245    87.0    12.9  0.27    294    3.66
+hermes+eden~NEWL     hidden   128 0.711     3.17  6.44      488    4375    264    87.0    12.9  0.18    500    3.59
+hermes+eden~NEWL     control  128 0.000     4.17  6.91      502    4363    245    88.0    11.9  0.23    273    3.66
+paired (a - b), 95% bootstrap over tasks:
+  hermes+eden~NEWL - hermes+eden~NEW hidden  n= 128 -0.008 (-0.086..+0.070)
+  hermes+eden~NEWL - hermes+eden~NEW control n= 128 -0.008 (-0.023..+0.000)
+  hermes+eden~NEW2 - hermes+eden~NEW hidden  n= 128 +0.062 (-0.008..+0.141)
+  hermes+eden~NEW2 - hermes+eden~NEW control n= 128 +0.031 (+0.008..+0.062)
+  hermes+eden~NEW  - hermes       hidden  n= 128 +0.633 (+0.547..+0.719)
+  hermes+eden~NEW  - hermes       control n= 128 +0.008 (+0.000..+0.023)
+  hermes+eden~NEW2 - hermes+eden  hidden  n= 128 +0.445 (+0.344..+0.547)
+  hermes+eden~NEW2 - hermes+eden  control n= 128 +0.031 (+0.000..+0.070)
+  hermes+eden~NEW2 - hermes       hidden  n= 128 +0.695 (+0.609..+0.773)
+  hermes+eden~NEW2 - hermes       control n= 128 +0.039 (+0.008..+0.070)
+  hermes+eden~NEW  - hermes+eden  hidden  n= 128 +0.383 (+0.281..+0.477)
+  hermes+eden~NEW  - hermes+eden  control n= 128 +0.000 (-0.023..+0.023)
+  hermes+eden~NEW  - hermes       hidden  n= 128 +0.633 (+0.547..+0.719)
+  hermes+eden~NEW  - hermes       control n= 128 +0.008 (+0.000..+0.031)
+  hermes+eden      - hermes       hidden  n= 128 +0.250 (+0.172..+0.336)
+  hermes+eden      - hermes       control n= 128 +0.008 (+0.000..+0.023)
+
+== pi / heldout13
+condition            kind     n   rate  wall p50  p90  ttft p50  in/req out/req cacheRd% cacheWr%  asks  chars  src/task
+eden                 hidden   128 0.531     3.29  4.38      527    1042    276    40.8    59.0  1.11    293    3.68
+eden                 control  128 0.000     3.45  4.23      528    1033    261    42.8    57.0  1.31    208    3.73
+none                 hidden   128 0.000     2.22  3.09      484     141    340     0.0     0.0  0.00      0    0.00
+none                 control  128 0.000     2.18  3.13      484     141    331     0.0     0.0  0.00      0    0.00
+tools                hidden   128 0.086     3.39  4.82      545    1237    249    80.3    19.5  0.00      0    0.00
+tools                control  128 0.000     3.46  4.68      529    1254    244    79.2    20.6  0.00      0    0.00
+both~NEW             hidden   128 0.672     4.14  5.56      520    1365    285    79.8    20.1  0.00    515    3.71
+both~NEW             control  128 0.008     4.43  5.61      527    1325    254    79.9    19.9  0.00    300    3.70
+eden~NEW             hidden   128 0.789     3.79  6.72      526    1031    296    73.4    26.4  0.62    524    3.70
+eden~NEW             control  128 0.008     5.41  7.37      525    1047    265    64.2    35.6  1.24    299    3.73
+both~NEW2            hidden   128 0.703     4.38  5.84      501    1383    276    82.1    17.7  0.00    506    3.66
+both~NEW2            control  128 0.023     4.68  5.98      519    1339    255    82.0    17.9  0.00    301    3.75
+eden~NEW2            hidden   128 0.797     3.69  7.19      522    1039    296    73.0    26.8  0.62    517    3.70
+eden~NEW2            control  128 0.016     5.75  7.38      521    1033    259    67.5    32.3  1.25    298    3.74
+eden~NEWL            hidden   128 0.750     3.41  6.76      517     994    290    73.9    25.8  0.59    494    3.71
+eden~NEWL            control  128 0.023     5.17  7.13      538    1028    263    66.6    33.2  1.25    293    3.77
+paired (a - b), 95% bootstrap over tasks:
+  eden~NEW         - eden         hidden  n= 128 +0.258 (+0.164..+0.352)
+  eden~NEW         - eden         control n= 128 +0.008 (+0.000..+0.023)
+  eden~NEW         - tools        hidden  n= 128 +0.703 (+0.617..+0.789)
+  eden~NEW         - tools        control n= 128 +0.008 (+0.000..+0.023)
+  eden~NEW         - none         hidden  n= 128 +0.789 (+0.719..+0.852)
+  eden~NEW         - none         control n= 128 +0.008 (+0.000..+0.023)
+  both~NEW         - tools        hidden  n= 128 +0.586 (+0.500..+0.672)
+  both~NEW         - tools        control n= 128 +0.008 (+0.000..+0.023)
+  both~NEW         - eden         hidden  n= 128 +0.141 (+0.039..+0.250)
+  both~NEW         - eden         control n= 128 +0.008 (+0.000..+0.023)
+  eden             - tools        hidden  n= 128 +0.445 (+0.344..+0.539)
+  eden             - tools        control n= 128 +0.000 (+0.000..+0.000)
+  eden             - none         hidden  n= 128 +0.531 (+0.445..+0.617)
+  eden             - none         control n= 128 +0.000 (+0.000..+0.000)
+  tools            - none         hidden  n= 128 +0.086 (+0.039..+0.133)
+  tools            - none         control n= 128 +0.000 (+0.000..+0.000)
+  eden~NEW2        - eden~NEW     hidden  n= 128 +0.008 (-0.062..+0.078)
+  eden~NEW2        - eden~NEW     control n= 128 +0.008 (-0.016..+0.039)
+  both~NEW2        - both~NEW     hidden  n= 128 +0.031 (-0.047..+0.109)
+  both~NEW2        - both~NEW     control n= 128 +0.016 (+0.000..+0.039)
+  eden~NEW2        - eden         hidden  n= 128 +0.266 (+0.172..+0.359)
+  eden~NEW2        - eden         control n= 128 +0.016 (+0.000..+0.039)
+  both~NEW2        - tools        hidden  n= 128 +0.617 (+0.531..+0.703)
+  both~NEW2        - tools        control n= 128 +0.023 (+0.000..+0.055)
+  eden~NEWL        - eden~NEW     hidden  n= 128 -0.039 (-0.125..+0.047)
+  eden~NEWL        - eden~NEW     control n= 128 +0.016 (-0.016..+0.047)
+  eden~NEW         - tools        hidden  n= 128 +0.703 (+0.617..+0.789)
+  eden~NEW         - tools        control n= 128 +0.008 (+0.000..+0.023)
+  both~NEW         - tools        hidden  n= 128 +0.586 (+0.500..+0.672)
+  both~NEW         - tools        control n= 128 +0.008 (+0.000..+0.023)
+
+== spend by harness and role (ledger; Phase 2 main matrix: run labels p2-pi-*, p2-h-*)
+harness  role          calls      usd   in/call  out/call cacheRd% cacheWr%  ttft p50  p90  $/1k runs
+
+ungraded hidden/control runs (no grader verdict, left out above): 0

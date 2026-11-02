@@ -73,6 +73,30 @@ describe("AnthropicModel", () => {
     expect(body.thinking).toEqual({ type: "disabled" });
   });
 
+  test("a user message marked cache ends a cached prefix at its own block", () => {
+    const body = anthropicBody(
+      { apiKey: "k" },
+      {
+        messages: [
+          { role: "system", content: "fixed" },
+          { role: "user", content: "standing list", cache: true },
+          { role: "user", content: "the request" },
+        ],
+        maxTokens: 100,
+      },
+      false,
+    );
+    expect(body.messages).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "standing list", cache_control: { type: "ephemeral" } },
+          { type: "text", text: "the request" },
+        ],
+      },
+    ]);
+  });
+
   test("streams text, reports cache reads, ttft, and books the call", async () => {
     const seen: { body?: Record<string, unknown>; headers?: Headers } = {};
     const { meter, reserved, booked } = recordingMeter();

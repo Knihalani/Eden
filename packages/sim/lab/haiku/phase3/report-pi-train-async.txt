@@ -1,0 +1,121 @@
+harness pi, model claude-haiku-5-5, grader claude-haiku-5-5, time scale 0, tools parallel
+spent $1.8314 (agent $0.7768, Eden $0.8965, grader $0.1581); 2304 runs, errors 0, ungraded 0
+config {"probes":true,"compactInjection":true,"quietSettled":true,"groundAway":true,"judgeContested":true,"judgeItemBytes":200,"probeShare":true,"probeTopicAlone":true,"fallbackAsks":true,"groundConflict":true,"quietClear":true,"probeFresh":true,"probeYield":true,"densePacket":true,"groundOccasion":true,"quietNameOnly":true,"judgeTied":true,"consequenceProbe":true,"probeRoles":true,"graph":true,"graphMerge":true,"cards":true,"anticipate":true,"sync":true,"askVerdicts":true,"conflictVocab":true,"compactAsk":true,"askDedup":true,"compactParts":true,"cardsEconomy":true}
+
+== hidden: hidden fact raised
+condition     n   rate   $/1k  (Eden)  calls  tools   in tok  out tok   p50 s   p90 s   p99 s  ttft p50 ms
+eden~NEW     192  0.740  0.788   0.508   1.35   0.57     1364      452    3.85    6.61    8.35          526
+eden~NEWL    192  0.656  0.661   0.373   1.37   0.58     1360      449    3.75    6.52    8.79          520
+eden~NEWA    192  0.557  0.846   0.453   1.58   0.90     1614      494    3.96    6.08    8.25          515
+both~NEW     192  0.641  0.667   0.336   1.68   1.97     2365      528    4.24    6.10    7.44          516
+both~NEWL    192  0.641  0.573   0.235   1.69   1.97     2391      525    4.20    5.67    7.02          505
+both~NEWA    192  0.318  0.580   0.230   1.79   2.28     2364      514    3.34    4.59    5.81          541
+
+== control: false concern
+condition     n   rate   $/1k  (Eden)  calls  tools   in tok  out tok   p50 s   p90 s   p99 s  ttft p50 ms
+eden~NEW     192  0.005  0.979   0.668   1.65   1.01     1648      480    5.22    7.29    9.31          518
+eden~NEWL    192  0.016  0.788   0.483   1.63   0.98     1591      472    4.83    6.99    8.99          523
+eden~NEWA    192  0.000  0.903   0.525   1.73   1.18     1734      502    4.57    5.96    8.47          532
+both~NEW     192  0.016  0.677   0.332   1.88   2.57     2558      535    4.62    5.86    7.04          514
+both~NEWL    192  0.000  0.592   0.239   1.96   2.81     2678      546    4.53    5.92    7.89          512
+both~NEWA    192  0.016  0.603   0.229   1.97   2.82     2669      546    3.46    4.86    5.91          510
+
+== critical path, mean ms per task (share of wall time); Eden beside the loop and grading after it
+condition     n             eden         model          tool         other    eden-bg  grading
+eden~NEW     384       1642 (35%)    3062 (65%)        0 (0%)        1 (0%)       1631      899
+eden~NEWL    384       1533 (34%)    3024 (66%)        0 (0%)        1 (0%)       1526      882
+eden~NEWA    384       1673 (41%)    2368 (59%)        0 (0%)        2 (0%)       1695      859
+both~NEW     384       1052 (24%)    3328 (76%)        0 (0%)        1 (0%)       1043      906
+both~NEWL    384        965 (22%)    3347 (78%)        0 (0%)        1 (0%)        961      891
+both~NEWA    384        948 (28%)    2429 (72%)        0 (0%)        2 (0%)        970      919
+
+== paired differences (a − b), bootstrap 95% interval over tasks
+
+== per-second profile: mean ms of each second of task time by phase, over tasks still running
+-- eden~NEW (384 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%    802   198     0     0      802
+   1    100%    272   723     0     0      272
+   2     98%    213   737     0     0      210
+   3     85%    297   535     0     0      291
+   4     57%    144   706     0     0      143
+   5     42%     47   776     0     0       42
+   6     23%     18   671     0     0       19
+   7      9%      2   606     0     0        2
+   8      3%      0   529     0     0        0
+   9      1%      0   491     0     0        0
+  10      0%      0    56     0     0        0
+-- eden~NEWL (384 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%    775   224     0     0      775
+   1    100%    203   790     0     0      203
+   2     97%    231   707     0     0      228
+   3     82%    286   541     0     0      286
+   4     55%    124   709     0     0      121
+   5     37%     61   763     0     0       53
+   6     22%     21   613     0     0       21
+   7      8%      0   649     0     0        1
+   8      3%      0   462     0     0        1
+   9      0%      0   951     0     0        0
+-- eden~NEWA (384 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%    764   234     0     2      784
+   1    100%    457   501     0     0      464
+   2     86%    399   437     0     0      400
+   3     63%    118   833     0     0      116
+   4     55%     44   788     0     0       37
+   5     34%     24   615     0     0       22
+   6     10%      6   554     0     0        6
+   7      3%      0   663     0     0        2
+   8      2%      0   408     0     0        0
+   9      0%      0    26     0     0        0
+-- both~NEW (384 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%    802   197     0     0      802
+   1    100%    225   762     0     0      225
+   2     96%     20   939     0     0       15
+   3     85%      5   877     0     0        0
+   4     63%      3   760     0     0        1
+   5     33%      0   602     0     0        0
+   6      9%      0   457     0     0        0
+   7      1%      0   335     0     0        0
+   8      0%      0   924     0     0        0
+-- both~NEWL (384 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%    784   216     0     0      784
+   1    100%    165   825     0     0      165
+   2     96%     17   932     0     0       12
+   3     84%      0   876     0     0        0
+   4     62%      0   734     0     0        0
+   5     29%      0   576     0     0        0
+   6      7%      0   487     0     0        1
+   7      2%      0   433     0     0        0
+   8      0%      0   578     0     0        0
+-- both~NEWA (384 tasks)
+   s  running   eden model  tool other  eden-bg
+   0    100%    769   229     0     2      784
+   1    100%    171   791     0     0      180
+   2     86%      9   874     0     0        6
+   3     66%      0   718     0     0        0
+   4     27%      0   551     0     0        0
+   5      6%      0   431     0     0        0
+   6      1%      0   809     0     0        0
+   7      0%      0   616     0     0        0
+
+== uptake (hidden): raised rate (n) when the planted item was in a packet, only in an ask answer, or neither
+eden~NEW     packet 0.946 (129)   ask 0.870 (23)   neither 0.000 (40)
+eden~NEWL    packet 0.892 (120)   ask 0.900 (20)   neither 0.019 (52)
+eden~NEWA    packet 0.939 (98)   ask 0.882 (17)   neither 0.000 (77)
+both~NEW     packet 0.900 (130)   ask   -   (0)   neither 0.097 (62)
+both~NEWL    packet 0.944 (124)   ask   -   (0)   neither 0.088 (68)
+both~NEWA    packet 0.959 (49)   ask   -   (0)   neither 0.098 (143)
+
+== Eden per task: source calls, probe queries (calls), cache hits, judge calls, slow path and ask ms
+eden~NEW     sources 3.85  probes 9.35 (0.61 calls)  cache hits 0.17  judge 0.00 (p50 0 ms)  injected 1.04  slow p50 12 p90 23  ask p50 1140 ms
+eden~NEWL    sources 3.91  probes 9.34 (0.66 calls)  cache hits 0.17  judge 0.00 (p50 0 ms)  injected 0.99  slow p50 13 p90 22  ask p50 1078 ms
+eden~NEWA    sources 3.90  probes 9.88 (0.66 calls)  cache hits 0.17  judge 0.00 (p50 0 ms)  injected 0.83  slow p50 12 p90 22  ask p50 1085 ms
+both~NEW     sources 3.84  probes 8.10 (0.65 calls)  cache hits 0.17  judge 0.00 (p50 0 ms)  injected 1.04  slow p50 13 p90 24  ask p50 1203 ms
+both~NEWL    sources 3.88  probes 8.13 (0.68 calls)  cache hits 0.17  judge 0.00 (p50 0 ms)  injected 1.00  slow p50 13 p90 22  ask p50 1113 ms
+both~NEWA    sources 3.90  probes 8.13 (0.70 calls)  cache hits 0.17  judge 0.00 (p50 0 ms)  injected 0.64  slow p50 12 p90 23  ask p50 1162 ms
+
+== process: 181 s sampled, CPU p50 71.6% p90 97.2% max 265.3% of a core; CPU time user 143.8 s system 21.1 s (72 ms per run); RSS max 6140.3 MB; tasks in flight max 72
