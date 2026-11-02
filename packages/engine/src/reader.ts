@@ -29,9 +29,9 @@ import { cardKey, type Card } from "./cards";
 import { inert, messageParts } from "./render";
 
 /** The version of the prompt and its output's shape: a lab replay cache made by another prompt is not this one's. */
-export const READER_VERSION = 5;
+export const READER_VERSION = 7;
 /** Hard cap on the items one call reads, whatever `askReaderPool` says. */
-export const READER_MAX_ITEMS = 40;
+export const READER_MAX_ITEMS = 60;
 /** An item's text as the model reads it: its most relevant sentences, at most this many characters. */
 export const READER_ITEM_CHARS = 400;
 const READER_TITLE_CHARS = 120;
@@ -88,6 +88,11 @@ export interface ReaderInput {
   items: ReaderItem[];
   /** The user's day (YYYY-MM-DD), so "until Friday" and "expired" can be read against it. */
   today: string;
+  /**
+   * How many of `items`, from the first, are the user's standing constraints (`askReaderStanding`) rather than the
+   * request's candidates: read without the request's focus and sent first, as a prefix a provider can cache.
+   */
+  standing?: number;
 }
 
 const STOP = new Set(
@@ -247,14 +252,24 @@ export function readerMessages(input: ReaderInput): ChatMessage[] {
     );
   });
   const question = input.question ? `\n<question>${inert(head(input.question))}</question>` : "";
+  const k = Math.min(input.standing ?? 0, items.length);
+  const ask = `<request>${inert(head(input.request))}</request>${question}\n<items>\n${items.slice(k).join("\n")}\n</items>`;
+  if (k === 0) {
+    return [
+      { role: "system", content: READER_SYSTEM },
+      { role: "user", content: `<today>${inert(input.today)}</today>\n${ask}` },
+    ];
+  }
+  // The day and the standing constraints change slowly: they lead the user turn as a cached prefix, the request and
+  // its candidates follow it.
   return [
     { role: "system", content: READER_SYSTEM },
     {
       role: "user",
-      content:
-        `<today>${inert(input.today)}</today>\n<request>${inert(head(input.request))}</request>${question}\n` +
-        `<items>\n${items.join("\n")}\n</items>`,
+      content: `<today>${inert(input.today)}</today>\n<standing>\n${items.slice(0, k).join("\n")}\n</standing>`,
+      cache: true,
     },
+    { role: "user", content: ask },
   ];
 }
 
@@ -270,7 +285,8 @@ export function readerMessages(input: ReaderInput): ChatMessage[] {
 export const READER_SYSTEM =
   "An assistant is about to act on a user's request. Below are items from the user's own email, chat, calendar " +
   "and documents that a search found related to it. Find the items that mean the assistant should NOT simply do " +
-  "the request as written. Label each item that looks relevant with exactly one kind:\n" +
+  "the request as written. Items in <standing> are the user's standing rules, holds, limits and absences on file, " +
+  "numbered with the others; most bind nothing here. Label each item that looks relevant with exactly one kind:\n" +
   "- blocks: something stops it now: a freeze, hold, ban, closure or outage in force; a person, document, vehicle " +
   "or account it needs that is unavailable, expired, unverified or needed elsewhere at that time; a clash with " +
   "something already booked at the same time (for the user or the people involved); a required approval, " +
@@ -295,9 +311,9 @@ export const READER_SYSTEM =
   "activity, system or service, booking, person, place and dates), not another of the same kind. Then binds: " +
   "true only if same is true and, as you wrote it, the item stops, limits, changes or makes unnecessary the " +
   "request as written today; an item that lifts, allows, approves, restores or confirms is false.\n" +
-  'Reply with JSON only: {"bears":[{"i":<item index>,"why":"<at most 12 words: what it means for the ' +
+  'Reply with JSON only: {"bears":[{"i":<item index>,"why":"<at most 8 words: what it means for the ' +
   'request>","same":true|false,"binds":true|false,"k":"blocks"|"limits"|"changes"|"done"|"lookalike"}]}, ' +
-  'binding items first, most decisive first, at most 6 entries. Reply {"bears":[]} when nothing looks relevant.';
+  'binding items first, most decisive first, at most 4 entries. Reply {"bears":[]} when nothing looks relevant.';
 
 /** A bearing as the agent may read it: words of letters, digits and a few signs, bounded, redacted. */
 function cleanWhy(raw: unknown): string {
