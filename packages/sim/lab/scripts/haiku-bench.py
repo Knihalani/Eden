@@ -98,8 +98,10 @@ COMPARE = {
            ("both~NEW", "eden"), ("eden", "tools"), ("eden", "none"), ("tools", "none"),
            ("eden~NEW@w1000", "eden~NEW"), ("both~NEW@w1000", "both~NEW"),
            ("eden~NEW2", "eden~NEW"), ("both~NEW2", "both~NEW"), ("eden~NEW2", "eden"), ("both~NEW2", "tools"),
-           ("eden~NEW2N", "eden~NEW2"), ("both~NEW2N", "both~NEW2")],
-    "hermes": [("hermes+eden~NEW2", "hermes+eden~NEW"), ("hermes+eden~NEW2", "hermes+eden"), ("hermes+eden~NEW2", "hermes"),
+           ("eden~NEW2N", "eden~NEW2"), ("both~NEW2N", "both~NEW2"),
+           ("eden~NEWL", "eden~NEW"), ("eden~NEWA", "eden~NEW"), ("both~NEWL", "both~NEW"), ("both~NEWA", "both~NEW")],
+    "hermes": [("hermes+eden~NEWL", "hermes+eden~NEW"), ("hermes+eden~NEWA", "hermes+eden~NEW"),
+               ("hermes+eden~NEW2", "hermes+eden~NEW"), ("hermes+eden~NEW2", "hermes+eden"), ("hermes+eden~NEW2", "hermes"),
                ("hermes+eden~NEW", "hermes+eden"), ("hermes+eden~NEW", "hermes"), ("hermes+eden", "hermes")],
 }
 for h in sorted({r["harness"] for r in rows}):
