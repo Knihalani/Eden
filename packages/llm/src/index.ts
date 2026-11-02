@@ -12,6 +12,7 @@ export {
   anthropicCost,
   anthropicPrice,
   anthropicWorstCase,
+  readSse,
   type AnthropicCallRecord,
   type AnthropicMeter,
   type AnthropicOptions,

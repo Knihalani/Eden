@@ -80,7 +80,7 @@ import {
   type CardMaker,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
-import { Budget, priceFor, type Model } from "@eden/llm";
+import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { REALISTIC, simSources, type SimSource } from "../sources";
@@ -90,6 +90,7 @@ import {
   ASK_DESCRIPTION_GUIDED,
   emptyResult,
   grade,
+  gradeWith,
   MAX_STEPS,
   OverBudget,
   render,
@@ -105,7 +106,7 @@ import {
 import { ACTIONS, actionParams, coerceArgs, executed, type ActionRecord } from "./act";
 import { DiskBridgeMaker } from "./bridge-disk";
 import { DiskCardMaker, samePath } from "./cards-disk";
-import { isCapError, labAccess, labModel, piModelFor, piRegistry, providerPrefs } from "./free";
+import { isAnthropic, isCapError, labAccess, labModel, piModelFor, piRegistry, providerPrefs } from "./free";
 import { parseConditions, parseVariants, type Condition } from "./pi-conditions";
 import { PRESETS } from "./presets";
 import { parseSuites } from "./suites";
@@ -231,8 +232,13 @@ const exhausted = () => spent + held >= BUDGET * 0.98;
 
 // ---- Pi: the agent's model on OpenRouter, through pi-ai's OpenAI-compatible chat completions.
 const AGENT_MAX_TOKENS = 2_000;
-const piModel: PiModel<"openai-completions"> = piModelFor(MODEL, AGENT_MAX_TOKENS);
+const piModel = piModelFor(MODEL, AGENT_MAX_TOKENS);
 const models = piRegistry([piModel]);
+/** A `claude-*` agent is Anthropic's API: each request is reserved in and booked to the campaign's spend ledger. */
+const AGENT_ANTHROPIC = isAnthropic(MODEL);
+const AGENT_METER = AGENT_ANTHROPIC ? ACCESS.ledger!.meter("agent") : null;
+/** A `claude-*` grader goes through `AnthropicModel` on the ledger; any other through OpenRouter (`grade`). */
+const GRADER_MODEL = isAnthropic(GRADER) ? labModel(ACCESS, { apiKey: "", model: GRADER }, "grader") : null;
 
 // ---- Per-second process samples: CPU (of one core) and memory, with how many tasks and requests are in flight.
 let activeTasks = 0;
@@ -365,6 +371,8 @@ interface TaskRecord {
     cost: number;
     /** Of `in`, the tokens the endpoint read from its prompt cache (billed at its cache-read price). */
     cached?: number;
+    /** Of `in`, the tokens written to the prompt cache (Anthropic: billed at 1.25x input). */
+    cacheWrite?: number;
   }[];
   events: Timeline["events"];
   dropped: number;
@@ -676,8 +684,10 @@ async function runWorld(
         /** OpenRouter reported a cost (a free model's is 0, which stands). */
         costed: boolean;
         cached: number;
+        cacheWrite: number;
       } | null = null;
       let est = 0;
+      let ledgerEst = 0;
       const agent = new Agent({
         initialState: {
           systemPrompt: systemPrompt(world, { lookups: LOOKUPS, data: useTools || useEden, act }),
@@ -699,6 +709,15 @@ async function runWorld(
           const chars = JSON.stringify(context.messages).length;
           est = worstCase(MODEL, chars, AGENT_MAX_TOKENS);
           reserve(est);
+          if (AGENT_METER) {
+            ledgerEst = anthropicWorstCase(MODEL, chars, AGENT_MAX_TOKENS);
+            try {
+              AGENT_METER.reserve(ledgerEst);
+            } catch (e) {
+              settle(est, 0, "agent");
+              throw e;
+            }
+          }
           const at = performance.now();
           request = {
             id: tl.begin("model.request", "model", "path", { turn: turns + 1 }),
@@ -709,9 +728,28 @@ async function runWorld(
             cost: 0,
             costed: false,
             cached: 0,
+            cacheWrite: 0,
           };
           activeRequests++;
           const mine = request;
+          if (AGENT_ANTHROPIC) {
+            // Anthropic's events: the first content block's start is the first token; usage comes on message_end.
+            return models.streamSimple(model, context, {
+              ...options,
+              maxTokens: AGENT_MAX_TOKENS,
+              fetch: ACCESS.fetch,
+              maxRetries: 0,
+              timeoutMs: 90_000,
+              cacheRetention: "short",
+              onProviderStreamEvent: (event) => {
+                const e = event as { type?: string };
+                if (mine.first === null && (e.type === "content_block_start" || e.type === "content_block_delta")) {
+                  mine.first = performance.now();
+                  tl.point("model.first-token", { turn: turns + 1 }, mine.first);
+                }
+              },
+            });
+          }
           return models.streamSimple(model, context, {
             ...options,
             temperature: 0,
@@ -792,6 +830,31 @@ async function runWorld(
           request = null;
           activeRequests--;
           const end = performance.now();
+          if (AGENT_METER) {
+            // pi-ai's usage splits the prompt: uncached input, cache reads, cache writes.
+            const u = e.message.usage;
+            q.in = u.input + u.cacheRead + u.cacheWrite;
+            q.out = u.output;
+            q.cached = u.cacheRead;
+            q.cacheWrite = u.cacheWrite;
+            const usage = {
+              inputTokens: q.in,
+              cachedInputTokens: q.cached,
+              cacheWriteTokens: q.cacheWrite,
+              outputTokens: q.out,
+            };
+            q.cost = anthropicCost(usage, anthropicPrice(MODEL));
+            q.costed = true;
+            AGENT_METER.release(ledgerEst);
+            ACCESS.ledger!.write("agent", {
+              model: MODEL,
+              usage,
+              costUsd: q.cost,
+              latencyMs: Math.round(end - q.at),
+              ttftMs: q.first === null ? null : Math.round(q.first - q.at),
+              stopReason: e.message.stopReason ?? null,
+            });
+          }
           // A usage chunk with no cost (it should not happen on OpenRouter) is priced at the list price; a reported
           // cost stands, a free model's $0 included.
           const cost = q.costed ? q.cost : q.in || q.out ? worstCase(MODEL, q.in * 4, q.out) : 0;
@@ -809,6 +872,7 @@ async function runWorld(
             out: q.out,
             cost,
             ...(q.cached ? { cached: q.cached } : {}),
+            ...(q.cacheWrite ? { cacheWrite: q.cacheWrite } : {}),
           });
         } else if (e.type === "tool_execution_start") {
           r.toolCalls++;
@@ -827,6 +891,7 @@ async function runWorld(
         const q = request as { id: number };
         tl.end(q.id, { error: true });
         settle(est, 0, "agent");
+        AGENT_METER?.release(ledgerEst);
         activeRequests--;
         request = null;
       }
@@ -865,7 +930,9 @@ async function runWorld(
             }
             const meter: Meter = { before: () => {}, after: (c) => (cost = c) };
             const via = { fetch: ACCESS.fetch, allowLogging: ACCESS.allowLogging };
-            r.facts = (await grade(KEY!, meter, GRADER, task, r.answer, via)).facts;
+            r.facts = GRADER_MODEL
+              ? await gradeWith(GRADER_MODEL, task, r.answer, (c) => (cost = c))
+              : (await grade(KEY!, meter, GRADER, task, r.answer, via)).facts;
           } catch (e) {
             // A failed grading call leaves the result ungraded (reported), never scored as a miss. The status line
             // only: an error body can quote the request.

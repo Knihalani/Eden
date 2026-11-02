@@ -6,6 +6,7 @@
  */
 import { inert } from "@eden/engine";
 import { ASK_CONTEXT_DESCRIPTION, ASK_CONTEXT_GUIDED, type AgentEvent } from "@eden/protocol";
+import type { Model } from "@eden/llm";
 import { buildSessions } from "../sessions";
 import type { ActionRecord } from "./act";
 import type { SimSource } from "../sources";
@@ -341,6 +342,26 @@ export async function grade(
   }
   const { msg, usage } = await chat(key, meter, grader, gradeMessages(task, answer), undefined, true, options);
   return { facts: parseGrade(task, msg.content), usage };
+}
+
+/**
+ * `grade` through any `Model` (a `claude-*` grader on Anthropic's API, metered by the model itself): same prompt, same
+ * lenient reading. `onCost` gets the call's cost.
+ */
+export async function gradeWith(
+  model: Model,
+  task: Task,
+  answer: string,
+  onCost: (usd: number) => void = () => {},
+): Promise<Record<string, boolean>> {
+  if (task.must.length === 0 || !answer.trim()) return Object.fromEntries(task.must.map((f) => [f.id, false]));
+  const messages = gradeMessages(task, answer).map((m) => ({
+    role: m.role as "system" | "user" | "assistant",
+    content: String(m.content ?? ""),
+  }));
+  const res = await model.chat({ messages, maxTokens: 2_000, json: true });
+  onCost(res.costUsd ?? 0);
+  return parseGrade(task, res.text);
 }
 
 /** One task under one condition, as the results file records it (`agent-ab-report.ts` reads these). */

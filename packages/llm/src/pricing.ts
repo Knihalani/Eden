@@ -18,6 +18,8 @@ export interface Price {
  */
 export const PRICES: Record<string, Price> = {
   "z-ai/glm-5.3-flash": { input: 0.15, output: 0.5, cachedInput: 0.03 },
+  // Anthropic's list price up to 100K prompt tokens (cache writes 1.25x are not here: `anthropicCost` prices those).
+  "claude-haiku-5-5": { input: 0.1, output: 0.5, cachedInput: 0.01 },
 };
 
 export function priceFor(model: string, env = process.env): Price {

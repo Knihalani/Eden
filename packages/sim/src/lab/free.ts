@@ -19,6 +19,7 @@ import { AnthropicModel, Pacer, priceFor, OpenRouterModel, type Model, type Open
 import { SpendLedger } from "./spend";
 import { createModels, createProvider, envApiKeyAuth, type Model as PiModel } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
+import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
 
 export const FREE_RPM = 18;
 
@@ -111,13 +112,17 @@ export function labModel(access: LabAccess, options: OpenRouterOptions, role = "
   });
 }
 
+/** The Pi model the lab defines for an id: OpenRouter's chat completions, or Anthropic's Messages API (`claude-*`). */
+export type LabPiModel = PiModel<"openai-completions"> | PiModel<"anthropic-messages">;
+
 /**
  * A Pi model definition for any OpenRouter id, free ones included: pi-ai's generated catalog does not list every
  * OpenRouter model (and no `:free` variant), so the lab defines its own and registers it on its own provider. Cost is
  * the lab's price (`priceFor`: $0 for a free model), used only as pi-ai's estimate; runs book OpenRouter's reported
- * cost.
+ * cost. A `claude-*` id is Anthropic's own API (`piAnthropicModel`).
  */
-export function piModelFor(id: string, maxTokens: number): PiModel<"openai-completions"> {
+export function piModelFor(id: string, maxTokens: number): LabPiModel {
+  if (isAnthropic(id)) return piAnthropicModel(id, maxTokens);
   const p = priceFor(id);
   return {
     id,
@@ -141,19 +146,69 @@ export function piModelFor(id: string, maxTokens: number): PiModel<"openai-compl
   };
 }
 
-/** pi-ai's model registry with the lab's OpenRouter provider and these models on it (key: OPENROUTER_API_KEY). */
-export function piRegistry(models: PiModel<"openai-completions">[]) {
+/**
+ * A Claude model on Anthropic's Messages API through pi-ai's native provider (not in its catalog under this id).
+ * pi-ai puts a 5-minute `cache_control` breakpoint on the last tool, the system prompt and the last user turn, so a
+ * task's repeated prefix (tools, system, earlier turns) is read from the cache on every later step. Thinking stays off,
+ * as the OpenRouter agent sends no reasoning: `reasoning: true` makes "off" an explicit `{type: "disabled"}`, which
+ * Haiku 5.5 accepts at its default effort. Sampling parameters are never sent (Haiku 5.5 rejects them).
+ */
+export function piAnthropicModel(id: string, maxTokens: number): PiModel<"anthropic-messages"> {
+  const p = priceFor(id);
+  return {
+    id,
+    name: id,
+    api: "anthropic-messages",
+    provider: "anthropic-lab",
+    baseUrl: "https://api.anthropic.com",
+    reasoning: true,
+    input: ["text"],
+    cost: { input: p.input, output: p.output, cacheRead: p.input * 0.1, cacheWrite: p.input * 1.25 },
+    contextWindow: 1_000_000,
+    maxTokens,
+    compat: {
+      supportsTemperature: false,
+      // Eden's packets go in as system messages before the user turn, as on the OpenRouter agent.
+      supportsMidConvoSystemMessages: true,
+      supportsLongCacheRetention: true,
+      supportsCacheControlOnTools: true,
+      supportsEagerToolInputStreaming: false,
+    },
+  } as PiModel<"anthropic-messages">;
+}
+
+/**
+ * pi-ai's model registry with the lab's providers and these models on them: OpenRouter (key OPENROUTER_API_KEY) and
+ * Anthropic (key HAIKU_API_KEY, else ANTHROPIC_API_KEY; `keyFor`).
+ */
+export function piRegistry(models: LabPiModel[]) {
   const registry = createModels();
-  registry.setProvider(
-    createProvider({
-      id: "openrouter-lab",
-      name: "OpenRouter",
-      baseUrl: "https://openrouter.ai/api/v1",
-      auth: { apiKey: envApiKeyAuth("OpenRouter", ["OPENROUTER_API_KEY"]) },
-      models,
-      api: openAICompletionsApi(),
-    }),
-  );
+  const openrouter = models.filter((m): m is PiModel<"openai-completions"> => m.api === "openai-completions");
+  const anthropic = models.filter((m): m is PiModel<"anthropic-messages"> => m.api === "anthropic-messages");
+  if (openrouter.length) {
+    registry.setProvider(
+      createProvider({
+        id: "openrouter-lab",
+        name: "OpenRouter",
+        baseUrl: "https://openrouter.ai/api/v1",
+        auth: { apiKey: envApiKeyAuth("OpenRouter", ["OPENROUTER_API_KEY"]) },
+        models: openrouter,
+        api: openAICompletionsApi(),
+      }),
+    );
+  }
+  if (anthropic.length) {
+    registry.setProvider(
+      createProvider({
+        id: "anthropic-lab",
+        name: "Anthropic",
+        baseUrl: "https://api.anthropic.com",
+        auth: { apiKey: envApiKeyAuth("Anthropic", ["HAIKU_API_KEY", "ANTHROPIC_API_KEY"]) },
+        models: anthropic,
+        api: anthropicMessagesApi(),
+      }),
+    );
+  }
   return registry;
 }
 
