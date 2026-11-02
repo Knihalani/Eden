@@ -1321,7 +1321,17 @@ export class ContextPartner {
     // `askReader` (D95): one budgeted model call reads the widened pool; the items it says bind lead, with its bearing.
     const reading =
       this.config.askReader && this.deps.reader
-        ? await this.readAsk(s, cue, [...order, ...scored], chosen, limit)
+        ? await this.readAsk(
+            s,
+            cue,
+            // `askReaderIntent`: what the intent index matched for this request leads the reader's pool (its own
+            // ranking keeps only anchored matches; the reader judges the rest).
+            this.config.askReaderIntent && intentFound.size > 0
+              ? [...scored.filter((x) => intentFound.has(x.item.id)), ...order, ...scored]
+              : [...order, ...scored],
+            chosen,
+            limit,
+          )
         : null;
     if (reading) chosen = reading.chosen;
     // `readerPush`: the ask was the engine's own, for the user's request. What the reader flagged goes to the agent as
@@ -1334,7 +1344,11 @@ export class ContextPartner {
         : [];
       const fresh = flagged.filter((x) => s.ledger.isFresh(x.item.id, s.turn));
       const injection =
-        fresh.length > 0 && !s.closed ? this.deliver(s, fresh, "proactive", `reader:${cue.id}`, cue) : null;
+        fresh.length > 0 && !s.closed
+          ? this.config.readerPushNotes
+            ? this.deliver(s, fresh, "proactive", `reader:${cue.id}`, cue, undefined, undefined, reading!.notes)
+            : this.deliver(s, fresh, "proactive", `reader:${cue.id}`, cue)
+          : null;
       if (injection) s.pending.push(injection);
       const latencyMs = Math.round(performance.now() - t0);
       if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "reader-push", delivered: !!injection });
@@ -1540,8 +1554,11 @@ export class ContextPartner {
       const cache = this.deps.cache;
       const today = localDay(now, cache.offsetOf(s.scope));
       const ids = this.deps.cards.carded(s.scope);
+      const kinds: ReadonlySet<string> = this.config.askReaderStandingKinds.length
+        ? new Set(this.config.askReaderStandingKinds)
+        : DIGEST_KINDS;
       const extra = [...this.deps.cards.cardsOf(s.scope, ids, now)]
-        .filter(([, card]) => DIGEST_KINDS.has(card.kind) && activeOn(card, today))
+        .filter(([, card]) => kinds.has(card.kind) && activeOn(card, today))
         .map(([id]) => cache.get(s.scope, id, now))
         .filter((item): item is ContextItem => item !== null && !bulkMail(item))
         .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0) || (a.id < b.id ? -1 : 1))
@@ -5036,6 +5053,7 @@ export class ContextPartner {
     cue: Cue,
     shown?: string,
     learnt?: string,
+    notes?: ReadonlyMap<string, string>,
   ): Injection | null;
   private deliver(
     s: Session,
@@ -5045,6 +5063,7 @@ export class ContextPartner {
     cue: Cue,
     shown?: string,
     learnt?: string,
+    notes?: ReadonlyMap<string, string>,
   ): Injection;
   private deliver(
     s: Session,
@@ -5054,6 +5073,7 @@ export class ContextPartner {
     cue: Cue,
     shown?: string,
     learnt?: string,
+    notes?: ReadonlyMap<string, string>,
   ): Injection | null {
     const spans = this.spans;
     // `supersede`: a packet does not carry an item and the newer one that decides its matter, only the newer one. A
@@ -5070,7 +5090,7 @@ export class ContextPartner {
       }
     }
     const sp = spans?.open("deliver", cue.span, { items: scored.length });
-    const injection = this.build(s, scored, mode, reason, cue, sp?.id ?? 0, shown, learnt);
+    const injection = this.build(s, scored, mode, reason, cue, sp?.id ?? 0, shown, learnt, notes);
     if (sp) spans!.close(sp, { bytes: injection.text.length });
     return injection;
   }
@@ -5084,6 +5104,7 @@ export class ContextPartner {
     parent: number,
     shown?: string,
     learnt?: string,
+    notes?: ReadonlyMap<string, string>,
   ): Injection {
     const spans = this.spans;
     // Whatever path delivered them, a probe that first brought one in paid for its call (`probeYield`).
@@ -5138,6 +5159,8 @@ export class ContextPartner {
       ...(this.config.packetDates ? { keepYear: true, when: true } : {}),
       ...(this.config.compactParts ? { split: true } : {}),
       ...(bearing ? { bearing: (shown: ContextItem) => this.shownBearing(cue, shown, bearing) } : {}),
+      // `readerPushNotes`: the reader's bearing before each item it flagged, in Eden's words (as an ask shows it).
+      ...(notes?.size ? { note: (item: ContextItem) => notes.get(item.id) } : {}),
     };
     const injection: Injection = {
       ...s.scope,

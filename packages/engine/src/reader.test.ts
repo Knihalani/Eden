@@ -537,6 +537,11 @@ describe("the reader in the engine (config.askReader)", () => {
     );
     const none = failing.partner.takePending({ tenantId: "t", userId: "u1", sessionId: "s1" });
     expect(none.find((p) => p.reason.startsWith("reader:"))).toBeUndefined();
+    // Without readerPushNotes the packet carries the item alone; with it, the reader's bearing in Eden's words.
+    expect(packets.find((p) => p.reason.startsWith("reader:"))!.text).not.toContain("Eden's reader");
+    const noted = await run({ askReader: true, readerPush: true, readerPushNotes: true }, { asks: 0 });
+    const withNote = noted.partner.takePending({ tenantId: "t", userId: "u1", sessionId: "s1" });
+    expect(withNote.find((p) => p.reason.startsWith("reader:"))!.text).toContain("Eden's reader: blocks:");
     // Off (and with askReader alone), observing makes no reader call.
     const off = await run({ askReader: true }, { asks: 0 });
     expect(off.maker.calls.length).toBe(0);
