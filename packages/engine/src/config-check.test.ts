@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { checkEngineConfig, NEEDS_DEP, PARENTS } from "./config-check";
 
-const ALL_DEPS = { cards: true, bridge: true, reader: true };
+const ALL_DEPS = { cards: true, reader: true };
 
 describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silently)", () => {
   test("an unknown key, a wrong type or an out-of-range number is refused, naming the key", () => {

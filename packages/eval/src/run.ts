@@ -384,7 +384,5 @@ export function unwiredFlags(config: Partial<EngineConfig>, wired: { reader: boo
   if (config.askReader && !wired.reader) out.push("askReader (needs a reader: pass --reader stub|oracle)");
   if (config.cards) out.push("cards (needs a card maker; the eval wires none, so no card is made or matched)");
   if (config.intent) out.push("intent (needs the card maker's intent requests; not wired)");
-  if ((config.askReaderStanding ?? 0) > 0) out.push("askReaderStanding (needs cards; not wired)");
-  if (config.bridgeQuery) out.push("bridgeQuery (needs a bridge model; not wired)");
   return out;
 }

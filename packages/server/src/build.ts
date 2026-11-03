@@ -24,12 +24,6 @@ export interface BuildOptions {
   queryPlanner?: "off" | "serve" | "shadow";
   onShadow?: ShadowSink;
   /**
-   * Ask answers rewritten by the model (D43); off by default. When set (true or false) it wins over
-   * `engine.askWithModel`, as before D103; unset, `engine.askWithModel` decides. The servers pass true for
-   * EDEN_ASK_MODEL=1 and leave it unset otherwise, so the EDEN_ENGINE_CONFIG file's value holds.
-   */
-  askWithModel?: boolean;
-  /**
    * Background connector sync (D57, experimental, off by default): sources with a list tool are read into each
    * active user's cache in the background, on a one-minute timer, and lookups answer them locally.
    */
@@ -59,11 +53,7 @@ export function buildPartner(options: BuildOptions): ContextPartner {
     planner:
       mode === "off" ? undefined : new QueryPlanner({ seed: (Math.random() * 2 ** 32) >>> 0, store: sourceMap, mode }),
     onShadow: options.onShadow,
-    config: {
-      ...options.engine,
-      askWithModel: options.askWithModel ?? options.engine?.askWithModel ?? false,
-      ...(sync ? { sync: true } : {}),
-    },
+    config: { ...options.engine, ...(sync ? { sync: true } : {}) },
   });
   if (sync) partner.startSync();
   return partner;

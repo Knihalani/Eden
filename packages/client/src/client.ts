@@ -201,15 +201,6 @@ export class EdenClient {
     return (await this.post<{ injections: Injection[] }>("/v1/pending", this.who))?.injections ?? [];
   }
 
-  /**
-   * The user's active-constraints digest (`constraintDigest` on the server), as data for the agent's prompt; the same
-   * constraints give the same bytes, so it can sit in a cached prefix. Null when there is none, the flag is off, or
-   * on any error (fails open).
-   */
-  async digest(): Promise<Injection | null> {
-    return (await this.post<{ digest: Injection | null }>("/v1/digest", this.who))?.digest ?? null;
-  }
-
   /** `observe`'s injection plus anything pending, in one list. */
   async collect(injection: Injection | null): Promise<Injection[]> {
     return [...(injection ? [injection] : []), ...(await this.pending())];
@@ -246,12 +237,12 @@ export class EdenClient {
 
   /**
    * Whether this client's setup works end to end: the server answers and accepts the key, the tenant and the ids.
-   * It reads the digest, which changes nothing (unlike `pending`, which drains the queue). Never throws; `error` is
+   * It calls `/v1/whoami`, which changes nothing (unlike `pending`, which drains the queue). Never throws; `error` is
    * the text `onError` also receives.
    */
   async health(options: { timeoutMs?: number } = {}): Promise<{ ok: boolean; error?: string }> {
     let error = "eden: unavailable";
-    const res = await this.post<unknown>("/v1/digest", this.who, options.timeoutMs, (e) => {
+    const res = await this.post<unknown>("/v1/whoami", this.who, options.timeoutMs, (e) => {
       error = e instanceof Error ? e.message : String(e);
     });
     return res === null ? { ok: false, error } : { ok: true };

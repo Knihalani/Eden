@@ -6,14 +6,14 @@
  *     bun packages/server/src/mcp-stdio.ts
  *
  * The session id is per process. Proactive delivery needs the HTTP API or the SDK (D14). EDEN_QUERY_PLANNER and
- * EDEN_ASK_MODEL and EDEN_ENGINE_CONFIG (D103) work as for the HTTP server (config.ts). What the query planner
+ * EDEN_ENGINE_CONFIG (D103) work as for the HTTP server (config.ts). What the query planner
  * learns persists in a source map under $EDEN_HOME, one file per tenant/user (EDEN_SOURCE_MAP overrides it).
  */
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { isId, newId } from "@eden/protocol";
 import { buildPartner, openSourceMap } from "./build";
 import { warmGate } from "@eden/redact";
-import { askModel, plannerMode, stdioSourceMapPath } from "./config";
+import { plannerMode, stdioSourceMapPath } from "./config";
 import { sourcesFromEnv } from "./connectors";
 import { engineConfig } from "./engine-config";
 import { createMcpServer } from "./mcp";
@@ -31,8 +31,6 @@ const partner = buildPartner({
   // Fails open to an in-memory map (logged to stderr) when the file cannot be opened, rather than not starting.
   sourceMap: openSourceMap(() => stdioSourceMapPath(tenantId, userId)),
   queryPlanner: plannerMode(process.env.EDEN_QUERY_PLANNER),
-  // Unset unless EDEN_ASK_MODEL=1, so an EDEN_ENGINE_CONFIG `askWithModel` holds (build.ts).
-  askWithModel: askModel(process.env.EDEN_ASK_MODEL) || undefined,
   engine: engineConfig(),
 });
 // Before the transport opens, so the first ask does not compile the secret gate.

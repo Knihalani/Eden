@@ -14,8 +14,6 @@
  * EDEN_QUERY_PLANNER the query planner chooses what each lookup sends to each connector (D28), on by default (D33):
  *                    1 (default) serves through it; "shadow" serves without it and runs it beside, learning and
  *                    reporting only; 0 turns it off.
- * EDEN_ASK_MODEL=1   ask answers are rewritten as prose by the model; off by default, the cited items are returned
- *                    as they are (D43).
  * EDEN_ENGINE_CONFIG path of a JSON file of engine settings over the production defaults (D103, engine-config.ts);
  *                    unset, the defaults exactly (D12).
  * EDEN_SOURCES_FILE  static documents shared by every user (connectors.ts); EDEN_USER_SOURCES_FILE each user's own
@@ -43,8 +41,6 @@ export interface ServerConfig {
   gateWorkers: number;
   /** The query planner (EDEN_QUERY_PLANNER): "serve" by default (D33), "shadow" or "off". */
   queryPlanner: "off" | "serve" | "shadow";
-  /** Whether ask answers are rewritten by the model (EDEN_ASK_MODEL=1); off by default (D43). */
-  askWithModel: boolean;
   /** Largest request body the HTTP API reads (EDEN_MAX_BODY_BYTES); 8 MB by default (D100). */
   maxBodyBytes: number;
 }
@@ -85,7 +81,6 @@ export function loadConfig(env = process.env): ServerConfig {
     tenantBurst: positive(env.EDEN_TENANT_BURST, 400, "EDEN_TENANT_BURST"),
     gateWorkers: workers(env.EDEN_GATE_WORKERS),
     queryPlanner: plannerMode(env.EDEN_QUERY_PLANNER),
-    askWithModel: askModel(env.EDEN_ASK_MODEL),
     maxBodyBytes: bodyBytes(env.EDEN_MAX_BODY_BYTES),
   };
 }
@@ -104,13 +99,6 @@ export function stdioSourceMapPath(tenantId: string, userId: string, env = proce
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const name = createHash("sha256").update(scopeKey({ tenantId, userId })).digest("hex").slice(0, 32);
   return join(dir, `${name}.source-map.db`);
-}
-
-/** EDEN_ASK_MODEL's value: "1" turns model-composed ask answers on (D43), unset or "0" leaves them off. */
-export function askModel(raw: string | undefined): boolean {
-  if (raw === undefined || raw === "" || raw === "0") return false;
-  if (raw === "1") return true;
-  throw new Error(`EDEN_ASK_MODEL must be 0 or 1, got ${raw}`);
 }
 
 /** EDEN_QUERY_PLANNER's value as a planner mode; throws on anything else. */

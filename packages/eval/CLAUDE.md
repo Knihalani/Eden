@@ -13,7 +13,7 @@ privacy check (planted secrets, inert framing), direct asks, model calls and cos
 | `src/scenario.ts` | The scenario shape: sources and their docs, sessions of turns (an event and its gold label: items due by this turn or the next, `"silent"`, or unscored), planted `secrets`, direct `asks`, a `clock` |
 | `src/run.ts` | `runScenarios`: plays every scenario (a fresh planner and reader per scenario), scores, returns `Metrics`; `proxyOf` (oracle scores, labelled), `unwiredFlags` |
 | `src/reader-stub.ts` | No-model readers behind the real `AskReader`: `StubReader` (nothing binds), `OracleReader` (flags the expected items; a proxy). The eval's own copy of the lab's semantics: eval never imports `packages/sim` |
-| `src/cli.ts` | `bun run eval [--live [--ask-model]] [--wait ms] [--no-planner] [--config '{…}'] [--reader stub\|oracle] [dir]` → one JSON object |
+| `src/cli.ts` | `bun run eval [--live] [--wait ms] [--no-planner] [--config '{…}'] [--reader stub\|oracle] [dir]` → one JSON object |
 | `scenarios/*.json` | The scenarios; [docs/research/eval-suite.md](../../docs/research/eval-suite.md) says what each covers |
 
 ## Rules that apply here
@@ -34,8 +34,8 @@ privacy check (planted secrets, inert framing), direct asks, model calls and cos
   ($0). `--reader oracle` keeps the stub's headline metrics and adds `oracleProxy` from a second run whose reader flags
   exactly the expected items: it reads the gold labels, so every key in it is named `proxy*`, and it never enters
   precision, recall or falseFireRate. The oracle's verdicts are cached per session and prompt like a real reader's.
-- **Unwired flags are labelled.** `cards`, `intent`, `askReaderStanding` and `bridgeQuery` need a card maker or a
-  bridge model the eval does not wire: they run as if off, are named under `inert` in the JSON and on stderr. Use the
+- **Unwired flags are labelled.** `cards` and `intent` need a card maker the eval does not
+  wire: they run as if off, are named under `inert` in the JSON and on stderr. Use the
   lab's funnel (replayed cards) to measure them.
 - `secretsLeaked` and `notInert` must stay 0: a scenario plants secrets and an injection in mail to check D10/D11.
 - A new scenario is ground truth written by hand: keep its expected items honest (what the agent truly needs), not
@@ -47,7 +47,7 @@ privacy check (planted secrets, inert framing), direct asks, model calls and cos
 bun run test:pkg eval            # ~0.5 s (run.test.ts: the harness, the reader wiring, scenario integrity; no model)
 bun run eval                     # a few seconds, no model, deterministic: the metrics JSON
 bun run eval --config '{"probes":true}'   # the same scenarios under engine flags
-bun run eval --config "$(bun -e "import {PRESETS} from './packages/sim/src/lab/presets.ts'; console.log(JSON.stringify(PRESETS.NEW2))")" --reader stub
+bun run eval --config "$(bun -e "import {PRESETS} from './packages/sim/src/lab/presets.ts'; console.log(JSON.stringify(PRESETS.NEWL))")" --reader stub
 ```
 
 ## Where next

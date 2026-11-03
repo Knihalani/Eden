@@ -12,7 +12,7 @@
  *   observes the request but injects nothing and gives no tool;
  * - `~variant`: the settings `--variant-config` gives that name, over `--config`, so a configuration's A/B runs both
  *   arms in one process, concurrently and paired task by task (the machine's load falls on both alike);
- * - `+flag`: shorthand for one engine flag on, `eden+packetDates`; it stacks on a variant (`eden~ALL2+judgeBehind`);
+ * - `+flag`: shorthand for one engine flag on, `eden+askDedup`; it stacks on a variant (`eden~ALL2+slowPathQueue`);
  * - `@w<ms>`: how long the first observe waits for Eden's slow path (default 3000, the client's `withContext`).
  *
  * An unknown base throws: a typo must not run Eden under another condition's name.

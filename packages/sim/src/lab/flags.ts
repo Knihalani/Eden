@@ -94,11 +94,11 @@ export function flags(tool: string, known: FlagSpec, usage: string, argv = proce
 }
 
 /**
- * The lab wires every partner dependency a configuration can ask for (cards from `--cards`, the bridge from
- * `--bridge`, the reader from `--reader`); a configuration that needs one the run does not pass is caught by the
- * CLI's own checks (funnel.ts refuses askReader without `--reader`, and says when intent or the bridge is inert).
+ * The lab wires every partner dependency a configuration can ask for (cards from `--cards`, the reader from
+ * `--reader`); a configuration that needs one the run does not pass is caught by the CLI's own checks (funnel.ts
+ * refuses askReader without `--reader`, and says when intent is inert).
  */
-export const LAB_DEPS = { cards: true, bridge: true, reader: true } as const;
+export const LAB_DEPS = { cards: true, reader: true } as const;
 
 /**
  * Engine settings for a lab run: `config` (the whole merged configuration, preset and overrides) checked by

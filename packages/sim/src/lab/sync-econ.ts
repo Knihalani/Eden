@@ -7,10 +7,7 @@
  *
  * Modes:
  * - `poll` (D57 as configured: no timed polls, on-demand polls by each source's learned change rate, a daily sweep);
- * - `timed` (the same plus a timed poll every 15 minutes);
- * - `push` (`syncPush`: the push-capable sources declare a watch and send a notice per change, deletes named in it;
- *   the CRM still polls), with a source's notices read at the next tick (`push`), at most every 30 minutes in the
- *   background (`push30`, `syncPushGapMs`), or only by lookups and the daily check (`pushLazy`).
+ * - `timed` (the same plus a timed poll every 15 minutes).
  *
  * Reports per user-day: listing calls in the background and inside lookups (request-time calls), and freshness: at
  * each lookup, the share of the items that arrived (since the backfill) at least a minute before it that the index
@@ -42,13 +39,13 @@ const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const MIN = 60_000;
 const T0 = Date.UTC(2026, 9, 26, 0, 0);
-/** Per working day (09:00-18:00), the assumed arrival rate of each source, and whether it can push. */
-const RATES: [string, number, boolean][] = [
-  ["gmail", 60, true],
-  ["slack", 150, true],
-  ["calendar", 6, true],
-  ["drive", 8, true],
-  ["crm", 4, false],
+/** Per working day (09:00-18:00), the assumed arrival rate of each source. */
+const RATES: [string, number][] = [
+  ["gmail", 60],
+  ["slack", 150],
+  ["calendar", 6],
+  ["drive", 8],
+  ["crm", 4],
 ];
 const HISTORY_DAYS = 14;
 
@@ -97,10 +94,9 @@ function arrivals(rng: Rng, perDay: number, from: number, to: number): number[] 
   return out.sort((a, b) => a - b);
 }
 
-type Mode = "poll" | "timed" | "push" | "push30" | "pushLazy";
+type Mode = "poll" | "timed";
 
 async function run(mode: Mode) {
-  const push = mode.startsWith("push");
   const rng = new Rng(SEED);
   let clock = T0 - 30 * MIN;
   const end = T0 + DAYS * DAY;
@@ -131,13 +127,7 @@ async function run(mode: Mode) {
     budget: new Budget(),
     model: null,
     now: () => clock,
-    config: {
-      sync: true,
-      ...(mode === "timed" ? { syncEveryMs: 15 * MIN } : {}),
-      ...(push ? { syncPush: true } : {}),
-      ...(mode === "push30" ? { syncPushGapMs: 30 * MIN } : {}),
-      ...(mode === "pushLazy" ? { syncPushGapMs: Infinity } : {}),
-    },
+    config: { sync: true, ...(mode === "timed" ? { syncEveryMs: 15 * MIN } : {}) },
   });
   const sync = partner.sync!;
   sync.track(scope, clock);
@@ -145,25 +135,12 @@ async function run(mode: Mode) {
     await sync.tick();
     clock += MIN;
   }
-  // The watch's one poll (what changed before it, no notice names) counts with the backfill.
-  if (push) for (const [id, , pushes] of RATES) if (pushes) partner.sourcePushes(scope, id);
-  if (push) await sync.tick();
   const backfill = sources.reduce((a, s) => a + s.lists, 0);
   for (const s of sources) s.lists = 0;
   sync.stats.backgroundCalls = 0;
   sync.stats.demandCalls = 0;
-  // Lookups through each working day; events between ticks, as a webhook would deliver them.
+  // Lookups through each working day, between ticks.
   const lookupsAt: number[] = arrivals(rng, LOOKUPS, T0, end);
-  const notices = sources.flatMap((s, i) =>
-    RATES[i]![2]
-      ? s.planned.flatMap((p) => [
-          ...(p.arrive >= T0 ? [{ at: p.arrive, id: s.id, deleted: undefined as string[] | undefined }] : []),
-          ...(p.deleteAt < end ? [{ at: p.deleteAt, id: s.id, deleted: [p.item.id] }] : []),
-        ])
-      : [],
-  );
-  notices.sort((a, b) => a.at - b.at);
-  let ni = 0;
   let li = 0;
   const fresh: number[] = [];
   const staleDeleted: number[] = [];
@@ -171,41 +148,34 @@ async function run(mode: Mode) {
   const syncedAt = new Map<string, number>();
   const TICK = 5 * MIN;
   for (let t = T0; t < end; t += TICK) {
-    // Within this tick's five minutes: notices and lookups in time order, then the tick.
+    // Within this tick's five minutes: lookups in time order, then the tick.
     for (;;) {
-      const nextNotice = push && ni < notices.length && notices[ni]!.at < t + TICK ? notices[ni]!.at : Infinity;
       const nextLookup = li < lookupsAt.length && lookupsAt[li]! < t + TICK ? lookupsAt[li]! : Infinity;
-      if (nextNotice === Infinity && nextLookup === Infinity) break;
-      if (nextNotice <= nextLookup) {
-        const x = notices[ni++]!;
-        clock = x.at;
-        partner.sourceChanged(scope, x.id, x.deleted ? { deleted: x.deleted } : {});
-      } else {
-        li++;
-        clock = nextLookup;
-        sync.track(scope, clock);
-        demandCalls += await sync.freshen(scope, sources, AbortSignal.timeout(10_000));
-        let due = 0;
-        let held = 0;
-        let gone = 0;
-        let ghost = 0;
-        for (const s of sources) {
-          for (const p of s.planned) {
-            // Items that arrived during the measured days (the history beyond `syncMaxItems` is never synced).
-            if (p.arrive < T0 || p.arrive > clock - MIN) continue;
-            const has = cache.get(scope, p.item.id, clock) !== null;
-            if (p.deleteAt <= clock - MIN) {
-              gone++;
-              if (has) ghost++;
-            } else if (p.deleteAt > clock) {
-              due++;
-              if (has) held++;
-            }
+      if (nextLookup === Infinity) break;
+      li++;
+      clock = nextLookup;
+      sync.track(scope, clock);
+      demandCalls += await sync.freshen(scope, sources, AbortSignal.timeout(10_000));
+      let due = 0;
+      let held = 0;
+      let gone = 0;
+      let ghost = 0;
+      for (const s of sources) {
+        for (const p of s.planned) {
+          // Items that arrived during the measured days (the history beyond `syncMaxItems` is never synced).
+          if (p.arrive < T0 || p.arrive > clock - MIN) continue;
+          const has = cache.get(scope, p.item.id, clock) !== null;
+          if (p.deleteAt <= clock - MIN) {
+            gone++;
+            if (has) ghost++;
+          } else if (p.deleteAt > clock) {
+            due++;
+            if (has) held++;
           }
         }
-        fresh.push(held / Math.max(1, due));
-        staleDeleted.push(ghost / Math.max(1, gone));
       }
+      fresh.push(held / Math.max(1, due));
+      staleDeleted.push(ghost / Math.max(1, gone));
       for (const s of sources) {
         for (const p of s.planned) {
           if (!syncedAt.has(p.item.id) && cache.get(scope, p.item.id, clock) !== null) syncedAt.set(p.item.id, clock);
@@ -242,14 +212,12 @@ async function run(mode: Mode) {
     deletedStillHeld: Number(mean(staleDeleted).toFixed(4)),
     syncDelayP50Min: Number(((delays[Math.floor(delays.length / 2)] ?? 0) / MIN).toFixed(1)),
     syncDelayP90Min: Number(((delays[Math.floor(delays.length * 0.9)] ?? 0) / MIN).toFixed(1)),
-    notices: sync.stats.notices,
-    pushPolls: sync.stats.pushPolls,
     lookups: lookupsAt.length,
   };
 }
 
 const out = [];
-for (const mode of ["poll", "timed", "push", "push30", "pushLazy"] as const) {
+for (const mode of ["poll", "timed"] as const) {
   const r = await run(mode);
   console.log(JSON.stringify(r));
   out.push(r);

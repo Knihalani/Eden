@@ -5,7 +5,7 @@
  *   [--planner-no-reuse] [--planner-deadline-margin 2] [--planner-latency-quantile 0.9]
  *   [--planner-mode serve|shadow] [--promote-after N]] [--time 0] [--wait 0]
  *   [--noise 1] [--updates 0] [--refresh-after-hours H] [--max-refreshes 3] [--tool-rate 0.4]
- *   [--judge none|perfect|noisy] [--ask-model] [--live] [--brief] [--config '{"probes":true}']
+ *   [--judge none|perfect|noisy] [--live] [--brief] [--config '{"probes":true}']
  *   [--timeline out.jsonl] [--sync]
  *   [--cards DIR/cards-v2.jsonl]
  *   [--drafts clause|half [--typing-ms 1500]]
@@ -57,16 +57,13 @@ const cli = flags(
       ].map((k) => [k, "value" as const]),
     ),
     ...Object.fromEntries(
-      ["planner", "planner-no-cascade", "planner-no-reuse", "ask-model", "live", "brief", "sync"].map((k) => [
-        k,
-        "bool" as const,
-      ]),
+      ["planner", "planner-no-cascade", "planner-no-reuse", "live", "brief", "sync"].map((k) => [k, "bool" as const]),
     ),
   },
   `
 bun packages/sim/src/quality-cli.ts [--users 6] [--sessions 15] [--seed 1] [--profile realistic|ideal|entities|
   zoo-tune|zoo-a|zoo-b] [--planner ...] [--time 0] [--wait 0] [--noise 1] [--updates 0] [--tool-rate 0.4]
-  [--judge none|perfect|noisy] [--ask-model] [--live] [--brief] [--config '{"probes":true}'] [--timeline F] [--sync]
+  [--judge none|perfect|noisy] [--live] [--brief] [--config '{"probes":true}'] [--timeline F] [--sync]
   [--cards F] [--drafts clause|half [--typing-ms 1500]]   (bun run sim; the header of quality-cli.ts has every flag)`,
 );
 if (cli.rest.length) {
@@ -130,7 +127,6 @@ const report = await runQuality({
   config: {
     ...(has("refresh-after-hours") ? { refreshAfterMs: Number(arg("refresh-after-hours", "0")) * 3_600_000 } : {}),
     ...(has("max-refreshes") ? { maxRefreshes: Number(arg("max-refreshes", "3")) } : {}),
-    ...(has("ask-model") ? { askWithModel: true } : {}),
     // Any engine setting, as JSON (`--config '{"probes":true}'`): for experiments behind a flag.
     ...engineConfig,
   },

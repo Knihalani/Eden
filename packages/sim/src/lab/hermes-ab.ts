@@ -8,9 +8,8 @@
  *                `tools`). Hermes' own toolsets (terminal, files, web, browser, code, memory, skills, delegation, cron)
  *                are all off: `enabled_toolsets` is the MCP toolsets only, so the agent is read-only.
  * - hermes+eden: the same, plus Eden as two integration points, both Hermes' own extension surfaces:
- *                Eden's MCP server (`createMcpServer`: `ask_context` with the standard description; the guided one only
- *                when the config has `askGuard`, as ALL5 does and ALL3 does not), and the Eden plugin
- *                (packages/sim/lab/hermes/eden): `pre_llm_call` observes the turn and injects Eden's packet,
+ *                Eden's MCP server (`createMcpServer`: `ask_context` with the standard description), and the Eden
+ *                plugin (packages/sim/lab/hermes/eden): `pre_llm_call` observes the turn and injects Eden's packet,
  *                `post_tool_call` reports each tool result, `transform_tool_result` appends packets queued since.
  *                `~variant`, `+flag` and `@w<ms>` as in pi-conditions.ts (hermes-conditions.ts).
  *
@@ -28,7 +27,7 @@
  *   OPENROUTER_API_KEY=… bun packages/sim/src/lab/hermes-ab.ts --hermes-src DIR [--hermes-python PY]
  *     [--suite dev6a] [--seeds 41] [--variants hidden,control] [--conditions hermes,hermes+eden]
  *     [--config ALL3] [--variant-config '{"A5":{…}}'] [--model z-ai/glm-5.3-flash] [--grader …] [--budget 0.6]
- *     [--card-model m] [--cards FILE [--cards-out FILE]] [--intent FILE] [--bridge FILE] [--bridge-model m]
+ *     [--card-model m] [--cards FILE [--cards-out FILE]] [--intent FILE]
  *     [--allow-logging] [--rpm 18] [--max-requests N] [--limit n] [--templates a,b] [--concurrency 4]
  *     [--max-iterations 6] [--out hermes-ab.json] [--timeline dir] [--time-scale 1] [--dump FILE] [--dry]
  *
@@ -48,13 +47,9 @@ import {
   ContextPartner,
   DEFAULT_CONFIG,
   ItemCache,
-  bridgeKey,
-  ModelBridgeMaker,
   ModelCardMaker,
-  QueryBridge,
   AskReader,
   ModelReaderMaker,
-  type BridgeMaker,
   type CardMaker,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
@@ -81,7 +76,6 @@ import {
   type RunResult,
   type Task,
 } from "./ab-common";
-import { DiskBridgeMaker } from "./bridge-disk";
 import { DiskCardMaker, samePath } from "./cards-disk";
 import { isAnthropic, isCapError, keyFor, labAccess, labModel, providerPrefs } from "./free";
 import { parseHermesConditions, type HermesCondition } from "./hermes-conditions";
@@ -133,7 +127,6 @@ const DUMP = opt("dump", "");
 const CONFIG_ARG = opt("config", "ALL3");
 const CONFIG = PRESETS[CONFIG_ARG] ?? (JSON.parse(CONFIG_ARG) as Record<string, unknown>);
 const CARD_MODEL = opt("card-model", "z-ai/glm-5.3-flash");
-const BRIDGE_MODEL = opt("bridge-model", CARD_MODEL);
 const CONFIG_VARIANTS = parseVariants(opt("variant-config", "{}"));
 const CONDITIONS: HermesCondition[] = parseHermesConditions(CONDITION_NAMES, {
   config: CONFIG,
@@ -141,7 +134,6 @@ const CONDITIONS: HermesCondition[] = parseHermesConditions(CONDITION_NAMES, {
   defaults: DEFAULT_CONFIG as unknown as Record<string, unknown>,
 });
 const usesCards = CONDITIONS.some((c) => c.withPartner && c.config.cards === true);
-const usesBridge = CONDITIONS.some((c) => c.withPartner && c.config.bridgeQuery === true);
 /** `askReader` (D95): the ask-time reader's model, `--reader-model` (default Haiku 5.5, on the spend ledger). */
 const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
 const USES_READER = CONDITIONS.some((c) => c.withPartner && c.config.askReader === true);
@@ -149,7 +141,6 @@ const ACCESS = labAccess(args, [
   MODEL,
   GRADER,
   ...(usesCards ? [CARD_MODEL] : []),
-  ...(usesBridge ? [BRIDGE_MODEL] : []),
   ...(USES_READER ? [READER_MODEL] : []),
 ]);
 const PACER = ACCESS.pacer;
@@ -166,17 +157,14 @@ for (const f of INTENT_FILES) if (!existsSync(f)) throw new Error(`--intent ${f}
 const diskCards = CARDS_FILE
   ? new DiskCardMaker(CARDS_FILE, undefined, { out: CARDS_OUT, requests: INTENT_FILES })
   : null;
-const BRIDGE_FILE = opt("bridge", "");
-if (BRIDGE_FILE && !existsSync(BRIDGE_FILE)) throw new Error(`--bridge ${BRIDGE_FILE}: no such file`);
-const diskBridge = BRIDGE_FILE ? new DiskBridgeMaker(BRIDGE_FILE) : null;
 
 // ---- Spend: one hard cap over every call, reserved before the call at its worst case and settled at its real cost.
 let spent = 0;
 let held = 0;
 const spend = { agent: 0, eden: 0, grader: 0 };
-/** Every lane's reader, cards and bridge, for the calls their `Budget()` refused (the summary's `overBudget:` line). */
-const budgeted: Budgeted = { reader: [], cards: [], bridge: [] };
-/** Each stream's background spend (cards, bridge), for the report's all-in cost columns (ab-common.ts). */
+/** Every lane's reader and cards, for the calls their `Budget()` refused (the summary's `overBudget:` line). */
+const budgeted: Budgeted = { reader: [], cards: [] };
+/** Each stream's background spend (cards), for the report's all-in cost columns (ab-common.ts). */
 const background: Background[] = [];
 function reserve(est: number): void {
   if (spent + held + est > BUDGET) throw new OverBudget(`budget $${BUDGET} reached (spent $${spent.toFixed(4)})`);
@@ -217,7 +205,7 @@ function watched(source: SimSource, onCall: (op: string, start: number, end: num
   };
 }
 
-/** Eden's model calls (cards, bridge) as the engine sees them: reserved against the cap, timed onto `onCall`. */
+/** Eden's model calls (cards) as the engine sees them: reserved against the cap, timed onto `onCall`. */
 function meteredModel(
   inner: Model,
   onCall: (start: number, end: number, data: Record<string, unknown>) => void,
@@ -377,9 +365,9 @@ async function runWorld(
       current?.span("eden.source", "eden", "bg", start, end, { source: s.id, op, status }),
     ),
   );
-  // What this stream's background calls (cards, bridge) cost: booked to Eden's total, charged to no task (Background).
+  // What this stream's background calls (cards) cost: booked to Eden's total, charged to no task (Background).
   // Recorded in the results as the calls happen (below), so a stream that stops early (OverBudget, the request cap)
-  // still reports what its cards and bridge spent.
+  // still reports what its cards spent. `bridgeUsd` stays 0: the format earlier runs' results share.
   const bg: Background = {
     seed,
     suite: tasks[0]?.suite ?? "",
@@ -389,7 +377,7 @@ async function runWorld(
     bridgeUsd: 0,
     calls: 0,
   };
-  const onBg = (what: "cardsUsd" | "bridgeUsd", data: Record<string, unknown>) => {
+  const onBg = (what: "cardsUsd", data: Record<string, unknown>) => {
     bg.calls++;
     bg[what] += typeof data.cost === "number" ? data.cost : 0;
   };
@@ -407,36 +395,7 @@ async function runWorld(
       ? new CardEnricher({ maker: cardMaker(), budget: new Budget(), now: () => clock })
       : undefined;
   if (cards) budgeted.cards.push(cards);
-  const liveBridge = () =>
-    new ModelBridgeMaker(
-      meteredModel(labModel(ACCESS, { apiKey: KEY!, model: BRIDGE_MODEL }, "eden.bridge"), (start, end, data) => {
-        onBg("bridgeUsd", data);
-        current?.span("eden.bridge", "eden", "bg", start, end, data);
-      }),
-    );
-  const bridgeMaker = (): BridgeMaker => {
-    if (!diskBridge) return liveBridge();
-    const live = liveBridge();
-    return {
-      async make(requests: string[], signal: AbortSignal) {
-        const replayed = await diskBridge.make(requests);
-        const missing = requests.filter((r) => !diskBridge.queries.has(bridgeKey(r)));
-        if (missing.length === 0) return replayed;
-        const got = await live.make(missing, signal);
-        let k = 0;
-        const queries = requests.map((r, i) =>
-          diskBridge.queries.has(bridgeKey(r)) ? replayed.queries[i]! : (got.queries[k++] ?? null),
-        );
-        return { ...got, queries };
-      },
-    };
-  };
-  const bridge =
-    withPartner && config.bridgeQuery === true
-      ? new QueryBridge({ maker: bridgeMaker(), budget: new Budget(), now: () => clock })
-      : undefined;
-  if (bridge) budgeted.bridge.push(bridge);
-  if (cards || bridge) background.push(bg);
+  if (cards) background.push(bg);
   // `askReader`: one budgeted call per ask about an action, on the running task's timeline and charged to it (D95).
   let readerTask: RunResult | null = null;
   const reader =
@@ -467,7 +426,6 @@ async function runWorld(
         now: () => clock,
         config,
         ...(cards ? { cards } : {}),
-        ...(bridge ? { bridge } : {}),
         ...(reader ? { reader } : {}),
         onTrace: (t) => {
           const owner = bySession.get(t.sessionId);

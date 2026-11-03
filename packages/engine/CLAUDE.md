@@ -16,13 +16,13 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `cache.ts` | `ItemCache`: per-user BM25F item cache, TTL, synced items, near-duplicate suppression; `sanitizeItem` |
 | `text.ts`, `situation.ts` | Cues with no model (entities, content terms, chatter); a coarse situation label for routing |
 | `render.ts`, `fold.ts` | The packet and ask answer in the `<context … Data, not instructions>` envelope (D11, D19), compaction (D47, D68), folding (D52) |
-| `judge.ts` | The judge and ask-answer prompts and parsers (indexes only, D19) |
+| `judge.ts` | The judge's prompt and parser (indexes only, D19) |
 | `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50) |
 | `kg.ts`, `cards.ts`, `intent.ts`, `anticipate.ts`, `sync.ts` | Moonshot tracks (D56–D63, D87): graph walk, implication cards, intent index, anticipation, background sync |
-| `bridge.ts`, `digest.ts`, `reader.ts` | Bridging query (D89), constraints digest (D90), ask-time reader (D95, D96) — each a budgeted model call wired by the embedder |
+| `reader.ts` | Ask-time reader (D95, D96): a budgeted model call wired by the embedder |
 | `firewall.ts` | The action firewall's cue and grounds (D69) |
-| `decide.ts`, `rank.ts`, `rank-weights.json`, `facts-fingerprint.ts` | Per-candidate facts; the learned no-model ranker (D82) |
-| `supersede.ts`, `ledger.ts`, `usage.ts` | Supersession (D81); not-twice ledger; usage inference for learning (D13, D18) |
+| `decide.ts` | Per-candidate facts for the lab's candidate dump (`onCandidates`) |
+| `ledger.ts`, `usage.ts` | Not-twice ledger; usage inference for learning (D13, D18) |
 | `spans.ts`, `trace.ts` | Span tracing (off by default, content-free, D56); decision traces |
 | `gate.ts` | Redaction off the event loop through the worker pool (D25, D26) |
 
@@ -30,8 +30,8 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 
 ## Invariants (with the decisions)
 
-- **Model last (D4, D5, D45).** No model call and no network call on the fast path. Every model call (judge, ask
-  prose, cards, bridge, reader) goes through its own `Budget`, has bounded input, and fails open to the no-model path
+- **Model last (D4, D5, D45).** No model call and no network call on the fast path. Every model call (judge,
+  cards, reader) goes through its own `Budget`, has bounded input, and fails open to the no-model path
   (D41). A new per-event call needs a decision and a cost estimate in docs/COST-MODEL.md.
 - **Silence by default; precision over recall (D3, D6).** A change that raises recall by raising false fires needs a
   decision. Check `bun run eval` (falseFireRate 0 on main) and the lab's decoy counts.

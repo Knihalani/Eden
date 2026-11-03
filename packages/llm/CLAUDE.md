@@ -29,7 +29,7 @@ No dependencies (plain `fetch`).
   own decision, PRIVACY.md and COST-MODEL.md (D98 says the same for NEW's reader).
 - **Secrets.** Never log or print `OPENROUTER_API_KEY`, `HAIKU_API_KEY` or `ANTHROPIC_API_KEY`; errors must not
   include request headers. Tests run with `OPENROUTER_*` and `EDEN_*` cleared (`scripts/test-preload.ts`).
-- **Untrusted text (D11).** Prompts are built by callers (engine `judge.ts`, `cards.ts`, `bridge.ts`, `reader.ts`),
+- **Untrusted text (D11).** Prompts are built by callers (engine `judge.ts`, `cards.ts`, `reader.ts`),
   which fence item text as data; this package sends what it is given.
 
 ## Test

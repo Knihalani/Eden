@@ -5,7 +5,7 @@ on Pi and Hermes, the connector lab, and their reports. The runbook with copy-pa
 [docs/LAB.md](../../../../docs/LAB.md); this file is the map and the rules.
 
 **Another session may be editing** `hidden-funnel, pi-ab, hermes-ab, hermes-host, hermes-proxy, hermes-worker,
-cards-enrich, bridge-enrich, presets, suites, free, spend` (`.ts`): check `git log origin/main` before changing them.
+cards-enrich, presets, suites, free, spend` (`.ts`): check `git log origin/main` before changing them.
 
 ## Key files
 
@@ -13,8 +13,8 @@ cards-enrich, bridge-enrich, presets, suites, free, spend` (`.ts`): check `git l
 |---|---|
 | `suites.ts` | `SUITES` by name, `parseSuites` (`all`, `heldout-all`, `train`), `UNRUN_BLIND` (left out of `all`) |
 | `hidden-context.ts`, `hidden-*.ts` | The suites: each plants one item (hidden) or a near-miss decoy (control) per template in a world |
-| `presets.ts` | `PRESETS`: H (D55), ALL3 (D80), ALL5 (D92), NEW (D96, recommended D98), NEWL (D99), NEW2; ALL3B and NEWB (+ `syncPollBehind`, D72's open run) |
-| `hidden-funnel.ts` | The no-model funnel: each task through Eden alone; returned/cached/delivered, decoys, calls, ms; `--ask`, `--cards`, `--intent`, `--bridge`, `--reader`, `--timeline`, `--json` |
+| `presets.ts` | `PRESETS`: H (D55), ALL3 (D80), NEW (D96, recommended D98), NEWL (D99); ALL3B and NEWB (+ `syncPollBehind`, D72's open run), NEWBB, ALL3BG, NEWBG |
+| `hidden-funnel.ts` | The no-model funnel: each task through Eden alone; returned/cached/delivered, decoys, calls, ms; `--ask`, `--cards`, `--intent`, `--reader`, `--timeline`, `--json` |
 | `funnel.ts` | `bun run funnel`: the funnel with a preset, replayed cards and `--ask`, and the funnel score; refuses held-out suites without `--blind` |
 | `funnel-merge.ts` | funnel.ts's arithmetic, tested in-process: `defaultJobs` (`--time` > 0 shards concurrently by default), `amortisedCalls` (merged connector calls), `callMismatches` (shards whose traces miss calls) |
 | `flags.ts` | Strict flags for the $0 CLIs (funnel, hidden-funnel, quality-cli): unknown flag, stray argument or missing value exits 2, `--help` prints usage; `labConfig` checks `--config`/`--set` with @eden/engine's `checkEngineConfig` |
@@ -23,13 +23,13 @@ cards-enrich, bridge-enrich, presets, suites, free, spend` (`.ts`): check `git l
 | `ab-common.ts` | Tasks, prompts, tools, grader and results format shared by every A/B (comparable results) |
 | `agent-ab.ts`, `agent-ab-report.ts` | The older in-house loop (label its results as such) and the shared report |
 | `free.ts`, `spend.ts`, `free-smoke.ts` | Lab access: pacer, `--allow-logging`, `--rpm`, `--max-requests`, keys; the Anthropic spend ledger and cap |
-| `cards-enrich.ts`, `cards-disk.ts`, `bridge-enrich.ts`, `bridge-disk.ts`, `reader-disk.ts` | Make once, replay free: cards (+ `--intent` requests), bridge queries, reader calls |
+| `cards-enrich.ts`, `cards-disk.ts`, `reader-disk.ts` | Make once, replay free: cards (+ `--intent` requests), reader calls |
 | `gate-traffic.ts`, `reader-latency-fit.ts` | No-model reader instruments: calls, gating and oracle-gate ceilings per preset (`--reuse`: cross-session verdict reuse); the reader latency fit (floor, ms per token) |
 | `timeline.ts`, `timeline-report.ts` | `--timeline` spans, CPU% and RSS per second; where the time went |
 | `ledger.ts`, `bench.ts`, `bench-compare.ts` | The benchmark ledger (`bench/ledger.jsonl`, `bench/runs/`) |
 | `regrade.ts`, `reprice.ts`, `act*.ts`, `firewall-replay.ts`, `uptake.ts` | Re-grading, fixed-price re-costing (D71), action mode and firewall (D69), uptake |
 | `distilled-reader.ts`, `distilled-fit.ts` | `--distill record\|labels\|cascade`: record the reader's verdicts as labels, replay them at $0, or put a no-model scorer in front of the reader (rejected, D110); `../../lab/distilled/run.sh` |
-| `rank-fit.ts`, `decide-fit.ts`, `cards-census.ts`, `*-reach.ts`, `graph-bench.ts`, `graph-memory.ts`, `sync-*.ts` | Offline instruments for one track each |
+| `decide-fit.ts`, `cards-census.ts`, `graph-bench.ts`, `graph-memory.ts`, `sync-*.ts` | Offline instruments for one track each |
 | `lab.ts`, `lab-cli.ts`, `connectors.ts`, `build.ts`, `capture.ts` | The connector lab: real MCP servers in Docker over seeded backends (`bun run sim:lab`) |
 
 Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-bench.py` (run with `python3 -I`).

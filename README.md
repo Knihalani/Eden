@@ -50,12 +50,12 @@ call; `defaultWaitMs` (or `waitMs` per call) fixes that, see [docs/INTEGRATION.m
 Both servers run on the production defaults. To turn on experimental engine flags, point `EDEN_ENGINE_CONFIG` at a
 JSON file of engine settings (`packages/engine/src/config.ts`); an unknown key, a wrong type, a number out of its
 range or a setting that would do nothing stops startup with a message naming it (D103). Only settings the servers can
-run are accepted: the no-model flags, the judge and `askWithModel` (both under the per-session budget; see
+run are accepted: the no-model flags and the judge (under the per-session budget; see
 [docs/COST-MODEL.md](docs/COST-MODEL.md)). Settings that need a model role the servers do not wire (`cards`,
-`intent`, `constraintDigest`, `bridgeQuery`, `askReader`, `readerPush`, `readerPushBehind` and their numbers) are
+`intent`, `askReader`, `readerPush`, `readerPushBehind` and their numbers) are
 refused unless at their default, so the NEW family is not runnable from the shipped servers. So are `sync` and every
-`sync*` setting (static sources cannot be listed; sync over per-user MCP sources is not supported from the servers yet) and push sync (`syncPush*`: no server
-route relays source watches or change notices) (D106). ALL3 minus `cards` and `sync` is runnable: on the no-model
+`sync*` setting (static sources cannot be listed; sync over per-user MCP sources is not supported from the servers
+yet) (D106). ALL3 minus `cards` and `sync` is runnable: on the no-model
 train funnel it surfaces 193 of 384 hidden facts against ALL3's 214, with as many decoys (190), and it lowers the
 no-model eval's precision from 1 to 0.91. [docs/profiles/](docs/profiles/README.md) has checked-in profiles with
 their numbers (D104, D106); none is recommended yet (no held-out or live check), and the defaults stay the

@@ -1,4 +1,4 @@
-/** The lab's named engine configurations (`--config H|ALL3|ALL5`), shared by pi-ab.ts and hermes-ab.ts. */
+/** The lab's named engine configurations (`--config H|ALL3|NEW`), shared by pi-ab.ts and hermes-ab.ts. */
 
 // D55's recommended experimental configuration, by name, so the documented commands stay short.
 export const PRESETS: Record<string, Record<string, unknown>> = {
@@ -22,9 +22,7 @@ export const PRESETS: Record<string, Record<string, unknown>> = {
     judgeTied: true,
   },
 };
-// D80's ALL3, and ALL5 (docs/research/edge-combined.md, proposed): ALL3 plus the intent index, the bridging query and
-// guarded, answer-shaped asks and packets. ALL5 needs `--cards` (with `--intent` to replay requests) and a bridge
-// model.
+// D80's ALL3.
 PRESETS.ALL3 = {
   ...PRESETS.H,
   consequenceProbe: true,
@@ -41,15 +39,6 @@ PRESETS.ALL3 = {
   compactParts: true,
   cardsEconomy: true,
 };
-PRESETS.ALL5 = {
-  ...PRESETS.ALL3,
-  intent: true,
-  bridgeQuery: true,
-  bridgeQuestions: true,
-  bridgeAskSeats: 2,
-  askGuard: true,
-  packetBearing: true,
-};
 // docs/research/haiku-opt.md (D96, proposed): ALL3 plus the intent index (D87) and the ask-time reader (D95, prompt
 // v5) with `askReaderDrop` and `readerPush` (the reader's flags as a packet for an acting request). Needs `--cards`
 // and `--intent` (requests replayed) and a reader model (`--reader-model`).
@@ -59,13 +48,6 @@ PRESETS.NEW = {
   askReader: true,
   askReaderDrop: true,
   readerPush: true,
-};
-// docs/research/haiku-phase3.md (proposed): NEW plus every request read (`askReaderQuestions`, which `readerPush` also
-// follows) and the user's standing constraints in the reader's pool, sent as a cached prefix (`askReaderStanding`).
-PRESETS.NEW2 = {
-  ...PRESETS.NEW,
-  askReaderQuestions: true,
-  askReaderStanding: 20,
 };
 // docs/research/haiku-phase3.md (D99): NEW's cheaper operating point. The reader is skipped when no candidate could
 // constrain the request, and reads 15 candidates of at most 240 characters.

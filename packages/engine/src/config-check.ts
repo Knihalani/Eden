@@ -8,20 +8,19 @@
  * - the key is one of `DEFAULT_CONFIG`'s (an unknown key is a typo or a flag from another version);
  * - its value has its default's type (`CHOICES` for strings with a fixed set, string lists' entries from `NAMES`);
  * - a number is finite and ≥ 0, and within its `RANGES` entry (whole, at least, at most);
- * - a key that acts only through a partner dependency (`NEEDS_DEP`: cards, bridge, reader) the caller does not wire
+ * - a key that acts only through a partner dependency (`NEEDS_DEP`: cards, reader) the caller does not wire
  *   is at its default (`deps`);
  * - with `parents` (the default), on the whole configuration merged over `DEFAULT_CONFIG`: a key set off its default
  *   has every parent flag it acts under (`PARENTS`) on. Check the merged preset + override, never an override alone,
  *   so a child set under a preset that turns its parent on is accepted.
  */
-import { CARD_KINDS } from "./cards";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { READER_KINDS } from "./reader";
 
 type Key = keyof EngineConfig;
 
 /** A partner dependency some settings act through (`PartnerDeps`). */
-export type ConfigDep = "cards" | "bridge" | "reader";
+export type ConfigDep = "cards" | "reader";
 
 /** String-valued keys and the values each accepts; every other key's type is its default's. */
 const CHOICES: Partial<Record<Key, readonly string[]>> = { probeWhen: ["always", "actions"] };
@@ -29,40 +28,25 @@ const CHOICES: Partial<Record<Key, readonly string[]>> = { probeWhen: ["always",
 /**
  * Keys that act only when the partner has a dependency, with that dependency. Set to anything but their default
  * without it they would be silent no-ops, so they are refused; the default (off, for a flag) is accepted. The numbers
- * and lists here are read only on their dependency's path (partner.ts: `digestFor`, the only reader of
- * `constraintDigest`, `digestLines` and `digestBytes`, returns nothing without cards, `askReaderStanding` fills the
- * reader's pool, `readerPushWaitMs` bounds the reader's push, the `intent*` settings are read by `intentFinds`, which
- * needs cards).
+ * and lists here are read only on their dependency's path (partner.ts: `readerPushWaitMs` bounds the reader's push,
+ * the `intent*` settings are read by `intentFinds`, which needs cards).
  */
 export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   cards: "cards",
   cardsEconomy: "cards",
   cardItems: "cards",
-  constraintDigest: "cards",
-  digestLines: "cards",
-  digestBytes: "cards",
   intent: "cards",
   intentHits: "cards",
   intentMinCoverage: "cards",
   intentMinMatched: "cards",
   intentWeight: "cards",
   intentSeats: "cards",
-  bridgeQuery: "bridge",
-  bridgeQuestions: "bridge",
-  bridgeWaitMs: "bridge",
-  bridgeHits: "bridge",
-  bridgeAskSeats: "bridge",
   askReader: "reader",
-  askReaderQuestions: "reader",
-  askReaderClear: "reader",
   askReaderDrop: "reader",
   askReaderPool: "reader",
   askReaderWaitMs: "reader",
-  askReaderStanding: "reader",
   askReaderItemChars: "reader",
-  askReaderStandingKinds: "reader",
   readerPush: "reader",
-  readerPushNotes: "reader",
   readerPushKinds: "reader",
   readerPushWaitMs: "reader",
   readerPushBehind: "reader",
@@ -96,12 +80,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   syncCatchupPages: SYNC,
   syncMaxUsersPerTenant: SYNC,
   syncLocalAll: SYNC,
-  syncWide: SYNC,
   syncTermProbes: SYNC,
-  syncPush: SYNC,
-  syncPushMaxStaleMs: ["sync", "syncPush"],
-  syncPushSweepMs: ["sync", "syncPush"],
-  syncPushGapMs: ["sync", "syncPush"],
   graphItems: ["graph"],
   graphSeats: ["graph"],
   graphGround: ["graph"],
@@ -109,7 +88,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   graphLearn: ["graph"],
   graphBudgetMs: ["graph"],
   graphFloor: ["graph"],
-  graphWordTies: ["graph"],
   graphDays: ["graph"],
   cardItems: ["cards"],
   cardsEconomy: ["cards"],
@@ -119,25 +97,13 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   intentMinMatched: ["cards", "intent"],
   intentWeight: ["cards", "intent"],
   intentSeats: ["cards", "intent"],
-  constraintDigest: ["cards"],
-  digestLines: ["cards", "constraintDigest"],
-  digestBytes: ["cards", "constraintDigest"],
-  bridgeWaitMs: ["bridgeQuery"],
-  bridgeHits: ["bridgeQuery"],
-  bridgeAskSeats: ["bridgeQuery"],
-  bridgeQuestions: ["bridgeQuery"],
   askReaderPool: READER,
   askReaderWaitMs: READER,
-  askReaderQuestions: READER,
-  askReaderClear: READER,
   askReaderDrop: READER,
-  askReaderStanding: ["askReader", "cards"],
   askReaderItemChars: READER,
-  askReaderStandingKinds: ["askReader", "cards"],
   readerPush: READER,
   readerGate: READER,
   readerPushKinds: PUSH,
-  readerPushNotes: PUSH,
   readerPushWaitMs: PUSH,
   readerPushBehind: [...PUSH, ...POLL_BEHIND],
   anticipateCalls: ["anticipate"],
@@ -196,18 +162,12 @@ const RANGES: Partial<Record<Key, Range>> = {
   syncMaxUsersPerTenant: SIZE,
   syncTermProbes: COUNT,
   cardItems: COUNT,
-  askFullItems: COUNT,
   decideCandidates: COUNT,
-  askContextItems: COUNT,
   intentHits: COUNT,
   intentMinCoverage: SHARE,
   intentMinMatched: COUNT,
   intentSeats: COUNT,
-  bridgeHits: COUNT,
-  bridgeAskSeats: COUNT,
   askReaderPool: COUNT,
-  askReaderStanding: COUNT,
-  digestLines: COUNT,
 };
 
 /**
@@ -221,7 +181,6 @@ export const ANTICIPATE_PARTS: readonly string[] = ["tools", "serve", "names", "
 const NAMES: Partial<Record<Key, readonly string[]>> = {
   anticipateOff: ANTICIPATE_PARTS,
   readerPushKinds: READER_KINDS,
-  askReaderStandingKinds: CARD_KINDS,
 };
 
 export interface ConfigCheckOptions {
@@ -234,8 +193,8 @@ export interface ConfigCheckOptions {
   /** Refuse a key set off its default whose `PARENTS` are not all on (default true). */
   parents?: boolean;
   /**
-   * Keys the caller cannot serve beyond `NEEDS_DEP` (the server: push sync needs a notice route, sync needs listable
-   * sources), each with the phrase its error gives after the key ("needs …"); refused unless at their default.
+   * Keys the caller cannot serve beyond `NEEDS_DEP` (the server: sync needs listable sources), each with the phrase
+   * its error gives after the key ("needs …"); refused unless at their default.
    */
   refuse?: Partial<Record<Key, string>>;
 }
