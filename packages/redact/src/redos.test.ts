@@ -4,8 +4,8 @@
  * values are assembled from parts, so no literal in this file is one.
  */
 import { describe, expect, test } from "bun:test";
-import { RE2_RULES, sanitizeForStore, secretRules } from "./secrets";
-import { SHARDS, shardRules, slowOn } from "./redos-sweep";
+import { backtrackingEngine, linearEngine, RE2_RULES, rulesWith, sanitizeForStore, secretRules } from "./secrets";
+import { CEILING_MS, costMs, craftedInputs, SHARDS, shardRules, slowOn } from "./redos-sweep";
 
 // The crafted-input sweep is split by rule index over this file (shard 0) and redos-{1,2,3}.test.ts (redos-sweep.ts).
 describe("rules left on JavaScript's engine stay cheap on crafted input", () => {
@@ -20,6 +20,16 @@ describe("rules left on JavaScript's engine stay cheap on crafted input", () => 
       .filter((rule) => !RE2_RULES.has(rule.id))
       .map((r) => r.id);
     expect(ids.sort()).toEqual(all.sort());
+  });
+
+  test("the sweep's cost (the lesser of wall and CPU time) still flags a rule that backtracks", () => {
+    // curl-auth-header is on RE2 because JavaScript's engine backtracks on it: about 78 ms on its "curl:" run here,
+    // on either clock (the cheapest of the seven to show; with every rule on JavaScript the sweep flags all seven).
+    const js = rulesWith({ rule: () => backtrackingEngine, allowlist: linearEngine });
+    const rule = js.find((r) => r.id === "curl-auth-header")!;
+    expect(RE2_RULES.has(rule.id)).toBe(true);
+    const text = [...craftedInputs(rule)].find((t) => t.startsWith("curl:curl:"))!;
+    expect(costMs(() => rule.spans(text))).toBeGreaterThan(CEILING_MS);
   });
 });
 
