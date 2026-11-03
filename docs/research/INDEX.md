@@ -112,6 +112,7 @@ and ALL4 (D84) branch off ALL3 (`packages/sim/src/lab/presets.ts`).
 | [broad-set.md](broad-set.md) | 2026-11-02 | — | train1–6 written blind; four rule-based tracks (ledger, ranker/gate, lexical bridge, validity) do not generalise; misses are reading, not retrieval | train adopted (tooling); the four tracks rejected |
 | [hermes-lab.md](hermes-lab.md) | 2026-11-02 | — | Hermes Agent with and without Eden: harness, smoke and a blind free-model run; full-bench estimates | adopted (tooling) |
 | [haiku-opt.md](haiku-opt.md) | 2026-11-02 | D95, D96, D97 | The ask-time reader on Haiku 5.5; prompt v5 labels lookalikes; `askReaderDrop`, `readerPush` | adopted (NEW) |
+| [new-minus-intent.md](new-minus-intent.md) | 2026-11-03 | D104 | NEW and NEWL without the intent index on train: −8.6 and −8.3 points of hidden for 16.9× fewer background items; intent kept | rejected (dropping intent) |
 | [haiku-benchmark.md](haiku-benchmark.md) | 2026-11-02 | D97, D98 | NEW vs ALL3 vs tools in Pi and Hermes, blind held-out 5–8 and 10–12: +22.8 / +23.9 points hidden raised, $24.36 | adopted (NEW is the recommendation) |
 
 Not in this directory: [../RESEARCH.md](../RESEARCH.md) (the Meta PMA paper and open questions),
