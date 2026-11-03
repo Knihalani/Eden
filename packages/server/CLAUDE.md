@@ -15,7 +15,7 @@ defaults.
 | `src/mcp.ts` | `createMcpServer`: one `ask_context` tool (guided description with `askGuard`, D88) |
 | `src/mcp-stdio.ts` | One user's `ask_context` over stdio (`EDEN_TENANT`, `EDEN_USER`, `EDEN_SOURCES_FILE`); persists its source map per user, falling back to an in-memory map (logged to stderr) when the file cannot be opened (`openSourceMap`); warms the gate before connecting |
 | `src/connectors.ts` | `staticSources`/`staticResolver` (`EDEN_SOURCES_FILE`, static and shared by every user); `sourcesFromEnv` (adds `UserSources` when `EDEN_USER_SOURCES_FILE` is set) |
-| `src/user-sources.ts` | `UserSources` (D104): per-(tenant, user) sources from a `SourceDirectory` (`fileDirectory` for `EDEN_USER_SOURCES_FILE`, or an embedding's vault), MCP connections cached per scope and closed on forget, idle (15 min), cap (10,000 users) or a changed spec; `checkSpecs` |
+| `src/user-sources.ts` | `UserSources` (D104): per-(tenant, user) sources from a `SourceDirectory` (`fileDirectory` for `EDEN_USER_SOURCES_FILE`, or an embedding's vault), MCP connections cached per scope and closed on forget, idle (15 min), the per-tenant cap (10,000 users), a changed spec, or a directory error or timeout (5 s); `checkSpecs` |
 | `src/main.ts` | `bun run dev`; passes `EDEN_MAX_BODY_BYTES` to `Bun.serve` as `maxRequestBodySize`; warms the secret gate (`warmGate`) before listening and logs `startup N ms` |
 
 ## Rules that apply here
@@ -40,8 +40,8 @@ defaults.
   static documents only (an entry without `docs` stops startup). MCP sources go in `EDEN_USER_SOURCES_FILE` or an
   embedding's `SourceDirectory`, through `UserSources`: built per scope from that scope's spec, cached per (tenant,
   user, source id), never shared. A new piece of per-user source state is keyed by scope, torn down by `forget`, and
-  gets a two-user test in `user-sources.test.ts`. A user's broken config is silence on lookups and a 422 on
-  `/v1/sources`, never a 5xx.
+  gets a two-user test in `user-sources.test.ts`. A user's broken config leaves them the shared sources and is a
+  422 on `/v1/sources`, never a 5xx. Caps on per-user state are per tenant, so one tenant cannot evict another's.
 - **Warm the gate before serving.** The secret gate compiles its ~230 rules on first use; `warmGate()` moves that to
   startup. Measured (3 runs each, `bun packages/engine/bench/pipeline.bench.ts 1500 300`, with and without a preload
   calling it): event #0 49.3/46.1/36.7 ms cold vs 9.6/14.2/12.6 ms warm; warm-up lag max 71.8/69.7/56.2 vs

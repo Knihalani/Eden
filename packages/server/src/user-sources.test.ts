@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Scope } from "@eden/protocol";
-import { ReadOnlyViolation, type Source } from "@eden/sources";
+import { ReadOnlyViolation, StaticSource, type Source } from "@eden/sources";
 import { z } from "zod";
 import { buildPartner } from "./build";
 import { sourcesFromEnv, staticSources } from "./connectors";
@@ -193,13 +193,13 @@ describe("UserSources: per-user sources and connections (D104)", () => {
     expect(mail.stats.open).toBe(0);
   });
 
-  test("idle users are closed by the sweep; past maxUsers the least recently used is closed", async () => {
+  test("idle users are closed by the sweep; past the tenant's cap its least recently used is closed", async () => {
     let now = 0;
     const servers = { alice: mailServer("alice"), bob: mailServer("bob") };
     const us = userSources((scope) => [mcpSpec(servers[scope.userId as "alice" | "bob"].transport)], {
       now: () => now,
       idleMs: 1_000,
-      maxUsers: 1,
+      maxUsersPerTenant: 1,
     });
     await texts(await us.resolver(alice), alice);
     now = 500;
@@ -212,6 +212,43 @@ describe("UserSources: per-user sources and connections (D104)", () => {
     await settle();
     expect(servers.bob.stats.open).toBe(0);
     expect(us.size).toBe(0);
+  });
+
+  test("one tenant making up user ids evicts only its own users, never another tenant's", async () => {
+    const victim = mailServer("victim");
+    const us = userSources((scope) => (scope.tenantId === "globex" ? [mcpSpec(victim.transport)] : []), {
+      maxUsersPerTenant: 3,
+    });
+    const v = { tenantId: "globex", userId: "v" };
+    await texts(await us.resolver(v), v);
+    for (let i = 0; i < 20; i++) await us.resolver({ tenantId: "acme", userId: `made-up-${i}` });
+    await settle();
+    expect(victim.stats.open).toBe(1);
+    expect(us.size).toBe(4);
+    expect((await us.resolver(v))[0]?.id).toBe("mail");
+    expect(victim.stats.connects).toBe(1);
+  });
+
+  test("a directory that does not answer is an error within the timeout: old connections close", async () => {
+    let now = 0;
+    let stuck = false;
+    const mail = mailServer("alice");
+    const us = userSources(() => (stuck ? new Promise<never>(() => {}) : [mcpSpec(mail.transport)]), {
+      now: () => now,
+      specTtlMs: 100,
+      directoryTimeoutMs: 50,
+    });
+    await texts(await us.resolver(alice), alice);
+    stuck = true;
+    now = 200;
+    await us.resolver(alice); // starts the refresh that hangs
+    await new Promise((r) => setTimeout(r, 120));
+    expect(mail.stats.open).toBe(0);
+    expect((await us.status(alice)).error).toMatch(/did not answer in 50 ms/);
+    // A first lookup against a stuck directory is answered (with nothing) instead of hanging.
+    const started = performance.now();
+    expect(await us.resolver(bob)).toEqual([]);
+    expect(performance.now() - started).toBeLessThan(1_000);
   });
 
   test("a changed spec (a new credential) rebuilds the connection; an unchanged one is kept", async () => {
@@ -237,7 +274,7 @@ describe("UserSources: per-user sources and connections (D104)", () => {
     expect(first.stats.open).toBe(0);
   });
 
-  test("a directory error is that user's config error: no sources, connections closed, other users unaffected", async () => {
+  test("a directory error is that user's config error: shared only, connections closed, others unaffected", async () => {
     let now = 0;
     let broken = false;
     const mail = mailServer("alice");
@@ -246,16 +283,19 @@ describe("UserSources: per-user sources and connections (D104)", () => {
         if (broken && scope.userId === "alice") throw new SourceConfigError("vault: alice's token was revoked");
         return [mcpSpec(mail.transport)];
       },
-      { now: () => now, specTtlMs: 100 },
+      { now: () => now, specTtlMs: 100, shared: [new StaticSource("faq", "team FAQ", [])] },
     );
-    await texts(await us.resolver(alice), alice);
+    await texts(
+      (await us.resolver(alice)).filter((s) => s.id === "mail"),
+      alice,
+    );
     broken = true;
     now = 200;
-    await us.resolver(alice).catch(() => {});
+    await us.resolver(alice);
     await settle();
-    await expect(us.resolver(alice)).rejects.toBeInstanceOf(SourceConfigError);
+    expect((await us.resolver(alice)).map((s) => s.id)).toEqual(["faq"]);
     expect(mail.stats.open).toBe(0);
-    expect((await us.resolver(bob)).map((s) => s.id)).toEqual(["mail"]);
+    expect((await us.resolver(bob)).map((s) => s.id)).toEqual(["faq", "mail"]);
     expect(await us.status(alice)).toEqual({ sources: [], error: "vault: alice's token was revoked" });
   });
 
@@ -269,13 +309,14 @@ describe("UserSources: per-user sources and connections (D104)", () => {
     ] as const;
     for (const [spec, why] of bad) {
       const us = userSources(() => [spec as never]);
-      await expect(us.resolver(alice)).rejects.toThrow(why);
+      expect(await us.resolver(alice)).toEqual([]);
+      expect((await us.status(alice)).error).toMatch(why);
     }
     const twice = userSources(() => [
       { kind: "static", id: "a", description: "", docs: [] },
       { kind: "static", id: "a", description: "", docs: [] },
     ]);
-    await expect(twice.resolver(alice)).rejects.toThrow(/listed twice/);
+    expect((await twice.status(alice)).error).toMatch(/listed twice/);
   });
 
   test("read-only (D7) is untouched: a search tool not marked read-only is refused through the handle", async () => {
@@ -314,6 +355,45 @@ describe("source files at startup", () => {
     expect(() => fileDirectory(write("c.json", { users: { alice: [] } }))).toThrow(/"<tenantId>\/<userId>"/);
     const bad = { users: { "acme/alice": [{ kind: "mcp", id: "m", description: "", url: "https://x" }] } };
     expect(() => fileDirectory(write("d.json", bad))).toThrow(/users\["acme\/alice"\]\[0\]\.searchTool\.name/);
+  });
+
+  test("a re-read applies entry by entry: a typo in one user's entry does not hold back another's revocation", () => {
+    let now = 0;
+    const entry = (id: string) => [{ kind: "static", id, description: "", docs: [] }];
+    const p = write("reload.json", { users: { "acme/alice": entry("notes"), "acme/bob": entry("notes") } });
+    const logs: string[] = [];
+    const directory = fileDirectory(p, { now: () => now, log: (m) => logs.push(m) });
+    expect(directory(alice)).toHaveLength(1);
+    // Alice is removed (revoked) and Bob's entry gets a typo in the same save.
+    writeFileSync(p, JSON.stringify({ users: { "acme/bob": [{ kind: "statik", id: "notes", description: "" }] } }));
+    utimesSync(p, new Date(), new Date(Date.now() + 10_000));
+    now = 6_000;
+    expect(directory(alice)).toEqual([]);
+    expect(() => directory(bob)).toThrow(/kind must be/);
+    // A half-written file keeps the last good read and is tried again at the next check, even at the same mtime.
+    writeFileSync(p, '{"users": {');
+    utimesSync(p, new Date(), new Date(Date.now() + 20_000));
+    now = 12_000;
+    expect(() => directory(bob)).toThrow(/kind must be/);
+    expect(logs).toHaveLength(1);
+    writeFileSync(p, JSON.stringify({ users: { "acme/bob": entry("fixed") } }));
+    utimesSync(p, new Date(), new Date(Date.now() + 20_000));
+    now = 18_000;
+    expect(directory(bob)).toEqual([expect.objectContaining({ id: "fixed" })]);
+  });
+
+  test("only: the stdio server reads and checks its own user's entry alone", () => {
+    const other = { kind: "mcp", id: "m", description: "", url: "https://x", headers: { A: { env: "EDEN_UNSET_X" } } };
+    const p = write("only.json", {
+      users: {
+        "acme/alice": [{ kind: "static", id: "notes", description: "", docs: [] }],
+        "acme/bob": [{ ...other, searchTool: { name: "s" } }],
+      },
+    });
+    expect(() => fileDirectory(p)).toThrow(/EDEN_UNSET_X/);
+    const directory = fileDirectory(p, { only: alice });
+    expect(directory(alice)).toHaveLength(1);
+    expect(directory(bob)).toEqual([]);
   });
 
   test("sourcesFromEnv: static only without EDEN_USER_SOURCES_FILE, per user with it", async () => {

@@ -10,10 +10,12 @@
  * - Connections are opened lazily (McpSource connects on first search) and cached per scope and source id. A spec
  *   whose fingerprint changes (a new token, a new URL) closes the old connection and builds a new one.
  * - The directory is asked again at most every `specTtlMs` (default 60 s), so a revoked account stops being read
- *   within that time; a directory error retires every held source of that user (no stale credentials are kept in use).
+ *   within that time; a directory error, or no answer within `directoryTimeoutMs` (5 s), retires every held source
+ *   of that user (no stale credentials are kept in use) and leaves them the shared sources only.
  * - `forget(scope)` (POST /v1/forget) closes the user's connections and drops the entry; `forget(scope, id)` closes
- *   one. A user not resolved for `idleMs` (default 15 min) is closed by the sweep; past `maxUsers` the least recently
- *   used is closed. A held source handed out before a close refuses further calls, and a call that was in flight
+ *   one. A user not resolved for `idleMs` (default 15 min) is closed by the sweep (background sync, D57, resolves its
+ *   users on every step, so a synced user stays open); past `maxUsersPerTenant` that tenant's least recently used
+ *   is closed. A held source handed out before a close refuses further calls, and a call that was in flight
  *   when it was closed closes the connection again when it settles, so no reconnect outlives the close.
  * - Read-only (D7) is untouched: every MCP source is an `McpSource`, which runs its own check on connect.
  */
@@ -56,6 +58,10 @@ export interface McpSpec {
    * time the directory is asked (every `specTtlMs`).
    */
   transport?: () => Transport;
+  /**
+   * Put credentials in `headers` (or `transport`), never in an `args` closure: `args` is compared by its source text,
+   * so a rotated token captured there would not rebuild the connection.
+   */
   searchTool: McpSourceOptions["searchTool"];
   fetchTool?: McpSourceOptions["fetchTool"];
   listTool?: McpSourceOptions["listTool"];
@@ -72,7 +78,8 @@ export class SourceConfigError extends Error {}
 
 const DEFAULT_IDLE_MS = 15 * 60_000;
 const DEFAULT_SPEC_TTL_MS = 60_000;
-const DEFAULT_MAX_USERS = 10_000;
+const DEFAULT_MAX_USERS_PER_TENANT = 10_000;
+const DEFAULT_DIRECTORY_TIMEOUT_MS = 5_000;
 const SWEEP_MS = 60_000;
 
 export interface UserSourcesOptions {
@@ -81,7 +88,10 @@ export interface UserSourcesOptions {
   shared?: Source[];
   idleMs?: number;
   specTtlMs?: number;
-  maxUsers?: number;
+  /** Users held per tenant; past it the tenant's least recently used is closed (one tenant never evicts another). */
+  maxUsersPerTenant?: number;
+  /** A directory call slower than this is that user's error (default 5 s): a stuck vault keeps no old credential. */
+  directoryTimeoutMs?: number;
   now?: () => number;
   log?: (message: string) => void;
 }
@@ -109,11 +119,12 @@ interface UserEntry {
 }
 
 export class UserSources {
-  /** Least recently used first: `sources` re-inserts, so the sweep and the cap read from the front. */
-  private readonly users = new Map<string, UserEntry>();
+  /** Per tenant, least recently used first: `ready` re-inserts, so the sweep and the cap read from the front. */
+  private readonly tenants = new Map<string, Map<string, UserEntry>>();
   private readonly idleMs: number;
   private readonly specTtlMs: number;
-  private readonly maxUsers: number;
+  private readonly maxUsersPerTenant: number;
+  private readonly directoryTimeoutMs: number;
   private readonly now: () => number;
   private readonly log: (message: string) => void;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -121,12 +132,13 @@ export class UserSources {
   constructor(private readonly o: UserSourcesOptions) {
     this.idleMs = o.idleMs ?? DEFAULT_IDLE_MS;
     this.specTtlMs = o.specTtlMs ?? DEFAULT_SPEC_TTL_MS;
-    this.maxUsers = o.maxUsers ?? DEFAULT_MAX_USERS;
+    this.maxUsersPerTenant = o.maxUsersPerTenant ?? DEFAULT_MAX_USERS_PER_TENANT;
+    this.directoryTimeoutMs = o.directoryTimeoutMs ?? DEFAULT_DIRECTORY_TIMEOUT_MS;
     this.now = o.now ?? Date.now;
     this.log = o.log ?? ((m) => console.error(m));
   }
 
-  /** The resolver to hand to `buildPartner`. Rejects with `SourceConfigError` when the user's config is broken. */
+  /** The resolver to hand to `buildPartner`. A user whose config is broken gets the shared sources only. */
   readonly resolver: SourceResolver = (scope) => this.sources(scope);
 
   /** Starts the idle sweep (unref'd: it never keeps the process alive). */
@@ -137,25 +149,19 @@ export class UserSources {
   }
 
   async sources(scope: Scope): Promise<Source[]> {
-    const u = await this.ready(scope);
-    if (u.error !== null) throw new SourceConfigError(u.error);
-    const own = [...u.held.values()].map((h) => h.lease as Source);
-    const shared = (this.o.shared ?? []).filter((s) => !u.held.has(s.id));
-    return [...shared, ...own];
+    return this.listOf(await this.ready(scope));
   }
 
-  /** The user's sources and configuration error, without opening a connection. */
+  /** The user's sources and configuration error (read from one state), without opening a connection. */
   async status(scope: Scope): Promise<UserSourcesStatus> {
     const u = await this.ready(scope);
     if (u.error !== null) return { sources: [], error: u.error };
-    const list = await this.sources(scope);
-    return { sources: list.map((s) => ({ id: s.id, kind: s.kind })), error: null };
+    return { sources: this.listOf(u).map((s) => ({ id: s.id, kind: s.kind })), error: null };
   }
 
   /** Closes the user's connections (all, or one source's) and, for the whole user, drops their entry. */
   forget(scope: Scope, sourceId?: string): void {
-    const key = scopeKey(scope);
-    const u = this.users.get(key);
+    const u = this.tenants.get(scope.tenantId)?.get(scopeKey(scope));
     if (!u) return;
     if (sourceId === undefined) {
       this.drop(u);
@@ -172,9 +178,11 @@ export class UserSources {
   /** Closes every user idle past `idleMs`. */
   sweep(): void {
     const cutoff = this.now() - this.idleMs;
-    for (const u of [...this.users.values()]) {
-      if (u.usedAt > cutoff) break; // LRU order: the rest are newer
-      this.drop(u);
+    for (const users of [...this.tenants.values()]) {
+      for (const u of [...users.values()]) {
+        if (u.usedAt > cutoff) break; // LRU order: the rest of this tenant's are newer
+        this.drop(u);
+      }
     }
   }
 
@@ -182,29 +190,42 @@ export class UserSources {
   close(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
-    for (const u of [...this.users.values()]) this.drop(u);
+    for (const users of [...this.tenants.values()]) for (const u of [...users.values()]) this.drop(u);
   }
 
-  /** Users with an entry (tests, stats). */
+  /** Users with an entry, across tenants (tests, stats). */
   get size(): number {
-    return this.users.size;
+    let n = 0;
+    for (const users of this.tenants.values()) n += users.size;
+    return n;
+  }
+
+  /** Shared sources (minus ids the user has their own of) and the user's own; shared only on a config error. */
+  private listOf(u: UserEntry): Source[] {
+    const own = [...u.held.values()].map((h) => h.lease as Source);
+    const shared = (this.o.shared ?? []).filter((s) => !u.held.has(s.id));
+    return [...shared, ...own];
+  }
+
+  private isCurrent(u: UserEntry): boolean {
+    return this.tenants.get(u.scope.tenantId)?.get(u.key) === u;
   }
 
   private async ready(scope: Scope): Promise<UserEntry> {
     const key = scopeKey(scope);
     const now = this.now();
-    let u = this.users.get(key);
-    if (u) this.users.delete(key);
+    let users = this.tenants.get(scope.tenantId);
+    if (!users) this.tenants.set(scope.tenantId, (users = new Map()));
+    let u = users.get(key);
+    if (u) users.delete(key);
     else {
       const own = { tenantId: scope.tenantId, userId: scope.userId };
       u = { scope: own, key, held: new Map(), usedAt: now, specsAt: -Infinity, loading: null, error: null };
     }
-    this.users.set(key, u);
+    users.set(key, u);
     u.usedAt = now;
-    while (this.users.size > this.maxUsers) {
-      const oldest = this.users.values().next().value!;
-      this.drop(oldest);
-    }
+    // Per tenant: a tenant making up user ids evicts only its own users.
+    while (users.size > this.maxUsersPerTenant) this.drop(users.values().next().value!);
     if (now - u.specsAt >= this.specTtlMs && !u.loading) {
       const entry = u;
       entry.loading = this.refresh(entry).finally(() => (entry.loading = null));
@@ -217,9 +238,9 @@ export class UserSources {
   private async refresh(u: UserEntry): Promise<void> {
     let specs: SourceSpec[];
     try {
-      specs = checkSpecs(await this.o.directory(u.scope), `sources of ${u.key}`);
+      specs = checkSpecs(await this.ask(u.scope), `sources of ${u.key}`);
     } catch (e) {
-      if (this.users.get(u.key) !== u) return;
+      if (!this.isCurrent(u)) return;
       const message = e instanceof Error ? e.message : String(e);
       if (message !== u.error) this.log(`eden: sources of ${u.key} not served: ${message}`);
       u.error = message;
@@ -230,7 +251,7 @@ export class UserSources {
       return;
     }
     // Forgotten (or evicted) while the directory answered: build nothing for it.
-    if (this.users.get(u.key) !== u) return;
+    if (!this.isCurrent(u)) return;
     u.error = null;
     u.specsAt = this.now();
     const next = new Map<string, Held>();
@@ -252,8 +273,28 @@ export class UserSources {
     u.held = next;
   }
 
+  /** The directory's answer, or a `SourceConfigError` past `directoryTimeoutMs`. */
+  private async ask(scope: Scope): Promise<unknown> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new SourceConfigError(`the source directory did not answer in ${this.directoryTimeoutMs} ms`)),
+        this.directoryTimeoutMs,
+      );
+    });
+    try {
+      return await Promise.race([Promise.resolve().then(() => this.o.directory(scope)), late]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   private drop(u: UserEntry): void {
-    if (this.users.get(u.key) === u) this.users.delete(u.key);
+    if (this.isCurrent(u)) {
+      const users = this.tenants.get(u.scope.tenantId)!;
+      users.delete(u.key);
+      if (users.size === 0) this.tenants.delete(u.scope.tenantId);
+    }
     for (const h of u.held.values()) h.lease.retire();
     u.held.clear();
   }
@@ -425,29 +466,43 @@ export function checkSpecs(raw: unknown, where: string): SourceSpec[] {
   return raw as SourceSpec[];
 }
 
-interface UsersFile {
-  users: Map<string, SourceSpec[]>;
+/** Each user's specs, or the message of what is wrong with their entry. */
+type UsersFile = Map<string, SourceSpec[] | { error: string }>;
+
+export interface FileDirectoryOptions {
+  /** Only this scope's entry is read and checked (the stdio server, one user per process). */
+  only?: Scope;
+  log?: (m: string) => void;
+  now?: () => number;
 }
 
 /**
- * EDEN_USER_SOURCES_FILE as a directory: `{"users": {"<tenant>/<user>": [spec, ...]}}`. Checked in full when read: a
- * bad entry anywhere stops startup with a message naming it, and every `{"env"}` header must be set. The file is
- * re-read when its modification time changes (checked at most every 5 s); a re-read that fails the check keeps the
- * last good file and logs why. A user not in the file has no sources of their own.
+ * EDEN_USER_SOURCES_FILE as a directory: `{"users": {"<tenant>/<user>": [spec, ...]}}`. At startup it is checked in
+ * full: a bad entry anywhere (or an `{"env"}` header whose variable is unset) stops startup with a message naming it.
+ * The file is re-read when its modification time changes (checked at most every 5 s), entry by entry: a user whose
+ * new entry is broken gets that as their configuration error (their connections close), a user no longer listed has
+ * no sources of their own, and the others take their new entries, so one typo does not hold back a revocation. A
+ * re-read of a file that is not valid JSON or not `{"users": {...}}` keeps the last good one and logs why, and is
+ * tried again at the next check.
  */
-export function fileDirectory(path: string, log: (m: string) => void = (m) => console.error(m)): SourceDirectory {
-  let current = readUsersFile(path);
+export function fileDirectory(path: string, options: FileDirectoryOptions = {}): SourceDirectory {
+  const log = options.log ?? ((m: string) => console.error(m));
+  const only = options.only ? scopeKey(options.only) : undefined;
   let mtime = statSync(path).mtimeMs;
-  let checkedAt = Date.now();
+  let current = readUsersFile(path, only);
+  for (const entry of current.values()) if (!Array.isArray(entry)) throw new SourceConfigError(entry.error);
+  const clock = options.now ?? Date.now;
+  let checkedAt = clock();
   return (scope) => {
-    const now = Date.now();
+    const now = clock();
     if (now - checkedAt >= 5_000) {
       checkedAt = now;
       try {
         const m = statSync(path).mtimeMs;
         if (m !== mtime) {
+          current = readUsersFile(path, only);
+          // Only after a good read: a half-written file read within one mtime tick is read again next time.
           mtime = m;
-          current = readUsersFile(path);
         }
       } catch (e) {
         log(
@@ -455,11 +510,13 @@ export function fileDirectory(path: string, log: (m: string) => void = (m) => co
         );
       }
     }
-    return current.users.get(scopeKey(scope)) ?? [];
+    const entry = current.get(scopeKey(scope)) ?? [];
+    if (!Array.isArray(entry)) throw new SourceConfigError(entry.error);
+    return entry;
   };
 }
 
-function readUsersFile(path: string): UsersFile {
+function readUsersFile(path: string, only: string | undefined): UsersFile {
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(path, "utf8"));
@@ -469,20 +526,29 @@ function readUsersFile(path: string): UsersFile {
   if (!isObject(raw) || !isObject(raw.users)) {
     throw new SourceConfigError(`EDEN_USER_SOURCES_FILE must be {"users": {"<tenant>/<user>": [sources]}}`);
   }
-  const users = new Map<string, SourceSpec[]>();
+  const users: UsersFile = new Map();
   for (const [key, list] of Object.entries(raw.users)) {
-    const slash = key.indexOf("/");
-    if (slash < 0 || !isId(key.slice(0, slash)) || !isId(key.slice(slash + 1))) {
-      throw new SourceConfigError(`EDEN_USER_SOURCES_FILE key "${key}" must be "<tenantId>/<userId>"`);
+    if (only !== undefined && key !== only) continue;
+    try {
+      users.set(key, checkEntry(key, list));
+    } catch (e) {
+      users.set(key, { error: e instanceof Error ? e.message : String(e) });
     }
-    const specs = checkSpecs(list, `EDEN_USER_SOURCES_FILE users["${key}"]`);
-    for (const s of specs) {
-      if (s.kind !== "mcp") continue;
-      if (s.transport !== undefined) throw new SourceConfigError(`users["${key}"] ${s.id}: a file source needs a url`);
-      // Fails here, at startup, rather than at the user's first lookup.
-      resolveHeaders(s.headers ?? {}, `users["${key}"] ${s.id}`);
-    }
-    users.set(key, specs);
   }
-  return { users };
+  return users;
+}
+
+function checkEntry(key: string, list: unknown): SourceSpec[] {
+  const slash = key.indexOf("/");
+  if (slash < 0 || !isId(key.slice(0, slash)) || !isId(key.slice(slash + 1))) {
+    throw new SourceConfigError(`EDEN_USER_SOURCES_FILE key "${key}" must be "<tenantId>/<userId>"`);
+  }
+  const specs = checkSpecs(list, `EDEN_USER_SOURCES_FILE users["${key}"]`);
+  for (const s of specs) {
+    if (s.kind !== "mcp") continue;
+    if (s.transport !== undefined) throw new SourceConfigError(`users["${key}"] ${s.id}: a file source needs a url`);
+    // Checked when read, so an unset variable is named at startup rather than at the user's first lookup.
+    resolveHeaders(s.headers ?? {}, `users["${key}"] ${s.id}`);
+  }
+  return specs;
 }

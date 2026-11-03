@@ -167,18 +167,22 @@ The server reads the end user's accounts with that user's credentials, never ano
   ```
 
   The file is checked at startup (a bad entry or an unset env header stops the server with a message naming it) and
-  re-read when it changes. `EDEN_SOURCES_FILE` stays for static documents every user shares; its entries need `docs`.
+  re-read when it changes, entry by entry (a broken entry is that user's error; the rest apply). `EDEN_SOURCES_FILE` stays for static documents every user shares; its entries need `docs`.
 - **Your own directory**, when you embed the server: `new UserSources({ directory: async (scope) => specs })` reads
   the user's connected accounts and tokens from your vault, then pass `userSources.resolver` to `buildPartner` and
   `userSources` to `createHandler`. Return specs with `url` and `headers` (or the same `transport` function while a
-  connection is unchanged: a new function is read as a new credential and reconnects).
+  connection is unchanged: a new function is read as a new credential and reconnects). Put credentials in `headers`
+  or `transport`, never in a `searchTool.args` closure: `args` is compared by its text, so a rotated token there is
+  not noticed.
 
 What Eden does with them: an MCP source must pass the read-only check (D7: `readOnlyHint: true`, or the tool named in
 `trustedReadTools` after you checked it by hand). Connections open on the first lookup and are kept per (tenant, user,
 source). The directory is asked again at most every 60 s: a rotated token reconnects, a removed source closes, and a
-directory error closes the user's connections and serves them nothing until it is fixed. `POST /v1/sources
+directory error (or no answer within 5 s) closes the user's connections and serves them only the shared sources until
+it is fixed. `POST /v1/sources
 {userId}` lists what a user has, or answers 422 naming their configuration error. `POST /v1/forget` closes the
-user's connections as well as dropping what Eden holds; a user idle 15 minutes is closed too. Forget does not edit
+user's connections as well as dropping what Eden holds; a user idle 15 minutes is closed too
+(unless background sync keeps reading them), and each tenant holds at most 10,000 users' connections. Forget does not edit
 your configuration: to revoke a connection, remove it from the directory (and forget, to drop what was read).
 
 ## Configuration

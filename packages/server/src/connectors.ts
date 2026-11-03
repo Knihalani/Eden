@@ -7,6 +7,7 @@
  * credentials must never go here, where every user would read it.
  */
 import { readFileSync } from "node:fs";
+import type { Scope } from "@eden/protocol";
 import { StaticSource, type Source, type SourceResolver, type StaticDoc } from "@eden/sources";
 import { fileDirectory, UserSources } from "./user-sources";
 
@@ -37,11 +38,15 @@ export function staticSources(path: string | undefined): Source[] {
 /**
  * The servers' sources from the environment: EDEN_SOURCES_FILE (static, shared) and, when set,
  * EDEN_USER_SOURCES_FILE (per user, D104). Without the second, the static resolver as before. A bad file throws at
- * startup with a message naming the entry.
+ * startup with a message naming the entry. `only` reads one scope's entry (the stdio server's one user).
  */
-export function sourcesFromEnv(env = process.env): { resolver: SourceResolver; userSources?: UserSources } {
+export function sourcesFromEnv(
+  env = process.env,
+  only?: Scope,
+): { resolver: SourceResolver; userSources?: UserSources } {
   const shared = staticSources(env.EDEN_SOURCES_FILE);
   if (!env.EDEN_USER_SOURCES_FILE) return { resolver: async () => shared };
-  const userSources = new UserSources({ directory: fileDirectory(env.EDEN_USER_SOURCES_FILE), shared }).start();
+  const directory = fileDirectory(env.EDEN_USER_SOURCES_FILE, { only });
+  const userSources = new UserSources({ directory, shared }).start();
   return { resolver: userSources.resolver, userSources };
 }

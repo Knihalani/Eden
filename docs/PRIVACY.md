@@ -59,7 +59,7 @@ and a statement on training (none).
   integrator's directory) and their MCP connections are held per (tenant, user, source); no connection, header or
   token is shared between users. Header values can name an environment variable so tokens stay out of the file; they
   are held in memory only while the user's connections are, and never logged. Forget, 15 minutes idle, a changed
-  token or a directory error closes the connections; the directory is asked again at most every 60 s, so a revoked
+  token, a directory error or a directory that does not answer within 5 s closes the connections; the directory is asked again at most every 60 s, so a revoked
   account stops being read within a minute. Tokens are issued and refreshed by the integrator (no OAuth flow in Eden).
 - **Model-bound background work:** with `cards` (D59), item text leaves Eden for the model provider even when no
   request is made; tenants who turn it on must disclose it, and the budget caps how much.
