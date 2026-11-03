@@ -190,15 +190,41 @@ describe("background sync (D57)", () => {
       expect(got.some((id) => id.startsWith("mail:new"))).toBe(true);
     });
 
-    test("thirty changed items: pages double, and the lookup holds all thirty before it answers", async () => {
+    test("thirty changed items: two calls (5, then 95), and the lookup holds all thirty before it answers", async () => {
       const { src, partner, cache, now } = await stale({ syncPollPageSize: 5 });
       added(src, 30, now());
       const before = src.limits.length;
       await say(partner, "Did Zed Quinn sign the contract renewal?", scope, "s1", now());
-      // Within the catch-up (2 pages of 100 items' worth): 5, 10, 20, and the third reaches what was synced.
-      expect(src.limits.slice(before)).toEqual([5, 10, 20]);
+      // The second page tops the first up to one full page: the same 100 items one full page lists, in two calls.
+      expect(src.limits.slice(before)).toEqual([5, 95]);
+      // The source holds 70 items (40 + 30): the 5 and the other 65.
+      expect(partner.sync!.stats.demandItems).toBe(70);
       for (let i = 0; i < 30; i++) expect(cache.isSynced(scope, itemId("mail", `new${i}`))).toBe(true);
       expect(partner.sync!.current(scope, "mail")).toBe(true);
+    });
+
+    test("more changes than a page: at most one call more than full pages, and as many items caught up", async () => {
+      const run = async (syncPollPageSize: number) => {
+        const { src, partner, cache, now } = await stale({ syncPollPageSize, syncCatchupPages: 2 });
+        added(src, 250, now());
+        const before = src.limits.length;
+        const stats = partner.sync!.stats;
+        const calls0 = stats.demandCalls;
+        await say(partner, "Did Zed Quinn sign the contract renewal?", scope, "s1", now());
+        let held = 0;
+        for (let i = 0; i < 250; i++) if (cache.isSynced(scope, itemId("mail", `new${i}`))) held++;
+        return { limits: src.limits.slice(before, before + 3), calls: stats.demandCalls - calls0, held };
+      };
+      // Full pages: two calls of 100, 200 of the 250 changes held when the lookup answers (the rest in the background).
+      const full = await run(0);
+      expect(full.calls).toBe(2);
+      expect(full.limits.slice(0, 2)).toEqual([100, 100]);
+      // Adaptive: 5, 95, 100 - the same 200 items in three calls, never the 5, 10, 20, 40, ... of doubling pages.
+      const adaptive = await run(5);
+      expect(adaptive.calls).toBe(3);
+      expect(adaptive.limits).toEqual([5, 95, 100]);
+      expect(adaptive.held).toBeGreaterThanOrEqual(full.held);
+      expect(adaptive.held).toBeGreaterThanOrEqual(200);
     });
 
     test("off (0): a poll reads full pages; the backfill's page size is unchanged either way", async () => {

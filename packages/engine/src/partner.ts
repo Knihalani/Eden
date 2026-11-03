@@ -994,7 +994,9 @@ export class ContextPartner {
    * `slowPathQueue`: looks up the request kept while the slow path was busy, once nothing is in flight, one at a time
    * (as `afterPoll`'s follow-ups are), and queues what it delivers. A request kept while this runs is looked up next.
    * One whose session closed, whose cue went into cooldown meanwhile, or that waited over `QUEUED_CUE_MAX_AGE_MS` is
-   * dropped (traced). Never throws, never blocks the caller.
+   * dropped (traced). It runs the slow path alone, without `anticipate`'s early answer (nobody waits on it, so
+   * answering early gains nothing), and with `syncPollBehind` it gets `afterPoll`'s follow-up as any lookup does.
+   * Never throws, never blocks the caller.
    */
   private drainQueued(s: Session): void {
     s.draining = true;
@@ -1039,6 +1041,11 @@ export class ContextPartner {
           if (s.inflight === tracked) s.inflight = null;
         });
         s.inflight = tracked;
+        // As for any lookup: a poll it left running gets a follow-up on the fresh index (run after this loop's next
+        // lookup if one takes `s.inflight` first; both wait on it in turn).
+        if (this.config.syncPollBehind && this.sync && this.config.syncOnDemand) {
+          this.afterPoll(s, cue, t0, eventKind, tracked, null);
+        }
         const injection = await tracked.catch(() => null);
         if (injection && !s.closed) s.pending.push(injection);
       }

@@ -72,6 +72,18 @@ holds three or more query terms and scores at least 0.8 (coverage plus the entit
 directly if the caller passed `waitMs` and it landed in time; otherwise it is queued and delivered with the next event
 (or via `/v1/pending`).
 
+**A request made while the slow path is busy** (proposed D102, `slowPathQueue`, off by default): one slow path runs
+per session, so a request the fast path did not answer while another lookup (a judge call, a slow source) is still
+running is traced `silent` / `slow path busy` and not looked up; its cue stays out of cooldown, so only the same
+request made again finds it. With the flag the request is kept in a one-slot per-session queue (the latest wins),
+traced `silent` / `slow path busy: queued`, and the event's `ObserveResult.pending` is true: once nothing is in
+flight (after the running lookup and any `afterPoll` follow-up, one at a time), the request is looked up with the
+slow path alone, its cue then put in cooldown, and what it delivers is queued as pending. It is dropped, traced
+`queued cue: repeat` or `queued cue: stale`, if its cue went into cooldown meanwhile or it waited over 10 s, and never
+run if the session closed. It skips `anticipate`'s early answer (nobody is waiting on it); with `syncPollBehind` it
+gets the follow-up on the fresh index as any lookup does. At most one extra slow path, so at most one judge call
+under the session's `Budget`, per busy window (docs/COST-MODEL.md).
+
 **Probes** (PoC behind `config.probes`, off by default; D46, `probes.ts`): besides the request itself, a lookup sends
 a few short queries, at most `probeCalls` source calls: each person it names (the sentence's leading verb removed) to
 the sources the source map says mention them, their organisation (read from what came back for them), its topic,
@@ -121,11 +133,17 @@ background: a backfill of the newest items across sources, polls when a lookup f
 change rate, a daily sweep that drops what a source has not listed in two sweeps in a row (about 48 h). Synced items have their own cap and TTL in the
 cache. A lookup answers every current synced source (its own search and every probe) from that local index at no
 call, and calls live only the sources that are not synced or still stale. The tick runs on a timer, never on the fast
-path, which only marks the user active.
+path, which only marks the user active. A poll lists `syncPageSize` (100) items a page, as backfill and sweeps do, and
+an on-demand poll reads at most `syncCatchupPages` (2) pages. With `syncPollPageSize` (proposed D101, 0 = off) a
+poll's first page is twice what the source's learned change rate expects since its last poll, at least that size and
+at most `syncPageSize`; while no page reaches what was already synced, the next tops the items asked up to the next
+multiple of `syncPageSize` (5, then 95, then 100). A poll then lists no more items than full pages would and catches
+up as far, in at most one more call (an on-demand poll: one to three calls, against one or two). Backfill and sweeps
+keep `syncPageSize`. `SyncStats` counts the items listed (`demandItems`, `backgroundItems`) beside the calls.
 
 **Poll behind the lookup** (D65, `syncPollBehind`, off by default; with `sync` and `syncOnDemand`): without it, a
 lookup that finds a synced source stale waits for that source's on-demand poll (`sync.freshen`, one or two listing
-calls), which was most of Eden's time on the agent's critical path in ALL (p50 503 ms where it ran). With it, every
+calls; up to three with `syncPollPageSize`), which was most of Eden's time on the agent's critical path in ALL (p50 503 ms where it ran). With it, every
 warm synced source answers the event's lookup from the index as it stands and the poll runs behind; the critical path
 then holds no source call for a synced source, current or polling behind. If the poll stores anything, the lookup is
 made again on the fresh index once both are done (after any lookup still in flight) and what it delivers is queued for

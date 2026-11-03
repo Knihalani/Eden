@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
 import { Budget, FakeModel, type ChatRequest, type ChatResponse, type Model } from "@eden/llm";
-import { itemId, type AgentEvent, type Injection } from "@eden/protocol";
-import { StaticSource } from "@eden/sources";
+import { itemId, type AgentEvent, type ContextItem, type Injection, type Scope } from "@eden/protocol";
+import { StaticSource, type ListPage, type SearchQuery, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
 import type { Trace } from "./trace";
@@ -29,8 +29,12 @@ class SlowJudge implements Model {
 const notes = new StaticSource("notes", "notes", [
   { ref: "globex", title: "Globex renewal", text: "The Globex renewal is due in March at the current price" },
   { ref: "initech", title: "Initech contact", text: "Bill Lumbergh is the Initech contact for the TPS project" },
+  { ref: "hooli", title: "Hooli quarterly numbers", text: "Gavin Belson sent the Hooli quarterly numbers on Monday" },
+  { ref: "piper", title: "Pied Piper pilot", text: "Richard Hendricks moved the Pied Piper pilot to Thursday" },
 ]);
 const INITECH = itemId("notes", "initech");
+const HOOLI = itemId("notes", "hooli");
+const PIPER = itemId("notes", "piper");
 const FIRST = "anything about the Globex renewal?";
 const SECOND = "Who is the contact at Initech, Bill Lumbergh?";
 
@@ -133,21 +137,128 @@ describe("slowPathQueue", () => {
     expect(model.calls.length).toBe(1);
   });
 
-  test("isolation: a request queued in one session never runs or delivers in another", async () => {
+  test("isolation: three sessions busy at once each look up only their own queued request", async () => {
     const { p, traces, model } = make({ slowPathQueue: true });
-    const first = p.observe(ev("a", FIRST), { waitMs: 0 });
+    // Same tenant: a (user u1), b (another user, u2), c (the same user u1, another session). All three are busy with
+    // their own slow path, and each queues a different request while it is.
+    const sessions = [
+      { sessionId: "a", userId: "u1", queued: SECOND, item: INITECH },
+      { sessionId: "b", userId: "u2", queued: "When is the Pied Piper pilot with Richard Hendricks?", item: PIPER },
+      { sessionId: "c", userId: "u1", queued: "Did Gavin Belson send the Hooli quarterly numbers?", item: HOOLI },
+    ];
+    const firsts = sessions.map((x) => p.observe(ev(x.sessionId, FIRST, x.userId), { waitMs: 0 }));
     await Bun.sleep(20);
-    await p.observe(ev("a", SECOND), { waitMs: 0 });
-    // Same tenant, another user; and the same user in another session: neither is busy, neither holds a queued cue.
-    await p.observe(ev("b", "thanks, sounds good", "u2"), { waitMs: 0 });
-    await p.observe(ev("c", "thanks, sounds good"), { waitMs: 0 });
-    await first;
-    await settle(model, 2);
-    expect(cited(p.takePending({ tenantId: "t1", userId: "u1", sessionId: "a" }))).toContain(INITECH);
-    expect(cited(p.takePending({ tenantId: "t1", userId: "u2", sessionId: "b" }))).toEqual([]);
-    expect(cited(p.takePending({ tenantId: "t1", userId: "u1", sessionId: "c" }))).toEqual([]);
-    const elsewhere = traces.filter((t) => t.sessionId !== "a");
-    expect(elsewhere.some((t) => t.itemIds.includes(INITECH))).toBe(false);
-    expect(elsewhere.some((t) => t.reason.startsWith("queued cue"))).toBe(false);
+    for (const x of sessions) {
+      const r = await p.observe(ev(x.sessionId, x.queued, x.userId), { waitMs: 0 });
+      expect(r.pending).toBe(true);
+    }
+    expect(traces.filter((t) => t.reason === "slow path busy: queued").map((t) => t.sessionId)).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
+    await Promise.all(firsts);
+    await settle(model, 6);
+    // Two judge calls per session: its first request, then its own queued one; none ran twice or in another session.
+    expect(model.calls.length).toBe(6);
+    const perSession = new Map<string, number>();
+    for (const t of traces) if (t.modelCalls > 0) perSession.set(t.sessionId, (perSession.get(t.sessionId) ?? 0) + 1);
+    expect(Object.fromEntries(perSession)).toEqual({ a: 2, b: 2, c: 2 });
+    for (const x of sessions) {
+      const got = cited(p.takePending({ tenantId: "t1", userId: x.userId, sessionId: x.sessionId }));
+      expect(got).toContain(x.item);
+      for (const other of sessions) if (other.item !== x.item) expect(got).not.toContain(other.item);
+    }
   });
+});
+
+/** A connector with a recent-first list call that can be held open. */
+class HeldListSource implements Source {
+  readonly kind = "test";
+  readonly description = "test";
+  items: ContextItem[] = [];
+  private held: Promise<void> | null = null;
+  private free: (() => void) | null = null;
+  constructor(readonly id: string) {}
+  add(ref: string, title: string, text: string, at: number): void {
+    this.items.push({ id: itemId(this.id, ref), sourceId: this.id, ref, title, text, updatedAt: at });
+  }
+  hold(): void {
+    this.held = new Promise((r) => (this.free = r));
+  }
+  release(): void {
+    this.free?.();
+    this.held = null;
+  }
+  /** Finds nothing: what the lookup knows of this source comes from the synced index only. */
+  async search(_q: SearchQuery): Promise<ContextItem[]> {
+    return [];
+  }
+  async list(_scope: Scope, cursor: string | undefined, limit: number): Promise<ListPage> {
+    if (this.held) await this.held;
+    const sorted = [...this.items].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+    const at = cursor ? Number(cursor) : 0;
+    return { items: sorted.slice(at, at + limit), next: at + limit < sorted.length ? String(at + limit) : null };
+  }
+}
+
+/** A source searched live whose search takes `ms`: it keeps a lookup busy with no model. */
+class SlowSearch implements Source {
+  readonly kind = "test";
+  readonly description = "test";
+  readonly id = "wiki";
+  constructor(private readonly ms: number) {}
+  async search(): Promise<ContextItem[]> {
+    await Bun.sleep(this.ms);
+    return [];
+  }
+}
+
+test("with syncPollBehind, the queued lookup gets the follow-up on the fresh index, as any lookup does", async () => {
+  const H = 3_600_000;
+  const traces: Trace[] = [];
+  let clock = T0;
+  const mail = new HeldListSource("mail");
+  for (let i = 0; i < 4; i++) mail.add(`n${i}`, `Note ${i}`, `Note ${i} about lunch orders`, T0 - (3 + i) * H);
+  const p = new ContextPartner({
+    sources: async () => [mail, new SlowSearch(300)],
+    sourceMap: new SourceMap(":memory:", { seed: 1 }),
+    cache: new ItemCache(),
+    budget: new Budget(),
+    model: null,
+    now: () => clock,
+    config: {
+      sync: true,
+      syncPageSize: 2,
+      syncCallsPerMin: 600,
+      syncMaxStaleMs: 5_000,
+      syncPollBehind: true,
+      slowPathQueue: true,
+    },
+    onTrace: (t) => traces.push(t),
+  });
+  const scope = { tenantId: "t1", userId: "u1" };
+  p.sync!.track(scope);
+  while (!p.sync!.warm(scope)) await p.sync!.tick();
+  clock += 6_000;
+  const say = (text: string) =>
+    p.observe({ ...scope, sessionId: "s1", at: clock, kind: "user_message", text } as AgentEvent, { waitMs: 0 });
+  // The first request polls the stale mail (not held) and waits on the slow search.
+  const first = say("anything new on the lunch orders note?");
+  await Bun.sleep(20);
+  expect((await say("When is the Dana Lee budget review?")).pending).toBe(true);
+  // Stale again when the queued request runs, and its poll is held: it answers from the index as it stood, and only
+  // its follow-up can see the new mail.
+  clock += 6_000;
+  mail.add("new", "Dana Lee: budget review cancelled", "Dana Lee cancelled the budget review entirely", clock);
+  mail.hold();
+  await first;
+  // Both lookups (300 ms of slow search each) are done by now; the queued one's poll is still held.
+  await Bun.sleep(800);
+  expect(traces.filter((t) => t.event === "user_message" && t.reason !== "slow path busy: queued").length).toBe(2);
+  expect(cited(p.takePending({ ...scope, sessionId: "s1" }))).not.toContain(itemId("mail", "new"));
+  mail.release();
+  // The follow-up waits for the poll, then looks again (another 300 ms of slow search).
+  await Bun.sleep(700);
+  expect(cited(p.takePending({ ...scope, sessionId: "s1" }))).toContain(itemId("mail", "new"));
 });

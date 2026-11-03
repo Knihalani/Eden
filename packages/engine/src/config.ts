@@ -60,7 +60,9 @@ export interface EngineConfig {
    * A request that arrives while the session's slow path is busy (a judge call, a slow source) is kept, not dropped:
    * one slot per session, the latest wins, looked up once the slow path settles, and its answer queued as pending.
    * Dropped instead if the session closed, its cue is in cooldown by then, or it waited over 10 s. At most one extra
-   * slow path (so one judge call, under the budget) per busy window. Off: such a request is not looked up.
+   * slow path (so one judge call, under the budget) per busy window. The kept request runs the slow path alone (no
+   * `anticipate` early answer); with `syncPollBehind` it gets the follow-up on the fresh index as any lookup does.
+   * Off: such a request is not looked up. Proposed D102.
    */
   slowPathQueue: boolean;
   /** Turns an injection has to show use before it counts as unused. */
@@ -264,8 +266,9 @@ export interface EngineConfig {
   /**
    * An incremental poll's smallest first page (0: polls read `syncPageSize` pages, as backfill and sweeps do). Set, a
    * poll's first page is twice what the source's learned change rate expects since its last poll, at least this and
-   * at most `syncPageSize`, doubling while no page reaches what was already synced; a poll still reads up to
-   * `syncCatchupPages` (or its background limit) full pages' worth of items. Cuts items listed on the request path.
+   * at most `syncPageSize`. While no page reaches what was already synced, the next page tops the items asked up to
+   * the next multiple of `syncPageSize` (5, 95, 100): a poll lists at most `syncCatchupPages` (or its background
+   * limit) full pages' worth of items, in at most one call more. Cuts items listed on the request path (D101).
    */
   syncPollPageSize: number;
   /** Timed polls of an active user's sources this often (ms); 0 polls only on demand (`syncOnDemand`). */

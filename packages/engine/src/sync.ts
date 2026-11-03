@@ -43,8 +43,9 @@ export interface SyncOptions {
   /**
    * An incremental poll's first page, at least (`syncPollPageSize`; 0 or absent: every page is `pageSize`). Set, a
    * poll's first page is sized to the changes the source's learned rate expects since its last poll (twice that, at
-   * least this, at most `pageSize`), and each page after it that finds no boundary doubles, up to `pageSize`; a poll
-   * reads at most as many items as `maxPages` full pages would. Backfill and sweeps always read `pageSize`.
+   * least this, at most `pageSize`). A page after it that is needed tops the items asked up to the next multiple of
+   * `pageSize`, so a poll lists at most what `maxPages` full pages would, in at most `maxPages + 1` calls. Backfill
+   * and sweeps always read `pageSize`.
    */
   pollPageSize?: number;
   /** Timed polls of an active user's sources, this often (ms); 0 for none (polls on demand only). */
@@ -582,18 +583,19 @@ export class SyncManager {
     const started = this.deps.now();
     let cursor: string | undefined;
     let changed = 0;
-    // `pollPageSize`: pages sized to what changed, not to the backfill's page. They may read as many items in all as
-    // `maxPages` full pages, so a source that changed a lot still catches up as far before the lookup goes on.
+    // `pollPageSize`: the first page is sized to what changed, not to the backfill's page; each page after it tops the
+    // items asked up to the next multiple of `pageSize` (5, then 95, then 100). So a poll lists no more items than
+    // `maxPages` full pages would, catches up as far before the lookup goes on, and makes at most one more call.
     const adaptive = (this.o.pollPageSize ?? 0) > 0;
     const itemCap = maxPages * this.o.pageSize;
-    let size = adaptive ? this.firstPage(s, started) : this.o.pageSize;
+    const first = adaptive ? Math.min(this.firstPage(s, started), itemCap) : this.o.pageSize;
     let asked = 0;
-    for (let p = 0; adaptive ? asked < itemCap : p < maxPages; p++) {
+    for (let p = 0; adaptive ? asked < itemCap && p <= maxPages : p < maxPages; p++) {
       if (u.gone || signal?.aborted) return;
       if (this.budget.take(budgetKey(u, s)) > 0) return;
-      const limit = adaptive ? Math.min(size, itemCap - asked) : this.o.pageSize;
+      const topUp = this.o.pageSize - (asked % this.o.pageSize);
+      const limit = !adaptive ? this.o.pageSize : p === 0 ? first : Math.min(topUp, itemCap - asked);
       asked += limit;
-      size = Math.min(this.o.pageSize, size * 2);
       const page = await this.list(demand ? "demand" : "poll", source, u.scope, cursor, limit, {
         timeoutMs: this.o.timeoutMs,
         signal,
