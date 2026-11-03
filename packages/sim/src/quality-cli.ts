@@ -15,17 +15,83 @@
  * --timeline records every engine span, per user, with CPU% and RSS each second (`lab/timeline.ts`); read it with
  * `lab/timeline-report.ts`.
  */
+import { checkEngineConfig } from "@eden/engine";
 import { OpenRouterModel } from "@eden/llm";
+import { flags, parseJson } from "./lab/flags";
 import { Timeline } from "./lab/timeline";
 import { DiskCardMaker } from "./lab/cards-disk";
 import { runQuality } from "./quality";
 import { IDEAL, REALISTIC, REALISTIC_ENTITIES, ZOO_HELDOUT_A, ZOO_HELDOUT_B, ZOO_TUNE } from "./sources";
 
-const args = process.argv.slice(2);
-const arg = (name: string, fallback: string) => {
-  const i = args.indexOf(`--${name}`);
-  return i >= 0 ? args[i + 1]! : fallback;
-};
+// Strict (lab/flags.ts): an unknown flag exits 2 before any world is built; `--help` prints the header above.
+const cli = flags(
+  "quality-cli",
+  {
+    ...Object.fromEntries(
+      [
+        "users",
+        "sessions",
+        "seed",
+        "profile",
+        "planner-max-calls",
+        "planner-cascade-min",
+        "planner-deadline-margin",
+        "planner-latency-quantile",
+        "planner-mode",
+        "planner-incumbent-mean",
+        "planner-incumbent-strength",
+        "promote-after",
+        "time",
+        "wait",
+        "noise",
+        "updates",
+        "refresh-after-hours",
+        "max-refreshes",
+        "tool-rate",
+        "judge",
+        "config",
+        "timeline",
+        "cards",
+        "drafts",
+        "typing-ms",
+      ].map((k) => [k, "value" as const]),
+    ),
+    ...Object.fromEntries(
+      ["planner", "planner-no-cascade", "planner-no-reuse", "ask-model", "live", "brief", "sync"].map((k) => [
+        k,
+        "bool" as const,
+      ]),
+    ),
+  },
+  `
+bun packages/sim/src/quality-cli.ts [--users 6] [--sessions 15] [--seed 1] [--profile realistic|ideal|entities|
+  zoo-tune|zoo-a|zoo-b] [--planner ...] [--time 0] [--wait 0] [--noise 1] [--updates 0] [--tool-rate 0.4]
+  [--judge none|perfect|noisy] [--ask-model] [--live] [--brief] [--config '{"probes":true}'] [--timeline F] [--sync]
+  [--cards F] [--drafts clause|half [--typing-ms 1500]]   (bun run sim; the header of quality-cli.ts has every flag)`,
+);
+if (cli.rest.length) {
+  console.error(`quality-cli: unexpected arguments after --: ${cli.rest.join(" ")}; --help lists the flags`);
+  process.exit(2);
+}
+const arg = cli.opt;
+const has = (name: string) => cli.has(name);
+/**
+ * `--config`: engine settings, checked (checkEngineConfig) with the dependencies runQuality wires: cards with
+ * `--cards`, never a bridge or a reader. A typo, a wrong type or a child flag whose parent is off exits 2.
+ */
+const engineConfig = ((): Record<string, unknown> => {
+  if (!has("config")) return {};
+  try {
+    return checkEngineConfig(parseJson(arg("config", "{}"), "--config"), {
+      where: "--config",
+      deps: { cards: has("cards") },
+      depNote: "which quality-cli.ts wires only for cards (with --cards)",
+    }) as Record<string, unknown>;
+  } catch (error) {
+    console.error(`quality-cli: ${(error as Error).message}`);
+    process.exit(2);
+  }
+})();
 const PROFILES = {
   realistic: REALISTIC,
   ideal: IDEAL,
@@ -36,7 +102,7 @@ const PROFILES = {
 };
 const profiles = PROFILES[arg("profile", "realistic") as keyof typeof PROFILES];
 if (!profiles) throw new Error(`--profile must be one of ${Object.keys(PROFILES).join(", ")}`);
-const live = args.includes("--live");
+const live = has("live");
 const model = live ? OpenRouterModel.fromEnv() : null;
 if (live && !model) throw new Error("--live needs OPENROUTER_API_KEY");
 
@@ -62,37 +128,31 @@ const report = await runQuality({
   noiseScale: Number(arg("noise", "1")),
   updates: Number(arg("updates", "0")),
   config: {
-    ...(args.includes("--refresh-after-hours")
-      ? { refreshAfterMs: Number(arg("refresh-after-hours", "0")) * 3_600_000 }
-      : {}),
-    ...(args.includes("--max-refreshes") ? { maxRefreshes: Number(arg("max-refreshes", "3")) } : {}),
-    ...(args.includes("--ask-model") ? { askWithModel: true } : {}),
+    ...(has("refresh-after-hours") ? { refreshAfterMs: Number(arg("refresh-after-hours", "0")) * 3_600_000 } : {}),
+    ...(has("max-refreshes") ? { maxRefreshes: Number(arg("max-refreshes", "3")) } : {}),
+    ...(has("ask-model") ? { askWithModel: true } : {}),
     // Any engine setting, as JSON (`--config '{"probes":true}'`): for experiments behind a flag.
-    ...(args.includes("--config") ? (JSON.parse(arg("config", "{}")) as Record<string, unknown>) : {}),
+    ...engineConfig,
   },
   agentToolRate: Number(arg("tool-rate", "0.4")),
-  ...(args.includes("--drafts")
+  ...(has("drafts")
     ? { drafts: arg("drafts", "clause") as "clause" | "half", typingMs: Number(arg("typing-ms", "1500")) }
     : {}),
   model,
   judge: arg("judge", "none") as "none" | "perfect" | "noisy",
-  promoteAfter: args.includes("--promote-after") ? Number(arg("promote-after", "0")) : undefined,
+  promoteAfter: has("promote-after") ? Number(arg("promote-after", "0")) : undefined,
   // Lab only: every source item synced into Eden's cache before each session (docs/research/moon-graph.md).
-  sync: args.includes("--sync"),
+  sync: has("sync"),
   // Implication cards replayed from a disk cache (`cards-enrich.ts`); `"cards": true` in --config uses them.
-  ...(args.includes("--cards") ? { cardMaker: new DiskCardMaker(arg("cards", "")) } : {}),
-  planner: args.includes("--planner")
+  ...(has("cards") ? { cardMaker: new DiskCardMaker(arg("cards", "")) } : {}),
+  planner: has("planner")
     ? {
         maxCalls: Number(arg("planner-max-calls", "3")),
-        cascade: !args.includes("--planner-no-cascade"),
-        reuse: !args.includes("--planner-no-reuse"),
-        ...(args.includes("--planner-latency-quantile")
-          ? { latencyQuantile: Number(arg("planner-latency-quantile", "0.9")) }
-          : {}),
-        ...(args.includes("--planner-deadline-margin")
-          ? { deadlineMargin: Number(arg("planner-deadline-margin", "2")) }
-          : {}),
-        ...(args.includes("--planner-cascade-min") ? { cascadeMin: Number(arg("planner-cascade-min", "0.05")) } : {}),
+        cascade: !has("planner-no-cascade"),
+        reuse: !has("planner-no-reuse"),
+        ...(has("planner-latency-quantile") ? { latencyQuantile: Number(arg("planner-latency-quantile", "0.9")) } : {}),
+        ...(has("planner-deadline-margin") ? { deadlineMargin: Number(arg("planner-deadline-margin", "2")) } : {}),
+        ...(has("planner-cascade-min") ? { cascadeMin: Number(arg("planner-cascade-min", "0.05")) } : {}),
         mode: arg("planner-mode", "serve") as "serve" | "shadow",
         incumbent: {
           shape: "terms" as const,
@@ -103,7 +163,7 @@ const report = await runQuality({
     : undefined,
 });
 await timeline?.close();
-const out = args.includes("--brief")
+const out = has("brief")
   ? {
       overall: report.overall,
       ask: report.ask,
@@ -118,7 +178,7 @@ console.log(
   JSON.stringify(
     {
       profile: arg("profile", "realistic"),
-      planner: args.includes("--planner"),
+      planner: has("planner"),
       live,
       wallSeconds: Math.round((performance.now() - t0) / 100) / 10,
       ...out,

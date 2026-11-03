@@ -139,7 +139,8 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
       if (typeof value === "boolean") return !value;
       // A legal non-default (`RANGES` is checked first): 0 is illegal for sizes, and a share must stay at most 1.
       if (typeof value === "number") return value === 0 ? 1 : Number.isInteger(value) ? value + 1 : value / 2;
-      if (Array.isArray(value)) return value.length ? [] : ["x"];
+      // A list's entries are checked against its known names (config-check.ts `NAMES`), so add a real one.
+      if (Array.isArray(value)) return value.length ? [] : ["deadline"];
       throw new Error(`no non-default value for ${JSON.stringify(value)}`);
     };
     // Sync is refused while the servers build no listable sources, so every sync sub-setting would be inert too.

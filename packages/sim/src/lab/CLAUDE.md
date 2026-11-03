@@ -16,6 +16,8 @@ cards-enrich, bridge-enrich, presets, suites, free, spend` (`.ts`): check `git l
 | `presets.ts` | `PRESETS`: H (D55), ALL3 (D80), ALL5 (D92), NEW (D96, recommended D98), NEWL (D99), NEW2; ALL3B and NEWB (+ `syncPollBehind`, D72's open run) |
 | `hidden-funnel.ts` | The no-model funnel: each task through Eden alone; returned/cached/delivered, decoys, calls, ms; `--ask`, `--cards`, `--intent`, `--bridge`, `--reader`, `--timeline`, `--json` |
 | `funnel.ts` | `bun run funnel`: the funnel with a preset, replayed cards and `--ask`, and the funnel score; refuses held-out suites without `--blind` |
+| `funnel-merge.ts` | funnel.ts's arithmetic, tested in-process: `defaultJobs` (`--time` > 0 shards concurrently by default), `amortisedCalls` (merged connector calls), `callMismatches` (shards whose traces miss calls) |
+| `flags.ts` | Strict flags for the $0 CLIs (funnel, hidden-funnel, quality-cli): unknown flag, stray argument or missing value exits 2, `--help` prints usage; `labConfig` checks `--config`/`--set` with @eden/engine's `checkEngineConfig` |
 | `pi-ab.ts`, `pi-conditions.ts`, `pi-timeline.ts`, `pi-ab-report.ts` | The live A/B on the Pi harness (the standard agent): conditions `none,tools,eden,both[-judge][~variant][+flag][@w<ms>]`, per-task timelines, report |
 | `hermes-ab.ts` + `hermes-{conditions,host,proxy,worker,anthropic}.ts` | The same A/B on Hermes Agent (Python workers, `../../lab/hermes/`), Eden as MCP server + plugin |
 | `ab-common.ts` | Tasks, prompts, tools, grader and results format shared by every A/B (comparable results) |
@@ -45,6 +47,11 @@ Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-b
   `--spend-headroom` clear. `--run-label` names a run's lines.
 - **Keys** are read by `keyFor`, never printed or put in results.
 - **Budgets:** every live run passes `--budget` (a hard cap per process on everything it spends).
+- **Strict CLIs (audit 2026-11-03b).** funnel.ts, hidden-funnel.ts and quality-cli.ts parse through `flags()`; a new
+  flag is added to the CLI's `known` list or it exits 2. Engine settings (`--config`, `--set`, the preset merged with
+  them) go through `labConfig`/`checkEngineConfig`: unknown keys, wrong types, out-of-range numbers and a child flag
+  whose parent flag the merged configuration has off (`PARENTS`, e.g. `syncPollBehind` without `sync`) exit 2.
+  gate-traffic.ts, the A/B harnesses and eval's cli.ts do not use it yet.
 - **Record honestly:** funnel and `bench.ts` record to `bench/ledger.jsonl` unless `--no-record` (`bun run funnel`
   does not record unless `--record`); a run on a dirty tree is marked `dirty`.
 

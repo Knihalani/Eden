@@ -18,8 +18,8 @@
  *   unrun blind ones (UNRUN_BLIND) are spent by the first run that names them.
  * - Not recorded in bench/ledger.jsonl unless `--record` (a screen is not a result).
  * - `--jobs N`: N hidden-funnel.ts processes at once, one per suite × seed shard, rows merged before the score (same
- *   score; at `--time 0` ms/task is then contended). Default 1; some flags force 1 (the `--jobs` note below says
- *   which and why); `--time` does not.
+ *   score; at `--time 0` ms/task is then contended). Default 1 at `--time 0`; at `--time` > 0 min(shards, 12,
+ *   3 × cores), since those shards wait on sleeps. Some flags force 1 (the `--jobs` note below says which and why).
  * - With intent on and nothing replayed (no `-- --intent F`, or a file for other items), every TOTAL and pool line and
  *   the JSON label say `[intent inert: no replay]`; `--reader stub|oracle` refuse a `--baseline` whose intent differs.
  * - `-- --wait-ms N` (the observe's wait) prints the deliveries made before the agent's first model call;
@@ -39,6 +39,8 @@ import { spawn, spawnSync } from "node:child_process";
 import { closeSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
+import { flags, labConfig, parseJson } from "./flags";
+import { amortisedCalls, callMismatches, defaultJobs, type CallCheck } from "./funnel-merge";
 import { PRESETS } from "./presets";
 import { missGate, MISS_EXIT } from "./reader-disk";
 import {
@@ -55,14 +57,32 @@ import {
 } from "./reader-stub";
 import { parseSuites, UNRUN_BLIND } from "./suites";
 
-const argv = process.argv.slice(2);
-const dash = argv.indexOf("--");
-const args = dash >= 0 ? argv.slice(0, dash) : argv;
-const passthrough = dash >= 0 ? argv.slice(dash + 1) : [];
-const opt = (name: string, fallback: string) => {
-  const i = args.indexOf(`--${name}`);
-  return i >= 0 && args[i + 1] ? args[i + 1]! : fallback;
-};
+const USAGE = `
+bun run funnel [--suite train] [--seeds 41,42] [--preset ALL3] [--set '{"flag":true}'] [--cards default|none|F]
+  [--no-ask] [--json out.json] [--baseline earlier.json] [--record] [--blind] [--jobs N] [--allow-misses]
+  [-- more hidden-funnel flags]
+Presets: none, ${Object.keys(PRESETS).join(", ")}. docs/LAB.md has the recipes; funnel.ts's header every flag.`;
+// Strict (flags.ts): a misspelled flag exits 2 before anything runs; what follows `--` is hidden-funnel.ts's to check.
+const cli = flags(
+  "funnel",
+  {
+    suite: "value",
+    seeds: "value",
+    preset: "value",
+    set: "value",
+    cards: "value",
+    json: "value",
+    baseline: "value",
+    jobs: "value",
+    "no-ask": "bool",
+    record: "bool",
+    blind: "bool",
+    "allow-misses": "bool",
+  },
+  USAGE,
+);
+const opt = cli.opt;
+const passthrough = cli.rest;
 const fail = (message: string): never => {
   console.error(`funnel: ${message}`);
   process.exit(2);
@@ -71,7 +91,7 @@ const fail = (message: string): never => {
 const suiteArg = opt("suite", "train");
 const suites = parseSuites(suiteArg);
 const heldout = suites.filter((s) => s.startsWith("heldout"));
-if (heldout.length && !args.includes("--blind")) {
+if (heldout.length && !cli.has("blind")) {
   fail(
     `${heldout.join(", ")} are held out: measurement only, never for tuning. Screen on train (or dev6a,dev6b); ` +
       `pass --blind for a pre-registered blind check.`,
@@ -83,14 +103,23 @@ if (unrun.length) console.error(`funnel: ${unrun.join(", ")} never run before: t
 const presetName = opt("preset", "ALL3");
 const preset = presetName === "none" ? {} : PRESETS[presetName];
 if (!preset) fail(`unknown preset ${presetName} (known: none, ${Object.keys(PRESETS).join(", ")})`);
-const config = { ...preset, ...(JSON.parse(opt("set", "{}")) as Record<string, unknown>) };
+// The merged configuration is checked whole (checkEngineConfig): an unknown or mistyped `--set` key, or a child flag
+// whose parent the merged configuration has off (`syncPollBehind` without `sync`), exits 2 naming it.
+let config: Record<string, unknown> = {};
+try {
+  const set = parseJson(opt("set", "{}"), "--set");
+  if (typeof set !== "object" || set === null || Array.isArray(set)) fail("--set must be a JSON object");
+  config = labConfig({ ...preset, ...(set as object) }, `--preset ${presetName} with --set`);
+} catch (error) {
+  fail((error as Error).message);
+}
 const has = (flag: string) => passthrough.includes(flag);
 /** The value after a hidden-funnel flag given after `--` ("" when absent). */
 const passValue = (name: string) => {
   const i = passthrough.indexOf(`--${name}`);
   return i >= 0 ? (passthrough[i + 1] ?? "") : "";
 };
-const allowMisses = args.includes("--allow-misses") || has("--allow-misses");
+const allowMisses = cli.has("allow-misses") || has("--allow-misses");
 if (config.askReader === true && !has("--reader")) {
   fail("this configuration has askReader: pass `-- --reader replay --reader-cache F` (or --reader live ...)");
 }
@@ -128,7 +157,7 @@ const out = opt("json", join(scratch, "funnel.json"));
 const seeds = opt("seeds", "41,42");
 
 const seedList = seeds.split(",");
-const label = presetName + (args.includes("--set") ? "+set" : "");
+const label = presetName + (cli.has("set") ? "+set" : "");
 
 /** hidden-funnel.ts's arguments for some suites and seeds, writing its rows to `json`. */
 const funnelArgsFor = (suiteList: string, seedList: string, json: string) => [
@@ -143,42 +172,53 @@ const funnelArgsFor = (suiteList: string, seedList: string, json: string) => [
   json,
   "--label",
   label,
-  ...(args.includes("--no-ask") ? [] : ["--ask"]),
+  ...(cli.has("no-ask") ? [] : ["--ask"]),
   ...(cards !== "none" && config.cards === true ? ["--cards", cards] : []),
-  ...(args.includes("--record") ? [] : ["--no-record"]),
+  ...(cli.has("record") ? [] : ["--no-record"]),
   ...(allowMisses && !has("--allow-misses") ? ["--allow-misses"] : []),
   ...passthrough,
 ];
 const shellLine = (a: string[]) => `bun ${a.map((x) => (/[\s{"]/.test(x) ? `'${x}'` : x)).join(" ")}`;
 
 /**
- * `--jobs N` (default 1): one hidden-funnel.ts process per suite × seed shard, N at a time, their rows merged here
- * before scoring. A task's result does not depend on which other seeds share its process (checked at `--time 0` and
- * `--time 1`: perTask rows identical without their timing fields, docs/LAB.md). At `--time 0` its `ms` does: with
- * N > 1 the shards contend for cores, so ms/task is not a latency figure. At `--time` > 0 a task's time is mostly the
- * connectors' simulated latency (sleeps, not CPU), so shards barely contend and ms/task stays a latency figure
- * (measured within a few percent of one process, docs/LAB.md); `--jobs` is honoured as typed, so a heavier
- * configuration or a machine with fewer cores can still choose one process. Some runs keep one process whatever N
- * says: each flag below clears and rewrites one output file per process (shards would overwrite each other's),
- * `--record` books one ledger entry per suite (a seed shard would book a partial run), and a live judge or reader
- * would multiply paid calls and rate-limit pressure in parallel. (hidden-funnel.ts's bridge is replay only,
+ * `--jobs N`: one hidden-funnel.ts process per suite × seed shard, N at a time, their rows merged here before
+ * scoring. Default 1 at `--time 0`; at `--time` > 0, min(shards, 12, 3 × cores) (`defaultJobs`, funnel-merge.ts). A
+ * task's result does not depend on which other seeds share its process (checked at `--time 0` and `--time 1`: perTask
+ * rows identical without their timing fields, docs/LAB.md). At `--time 0` its `ms` does: with N > 1 the shards contend
+ * for cores, so ms/task is not a latency figure. At `--time` > 0 a task's time is mostly the connectors' simulated
+ * latency (sleeps, not CPU), so shards barely contend and ms/task stays a latency figure (measured within a few
+ * percent of one process, docs/LAB.md), and the run says how many ran at once; `--jobs` is honoured as typed, so a
+ * latency study, a heavier configuration or a machine with fewer cores can choose one process. Some runs keep one
+ * process whatever N says: each flag below clears and rewrites one output file per process (shards would overwrite
+ * each other's), `--record` books one ledger entry per suite (a seed shard would book a partial run), and a live judge
+ * or reader would multiply paid calls and rate-limit pressure in parallel. (hidden-funnel.ts's bridge is replay only,
  * `--bridge F`, so it shards.)
  */
-const jobsAsked = Number(opt("jobs", "1"));
-if (!Number.isInteger(jobsAsked) || jobsAsked < 1) fail("--jobs must be a whole number of at least 1");
+const jobsGiven = cli.has("jobs") ? Number(opt("jobs", "1")) : undefined;
+if (jobsGiven !== undefined && (!Number.isInteger(jobsGiven) || jobsGiven < 1)) {
+  fail("--jobs must be a whole number of at least 1");
+}
 const soloReasons = [
   ...["--packets", "--card-log", "--reader-log", "--ask-diag", "--candidates", "--timeline"].filter(has),
-  ...(args.includes("--record") ? ["--record"] : []),
+  ...(cli.has("record") ? ["--record"] : []),
   ...(passValue("judge") === "live" ? ["--judge live"] : []),
   ...(passValue("reader") === "live" ? ["--reader live"] : []),
 ];
 /** `-- --time T`: connectors at their simulated latency; shards then wait on sleeps rather than contend for CPU. */
 const timeScale = Number(passValue("time") || "0");
 const shards = suites.flatMap((suite) => seedList.map((seed) => ({ suite, seed })));
-let jobs = Math.min(jobsAsked, shards.length);
-if (jobsAsked > 1 && soloReasons.length) {
-  console.error(`funnel: --jobs ${jobsAsked} ignored, running one job: ${soloReasons.join(", ")} needs one process`);
+const cores = availableParallelism();
+let jobs = defaultJobs({ ...(jobsGiven !== undefined ? { jobsGiven } : {}), timeScale, shards: shards.length, cores });
+if (jobs > 1 && soloReasons.length) {
+  const asked = jobsGiven !== undefined ? `--jobs ${jobsGiven}` : `the --time default of ${jobs} jobs`;
+  console.error(`funnel: ${asked} ignored, running one job: ${soloReasons.join(", ")} needs one process`);
   jobs = 1;
+} else if (jobsGiven === undefined && jobs > 1) {
+  console.error(
+    `funnel: --time ${timeScale} without --jobs: ${jobs} shards at once on ${cores} cores (min(shards, 12, ` +
+      "3 × cores)); ms/task read 0.8-3.5% higher at 12 jobs than at 1 on 4 cores (docs/LAB.md); --jobs 1 for an " +
+      "uncontended latency figure",
+  );
 }
 
 const t0 = performance.now();
@@ -254,6 +294,7 @@ interface ShardOut {
   cards?: Counts;
   reader?: Counts;
   intent?: IntentUse;
+  calls?: CallCheck;
   perTask: { variant: "hidden" | "control" }[];
 }
 
@@ -318,11 +359,23 @@ function mergeShards(files: string[]) {
         : `CONTENDED (${jobs} jobs at once: not a latency figure; use --jobs 1 for one)`),
   );
   if (sync) {
-    const amortised = request + sync.demandAll! - sync.demand! + sync.background! + sync.backfill!;
+    // `demandSeen`, not `demand`: the listings seen in the tasks' windows are already in `request` (funnel-merge.ts).
+    const amortised = amortisedCalls(request, sync);
     console.log(
       `merged sync (summed): ${JSON.stringify(sync)}; request ${(request / n).toFixed(2)}/task, amortised total ` +
         `${(amortised / n).toFixed(2)}/task, backfill ${(sync.warmMs! / Math.max(1, sync.users!)).toFixed(0)} ` +
         `ms/user (contended); demand items ${sync.demandItems ?? 0}, background items ${sync.backgroundItems ?? 0}`,
+    );
+  }
+  const mismatched = callMismatches(
+    parts.map((p, i) => ({ name: `${shards[i]!.suite} seed ${shards[i]!.seed}`, calls: p.calls })),
+  );
+  if (mismatched.length) {
+    console.log(
+      `CALLS UNTRACED in ${mismatched.length} of ${parts.length} shards (traces vs connectors; per-trace sourceCalls ` +
+        `and cost views built from traces are off, the connectors' count above is right${
+          config.syncPollBehind === true ? "; syncPollBehind's polls reach no trace" : ""
+        }): ${mismatched.join("; ")}`,
     );
   }
   if (cardUse) console.log(`merged cards use (summed): ${JSON.stringify(cardUse)}`);
