@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { ActionCheck, Injection } from "@eden/protocol";
-import { EdenClient } from "./client";
+import { isId, type ActionCheck, type Injection } from "@eden/protocol";
+import { EdenClient, edenId } from "./client";
 import { heldResult, withContext } from "./messages";
 
 const inj = (text: string) => ({ id: "inj_1", text }) as Injection;
@@ -147,5 +147,152 @@ describe("check fails open", () => {
       expect(await eden.check("deploy", { service: "api" })).toEqual(proceed);
     }
     expect(errors.length).toBe(4);
+  });
+});
+
+describe("misconfiguration is visible through onError", () => {
+  const reason = "userId must be 1-128 characters of [A-Za-z0-9._:@-]";
+  const answering = (res: () => Response) => (async () => res()) as unknown as typeof fetch;
+
+  test("a 4xx carries the server's error text; observe still fails open", async () => {
+    const errors: unknown[] = [];
+    const eden = new EdenClient({
+      userId: "u",
+      sessionId: "s",
+      fetch: answering(() => Response.json({ error: reason }, { status: 400 })),
+      onError: (e) => errors.push(e),
+    });
+    expect(await eden.observe({ kind: "user_message", text: "hi" })).toEqual({ injection: null, pending: false });
+    expect(errors.length).toBe(1);
+    expect(errors[0]).toBeInstanceOf(Error);
+    expect((errors[0] as Error).message).toBe(`eden /v1/events: 400 ${reason}`);
+  });
+
+  test("a huge non-JSON error body (a proxy's page) never reaches onError", async () => {
+    const errors: unknown[] = [];
+    const page = "<html>" + "x".repeat(1_000_000) + "</html>";
+    const eden = new EdenClient({
+      userId: "u",
+      sessionId: "s",
+      fetch: answering(() => new Response(page, { status: 502, headers: { "content-type": "text/html" } })),
+      onError: (e) => errors.push(e),
+    });
+    expect(await eden.ask("x")).toBeNull();
+    expect((errors[0] as Error).message).toBe("eden /v1/ask: 502");
+  });
+
+  test("a long or non-string error is capped or dropped", async () => {
+    const errors: Error[] = [];
+    const bodies = [{ error: "e".repeat(1_000_000) }, { error: { nested: "x" } }, { error: "y".repeat(1_500) }];
+    let i = 0;
+    const eden = new EdenClient({
+      userId: "u",
+      sessionId: "s",
+      fetch: answering(() => Response.json(bodies[i++], { status: 400 })),
+      onError: (e) => errors.push(e as Error),
+    });
+    for (let k = 0; k < bodies.length; k++) await eden.pending();
+    // A body past the read cap is not parsed at all; a string error is cut to 300 characters.
+    expect(errors.map((e) => e.message.length)).toEqual(["eden /v1/pending: 400".length, 21, 22 + 300]);
+    expect(errors.every((e) => e.message.length <= 400)).toBe(true);
+  });
+
+  test("an id the server would refuse is reported once at construction, and no call throws", async () => {
+    const errors: Error[] = [];
+    const eden = new EdenClient({
+      userId: "alice+work@x.com",
+      sessionId: "s",
+      baseUrl: "http://127.0.0.1:9",
+      timeoutMs: 200,
+      onError: (e) => errors.push(e as Error),
+    });
+    expect(errors.length).toBe(1);
+    expect(errors[0]!.message).toContain("userId must be 1-128 characters of [A-Za-z0-9._:@-]");
+    expect(errors[0]!.message).not.toContain("alice"); // The id itself may be personal data.
+    expect(await eden.observe({ kind: "user_message", text: "hi" })).toEqual({ injection: null, pending: false });
+    expect(await eden.check("t", {})).toMatchObject({ verdict: "proceed" });
+
+    const more: Error[] = [];
+    new EdenClient({ tenantId: "t/1", userId: "u", sessionId: "chat/123", onError: (e) => more.push(e as Error) });
+    expect(more.length).toBe(1);
+    expect(more[0]!.message).toContain("tenantId, sessionId");
+    expect(
+      () =>
+        new EdenClient({
+          userId: "a b",
+          sessionId: "s",
+          onError: () => {
+            throw new Error("x");
+          },
+        }),
+    ).not.toThrow();
+    expect(() => new EdenClient({ userId: "a b", sessionId: "s" })).not.toThrow();
+  });
+
+  test("health() reports an unreachable server as ok:false without throwing", async () => {
+    const eden = new EdenClient({ userId: "u", sessionId: "s", baseUrl: "http://127.0.0.1:9", timeoutMs: 200 });
+    const h = await eden.health();
+    expect(h.ok).toBe(false);
+    expect(typeof h.error).toBe("string");
+  });
+
+  test("health() surfaces a refused key or id, and ok:true on a 2xx", async () => {
+    const refused = new EdenClient({
+      apiKey: "k",
+      userId: "u",
+      sessionId: "s",
+      fetch: answering(() => Response.json({ error: "missing or unknown API key" }, { status: 401 })),
+    });
+    expect(await refused.health()).toEqual({ ok: false, error: "eden /v1/digest: 401 missing or unknown API key" });
+    let path = "";
+    const fine = new EdenClient({
+      userId: "u",
+      sessionId: "s",
+      fetch: (async (u: string) => {
+        path = new URL(u).pathname;
+        return Response.json({ digest: null });
+      }) as unknown as typeof fetch,
+    });
+    expect(await fine.health()).toEqual({ ok: true });
+    expect(path).toBe("/v1/digest"); // A read: it drains nothing, unlike /v1/pending.
+  });
+});
+
+describe("edenId", () => {
+  const raws = [
+    "alice+work@x.com",
+    "alice-work@x.com",
+    "alice_work@x.com",
+    "alice_2bwork@x.com",
+    "e:alice_2bwork@x.com",
+    "h:abc",
+    "e:abc",
+    "a b",
+    "a_20b",
+    "chat/123",
+    "chat#123",
+    "",
+    "Ünïcödé",
+    "x".repeat(128),
+    "x".repeat(129),
+    "+".repeat(200),
+    "+".repeat(201),
+    "user",
+  ];
+
+  test("is injective and every output passes the protocol's isId", () => {
+    const out = raws.map(edenId);
+    expect(new Set(out).size).toBe(raws.length);
+    for (const id of out) expect(isId(id)).toBe(true);
+    expect(edenId("alice+work@x.com")).not.toBe(edenId("alice-work@x.com"));
+  });
+
+  test("keeps an id that is already valid, and is deterministic", () => {
+    expect(edenId("user")).toBe("user");
+    expect(edenId("alice-work@x.com")).toBe("alice-work@x.com");
+    expect(edenId("x".repeat(128))).toBe("x".repeat(128));
+    expect(edenId("alice+work@x.com")).toBe(edenId("alice+work@x.com"));
+    expect(edenId("alice+work@x.com")).toBe("e:alice_2bwork@x.com");
+    expect(edenId("x".repeat(129)).startsWith("h:")).toBe(true);
   });
 });
