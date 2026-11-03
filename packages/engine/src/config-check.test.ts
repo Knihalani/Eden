@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { checkEngineConfig, NEEDS_DEP, PARENTS } from "./config-check";
+import { CORE_CONFIG, PARTS, type Part } from "./parts";
 
 const ALL_DEPS = { cards: true, reader: true };
 
@@ -35,6 +36,12 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
     expect(checkEngineConfig({ cards: true }, { deps: { cards: true } })).toEqual({ cards: true });
     expect(checkEngineConfig({ cardItems: 2 }, { deps: { cards: true } })).toEqual({ cardItems: 2 });
     expect(() => checkEngineConfig({ askReaderPool: 20 }, { deps: { cards: true } })).toThrow(/reader dependency/);
+    // Taking a part out (its core value) needs no dependency either.
+    expect(checkEngineConfig({ cards: false, askReader: false, askReaderPool: 30 })).toEqual({
+      cards: false,
+      askReader: false,
+      askReaderPool: 30,
+    });
   });
 
   test("a child flag whose parent is off is refused; under a parent that is on it is accepted", () => {
@@ -60,10 +67,23 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
       graph: false,
       graphItems: DEFAULT_CONFIG.graphItems,
     });
-    // A numeric child too.
-    expect(() => checkEngineConfig({ askReader: false, askReaderPool: 30 }, { deps: ALL_DEPS })).toThrow(
+    // A numeric child too; its core value (the part taken out) is accepted under the parent off.
+    expect(() => checkEngineConfig({ askReader: false, askReaderPool: 20 }, { deps: ALL_DEPS })).toThrow(
       /"askReaderPool" acts only/,
     );
+    expect(checkEngineConfig({ askReader: false, askReaderPool: 30 }, { deps: ALL_DEPS })).toEqual({
+      askReader: false,
+      askReaderPool: 30,
+    });
+    // A flag child turned on under its parent off is refused (the checks the old default's tests made).
+    expect(() => checkEngineConfig({ sync: false, syncPollBehind: true })).toThrow(/"syncPollBehind" acts only/);
+    expect(() => checkEngineConfig({ graph: false, graphMerge: true })).toThrow(/"graphMerge" acts only/);
+    expect(() => checkEngineConfig({ ...CORE_CONFIG, readerPushBehind: true }, { deps: ALL_DEPS })).toThrow(
+      /"readerPushBehind" acts only/,
+    );
+    // Default minus any part, and the core itself, pass whole: the part's own values take it out.
+    for (const part of Object.keys(PARTS) as Part[]) expect(() => checkEngineConfig(PARTS[part])).not.toThrow();
+    expect(() => checkEngineConfig(CORE_CONFIG)).not.toThrow();
     const push = { cards: true, askReader: true, readerPush: true, sync: true, syncPollBehind: true };
     expect(checkEngineConfig({ ...push, readerPushBehind: true }, { deps: ALL_DEPS })).toMatchObject(push);
     expect(checkEngineConfig({ ...push, readerPushWaitMs: 5_000 }, { deps: ALL_DEPS })).toMatchObject(push);

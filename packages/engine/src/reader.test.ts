@@ -639,14 +639,22 @@ describe("the reader in the engine (config.askReader)", () => {
     expect(off.answers.u1![0]!.ids).toContain("mail:n0");
     expect(on.answers.u1![0]!.ids).not.toContain("mail:n0");
     expect(on.answers.u1![0]!.ids[0]).toBe("mail:hold");
-    // A drop that would empty the answer is not made: an empty answer would say nothing was found.
+    // A drop that would empty the answer is made only when the reader read every candidate (D114); with the pool cut
+    // below the candidates the answer keeps them: an empty answer would be a false all-clear (D93).
     const all = (input: ReaderInput) => input.items.map((_, i) => i);
     const empty = await run(
       { askReader: true, askReaderDrop: true },
       { maker: new ScriptedReader(() => [], { reject: all }) },
     );
-    expect(empty.answers.u1![0]!.ids.length).toBeGreaterThan(0);
-    expect(empty.answers.u1![0]!.answer).not.toContain("Nothing in the connected sources");
+    expect(empty.reports[0]!.checked).toBe(empty.reports[0]!.pool.length);
+    expect(empty.answers.u1![0]!.ids).toEqual([]);
+    const cut = await run(
+      { askReader: true, askReaderDrop: true, askReaderPool: 2 },
+      { maker: new ScriptedReader(() => [], { reject: all }) },
+    );
+    expect(cut.reports[0]!.checked).toBe(2);
+    expect(cut.answers.u1![0]!.ids.length).toBeGreaterThan(0);
+    expect(cut.answers.u1![0]!.answer).not.toContain("Nothing in the connected sources");
     // Without a reading (the reader failed), nothing is dropped.
     const failed = await run(
       { askReader: true, askReaderDrop: true },

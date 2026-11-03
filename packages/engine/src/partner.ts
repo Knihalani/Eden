@@ -1438,6 +1438,12 @@ export class ContextPartner {
       seen.add(x.item.id);
       pool.push(x);
     }
+    // Whether the reader is shown every candidate the ask has (none cut by the pool's cap or the prompt's), so a
+    // rejection of all of them is a reading of everything found (D114).
+    const readsAll =
+      pool.length <= READER_MAX_ITEMS &&
+      ranked.every((x) => seen.has(x.item.id)) &&
+      chosen.every((x) => seen.has(x.item.id));
     const t0 = performance.now();
     const report = (outcome: ReaderReport["outcome"], flagged: ReaderReport["flagged"] = []) =>
       this.deps.onReader?.({
@@ -1567,9 +1573,9 @@ export class ContextPartner {
     // `askReaderDrop`: what the reader read and rejected by name leaves the answer (never what it flagged).
     const rejected = this.config.askReaderDrop ? new Set(verdict.rejected ?? []) : new Set<string>();
     let rest = chosen.filter((x) => !lead.includes(x) && !rejected.has(x.item.id));
-    // A drop that would leave the answer empty is not made: an empty answer reads "Nothing in the connected
-    // sources", a false all-clear (D93) when the search found items.
-    if (lead.length === 0 && rest.length === 0) rest = chosen.filter((x) => !lead.includes(x));
+    // A drop that would leave the answer empty is made only when the reader read every candidate (D114): otherwise
+    // the empty answer ("Nothing in the connected sources") would be a false all-clear over items it never read (D93).
+    if (lead.length === 0 && rest.length === 0 && !readsAll) rest = chosen.filter((x) => !lead.includes(x));
     return {
       chosen: [...lead, ...rest].slice(0, limit),
       notes,

@@ -9,12 +9,13 @@
  * - its value has its default's type (`CHOICES` for strings with a fixed set, string lists' entries from `NAMES`);
  * - a number is finite and ≥ 0, and within its `RANGES` entry (whole, at least, at most);
  * - a key that acts only through a partner dependency (`NEEDS_DEP`: cards, reader) the caller does not wire
- *   is at its default (`deps`);
- * - with `parents` (the default), on the whole configuration merged over `DEFAULT_CONFIG`: a key set off its default
- *   has every parent flag it acts under (`PARENTS`) on. Check the merged preset + override, never an override alone,
+ *   is at its default or the core's (`deps`; the core's value takes the part out, so it needs nothing);
+ * - with `parents` (the default), on the whole configuration merged over `DEFAULT_CONFIG`: a key given a value other
+ *   than the core's (`CORE_CONFIG`, its part taken out) has every parent flag it acts under (`PARENTS`) on. Check the merged preset + override, never an override alone,
  *   so a child set under a preset that turns its parent on is accepted.
  */
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
+import { CORE_CONFIG } from "./parts";
 import { READER_KINDS } from "./reader";
 
 type Key = keyof EngineConfig;
@@ -213,7 +214,7 @@ export function checkEngineConfig(value: unknown, options: ConfigCheckOptions = 
   for (const [key, given] of Object.entries(value)) {
     checkKey(where, key, given);
     const dep = NEEDS_DEP[key as Key];
-    if (dep !== undefined && options.deps?.[dep] !== true && !isDefault(key as Key, given)) {
+    if (dep !== undefined && options.deps?.[dep] !== true && !isInert(key as Key, given)) {
       throw new Error(
         `${where}: "${key}" needs the partner's ${dep} dependency, ` +
           `${options.depNote ?? "which this caller does not wire"}, so only its default ` +
@@ -232,7 +233,7 @@ export function checkEngineConfig(value: unknown, options: ConfigCheckOptions = 
     const merged = { ...DEFAULT_CONFIG, ...out } as EngineConfig;
     for (const key of Object.keys(out) as Key[]) {
       const parents = PARENTS[key];
-      if (!parents || isDefault(key, merged[key])) continue;
+      if (!parents || isCore(key, merged[key])) continue;
       const off = parents.filter((p) => merged[p] !== true);
       if (off.length) {
         throw new Error(
@@ -248,6 +249,19 @@ export function checkEngineConfig(value: unknown, options: ConfigCheckOptions = 
 /** JSON equality with the default: every setting is a boolean, a number, a string or a list of strings. */
 function isDefault(key: Key, given: unknown): boolean {
   return JSON.stringify(given) === JSON.stringify(DEFAULT_CONFIG[key]);
+}
+
+/**
+ * Whether a value asks nothing of a dependency or a parent flag: the default's own (which runs its no-model path
+ * without the dependency, D112), or the core's (`CORE_CONFIG`: the part taken out, "default minus <part>").
+ */
+function isInert(key: Key, given: unknown): boolean {
+  return isDefault(key, given) || isCore(key, given);
+}
+
+/** Whether a value is the core's: what a child holds with its part taken out, so it needs no parent on. */
+function isCore(key: Key, given: unknown): boolean {
+  return JSON.stringify(given) === JSON.stringify(CORE_CONFIG[key]);
 }
 
 /** Throws unless `key` is a setting and `given` a legal value for it. */
