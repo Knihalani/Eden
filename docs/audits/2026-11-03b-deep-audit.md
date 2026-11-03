@@ -139,7 +139,7 @@ unchanged at 214/384 hidden facts and 211/384 decoys. `bun run eval` now reports
 `example-agent-not-runnable-offline-and-wrong-description`, `dead-experimental-flags`, `scale-light-user-scan-index`
 and `no-memory-bench-per-user`. Most of these are not written up in this file; their details are in the run ledger.
 Clean-up package `claude/audit-cleanup` (2026-11-03) fixed `ingest-skip-unchanged-redaction` (unchanged sweep
-41-44 → 3.5-6.3 µs/item, docs/TESTING.md), `corr-sync-test-vacuous-guard`, `corr-searchsources-preaborted-hang`,
+41-44 → 3.6-4.8 µs/item, docs/TESTING.md), `corr-sync-test-vacuous-guard`, `corr-searchsources-preaborted-hang`,
 `example-agent-not-runnable-offline-and-wrong-description` and `no-memory-bench-per-user` (`ingest.bench.ts`), and
 added a named test for `corr-cache-offset-stale-on-refresh`, already fixed on main. `dead-experimental-flags` and
 `scale-light-user-scan-index` stay open.

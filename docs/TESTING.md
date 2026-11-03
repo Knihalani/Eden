@@ -190,15 +190,16 @@ sources 2.8 s, protocol 2.3 s, eval 0.6 s, graph 0.3 s, client 0.1 s, llm 0.1 s 
 path (`SyncManager` → `SourceFanout.list` with `sanitizeItem` as the redaction hook → `ItemCache.put`), each with their
 own copy of the workload's items (1,599 chars of text on average), then sweeps every user once with nothing changed.
 It prints the heap per user after a full GC and the CPU per item of the backfill (every item new) and of the sweep
-(every item unchanged): about 10x less on the sweep, the backfill within run-to-run noise. A change to the cache, the index, redaction or the sync reports these before and after.
+(every item unchanged). A change to the cache, the index, redaction or the sync reports these before and after.
 
 | 100 users × 500 items | memory per user | backfill µs/item | unchanged sweep µs/item |
 |---|---|---|---|
 | Before skipping unchanged items (main at 926b094), 5 runs | 1,812 KB (3,711 B/item) | 111.2-117.3 | 41.3-44.4 |
-| Unchanged items reuse their redacted copy, 5 runs | 1,833 KB (3,754 B/item) | 114.6-126.2 | 3.5-6.3 |
+| Unchanged items reuse their redacted copy, 5 runs | 1,833 KB (3,754-3,755 B/item) | 110.4-118.4 | 3.6-4.8 |
 
 The default size (200 × 500) took 20 s wall and gave 1,794 KB per user, 153 µs/item backfill and 45 µs/item sweep
-before the change (a busier machine at the time). The 43 B/item the reuse adds is its 53-bit hash per held item.
+before the change (a busier machine at the time). The reuse adds 43-44 B/item (measured); what makes it up (the
+hash field on each entry, a `madeFrom` WeakMap entry per held copy) is not measured apart.
 
 ## Rules for new tests
 

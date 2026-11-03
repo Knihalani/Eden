@@ -59,11 +59,29 @@ interface Entry {
 const RAW_SEED = new BigUint64Array(crypto.getRandomValues(new Uint32Array(2)).buffer)[0]!;
 
 /**
- * A raw item's every field, hashed (wyhash, cut to 53 bits so it is a plain number, held unboxed: a BigInt per item
- * cost 75 B in ingest.bench): equal hashes mean `sanitizeItem` gives the same copy.
+ * What `sanitizeItem` reads of a raw item, hashed (wyhash, cut to 53 bits so it is a plain number, held unboxed: a
+ * BigInt per item cost 75 B in ingest.bench): equal hashes mean `sanitizeItem` gives the same copy. Title and text are
+ * clipped as `sanitizeItem` clips them, so a huge listed text costs no more here than in the gate (D25 keeps that off
+ * the event loop), and fields are named, not serialized whole: a getter or `toJSON` cannot hide a change. Undefined
+ * when the item cannot be hashed (the caller then redacts it as usual).
  */
-function rawHash(raw: ContextItem): number {
-  return Number(BigInt.asUintN(53, Bun.hash.wyhash(JSON.stringify(raw), RAW_SEED)));
+function rawHash(raw: ContextItem, maxTextChars: number): number | undefined {
+  try {
+    const meta = raw.meta ? Object.entries(raw.meta).map(([k, v]) => `${k}\u0001${String(v)}`) : null;
+    const key = [
+      raw.id,
+      raw.sourceId,
+      raw.ref,
+      head(String(raw.title), 500),
+      head(String(raw.text), maxTextChars),
+      raw.url === undefined ? "\u0002" : String(raw.url),
+      String(raw.updatedAt),
+      meta === null ? "\u0002" : meta.join("\u0003"),
+    ].join("\u0000");
+    return Number(BigInt.asUintN(53, Bun.hash.wyhash(key, RAW_SEED)));
+  } catch {
+    return undefined;
+  }
 }
 
 /** The raw hash each redacted copy a listing made was made from (`ListReuse.made`), read when it is `put`. */
@@ -431,18 +449,23 @@ export class ItemCache {
    * (new, changed, a ref the gate rewrote, a copy a lookup replaced) is redacted. Per user: never another's copy.
    */
   reuseFor(scope: Scope): ListReuse {
-    const hashes = new WeakMap<ContextItem, number>();
+    const hashes = new WeakMap<ContextItem, number | undefined>();
     const hashOf = (raw: ContextItem) => {
-      let h = hashes.get(raw);
-      if (h === undefined) hashes.set(raw, (h = rawHash(raw)));
+      if (hashes.has(raw)) return hashes.get(raw);
+      const h = rawHash(raw, this.limits.maxTextChars);
+      hashes.set(raw, h);
       return h;
     };
     return {
       held: (raw) => {
         const e = this.peek(scope)?.items.get(raw.id);
-        return e?.raw !== undefined && e.raw === hashOf(raw) ? e.item : undefined;
+        if (e?.raw === undefined) return undefined;
+        return e.raw === hashOf(raw) ? e.item : undefined;
       },
-      made: (raw, redacted) => void madeFrom.set(redacted, hashOf(raw)),
+      made: (raw, redacted) => {
+        const h = hashOf(raw);
+        if (h !== undefined) madeFrom.set(redacted, h);
+      },
     };
   }
 

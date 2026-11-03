@@ -277,16 +277,16 @@ export class SourceFanout {
   }
 
   /**
-   * A listing's items redacted: those `reuse` holds unchanged are its copies, the rest go through the hook. The hook
-   * may leave items out; then its output cannot be paired with its input, nothing is remembered, and the page is
-   * what it returned followed by the held copies.
+   * A listing's items redacted, in the source's order: those `reuse` holds unchanged are its copies, the rest go
+   * through the hook. The hook may leave items out; then its output cannot be paired with its input, so nothing is
+   * remembered and the whole page goes through the hook, as without `reuse`.
    */
   private async redactListed(raw: ContextItem[], signal: AbortSignal, reuse?: ListReuse): Promise<ContextItem[]> {
     if (!reuse) return this.options.sanitize(raw, signal);
     const held = raw.map((r) => reuse.held(r));
     const fresh = raw.filter((_, i) => held[i] === undefined);
     const made = fresh.length > 0 ? await this.options.sanitize(fresh, signal) : [];
-    if (made.length !== fresh.length) return [...made, ...held.filter((h) => h !== undefined)];
+    if (made.length !== fresh.length) return held.length === fresh.length ? made : this.options.sanitize(raw, signal);
     let next = 0;
     return held.map((h, i) => {
       if (h !== undefined) return h;

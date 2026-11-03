@@ -43,15 +43,15 @@ const tools = [
   },
 ];
 
-/** Context Eden injected unasked (the system messages `withContext` adds), as the stub model saw it. */
-const injected: string[] = [];
+/** Context Eden injected unasked (the system messages `withContext` adds), as the stub model saw it, once each. */
+const injected = new Set<string>();
 
 /**
  * The offline stand-in for a model: on the user's turn it asks Eden about the request; once the tool answered, it
  * replies with what Eden gave it, asked and unasked. Deterministic, so the example doubles as a smoke test.
  */
 function stub(messages: Message[]): Message {
-  for (const m of messages) if (m.role === "system" && m.content?.startsWith("<context")) injected.push(m.content);
+  for (const m of messages) if (m.role === "system" && m.content?.startsWith("<context")) injected.add(m.content);
   const tool = messages.findLast((m) => m.role === "tool");
   if (!tool) {
     const question = messages.findLast((m) => m.role === "user")?.content ?? "";

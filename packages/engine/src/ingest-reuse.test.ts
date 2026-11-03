@@ -3,6 +3,7 @@ import { itemId, type ContextItem, type Scope } from "@eden/protocol";
 import { REDACTED } from "@eden/redact";
 import { SourceFanout, type ListPage, type Source } from "@eden/sources";
 import { ItemCache, sanitizeItem } from "./cache";
+import { pooledSanitizer } from "./gate";
 import { SyncManager, type SyncOptions } from "./sync";
 
 // Secret-shaped values are assembled from parts so no literal in the repo is one (packages/redact/CLAUDE.md).
@@ -180,6 +181,103 @@ describe("unchanged re-listed items skip redaction (ingest-skip-unchanged-redact
     expect(calls).toBe(2);
     expect(JSON.stringify(second)).not.toContain(secret);
     expect(cache.syncedCount(alice)).toBe(2);
+  });
+
+  test("a hook that drops an item from a page with held items: the whole page is redacted again, in order", async () => {
+    const cache = new ItemCache({ expireEveryMs: 0 });
+    const given: string[][] = [];
+    const fanout = new SourceFanout({
+      // Leaves out any item whose text says "drop".
+      sanitize: (items) => (
+        given.push(items.map((i) => i.id)),
+        items.filter((i) => !i.text.includes("drop")).map((i) => sanitizeItem(i))
+      ),
+      ratePerSec: 1e6,
+      burst: 1e6,
+    });
+    const src = new ListSource("mail", [mail("a", "one"), mail("b", "two")]);
+    const go = async () => {
+      const page = await fanout.list(src, alice, undefined, 100, { timeoutMs: 5_000, reuse: cache.reuseFor(alice) });
+      if (typeof page === "string") throw new Error(page);
+      cache.put(alice, page.items, Date.now(), true, true);
+      return page.items.map((i) => i.id);
+    };
+    await go();
+    src.items = [mail("c", "please drop"), mail("a", "one"), mail("d", "four"), mail("b", "two")];
+    expect(await go()).toEqual(["mail:a", "mail:d", "mail:b"]); // the source's order, the dropped one left out
+    expect(given.slice(1)).toEqual([
+      ["mail:c", "mail:d"], // the new items only, first
+      ["mail:c", "mail:a", "mail:d", "mail:b"], // then, unpairable, the whole page
+    ]);
+  });
+
+  test("through the worker-pool gate, resolving out of order: each copy is paired with its own raw item", async () => {
+    const cache = new ItemCache({ expireEveryMs: 0 });
+    let gated = 0;
+    const pool = {
+      // Later items finish first.
+      runOrInline: async <T>(_kind: string, payload: unknown): Promise<T> => {
+        const { item, maxTextChars } = payload as { item: ContextItem; maxTextChars: number };
+        gated++;
+        await Bun.sleep(Number(item.ref.slice(1)) % 2 === 0 ? 5 : 0);
+        return sanitizeItem(item, maxTextChars) as T;
+      },
+    };
+    const fanout = new SourceFanout({
+      sanitize: pooledSanitizer(pool, cache.maxTextChars),
+      ratePerSec: 1e6,
+      burst: 1e6,
+    });
+    const src = new ListSource(
+      "mail",
+      Array.from({ length: 6 }, (_, i) => mail(`m${i}`, i === 3 ? `token ${secret}` : `note ${i}`)),
+    );
+    const go = async () => {
+      const page = await fanout.list(src, alice, undefined, 100, { timeoutMs: 5_000, reuse: cache.reuseFor(alice) });
+      if (typeof page === "string") throw new Error(page);
+      cache.put(alice, page.items, Date.now(), true, true);
+      return page.items;
+    };
+    const first = await go();
+    expect(first.map((i) => i.id)).toEqual(src.items.map((i) => i.id));
+    expect(gated).toBe(6);
+    src.items[1] = mail("m1", `changed ${secret}`);
+    const second = await go();
+    expect(gated).toBe(7);
+    expect(second.map((i) => i.id)).toEqual(src.items.map((i) => i.id));
+    for (const [i, it] of second.entries()) {
+      expect(it.text).not.toContain(secret);
+      expect(it).toEqual(sanitizeItem(src.items[i]!, cache.maxTextChars)); // each is its own raw item's copy
+    }
+  });
+
+  test("the hash reads text as the gate does: a change past the clip is the same copy, a getter's change is not", async () => {
+    const { redacted, ingest, cache } = harness();
+    const big = "x".repeat(cache.maxTextChars);
+    const src = new ListSource("mail", [mail("a", `${big} tail one`)]);
+    await ingest(alice, src);
+    redacted.length = 0;
+    src.items = [mail("a", `${big} tail two ${secret}`)]; // differs only past what is kept
+    await ingest(alice, src);
+    expect(redacted).toEqual([]);
+    expect(cache.get(alice, "mail:a")?.text).not.toContain(secret);
+    // An embedder's item with a getter: its text is read through it, so a change is seen.
+    class Item {
+      constructor(private body: string) {}
+      id = itemId("mail", "g");
+      sourceId = "mail";
+      ref = "g";
+      title = "Getter";
+      get text() {
+        return this.body;
+      }
+    }
+    src.items = [new Item("first") as unknown as ContextItem];
+    await ingest(alice, src);
+    redacted.length = 0;
+    src.items = [new Item(`second ${secret}`) as unknown as ContextItem];
+    await ingest(alice, src);
+    expect(redacted).toEqual(["mail:g"]);
   });
 
   test("through the sync: a sweep of an unchanged source redacts nothing, and an edited item is redacted", async () => {
