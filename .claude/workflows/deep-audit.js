@@ -1,12 +1,16 @@
 export const meta = {
   name: "deep-audit",
   description:
-    "Audit the repo for order-of-magnitude cost/speed/quality levers, security, inefficiency and user pain points; verify, fix in parallel, review, re-audit until clean, report",
+    "Hunt for >=3x cost/latency/quality/scale/dev-loop levers and redesigns, plus inefficiencies, pain points and bugs; verify, fix in parallel, review, re-audit until clean, report",
   whenToUse:
     "Run through the deep-audit skill. Long, multi-agent: maps the repo, finds and verifies issues, fixes them on branches, reviews each fix, integrates, and loops until nothing material is left.",
   phases: [
     { title: "Map", detail: "one agent maps areas, entry points, and how to measure" },
-    { title: "Find", detail: "one finder per dimension (magnitude, security, inefficiency, pain points, correctness)" },
+    {
+      title: "Find",
+      detail:
+        "ambitious >=3x finders (cost, latency, quality, scale, dev loop, moonshot) plus inefficiency, pain points, bugs",
+    },
     { title: "Dedup", detail: "merge duplicate findings across dimensions" },
     { title: "Verify", detail: "two skeptics per finding with different lenses" },
     { title: "Audit", detail: "write the audit report and split it into work packages with disjoint files" },
@@ -74,7 +78,10 @@ const FINDING = {
   type: "object",
   properties: {
     id: { type: "string", description: "short stable slug, e.g. sec-redact-logs" },
-    dimension: { type: "string", enum: ["magnitude", "security", "inefficiency", "painpoint", "correctness"] },
+    dimension: {
+      type: "string",
+      enum: ["cost", "latency", "quality", "scale", "devloop", "moonshot", "inefficiency", "painpoint", "correctness"],
+    },
     title: { type: "string" },
     severity: SEVERITY,
     files: { type: "array", items: { type: "string" } },
@@ -164,14 +171,51 @@ const MERGED = {
   required: ["branch", "merged", "conflictsResolved", "dropped", "checks", "green"],
 };
 
+// Shared instructions for the ambitious finders: breadth first, then ruthless arithmetic.
+const LEVER = (metric) => `
+Target: improvements of AT LEAST 3x on ${metric} (10x or more ranks highest). Be creative and ambitious: first write
+down at least 12 candidate ideas, including unconventional ones (a different architecture, removing the work entirely,
+precomputing or caching it, batching, moving it off the critical path, speculation, approximation with a measured
+error, a different algorithm or data structure, a cheaper or smaller model or no model, learned components trained
+offline, sharing work across users or sessions where isolation allows, changing what is measured or delivered). Then
+measure the current baseline, do the arithmetic for each idea from measured numbers, and keep only ideas that plausibly
+reach >=3x on the metric or on a sub-part that dominates it. Say plainly where 3x is impossible and why. Severity:
+"critical" or "high" for >=10x, "medium" for 3-10x; anything below 3x is "low" unless it unblocks a >=3x lever. The fix
+may be a large structural change: give a staged plan whose first stage can be built and measured by one agent.`;
+
 const DIMENSIONS = [
   {
-    key: "magnitude",
-    prompt: `Find ARCHITECTURAL and STRUCTURAL changes that would give order-of-magnitude (≥3–10×) improvements in cost, speed (latency and throughput) or quality (the product's own success metrics). Trace the hot paths end to end and measure each stage. Find what dominates cost and time (model calls, tokens, cache misses, waits on the critical path, duplicated work, data structures, memory per user/item, sync/ingest design). For each lever, do the arithmetic from measured numbers, and say plainly where an order of magnitude is impossible (e.g. a cost dominated by something the code cannot remove). Reject ideas that only sound good.`,
+    key: "cost",
+    prompt: `Find ways to cut the product's running cost per task and per user (model/API calls and tokens, connector
+calls, storage, compute) by at least 3x.${LEVER("cost per task and per user, at equal or better quality")}`,
   },
   {
-    key: "security",
-    prompt: `Find security and privacy issues: secrets in code, logs or test output; injection (prompt injection via untrusted content, command/SQL/path injection); authn/authz and tenant/user isolation gaps; data sent to third parties beyond what docs promise; unredacted storage or logging; unsafe defaults; dependency risks; denial of service via unbounded input, loops or fan-out; error paths that leak data or fail closed where they must fail open (or the reverse). Prove each with a concrete path from an input to the failure; write a probe test where you can.`,
+    key: "latency",
+    prompt: `Find ways to cut latency the user or the integrating agent waits for (critical-path time, end-to-end task
+time, p50 and p90) by at least 3x.${LEVER("critical-path latency and task wall time, at equal or better quality")}`,
+  },
+  {
+    key: "quality",
+    prompt: `Find ways to make the product markedly better at its own success metrics (read the evals and benchmarks to
+learn them), e.g. cutting the miss rate or the false-alarm rate by at least 3x.${LEVER("the error rate on the product's main quality metrics, at bounded cost")}`,
+  },
+  {
+    key: "scale",
+    prompt: `Find ways to raise how much the system handles per machine (memory and CPU per user and per item,
+throughput, startup and sync/ingest time, behaviour on accounts 10-100x larger than the test worlds) by at least
+3x.${LEVER("memory per user, throughput and ingest time")}`,
+  },
+  {
+    key: "devloop",
+    prompt: `Find ways to make working on this repo at least 3x faster or cheaper: check and test time, benchmark and
+experiment time and cost, time to answer "did my change help?".${LEVER("developer and experiment cycle time and cost")}`,
+  },
+  {
+    key: "moonshot",
+    prompt: `Step back from the current design. If you were rebuilding this product from first principles with what the
+repo's research has learned (read docs/research and the decision log), what would you build differently, and which
+parts of that could be built now as an experiment behind a flag? Propose at most 4 bold redesigns, each with the
+measured evidence that motivates it and a first experiment.${LEVER("cost, latency and quality together")}`,
   },
   {
     key: "inefficiency",
@@ -221,7 +265,7 @@ while (round < MAX_ROUNDS) {
       DIMENSIONS.map(
         (d) => () =>
           agent(
-            `${d.prompt}\n\nScope: ${SCOPE}.${FOCUS}${roundNote}\n\nOrientation brief:\n${map}\n${RULES}${READONLY}\nReturn at most 12 findings, most valuable first.`,
+            `${d.prompt}\n\nScope: ${SCOPE}.${FOCUS}${roundNote}\n\nOrientation brief:\n${map}\n${RULES}${READONLY}\nReturn at most 12 findings, most valuable first (biggest measured multiple first).`,
             { label: `find:${d.key}:r${round}`, phase: "Find", schema: FINDINGS },
           ),
       ),
@@ -258,7 +302,7 @@ merged list.${READONLY}\n\n${JSON.stringify(raw)}`,
           parallel(
             [
               "Does the evidence hold? Re-read the cited code and re-run any cited command. Default to real=false if you cannot reproduce it.",
-              "Is the impact estimate sound and is the fix right (and not harmful)? Recompute the arithmetic; check the fix against the repo rules. Default to real=false if the fix would not deliver the claimed effect.",
+              "Is the impact estimate sound and is the fix right (and not harmful)? Recompute the arithmetic from measured numbers, including whether a claimed >=3x really holds; check the fix against the repo rules. Default to real=false if the fix would not deliver the claimed effect.",
             ].map(
               (lens, i) => () =>
                 agent(
@@ -370,6 +414,17 @@ Fix only integration breakage (not new features). Report what is green.\n\nBranc
     { label: `integrate:r${round}`, phase: "Integrate", schema: MERGED, isolation: "worktree" },
   );
   ledger.merges.push(merged);
+
+  // Every fixer, reviewer and integrator gets a full checkout; a long run fills the disk unless finished ones go.
+  await agent(
+    `Free disk between rounds. List git worktrees (\`git worktree list --porcelain\`). Remove (\`git worktree remove\`)
+only worktrees under the repo's .claude/worktrees folder whose HEAD is already contained in ${INTEGRATION}
+(\`git merge-base --is-ancestor <head> ${INTEGRATION}\`) or whose branch name starts with audit/ and is merged into it,
+and that have no uncommitted changes (\`git -C <path> status --porcelain\` empty). Never remove anything else, never
+delete branches, never touch the user's main checkout. Then \`git worktree prune\`. Report what you removed and the
+free disk (\`df -h .\`) before and after.`,
+    { label: `cleanup:r${round}`, phase: "Integrate" },
+  );
   if (!merged || !merged.green) {
     log(`round ${round}: integration not green; stopping so a human can look`);
     break;
