@@ -12,12 +12,10 @@
  * So does a number outside the key's range (`RANGES`), an `anticipateOff` part the engine does not have, or setting a
  * key that acts only through a partner dependency the servers do not wire (`NEEDS_DEP`) to anything but its default:
  * the engine would accept it and do nothing, or (`syncPageSize: 0`, `syncMaxItems: 0`) stop syncing without a word.
- * Those deps are paid model roles (cards, the bridge, the reader); ALL3 and the NEW family need them, so they are not
- * runnable from the shipped servers until the deps are wired under a decision with a COST-MODEL.md entry. Two more
- * things the servers lack are refused the same way: a route relaying source watches and change notices (push sync)
- * and sources that can be listed (sync, with all its `sync*` sub-settings). The judge
- * (`judge*`, `anticipate`) and `askWithModel` use the partner's own model and `Budget`; docs/COST-MODEL.md has their
- * cost.
+ * Those deps are paid model roles (cards, the reader); ALL3 and the NEW family need them, so they are not runnable
+ * from the shipped servers until the deps are wired under a decision with a COST-MODEL.md entry. One more thing the
+ * servers lack is refused the same way: sources that can be listed (sync, with all its `sync*` sub-settings). The
+ * judge (`judge*`, `anticipate`) uses the partner's own model and `Budget`; docs/COST-MODEL.md has its cost.
  */
 import { readFileSync } from "node:fs";
 import { ANTICIPATE_PARTS, checkEngineConfig, type EngineConfig } from "@eden/engine";
@@ -27,9 +25,6 @@ import { ANTICIPATE_PARTS, checkEngineConfig, type EngineConfig } from "@eden/en
 export { ANTICIPATE_PARTS };
 
 /** Why the shipped servers cannot serve a key beyond the unwired dependencies; the key's name is put in front. */
-const NOTIFY =
-  "needs a server route that relays source watches and change notices to the partner (`sourcePushes`, " +
-  "`sourceChanged`), which the shipped servers do not have";
 const LIST =
   "needs sources with a list tool: the static sources from EDEN_SOURCES_FILE cannot be listed (sync would read " +
   "nothing from them), and sync over per-user MCP sources (EDEN_USER_SOURCES_FILE) is not supported from the " +
@@ -37,18 +32,13 @@ const LIST =
 
 /**
  * Keys that act only through something the servers lack besides a partner dependency (those are @eden/engine's
- * `NEEDS_DEP`). sync.ts applies the `syncPush*` settings only to a source marked by `pushing`, which only
- * `sourcePushes` calls. `sync` is refused (D106): static sources cannot be listed, and per-user MCP sources (D108),
+ * `NEEDS_DEP`). `sync` is refused (D106): static sources cannot be listed, and per-user MCP sources (D108),
  * which can carry a list tool, are not yet tested under sync from the servers; so is every other `sync*` key off its
  * default, since each is inert without it.
- * engine-config.test.ts requires every reader, card, bridge, intent, digest, push and sync key to be refused here or
- * by `NEEDS_DEP`, or allow-listed with a reason.
+ * engine-config.test.ts requires every reader, card, intent, push and sync key to be refused here or by `NEEDS_DEP`,
+ * or allow-listed with a reason.
  */
 const SERVER_REFUSES: Partial<Record<keyof EngineConfig, string>> = {
-  syncPush: NOTIFY,
-  syncPushMaxStaleMs: NOTIFY,
-  syncPushSweepMs: NOTIFY,
-  syncPushGapMs: NOTIFY,
   sync: LIST,
   // With `sync` refused, every sync sub-setting is inert (partner.ts and sync.ts read them only with `this.sync`), so
   // they are refused too: `syncPollBehind`, the latency lever D65 measures, would otherwise start and do nothing.
@@ -67,7 +57,6 @@ const SERVER_REFUSES: Partial<Record<keyof EngineConfig, string>> = {
   syncCatchupPages: LIST,
   syncMaxUsersPerTenant: LIST,
   syncLocalAll: LIST,
-  syncWide: LIST,
   syncTermProbes: LIST,
 };
 
@@ -92,7 +81,7 @@ export function engineConfig(env: Record<string, string | undefined> = process.e
 
 /**
  * `value` as engine settings: a JSON object of known keys, each of its default's type. Throws naming the key. No
- * partner dependency is wired here (buildPartner wires no cards, bridge or reader). The parent-flag check is left off:
+ * partner dependency is wired here (buildPartner wires no cards or reader). The parent-flag check is left off:
  * a file is merged over the defaults, and refusing a child whose parent is off would refuse settings the server has
  * accepted so far (D104); the lab's CLIs run it.
  */

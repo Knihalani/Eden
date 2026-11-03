@@ -8,7 +8,7 @@
  *     [--no-ask] [--json out.json] [--baseline earlier.json] [--record] [--blind] [--jobs N]
  *     [-- more hidden-funnel flags]
  *
- * - `--preset`: a name from presets.ts (H, ALL3, ALL3B, ALL5, NEW, NEWB, NEWL, NEW2) or `none` (production
+ * - `--preset`: a name from presets.ts (H, ALL3, ALL3B, NEW, NEWB, NEWL, ...) or `none` (production
  *   defaults). `--set` adds flags.
  * - `--cards default`: the checked-in card caches (cards-v2 for dev/held-out worlds, cards-train for train), merged
  *   into a temp file; used when the configuration has `cards`.
@@ -27,7 +27,7 @@
  *   comparable). docs/LAB.md 1c.
  *
  * NEW needs the reader (`-- --reader replay --reader-cache F` or `--reader live --reader-model m`) and the intent
- * requests (`-- --intent F`); ALL5 needs `-- --intent F --bridge F`. Neither file is checked in (docs/LAB.md).
+ * requests (`-- --intent F`). Neither file is checked in (docs/LAB.md).
  * A replayed reader prompt that is not in the cache fails open (the ask answers without the reader), so the run
  * prints the miss count and exits 3 after the score unless `--allow-misses`: such a run is part NEW, part ALL3.
  * `-- --reader stub` screens the NEW family at $0 with no key: the reader's pool per suite (hidden and decoy in pool,
@@ -140,7 +140,6 @@ const checkBaseline = (current: IntentState) => {
 };
 if (config.intent !== true) checkBaseline("off");
 else if (!has("--intent")) checkBaseline("inert");
-if (config.bridgeQuery === true && !has("--bridge")) console.error("funnel: bridgeQuery is on but no `-- --bridge F`");
 
 const labDir = join(import.meta.dir, "..", "..", "lab");
 const scratch = mkdtempSync(join(tmpdir(), "eden-funnel-"));
@@ -191,8 +190,7 @@ const shellLine = (a: string[]) => `bun ${a.map((x) => (/[\s{"]/.test(x) ? `'${x
  * latency study, a heavier configuration or a machine with fewer cores can choose one process. Some runs keep one
  * process whatever N says: each flag below clears and rewrites one output file per process (shards would overwrite
  * each other's), `--record` books one ledger entry per suite (a seed shard would book a partial run), and a live judge
- * or reader would multiply paid calls and rate-limit pressure in parallel. (hidden-funnel.ts's bridge is replay only,
- * `--bridge F`, so it shards.)
+ * or reader would multiply paid calls and rate-limit pressure in parallel.
  */
 const jobsGiven = cli.has("jobs") ? Number(opt("jobs", "1")) : undefined;
 if (jobsGiven !== undefined && (!Number.isInteger(jobsGiven) || jobsGiven < 1)) {

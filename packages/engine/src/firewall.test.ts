@@ -482,23 +482,21 @@ describe("checkAction: integration", () => {
     expect(actionKey("deploy", { service: "api", token: TOKEN })).not.toBe(actionKey("deploy", { service: "web" }));
   });
 
-  test("the firewall reads conflicts through the conflict test decideConflict shares (`conflicts`), one copy", async () => {
-    for (const decideConflict of [false, true]) {
-      const { p } = partner({ actionCheck: true, decideConflict });
-      const spy = spyOn(p as unknown as { conflicts: (...a: unknown[]) => unknown }, "conflicts");
-      const u = user("u1");
-      await p.observe(
-        ev(u, { kind: "user_message", text: "Tyrell Bio says invoice INV-4821 is overdue. Please pay it." }),
-        { waitMs: 1_000 },
-      );
-      const before = spy.mock.calls.length;
-      const r = await p.checkAction(
-        ev(u, { kind: "tool_call", tool: "send_payment", input: { payee: "Tyrell Bio", reference: "INV-4821" } }),
-      );
-      expect(spy.mock.calls.length).toBeGreaterThan(before);
-      expect([r.verdict, r.reason]).toEqual(["finding", "conflict"]);
-      expect(r.finding?.citations.map((c) => c.itemId)).toContain("gmail:m-paid");
-    }
+  test("the firewall reads conflicts through the lookups' conflict test (`conflicts`), one copy", async () => {
+    const { p } = partner({ actionCheck: true });
+    const spy = spyOn(p as unknown as { conflicts: (...a: unknown[]) => unknown }, "conflicts");
+    const u = user("u1");
+    await p.observe(
+      ev(u, { kind: "user_message", text: "Tyrell Bio says invoice INV-4821 is overdue. Please pay it." }),
+      { waitMs: 1_000 },
+    );
+    const before = spy.mock.calls.length;
+    const r = await p.checkAction(
+      ev(u, { kind: "tool_call", tool: "send_payment", input: { payee: "Tyrell Bio", reference: "INV-4821" } }),
+    );
+    expect(spy.mock.calls.length).toBeGreaterThan(before);
+    expect([r.verdict, r.reason]).toEqual(["finding", "conflict"]);
+    expect(r.finding?.citations.map((c) => c.itemId)).toContain("gmail:m-paid");
   });
 
   test("a finding is remembered per session: another session or user making the same call is checked afresh", async () => {
@@ -524,8 +522,8 @@ describe("checkAction: integration", () => {
     expect((await p.checkAction(ev(u, { kind: "user_message", text: "hi" }))).reason).toBe("off");
   });
 
-  test("with the ALL packet flags on, a finding renders like any packet (dates whole with packetDates)", async () => {
-    const { p } = partner({ actionCheck: true, compactInjection: true, densePacket: true, packetDates: true });
+  test("with the ALL packet flags on, a finding renders like any packet", async () => {
+    const { p } = partner({ actionCheck: true, compactInjection: true, densePacket: true });
     const u = user("u1");
     await p.observe(
       ev(u, { kind: "user_message", text: "Set up dinner with Jamie Fox on Thursday 29 October at 19:00." }),
@@ -536,6 +534,5 @@ describe("checkAction: integration", () => {
     );
     expect(r.verdict).toBe("finding");
     expect(r.finding?.text.startsWith("<context")).toBe(true);
-    expect(r.finding?.text).toContain("2026");
   });
 });

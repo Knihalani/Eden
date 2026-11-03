@@ -462,27 +462,9 @@ describe("probes beside the lookup", () => {
     await waited.ask({ ...scope, sessionId: "s", question: "Book dinner with Dana Lee on Friday" });
     expect(performance.now() - t1).toBeGreaterThanOrEqual(390);
   });
-
-  test("with fallbackAgree, an item both the lookup and a person probe found is delivered with no model", async () => {
-    const text =
-      "Invite Dana Lee to the team offsite and book a table for six at an Italian restaurant in Soho on Friday evening";
-    const got = async (fallbackAgree: boolean) => {
-      // Nothing is sure on its words (confidentScore out of reach) and the plain fallback wants more of them than the
-      // item has (three: dana, lee, table): only agreement can deliver it.
-      const p = partner({ fallbackAgree, probeGraceMs: 1_000, confidentScore: 99, fallbackMatchedTerms: 4 });
-      const r = await p.observe({ ...scope, sessionId: "s", at, kind: "user_message", text } as AgentEvent, {
-        waitMs: 1_000,
-      });
-      return [...(r.injection ? [r.injection] : []), ...p.takePending({ ...scope, sessionId: "s" })].flatMap((i) =>
-        i.citations.map((c) => c.itemId),
-      );
-    };
-    expect(await got(false)).toEqual([]);
-    expect(await got(true)).toEqual(["drive:n1"]);
-  });
 });
 
-describe("the judged confident path (judgeConfident)", () => {
+describe("the confident path with a model", () => {
   const scope = { tenantId: "t", userId: "u" };
   const at = Date.parse("2026-10-27T09:00:00Z");
   const text =
@@ -512,37 +494,17 @@ describe("the judged confident path (judgeConfident)", () => {
     return { injections, got: injections.flatMap((i) => i.citations.map((c) => c.itemId)), model };
   };
 
-  test("off, a sure item is delivered on its score; on, the judge sees it and may decline it", async () => {
-    const off = await run({}, () => '{"pick": []}');
-    expect(off.got).toEqual(["drive:n1"]);
-    expect(off.model.calls.length).toBe(0);
-    const on = await run({ judgeConfident: true }, () => '{"pick": []}');
-    expect(on.model.calls.length).toBe(1);
-    expect(on.model.calls[0]!.messages.at(-1)!.content).toContain("Dana Lee is vegetarian");
-    expect(on.got).toEqual([]);
-  });
-
-  test("a failing model delivers the sure item as no judge would (D41)", async () => {
-    const failing = await run({ judgeConfident: true }, () => {
-      throw new Error("outage");
-    });
-    expect(failing.got).toEqual(["drive:n1"]);
-  });
-
-  test("with judgeAgreed off, a lone sure item the lookup and a probe both found skips the judge", async () => {
-    const r = await run({ judgeConfident: true, judgeAgreed: false }, () => {
-      throw new Error("not called");
-    });
+  test("a sure item is delivered on its score: the judge is not asked", async () => {
+    const r = await run({}, () => '{"pick": []}');
     expect(r.got).toEqual(["drive:n1"]);
     expect(r.model.calls.length).toBe(0);
   });
 
-  test("with compactInjection, the delivered item and the judge's copy drop the signature", async () => {
-    const r = await run({ compactInjection: true, judgeConfident: true }, () => '{"pick": [0]}');
+  test("with compactInjection, the delivered item drops the signature", async () => {
+    const r = await run({ compactInjection: true }, () => '{"pick": []}');
     expect(r.got).toEqual(["drive:n1"]);
     expect(r.injections[0]!.text).toContain("Dana Lee is vegetarian");
     expect(r.injections[0]!.text).not.toContain("Head of Partnerships");
-    expect(r.model.calls[0]!.messages.at(-1)!.content).not.toContain("Head of Partnerships");
   });
 });
 

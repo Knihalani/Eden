@@ -98,7 +98,7 @@ describe("hermes-ab's localhost routes", () => {
   test("Eden's MCP server lists ask_context with no task running, and answers only for the running task", async () => {
     const asked: string[] = [];
     const partner = {
-      config: { askGuard: false },
+      config: {},
       ask: async (q: { question: string; sessionId: string }) => {
         asked.push(`${q.sessionId}:${q.question}`);
         return { answer: "the freeze runs to Friday", citations: [] };

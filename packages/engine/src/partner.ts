@@ -51,23 +51,12 @@ import {
 } from "@eden/sources";
 import { IntentPatterns, predict, PREDICT_NAMES } from "./anticipate";
 import { nearDuplicate, sanitizedId, sanitizeItem, type CacheHit, type ItemCache, type Sketch } from "./cache";
-import { SyncManager, type SourceChange } from "./sync";
+import { SyncManager } from "./sync";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
-import {
-  assess,
-  constrains,
-  mayConstrain,
-  frameOf,
-  matterWords,
-  namesRef,
-  unmeasuredLimit,
-  type Frame,
-  type Verdict,
-} from "./conflict";
-import { cardVerdict, requestActions, type CardEnricher } from "./cards";
+import { assess, mayConstrain, frameOf, namesRef, unmeasuredLimit, type Frame, type Verdict } from "./conflict";
+import { cardVerdict, requestActions, STANDING_KINDS, type CardEnricher } from "./cards";
 import { intentTerms, stemWord } from "./intent";
-import { bridgeWants, type QueryBridge } from "./bridge";
 import {
   READER_MAX_ITEMS,
   readerFocus,
@@ -78,7 +67,6 @@ import {
   type ReaderRead,
   type ReaderKind,
 } from "./reader";
-import { activeOn, buildDigest, DIGEST_KINDS, digestAdmits, personalSender } from "./digest";
 import {
   accounts,
   actionKey,
@@ -92,7 +80,7 @@ import {
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
 import { ProbeEconomy, type ProbeKind } from "./economy";
 import { seedsOf, tieWords, type Walked } from "./kg";
-import { answerMessages, judgeMessages, parseJudge } from "./judge";
+import { judgeMessages, parseJudge } from "./judge";
 import { namesParticipant, startDay, startMs, timeWindow, titleNames, type TimeWindow } from "./grounding";
 import {
   absenceSpan,
@@ -116,18 +104,7 @@ import {
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
-import { rankAnswer, rankScore, type RankModel } from "./rank";
-import {
-  citationsOf,
-  guardLine,
-  renderAnswer,
-  renderPacket,
-  SHOWN,
-  shownText,
-  unbear,
-  usageText,
-  type Bearing,
-} from "./render";
+import { citationsOf, renderPacket, shownText } from "./render";
 import { classifySituation } from "./situation";
 import {
   contentTermsOf,
@@ -142,7 +119,6 @@ import {
 } from "./text";
 import { SpanStats, Tracer, type SpanSink, type SpanStat } from "./spans";
 import type { ShadowRecord, ShadowSink, Trace, TraceSink } from "./trace";
-import { chronological, supersededIn } from "./supersede";
 import { distinctiveTokens, showsUse, type Outstanding } from "./usage";
 
 export interface PartnerDeps {
@@ -178,11 +154,6 @@ export interface PartnerDeps {
    */
   cards?: CardEnricher;
   /**
-   * The request-time bridging query (`bridge.ts`, `config.bridgeQuery`): its own model, budget and per-user cache of
-   * queries. Absent, or the flag off: no call is made.
-   */
-  bridge?: QueryBridge;
-  /**
    * The ask-time model reader (`reader.ts`, `config.askReader`): its own model, budget and per-user, per-session cache
    * of verdicts. Absent, or the flag off: no call is made.
    */
@@ -196,11 +167,6 @@ export interface PartnerDeps {
    * (`decide.ts`) and what was delivered. Ids and numbers only, no content. Absent: no facts are computed for it.
    */
   onCandidates?: CandidateSink;
-  /**
-   * The learned ranker's weights (`rank.ts`) for `askRank` and `rankTies`, for the lab's cross-validation folds
-   * (`hidden-funnel.ts --rank-model`). Absent: the fitted weights the engine carries (`rank-weights.json`).
-   */
-  rankModel?: RankModel;
 }
 
 /** One no-model decision's candidates, for `PartnerDeps.onCandidates`. */
@@ -212,8 +178,7 @@ export interface CandidateDump {
   candidates: { id: string; facts: Facts }[];
   delivered: string[];
   /**
-   * How the rule paths decided (`sure`, `grounded-<how>`, `fallback`, `decide-conflict` when only `decideConflict`'s
-   * pass delivered, or empty for silence).
+   * How the rule paths decided (`sure`, `grounded-<how>`, `fallback`, `corrected`, or empty for silence).
    */
   how: string;
   /** The ask's pool before its cut to the item limit: what the rule paths would cite, in their order (path "ask"). */
@@ -235,8 +200,6 @@ export interface ReaderReport {
    */
   outcome: "read" | "late" | "budget" | "none" | "gated";
   waitedMs: number;
-  /** Whether the answer said the reader found nothing that binds (`askReaderClear`). */
-  clear: boolean;
 }
 export type ReaderSink = (report: ReaderReport) => void;
 
@@ -308,22 +271,10 @@ interface Session {
    */
   shown?: Map<string, Set<string>>;
   /**
-   * With `askContext`: the cue of the session's latest user request (its redacted words, names and days), so an ask
-   * is also ranked for what the user asked.
+   * With `askReader`: the cue of the session's latest user request (its redacted words, names and days), so an ask
+   * about it is read against what the user asked.
    */
   request?: Cue;
-  /**
-   * `askContext`: the request's answer order (`askOrder`), kept for the asks that follow it while the request, the
-   * user's cached items (`ItemCache.revision`) and the minute stand, so a run of narrow asks ranks the request once.
-   */
-  requestOrder?: { cue: Cue; revision: number; at: number; order: { order: Scored[]; hits: Scored[] } };
-  /**
-   * With `bridgeQuery`: the bridging queries of the session's latest request that had some (`bridge.ts`), so an ask
-   * about it in other words reads them too, with no call.
-   */
-  bridge?: string[];
-  /** With `bridgeQuery`: the latest request the bridge was asked about, whose call an ask may wait for. */
-  bridgeAsked?: string;
 }
 
 /** Items whose shown words a session keeps (`askDedup`). */
@@ -427,53 +378,15 @@ interface ProbeOpts {
   /** Synced sources whose copy is current (`sync`, D57): they answer from the local index, at no call. */
   local?: ReadonlySet<string> | null;
 }
-const ANSWER_MAX_TOKENS = 1_000;
-/** `askContext`: how long a request's answer order is reused by the asks that follow it (`requestOrder`). */
-const REQUEST_ORDER_MS = 60_000;
-/** `askContext`'s reciprocal-rank constant: rank 0 scores 1/k (the usual 60 flattens a five-item list to a tie). */
+/** `intent`'s reciprocal-rank constant: rank 0 scores 1/k (the usual 60 flattens a five-item list to a tie). */
 const ASK_FUSE_K = 2;
-/** `askContext`: the request's best-ranked candidates whose verdicts are read (with any its graph or cards found). */
-const ASK_CONTEXT_FACTS = 16;
 /** `densePacket`: a word on fewer than this share of the user's items is rare; an item adding one is no echo. */
 const RARE_SHARE = 0.03;
 /** The action firewall: a party named on more than this share of a user's items is the user's own organisation. */
 const SELF_DOMAIN_SHARE = 0.1;
-/** `recoverNames`: names taken from one request at most, and the words of it read for them. */
-const MAX_RECOVERED = 2;
-const RECOVER_WORDS = 24;
 
 /** Each cue's frame (`conflict.ts`), read once and dropped with the cue. */
 const FRAMES = new WeakMap<Cue, Frame>();
-/**
- * `supersede` and `askContext`: each cue's plain verdicts by item object (a refreshed copy is another object, so a memo
- * is never stale), read once and dropped with the cue.
- */
-const VERDICTS = new WeakMap<Cue, WeakMap<ContextItem, Reading>>();
-/** A plain verdict and the words of the statements behind it (`assess`'s `said`), for `supersede`. */
-interface Reading {
-  v: Verdict;
-  words: Set<string> | null;
-}
-/** An item's own words for `supersede`, lower case: its title and the head of its text, without header lines. */
-function ownWords(item: ContextItem): string {
-  const text = item.text.slice(0, 3_000).replace(/^(?:from|to|cc|bcc|date|sent|subject|reply-to):[^\n]*$/gim, "");
-  return `${item.title}\n${text}`.toLowerCase();
-}
-/** `supersedeThreads`: each item read with its quoted messages oldest first (`chronological`), made once per item. */
-const OLDEST_FIRST = new WeakMap<ContextItem, ContextItem>();
-function oldestFirst(item: ContextItem): ContextItem {
-  let x = OLDEST_FIRST.get(item);
-  if (!x) {
-    const text = chronological(item.text);
-    OLDEST_FIRST.set(item, (x = text === item.text ? item : { ...item, text }));
-  }
-  return x;
-}
-/**
- * `rankTies`: the learned ranker's score for a request's candidates (`rank.ts`), set by the lookup for its cue and
- * computed on first use, which is only when a cut ties.
- */
-const RANKERS = new WeakMap<Cue, (x: Scored) => number>();
 /** A lookup's knowledge-graph finds (`graph`), by item id, kept with its cue for delivery's learning. */
 const WALKS = new WeakMap<Cue, Map<string, Walked>>();
 
@@ -485,9 +398,6 @@ const ACTING = new Set<string>(["scheduling", "communication", "task", "travel"]
  */
 const ABOUT_MEETING =
   /\b(meet(ing)?|plans?|push|reschedul\w*|postpone|cancel|still on|running late|late|lunch|coffee|dinner|drinks|call|catch(ing)? up|slot|1:1)\b/i;
-/** A question asking leave to act (`bridgeQuestions`): "Can I share…", "Is it fine if I…", "Should we…". */
-const PERMISSION =
-  /^\s*(?:(?:can|could|may|should|shall)\s+(?:i|we)\b|is\s+it\s+(?:ok|okay|fine|alright|all right|safe)\b|(?:are|am)\s+(?:we|i)\s+(?:ok|okay|fine|allowed|clear)\b|is\s+(?:the|this|next)\b[^?]{0,60}\bgood\s+time\b)/i;
 /** Words of a request that only say when or ask about the calendar: with nothing else, it is a listing (D44). */
 const TIME_WORD =
   /^(|calendar|schedule|diary|agenda|plans?|busy|free|happening|booked|today|tonight|tomorrow|yesterday|week|weekend|next|coming|upcoming|morning|afternoon|evening|(mon|tues|wednes|thurs|fri|satur|sun)day|jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sept?(ember)?|oct(ober)?|nov(ember)?|dec(ember)?|\d{1,2}(st|nd|rd|th)?)$/;
@@ -661,38 +571,9 @@ export class ContextPartner {
             catchupPages: c.syncCatchupPages,
             maxUsersPerTenant: c.syncMaxUsersPerTenant,
             timeoutMs: Math.max(c.sourceTimeoutMs, 5_000),
-            push: c.syncPush,
-            pushMaxStaleMs: c.syncPushMaxStaleMs,
-            pushSweepMs: c.syncPushSweepMs,
-            pushGapMs: c.syncPushGapMs,
           },
         )
       : null;
-  }
-
-  /**
-   * Push (`syncPush`): a tenant that holds a watch on one of the user's sources (Gmail watch, Calendar push channel,
-   * Slack Events) declares it here once the source is synced, and relays each change notice to `sourceChanged`. A
-   * notice carries no content: Eden reads the change with its own read-only list call (D7), or drops the items the
-   * notice names as deleted. No-ops unless `sync` and `syncPush` are on and the user is synced; never throw. The
-   * source is read once more after the watch is declared (what changed before it, no notice names).
-   */
-  sourcePushes(scope: Scope, sourceId: string): void {
-    if (this.sync && this.config.syncPush) this.sync.pushing(scope, sourceId, this.now());
-  }
-
-  /**
-   * A change notice for a source that pushes (`sourcePushes`; see above). `{}` (or `{ deleted: [] }`) says the source
-   * changed; `{ deleted: [...] }` with Eden item ids (`itemId(sourceId, ref)`) or the connector's refs says only that
-   * those items went, unless `changed: true` says it also has new or changed items.
-   */
-  sourceChanged(scope: Scope, sourceId: string, change: SourceChange = {}): void {
-    if (!this.sync || !this.config.syncPush) return;
-    try {
-      this.sync.notify(scope, sourceId, change, this.now());
-    } catch {
-      // A malformed notice is the tenant's; the sync stays as it was.
-    }
   }
 
   /**
@@ -724,9 +605,7 @@ export class ContextPartner {
       this.deps.reader &&
       event.kind === "user_message" &&
       event.draft !== true &&
-      // With `askReaderQuestions` every request is read: the verb list behind `isImperative` misses many actions
-      // ("Cash in…", "RSVP yes…", "Open a Junior ISA…"), and the reader itself says when nothing binds.
-      (this.config.askReaderQuestions || isImperative(event.text, MORE_VERBS))
+      isImperative(event.text, MORE_VERBS)
         ? // The question as an ask may carry it (`checkAsk`'s cap): the event's own cap is 100 times that, and the
           // ask redacts and tokenizes it before its first await, on the observe's critical path.
           this.ask({ ...event, question: head(event.text, MAX_QUESTION_CHARS), maxItems: 5 }, internal).catch(
@@ -822,15 +701,6 @@ export class ContextPartner {
     };
 
     const queued = s.pending.shift() ?? null;
-    // `constraintDigest`: a session opens with the user's standing constraints, once, as data. It is not news (the
-    // ledger does not mark its items, so a lookup may still deliver one with its bearing on a request).
-    if (event.kind === "session_start" && this.config.constraintDigest && !queued) {
-      const digest = this.digestFor(s.scope, s.id);
-      if (digest) {
-        trace("digest", "digest", { itemIds: digest.citations.map((c) => c.itemId) });
-        return reply(digest);
-      }
-    }
     const lookup = wantsLookup(event, text, terms, s.vocab);
     // `anticipate`: every event with words is read for what the agent will need next, in the background. A request's
     // own names and days are its lookup's to probe; read from it are its intent's (class, learned names).
@@ -852,8 +722,8 @@ export class ContextPartner {
     if (event.kind === "external") cue.external = true;
     cue.arrived = this.now();
     if (root) cue.span = root.id;
-    // `askContext`: the request's own cue, kept so an ask reads what its frame, graph walk and verdicts already hold.
-    if (event.kind === "user_message" && (this.config.askContext || this.config.askGuard || this.config.askReader)) {
+    // `askReader`: the request's own cue, kept so an ask reads what its frame, graph walk and verdicts already hold.
+    if (event.kind === "user_message" && this.config.askReader) {
       s.request = cue;
     }
     // The request's names are its own lookup's to probe: a later event naming them again prefetches nothing.
@@ -869,7 +739,6 @@ export class ContextPartner {
     const ranked = this.rank(s, cue);
     if (ranking) spans!.close(ranking, { candidates: ranked.length });
     const sure = spans?.open("fast.confident", cue.span);
-    this.rankTiesFor(cue, () => this.factsOf(s, cue, ranked, event.kind));
     const fast = this.confident(ranked, cue);
     if (sure) spans!.close(sure, { sure: fast.length });
     // A stale cached copy is not delivered from here: the slow path re-reads it first (D40). A cue in cooldown is not
@@ -877,23 +746,15 @@ export class ContextPartner {
     // `anticipate` warms the cache before the request, so the fast path meets what only the slow path met before. With
     // a judge, the request then goes to the slow path, whose judge sees every candidate the live search adds: a lone
     // sure item from the cache would end the lookup before the second one that makes it the judge's call.
-    const judges = this.config.anticipate && this.deps.model !== null && !this.config.judgeBehind;
+    const judges = this.config.anticipate && this.deps.model !== null;
     const answers = fast.length > 0 && !this.stale(s, fast) && !judges;
-    // With no model's say, `decideConflict`'s pass runs here too (D67): a sure match from the cache would otherwise
-    // end the request before the slow path's pass, silencing a conflict the cache holds. Only a current copy joins.
-    const noModelSay = !this.deps.model || this.config.judgeBehind;
-    const { items: packet, how } =
-      answers && noModelSay
-        ? this.joinConflict(s, cue, ranked, event.kind, fast, { keep: (x) => !this.stale(s, [x]) })
-        : { items: fast, how: "" };
-    if (this.deps.onCandidates && noModelSay) {
-      this.dump(s, "fast", this.factsOf(s, cue, ranked, event.kind), answers ? packet : [], answers ? "sure" : "");
+    if (this.deps.onCandidates && !this.deps.model) {
+      this.dump(s, "fast", this.factsOf(s, cue, ranked, event.kind), answers ? fast : [], answers ? "sure" : "");
     }
     if (answers) {
       this.markCue(s, cue);
-      const reason = how ? `cache+decide-${how}` : "cache";
-      const injection = this.deliver(s, packet, "proactive", `${reason}:${cue.id}`, cue);
-      const ids = packet.map((x) => x.item.id);
+      const injection = this.deliver(s, fast, "proactive", `cache:${cue.id}`, cue);
+      const ids = fast.map((x) => x.item.id);
       trace("fast", cue.id, { itemIds: ids, ...this.prefetchedOf(s, ids) });
       if (queued) s.pending.unshift(queued);
       return reply(injection);
@@ -1066,7 +927,7 @@ export class ContextPartner {
     this.addBehind(s, work);
   }
 
-  /** Work a lookup left running behind its answer (`syncPollBehind`, `judgeBehind`), for harnesses to wait on. */
+  /** Work a lookup left running behind its answer (`syncPollBehind`), for harnesses to wait on. */
   /**
    * `readerPushBehind`: once the poll the push did not wait for is done, and only if it stored something, the push is
    * ranked again on the refreshed index and read once more (`again`: no second search, no further re-read). A pool the
@@ -1096,7 +957,7 @@ export class ContextPartner {
 
   /**
    * `readerPushBehind`: records what `injection`'s delivery marked in `s` (`was`: each item's ledger entry before it),
-   * so `withdraw` can undo it. An item the delivery left unmarked (folded out by `supersede`) has nothing to undo.
+   * so `withdraw` can undo it. An item the delivery left unmarked has nothing to undo.
    */
   private keepUndo(
     s: Session,
@@ -1139,69 +1000,6 @@ export class ContextPartner {
       if (s.behind === tracked) s.behind = null;
     });
     s.behind = tracked;
-  }
-
-  /**
-   * `judgeBehind`: the judge, off the critical path. It reads `rest` (candidates the lookup's answer left out) once
-   * that answer is out, within the session's model budget, and its picks not yet delivered are queued as a later
-   * injection. A failing, cut-off or unaffordable call adds nothing (D41). Never throws.
-   */
-  private judgeLater(s: Session, cue: Cue, t0: number, eventKind: string, rest: Scored[]): void {
-    const model = this.deps.model;
-    if (!model || rest.length === 0 || s.closed) return;
-    const reservation = this.charge(s);
-    if (!reservation) return;
-    const turn = s.turn;
-    const spans = this.spans;
-    const work = (async () => {
-      const candidates = rest.map((x) => x.item);
-      const messages = judgeMessages(
-        s.window.join("\n"),
-        candidates,
-        this.config.probes,
-        this.config.compactInjection ? focusOf(cue) : undefined,
-        { windowChars: this.config.judgeWindowChars, itemBytes: this.config.judgeItemBytes },
-      );
-      const calling = spans?.open("model", cue.span, { async: true, role: "judge-behind" });
-      let res: Awaited<ReturnType<Model["chat"]>>;
-      try {
-        res = await model.chat({
-          messages,
-          cacheKey: userCacheKey(s.scope),
-          maxTokens: JUDGE_MAX_TOKENS,
-          reasoning: "low",
-          json: true,
-          signal: s.abort.signal,
-        });
-      } catch {
-        if (calling) spans!.close(calling, { error: true });
-        this.settle(reservation, 0);
-        return;
-      }
-      if (calling) spans!.close(calling, modelAttrs(res));
-      this.settle(reservation, res.costUsd);
-      const picked = s.closed
-        ? []
-        : parseJudge(res.text, candidates.length)
-            .map((i) => rest[i]!)
-            .filter((x) => s.ledger.isFresh(x.item.id, s.turn))
-            .slice(0, this.config.maxItemsPerInjection);
-      this.trace({
-        sessionId: s.id,
-        turn,
-        event: eventKind,
-        decision: picked.length > 0 ? "model" : "silent",
-        reason: `judge-behind${res.truncated ? ":model-truncated" : ""}`,
-        latencyMs: Math.round(performance.now() - t0),
-        sourceCalls: 0,
-        modelCalls: 1,
-        costUsd: res.costUsd,
-        itemIds: picked.map((x) => x.item.id),
-      });
-      const late = picked.length > 0 ? this.deliver(s, picked, "proactive", `model:${cue.id}`, cue) : null;
-      if (late) s.pending.push(late);
-    })().catch(() => {});
-    this.addBehind(s, work);
   }
 
   /** Injections the slow path queued for a session, oldest first. Integrations that poll call this. */
@@ -1345,8 +1143,6 @@ export class ContextPartner {
       checked.add(informed);
       while (checked.size > MAX_CHECKED) checked.delete(checked.values().next().value as string);
       const finding = this.deliver(s, items, "proactive", `action-${g.how}:${cue.id}`, cue);
-      // `supersede`: every item that held the call has been replaced by a newer one that lifts it.
-      if (!finding) return proceed("superseded");
       this.handOut(s, finding);
       this.trace({
         sessionId: s.id,
@@ -1393,7 +1189,7 @@ export class ContextPartner {
       this.config.syncPollBehind &&
       this.config.syncOnDemand;
     const searched = internal.again?.searched ?? (await this.searchLive(s, cue, this.config.askSources, behind));
-    const { calls: sourceCalls, plans, probed, local, syncCalls, consequence, covered } = searched;
+    const { calls: sourceCalls, plans, probed, local, syncCalls, consequence } = searched;
     // `askVerdicts` (docs/research/gen-ask.md): an ask gathers what a lookup gathers (the consequence probe's finds,
     // the graph walk's, the card finds), not only what shares the question's words, and reads each with the verdicts
     // the lookup's rule paths read, so an item the question runs into answers it ahead of a merely similar one.
@@ -1403,11 +1199,7 @@ export class ContextPartner {
     const carded = verdicts ? this.cardFinds(s, cue) : new Map<string, CardFind>();
     // `intent`: what the question would change, by the requests written for each item (no model, no call).
     const intentFound = this.intentFinds(s, cue);
-    // `bridgeQuery`: the bridging queries of the question, or of the session's latest bridged request, from the user's
-    // cache only (an ask never makes the call), run against the index.
-    const bridgeQueries = this.config.bridgeQuery && this.deps.bridge ? await this.askBridge(s, question) : undefined;
-    const bridgeFound = bridgeQueries?.length ? this.bridgeFinds(s, bridgeQueries) : null;
-    const extra = [...consIds, ...carded.keys(), ...intentFound.keys(), ...(bridgeFound?.ids ?? [])];
+    const extra = [...consIds, ...carded.keys(), ...intentFound.keys()];
     const ranking = spans?.open("rank", cue.span);
     const scored = this.rank(s, cue, {
       ignoreLedger: true,
@@ -1417,19 +1209,10 @@ export class ContextPartner {
     if (ranking) spans!.close(ranking, { candidates: scored.length });
     // Only anchored intent hits are fused in (`anchoredIntents`); every hit still withholds the guard's line.
     const intents = this.anchoredIntents(s, cue, intentFound);
-    // The candidates' facts (`decide.ts`), read once: by `askVerdicts` for its hits, by `askRank` for its order, and by
-    // the lab's dump.
-    const ranked = this.config.askRank;
+    // The candidates' facts (`decide.ts`), read once: by `askVerdicts` for its hits, and by the lab's dump.
     const facts =
-      verdicts || ranked || this.deps.onCandidates
-        ? this.askFacts(s, cue, scored, {
-            probed,
-            consIds,
-            cls: consequence?.cls,
-            walked,
-            carded,
-            bridgedAlso: this.bridgeConflicts(scored, cue, bridgeFound),
-          })
+      verdicts || this.deps.onCandidates
+        ? this.askFacts(s, cue, scored, { probed, consIds, cls: consequence?.cls, walked, carded })
         : [];
     const hits = verdicts
       ? facts.filter(({ facts: f }) => f.conflictHit || f.graphHit || f.bridged || f.cardViolated).map(({ x }) => x)
@@ -1445,61 +1228,13 @@ export class ContextPartner {
       "ask",
     ).items;
     if (grounding) spans!.close(grounding, { grounded: grounded.length });
-    // `bridgeAskSeats`: the bridge's best finds the conflict test did not clear take seats after the verdict hits, so
-    // a constraint in words the test does not read still reaches the answer (the agent's model reads it).
-    const seated = bridgeFound ? this.bridgeSeats(scored, cue, bridgeFound, hits) : [];
     const lexical = [
       ...hits,
-      ...seated,
-      ...grounded.filter((x) => !hits.includes(x) && !seated.includes(x)),
-      ...scored.filter(
-        (x) =>
-          x.score >= this.config.candidateScore && !grounded.includes(x) && !hits.includes(x) && !seated.includes(x),
-      ),
+      ...grounded.filter((x) => !hits.includes(x)),
+      ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x) && !hits.includes(x)),
     ];
-    const pool = intents.size > 0 ? this.fuseIntent(lexical, hits, scored, intents) : lexical;
-    // `supersede` (docs/research/smart-supersede.md): what a newer decisive item replaced, and (for an action) what is
-    // settled, leaves the pool before any seat is given.
-    const context = this.config.askContext ? this.requestCue(s, cue, pool.length > 0) : null;
-    const whole = ranked || context !== null;
-    let order = this.config.supersede ? this.latest(cue, pool, true, whole ? undefined : limit) : pool;
-    // `askRank` (docs/research/smart-rank.md): the same pool in the learned ranker's order, and one seat open to its
-    // best candidate outside the pool by a margin. Same limit: what is cited changes, not how much.
-    if (ranked && facts.length > 0) {
-      const by = new Map(facts.map(({ x, facts: f }) => [x, rankScore(f, this.deps.rankModel)]));
-      const inPool = new Set(pool);
-      const outside = facts.filter(({ x }) => !inPool.has(x)).map(({ x }) => x);
-      let top = rankAnswer(order, outside, limit, this.config.askRankMargin, (x) => by.get(x));
-      // With `supersede`, the outsider that took a seat is read against the pool it joins: if it is superseded or
-      // settled there, the seat stays with the pool.
-      const joined = top.find((x) => !inPool.has(x));
-      if (joined && this.config.supersede && !this.latest(cue, [...order, joined], true).includes(joined)) {
-        top = rankAnswer(order, [], limit, this.config.askRankMargin, (x) => by.get(x));
-      }
-      // The ranked seats lead; the rest keep the rule paths' order for `askContext`'s fusion.
-      order = [...top, ...order.filter((x) => !top.includes(x))];
-      // An outsider that took a seat may itself supersede an item of the pool: that item leaves, as it would have
-      // had the two been read together from the start.
-      const seated = top.find((x) => !inPool.has(x));
-      if (seated && this.config.supersede) order = this.latest(cue, order, true);
-    }
+    const order = intents.size > 0 ? this.fuseIntent(lexical, hits, scored, intents) : lexical;
     let chosen = order.slice(0, limit);
-    // `askContext` (docs/research/smart-askctx.md): the session's latest request, ranked as an ask of its own over what
-    // is cached, fused in; with `supersede`, the request's finds are read against the question's pool too.
-    if (context) {
-      let fused = this.fuseAsk({ order, hits }, this.requestOrder(s, context), limit * 2);
-      if (this.config.supersede) {
-        fused = this.latest(cue, fused, true);
-        // What only the request found is read as the request reads it: a narrow question keeps a settled item it
-        // asked about (it is the answer), but a settled twin the request's words pulled in is not what was asked.
-        const own = new Set(order);
-        if (fused.some((x) => !own.has(x))) {
-          const kept = new Set(this.latest(context, fused, true));
-          fused = fused.filter((x) => own.has(x) || kept.has(x));
-        }
-      }
-      chosen = fused.slice(0, Math.min(limit, this.config.askContextItems));
-    }
     // `askReader` (D95): one budgeted model call reads the widened pool; the items it says bind lead, with its bearing.
     // An explicit ask waits `askReaderWaitMs` for it; the push waits for the reading itself (the observe that started
     // it stops waiting at `readerPushWaitMs`), bounded by the reader's call and the session's close.
@@ -1548,11 +1283,7 @@ export class ContextPartner {
       // A first reading whose poll runs behind may be withdrawn by the second: its ledger entries are kept to restore.
       const was = behind ? new Map(fresh.map((x) => [x.item.id, s.ledger.entry(x.item.id)])) : null;
       const injection =
-        fresh.length > 0 && !s.closed && latest
-          ? this.config.readerPushNotes
-            ? this.deliver(s, fresh, "proactive", `reader:${cue.id}`, cue, undefined, undefined, reading!.notes)
-            : this.deliver(s, fresh, "proactive", `reader:${cue.id}`, cue)
-          : null;
+        fresh.length > 0 && !s.closed && latest ? this.deliver(s, fresh, "proactive", `reader:${cue.id}`, cue) : null;
       if (injection && was) this.keepUndo(s, injection, fresh, was);
       if (injection) s.pending.push(injection);
       const latencyMs = Math.round(performance.now() - t0);
@@ -1580,52 +1311,11 @@ export class ContextPartner {
       if (behind && cue.polled) this.pushAgain(s, request, internal, cue.polled, searched, injection);
       return { answer: "", citations: [], usedModel: reading?.called === true, costUsd, latencyMs };
     }
-    // `askGuard` (docs/research/edge-ask.md): an ask about an action is answered with its verdicts said. What may block
-    // leads, marked; with nothing that may block and every source searched, a line says so. A reader's verdict, when
-    // there is one, is the answer's reading instead.
-    const guarded = this.config.askGuard && !reading?.read && this.acting(s, cue);
-    const bearing = guarded ? this.bearings(s, cue, chosen, hits) : null;
-    if (bearing) chosen = leadBinding(chosen, bearing);
-    // `askCompact` with `densePacket`: an echo of an occurrence the answer already shows (the invitation beside its
-    // event) is folded out, as in a packet (`fold.ts`).
-    const items = (
-      this.config.askCompact && this.config.densePacket
-        ? foldEchoes(chosen, {
-            focus: focusOf(cue),
-            year: new Date(this.now()).getUTCFullYear(),
-            self: this.deps.cache.selfOf(s.scope),
-            rare: (w) => this.deps.cache.isRare(s.scope, w, RARE_SHARE),
-          })
-        : chosen
-    ).map((x) => x.item);
+    const items = chosen.map((x) => x.item);
     const rendering = spans?.open("render", cue.span);
     const answering = this.answering(s, cue);
-    // What the intent index or the bridging queries chose for this request is not evidence that nothing binds.
-    const modelChosen = bearing ? new Set([...intentFound.keys(), ...(bridgeFound?.ids ?? [])]) : undefined;
-    const blocks =
-      bearing !== null &&
-      this.mayBlock(
-        cue,
-        items,
-        bearing,
-        modelChosen,
-        pool.map((x) => x.item),
-      );
-    const lead =
-      bearing && !blocks && covered
-        ? guardLine(
-            covered,
-            cleanEntities(cue.entities).filter((e) => !e.includes("@")),
-            [...(cue.time?.days ?? [])].sort(),
-          )
-        : undefined;
-    if (bearing) answering.bearing = (shown) => this.shownBearing(cue, shown, bearing);
-    if (lead) answering.lead = lead;
     if (reading?.notes.size) answering.note = (item) => reading.notes.get(item.id);
-    if (reading?.clear) answering.lead = READER_CLEAR(reading.checked);
-    let answer = items.length || lead ? renderPacket(items, answering) : "Nothing in the connected sources.";
-    // What usage learns from the answer: the packet without the flag's additions, unless the model composed it.
-    let learnt = this.config.packetDates && items.length ? usageText(items, answering) : undefined;
+    const answer = items.length ? renderPacket(items, answering) : "Nothing in the connected sources.";
     if (rendering) spans!.close(rendering, { items: items.length });
     if (this.deps.onCandidates) {
       this.dump(
@@ -1634,42 +1324,12 @@ export class ContextPartner {
         facts,
         scored.filter((x) => items.includes(x.item)),
         items.length > 0 ? "answer" : "",
-        pool.map((x) => x.item.id),
+        order.map((x) => x.item.id),
       );
     }
-    let usedModel = reading?.called === true;
-    // What the ask spent: the reader's call (0 when its verdict was cached, joined or late), then the answer model's.
-    let costUsd = reading?.costUsd ?? 0;
-    let answerCalls = 0;
-    const reservation =
-      this.config.askWithModel && items.length && this.deps.model && !s.closed
-        ? this.charge(s, this.config.estimatedAnswerUsd)
-        : null;
-    if (reservation && this.deps.model) {
-      const calling = spans?.open("model", cue.span, { async: true, role: "answer" });
-      try {
-        const res = await this.deps.model.chat({
-          messages: answerMessages(question, s.window.join("\n"), items),
-          maxTokens: ANSWER_MAX_TOKENS,
-          reasoning: "low",
-          cacheKey: userCacheKey(s.scope),
-          signal: s.abort.signal,
-        });
-        this.settle(reservation, res.costUsd);
-        // A cut-off answer is not shown: the cited items stand on their own (D43, D45).
-        if (res.text.trim() && !res.truncated) {
-          answer = renderAnswer(res.text);
-          learnt = undefined;
-        }
-        usedModel = true;
-        costUsd += res.costUsd;
-        answerCalls = 1;
-        if (calling) spans!.close(calling, modelAttrs(res));
-      } catch {
-        this.settle(reservation, 0);
-        if (calling) spans!.close(calling, { error: true });
-      }
-    }
+    const usedModel = reading?.called === true;
+    // What the ask spent: the reader's call (0 when its verdict was cached, joined or late).
+    const costUsd = reading?.costUsd ?? 0;
     if (items.length && !s.closed) {
       const injection = this.deliver(
         s,
@@ -1678,7 +1338,6 @@ export class ContextPartner {
         "ask",
         cue,
         answer,
-        learnt,
       );
       this.handOut(s, injection);
     }
@@ -1691,8 +1350,7 @@ export class ContextPartner {
       reason: cue.id,
       latencyMs,
       sourceCalls,
-      // The reader's call and the answer model's are two calls.
-      modelCalls: (reading?.called ? 1 : 0) + answerCalls,
+      modelCalls: reading?.called ? 1 : 0,
       costUsd,
       ...(reading ? { readerCalls: reading.called ? 1 : 0, readerCostUsd: reading.costUsd } : {}),
       itemIds: items.map((i) => i.id),
@@ -1720,8 +1378,6 @@ export class ContextPartner {
       cls?: ActionClass;
       walked: ReadonlyMap<string, Walked>;
       carded: ReadonlyMap<string, CardFind>;
-      /** The bridge's finds in conflict (`bridgeConflicts`): verdict hits as a consequence find in conflict is. */
-      bridgedAlso?: readonly string[];
     },
   ): { x: Scored; facts: Facts }[] {
     const cons = new Set(ctx.consIds);
@@ -1738,7 +1394,6 @@ export class ContextPartner {
             .map((x) => x.item.id)
         : [],
     );
-    for (const id of ctx.bridgedAlso ?? []) bridged.add(id);
     return this.factsOf(s, cue, scored, "ask", {
       probed: new Set(ctx.probed ?? []),
       bridged,
@@ -1748,12 +1403,12 @@ export class ContextPartner {
   }
 
   /**
-   * `askReader` (D95, `reader.ts`): the reader's verdict on an ask about an action (or any ask, with
-   * `askReaderQuestions`), over the first `askReaderPool` distinct candidates of `ranked` (the ask's pool in its order,
-   * then the rest it scored). The items it says bind lead the answer, at most `limit`, the usual `chosen` fill what is
-   * left. Null when the reader is not asked; `read` false when it gave no verdict within `waitMs` (fail open: `chosen`
-   * as is; Infinity waits for the verdict, with no timer). A late call reports `called` false and no cost: the call
-   * this read started is traced as "reader-late" when it lands.
+   * `askReader` (D95, `reader.ts`): the reader's verdict on an ask about an action, over the first `askReaderPool`
+   * distinct candidates of `ranked` (the ask's pool in its order, then the rest it scored). The items it says bind
+   * lead the answer, at most `limit`, the usual `chosen` fill what is left. Null when the reader is not asked; `read`
+   * false when it gave no verdict within `waitMs` (fail open: `chosen` as is; Infinity waits for the verdict, with no
+   * timer). A late call reports `called` false and no cost: the call this read started is traced as "reader-late" when
+   * it lands.
    */
   private async readAsk(
     s: Session,
@@ -1767,52 +1422,24 @@ export class ContextPartner {
     notes: Map<string, string>;
     kinds: Map<string, ReaderKind>;
     read: boolean;
-    clear: boolean;
-    checked: number;
     called: boolean;
     costUsd: number;
   } | null> {
     const reader = this.deps.reader!;
     const acts = (raw: string) => isImperative(raw, MORE_VERBS);
     const request = acts(cue.raw) ? cue.raw : s.request && acts(s.request.raw) ? s.request.raw : undefined;
-    if (!request && !this.config.askReaderQuestions && !ASKS_BLOCKERS.test(cue.raw)) return null;
+    if (!request && !ASKS_BLOCKERS.test(cue.raw)) return null;
     const pool: Scored[] = [];
     const seen = new Set<string>();
-    // `askReaderStanding`: the user's standing constraints on file (a carded freeze, limit, absence, deadline,
-    // prohibition or dependency still in force), newest first, lead the pool whatever their words: the item that binds
-    // a request often shares none of its words, so the ask's ranking never seats it (docs/research/haiku-phase3.md).
-    // The list depends on the user's cache alone, not the request, so the reader can send it as a cached prefix.
-    let standingCount = 0;
-    const standing = this.config.askReaderStanding;
-    if (standing > 0 && this.config.cards && this.deps.cards) {
-      const now = this.now();
-      const cache = this.deps.cache;
-      const today = localDay(now, cache.offsetOf(s.scope));
-      const ids = this.deps.cards.carded(s.scope);
-      const kinds: ReadonlySet<string> = this.config.askReaderStandingKinds.length
-        ? new Set(this.config.askReaderStandingKinds)
-        : DIGEST_KINDS;
-      const extra = [...this.deps.cards.cardsOf(s.scope, ids, now)]
-        .filter(([, card]) => kinds.has(card.kind) && activeOn(card, today))
-        .map(([id]) => cache.get(s.scope, id, now))
-        .filter((item): item is ContextItem => item !== null && !bulkMail(item))
-        .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0) || (a.id < b.id ? -1 : 1))
-        .slice(0, Math.min(standing, READER_POOL_CAP));
-      for (const item of extra) {
-        seen.add(item.id);
-        pool.push({ item, score: 0, matched: 0, sketch: null });
-      }
-      standingCount = extra.length;
-    }
-    const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP - standingCount));
+    const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
     for (const x of ranked) {
-      if (pool.length - standingCount >= cap) break;
+      if (pool.length >= cap) break;
       if (seen.has(x.item.id)) continue;
       seen.add(x.item.id);
       pool.push(x);
     }
     const t0 = performance.now();
-    const report = (outcome: ReaderReport["outcome"], flagged: ReaderReport["flagged"] = [], clear = false) =>
+    const report = (outcome: ReaderReport["outcome"], flagged: ReaderReport["flagged"] = []) =>
       this.deps.onReader?.({
         sessionId: s.id,
         checked: pool.length,
@@ -1820,7 +1447,6 @@ export class ContextPartner {
         flagged,
         outcome,
         waitedMs: Math.round(performance.now() - t0),
-        clear,
       });
     if (pool.length === 0) {
       report("none");
@@ -1837,18 +1463,17 @@ export class ContextPartner {
           )
         : new Map();
     // `readerGate`: no call when none of the request's own candidates could constrain it: no card of a constraint kind
-    // (or a state change or a thing done) and no constraint wording. Bulk mail never counts. Standing items do not
-    // open the gate: they are on file for every request.
+    // (or a state change or a thing done) and no constraint wording. Bulk mail never counts.
     if (this.config.readerGate) {
       const constraintLike = (x: Scored) => {
         if (bulkMail(x.item)) return false;
         const card = cards.get(x.item.id);
-        if (card && (DIGEST_KINDS.has(card.kind) || card.kind === "status-change" || card.kind === "already-done")) {
+        if (card && (STANDING_KINDS.has(card.kind) || card.kind === "status-change" || card.kind === "already-done")) {
           return true;
         }
         return mayConstrain(`${x.item.title}. ${x.item.text}`.toLowerCase());
       };
-      if (!pool.slice(standingCount).some(constraintLike)) {
+      if (!pool.some(constraintLike)) {
         report("gated");
         return null;
       }
@@ -1856,11 +1481,7 @@ export class ContextPartner {
     const input: ReaderInput = {
       request: main,
       ...(request && cue.raw !== request ? { question: cue.raw } : {}),
-      // A standing item is read without the request's focus, so its text is the same for every request of the user.
-      items: pool.map((x, i) =>
-        readerItem(x.item, i < standingCount ? NO_FOCUS : focus, cards.get(x.item.id), this.config.askReaderItemChars),
-      ),
-      ...(standingCount > 0 ? { standing: standingCount } : {}),
+      items: pool.map((x) => readerItem(x.item, focus, cards.get(x.item.id), this.config.askReaderItemChars)),
       today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
       // Sticky routing to the provider that holds the user's cached prefix, as the judge, answer and cards calls do.
       cacheKey: userCacheKey(s.scope),
@@ -1920,8 +1541,6 @@ export class ContextPartner {
       notes: new Map<string, string>(),
       kinds: new Map<string, ReaderKind>(),
       read: false,
-      clear: false,
-      checked: 0,
       called,
       costUsd,
     };
@@ -1941,11 +1560,9 @@ export class ContextPartner {
       notes.set(b.id, readerNote(b.kind, b.why));
       kinds.set(b.id, b.kind);
     }
-    const clear = this.config.askReaderClear && verdict.bears.length === 0;
     report(
       "read",
       verdict.bears.filter((b) => notes.has(b.id)).map((b) => ({ id: b.id, kind: b.kind })),
-      clear,
     );
     // `askReaderDrop`: what the reader read and rejected by name leaves the answer (never what it flagged).
     const rejected = this.config.askReaderDrop ? new Set(verdict.rejected ?? []) : new Set<string>();
@@ -1958,217 +1575,9 @@ export class ContextPartner {
       notes,
       kinds,
       read: true,
-      clear,
-      checked: verdict.checked,
       called,
       costUsd,
     };
-  }
-
-  /**
-   * `askGuard`: whether an ask is about an action, so that what blocks it, or that nothing does, is the answer's point:
-   * the question acts or asks what could stop or change an act, or the session's latest request acts.
-   */
-  private acting(s: Session, cue: Cue): boolean {
-    // In the imperative (`isImperative`): `isAction` also takes a scheduling word anywhere ("when is lunch?").
-    const acts = (raw: string) => isImperative(raw, MORE_VERBS);
-    return acts(cue.raw) || ASKS_BLOCKERS.test(cue.raw) || (s.request !== undefined && acts(s.request.raw));
-  }
-
-  /**
-   * Each item's bearing on `cue` (`packetBearing`, `askGuard`), from the verdicts the rule paths read, no model and no
-   * call: "conflict" for a verdict hit of the ask (`hits`), a card the request's actions violate, or the conflict
-   * test's conflict; "clear" for its clearance. Bulk mail and a settled update are vetoed by the rule paths, and say
-   * nothing here either.
-   */
-  private bearings(s: Session, cue: Cue, xs: readonly Scored[], hits: readonly Scored[] = []): Map<string, Bearing> {
-    const out = new Map<string, Bearing>();
-    const hit = new Set(hits.map((x) => x.item.id));
-    const violated = this.violatedCards(
-      s,
-      cue,
-      xs.map((x) => x.item.id),
-    );
-    for (const { item } of xs) {
-      if (hit.has(item.id) || violated.has(item.id)) out.set(item.id, "conflict");
-      else if (!bulkMail(item) && !settled(item)) {
-        const v = this.verdict(item, cue);
-        if (v !== "none") out.set(item.id, v);
-      }
-    }
-    return out;
-  }
-
-  /**
-   * `askGuard`: whether any of `items` may bear on `cue`, so that "nothing found" would be wrong: its bearing says it
-   * may block; the conflict test reads a conflict in it; or it is on, or names, a day the question names (a clash is
-   * the agent's to judge: an appointment that day has no word of a block, and is one); or a model-made path chose it
-   * for this request (`chosen`: the intent index's hits, the bridging queries' finds), which the verdicts did not
-   * read: "Withdrawals aren't possible before maturity", found by the intent index, beside "no rule, hold, limit …
-   * found" would contradict the line, and the rule paths read it as clear (docs/research/edge-combined.md).
-   * Nor is the line said beside an item, or over a candidate of the ask's pool (`pool`, bulk mail aside), whose words
-   * may state a constraint the verdicts did not read (`mayConstrain`): the same sentence found by its words alone
-   * would otherwise sit under "nothing found" (a false all-clear, D92).
-   */
-  private mayBlock(
-    cue: Cue,
-    items: readonly ContextItem[],
-    bearing: ReadonlyMap<string, Bearing>,
-    chosen: ReadonlySet<string> = new Set(),
-    pool: readonly ContextItem[] = [],
-  ): boolean {
-    const days = cue.time?.days;
-    const worded = (i: ContextItem) => mayConstrain(`${i.title}. ${i.text}`.toLowerCase());
-    return (
-      items.some(
-        (i) =>
-          bearing.get(i.id) === "conflict" ||
-          chosen.has(i.id) ||
-          (days !== undefined && (days.has(startDay(i) ?? "") || daysNamed(i, cue.at).some((d) => days.has(d)))) ||
-          (!bulkMail(i) && !settled(i) && this.verdict(i, cue) === "conflict") ||
-          worded(i),
-      ) || pool.some((i) => !bulkMail(i) && worded(i))
-    );
-  }
-
-  /**
-   * An item's bearing as a packet or answer says it: "conflict" only when the item as shown (its compacted text,
-   * `shown`) still states a constraint (`constrains`) or still reads as a conflict, so a mark never stands on a line
-   * that says none (a sender and date with the rest cut). "clear" as read.
-   */
-  private shownBearing(cue: Cue, shown: ContextItem, bearing: ReadonlyMap<string, Bearing>): Bearing | undefined {
-    const b = bearing.get(shown.id);
-    // An item said "(shown above)" (`askDedup`) keeps its mark: the agent has its words, and the mark says it answers.
-    if (b !== "conflict" || shown.text === SHOWN) return b;
-    const said = constrains(`${shown.title}. ${shown.text}`.toLowerCase()) || this.assessed(shown, cue) === "conflict";
-    return said ? b : undefined;
-  }
-
-  /** Which of `ids` hold a card that the request's actions violate (`cardVerdict`); none without cards. */
-  private violatedCards(s: Session, cue: Cue, ids: readonly string[]): Set<string> {
-    const out = new Set<string>();
-    const enricher = this.deps.cards;
-    if (!this.config.cards || !enricher || ids.length === 0) return out;
-    const actions = requestActions(cue.raw);
-    if (actions.size === 0) return out;
-    const frame = this.frame(cue);
-    for (const [id, card] of enricher.cardsOf(s.scope, ids, cue.arrived ?? this.now())) {
-      if (cardVerdict(card, frame, actions)?.violated) out.add(id);
-    }
-    return out;
-  }
-
-  /**
-   * `askContext`: the cue of the session's latest user request, when an ask's question is about it in other words (an
-   * agent asking narrowly). Null when there is none; when the question holds every content word the request does (it
-   * is the request, or more), so an ask made with the request's own text is answered as without the flag; and when
-   * the question shares no content word with the request while finding something of its own (it asks about something
-   * else, and the request's items would only crowd its answer).
-   */
-  private requestCue(s: Session, question: Cue, found: boolean): Cue | null {
-    const cue = s.request;
-    if (!cue) return null;
-    const asked = new Set(question.text.split(" ").filter(Boolean));
-    const words = cue.text.split(" ").filter(Boolean);
-    if (words.every((t) => asked.has(t))) return null;
-    if (found && !words.some((t) => asked.has(t))) return null;
-    return cue;
-  }
-
-  /**
-   * `askOrder` for the session's request, reused while the request, the user's cached items and the minute stand
-   * (recency and the graph's learnt weights move slower than that): a run of narrow asks about one request ranks the
-   * cache for it once, not once per ask.
-   */
-  private requestOrder(s: Session, cue: Cue): { order: Scored[]; hits: Scored[] } {
-    const revision = this.deps.cache.revision(s.scope);
-    const now = this.now();
-    const kept = s.requestOrder;
-    if (kept && kept.cue === cue && kept.revision === revision && now - kept.at < REQUEST_ORDER_MS) return kept.order;
-    const order = this.askOrder(s, cue);
-    s.requestOrder = { cue, revision, at: now, order };
-    return order;
-  }
-
-  /**
-   * An ask's candidates for `cue` in answer order, as `ask` orders its own (verdict hits, then what its people and
-   * days ground, then the rest above `candidateScore`), with no source call: what is cached, its graph and its cards.
-   */
-  private askOrder(s: Session, cue: Cue): { order: Scored[]; hits: Scored[] } {
-    const verdicts = this.config.askVerdicts;
-    // The request's lookup walked the graph from its cue already: its finds are kept with it (`WALKS`).
-    const walked =
-      verdicts && this.config.graph ? (WALKS.get(cue) ?? this.walkGraph(s, cue)) : new Map<string, Walked>();
-    const carded = verdicts ? this.cardFinds(s, cue) : new Map<string, CardFind>();
-    const scored = this.rank(s, cue, {
-      ignoreLedger: true,
-      ...(carded.size > 0 ? { probed: [...carded.keys()] } : {}),
-      ...(walked.size > 0 ? { walked: [...walked.keys()] } : {}),
-    });
-    // The request's verdicts are read on its best few and what its graph and cards found, cheapest test first: a
-    // hit ranked lower would not reach a five-item answer.
-    const read = scored.filter((x, i) => i < ASK_CONTEXT_FACTS || walked.has(x.item.id) || carded.has(x.item.id));
-    const hits = verdicts ? read.filter((x) => this.contextHit(x, cue, walked, carded)) : [];
-    const onDay = (x: Scored) => cue.time?.days.has(startDay(x.item) ?? "") === true;
-    const grounded = this.grounded(
-      s,
-      cue,
-      scored.filter((x) => x.score >= this.config.candidateScore || onDay(x)),
-      "ask",
-    ).items;
-    const order = [
-      ...hits,
-      ...grounded.filter((x) => !hits.includes(x)),
-      ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x) && !hits.includes(x)),
-    ];
-    return { order, hits };
-  }
-
-  /**
-   * `askContext`: whether a candidate of the request carries a verdict `askHits` reads (a card its actions violate, a
-   * binding graph-walked item in conflict, a conflict about the request tied beyond a name), as `factsOf` defines
-   * `cardViolated`, `graphHit` and `conflictHit`, with the cheap tests first and no other fact computed.
-   */
-  private contextHit(
-    x: Scored,
-    cue: Cue,
-    walked: ReadonlyMap<string, Walked>,
-    carded: ReadonlyMap<string, CardFind>,
-  ): boolean {
-    const item = x.item;
-    if (carded.get(item.id)?.violated === true) return true;
-    if (bulkMail(item) || !this.beyondName(x, cue)) return false;
-    const w = walked.get(item.id);
-    if (w?.binds && w.automated !== true && this.verdict(item, cue, this.conflictTies(cue, w), w.speaks) === "conflict")
-      return true;
-    if (settled(item) || !this.about(x, cue) || unmeasuredLimit(this.frame(cue), item)) return false;
-    return this.verdict(item, cue) === "conflict";
-  }
-
-  /**
-   * Weighted reciprocal-rank fusion of an ask's own order and its request's (`askContext`): each item scores
-   * 1/(k+rank) for the question plus `askContextWeight`/(k+rank) for the request, over the first `depth` of each; ties
-   * keep the question's order. An item is kept once (the question's copy, which carries its scores).
-   */
-  private fuseAsk(
-    own: { order: Scored[]; hits: Scored[] },
-    request: { order: Scored[]; hits: Scored[] },
-    depth: number,
-  ): Scored[] {
-    const k = ASK_FUSE_K;
-    const w = this.config.askContextWeight;
-    // A verdict hit of either ranks above every item without one: a structural verdict outweighs word overlap,
-    // whichever of the two found it.
-    const hit = new Set([...own.hits, ...request.hits].map((x) => x.item.id));
-    const fused = new Map<string, { x: Scored; score: number; first: number }>();
-    own.order.slice(0, depth).forEach((x, i) => fused.set(x.item.id, { x, score: 1 / (k + i), first: i }));
-    request.order.slice(0, depth).forEach((x, i) => {
-      const f = fused.get(x.item.id);
-      if (f) f.score += w / (k + i);
-      else fused.set(x.item.id, { x, score: w / (k + i), first: depth + i });
-    });
-    for (const f of fused.values()) if (hit.has(f.x.item.id)) f.score += 1;
-    return [...fused.values()].sort((a, b) => b.score - a.score || a.first - b.first).map((f) => f.x);
   }
 
   /**
@@ -2242,9 +1651,6 @@ export class ContextPartner {
     // A source's forget drops only what its items brought: the user's other items keep their cards.
     this.deps.cards?.forget(scope, sourceId);
     this.patterns.forget(scope, sourceId);
-    // Bridging queries are made from the user's requests, not from a source's items: only the user's forget drops
-    // them, with any call in flight (D89).
-    if (sourceId === undefined) this.deps.bridge?.forget(scope);
     // The reader's bearings are made from the items' text: any forget, of the user or of one source, drops them.
     this.deps.reader?.forget(scope);
   }
@@ -2321,9 +1727,8 @@ export class ContextPartner {
     s.window.length = 0;
     s.agentHas.length = 0;
     this.deps.budget.endSession(s.key);
-    // The reader and the bridge reserve on Budgets of their own, by the same session key.
+    // The reader reserves on a Budget of its own, by the same session key.
     this.deps.reader?.endSession(s.key);
-    this.deps.bridge?.endSession(s.key);
     this.sessions.delete(s.key);
     const n = (this.perTenant.get(s.scope.tenantId) ?? 1) - 1;
     if (n <= 0) this.perTenant.delete(s.scope.tenantId);
@@ -2527,37 +1932,7 @@ export class ContextPartner {
       .filter((x) => !this.cleared(x, cue))
       // Nor, with `quietNameOnly`, one only a name ties to the request.
       .filter((x) => this.beyondName(x, cue));
-    return this.cut(cue, sure, Math.min(this.config.maxItemsPerInjection, this.config.confidentItems));
-  }
-
-  /**
-   * The first `n` of `xs` (in a rule path's order), with `rankTies` the ones tied with the last kept (`same`, equal
-   * scores by default) in the learned ranker's order: which of equals is kept, never how many nor whether.
-   */
-  private cut(cue: Cue, xs: Scored[], n: number, same = (a: Scored, b: Scored) => a.score === b.score): Scored[] {
-    const rank = RANKERS.get(cue);
-    if (!rank || n <= 0 || xs.length <= n || !same(xs[n - 1]!, xs[n]!)) return xs.slice(0, n);
-    const last = xs[n - 1]!;
-    let from = n - 1;
-    while (from > 0 && same(xs[from - 1]!, last)) from--;
-    let to = n + 1;
-    while (to < xs.length && same(xs[to]!, last)) to++;
-    const tied = xs
-      .slice(from, to)
-      .map((x, i) => ({ x, i, v: rank(x) }))
-      .sort((a, b) => b.v - a.v || a.i - b.i)
-      .map((t) => t.x);
-    return [...xs.slice(0, from), ...tied].slice(0, n);
-  }
-
-  /** `rankTies`: the ranker's scores for this cue's candidates, from their facts, computed on first use. */
-  private rankTiesFor(cue: Cue, facts: () => { x: Scored; facts: Facts }[]): void {
-    if (!this.config.rankTies) return;
-    let by: Map<Scored, number> | null = null;
-    RANKERS.set(cue, (x) => {
-      by ??= new Map(facts().map((f) => [f.x, rankScore(f.facts, this.deps.rankModel)]));
-      return by.get(x) ?? -Infinity;
-    });
+    return sure.slice(0, Math.min(this.config.maxItemsPerInjection, this.config.confidentItems));
   }
 
   /**
@@ -2621,7 +1996,7 @@ export class ContextPartner {
       if (hits.length > 0) {
         // With `graphMerge`, the walk's best conflict joins the request's own (it was found another way).
         const extra = this.config.graphMerge ? best.slice(0, this.config.graphGround) : [];
-        return { items: [...this.cut(cue, hits, this.max() - extra.length), ...extra], how: "conflict" };
+        return { items: [...hits.slice(0, this.max() - extra.length), ...extra], how: "conflict" };
       }
       if (best.length > 0) return { items: best.slice(0, this.config.graphGround), how: "graph" };
       // `cards`: an item whose card the request violates (a freeze over its day, an expiry before it, a limit under
@@ -2661,8 +2036,7 @@ export class ContextPartner {
       // Equal scores: the one nearer in time (a meeting this week over one in March); undated items keep their order.
       const near = (x: Scored) => Math.abs((startMs(x.item) || cue.at) - cue.at);
       const byPerson = [...withPerson].sort((a, b) => b.score - a.score || near(a) - near(b));
-      const same = (a: Scored, b: Scored) => a.score === b.score && near(a) === near(b);
-      return { items: this.cut(cue, byPerson, 1, same), how: "person" };
+      return { items: byPerson.slice(0, 1), how: "person" };
     }
     if (!time) return none;
     const events = pool.filter((x) => (time.days.size > 0 ? onDay(x) : time.next && upcoming(x)));
@@ -2756,50 +2130,6 @@ export class ContextPartner {
     const by = (x: Scored) => walked!.get(x.item.id)!.score;
     const best = viaGraph.filter((x) => !hits.includes(x)).sort((a, b) => by(b) - by(a));
     return { hits, best };
-  }
-
-  /**
-   * `decideConflict` (D67, docs/research/econ-decide.md), where the rule paths decide: whatever path spoke first, or
-   * none, the best conflict among the ranked candidates (`conflicts()` over the top `decideCandidates`) joins `items`
-   * while the packet has room (`maxItemsPerInjection`); it never displaces what a rule path chose. CPU only. `keep`
-   * vetoes a find (the fast path's: a stale copy is the slow path's to re-read, D40). Off: `items` as they are.
-   */
-  private joinConflict(
-    s: Session,
-    cue: Cue,
-    scored: Scored[],
-    eventKind: string,
-    items: Scored[],
-    ctx: {
-      bridged?: ReadonlySet<string>;
-      cls?: ActionClass;
-      walked?: ReadonlyMap<string, Walked>;
-      keep?: (x: Scored) => boolean;
-    } = {},
-  ): { items: Scored[]; how: string } {
-    if (!this.config.decideConflict || items.length >= this.max()) return { items, how: "" };
-    const walked = ctx.walked ?? new Map<string, Walked>();
-    const pool = scored.slice(0, this.config.decideCandidates).filter((x) => !bulkMail(x.item));
-    const { hits, best } = this.conflicts(
-      cue,
-      pool.filter((x) => !x.walkedOnly),
-      this.acts(s, cue, eventKind),
-      ctx.bridged ?? new Set<string>(),
-      ctx.cls,
-      walked,
-      pool.filter((x) => walked.has(x.item.id)),
-    );
-    const frame = this.frame(cue);
-    // An item is in a packet once, whichever entry holds it.
-    const have = new Set(items.map((x) => x.item.id));
-    const x = [...hits, ...best].find(
-      (x) =>
-        !have.has(x.item.id) &&
-        !settled(x.item) &&
-        !unmeasuredLimit(frame, x.item) &&
-        (ctx.keep === undefined || ctx.keep(x)),
-    );
-    return x ? { items: [...items, x], how: "conflict" } : { items, how: "" };
   }
 
   /**
@@ -2929,49 +2259,6 @@ export class ContextPartner {
     });
   }
 
-  /**
-   * `supersede` (D81): the candidates as they stand now. An item a newer one about the same matter supersedes is
-   * dropped (`supersededIn`; the newer one is decisive: it conflicts with the request or clears it). For an `ask`
-   * that is not a question, an item about the request whose latest state is settled (the conflict test clears it, or
-   * it says the matter is done or resolved and nothing in it conflicts) is dropped too: the action meets nothing
-   * there, and a lifted hold read by the agent is a concern raised for nothing. A question keeps it: it is the answer.
-   */
-  private latest(cue: Cue, pool: Scored[], ask: boolean, limit = Number.MAX_SAFE_INTEGER): Scored[] {
-    const verdict = (item: ContextItem) => this.verdict(item, cue);
-    const gone = this.supersession(cue, pool);
-    const question = /\?\s*$/.test(cue.raw);
-    // Settled: cleared by the conflict test, or said done or resolved with nothing in it that conflicts.
-    const settledNow = (x: Scored) => {
-      if (!this.about(x, cue)) return false;
-      const v = verdict(x.item);
-      return v === "clear" || (v === "none" && settled(x.item));
-    };
-    // Read in rank order until `limit` are kept: what is past it is never shown.
-    const out: Scored[] = [];
-    for (const x of pool) {
-      if (out.length >= limit) break;
-      if (gone.has(x.item.id) || (ask && !question && settledNow(x))) continue;
-      out.push(x);
-    }
-    return out;
-  }
-
-  /** `supersede`: which of `pool` a newer item about the same constraint supersedes (`supersededIn`), and by what. */
-  private supersession(cue: Cue, pool: readonly Scored[]): Map<string, { by: string; at: number }> {
-    // What an item says, less the names the request gives: two statements about one party ("Globex") are not about
-    // one constraint, so the party's name is no shared word.
-    const names = matterWords(this.frame(cue).names.join(" "));
-    return supersededIn(
-      pool.map((x) => x.item),
-      (item) => {
-        const r = this.reading(item, cue);
-        const decisive = r.v !== "none";
-        const own = decisive && r.words ? r.words : matterWords(ownWords(item));
-        return { decisive, words: new Set([...own].filter((w) => !names.has(w))) };
-      },
-    );
-  }
-
   /** The request's frame (`conflict.ts`), read once per cue. */
   private frame(cue: Cue): Frame {
     let f = FRAMES.get(cue);
@@ -2985,49 +2272,16 @@ export class ContextPartner {
 
   /** What an item says about the request's frame: conflict, clear or none (`conflict.ts` `assess`). */
   private verdict(item: ContextItem, cue: Cue, ties?: ReadonlySet<string>, speaks = false): Verdict {
-    // `supersede` and `askContext` read the same verdicts more than once: kept per cue (the plain reading, no ties).
-    if ((this.config.supersede || this.config.askContext) && !ties && !speaks) return this.reading(item, cue).v;
-    return this.assessed(item, cue, ties, speaks);
-  }
-
-  /** The plain verdict and the words of the statements behind it, read once per cue and item. */
-  private reading(item: ContextItem, cue: Cue): Reading {
-    let seen = VERDICTS.get(cue);
-    if (!seen) VERDICTS.set(cue, (seen = new WeakMap()));
-    let r = seen.get(item);
-    if (r === undefined) {
-      const said = { words: null as Set<string> | null };
-      seen.set(item, (r = { v: this.assessed(item, cue, undefined, false, said), words: said.words }));
-    }
-    return r;
-  }
-
-  private assessed(
-    item: ContextItem,
-    cue: Cue,
-    ties?: ReadonlySet<string>,
-    speaks = false,
-    said?: { words: Set<string> | null },
-  ): Verdict {
-    return assess(
-      this.frame(cue),
-      this.config.supersedeThreads ? oldestFirst(item) : item,
-      localNow(cue),
-      ties,
-      speaks,
-      said,
-    );
+    return assess(this.frame(cue), item, localNow(cue), ties, speaks);
   }
 
   /**
    * The words that tie a graph-walked item's statements to the request (`graph`): the names of the nodes it was
-   * reached through ("umbrella", "health"); with `graphWordTies`, for one reached by a name, the request's own words
-   * (the name already says the item is about what the request names); for one reached by a day alone, the request's
-   * action class's words (`consequence.ts`: "production" for a release), when it has one.
+   * reached through ("umbrella", "health"); for one reached by a day alone, the request's action class's words
+   * (`consequence.ts`: "production" for a release), when it has one.
    */
   private conflictTies(cue: Cue, w: Walked): Set<string> {
     const ties = tieWords(w.via);
-    if (w.named && this.config.graphWordTies) for (const t of this.frame(cue).wordTies) ties.add(t);
     if (!w.named) {
       const cls = actionClass(cue.raw, isAction(cue.raw) || cue.external === true);
       if (cls) for (const t of classTies(cls)) ties.add(t);
@@ -3170,37 +2424,10 @@ export class ContextPartner {
   }
 
   /**
-   * `recoverNames`: the cue with the names it holds in lowercase added ("drinks with chen wei", "reply to stark
-   * freight"). A run of two or three words, none a stopword, a date or already an entity, is a name when the user's
-   * own sources have been recorded mentioning it (the source map's mentions: names their items wrote capitalised).
-   * A single word is never taken: "Lunch" is capitalised in many subjects. Longest runs first; at most
-   * `MAX_RECOVERED` names, from the request's first `RECOVER_WORDS` words. One indexed read per run tried.
-   */
-  private withRecoveredNames(s: Session, cue: Cue): Cue {
-    const have = new Set(cue.entities.map((e) => e.toLowerCase()));
-    const words = (cue.raw.match(/[\p{L}\p{N}][\p{L}\p{N}&'’-]*/gu) ?? []).slice(0, RECOVER_WORDS);
-    // Only words typed in lowercase: a capitalised run was the extractor's to read ("Has Aperture Labs been paid?").
-    const open = (w: string) => w === w.toLowerCase() && !isStopword(w) && !TIME_WORD.test(w) && !LEADING.has(w);
-    const used = new Uint8Array(words.length);
-    const found: string[] = [];
-    for (let n = 3; n >= 2; n--) {
-      for (let i = 0; i + n <= words.length && found.length < MAX_RECOVERED; i++) {
-        const run = words.slice(i, i + n);
-        if (run.some((w, k) => used[i + k] || !open(w))) continue;
-        const name = run.join(" ");
-        if (have.has(name) || this.deps.sourceMap.sourcesFor(s.scope, name).length === 0) continue;
-        found.push(run.map((w) => w[0]!.toUpperCase() + w.slice(1)).join(" "));
-        used.fill(1, i, i + n);
-      }
-    }
-    return found.length ? { ...cue, entities: [...cue.entities, ...found] } : cue;
-  }
-
-  /**
    * With no model's say, the best candidate alone, if it is strong enough: several distinct query terms and a score
    * of at least `fallbackScore` (coverage plus the entity bonus, D36). One item at most: nothing has judged it.
    */
-  private fallback(unsure: Scored[], agreed?: Set<string>, cue?: Cue): Scored | null {
+  private fallback(unsure: Scored[], cue?: Cue): Scored | null {
     const top = unsure[0];
     const c = this.config;
     if (!top || c.fallbackMatchedTerms <= 0 || (c.quietSettled && settled(top.item))) return null;
@@ -3229,22 +2456,7 @@ export class ContextPartner {
       if (hit) return hit;
     }
     const strong = !bulkMail(top.item) && top.matched >= c.fallbackMatchedTerms && top.score >= c.fallbackScore;
-    if (strong && (!cue || this.beyondName(top, cue))) return top;
-    // Found both by the request's own search and by a probe for its people (`fallbackAgree`): two independent queries
-    // agreeing is evidence words alone are not. Still one item, and it must share two of the request's terms.
-    if (!agreed) return null;
-    return (
-      unsure
-        .slice(0, 3)
-        .find(
-          (x) =>
-            agreed.has(x.item.id) &&
-            x.matched >= 2 &&
-            x.score >= c.fallbackAgreeScore &&
-            !bulkMail(x.item) &&
-            (!cue || this.beyondName(x, cue)),
-        ) ?? null
-    );
+    return strong && (!cue || this.beyondName(top, cue)) ? top : null;
   }
 
   /**
@@ -3292,8 +2504,6 @@ export class ContextPartner {
     /** With `sync`: sources answered from the local index, and listing calls of on-demand polls (in `calls`). */
     local?: number;
     syncCalls?: number;
-    /** With `sync`: the ids of the user's sources when every one was answered from a current synced copy. */
-    covered?: string[];
   }> {
     const all = await this.deps.sources(s.scope).catch((): Source[] => []);
     if (all.length === 0 || s.closed) return { calls: 0 };
@@ -3461,8 +2671,6 @@ export class ContextPartner {
       calls: made + syncCalls,
       ...(plans ? { plans } : {}),
       ...(this.sync ? { local: local?.size ?? 0, syncCalls } : {}),
-      // Every source of the user synced and current: the cache this lookup ranks holds all they have (`askGuard`).
-      ...(local && all.every((x) => local!.has(x.id)) ? { covered: all.map((x) => x.id) } : {}),
     };
     if (s.closed) return result; // Forgotten or ended mid-search: keep nothing.
     // One shadow lookup per session at a time: shadowing must not pile up work behind a slow connector.
@@ -3573,12 +2781,10 @@ export class ContextPartner {
       offline: boolean,
       parent: number,
     ): Promise<ContextItem[]> => {
-      // Synced sources whose copy is current answer from the local index (D57), at no call and outside `probeCalls`;
-      // with `syncWide`, every such source does, not only the ones this probe was routed to (a person or a topic).
+      // Synced sources whose copy is current answer from the local index (D57), at no call and outside `probeCalls`.
       let here: ContextItem[] = [];
       if (local) {
-        const wide = this.config.syncWide && kind !== "day" ? all.filter((x) => local.has(x.id)) : [];
-        const mine = new Set([...sources.filter((x) => local.has(x.id)), ...wide].map((x) => x.id));
+        const mine = new Set(sources.filter((x) => local.has(x.id)).map((x) => x.id));
         sources = sources.filter((x) => !local.has(x.id));
         if (mine.size > 0) {
           here = this.localAnswer(s, mine, text, window ? 20 : 5, window);
@@ -4024,12 +3230,8 @@ export class ContextPartner {
     return scored.some((x) => now - this.readAt(s, x.item, now) > after);
   }
 
-  /**
-   * When an item's copy was last known current: when it was fetched, or now when its source pushes its changes and
-   * has none unread (`syncPush`: a quiet pushed source is not re-listed, and its copy is no older for it).
-   */
+  /** When an item's copy was last known current: when it was fetched. */
   private readAt(s: Session, item: ContextItem, now: number): number {
-    if (this.sync?.confirmed(s.scope, item.sourceId, now)) return now;
     return this.deps.cache.fetchedAt(s.scope, item.id) ?? now;
   }
 
@@ -4410,9 +3612,8 @@ export class ContextPartner {
    * search returns. A stale copy is never delivered from here (D40). With a judge, nothing: the slow path decides.
    */
   private async early(s: Session, cue: Cue, eventKind: string, t0: number): Promise<Injection | null> {
-    // With a judge, the slow path decides (see the fast path): what is held only makes it faster. A judge behind
-    // (`judgeBehind`) decides nothing, so what is held is delivered as with no model.
-    if (this.deps.model !== null && !this.config.judgeBehind) return null;
+    // With a judge, the slow path decides (see the fast path): what is held only makes it faster.
+    if (this.deps.model !== null) return null;
     // The observe call waits on this: a resolver doing I/O (an MCP connect, a token refresh) must not hold it. Past
     // `EARLY_SOURCES_MS` the request goes to the slow path, which waits for the sources as it always has.
     // (A resolver that fails throws here; `observe` reads that as no early answer, as it reads an empty list.)
@@ -4435,7 +3636,6 @@ export class ContextPartner {
     const probed = new Set(out.kept);
     const scored = this.rank(s, cue, { probed: [...out.kept, ...(out.consequence?.ids ?? [])] });
     const bridged = this.bridgedOf(scored, cue, out.consequence);
-    this.rankTiesFor(cue, () => this.factsOf(s, cue, scored, eventKind, { probed, bridged }));
     const sure = this.confident(scored, cue);
     let items: Scored[] = [];
     let how = "sure";
@@ -4554,8 +3754,6 @@ export class ContextPartner {
         ),
       });
     try {
-      // `bridgeQuery`: the bridge's call runs beside the search, never before it (the slow path only).
-      const bridging = this.bridgeStart(s, cue);
       let probedIds: string[] | undefined;
       let lookedIds: string[] | undefined;
       let consequence: { cls: ActionClass; ids: string[] } | undefined;
@@ -4579,9 +3777,6 @@ export class ContextPartner {
       sourceCalls += await this.refresh(s, cue);
       if (s.closed) return null;
       const spans = this.spans;
-      // What the bridging queries find in the user's index, read once the search has cached what it brought.
-      const bridgeFound = bridging ? await this.bridgeFound(s, cue, bridging) : null;
-      if (s.closed) return null;
       // This lookup's probe finds, its own (never another turn's or a concurrent ask's).
       const consIds = new Set(consequence?.ids ?? []);
       // With `graph`: what the user's knowledge graph reaches from the request, after the lookup's items are cached.
@@ -4596,7 +3791,7 @@ export class ContextPartner {
       const intending = this.config.intent && this.deps.cards ? spans?.open("intent.match", cue.span) : undefined;
       const intentFound = this.intentFinds(s, cue);
       if (intending) spans!.close(intending, { found: intentFound.size });
-      const extra = [...consIds, ...carded.keys(), ...intentFound.keys(), ...(bridgeFound?.ids ?? [])];
+      const extra = [...consIds, ...carded.keys(), ...intentFound.keys()];
       const ranking = spans?.open("rank", cue.span);
       const scored = this.rank(s, cue, {
         probed: extra.length > 0 ? [...(probedIds ?? []), ...extra] : probedIds,
@@ -4622,40 +3817,18 @@ export class ContextPartner {
               .map((x) => x.item.id)
           : [],
       );
-      // A bridging query's find in conflict with the request, tied by the queries' words, counts as a consequence
-      // find does: a seat, the conflict ground and a verdict hit.
-      for (const id of this.bridgeConflicts(scored, cue, bridgeFound)) bridged.add(id);
       if (conflicting) spans!.close(conflicting, { bridged: bridged.size });
-      // `rankTies`: a cut among equals below reads the learned ranker, from the facts the dump reads.
-      this.rankTiesFor(cue, () =>
-        this.factsOf(s, cue, scored, eventKind, { probed: new Set(probedIds ?? []), bridged, walked, carded }),
-      );
       const confiding = spans?.open("confident", cue.span);
       const sure = this.confident(walked.size > 0 ? scored.filter((x) => !x.walkedOnly) : scored, cue);
       if (confiding) spans!.close(confiding, { sure: sure.length });
       const probedSet = new Set(probedIds ?? []);
       const factsNow = () =>
         this.factsOf(s, cue, scored, eventKind, { probed: probedSet, bridged, walked, carded: carded });
-      // The rule paths decide when no model does: with none, or with `judgeBehind`, whose lookup decides as with none
-      // and leaves the judge only what that answer left out.
-      const noModelSay = !this.deps.model || this.config.judgeBehind;
-      // A delivery is dumped with how it was made, never as silence: one only the conflict pass made is
-      // `decide-conflict`, which the lab must not read as a rule path's (`decide-fit.ts` reads `fallback`).
+      // The rule paths decide when no model does.
+      const noModelSay = !this.deps.model;
       const dumped = (path: CandidateDump["path"], items: readonly Scored[], how: string, say = noModelSay) => {
         if (this.deps.onCandidates && say) this.dump(s, path, factsNow(), items, items.length > 0 ? how : "");
       };
-      // `decideConflict` (D67, docs/research/econ-decide.md), with no model's say: whatever path spoke first, or none,
-      // the best conflict among every ranked candidate joins the delivery while it has room (`maxItemsPerInjection`):
-      // it never displaces what a rule path chose. The same pass runs on `syncPollBehind`'s follow-up lookup (a
-      // `served` lookup), so a fresh item the request breaks reaches the agent without its asking.
-      // `say` is whether the rule paths decide here: `noModel()` passes true, since a model that failed, was cut off
-      // or was over budget leaves the decision to them (D41: never worse than none). `at` is the cue they read
-      // (`noModel()`'s carries the names `recoverNames` found), so a name that grounds an item ties a conflict too.
-      const extend = (items: Scored[], say = noModelSay, at = cue): { items: Scored[]; how: string } =>
-        say
-          ? this.joinConflict(s, at, scored, eventKind, items, { bridged, cls: consequence?.cls, walked })
-          : { items, how: "" };
-      const tagged = (reason: string, how: string) => (how ? `${reason}+decide-${how}` : reason);
       // `anticipate`: the request was answered from what was held (`early`). The live search adds only what is sure,
       // or with no model what the request's structure grounds: never the fallback's best guess or a judge call, which
       // would have had that delivery among their candidates.
@@ -4663,7 +3836,7 @@ export class ContextPartner {
         // A follow-up (`afterPoll`) decides as with no model whatever is configured: its judge call would be the
         // event's second (docs/COST-MODEL.md).
         const ruled =
-          this.deps.model && !this.config.judgeBehind && !cue.followUp
+          this.deps.model && !cue.followUp
             ? []
             : sure.length > 0
               ? sure
@@ -4681,62 +3854,40 @@ export class ContextPartner {
         // A follow-up corrects: an item the agent was given whose words its poll changed goes out again, as it now
         // reads, whatever it scores (the agent holds the superseded copy).
         const corrected = cue.followUp ? scored.filter((x) => x.revised && !ruled.includes(x)) : [];
-        // A follow-up decides as with no model whatever is configured, so the conflict pass runs there too.
-        const say = noModelSay || cue.followUp === true;
-        const { items, how } = extend([...ruled, ...corrected], say);
+        const items = [...ruled, ...corrected];
         dumped(
           "served",
           items,
-          ruled.length > 0
-            ? sure.length > 0
-              ? "sure"
-              : "grounded"
-            : corrected.length > 0
-              ? "corrected"
-              : `decide-${how}`,
-          say,
+          ruled.length > 0 ? (sure.length > 0 ? "sure" : "grounded") : "corrected",
+          noModelSay || cue.followUp === true,
         );
-        // `judgeBehind`: the judge reads the best of the rest after this answer, and may only add to it.
-        if (this.deps.model && this.config.judgeBehind && !cue.followUp) {
-          const rest = this.eligible(scored, cue, new Set(probedIds ?? []), bridged, carded, intents)
-            .filter((x) => !items.includes(x))
-            .slice(0, this.config.judgeCandidates);
-          this.judgeLater(s, cue, t0, eventKind, rest);
-        }
         if (items.length === 0) {
           done("silent", "anticipated");
           return null;
         }
         done(
           "sources",
-          tagged(`after-anticipated:${cue.id}`, how),
+          `after-anticipated:${cue.id}`,
           items.map((x) => x.item),
         );
-        return this.deliver(s, items, "proactive", tagged(`sources`, how) + `:${cue.id}`, cue);
+        return this.deliver(s, items, "proactive", `sources:${cue.id}`, cue);
       }
-      // With `judgeConfident` and a judge to ask, what scores as sure is judged with the rest in the same call: the
-      // no-model bar is right about half the time (docs/research/probes.md), the judge more often.
       // One sure item both the request's search and a probe found is corroborated: delivered without the call
       // (`judgeAgreed` false).
       const both = agreed(new Set(probedIds ?? []), lookedIds);
       const corroborated = !this.config.judgeAgreed && sure.length === 1 && both.has(sure[0]!.item.id);
-      // `judgeContested`: only when more than one item scored as sure (which is meant is then the judge's call).
+      // `judgeContested`: only when more than one item scored as sure (which is meant is then the judge's call), what
+      // scores as sure is judged with the rest in the same call.
       const contested = this.config.judgeContested && sure.length > 1;
-      const judgeSure =
-        (this.config.judgeConfident || contested) &&
-        this.deps.model !== null &&
-        !this.config.judgeBehind &&
-        sure.length > 0 &&
-        !corroborated;
+      const judgeSure = contested && this.deps.model !== null && !corroborated;
       if (sure.length > 0 && !judgeSure) {
-        const { items, how } = extend(sure);
-        dumped("lookup", items, "sure");
+        dumped("lookup", sure, "sure");
         done(
           "sources",
-          tagged(cue.id, how),
-          items.map((x) => x.item),
+          cue.id,
+          sure.map((x) => x.item),
         );
-        return this.deliver(s, items, "proactive", tagged(`sources`, how) + `:${cue.id}`, cue);
+        return this.deliver(s, sure, "proactive", `sources:${cue.id}`, cue);
       }
       // An event on a day the request names is a candidate whatever it scores on words (D44).
       const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item) ?? "") === true;
@@ -4790,47 +3941,28 @@ export class ContextPartner {
         );
       }
       if (unsure.length === 0) {
-        const { items, how } = extend([]);
-        dumped("lookup", items, `decide-${how}`);
-        if (items.length > 0) {
-          done(
-            "sources",
-            `decide-${how}:${cue.id}`,
-            items.map((x) => x.item),
-          );
-          return this.deliver(s, items, "proactive", `decide-${how}:${cue.id}`, cue);
-        }
+        dumped("lookup", [], "");
         done("silent", "no candidates");
         return null;
       }
       // With no model to judge: what the request's people and days ground first (D44), then D36's fallback.
       const noModel = (why: string, reasonPrefix: string): Injection | null => {
-        // What scored as sure is delivered as it would have been with no judge to ask (`judgeConfident`): a failing
-        // or unaffordable model is never worse than none (D41).
-        // Here the rule paths decide, whatever the model's state: the conflict pass runs as it would with none.
+        // What scored as sure is delivered as it would have been with no judge to ask: a failing or unaffordable
+        // model is never worse than none (D41).
         if (judgeSure) {
-          const { items, how } = extend(sure, true);
-          dumped("lookup", items, "sure", true);
+          dumped("lookup", sure, "sure", true);
           done(
             "sources",
-            tagged(cue.id, how) + reasonPrefix,
-            items.map((x) => x.item),
+            cue.id + reasonPrefix,
+            sure.map((x) => x.item),
           );
-          return this.deliver(s, items, "proactive", tagged(`sources`, how) + `:${cue.id}`, cue);
-        }
-        // `recoverNames`: names the request typed in lowercase ("move my drinks with chen wei"), from the user's own
-        // record of names, ground and fall back as typed ones do. Only here: probes and ranking keep the cue as typed.
-        const named = this.config.recoverNames ? this.withRecoveredNames(s, cue) : cue;
-        if (named !== cue) {
-          this.rankTiesFor(named, () =>
-            this.factsOf(s, named, scored, eventKind, { probed: new Set(probedIds ?? []), bridged, walked, carded }),
-          );
+          return this.deliver(s, sure, "proactive", `sources:${cue.id}`, cue);
         }
         // Grounding reads every candidate, not only the judge's few: a day's events rank after every word match.
         const grounding = spans?.open("ground", cue.span, { candidates: eligible.length });
         const grounded = this.grounded(
           s,
-          named,
+          cue,
           eligible,
           eventKind,
           bridged,
@@ -4841,28 +3973,22 @@ export class ContextPartner {
         );
         if (grounding) spans!.close(grounding, { grounded: grounded.items.length });
         if (grounded.items.length > 0) {
-          const { items, how } = extend(grounded.items, true, named);
-          dumped("lookup", items, `grounded-${grounded.how}`, true);
+          dumped("lookup", grounded.items, `grounded-${grounded.how}`, true);
           done(
             "sources",
-            tagged(`grounded-${grounded.how}`, how) + `${reasonPrefix}:${cue.id}`,
-            items.map((x) => x.item),
+            `grounded-${grounded.how}${reasonPrefix}:${cue.id}`,
+            grounded.items.map((x) => x.item),
           );
-          return this.deliver(s, items, "proactive", tagged(`grounded-${grounded.how}`, how) + `:${cue.id}`, cue);
+          return this.deliver(s, grounded.items, "proactive", `grounded-${grounded.how}:${cue.id}`, cue);
         }
         const falling = spans?.open("fallback", cue.span);
-        const top = this.fallback(unsure, this.config.fallbackAgree ? agreed(probed, lookedIds) : undefined, named);
+        const top = this.fallback(unsure, cue);
         if (falling) spans!.close(falling, { picked: top !== null });
-        const { items, how } = extend(top ? [top] : [], true, named);
-        dumped("lookup", items, top ? "fallback" : `decide-${how}`, true);
-        if (items.length > 0) {
-          const reason = top ? tagged("fallback", how) : `decide-${how}`;
-          done(
-            "sources",
-            `${reason}${reasonPrefix}:${cue.id}`,
-            items.map((x) => x.item),
-          );
-          return this.deliver(s, items, "proactive", `${reason}:${cue.id}`, cue);
+        const items = top ? [top] : [];
+        dumped("lookup", items, "fallback", true);
+        if (top) {
+          done("sources", `fallback${reasonPrefix}:${cue.id}`, [top.item]);
+          return this.deliver(s, items, "proactive", `fallback:${cue.id}`, cue);
         }
         done("silent", why);
         return null;
@@ -4883,17 +4009,6 @@ export class ContextPartner {
           onNamedDay(x) ||
           x.matched >= 2 ||
           this.holdsAny(s, x, rare);
-      // `judgeBehind`: the lookup decides as with no model and answers now; the judge then reads the candidates that
-      // answer left out, and what it picks is queued for the agent's next turn. It only adds, never holds back.
-      if (this.deps.model && this.config.judgeBehind) {
-        const now = noModel("judge behind", "");
-        const given = new Set(now?.citations.map((c) => c.itemId) ?? []);
-        const rest = unsure.filter((x) => !given.has(x.item.id));
-        if (!this.config.judgeTied || rest.some(tiedBy(this.rareTerms(s, cue)))) {
-          this.judgeLater(s, cue, t0, eventKind, rest);
-        }
-        return now;
-      }
       if (this.deps.model && this.config.judgeTied) {
         const tying = spans?.open("judge.tied", cue.span);
         const tied = tiedBy(this.rareTerms(s, cue));
@@ -4963,190 +4078,6 @@ export class ContextPartner {
       done("silent", "error");
       return null;
     }
-  }
-
-  /**
-   * The user's active-constraints digest (`constraintDigest`, `digest.ts`): the items whose card states a standing
-   * constraint over today or later, a line each in their own words, as data. Null when the flag or cards are off, or
-   * nothing is in force. No model, no source call; the same constraints give the same bytes (prompt caching).
-   */
-  digest(request: Scope & { sessionId?: string }): Injection | null {
-    return this.digestFor({ tenantId: request.tenantId, userId: request.userId }, request.sessionId ?? "");
-  }
-
-  private digestFor(scope: Scope, sessionId: string): Injection | null {
-    const enricher = this.deps.cards;
-    if (!this.config.constraintDigest || !this.config.cards || !enricher) return null;
-    const now = this.now();
-    const cache = this.deps.cache;
-    const ids = enricher.carded(scope).filter((id) => cache.get(scope, id, now) !== null);
-    const entries = [...enricher.cardsOf(scope, ids, now)].map(([id, card]) => ({
-      item: cache.get(scope, id, now)!,
-      card,
-    }));
-    // The user's own day (D44), and their year, which compaction drops from dates as packets do.
-    const local = new Date(now + cache.offsetOf(scope) * 60_000);
-    const self = cache.selfOf(scope);
-    const digest = buildDigest(entries, {
-      today: local.toISOString().slice(0, 10),
-      lines: this.config.digestLines,
-      bytes: this.config.digestBytes,
-      personal: (item) => !bulkMail(item) && personalSender(item, (name) => cache.isPerson(scope, name)),
-      // An external sender's mail is never a standing line in every session (D90): known senders, the user, or none.
-      // Known is named in another of the user's items too: every sender is a party of their own mail (`isPerson`).
-      admits: (item) =>
-        !bulkMail(item) && digestAdmits(item, (name) => cache.partyCount(scope, name) >= DIGEST_KNOWN_ITEMS, self),
-      year: local.getUTCFullYear(),
-      self,
-    });
-    if (!digest) return null;
-    const items = digest.ids.map((id) => cache.get(scope, id, now)!);
-    return {
-      ...scope,
-      id: newId("inj", now),
-      sessionId,
-      mode: "proactive",
-      text: digest.text,
-      citations: citationsOf(items),
-      reason: "digest",
-      score: 0,
-      createdAt: now,
-    };
-  }
-
-  /**
-   * `bridgeQuery` (`bridge.ts`): the request's bridging queries, one budgeted call or the user's cache, started beside
-   * the lookup's search. Null when the flag or the bridge is off, the request does not act (`bridgeWants`; with
-   * `bridgeQuestions`, a question for permission too), or the lookup is a follow-up (its request was bridged).
-   */
-  private bridgeStart(s: Session, cue: Cue): Promise<string[] | null> | null {
-    const bridge = this.deps.bridge;
-    if (!this.config.bridgeQuery || !bridge || cue.followUp) return null;
-    // A new request's asks are about it: the queries of an earlier one no longer answer them.
-    s.bridge = undefined;
-    s.bridgeAsked = undefined;
-    const acts = bridgeWants(cue.raw, cue.external === true, this.config.conflictVocab);
-    if (!acts && !(this.config.bridgeQuestions && PERMISSION.test(cue.raw))) return null;
-    s.bridgeAsked = cue.raw;
-    return bridge.queriesFor(s.scope, s.key, cue.raw, s.abort.signal).catch(() => null);
-  }
-
-  /**
-   * The bridge's finds for a lookup: its queries, waited for at most `bridgeWaitMs` past the search (a call still
-   * running then is kept for the asks that follow, through the user's cache), run against the user's index.
-   */
-  private async bridgeFound(
-    s: Session,
-    cue: Cue,
-    bridging: Promise<string[] | null>,
-  ): Promise<{ ids: string[]; ties: Set<string> } | null> {
-    const spans = this.spans;
-    const sp = spans?.open("bridge", cue.span, { async: true });
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const late = new Promise<null>((r) => (timer = setTimeout(() => r(null), this.config.bridgeWaitMs)));
-    const queries = await Promise.race([bridging, late]);
-    clearTimeout(timer);
-    if (!queries || queries.length === 0 || s.closed) {
-      if (sp) spans!.close(sp, { queries: 0 });
-      return null;
-    }
-    s.bridge = queries;
-    const found = this.bridgeFinds(s, queries);
-    if (sp) spans!.close(sp, { queries: queries.length, found: found.ids.length });
-    return found;
-  }
-
-  /**
-   * The bridging queries an `ask` reads, with no call of its own: the question's own if the user's cache holds them,
-   * else the session's latest bridged request's, waiting at most `bridgeWaitMs` for its call when it is still running
-   * (an agent often asks while the lookup's call is out).
-   */
-  private async askBridge(s: Session, question: string): Promise<string[] | undefined> {
-    const bridge = this.deps.bridge!;
-    const held = bridge.peek(s.scope, question) ?? s.bridge;
-    if (held || !s.bridgeAsked) return held;
-    const running = bridge.inflight(s.scope, s.bridgeAsked);
-    if (!running) return bridge.peek(s.scope, s.bridgeAsked);
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const late = new Promise<null>((r) => (timer = setTimeout(() => r(null), this.config.bridgeWaitMs)));
-    const got = await Promise.race([running.catch(() => null), late]);
-    clearTimeout(timer);
-    return got ?? undefined;
-  }
-
-  /**
-   * What bridging queries find in the user's own index, with no source call: each query's best `bridgeHits` cached
-   * items holding two of its words (its one, for a query of one), and the queries' words (four letters or more, no
-   * stopword) that tie a find's statements to the request in the conflict test (`assess`'s extra ties).
-   */
-  private bridgeFinds(s: Session, queries: readonly string[]): { ids: string[]; ties: Set<string> } {
-    const ids: string[] = [];
-    const ties = new Set<string>();
-    const vocab = this.deps.cache.peekVocab(s.scope);
-    if (!vocab) return { ids, ties };
-    const now = this.now();
-    for (const q of queries) {
-      for (const w of q.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}'-]*/gu) ?? []) {
-        if (w.length >= 4 && !isStopword(w)) ties.add(w);
-      }
-      const t = termIds(q, vocab, false);
-      const terms: number[] = [];
-      for (let i = 0; i < t.n; i++) {
-        const id = t.ids[i]!;
-        if (!isStopword(vocab.term(id)) && !terms.includes(id)) terms.push(id);
-      }
-      if (terms.length === 0) continue;
-      const need = Math.min(2, terms.length);
-      let kept = 0;
-      for (const h of this.deps.cache.search(s.scope, terms, terms.length, this.config.bridgeHits * 2, now)) {
-        if (h.matched < need) continue;
-        if (!ids.includes(h.item.id)) ids.push(h.item.id);
-        if (++kept >= this.config.bridgeHits) break;
-      }
-    }
-    return { ids, ties };
-  }
-
-  /**
-   * `bridgeAskSeats`: the bridge's finds in the queries' order (each query's best first), that are not verdict hits
-   * already, not bulk mail and not cleared by the conflict test, at most `bridgeAskSeats`.
-   */
-  private bridgeSeats(
-    scored: readonly Scored[],
-    cue: Cue,
-    found: { ids: string[]; ties: Set<string> },
-    hits: readonly Scored[],
-  ): Scored[] {
-    const n = this.config.bridgeAskSeats;
-    if (n <= 0) return [];
-    const by = new Map(scored.map((x) => [x.item.id, x]));
-    const out: Scored[] = [];
-    for (const id of found.ids) {
-      const x = by.get(id);
-      if (!x || hits.includes(x) || bulkMail(x.item)) continue;
-      if (this.verdict(x.item, cue, found.ties) === "clear") continue;
-      out.push(x);
-      if (out.length >= n) break;
-    }
-    return out;
-  }
-
-  /** The bridge's finds the conflict test, tied by the queries' words, says conflict with the request. */
-  private bridgeConflicts(
-    scored: readonly Scored[],
-    cue: Cue,
-    found: { ids: string[]; ties: Set<string> } | null,
-  ): string[] {
-    if (!found || found.ids.length === 0) return [];
-    const ids = new Set(found.ids);
-    return scored
-      .filter(
-        (x) =>
-          ids.has(x.item.id) &&
-          !unmeasuredLimit(this.frame(cue), x.item) &&
-          this.verdict(x.item, cue, found.ties) === "conflict",
-      )
-      .map((x) => x.item.id);
   }
 
   /**
@@ -5300,33 +4231,12 @@ export class ContextPartner {
   }
 
   /**
-   * How an ask's answer is rendered. Not compacted, it says each item whole, so with `packetDates` only an event's
-   * missing day needs saying; `compactAsk` cuts each item to what bears on the question as a packet's are, and
-   * `askDedup` says an item this session already showed by what is new in it, or by its title alone.
+   * How an ask's answer is rendered. Not compacted, it says each item whole; `compactAsk` cuts each item to what
+   * bears on the question as a packet's are, and `askDedup` says an item this session already showed by what is new
+   * in it, or by its title alone.
    */
   private answering(s: Session, cue: Cue): Parameters<typeof renderPacket>[1] {
     const shown = this.config.askDedup ? s.shown : undefined;
-    const after = {
-      ...(shown ? { shownBefore: (item: ContextItem) => shown.get(shownKey(item)) } : {}),
-      ...(this.config.compactParts ? { split: true } : {}),
-    };
-    // `askCompact` (docs/research/gen-ask.md), the alternative to `compactAsk` (docs/research/gen-combined.md says
-    // which ALL3 takes): past the first `askFullItems` items each is cut to a line (`askLineBytes`), the answer is at
-    // most `askMaxBytes`, and dates drop the current year unless `packetDates` keeps it, as a packet's do.
-    if (this.config.askCompact) {
-      return {
-        maxBytes: this.config.askMaxBytes,
-        focus: focusOf(cue),
-        itemBytes: this.config.askItemBytes,
-        fullItems: this.config.askFullItems,
-        tailBytes: this.config.askLineBytes,
-        year: new Date(this.now()).getUTCFullYear(),
-        self: this.deps.cache.selfOf(s.scope),
-        dense: this.config.densePacket,
-        ...(this.config.packetDates ? { keepYear: true, when: true } : {}),
-        ...after,
-      };
-    }
     const compact = this.config.compactAsk;
     const dense = compact && this.config.densePacket;
     return {
@@ -5340,7 +4250,6 @@ export class ContextPartner {
             dense,
           }
         : {}),
-      ...(this.config.packetDates ? { when: true } : {}),
       ...(shown ? { shownBefore: (item: ContextItem) => shown.get(shownKey(item)) } : {}),
       ...(this.config.compactParts ? { split: true } : {}),
     };
@@ -5351,12 +4260,11 @@ export class ContextPartner {
    * showed the agent. A line is matched to its item by its `[source]` tag; a packet cut short has fewer lines.
    */
   private noteShown(s: Session, items: readonly ContextItem[], text: string): void {
-    // Item lines only: `askGuard`'s line before them is the engine's, and a bearing is not the item's words.
+    // Item lines only.
     const lines = text
       .split("\n")
       .slice(1, -1)
-      .filter((line) => line.startsWith("- ["))
-      .map(unbear);
+      .filter((line) => line.startsWith("- ["));
     const shown = (s.shown ??= new Map());
     // A packet's dates leave out the current year ("9 Oct"), meaning this one: an answer saying it is no news.
     const year = String(new Date(this.now()).getUTCFullYear());
@@ -5373,30 +4281,9 @@ export class ContextPartner {
   }
 
   /**
-   * `shown` is what the agent receives when it is not the injection's own text (an ask's answer), and `learnt` the
-   * words usage tracking reads for it when they differ (`usageText`, with `packetDates`). With
+   * `shown` is what the agent receives when it is not the injection's own text (an ask's answer). With
    * `compactInjection`, each item is cut to what bears on `cue` (`compactText`) rather than to its first bytes.
    */
-  private deliver(
-    s: Session,
-    scored: Scored[],
-    mode: "proactive",
-    reason: string,
-    cue: Cue,
-    shown?: string,
-    learnt?: string,
-    notes?: ReadonlyMap<string, string>,
-  ): Injection | null;
-  private deliver(
-    s: Session,
-    scored: Scored[],
-    mode: Exclude<InjectionMode, "proactive">,
-    reason: string,
-    cue: Cue,
-    shown?: string,
-    learnt?: string,
-    notes?: ReadonlyMap<string, string>,
-  ): Injection;
   private deliver(
     s: Session,
     scored: Scored[],
@@ -5404,25 +4291,10 @@ export class ContextPartner {
     reason: string,
     cue: Cue,
     shown?: string,
-    learnt?: string,
-    notes?: ReadonlyMap<string, string>,
-  ): Injection | null {
+  ): Injection {
     const spans = this.spans;
-    // `supersede`: a packet does not carry an item and the newer one that decides its matter, only the newer one. A
-    // clearance that replaced what the packet was for ("freeze lifted" for "frozen until 9 Nov") is not carried
-    // either: the agent never saw the block, so there is nothing to raise. A packet left with nothing is not sent.
-    if (this.config.supersede && mode === "proactive" && scored.length > 1) {
-      const gone = this.supersession(cue, scored);
-      if (gone.size > 0) {
-        const by = new Set([...gone.values()].map((g) => g.by));
-        scored = scored.filter(
-          (x) => !gone.has(x.item.id) && !(by.has(x.item.id) && this.verdict(x.item, cue) === "clear"),
-        );
-        if (scored.length === 0) return null;
-      }
-    }
     const sp = spans?.open("deliver", cue.span, { items: scored.length });
-    const injection = this.build(s, scored, mode, reason, cue, sp?.id ?? 0, shown, learnt, notes);
+    const injection = this.build(s, scored, mode, reason, cue, sp?.id ?? 0, shown);
     if (sp) spans!.close(sp, { bytes: injection.text.length });
     return injection;
   }
@@ -5435,8 +4307,6 @@ export class ContextPartner {
     cue: Cue,
     parent: number,
     shown?: string,
-    learnt?: string,
-    notes?: ReadonlyMap<string, string>,
   ): Injection {
     const spans = this.spans;
     // Whatever path delivered them, a probe that first brought one in paid for its call (`probeYield`).
@@ -5470,10 +4340,7 @@ export class ContextPartner {
         })
       : scored;
     if (folding) spans!.close(folding, { kept: shownItems.length });
-    // `packetBearing` (docs/research/edge-ask.md): a packet reads as an answer to the request, each item's bearing said
-    // before it, what may block first.
-    const bearing = this.config.packetBearing && mode === "proactive" ? this.bearings(s, cue, shownItems) : null;
-    const items = (bearing ? leadBinding(shownItems, bearing) : shownItems).map((x) => x.item);
+    const items = shownItems.map((x) => x.item);
     const rendering = spans?.open("render", parent, { items: items.length });
     const options: Parameters<typeof renderPacket>[1] = {
       maxBytes: this.config.maxInjectionBytes,
@@ -5484,15 +4351,9 @@ export class ContextPartner {
             year: new Date(this.now()).getUTCFullYear(),
             self,
             dense,
-            // A word the session has seen: a part with nothing else the agent has (`compactText`).
-            ...(this.config.compactNovel ? { known: (w: string) => s.seen.has(s.vocab.lookup(w)) } : {}),
           }
         : {}),
-      ...(this.config.packetDates ? { keepYear: true, when: true } : {}),
       ...(this.config.compactParts ? { split: true } : {}),
-      ...(bearing ? { bearing: (shown: ContextItem) => this.shownBearing(cue, shown, bearing) } : {}),
-      // `readerPushNotes`: the reader's bearing before each item it flagged, in Eden's words (as an ask shows it).
-      ...(notes?.size ? { note: (item: ContextItem) => notes.get(item.id) } : {}),
     };
     const injection: Injection = {
       ...s.scope,
@@ -5518,13 +4379,8 @@ export class ContextPartner {
       graphMask,
       sourceIds: [...new Set(items.map((i) => i.sourceId))],
       items: items.map((i) => ({ sourceId: i.sourceId, id: i.id })),
-      // Only the words the agent received: an item's text past the packet's cut is not evidence of use. Nor are the
-      // dates `packetDates` says whole: usage learns from the words the packet has without the flag (`usageText`).
-      text:
-        learnt ??
-        (this.config.packetDates && shown === undefined
-          ? usageText(items, options)
-          : shownText(shown ?? injection.text)),
+      // Only the words the agent received: an item's text past the packet's cut is not evidence of use.
+      text: shownText(shown ?? injection.text),
     });
     return injection;
   }
@@ -5602,7 +4458,8 @@ const NO_TERMS = new Uint32Array(0);
 
 /**
  * `ObserveResult.pending`: slower work may still queue an injection. That is a lookup in flight, work a lookup left
- * running behind its answer (`syncPollBehind`'s poll and follow-up, `judgeBehind`'s judge), or a queued delivery.
+ * running behind its answer (`syncPollBehind`'s poll and follow-up, `readerPushBehind`'s second reading), or a queued
+ * delivery.
  */
 function pendingOf(s: Session): boolean {
   return s.inflight !== null || !!s.behind || s.pending.length > 0;
@@ -5651,11 +4508,6 @@ interface CardFind {
 }
 /** The head of a request matched against the intent index (`intent`): where its action and objects are named. */
 const INTENT_QUERY_CHARS = 400;
-/**
- * `constraintDigest`: the items a sender must be a party of for their mail to be said (D90): their own and one more.
- * A stranger's single message is not; two from one stranger still are (a recorded limit of the rule, D90).
- */
-const DIGEST_KNOWN_ITEMS = 2;
 
 /** An item the intent index found for a request (`intent`): its place among the hits, and how its requests matched. */
 interface IntentFind {
@@ -5878,30 +4730,16 @@ function pairsOf(text: string, vocab: Vocab): number[] {
 const BULK_CATEGORY = /^promotions?$/i;
 const BULK_TITLE = /\b(newsletter|top stories|you appeared in)\b/i;
 
-/**
- * A question about what could stop or change an act (`askGuard`): the guided description's own words, and the usual
- * ways to ask whether something is fine to do.
- */
+/** A question about what could stop or change an act, and the usual ways to ask whether something is fine to do. */
 const ASKS_BLOCKERS =
   /\b(?:block(?:s|ed|ing|er|ers)?|constrain(?:s|t|ts)?|rules?|limits?|holds?|approvals?|policy|policies|availab(?:le|ility)|allowed|permitted|conflicts?|clash(?:es)?|freezes?|frozen|restrictions?|ok(?:ay)? to|safe to|fine to|go ahead)\b/i;
 
 /** The most candidates an ask's reader reads, whatever `askReaderPool` says. */
 const READER_POOL_CAP = READER_MAX_ITEMS;
-const NO_FOCUS: ReadonlySet<string> = new Set();
-
-/** `askReaderClear`'s line: what the reader read, in fixed words. `shownText` drops it as it drops the guard's. */
-const READER_CLEAR = (checked: number) =>
-  `Checked the ${checked} items found most related: none reads as blocking, limiting or changing this request.`;
 
 /** The user's day as YYYY-MM-DD, at their offset from UTC (minutes). */
 function localDay(at: number, offsetMin: number): string {
   return new Date(at + offsetMin * 60_000).toISOString().slice(0, 10);
-}
-
-/** `askGuard`: what may block leads the answer, the rest in their order. */
-function leadBinding(xs: Scored[], bearing: ReadonlyMap<string, Bearing>): Scored[] {
-  const binds = (x: Scored) => bearing.get(x.item.id) === "conflict";
-  return [...xs.filter(binds), ...xs.filter((x) => !binds(x))];
 }
 
 /**

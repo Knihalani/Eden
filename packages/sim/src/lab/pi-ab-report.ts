@@ -15,7 +15,7 @@
  * Also, from the timelines: the agent's cost re-priced at fixed endpoint prices beside the billed cost, with the
  * endpoint mix each condition was routed to (`reprice.ts`: routing moves billed cost between conditions), and uptake
  * on hidden tasks: how often the fact was raised when Eden's packet cited the planted item, when only an
- * `ask_context` answer did, and when neither did. A variant or flag condition (`eden~ALL2`, `eden+packetDates`) is
+ * `ask_context` answer did, and when neither did. A variant or flag condition (`eden~ALL2`, `eden+askDedup`) is
  * paired with the condition it modifies.
  *
  * After the outcome tables, a traffic-weighted row per condition for w in {0.1, 0.5}: w × hidden + (1 − w) × control
@@ -279,7 +279,7 @@ const PAIRS = [
   ["eden-judge", "tools"],
   ["both-judge", "tools"],
 ] as [string, string][];
-// A wait, variant or flag condition ("both@w0", "eden~ALL2", "eden+packetDates") against the one it modifies.
+// A wait, variant or flag condition ("both@w0", "eden~ALL2", "eden+askDedup") against the one it modifies.
 for (const c of conditions) {
   const base = pairedWith(c);
   if (base && !PAIRS.some(([a, b]) => a === c && b === base)) PAIRS.push([c, base]);

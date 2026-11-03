@@ -1,14 +1,12 @@
 /**
  * The background economy (docs/research/econ-background.md): the cards' strict prefilter and sentence reuse
- * (`cardsEconomy`), the card maker's price routing and its retry of a cut batch, and push sync (`syncPush`), alone and
- * with `syncPollBehind`.
+ * (`cardsEconomy`), and the card maker's price routing and its retry of a cut batch.
  */
 import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
 import { Budget, OpenRouterModel, type ChatRequest, type Model } from "@eden/llm";
-import { itemId, type ContextItem, type Scope } from "@eden/protocol";
-import type { ListPage, SearchQuery, Source } from "@eden/sources";
-import { DEFAULT_CACHE_LIMITS, ItemCache } from "./cache";
+import type { ContextItem, Scope } from "@eden/protocol";
+import { ItemCache } from "./cache";
 import {
   CardEnricher,
   cardMessages,
@@ -24,7 +22,6 @@ import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner } from "./partner";
 
 const NOW = Date.parse("2026-10-27T09:00:00Z");
-const HOUR = 3_600_000;
 const item = (id: string, title: string, text: string, sourceId = "mail"): ContextItem => ({
   id: `${sourceId}:${id}`,
   sourceId,
@@ -343,185 +340,5 @@ describe("OpenRouter routing", () => {
     expect(sent[0].provider.sort).toBeUndefined();
     expect(sent[1].provider).toEqual({ data_collection: "deny", zdr: true, allow_fallbacks: true, sort: "price" });
     expect(out.provider).toBe("Cheap");
-  });
-});
-
-// ── push sync ──
-
-const T0 = Date.UTC(2026, 9, 20, 9);
-
-class ListSource implements Source {
-  readonly kind = "test";
-  readonly description = "test";
-  lists = 0;
-  items: ContextItem[];
-  constructor(
-    readonly id: string,
-    n: number,
-  ) {
-    this.items = Array.from({ length: n }, (_, i) => this.make(`m${i}`, `Note ${i} about the plan`, T0 - i * HOUR));
-  }
-  make(ref: string, text: string, at: number): ContextItem {
-    return { id: itemId(this.id, ref), sourceId: this.id, ref, title: ref, text, updatedAt: at };
-  }
-  async search(_q: SearchQuery): Promise<ContextItem[]> {
-    return [];
-  }
-  async list(_scope: Scope, cursor: string | undefined, limit: number): Promise<ListPage> {
-    this.lists++;
-    const sorted = [...this.items].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
-    const at = cursor ? Number(cursor) : 0;
-    return { items: sorted.slice(at, at + limit), next: at + limit < sorted.length ? String(at + limit) : null };
-  }
-}
-
-async function synced(config: Record<string, unknown>, users: Scope[] = [{ tenantId: "t", userId: "u" }], n = 4) {
-  let clock = T0;
-  const srcs = new Map<string, ListSource>();
-  const cache = new ItemCache();
-  const partner = new ContextPartner({
-    sources: async (s) => {
-      let x = srcs.get(s.userId);
-      if (!x) srcs.set(s.userId, (x = new ListSource("mail", n)));
-      return [x];
-    },
-    sourceMap: new SourceMap(":memory:", { seed: 1 }),
-    cache,
-    budget: new Budget(),
-    model: null,
-    now: () => clock,
-    config: { sync: true, syncPageSize: 10, syncCallsPerMin: 600, ...config },
-  });
-  for (const u of users) partner.sync!.track(u, clock);
-  for (let i = 0; i < 10 && !users.every((u) => partner.sync!.warm(u)); i++) await partner.sync!.tick();
-  /** Declares the watch, then lets a tick make the one poll that reads what changed before it (no notice names it). */
-  const watch = async (scopes: Scope[] = users) => {
-    for (const u of scopes) partner.sourcePushes(u, "mail");
-    clock += 60_000;
-    for (const u of scopes) partner.sync!.track(u, clock);
-    await partner.sync!.tick();
-  };
-  const advance = (ms: number) => (clock += ms);
-  return { partner, cache, src: (u = "u") => srcs.get(u)!, advance, now: () => clock, watch };
-}
-
-describe("push sync (syncPush)", () => {
-  const scope: Scope = { tenantId: "t", userId: "u" };
-
-  test("off by default: notices and watches are ignored", async () => {
-    expect(DEFAULT_CONFIG.syncPush).toBe(false);
-    const { partner, cache, now } = await synced({});
-    const id = itemId("mail", "m1");
-    const before = partner.sync!.current(scope, "mail", now());
-    partner.sourcePushes(scope, "mail");
-    partner.sourceChanged(scope, "mail");
-    partner.sourceChanged(scope, "mail", { deleted: [id] });
-    expect(partner.sync!.stats.notices).toBe(0);
-    expect(partner.sync!.current(scope, "mail", now())).toBe(before);
-    expect(cache.get(scope, id, now())).not.toBeNull();
-  });
-
-  test("a pushed source is current while quiet, stale on a notice, and current again after one poll", async () => {
-    const { partner, src, advance, now, cache, watch } = await synced({ syncPush: true });
-    await watch();
-    advance(5 * HOUR);
-    expect(partner.sync!.current(scope, "mail", now())).toBe(true);
-    const before = src().lists;
-    src().items.push(src().make("new", "Kestrel is frozen", now()));
-    partner.sourceChanged(scope, "mail");
-    expect(partner.sync!.current(scope, "mail", now())).toBe(false);
-    advance(60_000);
-    partner.sync!.track(scope, now());
-    await partner.sync!.tick();
-    expect(src().lists - before).toBe(1);
-    expect(cache.get(scope, itemId("mail", "new"), now())).not.toBeNull();
-    expect(partner.sync!.current(scope, "mail", now())).toBe(true);
-    // A watch silent past syncPushMaxStaleMs is not trusted.
-    advance(DEFAULT_CONFIG.syncPushMaxStaleMs + 1);
-    expect(partner.sync!.current(scope, "mail", now())).toBe(false);
-  });
-
-  test("a quiet pushed source's items count as read now (confirmed); a notice or push off ends that", async () => {
-    const { partner, advance, now, watch } = await synced({ syncPush: true });
-    expect(partner.sync!.confirmed(scope, "mail", now())).toBe(false); // No watch declared yet.
-    await watch();
-    advance(5 * HOUR);
-    expect(partner.sync!.confirmed(scope, "mail", now())).toBe(true);
-    partner.sourceChanged(scope, "mail");
-    expect(partner.sync!.confirmed(scope, "mail", now())).toBe(false);
-    const off = await synced({});
-    off.partner.sourcePushes(scope, "mail");
-    expect(off.partner.sync!.confirmed(scope, "mail", off.now())).toBe(false);
-  });
-
-  test("a notice naming deleted items drops them at once, with no call", async () => {
-    const { partner, src, cache, now, watch } = await synced({ syncPush: true });
-    await watch();
-    const id = itemId("mail", "m1");
-    expect(cache.get(scope, id, now())).not.toBeNull();
-    const before = src().lists;
-    partner.sourceChanged(scope, "mail", { deleted: [id] });
-    expect(cache.get(scope, id, now())).toBeNull();
-    expect(src().lists).toBe(before);
-    expect(partner.sync!.current(scope, "mail", now())).toBe(true);
-  });
-
-  test("a notice for one user never touches another's index or freshness", async () => {
-    const a: Scope = { tenantId: "t", userId: "a" };
-    const b: Scope = { tenantId: "t", userId: "b" };
-    const { partner, cache, now, watch } = await synced({ syncPush: true }, [a, b]);
-    await watch([a, b]);
-    const id = itemId("mail", "m0");
-    partner.sourceChanged(a, "mail", { deleted: [id] });
-    partner.sourceChanged(a, "mail");
-    expect(cache.get(a, id, now())).toBeNull();
-    expect(cache.get(b, id, now())).not.toBeNull();
-    expect(partner.sync!.current(a, "mail", now())).toBe(false);
-    expect(partner.sync!.current(b, "mail", now())).toBe(true);
-    // A notice for a user not synced starts nothing.
-    partner.sourceChanged({ tenantId: "t", userId: "nobody" }, "mail");
-    expect(partner.sync!.userCount).toBe(2);
-  });
-
-  test("a quiet pushed source's items never lapse from the cache between its sweeps", async () => {
-    // Only sweeps re-list a quiet pushed source's older items, and a synced item lives `syncTtlMs` (7 days) from its
-    // last listing. A sweep spans many ticks when the source is large and the rate is low, so a sweep every 7 days
-    // let the first pages' items expire before the next sweep re-read them: lookups answered locally then missed them.
-    const { partner, src, cache, advance, now } = await synced(
-      { syncPush: true, syncPageSize: 2, syncCallsPerMin: 1 },
-      [scope],
-      40,
-    );
-    const step = async () => {
-      advance(5 * 60_000);
-      partner.sync!.track(scope, now());
-      await partner.sync!.tick();
-    };
-    // The backfill, at one call a minute.
-    while (!partner.sync!.warm(scope)) await step();
-    partner.sourcePushes(scope, "mail");
-    const ids = src().items.map((x) => x.id);
-    let lapsed = 0;
-    for (let t = 0; t < 8 * 24 * 12; t++) {
-      await step();
-      lapsed += ids.filter((id) => cache.get(scope, id, now()) === null).length;
-    }
-    expect(lapsed).toBe(0);
-    expect(DEFAULT_CONFIG.syncPushSweepMs).toBeLessThanOrEqual(DEFAULT_CACHE_LIMITS.syncTtlMs / 2);
-  });
-
-  test("with a gap, a busy source's notices are read at most that often in the background", async () => {
-    const { partner, src, advance, now } = await synced({ syncPush: true, syncPushGapMs: 30 * 60_000 });
-    partner.sourcePushes(scope, "mail");
-    const before = src().lists;
-    for (let i = 0; i < 6; i++) {
-      advance(5 * 60_000);
-      src().items.push(src().make(`n${i}`, "news", now()));
-      partner.sourceChanged(scope, "mail");
-      partner.sync!.track(scope, now());
-      await partner.sync!.tick();
-    }
-    // Thirty minutes of notices every five: at most two background polls (the backfill's poll began the gap).
-    expect(src().lists - before).toBeLessThanOrEqual(2);
   });
 });

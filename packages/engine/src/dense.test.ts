@@ -156,7 +156,7 @@ describe("rare words in the user's items (densePacket)", () => {
   });
 });
 
-describe("the engine (densePacket, groundOccasion, recoverNames)", () => {
+describe("the engine (densePacket, groundOccasion)", () => {
   const scope = { tenantId: "t", userId: "u" };
   const at = Date.parse("2026-10-27T09:00:00Z");
   const partner = (sources: StaticSource[], config: Record<string, unknown>, sourceMap = new SourceMap()) =>
@@ -243,37 +243,5 @@ describe("the engine (densePacket, groundOccasion, recoverNames)", () => {
     const text = 'New email from Nadia Petrova: "Running a bit late, still ok to meet?"';
     const got = cites(await ask(partner(occasions(), { ...quiet, groundOccasion: true }), text, scope, "external"));
     expect(got).toEqual(["calendar:lunch grounded-occasion-sender"]);
-  });
-
-  test("recoverNames: a name typed in lowercase grounds as a capitalised one does, from this user's sources only", async () => {
-    const drinks = (title: string) =>
-      new StaticSource("calendar", "Calendar", [
-        {
-          ref: "d1",
-          title,
-          text: "When: Monday 2 Nov 2026, 19:00–20:30\nWhere: Rochelle Canteen, London",
-          meta: { start: "2026-11-02T19:00:00Z", people: "Chen Wei <chen.wei@x.example>" },
-        },
-      ]);
-    const text = "please reschedule my drinks with chen wei";
-    const map = new SourceMap();
-    const a = { tenantId: "t", userId: "a" };
-    const b = { tenantId: "t", userId: "b" };
-    // User a's sources write the name capitalised (a recorded mention); user b's never do.
-    const sources = async (s: { userId: string }) => [drinks(s.userId === "a" ? "Drinks with Chen Wei" : "drinks")];
-    const p = (recoverNames: boolean) =>
-      new ContextPartner({
-        sources,
-        sourceMap: map,
-        cache: new ItemCache(),
-        budget: new Budget(),
-        model: null,
-        now: () => at,
-        config: { probes: true, probeGraceMs: 1_000, ...quiet, recoverNames },
-      });
-    expect(cites(await ask(p(true), text, a))).toEqual(["calendar:d1 grounded-person"]);
-    expect(cites(await ask(p(false), text, a))).toEqual([]);
-    // b's item has the same participant, but b's sources never named "Chen Wei": a's record is not b's.
-    expect(cites(await ask(p(true), text, b))).toEqual([]);
   });
 });

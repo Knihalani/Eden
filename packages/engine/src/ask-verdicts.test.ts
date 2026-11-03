@@ -6,11 +6,10 @@ import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { CardEnricher, type Card, type CardMaker } from "./cards";
 import { ContextPartner } from "./partner";
-import { renderPacket } from "./render";
 
 /**
- * `askVerdicts` and `askCompact` (docs/research/gen-ask.md): an ask gathers the lookup's candidates and answers first
- * with those a rule path's verdict says the question runs into; its answer is compacted as a packet is.
+ * `askVerdicts` (docs/research/gen-ask.md): an ask gathers the lookup's candidates and answers first with those a rule
+ * path's verdict says the question runs into.
  */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
 const HOUR = 3_600_000;
@@ -105,35 +104,5 @@ describe("askVerdicts", () => {
     const out = await ask({ askVerdicts: true }, ["u1", "u2"], ["u1"]);
     expect(out.u1!.ids).toContain("chat:k1");
     expect(out.u2!.ids).not.toContain("chat:k1");
-  });
-});
-
-describe("askCompact", () => {
-  test("the answer is compacted around the question and is no larger; the same items are cited", async () => {
-    const plain = await ask({ askVerdicts: true });
-    const compact = await ask({ askVerdicts: true, askCompact: true });
-    expect(compact.u1!.ids).toEqual(plain.u1!.ids);
-    expect(Buffer.byteLength(compact.u1!.answer)).toBeLessThanOrEqual(Buffer.byteLength(plain.u1!.answer));
-    expect(compact.u1!.answer).toContain("read-only from 4 Nov until 9 Nov");
-  });
-
-  test("items past fullItems are cut to tailBytes, the first ones to itemBytes", () => {
-    const words = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india", "juliet"];
-    const long = (n: number) =>
-      item(`l${n}`, `Note ${n}`, words.map((w) => `The Kestrel deploy needs ${w}${n} signed off first.`).join(" "));
-    const focus = new Set(["kestrel", "deploy"]);
-    const out = renderPacket([long(1), long(2), long(3)], {
-      maxBytes: 4_000,
-      focus,
-      itemBytes: 320,
-      fullItems: 1,
-      tailBytes: 120,
-    }).split("\n");
-    // The header, three items and the footer: the first is longer than the two cut to a line.
-    expect(out).toHaveLength(5);
-    const size = (s: string) => Buffer.byteLength(s);
-    expect(size(out[1]!)).toBeGreaterThan(size(out[2]!) + 100);
-    expect(size(out[2]!)).toBeLessThan(160);
-    expect(size(out[3]!)).toBeLessThan(160);
   });
 });

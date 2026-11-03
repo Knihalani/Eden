@@ -38,7 +38,7 @@ describe("parseFlags (audit 2026-11-03b, devloop-lab-accepts-typos-silently)", (
 
 describe("labConfig: the lab's presets and overrides through checkEngineConfig", () => {
   test("every preset passes as it stands", () => {
-    expect(Object.keys(PRESETS).length).toBe(11);
+    expect(Object.keys(PRESETS).length).toBe(9);
     for (const [name, preset] of Object.entries(PRESETS)) {
       expect(() => labConfig(preset, name)).not.toThrow();
     }

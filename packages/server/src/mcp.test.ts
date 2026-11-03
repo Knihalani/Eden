@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { ASK_CONTEXT_DESCRIPTION, ASK_CONTEXT_GUIDED } from "@eden/protocol";
+import { ASK_CONTEXT_DESCRIPTION } from "@eden/protocol";
 import { StaticSource } from "@eden/sources";
 import { buildPartner } from "./build";
 import { createMcpServer } from "./mcp";
@@ -44,7 +44,7 @@ test("source titles reach the agent only inside a data envelope", async () => {
   await client.close();
 });
 
-test("ask_context gives the guided description only with askGuard (D88)", async () => {
+test("ask_context gives the standard description", async () => {
   const description = async (engine: Record<string, unknown>) => {
     const partner = buildPartner({ sources: async () => [], model: null, engine });
     const server = createMcpServer(partner, { tenantId: "t", userId: "u", sessionId: "s" });
@@ -57,6 +57,4 @@ test("ask_context gives the guided description only with askGuard (D88)", async 
     return tools[0]!.description;
   };
   expect(await description({})).toBe(ASK_CONTEXT_DESCRIPTION);
-  expect(await description({ askGuard: true })).toBe(ASK_CONTEXT_GUIDED);
-  expect(ASK_CONTEXT_GUIDED.startsWith(ASK_CONTEXT_DESCRIPTION)).toBe(true);
 });

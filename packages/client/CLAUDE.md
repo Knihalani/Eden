@@ -8,7 +8,7 @@ an action before it runs (`check`), and put injections into a message list (`wit
 
 | File | Owns |
 |---|---|
-| `src/client.ts` | `EdenClient`: `observe`, `pending`, `collect`, `ask`, `check`, `digest`, `feedback`, `health` (a never-throwing probe); one `post` with a timeout (default 800 ms; an observe adds its `waitMs`). `edenId(raw)`: maps any string to a valid id injectively (escapes UTF-16 code units, else `h:` + SHA-256) |
+| `src/client.ts` | `EdenClient`: `observe`, `pending`, `collect`, `ask`, `check`, `feedback`, `health` (a never-throwing probe, `/v1/whoami`); one `post` with a timeout (default 800 ms; an observe adds its `waitMs`). `edenId(raw)`: maps any string to a valid id injectively (escapes UTF-16 code units, else `h:` + SHA-256) |
 | `src/messages.ts` | `withContext` (injections into a chat message list as data), `heldResult` (a firewall finding as a held tool's result, D69) |
 | `src/index.ts` | Public exports, re-exporting the `ask_context` descriptions and protocol types |
 

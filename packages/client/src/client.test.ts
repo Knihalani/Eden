@@ -20,8 +20,7 @@ describe("EdenClient", () => {
     expect(await eden.ask("x")).toBeNull();
     expect(await eden.pending()).toEqual([]);
     expect(await eden.check("send_payment", { amount: "10" })).toMatchObject({ verdict: "proceed", finding: null });
-    expect(await eden.digest()).toBeNull();
-    expect(errors.length).toBe(5);
+    expect(errors.length).toBe(4);
   });
 
   test("sends the user and session with each event", async () => {
@@ -311,18 +310,18 @@ describe("misconfiguration is visible through onError", () => {
       sessionId: "s",
       fetch: answering(() => Response.json({ error: "missing or unknown API key" }, { status: 401 })),
     });
-    expect(await refused.health()).toEqual({ ok: false, error: "eden /v1/digest: 401 missing or unknown API key" });
+    expect(await refused.health()).toEqual({ ok: false, error: "eden /v1/whoami: 401 missing or unknown API key" });
     let path = "";
     const fine = new EdenClient({
       userId: "u",
       sessionId: "s",
       fetch: (async (u: string) => {
         path = new URL(u).pathname;
-        return Response.json({ digest: null });
+        return Response.json({ ok: true });
       }) as unknown as typeof fetch,
     });
     expect(await fine.health()).toEqual({ ok: true });
-    expect(path).toBe("/v1/digest"); // A read: it drains nothing, unlike /v1/pending.
+    expect(path).toBe("/v1/whoami"); // It changes nothing, unlike /v1/pending.
   });
 });
 

@@ -20,7 +20,7 @@
  *
  * Variants of the configuration run in one process, paired task by task (`pi-conditions.ts` has the grammar):
  * `--variant-config '{"ALL2":{"syncPollBehind":true}}' --conditions eden,eden~ALL2` gives each name the settings it
- * adds over `--config`, and `eden+packetDates` is shorthand for one flag on. `--act` is a mode of its own: every
+ * adds over `--config`, and `eden+askDedup` is shorthand for one flag on. `--act` is a mode of its own: every
  * condition gets stub action tools (`act.ts`) and a system prompt that lets the agent act, and each task records its
  * action calls (`act-report.ts` reads them). `-act-firewall` conditions (`tools-act-firewall`, `eden-act-firewall`)
  * also turn on the engine's `actionCheck` (D69) and send each action call to `checkAction` before it runs (Pi's
@@ -47,14 +47,13 @@
  *     [--grader anthropic/claude-haiku-5.5] [--budget 0.6] [--out pi-ab.json] [--timeline dir] [--time-scale 1]
  *     [--tool-exec parallel|sequential] [--tasks 30] [--offworld 5] [--limit n] [--dry]
  *     [--variant-config '{"name":{...}}'] [--act] [--cards FILE [--cards-out FILE]] [--card-sort price]
- *     [--allow-logging] [--rpm 18] [--max-requests N] [--intent FILE] [--bridge FILE] [--bridge-model m]
+ *     [--allow-logging] [--rpm 18] [--max-requests N] [--intent FILE]
  *     [--replay DIR [--replay-timing] [--replay-only]] [--reuse-arms earlier.json]
  *
  * `--replay DIR` replays the reader's and the grader's calls from DIR and appends new ones; `--reuse-arms F` copies the
  * `none` and `tools` arms from a matching earlier run instead of running them (both at their definitions below).
  *
- * `--templates a,b` runs only those hidden-context templates; `--ask-description guided` gives the agent the MCP
- * server's guided description (`askGuard`, docs/research/edge-ask.md). Free models go through `free.ts` (above).
+ * `--templates a,b` runs only those hidden-context templates. Free models go through `free.ts` (above).
  *
  * --budget is a hard cap on everything this run spends (agent, Eden's judge, grader): each call reserves its
  * worst case before it is sent and is refused when that could cross the cap. --time-scale (default 1) gives the sim
@@ -82,13 +81,9 @@ import {
   ContextPartner,
   DEFAULT_CONFIG,
   ItemCache,
-  bridgeKey,
-  ModelBridgeMaker,
   ModelCardMaker,
-  QueryBridge,
   AskReader,
   ModelReaderMaker,
-  type BridgeMaker,
   type CardMaker,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
@@ -100,7 +95,6 @@ import type { World } from "../world";
 import {
   armPromptsHash,
   ASK_DESCRIPTION,
-  ASK_DESCRIPTION_GUIDED,
   chatModel,
   emptyResult,
   grade,
@@ -121,7 +115,6 @@ import {
   type Task,
 } from "./ab-common";
 import { ACTIONS, actionParams, coerceArgs, executed, type ActionRecord } from "./act";
-import { DiskBridgeMaker } from "./bridge-disk";
 import { DiskCardMaker, samePath } from "./cards-disk";
 import { isAnthropic, isCapError, labAccess, labModel, piModelFor, piRegistry, providerPrefs } from "./free";
 import { parseConditions, parseVariants, type Condition } from "./pi-conditions";
@@ -138,16 +131,6 @@ const opt = (name: string, fallback: string) => {
   return i >= 0 && args[i + 1] ? args[i + 1]! : fallback;
 };
 const DRY = args.includes("--dry");
-/**
- * `--ask-description auto|guided|standard`: which `ask_context` description the agent gets. `auto` (the default) does
- * as the MCP server does: the guided one (`ASK_CONTEXT_GUIDED`) for a condition whose config has `askGuard`, else the
- * standard one. `guided` and `standard` force one for every condition.
- */
-const ASK_DESC = opt("ask-description", "auto");
-if (!["auto", "guided", "standard"].includes(ASK_DESC))
-  throw new Error("--ask-description must be auto|guided|standard");
-const ASK_GUIDED = ASK_DESC === "guided";
-const guidedFor = (config: Record<string, unknown>) => ASK_GUIDED || (ASK_DESC === "auto" && config.askGuard === true);
 const KEY = process.env.OPENROUTER_API_KEY;
 if (!KEY && !DRY) throw new Error("needs OPENROUTER_API_KEY");
 const SEEDS = opt("seeds", "41").split(",").map(Number);
@@ -175,7 +158,6 @@ const CONFIG = PRESETS[CONFIG_ARG] ?? (JSON.parse(CONFIG_ARG) as Record<string, 
 // `cards` makes implication cards with a model in the background (D59), metered and charged to Eden's spend.
 const CARD_MODEL = opt("card-model", "z-ai/glm-5.3-flash");
 const CARD_SORT = opt("card-sort", "");
-const BRIDGE_MODEL = opt("bridge-model", CARD_MODEL);
 if (CARD_SORT && CARD_SORT !== "price") throw new Error("--card-sort must be price");
 const CONFIG_VARIANTS = parseVariants(opt("variant-config", "{}"));
 // Every condition is parsed before anything is spent: a typo fails here, not after the first stream has run.
@@ -222,14 +204,6 @@ for (const f of INTENT_FILES) if (!existsSync(f)) throw new Error(`--intent ${f}
 const diskCards = CARDS_FILE
   ? new DiskCardMaker(CARDS_FILE, undefined, { out: CARDS_OUT, requests: INTENT_FILES })
   : null;
-/**
- * `--bridge FILE` (with `"bridgeQuery": true`; docs/research/edge-bridge.md): bridging queries replayed from
- * `bridge-enrich.ts`'s cache; a request with no line is sent live to `--bridge-model` (default `--card-model`),
- * metered and paced like Eden's other calls. Without `--bridge`, `bridgeQuery` makes every call live.
- */
-const BRIDGE_FILE = opt("bridge", "");
-if (BRIDGE_FILE && !existsSync(BRIDGE_FILE)) throw new Error(`--bridge ${BRIDGE_FILE}: no such file`);
-const diskBridge = BRIDGE_FILE ? new DiskBridgeMaker(BRIDGE_FILE) : null;
 
 /** `--replay`'s counts per role, as the results file and the spend line give them. */
 const replaySummary = () =>
@@ -301,9 +275,9 @@ if (REUSE_FILE && !existsSync(REUSE_FILE)) throw new Error(`--reuse-arms ${REUSE
 let spent = 0;
 let held = 0;
 const spend = { agent: 0, eden: 0, grader: 0 };
-/** Every lane's reader, cards and bridge, for the calls their `Budget()` refused (the summary's `overBudget:` line). */
-const budgeted: Budgeted = { reader: [], cards: [], bridge: [] };
-/** Each stream's background spend (cards, bridge), for the report's all-in cost columns. */
+/** Every lane's reader and cards, for the calls their `Budget()` refused (the summary's `overBudget:` line). */
+const budgeted: Budgeted = { reader: [], cards: [] };
+/** Each stream's background spend (cards), for the report's all-in cost columns. */
 const background: Background[] = [];
 /** Reserves `est` dollars, or throws `OverBudget` when that could take the run past `--budget`. */
 function reserve(est: number): void {
@@ -530,9 +504,9 @@ async function runWorld(
       current?.span("eden.source", "eden", "bg", start, end, { source: id, op, status, items }),
     ),
   );
-  // What this stream's background calls (cards, bridge) cost: booked to Eden's total, charged to no task (Background).
+  // What this stream's background calls (cards) cost: booked to Eden's total, charged to no task (Background).
   // Recorded in the results as the calls happen (below), so a stream that stops early (OverBudget, the request cap)
-  // still reports what its cards and bridge spent.
+  // still reports what its cards spent. `bridgeUsd` stays 0: the format earlier runs' results share.
   const bg: Background = {
     seed,
     suite: tasks[0]?.suite ?? "",
@@ -542,7 +516,7 @@ async function runWorld(
     bridgeUsd: 0,
     calls: 0,
   };
-  const onBg = (what: "cardsUsd" | "bridgeUsd", data: Record<string, unknown>) => {
+  const onBg = (what: "cardsUsd", data: Record<string, unknown>) => {
     bg.calls++;
     bg[what] += typeof data.cost === "number" ? data.cost : 0;
   };
@@ -566,37 +540,7 @@ async function runWorld(
       ? new CardEnricher({ maker: cardMaker(), budget: new Budget(), now: () => clock })
       : undefined;
   if (cards) budgeted.cards.push(cards);
-  // `bridgeQuery`: replayed queries first, the rest made live (booked to Eden like its judge).
-  const liveBridge = () =>
-    new ModelBridgeMaker(
-      meteredModel(labModel(ACCESS, { apiKey: KEY!, model: BRIDGE_MODEL }, "eden.bridge"), (start, end, data) => {
-        onBg("bridgeUsd", data);
-        current?.span("eden.bridge", "eden", "bg", start, end, data);
-      }),
-    );
-  const bridgeMaker = (): BridgeMaker => {
-    if (!diskBridge) return liveBridge();
-    const live = liveBridge();
-    return {
-      async make(requests: string[], signal: AbortSignal) {
-        const replayed = await diskBridge.make(requests);
-        const missing = requests.filter((_, i) => !diskBridge.queries.has(bridgeKey(requests[i]!)));
-        if (missing.length === 0) return replayed;
-        const got = await live.make(missing, signal);
-        let k = 0;
-        const queries = requests.map((r, i) =>
-          diskBridge.queries.has(bridgeKey(r)) ? replayed.queries[i]! : (got.queries[k++] ?? null),
-        );
-        return { ...got, queries };
-      },
-    };
-  };
-  const bridge =
-    withPartner && config.bridgeQuery === true
-      ? new QueryBridge({ maker: bridgeMaker(), budget: new Budget(), now: () => clock })
-      : undefined;
-  if (bridge) budgeted.bridge.push(bridge);
-  if (cards || bridge) background.push(bg);
+  if (cards) background.push(bg);
   // `askReader`: one budgeted call per ask about an action, on the running task's timeline and charged to it (D95).
   let readerTask: RunResult | null = null;
   const reader =
@@ -633,7 +577,6 @@ async function runWorld(
         now: () => clock,
         config,
         ...(cards ? { cards } : {}),
-        ...(bridge ? { bridge } : {}),
         ...(reader ? { reader } : {}),
         // Charged to the task whose session the trace is from: a slow-path verdict can land after it ended.
         onTrace: (t) => {
@@ -787,7 +730,7 @@ async function runWorld(
       if (useEden && !useTools && partner) {
         tools.push({
           name: "ask_context",
-          description: guidedFor(config) ? ASK_DESCRIPTION_GUIDED : ASK_DESCRIPTION,
+          description: ASK_DESCRIPTION,
           label: "ask_context",
           parameters: askParams,
           prepareArguments: (a) => {
@@ -1220,7 +1163,6 @@ writeFileSync(
       requests: PACER.summary(),
       partial: capStopped > 0 || PACER.refused > 0,
       toolExecution: TOOL_EXEC,
-      askDescription: ASK_DESC,
       spend,
       // Eden's spend no task is charged for, per stream: the report's backfill and all-in columns (ab-common.ts).
       background,
