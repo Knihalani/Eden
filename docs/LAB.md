@@ -73,10 +73,29 @@ Reports: `pi-ab-report.ts` (critical path, per-second profile, CPU; Hermes too),
 | Cards, price-routed batch 20 | `cards-enrich.ts --sort price --batch 20` | `econ-price20-v2.jsonl` (econ-background.md) | yes |
 | Intent requests (D87) | `cards-enrich.ts --intent --dir D` | `--intent D/intent-v2.jsonl` (needs `--cards`) | no (`.local/haiku/intent/`) |
 | Bridge queries (D89) | `bridge-enrich.ts --out F` | `--bridge F` | no |
-| Reader calls (D95) | `--reader live --reader-cache F` | `--reader replay --reader-cache F` (a prompt not cached fails open) | no |
+| Reader calls (D95) | `--reader live --reader-cache F` | `--reader replay --reader-cache F` (a prompt not cached fails open; misses exit 3, below) | no |
 
 `pi-ab.ts`/`hermes-ab.ts` read `--cards FILE` and write cards they had to make live to `--cards-out` (default
 `<out>.cards.jsonl`); name that file in later runs. Keep run outputs under `.local/` (git ignores it).
+
+**The miss gate.** The reader replay cache keys each call on a hash of its whole prompt (`promptKey`,
+`reader-disk.ts`): the model id, the rendered items, the pool order, the request and `READER_VERSION`. Any engine
+change upstream of the reader's input therefore misses, and in `--reader replay` a miss fails open: that ask is
+answered without the reader, so a NEW screen silently becomes part NEW, part ALL3. `hidden-funnel.ts` and
+`bun run funnel` print `READER MISSES: n` and exit 3 when n > 0; the funnel still prints its score first, and
+`hidden-funnel.ts` leaves the run out of the ledger. Pass `--allow-misses` (before or after `--`) to accept a partial
+screen knowingly. Its JSON (`--json`) carries `reader: {replayed, sent, missed, failed}`. Checked on 2026-11-03 with
+an empty cache file (`--suite train1 --seeds 41 --preset NEW`): 108 misses, exit 3; with `--allow-misses`, exit 0.
+
+**The `overBudget:` line.** `pi-ab.ts` and `hermes-ab.ts` give each lane's reader, cards and bridge their own
+`new Budget()` (production defaults: 20 calls and $0.02 a session, `packages/llm/src/budget.ts`); `hidden-funnel.ts`
+gives them an uncapped one. A call refused there is skipped, and a refused read reports outcome `none`, the same as a
+model failure. Every run therefore ends with `overBudget: reader n (k lanes), cards n, bridge n` (and the A/B results
+JSON has `overBudget`). Any non-zero count means the session cap cut reading and those asks ran as ALL3: say so with
+the result. The reader calls up to once a user message (COST-MODEL.md), or twice when push and a later ask miss its
+verdict cache, so a session of roughly 10 to 20 user messages can reach the cap (an estimate, not measured in the
+lab). The unit test `reader-disk.test.ts` shows the count: 25 distinct reads on one default `Budget` give 20 calls
+and `overBudget: reader 5`.
 
 ## Scorers (`packages/sim/lab/scripts/`, run with `python3 -I`)
 

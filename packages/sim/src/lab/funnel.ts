@@ -18,12 +18,15 @@
  *
  * NEW needs the reader (`-- --reader replay --reader-cache F` or `--reader live --reader-model m`) and the intent
  * requests (`-- --intent F`); ALL5 needs `-- --intent F --bridge F`. Neither file is checked in (docs/LAB.md).
+ * A replayed reader prompt that is not in the cache fails open (the ask answers without the reader), so the run
+ * prints the miss count and exits 3 after the score unless `--allow-misses`: such a run is part NEW, part ALL3.
  */
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PRESETS } from "./presets";
+import { missGate, MISS_EXIT } from "./reader-disk";
 import { parseSuites, UNRUN_BLIND } from "./suites";
 
 const argv = process.argv.slice(2);
@@ -56,6 +59,7 @@ const preset = presetName === "none" ? {} : PRESETS[presetName];
 if (!preset) fail(`unknown preset ${presetName} (known: none, ${Object.keys(PRESETS).join(", ")})`);
 const config = { ...preset, ...(JSON.parse(opt("set", "{}")) as Record<string, unknown>) };
 const has = (flag: string) => passthrough.includes(flag);
+const allowMisses = args.includes("--allow-misses") || has("--allow-misses");
 if (config.askReader === true && !has("--reader")) {
   fail("this configuration has askReader: pass `-- --reader replay --reader-cache F` (or --reader live ...)");
 }
@@ -91,12 +95,14 @@ const funnelArgs = [
   ...(args.includes("--no-ask") ? [] : ["--ask"]),
   ...(cards !== "none" && config.cards === true ? ["--cards", cards] : []),
   ...(args.includes("--record") ? [] : ["--no-record"]),
+  ...(allowMisses && !has("--allow-misses") ? ["--allow-misses"] : []),
   ...passthrough,
 ];
 console.error(`funnel: bun ${funnelArgs.map((a) => (/[\s{"]/.test(a) ? `'${a}'` : a)).join(" ")}`);
 const t0 = performance.now();
 const run = spawnSync("bun", funnelArgs, { stdio: "inherit" });
-if (run.status !== 0) {
+// A run with reader misses still wrote its rows: score them, then fail below.
+if (run.status !== 0 && run.status !== MISS_EXIT) {
   rmSync(scratch, { recursive: true, force: true });
   process.exit(run.status ?? 1);
 }
@@ -111,6 +117,7 @@ interface TaskRow {
   askCited?: boolean;
 }
 const tasks = (file: string) => (JSON.parse(readFileSync(file, "utf8")) as { perTask: TaskRow[] }).perTask;
+const readerReplay = (JSON.parse(readFileSync(out, "utf8")) as { reader?: { missed: number } }).reader;
 const surfaced = (t: TaskRow) => Boolean(t.delivered || t.askCited);
 const key = (t: TaskRow) => `${t.suite}|${t.variant}|${t.seed}|${t.template}`;
 
@@ -132,6 +139,7 @@ for (const [suite, a] of [...bySuite].sort()) {
   a.forEach((v, i) => (total[i]! += v));
 }
 console.log(`  ${"TOTAL".padEnd(10)} hidden ${total[0]}/${total[1]}  decoys ${total[2]}/${total[3]}`);
+if (readerReplay) console.log(`  reader replay misses: ${readerReplay.missed}`);
 if (!opt("json", "")) console.log("  (pass --json FILE to keep the per-task rows, e.g. as a later --baseline)");
 
 const baseline = opt("baseline", "");
@@ -159,3 +167,6 @@ if (baseline) {
   if (changed.length > 40) console.log(`  … ${changed.length - 40} more`);
 }
 rmSync(scratch, { recursive: true, force: true });
+const gate = missGate(readerReplay?.missed ?? 0, allowMisses);
+if (gate.message) console.error(`\nfunnel: ${gate.message}`);
+process.exit(gate.code);
