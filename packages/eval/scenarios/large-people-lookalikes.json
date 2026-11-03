@@ -1,0 +1,356 @@
+{
+  "id": "large-people-lookalikes",
+  "category": "relationships",
+  "description": "57 documents. Booking dinner for one contact among near-namesakes (Jordan Pike at Northwind, Jordan Pyke, a Jordan Pike at another company); only the right one's allergy matters.",
+  "clock": "2026-11-03T09:00:00Z",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "mail-misc-11",
+          "title": "Car service (Maya Castell)",
+          "text": "Your car is due its annual service; we have slots on the 9th and the 16th. — Maya Castell"
+        },
+        {
+          "ref": "mail-misc-21",
+          "title": "Library hold (Tomas Halvorsen)",
+          "text": "The book you reserved, A Gentleman in Moscow, is waiting at the front desk for seven days. — Tomas Halvorsen"
+        },
+        {
+          "ref": "mail-misc-19",
+          "title": "Dentist newsletter (Ines Tanaka)",
+          "text": "Our practice now offers evening hygiene appointments on Mondays and Wednesdays. — Ines Tanaka"
+        },
+        {
+          "ref": "mail-misc-23",
+          "title": "Photo album (Kwame Varga)",
+          "text": "The holiday photos are uploaded to the shared album; 214 pictures from the coast. — Kwame Varga"
+        },
+        {
+          "ref": "pike-thursday",
+          "title": "Re: Thursday",
+          "text": "Thursday works for me, looking forward to catching up. Jordan Pike, Northwind."
+        },
+        {
+          "ref": "mail-misc-16",
+          "title": "Streaming receipt (Lena Castell)",
+          "text": "Thanks for your payment; your streaming plan continues for another month. — Lena Castell"
+        },
+        {
+          "ref": "mail-misc-15",
+          "title": "School newsletter (Oskar Halvorsen)",
+          "text": "Reminder that the harvest festival collection runs all week; tins and dry food please. — Oskar Halvorsen"
+        },
+        {
+          "ref": "mail-misc-25",
+          "title": "Plumber visit (Noor Tanaka)",
+          "text": "The plumber can come on Wednesday morning to look at the kitchen tap; access via side gate. — Noor Tanaka"
+        },
+        {
+          "ref": "mail-misc-10",
+          "title": "Gym membership (Noor Mbeki)",
+          "text": "Your membership renews on the 3rd. Classes this week: spin Tuesday, yoga Thursday. — Noor Mbeki"
+        },
+        {
+          "ref": "mail-misc-6",
+          "title": "Bike repair (Tomas Byrne)",
+          "text": "The bike shop replaced the rear brake pads and trued the wheel; ready for pickup. — Tomas Byrne"
+        },
+        {
+          "ref": "mail-misc-24",
+          "title": "Car service (Ines Byrne)",
+          "text": "Your car is due its annual service; we have slots on the 9th and the 16th. — Ines Byrne"
+        },
+        {
+          "ref": "mail-misc-3",
+          "title": "Quiz night (Ines Ostrom)",
+          "text": "Pub quiz is back on Wednesday; teams of up to six, picture round included. — Ines Ostrom"
+        },
+        {
+          "ref": "mail-misc-8",
+          "title": "Plumber visit (Oskar Byrne)",
+          "text": "The plumber can come on Wednesday morning to look at the kitchen tap; access via side gate. — Oskar Byrne"
+        },
+        {
+          "ref": "mail-misc-18",
+          "title": "Mortgage statement (Ines Castell)",
+          "text": "Your annual mortgage statement is available to download from the portal. — Ines Castell"
+        },
+        {
+          "ref": "mail-misc-26",
+          "title": "Neighbourhood watch (Bea Quinlan)",
+          "text": "A reminder to lock bikes overnight; two were taken from Elm Road last week. — Bea Quinlan"
+        },
+        {
+          "ref": "mail-misc-1",
+          "title": "Charity run (Felix Castell)",
+          "text": "Thanks for signing up for the 10k charity run in the park; bib numbers go out next week. — Felix Castell"
+        },
+        {
+          "ref": "mail-misc-12",
+          "title": "Garden centre order (Lena Castell)",
+          "text": "Two bags of compost and a lavender plant are ready to collect from the garden centre. — Lena Castell"
+        },
+        {
+          "ref": "mail-misc-20",
+          "title": "Piano lessons (Hiro Byrne)",
+          "text": "Lessons move to 5pm on Tuesdays from next month; please practise the scales. — Hiro Byrne"
+        },
+        {
+          "ref": "mail-misc-5",
+          "title": "Laptop warranty (Kwame Mbeki)",
+          "text": "Your laptop's extended warranty covers accidental damage until next spring. — Kwame Mbeki"
+        },
+        {
+          "ref": "mail-misc-13",
+          "title": "School newsletter (Ines Castell)",
+          "text": "Reminder that the harvest festival collection runs all week; tins and dry food please. — Ines Castell"
+        },
+        {
+          "ref": "mail-misc-14",
+          "title": "Quiz night (Ines Ostrom)",
+          "text": "Pub quiz is back on Wednesday; teams of up to six, picture round included. — Ines Ostrom"
+        },
+        {
+          "ref": "mail-misc-22",
+          "title": "Wine club (Felix Delacroix)",
+          "text": "This quarter's case has six reds from the Douro; tasting notes are enclosed. — Felix Delacroix"
+        },
+        {
+          "ref": "mail-misc-2",
+          "title": "Streaming receipt (Kwame Mbeki)",
+          "text": "Thanks for your payment; your streaming plan continues for another month. — Kwame Mbeki"
+        },
+        {
+          "ref": "pyke-lunch",
+          "title": "Lunch with Jordan Pyke",
+          "text": "Jordan Pyke suggested the new seafood place on the harbour for lunch next month."
+        },
+        {
+          "ref": "mail-misc-4",
+          "title": "Window cleaner (Kwame Castell)",
+          "text": "The window cleaner will come on the first Monday of each month as usual. — Kwame Castell"
+        },
+        {
+          "ref": "mail-misc-7",
+          "title": "Hiking group (Lena Byrne)",
+          "text": "Saturday's hike is the ridge loop, 14 km; bring water and a waterproof. — Lena Byrne"
+        },
+        {
+          "ref": "mail-misc-9",
+          "title": "Office plants (Tomas Varga)",
+          "text": "Facilities will water the office plants on Fridays; please do not move the ficus. — Tomas Varga"
+        },
+        {
+          "ref": "mail-misc-17",
+          "title": "Piano lessons (Felix Quinlan)",
+          "text": "Lessons move to 5pm on Tuesdays from next month; please practise the scales. — Felix Quinlan"
+        }
+      ]
+    },
+    {
+      "id": "crm",
+      "description": "The user's CRM",
+      "docs": [
+        {
+          "ref": "jordan-pike-northwind",
+          "title": "Jordan Pike (Northwind)",
+          "text": "Head of Operations at Northwind. Severe shellfish allergy: never book seafood restaurants. Prefers early dinners."
+        },
+        {
+          "ref": "crm-misc-12",
+          "title": "Car service (Felix Halvorsen)",
+          "text": "Your car is due its annual service; we have slots on the 9th and the 16th. — Felix Halvorsen"
+        },
+        {
+          "ref": "crm-misc-1",
+          "title": "Electricity bill (Felix Delacroix)",
+          "text": "Your statement for the period is ready; direct debit will be taken on the 21st. — Felix Delacroix"
+        },
+        {
+          "ref": "crm-misc-3",
+          "title": "Garden centre order (Felix Ostrom)",
+          "text": "Two bags of compost and a lavender plant are ready to collect from the garden centre. — Felix Ostrom"
+        },
+        {
+          "ref": "crm-misc-2",
+          "title": "Neighbourhood watch (Ruth Byrne)",
+          "text": "A reminder to lock bikes overnight; two were taken from Elm Road last week. — Ruth Byrne"
+        },
+        {
+          "ref": "crm-misc-10",
+          "title": "Quiz night (Felix Castell)",
+          "text": "Pub quiz is back on Wednesday; teams of up to six, picture round included. — Felix Castell"
+        },
+        {
+          "ref": "jordan-pyke",
+          "title": "Jordan Pyke",
+          "text": "Account manager at Fabrikam. Vegetarian. Likes Italian."
+        },
+        {
+          "ref": "crm-misc-6",
+          "title": "Volunteer rota (Amara Tanaka)",
+          "text": "You are on the food bank rota for the second Saturday; shift starts at 9:30. — Amara Tanaka"
+        },
+        {
+          "ref": "crm-misc-5",
+          "title": "Garden centre order (Ines Varga)",
+          "text": "Two bags of compost and a lavender plant are ready to collect from the garden centre. — Ines Varga"
+        },
+        {
+          "ref": "crm-misc-4",
+          "title": "Water outage (Bea Quinlan)",
+          "text": "Planned maintenance may cause low water pressure on Thursday between 10 and 2. — Bea Quinlan"
+        },
+        {
+          "ref": "crm-misc-8",
+          "title": "Recipe swap (Hiro Quinlan)",
+          "text": "Here is the lentil soup recipe: onions, carrots, red lentils, cumin, simmer forty minutes. — Hiro Quinlan"
+        },
+        {
+          "ref": "crm-misc-11",
+          "title": "Conference CFP (Amara Ostrom)",
+          "text": "The call for papers closes at the end of the month; talks are 25 minutes. — Amara Ostrom"
+        },
+        {
+          "ref": "crm-misc-7",
+          "title": "Water outage (Noor Castell)",
+          "text": "Planned maintenance may cause low water pressure on Thursday between 10 and 2. — Noor Castell"
+        },
+        {
+          "ref": "jordan-pike-contoso",
+          "title": "Jordan Pike (Contoso)",
+          "text": "Junior analyst at Contoso; met at the 2024 trade fair. No dietary notes."
+        },
+        {
+          "ref": "crm-misc-9",
+          "title": "Gym membership (Felix Quinlan)",
+          "text": "Your membership renews on the 3rd. Classes this week: spin Tuesday, yoga Thursday. — Felix Quinlan"
+        }
+      ]
+    },
+    {
+      "id": "calendar",
+      "description": "The user's calendar",
+      "docs": [
+        {
+          "ref": "calendar-misc-10",
+          "title": "Bike repair (Noor Delacroix)",
+          "text": "The bike shop replaced the rear brake pads and trued the wheel; ready for pickup. — Noor Delacroix"
+        },
+        {
+          "ref": "calendar-misc-4",
+          "title": "Parcel locker (Oskar Byrne)",
+          "text": "Your parcel is in locker 12 at the station; collect within 72 hours. — Oskar Byrne"
+        },
+        {
+          "ref": "calendar-misc-12",
+          "title": "Podcast recommendation (Ruth Castell)",
+          "text": "You might like the episode on urban beekeeping, about forty minutes long. — Ruth Castell"
+        },
+        {
+          "ref": "calendar-misc-11",
+          "title": "Office plants (Kwame Varga)",
+          "text": "Facilities will water the office plants on Fridays; please do not move the ficus. — Kwame Varga"
+        },
+        {
+          "ref": "calendar-misc-6",
+          "title": "Charity run (Oskar Quinlan)",
+          "text": "Thanks for signing up for the 10k charity run in the park; bib numbers go out next week. — Oskar Quinlan"
+        },
+        {
+          "ref": "calendar-misc-14",
+          "title": "Garden centre order (Oskar Quinlan)",
+          "text": "Two bags of compost and a lavender plant are ready to collect from the garden centre. — Oskar Quinlan"
+        },
+        {
+          "ref": "calendar-misc-8",
+          "title": "Car service (Amara Byrne)",
+          "text": "Your car is due its annual service; we have slots on the 9th and the 16th. — Amara Byrne"
+        },
+        {
+          "ref": "calendar-misc-7",
+          "title": "Recipe swap (Maya Halvorsen)",
+          "text": "Here is the lentil soup recipe: onions, carrots, red lentils, cumin, simmer forty minutes. — Maya Halvorsen"
+        },
+        {
+          "ref": "calendar-misc-9",
+          "title": "Library hold (Lena Delacroix)",
+          "text": "The book you reserved, A Gentleman in Moscow, is waiting at the front desk for seven days. — Lena Delacroix"
+        },
+        {
+          "ref": "calendar-misc-3",
+          "title": "Wine club (Tomas Mbeki)",
+          "text": "This quarter's case has six reds from the Douro; tasting notes are enclosed. — Tomas Mbeki"
+        },
+        {
+          "ref": "calendar-misc-1",
+          "title": "Library hold (Ines Varga)",
+          "text": "The book you reserved, A Gentleman in Moscow, is waiting at the front desk for seven days. — Ines Varga"
+        },
+        {
+          "ref": "calendar-misc-2",
+          "title": "Office plants (Ruth Novak)",
+          "text": "Facilities will water the office plants on Fridays; please do not move the ficus. — Ruth Novak"
+        },
+        {
+          "ref": "calendar-misc-13",
+          "title": "Car service (Oskar Quinlan)",
+          "text": "Your car is due its annual service; we have slots on the 9th and the 16th. — Oskar Quinlan"
+        },
+        {
+          "ref": "calendar-misc-5",
+          "title": "Podcast recommendation (Tomas Byrne)",
+          "text": "You might like the episode on urban beekeeping, about forty minutes long. — Tomas Byrne"
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "large-people-lookalikes-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Book dinner on Thursday for me and Jordan Pike from Northwind."
+          },
+          "expect": {
+            "items": [
+              "crm:jordan-pike-northwind"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "I'll find a table."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Perfect."
+          },
+          "expect": "silent"
+        }
+      ]
+    }
+  ],
+  "asks": [
+    {
+      "question": "Does Jordan Pike from Northwind have any dietary needs?",
+      "expect": [
+        "crm:jordan-pike-northwind"
+      ]
+    }
+  ]
+}

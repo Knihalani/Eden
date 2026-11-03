@@ -139,4 +139,35 @@ describe("Thompson routing", () => {
     map.recordOutcome(alice, "chat", "crm", true);
     expect(map.utility(alice, "chat", "crm")).toBe(2 / 3); // Writes go on.
   });
+
+  test("two processes writing one file at once both open it and neither write throws (busy_timeout)", async () => {
+    // Two MCP clients launching mcp-stdio for one user share one file. Without a busy timeout one process failed in
+    // the constructor with "database is locked" and the other lost writes to SQLITE_BUSY.
+    const path = join(mkdtempSync(join(tmpdir(), "eden-sm-lock-")), "map.db");
+    const writer = `
+      const { SourceMap } = await import(${JSON.stringify(join(import.meta.dir, "source-map.ts"))});
+      let errors = 0, writes = 0, opened = true, map;
+      try { map = new SourceMap(process.argv[1]); } catch { opened = false; }
+      const scope = { tenantId: "t", userId: "u" };
+      const end = Date.now() + 400;
+      while (map && Date.now() < end) {
+        try { map.recordMentionsMany(scope, [{ sourceId: "p" + process.pid, entities: ["shared"] }]); writes++; }
+        catch { errors++; }
+      }
+      console.log(JSON.stringify({ opened, writes, errors }));
+    `;
+    const run = () => Bun.spawn([process.execPath, "-e", writer, path], { stdout: "pipe", stderr: "inherit" });
+    const procs = [run(), run()];
+    const results = await Promise.all(procs.map(async (p) => JSON.parse(await new Response(p.stdout).text())));
+    for (const r of results) {
+      expect(r.opened).toBe(true);
+      expect(r.errors).toBe(0);
+      expect(r.writes).toBeGreaterThan(0);
+    }
+    // Both wrote to this file: one row per process, each counting every write it made.
+    const map = new SourceMap(path);
+    const counts = map.sourcesFor({ tenantId: "t", userId: "u" }, "shared").map((r) => r.count);
+    expect(counts.sort((a, b) => a - b)).toEqual(results.map((r) => r.writes).sort((a, b) => a - b));
+    map.close();
+  });
 });

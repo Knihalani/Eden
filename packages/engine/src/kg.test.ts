@@ -271,7 +271,7 @@ describe("ItemCache graph", () => {
       at,
     );
     const g = (cache as unknown as { users: Map<string, { graph: UserGraph }> }).users.values().next().value!.graph;
-    expect([...g.nodes.keys()].some((k) => k.includes(key.toLowerCase()))).toBe(false);
+    expect(g.keys().some((k) => k.includes(key.toLowerCase()))).toBe(false);
   });
 });
 

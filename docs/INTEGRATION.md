@@ -11,13 +11,30 @@ D64's timelines, not tested in a tenant's agent. Measure in your own agent befor
 ```ts
 import { EdenClient, withContext } from "@eden/client";
 
-const eden = new EdenClient({ apiKey, userId, sessionId });
+// defaultWaitMs: each user message's observe waits up to 1.5 s for its lookup (see "How long to wait" below).
+const eden = new EdenClient({ apiKey, userId, sessionId, defaultWaitMs: 1500 });
 const { injection } = await eden.observe({ kind: "user_message", text }); // report each event
 messages = withContext(messages, await eden.collect(injection)); // before each model call
 ```
 
 - **One `userId` per end user, one `sessionId` per conversation.** Eden keys every piece of state by tenant, user and
   session (D9); a shared id would mix users' context.
+- **Ids are 1-128 characters of `[A-Za-z0-9._:@-]`** (`isId` in `@eden/protocol`) for `tenantId`, `userId` and
+  `sessionId`. The server refuses anything else with a 400, so `alice+work@x.com`, `chat/123` or an id with a space
+  get no context at all. Map ids you do not control with `edenId(raw)` from `@eden/client`: it keeps a valid id as it
+  is and maps any other string injectively (a reversible escape of its UTF-16 code units, `e:alice_2bwork@x.com`, or
+  `h:` + SHA-256 when that would pass 128 characters), so two users never share an id, even when an id holds a lone
+  surrogate from cutting a string mid-character. Use the same mapping everywhere; the id is how Eden
+  finds the user's state next time. Never fold a bad id by replacing characters (`+` to `-` would merge
+  `alice+work@x.com` with `alice-work@x.com`). The client reports a bad id once through `onError` when it is
+  constructed.
+- **Set `onError`.** A refused key or id, a wrong port and a down server all look like Eden's normal silence
+  otherwise: the SDK swallows every error (it fails open) and has no default logger. The error's message carries the
+  server's reason (`eden /v1/events: 400 userId must be 1-128 characters of [A-Za-z0-9._:@-]`), capped at 300
+  characters; it never includes the request or the key.
+- **Check the setup with `health()`** at startup: `await eden.health()` resolves `{ ok: true }` when the server
+  answers and accepts the key, the tenant and the ids, and `{ ok: false, error }` otherwise. It never throws and
+  changes no state (it reads the digest).
 - **Report every event**: user messages, the agent's tool calls and results, arriving messages. Eden stays silent on
   most of them; the ones it reads are how it knows what the agent is about to do.
 - **Inject before each model call, not only the first**: work Eden finishes after the first request (the slow path, a
@@ -25,15 +42,26 @@ messages = withContext(messages, await eden.collect(injection)); // before each 
 - **The SDK fails open.** A timeout or an error is "no context", never an exception in the agent's loop. Keep it that
   way in your wrapper.
 
-## How long to wait on the user message (`waitMs`; NEW only, D98)
+## How long to wait on the user message (`waitMs`; D98, D105)
 
 `observe` takes a `waitMs` option: how long the server may hold the user message's observe for a fresher answer
-before it replies. The client sends none by default; the server treats a missing value as 0 and caps it at 5,000 ms.
+before it replies. The client sends none by default (unless `defaultWaitMs` is set); the server treats a missing value
+as 0 and caps it at 5,000 ms.
 The client's own timeout for that request is 800 ms plus `waitMs`, so a long wait does not make the SDK give up early.
 Work still running when the wait ends arrives later through `pending`/`collect`, as above.
 
-- **Default configuration: no long wait needed.** Without the experimental reader, the observe returns as soon as its
-  lookup is done, so `waitMs` only bounds a slow lookup.
+- **Default configuration: pass a wait on the user message (about `waitMs: 1500`).** With no `waitMs` the observe
+  does not wait for its lookup: when the lookup is not already done it replies at once (`pending: true`) and the
+  answer lands in `pending`, so it misses the agent's first model call and a one-turn answer never sees it
+  (partner.ts `observe`: `waitMs <= 0` queues the slow path and returns). With `waitMs` the reply comes as soon as the
+  lookup ends, so a fast lookup costs no extra latency; only a slow one costs up to the wait. **Measured** (simulated
+  connectors at their profiles' assumed latency, `bun run funnel --preset none --suite train1,train2 --seeds 41 --
+  --time 1`, production defaults): all 11 deliveries arrived 630 to 1,336 ms after the user message (the harness
+  waits 3,000 ms). By those timings (inferred, not a run at each wait) no wait or 600 ms would have delivered 0 of
+  the 11 before the first model call, 800 ms 5, and 1,500 ms all 11. Warm in-process sources (the README's static
+  file) answer in milliseconds, so there the wait is rarely spent. Either pass `waitMs` on each user message's
+  observe or set the client's `defaultWaitMs: 1500`, which does it for every sent user message and nothing else
+  (D105, proposed; unset by default).
 - **Running NEW (`readerPush` with `askReader`, D98): pass about `waitMs: 3000` on the user message's observe.** The
   reader then reads the request on the critical path, and its call is paid for whatever wait you pass; with too short
   a wait its packet lands after the agent has answered. **Measured** in the lab (Haiku 5.5, simulated worlds), against
@@ -124,6 +152,50 @@ lookup never waits for a poll. Today this is an engine API (`ContextPartner.sour
 `sync` and `syncPush`); there is no HTTP route for it yet. A notice carries no content: Eden reads the change through
 the same read-only tools (D7). The connectors' push APIs cost about nothing in fees (research §5); the costs are your
 relay endpoint and watch renewal (7 days for Gmail and Outlook).
+
+## Connect each user's own sources (D108)
+
+The server reads the end user's accounts with that user's credentials, never another's. Two ways to say which:
+
+- **A file**, for a small deployment: `EDEN_USER_SOURCES_FILE=users.json`, one entry per `"<tenantId>/<userId>"`.
+  Header values can name an environment variable, so the file holds no token:
+
+  ```json
+  {
+    "users": {
+      "acme/u1": [
+        {
+          "kind": "mcp",
+          "id": "notes",
+          "description": "The user's notes",
+          "url": "https://notes.example.com/mcp",
+          "headers": { "Authorization": { "env": "U1_NOTES_TOKEN" } },
+          "searchTool": { "name": "search_notes" }
+        },
+        { "kind": "static", "id": "faq", "description": "Team FAQ", "docs": [] }
+      ]
+    }
+  }
+  ```
+
+  The file is checked at startup (a bad entry or an unset env header stops the server with a message naming it) and
+  re-read when it changes, entry by entry (a broken entry is that user's error; the rest apply). `EDEN_SOURCES_FILE` stays for static documents every user shares; its entries need `docs`.
+- **Your own directory**, when you embed the server: `new UserSources({ directory: async (scope) => specs })` reads
+  the user's connected accounts and tokens from your vault, then pass `userSources.resolver` to `buildPartner` and
+  `userSources` to `createHandler`. Return specs with `url` and `headers` (or the same `transport` function while a
+  connection is unchanged: a new function is read as a new credential and reconnects). Put credentials in `headers`
+  or `transport`, never in a `searchTool.args` closure: `args` is compared by its text, so a rotated token there is
+  not noticed.
+
+What Eden does with them: an MCP source must pass the read-only check (D7: `readOnlyHint: true`, or the tool named in
+`trustedReadTools` after you checked it by hand). Connections open on the first lookup and are kept per (tenant, user,
+source). The directory is asked again at most every 60 s: a rotated token reconnects, a removed source closes, and a
+directory error (or no answer within 5 s) closes the user's connections and serves them only the shared sources until
+it is fixed. `POST /v1/sources
+{userId}` lists what a user has, or answers 422 naming their configuration error. `POST /v1/forget` closes the
+user's connections as well as dropping what Eden holds; a user idle 15 minutes is closed too
+(unless background sync keeps reading them), and each tenant holds at most 10,000 users' connections. Forget does not edit
+your configuration: to revoke a connection, remove it from the directory (and forget, to drop what was read).
 
 ## Configuration
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
-import { Budget, FakeModel } from "@eden/llm";
+import { Budget, FakeModel, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
@@ -320,6 +320,30 @@ describe("the reader's prompt and output (reader.ts)", () => {
     await new ModelReaderMaker(model).read(input(), new AbortController().signal);
     expect(model.calls[0]!.cacheKey).toBe("eden-abc");
     expect(model.calls[1]!.cacheKey).toBeUndefined();
+  });
+
+  test("the model maker asks for low reasoning by default; 'off' sends no effort and 'high' passes through", async () => {
+    const model = new FakeModel(() => '{"bears":[]}');
+    const signal = new AbortController().signal;
+    await new ModelReaderMaker(model).read(input(), signal);
+    await new ModelReaderMaker(model, { reasoning: "off" }).read(input(), signal);
+    await new ModelReaderMaker(model, { reasoning: "high" }).read(input(), signal);
+    expect(model.calls[0]!.reasoning).toBe("low");
+    expect("reasoning" in model.calls[1]!).toBe(false);
+    expect(model.calls[2]!.reasoning).toBe("high");
+    // The prompt is the same whatever the effort: the replay cache key (READER_VERSION) does not change.
+    expect(model.calls[1]!.messages).toEqual(model.calls[0]!.messages);
+  });
+
+  test("the model maker hands the call's usage back unchanged, reasoning tokens included", async () => {
+    const usage = { inputTokens: 3_900, outputTokens: 310, cachedInputTokens: 0, reasoningTokens: 120 };
+    const model: Model = {
+      id: "stub",
+      chat: async () => ({ text: '{"bears":[]}', usage, costUsd: 0.0004, model: "stub", latencyMs: 0 }),
+    };
+    const got = await new ModelReaderMaker(model).read(input(), new AbortController().signal);
+    expect(got.usage).toEqual(usage);
+    expect(got.costUsd).toBe(0.0004);
   });
 });
 
@@ -673,15 +697,20 @@ describe("the reader in the engine (config.askReader)", () => {
   });
 
   test("readerPushWaitMs 0: observe returns before a slow reader; its packet is queued when it lands", async () => {
-    const slow = new ScriptedReader(flags("mail:hold"), { delayMs: 800 });
+    // The reading is held until the test releases it, so observe returning at all shows it did not wait for it; the
+    // time bound only tells "returned at once" from "waited the 3 s it was allowed", with a wide margin either way.
+    const gate = new Gate();
+    const slow = new ScriptedReader(flags("mail:hold"), { gate });
     const t0 = performance.now();
     const r = await run(
       { askReader: true, readerPush: true, readerPushWaitMs: 0, askReaderWaitMs: 3_000 },
       { asks: 0, maker: slow, waitMs: 3_000 },
     );
-    expect(performance.now() - t0).toBeLessThan(400);
+    expect(performance.now() - t0).toBeLessThan(1_500);
+    await until(() => slow.calls.length === 1);
     expect(r.partner.takePending({ tenantId: "t", userId: "u1", sessionId: "s1" }).length).toBe(0);
-    await Bun.sleep(1_000);
+    gate.release();
+    await slow.idle();
     const later = r.partner.takePending({ tenantId: "t", userId: "u1", sessionId: "s1" });
     expect(later.find((x) => x.reason.startsWith("reader:"))).toBeDefined();
   });

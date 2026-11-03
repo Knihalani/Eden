@@ -2,7 +2,10 @@
  * Interner designs on the same scan: identity by comparing against string objects, against a character arena, or by
  * a two-lane fingerprint with no comparison (what `Vocab` does). Each is a minimal open-addressing table.
  */
+import { heapStats } from "bun:jsc";
 import { CLASS, classOf, WORD_PART, WORD_START } from "../src/charclass";
+import { tokenizeInto } from "../src/tokenize";
+import { Vocab } from "../src/vocab";
 import { bench, corpus, report } from "./harness";
 
 const text = corpus(2048);
@@ -129,3 +132,79 @@ report([
   bench("+ intern, compare against a char arena", () => scan(text, viaArena), { batch: 50 }),
   bench("+ intern, two-lane fingerprint (Vocab)", () => scan(text, viaFingerprint), { batch: 50 }),
 ]);
+
+// The Vocab class itself: lookups of known terms (what every query does), and a churn of new terms in and old ones
+// released at a steady 4,096 live (what an index with `onTermFreed` does to a user's vocabulary; release is new).
+const words = [...new Set(text.toLowerCase().match(/[a-z]+/g) ?? [])];
+const known = new Vocab();
+for (const w of words) known.intern(w);
+let wi = 0;
+const churn = new Vocab();
+const ring: number[] = [];
+let fresh = 0;
+const rows = [
+  bench(`Vocab.lookup, ${words.length} known terms`, () => {
+    let acc = 0;
+    for (let i = 0; i < words.length; i++) acc += known.lookup(words[(wi + i) % words.length]!);
+    wi++;
+    return acc;
+  }),
+];
+if (typeof (churn as { release?: unknown }).release === "function") {
+  for (; fresh < 4_096; fresh++) ring.push(churn.intern(`t${fresh}`));
+  rows.push(
+    bench("Vocab.intern new + release oldest, 4,096 live", () => {
+      churn.release(ring[fresh % 4_096]!);
+      ring[fresh % 4_096] = churn.intern(`t${fresh}`);
+      fresh++;
+      return churn.size;
+    }),
+  );
+}
+report(rows);
+
+// Every term new (a cold vocabulary): what interning a user's first items costs, where each new term is folded and
+// stored. 2 KB of text with 10% non-ASCII, a fresh Vocab per run.
+const cold = corpus(2048, { nonAscii: true, seed: 5 });
+const coldOut = new Uint32Array(cold.length);
+report([
+  bench("tokenizeInto, cold Vocab (every term new), 2 KB +10% non-ASCII", () =>
+    tokenizeInto(cold, new Vocab(256), true, coldOut, null),
+  ),
+]);
+
+// Heap per stored term: the slope of the JSC heap from 20k to 120k distinct terms of 9-22 characters, each interned
+// from a slice of one flat text (as `tokenizeInto` hands them over).
+{
+  const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let seed = 11;
+  const rand = () => (seed = (Math.imul(seed, 1_103_515_245) + 12_345) >>> 0) / 2 ** 32;
+  const parts: string[] = [];
+  for (let i = 0; i < 120_000; i++) {
+    let w = "";
+    for (let j = 8 + Math.floor(rand() * 10); j > 0; j--) w += letters[Math.floor(rand() * letters.length)];
+    parts.push(`${w}${i}`);
+  }
+  const flat = parts.join(" ");
+  parts.length = 0;
+  const v = new Vocab(1 << 18);
+  let at = 0;
+  const intern = (n: number) => {
+    for (let k = 0; k < n; k++) {
+      let e = flat.indexOf(" ", at);
+      if (e < 0) e = flat.length;
+      v.intern(flat.slice(at, e));
+      at = e + 1;
+    }
+  };
+  const heap = () => {
+    Bun.gc(true);
+    Bun.gc(true);
+    return heapStats().heapSize;
+  };
+  intern(20_000);
+  const a = heap();
+  intern(100_000);
+  const b = heap();
+  console.log(`Vocab heap per stored term (20k -> 120k terms): ${((b - a) / 100_000).toFixed(1)} B/term`);
+}

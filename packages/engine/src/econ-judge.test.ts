@@ -691,3 +691,85 @@ describe("syncPollBehind and judgeBehind: review regressions", () => {
     }
   });
 });
+
+// Audit 2026-11-03b (corr-poll-behind-calls-untraced): a lookup that does not wait for its on-demand poll leaves the
+// poll's listing calls out of its own trace, so the poll gets a "skipped" trace of its own when it settles. Summed over
+// the traces, the calls are what the connector received, flag on or off.
+describe("syncPollBehind: the poll's calls are traced", () => {
+  const settle = async (p: ContextPartner) => {
+    const table = (p as unknown as { sessions: Map<string, { inflight: unknown; behind?: unknown }> }).sessions;
+    for (let k = 0; k < 500 && [...table.values()].some((x) => x.inflight || x.behind); k++) await Bun.sleep(1);
+  };
+  const run = async (config: Record<string, unknown>, closeEarly = false) => {
+    let clock = T0;
+    const src = new SlowListSource("mail");
+    src.add("old", "Dana Lee: budget", "Dana Lee says the budget review moved to Friday", T0 - 2 * HOUR);
+    for (let i = 0; i < 4; i++) src.add(`n${i}`, `Note ${i}`, `Note ${i} about lunch orders`, T0 - (3 + i) * HOUR);
+    const traces: Trace[] = [];
+    const p = new ContextPartner({
+      sources: async () => [src],
+      sourceMap: new SourceMap(":memory:", { seed: 1 }),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      onTrace: (t) => traces.push(t),
+      config: { sync: true, syncPageSize: 2, syncCallsPerMin: 600, syncMaxStaleMs: 4 * HOUR, ...config },
+    });
+    p.sync!.track(scope);
+    while (!p.sync!.warm(scope)) await p.sync!.tick();
+    const received = () => src.lists + src.searches;
+    const before = received();
+    const say = (text: string, sessionId = "s1") =>
+      p.observe({ ...scope, sessionId, at: clock, kind: "user_message", text } as AgentEvent, { waitMs: 2_000 });
+    clock += 5 * HOUR; // Stale: the first lookup polls (and stores nothing).
+    src.hold();
+    const first = say("When is the Dana Lee budget review?");
+    if (closeEarly) {
+      await Bun.sleep(5);
+      await p.observe({ ...scope, sessionId: "s1", at: clock, kind: "session_end" } as AgentEvent);
+    }
+    src.release();
+    await first;
+    await settle(p);
+    if (!closeEarly) {
+      clock += 5 * HOUR; // Stale again; this poll stores the new item, and its follow-up is traced too.
+      src.add("new", "Dana Lee: budget review cancelled", "Dana Lee cancelled the budget review entirely", clock);
+      src.hold();
+      const second = say("Is the Dana Lee budget review cancelled?", "s2");
+      await Bun.sleep(5);
+      src.release();
+      await second;
+      await settle(p);
+    }
+    await Bun.sleep(5);
+    const traced = traces.reduce((n, t) => n + t.sourceCalls + (t.anticipateCalls ?? 0), 0);
+    return { received: received() - before, traced, traces };
+  };
+
+  for (const on of [false, true]) {
+    test(`syncPollBehind ${on ? "on" : "off"}: the traces sum to the calls the connector received`, async () => {
+      const { received, traced, traces } = await run({ syncPollBehind: on });
+      expect(received).toBeGreaterThan(0);
+      expect(traced).toBe(received);
+      const polls = traces.filter((t) => t.reason === "sync poll behind");
+      if (!on) expect(polls).toEqual([]);
+      else {
+        // One per lookup that left a poll running, whether or not it stored anything; never a decision to be silent.
+        expect(polls.length).toBe(2);
+        for (const t of polls) {
+          expect(t.decision).toBe("skipped");
+          expect(t.syncCalls).toBe(t.sourceCalls);
+          expect(t.itemIds).toEqual([]);
+        }
+      }
+    });
+  }
+
+  test("a session closed while its poll is out still gets the poll's trace: the calls were made", async () => {
+    const { received, traced, traces } = await run({ syncPollBehind: true }, true);
+    expect(received).toBeGreaterThan(0);
+    expect(traced).toBe(received);
+    expect(traces.filter((t) => t.reason === "sync poll behind")).toHaveLength(1);
+  });
+});

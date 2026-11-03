@@ -8,6 +8,9 @@
  *
  * Removal marks the doc dead (skipped when scoring) and updates df and lengths at once; postings of dead docs are
  * purged in one compaction pass when they reach ~10% of all postings, after which their doc numbers are reused.
+ * Compaction also frees the posting arrays it emptied and reports each term no live doc holds any more
+ * (`onTermFreed`): from then on nothing in the index refers to that term id, so its owner may release it
+ * (`Vocab.release`) and the id may come back as another term.
  *
  * Fields. A doc may have several fields (title, body): each field has its own postings, length normalization (`b`)
  * and weight, and a doc's score is the weighted sum of per-field BM25 (the multi-field model Lucene and Orama use).
@@ -34,6 +37,11 @@ export interface SparseIndexOptions {
   weights?: number[];
   /** BM25+ lower bound per matched term and field, default 0 (plain BM25). */
   delta?: number;
+  /**
+   * Called during compaction for each term id that no doc, live or dead, refers to any more (its last holder was
+   * removed and its postings purged). Not called for a term that was never added.
+   */
+  onTermFreed?: (term: number) => void;
 }
 
 export interface SearchResults {
@@ -46,15 +54,42 @@ export interface SearchResults {
 
 const EMPTY = new Uint32Array(0);
 
+// Insert and query scratch, indexed by term id, shared by every index: JavaScript runs one `addFields` or `search` at
+// a time and neither yields, so one copy serves all (each per-user index held its own before: 24 bytes per term id
+// of the user's vocabulary). Insert: per-field counts tagged with a stamp (no clearing, no hashing), the doc-level
+// seen stamp and the touched-term lists; it replaced a Map and a Set per insert (bench/index.bench.ts). Query: the
+// query that last held each term, so a repeated term is skipped in O(1). Stamps only grow and are shared, so a stamp
+// left by one index never equals a later one of another.
+let tfCount: Uint32Array = new Uint32Array(1_024);
+let tfStamp: Uint32Array = new Uint32Array(1_024);
+let docStamp: Uint32Array = new Uint32Array(1_024);
+let stampNo = 0;
+let fieldTouched: Uint32Array = new Uint32Array(1_024);
+let docTouched: Uint32Array = new Uint32Array(1_024);
+let queryTermStamp: Uint32Array = new Uint32Array(1_024);
+let termQueryNo = 0;
+
+/** Grows the insert scratch so term id `t` fits; lists are sized like the arrays (a field has ≤ that many terms). */
+function growScratch(t: number): void {
+  let size = tfCount.length;
+  while (size <= t) size *= 2;
+  tfCount = growU32(tfCount, size);
+  tfStamp = growU32(tfStamp, size);
+  docStamp = growU32(docStamp, size);
+  fieldTouched = growU32(fieldTouched, size); // may grow mid-field: keep what this field touched so far
+  docTouched = growU32(docTouched, size);
+}
+
 export class SparseIndex {
   private readonly k1: number;
   private readonly fields: number;
   private readonly b: Float64Array;
   private readonly weights: Float64Array;
   private readonly delta: number;
+  private readonly onTermFreed: ((term: number) => void) | undefined;
   // Per term key (term × fields + field): postings.
-  private postDocs: Uint32Array[] = [];
-  private postTfs: Uint16Array[] = [];
+  private postDocs: (Uint32Array | undefined)[] = [];
+  private postTfs: (Uint16Array | undefined)[] = [];
   private postLen: Uint32Array = new Uint32Array(64);
   // Per term id: docs (any field) that hold it.
   private df: Uint32Array = new Uint32Array(64);
@@ -67,6 +102,8 @@ export class SparseIndex {
   private live = 0;
   private deadPostings = 0;
   private totalPostings = 0;
+  // Term ids some live doc holds (df > 0).
+  private liveTerms = 0;
   private freeDocs: number[] = [];
   private pendingFree: number[] = [];
   // Query scratch.
@@ -77,16 +114,6 @@ export class SparseIndex {
   private stamp = new Uint32Array(64);
   private touched = new Int32Array(64);
   private queryNo = 0;
-  // Per term: the query that last held it, so a repeated query term is skipped in O(1).
-  private queryTermStamp: Uint32Array = new Uint32Array(64);
-  // Insert scratch, indexed by term id: per-field counts tagged with a stamp (no clearing, no hashing), the doc-level
-  // seen stamp, and the touched-term lists. Replaced a Map and a Set per insert (bench/index.bench.ts).
-  private tfCount = new Uint32Array(1_024);
-  private tfStamp = new Uint32Array(1_024);
-  private docStamp = new Uint32Array(1_024);
-  private stampNo = 0;
-  private fieldTouched = new Uint32Array(1_024);
-  private docTouched = new Uint32Array(1_024);
 
   constructor(options: SparseIndexOptions = {}) {
     this.k1 = options.k1 ?? 1.2;
@@ -94,6 +121,7 @@ export class SparseIndex {
     this.b = Float64Array.from({ length: this.fields }, (_, f) => options.b?.[f] ?? 0.75);
     this.weights = Float64Array.from({ length: this.fields }, (_, f) => options.weights?.[f] ?? 1);
     this.delta = options.delta ?? 0;
+    this.onTermFreed = options.onTermFreed;
     this.totalLens = new Float64Array(this.fields);
     this.lens = new Float32Array(64 * this.fields);
   }
@@ -101,6 +129,11 @@ export class SparseIndex {
   /** Live documents. */
   get size(): number {
     return this.live;
+  }
+
+  /** Distinct term ids that some live doc holds. */
+  get termCount(): number {
+    return this.liveTerms;
   }
 
   /** Adds a one-field doc from its term ids in order (repeats are its term frequencies). Returns its doc number. */
@@ -112,36 +145,45 @@ export class SparseIndex {
   addFields(fieldTerms: Uint32Array[], counts: number[]): number {
     const F = this.fields;
     const doc = this.allocateDoc();
-    if (this.stampNo > 0xffff_fff0) {
+    if (stampNo > 0xffff_fff0 - F) {
       // Stamps are Uint32: before the counter wraps, clear them so an old stamp can never equal a new one.
-      this.tfStamp.fill(0);
-      this.docStamp.fill(0);
-      this.stampNo = 0;
+      tfStamp.fill(0);
+      docStamp.fill(0);
+      stampNo = 0;
     }
-    const docMark = ++this.stampNo;
+    const docMark = ++stampNo;
     let docUnique = 0;
+    // The scratch in locals (module bindings read slower in a hot loop); reloaded when `growScratch` replaces it.
+    let count = tfCount;
+    let fieldStamp = tfStamp;
+    let seen = docStamp;
+    let fieldList = fieldTouched;
+    let docList = docTouched;
     for (let f = 0; f < F; f++) {
       const terms = fieldTerms[f];
       const n = terms === undefined ? 0 : (counts[f] ?? 0);
-      const fieldMark = ++this.stampNo;
+      const fieldMark = ++stampNo;
       let fieldUnique = 0;
       for (let i = 0; i < n; i++) {
         const t = terms![i]!;
-        if (t >= this.tfCount.length) this.growScratch(t);
-        if (this.tfStamp[t] !== fieldMark) {
-          this.tfStamp[t] = fieldMark;
-          this.tfCount[t] = 0;
-          this.fieldTouched[fieldUnique++] = t;
+        if (t >= count.length) {
+          growScratch(t);
+          [count, fieldStamp, seen, fieldList, docList] = [tfCount, tfStamp, docStamp, fieldTouched, docTouched];
         }
-        this.tfCount[t]!++;
-        if (this.docStamp[t] !== docMark) {
-          this.docStamp[t] = docMark;
-          this.docTouched[docUnique++] = t;
+        if (fieldStamp[t] !== fieldMark) {
+          fieldStamp[t] = fieldMark;
+          count[t] = 0;
+          fieldList[fieldUnique++] = t;
+        }
+        count[t]!++;
+        if (seen[t] !== docMark) {
+          seen[t] = docMark;
+          docList[docUnique++] = t;
         }
       }
       for (let j = 0; j < fieldUnique; j++) {
-        const t = this.fieldTouched[j]!;
-        const c = this.tfCount[t]!;
+        const t = fieldList[j]!;
+        const c = count[t]!;
         const key = t * F + f;
         this.ensureKey(key);
         this.append(key, doc, c > 65_535 ? 65_535 : c);
@@ -150,12 +192,12 @@ export class SparseIndex {
       this.totalLens[f]! += n;
       this.totalPostings += fieldUnique;
     }
-    const unique = this.docTouched.slice(0, docUnique);
+    const unique = docList.slice(0, docUnique);
     unique.sort();
     for (let i = 0; i < docUnique; i++) {
       const t = unique[i]!;
       this.ensureTerm(t);
-      this.df[t]!++;
+      if (this.df[t]!++ === 0) this.liveTerms++;
     }
     this.docTerms[doc] = unique;
     this.alive[doc] = 1;
@@ -163,33 +205,26 @@ export class SparseIndex {
     return doc;
   }
 
-  /** Grows the insert scratch so term id `t` fits; lists are sized like the arrays (a field has ≤ that many terms). */
-  private growScratch(t: number): void {
-    let size = this.tfCount.length;
-    while (size <= t) size *= 2;
-    const grow = (a: Uint32Array) => {
-      const b = new Uint32Array(size);
-      b.set(a);
-      return b;
-    };
-    this.tfCount = grow(this.tfCount);
-    this.tfStamp = grow(this.tfStamp);
-    this.docStamp = grow(this.docStamp);
-    this.fieldTouched = grow(this.fieldTouched); // may grow mid-field: keep what this field touched so far
-    this.docTouched = grow(this.docTouched);
-  }
-
   remove(doc: number): void {
     if (doc < 0 || doc >= this.docs || this.alive[doc] === 0) return;
     this.alive[doc] = 0;
     const terms = this.docTerms[doc]!;
     const F = this.fields;
-    for (let i = 0; i < terms.length; i++) this.df[terms[i]!]!--;
+    for (let i = 0; i < terms.length; i++) if (--this.df[terms[i]!]! === 0) this.liveTerms--;
     for (let f = 0; f < F; f++) this.totalLens[f]! -= this.lens[doc * F + f]!;
     this.live--;
     this.deadPostings += terms.length; // at least this many postings died (a term may sit in several fields)
     this.pendingFree.push(doc);
     if (this.deadPostings > 64 && this.deadPostings * 10 > this.totalPostings) this.compact();
+  }
+
+  /**
+   * Compacts now if any removed doc's postings are still held, so every term no live doc holds is freed
+   * (`onTermFreed`) before this returns. Removal compacts on its own once dead postings pass ~10%; this is for a
+   * caller that must know nothing of what it removed is left (a revoked source).
+   */
+  flush(): void {
+    if (this.pendingFree.length > 0) this.compact();
   }
 
   /** The doc's sorted unique term ids (all fields). */
@@ -240,12 +275,15 @@ export class SparseIndex {
     if (this.queryNo > 0xffff_ffff - n - 1) {
       // Stamps are Uint32: before the counter wraps, clear them so an old stamp can never equal a new one.
       this.stamp.fill(0);
-      this.queryTermStamp.fill(0);
       this.queryNo = 0;
     }
-    if (this.queryTermStamp.length < this.df.length) this.queryTermStamp = growU32(this.queryTermStamp, this.df.length);
-    const queryMark = ++this.queryNo;
-    const termStamp = this.queryTermStamp;
+    if (termQueryNo > 0xffff_fff0) {
+      queryTermStamp.fill(0);
+      termQueryNo = 0;
+    }
+    if (queryTermStamp.length < this.df.length) queryTermStamp = growU32(queryTermStamp, this.df.length);
+    const queryMark = ++termQueryNo;
+    const termStamp = queryTermStamp;
     for (let q = 0; q < n; q++) {
       const t = query[q]!;
       if (t >= this.df.length || this.df[t] === 0) continue;
@@ -353,12 +391,17 @@ export class SparseIndex {
     this.postLen[key] = len + 1;
   }
 
-  /** Purges dead docs' postings from the keys they used, then frees their doc numbers for reuse. */
+  /**
+   * Purges dead docs' postings from the keys they used, frees the posting arrays left empty, then frees the dead docs'
+   * numbers for reuse and reports each of their terms no live doc holds (`onTermFreed`).
+   */
   private compact(): void {
     const F = this.fields;
     const dirty = new Set<number>();
+    const terms = new Set<number>();
     for (const doc of this.pendingFree) {
       for (const t of this.docTerms[doc]!) {
+        terms.add(t);
         for (let f = 0; f < F; f++) {
           const key = t * F + f;
           if (key < this.postLen.length && this.postDocs[key] !== undefined) dirty.add(key);
@@ -379,6 +422,16 @@ export class SparseIndex {
       }
       purged += len - w;
       this.postLen[key] = w;
+      if (w === 0) {
+        // Emptied: a term that comes back (or a new term on a released id) allocates afresh.
+        this.postDocs[key] = undefined;
+        this.postTfs[key] = undefined;
+      } else if (w * 4 < docs.length && docs.length > 16) {
+        // Mostly dead: shrink to twice what is left (appends grow by doubling), so a term whose holders came and
+        // went keeps no array sized for its peak.
+        this.postDocs[key] = docs.slice(0, w * 2);
+        this.postTfs[key] = tfs.slice(0, w * 2);
+      }
     }
     for (const doc of this.pendingFree) {
       this.docTerms[doc] = EMPTY;
@@ -387,6 +440,9 @@ export class SparseIndex {
     this.totalPostings -= purged;
     this.deadPostings = 0;
     this.pendingFree = [];
+    // Last: no doc number or posting names these terms now, so the callback may release them at once.
+    const freed = this.onTermFreed;
+    if (freed !== undefined) for (const t of terms) if (this.df[t] === 0) freed(t);
   }
 }
 

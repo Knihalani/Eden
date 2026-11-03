@@ -362,12 +362,16 @@ describe("QueryPlanner", () => {
 
   test("no call is started that cannot answer before the caller's deadline; a cut step is not credited", async () => {
     // A slow substring connector: the cue's terms find nothing, so the cascade (one call per entity) would follow.
+    // Each call takes 40 ms on the planner's clock, a fake one the call advances: no real wait, so a busy machine
+    // cannot move a call past the deadline.
+    let clock = 0;
+    const now = () => clock;
     const slow: Source = {
       id: "slow",
       kind: "t",
       description: "",
       search: async (q) => (
-        await Bun.sleep(40),
+        await Promise.resolve((clock += 40)),
         q.text === "Globex" ? [{ id: "slow:2", sourceId: "slow", ...DOCS[1]! }] : []
       ),
     };
@@ -375,33 +379,33 @@ describe("QueryPlanner", () => {
     const store: PlannerStore = { loadArms: () => [], saveArms: (_s, _id, arms) => void rows.push(...arms) };
     const q = query("globex renewal sam ortiz", ["Globex", "Sam Ortiz"]);
     // A 60 ms deadline: after a 40 ms call 20 ms are left, and a second call needs 80 (40 ms times the margin, 2).
-    const tight = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0, store });
-    const r = await tight.search(slow, q, signal, undefined, undefined, performance.now() + 60);
+    const tight = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0, store, now });
+    const r = await tight.search(slow, q, signal, undefined, undefined, clock + 60);
     expect(r.calls).toBe(1);
     expect(rows.filter((x) => x.shape === "cascade")).toEqual([]);
-    // The margin decides: with 110 ms, about 70 are left after the first call. Margin 1 needs 40, so it sends the
+    // The margin decides: with 110 ms, 70 are left after the first call. Margin 1 needs 40, so it sends the
     // next call; the default (2) needs 80, so it does not.
-    const loose = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0, deadlineMargin: 1 });
-    expect((await loose.search(slow, q, signal, undefined, undefined, performance.now() + 110)).calls).toBe(2);
-    const strict = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0 });
-    expect((await strict.search(slow, q, signal, undefined, undefined, performance.now() + 110)).calls).toBe(1);
+    const loose = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0, deadlineMargin: 1, now });
+    expect((await loose.search(slow, q, signal, undefined, undefined, clock + 110)).calls).toBe(2);
+    const strict = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0, now });
+    expect((await strict.search(slow, q, signal, undefined, undefined, clock + 110)).calls).toBe(1);
     // With time to spare, the cascade runs as before.
-    const roomy = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0 });
-    expect(
-      (await roomy.search(slow, q, signal, undefined, undefined, performance.now() + 5_000)).calls,
-    ).toBeGreaterThan(1);
+    const roomy = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0, now });
+    expect((await roomy.search(slow, q, signal, undefined, undefined, clock + 5_000)).calls).toBeGreaterThan(1);
     // No deadline: no cut.
     expect(
-      (await new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0 }).search(slow, q, signal)).calls,
+      (await new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0, now }).search(slow, q, signal)).calls,
     ).toBeGreaterThan(1);
   });
 
   test("the deadline check also expects the connector's recent latency, not only this lookup's calls", async () => {
+    let clock = 0;
+    const now = () => clock;
     const quick: Source = {
       id: "quick",
       kind: "t",
       description: "",
-      search: async () => (await Bun.sleep(5), []),
+      search: async () => (await Promise.resolve((clock += 5)), []),
     };
     // The connector's recent calls took 400 ms at the 0.9 quantile; this lookup's first call took 5 ms.
     const via: PlanCalls = {
@@ -410,21 +414,23 @@ describe("QueryPlanner", () => {
       expectMs: (_q, quantile) => (quantile === 0.9 ? 400 : 0),
     };
     const q = query("globex renewal sam ortiz", ["Globex", "Sam Ortiz"]);
-    const planner = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0 });
+    const planner = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0, now });
     // 200 ms left: the history says a call needs 800 (400 times the margin), so the cascade is not sent.
-    expect((await planner.search(quick, q, signal, undefined, via, performance.now() + 200)).calls).toBe(1);
+    expect((await planner.search(quick, q, signal, undefined, via, clock + 200)).calls).toBe(1);
     // With the history off (quantile 0), the lookup's own 5 ms call is the estimate, and the cascade runs.
-    const own = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0, latencyQuantile: 0 });
-    expect((await own.search(quick, q, signal, undefined, via, performance.now() + 200)).calls).toBeGreaterThan(1);
+    const own = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0, latencyQuantile: 0, now });
+    expect((await own.search(quick, q, signal, undefined, via, clock + 200)).calls).toBeGreaterThan(1);
   });
 
   test("a shape cut short by the deadline partway keeps its items but is not credited", async () => {
+    let clock = 0;
+    const now = () => clock;
     const slow: Source = {
       id: "slow",
       kind: "t",
       description: "",
       search: async (q) => (
-        await Bun.sleep(40),
+        await Promise.resolve((clock += 40)),
         q.text === "Globex" ? [{ id: "slow:2", sourceId: "slow", ...DOCS[1]! }] : []
       ),
     };
@@ -435,10 +441,11 @@ describe("QueryPlanner", () => {
       seed: 1,
       epsilon: 0,
       store,
+      now,
       incumbent: { shape: "each-entity", mean: 0.99, strength: 100 },
     });
     const q = query("globex renewal sam ortiz", ["Globex", "Sam Ortiz"]);
-    const r = await planner.search(slow, q, signal, undefined, undefined, performance.now() + 60);
+    const r = await planner.search(slow, q, signal, undefined, undefined, clock + 60);
     expect(r.shapes).toEqual(["each-entity"]);
     expect(r.calls).toBe(1);
     expect(r.items.map((i) => i.id)).toEqual(["slow:2"]);
@@ -446,10 +453,10 @@ describe("QueryPlanner", () => {
     // PlannedSource passes its lookup's deadline through.
     const p = new PlannedSource(
       slow,
-      new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0 }),
+      new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0, now }),
       undefined,
       undefined,
-      performance.now() + 60,
+      clock + 60,
     );
     await p.search(q, signal);
     expect(p.last!.calls).toBe(1);

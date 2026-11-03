@@ -119,6 +119,11 @@ export interface PlannerOptions {
    * nothing from it. Mutable on the planner (`mode`), so a deployment can promote shadow learning to serving.
    */
   mode?: "serve" | "shadow";
+  /**
+   * The clock the deadline check and call timings read (ms, on the same scale as the `deadlineAt` callers pass).
+   * Default `performance.now`; tests pass a fake clock so a deadline is checked without real waits.
+   */
+  now?: () => number;
 }
 
 /**
@@ -212,12 +217,14 @@ export class QueryPlanner {
   /** See `PlannerOptions.mode`. */
   mode: "serve" | "shadow";
   private readonly eligible = new Uint8Array(SHAPES.length);
+  private readonly now: () => number;
 
   constructor(options: PlannerOptions = {}) {
     this.o = { ...DEFAULTS, ...options };
     this.rng = new Xoshiro128(this.o.seed);
     this.incumbentArm = this.o.incumbent.strength > 0 ? SHAPES.indexOf(this.o.incumbent.shape) : -1;
     this.mode = options.mode ?? "serve";
+    this.now = options.now ?? (() => performance.now());
   }
 
   /**
@@ -231,7 +238,7 @@ export class QueryPlanner {
     signal: AbortSignal,
     permit?: () => boolean,
     via?: PlanCalls,
-    /** When the caller stops waiting (`performance.now()` ms): no call is started that cannot answer by then. */
+    /** When the caller stops waiting (ms on the planner's `now`): no call is started that cannot answer by then. */
     deadlineAt?: number,
   ): Promise<{ items: ContextItem[] } & PlanOutcome> {
     const input: ShapeInput = { text: query.text, entities: query.entities };
@@ -287,15 +294,14 @@ export class QueryPlanner {
         // A call after the first is sent only if it can answer before the caller's deadline, at this lookup's
         // slowest call so far (with a margin): one the deadline cuts off costs the connector a call, returns nothing,
         // and counts as a timeout against it. A shape cut short here is not credited (below).
-        if (calls > 0 && deadlineAt !== undefined && performance.now() + callMs * this.o.deadlineMargin > deadlineAt)
-          break;
+        if (calls > 0 && deadlineAt !== undefined && this.now() + callMs * this.o.deadlineMargin > deadlineAt) break;
         if (calls > 0 && permit && !permit()) break;
         calls++;
         sent++;
-        const t0 = performance.now();
+        const t0 = this.now();
         try {
           for (const it of await (via ? via.call(q, signal) : source.search(q, signal))) got.push(it);
-          callMs = Math.max(callMs, performance.now() - t0);
+          callMs = Math.max(callMs, this.now() - t0);
         } catch (e) {
           // What came back before the failure is reported with it, so a caller can account for the calls made.
           throw new PlanError(e, { items: [...items, ...got], shapes: [...shapes, SHAPES[arm]!], calls });
@@ -524,7 +530,7 @@ export class PlannedSource implements Source {
     private readonly permit?: () => boolean,
     /** The fan-out's cached, sanitized path for each call; absent: calls go straight to `inner`. */
     readonly via?: PlanCalls,
-    /** When the lookup's caller stops waiting (`performance.now()` ms). */
+    /** When the lookup's caller stops waiting (on the planner's `now`, default `performance.now()` ms). */
     private readonly deadlineAt?: number,
   ) {
     this.id = inner.id;

@@ -11,7 +11,7 @@
  * docs/research/edge-freelab.md). Nothing reads it from the environment: `fromEnv`, and so the server, never sets it.
  */
 import { costOf, priceFor } from "./pricing";
-import type { ChatMessage, ChatRequest, ChatResponse, Model } from "./types";
+import type { ChatMessage, ChatRequest, ChatResponse, Model, Usage } from "./types";
 
 export interface OpenRouterOptions {
   apiKey: string;
@@ -95,10 +95,13 @@ export class OpenRouterModel implements Model {
     );
     if (!res.ok) throw new Error(`openrouter ${res.status}: ${(await res.text()).slice(0, 300)}`);
     const data = (await res.json()) as OpenRouterResponse;
-    const usage = {
+    const reasoningTokens = data.usage?.completion_tokens_details?.reasoning_tokens;
+    const usage: Usage = {
       inputTokens: data.usage?.prompt_tokens ?? 0,
       outputTokens: data.usage?.completion_tokens ?? 0,
       cachedInputTokens: data.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+      // The reasoning is excluded from the reply but billed as output: its share is only visible here.
+      ...(typeof reasoningTokens === "number" ? { reasoningTokens } : {}),
     };
     return {
       text: data.choices?.[0]?.message?.content ?? "",
@@ -149,5 +152,6 @@ interface OpenRouterResponse {
     completion_tokens?: number;
     cost?: number;
     prompt_tokens_details?: { cached_tokens?: number };
+    completion_tokens_details?: { reasoning_tokens?: number };
   };
 }

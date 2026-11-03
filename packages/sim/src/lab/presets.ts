@@ -75,3 +75,20 @@ PRESETS.NEWL = {
   askReaderPool: 15,
   askReaderItemChars: 240,
 };
+// The deep audit of 2026-11-03 (finding lat-sync-poll-on-critical-path): ALL3 and NEW with `syncPollBehind`, so a
+// warm on-demand sync poll no longer blocks the search it freshens. At profile latency (`funnel -- --time 1`) the
+// poll was about 91% of ALL3's critical path. D72 left "syncPollBehind alone" to a fresh pre-registered run that never
+// happened; these presets name that configuration for it. Lab only: production defaults are unchanged, and ALL3/NEW
+// themselves are untouched. The trade (D57, D40): a stale warm copy can answer first, its correction queued for the
+// next request, which the static sim worlds cannot show.
+PRESETS.ALL3B = { ...PRESETS.ALL3, syncPollBehind: true };
+PRESETS.NEWB = { ...PRESETS.NEW, syncPollBehind: true };
+// The deep audit of 2026-11-03b, round 2. NEWBB (lat-push-read-waits-poll): NEWB with `readerPushBehind`, so the
+// push's reader starts on the index as it stands instead of after the poll; a poll that stores something gets one
+// second reading. ALL3BG and NEWBG (lat-probe-grace-floor): ALL3B and NEWB with no probe grace, so a lookup no longer
+// waits up to 100 ms past its own search for its probes (D47's grace; what a late probe finds is still cached for
+// later turns, but this lookup does not rank it). A plain override, measured as shipped. Lab only: no default changes,
+// and D47's live probe gain was measured with the grace on, so a Pi run is owed before any decision.
+PRESETS.NEWBB = { ...PRESETS.NEWB, readerPushBehind: true };
+PRESETS.ALL3BG = { ...PRESETS.ALL3B, probeGraceMs: 0 };
+PRESETS.NEWBG = { ...PRESETS.NEWB, probeGraceMs: 0 };

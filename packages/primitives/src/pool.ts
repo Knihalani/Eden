@@ -14,6 +14,8 @@
  * - Deadline: a batch still running after `taskTimeoutMs` has its worker terminated and replaced, and every task in
  *   it rejects with `PoolTimeoutError`. This is what bounds a pathological input; nothing else can stop a
  *   synchronous loop.
+ * - Warm-up: `warm` names a task every worker (a replacement too) runs once before it is ready, so state its tasks
+ *   build lazily (the secret gate's compiled rules) is not paid by the first batch the worker serves.
  * - Policy: `runOrInline` runs a task on the calling thread when its cost (the caller's estimate, e.g. characters)
  *   is below `inlineBelow`, where the message round trip would cost more than the work, or when the pool is full.
  */
@@ -41,6 +43,13 @@ export interface PoolOptions {
   taskTimeoutMs: number;
   /** `runOrInline` runs tasks whose cost is below this on the calling thread. */
   inlineBelow: number;
+  /**
+   * A task (exported by `module`, called with no input) each worker runs once after importing the module and before
+   * it counts as ready, replacement workers included: a cache or compiled state the tasks would otherwise build on
+   * their first batch, so that batch is not the slow one. A missing export fails the worker's start; a warm task that
+   * throws is ignored (the worker warms lazily, as without one).
+   */
+  warm?: string;
 }
 
 export interface PoolStats {
@@ -97,7 +106,10 @@ export class WorkerPool {
     private readonly local: Record<string, unknown>,
   ) {}
 
-  /** Starts `size` workers and resolves once each has imported the task module (Bun: ~8 ms each, measured). */
+  /**
+   * Starts `size` workers and resolves once each has imported the task module (Bun: ~8 ms each, measured) and run
+   * the `warm` task, if any.
+   */
   static async start(options: PoolOptions): Promise<WorkerPool> {
     const local = (await import(options.module)) as Record<string, unknown>;
     const pool = new WorkerPool(options, local);
@@ -201,7 +213,7 @@ export class WorkerPool {
       event.preventDefault();
       this.replace(slot, new Error(`pool worker crashed: ${event.message}`));
     };
-    worker.postMessage({ module: this.options.module });
+    worker.postMessage({ module: this.options.module, warm: this.options.warm });
     return slot;
   }
 

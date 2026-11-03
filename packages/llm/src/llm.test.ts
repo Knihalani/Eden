@@ -269,4 +269,26 @@ describe("OpenRouterModel", () => {
     expect(sent.reasoning).toEqual({ effort: "low", exclude: true });
     expect(out.truncated).toBe(true);
   });
+
+  test("reads the hidden reasoning's share of the output when reported, and leaves it unset when not", async () => {
+    const replies = [
+      { prompt_tokens: 300, completion_tokens: 310, completion_tokens_details: { reasoning_tokens: 120 } },
+      { prompt_tokens: 300, completion_tokens: 190 },
+      { prompt_tokens: 300, completion_tokens: 190, completion_tokens_details: {} },
+    ];
+    let i = 0;
+    const fake = (async () =>
+      Response.json({ choices: [{ message: { content: "{}" } }], usage: replies[i++] })) as unknown as typeof fetch;
+    const model = new OpenRouterModel({ apiKey: "k", model: "z-ai/glm-5.3-flash", fetch: fake });
+    const req = { messages: [{ role: "user" as const, content: "hi" }], maxTokens: 500, reasoning: "low" as const };
+    const reported = await model.chat(req);
+    expect(reported.usage.reasoningTokens).toBe(120);
+    expect(reported.usage.outputTokens).toBe(310);
+    for (const _ of [1, 2]) {
+      const silent = await model.chat(req);
+      expect(silent.usage.reasoningTokens).toBeUndefined();
+      expect("reasoningTokens" in silent.usage).toBe(false);
+      expect(silent.usage.outputTokens).toBe(190);
+    }
+  });
 });
