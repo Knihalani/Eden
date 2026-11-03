@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { runScenarios } from "./run";
+import { ORACLE_LABEL, proxyOf, runScenarios, unwiredFlags } from "./run";
 import type { Scenario } from "./scenario";
 
 const scenario = JSON.parse(
@@ -103,5 +103,87 @@ describe("eval harness", () => {
     expect(on.plannedLookups).toBeGreaterThan(0);
     expect(off.plannedLookups).toBe(0);
     expect(on.falseFireRate).toBe(0);
+  });
+});
+
+const load = (id: string) =>
+  JSON.parse(readFileSync(join(import.meta.dir, "..", "scenarios", `${id}.json`), "utf8")) as Scenario;
+// NEW's reader flags (packages/sim/src/lab/presets.ts); the eval wires no cards, so the rest of NEW is beside the
+// point here.
+const READER = { askReader: true, askReaderDrop: true, readerPush: true };
+
+describe("eval harness: the reader family (--reader stub|oracle)", () => {
+  const freeze = load("large-vendor-freeze");
+
+  test("stub: the real AskReader is wired, its calls counted and the expected items found in its pool", async () => {
+    const m = await runScenarios([freeze], { model: null, waitMs: 1_000, config: READER, reader: "stub" });
+    const pool = m.readerPool!;
+    expect(pool.reader).toBe("stub");
+    expect(pool.calls).toBeGreaterThan(0);
+    expect(pool.reads).toBe(pool.calls);
+    // The acting request's two expected items (the hold and the invoice) were both in what the reader would read.
+    expect(pool).toMatchObject({ expected: 2, expectedInPool: 2 });
+    expect(pool.byCategory.purchases).toEqual({ expected: 2, expectedInPool: 2 });
+    expect(m.decisions["reader-push"]).toBeGreaterThan(0);
+    // A stub never binds: the hold, which shares few words with the request, is still not delivered.
+    expect(m.counts.found).toBe(1);
+    // The engine traces the reader's calls as model calls (the rate a real reader would be called at); they cost $0.
+    expect(m.modelCallsPerTurn).toBe(pool.calls / m.turns);
+    expect(m.costPerTurnUsd).toBe(0);
+  });
+
+  test("without --reader no reader is wired: askReader is inert and there is no pool report", async () => {
+    const m = await runScenarios([freeze], { model: null, waitMs: 1_000, config: READER });
+    expect(m.readerPool).toBeUndefined();
+    expect(m.decisions["reader-push"]).toBeUndefined();
+  });
+
+  test("oracle: flags exactly the expected items, so the hold is delivered; its scores are labelled proxies", async () => {
+    const m = await runScenarios([freeze], { model: null, waitMs: 1_000, config: READER, reader: "oracle" });
+    expect(m.counts.found).toBe(2);
+    expect(m.falseFireRate).toBe(0);
+    const proxy = proxyOf(m);
+    expect(proxy.label).toBe(ORACLE_LABEL);
+    expect(proxy.label).toStartWith("PROXY");
+    // Every score key names itself a proxy, at the top and per category: none reads as a headline metric.
+    for (const k of Object.keys(proxy).filter((k) => k !== "label")) expect(k).toStartWith("proxy");
+    for (const c of Object.values(proxy.proxyByCategory)) {
+      for (const k of Object.keys(c)) expect(k).toStartWith("proxy");
+    }
+    expect(proxy.proxyCounts.found).toBe(2);
+  });
+
+  test("flags whose dependency the eval does not wire are named", () => {
+    expect(unwiredFlags({}, { reader: false })).toEqual([]);
+    expect(unwiredFlags({ askReader: true }, { reader: true })).toEqual([]);
+    const named = unwiredFlags(
+      { askReader: true, cards: true, intent: true, askReaderStanding: 20, bridgeQuery: true },
+      { reader: false },
+    ).map((s) => s.split(" ")[0]);
+    expect(named).toEqual(["askReader", "cards", "intent", "askReaderStanding", "bridgeQuery"]);
+  });
+});
+
+describe("scenarios", () => {
+  const dir = join(import.meta.dir, "..", "scenarios");
+  const all = readdirSync(dir)
+    .filter((f) => f.endsWith(".json"))
+    .map((f) => JSON.parse(readFileSync(join(dir, f), "utf8")) as Scenario);
+
+  test("every expected item exists in its scenario's sources", () => {
+    for (const s of all) {
+      const ids = new Set(s.sources.flatMap((src) => src.docs.map((d) => `${src.id}:${d.ref}`)));
+      const wanted = [
+        ...s.sessions.flatMap((x) => x.turns.flatMap((t) => (t.expect && t.expect !== "silent" ? t.expect.items : []))),
+        ...(s.asks ?? []).flatMap((a) => a.expect),
+      ];
+      for (const id of wanted) expect(`${s.id}: ${id} ${ids.has(id)}`).toBe(`${s.id}: ${id} true`);
+    }
+  });
+
+  test("the large scenarios hold 50+ documents each, so retrieval is not trivial", () => {
+    const large = all.filter((s) => s.id.startsWith("large-"));
+    expect(large.length).toBeGreaterThanOrEqual(3);
+    for (const s of large) expect(s.sources.reduce((n, src) => n + src.docs.length, 0)).toBeGreaterThanOrEqual(50);
   });
 });

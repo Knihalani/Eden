@@ -1,0 +1,372 @@
+{
+  "id": "large-vendor-freeze",
+  "category": "purchases",
+  "description": "60 documents. Paying one vendor's invoice while payments to that vendor are on hold; lookalikes: a vendor with the same first word whose hold was lifted, last year's lifted hold, and the vendor's other invoices.",
+  "clock": "2026-11-03T09:00:00Z",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "mail-misc-8",
+          "title": "Car service (Tomas Quinlan)",
+          "text": "Your car is due its annual service; we have slots on the 9th and the 16th. — Tomas Quinlan"
+        },
+        {
+          "ref": "mail-misc-9",
+          "title": "Streaming receipt (Noor Varga)",
+          "text": "Thanks for your payment; your streaming plan continues for another month. — Noor Varga"
+        },
+        {
+          "ref": "invoice-4390",
+          "title": "Acme Logistics invoice 4390 paid",
+          "text": "Remittance: invoice 4390 for September freight was paid on 2 October."
+        },
+        {
+          "ref": "mail-misc-26",
+          "title": "Plumber visit (Bea Ostrom)",
+          "text": "The plumber can come on Wednesday morning to look at the kitchen tap; access via side gate. — Bea Ostrom"
+        },
+        {
+          "ref": "mail-misc-18",
+          "title": "Book club (Bea Novak)",
+          "text": "This month we read The Overstory; bring a snack and your notes on chapter nine. — Bea Novak"
+        },
+        {
+          "ref": "mail-misc-1",
+          "title": "Electricity bill (Oskar Byrne)",
+          "text": "Your statement for the period is ready; direct debit will be taken on the 21st. — Oskar Byrne"
+        },
+        {
+          "ref": "mail-misc-21",
+          "title": "Wine club (Kwame Mbeki)",
+          "text": "This quarter's case has six reds from the Douro; tasting notes are enclosed. — Kwame Mbeki"
+        },
+        {
+          "ref": "mail-misc-27",
+          "title": "Mortgage statement (Ruth Tanaka)",
+          "text": "Your annual mortgage statement is available to download from the portal. — Ruth Tanaka"
+        },
+        {
+          "ref": "mail-misc-15",
+          "title": "Garden centre order (Maya Halvorsen)",
+          "text": "Two bags of compost and a lavender plant are ready to collect from the garden centre. — Maya Halvorsen"
+        },
+        {
+          "ref": "mail-misc-4",
+          "title": "Car service (Hiro Byrne)",
+          "text": "Your car is due its annual service; we have slots on the 9th and the 16th. — Hiro Byrne"
+        },
+        {
+          "ref": "invoice-4471",
+          "title": "Acme Logistics invoice 4471",
+          "text": "Invoice 4471 from Acme Logistics for October freight, 2,300 GBP, due 10 November."
+        },
+        {
+          "ref": "mail-misc-6",
+          "title": "Office plants (Ines Tanaka)",
+          "text": "Facilities will water the office plants on Fridays; please do not move the ficus. — Ines Tanaka"
+        },
+        {
+          "ref": "mail-misc-20",
+          "title": "Wine club (Noor Ostrom)",
+          "text": "This quarter's case has six reds from the Douro; tasting notes are enclosed. — Noor Ostrom"
+        },
+        {
+          "ref": "acme-catering-invoice",
+          "title": "Acme Catering invoice 88",
+          "text": "Invoice 88 from Acme Catering for the offsite lunch, 640 GBP, due 20 November."
+        },
+        {
+          "ref": "mail-misc-11",
+          "title": "Mortgage statement (Amara Ostrom)",
+          "text": "Your annual mortgage statement is available to download from the portal. — Amara Ostrom"
+        },
+        {
+          "ref": "mail-misc-17",
+          "title": "Car service (Kwame Varga)",
+          "text": "Your car is due its annual service; we have slots on the 9th and the 16th. — Kwame Varga"
+        },
+        {
+          "ref": "mail-misc-3",
+          "title": "Streaming receipt (Ines Tanaka)",
+          "text": "Thanks for your payment; your streaming plan continues for another month. — Ines Tanaka"
+        },
+        {
+          "ref": "mail-misc-23",
+          "title": "Mortgage statement (Bea Novak)",
+          "text": "Your annual mortgage statement is available to download from the portal. — Bea Novak"
+        },
+        {
+          "ref": "mail-misc-7",
+          "title": "Piano lessons (Ines Novak)",
+          "text": "Lessons move to 5pm on Tuesdays from next month; please practise the scales. — Ines Novak"
+        },
+        {
+          "ref": "mail-misc-2",
+          "title": "Podcast recommendation (Amara Mbeki)",
+          "text": "You might like the episode on urban beekeeping, about forty minutes long. — Amara Mbeki"
+        },
+        {
+          "ref": "mail-misc-24",
+          "title": "Streaming receipt (Bea Tanaka)",
+          "text": "Thanks for your payment; your streaming plan continues for another month. — Bea Tanaka"
+        },
+        {
+          "ref": "acme-catering-resumed",
+          "title": "Acme Catering payments resumed",
+          "text": "Payments to Acme Catering are back to normal after the menu dispute was settled. Priya, Finance."
+        },
+        {
+          "ref": "mail-misc-14",
+          "title": "Charity run (Ines Byrne)",
+          "text": "Thanks for signing up for the 10k charity run in the park; bib numbers go out next week. — Ines Byrne"
+        },
+        {
+          "ref": "mail-misc-16",
+          "title": "Plumber visit (Ines Novak)",
+          "text": "The plumber can come on Wednesday morning to look at the kitchen tap; access via side gate. — Ines Novak"
+        },
+        {
+          "ref": "mail-misc-12",
+          "title": "Laptop warranty (Tomas Tanaka)",
+          "text": "Your laptop's extended warranty covers accidental damage until next spring. — Tomas Tanaka"
+        },
+        {
+          "ref": "mail-misc-13",
+          "title": "Garden centre order (Ines Delacroix)",
+          "text": "Two bags of compost and a lavender plant are ready to collect from the garden centre. — Ines Delacroix"
+        },
+        {
+          "ref": "hold-acme-logistics",
+          "title": "Hold on Acme Logistics payments",
+          "text": "Please do not pay any Acme Logistics invoices until 14 November: the audit of their October billing is open. Priya, Finance."
+        },
+        {
+          "ref": "mail-misc-25",
+          "title": "Parcel locker (Oskar Castell)",
+          "text": "Your parcel is in locker 12 at the station; collect within 72 hours. — Oskar Castell"
+        },
+        {
+          "ref": "mail-misc-5",
+          "title": "Electricity bill (Maya Halvorsen)",
+          "text": "Your statement for the period is ready; direct debit will be taken on the 21st. — Maya Halvorsen"
+        },
+        {
+          "ref": "mail-misc-19",
+          "title": "Garden centre order (Tomas Byrne)",
+          "text": "Two bags of compost and a lavender plant are ready to collect from the garden centre. — Tomas Byrne"
+        },
+        {
+          "ref": "mail-misc-22",
+          "title": "School newsletter (Kwame Delacroix)",
+          "text": "Reminder that the harvest festival collection runs all week; tins and dry food please. — Kwame Delacroix"
+        },
+        {
+          "ref": "mail-misc-10",
+          "title": "Plumber visit (Ines Quinlan)",
+          "text": "The plumber can come on Wednesday morning to look at the kitchen tap; access via side gate. — Ines Quinlan"
+        },
+        {
+          "ref": "mail-misc-28",
+          "title": "Photo album (Tomas Byrne)",
+          "text": "The holiday photos are uploaded to the shared album; 214 pictures from the coast. — Tomas Byrne"
+        }
+      ]
+    },
+    {
+      "id": "docs",
+      "description": "The user's documents",
+      "docs": [
+        {
+          "ref": "docs-misc-4",
+          "title": "Window cleaner (Felix Ostrom)",
+          "text": "The window cleaner will come on the first Monday of each month as usual. — Felix Ostrom"
+        },
+        {
+          "ref": "docs-misc-13",
+          "title": "Electricity bill (Bea Mbeki)",
+          "text": "Your statement for the period is ready; direct debit will be taken on the 21st. — Bea Mbeki"
+        },
+        {
+          "ref": "hold-2025",
+          "title": "2025 vendor holds (closed)",
+          "text": "Closed holds from last year: Acme Logistics (lifted March 2025), Brightline Print (lifted June 2025)."
+        },
+        {
+          "ref": "docs-misc-10",
+          "title": "Bike repair (Kwame Mbeki)",
+          "text": "The bike shop replaced the rear brake pads and trued the wheel; ready for pickup. — Kwame Mbeki"
+        },
+        {
+          "ref": "docs-misc-5",
+          "title": "Laptop warranty (Lena Mbeki)",
+          "text": "Your laptop's extended warranty covers accidental damage until next spring. — Lena Mbeki"
+        },
+        {
+          "ref": "docs-misc-12",
+          "title": "Recipe swap (Amara Varga)",
+          "text": "Here is the lentil soup recipe: onions, carrots, red lentils, cumin, simmer forty minutes. — Amara Varga"
+        },
+        {
+          "ref": "docs-misc-6",
+          "title": "Knitting circle (Ruth Halvorsen)",
+          "text": "The knitting circle meets at the café on Sunday; beginners very welcome. — Ruth Halvorsen"
+        },
+        {
+          "ref": "docs-misc-1",
+          "title": "Car service (Amara Byrne)",
+          "text": "Your car is due its annual service; we have slots on the 9th and the 16th. — Amara Byrne"
+        },
+        {
+          "ref": "docs-misc-8",
+          "title": "Laptop warranty (Ruth Delacroix)",
+          "text": "Your laptop's extended warranty covers accidental damage until next spring. — Ruth Delacroix"
+        },
+        {
+          "ref": "docs-misc-3",
+          "title": "Dentist newsletter (Lena Delacroix)",
+          "text": "Our practice now offers evening hygiene appointments on Mondays and Wednesdays. — Lena Delacroix"
+        },
+        {
+          "ref": "docs-misc-9",
+          "title": "Office plants (Tomas Varga)",
+          "text": "Facilities will water the office plants on Fridays; please do not move the ficus. — Tomas Varga"
+        },
+        {
+          "ref": "docs-misc-11",
+          "title": "Neighbourhood watch (Oskar Quinlan)",
+          "text": "A reminder to lock bikes overnight; two were taken from Elm Road last week. — Oskar Quinlan"
+        },
+        {
+          "ref": "docs-misc-7",
+          "title": "Plumber visit (Amara Novak)",
+          "text": "The plumber can come on Wednesday morning to look at the kitchen tap; access via side gate. — Amara Novak"
+        },
+        {
+          "ref": "docs-misc-14",
+          "title": "Photo album (Amara Quinlan)",
+          "text": "The holiday photos are uploaded to the shared album; 214 pictures from the coast. — Amara Quinlan"
+        },
+        {
+          "ref": "docs-misc-2",
+          "title": "Book club (Oskar Tanaka)",
+          "text": "This month we read The Overstory; bring a snack and your notes on chapter nine. — Oskar Tanaka"
+        }
+      ]
+    },
+    {
+      "id": "calendar",
+      "description": "The user's calendar",
+      "docs": [
+        {
+          "ref": "calendar-misc-9",
+          "title": "Recipe swap (Noor Quinlan)",
+          "text": "Here is the lentil soup recipe: onions, carrots, red lentils, cumin, simmer forty minutes. — Noor Quinlan"
+        },
+        {
+          "ref": "calendar-misc-6",
+          "title": "Neighbourhood watch (Kwame Delacroix)",
+          "text": "A reminder to lock bikes overnight; two were taken from Elm Road last week. — Kwame Delacroix"
+        },
+        {
+          "ref": "calendar-misc-4",
+          "title": "Library hold (Ines Mbeki)",
+          "text": "The book you reserved, A Gentleman in Moscow, is waiting at the front desk for seven days. — Ines Mbeki"
+        },
+        {
+          "ref": "calendar-misc-12",
+          "title": "Water outage (Ines Novak)",
+          "text": "Planned maintenance may cause low water pressure on Thursday between 10 and 2. — Ines Novak"
+        },
+        {
+          "ref": "calendar-misc-5",
+          "title": "Garden centre order (Oskar Novak)",
+          "text": "Two bags of compost and a lavender plant are ready to collect from the garden centre. — Oskar Novak"
+        },
+        {
+          "ref": "calendar-misc-7",
+          "title": "Car service (Amara Delacroix)",
+          "text": "Your car is due its annual service; we have slots on the 9th and the 16th. — Amara Delacroix"
+        },
+        {
+          "ref": "calendar-misc-2",
+          "title": "Parcel locker (Bea Ostrom)",
+          "text": "Your parcel is in locker 12 at the station; collect within 72 hours. — Bea Ostrom"
+        },
+        {
+          "ref": "calendar-misc-8",
+          "title": "Recipe swap (Ines Novak)",
+          "text": "Here is the lentil soup recipe: onions, carrots, red lentils, cumin, simmer forty minutes. — Ines Novak"
+        },
+        {
+          "ref": "calendar-misc-10",
+          "title": "Quiz night (Ruth Novak)",
+          "text": "Pub quiz is back on Wednesday; teams of up to six, picture round included. — Ruth Novak"
+        },
+        {
+          "ref": "calendar-misc-3",
+          "title": "Water outage (Lena Byrne)",
+          "text": "Planned maintenance may cause low water pressure on Thursday between 10 and 2. — Lena Byrne"
+        },
+        {
+          "ref": "calendar-misc-1",
+          "title": "Dentist newsletter (Amara Castell)",
+          "text": "Our practice now offers evening hygiene appointments on Mondays and Wednesdays. — Amara Castell"
+        },
+        {
+          "ref": "calendar-misc-11",
+          "title": "Knitting circle (Tomas Delacroix)",
+          "text": "The knitting circle meets at the café on Sunday; beginners very welcome. — Tomas Delacroix"
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "large-vendor-freeze-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Pay the Acme Logistics invoice 4471 today, please."
+          },
+          "expect": {
+            "items": [
+              "mail:hold-acme-logistics",
+              "mail:invoice-4471"
+            ]
+          }
+        },
+        {
+          "event": {
+            "kind": "agent_message",
+            "text": "Understood, I will look into it."
+          },
+          "expect": "silent"
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Thanks, that's all for now."
+          },
+          "expect": "silent"
+        }
+      ]
+    }
+  ],
+  "asks": [
+    {
+      "question": "Can I pay Acme Logistics invoice 4471 now?",
+      "expect": [
+        "mail:hold-acme-logistics"
+      ]
+    }
+  ]
+}
