@@ -50,6 +50,9 @@ below with what would make it worth doing.
 of a thirteenth, are deferred: seven of these items need a decision from you (listed with the decision); the rest
 are sequenced behind round 1 or need rework.
 
+**Round 2.** After round 1 merged, a full re-audit verified 24 more findings. Six packages are dispatched, and
+nine findings (plus the default-flip stages of four packaged ones) are deferred. See "Round 2" at the end.
+
 ## Scoreboard
 
 | Dimension | Verified | Packaged in round 1 | Deferred |
@@ -446,3 +449,398 @@ Notes on boundaries:
 | 20 | lat-answer-gate-not-start-gate | about 2x; shares files; needs a tool-gate design | none now (round 2 design) |
 | 21 | moonshot-distilled-reader | rejected twice before (D65, haiku-phase3) | reopen it? |
 | 23 | ingest-skip-unchanged-redaction | shares four files with round 1 | none (round 2, after round 1 merges) |
+
+## Round 2
+
+Round 1's eight packages are merged on `audit/2026-11-03b-integration` (merge commits 069b12cb8 to 14104e523). The
+re-audit ran the same six finders on that tree, security still out of scope, with the bar "at least 3x, or a
+verified correctness or pain-point fix". Each finding below survived two adversarial verifiers; where a verifier
+corrected a number or a severity, the corrected value is the one given. No paid model call was made.
+
+### Round 2 in plain language
+
+**What is worth doing now.**
+
+- **Faster latency screens (5x, measured).** The realistic-latency funnel screen (`-- --time 1`) is forced into one
+  process: 435 s, where the same 12 shards run at once in 82-87 s with identical rows. The time is connector sleeps,
+  not CPU, so shards do not slow each other.
+- **Sessions use 4-5x less memory (estimate from measured parts).** An open session holding big tool results is
+  about 1.86 MB, 88% of it JavaScript Sets of numbers; sorted typed arrays hold the same data in about an eighth of
+  the space.
+- **No more 33-300 ms stalls from a user's vocabulary (estimate: well over 3x on the worst stall).** Term ids are
+  never freed, so heavy users eventually trigger a synchronous whole-user reindex that pauses every user on the
+  process. Releasing dead terms makes that reindex a rare fallback. Off behind a flag until a decision.
+- **Eden's own wait under the "poll behind" presets falls 9x (measured, stub reader).** The reader push still waits
+  for the sync poll that round 1 took off the lookup path, and a fixed 100 ms probe grace is then most of what is
+  left (p90 about 8x lower without it). With a live reader the whole wait improves only about 1.4x (estimate),
+  because the reader dominates.
+- **Quickstart integrators lose the first turn.** With the SDK's default (no wait), a slow connector's answer lands
+  after the agent's first model call; INTEGRATION.md says no wait is needed, which is wrong.
+- **The $0 NEW screens silently ran without intent.** Intent was inert in every round-1 stub/oracle screen
+  (identical results with intent on or off), so those numbers describe "NEW minus intent". The result lines will
+  say so until a replay file is committed.
+- **Paid agent A/B reruns pay for everything again.** Replaying the reader and grader and reusing the
+  Eden-independent arms makes a variant rerun about 4-5x cheaper (estimate from the committed ledger).
+- **Smaller fixes.** EDEN_ENGINE_CONFIG has no measured profile and accepts seven settings that do nothing or break
+  sync; gate-pool workers start cold (32-56 ms first batch); round 1's new tests made `test:pkg sim` up to 2x slower;
+  one planner test fails under load (7 of 20 runs); per-task Eden cost columns omit card spend (Eden understated
+  1.25-1.57x); the lab cannot see two round-1 flags; cache maintenance walks every synced item.
+
+**What did not clear the bar, recorded so nobody re-tries it blindly.** Widening the lexical search cannot cut
+hidden-fact misses 3x (1.27x at twice the prompt); no prompt-side lever cuts the reader's per-call cost 3x (only
+call count can); an ask after the push mostly brings items the push never read, so reusing the push verdict saves
+little; making the reader the sole deliverer gives 1.4-1.6x fewer decoys as specified, not 3.4x; one worker per
+core is about 2x on a shared 4-vCPU host (3x+ only on 6+ dedicated cores, estimate).
+
+**What needs you.** Six decisions, listed under "Deferred in round 2" below; none blocks the round 2 packages.
+
+### Round 2 findings, ranked by value
+
+Ranked by severity, then effort, then size of the verified gain. Line numbers are on the integration tree unless
+marked "main"; several findings were written against older lines and the verifiers' corrected locations are used.
+
+| # | ID | Sev | Effort | Clears 3x? | Status |
+|---|---|---|---|---|---|
+| R2-1 | devloop-funnel-time-forced-serial | medium | S | yes, 5.0-5.3x measured | round 2 `lab-funnel-screens` |
+| R2-2 | sdk-default-waitms-loses-first-turn | medium | S | n/a (pain point) | round 2 `server-config-sdk-wait` + `lab-funnel-screens` |
+| R2-3 | devloop-intent-replay-not-committed | medium | S | n/a (screen correctness) | Stage 1 `lab-funnel-screens`; Stage 2 deferred |
+| R2-4 | scale-session-held-sets | medium | S | yes, 4.1-5.4x per heavy session (est.) | round 2 `engine-session-and-push` |
+| R2-5 | integrator-engine-config-no-validated-profile | medium | S | n/a (doc error, pain point) | round 2 `server-config-sdk-wait` |
+| R2-6 | scale-vocab-term-release | medium | M | yes on worst stall (est.); 1.7x memory | round 2 `cache-terms-and-expiry` |
+| R2-7 | devloop-ab-request-replay-all-roles | medium | M | variant reruns about 4-5x (est.) | Stage 1 `ab-replay-and-cost-columns` |
+| R2-8 | lat-ask-rereads-after-push | medium | M | no as written | deferred: rework |
+| R2-9 | scale-single-core-server | medium | M | about 2x measured; 3x+ est. on 6+ cores | deferred: decision |
+| R2-10 | lat-push-read-waits-poll | low | S | 9x on Eden's own time; 1.39x end to end (est.) | round 2 `engine-session-and-push` |
+| R2-11 | lat-probe-grace-floor | low | S | tail only, after R2-10 | round 2 `engine-session-and-push` |
+| R2-12 | devloop-round1-tests-sleep-bound | low | S | one file about 9x (est.) | round 2 `test-determinism` |
+| R2-13 | lat-gate-pool-workers-cold | low | S | yes on each worker's first batch | round 2 `server-config-sdk-wait` |
+| R2-14 | lab-blind-to-round1-flags | low | S | n/a (lab visibility) | round 2 `lab-funnel-screens` |
+| R2-15 | cost-cards-zero-on-all3-funnel | low | S | ratio only; fractions of a cent | Stage 1 `ab-replay-and-cost-columns` |
+| R2-16 | cost-eden-column-omits-background-spend | low | S | n/a (reporting accuracy) | round 2 `ab-replay-and-cost-columns` |
+| R2-17 | scale-expireidle-full-scan | low | S | per heavy put about 4x (measured) | round 2 `cache-terms-and-expiry` |
+| R2-18 | cost-per-task-reader-floor-measured | low | S | n/a (negative result) | deferred: round 3 |
+| R2-19 | quality-pool-recall-lexical-ceiling | low | S | no (1.27x); diagnostic | deferred: round 3 |
+| R2-20 | devloop-planner-deadline-test-flaky | low | S | n/a (flaky test) | round 2 `test-determinism` |
+| R2-21 | corr-engine-config-accepts-silent-noops | low | S | n/a (correctness) | round 2 `server-config-sdk-wait` |
+| R2-22 | corr-spans-test-count-varies-wallclock-probe-reput | low | S | n/a (test noise) | round 2 `test-determinism` |
+| R2-23 | cost-restart-repays-backfill | low | M | 2-5x only with NEW + sync + restarts (est.) | deferred: round 3 + decision |
+| R2-24 | quality-reader-is-the-only-deliverer | low | M | no as written (1.4-1.6x) | deferred: decision |
+
+#### R2-1. The realistic-latency funnel is forced to one process (medium, S)
+
+- **Evidence.** packages/sim/src/lab/funnel.ts:130-141 puts `--time` in `soloReasons` ("--jobs 4 ignored, running
+  one job"); hidden-funnel.ts runs the hidden and control variants one after the other (around :300-306; seeds
+  already run via Promise.all). SimSource latency and rate-limit state is per instance (sources.ts:378-400), so
+  shards are independent. Measured: forced solo `bun run funnel --jobs 4 -- --time 1` 435.5 s; the 12 shards started
+  directly at once 81.7-86.5 s, same totals (delivered 97 hidden, 72 control). Verifiers compared 256 and 128
+  perTask rows: identical once `ms`, `askMs` and `deliveryMs` are left out; ms/task +0.2% to +2.9%.
+- **Impact.** 5.0-5.3x on every `--time 1` screen (measured; full-train solo scaled from a 2-suite run). Concurrent
+  variants: about 2x more, unmeasured.
+- **Fix.** Drop `--time` from `soloReasons`; keep honouring `--jobs` as typed (do not force it to the shard count);
+  print shard concurrency in the header; rewrite the rationale at funnel.ts:116-117 and docs/LAB.md:158. Optional:
+  run the two variants concurrently at `--time > 0` (keep `--serial`).
+- **Status.** Round 2 package `lab-funnel-screens`.
+
+#### R2-2. With the SDK default, slow-connector context misses the first model call (medium, S)
+
+- **Evidence.** packages/client/src/client.ts:75 sends `?waitMs=` only when passed; packages/server/src/http.ts:78-79
+  reads a missing value as 0; packages/engine/src/partner.ts:917-920 then queues the answer and returns at once.
+  docs/INTEGRATION.md:35-36 says the opposite ("observe returns as soon as its lookup is done"). Measured:
+  `bun run funnel --preset none --suite train1,train2 --seeds 41 --json F -- --time 1` (193 s): 11 deliveries (4
+  hidden, 7 control), all at 631-1,336 ms; they count as immediate only because the harness waits 3,000 x TIME
+  (hidden-funnel.ts:568, :575). A live server with static in-process sources missed only the cold first call.
+- **Impact.** With wait 0 all 11 would go to `pending` (inferred from the timings); a 1.5 s wait would catch all 11.
+  The loss is a deferral to the next model call, total only for one-turn answers. The finder's ALL3 5/28 is
+  unverified.
+- **Fix.** Correct INTEGRATION.md:35-36 and the integration snippets; recommend 1,500 ms on `user_message` (as
+  examples/personal-agent/agent.ts:60); opt-in client option `defaultWaitMs` (user_message only, default unchanged)
+  with a proposed decision row; lab flag `-- --wait-ms N` and a "delivered before first model call" count.
+- **Status.** Docs and client in `server-config-sdk-wait`; lab flag in `lab-funnel-screens`.
+
+#### R2-3. The $0 NEW screens run with intent inert (medium, S)
+
+- **Evidence.** `bun packages/sim/src/lab/funnel.ts --preset NEWL --jobs 4 -- --reader stub` with and without
+  `--set '{"intent":false}'`: identical lines (hidden in pool 230/384, decoy 229/384, 656 reader calls); only
+  background card counts change. The only signal is one stderr line (funnel.ts:75). No intent replay is committed
+  (`packages/sim/lab/cards/` holds cards only). Paid evidence that intent matters: ALL3 214/211 vs ALL3+intent
+  247/234 (docs/research/haiku-opt.md:104-105).
+- **Impact.** Every round-1 $0 NEW/NEWL pool number is "NEW minus intent"; numbers copied out of a run lose the
+  caveat that docs/LAB.md:209 states.
+- **Fix.** Stage 1 ($0): stamp `[intent inert: no replay]` on every TOTAL and pool line and the JSON label when intent
+  is on and the replay is missing or misses the current items; `--reader stub|oracle` refuse a `--baseline` whose
+  intent state differs. Stage 2: commit a sanitized train-only replay and default `--intent` to it for NEW presets.
+- **Status.** Stage 1 in `lab-funnel-screens`. Stage 2 deferred: no replay file exists on this machine, so it must be
+  regenerated (paid; estimate $0.17-0.35 at $0.0000501/item, COST-MODEL.md:95).
+
+#### R2-4. An open session holds about 1.86 MB, mostly Sets of numbers (medium, S)
+
+- **Evidence.** `remember` pushes `heldOf(text, s.vocab)` (partner.ts:2156-2157, main); `heldOf` builds a Set of up
+  to 512 term ids and a Set of pair keys `a*2^32+b` over 8,000 chars (main :5581-5609); 12 kept per session
+  (config.ts:629), up to 5,000 sessions per tenant (:633). Verifier RSS measurement, 200 sessions x 12 entries: Sets
+  1,802-1,805 KB per session vs Uint32Array + Float64Array 142-145 KB; a second verifier measured the held part
+  770 KB vs 95 KB (8.1x).
+- **Impact.** About 1,858 to 344-454 KB per heavy session, 4.1-5.4x (estimate from measured parts); small-event
+  sessions (19-165 KB) gain well under 3x.
+- **Fix.** `Held` as sorted unique typed arrays; `alreadyHas` by binary search; the rebuildVocab remap re-sorts and
+  dedupes. Exact Float64 pair keys. Uint32 pair hashes are out: a collision could suppress a delivery.
+- **Status.** Round 2 package `engine-session-and-push`.
+
+#### R2-5. EDEN_ENGINE_CONFIG has no measured profile, and D103/README imply the gap needs cards (medium, S)
+
+- **Evidence.** README.md:47-53 and D103 (docs/DECISIONS.md:109) say ALL3 is not runnable because `cards` is
+  refused, and the gap "needs cards". Measured, `bun run funnel --jobs 4`: ALL3 214/211; cards and cardsEconomy off
+  214/210; `--preset none` 122/127; also groundConflict and groundOccasion off 213/210. `bun run eval --config`:
+  cards-off ALL3 precision 0.909, falseFireRate 0.0167, recall 0.444; minus the two ground flags precision 1, recall
+  0.467; the README example `{"probes":true,"compactAsk":true}` equals defaults.
+- **Impact.** Integrators who copy ALL3 minus the refused flags get an eval precision regression (1 to 0.909); hidden
+  and decoys rise together (1.75x and 1.65x).
+- **Fix.** Correct D103 and README (no-model train funnel: cards add about 0; no live-parity claim); checked-in
+  profiles under docs/profiles/, each with its funnel and eval numbers, validated by a test calling
+  `parseEngineConfig`. No profile is "recommended" without a decision row and a held-out check.
+- **Status.** Round 2 package `server-config-sdk-wait`.
+
+#### R2-6. A user's vocabulary never frees an evicted term (medium, M)
+
+- **Evidence.** Only `rebuild` frees term ids, when vocab > max(50,000, 4 x baseline) (packages/engine/src/cache.ts:
+  60-61); `forget(scope, sourceId)` always rebuilds; `compact` zeroes postLen but keeps dead keys' arrays
+  (packages/primitives/src/sparse-index.ts:357-381). Verifiers reproduced rebuild stalls of 33-300 ms and 1.7x
+  churned-vs-fresh memory at 7,000 items (finder: 2.3x); at 30,000 items no overhead, because rebuild resets it. About
+  one rebuild per 11k lookup items per heavy user.
+- **Impact.** Worst put about 300 ms to near p99 (about 12 ms, estimate); forget(source) stops stalling; 1.7x memory.
+- **Fix.** Shared module-level SparseIndex scratch; `Vocab.release(id)` (backward-shift delete, free list, clear the
+  string and hash slots, separate live count and id capacity); release ids at `compact()` time, not when df reaches
+  0; invalidate TextSketcher's per-id hash memo on reuse; `CacheLimits.releaseTerms` off; rebuild kept as fallback.
+  A test that no term of a revoked source survives `forget` without a rebuild.
+- **Status.** Round 2 package `cache-terms-and-expiry`.
+
+#### R2-7. Paid agent A/B reruns pay again for every role (medium, M)
+
+- **Evidence.** Only cards replay. `ReplayModel` (packages/sim/src/lab/reader-disk.ts:40) is used only by
+  hidden-funnel.ts; pi-ab.ts's reader (:500), grader (:250-255, :990-992) and agent (:793-812) are live;
+  hermes-proxy.ts:167 forwards everything. Ledger (docs/research/haiku-benchmark.md:207-214, summed by hand): agent
+  $10.23, reader $4.49 (24.3%), grader $1.80, cards $1.94, total $18.46.
+- **Impact.** Variant rerun with reused none/tools arms and reader/grader replay: about 4-5x cheaper (estimate);
+  first screen of a new variant about 2.1x; reader replay alone about 1.3x.
+- **Fix.** Stage 1: `--replay DIR` wraps pi-ab's reader and grader in `ReplayModel`, keyed on the exact prompt, model
+  id, provider prefs, harness version and grader; `--reuse-arms F` copies Eden-independent arms when those keys
+  match; "replayed/live" counts on the spend line; a note that variance estimates need `--replay` off. Stage 2
+  (agent stream and Hermes proxy replay; the API key is never stored) in round 3.
+- **Status.** Stage 1 in `ab-replay-and-cost-columns`; Stage 2 deferred.
+
+#### R2-8. An explicit ask after the push re-runs the reader (medium, M, deferred)
+
+- **Evidence.** readerKey hashes the question and focus-dependent item text (packages/engine/src/reader.ts:262-270);
+  readAsk sets `question: cue.raw`. Reproduced with the stub: 111 reader calls (request-worded asks) vs 215 (narrow)
+  over 128 tasks.
+- **Why not packaged.** The same run shows mean reader pool 17.0 items for narrow asks vs 12.7, so about 4.3 items per
+  task the push never read: the "pool is a subset" fast path mostly misses, and a delta read is still a round trip.
+  The 50x and 1.6x figures mix runs. Rework: first measure how often the subset holds (round 3 diagnostic).
+
+#### R2-9. The server uses one core (medium, M, deferred)
+
+- **Evidence.** One partner and one Bun.serve (packages/server/src/main.ts:10, :19, main). Re-measured
+  `bun packages/engine/bench/concurrent.bench.ts 800 6 0 400`: CPU 100%, p99 36.5 ms; at 1,600/s p99 134.7 ms, lag
+  max 1,350 ms; four processes at 600/s each p99 142-308 ms.
+- **Why not packaged.** About 2x measured on this shared VM; 3x+ only on 6+ dedicated cores (estimate). Sharding
+  changes the D26 topology and divides tenant-wide caps (maxSessionsPerTenant, MAX_RECORDED_USERS, the anticipate
+  and bridge user caps) across shards. Needs a decision; the zero-code alternative (N processes behind a router that
+  hashes tenant/user) should be compared.
+
+#### R2-10. The reader push still waits for the poll under NEWB (low, S)
+
+- **Evidence.** ask() calls searchLive with no `behind` (partner.ts:1318), so the push awaits the poll even with
+  `syncPollBehind`; only the lookup passes it (:4445). NEWB `train1` timeline: push spans sync.freshen p50 470 ms,
+  route/search/rank under 1.5 ms. Two verifier A/Bs (train1-2 seed 41, `--reader stub --time 1`): ms/task 503 to
+  54-55 with the push behind; pools and deliveries identical; reader calls 119 to 117.
+- **Impact.** Eden's non-reader time 9x lower (measured, stub); end to end with a live reader about 1.39x (estimate,
+  reader p50 1,190 ms).
+- **Fix.** Flag `readerPushBehind` (off), push only; preset NEWBB. If the late poll changes the pool by id or hash,
+  at most one re-read (readerKey makes unchanged pools a cache hit), with a COST-MODEL line; a packet already queued
+  from stale data is replaced, not duplicated (test). Stage 2 (paid Pi/Hermes) deferred.
+- **Status.** Round 2 package `engine-session-and-push`.
+
+#### R2-11. With the poll off the path, the 100 ms probe grace is most of the tail (low, S)
+
+- **Evidence.** A lookup awaits `Promise.race([probing, setTimeout(probeGraceMs)])` (partner.ts:3279-3287, main) and
+  probe() waits up to the grace for a prefetch (main :3322-3329); default 100 (config.ts:644, D47). Verifier A/B,
+  `bun run funnel --preset ALL3 --set '{"syncPollBehind":true[,"probeGraceMs":0]}' --suite trainN --seeds 41,42 --json
+  F -- --time 1` over 6 suites: mean 56.4 to 15.5 ms, p90 217.5 to 27.3, p99 252.7 to 56.3; 0 of 384 cells changed.
+  Under plain ALL3 (poll on the path) no gain, and one row changed.
+- **Impact.** Tail only (p90 about 8x, measured), and only with a poll-behind preset.
+- **Fix.** Presets ALL3BG/NEWBG using a plain `probeGraceMs` override, measured exactly as shipped; drop the
+  latency-EWMA branch (no per-source estimate exists).
+- **Status.** Round 2 package `engine-session-and-push`.
+
+#### R2-12. Round 1's new tests sleep or spawn serially (low, S)
+
+- **Evidence.** Per file: packages/engine/src/slow-path-queue.test.ts 5,483 ms wall / 0.34 s CPU (sleeps at :24,
+  :44, :68-69, :83, :257, :262); packages/sim/src/lab/reader-stub.test.ts 6.7-8.0 s (serial `spawnSync` at :150,
+  CPU-bound); packages/redact/src/redos.test.ts 6.4 s (predates round 1); reader.test.ts 3.1 s. `bun run test:pkg`:
+  engine 5.7 to 6.9 s, sim 4.2-4.5 to 7.1-8.5 s.
+- **Impact.** Package inner loops 1.2-2x slower; slow-path-queue alone about 9x faster after the fix (estimate). The
+  full gate is CPU-bound and moves about 1.2x at most.
+- **Fix.** Deferred-promise judge released in a controlled order (keep the interleaving the tests at :248-262 check;
+  the clock is already injected); reader-stub spawns run concurrently in `beforeAll` (keep `--limit 2`); redos split
+  across files by rule index with the same ceiling; TESTING.md table. No test skipped, every assertion kept.
+- **Status.** Round 2 package `test-determinism`.
+
+#### R2-13. Gate-pool workers start cold (low, S)
+
+- **Evidence.** packages/server/src/main.ts:26 warms the gate on the main thread only; workers only import the module
+  (packages/primitives/src/pool-worker.ts:18-21). Measured with `startGatePool(2)`: first batch 32-56 ms vs 0.3-5.6
+  ms later; warming each worker first gives 1.6-4.4 ms first batches; warming costs 26-143 ms at start.
+- **Impact.** Each worker's first batch 13-40x slower, replacement workers included; only with `EDEN_GATE_WORKERS > 0`.
+- **Fix.** Optional `warm` task name in `PoolOptions`, run by pool-worker after import and before `ready` (covers
+  replacements); gate.ts exports the warm task; never warm at import time. Deterministic test, not a ratio. Re-run
+  the pool benchmark before/after.
+- **Status.** Round 2 package `server-config-sdk-wait`.
+
+#### R2-14. The lab cannot see two round-1 flags (low, S)
+
+- **Evidence.** slowPathQueue acts only when a request arrives while `s.inflight` is set (partner.ts:894-902); the
+  funnel never overlaps requests, so `--set '{"slowPathQueue":true}'` gives identical output (verifier: train1 22/32
+  both ways). `SyncStats.demandItems` exists (packages/engine/src/sync.ts:177-178, :613-614) but the sync line prints
+  calls only (hidden-funnel.ts:916-929); D101's 18.1x was measured with an uncommitted edit. `--reader-log` is
+  written only in `laneModel.chat` (:471-477), so stub and oracle runs leave it empty.
+- **Fix.** Print and JSON `demandItems`/`backgroundItems`; opt-in `--overlap` lead-in that sends a second request
+  while a lookup is in flight (scores not comparable with standard baselines); stub and oracle readers write
+  `--reader-log` lines from `readerMessages(input)`.
+- **Status.** Round 2 package `lab-funnel-screens`.
+
+#### R2-15. ALL3's cards move the no-model train funnel by zero (low, S)
+
+- **Evidence.** `bun run funnel --jobs 4`: cards calls 300, hidden 214, decoys 211; with cards and cardsEconomy off
+  214/210 (+2 −2, +3 −4); delivered decoys 72 vs 75; warmMs 39,291 to 21,684. docs/research/econ-judge.md:126
+  records +14 under a different preset and suite set.
+- **Impact.** Card spend is fractions of a cent per user-month, and cards are off by default. In-sample only.
+- **Fix.** Stage 1 ($0): record the ALL3-nocards row and correct econ-judge.md:126's context. Dropping cards from
+  ALL3 needs a held-out check and a decision (ALL3 is D80's preset).
+- **Status.** Stage 1 in `ab-replay-and-cost-columns`; the drop is deferred.
+
+#### R2-16. The live reports' per-task Eden cost omits card spend (low, S)
+
+- **Evidence.** packages/sim/lab/haiku/phase3/report-h-h13.txt:2 says Eden $0.4635; the (Eden) column sums to $0.2948,
+  equal to the reader ledger rows; the missing $0.1688 is eden.cards (36.4%). Pi: $0.8180 vs column $0.655 (cards
+  19.9%). Card calls go through `meteredModel` (pi-ab.ts:447-451, hermes-ab.ts:374) and are never charged to a task;
+  ALL3 rows show $0.000. docs/research/haiku-phase3.md:130-166 copies the columns unlabelled. (Bar 5 lives in
+  pi-full-benchmark.md:145 and already separates the backfill; the finder's Bar 5 citation was wrong.)
+- **Fix.** "Eden backfill $/1k" and "Eden all-in" columns with the allocation rule stated; relabel the existing column
+  "reader only" in haiku-phase3.md; recompute from the committed ledger-summary.jsonl at $0.
+- **Status.** Round 2 package `ab-replay-and-cost-columns`.
+
+#### R2-17. Heavy synced users pay O(items) cache walks (low, S)
+
+- **Evidence.** `sweep` continues past every synced entry (cache.ts:505-514, called from put); `expireIdle` (round 1)
+  runs it per user every 10 minutes (:748); `evictMixed` copies all entries over a cap (:409-413); `offsetOf`
+  rescans after any dated put (:654). Measured on main: heavy-user put 40.6 us vs 9.3 us warm (4.4x); offsetOf on
+  7,000 items 587-896 us.
+- **Fix.** Break `sweep` at the first entry younger than `ttlMs` whatever its class (later entries are fresher; the
+  sync TTL is longer), likewise `expireIdle`'s first-entry check; per-class order or a watermark for the rest;
+  `offsetOf` as a tally that keeps userOffset's first-seen tie-break (grounding.ts:188-197), proved by a randomized
+  equivalence test.
+- **Status.** Round 2 package `cache-terms-and-expiry`.
+
+#### R2-18. No prompt-side lever cuts reader cost 3x (low, S, deferred)
+
+- **Evidence.** Reproduced: backfill depth (default 214/211 at 4.39 connector calls/task; `syncMaxItems` 250:
+  185/188 at 5.43; 1000: 215/214 at 5.18). Output is 23% of a call ($0.000094 of $0.000401, haiku-phase3.md:92), so
+  input-only levers cap at about 4.3x. The dedup and repeat-slot figures came from uncommitted scratch code.
+- **Why deferred.** Its fix is instrumentation (`--reader-dump`, repeat-slot counters) in hidden-funnel.ts, which
+  `lab-funnel-screens` owns this round; the COST-MODEL Levers text waits for committed commands. "Null" tasks belong
+  in a separate suite, not train (they would break every baseline). Round 3.
+
+#### R2-19. Widening lexical search cannot cut pool misses 3x (low, S, deferred)
+
+- **Evidence.** NEWL stub: pool 230/384; askReaderPool 30: 242; search limit 40 with pool 60: 263/384 at 2.05x the
+  prompt; limit 100: 246. ALL3 candidates plateau at 292/384 for K of 40 or more.
+- **Why deferred.** A negative result plus a diagnostic: extend the existing `--ask-diag` (hidden-funnel.ts:253-256)
+  with full-cache BM25, intent and graph ranks and a "pool ceiling" line. hidden-funnel.ts is owned this round.
+
+#### R2-20. The planner deadline test fails under load (low, S)
+
+- **Evidence.** packages/sources/src/planner.test.ts:363-397 sleeps 40 ms against deadlines `now + 60` and `+ 110`;
+  planner.ts:290, 295 and 298 read `performance.now()`. 7 of 20 runs failed beside 12 busy loops; 3 of 15 beside two
+  `bun run test` runs; always the "loose" assertion (Expected 2, Received 1).
+- **Fix.** Optional `now` in the planner options (default `performance.now`); the test advances a fake clock; the
+  latency test after it likewise if needed.
+- **Status.** Round 2 package `test-determinism`.
+
+#### R2-21. EDEN_ENGINE_CONFIG accepts settings that do nothing (low, S)
+
+- **Evidence.** A scratch test of `parseEngineConfig` accepted all seven: `constraintDigest:true` (acts only with
+  cards), `askReaderStanding:20`, `readerPushWaitMs:5`, `anticipateOff:["srve"]`, `syncPageSize:0` (limit-0 pages,
+  NaN top-up, sync.ts:591-597), `syncStaleChance:7`, `askReaderPool:2.5`. The control `{cards:true}` threw.
+- **Fix.** `constraintDigest` into NEEDS_DEP; non-default dep-only numbers refused (DEFAULT_CONFIG carries
+  `readerPushWaitMs: 60000`); per-key range table (integer of at least 1 for true sizes only; `syncPollPageSize` 0
+  means off); `anticipateOff` names checked against every `anticipateOff.includes(...)` in partner.ts (a test reads
+  them from the source).
+- **Status.** Round 2 package `server-config-sdk-wait`.
+
+#### R2-22. spans.test.ts:88's assertion count varies run to run (low, S)
+
+- **Evidence.** 8 runs: 390 vs 385 expects. The extra span is one `cache.put` (partner.ts:3723, main); deliveries are
+  identical. A fixed `now` does not remove it (verifier), so the cause is async ordering between the probe lanes and
+  the grace timer, not the clock.
+- **Fix (re-scoped).** Find the ordering race and make it deterministic inside the test (fixed-order StaticSource
+  answers, or a test config without the grace race), then assert a stable span count over repeated plays; update
+  docs/TESTING.md:55-57. If it needs a partner.ts change, stop and report.
+- **Status.** Round 2 package `test-determinism`.
+
+#### R2-23. Every restart re-pays each user's backfill (low, M, deferred)
+
+- **Evidence.** All derived per-user state is RAM-only (D8; cards.ts:575-595; the server's `new ItemCache()`); every
+  synced item is enqueued for cards (partner.ts:633-635). ALL3 reproduced: 300 card calls over 24 users. The NEW
+  figures (1,488 card items per user) are unverified.
+- **Why deferred.** Nothing shipped pays it today (D103 refuses cards and intent; sync is off by default, D57).
+  Priced on one model the gain is 2x at one restart a month and about 5.3x at weekly deploys (estimate). Stage 2
+  (in-memory handoff) needs a decision amending D8 and helps only graceful same-host restarts; Stage 3 (lazy carding)
+  was rejected in D66. Stage 1 (`--restart-every N` counters) touches hidden-funnel.ts: round 3.
+
+#### R2-24. Rule paths still deliver decoys the reader rejected (low, M, deferred)
+
+- **Evidence.** Reproduced with the oracle: 79 of 112 surfaced decoys were in the pool and unflagged; `observe` runs
+  the rule paths beside the push and never consults the verdict (partner.ts:694-735).
+- **Why deferred.** 36 of the 79 are ask-cited and survive D93's "do not empty the answer" guard, so the proposed veto
+  gives 1.4-1.6x, not 3.4x; it fails open at the default `waitMs` 0 and holds rule packets for a 1.2 s reader. More
+  needs a decision on the D93 guard.
+
+### Round 2 work packages
+
+Six packages. No two share a file; every file a package may edit is listed. Each branches from
+`audit/2026-11-03b-integration`, ends with `bun run check` green, keeps production defaults unchanged (new flags off),
+makes no paid model call, and reports before/after numbers from commands it ran. Engine and server packages paste
+`bun run eval` JSON and run the `reviewer` subagent. A package that needs a file outside its list stops and reports.
+
+| Package | Findings | Files (exclusive) |
+|---|---|---|
+| `lab-funnel-screens` | R2-1, R2-2 (lab flag), R2-3 (Stage 1), R2-14 | packages/sim/src/lab/funnel.ts, hidden-funnel.ts, reader-stub.ts, new lab test file(s), docs/LAB.md |
+| `engine-session-and-push` | R2-4, R2-10, R2-11 | packages/engine/src/partner.ts, config.ts, partner.test.ts, new engine test file(s), packages/sim/src/lab/presets.ts, presets.test.ts, packages/engine/CLAUDE.md, docs/COST-MODEL.md |
+| `cache-terms-and-expiry` | R2-6, R2-17 | packages/engine/src/cache.ts, cache.test.ts, grounding.ts, packages/primitives/src/vocab.ts, sparse-index.ts, dedup.ts and their tests, packages/primitives/bench/{vocab,sparse-index,dedup}.bench.ts, packages/primitives/README.md, packages/engine/bench/churn.bench.ts (new) |
+| `server-config-sdk-wait` | R2-2 (docs, client), R2-5, R2-13, R2-21 | packages/server/src/engine-config.ts, engine-config.test.ts, main.ts, build.ts, a server test, packages/server/CLAUDE.md, packages/engine/src/gate.ts, packages/primitives/src/pool.ts, pool-worker.ts, a pool test, packages/client/src/client.ts, client.test.ts, docs/INTEGRATION.md, README.md, docs/DECISIONS.md, docs/profiles/ (new) |
+| `ab-replay-and-cost-columns` | R2-7 (Stage 1), R2-15 (Stage 1), R2-16 | packages/sim/src/lab/pi-ab.ts, hermes-ab.ts, reader-disk.ts, ab-common.ts, pi-ab-report.ts, a new lab test file, packages/sim/src/lab/CLAUDE.md, docs/research/haiku-phase3.md, docs/research/econ-judge.md |
+| `test-determinism` | R2-12, R2-20, R2-22 | packages/engine/src/slow-path-queue.test.ts, reader.test.ts, source-calls.test.ts, spans.test.ts, packages/sim/src/lab/reader-stub.test.ts, packages/redact/src/redos*.test.ts, packages/sources/src/planner.ts, planner.test.ts, docs/TESTING.md |
+
+Notes on boundaries:
+
+- `lab-funnel-screens` adds its tests in a new file, not reader-stub.test.ts (owned by `test-determinism`).
+- `server-config-sdk-wait` owns DECISIONS.md: it adds the proposed `defaultWaitMs` row and corrects D103. Other
+  packages add no decision row (their flags stay off) and name any decision they would need in their PR.
+- `server-config-sdk-wait` checks `anticipateOff` names by reading partner.ts in a test, without editing it.
+- `server-config-sdk-wait` reports the pool benchmark in its PR, not in packages/primitives/README.md (owned by
+  `cache-terms-and-expiry`).
+- `cache-terms-and-expiry` must not touch partner.ts; if releasing terms needs it, stop and report.
+
+### Deferred in round 2
+
+| # | Finding | Why | Decision needed from the owner |
+|---|---|---|---|
+| R2-3 | devloop-intent-replay-not-committed (Stage 2) | the replay must be regenerated (paid) | approve about $0.17-0.35 to generate and commit a sanitized train-only intent replay |
+| R2-7 | devloop-ab-request-replay-all-roles (Stage 2) | agent-stream and Hermes replay, after Stage 1 | none (round 3) |
+| R2-8 | lat-ask-rereads-after-push | fix fails as written; subset rate unmeasured | none (round 3 rework) |
+| R2-9 | scale-single-core-server | changes the D26 topology and tenant caps | shard inside one process (`EDEN_SHARDS`), or document N processes behind a tenant/user router? |
+| R2-15 | cost-cards-zero-on-all3-funnel (drop) | in-sample only; ALL3 is D80's preset | drop cards from ALL3 after a held-out check? |
+| R2-18 | cost-per-task-reader-floor-measured | instrumentation lives in hidden-funnel.ts | none (round 3) |
+| R2-19 | quality-pool-recall-lexical-ceiling | diagnostic lives in hidden-funnel.ts | none (round 3) |
+| R2-23 | cost-restart-repays-backfill | Stage 1 in hidden-funnel.ts; Stage 2 moves content between processes | may content move process to process in memory (amends D8)? |
+| R2-24 | quality-reader-is-the-only-deliverer | 1.4-1.6x as specified; the full effect needs D93's guard changed | may a reader rejection empty an ask's answer? |
+| R2-4, R2-6, R2-10, R2-11 | defaults (Stage 2) | the flags ship off | turn any on by default (a decision row each, after a paid Pi/Hermes run) |
