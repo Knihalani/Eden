@@ -3,6 +3,7 @@
  * a two-lane fingerprint with no comparison (what `Vocab` does). Each is a minimal open-addressing table.
  */
 import { CLASS, classOf, WORD_PART, WORD_START } from "../src/charclass";
+import { Vocab } from "../src/vocab";
 import { bench, corpus, report } from "./harness";
 
 const text = corpus(2048);
@@ -129,3 +130,33 @@ report([
   bench("+ intern, compare against a char arena", () => scan(text, viaArena), { batch: 50 }),
   bench("+ intern, two-lane fingerprint (Vocab)", () => scan(text, viaFingerprint), { batch: 50 }),
 ]);
+
+// The Vocab class itself: lookups of known terms (what every query does), and a churn of new terms in and old ones
+// released at a steady 4,096 live (what an index with `onTermFreed` does to a user's vocabulary; release is new).
+const words = [...new Set(text.toLowerCase().match(/[a-z]+/g) ?? [])];
+const known = new Vocab();
+for (const w of words) known.intern(w);
+let wi = 0;
+const churn = new Vocab();
+const ring: number[] = [];
+let fresh = 0;
+const rows = [
+  bench(`Vocab.lookup, ${words.length} known terms`, () => {
+    let acc = 0;
+    for (let i = 0; i < words.length; i++) acc += known.lookup(words[(wi + i) % words.length]!);
+    wi++;
+    return acc;
+  }),
+];
+if (typeof (churn as { release?: unknown }).release === "function") {
+  for (; fresh < 4_096; fresh++) ring.push(churn.intern(`t${fresh}`));
+  rows.push(
+    bench("Vocab.intern new + release oldest, 4,096 live", () => {
+      churn.release(ring[fresh % 4_096]!);
+      ring[fresh % 4_096] = churn.intern(`t${fresh}`);
+      fresh++;
+      return churn.size;
+    }),
+  );
+}
+report(rows);

@@ -12,6 +12,12 @@
  * The *Range methods take a range of a larger string whose hash the caller computed while scanning (the tokenizer
  * does), so a known term allocates nothing. Keys are folded (lowercase, accents dropped: "Zoë" and "zoe" are one
  * term); the length that identifies a term is its folded length, which the caller passes.
+ *
+ * Release. `release(id)` forgets a term: its slot is removed with a backward-shift delete (no tombstones, so lookups
+ * stay as short as in a table that never held it), its string and fingerprint are cleared, and its id goes on a free
+ * list that the next new term takes. So `size` is the id capacity (every id is below it; what id-indexed arrays are
+ * sized by) and `live` the terms held. A caller that keeps per-id state registers `onRelease` to drop it: an id may
+ * name another term after a release.
  */
 
 import { FOLD, FOLD_DROP, FOLD_EXPAND, foldOf, foldString } from "./charclass";
@@ -46,6 +52,8 @@ function hashTerm(term: string, out: Uint32Array): string {
 }
 
 const scratch = new Uint32Array(2);
+/** `lens` of a released id: no folded length is this, so `find` never matches it and `rehash` skips it. */
+const RELEASED = 0xffff_ffff;
 
 export class Vocab {
   private slots: Int32Array;
@@ -54,6 +62,9 @@ export class Vocab {
   private h2: Uint32Array;
   private lens: Uint32Array;
   private readonly strings: string[] = [];
+  /** Released ids, reused last-released first. */
+  private readonly free: number[] = [];
+  private readonly listeners: ((id: number) => void)[] = [];
 
   constructor(capacity = 1_024) {
     const size = 1 << Math.ceil(Math.log2(Math.max(16, capacity * 2)));
@@ -65,13 +76,56 @@ export class Vocab {
     this.lens = new Uint32Array(ids);
   }
 
+  /** The id capacity: every id, live or released, is below it. Size id-indexed arrays by it. */
   get size(): number {
     return this.strings.length;
   }
 
-  /** The (folded) term for an id. */
+  /** Terms held (`size` less the released ids awaiting reuse). */
+  get live(): number {
+    return this.strings.length - this.free.length;
+  }
+
+  /** The (folded) term for an id; "" for a released id. */
   term(id: number): string {
     return this.strings[id]!;
+  }
+
+  /** Calls `fn(id)` whenever an id is released (`release`): per-id state kept outside must be dropped then. */
+  onRelease(fn: (id: number) => void): void {
+    this.listeners.push(fn);
+  }
+
+  /**
+   * Forgets the term of `id`: lookups no longer find it, `term(id)` returns "", and the id is reused by a later new
+   * term. The caller must hold no live reference to the id (an index posting, a stored doc's terms). A released or
+   * unknown id is ignored.
+   */
+  release(id: number): void {
+    if (id < 0 || id >= this.strings.length || this.lens[id] === RELEASED) return;
+    const slots = this.slots;
+    const mask = this.mask;
+    let i = this.h1[id]! & mask;
+    while (slots[i] !== id + 1) i = (i + 1) & mask;
+    // Backward-shift delete (linear probing): pull each later entry of the run into the hole when its home slot does
+    // not lie cyclically in (hole, its slot], so every remaining key stays reachable from its home without tombstones.
+    let j = i;
+    for (;;) {
+      j = (j + 1) & mask;
+      const v = slots[j]!;
+      if (v === 0) break;
+      const home = this.h1[v - 1]! & mask;
+      if (i <= j ? home > i && home <= j : home > i || home <= j) continue;
+      slots[i] = v;
+      i = j;
+    }
+    slots[i] = 0;
+    this.strings[id] = "";
+    this.h1[id] = 0;
+    this.h2[id] = 0;
+    this.lens[id] = RELEASED;
+    this.free.push(id);
+    for (const fn of this.listeners) fn(id);
   }
 
   /** The id of a term (folded first), or -1. */
@@ -113,6 +167,15 @@ export class Vocab {
   }
 
   private add(term: string, h: number, g: number, len: number): number {
+    const reused = this.free.pop();
+    if (reused !== undefined) {
+      this.strings[reused] = term;
+      this.h1[reused] = h;
+      this.h2[reused] = g;
+      this.lens[reused] = len;
+      this.place(reused, h); // the table never holds more than `size` ids, which it was sized for
+      return reused;
+    }
     const id = this.strings.length;
     if (id >= this.h1.length) {
       const n = this.h1.length * 2;
@@ -139,7 +202,7 @@ export class Vocab {
   private rehash(size: number): void {
     this.slots = new Int32Array(size);
     this.mask = size - 1;
-    for (let id = 0; id < this.strings.length; id++) this.place(id, this.h1[id]!);
+    for (let id = 0; id < this.strings.length; id++) if (this.lens[id] !== RELEASED) this.place(id, this.h1[id]!);
   }
 }
 

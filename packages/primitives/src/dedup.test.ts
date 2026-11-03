@@ -344,3 +344,54 @@ describe("TextSketcher shared scratch", () => {
     expect([...again]).toEqual([...outA]);
   });
 });
+
+describe("TextSketcher after the vocabulary releases ids", () => {
+  test("a reused id is hashed again: sketches match a sketcher that never saw the old terms", () => {
+    const vocab = new Vocab(64);
+    const sk = new TextSketcher(vocab, 4_096, 3);
+    // Hash some terms (one numeric, one in unsegmented script), then release them all.
+    sk.load("quarterly renewal 3pm 東京ホテル ledger");
+    const old = ["quarterly", "renewal", "3pm", "東京ホテル", "ledger"].map((w) => vocab.lookup(w));
+    for (const id of old) vocab.release(id);
+    // New terms take the released ids; their memo must not be the old terms'.
+    const text = "offsite 4pm 大阪の宿 budget lisbon";
+    sk.load(text);
+    for (const w of ["offsite", "4pm", "budget"]) expect(old).toContain(vocab.lookup(w));
+    const got = { fp: new Uint32Array(2), sim: new Uint32Array(2), sig: new Uint32Array(64) };
+    sk.fingerprint(got.fp);
+    sk.simhash(got.sim);
+    sk.minhash(got.sig);
+    const numbers = sk.numberKey;
+    const units = sk.termCount;
+    const ref = new TextSketcher(new Vocab(64), 4_096, 3);
+    ref.load(text);
+    const want = { fp: new Uint32Array(2), sim: new Uint32Array(2), sig: new Uint32Array(64) };
+    ref.fingerprint(want.fp);
+    ref.simhash(want.sim);
+    ref.minhash(want.sig);
+    expect([...got.fp, ...got.sim, ...got.sig]).toEqual([...want.fp, ...want.sim, ...want.sig]);
+    expect([numbers, units]).toEqual([ref.numberKey, ref.termCount]);
+  });
+
+  test("released unsegmented terms' units are reclaimed: the pool does not grow with churn", () => {
+    const vocab = new Vocab(64);
+    const sk = new TextSketcher(vocab, 4_096, 2);
+    const ref = new TextSketcher(new Vocab(64), 4_096, 2);
+    const out = new Uint32Array(2);
+    const want = new Uint32Array(2);
+    for (let round = 0; round < 3_000; round++) {
+      // A different run of kana every round: one term of many units each, released after use.
+      const run = Array.from({ length: 12 }, (_, i) => String.fromCharCode(0x3042 + ((round * 7 + i * 3) % 80))).join(
+        "",
+      );
+      const text = `${run} renewal ${round % 10}`;
+      sk.load(text);
+      sk.simhash(out);
+      ref.load(text);
+      ref.simhash(want);
+      expect([...out]).toEqual([...want]);
+      vocab.release(vocab.lookup(run));
+    }
+    expect((sk as unknown as { pool: Uint32Array }).pool.length).toBeLessThanOrEqual(4_096);
+  });
+});
