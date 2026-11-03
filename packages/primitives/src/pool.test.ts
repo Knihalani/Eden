@@ -118,6 +118,29 @@ describe("WorkerPool", () => {
     await expect(p.run("double", 1)).rejects.toBeInstanceOf(PoolClosedError);
   });
 
+  test("warm: every worker runs the warm task before its first task, replacement workers too", async () => {
+    const cold = await pool({ size: 2 });
+    expect(await Promise.all([cold.run("isWarm", null), cold.run("isWarm", null)])).toEqual([false, false]);
+
+    const p = await pool({ size: 2, warm: "warmUp", taskTimeoutMs: 200 });
+    // Two tasks queued in one turn go one to each idle worker (dispatch shares them evenly).
+    expect(await Promise.all([p.run("isWarm", null), p.run("isWarm", null)])).toEqual([true, true]);
+    // A worker replaced after a timeout and one after a crash are warm before they serve.
+    await expect(p.run("spin", 10_000)).rejects.toBeInstanceOf(PoolTimeoutError);
+    expect(await p.run("crashLater", null)).toBe(1);
+    await Bun.sleep(100);
+    expect(p.stats().restarts).toBe(2);
+    expect(await Promise.all([p.run("isWarm", null), p.run("isWarm", null)])).toEqual([true, true]);
+    // The warm task is not run on the calling thread: nothing warms at import or start there.
+    expect(await p.runOrInline("isWarm", null, -1)).toBe(false);
+  });
+
+  test("warm: a missing warm task fails start; one that throws leaves the worker serving", async () => {
+    await expect(pool({ size: 1, warm: "noSuchTask" })).rejects.toThrow();
+    const p = await pool({ size: 1, warm: "warmFails" });
+    expect(await p.run("double", 5)).toBe(10);
+  });
+
   test("a module that fails to load fails start", async () => {
     await expect(
       WorkerPool.start({

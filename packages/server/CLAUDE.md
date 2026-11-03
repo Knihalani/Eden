@@ -11,7 +11,7 @@ defaults.
 | `src/http.ts` | `createHandler`: `/v1/events` (`?waitMs=`, clamped 0–5,000), `/v1/ask`, `/v1/check`, `/v1/pending`, `/v1/digest`, `/v1/feedback`, `/v1/forget`, `/healthz`; auth (the key fixes the tenant; dev mode accepts a missing key, never a wrong one); 429 with Retry-After past the tenant's rate; 413 when the declared content-length passes `maxBodyBytes` (D100) |
 | `src/build.ts` | `buildPartner` (production defaults: query planner serving D33, no experimental flag unless `engine` passes it), `startGatePool` (`EDEN_GATE_WORKERS`, D26) |
 | `src/config.ts` | `loadConfig`: every `EDEN_*` variable validated at startup with a message naming it; `stdioSourceMapPath` (one source-map file per tenant/user under `$EDEN_HOME/mcp-stdio`, or `EDEN_SOURCE_MAP`) |
-| `src/engine-config.ts` | `engineConfig`: `EDEN_ENGINE_CONFIG`, a JSON file of `EngineConfig` keys over the defaults (D103); unknown keys, wrong types and flags needing an unwired dep stop startup |
+| `src/engine-config.ts` | `engineConfig`: `EDEN_ENGINE_CONFIG`, a JSON file of `EngineConfig` keys over the defaults (D103); unknown keys, wrong types, out-of-range numbers (`RANGES`), unknown `anticipateOff` parts and non-default settings needing an unwired dep stop startup (D104); `docs/profiles/*.json` are parsed by its test |
 | `src/mcp.ts` | `createMcpServer`: one `ask_context` tool (guided description with `askGuard`, D88) |
 | `src/mcp-stdio.ts` | One user's `ask_context` over stdio (`EDEN_TENANT`, `EDEN_USER`, `EDEN_SOURCES_FILE`); persists its source map per user, falling back to an in-memory map (logged to stderr) when the file cannot be opened (`openSourceMap`); warms the gate before connecting |
 | `src/connectors.ts` | `staticResolver`: sources from a JSON file; per-user OAuth MCP connections are roadmap M2 |
@@ -29,12 +29,14 @@ defaults.
   `buildPartner({ engine })` or the deployment's `EDEN_ENGINE_CONFIG` file turns it on; unset, the partner's config
   deep-equals `DEFAULT_CONFIG` (`engine-config.test.ts`). Never import presets from `@eden/sim` here. Do not read lab
   options (`allowLogging`, Anthropic models) from the environment.
-- **The file turns on only what the servers can run (D103).** `buildPartner` wires no cards, bridge or reader, so
-  `engineConfig` refuses `cards`, `intent`, `bridgeQuery`, `askReader`, `readerPush` and their sub-flags (`NEEDS_DEP`)
-  set to true: the engine would accept them and do nothing. ALL3 and the NEW family therefore cannot run from the
-  shipped servers. Wire a paid model dep only under a decision with a COST-MODEL.md entry, then drop its keys from
-  `NEEDS_DEP`. An explicit `buildPartner({ askWithModel })` (true or false) wins over `engine.askWithModel`; the
-  servers pass it only for `EDEN_ASK_MODEL=1`, so the file's value holds otherwise.
+- **The file turns on only what the servers can run (D103, D104).** `buildPartner` wires no cards, bridge or
+  reader, so `engineConfig` refuses `cards`, `intent`, `bridgeQuery`, `askReader`, `readerPush` and their
+  sub-settings (`NEEDS_DEP`) set to anything but their default (numbers and lists included, D104): the engine would
+  accept them and do nothing. The NEW family therefore cannot run from the shipped servers; ALL3 minus `cards` can
+  (`docs/profiles/`, measured there, none recommended). Wire a paid model dep only under a decision with a
+  COST-MODEL.md entry, then drop its keys from `NEEDS_DEP`. An explicit `buildPartner({ askWithModel })` (true or
+  false) wins over `engine.askWithModel`; the servers pass it only for `EDEN_ASK_MODEL=1`, so the file's value
+  holds otherwise.
 - **MCP sources in `EDEN_SOURCES_FILE` are not supported yet.** `staticResolver` gives every tenant and user the same
   sources, so a credentialed connector there would serve one account's data to everyone. Do not add MCP entries to it
   without a decision and an isolation test.
@@ -42,8 +44,11 @@ defaults.
   startup. Measured (3 runs each, `bun packages/engine/bench/pipeline.bench.ts 1500 300`, with and without a preload
   calling it): event #0 49.3/46.1/36.7 ms cold vs 9.6/14.2/12.6 ms warm; warm-up lag max 71.8/69.7/56.2 vs
   57.6/43.8/41.4 ms. First `sanitizeForStore` in a fresh process 36-44 ms cold vs 1.0-1.8 ms after `warmGate` (64-92
-  ms at startup instead). Gate workers (D25) still warm lazily: `WorkerPool` has no init hook. Do not call it at the
-  top level of `engine/src/gate.ts` (every importer would pay).
+  ms at startup instead). Gate workers (D25) warm too: `startGatePool` passes `warm: "warmGateItem"`, which every
+  worker (a replacement too) runs before it is ready. Measured (scratch script, 3 runs, `startGatePool(2)`, 4 items of
+  ~3 KB with keywords): first batch 45.6/51.3/74.9 ms before vs 5.2/6.0/13.8 ms after (steady state 1.4-2.4 ms); pool
+  start 36-50 ms before vs 155-182 ms after (the cost moves to startup). Never warm at the top level of
+  `engine/src/gate.ts` (every importer, the main thread included, would pay).
 - **Read-only sources (D7)** are enforced in `@eden/sources`; `connectors.ts` must build sources through it.
 - **Body size (D100).** `EDEN_MAX_BODY_BYTES` (default 8 MB = 8,388,608) caps every request body twice: the handler
   refuses a declared content-length past it with 413 before `req.json()`, and `Bun.serve` refuses bodies with no

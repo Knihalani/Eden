@@ -87,7 +87,8 @@ export function openSourceMap(resolvePath: () => string, log = console.error): S
 /**
  * Starts the pool that redacts lookup results (D25), or returns undefined for 0 workers. Items under 1 KB are gated
  * inline (the round trip costs more than the work); a batch running past 500 ms has its worker replaced and its items
- * dropped, which bounds a pathological input.
+ * dropped, which bounds a pathological input. Each worker, a replacement too, compiles the secret gate before it
+ * serves (`warmGateItem` in engine/src/gate.ts): otherwise each one's first batch paid 30-50 ms for it.
  */
 export async function startGatePool(workers: number): Promise<WorkerPool | undefined> {
   if (workers <= 0) return undefined;
@@ -98,5 +99,7 @@ export async function startGatePool(workers: number): Promise<WorkerPool | undef
     maxBatch: 32,
     taskTimeoutMs: 500,
     inlineBelow: 1_024,
+    // A task of GATE_MODULE: a missing export fails the start, so a rename cannot leave the workers cold unnoticed.
+    warm: "warmGateItem",
   });
 }

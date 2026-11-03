@@ -11,6 +11,7 @@
  */
 import type { WorkerPool } from "@eden/primitives";
 import type { ContextItem } from "@eden/protocol";
+import { warmGate } from "@eden/redact";
 import { DEFAULT_CACHE_LIMITS, sanitizeItem } from "./cache";
 import { head } from "./text";
 
@@ -20,6 +21,25 @@ export const GATE_MODULE = import.meta.url;
 /** Pool task: one item made safe to hold (`sanitizeItem`). */
 export function gateItem(input: { item: ContextItem; maxTextChars: number }): ContextItem {
   return sanitizeItem(input.item, input.maxTextChars);
+}
+
+let warmed = false;
+
+/** Pool task: whether `warmGateItem` has run on this thread (the server's tests check every worker). */
+export function gateWarmed(): boolean {
+  return warmed;
+}
+
+/**
+ * Pool warm task (`PoolOptions.warm`): compiles the secret gate's rules in this worker (`warmGate`) and gates one
+ * keyword-bearing sample item, so a worker's first lookup batch does not pay 30-50 ms for it (audit 2026-11-03b,
+ * `lat-gate-pool-workers-cold`). Run per worker by the pool, never at import: the main thread imports this module too.
+ */
+export function warmGateItem(): void {
+  warmed = true;
+  warmGate();
+  const sample = "warm-up: api key, token, password and secret, none of them real";
+  gateItem({ item: { id: "warm", sourceId: "warm", ref: "warm", title: sample, text: sample }, maxTextChars: 400 });
 }
 
 /** A `SourceFanout` sanitize hook that gates items through `pool`; rejects if any item's task fails. */
