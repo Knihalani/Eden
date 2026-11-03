@@ -615,6 +615,9 @@ function dateVerdict(
  * `DONE`, `STANDING`): the knowledge graph links such an item to the days and things it names as constraining them.
  */
 export function constrains(s: string): boolean {
+  // Most sentences match none of the four: one search each (no match objects) answers them. `search` ignores the
+  // shared lists' global `lastIndex`.
+  if (s.search(BLOCKS) < 0 && s.search(MOVES) < 0 && s.search(DONE) < 0 && s.search(STANDING) < 0) return false;
   return (
     marks(s, BLOCKS, true).length > 0 ||
     marks(s, MOVES, true).length > 0 ||

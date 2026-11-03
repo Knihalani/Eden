@@ -307,7 +307,8 @@ in-sample and +19 (26%) blind; ALL is +90 (70%) in-sample, +56 (78%) blind.
   review (20 users, full caches of 2,000 realistic items each from worlds 41–43 at `noiseScale` 1.5, `ItemCache.put`
   in batches of ten, nothing else running), heap 3.38 → 8.16 MB per user and put CPU 120 → 361 ms per 2,000 items
   (2.4× and 3×); at the cache's 10,000 users per tenant that is about 48 GB more heap. `MAX_NODES` (120,000) is not
-  what bounds it (1,161 nodes for 2,000 items here): the links and postings are. Not yet reduced (D63).
+  what bounds it (1,161 nodes for 2,000 items here): the links and postings are. Not yet reduced (D63). Reduced in
+  D104 (`graph-memory.ts`): 2.23 → 0.63 KB per item and 106 → 49 µs of put per item, same results.
 - **Anticipation** (D60): no model call; the prefetch's source calls (funnel +0.7 calls per task with a draft
   lead-in).
 - Telemetry (D56) off costs one null check per phase.

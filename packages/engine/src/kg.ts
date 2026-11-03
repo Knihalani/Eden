@@ -90,27 +90,9 @@ const MAX_NODES = 120_000;
 
 export type NodeKind = "name" | "email" | "id" | "channel" | "role" | "day";
 
-interface GNode {
-  kind: NodeKind;
-  /** The node's name as first seen written (for ties): "Umbrella Health", "inv-7174", "#legal", "2026-10-29". */
-  label: string;
-  /** Item id → mask of edge types (`EDGE`). */
-  items: Map<string, number>;
-  /** Node key → { mask, count }: a link is kept while some item still states it. */
-  links: Map<string, { mask: number; n: number }>;
-}
-
-/** What one item put in the graph, so it can be taken out again. */
-interface Placed {
-  nodes: string[];
-  links: [string, string, number][];
-  /** Its authors' node keys (From, organiser, owner, chat speaker). */
-  authors: string[];
-  /** Sent by a system, not a person (`AUTOMATED`). */
-  automated: boolean;
-  /** A sentence of it blocks, moves or settles something (`conflict.ts` `constrains`). */
-  bound: boolean;
-}
+/** An item's flags in the graph: sent by a system (`AUTOMATED`); a sentence of it constrains something. */
+const AUTOMATED_FLAG = 1;
+const BOUND_FLAG = 2;
 
 /** What `extract` reads from an item: its nodes with edge masks, node links, and authors. */
 export interface Extraction {
@@ -210,11 +192,23 @@ export function orgLabel(domain: string): string | null {
 }
 
 /** A name squashed to its lower-case letters and digits: "Umbrella Health" and "umbrellahealth" are one key. */
-export const squash = (s: string) =>
-  s
-    .toLowerCase()
-    .replace(/['’]s$/u, "")
-    .replace(/[^\p{L}\p{N}]/gu, "");
+export function squash(s: string): string {
+  const lower = s.toLowerCase();
+  // ASCII (most names, every domain): the same result without the Unicode-class pattern.
+  let ascii = true;
+  let clean = true;
+  for (let i = 0; i < lower.length; i++) {
+    const c = lower.charCodeAt(i);
+    if (c >= 128) {
+      ascii = false;
+      break;
+    }
+    if (!((c >= 97 && c <= 122) || (c >= 48 && c <= 57))) clean = false;
+  }
+  if (ascii && clean) return lower;
+  if (ascii) return (lower.endsWith("'s") ? lower.slice(0, -2) : lower).replace(/[^a-z0-9]/g, "");
+  return lower.replace(/['’]s$/u, "").replace(/[^\p{L}\p{N}]/gu, "");
+}
 
 const nameKey = (s: string) => `n:${squash(s)}`;
 
@@ -231,8 +225,6 @@ const SPEAKER = /^(\[\d{1,2}:\d{2}\]\s?)?(\p{Lu}[\p{L}'’-]{0,30}(?:[ \t]\p{Lu}
 const IDENT = /\b([A-Z]{2,6})[- ]?(\d{2,9})\b/g;
 /** An IBAN-like account number: two letters, two digits, then 10 to 30 letters and digits in groups. */
 const IBAN = /\b([A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,4})?)\b/g;
-/** A word of a name: letters (any script), digits and inner marks. */
-const WORD = /[\p{L}\p{N}][\p{L}\p{N}&'’.-]{0,40}/gu;
 /**
  * A role named as someone's ("your manager", "the landlord", "(Legal)"). Not "my X": in a message from someone else,
  * "my mum" is theirs, not the user's.
@@ -266,10 +258,10 @@ export function runsOf(text: string, max = 32, title = false): string[] {
   let lastEnd = -1;
   let sentenceStart = true;
   const flush = () => {
+    if (run.length === 0) return;
     // Dates and common words around a name are not part of it ("on Friday Dana Lee", "Hi Robin"), nor is a number
     // left at either end ("Mon 26 Oct" is no name).
-    const lead = (w: string) => COMMON_CAPS.has(w.toLowerCase()) || LEADING.has(w.toLowerCase()) || /^\p{N}/u.test(w);
-    while (run.length > 0 && lead(run[0]!)) {
+    while (run.length > 0 && leads(run[0]!)) {
       run.shift();
       runStart = false;
     }
@@ -280,39 +272,224 @@ export function runsOf(text: string, max = 32, title = false): string[] {
       const skip =
         one !== "" &&
         ((runStart && !title) || isStopword(one) || ROLES.has(one) || one.length < 2 || /^[qh]\d$/.test(one));
-      const name = run.join(" ").replace(/['’]s$/u, "");
+      let name = run.length === 1 ? run[0]! : run.join(" ");
+      if (name.length > 1 && name.endsWith("s") && (name.at(-2) === "'" || name.at(-2) === "’")) {
+        name = name.slice(0, -2);
+      }
       if (!skip && name.length <= 80 && !out.includes(name)) out.push(name);
     }
     run = [];
   };
-  for (const m of text.matchAll(WORD)) {
+  // One pass over the words of a name (a letter or digit of any script, then up to 40 more code points of letters,
+  // digits and & ' ’ . -, as /[\p{L}\p{N}][\p{L}\p{N}&'’.-]{0,40}/u reads them), scanned by character code: this runs
+  // on every sentence of every item cached, and a regex match per word allocated an array each.
+  for (let i = 0; i < text.length;) {
+    const c = codeAt(text, i);
+    if (!isWordStart(c)) {
+      i += c > 0xffff ? 2 : 1;
+      continue;
+    }
+    const at = i;
+    i += c > 0xffff ? 2 : 1;
+    for (let more = 0; more < 40 && i < text.length; more++) {
+      const d = codeAt(text, i);
+      if (!isWordPart(d)) break;
+      i += d > 0xffff ? 2 : 1;
+    }
     if (out.length >= max) break;
-    const word = m[0].replace(/[.'’-]+$/u, "");
-    const at = m.index!;
-    const between = lastEnd < 0 ? "" : text.slice(lastEnd, at);
-    const joined = lastEnd >= 0 && /^[ \t]+$/.test(between);
+    // Joined to the run when only spaces and tabs come between; a new sentence after . ! ? : or a line break.
+    let joined = false;
+    let boundary = false;
+    if (lastEnd >= 0 && at > lastEnd) {
+      joined = true;
+      for (let k = lastEnd; k < at; k++) {
+        const b = text.charCodeAt(k);
+        if (b !== 32 && b !== 9) joined = false;
+        if (b === 46 || b === 33 || b === 63 || b === 58 || b === 10) boundary = true;
+      }
+    }
     if (!joined) {
       flush();
-      if (lastEnd < 0 || /[.!?:\n]/.test(between)) sentenceStart = true;
+      if (lastEnd < 0 || boundary) sentenceStart = true;
     }
-    const cap = /^\p{Lu}/u.test(word);
-    const num = /^\p{N}/u.test(word);
+    const cap = c < 128 ? c >= 65 && c <= 90 : UPPER_START.test(text.slice(at, i));
+    const num = c < 128 ? c >= 48 && c <= 57 : NUMBER_START.test(text.slice(at, i));
     if (cap || (num && run.length > 0)) {
       if (run.length === 0) runStart = sentenceStart;
-      if (run.length < 4) run.push(word);
+      // Trailing dots, apostrophes and hyphens are not part of the word ("Lee.", "Hooli's'").
+      let cut = i;
+      while (cut > at + 1 && isTrail(text.charCodeAt(cut - 1))) cut--;
+      if (run.length < 4) run.push(text.slice(at, cut));
     } else flush();
-    sentenceStart = /[.!?:]$/.test(m[0]) && !/\p{Lu}\.$/u.test(m[0]);
-    lastEnd = at + m[0].length;
+    // A word ending in a full stop ends a sentence, unless it is an initial ("U.S.", "J.").
+    if (text.charCodeAt(i - 1) !== 46) sentenceStart = false;
+    else {
+      const prev = text.charCodeAt(i - 2);
+      sentenceStart = prev < 128 ? !(prev >= 65 && prev <= 90) : !UPPER_BEFORE_DOT.test(text.slice(at, i));
+    }
+    lastEnd = i;
   }
   flush();
   return out;
 }
 
+/** Characters stripped from a word's end, and the tests `runsOf` reads outside ASCII. */
+const isTrail = (c: number) => c === 46 || c === 39 || c === 0x2019 || c === 45;
+/** The code point at `i`: a code unit, or a surrogate pair's code point. */
+function codeAt(s: string, i: number): number {
+  const c = s.charCodeAt(i);
+  return c >= 0xd800 && c <= 0xdbff ? s.codePointAt(i)! : c;
+}
+/** Whether a run's first word is no part of a name (`runsOf`): a common capital, a request verb, a number. */
+function leads(w: string): boolean {
+  const lower = w.toLowerCase();
+  return COMMON_CAPS.has(lower) || LEADING.has(lower) || startsNumber(w);
+}
+const LETTER_OR_DIGIT = /^[\p{L}\p{N}]$/u;
+/** `LETTER_OR_DIGIT` per code unit of the basic plane, read once each: 0 not yet, 1 yes, 2 no. */
+const LN_CLASS = new Uint8Array(0x10000);
+function isWordStart(cp: number): boolean {
+  if (cp < 128) return (cp >= 97 && cp <= 122) || (cp >= 65 && cp <= 90) || (cp >= 48 && cp <= 57);
+  if (cp > 0xffff) return LETTER_OR_DIGIT.test(String.fromCodePoint(cp));
+  if (LN_CLASS[cp] === 0) LN_CLASS[cp] = LETTER_OR_DIGIT.test(String.fromCharCode(cp)) ? 1 : 2;
+  return LN_CLASS[cp] === 1;
+}
+/** A code point a word goes on with: a letter, a digit, or & ' ’ . - */
+const isWordPart = (cp: number) => cp === 38 || cp === 39 || cp === 46 || cp === 45 || cp === 0x2019 || isWordStart(cp);
+const UPPER_START = /^\p{Lu}/u;
+const NUMBER_START = /^\p{N}/u;
+const UPPER_BEFORE_DOT = /\p{Lu}\.$/u;
+const startsNumber = (w: string) => {
+  const c = w.charCodeAt(0);
+  return c < 128 ? c >= 48 && c <= 57 : NUMBER_START.test(w);
+};
+
+/** Sentences (and people) a user's graph remembers reading (`UserGraph`), at most. */
+const MEMO_SENTENCES = 256;
+
+/**
+ * What one sentence says for the graph, apart from the item it is in and the day it is read on (`parseSentence`).
+ * Shared by every item that says the sentence: read only.
+ */
+export interface Parsed {
+  /** It blocks, moves or settles something (`conflict.ts` `constrains`). */
+  binding: boolean;
+  /** Its capitalised runs (`runsOf`), as pairs: node key, then the run as written. */
+  readonly runs: readonly string[];
+  /** Its identifiers ("inv-7174") and account numbers. */
+  readonly ids: readonly string[];
+  readonly accounts: readonly string[];
+  /** The roles it names as someone's, as pairs: the role, then the name written just before it or null. */
+  readonly roles: readonly (string | null)[];
+  /** The sentence in lower case (read for dates when it binds), and whether it states an expiry. */
+  lower: string;
+  expiry: boolean;
+}
+
+const NONE: readonly never[] = Object.freeze([]);
+
+/** Reads one sentence (`Parsed`): its names, identifiers and roles, and whether it constrains anything. */
+function parseSentence(raw: string, inTitle: boolean): Parsed {
+  const lower = raw.toLowerCase();
+  const binding = raw.length >= 3 && constrains(lower);
+  const runs: string[] = [];
+  for (const run of runsOf(raw, 12, inTitle)) runs.push(nameKey(run), run);
+  const ids: string[] = [];
+  for (const m of allOf(IDENT, raw)) if (!NOT_ID.test(m[1]!)) ids.push(`${m[1]!.toLowerCase()}-${m[2]}`);
+  const accounts: string[] = [];
+  for (const m of allOf(IBAN, raw)) {
+    const id = m[1]!.replace(/\s/g, "").toLowerCase();
+    if (id.length >= 14) accounts.push(id);
+  }
+  const roles: (string | null)[] = [];
+  for (const m of allOf(ROLE_AT, lower)) {
+    const role = (m[1] ?? m[2])!;
+    if (!PERSON_ROLES.has(role)) continue;
+    // (Read from the sentence as written, at the same place: lower-casing kept its length, or it is not read.)
+    const before = raw.slice(Math.max(0, m.index! - 40), m.index!);
+    const named = lower.length === raw.length ? NAME_BEFORE.exec(before) : null;
+    roles.push(role, named ? named[1]!.trim() : null);
+  }
+  // Most lists are empty: one shared empty list keeps a remembered sentence small.
+  const or = <T>(xs: T[]): readonly T[] => (xs.length > 0 ? xs : NONE);
+  return {
+    binding,
+    runs: or(runs),
+    ids: or(ids),
+    accounts: or(accounts),
+    roles: or(roles),
+    lower: binding ? lower : "",
+    expiry: binding && EXPIRY.test(lower),
+  };
+}
+
+const NO_MATCHES: RegExpExecArray[] = [];
+
+/**
+ * Every match of one of this file's global patterns, as `matchAll` gives them, without its copy of the pattern and
+ * iterator per call (`extract` reads several patterns per sentence). Collected first, so the loop over them may use
+ * any pattern; none of these matches an empty string.
+ */
+function allOf(re: RegExp, s: string): RegExpExecArray[] {
+  re.lastIndex = 0;
+  let m = re.exec(s);
+  if (m === null) return NO_MATCHES;
+  const out: RegExpExecArray[] = [];
+  for (; m !== null; m = re.exec(s)) out.push(m);
+  re.lastIndex = 0;
+  return out;
+}
+
+/** What `parsePerson` reads from a name and an address: the keys and labels a person puts in the graph. */
+export interface ParsedPerson {
+  /** The person's name node (null when the words name no one) and the name as written. */
+  key: string | null;
+  full: string;
+  /** Their first name's node, when the name has two words or more, and the first name. */
+  firstKey: string | null;
+  first: string;
+  /** Their address's node ("e:" and the address in lower case), the organisation its domain names, a system's. */
+  at: string | null;
+  org: string | null;
+  automated: boolean;
+}
+
+/** Reads a person's name and address (`ParsedPerson`); `extract` adds what it names, in its order. */
+function parsePerson(name: string, email: { local: string; domain: string } | null): ParsedPerson {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  while (words.length > 0 && COMMON_CAPS.has(words[0]!.toLowerCase())) words.shift();
+  const one = words.length === 1 ? words[0]!.toLowerCase() : "";
+  const isName = words.length >= 1 && (one === "" || !(isStopword(one) || ROLES.has(one) || one.length < 2));
+  const full = isName ? words.join(" ") : "";
+  return {
+    key: isName ? nameKey(full) : null,
+    full,
+    firstKey: isName && words.length >= 2 ? nameKey(words[0]!) : null,
+    first: isName && words.length >= 2 ? words[0]! : "",
+    at: email ? `e:${email.local.toLowerCase()}@${email.domain.toLowerCase()}` : null,
+    org: email ? orgLabel(email.domain) : null,
+    automated: email !== null && AUTOMATED.test(email.local),
+  };
+}
+
+/** What a user's graph remembers reading (`extract`): sentences and people, while every item that said them stays. */
+export interface Memo {
+  sentences: Map<string, Parsed>;
+  people: Map<string, ParsedPerson>;
+}
+
+/** Remembers one reading, forgetting the oldest past `MEMO_SENTENCES`. */
+function remember<T>(memo: Map<string, T>, key: string, value: T): void {
+  if (memo.size >= MEMO_SENTENCES) memo.delete(memo.keys().next().value!);
+  memo.set(key, value);
+}
+
 /**
  * What an item puts in the graph (`Extraction`). `now` resolves the year of a day written without one. Linear in the
- * item's head (`READ_CHARS`); at most `MAX_NODES_PER_ITEM` nodes.
+ * item's head (`READ_CHARS`); at most `MAX_NODES_PER_ITEM` nodes. `memo` (the user's graph's) holds sentences already
+ * read: the same result, without reading them again.
  */
-export function extract(item: ContextItem, now: number): Extraction {
+export function extract(item: ContextItem, now: number, memo?: Memo): Extraction {
   const nodes = new Map<string, { kind: NodeKind; label: string; mask: number }>();
   const links: [string, string, number][] = [];
   const authors: string[] = [];
@@ -338,44 +515,42 @@ export function extract(item: ContextItem, now: number): Extraction {
   const body = item.text.slice(0, READ_CHARS);
   /** A person by name (capitalised words), with an address or not: the person, address, first name, organisation. */
   const person = (name: string, email: { local: string; domain: string } | null, type: EdgeType) => {
-    const words = name.trim().split(/\s+/).filter(Boolean);
-    while (words.length > 0 && COMMON_CAPS.has(words[0]!.toLowerCase())) words.shift();
-    const one = words.length === 1 ? words[0]!.toLowerCase() : "";
-    const isName = words.length >= 1 && (one === "" || !(isStopword(one) || ROLES.has(one) || one.length < 2));
-    let key: string | null = null;
-    if (isName) {
-      const full = words.join(" ");
-      key = nameKey(full);
-      add(key, "name", full, type);
+    // A name and address many items carry (a sender, a colleague) are read once per user while their items stay.
+    const memoKey = memo ? (email ? `${name}\u0000${email.local}@${email.domain}` : name) : "";
+    let p = memo?.people.get(memoKey);
+    if (!p) {
+      p = parsePerson(name, email);
+      if (memo) remember(memo.people, memoKey, p);
+    }
+    const key = p.key;
+    if (key !== null) {
+      add(key, "name", p.full, type);
       if (type === "authored") {
         authors.push(key);
-        authorNames.push(full);
+        authorNames.push(p.full);
       }
-      if (words.length >= 2) {
+      if (p.firstKey !== null) {
         // A first name links to the person: "Łukasz" in a chat is Łukasz Nowak when the user's items say so.
-        const first = nameKey(words[0]!);
-        add(first, "name", words[0]!, type);
-        link(key, first, "alias");
+        add(p.firstKey, "name", p.first, type);
+        link(key, p.firstKey, "alias");
       }
     }
-    if (email) {
-      const at = `e:${email.local.toLowerCase()}@${email.domain.toLowerCase()}`;
-      add(at, "email", at.slice(2), type);
-      if (type === "authored") authors.push(at);
-      if (type === "authored" && AUTOMATED.test(email.local)) automated = true;
-      if (key) link(key, at, "alias");
-      const org = orgLabel(email.domain);
-      if (org) {
-        const orgKey = `n:${org}`;
-        add(orgKey, "name", org, "mentions");
-        link(key ?? at, orgKey, "member");
+    if (p.at !== null) {
+      add(p.at, "email", p.at.slice(2), type);
+      if (type === "authored") authors.push(p.at);
+      if (type === "authored" && p.automated) automated = true;
+      if (key !== null) link(key, p.at, "alias");
+      if (p.org !== null) {
+        const orgKey = `n:${p.org}`;
+        add(orgKey, "name", p.org, "mentions");
+        link(key ?? p.at, orgKey, "member");
       }
     }
   };
   /** The people of a text: each address with the name written just before it, then names with no address. */
   const people = (value: string, type: EdgeType, bare: boolean) => {
     let found = false;
-    for (const m of value.matchAll(EMAIL)) {
+    for (const m of allOf(EMAIL, value)) {
       found = true;
       const before = value.slice(Math.max(0, m.index! - 80), m.index!);
       person(TRAILING_NAME.exec(before)?.[1] ?? "", { local: m[1]!, domain: m[2]! }, type);
@@ -387,56 +562,54 @@ export function extract(item: ContextItem, now: number): Extraction {
     }
   };
   // Who takes part: header lines and `meta.people`; addresses anywhere else in the text are mentions.
-  for (const m of body.matchAll(PARTY)) {
+  const parties = allOf(PARTY, body);
+  for (const m of parties) {
     const field = m[1]!.toLowerCase();
     people(m[2]!, /^(from|owner|organi)/.test(field) ? "authored" : "attended", true);
   }
   if (item.meta?.people) people(item.meta.people.slice(0, 1_000), "attended", true);
-  people(body.replace(PARTY, ""), "mentions", false);
+  // (With no header line, the text without them is the text: no copy.)
+  people(parties.length > 0 ? body.replace(PARTY, "") : body, "mentions", false);
   // Chat speakers, and the channel a chat item is in.
   const channel = /^#([\p{L}\p{N}_-]{2,40})/u.exec(title);
   const chat = channel !== null || /^dm\b/i.test(title);
-  for (const m of body.matchAll(SPEAKER)) if (m[1] || chat) person(m[2]!, null, "authored");
+  for (const m of allOf(SPEAKER, body)) if (m[1] || chat) person(m[2]!, null, "authored");
   if (channel) add(`c:#${channel[1]!.toLowerCase()}`, "channel", `#${channel[1]!.toLowerCase()}`, "channel");
   // Sentences that block, move or settle something constrain what they name and the days they cover.
   const sentences = `${title}.\n${body}`.split(/[.!?;]+\s|\n+/);
   let bound = false;
   for (const raw of sentences) {
-    const lower = raw.toLowerCase();
-    const binding = raw.length >= 3 && constrains(lower);
-    bound ||= binding;
     const inTitle = raw.trim().length > 2 && title.includes(raw.trim());
-    // A title's first word is its subject as often as not ("Globex — account", "Hooli supplier tender").
-    for (const run of runsOf(raw, 12, inTitle)) {
-      add(nameKey(run), "name", run, inTitle ? "about" : "mentions");
-      if (binding) add(nameKey(run), "name", run, "constrains");
+    // A sentence many items share (a greeting, a sign-off, a footer) is read once per user while its items stay.
+    let p = inTitle || !memo ? undefined : memo.sentences.get(raw);
+    if (!p) {
+      p = parseSentence(raw, inTitle);
+      if (!inTitle && memo) remember(memo.sentences, raw, p);
     }
-    for (const m of raw.matchAll(IDENT)) {
-      if (NOT_ID.test(m[1]!)) continue;
-      const id = `${m[1]!.toLowerCase()}-${m[2]}`;
+    const binding = p.binding;
+    bound ||= binding;
+    // A title's first word is its subject as often as not ("Globex — account", "Hooli supplier tender").
+    for (let k = 0; k < p.runs.length; k += 2) {
+      add(p.runs[k]!, "name", p.runs[k + 1]!, inTitle ? "about" : "mentions");
+      if (binding) add(p.runs[k]!, "name", p.runs[k + 1]!, "constrains");
+    }
+    for (const id of p.ids) {
       add(`i:${id}`, "id", id, "ref");
       if (binding) add(`i:${id}`, "id", id, "constrains");
     }
-    for (const m of raw.matchAll(IBAN)) {
-      const id = m[1]!.replace(/\s/g, "").toLowerCase();
-      if (id.length >= 14) add(`i:${id}`, "id", id, "ref");
-    }
-    for (const m of lower.matchAll(ROLE_AT)) {
-      const role = (m[1] ?? m[2])!;
-      if (!PERSON_ROLES.has(role)) continue;
+    for (const id of p.accounts) add(`i:${id}`, "id", id, "ref");
+    for (let k = 0; k < p.roles.length; k += 2) {
+      const role = p.roles[k]!;
       add(`r:${role}`, "role", role, binding ? "constrains" : "role");
       // The person the role is someone's: the name just before it, the item's author when that is their first name.
-      // (Read from the sentence as written, at the same place: lower-casing kept its length, or it is not read.)
-      const before = raw.slice(Math.max(0, m.index! - 40), m.index!);
-      const named = lower.length === raw.length ? NAME_BEFORE.exec(before) : null;
-      if (named) {
-        const name = named[1]!.trim();
+      const name = p.roles[k + 1];
+      if (name !== null) {
         const full = authorNames.find((a) => a === name || a.split(" ")[0] === name);
-        link(nameKey(full ?? name), `r:${role}`, "alias");
+        link(nameKey(full ?? name!), `r:${role}`, "alias");
       }
     }
     if (binding) {
-      const d = datesIn(lower, now);
+      const d = datesIn(p.lower, now);
       for (const sp of d.spans) {
         // A span too long to link day by day ("pausing headcount from 19 Oct until Q1") is kept whole (`long`).
         if (daysBetween(sp.from, sp.to) >= MAX_SPAN_DAYS) {
@@ -445,7 +618,7 @@ export function extract(item: ContextItem, now: number): Extraction {
       }
       // A deadline ("the slip by Monday 2 Nov") binds what it is about, not every day before it. An expiry binds every
       // day after it: "passport expires 2 Nov" constrains a trip on the 21st.
-      if (EXPIRY.test(lower)) {
+      if (p.expiry) {
         for (const day of d.limits) if (long.length < MAX_LONG) long.push({ from: nextDay(day), to: "9999-12-31" });
       }
     }
@@ -480,87 +653,276 @@ function daysOf(from: string, to: string): string[] {
   return out;
 }
 
+/**
+ * The graph's storage is compact (D58 held a Map per node for its items and another for its links, and every item's
+ * node keys and links again as strings: 2.2 KB per item over realistic mail). Node keys are interned to small integer
+ * ids and items to slots; a node's items and links are packed words in typed arrays, (item slot or node id) shifted
+ * past the edge mask; what one item placed is one `Int32Array`. Orders are kept as the Maps kept them (appended,
+ * removed in place), so a walk visits what it visited before in the same order.
+ */
+const MASK_BITS = N_TYPES;
+const MASK = (1 << MASK_BITS) - 1;
+/** Item slots and node ids stay below this, so a packed word stays a positive 32-bit integer. */
+const MAX_INDEX = 1 << (31 - MASK_BITS);
+/** In an item's placed links: the link went on both nodes (else only the first's: the second was full). */
+const BOTH = 1 << MASK_BITS;
+const EMPTY = new Int32Array(0);
+const KINDS: Record<string, NodeKind> = { n: "name", e: "email", i: "id", c: "channel", r: "role", d: "day" };
+const ALIAS = bit("alias");
+const CONSTRAINS = bit("constrains");
+
+class GNode {
+  /**
+   * Whether the node is in the graph. A node out of it keeps its id (and key) while a link or an item's author still
+   * names it, so a key never has two ids and an id never two keys.
+   */
+  live = false;
+  /** Its items: (item slot << MASK_BITS | edge mask), in the order they came; `ni` used. */
+  items: Int32Array = EMPTY;
+  ni = 0;
+  /** Its links to other nodes: pairs (node id << MASK_BITS | mask, items stating it), in the order they came. */
+  links: Int32Array = EMPTY;
+  /** Links used (pairs). A link is kept while some item still states it. */
+  nl = 0;
+  /** Links on other nodes and items' authors that name this node's id. */
+  refs = 0;
+  /** The node's name as first seen written (for ties): "Umbrella Health", "inv-7174", "#legal", "2026-10-29". */
+  label: string;
+  kind: NodeKind;
+  readonly key: string;
+  constructor(key: string, kind: NodeKind, label: string) {
+    this.key = key;
+    this.kind = kind;
+    this.label = label;
+  }
+}
+
+/** Scratch for `add` (one graph is built at a time: no await inside). */
+const scratchNodes: number[] = [];
+const scratchLinks: number[] = [];
+const scratchAuthors: number[] = [];
+
+/** `xs` with room for `n` more words, doubled when full. */
+function room(xs: Int32Array, used: number, n: number): Int32Array {
+  if (used + n <= xs.length) return xs;
+  const grown = new Int32Array(Math.max(4, xs.length * 2, used + n));
+  grown.set(xs.subarray(0, used));
+  return grown;
+}
+
+/** `xs` halved when at most a quarter is used (an item churned off a busy node gives its room back). */
+function shrink(xs: Int32Array, used: number): Int32Array {
+  return xs.length > 8 && used <= xs.length >> 2 ? xs.slice(0, xs.length >> 1) : xs;
+}
+
 /** One user's graph. Held by the user's cache entry (`ItemCache`), so it is keyed, bounded and dropped with it. */
 export class UserGraph {
-  readonly nodes = new Map<string, GNode>();
-  private readonly placed = new Map<string, Placed>();
-  /** Items with long spans (`Extraction.long`), scanned by a walk from days: at most one entry per cached item. */
-  private readonly long = new Map<string, { from: string; to: string }[]>();
+  /** Node key → id, for every node in the graph and every id still named (`GNode.live`). */
+  private readonly ids = new Map<string, number>();
+  private readonly nodeAt: (GNode | undefined)[] = [];
+  private readonly freeIds: number[] = [];
+  private liveNodes = 0;
+  /** Item id → slot, and per slot: the id, what it placed, its flags (`AUTOMATED_FLAG`, `BOUND_FLAG`). */
+  private readonly slots = new Map<string, number>();
+  private readonly itemAt: (string | undefined)[] = [];
+  /**
+   * What each item placed, to take it out again: [nodes n, links n, its node ids…, its links as (a, b, mask | BOTH)
+   * triples…, its authors' node ids (From, organiser, owner, chat speaker)…].
+   */
+  private readonly placedAt: (Int32Array | undefined)[] = [];
+  private flags = new Uint8Array(64);
+  private readonly freeSlots: number[] = [];
+  /** Items with long spans (`Extraction.long`), by slot, scanned by a walk from days: at most one entry an item. */
+  private readonly long = new Map<number, { from: string; to: string }[]>();
+  /**
+   * Sentences and people read lately (`parseSentence`, `parsePerson`, at most `MEMO_SENTENCES` each): emptied whenever
+   * an item leaves, so it never holds what only an item the graph no longer holds said.
+   */
+  private readonly memo: Memo = { sentences: new Map(), people: new Map() };
   /** Learned evidence per edge type: Beta(alpha, beta) of "an item reached by this type was delivered and used". */
   private readonly alpha = new Float64Array(N_TYPES).fill(2);
   private readonly beta = new Float64Array(N_TYPES).fill(2);
 
   get size(): number {
-    return this.nodes.size;
+    return this.liveNodes;
+  }
+
+  /** Whether a node exists (for tests and for seeding only names the user's items know). */
+  has(key: string): boolean {
+    return this.liveId(key) >= 0;
+  }
+
+  /** The keys of the nodes in the graph (for tests). */
+  keys(): string[] {
+    const out: string[] = [];
+    for (const n of this.nodeAt) if (n?.live) out.push(n.key);
+    return out;
+  }
+
+  /** A node's id when it is in the graph, else -1. */
+  private liveId(key: string): number {
+    const id = this.ids.get(key);
+    return id !== undefined && this.nodeAt[id]!.live ? id : -1;
+  }
+
+  /** The id of `key`, made (out of the graph) if it has none. */
+  private intern(key: string, kind: NodeKind, label: string): number {
+    const known = this.ids.get(key);
+    if (known !== undefined) return known;
+    const id = this.freeIds.pop() ?? this.nodeAt.length;
+    this.nodeAt[id] = new GNode(key, kind, label);
+    this.ids.set(key, id);
+    return id;
+  }
+
+  /** Frees an id that is out of the graph and named by nothing. */
+  private release(id: number): void {
+    const node = this.nodeAt[id]!;
+    if (node.live || node.refs > 0) return;
+    this.ids.delete(node.key);
+    this.nodeAt[id] = undefined;
+    this.freeIds.push(id);
+  }
+
+  /** Takes a node out of the graph when nothing holds it: no item and no link. */
+  private settle(id: number): void {
+    const node = this.nodeAt[id];
+    if (!node?.live || node.ni > 0 || node.nl > 0) return;
+    node.live = false;
+    this.liveNodes--;
+    this.release(id);
   }
 
   /** Puts an item in the graph, replacing what an earlier copy of it put there. */
   add(item: ContextItem, now: number): void {
-    if (this.placed.has(item.id)) this.remove(item.id);
-    const x = extract(item, now);
-    const placed: Placed = { nodes: [], links: [], authors: x.authors, automated: x.automated, bound: x.bound };
+    if (this.slots.has(item.id)) this.remove(item.id);
+    // Bounded well before this by the cache's items per user and `MAX_NODES`: a packed word must stay an int32.
+    if (this.freeSlots.length === 0 && this.itemAt.length >= MAX_INDEX) return;
+    if (this.nodeAt.length - this.freeIds.length + 2 * MAX_NODES_PER_ITEM >= MAX_INDEX) return;
+    const x = extract(item, now, this.memo);
+    const slot = this.freeSlots.pop() ?? this.itemAt.length;
+    const nodes = scratchNodes;
+    const links = scratchLinks;
+    const authors = scratchAuthors;
+    nodes.length = links.length = authors.length = 0;
     for (const [key, n] of x.nodes) {
-      let node = this.nodes.get(key);
-      if (!node) {
-        if (this.nodes.size >= MAX_NODES) continue;
-        node = { kind: n.kind, label: n.label, items: new Map(), links: new Map() };
-        this.nodes.set(key, node);
+      let id = this.ids.get(key);
+      let node = id === undefined ? undefined : this.nodeAt[id]!;
+      if (!node?.live) {
+        if (this.liveNodes >= MAX_NODES) continue;
+        id ??= this.intern(key, n.kind, n.label);
+        node = this.nodeAt[id]!;
+        node.kind = n.kind;
+        node.label = n.label;
+        node.live = true;
+        this.liveNodes++;
       } else if (n.kind === "name" && /\s/.test(n.label) && !/\s/.test(node.label)) node.label = n.label;
-      node.items.set(item.id, (node.items.get(item.id) ?? 0) | n.mask);
-      placed.nodes.push(key);
+      node.items = room(node.items, node.ni, 1);
+      node.items[node.ni++] = (slot << MASK_BITS) | n.mask;
+      nodes.push(id!);
     }
     for (const [a, b, mask] of x.links) {
-      const na = this.nodes.get(a);
-      const nb = this.nodes.get(b);
-      if (!na || !nb) continue;
-      if (!this.bump(na, b, mask) || !this.bump(nb, a, mask)) continue;
-      placed.links.push([a, b, mask]);
+      const ia = this.liveId(a);
+      const ib = this.liveId(b);
+      if (ia < 0 || ib < 0 || !this.bump(ia, ib, mask)) continue;
+      links.push(ia, ib, this.bump(ib, ia, mask) ? mask | BOTH : mask);
     }
-    this.placed.set(item.id, placed);
-    if (x.long.length > 0) this.long.set(item.id, x.long);
+    for (const k of x.authors) {
+      const id = this.intern(k, KINDS[k[0]!] ?? "name", "");
+      this.nodeAt[id]!.refs++;
+      authors.push(id);
+    }
+    const placed = new Int32Array(2 + nodes.length + links.length + authors.length);
+    placed[0] = nodes.length;
+    placed[1] = links.length / 3;
+    placed.set(nodes, 2);
+    placed.set(links, 2 + nodes.length);
+    placed.set(authors, 2 + nodes.length + links.length);
+    if (slot >= this.flags.length) {
+      const grown = new Uint8Array(this.flags.length * 2);
+      grown.set(this.flags);
+      this.flags = grown;
+    }
+    this.flags[slot] = (x.automated ? AUTOMATED_FLAG : 0) | (x.bound ? BOUND_FLAG : 0);
+    this.slots.set(item.id, slot);
+    this.itemAt[slot] = item.id;
+    this.placedAt[slot] = placed;
+    if (x.long.length > 0) this.long.set(slot, x.long);
   }
 
-  /** Adds one statement of a link; false when the node is full (then nothing is added on either side). */
-  private bump(node: GNode, other: string, mask: number): boolean {
-    const l = node.links.get(other);
-    if (l) {
-      l.mask |= mask;
-      l.n++;
+  /** Adds one statement of a link from one node to another; false when the first is full (then nothing is added). */
+  private bump(from: number, to: number, mask: number): boolean {
+    const node = this.nodeAt[from]!;
+    const l = node.links;
+    for (let k = 0; k < node.nl * 2; k += 2) {
+      if (l[k]! >> MASK_BITS !== to) continue;
+      l[k]! |= mask;
+      l[k + 1]!++;
       return true;
     }
-    if (node.links.size >= MAX_LINKS) return false;
-    node.links.set(other, { mask, n: 1 });
+    if (node.nl >= MAX_LINKS) return false;
+    node.links = room(l, node.nl * 2, 2);
+    node.links[node.nl * 2] = (to << MASK_BITS) | mask;
+    node.links[node.nl * 2 + 1] = 1;
+    node.nl++;
+    this.nodeAt[to]!.refs++;
     return true;
+  }
+
+  /** Takes back one statement of a link from one node to another; the link goes with its last statement. */
+  private unbump(from: number, to: number): void {
+    const node = this.nodeAt[from]!;
+    const l = node.links;
+    for (let k = 0; k < node.nl * 2; k += 2) {
+      if (l[k]! >> MASK_BITS !== to) continue;
+      if (--l[k + 1]! > 0) return;
+      l.copyWithin(k, k + 2, node.nl * 2);
+      node.nl--;
+      node.links = shrink(l, node.nl * 2);
+      this.nodeAt[to]!.refs--;
+      this.release(to);
+      return;
+    }
   }
 
   /** Takes an item out: its edges, the links it stated, and nodes nothing else holds. */
   remove(id: string): void {
-    const p = this.placed.get(id);
-    if (!p) return;
-    this.placed.delete(id);
-    this.long.delete(id);
-    for (const [a, b] of p.links) {
-      for (const [x, y] of [
-        [a, b],
-        [b, a],
-      ] as const) {
-        const node = this.nodes.get(x);
-        const l = node?.links.get(y);
-        if (l && --l.n <= 0) node!.links.delete(y);
-      }
+    const slot = this.slots.get(id);
+    if (slot === undefined) return;
+    const p = this.placedAt[slot]!;
+    this.memo.sentences.clear();
+    this.memo.people.clear();
+    this.slots.delete(id);
+    this.long.delete(slot);
+    this.itemAt[slot] = undefined;
+    this.placedAt[slot] = undefined;
+    this.freeSlots.push(slot);
+    const nodesEnd = 2 + p[0]!;
+    const linksEnd = nodesEnd + p[1]! * 3;
+    for (let k = nodesEnd; k < linksEnd; k += 3) {
+      this.unbump(p[k]!, p[k + 1]!);
+      if (p[k + 2]! & BOTH) this.unbump(p[k + 1]!, p[k]!);
     }
-    for (const key of p.nodes) {
-      const node = this.nodes.get(key);
-      if (!node) continue;
-      node.items.delete(id);
-      if (node.items.size === 0 && node.links.size === 0) this.nodes.delete(key);
+    for (let k = 2; k < nodesEnd; k++) {
+      const node = this.nodeAt[p[k]!]!;
+      const xs = node.items;
+      for (let i = 0; i < node.ni; i++) {
+        if (xs[i]! >> MASK_BITS !== slot) continue;
+        xs.copyWithin(i, i + 1, node.ni);
+        node.ni--;
+        node.items = shrink(xs, node.ni);
+        break;
+      }
+      this.settle(p[k]!);
     }
     // A node kept only by a link whose last item just left: gone with it.
-    for (const [a, b] of p.links) {
-      for (const k of [a, b]) {
-        const node = this.nodes.get(k);
-        if (node && node.items.size === 0 && node.links.size === 0) this.nodes.delete(k);
-      }
+    for (let k = nodesEnd; k < linksEnd; k += 3) {
+      this.settle(p[k]!);
+      this.settle(p[k + 1]!);
+    }
+    for (let k = linksEnd; k < p.length; k++) {
+      this.nodeAt[p[k]!]!.refs--;
+      this.release(p[k]!);
     }
   }
 
@@ -578,7 +940,7 @@ export class UserGraph {
       best = Math.max(best, PRIOR[TYPES[t]!] * this.factor(t));
     }
     // What constrains something is what the conflict test can use: it ranks first among a name's many items.
-    if (mask & bit("constrains")) best = Math.max(best, 0.5) * (1 + PRIOR.constrains * this.factor(EDGE.constrains));
+    if (mask & CONSTRAINS) best = Math.max(best, 0.5) * (1 + PRIOR.constrains * this.factor(EDGE.constrains));
     return best;
   }
 
@@ -607,35 +969,42 @@ export class UserGraph {
     let steps = 0;
     const late = () => (++steps & 127) === 0 && performance.now() - t0 > opt.budgetMs;
     // Each activated node, its activation and the seed it came from: a node reached from two seeds keeps the larger.
-    const act = new Map<string, { a: number; origin: string }>();
-    const isSeed = new Set<string>();
-    const banned = opt.exclude ?? new Set<string>();
+    const act = new Map<number, { a: number; origin: string }>();
+    const isSeed = new Set<number>();
+    const banned = new Set<number>();
+    for (const k of opt.exclude ?? []) {
+      const id = this.ids.get(k);
+      if (id !== undefined) banned.add(id);
+    }
     for (const s of seeds) {
-      if (!this.nodes.has(s.key) || banned.has(s.key) || (act.get(s.key)?.a ?? 0) >= s.weight) continue;
-      if (s.parent && this.nodes.has(s.parent)) continue;
-      act.set(s.key, { a: s.weight, origin: s.key });
-      isSeed.add(s.key);
+      const id = this.liveId(s.key);
+      if (id < 0 || banned.has(id) || (act.get(id)?.a ?? 0) >= s.weight) continue;
+      if (s.parent && this.has(s.parent)) continue;
+      act.set(id, { a: s.weight, origin: s.key });
+      isSeed.add(id);
     }
     /** Nodes one link from a seed whose seed is no hub: their items' authors speak for what the request names. */
-    const near = new Set<string>(isSeed);
+    const near = new Set<number>(isSeed);
     // Two hops of links: a first name to the person, the person to their organisation ("Ingrid" to Ingrid Berg to
     // Globex), each hop weaker.
     // A word of a longer name seeds its own items only: "Sam" of an unknown "Sam Ortiz" is not every Sam.
     const words = new Set(seeds.filter((s) => s.parent).map((s) => s.key));
-    let frontier = [...isSeed].filter((k) => !words.has(k));
+    let frontier = [...isSeed].filter((id) => !words.has(this.nodeAt[id]!.key));
     for (let hop = 1; hop <= LINK_HOPS && frontier.length > 0; hop++) {
-      const next: string[] = [];
+      const next: number[] = [];
       for (const key of frontier) {
-        const node = this.nodes.get(key)!;
+        const node = this.nodeAt[key]!;
         const from = act.get(key)!;
         // A person's few links (addresses, first name, organisation) each carry them whole; an organisation's many
         // people share its activation.
-        const fan = node.links.size > 12 ? Math.sqrt(node.links.size) : 1;
-        for (const [other, l] of node.links) {
+        const fan = node.nl > 12 ? Math.sqrt(node.nl) : 1;
+        for (let k = 0; k < node.nl * 2; k += 2) {
           if (late()) break;
+          const other = node.links[k]! >> MASK_BITS;
+          const mask = node.links[k]! & MASK;
           // A first name several people go by stands for each of them only in part ("Sam": Sam Patel or Sam Ortiz).
-          const shared = l.mask & bit("alias") ? Math.max(1, this.peopleCalled(key), this.peopleCalled(other)) : 1;
-          const w = ((from.a * this.weightOf(l.mask)) / fan / shared) * (hop === 1 ? 1 : HOP_DECAY);
+          const shared = mask & ALIAS ? Math.max(1, this.peopleCalled(key), this.peopleCalled(other)) : 1;
+          const w = ((from.a * this.weightOf(mask)) / fan / shared) * (hop === 1 ? 1 : HOP_DECAY);
           if (banned.has(other)) continue;
           if (w > (act.get(other)?.a ?? 0)) {
             if (!act.has(other)) next.push(other);
@@ -643,37 +1012,40 @@ export class UserGraph {
           }
           // The seed's own names and addresses, or the person a role names: their items speak for the seed. An
           // organisation's members do not each speak for what the request asks of it.
-          if (hop === 1 && l.mask & bit("alias") && node.links.size <= 12 && node.items.size <= HUB) near.add(other);
+          if (hop === 1 && mask & ALIAS && node.nl <= 12 && node.ni <= HUB) near.add(other);
         }
       }
-      frontier = next.filter((k) => this.nodes.has(k));
+      frontier = next.filter((id) => this.nodeAt[id]?.live);
     }
     // An item's score from one seed is the best of the nodes that seed reached it through (a person's name, address
-    // and first name are one person, not three votes); its scores from different seeds add up.
-    const best = new Map<string, Map<string, number>>();
-    const masks = new Map<string, number>();
-    const via = new Map<string, string[]>();
-    const viaName = new Set<string>();
-    const binding = new Set<string>();
-    const byRef = new Set<string>();
+    // and first name are one person, not three votes); its scores from different seeds add up. Keyed by item slot.
+    const best = new Map<number, Map<string, number>>();
+    const masks = new Map<number, number>();
+    const via = new Map<number, string[]>();
+    const viaName = new Set<number>();
+    const binding = new Set<number>();
+    const byRef = new Set<number>();
     for (const [key, { a, origin }] of act) {
       if (late()) break;
-      const node = this.nodes.get(key);
-      if (!node || node.items.size > HUB) continue;
-      const spread = a / Math.log2(2 + node.items.size);
-      for (const [id, mask] of node.items) {
-        if (node.kind === "day" && !(mask & bit("constrains"))) continue;
+      const node = this.nodeAt[key];
+      if (!node?.live || node.ni > HUB) continue;
+      const spread = a / Math.log2(2 + node.ni);
+      const reached = isSeed.has(key) ? 0 : this.linkMask(key, isSeed);
+      for (let k = 0; k < node.ni; k++) {
+        const slot = node.items[k]! >> MASK_BITS;
+        const mask = node.items[k]! & MASK;
+        if (node.kind === "day" && !(mask & CONSTRAINS)) continue;
         const s = spread * this.weightOf(mask);
-        const per = best.get(id) ?? new Map<string, number>();
+        const per = best.get(slot) ?? new Map<string, number>();
         if (s > (per.get(origin) ?? 0)) per.set(origin, s);
-        best.set(id, per);
-        masks.set(id, (masks.get(id) ?? 0) | mask | (isSeed.has(key) ? 0 : this.linkMask(key, isSeed)));
-        const v = via.get(id) ?? [];
+        best.set(slot, per);
+        masks.set(slot, (masks.get(slot) ?? 0) | mask | reached);
+        const v = via.get(slot) ?? [];
         if (v.length < 6 && !v.includes(node.label)) v.push(node.label);
-        via.set(id, v);
-        if (node.kind !== "day") viaName.add(id);
-        if (mask & bit("constrains")) binding.add(id);
-        if (node.kind === "id" && isSeed.has(key)) byRef.add(id);
+        via.set(slot, v);
+        if (node.kind !== "day") viaName.add(slot);
+        if (mask & CONSTRAINS) binding.add(slot);
+        if (node.kind === "id" && isSeed.has(key)) byRef.add(slot);
       }
     }
     // Days a long span covers: the items holding such spans, scanned (one per cached item at most), each covering
@@ -681,39 +1053,42 @@ export class UserGraph {
     for (const s of seeds) {
       if (!s.key.startsWith("d:") || this.long.size === 0) continue;
       const day = s.key.slice(2);
-      const covering: string[] = [];
-      for (const [id, spans] of this.long) {
+      const covering: number[] = [];
+      for (const [slot, spans] of this.long) {
         if (late()) break;
-        if (spans.some((sp) => sp.from <= day && day <= sp.to)) covering.push(id);
+        if (spans.some((sp) => sp.from <= day && day <= sp.to)) covering.push(slot);
       }
-      const spread = (s.weight / Math.log2(2 + covering.length)) * this.weightOf(bit("constrains"));
-      for (const id of covering) {
-        const per = best.get(id) ?? new Map<string, number>();
+      const spread = (s.weight / Math.log2(2 + covering.length)) * this.weightOf(CONSTRAINS);
+      for (const slot of covering) {
+        const per = best.get(slot) ?? new Map<string, number>();
         if (spread > (per.get(s.key) ?? 0)) per.set(s.key, spread);
-        best.set(id, per);
-        masks.set(id, (masks.get(id) ?? 0) | bit("constrains"));
-        const v = via.get(id) ?? [];
+        best.set(slot, per);
+        masks.set(slot, (masks.get(slot) ?? 0) | CONSTRAINS);
+        const v = via.get(slot) ?? [];
         if (v.length < 6 && !v.includes(day)) v.push(day);
-        via.set(id, v);
-        binding.add(id);
+        via.set(slot, v);
+        binding.add(slot);
       }
     }
     const out: Walked[] = [];
-    for (const [id, per] of best) {
+    for (const [slot, per] of best) {
       let s = 0;
       for (const x of per.values()) s += x;
       if (s < opt.floor) continue;
-      const authors = this.placed.get(id)?.authors ?? [];
+      const p = this.placedAt[slot]!;
+      let speaks = false;
+      for (let k = 2 + p[0]! + p[1]! * 3; k < p.length && !speaks; k++) speaks = near.has(p[k]!);
+      const flags = this.flags[slot]!;
       out.push({
-        id,
+        id: this.itemAt[slot]!,
         score: s,
-        mask: masks.get(id)!,
-        via: via.get(id)!,
-        speaks: authors.some((k) => near.has(k)),
-        named: viaName.has(id),
-        binds: binding.has(id) || (this.placed.get(id)?.bound ?? false),
-        automated: this.placed.get(id)?.automated ?? false,
-        byRef: byRef.has(id),
+        mask: masks.get(slot)!,
+        via: via.get(slot)!,
+        speaks,
+        named: viaName.has(slot),
+        binds: binding.has(slot) || (flags & BOUND_FLAG) !== 0,
+        automated: (flags & AUTOMATED_FLAG) !== 0,
+        byRef: byRef.has(slot),
       });
     }
     return out.sort((a, b) => b.score - a.score || (a.id < b.id ? -1 : 1)).slice(0, opt.limit);
@@ -725,34 +1100,34 @@ export class UserGraph {
    */
   around(key: string): Set<string> {
     const out = new Set<string>();
-    const node = this.nodes.get(key);
-    if (!node) return out;
+    const id = this.liveId(key);
+    if (id < 0) return out;
     out.add(key);
-    for (const [other, l] of node.links) if (l.mask & (bit("alias") | bit("member"))) out.add(other);
+    const node = this.nodeAt[id]!;
+    for (let k = 0; k < node.nl * 2; k += 2) {
+      if (node.links[k]! & (ALIAS | bit("member"))) out.add(this.nodeAt[node.links[k]! >> MASK_BITS]!.key);
+    }
     return out;
   }
 
   /** For a one-word name (a first name), how many people go by it: its alias links to other names; else 0. */
-  private peopleCalled(key: string): number {
-    const node = this.nodes.get(key);
-    if (!node || node.kind !== "name" || /\s/.test(node.label)) return 0;
+  private peopleCalled(id: number): number {
+    const node = this.nodeAt[id];
+    if (!node?.live || node.kind !== "name" || /\s/.test(node.label)) return 0;
     let n = 0;
-    for (const [other, l] of node.links) if (l.mask & bit("alias") && other.startsWith("n:")) n++;
+    for (let k = 0; k < node.nl * 2; k += 2) {
+      if (node.links[k]! & ALIAS && this.nodeAt[node.links[k]! >> MASK_BITS]!.key.startsWith("n:")) n++;
+    }
     return n;
   }
 
   /** The link types by which a non-seed node was reached from the seeds (for learning). */
-  private linkMask(key: string, seeds: Set<string>): number {
+  private linkMask(id: number, seeds: Set<number>): number {
     let mask = 0;
-    const node = this.nodes.get(key);
-    if (!node) return 0;
-    for (const s of seeds) mask |= node.links.get(s)?.mask ?? 0;
+    const node = this.nodeAt[id];
+    if (!node?.live) return 0;
+    for (let k = 0; k < node.nl * 2; k += 2) if (seeds.has(node.links[k]! >> MASK_BITS)) mask |= node.links[k]! & MASK;
     return mask;
-  }
-
-  /** Whether a node exists (for tests and for seeding only names the user's items know). */
-  has(key: string): boolean {
-    return this.nodes.has(key);
   }
 }
 
