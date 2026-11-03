@@ -16,9 +16,11 @@ first (D10). See [README.md](README.md).
 ## Rules that apply here
 
 - **The prefilter may only add candidates, never drop them (D21);** `prefilter.test.ts` enforces it.
-- **Linear time (D24).** Any rule that backtracks on crafted input moves to `RE2_RULES`. `redos.test.ts` fails when
-  a gitleaks update adds one (rules left on JavaScript must stay under 40 ms on 8 KB crafted runs, best of three) and
-  checks 128 KB attacks stay under 1 s. `linear.test.ts` checks RE2 finds exactly the spans JavaScript finds.
+- **Linear time (D24).** Any rule that backtracks on crafted input moves to `RE2_RULES`. `redos.test.ts` and
+  `redos-{1,2,3}.test.ts` (the sweep in `redos-sweep.ts`, split by rule index) fail when a gitleaks update adds one
+  (rules left on JavaScript must stay under 40 ms on 8 KB crafted runs, best of three, each run timed as the lesser
+  of wall and CPU time) and check 128 KB attacks stay under 1 s. `linear.test.ts` checks RE2 finds exactly the
+  spans JavaScript finds.
 - **Never weaken the gate to fix a false positive in a test**: make the test text not secret-shaped. Secret-shaped
   test values are assembled from parts (`"AK" + "IA" + …`) so no literal in the repo is one.
 - **Dependencies (D15, D24):** `re2js` is the one justified exception; a new one needs its own decision.
@@ -28,13 +30,14 @@ first (D10). See [README.md](README.md).
 ## Test
 
 ```bash
-bun run test:pkg redact          # 7 files, ~6 s wall in parallel; redos.test.ts (~6.5 s) and linear.test.ts (~4 s) lead
+bun run test:pkg redact          # 10 files, ~5 s wall in parallel; linear.test.ts (~4 s) leads, redos* ~1.7 s each
 ```
 
 ## Pitfalls
 
-- The timing tests use wall-clock ceilings. Under heavy parallel load they have headroom (best of three, 40 ms vs
-  13 ms measured), but if one flakes, investigate before raising a ceiling: that ceiling is the ReDoS guard.
+- The timing tests use ceilings. The sweep's ignores waiting for a core (the lesser of wall and CPU time, best of
+  three, 40 ms vs 13 ms measured); the 128 KB attacks are wall-clock. If one flakes, investigate before raising a
+  ceiling: that ceiling is the ReDoS guard.
 - The vendored README mentions memory-era file names (`memory-secrets.ts`); today's equivalents are `secrets.ts` and
   its tests.
 
