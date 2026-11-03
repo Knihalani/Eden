@@ -67,17 +67,18 @@ const RAW_SEED = new BigUint64Array(crypto.getRandomValues(new Uint32Array(2)).b
  */
 function rawHash(raw: ContextItem, maxTextChars: number): number | undefined {
   try {
-    const meta = raw.meta ? Object.entries(raw.meta).map(([k, v]) => `${k}\u0001${String(v)}`) : null;
-    const key = [
+    // Each part prefixed with its length, so no field's content can pass for a boundary between two.
+    const parts: string[] = [
       raw.id,
       raw.sourceId,
       raw.ref,
       head(String(raw.title), 500),
       head(String(raw.text), maxTextChars),
-      raw.url === undefined ? "\u0002" : String(raw.url),
+      raw.url === undefined ? "" : `=${String(raw.url)}`,
       String(raw.updatedAt),
-      meta === null ? "\u0002" : meta.join("\u0003"),
-    ].join("\u0000");
+    ];
+    if (raw.meta) for (const [k, v] of Object.entries(raw.meta)) parts.push(k, String(v));
+    const key = parts.map((p) => `${p.length}:${p}`).join("");
     return Number(BigInt.asUintN(53, Bun.hash.wyhash(key, RAW_SEED)));
   } catch {
     return undefined;

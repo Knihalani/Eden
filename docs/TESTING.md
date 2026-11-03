@@ -186,11 +186,11 @@ sources 2.8 s, protocol 2.3 s, eval 0.6 s, graph 0.3 s, client 0.1 s, llm 0.1 s 
 
 ## Scale anchors: memory per user and ingest cost (2026-11-03, 4-core container shared with other agents, Bun 1.4.4)
 
-`bun packages/engine/bench/ingest.bench.ts [users=200] [itemsPerUser=500]` syncs that many users through the real
-path (`SyncManager` → `SourceFanout.list` with `sanitizeItem` as the redaction hook → `ItemCache.put`), each with their
-own copy of the workload's items (1,599 chars of text on average), then sweeps every user once with nothing changed.
-It prints the heap per user after a full GC and the CPU per item of the backfill (every item new) and of the sweep
-(every item unchanged). A change to the cache, the index, redaction or the sync reports these before and after.
+`bun packages/engine/bench/ingest.bench.ts [users=200] [itemsPerUser=500]` syncs that many users through the real path
+(`SyncManager` → `SourceFanout.list` with `sanitizeItem` as the redaction hook → `ItemCache.put`), each with their own
+copy of the workload's items (1,599 chars of text on average), then sweeps every user once with nothing changed. It
+prints the heap per user after a full GC and the CPU per item of the backfill (every item new) and of the sweep (every
+item unchanged). A change to the cache, the index, redaction or the sync reports these before and after.
 
 | 100 users × 500 items | memory per user | backfill µs/item | unchanged sweep µs/item |
 |---|---|---|---|
