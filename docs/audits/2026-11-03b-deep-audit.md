@@ -1,5 +1,170 @@
 # Deep audit: 3x-and-bigger levers (2026-11-03b)
 
+## Final summary, after three rounds (read this first)
+
+Written for the repo owner, in plain words. Four terms used below:
+
+- **Connector**: a link to one of the user's sources, such as mail or a calendar. Eden only reads them.
+- **Sync poll**: Eden asking a connector "what changed since last time?" before it answers.
+- **Reader**: Eden's one model call that reads the user's request and picks the facts that matter.
+- **ALL3 / NEW**: lab settings. ALL3 is the best no-model setting; NEW is ALL3 plus the reader.
+
+### 1. The bottom line
+
+Three rounds of audit found 106 candidate problems or ideas; 84 survived two independent checks. The biggest problem
+was speed: at realistic connector speed, Eden spent most of its time waiting for connectors, and the lab's benchmarks
+hid that because their connectors answered instantly. Fixes for 54 of the 84 are merged on one branch: faster
+request paths behind new switches, two bugs that silently lost facts, a much faster and less flaky test loop, and lab
+screens that can no longer run the wrong setting because of a typo. Production behaviour is unchanged by default:
+every new engine switch ships off, so users see no change until you turn one on. No paid model call was made. The
+largest measured gains (for example 11.4x less Eden time per task) need a decision from you to reach users.
+
+### 2. Scoreboard
+
+"Fixed" means the finding is marked done in the audit ledger and its branch is merged into
+`audit/2026-11-03b-integration` (checked with `git branch --merged`: all 22 package branches are merged). "Fixed"
+includes 9 findings where only a first stage shipped, and 5 that are measured limits ("ceilings") rather than code
+fixes; both groups are named in section 4.
+
+| Dimension | Found | Verified | Fixed and reviewed | Still open |
+|---|---|---|---|---|
+| Latency (speed) | 16 | 13 | 9 | 4 |
+| Scale and memory | 19 | 16 | 7 | 9 |
+| Dev loop (tests, lab tools) | 23 | 18 | 14 | 4 |
+| Correctness (bugs) | 12 | 14 | 11 | 3 |
+| Cost | 13 | 7 | 3 | 4 |
+| Quality (right facts delivered) | 7 | 6 | 3 | 3 |
+| Pain points (integrators, users) | 8 | 5 | 4 | 1 |
+| Moonshots (redesigns) | 6 | 4 | 3 | 1 |
+| Inefficiency | 2 | 1 | 0 | 1 |
+| **Total** | **106** | **84** | **54** | **30** |
+
+The checkers rejected 22 findings (claim not reproduced, or gain under 3x). They re-filed two dev-loop findings as
+correctness, which is why correctness has more verified (14) than found (12).
+
+Where the ledger and git disagree, or the ledger disagrees with itself:
+
+- The ledger marks `devloop-planner-deadline-test-flaky` resolved, but the verified finding is named
+  `devloop-planner-deadline-test-flaky-under-load`. Its fix (round 2 `test-determinism`, planner.ts) is merged, so the
+  table counts it as fixed.
+- `sdk-default-waitms-loses-first-turn` and `corr-poll-behind-calls-untraced` are listed twice as resolved; each is
+  counted once.
+- The ledger lists no unresolved items, but 30 verified findings are neither resolved nor rejected. They are open.
+- Round 3's text says R3-20 closes `cost-per-task-reader-floor-measured` (R2-18); the ledger still has it open. The
+  table follows the ledger.
+- Round 1's merge record names merge commits (such as 069b12cb8), not branch tips. The current branch tips are all
+  ancestors of the integration tip, so nothing is missing.
+
+### 3. The most important fixes
+
+Numbers come from the audit's own records. "Measured" means a command was run; "estimate" means arithmetic.
+
+- **Eden stops waiting for the sync poll (`syncPollBehind`, in lab presets).** Eden's time per task fell 11.4x with
+  the same deliveries (measured, no model). Off by default in production.
+- **Sync polls read only what they need (`syncPollPageSize`).** About 20x fewer items listed per poll on the request
+  path, same score (measured counts). Off by default.
+- **The lab now shows realistic connector speed.** Live agent benchmarks had understated Eden's wait 13.8x and 21.8x
+  for ALL3 (measured); Pi and Hermes runs now default to realistic connector timing.
+- **Answering from a warm synced copy would be about 640x faster at the median** (715 ms to 1.11 ms, measured in the
+  lab), but it also raises decoys. Only the docs and a startup refusal shipped; turning it on is your decision.
+- **Under the reader push, Eden's own (non-reader) wait fell 9x at the mean and 13.7x at the median** (measured with
+  a stub reader). With a live reader the whole wait improves about 1.4x (estimate). Behind switches, off by default.
+- **Two bugs that silently lost facts are fixed.** A withdrawn reader push no longer hides its items for 40 turns. A
+  connector page cut short no longer loses the rest of that page until the next daily sweep.
+- **First event after start: median 40.5 to 11.7 ms (3.5x).** The secret-scanning rules are now compiled at startup,
+  not on the first live request; round 2 extended this warm-up to the worker threads.
+- **Integrators get context on the first turn.** With the client's old default (no wait), 0 of 11 lookups reached the
+  agent's first model call; with about 1.5 s of wait, 11 of 11 (measured in the simulator). Client errors and
+  refused user ids are no longer silent.
+- **Memory (behind switches; estimates).** Idle users are freed (5-10x less resident memory, depending on the share
+  of idle users); an open session needs about 4-6x less memory; the worst pause from vocabulary clean-up falls from
+  57-340 ms to about 10-17 ms.
+- **Dev loop (measured).** Typing `bun test` at the root: 214 s with 487 false failures, now 15 s green (14.2x). The
+  realistic-latency lab screen: 435 s to 86.5 s, and 222 s to 44 s with the new default (5.0x each). Type-checking
+  with the new native checker is 5.1-5.6x faster (fast loop only; the merge gate still uses `tsc`). The full gate
+  went from 38.3 s (after round 1) to 18.1 s (after round 3) while tests grew from 1,425 to 1,562 (single runs;
+  machine load varied).
+- **The lab refuses typos.** A misspelled flag or config key used to run the wrong setting and report "no effect";
+  every $0 screen now refuses it.
+- **Honest cost columns.** Live reports understated Eden's cost per task 1.25-1.57x by leaving out background card
+  and intent spend; they now include it.
+
+Checks on the final tree (a2c3d6fe0, all at $0): `bun run check` green (1,562 tests, 0 failures); the no-model funnel
+unchanged at 214/384 hidden facts and 211/384 decoys. `bun run eval` now reports precision 0.889 and recall 0.48
+(was 1 and 0.444) because round 3 added harder look-alike scenarios, not because the engine changed. Still owed:
+`bun run eval --live` (paid) for the engine branches, which change delivery when their switches are on.
+
+### 4. What is still open, and the next step
+
+**Needs a decision from you.** Each question is in the "Deferred" table of its round.
+
+- **Turn the measured speed switches on by default**: poll behind, poll page size, session memory, vocabulary
+  release, push wait, probe grace; and `sync` with the warm copy, which first needs connectors the server can list,
+  and raises decoys along with recall. Next step: a paid live Pi/Hermes run, then one decision row each.
+- **Intent index under NEW** (about half of NEW's per-user model bill, estimate). Next step: approve about $0.5 for
+  one train screen of NEW without intent. A separate $0.17-0.35 buys the intent replay the $0 screens lack.
+- **Explicit asks answering from a slightly stale copy** (`lat-ask-waits-poll`, about 4.3x on ask p95, estimate).
+  It departs from D65/D40.
+- **Reading on the draft event** (stage 2 of `lat-draft-speculative-read`): one model call per draft.
+- **One core per server** (`scale-single-core-server`, about 2x measured on a shared VM): shard inside one process,
+  or document several processes behind a router?
+- **Restarts re-pay every user's backfill** (`cost-restart-repays-backfill`, 3-10x on background spend, estimate):
+  may content move between processes in memory (amends D8)?
+- **Reader as the only deliverer** (`quality-reader-is-the-only-deliverer`): may a reader rejection empty an answer
+  (D93)?
+- **Drop cards from ALL3** (stage 2 of `cost-cards-zero-on-all3-funnel`), after a held-out check.
+- **Paid reader screens** for the reader's latency and call-count limits: about $0.3-0.5 each.
+- **Make `tsgo` the merge gate** after a month of matching results, or wait for TypeScript 7.
+- **Cap old source-map mention rows** (`scale-source-map-mentions-unbounded`; amends D8's stored metadata).
+- **Per-user MCP credentials** for the shipped server (the MCP half of `integrator-server-...`).
+- **Reopen the distilled local reader** (`moonshot-distilled-reader`), rejected twice before (D65, haiku-phase3).
+- **Let the merge gate skip cached test passes** (`devloop-test-closure-cache`); harmful as first written.
+- **Make the knowledge graph a production default?** (`graph-memory-and-ingest`, under 3x as specified).
+
+**Needs rework (too big, or under 3x as written).** Next step: a redesigned round 4 package.
+
+- Search-index memory: `scale-index-posting-arena` (2.1-2.8x as specified), `scale-compact-frozen-index` and
+  `scale-compressed-text-cold-tier`. Next step: one frozen, packed index for synced items.
+- `quality-reader-pool-universe`: adding the user's constraint items to the reader's pool cut retrieval misses about
+  6x ($0, measured), but no round packaged it, and the related `quality-constraint-index-seats` was rejected.
+- `lat-answer-gate-not-start-gate` (about 2x on measured mixes): needs a tool-gate design.
+- `lat-ask-rereads-after-push`: the fix failed as written.
+- `devloop-reader-replay-item-level-key`: as written it erases the effects it should screen; needs a narrow version.
+- Landlord bindings missed by the reader gate (R3-19), and the server's config check delegating to the shared checker
+  (R3-5): queued for round 4.
+
+**Small, verified, never packaged.** Next step: one small clean-up package.
+`ingest-skip-unchanged-redaction` (deferred in round 1, not picked up later), `corr-cache-offset-stale-on-refresh`,
+`corr-sync-test-vacuous-guard`, `corr-searchsources-preaborted-hang`,
+`example-agent-not-runnable-offline-and-wrong-description`, `dead-experimental-flags`, `scale-light-user-scan-index`
+and `no-memory-bench-per-user`. Most of these are not written up in this file; their details are in the run ledger.
+
+**Recorded limits; nothing to fix:** `cost-no-3x-areas`, `lat-wall-ceiling`, `observe-throughput-no-3x`,
+`devloop-funnel-3x-not-reachable`, `cost-per-task-reader-floor-measured` and `quality-pool-recall-lexical-ceiling`,
+plus round 3's five ceilings (R3-18 to R3-20, R3-22, R3-23), which the table counts as fixed. Together they say: the
+remaining 3x gains on cost or speed come from moving or removing the reader's call, not from tuning it.
+
+**Shipped as a first stage only** (counted as fixed above; the rest is in the decision list):
+`lat-sync-poll-on-critical-path`, `lat-default-path-live-search-vs-warm-index`, `lat-draft-speculative-read`,
+`moon-agent-is-the-reader`, `lat-reader-faster-endpoint-no-reasoning`, `integrator-server-...`,
+`devloop-intent-replay-not-committed`, `devloop-ab-request-replay-all-roles` and `cost-cards-zero-on-all3-funnel`.
+
+### 5. Where everything is
+
+- **This file**: `docs/audits/2026-11-03b-deep-audit.md`. The original round 1 summary and findings follow; then
+  "Round 2" and "Round 3", each with findings, work packages and a "Deferred" table.
+- **Integration branch**: `audit/2026-11-03b-integration` holds every fix. It is not yet merged into `main`; run
+  `bun run eval --live` (paid) for the engine changes first.
+- **Per-package branches**, all merged into the integration branch:
+  - Round 1, `audit/2026-11-03b-r1-*`: `engine-request-path`, `cache-expiry-and-dates`, `lab-connector-latency`,
+    `lab-reader-stub`, `bunfig-ignore-archived`, `sdk-errors-and-ids`, `server-startup-config`,
+    `reader-reasoning-option`.
+  - Round 2, `audit/2026-11-03b-r2-*`: `lab-funnel-screens`, `engine-session-and-push`, `cache-terms-and-expiry`,
+    `server-config-sdk-wait`, `ab-replay-and-cost-columns`, `test-determinism`.
+  - Round 3, `audit/2026-11-03b-r3-*`: `engine-push-behind-accounting`, `sources-pages-and-vocab`,
+    `server-config-fast-gate`, `lab-cli-strict-and-funnel`, `devloop-speed-and-flakes`, `lab-ceilings`,
+    `reporting-weights-and-notes`, `eval-reader-family`.
+
 The second deep audit of 2026-11-03, run with the revised `/deep-audit` skill: security is out of scope (use
 `/security-review` for that), and the six finders hunted for improvements of 3x or more in cost, latency, quality,
 scale and the dev loop, plus first-principles redesigns ("moonshots"), correctness bugs and pain points. Every
