@@ -402,7 +402,7 @@ export interface EngineConfig {
    * Verdicts are cached per user and session. Needs a reader in the deps; with none, nothing changes.
    */
   askReader: boolean;
-  /** How many of the ask's ranked candidates the reader reads (capped at `READER_MAX_ITEMS`, 40). */
+  /** How many of the ask's ranked candidates the reader reads (capped at `READER_MAX_ITEMS`, 60). */
   askReaderPool: number;
   /** How long an ask waits for the reader (ms); past it, the usual answer (the call still fills the cache). */
   askReaderWaitMs: number;

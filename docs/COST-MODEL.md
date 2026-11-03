@@ -25,7 +25,6 @@ OpenRouter returns the real cost per call (`usage.cost`), and the engine books t
 | Call                                                                                           | Input bound                                                                                                   | Output bound                        | Cost at $0.15 / $0.50, uncached |
 | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------- |
 | Judge                                                                                          | system ≈ 100 tok + window ≤ 4,000 chars (≈ 1,000 tok) + ≤ 6 candidates × ≈ 100 tok ≈ 1,700 tok                | 512 tok, reasoning included (D45)   | ≈ $0.00051                      |
-| Ask answer (only with `askWithModel`, off by default, D43)                                     | ≈ 100 + question ≤ 10,000 chars (≈ 2,500) + window ≤ 2,000 chars (≈ 500) + ≤ 20 items × ≈ 170 tok ≈ 6,500 tok | 1,000 tok, reasoning included (D45) | ≈ $0.0015                       |
 | Card enrichment (only with `cards`, off by default, D59 proposed; background, never per event) | system ≈ 700 tok + ≤ 10 items × (title ≤ 160 + own text ≤ 900 chars) ≈ 3,400 tok                              | 2,000 tok, reasoning included       | ≈ $0.0015                       |
 
 Queued request (`slowPathQueue`, off by default, proposed D102). No new kind of call: a request that arrives while
@@ -57,20 +56,7 @@ tokens per ten-item call over 184 calls (24 of them retries of a batch cut off a
 that would be $0.0021 per call, $0.00021 per item, about $0.32 per user-month, an upper bound for a model that
 reasons that much. Request time adds one BM25 search over the user's requests (no model, no call).
 
-Bridging query (proposed D89, `bridgeQuery`, off by default; docs/research/edge-bridge.md). One call per request
-that acts (in the imperative, or an `external` message, so a third party's inbound message can cause a call, bounded by
-the bridge's own `Budget`; with `bridgeQuestions`, also a question for permission), on the
-slow path beside the lookup's search, never per event and never on the fast path; cached per user by request, so a
-repeated request and every `ask` about it make none. Input: the system prompt and the redacted request, at most 400
-characters: about 300 tokens (301 measured for one request on the lab's free model). Output: three queries of at most
-eight words (about 40 tokens) after the model's reasoning, capped at 2,000 tokens. Measured on the free lab model
-(nvidia/nemotron-3.5-super-vl:free): 1,375 output tokens for one request, 762 for two; its reasoning ignores "low".
-Not measured on glm-5.3-flash. Estimate at $0.15/$0.50 per M: $0.00005 input plus $0.00005 to $0.0007 output, so
-$0.0001 to $0.00075 per bridged request; reserved at $0.0005 against its own `Budget`. On the dev suites 0.73
-requests per task are bridged (352 of 480; 0.82 with `bridgeQuestions`): about $0.00007 to $0.0006 per task, against an
-agent cost of about $0.0005 per task (docs/research/path-to-90.md), so +15% to +110% of the agent's cost at list
-prices, mostly reasoning tokens. A model or setting with no reasoning would sit at the low end (an estimate: not
-measured).
+The bridging query (D89) was deleted by D112; its cost notes are in git history.
 
 Ask-time reader (proposed D95, `askReader`, off by default; `reader.ts`). One call per `ask` about an action (an
 imperative question, a question about blockers, or an ask while the session's latest request acts; any ask with
@@ -145,20 +131,9 @@ it part of a preset still needs the live hidden-fact check. Applying the live pe
 call); NEW2 about $0.25–0.30 with the gate and $0.40–0.47 without ($0.00040–0.00047 a call). Ceilings for the gate, an
 oracle gate and verdict reuse: "Where 3x is impossible" below.
 
-Active-constraints digest (proposed D90, `constraintDigest`, off by default): no model call and no source call. Its
-cost is the agent's: at most `digestBytes` (1,600 bytes; 1,377 on average on dev, 1,414 in-sample), about 350 tokens,
-once per session as data. The same constraints give the same bytes across sessions (one distinct digest per simulated
-user over 30 sessions on dev), so in a stable prompt prefix a provider's cache reads it at the cached price ($0.03 per
-M at Z.AI): about $0.00001 per agent model request cached, $0.00005 uncached. An estimate, not measured live.
+The active-constraints digest (D90) was deleted by D112.
 
-ALL5 (proposed D92; docs/research/edge-combined.md): ALL3 plus `intent` (D87) and `bridgeQuery` (D89) adds two
-model costs, both off the fast path and each through its own `Budget`; `askGuard`/`packetBearing` (D88) add none. On
-the dev funnel (16 simulated users, replayed, so counted but not sent): the card enrichment read 23,782 items in 1,220
-calls instead of 1,294 in 215 (about 76 calls per user instead of 13, a backfill of every synced item): at D87's
-measured per-item price that is the estimated $0.035 per user once and per month at 50 new items a day. The bridge
-asked 392 times in 480 tasks (0.82 per task): $0.00006–0.0006 per task at D89's estimate. Agent-side, answers grow:
-ask bytes +17% (dev 683 → 800, in-sample 638 → 750), packet bytes +19% and +12%. Estimates, not measured on the
-default model; the lab's free runs cost $0 and are no price guide.
+ALL5 (D92) was deleted by D112; its intent part is in the default (cost above).
 
 Card economy (proposed D66, `cardsEconomy`, off by default; docs/research/econ-background.md; in-sample, 2026-10-31):
 the strict prefilter and sentence reuse read 74.25 items per simulated user instead of 166.5 (−55.4%) in 12.4 calls
@@ -176,12 +151,7 @@ its own reservation. At that rate the retries add about 6% of items at the defau
 2,400 input tokens at $0.15/M, 4,000 output at $0.50/M). On D64's accounting the benchmark's card share would fall
 from $0.156 to about $0.039 per 1,000 tasks, Eden ALL all-in from $0.474 to about $0.36 (an estimate, not a live run).
 
-Sync push (proposed D66, `syncPush`, off by default) adds no model call. In the funnel it takes request-time listing
-calls from 5.55 to 0 per task (amortised 6.89 → 1.46, counting the one poll each watch costs when it is declared).
-In an arrival simulation with assumed rates (mail 60, chat 150 items a working day), D57's on-demand polling makes
-104.7 listing calls per user-day; push with `syncPushGapMs` 30 minutes 80.7, with notices read at every five-minute
-tick 151 (the busiest source sets it). Over 7 days, with the pushed sources' sweep every 3 days (D66): D57 111.6, push
-with the 30-minute gap 88.4 (−21%).
+Sync push (D66) was deleted by D112.
 
 With `graph` (proposed D58) the judge sees at most `graphSeats` (1) more candidate, about 100 more input tokens per
 call at its cap; no other model call is added and the graph makes no source call. Measured in simulation (realistic,
@@ -292,6 +262,8 @@ Per task (live, Pi harness, Haiku 5.5 as agent, grader and Eden's roles, blind h
 - Per task, larger sample (haiku-phase3.md, held-out 13 seeds 41–44): NEWL agent + reader $0.638 per 1k hidden Pi
   tasks ($0.744 all-in); traffic-weighted at one task in ten carrying a fact, Eden's own calls $0.518 per 1k (Pi) and
   $0.290 (Hermes).
+- Each role's own budget is `DEFAULT_LIMITS` (as in the measured Pi setup): at the reader's $0.002 reservation that is
+  about 10 reads per session, past which a long session's later requests take the no-model path.
 - Reader calls are about 2,800 uncached input tokens ($0.00028) and 200 output tokens ($0.0001) each on Haiku 5.5
   (haiku-phase3.md); the budget reserves $0.002 a call (`DEFAULT_READER_LIMITS.estimateUsd`).
 
@@ -412,9 +384,9 @@ matching.
 
 The judge, measured on ALL (D65, docs/research/econ-judge.md; in-sample). On the critical path it adds no facts and
 costs time: in the full benchmark (D64), in-sample, paired, eden-judge − eden is −0.026 hidden at +1.10 s and +$0.039
-per 1,000 tasks, so the recommended configuration has no judge. `judgeBehind` (off by default, not recommended) moves
-it behind the no-model answer, where it can only add. It is one bounded judge call (the judge's caps and `Budget`) on a
-lookup whose no-model answer left candidates out:
+per 1,000 tasks, so the recommended configuration has no judge (and the shipped servers wire none, D112).
+`judgeBehind`, which moved it behind the no-model answer, was deleted by D112. What it measured, for the record: one
+bounded judge call (the judge's caps and `Budget`) on a lookup whose no-model answer left candidates out:
 - funnel, seed 41: 0.93 calls per task, $0.0088 for 134 tasks ($0.066 per 1,000 tasks);
 - live, seed 43: 0.90 calls per task, about $0.000024 a call (OpenRouter's reported cost), $0.017–0.022 per 1,000
   tasks against the judge on the path's $0.023.

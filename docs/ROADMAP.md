@@ -91,7 +91,7 @@ train / held-out split for tuning, and text not written by templates.
   whole dates in packets (D68), the action firewall (D69); one-turn packets rejected, `ask_context` kept (D70); cost
   reported billed and re-priced at a fixed endpoint (D71). A tenant guide, labelled as unmeasured advice:
   [INTEGRATION.md](INTEGRATION.md). Next: the pre-registered blind run on held-out 5–9 and D72 (whether `ALL2`
-  replaces ALL, with or without `judgeBehind`); an HTTP route for push notices; supersession on graph edges, then a
+  replaces ALL); [superseded by D112: the default is the unified configuration, `judgeBehind` and push were deleted]; supersession on graph edges, then a
   cost-sensitive delivery gate under its own decision.
 - Entity resolution (aliases, email ↔ name), typed relations (person–company–project), freshness per source. A
   first per-user graph is built (D58); learned edge weights are unmeasured (no usage signal in the funnel).

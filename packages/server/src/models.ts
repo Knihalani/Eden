@@ -28,8 +28,16 @@ export interface ModelRoles {
   usdPerTenantDay: number;
 }
 
-/** No model at all: the default's no-model path (tests, and a server with no key). */
-export const NO_MODELS: ModelRoles = { reader: null, cards: null, cardsRetry: null, usdPerTenantDay: 0 };
+/**
+ * No model role: the default's no-model path (tests, and a server with no key). The tenant cap stays the default's,
+ * since an embedding's own judge (`BuildOptions.model`) is charged against it too.
+ */
+export const NO_MODELS: ModelRoles = {
+  reader: null,
+  cards: null,
+  cardsRetry: null,
+  usdPerTenantDay: DEFAULT_USD_PER_TENANT_DAY,
+};
 
 /** The roles from the environment; all null without OPENROUTER_API_KEY. Throws on a malformed cap. */
 export function modelRolesFromEnv(env: Record<string, string | undefined> = process.env): ModelRoles {

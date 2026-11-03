@@ -76,6 +76,11 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     // No judge: the measured default ran without one.
     expect(both.deps.model).toBeNull();
     expect(both.config).toEqual(DEFAULT_CONFIG);
+    // An embedding's judge with no roles is charged under the default tenant cap, not refused by a 0 cap.
+    const judged = buildPartner({ sources: async () => [], model }) as unknown as {
+      deps: { budget: { reserve(user: string, session: string, usd: number): unknown } };
+    };
+    expect(judged.deps.budget.reserve("acme/u1", "s1", 0.001)).not.toBeNull();
     // Default minus a part: its role is not built, so it costs nothing.
     const minus = buildPartner({ sources: async () => [], models: roles, engine: { cards: false, askReader: false } });
     expect((minus as unknown as { deps: Record<string, unknown> }).deps.cards).toBeUndefined();
