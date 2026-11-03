@@ -240,6 +240,22 @@ describe("the engine (densePacket, groundOccasion)", () => {
     expect(cites(other).filter((c) => c.includes("occasion"))).toEqual([]);
   });
 
+  test("groundOccasion: a lowercase first name is no occasion word (eval people-and-days-4)", async () => {
+    // "nadia" is not read as a name (no capital), so it was left among the occasion words and matched the 1:1's title
+    // by its participant's name: "the agenda with nadia" asks for something other than the 1:1.
+    const lower = await ask(
+      partner(occasions(), { ...quiet, groundOccasion: true }),
+      "what's on the agenda with nadia on tuesday 3 november?",
+    );
+    expect(cites(lower).filter((c) => c.includes("occasion"))).toEqual([]);
+    // The occasion still grounds with a lowercase name beside it.
+    const lunch = await ask(
+      partner(occasions(), { ...quiet, groundOccasion: true }),
+      "where is lunch with nadia on wednesday 4 november?",
+    );
+    expect(cites(lunch)).toEqual(["calendar:lunch grounded-occasion-day"]);
+  });
+
   test("groundOccasion: a message from someone about meeting grounds the next event that names them", async () => {
     const text = 'New email from Nadia Petrova: "Running a bit late, still ok to meet?"';
     const got = cites(await ask(partner(occasions(), { ...quiet, groundOccasion: true }), text, scope, "external"));

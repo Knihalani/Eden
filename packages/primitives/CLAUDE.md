@@ -43,6 +43,10 @@ bun packages/primitives/bench/tokenize.bench.ts   # a benchmark (no assertions; 
 - `SparseIndex` must stay identical to `sparse-index.reference.ts` (D111): sum each doc's contributions in the same
   order into the Float32 accumulator, and keep each key's postings in insertion order, frozen before delta (top-k ties
   follow push order). The reference stays as it is; run `sparse-index-packed.test.ts` after any change.
+- Merges are incremental (D116): a purge leaves the freed docs' frozen postings stale, and scoring skips them only
+  because a freed doc is neither `FROZEN` nor `DELTA`. A doc number may become `FROZEN` again only in a merge that
+  filtered its stale postings (`staleDocs`, snapshotted at the seal); anything that freezes a doc another way breaks
+  that. Work per step is `MERGE_MIN_WORK`; re-run `index-memory.bench.ts` (churn) after changing it.
 - `pool.test.ts` starts real Bun workers: keep per-test timeouts generous, the parallel test run shares the cores.
 - Statistical tests (`bandit`, `calibrate`, `pack`, `random`) use seeded `Xoshiro128`; keep seeds fixed so a failure
   reproduces.

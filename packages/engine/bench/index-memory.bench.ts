@@ -7,6 +7,7 @@
  *
  * - heap per item and per user, each in a child process (heap after a full GC less the heap before, the vocabulary
  *   built first so only the index counts): one heavy user holding every item, and 500 light users of 20 items each;
+ *   the packed index settled (no merge under way, D116), and as built (a merge may hold old and new arrays together);
  * - the whole `ItemCache` per item (`cache` mode: entries, sketches, tallies, vocabulary and index; not the item text,
  *   whose strings the world still holds), for the end-to-end share: run it on each tree for before/after;
  * - add p50/p99/max (the max is a freeze in the packed index), search p50/p99 for 4-term queries drawn from item
@@ -78,7 +79,7 @@ function sharedScratch(docs: number): number {
 }
 
 /** Child: heap of `users` indexes of `per` items each (bytes per item, per user). */
-function heapChild(impl: Impl, users: number, per: number): void {
+function heapChild(impl: Impl, users: number, per: number, settled: boolean): void {
   // Warm the shared scratch (one copy per process) so it counts in no build.
   const warm = make(impl);
   add(warm, { title: Uint32Array.of(1 << 17), body: Uint32Array.of(0) });
@@ -94,6 +95,8 @@ function heapChild(impl: Impl, users: number, per: number): void {
   // taken before building them counted up to ~10 MB of tokenizer garbage JSC had not yet swept.
   const held: Index[] = [];
   for (const docs of corpora) held.push(build(impl, docs));
+  // Settled: no merge under way (D116), the index at rest. As built, a merge may hold old and new arrays together.
+  if (settled) for (const ix of held) if (ix instanceof SparseIndex) ix.settle();
   const withIndexes = heapBytes();
   const count = held.length;
   held.length = 0;
@@ -118,9 +121,11 @@ function buildCache(): void {
 }
 
 /** Heap before and after building (dropping the cache freed nothing measurable in JSC, so not that way round). */
-function cacheChild(): void {
+function cacheChild(settled: boolean): void {
   const before = heapBytes();
   buildCache();
+  // The expiry tick ends a merge left under way (D116); nothing expires at the world's own clock.
+  if (settled) caches[0]!.expireIdle(world.now);
   console.log(JSON.stringify({ perItem: (heapBytes() - before) / ITEMS.length }));
 }
 
@@ -194,8 +199,8 @@ function churn(impl: Impl): string {
 }
 
 const [mode, ...rest] = process.argv.slice(2);
-if (mode === "heap") heapChild(rest[0] as Impl, Number(rest[1]), Number(rest[2]));
-else if (mode === "cache") cacheChild();
+if (mode === "heap") heapChild(rest[0] as Impl, Number(rest[1]), Number(rest[2]), rest[3] !== "built");
+else if (mode === "cache") cacheChild(rest[0] !== "built");
 else {
   console.log(
     `corpus: ${ITEMS.length} sim items, ${(ITEMS.reduce((s, i) => s + i.text.length, 0) / ITEMS.length) | 0} chars of text each\n`,
@@ -209,17 +214,22 @@ else {
   ] as const) {
     const a = child(["heap", "reference", String(users), String(per)]) as { perItem: number; perUser: number };
     const b = child(["heap", "packed", String(users), String(per)]) as { perItem: number; perUser: number };
+    const built = child(["heap", "packed", String(users), String(per), "built"]) as { perItem: number };
     b.perUser += sharedScratch(per) / users; // the process's one copy, shared by its users
     b.perItem += sharedScratch(per) / (users * per);
+    built.perItem += sharedScratch(per) / (users * per);
     console.log(
       `${label.padEnd(24)} ${`${a.perItem.toFixed(0)} B/item`.padStart(16)} ${`${b.perItem.toFixed(0)} B/item`.padStart(16)}` +
-        `  ${(a.perItem / b.perItem).toFixed(2)}x   (per user ${(a.perUser / 1024).toFixed(1)} → ${(b.perUser / 1024).toFixed(1)} KB)`,
+        `  ${(a.perItem / b.perItem).toFixed(2)}x   (per user ${(a.perUser / 1024).toFixed(1)} → ${(b.perUser / 1024).toFixed(1)} KB;` +
+        ` as built, a merge maybe under way: ${built.perItem.toFixed(0)} B/item)`,
     );
   }
   const c = child(["cache"]) as { perItem: number };
+  const cBuilt = child(["cache", "built"]) as { perItem: number };
   console.log(
     `\nItemCache, 1 user × ${ITEMS.length} items (this tree's index; the packed index's shared query scratch, ` +
-      `${(sharedScratch(ITEMS.length) / ITEMS.length).toFixed(0)} B/item, not included): ${c.perItem.toFixed(0)} B/item\n`,
+      `${(sharedScratch(ITEMS.length) / ITEMS.length).toFixed(0)} B/item, not included): ${c.perItem.toFixed(0)} B/item` +
+      ` after an expiry tick, ${cBuilt.perItem.toFixed(0)} B/item as built\n`,
   );
   for (const impl of ["reference", "packed"] as const) {
     console.log(impl);

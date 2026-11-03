@@ -933,6 +933,8 @@ export class ItemCache {
     let n = 0;
     // Deleting the entry being visited is safe in a Map walk: no copy of 10k+ users per tick.
     for (const [key, u] of this.users) {
+      // A merge left under way by a user who stopped writing holds two copies of the index's arrays: end it (D116).
+      u.index.settle();
       // Holds items, none expired: nothing to sweep, and alive. (A user with none may be dropped below.)
       if (u.items.size > 0 && !this.anyExpired(u, now)) continue;
       // A probe made within the time to live is kept with its user, even one that found nothing: forgetting it would

@@ -134,6 +134,73 @@ describe("SparseIndex (packed) matches the reference layout exactly", () => {
     expect(m.freedPacked).toEqual(m.freedReference);
   });
 
+  test("heavy churn: merges in flight, purges, doc-number and term reuse answer alike", () => {
+    // A full heavy index turning over (remove one, add one), queried every few steps, so queries land while a merge is
+    // in flight, after purges whose doc numbers come back (in the delta, in a sealed delta) and after flushes.
+    for (const seed of [21, 22]) {
+      const m = mirror({ fields: 2, delta: seed === 22 ? 0.25 : 0 });
+      const rnd = new Xoshiro128(seed);
+      const docs: number[] = [];
+      const doc = () => Uint32Array.from({ length: 25 }, () => Math.floor(6_000 * rnd.uniform() ** 3));
+      const q = () => Uint32Array.from({ length: 3 }, () => Math.floor(6_000 * rnd.uniform() ** 3));
+      const add = () => {
+        const body = doc();
+        const title = Uint32Array.of(Math.floor(rnd.uniform() * 50));
+        const d = m.packed.addFields([title, body], [1, body.length]);
+        expect(m.reference.addFields([title, body], [1, body.length])).toBe(d);
+        docs.push(d);
+      };
+      for (let i = 0; i < 2_500; i++) add();
+      for (let i = 0; i < 4_000; i++) {
+        const d = docs.splice(rnd.uniform() < 0.7 ? 0 : Math.floor(rnd.uniform() * docs.length), 1)[0]!;
+        m.packed.remove(d);
+        m.reference.remove(d);
+        add();
+        if (i % 500 === 499) {
+          m.packed.flush();
+          m.reference.flush();
+        }
+        if (i % 7 === 0) same(m, q(), 20);
+        if (i % 97 === 0) {
+          const x = docs[Math.floor(rnd.uniform() * docs.length)]!;
+          expect([...m.packed.termsOf(x)]).toEqual([...m.reference.termsOf(x)]);
+        }
+      }
+      expect(m.freedPacked).toEqual(m.freedReference);
+      for (let d = 0; d < 3_000; d++) expect([...m.packed.termsOf(d)]).toEqual([...m.reference.termsOf(d)]);
+    }
+  });
+
+  test("heavy churn spreads the work: a purge leaves the frozen tier as it is, a merge spans several adds", () => {
+    const ix = new SparseIndex({ fields: 2 });
+    const inside = ix as unknown as { fDocs: unknown; merge: unknown };
+    const rnd = new Xoshiro128(9);
+    const body = () => Uint32Array.from({ length: 40 }, () => Math.floor(20_000 * rnd.uniform() ** 2));
+    const docs: number[] = [];
+    for (let i = 0; i < 4_000; i++) {
+      const b = body();
+      docs.push(ix.addFields([Uint32Array.of(i % 9), b], [1, b.length]));
+    }
+    let purges = 0;
+    let spans = 0;
+    let inFlight = 0;
+    for (let i = 0; i < 3_000; i++) {
+      const frozen = inside.fDocs;
+      const merging = inside.merge !== null;
+      ix.remove(docs.shift()!);
+      // A remove never swaps the frozen tier in by itself unless a merge was already under way.
+      if (!merging && inside.fDocs !== frozen) purges++;
+      const b = body();
+      docs.push(ix.addFields([Uint32Array.of(1), b], [1, b.length]));
+      if (inside.merge !== null) inFlight++;
+      if (!merging && inside.merge !== null) spans++;
+    }
+    expect(purges).toBe(0);
+    // Every merge started stayed in flight past the add that started it, over many adds in all.
+    expect(spans).toBeGreaterThan(2);
+    expect(inFlight).toBeGreaterThan(spans * 4);
+  });
+
   test("past 65,536 doc numbers (Uint32 doc arrays) and term ids past 16 bits, with purges", () => {
     const m = mirror({ fields: 1 });
     const live: number[] = [];
