@@ -372,6 +372,17 @@ describe("offsetOf: a tally kept as items come and go", () => {
     expect(ties).toBeGreaterThan(20); // the tie-break path ran
   });
 
+  test("a refresh that moves an event's zone but keeps its words moves the offset (corr-cache-offset-stale-on-refresh)", () => {
+    const cache = new ItemCache({ expireEveryMs: 0 });
+    const at = (z: string) => ({ ...item("cal", "1", "standup"), meta: { start: `2026-11-03T09:00:00${z}` } });
+    cache.put(alice, [at("+01:00")]);
+    expect(cache.offsetOf(alice)).toBe(60); // read once, so a stale memo would show below
+    cache.put(alice, [at("-05:00")]); // same title and text: the unchanged-words path
+    expect(cache.offsetOf(alice)).toBe(-300);
+    cache.put(alice, [{ ...at(""), meta: undefined }]);
+    expect(cache.offsetOf(alice)).toBe(0);
+  });
+
   test("per user: one user's events never shape another's offset", () => {
     const cache = new ItemCache({ expireEveryMs: 0 });
     const bob = { tenantId: "t", userId: "bob" };

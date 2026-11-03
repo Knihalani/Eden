@@ -749,8 +749,10 @@ export class SyncManager {
     scope: Scope,
     cursor: string | undefined,
     limit: number,
-    options: { timeoutMs: number; signal?: AbortSignal; reserve?: number },
+    given: { timeoutMs: number; signal?: AbortSignal; reserve?: number },
   ): ReturnType<SourceFanout["list"]> {
+    // Items the cache holds unchanged are not redacted again (most of a poll or a sweep re-lists what is held).
+    const options = { ...given, reuse: this.deps.cache.reuseFor(scope) };
     const tracer = this.deps.tracer;
     if (!tracer) return this.deps.fanout.list(source, scope, cursor, limit, options);
     const sp = tracer.open("sync.list", 0, { async: true, phase, source: source.id });
