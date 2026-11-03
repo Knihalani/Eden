@@ -113,6 +113,7 @@ import {
   type ScreenRow,
 } from "./reader-stub";
 import { packetLine } from "./uptake";
+import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -263,6 +264,10 @@ const readerModel =
         READER_MODEL,
       );
 const readerLanes: AskReader[] = [];
+/** `--distill record|labels|cascade:FILE` (distilled-reader.ts): record the reader's verdicts, replay labels, or cascade. */
+const DISTILL = opt("distill", "") ? parseDistill(opt("distill", "")) : null;
+const DISTILL_MODEL = DISTILL?.mode === "cascade" ? loadModel(DISTILL.file) : null;
+const distillLanes: DistilledReaderMaker[] = [];
 /** `--allow-misses`: accept a replay run some of whose reader prompts were not cached (they fail open). */
 const ALLOW_MISSES = args.includes("--allow-misses");
 const TIMELINE = opt("timeline", "");
@@ -494,7 +499,12 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     : NO_MODEL_READER
       ? new CountingReader()
       : null;
-  const maker = stub ?? (laneModel ? new ModelReaderMaker(laneModel) : null);
+  const modelMaker = laneModel ? new ModelReaderMaker(laneModel) : null;
+  const distill = DISTILL
+    ? new DistilledReaderMaker(DISTILL.mode, modelMaker, DISTILL.file, DISTILL_MODEL, DISTILL.out)
+    : null;
+  if (distill) distillLanes.push(distill);
+  const maker = distill ?? stub ?? modelMaker;
   const reader = maker ? new AskReader({ maker, budget: new Budget(UNCAPPED), now: () => clock }) : null;
   if (reader) readerLanes.push(reader);
   // Every report per session, in order: a request can be read twice (`readerPush`'s ask, then the funnel's own).
@@ -599,6 +609,10 @@ async function runSeed(suite: string, variant: "hidden" | "control", seed: numbe
     if (stub instanceof OracleReaderMaker) {
       stub.task = readerTask;
       stub.planted = new Map([[id, variant === "hidden" ? "hidden" : "decoy"]]);
+    }
+    if (distill) {
+      distill.task = readerTask;
+      distill.planted = { id, role: variant === "hidden" ? "hidden" : "decoy" };
     }
     // The request's own reader calls start here (after the draft's, below).
     let stubBefore = stub?.sizes.length ?? 0;
@@ -965,6 +979,13 @@ if (readerModel) {
 }
 if (readerModel || cardMaker || bridgeMaker) {
   console.log(overBudgetLine({ reader: readerLanes, cards: cardLanes, bridge: bridgeLanes }));
+}
+if (distillLanes.length) {
+  const sum = (f: (d: DistilledReaderMaker) => number) => distillLanes.reduce((a, d) => a + f(d), 0);
+  console.log(
+    `distill ${DISTILL!.mode}: local silent ${sum((d) => d.stats.silent)}, local bind ${sum((d) => d.stats.bind)}, ` +
+      `escalated ${sum((d) => d.stats.escalated)}, label misses ${sum((d) => d.missed)}`,
+  );
 }
 const misses = missGate(readerModel?.missed ?? 0, ALLOW_MISSES);
 if (misses.message) console.log(`\n${misses.message}\n`);
