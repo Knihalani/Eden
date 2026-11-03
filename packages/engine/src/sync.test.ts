@@ -16,6 +16,8 @@ class ListSource implements Source {
   readonly description = "test";
   searches = 0;
   lists = 0;
+  /** The `limit` of every list call, in order. */
+  limits: number[] = [];
   failLists = false;
   items: ContextItem[];
   constructor(
@@ -34,6 +36,7 @@ class ListSource implements Source {
   }
   async list(_scope: Scope, cursor: string | undefined, limit: number): Promise<ListPage> {
     this.lists++;
+    this.limits.push(limit);
     if (this.failLists) throw new Error("500 Internal Server Error");
     const sorted = [...this.items].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
     const at = cursor ? Number(cursor) : 0;
@@ -154,6 +157,66 @@ describe("background sync (D57)", () => {
     expect(src.searches).toBe(0);
     expect(got).toContain(itemId("mail", "new"));
     expect(partner.sync!.current(scope, "mail")).toBe(true);
+  });
+
+  describe("syncPollPageSize: polls sized to what changed", () => {
+    // 40 mails an hour apart, one backfill page: the learned rate is about one change in four hours.
+    const stale = async (config: Record<string, unknown>) => {
+      const src = new ListSource("mail", mail(40));
+      const env = setup([src], { syncPageSize: 100, syncMaxStaleMs: 4 * HOUR, ...config });
+      env.partner.sync!.track(scope);
+      while (!env.partner.sync!.warm(scope)) await env.partner.sync!.tick();
+      env.advance(5 * HOUR);
+      return { src, ...env };
+    };
+    const added = (src: ListSource, n: number, at: number) => {
+      for (let i = 0; i < n; i++) {
+        src.items.push(src.make(`new${i}`, `Zed Quinn ${i}`, `Zed Quinn contract renewal note ${i}`, at - i * 60_000));
+      }
+    };
+
+    test("three changed items: one list call of at most five items, and the new item is delivered", async () => {
+      const { src, partner, now } = await stale({ syncPollPageSize: 5 });
+      added(src, 3, now());
+      const before = src.limits.length;
+      const r = await say(partner, "Did Zed Quinn sign the contract renewal?", scope, "s1", now());
+      const calls = src.limits.slice(before);
+      expect(calls).toEqual([5]);
+      expect(partner.sync!.stats.demandItems).toBe(5);
+      expect(partner.sync!.current(scope, "mail")).toBe(true);
+      const got = [r.injection, ...partner.takePending({ ...scope, sessionId: "s1" })].flatMap(
+        (x) => x?.citations.map((c) => c.itemId) ?? [],
+      );
+      expect(got.some((id) => id.startsWith("mail:new"))).toBe(true);
+    });
+
+    test("thirty changed items: pages double, and the lookup holds all thirty before it answers", async () => {
+      const { src, partner, cache, now } = await stale({ syncPollPageSize: 5 });
+      added(src, 30, now());
+      const before = src.limits.length;
+      await say(partner, "Did Zed Quinn sign the contract renewal?", scope, "s1", now());
+      // Within the catch-up (2 pages of 100 items' worth): 5, 10, 20, and the third reaches what was synced.
+      expect(src.limits.slice(before)).toEqual([5, 10, 20]);
+      for (let i = 0; i < 30; i++) expect(cache.isSynced(scope, itemId("mail", `new${i}`))).toBe(true);
+      expect(partner.sync!.current(scope, "mail")).toBe(true);
+    });
+
+    test("off (0): a poll reads full pages; the backfill's page size is unchanged either way", async () => {
+      for (const pollPageSize of [0, 5]) {
+        const src = new ListSource("mail", mail(25));
+        const { partner, advance, now } = setup([src], {
+          syncPageSize: 10,
+          syncPollPageSize: pollPageSize,
+          syncMaxStaleMs: 4 * HOUR,
+        });
+        partner.sync!.track(scope);
+        while (!partner.sync!.warm(scope)) await partner.sync!.tick();
+        expect(src.limits).toEqual([10, 10, 10]);
+        advance(5 * HOUR);
+        await say(partner, "Where is the quarterly plan?", scope, "s1", now());
+        expect(src.limits.slice(3)).toEqual([pollPageSize === 0 ? 10 : 5]);
+      }
+    });
   });
 
   test("with on-demand polls off, a stale source is searched live as before", async () => {

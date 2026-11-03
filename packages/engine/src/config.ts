@@ -56,6 +56,13 @@ export interface EngineConfig {
   ledgerCooldownTurns: number;
   /** Turns before the same cue is looked up again. */
   cueCooldownTurns: number;
+  /**
+   * A request that arrives while the session's slow path is busy (a judge call, a slow source) is kept, not dropped:
+   * one slot per session, the latest wins, looked up once the slow path settles, and its answer queued as pending.
+   * Dropped instead if the session closed, its cue is in cooldown by then, or it waited over 10 s. At most one extra
+   * slow path (so one judge call, under the budget) per busy window. Off: such a request is not looked up.
+   */
+  slowPathQueue: boolean;
   /** Turns an injection has to show use before it counts as unused. */
   usageWindowTurns: number;
   /**
@@ -254,6 +261,13 @@ export interface EngineConfig {
   syncMaxItems: number;
   /** Items asked per listing page. */
   syncPageSize: number;
+  /**
+   * An incremental poll's smallest first page (0: polls read `syncPageSize` pages, as backfill and sweeps do). Set, a
+   * poll's first page is twice what the source's learned change rate expects since its last poll, at least this and
+   * at most `syncPageSize`, doubling while no page reaches what was already synced; a poll still reads up to
+   * `syncCatchupPages` (or its background limit) full pages' worth of items. Cuts items listed on the request path.
+   */
+  syncPollPageSize: number;
   /** Timed polls of an active user's sources this often (ms); 0 polls only on demand (`syncOnDemand`). */
   syncEveryMs: number;
   /** A synced source is stale once the chance it changed since its last poll (its learned rate) reaches this. */
@@ -629,6 +643,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   windowEvents: 12,
   ledgerCooldownTurns: 40,
   cueCooldownTurns: 6,
+  slowPathQueue: false,
   usageWindowTurns: 6,
   maxSessionsPerTenant: 5_000,
   sessionIdleMs: 2 * 3_600_000,
@@ -695,6 +710,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   sync: false,
   syncMaxItems: 3_000,
   syncPageSize: 100,
+  syncPollPageSize: 0,
   syncEveryMs: 0,
   syncStaleChance: 0.15,
   syncMaxStaleMs: 6 * 3_600_000,
