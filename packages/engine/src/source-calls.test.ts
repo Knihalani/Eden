@@ -30,17 +30,44 @@ const itemsOf = (sourceId: string): ContextItem[] =>
     updatedAt: NOW - (i + 1) * 3_600_000,
   }));
 
+/** Searches started and not yet answered, across every `counting` connector of a run. */
+type Flights = { n: number };
+
 /** A connector that counts every search it receives and answers after `delayMs`, so lookups overlap in flight. */
-const counting = (id: string, sent: Map<string, number>, delayMs: number): Source => ({
+const counting = (id: string, sent: Map<string, number>, delayMs: number, flights: Flights = { n: 0 }): Source => ({
   id,
   kind: "test",
   description: id,
   search: async () => {
     sent.set(id, (sent.get(id) ?? 0) + 1);
-    await Bun.sleep(delayMs);
+    flights.n++;
+    try {
+      await Bun.sleep(delayMs);
+    } finally {
+      flights.n--;
+    }
     return itemsOf(id);
   },
 });
+
+/** One turn of the event loop. */
+const turn = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+/**
+ * Waits until everything a request started (slow path, push, probes) has finished: no search in flight, and no new
+ * search or trace over `quietTurns` event-loop turns in a row. A search in flight is waited for, so this waits for the
+ * connectors' own delay and no more, instead of a fixed sleep past it.
+ */
+async function settled(flights: Flights, traces: Trace[], sent: Map<string, number>, quietTurns = 50) {
+  const mark = () => `${flights.n}/${traces.length}/${total(sent)}`;
+  let calm = 0;
+  for (let i = 0; i < 100_000 && calm < quietTurns; i++) {
+    const before = mark();
+    await turn();
+    calm = flights.n === 0 && mark() === before ? calm + 1 : 0;
+  }
+  if (calm < quietTurns) throw new Error("the request's work never settled");
+}
 
 /** Flags nothing; answers at once at no cost. */
 const quiet: ReaderMaker = { read: async () => ({ bears: [], costUsd: 0 }) };
@@ -53,7 +80,8 @@ async function run(
   opts: { delayMs?: number; planner?: boolean; requests?: number } = {},
 ): Promise<{ traces: Trace[]; sent: Map<string, number> }> {
   const sent = new Map<string, number>();
-  const sources = SOURCES.map((id) => counting(id, sent, opts.delayMs ?? 20));
+  const flights: Flights = { n: 0 };
+  const sources = SOURCES.map((id) => counting(id, sent, opts.delayMs ?? 20, flights));
   const traces: Trace[] = [];
   const p = new ContextPartner({
     sources: async () => sources,
@@ -74,7 +102,7 @@ async function run(
       waitMs: 2_000,
     });
     // Everything the request started (slow path, push, probes past their grace) has finished before it is counted.
-    await Bun.sleep(200);
+    await settled(flights, traces, sent);
   }
   return { traces, sent };
 }

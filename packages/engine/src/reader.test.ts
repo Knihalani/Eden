@@ -697,15 +697,20 @@ describe("the reader in the engine (config.askReader)", () => {
   });
 
   test("readerPushWaitMs 0: observe returns before a slow reader; its packet is queued when it lands", async () => {
-    const slow = new ScriptedReader(flags("mail:hold"), { delayMs: 800 });
+    // The reading is held until the test releases it, so observe returning at all shows it did not wait for it; the
+    // time bound only tells "returned at once" from "waited the 3 s it was allowed", with a wide margin either way.
+    const gate = new Gate();
+    const slow = new ScriptedReader(flags("mail:hold"), { gate });
     const t0 = performance.now();
     const r = await run(
       { askReader: true, readerPush: true, readerPushWaitMs: 0, askReaderWaitMs: 3_000 },
       { asks: 0, maker: slow, waitMs: 3_000 },
     );
-    expect(performance.now() - t0).toBeLessThan(400);
+    expect(performance.now() - t0).toBeLessThan(1_500);
+    await until(() => slow.calls.length === 1);
     expect(r.partner.takePending({ tenantId: "t", userId: "u1", sessionId: "s1" }).length).toBe(0);
-    await Bun.sleep(1_000);
+    gate.release();
+    await slow.idle();
     const later = r.partner.takePending({ tenantId: "t", userId: "u1", sessionId: "s1" });
     expect(later.find((x) => x.reason.startsWith("reader:"))).toBeDefined();
   });

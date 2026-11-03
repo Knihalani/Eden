@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -145,42 +145,54 @@ describe("screen lines", () => {
 describe("the funnel with a no-model reader (end to end, small)", () => {
   const lab = import.meta.dir;
   const cards = join(lab, "..", "..", "lab", "cards", "cards-train.jsonl");
-  const run = (reader: string) => {
+  type Run = { status: number | null; stdout: string; json: { reader?: unknown; perTask: Record<string, unknown>[] } };
+  /** One small funnel run in its own process. The runs below go out together: each is CPU-bound, single-threaded. */
+  const start = async (reader: string): Promise<Run> => {
     const out = join(mkdtempSync(join(tmpdir(), "reader-stub-")), "f.json");
-    const r = spawnSync(
-      "bun",
+    const child = Bun.spawn(
       [
+        "bun",
         join(lab, "hidden-funnel.ts"),
         ...["--suite", "train1", "--seeds", "41", "--limit", "2", "--ask", "--no-record", "--reader", reader],
         ...["--config", JSON.stringify(PRESETS.NEWL), "--cards", cards, "--json", out],
       ],
-      { encoding: "utf8", env: { ...process.env, OPENROUTER_API_KEY: "" } },
+      { env: { ...process.env, OPENROUTER_API_KEY: "" }, stdout: "pipe", stderr: "inherit" },
     );
+    const [stdout, status] = await Promise.all([new Response(child.stdout).text(), child.exited]);
+    const json = status === 0 ? (JSON.parse(readFileSync(out, "utf8")) as Run["json"]) : { perTask: [] };
+    return { status, stdout, json };
+  };
+  // The stub twice (its determinism) and the oracle once, run at the same time rather than one after another.
+  let runs: { stub: Run[]; oracle: Run };
+  beforeAll(async () => {
+    const [a, b, oracle] = await Promise.all([start("stub"), start("stub"), start("oracle:0.9,0.1")]);
+    runs = { stub: [a!, b!], oracle: oracle! };
+  }, 60_000);
+  const run = (r: Run) => {
     expect(r.status).toBe(0);
-    const json = JSON.parse(readFileSync(out, "utf8")) as { reader?: unknown; perTask: Record<string, unknown>[] };
-    return { stdout: r.stdout, json };
+    return r;
   };
   const timing = new Set(["ms", "askMs", "readerWaitMs", "deliveryMs"]);
   const strip = (rows: Record<string, unknown>[]) =>
     rows.map((t) => Object.fromEntries(Object.entries(t).filter(([k]) => !timing.has(k))));
 
   test("stub: no model (no replay or live reader), pool fields per task, deterministic across runs", () => {
-    const a = run("stub");
+    const a = run(runs.stub[0]!);
     expect(a.json.reader).toBeUndefined();
     expect(a.stdout).not.toContain("calls answered");
     expect(a.stdout).toContain("NOT the preset's numbers");
     expect(a.stdout).toContain("hidden in pool");
     expect(a.json.perTask.every((t) => typeof t.poolHas === "boolean")).toBe(true);
     expect(a.json.perTask.reduce((n, t) => n + Number(t.stubCalls ?? 0), 0)).toBeGreaterThan(0);
-    expect(strip(run("stub").json.perTask)).toEqual(strip(a.json.perTask));
-  }, 60_000);
+    expect(strip(run(runs.stub[1]!).json.perTask)).toEqual(strip(a.json.perTask));
+  });
 
   test("oracle: every table line is labelled a proxy", () => {
-    const o = run("oracle:0.9,0.1");
+    const o = run(runs.oracle);
     const table = o.stdout.split("\n").filter((l) => /^(TOTAL|train1 )/.test(l));
     expect(table.length).toBeGreaterThan(0);
     for (const l of table) expect(l).toContain("[oracle proxy 0.9,0.1]");
-  }, 60_000);
+  });
 
   test("funnel refuses a held-out suite in stub mode without --blind, before running anything", () => {
     const r = spawnSync("bun", [join(lab, "funnel.ts"), "--suite", "heldout13", "--", "--reader", "stub"], {

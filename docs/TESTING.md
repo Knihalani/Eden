@@ -61,8 +61,44 @@ a fresh global (`--isolate`), each worker with its own preload and temp HOME.
 The fix that made parallel pass and balance: the redact timing tests moved from `linear.test.ts` to `redos.test.ts`
 (so two workers share the 10 s that file took alone), and the RE2 equivalence test got an explicit 30 s timeout like
 its neighbour's 60 s. The `expect()` count was 1,111,674 in both serial runs and in one of the three passing
-parallel runs, 1,111,669 in the other two: some test's number of assertions depends on timing or order (not traced).
-Every test passed each time; worth pinning down.
+parallel runs, 1,111,669 in the other two. Traced in the 2026-11-03b audit: `spans.test.ts`'s "every phase" test
+used an unseeded `SourceMap`, whose routing draw (Thompson sampling seeded from `Math.random`) set the order the
+sources were asked in, and so whether one probe page was stored on its own: one `cache.put` span (five `expect()`
+calls) more or less per run. Its map is seeded now, and a test asserts the same spans across five plays. Five
+consecutive `bun run test` runs then gave 1,112,544 `expect()` calls each, and two junit runs
+(`./scripts/test.sh --reporter=junit`) the same assertion count for every one of the 1,431 tests.
+
+## Sleep-free timing tests (2026-11-03b, 4-core container shared with other agents, Bun 1.4.4)
+
+Tests that slept past a delay now hold the call and release it: `slow-path-queue.test.ts` (a judge and a slow
+search whose calls the test answers, in the order the interleaving needs), `source-calls.test.ts` (waits until no
+search is in flight and nothing changes for 50 event-loop turns, instead of 200 ms per request), and
+`reader.test.ts`'s "readerPushWaitMs 0" (a held reading). `QueryPlanner` takes an optional `now` (default
+`performance.now`), so its deadline tests run on a fake clock the connector advances. `reader-stub.test.ts` starts
+its three funnel processes at once in `beforeAll` (same `--limit 2`, same assertions). The ReDoS sweep is split by
+rule index over `redos.test.ts` and `redos-{1,2,3}.test.ts` (`redos-sweep.ts`), and times each run as the lesser
+of wall and CPU time: split, a wall-clock-only timing failed 4 of 5 `test:pkg redact` runs beside 8 busy loops
+(rules at 40–59 ms), where the unsplit file passed 5 of 5; with the lesser of the two, 6 of 6 passed (one failure
+in `warm.test.ts`, which also failed once in 5 on the old files). A test checks the measure still flags
+`curl-auth-header` on JavaScript's engine (about 78 ms against the 40 ms ceiling).
+
+Each file alone (`bun test ./file`; CPU is user time):
+
+| File | Before | After |
+|---|---|---|
+| packages/engine/src/slow-path-queue.test.ts | 5,468 ms (CPU 0.35 s) | 214–286 ms (CPU 0.25–0.28 s) |
+| packages/engine/src/source-calls.test.ts | 1,782 ms (CPU 0.33 s) | 379–460 ms (CPU 0.27–0.33 s) |
+| packages/engine/src/reader.test.ts | 3,198 ms | 2,187–2,286 ms (the rest are wait-bound tests, real delays by design) |
+| packages/sim/src/lab/reader-stub.test.ts | 6,117 ms (CPU 8.6 s) | 2,896–5,280 ms (CPU 8.2–8.6 s) |
+| packages/redact/src/redos.test.ts | 5,966 ms | four files, 1,526–1,930 ms each |
+| packages/sources/src/planner.test.ts | 602 ms | 72–138 ms |
+
+`bun run test:pkg`, base and new files alternated three times on the same machine (load average 3.4–4.6 from
+other work): engine 6.6, 7.5, 7.3 s → 6.5, 5.7, 6.1 s; sim 7.9, 8.4, 9.6 s → 6.9, 6.1, 6.5 s; redact 7.8, 7.1,
+8.1 s → 5.8, 4.8, 5.4 s; sources about the same (1.2–1.6 s → 1.4 s). The whole suite, alternated twice: 16.9,
+19.5 s → 16.4, 17.9 s (1,425 → 1,431 tests). The gate is CPU-bound (about 63 s of CPU over 4 cores), so removing
+sleeps shortens the package loops more than the full run; `reader-stub.test.ts` still spends 8.6 s of CPU in its
+three funnel processes and is what keeps sim above its earlier 4–4.5 s.
 
 ## The slowest files (each alone, `bun test <file>`, wall incl. ~70 ms start-up)
 
@@ -76,7 +112,9 @@ Every test passed each time; worth pinning down.
 | packages/primitives/src/bandit.test.ts | 1,268 | statistical convergence runs | as above |
 | packages/sim/src/lab/suites.test.ts | 1,213 | builds worlds for every suite | One world per seed shared by the registry tests |
 | packages/engine/src/partner.test.ts | 1,143 | 74 tests | (protected while the engine is being edited) |
-| packages/engine/src/reader.test.ts | 1,138 | reader prompts over many items | (protected) |
+| packages/engine/src/reader.test.ts | 2,187 | wait-bound tests with real delays (300–400 ms readings) | Sleep-free where the test is not of a wait bound (2026-11-03b) |
+| packages/sim/src/lab/reader-stub.test.ts | 2,896–5,280 | three `hidden-funnel.ts` processes (8.6 s CPU), now run at once | One in-process funnel run, or a cheaper shard set-up (sync backfill) |
+| packages/redact/src/redos*.test.ts | 1,526–1,930 each | the crafted-input sweep, split over four files | Done (2026-11-03b) |
 | packages/sim/src/lab/hermes-host.test.ts | 1,117 | starts servers and stub workers | (protected) |
 
 Per package, summing each file alone: engine 14.6 s, redact 10.1 s, sim 9.2 s, primitives 5.0 s, server 2.9 s,
