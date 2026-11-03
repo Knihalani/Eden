@@ -345,4 +345,29 @@ describe("bridging in the engine (config.bridgeQuery)", () => {
     expect((await run({ bridgeQuery: true }, ["u1"], asked)).maker.calls).toEqual([]);
     expect((await run({ bridgeQuery: true, bridgeQuestions: true }, ["u1"], asked)).maker.calls.length).toBe(1);
   });
+
+  // `Budget.sessions` has no cap or eviction, so a session the bridge fails to end shows at any count: 100 is enough.
+  test("the bridge's budget ends each session with the partner's: 100 sessions leave no session tally", async () => {
+    const maker = new FixedMaker(["commitment second signature"]);
+    const budget = new Budget();
+    const p = new ContextPartner({
+      sources: async () => [strict([rule()])],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => NOW,
+      config: { groundConflict: true, askVerdicts: true, bridgeQuery: true },
+      bridge: new QueryBridge({ maker, budget, now: () => NOW }),
+    });
+    for (let n = 0; n < 100; n++) {
+      const e = { tenantId: "t", userId: `u${n % 10}`, sessionId: `s${n}`, at: NOW };
+      // A request of its own per session, so each one is a call (the bridge caches by user and request).
+      const text = `Approve the order number ${n} for twelve laptops from the reseller.`;
+      await p.observe({ ...e, kind: "user_message", text } as AgentEvent, { waitMs: 1_000 });
+      await p.observe({ ...e, kind: "session_end" } as AgentEvent);
+    }
+    expect(maker.calls.length).toBe(100);
+    expect(budget.size.sessions).toBe(0);
+  });
 });
