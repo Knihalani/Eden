@@ -44,10 +44,13 @@ one user (`EDEN_USER`, `EDEN_TENANT`), and `createMcpServer` attaches it to any 
 [examples/personal-agent/agent.ts](examples/personal-agent/agent.ts).
 [docs/INTEGRATION.md](docs/INTEGRATION.md) has advice on placement, caching and cost (unmeasured).
 
-Both servers run on the production defaults. To run a measured experimental configuration instead, point
-`EDEN_ENGINE_CONFIG` at a JSON file of engine settings (`packages/engine/src/config.ts`), for example
-`{"probes": true, "compactAsk": true}`; an unknown key or a wrong type stops startup with a message naming it (D101).
-Flags that call a model stay under the per-session budget; see [docs/COST-MODEL.md](docs/COST-MODEL.md).
+Both servers run on the production defaults. To turn on experimental engine flags, point `EDEN_ENGINE_CONFIG` at a
+JSON file of engine settings (`packages/engine/src/config.ts`), for example `{"probes": true, "compactAsk": true}`;
+an unknown key or a wrong type stops startup with a message naming it (D101). Only flags the servers can run are
+accepted: the no-model flags, the judge and `askWithModel` (both under the per-session budget; see
+[docs/COST-MODEL.md](docs/COST-MODEL.md)). Flags that need a model role the servers do not wire (`cards`, `intent`,
+`bridgeQuery`, `askReader`, `readerPush`) are refused at startup, so the lab's ALL3 and NEW configurations are not
+runnable from the shipped servers yet; an embedding that supplies those deps can run them.
 `EDEN_SOURCES_FILE` holds static documents only for now: MCP connectors there are not supported yet, since that file's
 sources are shared by every user; connect MCP sources through `McpSource` in an embedding's resolver.
 

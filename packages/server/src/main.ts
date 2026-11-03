@@ -16,7 +16,8 @@ const partner = buildPartner({
   sources: staticResolver(process.env.EDEN_SOURCES_FILE),
   sourceMapPath: config.sourceMapPath,
   queryPlanner: config.queryPlanner,
-  askWithModel: config.askWithModel,
+  // Unset unless EDEN_ASK_MODEL=1, so an EDEN_ENGINE_CONFIG `askWithModel` holds (build.ts).
+  askWithModel: config.askWithModel || undefined,
   engine,
   onShadow: process.env.EDEN_TRACE === "1" ? (r) => console.log(JSON.stringify({ shadow: r })) : undefined,
   onTrace: process.env.EDEN_TRACE === "1" ? (t) => console.log(JSON.stringify(t)) : undefined,

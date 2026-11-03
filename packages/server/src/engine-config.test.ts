@@ -46,14 +46,45 @@ describe("EDEN_ENGINE_CONFIG (D101)", () => {
     expect(partner.config).toEqual({ ...DEFAULT_CONFIG, ...engine });
   });
 
-  test("askWithModel from the file is not overridden by the unset environment flag", () => {
-    const partner = buildPartner({
-      sources: async () => [],
-      model: null,
-      askWithModel: false,
-      engine: { askWithModel: true },
-    });
-    expect(partner.config.askWithModel).toBe(true);
+  test("askWithModel: the file's value holds when the option is unset; an explicit option wins, as before D101", () => {
+    const build = (askWithModel: boolean | undefined, engine: { askWithModel?: boolean }) =>
+      buildPartner({ sources: async () => [], model: null, askWithModel, engine }).config.askWithModel;
+    expect(build(undefined, { askWithModel: true })).toBe(true);
+    expect(build(false, { askWithModel: true })).toBe(false);
+    expect(build(true, {})).toBe(true);
+    expect(build(undefined, {})).toBe(false);
+  });
+
+  test("a flag whose partner dependency the servers do not wire is refused, naming it and the dependency", () => {
+    // buildPartner wires no cards, bridge or reader: turned on, these would be accepted by the engine and do nothing.
+    const needs = {
+      cards: "cards",
+      cardsEconomy: "cards",
+      intent: "cards",
+      bridgeQuery: "bridge",
+      bridgeQuestions: "bridge",
+      askReader: "reader",
+      askReaderQuestions: "reader",
+      askReaderClear: "reader",
+      askReaderDrop: "reader",
+      readerPush: "reader",
+      readerPushNotes: "reader",
+      readerGate: "reader",
+    };
+    for (const [key, dep] of Object.entries(needs)) {
+      expect(() => parseEngineConfig({ probes: true, [key]: true })).toThrow(
+        new RegExp(`"${key}" needs the partner's ${dep} dependency`),
+      );
+      // Off is the default and harmless.
+      expect(parseEngineConfig({ [key]: false })).toEqual({ [key]: false });
+    }
+    const path = file("all3.json", JSON.stringify({ probes: true, graph: true, cards: true }));
+    expect(() => engineConfig({ EDEN_ENGINE_CONFIG: path })).toThrow(/EDEN_ENGINE_CONFIG .*"cards" needs/);
+    // Each one is a dependency buildPartner does not wire.
+    const partner = buildPartner({ sources: async () => [], model: null }) as unknown as {
+      deps: Record<string, unknown>;
+    };
+    for (const dep of new Set(Object.values(needs))) expect(partner.deps[dep]).toBeUndefined();
   });
 
   test("an unknown key stops startup with an error naming it", () => {

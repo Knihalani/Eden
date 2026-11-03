@@ -30,7 +30,8 @@ const partner = buildPartner({
   // Fails open to an in-memory map (logged to stderr) when the file cannot be opened, rather than not starting.
   sourceMap: openSourceMap(() => stdioSourceMapPath(tenantId, userId)),
   queryPlanner: plannerMode(process.env.EDEN_QUERY_PLANNER),
-  askWithModel: askModel(process.env.EDEN_ASK_MODEL),
+  // Unset unless EDEN_ASK_MODEL=1, so an EDEN_ENGINE_CONFIG `askWithModel` holds (build.ts).
+  askWithModel: askModel(process.env.EDEN_ASK_MODEL) || undefined,
   engine: engineConfig(),
 });
 // Before the transport opens, so the first ask does not compile the secret gate.
