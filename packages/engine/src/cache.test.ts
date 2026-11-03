@@ -383,3 +383,35 @@ describe("offsetOf: a tally kept as items come and go", () => {
     expect([cache.offsetOf(alice), cache.offsetOf(bob)]).toEqual([60, 0]);
   });
 });
+
+describe("ItemCache index isolation (packed index, shared scratch)", () => {
+  test("users interleaved past freezes and purges rank as each would alone", () => {
+    const bob = { tenantId: "t", userId: "bob" };
+    const other = { tenantId: "u", userId: "alice" }; // same user id, another tenant
+    const words = (u: number, i: number) =>
+      Array.from({ length: 30 }, (_, j) => `w${(i * 7 + j * 13 + u) % 90}`).join(" ") + ` renewal u${u}`;
+    const together = new ItemCache({ maxItemsPerUser: 150, expireEveryMs: 0 });
+    const alone = [alice, bob, other].map(() => new ItemCache({ maxItemsPerUser: 150, expireEveryMs: 0 }));
+    const now = 1_700_000_000_000;
+    // 400 items each through a cap of 150: several freezes (every 128 adds) and purges (evictions), interleaved.
+    for (let i = 0; i < 400; i++) {
+      [alice, bob, other].forEach((scope, u) => {
+        const it = item("mail", `${u}-${i}`, words(u, i));
+        together.put(scope, [it], now + i);
+        alone[u]!.put(scope, [it], now + i);
+      });
+      if (i % 37 !== 0) continue;
+      [alice, bob, other].forEach((scope, u) => {
+        const q = (c: ItemCache) => termIds(`w3 w44 renewal u${u} w81`, c.peekVocab(scope)!, false);
+        const a = q(together);
+        const b = q(alone[u]!);
+        const got = together.search(scope, a.ids, a.n, 20, now + i);
+        const want = alone[u]!.search(scope, b.ids, b.n, 20, now + i);
+        expect(got.map((h) => [h.item.id, h.score, h.coverage])).toEqual(
+          want.map((h) => [h.item.id, h.score, h.coverage]),
+        );
+        expect(got.every((h) => h.item.id.startsWith(`mail:${u}-`))).toBe(true);
+      });
+    }
+  });
+});

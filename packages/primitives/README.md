@@ -20,7 +20,7 @@ choices they drove are in [docs/research/primitives.md](../../docs/research/prim
 | `breaker.ts` | `CircuitBreaker`: time-windowed failure rate, half-open probe | Failing upstreams |
 | `limiter.ts` | `AimdLimiter`: adaptive concurrency limit | Fan-out to upstreams of unknown capacity |
 | `histogram.ts` | `Histogram`, `RollingHistogram`: log-linear, ~3% precision, 4 KB | p95/p99 for hedging, slow-call thresholds, metrics |
-| `sparse-index.ts` | `SparseIndex`: term-at-a-time BM25 / BM25F (per-field weights and `b`, BM25+ delta), query coverage, tombstones with compaction that reports freed terms (`onTermFreed`) | The engine's item cache |
+| `sparse-index.ts` | `SparseIndex`: term-at-a-time BM25 / BM25F (per-field weights and `b`, BM25+ delta), query coverage, tombstones with compaction that reports freed terms (`onTermFreed`); packed: a frozen CSR tier plus a small delta (scanned for light users, chained per term for heavy ones) | The engine's item cache |
 | `utf8.ts` | `utf8Length`, `truncateUtf8`: byte budgets without encoding, surrogate-safe | Injection and prompt byte limits |
 | `reply.ts` | `splitReply`, `stripReply`, `dedupText`: quotes, signatures, greetings and forwards marked per line | The text an item adds of its own, for dedup |
 | `dedup.ts` | `TextSketcher` (shingles, SimHash, MinHash, number key), `MinHashIndex` (LSH), `hamming64` | Near-duplicate items |
@@ -96,3 +96,39 @@ The steady-state tokenizer rows never call `foldString` (every term is already k
 run-to-run noise (±30% on this VM). The gain is memory: 13.6x less heap per stored term, at no cost to interning. How
 much of a session's heap that is depends on how many terms are never read back (`term(id)` resolves a rope); not
 measured here. `tokenize.bench.ts`'s engine row now passes the vocabulary `contentTerms` takes (it had stopped running).
+
+## Packed index (2026-11-03, D111)
+
+`SparseIndex` keeps the same API and the same results bit for bit (scores, ranking, coverage, matches, doc numbers,
+freed terms and their order) in a packed layout: a frozen tier in compressed sparse rows (one offset per (term, field)
+key, Uint16 doc numbers while they fit, one byte per term frequency with an escape map for 255+, one forward arena of
+sorted term ids, Uint16 while they fit) and a delta of the docs added since the last freeze. The delta has no
+postings: up to 128 docs a query scans it (binary search per doc), so an index of fewer docs never builds postings
+(the light-user path); a heavy index's delta (an eighth of its docs, at most 512) is also chained per term. Freezes
+merge the delta in one pass, copying runs of untouched keys as blocks; purges run exactly where the old compaction
+ran. The old class is kept as `src/sparse-index.reference.ts`: the oracle for `sparse-index-packed.test.ts`
+(randomised operations on both, compared result for result) and the "before" of the benchmarks.
+
+Heap of the index alone (`packages/engine/bench/index-memory.bench.ts`, a sim world of 6,892 items of ~1 KB, title and
+text fields; heap held by the indexes after a full GC, measured by dropping them), and the whole `ItemCache` (`cache`
+mode, item text excluded) run on main and on this branch:
+
+| Benchmark | Before | After |
+|---|---|---|
+| Index heap per item, 1 user × 6,892 items | 1,387 B | 388 B (3.57x) |
+| Index heap per item, 1 user × 2,000 items | 2,587 B | 744 B (3.48x) |
+| Index heap per item, 100 users × 200 items | 1,743 B (340 KB per user) | 527 B (103 KB per user; 3.30x) |
+| Index heap per item, 500 users × 20 items | 3,467 B (67.7 KB per user) | 897 B (17.5 KB per user; 3.86x) |
+| `ItemCache` heap per item, 1 user × 6,892 items | 2,219 B | 1,241 B (1.79x) |
+| `sparse-index-ab.bench.ts` (interleaved, median of 6) zipf search / remove + add, p50 | 10.44–19.39 / 15.01–19.86 µs | 10.71–18.50 / 9.45–12.01 µs |
+| Same, dense search / remove + add, p50 | 74.39–75.82 / 3.26–4.02 µs | 70.76–77.80 / 4.30–5.08 µs |
+| `index-memory.bench.ts` search p50, 20 / 128 / 1,000 / 6,892 items (two runs) | 1.6–3.3 / 4.6–5.1 / 47.7–62.6 / 210.7–274.6 µs | 3.4–3.5 / 4.0–4.3 / 39.2–61.6 / 149.1–196.0 µs |
+| Same, churn at 6,892 (remove oldest + add): p50 / p99 / max | 4.6 / 48.3–51.1 µs / 12.5–16.5 ms | 4.6–7.7 / 72.3–79.2 µs / 23.1–40.3 ms |
+| Same, churn steps over 1 ms: count, median | 7, 5.7–7.2 ms | 13–15, 6.8–9.5 ms |
+
+The index is 3.3–3.9x smaller at every size measured. Search is unchanged within noise except for the smallest users
+(20 items: about 2 µs slower, a scan of the delta instead of postings, still a few µs). The cost moved to puts: the
+reference compacted 7 times in 5,000 churn steps, the packed index purges at the same 7 points and also freezes its
+delta about as often again, so it pauses about twice as often, each pause one pass over the postings (median 7–9 ms
+at 6,892 items on this VM, with GC; the reference's compactions 6–7 ms) and its worst step (GC included) is higher.
+Measured on a shared VM, ±30% run to run.
