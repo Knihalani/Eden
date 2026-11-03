@@ -202,5 +202,7 @@ describe("source-side updates", () => {
     const on = await runQuality({ ...base, updates: 0.5 });
     expect(on.updates.applied).toBe(on.updates.planned);
     expect(on.updates.planned).toBeGreaterThan(0);
-  });
+    // Two full quality runs: 2.1-2.5 s alone, but over bun's 5 s default under the parallel gate's load (5.1-6.0 s
+    // seen in the 2026-11-03b audit). 20 s still catches a hang.
+  }, 20_000);
 });

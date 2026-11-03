@@ -1,6 +1,6 @@
-import { beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readerMessages, type ReaderInput } from "@eden/engine";
@@ -8,6 +8,7 @@ import { PRESETS } from "./presets";
 import {
   CountingReader,
   draw,
+  INTENT_INERT,
   OracleReaderMaker,
   packetLines,
   parseOracle,
@@ -145,28 +146,54 @@ describe("screen lines", () => {
 describe("the funnel with a no-model reader (end to end, small)", () => {
   const lab = import.meta.dir;
   const cards = join(lab, "..", "..", "lab", "cards", "cards-train.jsonl");
-  type Run = { status: number | null; stdout: string; json: { reader?: unknown; perTask: Record<string, unknown>[] } };
+  type Run = {
+    status: number | null;
+    stdout: string;
+    stderr: string;
+    json: { reader?: unknown; perTask: Record<string, unknown>[] } & Record<string, unknown>;
+  };
+  // Each run's scratch directory, removed after the last test (each run used to leave its own in /tmp).
+  const dirs: string[] = [];
+  afterAll(() => {
+    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+  });
   /** One small funnel run in its own process. The runs below go out together: each is CPU-bound, single-threaded. */
-  const start = async (reader: string): Promise<Run> => {
-    const out = join(mkdtempSync(join(tmpdir(), "reader-stub-")), "f.json");
+  const start = async (reader: string, extra: string[] = []): Promise<Run> => {
+    const out = join(scratch(), "f.json");
     const child = Bun.spawn(
       [
         "bun",
         join(lab, "hidden-funnel.ts"),
         ...["--suite", "train1", "--seeds", "41", "--limit", "2", "--ask", "--no-record", "--reader", reader],
-        ...["--config", JSON.stringify(PRESETS.NEWL), "--cards", cards, "--json", out],
+        ...["--config", JSON.stringify(PRESETS.NEWL), "--cards", cards, "--json", out, ...extra],
       ],
-      { env: { ...process.env, OPENROUTER_API_KEY: "" }, stdout: "pipe", stderr: "inherit" },
+      { env: { ...process.env, OPENROUTER_API_KEY: "" }, stdout: "pipe", stderr: "pipe" },
     );
-    const [stdout, status] = await Promise.all([new Response(child.stdout).text(), child.exited]);
+    const [stdout, stderr, status] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
     const json = status === 0 ? (JSON.parse(readFileSync(out, "utf8")) as Run["json"]) : { perTask: [] };
-    return { status, stdout, json };
+    return { status, stdout, stderr, json };
   };
-  // The stub twice (its determinism) and the oracle once, run at the same time rather than one after another.
-  let runs: { stub: Run[]; oracle: Run };
+  const scratch = () => {
+    const dir = mkdtempSync(join(tmpdir(), "reader-stub-"));
+    dirs.push(dir);
+    return dir;
+  };
+  // The stub twice (its determinism) and the oracle once, run at the same time rather than one after another. The
+  // first stub run also writes a reader log under a label: the NEWL flag checks below read it, so they need no run
+  // of their own (they had one in funnel-flags.test.ts, a fourth process for the same work).
+  let runs: { stub: Run[]; oracle: Run; log: string };
   beforeAll(async () => {
-    const [a, b, oracle] = await Promise.all([start("stub"), start("stub"), start("oracle:0.9,0.1")]);
-    runs = { stub: [a!, b!], oracle: oracle! };
+    const log = join(scratch(), "reader.jsonl");
+    const [a, b, oracle] = await Promise.all([
+      start("stub", ["--reader-log", log, "--label", "NEWL"]),
+      start("stub"),
+      start("oracle:0.9,0.1"),
+    ]);
+    runs = { stub: [a!, b!], oracle: oracle!, log };
   }, 60_000);
   const run = (r: Run) => {
     expect(r.status).toBe(0);
@@ -185,6 +212,29 @@ describe("the funnel with a no-model reader (end to end, small)", () => {
     expect(a.json.perTask.every((t) => typeof t.poolHas === "boolean")).toBe(true);
     expect(a.json.perTask.reduce((n, t) => n + Number(t.stubCalls ?? 0), 0)).toBeGreaterThan(0);
     expect(strip(run(runs.stub[1]!).json.perTask)).toEqual(strip(a.json.perTask));
+  });
+
+  test("NEWL with --reader stub and no --intent: stamped inert, JSON label, reader log, sync item counters", () => {
+    const r = runs.stub[0]!;
+    expect(r.stderr).not.toContain("error:");
+    const { stdout, json } = run(r);
+    const totals = stdout.split("\n").filter((l) => /^(TOTAL|train1 )/.test(l) || l.includes("hidden in pool"));
+    expect(totals.length).toBeGreaterThan(1);
+    for (const l of totals) expect(l).toContain(INTENT_INERT);
+    expect(json.label).toBe(`NEWL  ${INTENT_INERT}`);
+    expect((json.intent as { state: string }).state).toBe("inert");
+    const lines = readFileSync(runs.log, "utf8").trim().split("\n");
+    expect(lines.length).toBeGreaterThan(0);
+    const first = JSON.parse(lines[0]!) as { task: string; reader: string; prompt: string };
+    expect(first.reader).toBe("stub");
+    expect(first.task.startsWith("train1/")).toBe(true);
+    expect(first.prompt.length).toBeGreaterThan(0);
+    // NEWL has the real sync: its item counters are in the JSON and on the sync line.
+    const sync = json.sync as Record<string, number>;
+    expect(typeof sync.demandItems).toBe("number");
+    expect(sync.backgroundItems).toBeGreaterThan(0);
+    expect(stdout).toMatch(/demand items \d+, background items \d+/);
+    expect(stdout).toContain("delivered before first model call");
   });
 
   test("oracle: every table line is labelled a proxy", () => {

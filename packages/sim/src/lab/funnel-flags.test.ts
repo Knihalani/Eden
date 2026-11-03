@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ReaderInput } from "@eden/engine";
@@ -18,25 +18,69 @@ import {
 
 const lab = import.meta.dir;
 const cards = join(lab, "..", "..", "lab", "cards", "cards-train.jsonl");
-const scratch = () => mkdtempSync(join(tmpdir(), "funnel-flags-"));
+// Every scratch directory this file makes, removed when it is done (each run used to leave its own in /tmp).
+const scratchDirs: string[] = [];
+const scratch = () => {
+  const dir = mkdtempSync(join(tmpdir(), "funnel-flags-"));
+  scratchDirs.push(dir);
+  return dir;
+};
+afterAll(() => {
+  for (const dir of scratchDirs) rmSync(dir, { recursive: true, force: true });
+});
 const noKey = { ...process.env, OPENROUTER_API_KEY: "" };
+
+type Run = { status: number | null; stdout: string; stderr: string; out: string };
+/** `bun args…` in a child process without blocking this one, so the runs below can go out together. */
+const spawn = async (args: string[], out: string): Promise<Run> => {
+  const p = Bun.spawn(["bun", ...args], { env: noKey, stdout: "pipe", stderr: "pipe" });
+  const [stdout, stderr, status] = await Promise.all([
+    new Response(p.stdout).text(),
+    new Response(p.stderr).text(),
+    p.exited,
+  ]);
+  return { status, stdout, stderr, out };
+};
 
 /** hidden-funnel.ts on train1 seed 41, the first `limit` tasks of each variant, no model. */
 const funnel = (config: Record<string, unknown>, extra: string[], limit = 2) => {
   const out = join(scratch(), "f.json");
-  const r = spawnSync(
-    "bun",
+  return spawn(
     [
       join(lab, "hidden-funnel.ts"),
       ...["--suite", "train1", "--seeds", "41", "--limit", String(limit), "--ask", "--no-record"],
       ...["--config", JSON.stringify(config), "--cards", cards, "--json", out, ...extra],
     ],
-    { encoding: "utf8", env: noKey },
+    out,
   );
-  expect(r.stderr).not.toContain("error:");
-  expect(r.status).toBe(0);
-  return { stdout: r.stdout, json: JSON.parse(readFileSync(out, "utf8")) as Record<string, unknown> };
 };
+
+/** funnel.ts on train1 seeds 41 and 42: two seeds make two shards, so `--jobs 2` really runs two at a time. */
+const funnelTimed = (jobs: string) => {
+  const out = join(scratch(), "f.json");
+  return spawn(
+    [
+      join(lab, "funnel.ts"),
+      ...["--suite", "train1", "--seeds", "41,42", "--jobs", jobs, "--json", out],
+      // One task per variant and seed. Not a smaller --time: at 0.005 the sleeps are as short as a loaded machine's
+      // scheduling jitter, and a task's call counts then changed between the two runs (seen once in three runs).
+      ...["--", "--time", "0.05", "--limit", "1"],
+    ],
+    out,
+  );
+};
+
+// The end-to-end runs are single-threaded child processes (mostly sleeps, for the shards). They start together
+// here, before any test, and each test awaits its own: one after another they cost the sum of their wall times.
+// The NEWL stub run's assertions are in reader-stub.test.ts, on the stub run that file makes anyway.
+let runs: { overlap: Promise<Run>; solo: Promise<Run>; sharded: Promise<Run> };
+beforeAll(() => {
+  runs = {
+    overlap: funnel({ ...PRESETS.ALL3, slowPathQueue: true }, ["--overlap"], 3),
+    solo: funnelTimed("1"),
+    sharded: funnelTimed("2"),
+  };
+});
 
 describe("intent state (inert without a replay)", () => {
   test("off without intent; inert with intent and nothing replayed; live once any request replayed", () => {
@@ -103,30 +147,12 @@ describe("delivered before the first model call", () => {
 });
 
 describe("hidden-funnel flags (end to end, small, no model)", () => {
-  test("NEWL with --reader stub and no --intent: stamped inert, JSON label, reader log, sync item counters", () => {
-    const log = join(scratch(), "reader.jsonl");
-    const { stdout, json } = funnel(PRESETS.NEWL!, ["--reader", "stub", "--reader-log", log, "--label", "NEWL"]);
-    const totals = stdout.split("\n").filter((l) => /^(TOTAL|train1 )/.test(l) || l.includes("hidden in pool"));
-    expect(totals.length).toBeGreaterThan(1);
-    for (const l of totals) expect(l).toContain(INTENT_INERT);
-    expect(json.label).toBe(`NEWL  ${INTENT_INERT}`);
-    expect((json.intent as { state: string }).state).toBe("inert");
-    const lines = readFileSync(log, "utf8").trim().split("\n");
-    expect(lines.length).toBeGreaterThan(0);
-    const first = JSON.parse(lines[0]!) as { task: string; reader: string; prompt: string };
-    expect(first.reader).toBe("stub");
-    expect(first.task.startsWith("train1/")).toBe(true);
-    expect(first.prompt.length).toBeGreaterThan(0);
-    // NEWL has the real sync: its item counters are in the JSON and on the sync line.
-    const sync = json.sync as Record<string, number>;
-    expect(typeof sync.demandItems).toBe("number");
-    expect(sync.backgroundItems).toBeGreaterThan(0);
-    expect(stdout).toMatch(/demand items \d+, background items \d+/);
-    expect(stdout).toContain("delivered before first model call");
-  }, 60_000);
-
-  test("--overlap with slowPathQueue: a request arrives while the slow path is busy, and is queued", () => {
-    const { stdout, json } = funnel({ ...PRESETS.ALL3, slowPathQueue: true }, ["--overlap"], 3);
+  test("--overlap with slowPathQueue: a request arrives while the slow path is busy, and is queued", async () => {
+    const r = await runs.overlap;
+    expect(r.stderr).not.toContain("error:");
+    expect(r.status).toBe(0);
+    const stdout = r.stdout;
+    const json = JSON.parse(readFileSync(r.out, "utf8")) as Record<string, unknown>;
     const m = /overlap: slow path busy (\d+) times \((\d+) queued/.exec(stdout);
     expect(m).not.toBeNull();
     expect(Number(m![1])).toBeGreaterThanOrEqual(1);
@@ -152,27 +178,17 @@ describe("funnel.ts flags", () => {
   });
 
   test("--time shards: --jobs is honoured, and rows match one process's without their timing fields", async () => {
-    // Both runs at once (they are sleeps mostly), each in its own scratch directory.
-    const run = async (jobs: string) => {
-      const out = join(scratch(), "f.json");
-      const p = Bun.spawn(
-        [
-          "bun",
-          join(lab, "funnel.ts"),
-          ...["--suite", "train1", "--seeds", "41,42", "--jobs", jobs, "--json", out],
-          ...["--", "--time", "0.05", "--limit", "2"],
-        ],
-        { env: noKey, stdout: "ignore", stderr: "pipe" },
-      );
-      const stderr = await new Response(p.stderr).text();
-      expect(await p.exited).toBe(0);
-      return { stderr, rows: (JSON.parse(readFileSync(out, "utf8")) as { perTask: object[] }).perTask };
+    // Both runs went out together in beforeAll, each in its own scratch directory.
+    const rowsOf = async (run: Promise<Run>) => {
+      const r = await run;
+      expect(r.status).toBe(0);
+      return { stderr: r.stderr, rows: (JSON.parse(readFileSync(r.out, "utf8")) as { perTask: object[] }).perTask };
     };
     // Timing fields, and `beforeModel` (whether a delivery beat the observe's wait is a matter of timing too).
     const timing = new Set(["ms", "askMs", "deliveryMs", "beforeModel"]);
     const strip = (rows: object[]) =>
       rows.map((t) => Object.fromEntries(Object.entries(t).filter(([k]) => !timing.has(k))));
-    const [solo, sharded] = await Promise.all([run("1"), run("2")]);
+    const [solo, sharded] = await Promise.all([rowsOf(runs.solo), rowsOf(runs.sharded)]);
     expect(sharded.stderr).not.toContain("running one job");
     expect(sharded.stderr).toContain("2 at a time");
     expect(strip(sharded.rows)).toEqual(strip(solo.rows));
