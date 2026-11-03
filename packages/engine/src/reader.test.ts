@@ -4,7 +4,7 @@ import { Budget, FakeModel } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
-import { ContextPartner, type ReaderReport } from "./partner";
+import { ContextPartner, type ReaderReport, userCacheKey } from "./partner";
 import {
   AskReader,
   ModelReaderMaker,
@@ -24,6 +24,7 @@ import {
   type ReaderMaker,
 } from "./reader";
 import { shownText } from "./render";
+import type { Trace } from "./trace";
 
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -363,11 +364,14 @@ describe("the reader in the engine (config.askReader)", () => {
       200,
     ),
   ];
-  const source = (): Source => ({
+  const source = (sent?: { searches: number }): Source => ({
     id: "mail",
     kind: "test",
     description: "Mail",
-    search: async () => items,
+    search: async () => {
+      if (sent) sent.searches++;
+      return items;
+    },
   });
 
   const run = async (
@@ -387,8 +391,11 @@ describe("the reader in the engine (config.askReader)", () => {
     const maker = opts.maker ?? new ScriptedReader(flags("mail:hold"));
     const reader = new AskReader({ maker, budget: opts.budget ?? new Budget(), now: () => clock });
     const reports: ReaderReport[] = [];
+    const traces: Trace[] = [];
+    // What the connector itself received, against what the traces say was sent.
+    const sent = { searches: 0 };
     const p = new ContextPartner({
-      sources: async () => [source()],
+      sources: async () => [source(sent)],
       sourceMap: new SourceMap(),
       cache: new ItemCache(),
       budget: new Budget(),
@@ -397,8 +404,9 @@ describe("the reader in the engine (config.askReader)", () => {
       config: { askReaderWaitMs: 200, ...config },
       reader,
       onReader: (r) => reports.push(r),
+      onTrace: (t) => traces.push(t),
     });
-    const answers: Record<string, { answer: string; ids: string[] }[]> = {};
+    const answers: Record<string, { answer: string; ids: string[]; costUsd: number; usedModel: boolean }[]> = {};
     for (const userId of opts.users ?? ["u1"]) {
       const scope = { tenantId: "t", userId };
       const sessionId = "s1";
@@ -416,10 +424,15 @@ describe("the reader in the engine (config.askReader)", () => {
           });
         }
         const a = await p.ask({ ...scope, sessionId, question: REQUEST, maxItems: 3 });
-        answers[userId]!.push({ answer: a.answer, ids: a.citations.map((c) => c.itemId) });
+        answers[userId]!.push({
+          answer: a.answer,
+          ids: a.citations.map((c) => c.itemId),
+          costUsd: a.costUsd,
+          usedModel: a.usedModel,
+        });
       }
     }
-    return { answers, maker, reader, reports, partner: p };
+    return { answers, maker, reader, reports, traces, sent, partner: p };
   };
 
   test("flag off: no call, and the binding item is not among the seats", async () => {
@@ -448,20 +461,22 @@ describe("the reader in the engine (config.askReader)", () => {
   });
 
   test("fail open: late, over budget, failing or unreadable, the answer is the one without the flag", async () => {
-    const base = (await run({})).answers.u1![0]!;
+    // What the agent reads: the answer and its citations (the cost and usedModel fields say what was spent).
+    const seen = (a: { answer: string; ids: string[] } | undefined) => ({ answer: a?.answer, ids: a?.ids });
+    const base = seen((await run({})).answers.u1![0]);
     const late = await run({ askReader: true }, { maker: new ScriptedReader(flags("mail:hold"), { delayMs: 400 }) });
-    expect(late.answers.u1![0]).toEqual(base);
+    expect(seen(late.answers.u1![0])).toEqual(base);
     expect(late.reports[0]!.outcome).toBe("late");
     const poor = await run(
       { askReader: true },
       { budget: new Budget({ callsPerSession: 0, usdPerSession: 1, usdPerUserDay: 1 }) },
     );
-    expect(poor.answers.u1![0]).toEqual(base);
+    expect(seen(poor.answers.u1![0])).toEqual(base);
     expect(poor.maker.calls.length).toBe(0);
     const down = await run({ askReader: true }, { maker: new ScriptedReader(() => null, { fail: true }) });
-    expect(down.answers.u1![0]).toEqual(base);
+    expect(seen(down.answers.u1![0])).toEqual(base);
     const garbled = await run({ askReader: true }, { maker: new ScriptedReader(() => null) });
-    expect(garbled.answers.u1![0]).toEqual(base);
+    expect(seen(garbled.answers.u1![0])).toEqual(base);
     expect(garbled.reports[0]!.outcome).toBe("none");
   });
 
@@ -603,5 +618,154 @@ describe("the reader in the engine (config.askReader)", () => {
     expect(answers.u1![0]!.answer).toContain("Checked the 8 items found most related: none reads as blocking");
     const quiet = await run({ askReader: true }, { maker: new ScriptedReader(() => []) });
     expect(quiet.answers.u1![0]!.answer).not.toContain("Checked the");
+  });
+
+  test("the reader's spend is the ask's: the first ask costs the call, a cached repeat nothing; the trace agrees", async () => {
+    const { answers, traces } = await run({ askReader: true }, { asks: 2 });
+    const [first, again] = answers.u1!;
+    expect(first!.usedModel).toBe(true);
+    expect(first!.costUsd).toBeCloseTo(0.0002, 10);
+    expect(again!.usedModel).toBe(false);
+    expect(again!.costUsd).toBe(0);
+    const asked = traces.filter((t) => t.event === "ask" && t.decision === "answer");
+    expect(asked.map((t) => t.costUsd)).toEqual([first!.costUsd, 0]);
+    expect(asked.map((t) => t.modelCalls)).toEqual([1, 0]);
+    // The reader's part is named, so a harness that meters the reader's model itself can leave it out.
+    expect(asked.map((t) => t.readerCostUsd)).toEqual([first!.costUsd, 0]);
+    expect(asked.map((t) => t.readerCalls)).toEqual([1, 0]);
+  });
+
+  test("readerPush: the push's read is traced with its cost, and a later ask over it costs nothing", async () => {
+    const { answers, traces } = await run({ askReader: true, readerPush: true });
+    const pushed = traces.filter((t) => t.decision === "reader-push");
+    expect(pushed.length).toBe(1);
+    expect(pushed[0]!.costUsd).toBeCloseTo(0.0002, 10);
+    expect(pushed[0]!.modelCalls).toBe(1);
+    expect(pushed[0]!.itemIds).toContain("mail:hold");
+    expect(answers.u1![0]!.costUsd).toBe(0);
+  });
+
+  test("readerPush: an ask that joins the push's call in flight is not a second call", async () => {
+    // The push starts the read (300 ms) and the observe stops waiting after 5; the agent's ask then joins that call.
+    const { answers, traces, reader, maker } = await run(
+      { askReader: true, readerPush: true, askReaderWaitMs: 1_000 },
+      { maker: new ScriptedReader(flags("mail:hold"), { delayMs: 300 }), waitMs: 5 },
+    );
+    expect(maker.calls.length).toBe(1);
+    expect(reader.stats.calls).toBe(1);
+    const total = (f: (t: Trace) => number) => traces.reduce((n, t) => n + f(t), 0);
+    expect(total((t) => t.modelCalls)).toBe(reader.stats.calls);
+    expect(total((t) => t.readerCalls ?? 0)).toBe(1);
+    expect(total((t) => t.costUsd)).toBeCloseTo(0.0002, 10);
+    const pushed = traces.find((t) => t.decision === "reader-push")!;
+    expect([pushed.modelCalls, pushed.readerCalls]).toEqual([1, 1]);
+    const asked = traces.find((t) => t.decision === "answer")!;
+    expect([asked.modelCalls, asked.readerCalls, asked.costUsd]).toEqual([0, 0, 0]);
+    // Intended: `usedModel` says whether this ask made a model call, and the push made it (the call is counted once,
+    // on the push's trace). The joined ask still reads the verdict.
+    expect(answers.u1![0]!.usedModel).toBe(false);
+    expect(answers.u1![0]!.ids).toContain("mail:hold");
+  });
+
+  test("an ask whose own wait runs out while joining another's call does not count it either", async () => {
+    const maker = new ScriptedReader(flags("mail:hold"), { delayMs: 300 });
+    const { traces, reader } = await run(
+      { askReader: true, readerPush: true, askReaderWaitMs: 50 },
+      { maker, waitMs: 5 },
+    );
+    await Bun.sleep(400);
+    expect(reader.stats.calls).toBe(1);
+    expect(traces.reduce((n, t) => n + t.modelCalls, 0)).toBe(1);
+    expect(traces.find((t) => t.decision === "reader-push")!.modelCalls).toBe(1);
+  });
+
+  test("readerPush: the traces' source calls are the calls the connector received", async () => {
+    for (const readerPush of [false, true]) {
+      const { traces, sent } = await run({ askReader: true, readerPush }, { asks: 0 });
+      expect(sent.searches).toBeGreaterThan(0);
+      expect(traces.reduce((n, t) => n + t.sourceCalls, 0)).toBe(sent.searches);
+      // The push's own lookup is named apart, never added to `sourceCalls`.
+      const pushed = traces.find((t) => t.decision === "reader-push");
+      if (readerPush) expect([pushed!.sourceCalls, pushed!.pushSourceCalls]).toEqual([0, 1]);
+      else expect(pushed).toBeUndefined();
+    }
+  });
+
+  test('a session past its budget\'s 20 calls reports the reader\'s outcome as "budget", not "none"', async () => {
+    const maker = new ScriptedReader(flags("mail:hold"));
+    const reports: ReaderReport[] = [];
+    const p = new ContextPartner({
+      sources: async () => [source()],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => NOW,
+      config: { askReader: true, askReaderWaitMs: 200 },
+      reader: new AskReader({ maker, budget: new Budget(), now: () => NOW }),
+      onReader: (r) => reports.push(r),
+    });
+    const scope = { tenantId: "t", userId: "u1", sessionId: "s1" };
+    for (let n = 0; n < 22; n++) await p.ask({ ...scope, question: `Pay the Harlow invoice number ${n} today.` });
+    expect(maker.calls.length).toBe(20);
+    expect(reports.slice(0, 20).every((r) => r.outcome === "read")).toBe(true);
+    expect(reports.slice(20).map((r) => r.outcome)).toEqual(["budget", "budget"]);
+  });
+
+  test("readerPush: a 1,000,000-character message is asked as at most 10,000 characters (the ask's cap)", async () => {
+    const huge = `${REQUEST} ${"and the venue deposit ".repeat(50_000)}`.slice(0, 1_000_000);
+    expect(huge.length).toBe(1_000_000);
+    const { maker } = await run(
+      { askReader: true, readerPush: true, askReaderQuestions: true },
+      { asks: 0, request: huge },
+    );
+    expect(maker.calls.length).toBe(1);
+    expect(maker.calls[0]!.request.length).toBeLessThanOrEqual(10_000);
+    expect((maker.calls[0]!.question ?? "").length).toBeLessThanOrEqual(10_000);
+  });
+
+  test("the reader's budget ends each session with the partner's: 1,000 sessions leave no session tally", async () => {
+    const maker = new ScriptedReader(flags("mail:hold"));
+    const budget = new Budget();
+    const p = new ContextPartner({
+      sources: async () => [source()],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => NOW,
+      config: { askReader: true, readerPush: true },
+      reader: new AskReader({ maker, budget, now: () => NOW }),
+    });
+    for (let n = 0; n < 1_000; n++) {
+      const e = { tenantId: "t", userId: `u${n % 10}`, sessionId: `s${n}`, at: NOW };
+      await p.observe({ ...e, kind: "user_message", text: REQUEST } as AgentEvent, { waitMs: 1_000 });
+      await p.observe({ ...e, kind: "session_end" } as AgentEvent);
+    }
+    expect(maker.calls.length).toBe(1_000);
+    expect(budget.size.sessions).toBe(0);
+  });
+
+  test("the reader's model request carries the user's sticky cache key; two users get different keys", async () => {
+    const model = new FakeModel(() => '{"bears":[]}');
+    const p = new ContextPartner({
+      sources: async () => [source()],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => NOW,
+      config: { askReader: true, askReaderWaitMs: 1_000 },
+      reader: new AskReader({ maker: new ModelReaderMaker(model), budget: new Budget(), now: () => NOW }),
+    });
+    const u1 = { tenantId: "t", userId: "u1" };
+    const u2 = { tenantId: "t", userId: "u2" };
+    for (const scope of [u1, u2]) await p.ask({ ...scope, sessionId: "s1", question: REQUEST });
+    expect(model.calls.length).toBe(2);
+    expect(model.calls[0]!.cacheKey).toBe(userCacheKey(u1));
+    expect(model.calls[1]!.cacheKey).toBe(userCacheKey(u2));
+    expect(model.calls[0]!.cacheKey).not.toBe(model.calls[1]!.cacheKey);
+    // The key is for routing only: the verdict's cache key does not hold it.
+    expect(readerKey({ ...input(), cacheKey: "a" })).toBe(readerKey({ ...input(), cacheKey: "b" }));
   });
 });
