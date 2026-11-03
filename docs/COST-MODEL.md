@@ -220,7 +220,7 @@ and `--replay FILE.jsonl ...` fits per call, with cached input apart when the li
 | --- | --- | --- | --- |
 | Reader latency, any reader-only change while it emits a verdict | everything but the floor | 3.24x p50 (fit a), 2.27x p50 and 1.36x p90 (fit b, weak) | `reader-latency-fit.ts`, default and `--runs` |
 | Reader latency, input side (pool size, item chars, standing, markup) | shorter input | 24–42 ms of 1,190 (about 1.02–1.04x): a cost lever only | the same fits at v7's shape |
-| Reader latency and cost, terse reply (no output at all) | a ceiling, **not a recommendation**: D96's reply carries the bearing the agent reads | latency at most the floor ratio above; cost 1.31x ($0.000094 output of $0.000401, haiku-phase3.md:92) | **estimate** from the fits and haiku-phase3.md:92 |
+| Reader latency and cost, terse reply (no output at all) | a ceiling, **not a recommendation**: D96's reply carries the bearing the agent reads | latency at most the floor ratio above; cost 1.31x ($0.000094 output of $0.000401, haiku-phase3.md:93) | **estimate** from the fits and haiku-phase3.md:93 |
 | Reader calls, the shipped gate | `readerGate` | NEWL 87 → 66 calls (1.32x, 5 of 22 gated held a needed item); NEW2 436 → 275 (1.59x, 29 of 163) | `bun run gate-traffic` |
 | Reader calls, an oracle gate over any needed fact | perfect skip of pools with no needed item | NEW2 2.19x (199 calls), NEWL-nogate 2.07x (42) | `bun run gate-traffic`, "oracle gate" line |
 | Reader calls, an oracle gate over reader facts only (constraint, blocker, paid) | perfect skip of pools with nothing the reader is for | NEW2 8.90x (49 calls; 5.38x, 81 calls, counting reader facts the turn may use), NEWL-nogate 3.63x (24) | `bun run gate-traffic`, "oracle gate" line |
@@ -242,10 +242,10 @@ What the table says:
   information (a meeting's time, an invoice's amount) the reader is not for. Counted over the facts the reader is for,
   an oracle gate cuts NEW2's calls 5.4–8.9x on simulated sessions: a 3x on calls is not ruled out; the shipped gate's
   precision is what stands between: NEW2 + gate makes 275 calls against the oracle's 49–81 and still gates 36 need
-  turns, 7 of them needing a reader fact. Two caveats: the reader-fact kinds are this lab's reading of the reader's prompt
+  turns, 5 of them needing a reader fact (7 needing or able to use one). Two caveats: the reader-fact kinds are this lab's reading of the reader's prompt
   (gate-traffic.ts `READER_FACTS`), and a pool holding the item is not the reader binding it.
-- **Need turns NEWL never reads.** Of NEWL's 348 unread user messages, 178 are need turns and 62 of those need a
-  reader fact (gate-traffic's oracle line): a quality question for NEWL's "acting requests only" rule, not a cost
+- **Need turns NEWL never reads.** Of NEWL's 348 unread user messages, 178 are need turns: 26 of those need a
+  reader fact and 62 need or can use one (gate-traffic's oracle line): a quality question for NEWL's "acting requests only" rule, not a cost
   lever.
 - **Reuse.** A cross-session verdict cache reaches 1.27x on exact inputs and 2.19x only as an oracle memo (same type
   and same binding set); the sessions' requests are templated, so even these overstate real repeats. It is not worth

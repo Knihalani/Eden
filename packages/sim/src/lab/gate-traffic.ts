@@ -118,11 +118,16 @@ interface Tally {
   coveredGated: number;
   /** Oracle gates: messages at the gate whose pool holds an item stating a fact of each kind, and their calls. */
   oracle: Record<OracleKind, number>;
-  /** User messages not read (`skipped`) or gated whose label is a need; and of those, needing a reader fact. */
+  /**
+   * User messages not read (`skipped`) or gated whose label is a need; of those, the ones needing a reader fact (in
+   * `must`), and the wider set needing or able to use one (in `must` or `ok`): see `needKinds`.
+   */
   unreadNeed: number;
   unreadReaderNeed: number;
+  unreadReaderUsable: number;
   gatedNeed: number;
   gatedReaderNeed: number;
+  gatedReaderUsable: number;
   /** `--reuse`: calls made by messages that repeat an earlier called message of the same user, per key. */
   reuse: Record<ReuseKind, number>;
 }
@@ -138,6 +143,15 @@ export const factKind = (fact: string) => fact.slice(fact.lastIndexOf(":") + 1);
 /** `must`: any needed fact; `reader`: needed reader facts; `readerOk`: reader facts needed or usable (`ok`). */
 export type OracleKind = "must" | "reader" | "readerOk";
 export const ORACLE_KINDS: readonly OracleKind[] = ["must", "reader", "readerOk"];
+
+/**
+ * How a turn counts among need turns: a need at all; needing a reader fact (one in `must`); needing or able to use
+ * one (in `must` or `ok`). A reader fact only in `ok` makes a turn usable, not needing.
+ */
+export function needKinds(label: Label): { need: boolean; readerNeed: boolean; readerUsable: boolean } {
+  const wanted = oracleFacts(label);
+  return { need: label.kind === "need", readerNeed: wanted.reader.size > 0, readerUsable: wanted.readerOk.size > 0 };
+}
 
 /** The facts each oracle looks for in a turn's pool. Only a need turn has any. */
 export function oracleFacts(label: Label): Record<OracleKind, Set<string>> {
@@ -200,8 +214,10 @@ const tally = (): Tally => ({
   oracle: { must: 0, reader: 0, readerOk: 0 },
   unreadNeed: 0,
   unreadReaderNeed: 0,
+  unreadReaderUsable: 0,
   gatedNeed: 0,
   gatedReaderNeed: 0,
+  gatedReaderUsable: 0,
   reuse: { exact: 0, pool: 0, typeBinding: 0 },
 });
 
@@ -300,8 +316,7 @@ async function runSeed(config: Partial<EngineConfig>, seed: number, total: Tally
         const oracleHit = Object.fromEntries(
           ORACLE_KINDS.map((k) => [k, atOracle && poolHolds(r!.pool, wanted[k], facts)]),
         ) as Record<OracleKind, boolean>;
-        const isNeed = turn.label.kind === "need";
-        const readerNeed = wanted.readerOk.size > 0;
+        const kinds = needKinds(turn.label);
         let repeat: Record<ReuseKind, boolean> | null = null;
         if (REUSE && r && calls > 0) {
           const text = turn.event.kind === "user_message" ? turn.event.text : "";
@@ -314,13 +329,15 @@ async function runSeed(config: Partial<EngineConfig>, seed: number, total: Tally
           x.outcomes[outcome]++;
           // A gated message would have made one call; a read answered from the session's cache made none.
           for (const k of ORACLE_KINDS) if (oracleHit[k]) x.oracle[k] += outcome === "gated" ? 1 : calls;
-          if (isNeed && outcome === "skipped") {
+          if (kinds.need && outcome === "skipped") {
             x.unreadNeed++;
-            if (readerNeed) x.unreadReaderNeed++;
+            if (kinds.readerNeed) x.unreadReaderNeed++;
+            if (kinds.readerUsable) x.unreadReaderUsable++;
           }
-          if (isNeed && outcome === "gated") {
+          if (kinds.need && outcome === "gated") {
             x.gatedNeed++;
-            if (readerNeed) x.gatedReaderNeed++;
+            if (kinds.readerNeed) x.gatedReaderNeed++;
+            if (kinds.readerUsable) x.gatedReaderUsable++;
           }
           if (repeat) for (const k of REUSE_KINDS) if (repeat[k]) x.reuse[k] += calls;
           if (binding) {
@@ -385,8 +402,10 @@ function summary(t: Tally) {
     oracleCeiling: ceilings(t.calls, t.oracle),
     unreadNeed: t.unreadNeed,
     unreadReaderNeed: t.unreadReaderNeed,
+    unreadReaderUsable: t.unreadReaderUsable,
     gatedNeed: t.gatedNeed,
     gatedReaderNeed: t.gatedReaderNeed,
+    gatedReaderUsable: t.gatedReaderUsable,
     ...(REUSE ? { reuseCalls: { ...t.reuse }, reuseCeiling: reuseCeilings(t.calls, t.reuse) } : {}),
   };
 }
@@ -429,8 +448,8 @@ if (import.meta.main) {
     console.log(
       `  oracle gate: ${o.must} calls over any needed fact (${times(c.must)}), ${o.reader} over needed reader ` +
         `facts (${times(c.reader)}), ${o.readerOk} over reader facts needed or usable (${times(c.readerOk)}); ` +
-        `need turns not read ${a.unreadNeed} (${a.unreadReaderNeed} needing a reader fact), gated ${a.gatedNeed} ` +
-        `(${a.gatedReaderNeed})`,
+        `need turns not read ${a.unreadNeed} (${a.unreadReaderNeed} needing a reader fact, ${a.unreadReaderUsable} ` +
+        `needing or able to use one), gated ${a.gatedNeed} (${a.gatedReaderNeed}, ${a.gatedReaderUsable})`,
     );
     if (a.reuseCalls && a.reuseCeiling) {
       const u = a.reuseCalls;

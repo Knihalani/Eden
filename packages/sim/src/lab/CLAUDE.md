@@ -22,6 +22,7 @@ cards-enrich, bridge-enrich, presets, suites, free, spend` (`.ts`): check `git l
 | `agent-ab.ts`, `agent-ab-report.ts` | The older in-house loop (label its results as such) and the shared report |
 | `free.ts`, `spend.ts`, `free-smoke.ts` | Lab access: pacer, `--allow-logging`, `--rpm`, `--max-requests`, keys; the Anthropic spend ledger and cap |
 | `cards-enrich.ts`, `cards-disk.ts`, `bridge-enrich.ts`, `bridge-disk.ts`, `reader-disk.ts` | Make once, replay free: cards (+ `--intent` requests), bridge queries, reader calls |
+| `gate-traffic.ts`, `reader-latency-fit.ts` | No-model reader instruments: calls, gating and oracle-gate ceilings per preset (`--reuse`: cross-session verdict reuse); the reader latency fit (floor, ms per token) |
 | `timeline.ts`, `timeline-report.ts` | `--timeline` spans, CPU% and RSS per second; where the time went |
 | `ledger.ts`, `bench.ts`, `bench-compare.ts` | The benchmark ledger (`bench/ledger.jsonl`, `bench/runs/`) |
 | `regrade.ts`, `reprice.ts`, `act*.ts`, `firewall-replay.ts`, `uptake.ts` | Re-grading, fixed-price re-costing (D71), action mode and firewall (D69), uptake |

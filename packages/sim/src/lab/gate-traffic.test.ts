@@ -7,6 +7,7 @@ import type { Label } from "../sessions";
 import {
   ceilings,
   factKind,
+  needKinds,
   oracleFacts,
   poolHolds,
   READER_FACTS,
@@ -33,6 +34,18 @@ describe("oracle facts", () => {
       const none = oracleFacts(label);
       expect(none.must.size + none.reader.size + none.readerOk.size).toBe(0);
     }
+  });
+
+  test("a reader fact only in ok makes a need turn able to use one, not needing one", () => {
+    const usable: Label = { kind: "need", must: ["m1:event"], ok: ["m1:constraint"] };
+    expect(needKinds(usable)).toEqual({ need: true, readerNeed: false, readerUsable: true });
+    const needing: Label = { kind: "need", must: ["t1:blocker"], ok: [] };
+    expect(needKinds(needing)).toEqual({ need: true, readerNeed: true, readerUsable: true });
+    expect(needKinds({ kind: "context", ok: ["m1:constraint"] } as Label)).toEqual({
+      need: false,
+      readerNeed: false,
+      readerUsable: false,
+    });
   });
 
   test("a pool holds a wanted fact only through an item stating it", () => {
@@ -114,6 +127,10 @@ describe("gate-traffic end to end (one seed, 15 sessions, no model)", () => {
       oracleCalls: { must: number; reader: number; readerOk: number };
       unreadNeed: number;
       unreadReaderNeed: number;
+      unreadReaderUsable: number;
+      gatedNeed: number;
+      gatedReaderNeed: number;
+      gatedReaderUsable: number;
       reuseCalls: { exact: number; pool: number; typeBinding: number };
     };
     const results = (JSON.parse(readFileSync(out, "utf8")) as { results: Record<string, { all: S }> }).results;
@@ -125,7 +142,11 @@ describe("gate-traffic end to end (one seed, 15 sessions, no model)", () => {
       // An oracle calls at most once for each message read or gated.
       expect(o.must).toBeLessThanOrEqual(all.calls + all.gated);
       expect(o.must).toBeLessThanOrEqual(all.bindingInPool);
-      expect(all.unreadReaderNeed).toBeLessThanOrEqual(all.unreadNeed);
+      // Needing a reader fact is a subset of needing or being able to use one.
+      expect(all.unreadReaderNeed).toBeLessThanOrEqual(all.unreadReaderUsable);
+      expect(all.unreadReaderUsable).toBeLessThanOrEqual(all.unreadNeed);
+      expect(all.gatedReaderNeed).toBeLessThanOrEqual(all.gatedReaderUsable);
+      expect(all.gatedReaderUsable).toBeLessThanOrEqual(all.gatedNeed);
       expect(all.unreadNeed).toBeLessThanOrEqual(all.skipped);
       const u = all.reuseCalls;
       expect(u.exact).toBeLessThanOrEqual(u.pool);

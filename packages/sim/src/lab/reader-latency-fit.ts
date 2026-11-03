@@ -199,18 +199,26 @@ function show(title: string, fit: Fit, at: [number, number]): void {
 
 if (import.meta.main) {
   const args = process.argv.slice(2);
+  const fail = (message: string): never => {
+    console.error(message);
+    process.exit(2);
+  };
+  // A flag given without its value is an error, not a silent fall back to the default fit.
   const opt = (name: string) => {
     const i = args.indexOf(`--${name}`);
-    return i >= 0 ? args[i + 1] : undefined;
+    if (i < 0) return undefined;
+    const v = args[i + 1];
+    if (v === undefined || v.startsWith("--")) fail(`--${name} needs a value`);
+    return v;
   };
   const known = new Set(["--md", "--replay", "--runs", "--at"]);
   const unknown = args.filter((a) => a.startsWith("--") && !known.has(a));
-  if (unknown.length) {
-    console.error(`unknown flag ${unknown.join(", ")}; known: ${[...known].join(", ")}`);
-    process.exit(2);
-  }
-  const atArg = (opt("at") ?? "3921,188").split(",").map(Number);
-  const at: [number, number] = [atArg[0] ?? 3921, atArg[1] ?? 188];
+  if (unknown.length) fail(`unknown flag ${unknown.join(", ")}; known: ${[...known].join(", ")}`);
+  const atText = opt("at");
+  const atArg = (atText ?? "3921,188").split(",").map(Number);
+  if (atArg.length !== 2 || !atArg.every((x) => Number.isFinite(x) && x >= 0))
+    fail(`--at needs IN,OUT token counts (two numbers), got ${atText}`);
+  const at: [number, number] = [atArg[0]!, atArg[1]!];
   const ri = args.indexOf("--replay");
   // Every argument after --replay up to the next flag is a file.
   const replays: string[] = [];
@@ -219,6 +227,7 @@ if (import.meta.main) {
       if (a.startsWith("--")) break;
       replays.push(a);
     }
+  if (ri >= 0 && replays.length === 0) fail("--replay needs at least one replay file");
   const shown = (f: string) => relative(process.cwd(), f) || f;
   const runs = opt("runs");
   if (replays.length > 0) {
