@@ -28,6 +28,17 @@ OpenRouter returns the real cost per call (`usage.cost`), and the engine books t
 | Ask answer (only with `askWithModel`, off by default, D43)                                     | ≈ 100 + question ≤ 10,000 chars (≈ 2,500) + window ≤ 2,000 chars (≈ 500) + ≤ 20 items × ≈ 170 tok ≈ 6,500 tok | 1,000 tok, reasoning included (D45) | ≈ $0.0015                       |
 | Card enrichment (only with `cards`, off by default, D59 proposed; background, never per event) | system ≈ 700 tok + ≤ 10 items × (title ≤ 160 + own text ≤ 900 chars) ≈ 3,400 tok                              | 2,000 tok, reasoning included       | ≈ $0.0015                       |
 
+Queued request (`slowPathQueue`, off by default, proposed D102). No new kind of call: a request that arrives while
+the session's slow path is busy is looked up once that slow path settles, instead of being dropped. One slot per
+session (the latest request wins), so it adds at most one extra slow path, so at most one judge call (under the
+session's `Budget`, as any lookup's), per busy window. A queued request older than 10 s, in cooldown by then, or in a
+session that closed makes no call.
+
+Smaller poll pages (`syncPollPageSize`, off by default, proposed D101). No model call. An on-demand poll lists far
+fewer items (measured on the train funnel: 182,742 → 10,080 items at `syncPollPageSize` 5, calls 2,048 → 2,049) but
+can make one listing call more than full pages would (at most `syncCatchupPages` + 1): a connector billed per call
+pays at most that one call more per poll, one billed per item or byte pays less.
+
 Card enrichment, measured (docs/research/moon-cards.md, 572 calls on simulated worlds, 2026-10-31): 1,599 input and
 677 output tokens per call on average, $0.000181 per call as OpenRouter reported it. One call per ten new items that
 pass the no-model prefilter (11-15% of simulated items), each item read once per content hash: about $0.002 per 1,000

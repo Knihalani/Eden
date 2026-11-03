@@ -40,6 +40,14 @@ export interface SyncOptions {
   maxItems: number;
   /** Items asked per listing page. */
   pageSize: number;
+  /**
+   * An incremental poll's first page, at least (`syncPollPageSize`; 0 or absent: every page is `pageSize`). Set, a
+   * poll's first page is sized to the changes the source's learned rate expects since its last poll (twice that, at
+   * least this, at most `pageSize`). A page after it that is needed tops the items asked up to the next multiple of
+   * `pageSize`, so a poll lists at most what `maxPages` full pages would, in at most `maxPages + 1` calls. Backfill
+   * and sweeps always read `pageSize`.
+   */
+  pollPageSize?: number;
   /** Timed polls of an active user's sources, this often (ms); 0 for none (polls on demand only). */
   everyMs: number;
   /** A source's synced copy is stale once the chance that it changed since the last poll reaches this. */
@@ -165,6 +173,9 @@ export interface SyncStats {
   backgroundCalls: number;
   /** Listing calls made inside lookups (on-demand polls). */
   demandCalls: number;
+  /** Items the background calls and the on-demand polls' calls listed (what came back, changed or not). */
+  backgroundItems: number;
+  demandItems: number;
   /** Items dropped because their source no longer lists them. */
   deleted: number;
   /** Change notices received (`notify`), and polls a notice caused. */
@@ -181,6 +192,8 @@ export class SyncManager {
   readonly stats: SyncStats = {
     backgroundCalls: 0,
     demandCalls: 0,
+    backgroundItems: 0,
+    demandItems: 0,
     deleted: 0,
     notices: 0,
     pushPolls: 0,
@@ -487,6 +500,7 @@ export class SyncManager {
         return;
       }
       this.stats.backgroundCalls++;
+      this.stats.backgroundItems += page.items.length;
       next.failures = 0;
       this.store(u, next, page.items);
       for (const it of page.items)
@@ -569,10 +583,20 @@ export class SyncManager {
     const started = this.deps.now();
     let cursor: string | undefined;
     let changed = 0;
-    for (let p = 0; p < maxPages; p++) {
+    // `pollPageSize`: the first page is sized to what changed, not to the backfill's page; each page after it tops the
+    // items asked up to the next multiple of `pageSize` (5, then 95, then 100). So a poll lists no more items than
+    // `maxPages` full pages would, catches up as far before the lookup goes on, and makes at most one more call.
+    const adaptive = (this.o.pollPageSize ?? 0) > 0;
+    const itemCap = maxPages * this.o.pageSize;
+    const first = adaptive ? Math.min(this.firstPage(s, started), itemCap) : this.o.pageSize;
+    let asked = 0;
+    for (let p = 0; adaptive ? asked < itemCap && p <= maxPages : p < maxPages; p++) {
       if (u.gone || signal?.aborted) return;
       if (this.budget.take(budgetKey(u, s)) > 0) return;
-      const page = await this.list(demand ? "demand" : "poll", source, u.scope, cursor, this.o.pageSize, {
+      const topUp = this.o.pageSize - (asked % this.o.pageSize);
+      const limit = !adaptive ? this.o.pageSize : p === 0 ? first : Math.min(topUp, itemCap - asked);
+      asked += limit;
+      const page = await this.list(demand ? "demand" : "poll", source, u.scope, cursor, limit, {
         timeoutMs: this.o.timeoutMs,
         signal,
         reserve: demand ? 0 : SERVING_HEADROOM,
@@ -586,6 +610,8 @@ export class SyncManager {
         return;
       }
       this.count(demand);
+      if (demand) this.stats.demandItems += page.items.length;
+      else this.stats.backgroundItems += page.items.length;
       s.failures = 0;
       const fresh = this.store(u, s, page.items);
       changed += fresh;
@@ -601,6 +627,17 @@ export class SyncManager {
     if (demand && !u.gone) {
       void Promise.resolve().then(() => this.run(s, () => this.poll(u, s, source, MAX_POLL_PAGES, false)));
     }
+  }
+
+  /**
+   * A poll's first page under `pollPageSize`: twice the changes the source's rate posterior expects since its last
+   * poll (room for a rate that has risen), at least `pollPageSize`, at most `pageSize`.
+   */
+  private firstPage(s: SourceSync, startedAt: number): number {
+    const hours = Math.max(0, (startedAt - s.polledAt) / HOUR);
+    const expected = Math.ceil((2 * s.alpha * hours) / s.beta);
+    const floor = Math.min(this.o.pollPageSize ?? 0, this.o.pageSize);
+    return Number.isFinite(expected) ? Math.min(this.o.pageSize, Math.max(floor, expected)) : this.o.pageSize;
   }
 
   /** A complete poll: the change-rate posterior learns `changed` items over the hours since the last poll. */
@@ -644,6 +681,7 @@ export class SyncManager {
         return;
       }
       this.stats.backgroundCalls++;
+      this.stats.backgroundItems += page.items.length;
       const first = sw.seen.size === 0;
       const fresh = this.store(u, s, page.items);
       for (const it of page.items) sw.seen.add(it.id);

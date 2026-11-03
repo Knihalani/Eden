@@ -291,6 +291,12 @@ interface Session {
   /** Work lookups left running behind their answers: a poll and its follow-up (`afterPoll`), a judge (`judgeLater`). */
   behind?: Promise<void> | null;
   /**
+   * With `slowPathQueue`: the latest request that arrived while the slow path was busy, looked up once it settles
+   * (`drainQueued`), and whether that drain is under way.
+   */
+  queuedCue?: { cue: Cue; t0: number; eventKind: string } | null;
+  draining?: boolean;
+  /**
    * With `actionCheck`: the keys of the calls the firewall answered with a finding (`actionKey`, bounded by
    * `MAX_CHECKED`, oldest first). The same call made again is the agent's informed choice, and proceeds.
    */
@@ -338,6 +344,8 @@ interface Anticipation {
 
 /** Item ids a session's anticipation remembers as prefetched, and names and days it remembers as asked. */
 const MAX_PREFETCHED = 256;
+/** `slowPathQueue`: a request kept while the slow path was busy is dropped once it has waited this long (ms). */
+const QUEUED_CUE_MAX_AGE_MS = 10_000;
 const MAX_ASKED = 64;
 
 interface Cue {
@@ -631,6 +639,7 @@ export class ContextPartner {
           {
             maxItems: c.syncMaxItems,
             pageSize: c.syncPageSize,
+            pollPageSize: c.syncPollPageSize,
             everyMs: c.syncEveryMs,
             staleChance: c.syncStaleChance,
             maxStaleMs: c.syncMaxStaleMs,
@@ -884,6 +893,13 @@ export class ContextPartner {
     }
     if (s.inflight) {
       // The cue is not put in cooldown: it was not looked up, so the next event may look it up.
+      if (this.config.slowPathQueue) {
+        // One slot, the latest wins: looked up once the slow path settles, its answer queued (`drainQueued`).
+        s.queuedCue = { cue, t0, eventKind: event.kind };
+        trace("silent", "slow path busy: queued");
+        if (!s.draining) this.drainQueued(s);
+        return reply(queued);
+      }
       trace("silent", "slow path busy");
       return reply(queued);
     }
@@ -972,6 +988,71 @@ export class ContextPartner {
       })
       .catch(() => {});
     this.addBehind(s, chain);
+  }
+
+  /**
+   * `slowPathQueue`: looks up the request kept while the slow path was busy, once nothing is in flight, one at a time
+   * (as `afterPoll`'s follow-ups are), and queues what it delivers. A request kept while this runs is looked up next.
+   * One whose session closed, whose cue went into cooldown meanwhile, or that waited over `QUEUED_CUE_MAX_AGE_MS` is
+   * dropped (traced). It runs the slow path alone, without `anticipate`'s early answer (nobody waits on it, so
+   * answering early gains nothing), and with `syncPollBehind` it gets `afterPoll`'s follow-up as any lookup does.
+   * Never throws, never blocks the caller.
+   */
+  private drainQueued(s: Session): void {
+    s.draining = true;
+    const work = (async () => {
+      for (;;) {
+        // Nothing awaits between the last check and taking `s.inflight` below, so a follow-up woken in the same tick
+        // and this lookup still run one at a time.
+        while (s.inflight && !s.closed) await s.inflight.catch(() => null);
+        const next = s.queuedCue;
+        s.queuedCue = null;
+        if (!next || s.closed) {
+          // Cleared in this same tick: a request kept after this point starts a drain of its own.
+          s.draining = false;
+          return;
+        }
+        const { cue, t0, eventKind } = next;
+        const dropped = (reason: string) =>
+          this.trace({
+            sessionId: s.id,
+            turn: s.turn,
+            event: eventKind,
+            decision: "silent",
+            reason,
+            latencyMs: Math.round(performance.now() - t0),
+            sourceCalls: 0,
+            modelCalls: 0,
+            costUsd: 0,
+            itemIds: [],
+          });
+        const last = s.cues.get(cue.key);
+        if (last !== undefined && s.turn - last < this.config.cueCooldownTurns) {
+          dropped("queued cue: repeat");
+          continue;
+        }
+        if (this.now() - (cue.arrived ?? this.now()) > QUEUED_CUE_MAX_AGE_MS) {
+          dropped("queued cue: stale");
+          continue;
+        }
+        this.markCue(s, cue);
+        const run = this.slowPath(s, cue, t0, eventKind);
+        const tracked = run.finally(() => {
+          if (s.inflight === tracked) s.inflight = null;
+        });
+        s.inflight = tracked;
+        // As for any lookup: a poll it left running gets a follow-up on the fresh index (run after this loop's next
+        // lookup if one takes `s.inflight` first; both wait on it in turn).
+        if (this.config.syncPollBehind && this.sync && this.config.syncOnDemand) {
+          this.afterPoll(s, cue, t0, eventKind, tracked, null);
+        }
+        const injection = await tracked.catch(() => null);
+        if (injection && !s.closed) s.pending.push(injection);
+      }
+    })().catch(() => {
+      s.draining = false;
+    });
+    this.addBehind(s, work);
   }
 
   /** Work a lookup left running behind its answer (`syncPollBehind`, `judgeBehind`), for harnesses to wait on. */
