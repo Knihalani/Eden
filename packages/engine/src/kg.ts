@@ -743,6 +743,9 @@ export class UserGraph {
   private readonly alpha = new Float64Array(N_TYPES).fill(2);
   private readonly beta = new Float64Array(N_TYPES).fill(2);
 
+  /** `maxIds`: node ids held at most (`MAX_INDEX`; a test passes fewer to reach the bound). */
+  constructor(private readonly maxIds = MAX_INDEX) {}
+
   get size(): number {
     return this.liveNodes;
   }
@@ -795,11 +798,14 @@ export class UserGraph {
 
   /** Puts an item in the graph, replacing what an earlier copy of it put there. */
   add(item: ContextItem, now: number): void {
-    if (this.slots.has(item.id)) this.remove(item.id);
-    // Bounded well before this by the cache's items per user and `MAX_NODES`: a packed word must stay an int32.
-    if (this.freeSlots.length === 0 && this.itemAt.length >= MAX_INDEX) return;
-    if (this.nodeAt.length - this.freeIds.length + 2 * MAX_NODES_PER_ITEM >= MAX_INDEX) return;
     const x = extract(item, now, this.memo);
+    // A packed word must stay an int32: ids in use and every id this item could intern (its nodes, and its authors,
+    // which neither `MAX_NODES` nor `MAX_NODES_PER_ITEM` bounds) stay under `maxIds`, slots under `MAX_INDEX`. Checked
+    // before an earlier copy leaves: a copy refused here leaves the one held.
+    if (this.nodeAt.length - this.freeIds.length + x.nodes.size + x.authors.length > this.maxIds) return;
+    const replacing = this.slots.has(item.id);
+    if (!replacing && this.freeSlots.length === 0 && this.itemAt.length >= MAX_INDEX) return;
+    if (replacing) this.remove(item.id);
     const slot = this.freeSlots.pop() ?? this.itemAt.length;
     const nodes = scratchNodes;
     const links = scratchLinks;

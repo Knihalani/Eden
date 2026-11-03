@@ -706,3 +706,56 @@ describe("squash against the reference", () => {
     }
   });
 });
+
+describe("UserGraph bounds and memory", () => {
+  const chat = (id: string, speakers: string[]): ContextItem => ({
+    id,
+    sourceId: "slack",
+    ref: id,
+    title: "#ops",
+    text: speakers.map((s, k) => `[09:${String(k % 60).padStart(2, "0")}] ${s}: ok`).join("\n"),
+  });
+  const names = (from: number, n: number) => Array.from({ length: n }, (_, k) => `Speaker${from + k} Q`);
+
+  test("node ids stay under the bound however many authors items name; a refused copy keeps the held one", () => {
+    const g = new UserGraph(300);
+    const ids = () => (g as unknown as { nodeAt: unknown[] }).nodeAt.length;
+    for (let k = 0; k < 20; k++) g.add(chat(`slack:c${k}`, names(k * 40, 40)), at);
+    expect(ids()).toBeLessThanOrEqual(300);
+    g.add(chat("slack:big", names(10_000, 200)), at);
+    g.remove("slack:big");
+    g.add(
+      { id: "gmail:z", sourceId: "gmail", ref: "z", title: "Hi", text: "From: Zed Quill <zed@zzcorp.com>\n\nHi" },
+      at,
+    );
+    expect(ids()).toBeLessThanOrEqual(300);
+    expect(() => g.around("n:zedquill")).not.toThrow();
+    expect(() => g.walk([{ key: "n:zedquill", weight: 1 }], { budgetMs: 1e9, limit: 10, floor: 0 })).not.toThrow();
+    // A copy too big for what is left is refused, and the copy already held stays.
+    const held = g.walk([{ key: "n:speaker0q", weight: 1 }], { budgetMs: 1e9, limit: 10, floor: 0 });
+    expect(held.map((w) => w.id)).toContain("slack:c0");
+    g.add(chat("slack:c0", names(50_000, 300)), at);
+    expect(g.walk([{ key: "n:speaker0q", weight: 1 }], { budgetMs: 1e9, limit: 10, floor: 0 })).toEqual(held);
+  });
+
+  test("the memo of sentences and people is emptied when an item leaves or is replaced", () => {
+    const g = new UserGraph();
+    const memo = () =>
+      (g as unknown as { memo: { sentences: Map<string, unknown>; people: Map<string, unknown> } }).memo;
+    const it: ContextItem = {
+      id: "gmail:q",
+      sourceId: "gmail",
+      ref: "q",
+      title: "Quarterly",
+      text: "From: Odile Ferrand <odile@quorvant.com>\n\nThe Quorvant escrow stays frozen until Friday.",
+    };
+    const has = () => [...memo().sentences.keys(), ...memo().people.keys()].some((k) => /Quorvant|Odile/.test(k));
+    g.add(it, at);
+    expect(has()).toBe(true);
+    g.add({ ...it, text: "Nothing here." }, at); // Replaced: the old copy's sentences go.
+    expect(has()).toBe(false);
+    g.add(it, at);
+    g.remove(it.id);
+    expect(memo().sentences.size + memo().people.size).toBe(0);
+  });
+});
