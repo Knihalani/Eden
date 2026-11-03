@@ -16,11 +16,15 @@
  *                    reporting only; 0 turns it off.
  * EDEN_ASK_MODEL=1   ask answers are rewritten as prose by the model; off by default, the cited items are returned
  *                    as they are (D43).
+ * EDEN_ENGINE_CONFIG path of a JSON file of engine settings over the production defaults (D103, engine-config.ts);
+ *                    unset, the defaults exactly (D12).
  * EDEN_MAX_BODY_BYTES largest request body the HTTP API reads, default 8 MB (8,388,608, D100): above the ~6 MB worst
  *                    case of a valid event, far below Bun's 128 MB default. Larger bodies get 413.
  */
+import { createHash } from "node:crypto";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { edenHome, isId } from "@eden/protocol";
+import { edenHome, isId, scopeKey } from "@eden/protocol";
 
 export interface ServerConfig {
   port: number;
@@ -81,6 +85,22 @@ export function loadConfig(env = process.env): ServerConfig {
     askWithModel: askModel(env.EDEN_ASK_MODEL),
     maxBodyBytes: bodyBytes(env.EDEN_MAX_BODY_BYTES),
   };
+}
+
+/**
+ * Where the stdio MCP server (one user per process) keeps its source map: EDEN_SOURCE_MAP when set, as for the HTTP
+ * server, else one file per tenant/user under $EDEN_HOME/mcp-stdio. Rows inside are keyed by scope either way, as
+ * the HTTP server's are; the file per user keeps two users' processes from contending for one SQLite writer. The name
+ * is a hash of the scope key, since ids may hold "." and ".." would leave the directory. Both the override and the
+ * home come from `env`; with no EDEN_HOME there, edenHome()'s default applies.
+ */
+export function stdioSourceMapPath(tenantId: string, userId: string, env = process.env): string {
+  if (env.EDEN_SOURCE_MAP) return env.EDEN_SOURCE_MAP;
+  // `env`'s EDEN_HOME, not process.env's (which edenHome() reads), so a caller passing an env gets that home.
+  const dir = join(env.EDEN_HOME || edenHome(), "mcp-stdio");
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const name = createHash("sha256").update(scopeKey({ tenantId, userId })).digest("hex").slice(0, 32);
+  return join(dir, `${name}.source-map.db`);
 }
 
 /** EDEN_ASK_MODEL's value: "1" turns model-composed ask answers on (D43), unset or "0" leaves them off. */

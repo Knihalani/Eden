@@ -19,6 +19,8 @@ it to ask the few sources likely to know. SQLite via `bun:sqlite` (D15). One fil
 - **Fast path may write here** (D4): outcomes are written behind (buffered, one transaction within
   `OUTCOME_FLUSH_MS` or at 256 rows; every read flushes first) with WAL and synchronous=NORMAL, about 2 µs per outcome
   instead of an fsync per commit. Keep new writes on that path; do not add a synchronous commit per event.
+- `busy_timeout` is 2 s: two processes may share a file (mcp-stdio launched by two MCP clients for one user), and
+  without it one failed in the constructor with SQLITE_BUSY (`source-map.test.ts`, the two-process test).
 - Statements go through `db.query` (prepared-statement cache): re-preparing per call was 5% of end-to-end CPU
   (`packages/engine/bench/pipeline.bench.ts`).
 - Exploration (Thompson draws) decides which sources are queried, never whether anything is injected (D23).
