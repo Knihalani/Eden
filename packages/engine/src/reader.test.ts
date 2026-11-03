@@ -313,6 +313,14 @@ describe("the reader's prompt and output (reader.ts)", () => {
     expect(model.calls[0]!.json).toBe(true);
     expect(model.calls[0]!.maxTokens).toBeGreaterThanOrEqual(1_000);
   });
+
+  test("the model maker passes the input's cacheKey through for sticky routing, and none when unset", async () => {
+    const model = new FakeModel(() => '{"bears":[]}');
+    await new ModelReaderMaker(model).read({ ...input(), cacheKey: "eden-abc" }, new AbortController().signal);
+    await new ModelReaderMaker(model).read(input(), new AbortController().signal);
+    expect(model.calls[0]!.cacheKey).toBe("eden-abc");
+    expect(model.calls[1]!.cacheKey).toBeUndefined();
+  });
 });
 
 describe("the verdict cache (AskReader)", () => {
