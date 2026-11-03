@@ -11,12 +11,47 @@ const isText = (v: unknown, max = 1_000_000): v is string => typeof v === "strin
 /** The id shape for tenants, users, sessions and injections: no `/` or `#`, which scope keys use as separators. */
 export const isId = (v: unknown): v is string => typeof v === "string" && /^[A-Za-z0-9._:@-]{1,128}$/.test(v);
 
+/** How deep a tool call's input may nest (D100). No real tool input comes near it; JSON.parse handles far deeper. */
+export const MAX_INPUT_DEPTH = 1_000;
+/** Values a tool call's input may hold (D100). A 1,000,000-character flat array holds at most ~500,000. */
+const MAX_INPUT_NODES = 1_000_000;
+
+/**
+ * Whether `v` nests at most `maxDepth` containers deep and holds at most `maxNodes` values (array elements and object
+ * values). Iterative with an explicit stack: it must be cheap exactly where recursion and JSON.stringify are not,
+ * because stringifying a 60,000-deep array runs ~1.5 s on the event loop before it overflows (D100).
+ */
+function shapeUnder(root: unknown, maxDepth: number, maxNodes: number): boolean {
+  if (root === null || typeof root !== "object") return true;
+  const values: unknown[] = [root];
+  const depths: number[] = [1];
+  let nodes = 0;
+  while (values.length > 0) {
+    const v = values.pop() as object;
+    const depth = depths.pop()!;
+    if (depth > maxDepth) return false;
+    const children = Array.isArray(v) ? v : Object.values(v);
+    nodes += children.length;
+    if (nodes > maxNodes) return false;
+    for (const c of children) {
+      if (c !== null && typeof c === "object") {
+        values.push(c);
+        depths.push(depth + 1);
+      }
+    }
+  }
+  return true;
+}
+
 /**
  * Whether `v` serializes to JSON of at most `max` characters. The engine stringifies a tool call's input, so input it
- * cannot stringify (nested past the stack limit) or that is huge is the caller's error, not a 503 later.
+ * cannot stringify (nested past the stack limit) or that is huge is the caller's error, not a 503 later. The shape
+ * walk runs first so deep input is refused before the stringify that would stall on it (D100).
  */
 function jsonUnder(v: unknown, max: number): boolean {
   try {
+    // Inside the try: an embedder's object may have a throwing getter, and validation must not throw.
+    if (!shapeUnder(v, MAX_INPUT_DEPTH, MAX_INPUT_NODES)) return false;
     return (JSON.stringify(v ?? null)?.length ?? 0) <= max;
   } catch {
     return false;
@@ -52,7 +87,10 @@ export function checkEvent(v: unknown): Checked<AgentEvent> {
     case "tool_call":
       if (!isText(v.tool, 200)) return { ok: false, error: "tool_call.tool must be a string" };
       if (!jsonUnder(v.input, 1_000_000)) {
-        return { ok: false, error: "tool_call.input must be JSON of at most 1,000,000 characters" };
+        return {
+          ok: false,
+          error: "tool_call.input must be JSON of at most 1,000,000 characters, nested at most 1,000 deep",
+        };
       }
       return { ok: true, value: { ...base, kind: "tool_call", tool: v.tool, input: v.input } };
     case "tool_result":

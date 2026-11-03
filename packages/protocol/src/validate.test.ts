@@ -43,7 +43,56 @@ test("tool_call.input must serialize to JSON under 1,000,000 characters", () => 
   const scope = { tenantId: "t", userId: "u", sessionId: "s" };
   expect(checkEvent({ ...scope, kind: "tool_call", tool: "t", input: { q: "x" } }).ok).toBe(true);
   expect(checkEvent({ ...scope, kind: "tool_call", tool: "t", input: "x".repeat(1_000_001) }).ok).toBe(false);
-  let deep: unknown = 1;
-  for (let i = 0; i < 60_000; i++) deep = [deep];
-  expect(checkEvent({ ...scope, kind: "tool_call", tool: "t", input: deep }).ok).toBe(false);
+});
+
+describe("tool_call.input depth and size (D100)", () => {
+  const scope = { tenantId: "t", userId: "u", sessionId: "s" };
+  const nest = (depth: number, wrap: (v: unknown) => unknown): unknown => {
+    let v: unknown = 1;
+    for (let i = 0; i < depth; i++) v = wrap(v);
+    return v;
+  };
+  const call = (input: unknown) => checkEvent({ ...scope, kind: "tool_call", tool: "t", input });
+
+  test("a 60,000-deep input is refused before any stringify, in well under a second", () => {
+    const deep = nest(60_000, (v) => [v]);
+    const t0 = performance.now();
+    const r = call(deep);
+    const ms = performance.now() - t0;
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/1,000 deep/);
+    // Stringifying until the stack overflowed took ~1.5 s here; the walk stops at the cap. Loose bound for slow CI.
+    expect(ms).toBeLessThan(500);
+  });
+
+  test("depth 100 and depth 1,000 are accepted; 1,001 is refused, for arrays and objects alike", () => {
+    expect(call(nest(100, (v) => [v])).ok).toBe(true);
+    expect(call(nest(1_000, (v) => [v])).ok).toBe(true);
+    expect(call(nest(1_000, (v) => ({ a: v }))).ok).toBe(true);
+    expect(call(nest(1_001, (v) => [v])).ok).toBe(false);
+    expect(call(nest(1_001, (v) => ({ a: v }))).ok).toBe(false);
+    // Depth is measured along the deepest branch, not summed across siblings.
+    expect(call({ a: nest(999, (v) => [v]), b: nest(999, (v) => ({ c: v })) }).ok).toBe(true);
+  });
+
+  test("scalars, null and a missing input pass; the length cap still applies after the walk", () => {
+    for (const input of [undefined, null, 0, "x", true, [], {}]) expect(call(input).ok).toBe(true);
+    expect(call({ q: "x".repeat(1_000_001) }).ok).toBe(false);
+    expect(call(Array.from({ length: 300_000 }, () => 1)).ok).toBe(true); // 600,001 characters
+    expect(call(Array.from({ length: 600_000 }, () => 1)).ok).toBe(false); // 1,200,001 characters
+  });
+
+  test("an embedder's cyclic or throwing input is refused, never thrown", () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    expect(call(cyclic).ok).toBe(false);
+    const throwing = Object.defineProperty({}, "a", {
+      enumerable: true,
+      get() {
+        throw new Error("boom");
+      },
+    });
+    expect(() => call(throwing)).not.toThrow();
+    expect(call(throwing).ok).toBe(false);
+  });
 });

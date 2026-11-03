@@ -16,6 +16,8 @@
  *                    reporting only; 0 turns it off.
  * EDEN_ASK_MODEL=1   ask answers are rewritten as prose by the model; off by default, the cited items are returned
  *                    as they are (D43).
+ * EDEN_MAX_BODY_BYTES largest request body the HTTP API reads, default 8 MB (8,388,608, D100): above the ~6 MB worst
+ *                    case of a valid event, far below Bun's 128 MB default. Larger bodies get 413.
  */
 import { join } from "node:path";
 import { edenHome, isId } from "@eden/protocol";
@@ -36,7 +38,15 @@ export interface ServerConfig {
   queryPlanner: "off" | "serve" | "shadow";
   /** Whether ask answers are rewritten by the model (EDEN_ASK_MODEL=1); off by default (D43). */
   askWithModel: boolean;
+  /** Largest request body the HTTP API reads (EDEN_MAX_BODY_BYTES); 8 MB by default (D100). */
+  maxBodyBytes: number;
 }
+
+/**
+ * 8 MB (D100). The largest valid event holds one 1,000,000-unit text field; sent as `\uXXXX` escapes that is ~6 MB of
+ * JSON, so every valid event fits and only padded bodies are refused.
+ */
+export const DEFAULT_MAX_BODY_BYTES = 8_388_608;
 
 export function loadConfig(env = process.env): ServerConfig {
   const port = Number(env.PORT ?? 8790);
@@ -69,6 +79,7 @@ export function loadConfig(env = process.env): ServerConfig {
     gateWorkers: workers(env.EDEN_GATE_WORKERS),
     queryPlanner: plannerMode(env.EDEN_QUERY_PLANNER),
     askWithModel: askModel(env.EDEN_ASK_MODEL),
+    maxBodyBytes: bodyBytes(env.EDEN_MAX_BODY_BYTES),
   };
 }
 
@@ -91,6 +102,14 @@ function positive(raw: string | undefined, fallback: number, name: string): numb
   if (raw === undefined || raw === "") return fallback;
   const n = Number(raw);
   if (!Number.isFinite(n) || n <= 0) throw new Error(`${name} must be a positive number, got ${raw}`);
+  return n;
+}
+
+/** EDEN_MAX_BODY_BYTES as a positive whole number of bytes; 8 MB when unset (D100). */
+function bodyBytes(raw: string | undefined): number {
+  if (raw === undefined || raw === "") return DEFAULT_MAX_BODY_BYTES;
+  const n = Number(raw);
+  if (!Number.isSafeInteger(n) || n <= 0) throw new Error(`EDEN_MAX_BODY_BYTES must be a positive integer, got ${raw}`);
   return n;
 }
 
