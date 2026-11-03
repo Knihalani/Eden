@@ -463,14 +463,33 @@ export interface ReaderMaker {
   }>;
 }
 
+/** How hard the reader's model reasons before it answers; "off" sends no effort at all. */
+export type ReaderReasoning = "low" | "medium" | "high" | "off";
+
+export interface ModelReaderOptions {
+  /**
+   * Default "low", today's production value. Reasoning tokens are billed as output and add to latency, but
+   * OpenRouter excludes them from the reply, so only `usage.reasoningTokens` shows them. Changing the default needs a
+   * decision and a decoy measurement: D96 found that reasoning before the verdict is what keeps decoys out.
+   */
+  reasoning?: ReaderReasoning;
+}
+
 export class ModelReaderMaker implements ReaderMaker {
-  constructor(private readonly model: Model) {}
+  private readonly reasoning: ReaderReasoning;
+
+  constructor(
+    private readonly model: Model,
+    options: ModelReaderOptions = {},
+  ) {
+    this.reasoning = options.reasoning ?? "low";
+  }
 
   async read(input: ReaderInput, signal: AbortSignal) {
     const res = await this.model.chat({
       messages: readerMessages(input),
       maxTokens: READER_MAX_TOKENS,
-      reasoning: "low",
+      ...(this.reasoning === "off" ? {} : { reasoning: this.reasoning }),
       json: true,
       ...(input.cacheKey ? { cacheKey: input.cacheKey } : {}),
       signal,

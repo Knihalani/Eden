@@ -62,6 +62,12 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   clock-independent in D58).
 - Regressions found in reviews go to `regressions.test.ts`, `review-regressions.test.ts` or the track's own
   `*-review.test.ts`; add to them rather than editing an old expectation.
+- `new ModelReaderMaker(model, { reasoning })` takes `"low"` (the default, production's value), `"medium"`, `"high"`
+  or `"off"` (no effort sent). No `EngineConfig` key wires it yet. OpenRouter excludes reasoning from the reply but
+  bills it as output; `usage.reasoningTokens` (from `completion_tokens_details.reasoning_tokens`, unset when not
+  reported) shows that share. Lab reader latencies (Anthropic, thinking off by default) exclude it, so they
+  understate production wherever the routed endpoint reasons. Changing the default needs a decision and a decoy
+  measurement (D96: reasoning before the verdict is what keeps decoys out).
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 
