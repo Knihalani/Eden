@@ -141,6 +141,46 @@ lookup never waits for a poll. Today this is an engine API (`ContextPartner.sour
 the same read-only tools (D7). The connectors' push APIs cost about nothing in fees (research §5); the costs are your
 relay endpoint and watch renewal (7 days for Gmail and Outlook).
 
+## Connect each user's own sources (D104)
+
+The server reads the end user's accounts with that user's credentials, never another's. Two ways to say which:
+
+- **A file**, for a small deployment: `EDEN_USER_SOURCES_FILE=users.json`, one entry per `"<tenantId>/<userId>"`.
+  Header values can name an environment variable, so the file holds no token:
+
+  ```json
+  {
+    "users": {
+      "acme/u1": [
+        {
+          "kind": "mcp",
+          "id": "notes",
+          "description": "The user's notes",
+          "url": "https://notes.example.com/mcp",
+          "headers": { "Authorization": { "env": "U1_NOTES_TOKEN" } },
+          "searchTool": { "name": "search_notes" }
+        },
+        { "kind": "static", "id": "faq", "description": "Team FAQ", "docs": [] }
+      ]
+    }
+  }
+  ```
+
+  The file is checked at startup (a bad entry or an unset env header stops the server with a message naming it) and
+  re-read when it changes. `EDEN_SOURCES_FILE` stays for static documents every user shares; its entries need `docs`.
+- **Your own directory**, when you embed the server: `new UserSources({ directory: async (scope) => specs })` reads
+  the user's connected accounts and tokens from your vault, then pass `userSources.resolver` to `buildPartner` and
+  `userSources` to `createHandler`. Return specs with `url` and `headers` (or the same `transport` function while a
+  connection is unchanged: a new function is read as a new credential and reconnects).
+
+What Eden does with them: an MCP source must pass the read-only check (D7: `readOnlyHint: true`, or the tool named in
+`trustedReadTools` after you checked it by hand). Connections open on the first lookup and are kept per (tenant, user,
+source). The directory is asked again at most every 60 s: a rotated token reconnects, a removed source closes, and a
+directory error closes the user's connections and serves them nothing until it is fixed. `POST /v1/sources
+{userId}` lists what a user has, or answers 422 naming their configuration error. `POST /v1/forget` closes the
+user's connections as well as dropping what Eden holds; a user idle 15 minutes is closed too. Forget does not edit
+your configuration: to revoke a connection, remove it from the directory (and forget, to drop what was read).
+
 ## Configuration
 
 Every experimental flag is off by default. D64's recommended experimental configuration is ALL; a successor with the

@@ -7,7 +7,9 @@
  *   POST /v1/pending   {tenantId,userId,sessionId} → {injections}
  *   POST /v1/digest    {tenantId,userId,sessionId?} → {digest}  (active constraints, `constraintDigest`; null when off)
  *   POST /v1/feedback  a Feedback (used: boolean)  → {ok, applied}
- *   POST /v1/forget    {tenantId,userId,sourceId?} → {ok}
+ *   POST /v1/forget    {tenantId,userId,sourceId?} → {ok}  (also closes the user's source connections, D104)
+ *   POST /v1/sources   {tenantId,userId}           → {sources:[{id,kind}]}; 422 {error} when the user's source
+ *                                                    configuration is broken (only with per-user sources, D104)
  *   GET  /healthz
  *
  * Auth: `Authorization: Bearer <key>`; the key fixes the tenant, and a body naming another tenant is refused.
@@ -21,6 +23,7 @@ import type { ContextPartner } from "@eden/engine";
 import { Gcra } from "@eden/primitives";
 import { checkAsk, checkEvent, isId } from "@eden/protocol";
 import { DEFAULT_MAX_BODY_BYTES, type ServerConfig } from "./config";
+import type { UserSources } from "./user-sources";
 
 type Json = Record<string, unknown>;
 const json = (body: unknown, status = 200) => Response.json(body, { status });
@@ -30,6 +33,8 @@ export function createHandler(
   partner: ContextPartner,
   config: Pick<ServerConfig, "keys" | "dev"> &
     Partial<Pick<ServerConfig, "tenantRatePerSec" | "tenantBurst" | "maxBodyBytes">>,
+  /** Per-user sources (D104): forget closes the user's connections, and `/v1/sources` reports their config. */
+  userSources?: UserSources,
 ) {
   const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   const tooLarge = `body must be at most ${maxBodyBytes.toLocaleString("en-US")} bytes`;
@@ -122,8 +127,18 @@ export function createHandler(
         case "/v1/forget": {
           if (badId(body, ["userId"])) return fail(400, "userId must be 1-128 characters of [A-Za-z0-9._:@-]");
           if (body.sourceId !== undefined && !isId(body.sourceId)) return fail(400, "sourceId is malformed");
-          partner.forget({ tenantId: tenant, userId: body.userId as string }, body.sourceId as string | undefined);
+          const scope = { tenantId: tenant, userId: body.userId as string };
+          partner.forget(scope, body.sourceId as string | undefined);
+          userSources?.forget(scope, body.sourceId as string | undefined);
           return json({ ok: true });
+        }
+        case "/v1/sources": {
+          if (!userSources) return fail(404, "per-user sources are not configured (EDEN_USER_SOURCES_FILE)");
+          if (badId(body, ["userId"])) return fail(400, "userId must be 1-128 characters of [A-Za-z0-9._:@-]");
+          const status = await userSources.status({ tenantId: tenant, userId: body.userId as string });
+          // The caller's (the integrator's) configuration for this user, not an internal failure: 422, not 5xx.
+          if (status.error !== null) return fail(422, `source configuration: ${status.error}`);
+          return json({ sources: status.sources });
         }
         default:
           return fail(404, "no such route");

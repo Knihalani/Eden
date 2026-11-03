@@ -18,6 +18,9 @@
  *                    as they are (D43).
  * EDEN_ENGINE_CONFIG path of a JSON file of engine settings over the production defaults (D103, engine-config.ts);
  *                    unset, the defaults exactly (D12).
+ * EDEN_SOURCES_FILE  static documents shared by every user (connectors.ts); EDEN_USER_SOURCES_FILE each user's own
+ *                    sources, MCP connections with their own credentials included (user-sources.ts, D104). Both are
+ *                    read and checked at startup by `sourcesFromEnv`, not here.
  * EDEN_MAX_BODY_BYTES largest request body the HTTP API reads, default 8 MB (8,388,608, D100): above the ~6 MB worst
  *                    case of a valid event, far below Bun's 128 MB default. Larger bodies get 413.
  */

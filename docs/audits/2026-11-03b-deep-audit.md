@@ -268,7 +268,8 @@ the finder's first claim) reaches the user's 3x bar.
   sim); persist mcp-stdio's source map under `EDEN_HOME`, keyed by tenant/user. **Deferred part:** MCP entries in
   `EDEN_SOURCES_FILE`. `staticResolver` returns one list to every tenant and user, so a credentialed MCP source there
   would let every user read one account's mail (isolation rule).
-- **Status.** Round 1 package `server-startup-config` (config and persistence); MCP sources deferred (decision).
+- **Status.** Round 1 package `server-startup-config` (config and persistence); MCP sources: follow-up
+  `claude/fu-user-sources` (D104, per-user sources and connections).
 
 ### 12. Read speculatively on the draft event (medium, M, low confidence)
 
