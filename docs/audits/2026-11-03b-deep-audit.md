@@ -125,6 +125,8 @@ unchanged at 214/384 hidden facts and 211/384 decoys. `bun run eval` now reports
 
 - Search-index memory: `scale-index-posting-arena` (2.1-2.8x as specified), `scale-compact-frozen-index` and
   `scale-compressed-text-cold-tier`. Next step: one frozen, packed index for synced items.
+  **Done after the audit (D111):** the packed index (frozen CSR plus a scanned or chained delta, light users scanned)
+  is 3.2-3.8x smaller per item with identical results; the compressed text tier was left out (D111 says why).
 - `quality-reader-pool-universe`: adding the user's constraint items to the reader's pool cut retrieval misses about
   6x ($0, measured), but no round packaged it, and the related `quality-constraint-index-seats` was rejected.
 - `lat-answer-gate-not-start-gate` (about 2x on measured mixes): needs a tool-gate design.
@@ -138,6 +140,11 @@ unchanged at 214/384 hidden facts and 211/384 decoys. `bun run eval` now reports
 `corr-sync-test-vacuous-guard`, `corr-searchsources-preaborted-hang`,
 `example-agent-not-runnable-offline-and-wrong-description`, `dead-experimental-flags`, `scale-light-user-scan-index`
 and `no-memory-bench-per-user`. Most of these are not written up in this file; their details are in the run ledger.
+Clean-up package `claude/audit-cleanup` (2026-11-03) fixed `ingest-skip-unchanged-redaction` (unchanged sweep
+41-44 → 3.6-4.8 µs/item, docs/TESTING.md), `corr-sync-test-vacuous-guard`, `corr-searchsources-preaborted-hang`,
+`example-agent-not-runnable-offline-and-wrong-description` and `no-memory-bench-per-user` (`ingest.bench.ts`), and
+added a named test for `corr-cache-offset-stale-on-refresh`, already fixed on main. `dead-experimental-flags` and
+`scale-light-user-scan-index` stay open.
 
 **Recorded limits; nothing to fix:** `cost-no-3x-areas`, `lat-wall-ceiling`, `observe-throughput-no-3x`,
 `devloop-funnel-3x-not-reachable`, `cost-per-task-reader-floor-measured` and `quality-pool-recall-lexical-ceiling`,

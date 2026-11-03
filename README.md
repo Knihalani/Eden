@@ -43,7 +43,8 @@ const answer = await eden.ask("What did Dana say about the renewal?");     // or
 
 MCP-capable agents can also use the `ask_context` tool: `bun packages/server/src/mcp-stdio.ts` serves it over stdio for
 one user (`EDEN_USER`, `EDEN_TENANT`), and `createMcpServer` attaches it to any other MCP transport. A full loop:
-[examples/personal-agent/agent.ts](examples/personal-agent/agent.ts).
+[examples/personal-agent/agent.ts](examples/personal-agent/agent.ts), run with the dev server above; without
+`OPENAI_API_KEY` it runs a scripted offline model, free.
 [docs/INTEGRATION.md](docs/INTEGRATION.md) has advice on placement, caching and cost (unmeasured).
 
 Without a wait, a user message's observe replies before a slow lookup ends and its context misses the first model

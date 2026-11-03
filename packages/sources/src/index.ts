@@ -32,6 +32,7 @@ export {
   type FanoutOptions,
   type FanoutOutcome,
   type FanoutStatus,
+  type ListReuse,
   type SharedCalls,
 } from "./guarded";
 export { buildShape, inert, SHAPES, type Shape, type ShapeInput, type ShapeOptions } from "./shapes";

@@ -140,8 +140,17 @@ describe("background sync (D57)", () => {
     expect(src.searches).toBe(0);
     expect(src.lists).toBe(lists);
     expect(got).toContain(itemId("mail", "a"));
-    const lookup = traces.find((t) => t.localSources !== undefined);
-    if (lookup) expect(lookup.sourceCalls).toBe(0);
+    // The fast path delivered it from the synced copy: no trace of this turn made a source call.
+    expect(traces.length).toBeGreaterThan(0);
+    expect(traces.map((t) => t.sourceCalls)).toEqual(traces.map(() => 0));
+    // An ask always runs a lookup: it is answered from the local index (a source counted as local) at no call.
+    const asked = await partner.ask({ ...scope, sessionId: "s1", question: "When is the Dana Lee budget review?" });
+    expect(asked.citations.map((c) => c.itemId)).toContain(itemId("mail", "a"));
+    const lookup = traces.find((t) => t.event === "ask");
+    expect(lookup?.localSources).toBe(1);
+    expect(lookup?.sourceCalls).toBe(0);
+    expect(src.searches).toBe(0);
+    expect(src.lists).toBe(lists);
   });
 
   test("a stale source is polled on demand (one listing call), and a new item it brings is answered locally", async () => {

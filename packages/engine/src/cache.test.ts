@@ -372,6 +372,17 @@ describe("offsetOf: a tally kept as items come and go", () => {
     expect(ties).toBeGreaterThan(20); // the tie-break path ran
   });
 
+  test("a refresh that moves an event's zone but keeps its words moves the offset (corr-cache-offset-stale-on-refresh)", () => {
+    const cache = new ItemCache({ expireEveryMs: 0 });
+    const at = (z: string) => ({ ...item("cal", "1", "standup"), meta: { start: `2026-11-03T09:00:00${z}` } });
+    cache.put(alice, [at("+01:00")]);
+    expect(cache.offsetOf(alice)).toBe(60); // read once, so a stale memo would show below
+    cache.put(alice, [at("-05:00")]); // same title and text: the unchanged-words path
+    expect(cache.offsetOf(alice)).toBe(-300);
+    cache.put(alice, [{ ...at(""), meta: undefined }]);
+    expect(cache.offsetOf(alice)).toBe(0);
+  });
+
   test("per user: one user's events never shape another's offset", () => {
     const cache = new ItemCache({ expireEveryMs: 0 });
     const bob = { tenantId: "t", userId: "bob" };
@@ -381,5 +392,37 @@ describe("offsetOf: a tally kept as items come and go", () => {
     cache.dropSynced(bob, ["cal:1"]); // not synced: kept
     cache.forget(bob);
     expect([cache.offsetOf(alice), cache.offsetOf(bob)]).toEqual([60, 0]);
+  });
+});
+
+describe("ItemCache index isolation (packed index, shared scratch)", () => {
+  test("users interleaved past freezes and purges rank as each would alone", () => {
+    const bob = { tenantId: "t", userId: "bob" };
+    const other = { tenantId: "u", userId: "alice" }; // same user id, another tenant
+    const words = (u: number, i: number) =>
+      Array.from({ length: 30 }, (_, j) => `w${(i * 7 + j * 13 + u) % 90}`).join(" ") + ` renewal u${u}`;
+    const together = new ItemCache({ maxItemsPerUser: 150, expireEveryMs: 0 });
+    const alone = [alice, bob, other].map(() => new ItemCache({ maxItemsPerUser: 150, expireEveryMs: 0 }));
+    const now = 1_700_000_000_000;
+    // 400 items each through a cap of 150: several freezes (every 128 adds) and purges (evictions), interleaved.
+    for (let i = 0; i < 400; i++) {
+      [alice, bob, other].forEach((scope, u) => {
+        const it = item("mail", `${u}-${i}`, words(u, i));
+        together.put(scope, [it], now + i);
+        alone[u]!.put(scope, [it], now + i);
+      });
+      if (i % 37 !== 0) continue;
+      [alice, bob, other].forEach((scope, u) => {
+        const q = (c: ItemCache) => termIds(`w3 w44 renewal u${u} w81`, c.peekVocab(scope)!, false);
+        const a = q(together);
+        const b = q(alone[u]!);
+        const got = together.search(scope, a.ids, a.n, 20, now + i);
+        const want = alone[u]!.search(scope, b.ids, b.n, 20, now + i);
+        expect(got.map((h) => [h.item.id, h.score, h.coverage])).toEqual(
+          want.map((h) => [h.item.id, h.score, h.coverage]),
+        );
+        expect(got.every((h) => h.item.id.startsWith(`mail:${u}-`))).toBe(true);
+      });
+    }
   });
 });
