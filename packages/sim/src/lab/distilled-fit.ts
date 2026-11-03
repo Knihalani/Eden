@@ -121,9 +121,9 @@ function grow(rows: number[], bins: Uint8Array[], g: number[], h: number[], cuts
     const bf = bins[f]!;
     for (const r of rows) {
       const b = bf[r]!;
-      gs[b] += g[r]!;
-      hs[b] += h[r]!;
-      ns[b]++;
+      gs[b] = gs[b]! + g[r]!;
+      hs[b] = hs[b]! + h[r]!;
+      ns[b] = ns[b]! + 1;
     }
     let gl = 0;
     let hl = 0;

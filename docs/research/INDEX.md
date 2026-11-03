@@ -113,6 +113,7 @@ and ALL4 (D84) branch off ALL3 (`packages/sim/src/lab/presets.ts`).
 | [hermes-lab.md](hermes-lab.md) | 2026-11-02 | — | Hermes Agent with and without Eden: harness, smoke and a blind free-model run; full-bench estimates | adopted (tooling) |
 | [haiku-opt.md](haiku-opt.md) | 2026-11-02 | D95, D96, D97 | The ask-time reader on Haiku 5.5; prompt v5 labels lookalikes; `askReaderDrop`, `readerPush` | adopted (NEW) |
 | [haiku-benchmark.md](haiku-benchmark.md) | 2026-11-02 | D97, D98 | NEW vs ALL3 vs tools in Pi and Hermes, blind held-out 5–8 and 10–12: +22.8 / +23.9 points hidden raised, $24.36 | adopted (NEW is the recommendation) |
+| [distilled-reader.md](distilled-reader.md) | 2026-11-03 | D104 | A no-model cascade in front of the reader, trained on Haiku labels from train1–6: planted-vs-decoy AUC 0.544; blind 1.09× fewer reader calls at equal hidden, decoys +2.3 points | rejected (`--distill` kept as lab tooling) |
 
 Not in this directory: [../RESEARCH.md](../RESEARCH.md) (the Meta PMA paper and open questions),
 [../plans/](../plans/) (the query-planner plan and `next.md`), [../LAB.md](../LAB.md) (how to run the lab).

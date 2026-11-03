@@ -196,6 +196,11 @@ bun run funnel --preset NEWL --jobs 4 -- --reader stub --lead-in clause # draft 
   compares its pool with the request's first read: the share of tasks whose draft had a pool, mean Jaccard, final pool
   ⊆ draft pool, and the hidden item in the draft's pool (stage 1 of lat-draft-speculative-read). The draft's lookup
   is real: it caches what it finds for the request, so delivery moves slightly (NEWL stub: decoys 211 → 212).
+- **`--distill labels:LABELS.jsonl,OUT.jsonl` with `--reader stub`** replays Haiku 5.5's reader verdicts for train1–6,
+  seeds 41–44 (`packages/sim/lab/distilled/labels-train.jsonl`, keyed on task and `readerKey`) at $0, and writes each
+  call with its items to OUT: labels for (request, candidate) pairs. It needs the committed cards and intent requests
+  (`packages/sim/lab/distilled/run.sh labels` sets them up). `record:OUT` makes such labels with a live reader;
+  `cascade:MODEL` puts a no-model scorer in front of the reader (rejected, D104, docs/research/distilled-reader.md).
 
 Measured on train1–6, seeds 41–42, 4 cores, no key set:
 

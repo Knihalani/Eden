@@ -264,7 +264,7 @@ const readerModel =
         READER_MODEL,
       );
 const readerLanes: AskReader[] = [];
-/** `--distill record|labels|cascade:FILE` (distilled-reader.ts): record the reader's verdicts, replay labels, or cascade. */
+/** `--distill record|labels|cascade:FILE` (distilled-reader.ts): record reader verdicts, replay labels, or cascade. */
 const DISTILL = opt("distill", "") ? parseDistill(opt("distill", "")) : null;
 const DISTILL_MODEL = DISTILL?.mode === "cascade" ? loadModel(DISTILL.file) : null;
 const distillLanes: DistilledReaderMaker[] = [];
