@@ -131,10 +131,41 @@ export function startDay(item: ContextItem): string | null {
   return s && /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null;
 }
 
-/** When an item starts (ms), or NaN. */
+/** When an item starts (ms, `parseWhen`), or NaN. */
 export function startMs(item: ContextItem): number {
   const s = item.meta?.start;
-  return s ? Date.parse(s) : Number.NaN;
+  return s ? parseWhen(s) : Number.NaN;
+}
+
+/** A trailing zone: "Z", "+01:00", "-0700", "GMT+0100", an RFC 2822 name; an optional "(comment)" after it. */
+const HAS_ZONE = /(?:\dZ|[+-]\d{2}(?::?\d{2})?|\b(?:UTC?|GMT|[ECMP][SD]T))(?:\s*\([^)]*\))?\s*$/;
+const ISO_LOCAL = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/;
+
+/**
+ * A date or date-time string as ms, read the same on every host: a string with no zone is UTC (the sim writes its
+ * headers so, and `startDay` reads a start's own day), not the server process's local zone, which `Date.parse` uses
+ * for zone-less date-times and for "14 Oct 2026". A string with a zone, and an ISO bare date (UTC by spec), are left
+ * to `Date.parse`. NaN when it does not parse. Off the fast path: per item, where a date is read.
+ */
+export function parseWhen(s: string): number {
+  const t = s.trim();
+  if (t === "" || HAS_ZONE.test(t)) return Date.parse(t);
+  if (ISO_LOCAL.test(t)) return Date.parse(`${t.replace(" ", "T")}Z`);
+  if (/^\d{4}-\d{2}(?:-\d{2})?$/.test(t)) return Date.parse(t);
+  const utc = Date.parse(`${t} GMT`);
+  if (Number.isFinite(utc)) return utc;
+  // A form the suffix breaks: read it locally, then take its wall-clock fields as UTC.
+  const local = new Date(Date.parse(t));
+  if (Number.isNaN(local.getTime())) return Number.NaN;
+  return Date.UTC(
+    local.getFullYear(),
+    local.getMonth(),
+    local.getDate(),
+    local.getHours(),
+    local.getMinutes(),
+    local.getSeconds(),
+    local.getMilliseconds(),
+  );
 }
 
 /** The UTC offset (minutes) a start timestamp carries: "Z" is 0, "+01:00" is 60; null for none or a bare date. */

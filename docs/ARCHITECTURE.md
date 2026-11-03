@@ -358,6 +358,21 @@ Sessions live in memory, capped per tenant and dropped when idle. Each owns an A
 eviction and `forget` abort in-flight lookups and model calls, and nothing is cached, learned, charged or queued for a
 closed session afterwards (D17).
 
+The item cache (`cache.ts`) is bounded per user and per tenant, and also in time: an unref'd timer (`expireEveryMs`,
+default 10 minutes, 0 off) runs `ItemCache.expireIdle`, which sweeps every user's expired items (a lookup's past
+`ttlMs`, 24 h; a synced one past `syncTtlMs`, 7 days) and drops each user left with none (unless they made a probe
+within `ttlMs`), through the same `onDropped(scope, null)` hook as `forget`, so their cards go too. Reads already
+skipped expired items, so no answer changes; resident memory follows the users active within the time to live rather
+than every user seen since the process started. The timer runs on the cache's own clock (the last `put`'s `now`
+moved on by wall time since), so a simulation on an injected clock expires on its own time.
+
+Dates in items are read the same on every host: `parseWhen` (`grounding.ts`) reads a zone-less date or date-time (a
+`Date:` header without a zone, a calendar start with no offset, "14 Oct 2026") as UTC, not the server process's local
+zone, and leaves strings with a zone and ISO bare dates to `Date.parse`. A mail's sent time (`sentAt`), the date in a
+card prompt (`datedOf`, and so its replay hash), an event's start (`startMs`) and the order of a day's events
+(`ItemCache.timed`, unparseable starts last) all go through it. Tests run with TZ=UTC (`scripts/test-preload.ts`);
+`tz.test.ts` checks the same answers under Asia/Tokyo and America/Los_Angeles.
+
 ## What is deliberately missing (see ROADMAP.md)
 
 Per-user MCP connections with OAuth and a token vault; persistent session state;

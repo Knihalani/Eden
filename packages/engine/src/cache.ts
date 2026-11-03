@@ -8,7 +8,9 @@
  * stored term ids (pipeline.bench.ts: these two rescans were ~30% of end-to-end CPU before).
  *
  * Bounded three ways: items per user (oldest evicted), users per tenant (least recently written dropped, so one tenant
- * never evicts another's), and item text length. Expired items are swept on write, so they stop shaping idf. A
+ * never evicts another's), and item text length. Expired items are swept on write, so they stop shaping idf, and on a
+ * timer (`expireIdle`), which also drops users left with none: memory follows the users active within the time to
+ * live, not every user seen since the process started. A
  * vocabulary never forgets a term, so a user's is rebuilt from the live items when a source is forgotten (no term of
  * a revoked source's content survives) and when it outgrows `VOCAB_REBUILD_FACTOR` times its size after the last
  * rebuild.
@@ -17,7 +19,7 @@ import { createHash } from "node:crypto";
 import { dedupText, hamming64, SparseIndex, TextSketcher, Vocab } from "@eden/primitives";
 import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
-import { userOffset } from "./grounding";
+import { parseWhen, userOffset } from "./grounding";
 import { squash, UserGraph, type Seed, type Walked, type WalkOptions } from "./kg";
 import { head, termIds } from "./text";
 
@@ -152,6 +154,11 @@ export interface CacheLimits {
   maxSyncedPerUser: number;
   /** How long a synced item is kept without a sync seeing it again (a re-listing refreshes it). */
   syncTtlMs: number;
+  /**
+   * How often expired items are swept from every user, and users left with none dropped (`expireIdle`), on an unref'd
+   * timer started by the first `put`. 0: never (expired items then go only when their user writes again).
+   */
+  expireEveryMs: number;
 }
 
 export const DEFAULT_CACHE_LIMITS: CacheLimits = {
@@ -161,6 +168,7 @@ export const DEFAULT_CACHE_LIMITS: CacheLimits = {
   maxTextChars: 8_000,
   maxSyncedPerUser: 5_000,
   syncTtlMs: 7 * 24 * 3_600_000,
+  expireEveryMs: 10 * 60_000,
 };
 
 /**
@@ -203,6 +211,16 @@ export class ItemCache {
   private dropped: ((scope: Scope, ids: string[] | null) => void) | null = null;
   /** The last revision handed out: every user's revisions are drawn from it, so one never repeats. */
   private revisions = 0;
+  /** The expiry timer (`expireEveryMs`), started by the first `put`; null before then and after `close`. */
+  private expiry: ReturnType<typeof setInterval> | null = null;
+  private closed = false;
+  /**
+   * The cache's clock for the timer: the `now` of the last `put`, and the wall time it came at. A tick reads that
+   * clock moved on by the wall time since, so a caller on an injected clock (a simulation, a replay) has its items
+   * expired on its own time, not on the wall clock's; in production the two are the same.
+   */
+  private lastNow = 0;
+  private lastWall = 0;
 
   constructor(limits: Partial<CacheLimits> = {}) {
     this.limits = { ...DEFAULT_CACHE_LIMITS, ...limits };
@@ -328,6 +346,16 @@ export class ItemCache {
    * saturation (packages/sim perf-cli, docs/research/simulation.md).
    */
   put(scope: Scope, items: ContextItem[], now = Date.now(), sanitized = false, synced = false): ContextItem[] {
+    this.lastNow = now;
+    this.lastWall = Date.now();
+    if (this.expiry === null && !this.closed && this.limits.expireEveryMs > 0) {
+      this.expiry = setInterval(
+        () => this.expireIdle(this.lastNow + (Date.now() - this.lastWall)),
+        this.limits.expireEveryMs,
+      );
+      // Never what keeps a process alive: a server's own handles do, and a test or script exits when it is done.
+      (this.expiry as { unref?: () => void }).unref?.();
+    }
     const u = this.touch(scope);
     this.sweep(u, now);
     const changed: ContextItem[] = [];
@@ -589,7 +617,12 @@ export class ItemCache {
       if (!start || !days.has(start.slice(0, 10)) || !this.alive(e, now)) continue;
       out.push({ item: e.item, sketch: e.sketch, doc: e.doc, score: 0, coverage: 0, matched: 0 });
     }
-    return out.sort((a, b) => Date.parse(a.item.meta!.start!) - Date.parse(b.item.meta!.start!)).slice(0, limit);
+    // Zone-less starts read as UTC (`parseWhen`); one that does not parse sorts last (NaN compares false).
+    const at = (h: CacheHit) => {
+      const t = parseWhen(h.item.meta!.start!);
+      return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t;
+    };
+    return out.sort((a, b) => at(a) - at(b) || 0).slice(0, limit);
   }
 
   /** A probe this user made within `maxAgeMs` (D46): its ids, when every one is still cached and fresh; else null. */
@@ -704,6 +737,64 @@ export class ItemCache {
   /** True if the cached item `doc` contains every term id in `ids[0..n)`: whole-term matching, no text rescans. */
   containsAll(scope: Scope, doc: number, ids: ArrayLike<number>, n: number): boolean {
     return this.peek(scope)?.index.containsAll(doc, ids, n) ?? false;
+  }
+
+  /**
+   * Sweeps expired items from every user (`sweep`: a lookup's past `ttlMs`, a synced one past `syncTtlMs`) and drops
+   * each user left with none, telling `onDropped` (null ids: the whole user, so their cards go too). Reads already
+   * skip expired items, so no answer changes; what changes is that an idle user's items, index and vocabulary are
+   * freed instead of held until they write again. Every user is visited on their own items alone: one user's fresh
+   * items keep no other user, and no tenant's traffic expires another's. Returns how many users were dropped.
+   *
+   * A user whose oldest entry is a fresh lookup item has nothing expired and costs one check. Runs on the timer
+   * (`expireEveryMs`), so never inside a caller's synchronous use of a user's vocabulary ids; callable directly
+   * (tests, a simulation on its own clock).
+   */
+  expireIdle(now = Date.now()): number {
+    let n = 0;
+    // Deleting the entry being visited is safe in a Map walk: no copy of 10k+ users per tick.
+    for (const [key, u] of this.users) {
+      const first = u.items.values().next().value as Entry | undefined;
+      // Oldest-first order: a fresh first entry that is not synced means nothing is expired (a synced one may hide
+      // expired lookups behind it, so the sweep runs).
+      if (first && !first.synced && this.alive(first, now)) continue;
+      // A probe made within the time to live is kept with its user, even one that found nothing: forgetting it would
+      // cost the source call it saves (D46).
+      const idle = !this.probedSince(u, now - this.limits.ttlMs);
+      // A user with nothing alive goes whole, without unindexing item by item (2.2 s for 100k items when swept one
+      // by one, scratch measurement): the drop hook hears (scope, null), as for `forget`.
+      if (idle && !this.anyAlive(u, now)) {
+        this.dropUser(key, u.scope.tenantId);
+        n++;
+        continue;
+      }
+      this.sweep(u, now);
+      if (idle && u.items.size === 0) {
+        this.dropUser(key, u.scope.tenantId);
+        n++;
+      }
+    }
+    return n;
+  }
+
+  /** Whether any of the user's items is within its time to live: a scan of fetch times, nothing dropped. */
+  private anyAlive(u: UserCache, now: number): boolean {
+    for (const e of u.items.values()) if (this.alive(e, now)) return true;
+    return false;
+  }
+
+  /** Whether the user made a probe at or after `since` (the probes map is least recently made first). */
+  private probedSince(u: UserCache, since: number): boolean {
+    let last: { at: number } | undefined;
+    for (const p of u.probes.values()) last = p;
+    return last !== undefined && last.at >= since;
+  }
+
+  /** Stops the expiry timer for good (a closing server, a test). The cache still answers; nothing expires on time. */
+  close(): void {
+    this.closed = true;
+    if (this.expiry !== null) clearInterval(this.expiry);
+    this.expiry = null;
   }
 
   forget(scope: Scope, sourceId?: string): void {
