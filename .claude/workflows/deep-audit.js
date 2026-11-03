@@ -1,7 +1,7 @@
 export const meta = {
   name: "deep-audit",
   description:
-    "Hunt for >=3x cost/latency/quality/scale/dev-loop levers and redesigns, plus inefficiencies, pain points and bugs; verify, fix in parallel, review, re-audit until clean, report",
+    "Hunt for >=1.5x (configurable) cost/latency/quality/scale/dev-loop levers and redesigns, plus inefficiencies, pain points and bugs; verify, fix in parallel, review, re-audit until clean, report",
   whenToUse:
     "Run through the deep-audit skill. Long, multi-agent: maps the repo, finds and verifies issues, fixes them on branches, reviews each fix, integrates, and loops until nothing material is left.",
   phases: [
@@ -9,7 +9,7 @@ export const meta = {
     {
       title: "Find",
       detail:
-        "ambitious >=3x finders (cost, latency, quality, scale, dev loop, moonshot) plus inefficiency, pain points, bugs",
+        "ambitious finders (>=1.5x by default) (cost, latency, quality, scale, dev loop, moonshot) plus inefficiency, pain points, bugs",
     },
     { title: "Dedup", detail: "merge duplicate findings across dimensions" },
     { title: "Verify", detail: "two skeptics per finding with different lenses" },
@@ -38,6 +38,8 @@ const SCOPE = A.scope || "the whole repository";
 const FOCUS = A.focus ? `\nUser's extra focus: ${A.focus}` : "";
 const DATE = A.date || "undated";
 const MAX_ROUNDS = A.maxRounds || 3;
+// The smallest improvement a lever finder keeps (a multiple of the metric); `minMultiple` in args.
+const MIN = A.minMultiple || 1.5;
 const MAX_FINDINGS = A.maxFindings || 24;
 const MAX_PACKAGES = A.maxPackages || 10;
 const FIX_ATTEMPTS = A.fixAttempts || 3;
@@ -173,41 +175,42 @@ const MERGED = {
 
 // Shared instructions for the ambitious finders: breadth first, then ruthless arithmetic.
 const LEVER = (metric) => `
-Target: improvements of AT LEAST 3x on ${metric} (10x or more ranks highest). Be creative and ambitious: first write
-down at least 12 candidate ideas, including unconventional ones (a different architecture, removing the work entirely,
-precomputing or caching it, batching, moving it off the critical path, speculation, approximation with a measured
-error, a different algorithm or data structure, a cheaper or smaller model or no model, learned components trained
-offline, sharing work across users or sessions where isolation allows, changing what is measured or delivered). Then
-measure the current baseline, do the arithmetic for each idea from measured numbers, and keep only ideas that plausibly
-reach >=3x on the metric or on a sub-part that dominates it. Say plainly where 3x is impossible and why. Severity:
-"critical" or "high" for >=10x, "medium" for 3-10x; anything below 3x is "low" unless it unblocks a >=3x lever. The fix
-may be a large structural change: give a staged plan whose first stage can be built and measured by one agent.`;
+Target: improvements of AT LEAST ${MIN}x on ${metric} (bigger multiples rank higher; 10x or more highest). Be creative
+and ambitious: first write down at least 12 candidate ideas, including unconventional ones (a different architecture,
+removing the work entirely, precomputing or caching it, batching, moving it off the critical path, speculation,
+approximation with a measured error, a different algorithm or data structure, a cheaper or smaller model or no model,
+learned components trained offline, sharing work across users or sessions where isolation allows, changing what is
+measured or delivered). Then measure the current baseline, do the arithmetic for each idea from measured numbers, and
+keep only ideas that plausibly reach >=${MIN}x on the metric or on a sub-part that dominates it. Say plainly where even
+${MIN}x is impossible and why. Severity: "critical" for >=10x, "high" for 3-10x, "medium" for ${MIN}-3x; anything below
+${MIN}x is "low" unless it unblocks a bigger lever. The fix may be a large structural change: give a staged plan whose
+first stage can be built and measured by one agent.`;
 
 const DIMENSIONS = [
   {
     key: "cost",
     prompt: `Find ways to cut the product's running cost per task and per user (model/API calls and tokens, connector
-calls, storage, compute) by at least 3x.${LEVER("cost per task and per user, at equal or better quality")}`,
+calls, storage, compute) by at least ${MIN}x.${LEVER("cost per task and per user, at equal or better quality")}`,
   },
   {
     key: "latency",
     prompt: `Find ways to cut latency the user or the integrating agent waits for (critical-path time, end-to-end task
-time, p50 and p90) by at least 3x.${LEVER("critical-path latency and task wall time, at equal or better quality")}`,
+time, p50 and p90) by at least ${MIN}x.${LEVER("critical-path latency and task wall time, at equal or better quality")}`,
   },
   {
     key: "quality",
     prompt: `Find ways to make the product markedly better at its own success metrics (read the evals and benchmarks to
-learn them), e.g. cutting the miss rate or the false-alarm rate by at least 3x.${LEVER("the error rate on the product's main quality metrics, at bounded cost")}`,
+learn them), e.g. cutting the miss rate or the false-alarm rate by at least ${MIN}x.${LEVER("the error rate on the product's main quality metrics, at bounded cost")}`,
   },
   {
     key: "scale",
     prompt: `Find ways to raise how much the system handles per machine (memory and CPU per user and per item,
 throughput, startup and sync/ingest time, behaviour on accounts 10-100x larger than the test worlds) by at least
-3x.${LEVER("memory per user, throughput and ingest time")}`,
+${MIN}x.${LEVER("memory per user, throughput and ingest time")}`,
   },
   {
     key: "devloop",
-    prompt: `Find ways to make working on this repo at least 3x faster or cheaper: check and test time, benchmark and
+    prompt: `Find ways to make working on this repo at least ${MIN}x faster or cheaper: check and test time, benchmark and
 experiment time and cost, time to answer "did my change help?".${LEVER("developer and experiment cycle time and cost")}`,
   },
   {
@@ -302,7 +305,7 @@ merged list.${READONLY}\n\n${JSON.stringify(raw)}`,
           parallel(
             [
               "Does the evidence hold? Re-read the cited code and re-run any cited command. Default to real=false if you cannot reproduce it.",
-              "Is the impact estimate sound and is the fix right (and not harmful)? Recompute the arithmetic from measured numbers, including whether a claimed >=3x really holds; check the fix against the repo rules. Default to real=false if the fix would not deliver the claimed effect.",
+              "Is the impact estimate sound and is the fix right (and not harmful)? Recompute the arithmetic from measured numbers, including whether the claimed multiple really holds and is at least the target; check the fix against the repo rules. Default to real=false if the fix would not deliver the claimed effect.",
             ].map(
               (lens, i) => () =>
                 agent(

@@ -1,6 +1,6 @@
 ---
 name: deep-audit
-description: Full audit-and-fix run. Hunts ambitiously for 3x-and-bigger improvements in cost, latency, quality, scale and the dev loop (plus first-principles redesigns), inefficiencies, correctness bugs and user pain points (security is out of scope; use /security-review for that); verifies each finding adversarially; writes an audit; dispatches subagents to fix everything on branches; reviews their work and loops until nothing material is left; then reports in plain language. Use when the user asks for a deep audit, an overhaul, "find and fix everything", or order-of-magnitude improvements across the repo.
+description: Full audit-and-fix run. Hunts ambitiously for 1.5x-and-bigger improvements (configurable) in cost, latency, quality, scale and the dev loop (plus first-principles redesigns), inefficiencies, correctness bugs and user pain points (security is out of scope; use /security-review for that); verifies each finding adversarially; writes an audit; dispatches subagents to fix everything on branches; reviews their work and loops until nothing material is left; then reports in plain language. Use when the user asks for a deep audit, an overhaul, "find and fix everything", or order-of-magnitude improvements across the repo.
 ---
 
 # Deep audit: find, verify, fix, review, repeat, report
@@ -14,7 +14,7 @@ Running this skill is the user's opt-in to multi-agent orchestration: call the W
 1. **Map**: one agent reads the repo's CLAUDE.md files and docs, runs the checks, and writes an orientation brief:
    areas, hot paths, how to measure, rules that constrain changes.
 2. **Find**: nine finders in parallel. Six are ambitious levers, each told to brainstorm at least 12 ideas (including
-   unconventional ones), measure the baseline, and keep only what the arithmetic says reaches **at least 3x**
+   unconventional ones), measure the baseline, and keep only what the arithmetic says reaches **at least 1.5x** (`minMultiple`, default 1.5)
    (10x or more ranks highest):
    - **cost**: model/API calls and tokens, connector calls, storage, compute per task and per user;
    - **latency**: what the user or integrating agent waits for, p50 and p90;
@@ -59,6 +59,7 @@ Running this skill is the user's opt-in to multi-agent orchestration: call the W
      "scope": "the whole repository",
      "focus": "<the user's emphasis, if any; plus 'do not edit: …' paths>",
      "date": "<YYYY-MM-DD>",
+     "minMultiple": 1.5,
      "maxRounds": 3,
      "maxFindings": 24,
      "maxPackages": 10,
@@ -97,11 +98,11 @@ Running this skill is the user's opt-in to multi-agent orchestration: call the W
 
 | Area | Found | Confirmed | Fixed + reviewed | Still open |
 |---|---|---|---|---|
-| Cost (≥3×) | … | … | … | … |
-| Latency (≥3×) | … | … | … | … |
-| Quality (≥3×) | … | … | … | … |
-| Scale (≥3×) | … | … | … | … |
-| Dev loop (≥3×) | … | … | … | … |
+| Cost (≥1.5×) | … | … | … | … |
+| Latency (≥1.5×) | … | … | … | … |
+| Quality (≥1.5×) | … | … | … | … |
+| Scale (≥1.5×) | … | … | … | … |
+| Dev loop (≥1.5×) | … | … | … | … |
 | Moonshots | … | … | … | … |
 | Inefficiencies | … | … | … | … |
 | User pain points | … | … | … | … |
