@@ -52,6 +52,11 @@ delivery also run `bun run eval --live` (needs `OPENROUTER_API_KEY`; costs fract
 
 ## Engineering rules
 
+- **One product (D111).** `DEFAULT_CONFIG` is the best measured configuration, and it is what ships: the servers run
+  it, with its model roles on when a model key is set and its no-model path when not. New behaviour enters behind a
+  trial switch with an owner and an end date (the trials table in docs/DECISIONS.md, below the decisions); at the
+  end it is promoted into the default (measured better or neutral at no extra paid cost) or deleted with its code and
+  tests. Lab presets are only `default` and `default minus <part>` (`PARTS` in `@eden/engine`).
 - **Silence by default; precision over recall.** A change that raises recall by also raising `falseFireRate` needs
   an explicit decision.
 - **Model last.** No model call on the fast path. Every model call goes through `Budget` and has bounded input.
