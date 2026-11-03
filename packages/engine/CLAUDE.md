@@ -26,7 +26,8 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `spans.ts`, `trace.ts` | Span tracing (off by default, content-free, D56); decision traces |
 | `gate.ts` | Redaction off the event loop through the worker pool (D25, D26) |
 
-`bench/`: `pipeline.bench.ts` (the end-to-end anchor for performance work), `concurrent`, `put`, `workload.ts`.
+`bench/`: `pipeline.bench.ts` (the end-to-end anchor for performance work), `ingest.bench.ts` (memory per synced
+user, ingest µs/item; the scale anchor, docs/TESTING.md), `concurrent`, `put`, `churn`, `workload.ts`.
 
 ## Invariants (with the decisions)
 

@@ -14,8 +14,8 @@ anything is held).
 | `src/schema-args.ts` | Arguments built from a tool's JSON schema (search, fetch, list), deterministic; operator `fixed` values win |
 | `src/shapes.ts` | Query shapes (terms, entities, one call per entity…); `inert` strips search-syntax operators from untrusted text |
 | `src/planner.ts` | `QueryPlanner`, `PlannedSource`: Thompson sampling over shapes per (tenant, user, connector), learned cascade (D28–D33, D38, D39) |
-| `src/guarded.ts` | `SourceFanout`: per-(user, source) breaker, AIMD, GCRA, histogram; singleflight; stale-on-failure result cache; `SharedCalls` (D48) |
-| `src/fanout.ts` | `searchSources`: the plain parallel search with per-source outcome |
+| `src/guarded.ts` | `SourceFanout`: per-(user, source) breaker, AIMD, GCRA, histogram; singleflight; stale-on-failure result cache; `SharedCalls` (D48); `list`'s `reuse` (`ListReuse`: a held, unchanged item is not redacted again) |
+| `src/fanout.ts` | `searchSources`: the plain parallel search with per-source outcome (an aborted `signal` is a "timeout", no call) |
 | `src/static-source.ts` | `StaticSource`: in-memory documents (tests, examples, `EDEN_SOURCES_FILE`) |
 | `src/fixtures/` | Real MCP `tools/list` schemas and search results captured from the connector lab (`packages/sim/src/lab/capture.ts`) |
 

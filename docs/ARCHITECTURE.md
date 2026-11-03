@@ -127,19 +127,23 @@ share) by fixed verb lexicons and sends one query of the class's fixed constrain
 only by a person's name. `judgeTied` skips the judge when no candidate is tied to the request by a probe, a named day,
 two request words, a rare word or a consequence find.
 
-**Background sync, "Eden Atlas"** (proposed D57, `sync`, off by default; `sync.ts`): sources with a read-only list
-tool (`Source.list`; `McpSource.listTool`, checked like the search tool) are read into each active user's cache in the
+**Background sync, "Eden Atlas"** (proposed D57, `sync`, off by default; `sync.ts`): sources with a read-only list tool
+(`Source.list`; `McpSource.listTool`, checked like the search tool) are read into each active user's cache in the
 background: a backfill of the newest items across sources, polls when a lookup finds a source stale by its learned
-change rate, a daily sweep that drops what a source has not listed in two sweeps in a row (about 48 h). Synced items have their own cap and TTL in the
-cache. A lookup answers every current synced source (its own search and every probe) from that local index at no
-call, and calls live only the sources that are not synced or still stale. The tick runs on a timer, never on the fast
-path, which only marks the user active. A poll lists `syncPageSize` (100) items a page, as backfill and sweeps do, and
-an on-demand poll reads at most `syncCatchupPages` (2) pages. With `syncPollPageSize` (proposed D101, 0 = off) a
-poll's first page is twice what the source's learned change rate expects since its last poll, at least that size and
-at most `syncPageSize`; while no page reaches what was already synced, the next tops the items asked up to the next
-multiple of `syncPageSize` (5, then 95, then 100). A poll then lists no more items than full pages would and catches
-up as far, in at most one more call (an on-demand poll: one to three calls, against one or two). Backfill and sweeps
-keep `syncPageSize`. `SyncStats` counts the items listed (`demandItems`, `backgroundItems`) beside the calls.
+change rate, a daily sweep that drops what a source has not listed in two sweeps in a row (about 48 h). Synced items
+have their own cap and TTL in the cache. A lookup answers every current synced source (its own search and every probe)
+from that local index at no call, and calls live only the sources that are not synced or still stale. The tick runs on a
+timer, never on the fast path, which only marks the user active. A listing redacts only what it brings new or changed:
+an item the cache holds whose raw copy hashes the same on what the gate reads (wyhash over the clipped fields,
+per-process seed) gets the held redacted copy back (`ItemCache.reuseFor`, `SourceFanout.list`'s `reuse`), so a sweep of
+an unchanged source costs about a tenth of what it did (`packages/engine/bench/ingest.bench.ts`, docs/TESTING.md). A
+poll lists `syncPageSize` (100) items a page, as backfill and sweeps do, and an on-demand poll reads at most
+`syncCatchupPages` (2) pages. With `syncPollPageSize` (proposed D101, 0 = off) a poll's first page is twice what the
+source's learned change rate expects since its last poll, at least that size and at most `syncPageSize`; while no page
+reaches what was already synced, the next tops the items asked up to the next multiple of `syncPageSize` (5, then 95,
+then 100). A poll then lists no more items than full pages would and catches up as far, in at most one more call (an
+on-demand poll: one to three calls, against one or two). Backfill and sweeps keep `syncPageSize`. `SyncStats` counts the
+items listed (`demandItems`, `backgroundItems`) beside the calls.
 
 **Poll behind the lookup** (D65, `syncPollBehind`, off by default; with `sync` and `syncOnDemand`): without it, a
 lookup that finds a synced source stale waits for that source's on-demand poll (`sync.freshen`, one or two listing
