@@ -518,6 +518,8 @@ export class SparseIndex {
   private allocateDoc(): number {
     const reused = this.freeDocs.pop();
     if (reused !== undefined) return reused;
+    // `bigTf` keys pack a doc number into 22 bits: past that a key would collide with the next one's.
+    if (this.docs >= DOC_SPAN) throw new RangeError(`SparseIndex holds at most ${DOC_SPAN} doc numbers`);
     const doc = this.docs++;
     if (doc >= this.where.length) {
       const size = this.where.length * 2;

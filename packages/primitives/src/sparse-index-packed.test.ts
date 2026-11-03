@@ -134,6 +134,29 @@ describe("SparseIndex (packed) matches the reference layout exactly", () => {
     expect(m.freedPacked).toEqual(m.freedReference);
   });
 
+  test("past 65,536 doc numbers (Uint32 doc arrays) and term ids past 16 bits, with purges", () => {
+    const m = mirror({ fields: 1 });
+    const live: number[] = [];
+    for (let i = 0; i < 70_000; i++) {
+      const terms = Uint32Array.of(i % 97, 70_000 + (i % 5_000), i % 13);
+      const d = m.packed.add(terms, 3);
+      expect(m.reference.add(terms, 3)).toBe(d);
+      live.push(d);
+      if (i % 50 === 49) {
+        const gone = live.splice(i % live.length, 1)[0]!;
+        m.packed.remove(gone);
+        m.reference.remove(gone);
+      }
+      if (i % 9_000 === 0) same(m, Uint32Array.of(5, 70_123, 3), 30);
+    }
+    m.packed.flush();
+    m.reference.flush();
+    same(m, Uint32Array.of(5, 70_123, 3), 30);
+    same(m, Uint32Array.of(96, 74_999), 50);
+    expect((m.packed as unknown as { fDocs: unknown }).fDocs).toBeInstanceOf(Uint32Array);
+    expect(m.freedPacked).toEqual(m.freedReference);
+  });
+
   test("a term view stays valid after the index freezes and purges", () => {
     const ix = new SparseIndex();
     const d = ix.add(Uint32Array.of(5, 3, 9), 3);

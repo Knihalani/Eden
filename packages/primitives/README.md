@@ -115,22 +115,28 @@ mode, item text excluded) run on main and on this branch:
 
 | Benchmark | Before | After |
 |---|---|---|
-| Index heap per item, 1 user × 6,892 items | 1,387 B | 388 B (3.57x) |
-| Index heap per item, 1 user × 2,000 items | 2,587 B | 744 B (3.48x) |
-| Index heap per item, 100 users × 200 items | 1,743 B (340 KB per user) | 527 B (103 KB per user; 3.30x) |
-| Index heap per item, 500 users × 20 items | 3,467 B (67.7 KB per user) | 897 B (17.5 KB per user; 3.86x) |
-| `ItemCache` heap per item, 1 user × 6,892 items | 2,219 B | 1,241 B (1.79x) |
+| Index heap per item, 1 user × 6,892 items | 1,387 B | 415 B (3.35x) |
+| Index heap per item, 1 user × 2,000 items | 2,588 B | 802 B (3.23x) |
+| Index heap per item, 100 users × 200 items | 1,743 B (340 KB per user) | 529 B (103 KB per user; 3.30x) |
+| Index heap per item, 500 users × 20 items | 3,467 B (67.7 KB per user) | 903 B (17.6 KB per user; 3.84x) |
+| `ItemCache` heap per item, 1 user × 6,892 items (item text excluded) | 2,124–2,219 B | 1,269–1,270 B (1.67–1.75x) |
 | `ingest.bench.ts` (200 users × 500 synced items, text included; two runs each): memory per user | 1,818 KB (3,723 B/item) | 1,272 KB (2,606 B/item; 1.43x) |
 | Same: backfill / unchanged sweep, µs per item | 122.0–137.8 / 5.7–6.5 | 118.9–130.0 / 4.2–5.7 |
-| `sparse-index-ab.bench.ts` (interleaved, median of 6) zipf search / remove + add, p50 | 10.44–19.39 / 15.01–19.86 µs | 10.71–18.50 / 9.45–12.01 µs |
-| Same, dense search / remove + add, p50 | 74.39–75.82 / 3.26–4.02 µs | 70.76–77.80 / 4.30–5.08 µs |
+| `sparse-index-ab.bench.ts` (interleaved; 6 runs, each the median of 6 rounds) zipf search / remove + add, p50 | 9.5–19.4 / 12.6–19.9 µs | 10.7–18.9 / 9.3–12.0 µs |
+| Same, dense search / remove + add, p50 | 74.4–80.8 / 3.1–4.1 µs | 68.6–118.0 / 3.6–5.3 µs |
 | `index-memory.bench.ts` search p50, 20 / 128 / 1,000 / 6,892 items (two runs) | 1.6–3.3 / 4.6–5.1 / 47.7–62.6 / 210.7–274.6 µs | 3.4–3.5 / 4.0–4.3 / 39.2–61.6 / 149.1–196.0 µs |
-| Same, churn at 6,892 (remove oldest + add): p50 / p99 / max | 4.6 / 48.3–51.1 µs / 12.5–16.5 ms | 4.6–7.7 / 72.3–79.2 µs / 23.1–40.3 ms |
-| Same, churn steps over 1 ms: count, median | 7, 5.7–7.2 ms | 13–15, 6.8–9.5 ms |
+| Same, churn at 6,892 (remove oldest + add, 5,000 steps; four runs): p50 / p99 | 4.6–7.9 / 40.0–51.1 µs | 4.4–7.7 / 66.4–104.2 µs |
+| Same: steps over 1 ms (count, median), worst step | 7, 5.7–7.7 ms; 11.8–20.2 ms | 13–15, 6.0–9.5 ms; 21.2–40.3 ms |
 
-The index is 3.3–3.9x smaller at every size measured. Search is unchanged within noise except for the smallest users
+The index heap counts the packed index's per-doc query scratch (20 B per doc slot), which the reference held per
+index and the packed index holds once per process, sized by the largest index: the bench adds it to the packed rows
+(the largest user's share; `sharedScratch`), and the `ItemCache` row above adds its 24 B/item by hand.
+
+The index is 3.2–3.8x smaller at every size measured. Search is unchanged within noise (the dense rows spread widely
+across runs in both directions; a reviewer's four runs gave 75.5–155.3 → 71.6–114.7 µs) except for the smallest users
 (20 items: about 2 µs slower, a scan of the delta instead of postings, still a few µs). The cost moved to puts: the
 reference compacted 7 times in 5,000 churn steps, the packed index purges at the same 7 points and also freezes its
-delta about as often again, so it pauses about twice as often, each pause one pass over the postings (median 7–9 ms
-at 6,892 items on this VM, with GC; the reference's compactions 6–7 ms) and its worst step (GC included) is higher.
+delta about as often again, so it pauses about twice as often, each pause one pass over the postings (median 6–9.5 ms
+at 6,892 items on this VM, with GC; the reference's compactions 5.7–7.7 ms) and its worst step (GC included) is
+higher.
 Measured on a shared VM, ±30% run to run.

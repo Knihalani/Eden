@@ -58,6 +58,25 @@ function heapBytes(): number {
   return process.memoryUsage().heapUsed;
 }
 
+/** One user's index. A function of its own, so no stack slot of the caller keeps it past the drop. */
+function build(impl: Impl, docs: Doc[]): Index {
+  const ix = make(impl);
+  for (const d of docs) add(ix, d);
+  return ix;
+}
+
+/**
+ * The packed index's per-doc query scratch (score, coverage, matches, stamp, touched: 20 bytes per doc slot, slots a
+ * power of two from 1,024) is one copy per process, sized by the largest index searched; the reference holds the same
+ * per index, so its readings include it. Searching a measured index here made JSC keep it reachable after the drop
+ * (a one-user reading came out as zero), so the packed rows add it by this count instead, for the largest user only.
+ */
+function sharedScratch(docs: number): number {
+  let slots = 1_024;
+  while (slots < docs) slots *= 2;
+  return 20 * slots;
+}
+
 /** Child: heap of `users` indexes of `per` items each (bytes per item, per user). */
 function heapChild(impl: Impl, users: number, per: number): void {
   // Warm the shared scratch (one copy per process) so it counts in no build.
@@ -74,11 +93,7 @@ function heapChild(impl: Impl, users: number, per: number): void {
   // Measured as the heap the indexes hold when dropped (heap with them less heap after dropping them): a reading
   // taken before building them counted up to ~10 MB of tokenizer garbage JSC had not yet swept.
   const held: Index[] = [];
-  for (const docs of corpora) {
-    const ix = make(impl);
-    for (const d of docs) add(ix, d);
-    held.push(ix);
-  }
+  for (const docs of corpora) held.push(build(impl, docs));
   const withIndexes = heapBytes();
   const count = held.length;
   held.length = 0;
@@ -194,13 +209,18 @@ else {
   ] as const) {
     const a = child(["heap", "reference", String(users), String(per)]) as { perItem: number; perUser: number };
     const b = child(["heap", "packed", String(users), String(per)]) as { perItem: number; perUser: number };
+    b.perUser += sharedScratch(per) / users; // the process's one copy, shared by its users
+    b.perItem += sharedScratch(per) / (users * per);
     console.log(
       `${label.padEnd(24)} ${`${a.perItem.toFixed(0)} B/item`.padStart(16)} ${`${b.perItem.toFixed(0)} B/item`.padStart(16)}` +
         `  ${(a.perItem / b.perItem).toFixed(2)}x   (per user ${(a.perUser / 1024).toFixed(1)} → ${(b.perUser / 1024).toFixed(1)} KB)`,
     );
   }
   const c = child(["cache"]) as { perItem: number };
-  console.log(`\nItemCache, 1 user × ${ITEMS.length} items (this tree's index): ${c.perItem.toFixed(0)} B/item\n`);
+  console.log(
+    `\nItemCache, 1 user × ${ITEMS.length} items (this tree's index; the packed index's shared query scratch, ` +
+      `${(sharedScratch(ITEMS.length) / ITEMS.length).toFixed(0)} B/item, not included): ${c.perItem.toFixed(0)} B/item\n`,
+  );
   for (const impl of ["reference", "packed"] as const) {
     console.log(impl);
     for (const n of [20, 128, 1_000, ITEMS.length]) console.log(`  ${speed(impl, n)}`);
