@@ -88,6 +88,7 @@ import { parseHermesConditions, type HermesCondition } from "./hermes-conditions
 import { edenMcpServer, labRouter, type StreamHost, type TaskBinding } from "./hermes-host";
 import { modelProxy, type RequestRecord } from "./hermes-proxy";
 import { Worker } from "./hermes-worker";
+import { TRAFFIC_WEIGHTS, weightedLines, weightedRow, type WeightedRow } from "./pi-ab-weighted";
 import { parseVariants } from "./pi-conditions";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
 import { PRESETS } from "./presets";
@@ -882,3 +883,16 @@ console.error(
     (stoppedStreams ? `; PARTIAL: ${stoppedStreams} streams stopped on a failure (logged above)` : ""),
 );
 console.error(overBudgetLine(budgeted));
+// Traffic-weighted rows (pi-ab-weighted.ts): most traffic is silent, so the hidden-only cost columns understate. The
+// full report (pi-ab-report.ts on OUT) prints the same rows beside the outcome tables.
+{
+  const kindOf = new Map(tasks.map((t) => [t.id, t.kind]));
+  const samplesOf = (c: string, kind: Task["kind"]) =>
+    results
+      .filter((r) => !r.error && r.condition === c && kindOf.get(r.task) === kind)
+      .map((r) => ({ usd: r.costUsd, edenUsd: r.edenCostUsd, tools: r.toolCalls, wallS: r.wallMs / 1_000 }));
+  const rows = TRAFFIC_WEIGHTS.flatMap((w) =>
+    CONDITIONS.map((c) => weightedRow(c.name, samplesOf(c.name, "hidden"), samplesOf(c.name, "control"), w)),
+  ).filter((r): r is WeightedRow => r !== null);
+  for (const line of weightedLines(rows)) console.error(line);
+}

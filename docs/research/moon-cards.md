@@ -124,6 +124,38 @@ a hiring freeze is carded correctly but "open a req" is not classed as hiring (a
 gained, so it was reverted); a standing "do not commit delivery dates to Umbrella Health" names the organisation
 while the request names only its contact; a coeliac diagnosis needs a name and the request says "my mum".
 
+## Negative result: card action triggers (audit 2026-11-03b, R3-22)
+
+Question: could matching a card's actions against the request's actions (`requestActions`, cards.ts:1177), gating
+on card kind, or cutting on age fix no-model misses or cut decoys 3x? No. The bottleneck is the closed regex
+lexicon, not how cards are matched; this supports a constraint index over a wider action vocabulary instead.
+
+Measured on train1–6, seeds 41–42 (384 hidden and 384 control tasks), joining planted items to `cards-v2.jsonl` +
+`cards-train.jsonl` by `cardKey(sanitizeItem(item))`, as `cards-census.ts` does. Each number is labelled with
+who reproduced it:
+
+| Measure | Value | Status |
+|---|---|---|
+| Requests where `requestActions` finds an action | 261/384 (68%); per suite 50, 46, 39, 36, 42, 48 of 64 | verified (two independent re-runs) |
+| Hidden items with a non-null card / of a DIGEST kind | 136 / 115 | verified |
+| Hidden items whose card's actions meet the request's | 52/384 | verified |
+| Decoys whose card's actions meet the request's | 37/384 (1.4x fewer than hidden) | verified |
+| Hidden items with a replayed card | 220 claimed, 224 on re-run | approximately verified (key differences) |
+| Decoy replayed / non-null / DIGEST cards | 217 / 99 / 48 claimed, 223 / 101 / 50 on re-run | approximately verified |
+| ALL3 baseline (`bun run funnel --jobs 8`) | hidden 214/384, decoys 211/384 | verified |
+| ALL3 gated on an active DIGEST card | hidden 60, decoys 24 (re-run 25): 2.4–2.5x separation, recall 214 to 60 | verified |
+| NEW2's 83 pool misses whose card meets the request's actions | 2 of 83 | unverified (needs the reader cache, not checked in) |
+| Action-indexed pool size | p50 3, p90 15 items | unverified |
+| Hidden/decoy pairs with the same age | 306/384 | unverified; plausible (`plantHidden` dates every planted item now − 1 day) |
+
+- **Action triggers** recover at most 2 of 83 misses (about 2%, unverified) and separate hidden from decoys only
+  1.4x (52 against 37).
+- **Card-kind gating** separates 2.4–2.5x, under the 3x bar, at the cost of 72% of recall (214 to 60).
+- **Age** cannot separate them: planted items and decoys mostly share an age.
+- Any lexicon widening is fitted on data held out of train and reports `requestActions` coverage on gate-traffic
+  sessions, so it is not tuned to the train suites' wording (broad-set.md).
+- No code changed.
+
 ## Risks
 
 - In-sample: the prompt and rules were tuned on the dev suites; the blind suites were not run.

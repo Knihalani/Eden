@@ -17,10 +17,15 @@
  * on hidden tasks: how often the fact was raised when Eden's packet cited the planted item, when only an
  * `ask_context` answer did, and when neither did. A variant or flag condition (`eden~ALL2`, `eden+packetDates`) is
  * paired with the condition it modifies.
+ *
+ * After the outcome tables, a traffic-weighted row per condition for w in {0.1, 0.5}: w × hidden + (1 − w) × control
+ * (pi-ab-weighted.ts; most traffic is silent, so hidden-only cost understates). `--weighted report.txt` prints the
+ * weighted means of a report kept only as text.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { Rng } from "../rng";
 import { backfillShares, type Background, type RunResult, type Task } from "./ab-common";
+import { TRAFFIC_WEIGHTS, weightedFromReport, weightedLines, weightedRow, type WeightedRow } from "./pi-ab-weighted";
 import { pairedWith } from "./pi-conditions";
 import { endpointMix, ENDPOINT_PRICES, FIXED_PRICES, repricedUsd } from "./reprice";
 import { uptakeWay } from "./uptake";
@@ -92,6 +97,12 @@ const flag = (name: string) => {
 if (flag("reconcile")) {
   // Exits 1 when the columns do not add up to the header's Eden total within $0.01, so a script can gate on it.
   process.exit(reconcile(flag("reconcile")!, flag("ledger") ?? "", flag("run") ?? "") ? 0 : 1);
+}
+if (flag("weighted")) {
+  // `--weighted report.txt`: the traffic-weighted means of a report kept only as text (no per-task samples, so no
+  // percentiles): the Haiku campaign's frontier (docs/research/haiku-phase3.md) was recomputed with it at $0.
+  for (const line of weightedLines(weightedFromReport(readFileSync(flag("weighted")!, "utf8")))) console.log(line);
+  process.exit(0);
 }
 const files = argv.filter((a, i) => a.endsWith(".json") && !argv[i - 1]?.startsWith("--"));
 if (!files.length) throw new Error("usage: pi-ab-report.ts pi-ab.json [more.json ...] [--timeline dir]");
@@ -209,6 +220,18 @@ for (const kind of KINDS) {
     ];
     console.log(cells.join(" "));
   }
+}
+
+// ---- Traffic-weighted rows: a mix of hidden and control tasks (pi-ab-weighted.ts); p50/p90 from the pooled samples.
+{
+  const samplesOf = (c: string, kind: Task["kind"]) =>
+    ok
+      .filter((r) => r.condition === c && tasks.get(r.task)!.kind === kind)
+      .map((r) => ({ usd: r.costUsd, edenUsd: r.edenCostUsd, tools: r.toolCalls, wallS: r.wallMs / 1_000 }));
+  const rows = TRAFFIC_WEIGHTS.flatMap((w) =>
+    conditions.map((c) => weightedRow(c, samplesOf(c, "hidden"), samplesOf(c, "control"), w)),
+  ).filter((r): r is WeightedRow => r !== null);
+  for (const line of weightedLines(rows)) console.log(line);
 }
 
 // ---- The critical path: where each task's wall time went.

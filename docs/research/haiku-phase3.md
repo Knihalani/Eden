@@ -168,7 +168,8 @@ honest measure.
 - The critical-path column is the mean over hidden and control tasks. Every row ran with connectors at 0 ms
   (`--time-scale 0`, the harnesses' default then), so it leaves out Eden's on-demand sync poll; the wall times
   leave out connector time for the tools conditions too. See the note of 2026-11-03.
-- The cost columns are per thousand hidden tasks.
+- The cost columns are per thousand hidden tasks. Most traffic is silent (control), and there the reader costs more:
+  the traffic-weighted frontier below prices both.
 - Paired differences, held-out 13:
   - NEW − ALL3: +25.8 (Pi), +38.3 (Hermes);
   - NEW2 − NEW: +0.8 (Pi eden), +3.1 (Pi both), +6.2 (Hermes, −0.8..+14.1);
@@ -215,6 +216,43 @@ only and all-in (with the cards' backfill, allocated as above).
 
 The backfill is the same for every point of a harness, so the ranking does not change; the gap to the tools arm
 (Pi $0.345, Hermes $0.358) widens by $0.106 (Pi) and $0.165 (Hermes) per 1k.
+
+### Traffic-weighted (audit 2026-11-03b, R3-21)
+
+The table above prices hidden tasks only. A deployment's traffic is mostly silent, and on control tasks the NEW
+family's reader costs more (Pi tool calls 1.24 a task against 0.63 on hidden; Eden $/1k NEW 0.778 against 0.553,
+1.41x; NEWL 0.532 against 0.388, 1.37x). The same frontier at w × hidden + (1 − w) × control, for w = 0.1 (one
+task in ten carries a fact) and w = 0.5 (Bar 5's mix, pi-full-benchmark.md). Agent + Eden $ per 1k tasks; all-in
+adds the backfill, which is spread over every task run and so is the same at every w. The hidden-only (w = 1)
+columns are the table above.
+
+| Point | Pi reader only, w 0.1 / 0.5 | Pi all-in, w 0.1 / 0.5 | Pi Eden only, w 0.1 / 0.5 | Hermes reader only, w 0.1 / 0.5 | Hermes all-in, w 0.1 / 0.5 | Hermes Eden only, w 0.1 / 0.5 |
+|---|---|---|---|---|---|---|
+| tools arm | 0.348 / 0.347 | 0.348 / 0.347 | 0 / 0 | 0.348 / 0.353 | 0.348 / 0.353 | 0 / 0 |
+| ALL3 | 0.382 / 0.379 | 0.488 / 0.485 | 0 / 0 | 0.420 / 0.410 | 0.585 / 0.575 | 0 / 0 |
+| NEWL | 0.833 / 0.747 | 0.939 / 0.853 | 0.518 / 0.460 | 0.686 / 0.660 | 0.851 / 0.825 | 0.290 / 0.284 |
+| NEW | 1.079 / 0.961 | 1.185 / 1.067 | 0.756 / 0.666 | 0.823 / 0.791 | 0.988 / 0.956 | 0.420 / 0.413 |
+| NEW2 | 1.135 / 1.013 | 1.241 / 1.119 | 0.820 / 0.721 | 0.860 / 0.847 | 1.025 / 1.012 | 0.455 / 0.456 |
+
+- Recomputed at $0 from the committed reports (no paid run); "Eden only" is the reader-only (Eden) column:
+
+  ```bash
+  bun packages/sim/src/lab/pi-ab-report.ts --weighted packages/sim/lab/haiku/phase3/report-pi-h13.txt
+  bun packages/sim/src/lab/pi-ab-report.ts --weighted packages/sim/lab/haiku/phase3/report-h-h13.txt
+  ```
+
+  All-in adds the backfill above ($0.106 Pi, $0.165 Hermes) by hand.
+- **What moves.** On Pi at w = 0.5, NEW costs $0.961/1k against tools' $0.347: 2.77x, against 2.36x on hidden
+  tasks alone (0.814 / 0.345), and the gap to tools grows from $0.469 to $0.614. At w = 0.1 it is 3.10x. On Hermes
+  the control-task penalty is small (NEW Eden only 0.403 hidden, 0.422 control), so the weighted frontier barely
+  moves. No ranking changes, NEW still fails Bar 5 at every w, and the D98 recommendation stands.
+- **Wall time is not weighted here.** A weighted p50/p90 must come from the pooled per-task samples (a weighted
+  average of two p50s is not the p50 of the mix), and the campaign's raw results are not kept, so these reports
+  give only the means. The per-kind p50s show the direction: Pi NEW 3.72 s hidden, 5.39 s control (ALL3 3.29 /
+  3.44); NEW's wall penalty over ALL3 is +0.43 s on hidden and +1.95 s on control. New `pi-ab-report.ts` and
+  `hermes-ab.ts` output prints weighted p50/p90 from the pooled samples (`pi-ab-weighted.ts`).
+- The control-task cost points at the ask path: on control tasks the agent calls `ask_context` about twice as
+  often, and each call can wake the reader.
 
 - **NEW stays the recommended configuration (D98).**
 - **NEWL is the cheaper point.** It gives up a few points (0–4 on blind, up to 8 on train in one arm) for about 30%

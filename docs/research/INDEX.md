@@ -65,7 +65,7 @@ and ALL4 (D84) branch off ALL3 (`packages/sim/src/lab/presets.ts`).
 | [moon-telemetry.md](moon-telemetry.md) | 2026-10-31 | D56 | Engine-wide span tracing, a run recorder and report; two optimisations | adopted (spans off by default) |
 | [moon-sync.md](moon-sync.md) | 2026-10-31 | D57, D63 | "Eden Atlas": background sync into a per-user local index | adopted (ALL3) |
 | [moon-graph.md](moon-graph.md) | 2026-10-31 | D58 | Per-user knowledge graph with a 2 ms graph walk, no model | adopted (ALL3) |
-| [moon-cards.md](moon-cards.md) | 2026-10-31 | D59 | Implication cards made in the background by a model, matched at request time with no model | adopted (ALL3) |
+| [moon-cards.md](moon-cards.md) | 2026-10-31 | D59 | Implication cards made in the background by a model, matched at request time with no model; negative result (2026-11-03b): card action triggers, kind gating and age cuts cannot reach 3x (the action lexicon is the limit) | adopted (ALL3); triggers rejected |
 | [moon-anticipate.md](moon-anticipate.md) | 2026-10-31 | D60 | Read each event for what the agent will need next and prefetch it | adopted (ALL3) |
 | [moon-pi.md](moon-pi.md) | 2026-10-31 | D61 | The Pi harness as the standard live agent, with a per-task timeline | adopted (tooling) |
 | [moonshots.md](moonshots.md) | 2026-10-31 | D62, D63 | The six tracks on one tree; configuration R; review fixes | superseded (R → ALL → ALL3) |
