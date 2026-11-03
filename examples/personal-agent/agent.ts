@@ -54,7 +54,10 @@ let messages: Message[] = [
 await eden.observe({ kind: "session_start", agent: "example" });
 // waitMs: this agent can afford a short wait on the first turn for a fresher lookup. Set EDEN_WAIT_MS to about 3000
 // when the server runs the experimental reader (NEW, D98): see "How long to wait" in docs/INTEGRATION.md.
-const waitMs = Number(process.env.EDEN_WAIT_MS) || 1_500;
+// Unset or empty keeps the 1,500 default; EDEN_WAIT_MS=0 turns the wait off (`|| 1_500` would treat 0 as unset).
+const rawWaitMs = process.env.EDEN_WAIT_MS;
+const parsedWaitMs = rawWaitMs === undefined || rawWaitMs === "" ? 1_500 : Number(rawWaitMs);
+const waitMs = Number.isFinite(parsedWaitMs) ? Math.max(0, parsedWaitMs) : 1_500;
 const { injection } = await eden.observe({ kind: "user_message", text: userText }, { waitMs });
 
 for (let step = 0; step < 5; step++) {
