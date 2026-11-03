@@ -17,6 +17,14 @@ cleared) is read from the working directory, so `bun test` started inside a pack
 a change outside packages/ and examples/ (scripts, bun.lock, tsconfig, bunfig) as "run everything", and skips
 Markdown-only changes. `TEST_SERIAL=1 bun run test` runs in one process, as before parallelism.
 
+A bare `bun test` at the repo root skips `archived/` through `pathIgnorePatterns` in `bunfig.toml`, so it runs the
+same 102 files as `scripts/test.sh`, but serially: 1,362 pass, 0 fail in 30.0 s (Bun 1.4.4, 2026-11-03). Before the
+ignore it also ran archived/'s 530 test files: 687 files, 487 fail, about 215 s. `bun run test` stays the parallel
+path (about 16 s). The key was checked on Bun 1.3.13 (`packageManager`) too: 102 files and a planted failing test
+under archived/ not run. On 1.3.13 three tests in those files fail (`utf8.test.ts` astral/lone-surrogate length, also
+failing with the old bunfig, and two `redos.test.ts` timing tests), and the run took 107 s; the gate is measured on
+1.4.4.
+
 ## Caches in format:check and typecheck (measured 2026-11-03, 4-core container, Bun 1.4.4)
 
 `scripts/format.sh` runs Prettier with `--cache --cache-strategy content`, and `scripts/typecheck.sh` runs `tsc
