@@ -60,6 +60,9 @@ Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-b
   haiku-phase3 row) ran at 0, connectors instant; compare like with like. Use 0 only for a stated quality-only rerun.
   In the funnel the poll was about 91% of ALL3's critical path at `--time 1`; ALL3B cut ms/task 481.8 to 26.5 on
   train1–6 seeds 41–42 with an empty task-by-task diff (docs/research/haiku-phase3.md, note of 2026-11-03).
+  Any pi-ab/hermes-ab Reproduce command dated before 2026-11-03 (hermes-lab.md, haiku-benchmark.md, edge-combined.md,
+  edge-freelab.md and the rest) needs `--time-scale 0` added to reproduce its numbers: at 1 the tools conditions
+  also get connector errors and per-second rate limits (sources.ts). `lab/haiku/run.sh` and `run-w.sh` pin 0.
 - `--cards FILE` is only read; new cards go to `--cards-out` (default `<out>.cards.jsonl`): name it in later runs.
 - Hermes needs a hermes-agent checkout with `<src>/.venv` (`uv sync --frozen --no-install-project`); the first task
   of each stream pays worker start-up (exclude it from wall times).
