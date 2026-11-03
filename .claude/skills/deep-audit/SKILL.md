@@ -38,7 +38,12 @@ Running this skill is the user's opt-in to multi-agent orchestration: call the W
 6. **Integrate**: approved branches are merged into `audit/<date>-integration`, and the full checks run there.
 7. **Repeat**: the finders run again on what changed and on anything still open, until a round finds nothing material
    (no verified finding above "low") or the round limit is reached.
-8. **Report**: a plain-language summary goes at the top of the audit file and comes back to you.
+8. **Finalize, no loose ends**: every flag or option the run added is measured on against off. It is then made the
+   default (with a decision row), removed with its dead code, or kept off only with a recorded reason and a next
+   step. Every deferred or unresolved item is resolved or decided in writing. Approved branches left unmerged, new
+   TODO/FIXME lines and docs that disagree with the code are fixed. These fixes get the same fix → review → merge
+   loop, for up to two passes.
+9. **Report**: a plain-language summary goes at the top of the audit file and comes back to you.
 
 ## How to run it
 
@@ -72,6 +77,10 @@ Running this skill is the user's opt-in to multi-agent orchestration: call the W
    ```
    Scale down for a small repo or a quick pass (`maxRounds: 1`, `maxFindings: 10`). Scale up only if the user asked
    for exhaustive. Each round runs up to about 5 finders, 2 verifiers per finding, and 2 agents per package attempt.
+   Speed: a workflow runs at most (CPU cores − 2) agents at once, so a 4-core container runs 2. Expect hours for
+   a full run there. The run already avoids waste: it verifies only the findings it will fix this round, gives fixers
+   the reviewer's checklist up front (fewer reject-and-redo cycles), and uses fast checks while iterating with one
+   full check at the end.
    Say the expected scale in one line before starting. A round runs about 9 finders, up to 2 verifiers per
    finding, 2 agents per package attempt, and a cleanup step that frees finished worktrees.
 4. **While it runs**, stay available. If the user interjects, answer; don't stop the run unless they ask.
