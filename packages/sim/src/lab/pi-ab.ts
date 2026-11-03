@@ -44,7 +44,7 @@
  *
  *   OPENROUTER_API_KEY=… bun packages/sim/src/lab/pi-ab.ts [--suite heldout] [--seeds 41] [--variants hidden,control]
  *     [--conditions none,tools,eden,both] [--config H|'{"probes":true}'] [--model z-ai/glm-5.3-flash]
- *     [--grader anthropic/claude-haiku-5.5] [--budget 0.6] [--out pi-ab.json] [--timeline dir] [--time-scale 0]
+ *     [--grader anthropic/claude-haiku-5.5] [--budget 0.6] [--out pi-ab.json] [--timeline dir] [--time-scale 1]
  *     [--tool-exec parallel|sequential] [--tasks 30] [--offworld 5] [--limit n] [--dry]
  *     [--variant-config '{"name":{...}}'] [--act] [--cards FILE [--cards-out FILE]] [--card-sort price]
  *     [--allow-logging] [--rpm 18] [--max-requests N] [--intent FILE] [--bridge FILE] [--bridge-model m]
@@ -53,8 +53,13 @@
  * server's guided description (`askGuard`, docs/research/edge-ask.md). Free models go through `free.ts` (above).
  *
  * --budget is a hard cap on everything this run spends (agent, Eden's judge, grader): each call reserves its
- * worst case before it is sent and is refused when that could cross the cap. --time-scale 1 gives the sim sources
- * their profiles' assumed latency (agent-ab runs them at 0, instant); the timeline then shows connector time.
+ * worst case before it is sent and is refused when that could cross the cap. --time-scale (default 1) gives the sim
+ * sources their profiles' assumed latency (sources.ts REALISTIC), so Eden's on-demand sync poll and every tools
+ * condition's connector calls cost what they would at that assumed speed; the timeline then shows connector time.
+ * Runs before 2026-11-03 used 0 (instant connectors), which hid the poll (91% of ALL3's critical path in the funnel at
+ * --time 1). Pass `--time-scale 0` only for a quality-only rerun whose latency columns nobody will read, and say so in
+ * the write-up: it is faster in wall time, but probe grace (`probes.grace`) and timeouts can still shift quality
+ * between 0 and 1. The header, the summary line and the results file all record the scale.
  *
  * Free models (`<model>:free`, docs/research/edge-freelab.md): every OpenRouter request of the run (agent, Eden's
  * judge and cards, grader) goes through one `Pacer` (`free.ts`): `--rpm` (default 18 a minute with a free model),
@@ -147,7 +152,7 @@ const ACT = args.includes("--act");
 const CONDITION_NAMES = opt("conditions", ACT ? "tools,eden,eden-act-firewall" : "none,tools,eden,both").split(",");
 const OUT = opt("out", "pi-ab.json");
 const TIMELINE = opt("timeline", `${OUT.replace(/\.json$/, "")}.timeline`);
-const TIME_SCALE = Number(opt("time-scale", "0"));
+const TIME_SCALE = Number(opt("time-scale", "1"));
 const TOOL_EXEC = opt("tool-exec", "parallel") as "parallel" | "sequential";
 const LIMITS = { maxTasks: Number(opt("tasks", "30")), maxOffworld: Number(opt("offworld", "5")) };
 // The first N tasks of each world only: a plumbing check before a real run.
@@ -1015,7 +1020,8 @@ const worlds = SEEDS.flatMap((seed) =>
 console.error(
   `pi-ab: ${worlds.reduce((n, w) => n + w.tasks.length, 0)} tasks × ${CONDITIONS.length} conditions ` +
     `(${CONDITIONS.map((c) => c.name).join(",")}), model ${MODEL}, grader ${GRADER}, cap $${BUDGET}, suites ` +
-    `${SUITE_LIST.join(",")}, config ${JSON.stringify(CONFIG)}` +
+    `${SUITE_LIST.join(",")}, time-scale ${TIME_SCALE}${TIME_SCALE === 0 ? " (connectors at 0 ms)" : ""}, ` +
+    `config ${JSON.stringify(CONFIG)}` +
     (Object.keys(CONFIG_VARIANTS).length ? `, variants ${JSON.stringify(CONFIG_VARIANTS)}` : "") +
     (CARDS_FILE ? `, cards ${CARDS_FILE} (${diskCards!.cards.size} replayed; new → ${CARDS_OUT})` : "") +
     (ACCESS.allowLogging ? ", ALLOW-LOGGING (lab only)" : "") +
@@ -1076,8 +1082,8 @@ writeFileSync(
 const ungraded = results.filter((r) => !r.error && !r.facts && tasks.find((t) => t.id === r.task)!.must.length).length;
 console.error(
   `spent $${spent.toFixed(4)} (agent $${spend.agent.toFixed(4)}, eden $${spend.eden.toFixed(4)}, grader ` +
-    `$${spend.grader.toFixed(4)}); ${results.length} runs, ${ungraded} ungraded → ${OUT}, timeline ${TIMELINE}; ` +
-    `${PACER.sent} requests (${PACER.retried} retried, ${JSON.stringify(PACER.statuses)})` +
+    `$${spend.grader.toFixed(4)}); ${results.length} runs, ${ungraded} ungraded → ${OUT}, timeline ${TIMELINE}, ` +
+    `time-scale ${TIME_SCALE}; ${PACER.sent} requests (${PACER.retried} retried, ${JSON.stringify(PACER.statuses)})` +
     (capStopped || PACER.refused ? `; PARTIAL: request cap reached (${capStopped} streams stopped early)` : ""),
 );
 console.error(overBudgetLine(budgeted));

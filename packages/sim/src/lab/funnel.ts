@@ -8,7 +8,8 @@
  *     [--no-ask] [--json out.json] [--baseline earlier.json] [--record] [--blind] [--jobs N]
  *     [-- more hidden-funnel flags]
  *
- * - `--preset`: a name from presets.ts (H, ALL3, ALL5, NEW) or `none` (production defaults). `--set` adds flags.
+ * - `--preset`: a name from presets.ts (H, ALL3, ALL3B, ALL5, NEW, NEWB, NEWL, NEW2) or `none` (production
+ *   defaults). `--set` adds flags.
  * - `--cards default`: the checked-in card caches (cards-v2 for dev/held-out worlds, cards-train for train), merged
  *   into a temp file; used when the configuration has `cards`.
  * - `--baseline`: a `--json` file of an earlier run on the same suites and seeds; prints, task by task, the hidden

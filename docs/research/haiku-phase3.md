@@ -57,14 +57,15 @@ comes from a command run in this session. The committed outputs are in `packages
 
 The parent's targets were:
 - Eden's request-time cost per task at or below ALL3's;
-- Eden on the critical path below 100 ms;
+- Eden on the critical path below 100 ms (judged with connectors at 0 ms, `--time-scale 0`; see the note of
+  2026-11-03 below);
 - hidden fact at or above NEW's.
 
 Three measured facts bound what is possible here:
 
 1. **The agent's own model is most of the bill and most of the wall time.** In Phase 2's Pi matrix:
    - the agent was $5.71, the reader $3.19 and the cards $1.01 (the grader is lab-only);
-   - wall p50 is 3.2 s with ALL3, where Eden's critical path is 36 ms.
+   - wall p50 is 3.2 s with ALL3, where Eden's critical path is 36 ms (connectors at 0 ms, `--time-scale 0`).
 
    So Eden alone cannot cut total cost or wall time tenfold. It can only get back to ALL3's.
 2. **The reading has to land before the agent answers.**
@@ -127,7 +128,7 @@ honest measure.
   about ±6 points.
 - **Held-out 13:** seeds 41–44, Pi and Hermes, the final check.
 
-| Condition (held-out 13) | Hidden | False concern | Wall p50 / p90 s | Eden on critical path ms | Eden $ / 1k tasks | Agent + Eden $ / 1k tasks |
+| Condition (held-out 13) | Hidden | False concern | Wall p50 / p90 s | Eden on critical path ms, connectors at 0 ms (--time-scale 0) | Eden $ / 1k tasks | Agent + Eden $ / 1k tasks |
 |---|---|---|---|---|---|---|
 | Pi none | 0.0% | 0.0% | 2.21 / 3.09 | 0 | 0 | 0.184 |
 | Pi tools | 8.6% | 0.0% | 3.39 / 4.82 | 0 | 0 | 0.345 |
@@ -143,7 +144,9 @@ honest measure.
 | Hermes + NEW2 | 78.1% | 3.9% | 3.79 / 7.08 | 1,548 | 0.456 | 0.830 |
 | Hermes + NEWL | 71.1% | 0.0% | 3.05 / 6.44 | 1,236 | 0.276 | 0.628 |
 
-- The critical-path column is the mean over hidden and control tasks.
+- The critical-path column is the mean over hidden and control tasks. Every row ran with connectors at 0 ms
+  (`--time-scale 0`, the harnesses' default then), so it leaves out Eden's on-demand sync poll; the wall times
+  leave out connector time for the tools conditions too. See the note of 2026-11-03.
 - The cost columns are per thousand hidden tasks.
 - Paired differences, held-out 13:
   - NEW − ALL3: +25.8 (Pi), +38.3 (Hermes);
@@ -151,6 +154,31 @@ honest measure.
   - NEWL − NEW: −3.9 (Pi eden, −12.5..+4.7), −0.8 (Hermes, −8.6..+7.0).
 
   The full tables and intervals are in `agg-h13.txt`.
+
+### Note, 2026-11-03: these latency columns hide connector time
+
+Pi and Hermes ran every row above with the sim sources at 0 ms (`--time-scale 0`). At the profiles' assumed latency
+(`sources.ts` REALISTIC, `--time 1`), the no-model funnel shows that Eden's on-demand sync poll dominates its time,
+and that letting a warm poll run behind the search (`syncPollBehind`, preset ALL3B) removes it from the path with no
+change in what is delivered. Measured with `bun run funnel` (no model, cards replayed, `--ask`), on this tree:
+
+| Run | Suites, seeds | ms/task ALL3 | ms/task ALL3B | Hidden / decoys surfaced, both | Task-by-task diff |
+|---|---|---|---|---|---|
+| `--jobs 4 -- --time 1` (one job: `--time` needs one process) | train1–6, 41–42 | 481.8 | 26.5 (18.2x) | 214/384, 211/384 | hidden +0 −0, decoys +0 −0 |
+| `--suite train1 --seeds 41 -- --time 1` | train1, 41 | 414.5 | 36.3 (11.4x) | 22/32, 22/32 | hidden +0 −0, decoys +0 −0 |
+
+- Delivered and surfaced are identical task by task. "Returned" (the planted item in the raw search results) fell
+  from 11/384 to 9/384 (train1: energy-fix-exit-fees and company-cards-suspended, 1/2 to 0/2 each), because those
+  searches now answer from the warm copy before the poll lands.
+- On-demand sync calls on the lookups' traces fell from 2.68 to 0.07 a task; the connectors still received 2,054
+  on-demand listings, now behind the search. Amortised source calls: 4.36 to 4.26 a task.
+- What this does not show: the trade D57/D40 name (a stale warm copy answers first, its correction waits for the next
+  request) cannot happen in the static sim worlds, and an empty no-model diff did not predict ALL2's live loss (D72).
+  `syncPollBehind` alone still needs the pre-registered live blind run D72 left open, on a new held-out suite.
+- From now on pi-ab and hermes-ab default to `--time-scale 1` and print the scale in their header, summary and results
+  file. Comparing a new run with the rows above needs `--time-scale 0`, or a rerun of the baseline at 1. The 13.8x
+  and 21.8x gaps one gets from 414 ms against the Pi and Hermes ALL3 rows (30 and 19 ms) are estimates across suites
+  and harnesses, not a measurement.
 
 ## The frontier, and the recommendation
 
@@ -198,7 +226,7 @@ Points, held-out 13: hidden fact raised, and agent + Eden cost per 1k hidden tas
 H=.local/haiku; L3="--spend-ledger $H/ledger-p3.jsonl --spend-cap 30 --spend-headroom 2"
 V='{"NEW":{...PRESETS.NEW},"NEW2":{...,"askReaderQuestions":true,"askReaderStanding":20},
     "NEWL":{...NEW,"readerGate":true,"askReaderPool":15,"askReaderItemChars":240}}'   # as in phase3 run3.sh
-bun packages/sim/src/lab/pi-ab.ts --suite heldout13 --seeds 41 --variants hidden,control --config ALL3 \
+bun packages/sim/src/lab/pi-ab.ts --suite heldout13 --seeds 41 --variants hidden,control --config ALL3 --time-scale 0 \
   --variant-config "$V" --cards $H/cards/cards-v2.jsonl --intent $H/intent/intent-v2.jsonl \
   --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 --model claude-haiku-5-5 --grader claude-haiku-5-5 \
   --conditions none,tools,eden,eden~NEW,eden~NEW2,eden~NEWL,both~NEW,both~NEW2 $L3 --out p3-pi-h13-s41.json
