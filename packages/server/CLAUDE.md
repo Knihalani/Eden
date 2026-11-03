@@ -11,7 +11,7 @@ defaults.
 | `src/http.ts` | `createHandler`: `/v1/events` (`?waitMs=`, clamped 0–5,000), `/v1/ask`, `/v1/check`, `/v1/pending`, `/v1/digest`, `/v1/feedback`, `/v1/forget`, `/healthz`; auth (the key fixes the tenant; dev mode accepts a missing key, never a wrong one); 429 with Retry-After past the tenant's rate; 413 when the declared content-length passes `maxBodyBytes` (D100) |
 | `src/build.ts` | `buildPartner` (production defaults: query planner serving D33, no experimental flag unless `engine` passes it), `startGatePool` (`EDEN_GATE_WORKERS`, D26) |
 | `src/config.ts` | `loadConfig`: every `EDEN_*` variable validated at startup with a message naming it; `stdioSourceMapPath` (one source-map file per tenant/user under `$EDEN_HOME/mcp-stdio`, or `EDEN_SOURCE_MAP`) |
-| `src/engine-config.ts` | `engineConfig`: `EDEN_ENGINE_CONFIG`, a JSON file of `EngineConfig` keys over the defaults (D103); unknown keys, wrong types, out-of-range numbers (`RANGES`), unknown `anticipateOff` parts and non-default settings needing an unwired dep stop startup (D104); `docs/profiles/*.json` are parsed by its test |
+| `src/engine-config.ts` | `engineConfig`: `EDEN_ENGINE_CONFIG`, a JSON file of `EngineConfig` keys over the defaults (D103); unknown keys, wrong types, out-of-range numbers (`RANGES`), unknown `anticipateOff` parts and non-default settings needing something the servers lack (an unwired dep, a push route, listable sources) stop startup (D104, D106); `docs/profiles/*.json` are parsed by its test, and `test:changed` runs it when they change |
 | `src/mcp.ts` | `createMcpServer`: one `ask_context` tool (guided description with `askGuard`, D88) |
 | `src/mcp-stdio.ts` | One user's `ask_context` over stdio (`EDEN_TENANT`, `EDEN_USER`, `EDEN_SOURCES_FILE`); persists its source map per user, falling back to an in-memory map (logged to stderr) when the file cannot be opened (`openSourceMap`); warms the gate before connecting |
 | `src/connectors.ts` | `staticResolver`: sources from a JSON file; per-user OAuth MCP connections are roadmap M2 |
@@ -29,11 +29,17 @@ defaults.
   `buildPartner({ engine })` or the deployment's `EDEN_ENGINE_CONFIG` file turns it on; unset, the partner's config
   deep-equals `DEFAULT_CONFIG` (`engine-config.test.ts`). Never import presets from `@eden/sim` here. Do not read lab
   options (`allowLogging`, Anthropic models) from the environment.
-- **The file turns on only what the servers can run (D103, D104).** `buildPartner` wires no cards, bridge or
+- **The file turns on only what the servers can run (D103, D104, D106).** `buildPartner` wires no cards, bridge or
   reader, so `engineConfig` refuses `cards`, `intent`, `bridgeQuery`, `askReader`, `readerPush` and their
-  sub-settings (`NEEDS_DEP`) set to anything but their default (numbers and lists included, D104): the engine would
-  accept them and do nothing. The NEW family therefore cannot run from the shipped servers; ALL3 minus `cards` can
-  (`docs/profiles/`, measured there, none recommended). Wire a paid model dep only under a decision with a
+  sub-settings (`readerPushBehind` included) set to anything but their default (`NEEDS_DEP`, numbers and lists
+  included, D104): the engine would accept them and do nothing. It refuses `syncPush*` (no route relays source
+  watches and change notices to `sourcePushes`/`sourceChanged`) and `sync` (the servers build only `StaticSource`s,
+  which cannot be listed) the same way, each with its own message (D106). With `sync` refused, every other `sync*`
+  key (`syncPollBehind` included) is refused off its default too, with the list message: each acts only with sync on.
+  A new reader, card, bridge, intent, digest, push or sync key fails `engine-config.test.ts` until it is in
+  `NEEDS_DEP` or allow-listed there with a reason. The NEW
+  family therefore cannot run from the shipped servers; ALL3 minus `cards` and `sync` can (`docs/profiles/`,
+  measured there, none recommended). Wire a paid model dep only under a decision with a
   COST-MODEL.md entry, then drop its keys from `NEEDS_DEP`. An explicit `buildPartner({ askWithModel })` (true or
   false) wins over `engine.askWithModel`; the servers pass it only for `EDEN_ASK_MODEL=1`, so the file's value
   holds otherwise.

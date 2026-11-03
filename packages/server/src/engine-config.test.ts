@@ -87,6 +87,78 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     for (const dep of new Set(Object.values(needs))) expect(partner.deps[dep]).toBeUndefined();
   });
 
+  test("readerPushBehind, syncPush* and sync are refused, naming what the servers lack (audit 2026-11-03b r3)", () => {
+    // readerPushBehind acts only on the reader's push (partner.ts ask with internal.push), so it needs the reader.
+    expect(() => parseEngineConfig({ readerPushBehind: true })).toThrow(
+      /"readerPushBehind" needs the partner's reader dependency/,
+    );
+    // Push sync acts only once a route relays source watches and change notices (sourcePushes, sourceChanged).
+    for (const [key, value] of [
+      ["syncPush", true],
+      ["syncPushMaxStaleMs", 1000],
+      ["syncPushSweepMs", 1000],
+      ["syncPushGapMs", 1000],
+    ] as const) {
+      expect(() => parseEngineConfig({ [key]: value })).toThrow(
+        new RegExp(`"${key}" needs a server route that relays source watches and change notices`),
+      );
+    }
+    // The servers build only StaticSources (connectors.ts), which have no list tool: sync would list nothing.
+    expect(() => parseEngineConfig({ sync: true })).toThrow(/"sync" needs sources with a list tool/);
+    const path = file("sync.json", JSON.stringify({ probes: true, sync: true }));
+    expect(() => engineConfig({ EDEN_ENGINE_CONFIG: path })).toThrow(/EDEN_ENGINE_CONFIG .*"sync" needs sources/);
+    // With sync refused, its sub-settings would start cleanly and do nothing (partner.ts gates them on this.sync).
+    for (const [key, value] of [
+      ["syncPollBehind", true],
+      ["syncOnDemand", false],
+      ["syncWide", true],
+      ["syncPollPageSize", 5],
+      ["syncEveryMs", 60_000],
+      ["syncStaleChance", 1],
+    ] as const) {
+      expect(() => parseEngineConfig({ [key]: value })).toThrow(new RegExp(`"${key}" needs sources with a list tool`));
+    }
+    // Their defaults stay accepted.
+    const defaults = {
+      readerPushBehind: false,
+      sync: false,
+      syncPush: false,
+      syncPushMaxStaleMs: DEFAULT_CONFIG.syncPushMaxStaleMs,
+      syncPushSweepMs: DEFAULT_CONFIG.syncPushSweepMs,
+      syncPushGapMs: DEFAULT_CONFIG.syncPushGapMs,
+    };
+    expect(parseEngineConfig(defaults)).toEqual(defaults);
+  });
+
+  test("every reader, card, bridge, intent, digest, push and sync key is refused off its default or allow-listed", () => {
+    // A new key of these families acts only through something the servers do not wire (a paid model dependency, a
+    // push route) unless shown otherwise. Each must be refused at a non-default value, or listed here with the reason
+    // it does something from the shipped servers.
+    const allowed: Record<string, string> = {};
+    const other = (value: unknown): unknown => {
+      if (typeof value === "boolean") return !value;
+      // A legal non-default (`RANGES` is checked first): 0 is illegal for sizes, and a share must stay at most 1.
+      if (typeof value === "number") return value === 0 ? 1 : Number.isInteger(value) ? value + 1 : value / 2;
+      if (Array.isArray(value)) return value.length ? [] : ["x"];
+      throw new Error(`no non-default value for ${JSON.stringify(value)}`);
+    };
+    // Sync is refused while the servers build no listable sources, so every sync sub-setting would be inert too.
+    const keys = Object.keys(DEFAULT_CONFIG).filter((key) => /reader|card|bridge|intent|digest|push|^sync/i.test(key));
+    expect(keys.length).toBeGreaterThanOrEqual(36 + 18);
+    const unguarded: string[] = [];
+    for (const key of keys) {
+      if (allowed[key] !== undefined) continue;
+      const value = other(DEFAULT_CONFIG[key as keyof typeof DEFAULT_CONFIG]);
+      try {
+        parseEngineConfig({ [key]: value });
+        unguarded.push(key);
+      } catch (error) {
+        expect((error as Error).message).toContain(`"${key}" needs `);
+      }
+    }
+    expect(unguarded).toEqual([]);
+  });
+
   test("an unknown key stops startup with an error naming it", () => {
     const path = file("typo.json", JSON.stringify({ probes: true, askReder: true }));
     expect(() => engineConfig({ EDEN_ENGINE_CONFIG: path })).toThrow(/unknown key "askReder"/);
@@ -137,12 +209,11 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     // Legal: nothing, 0 where 0 means off, defaults of dependency-only keys, chances at the bounds, real parts.
     const accepted: Record<string, unknown>[] = [
       {},
-      { syncPollPageSize: 0 },
-      { syncPollPageSize: 5, sync: true },
+      { syncPollPageSize: 0, syncPageSize: DEFAULT_CONFIG.syncPageSize },
       { readerPushWaitMs: DEFAULT_CONFIG.readerPushWaitMs, askReaderStanding: 0 },
       { readerPushKinds: [...DEFAULT_CONFIG.readerPushKinds] },
-      { syncStaleChance: 0 },
-      { syncStaleChance: 1 },
+      { syncStaleChance: DEFAULT_CONFIG.syncStaleChance },
+      { probeFreshFloor: 0, probeYieldFloor: 1 },
       { anticipateOff: ["serve", "names"] },
       { confidentScore: 1.25, maxRefreshes: 0 },
     ];

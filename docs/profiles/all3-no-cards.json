@@ -21,7 +21,6 @@
   "graph": true,
   "graphMerge": true,
   "anticipate": true,
-  "sync": true,
   "askVerdicts": true,
   "conflictVocab": true,
   "compactAsk": true,

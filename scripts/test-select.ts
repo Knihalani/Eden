@@ -8,16 +8,17 @@
  *                                   runs sim, server and eval)
  *
  * `test:changed` runs everything when it cannot tell what changed (no origin/main) or when a change is outside
- * packages/ and examples/ (scripts, bun.lock, tsconfig, bunfig), and nothing when only Markdown changed. It is a
+ * packages/ and examples/ (scripts, bun.lock, tsconfig, bunfig), and nothing when only Markdown changed. Data a
+ * package's tests read from outside it maps to that package (`DATA_DIRS`); the rest of docs/ is skipped. It is a
  * fast loop, not a gate: `bun run check` runs every test before a merge. Arguments after `--` go to `bun test`;
  * `--dry` prints the directories it would test and runs nothing; `--base REF` diffs against REF instead (`--base
- * HEAD`: only what is not committed yet).
+ * HEAD`: only what is not committed yet). EDEN_TEST_SELECT_ROOT names another repository to select in (its test).
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const root = join(import.meta.dir, "..");
+const root = process.env.EDEN_TEST_SELECT_ROOT || join(import.meta.dir, "..");
 const argv = process.argv.slice(2);
 const dash = argv.indexOf("--");
 const head = dash >= 0 ? argv.slice(0, dash) : argv;
@@ -27,7 +28,14 @@ const baseRef = baseAt >= 0 ? head[baseAt + 1] : undefined;
 const [mode, ...names] = head.filter((a, i) => a !== "--dry" && (baseAt < 0 || (i !== baseAt && i !== baseAt + 1)));
 const extra = dash >= 0 ? argv.slice(dash + 1) : [];
 
-interface Pkg {
+/**
+ * Directories outside the packages whose files a package's tests read, with that package. Checked before the docs/
+ * skip: packages/server/src/engine-config.test.ts parses every docs/profiles/*.json (D104), so a typo in a profile
+ * would otherwise pass test:changed and check:fast.
+ */
+export const DATA_DIRS: Record<string, string> = { "docs/profiles/": "packages/server" };
+
+export interface Pkg {
   dir: string;
   name: string;
   deps: string[];
@@ -65,12 +73,22 @@ function changedDirs(pkgs: Pkg[]): string[] | null {
   for (const out of [git("diff", "--name-only", base), git("ls-files", "--others", "--exclude-standard")]) {
     for (const f of (out ?? "").split("\n")) if (f) files.add(f);
   }
+  return touchedPackages([...files], pkgs);
+}
+
+/**
+ * The directories of the packages `files` touch plus their dependents, in workspace order; null (test everything)
+ * when a file is outside the packages, the data directories and the skipped docs.
+ */
+export function touchedPackages(files: string[], pkgs: Pkg[], log = console.error): string[] | null {
   const touched = new Set<string>();
   for (const f of files) {
-    if (f.endsWith(".md") || f.startsWith("docs/") || f.startsWith("archived/") || f.startsWith("bench/")) continue;
-    const pkg = pkgs.find((p) => f.startsWith(`${p.dir}/`));
+    if (f.endsWith(".md")) continue;
+    const data = Object.entries(DATA_DIRS).find(([prefix]) => f.startsWith(prefix))?.[1];
+    if (data === undefined && (f.startsWith("docs/") || f.startsWith("archived/") || f.startsWith("bench/"))) continue;
+    const pkg = pkgs.find((p) => (data === undefined ? f.startsWith(`${p.dir}/`) : p.dir === data));
     if (!pkg) {
-      console.error(`test:changed: ${f} is outside the packages; running every test`);
+      log(`test:changed: ${f} is outside the packages; running every test`);
       return null;
     }
     touched.add(pkg.name);
@@ -89,43 +107,47 @@ function changedDirs(pkgs: Pkg[]): string[] | null {
   return pkgs.filter((p) => touched.has(p.name)).map((p) => p.dir);
 }
 
-const pkgs = workspace();
-let dirs: string[] | null;
-if (mode === "changed") {
-  dirs = changedDirs(pkgs);
-} else if (mode === "pkg" && names.length) {
-  dirs = names.map((n) => {
-    const hit = pkgs.find((p) => p.dir === n.replace(/\/$/, "") || p.dir.endsWith(`/${n}`) || p.name === n);
-    if (hit) return hit.dir;
-    if (existsSync(join(root, n))) return n;
-    console.error(`test:pkg: no package "${n}" (known: ${pkgs.map((p) => p.dir.split("/")[1]).join(", ")})`);
-    process.exit(2);
-  });
-} else {
-  console.error("usage: bun scripts/test-select.ts changed | pkg <name> [...] [-- bun test args]");
-  process.exit(2);
-}
+if (import.meta.main) main();
 
-if (dirs && dirs.length === 0) {
-  console.log(`test:changed: no package code changed since ${baseRef ?? "origin/main"}; nothing to test`);
-  process.exit(0);
-}
-// Packages with no test file of their own (protocol's types-only edits still reach their dependents' tests).
-const withTests = dirs?.filter((d) => {
-  const r = spawnSync("find", [d, "-name", "*.test.ts", "-not", "-path", "*/node_modules/*"], {
-    cwd: root,
-    encoding: "utf8",
+function main(): void {
+  const pkgs = workspace();
+  let dirs: string[] | null;
+  if (mode === "changed") {
+    dirs = changedDirs(pkgs);
+  } else if (mode === "pkg" && names.length) {
+    dirs = names.map((n) => {
+      const hit = pkgs.find((p) => p.dir === n.replace(/\/$/, "") || p.dir.endsWith(`/${n}`) || p.name === n);
+      if (hit) return hit.dir;
+      if (existsSync(join(root, n))) return n;
+      console.error(`test:pkg: no package "${n}" (known: ${pkgs.map((p) => p.dir.split("/")[1]).join(", ")})`);
+      process.exit(2);
+    });
+  } else {
+    console.error("usage: bun scripts/test-select.ts changed | pkg <name> [...] [-- bun test args]");
+    process.exit(2);
+  }
+
+  if (dirs && dirs.length === 0) {
+    console.log(`test:changed: no package code changed since ${baseRef ?? "origin/main"}; nothing to test`);
+    process.exit(0);
+  }
+  // Packages with no test file of their own (protocol's types-only edits still reach their dependents' tests).
+  const withTests = dirs?.filter((d) => {
+    const r = spawnSync("find", [d, "-name", "*.test.ts", "-not", "-path", "*/node_modules/*"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    return r.stdout.trim().length > 0;
   });
-  return r.stdout.trim().length > 0;
-});
-if (withTests && withTests.length === 0) {
-  console.log(`no test files under ${dirs!.join(", ")}`);
-  process.exit(0);
+  if (withTests && withTests.length === 0) {
+    console.log(`no test files under ${dirs!.join(", ")}`);
+    process.exit(0);
+  }
+  if (withTests) console.log(`testing ${withTests.join(" ")}`);
+  if (dry) {
+    if (!withTests) console.log("testing everything");
+    process.exit(0);
+  }
+  const r = spawnSync(join(root, "scripts/test.sh"), [...(withTests ?? []), ...extra], { cwd: root, stdio: "inherit" });
+  process.exit(r.status ?? 1);
 }
-if (withTests) console.log(`testing ${withTests.join(" ")}`);
-if (dry) {
-  if (!withTests) console.log("testing everything");
-  process.exit(0);
-}
-const r = spawnSync(join(root, "scripts/test.sh"), [...(withTests ?? []), ...extra], { cwd: root, stdio: "inherit" });
-process.exit(r.status ?? 1);
