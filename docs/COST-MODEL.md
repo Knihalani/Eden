@@ -336,6 +336,16 @@ makes no second judge call (a test counts one model call per event, flag on or o
 locally, but sources that are not synced are searched live a second time. The in-sample worlds are static, so that second lookup never ran in any benchmark and its source calls are
 unmeasured; in a live mailbox they scale with how often a poll finds something new.
 
+`readerPushBehind` (off by default; with `readerPush`, `syncOnDemand` and `syncPollBehind`) lets the push's reader
+start before that poll is done. It adds no source call: when the poll stores something, the push is ranked once more
+on the refreshed index with the first search's results, and read at most once more. That second read is a model call
+only when the poll changed the reader's pool (an item in or out, or an item's words): an unchanged pool is the same
+`readerKey`, a cache hit at $0. Worst case, one extra reader call per acting request whose poll stored something,
+about $0.00040 (prompt v7) each; the rate is that of polls that find something new for a request's own pool, which
+the static sim worlds do not show. In the stub screen (`funnel --preset NEWB` vs `NEWBB --suite train1,train2 --seeds
+41 -- --reader stub --time 1`, 2026-11-03) the reader was asked 119 times under NEWB and 117 under NEWBB; connectors
+received 430 and 424 calls.
+
 The non-model costs (source API calls, hosting) are not modelled yet. Source calls may dominate for some connectors;
 measure them per connector in M2. The query planner (D28), on by default in the server since D33, adds no model call.
 After its iterations it makes 1.36–1.47x planner-off's source calls per lookup in the simulation at time 0 and

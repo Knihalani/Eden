@@ -662,6 +662,23 @@ describe("what the agent has or does not need is not delivered", () => {
     expect(await delivered(p, { kind: "user_message", text })).toContain("calendar:rev");
   });
 
+  test("an item the agent fetched is still recognised as held after the session vocabulary is rebuilt", async () => {
+    const { p } = partner({ config: { maxSessionTerms: 300, maxSeenTokens: 50 } }, [review]);
+    const output = "Design review with Hana, Monday 11:00, room Orion, bring the mobile mocks";
+    expect(await delivered(p, { kind: "tool_result", tool: "calendar.get", output })).toEqual([]);
+    // A tool call is not held, so its 400 new terms only grow the vocabulary past its cap; the next event rebuilds it
+    // and the held event's terms and pairs are remapped to new ids.
+    const letter = (i: number) => String.fromCharCode(97 + (i % 26));
+    const filler = Array.from({ length: 400 }, (_, i) => `zq${letter(i)}${letter(Math.floor(i / 26))}x`);
+    await delivered(p, { kind: "tool_call", tool: "notes.search", input: filler.join(" ") });
+    const sessions = (p as unknown as { sessions: Map<string, { vocab: { size: number } }> }).sessions;
+    expect([...sessions.values()][0]!.vocab.size).toBeGreaterThan(300);
+    expect(
+      await delivered(p, { kind: "user_message", text: "What should I bring to the design review with Hana?" }),
+    ).toEqual([]);
+    expect([...sessions.values()][0]!.vocab.size).toBeLessThan(100); // Rebuilt: the filler is gone.
+  });
+
   test("what one session's agent fetched does not hold the item back in another session", async () => {
     const { p } = partner({}, [review]);
     const output = "Design review with Hana, Monday 11:00, room Orion, bring the mobile mocks";

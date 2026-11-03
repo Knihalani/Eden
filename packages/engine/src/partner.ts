@@ -1056,6 +1056,33 @@ export class ContextPartner {
   }
 
   /** Work a lookup left running behind its answer (`syncPollBehind`, `judgeBehind`), for harnesses to wait on. */
+  /**
+   * `readerPushBehind`: once the poll the push did not wait for is done, and only if it stored something, the push is
+   * ranked again on the refreshed index and read once more (`again`: no second search, no further re-read). A pool the
+   * poll left as it was reads as the same reader input, a cache hit with no call. Nothing runs for a closed session or
+   * for a request the user has since followed with another. Never throws.
+   */
+  private pushAgain(
+    s: Session,
+    request: AskRequest,
+    internal: AskInternal,
+    polled: Promise<boolean>,
+    searched: SearchedLive,
+    prev: Injection | null,
+  ): void {
+    const work = polled
+      .then(async (fresh) => {
+        if (!fresh || s.closed || this.sessions.get(s.key) !== s) return;
+        if (internal.request !== undefined && internal.request !== s.requests) return;
+        // The calls were the first reading's; the second makes none (nor any plan) of its own.
+        const { plans: _plans, ...rest } = searched;
+        const again = { ...rest, calls: 0, ...(rest.syncCalls !== undefined ? { syncCalls: 0 } : {}) };
+        await this.ask(request, { push: true, request: internal.request, again: { searched: again, prev } });
+      })
+      .catch(() => {});
+    this.addBehind(s, work);
+  }
+
   private addBehind(s: Session, work: Promise<void>): void {
     const all = s.behind ? Promise.all([s.behind, work]).then(() => {}) : work;
     const tracked: Promise<void> = all.finally(() => {
@@ -1289,7 +1316,7 @@ export class ContextPartner {
     }
   }
 
-  async ask(request: AskRequest, internal: { push?: boolean; request?: number } = {}): Promise<AskResponse> {
+  async ask(request: AskRequest, internal: AskInternal = {}): Promise<AskResponse> {
     const t0 = performance.now();
     const spans = this.spans;
     const root = spans?.open("ask", 0, { async: true });
@@ -1307,15 +1334,16 @@ export class ContextPartner {
     );
     if (root) cue.span = root.id;
     const limit = request.maxItems ?? 5;
-    const {
-      calls: sourceCalls,
-      plans,
-      probed,
-      local,
-      syncCalls,
-      consequence,
-      covered,
-    } = await this.searchLive(s, cue, this.config.askSources);
+    // `readerPushBehind`: the push reads the index as it stands while the sync's poll runs behind (the agent's asks
+    // still wait for it). Its second reading, once the poll has stored something, reuses the first one's search.
+    const behind =
+      internal.push === true &&
+      internal.again === undefined &&
+      this.config.readerPushBehind &&
+      this.config.syncPollBehind &&
+      this.config.syncOnDemand;
+    const searched = internal.again?.searched ?? (await this.searchLive(s, cue, this.config.askSources, behind));
+    const { calls: sourceCalls, plans, probed, local, syncCalls, consequence, covered } = searched;
     // `askVerdicts` (docs/research/gen-ask.md): an ask gathers what a lookup gathers (the consequence probe's finds,
     // the graph walk's, the card finds), not only what shares the question's words, and reads each with the verdicts
     // the lookup's rule paths read, so an item the question runs into answers it ahead of a merely similar one.
@@ -1445,9 +1473,26 @@ export class ContextPartner {
       const flagged = reading
         ? chosen.filter((x) => reading.notes.has(x.item.id) && pushes.has(reading.kinds.get(x.item.id) ?? ""))
         : [];
-      const fresh = flagged.filter((x) => s.ledger.isFresh(x.item.id, s.turn));
       // A reading that lands after a newer user message answers a request the agent has moved past: not queued.
       const latest = internal.request === undefined || internal.request === s.requests;
+      // `readerPushBehind`'s second reading, on the index the poll refreshed: the packet the first queued from the
+      // older copies, if the agent has not taken it, gives way to this one (its items count as undelivered here). One
+      // the agent has taken stays taken: only what is new to it, or what the poll changed since, goes out again.
+      const prev = internal.again?.prev;
+      const withdrawn = new Set<string>();
+      if (prev && reading?.read && !s.closed && latest) {
+        const at = s.pending.indexOf(prev);
+        if (at >= 0) {
+          s.pending.splice(at, 1);
+          for (const c of prev.citations) withdrawn.add(c.itemId);
+        }
+      }
+      const fresh = flagged.filter(
+        (x) =>
+          withdrawn.has(x.item.id) ||
+          s.ledger.isFresh(x.item.id, s.turn) ||
+          (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)),
+      );
       const injection =
         fresh.length > 0 && !s.closed && latest
           ? this.config.readerPushNotes
@@ -1477,6 +1522,7 @@ export class ContextPartner {
         itemIds: injection ? injection.citations.map((c) => c.itemId) : [],
       });
       if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "reader-push", delivered: !!injection });
+      if (behind && cue.polled) this.pushAgain(s, request, internal, cue.polled, searched, injection);
       return { answer: "", citations: [], usedModel: reading?.called === true, costUsd, latencyMs };
     }
     // `askGuard` (docs/research/edge-ask.md): an ask about an action is answered with its verdicts said. What may block
@@ -3165,11 +3211,11 @@ export class ContextPartner {
       if (id < 0) return false;
       ids[i] = id;
     }
-    const holders = s.agentHas.filter((held) => ids.every((id) => held.terms.has(id)));
+    const holders = s.agentHas.filter((held) => ids.every((id) => sortedHas(held.terms, id)));
     if (holders.length === 0) return false;
     // Every term is known to the session now, so no term is skipped and adjacent ids are adjacent words.
     const pairs = [...pairsOf(item.title, s.vocab), ...pairsOf(item.text.slice(0, HELD_CHARS), s.vocab)];
-    return holders.some((held) => pairs.every((p) => held.pairs.has(p)));
+    return holders.some((held) => pairs.every((p) => sortedHas(held.pairs, p)));
   }
 
   /**
@@ -5597,17 +5643,29 @@ function rebuildVocab(s: Session, maxTerms: number): void {
   const agentHas: Held[] = [];
   const remap = (id: number) => vocab.intern(old.term(id));
   let room = Math.floor(maxTerms / 4);
-  for (let i = s.agentHas.length - 1; i >= 0 && s.agentHas[i]!.terms.size <= room; i--) {
+  for (let i = s.agentHas.length - 1; i >= 0 && s.agentHas[i]!.terms.length <= room; i--) {
     const held = s.agentHas[i]!;
-    room -= held.terms.size;
-    const pairs = new Set(
-      Array.from(held.pairs, (p) => pairKey(remap(Math.floor(p / PAIR_BASE)), remap(p % PAIR_BASE))),
-    );
-    agentHas.unshift({ terms: new Set(Array.from(held.terms, remap)), pairs });
+    room -= held.terms.length;
+    // New ids do not keep the old order, so both arrays are sorted again after the remap.
+    const terms = held.terms.map(remap);
+    const pairs = held.pairs.map((p) => pairKey(remap(Math.floor(p / PAIR_BASE)), remap(p % PAIR_BASE)));
+    agentHas.unshift({ terms: sortedUnique(terms), pairs: sortedUnique(pairs) });
   }
   s.agentHas = agentHas;
   s.vocab = vocab;
   s.seen = seen;
+}
+
+/** What `searchLive` returns: the calls it made and what the lookup's ranking reads from them. */
+type SearchedLive = Awaited<ReturnType<ContextPartner["searchLive"]>>;
+
+/** `ask`'s second argument, for the engine's own asks (`readerPush`); an embedder's ask passes none. */
+interface AskInternal {
+  push?: boolean;
+  /** The session's request count when the push's request was counted: a later request makes it stale. */
+  request?: number;
+  /** `readerPushBehind`'s second reading: the first one's search, and the packet it queued. */
+  again?: { searched: SearchedLive; prev: Injection | null };
 }
 
 const sessionKey = (e: Scope & { sessionId: string }) => `${scopeKey(e)}#${e.sessionId}`;
@@ -5658,10 +5716,15 @@ function buildCue(text: string, ids: Uint32Array, vocab: Vocab, at: number, offs
   return { text: terms.join(" "), entities, key, id, time: timeWindow(text, at, offset), at, raw: text, offset };
 }
 
-/** What one agent-held event holds: its terms and its adjacent term pairs (`pairKey`), in session ids. */
+/**
+ * What one agent-held event holds: its terms and its adjacent term pairs (`pairKey`), in session ids, each sorted and
+ * unique so membership is a binary search. Typed arrays, not Sets: a session keeps up to `windowEvents` of these, and
+ * a Set of numbers costs over 100 bytes an entry against 4 or 8 here (`held.test.ts`: a session with 12 mail
+ * listings of 8 KB took 2,096 KB with Sets, 311 KB with these).
+ */
 interface Held {
-  terms: Set<number>;
-  pairs: Set<number>;
+  terms: Uint32Array;
+  pairs: Float64Array;
 }
 
 /**
@@ -5678,15 +5741,40 @@ const pairKey = (a: number, b: number) => a * PAIR_BASE + b;
 
 /** An agent-held event's terms and pairs. Its terms are interned already (`observe`), so none is skipped. */
 function heldOf(text: string, vocab: Vocab): Held {
-  const { ids, n } = termIds(text.slice(0, HELD_CHARS), vocab, false);
-  const terms = new Set<number>();
-  const pairs = new Set<number>();
-  for (let i = 0; i < n; i++) {
-    if (!terms.has(ids[i]!) && terms.size === MAX_HELD_TERMS) break;
-    terms.add(ids[i]!);
-    if (i > 0) pairs.add(pairKey(ids[i - 1]!, ids[i]!));
+  const { ids, n: all } = termIds(text.slice(0, HELD_CHARS), vocab, false);
+  let terms = sortedUnique(ids.subarray(0, all));
+  let n = all;
+  if (terms.length > MAX_HELD_TERMS) {
+    // Rare (an event of over 512 distinct terms): the head up to its 513th distinct term, in reading order.
+    const distinct = new Set<number>();
+    for (n = 0; n < all && (distinct.has(ids[n]!) || distinct.size < MAX_HELD_TERMS); n++) distinct.add(ids[n]!);
+    terms = sortedUnique(ids.subarray(0, n));
   }
-  return { terms, pairs };
+  const pairs = new Float64Array(Math.max(0, n - 1));
+  for (let i = 1; i < n; i++) pairs[i - 1] = pairKey(ids[i - 1]!, ids[i]!);
+  return { terms, pairs: sortedUnique(pairs) };
+}
+
+/** A sorted copy of `xs` without repeats, trimmed to fit (a fresh buffer: the input may be a view of a shared one). */
+function sortedUnique<T extends Uint32Array | Float64Array>(xs: T): T {
+  const sorted = xs.slice().sort() as T;
+  let m = 0;
+  for (let i = 0; i < sorted.length; i++) if (m === 0 || sorted[i] !== sorted[m - 1]) sorted[m++] = sorted[i]!;
+  return m === sorted.length ? sorted : (sorted.slice(0, m) as T);
+}
+
+/** Whether sorted `xs` holds `x`. */
+function sortedHas(xs: Uint32Array | Float64Array, x: number): boolean {
+  let lo = 0;
+  let hi = xs.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >>> 1;
+    const v = xs[mid]!;
+    if (v === x) return true;
+    if (v < x) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  return false;
 }
 
 /** The adjacent term pairs of `text` (terms the vocabulary does not know are skipped). */

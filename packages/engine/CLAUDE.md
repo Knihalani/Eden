@@ -68,6 +68,17 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   reported) shows that share. Lab reader latencies (Anthropic, thinking off by default) exclude it, so they
   understate production wherever the routed endpoint reasons. Changing the default needs a decision and a decoy
   measurement (D96: reasoning before the verdict is what keeps decoys out).
+- `Held` (what a tool result or agent message holds, for `alreadyHas`) is two sorted unique typed arrays, searched by
+  binary search: a remap (`rebuildVocab`) must sort and dedupe again, since new ids do not keep the old order. Pair
+  keys stay exact Float64 (`pairKey`): a hashed key could hold back a delivery on a collision. `held.test.ts` measures
+  a session with 12 mail listings of 8 KB (311 KB; 2,096 KB with Sets).
+- `readerPushBehind` (off; needs `readerPush`, `syncOnDemand`, `syncPollBehind`): the push's lookup reads the index
+  before the poll is done; a poll that stores something gets one more ranking and reading, no new source call, a
+  reader cache hit when the pool is unchanged, and its packet replaces one the agent has not taken
+  (`push-behind.test.ts`). Lab preset NEWBB. With `syncPollBehind` neither lookup's trace counts the poll's listing
+  calls (the funnel's connector count does). Presets ALL3BG and NEWBG set `probeGraceMs` 0 on ALL3B and NEWB: a
+  lookup no longer waits for its probes (D47's grace), so a slow probe's finds only reach later turns. No decision
+  yet for either; a Pi run is owed before any default changes.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 
