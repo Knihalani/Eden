@@ -1,6 +1,6 @@
 ---
 name: deep-audit
-description: Full audit-and-fix run. Finds order-of-magnitude cost/speed/quality levers, security and privacy issues, inefficiencies, correctness bugs and user pain points; verifies each finding adversarially; writes an audit; dispatches subagents to fix everything on branches; reviews their work and loops until nothing material is left; then reports in plain language. Use when the user asks for a deep audit, an overhaul, "find and fix everything", or order-of-magnitude improvements across the repo.
+description: Full audit-and-fix run. Hunts ambitiously for 3x-and-bigger improvements in cost, latency, quality, scale and the dev loop (plus first-principles redesigns), inefficiencies, correctness bugs and user pain points (security is out of scope; use /security-review for that); verifies each finding adversarially; writes an audit; dispatches subagents to fix everything on branches; reviews their work and loops until nothing material is left; then reports in plain language. Use when the user asks for a deep audit, an overhaul, "find and fix everything", or order-of-magnitude improvements across the repo.
 ---
 
 # Deep audit: find, verify, fix, review, repeat, report
@@ -13,13 +13,23 @@ Running this skill is the user's opt-in to multi-agent orchestration: call the W
 
 1. **Map**: one agent reads the repo's CLAUDE.md files and docs, runs the checks, and writes an orientation brief:
    areas, hot paths, how to measure, rules that constrain changes.
-2. **Find**: five finders in parallel, one per dimension:
-   - **magnitude**: architectural changes that give ≥3–10× on cost, speed or quality, with arithmetic from measured
-     numbers, and an honest "impossible" where the code cannot remove what dominates;
-   - **security**: secrets, injection, isolation, privacy, unsafe defaults, denial of service;
-   - **inefficiency**: wasted work, uncacheable prompts, redundant calls, dead flags, slow tests and dev loops;
+2. **Find**: nine finders in parallel. Six are ambitious levers, each told to brainstorm at least 12 ideas (including
+   unconventional ones), measure the baseline, and keep only what the arithmetic says reaches **at least 3x**
+   (10x or more ranks highest):
+   - **cost**: model/API calls and tokens, connector calls, storage, compute per task and per user;
+   - **latency**: what the user or integrating agent waits for, p50 and p90;
+   - **quality**: the product's own success metrics (miss rate, false alarms);
+   - **scale**: memory and CPU per user and item, throughput, ingest, accounts 10-100x larger;
+   - **devloop**: check, test, benchmark and experiment time and cost;
+   - **moonshot**: first-principles redesigns from the repo's research, each with a first experiment.
+
+   Three more cover the rest:
+   - **inefficiency**: wasted work, uncacheable prompts, redundant calls, dead flags, slow tests;
    - **painpoint**: integrator, end-user and developer journeys, walked through for real;
    - **correctness**: bugs, with a failing test or a command.
+
+   Security is not audited here (use `/security-review`), but no fix may weaken a security, privacy or isolation
+   check.
 3. **Dedup and verify**: duplicates are merged. Two skeptics check each finding: one re-runs the evidence, the other
    checks the impact arithmetic and the fix. Only findings that hold up are kept.
 4. **Audit**: a report is written (`docs/audits/<date>-deep-audit.md`) and split into work packages that share no files.
@@ -61,7 +71,8 @@ Running this skill is the user's opt-in to multi-agent orchestration: call the W
    ```
    Scale down for a small repo or a quick pass (`maxRounds: 1`, `maxFindings: 10`). Scale up only if the user asked
    for exhaustive. Each round runs up to about 5 finders, 2 verifiers per finding, and 2 agents per package attempt.
-   Say the expected scale in one line before starting.
+   Say the expected scale in one line before starting. A round runs about 9 finders, up to 2 verifiers per
+   finding, 2 agents per package attempt, and a cleanup step that frees finished worktrees.
 4. **While it runs**, stay available. If the user interjects, answer; don't stop the run unless they ask.
 5. **After it returns:**
    - Check every package branch against the integration branch (`git merge-base --is-ancestor <branch>
@@ -86,8 +97,12 @@ Running this skill is the user's opt-in to multi-agent orchestration: call the W
 
 | Area | Found | Confirmed | Fixed + reviewed | Still open |
 |---|---|---|---|---|
-| Order-of-magnitude levers | … | … | … | … |
-| Security & privacy | … | … | … | … |
+| Cost (≥3×) | … | … | … | … |
+| Latency (≥3×) | … | … | … | … |
+| Quality (≥3×) | … | … | … | … |
+| Scale (≥3×) | … | … | … | … |
+| Dev loop (≥3×) | … | … | … | … |
+| Moonshots | … | … | … | … |
 | Inefficiencies | … | … | … | … |
 | User pain points | … | … | … | … |
 | Bugs | … | … | … | … |
