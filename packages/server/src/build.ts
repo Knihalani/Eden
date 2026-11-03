@@ -21,7 +21,7 @@ export interface BuildOptions {
   /** The query planner (D28): serving by default (D33), in shadow, or off; its learning persists in the source map. */
   queryPlanner?: "off" | "serve" | "shadow";
   onShadow?: ShadowSink;
-  /** Ask answers rewritten by the model (D43); off by default. */
+  /** Ask answers rewritten by the model (D43); off by default. On when this or `engine.askWithModel` is. */
   askWithModel?: boolean;
   /**
    * Background connector sync (D57, experimental, off by default): sources with a list tool are read into each
@@ -29,9 +29,10 @@ export interface BuildOptions {
    */
   sync?: boolean;
   /**
-   * Engine settings over the production defaults, for an embedding that opts into experimental flags: the action
-   * firewall (`actionCheck`, D69, behind `POST /v1/check`) finds only on the grounds these turn on (`probes`,
-   * `groundConflict`, `groundAway`, `graph`, `cards`). The environment sets none of them.
+   * Engine settings over the production defaults, for an embedding or a deployment that opts into experimental flags:
+   * the action firewall (`actionCheck`, D69, behind `POST /v1/check`) finds only on the grounds these turn on
+   * (`probes`, `groundConflict`, `groundAway`, `graph`, `cards`). The servers pass what EDEN_ENGINE_CONFIG names
+   * (D101, engine-config.ts), `{}` when it is unset. `sync: true` here also starts the sync timer.
    */
   engine?: Partial<EngineConfig>;
 }
@@ -40,6 +41,7 @@ export interface BuildOptions {
 export function buildPartner(options: BuildOptions): ContextPartner {
   const sourceMap = new SourceMap(options.sourceMapPath);
   const mode = options.queryPlanner ?? "serve";
+  const sync = options.sync === true || options.engine?.sync === true;
   const partner = new ContextPartner({
     sources: options.sources,
     sourceMap,
@@ -53,11 +55,11 @@ export function buildPartner(options: BuildOptions): ContextPartner {
     onShadow: options.onShadow,
     config: {
       ...options.engine,
-      askWithModel: options.askWithModel ?? options.engine?.askWithModel ?? false,
-      ...(options.sync ? { sync: true } : {}),
+      askWithModel: options.askWithModel === true || options.engine?.askWithModel === true,
+      ...(sync ? { sync: true } : {}),
     },
   });
-  if (options.sync) partner.startSync();
+  if (sync) partner.startSync();
   return partner;
 }
 

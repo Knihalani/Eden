@@ -44,6 +44,13 @@ one user (`EDEN_USER`, `EDEN_TENANT`), and `createMcpServer` attaches it to any 
 [examples/personal-agent/agent.ts](examples/personal-agent/agent.ts).
 [docs/INTEGRATION.md](docs/INTEGRATION.md) has advice on placement, caching and cost (unmeasured).
 
+Both servers run on the production defaults. To run a measured experimental configuration instead, point
+`EDEN_ENGINE_CONFIG` at a JSON file of engine settings (`packages/engine/src/config.ts`), for example
+`{"probes": true, "compactAsk": true}`; an unknown key or a wrong type stops startup with a message naming it (D101).
+Flags that call a model stay under the per-session budget; see [docs/COST-MODEL.md](docs/COST-MODEL.md).
+`EDEN_SOURCES_FILE` holds static documents only for now: MCP connectors there are not supported yet, since that file's
+sources are shared by every user; connect MCP sources through `McpSource` in an embedding's resolver.
+
 ## Repository
 
 | Path | What it is |
