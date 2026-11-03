@@ -53,6 +53,14 @@ are sequenced behind round 1 or need rework.
 **Round 2.** After round 1 merged, a full re-audit verified 24 more findings. Six packages are dispatched, and
 nine findings (plus the default-flip stages of four packaged ones) are deferred. See "Round 2" at the end.
 
+**Round 3.** After round 2 merged, a deeper re-audit (security still out of scope; the bar stays at 3x, or a
+verified bug) verified 24 more findings. Measured 3x+ wins: the native TypeScript checker types the repo about 5x
+faster, and the realistic-latency screen runs 4.4-5x faster by default. Two bugs silently drop facts (a withdrawn
+push keeps its items marked delivered; an MCP token page is cut short and its tail is never listed). The largest lab
+number, about 640x on Eden's median wait from answering out of the warm synced index, cannot ship until the servers
+can list sources, and it raises decoys with recall, so it is your decision. Many ambitious ideas were measured and
+ruled out, with the ceilings recorded. Eight packages are dispatched; four decisions are listed. See "Round 3".
+
 ## Scoreboard
 
 | Dimension | Verified | Packaged in round 1 | Deferred |
@@ -844,3 +852,509 @@ Notes on boundaries:
 | R2-23 | cost-restart-repays-backfill | Stage 1 in hidden-funnel.ts; Stage 2 moves content between processes | may content move process to process in memory (amends D8)? |
 | R2-24 | quality-reader-is-the-only-deliverer | 1.4-1.6x as specified; the full effect needs D93's guard changed | may a reader rejection empty an ask's answer? |
 | R2-4, R2-6, R2-10, R2-11 | defaults (Stage 2) | the flags ship off | turn any on by default (a decision row each, after a paid Pi/Hermes run) |
+
+## Round 3
+
+Round 2's six packages are merged on `audit/2026-11-03b-integration` (merge commits c42db27bf to e978f7266). Round 3
+ran with the owner's revised brief: security is out of scope; the finders went as deep, creative and ambitious as
+they could on innovations and optimisations; and a gain had to be at least 3x (or a verified correctness bug or pain
+point) to count. Every finding below survived two adversarial verifiers. Where they corrected a number, a line or a
+severity, the corrected value is the one given. Line numbers are on the integration tree unless marked "main". No
+paid model call was made.
+
+### Round 3 in plain language
+
+**What is worth doing now.**
+
+- **Type-checking about 5x faster (measured).** TypeScript's new native checker (`tsgo`) checks the repo in about
+  1.6-2.0 s where `tsc` takes 9-11 s, with identical errors on six planted error kinds. It goes into the fast loop
+  first; the merge gate keeps `tsc` until TypeScript 7 is stable.
+- **The realistic-latency screen 4.4-5x faster (measured).** Round 2 let `-- --time 1` screens run in parallel, but
+  the default is still one job: 222 s, against 44-51 s at 12 jobs with identical rows. The time is sleeps, not CPU.
+- **Two bugs that silently drop facts.** (1) Under `readerPushBehind`, a push that a late poll replaces leaves its
+  items marked "delivered" for 40 turns, so the agent never gets them pushed unless it asks. (2) An MCP list tool
+  that pages by token but takes no page size loses rows: asking for 2 rows of a 4-row page skips the other 2 for good
+  (m2, m3, m6, m7 of 10 were never listed). Round 2's small poll pages make that common.
+- **The $0 screens accept typos and run the wrong thing.** `--presett NEWL` runs the default preset, `--help` runs a
+  30 s screen, and a misspelled config key runs the defaults and reports "+0 -0", so the flag looks useless. Each
+  screen will refuse unknown flags and keys and print usage.
+- **Round 2's new lab tests made the package loop about 3x slower (measured: `test:pkg sim` 3.7-3.9 s to 11.3 s).**
+  They spawn whole funnel runs. Sharing the runs and shrinking them brings it back toward 5-7 s (estimate).
+- **Smaller fixes.** Connector calls made by a poll that runs behind are missing from every trace (traces count 28
+  of 185 calls); the merged funnel overstates connector calls per task 1.6x for the same presets; a lookup that waits
+  on someone else's empty poll runs a second slow path; the vocabulary keeps each word as an unflattened string (3.4x
+  more vocabulary memory, about 1.3x per session); a 1 ms off-by-one in deadlines and a 5 ms timing bound make the
+  gate flaky; the fast check skips changes to the shipped config profiles; `EDEN_ENGINE_CONFIG` still accepts five
+  settings that do nothing; `bun run eval` cannot see the reader at all (NEW and ALL3 score identically).
+
+**The biggest number this round, and why it is not simply "turn it on".** In the lab, with simulated connectors at
+realistic latency, Eden's default settings spend 99.7% of their critical path in live connector searches. Answering
+from the warm synced index with the poll behind (`sync` + `syncPollBehind`) cut the median about 640x (715 ms to
+about 1 ms) and the ask p95 4.4x, and surfaced 1.85x more hidden facts. But it also surfaced 1.79x more decoys; the
+shipped servers cannot sync at all yet (their sources are static JSON, which cannot be listed); the lab worlds never
+change; and each new user first pays about 6.6 s of backfill. So this round only fixes the docs (the profiles'
+latency column is in-process and will say so) and refuses a `sync` setting the servers cannot honour. Turning it on
+is your decision.
+
+**What the deep hunt ruled out, so nobody re-tries it blindly.** The finders looked hard for further 3x levers on
+cost and latency and recorded where none exists. The reader's latency is a fixed floor of about 365-535 ms plus about
+4.2 ms per output token, so input-side changes move it 2-4% at most. An oracle gate cuts reader calls about 2.2x
+(today's gate 1.3x, and it misses every landlord binding); cross-session verdict reuse 1.4-2.2x. The engine's fast
+path has a flat profile. Compute and storage are orders of magnitude below the reader's cost. Even a free Eden cuts
+total task cost at most 1.8x (Hermes) or 2.6x (Pi). The 3x levers left all move or remove the read: not waiting on
+it, letting the agent read, a fully cached reader input, or a distilled scorer. Card action triggers cannot fix
+retrieval misses. A posting arena for the search index gives 2-2.8x as specified (3x needs a fully packed index),
+and pruning the source map is under 2x.
+
+**What needs you.** Four decisions, listed under "Deferred in round 3". None blocks the round 3 packages.
+
+### Round 3 findings, ranked by value
+
+Ranked by severity, then effort, then size of the verified gain.
+
+| # | ID | Sev | Effort | Clears 3x? | Status |
+|---|---|---|---|---|---|
+| R3-1 | devloop-tsgo-typecheck | medium | S | yes, about 5x measured (cold, and after a shared-file edit) | Stage 1 `devloop-speed-and-flakes`; Stage 2 deferred |
+| R3-2 | devloop-time-screen-jobs-default | medium | S | yes, 4.4-5.0x measured | `lab-cli-strict-and-funnel` |
+| R3-3 | corr-push-behind-withdraw-leaves-ledger-marked | medium | S | n/a (correctness) | `engine-push-behind-accounting` |
+| R3-4 | corr-mcp-list-truncation-skips-items-with-small-poll-page | medium | S | n/a (correctness) | `sources-pages-and-vocab` |
+| R3-5 | devloop-lab-accepts-typos-silently | medium | S | n/a (screen correctness) | `lab-cli-strict-and-funnel`; gate-traffic and eval parts in their packages |
+| R3-6 | lat-default-path-live-search-vs-warm-index | medium | M | about 640x p50 in the lab; not shippable today | Stage 1 `server-config-fast-gate`; Stage 2 deferred |
+| R3-7 | devloop-r2-subprocess-lab-tests-break-gate | medium | M | about 3x lost on `test:pkg sim` (measured) | `devloop-speed-and-flakes` |
+| R3-8 | scale-index-posting-arena | medium | M | no as specified (2.1-2.8x, estimate) | deferred: rework |
+| R3-9 | corr-poll-behind-calls-untraced | low | S | n/a (accounting) | `engine-push-behind-accounting` (+ funnel check in `lab-cli-strict-and-funnel`) |
+| R3-10 | lab-merged-amortised-double-counts-behind-polls | low | S | n/a (lab accounting) | `lab-cli-strict-and-funnel` |
+| R3-11 | corr-shared-poll-counts-as-fresh | low | S | n/a (correctness) | `engine-push-behind-accounting` |
+| R3-12 | scale-vocab-rope-terms | low | S | 3.4x on vocabulary memory; about 1.3x per session | `sources-pages-and-vocab` |
+| R3-13 | devloop-gate-flakes-deadline | low | S | n/a (flaky test, real off-by-one) | `devloop-speed-and-flakes` |
+| R3-14 | devloop-wallclock-microbounds-in-parallel-suite | low | S | n/a (flaky test) | `devloop-speed-and-flakes` |
+| R3-15 | devloop-test-changed-skips-docs-profiles | low | S | n/a (fast-gate hole) | `server-config-fast-gate` |
+| R3-16 | corr-engine-config-still-accepts-noop-flags | low | S | n/a (correctness) | `server-config-fast-gate` |
+| R3-17 | eval-blind-to-new-family | low | M | n/a (CI visibility) | `eval-reader-family` |
+| R3-18 | lat-reader-decode-bound-ceiling | low | S | negative result (ceiling) | Stage 1 `lab-ceilings`; Stage 2 deferred |
+| R3-19 | cost-reader-call-count-no-3x-left | low | S | negative result (ceiling) | Stage 1 `lab-ceilings`; Stage 2 sequenced |
+| R3-20 | redesign-no-3x-remaining-without-moving-the-read | low | S | negative result (ceiling table) | Stage 1 `lab-ceilings`; Stage 2 deferred |
+| R3-21 | measure-frontier-weights-hidden-only | low | S | n/a (reporting) | `reporting-weights-and-notes` |
+| R3-22 | quality-card-action-trigger-ceiling | low | S | negative result | `reporting-weights-and-notes` |
+| R3-23 | scale-r3-candidates-and-3x-ceilings | low | S | negative result; two follow-ups | `reporting-weights-and-notes` (one follow-up) |
+| R3-24 | scale-source-map-mentions-unbounded | low | S | no (1.84x per row) | deferred: decision |
+
+#### R3-1. `tsgo` types the repo about 5x faster than `tsc` (medium, S)
+
+- **Evidence.** scripts/typecheck.sh:4-24 loops over the tsconfig projects (one, ./tsconfig.json, strict). With
+  @typescript/native-preview 7.0.0-dev.20260707.2 in a scratch install (repo tsc 5.9.3, 4 cores), verifiers
+  measured: cold `tsc -p ./tsconfig.json --noEmit` 9.0-11.5 s against `tsgo -p` 1.55-2.0 s; after planting an error
+  in packages/protocol/src/index.ts, incremental `bun run typecheck` 9.9-11.2 s against tsgo 2.2-2.3 s, both
+  reporting the same TS2322; warm no-edit `bun run typecheck` 3.35-4.3 s against `tsgo --incremental` 0.72 s.
+  Parity: six planted error kinds (TS2322, TS2307, TS7006, TS2353, TS18048, TS2322 on a Promise) gave identical
+  sorted output; the clean tree gives 0 errors in both.
+- **Impact.** About 5x cold and after editing a widely imported file; past 3x warm only with `--incremental`. The
+  container was contended, so absolute values are noisy; the ratios held across runs.
+- **Fix.** Pin @typescript/native-preview as a devDependency (a dev-only preview; justify it in the PR as CLAUDE.md
+  requires); scripts/typecheck.sh uses it with `--incremental --tsBuildInfoFile` under `TYPECHECK=tsgo` and in
+  `check:fast`; `bun run check` keeps tsc; a parity mode runs both and prints both outputs when they disagree. Record
+  the timings in docs/TESTING.md.
+- **Status.** Stage 1 in `devloop-speed-and-flakes`. Stage 2 (tsgo as the merge gate) deferred.
+
+#### R3-2. The realistic-latency screen still defaults to one job (medium, S)
+
+- **Evidence.** funnel.ts:167 defaults `--jobs` to 1; round 2 removed `--time` from the solo list (funnel.ts:155-176);
+  LAB.md:163-171 documents `--jobs 4`. ALL3, train1-6, seeds 41-42, `-- --time 1`: default 222.4-222.5 s, `--jobs 4`
+  112.1-112.2 s, `--jobs 12` 44.1-50.5 s (finder and verifier). All score hidden 214/384, decoys 211/384; the 768
+  perTask rows match exactly once `ms`, `askMs`, `deliveryMs` and `beforeModel` are left out. ms/task rises 2.6-3.5%
+  at 12 jobs against one.
+- **Impact.** 4.4-5.0x over the default and 2.2-2.5x over the documented recipe on every realistic-latency screen.
+  On main the speedup does not exist (main still forces `--time` to one job, funnel.ts:130 main).
+- **Fix.** When `--time > 0` and `--jobs` is not given, default to min(shards, a cap near 12 scaled to cores); keep
+  an explicit `--jobs` as typed; the solo reasons (`--record`, per-process logs, live judge or reader) still win;
+  print the chosen concurrency and an ms/task inflation note. Update LAB.md and the funnel.ts doc comment.
+- **Status.** `lab-cli-strict-and-funnel`.
+
+#### R3-3. A withdrawn push leaves its items marked delivered (medium, S)
+
+- **Evidence.** partner.ts:1481-1489: the re-read after a late poll (`internal.again`) splices the earlier packet out
+  of `s.pending` and fills `withdrawn`, which only lets those items past the freshness filter (:1490-1495). deliver()
+  already called `s.ledger.mark` (:5374) and pushed sketches into `s.delivered` (:5368); nothing reverses either.
+  `Ledger.isFresh` (ledger.ts:16-18) then reports them delivered for `ledgerCooldownTurns` (40, config.ts:656).
+  Scratch test on push-behind.test.ts's setup (cueCooldownTurns 0): the push reads HOLD, the re-read flags NEW, and
+  takePending gives `["mail:new"]`; on the next message ("Wire the Harlow invoice payment now") the reader flags
+  HOLD, but the reader-push trace itemIds are `[]` and takePending gives `[]` (1 pass, 1 fail). With
+  readerPushBehind off, the same message delivers HOLD.
+- **Impact.** A binding fact the reader flagged is kept out of proactive pushes for up to 40 turns whenever a late
+  poll changes the verdict. An explicit ask still gets it (asks ignore the ledger). Behind readerPushBehind, off by
+  default.
+- **Fix.** Snapshot each withdrawn item's ledger entry (turn and version, or absence) before withdrawing and restore
+  it for items the second packet does not re-deliver; a bare `unmark` would erase an earlier, still-valid delivery of
+  a revised item. Drop the withdrawn sketches from `s.delivered` too (the lookup near-duplicate filter reads it at
+  :2436). Add the failing case to push-behind.test.ts, and assert that only that session's ledger changes.
+- **Status.** `engine-push-behind-accounting`.
+
+#### R3-4. McpSource truncates a token page and keeps the server's cursor (medium, S)
+
+- **Evidence.** packages/sources/src/mcp-source.ts:258-272: `listPage` cuts the page with `.slice(0, limit)` (:353,
+  :367) but returns `nextCursorOf(result)` (:270), which points past the whole server page. schema-args.ts:320-325
+  sends a page size only for a known limit name. Scratch `McpServer` on InMemoryTransport, `list_mail({pageToken?})`,
+  10 rows, 4 per page, paged at limit 2: `SEEN ["m0","m1","m4","m5","m8","m9"]` (both verifiers). SyncManager.poll
+  then reaches its boundary and treats the source as current.
+- **Impact.** Silent loss of new items until the next sweep (24 h default). With D101's `syncPollPageSize` (off by
+  default) the first poll page is often 5 or fewer, so any token-paged tool without a page-size argument loses rows
+  routinely; on main only pages over 100 rows are hit. Sim sources honour `limit`, so the funnel and eval cannot see
+  it.
+- **Fix.** For a token cursor, do not truncate the page (the poll's boundary logic already handles long pages), also
+  when an operator-supplied `listTool.args` function ignores `limit`. Do not return `next: null` (it cuts backfill
+  short). The read-only check is untouched.
+- **Status.** `sources-pages-and-vocab`.
+
+#### R3-5. The $0 screens accept typos and run the wrong configuration (medium, S)
+
+- **Evidence.** Hand-rolled `opt()` parsers with no unknown-flag check: funnel.ts:39-42, hidden-funnel.ts:110,
+  gate-traffic.ts:58-62, packages/eval/src/cli.ts:22-24, packages/sim/src/quality-cli.ts:71; `--set`/`--config` are
+  spread in unchecked (funnel.ts:86, hidden-funnel.ts:137). Measured: `bun run eval --config '{"fallbackAsk":true}'`
+  (misspelled) gives recall 0.4444, the same as no config; the real key `fallbackAsks` gives 0.4667.
+  `funnel.ts --presett NEWL --no-record` ran the default ALL3 screen and exited 0. `syncPollBehind` or `graphMerge`
+  alone give eval output identical to defaults (their parents are off). Not re-run by the verifiers: the `--help`
+  timings and the ledger row a misspelled hidden-funnel run writes (the path at hidden-funnel.ts:1089 supports it).
+- **Impact.** A typo'd screen reads "the flag does nothing" and steers which paid runs ($0.3-0.5 each) get bought.
+- **Fix.** A `checkEngineConfig(obj, { deps })` in @eden/engine (keys, types, ranges, and a PARENT map allowing
+  several parents per key, checked on the merged preset+override with the lab's wired deps); a shared lab `flags`
+  helper that exits 2 on an unknown flag and prints usage on `--help`. All 11 presets pass such a check (verified).
+  The server's NEEDS_DEP refusal stays in the server (the lab wires cards, bridge and reader).
+- **Status.** funnel.ts, hidden-funnel.ts and quality-cli.ts in `lab-cli-strict-and-funnel`; gate-traffic.ts in
+  `lab-ceilings` and eval cli.ts in `eval-reader-family`, each after the helpers merge (see the boundary notes).
+
+#### R3-6. On default settings live connector search is 99.7% of the critical path (medium, M)
+
+- **Evidence.** Lab, $0, simulated connectors at profile latency, full train (768 tasks): `funnel.ts --preset none
+  --jobs 12 -- --time 1 --timeline T` then timeline-report.ts, defaults against `--set
+  '{"sync":true,"syncPollBehind":true}'`. Critical-path p50 715-729 ms to 0.97-1.11 ms; ask p95 1,410 to 317 ms;
+  Eden ms/task 823.5 to 1.07-1.3; source.search 99.7% of the default critical path (sync.freshen 96% after);
+  connector calls 8.3/task to 3.83 amortised (432 backfill calls, about 6.6 s per user); surfaced hidden 96 to 178,
+  decoys 104-105 to 186. ALL3-no-cards-no-grounds profile (train1-2, seed 41): Eden ms/task 537-541 as shipped, 29
+  with syncPollBehind, 5.2-5.7 with probeGraceMs 0, surfacing identical. docs/profiles/README.md's only latency
+  column is the eval's p95, and the eval uses in-process StaticSource (packages/eval/src/run.ts:144). Defaults:
+  config.ts:722 `sync: false`, :734 `syncPollBehind: false`; D57 and D65 are still Proposed.
+- **Why it is not a straight win.** The second verifier rated it not real for production: the shipped servers build
+  only StaticSources (connectors.ts:5-6, milestone M2), which have no `list`, so a sync profile loaded through
+  EDEN_ENGINE_CONFIG would silently do nothing; the lab worlds are static (polls store nothing); deliveries during
+  backfill are not counted; and decoys rise with recall, which CLAUDE.md says needs a decision. D57 and D65 already
+  record the direction.
+- **Fix (Stage 1, no default change).** Label the profiles README latency column "in-process static sources, no
+  connector latency" and point to the funnel command for connector-latency numbers (labelled lab, simulated). Refuse
+  `sync: true` in EDEN_ENGINE_CONFIG while the servers wire no listable source, with its own message. Stage 2:
+  listable connectors (M2), a funnel count of deliveries during backfill, a blind live Pi run of defaults against
+  sync + syncPollBehind, a COST-MODEL entry for backfill calls and per-user RAM, then a decision.
+- **Status.** Stage 1 in `server-config-fast-gate`; Stage 2 deferred (decision).
+
+#### R3-7. Round 2's subprocess lab tests made the sim loop about 3x slower (medium, M)
+
+- **Evidence.** funnel-flags.test.ts alone 8.15-9.6 s wall / 15.6-18.7 s CPU (the slowest file in the repo);
+  reader-stub.test.ts 3.1-3.4 s / 9-10 s CPU. `bun run test:pkg sim`: main 3.7-4.4 s, integration 11.3-17.7 s.
+  `bun run test`: main 14.5-17.2 s, integration 19.5-29.1 s (about 1.37x wall, 1.9x CPU). The `--time shards` test
+  (:154-178) spawns funnel.ts twice; the `funnel()` helper (:24-40) spawns hidden-funnel.ts; reader-stub.test.ts
+  :162-165 spawns three NEWL runs at once. Each test's mkdtemp dir is never removed (funnel-flags.test.ts:21,
+  reader-stub.test.ts:151; /tmp/funnel-flags-* grew from 288 to 330 in one verifier's runs). The sim.test.ts:198 5 s
+  timeout failed in 3 of 6 gate runs for the finder and 0 of 6 for a verifier, so severity is medium, not high.
+- **Correction.** One hidden-funnel stub run costs 1.7-1.8 s wall, of which loading modules is 0.31 s: the cost is
+  per-run setup, not process start. Moving runs in-process (the original fix) saves little and can be slower (the
+  three concurrent spawns would run one after another); "one seed" breaks the sharding assertion at :176.
+- **Fix.** Share the NEWL stub runs through a `beforeAll` (kept as concurrent subprocesses); shrink `--time shards`
+  to two seeds at `--limit 1 --time 0.005`; delete each mkdtemp dir; give sim.test.ts:198 an explicit timeout with a
+  reason (or share one runQuality). Drop no assertion.
+- **Status.** `devloop-speed-and-flakes`.
+
+#### R3-8. The search index's per-key arrays (medium, M, deferred)
+
+- **Evidence.** sparse-index.ts:367-377 `ensureKey` allocates a `Uint32Array(4)` and a `Uint16Array(4)` per (term,
+  field) key at 74.4 B of header each (measured over 100k); :379-392 doubles them. At 3,000 docs a verifier measured
+  18,180 keys (57% with one posting), 9.56 MB of heap plus 3.10 MB off-heap against about 2.95 MB packed (3.2-4.3x).
+  The ratio falls with size: about 1.4x at 30,000 docs; the per-user cap is 7,000 (cache.ts:158-162 main).
+- **Why deferred.** Modelled on the measured posting distribution, the proposed slab with inline singles gives about
+  2.8x at 3,000 docs and 2.4x at 7,000 (estimate), 2-2.4x per user: under the 3x bar. Only a fully packed layout
+  approaches the 3.8x ceiling. Round 4 rework: a frozen CSR for the synced corpus with a small mutable delta.
+
+#### R3-9. Poll-behind connector calls appear in no trace (low, S)
+
+- **Evidence.** partner.ts:3254-3263 (main :3134-3135): `if (behind) cue.polled = polled.then(...)` drops freshen()'s
+  call count, so `calls: made + syncCalls` leaves the poll out; afterPoll runs a follow-up only when the poll stored
+  something. Reproduced on main: `bun run funnel --suite train6 --seeds 41 --preset ALL3` prints "connectors received
+  187 ... traces summed 187"; with `--set '{"syncPollBehind":true}'`, "connectors received 185 ... traces summed 28"
+  (6.6x). hidden-funnel.ts:142 already works around it with the sync's own count.
+- **Impact.** Per-trace `sourceCalls`, and every cost or rate-limit view built from traces, under-report connector
+  traffic about 6x under poll-behind. Answers are unchanged.
+- **Fix.** Emit a `skipped` trace (reason "sync poll behind", sourceCalls and syncCalls = freshen()'s return) when
+  the behind poll settles, whether or not it stored anything and even after the session closed (the "reader-late"
+  precedent); not `silent`, which means "looked, found nothing". The funnel reports a shard where traced != received.
+- **Status.** Engine in `engine-push-behind-accounting`; the funnel check in `lab-cli-strict-and-funnel`.
+
+#### R3-10. The merged funnel double-counts behind polls (low, S)
+
+- **Evidence.** funnel.ts:321 (main :267) computes `amortised = request + sync.demandAll - sync.demand + background +
+  backfill`; the per-shard formula subtracts `demandSeen` (hidden-funnel.ts:789 main, comment :788). `bun run funnel
+  --suite train1,train2 --seeds 41,42 --set '{"syncPollBehind":true}' --jobs 4`: shards print 4.08-4.67/task, the
+  merged line 7.04; corrected 4.43 (1.59x overstated). ALL3 without the flag is unaffected.
+- **Fix.** Subtract the summed `sync.demandSeen`. Test with two synthetic shard summaries (demand < demandSeen).
+- **Status.** `lab-cli-strict-and-funnel`.
+
+#### R3-11. A lookup that waits on another's poll counts it as fresh (low, S)
+
+- **Evidence.** sync.ts:364-368 (main :351-355): after `await s.busy`, `tally.fresh++` runs whatever that poll stored
+  (the comment admits it). partner.ts:3261 turns `tally.fresh > 0` into `cue.polled`; afterPoll runs a follow-up slow
+  path. Scratch test (stale source, poll stores nothing): with an ask's poll in flight, the message's lookup ran 2
+  slow paths and 1 follow-up; alone, or overlapping a timed tick, 1 and 0. It happens on overlap, not on every
+  message.
+- **Fix.** Whatever holds the source (poll, sweep or backfill page) records what it stored on the SourceSync and the
+  waiter adds that, or 0 on abort.
+- **Status.** `engine-push-behind-accounting`.
+
+#### R3-12. The vocabulary stores each word as an unflattened rope (low, S)
+
+- **Evidence.** foldString (packages/primitives/src/charclass.ts:82-99) builds each term with `out +=
+  String.fromCharCode(f)`; Vocab.add (vocab.ts:115-123) stores it unread, so the JSC rope never flattens. Finder: 238
+  against 69 B/term on 147,718 real terms (3.4x). Verifiers (synthetic terms, heap slope over 100k-300k terms): 503
+  against 39-40 B/term; touching the rope (`charCodeAt`) does not help, a new flat string does.
+- **Impact.** 3.4x or more on vocabulary string memory; about 1.3x per session and 1.04-1.26x for heavy cache users
+  (finder's scratch harness, not re-run).
+- **Fix.** Fold into a reused, growable Uint16Array scratch and build the string once (`String.fromCharCode` over
+  chunks), not `toLowerCase()`, which the comment at charclass.ts:78-81 avoids on purpose. The stored string must
+  equal today's foldString output. Re-run vocab.bench and tokenize.bench before and after (primitives README).
+- **Status.** `sources-pages-and-vocab`.
+
+#### R3-13. `Deadline.child` can outlive its parent by 1 ms (low, S)
+
+- **Evidence.** packages/primitives/src/deadline.ts:32-35 reads the clock in remaining() and again in after(); a
+  millisecond tick between them gives child.at = parent.at + 1. A Date.now that advances on each read reproduces it
+  every time; 200,000 hot calls gave 121 such children. The test flake rate at resilience.test.ts:13 is unverified
+  (0 of 30 and 0 of 60 in later runs).
+- **Fix.** One clock read: `at = Math.min(this.at, now + ms)`, timer on `at - now`; keep the unbounded (Infinity)
+  branch returning the parent signal; an optional injected clock for the test. fraction() is covered through child().
+- **Status.** `devloop-speed-and-flakes`.
+
+#### R3-14. A 5 ms wall-clock bound in warm.test.ts fails under load (low, S)
+
+- **Evidence.** packages/redact/src/warm.test.ts:16 (`< 5` ms after warmGate) and :24 (`< 1` ms); with 8 busy loops
+  on 4 cores, 1 of 10 and 3 of 20 runs failed at :16. docs/TESTING.md:80-82 already records it.
+- **Fix.** Assert work, not time: no lazy rule compile on the first call after warmGate, and the rule set is not
+  rebuilt; or a CPU-time ratio against a cold control as the ReDoS sweep does. Leave client.test.ts:111 and
+  reader.test.ts:709 alone (wide, justified margins; never seen failing).
+- **Status.** `devloop-speed-and-flakes`.
+
+#### R3-15. `test:changed` skips docs/profiles, which a server test reads (low, S)
+
+- **Evidence.** scripts/test-select.ts:70 skips every path under `docs/`;
+  packages/server/src/engine-config.test.ts:161-166 loads every docs/profiles/*.json. With `{"fallbakAsks":true}` in
+  docs/profiles/fallback-asks.json, `bun scripts/test-select.ts changed --base HEAD --dry` printed "no package code
+  changed since HEAD; nothing to test", while the full engine-config test fails on it. `bun run check` still catches
+  it.
+- **Fix.** A data-directory-to-package table in test-select.ts, checked before the docs skip (`docs/profiles/` to
+  packages/server), with a unit case.
+- **Status.** `server-config-fast-gate`.
+
+#### R3-16. EDEN_ENGINE_CONFIG still accepts five settings that do nothing (low, S)
+
+- **Evidence.** packages/server/src/engine-config.ts:32-64 NEEDS_DEP covers every reader, card, bridge, intent and
+  digest key except `readerPushBehind` (acts only under `internal.push`, partner.ts:1337-1343, which needs the
+  reader) and `syncPush`, `syncPushMaxStaleMs`, `syncPushSweepMs`, `syncPushGapMs` (act only once `sourcePushes`
+  sets `s.pushed`; nothing outside engine and sim calls `sourcePushes` or `sourceChanged`). D104 says such settings
+  are the misconfiguration to refuse.
+- **Fix.** `readerPushBehind: "reader"`; a separate refusal kind for syncPush* ("needs a server route that relays
+  source watches", not "the partner's dependency") until such a route exists; a coverage test over DEFAULT_CONFIG
+  keys matching `/reader|card|bridge|intent|digest|push/i` (case-insensitive, or it misses askReader*). A D104
+  follow-up row names the added keys.
+- **Status.** `server-config-fast-gate`.
+
+#### R3-17. `bun run eval` cannot see the reader family (low, M)
+
+- **Evidence.** `bun run packages/eval/src/cli.ts --config <PRESETS.X>` for ALL3, NEW and NEW2: identical precision
+  0.909, recall 0.444, falseFireRate 0.0167, delivered 22 (the diff of the JSON outputs, latency lines aside, is
+  empty). packages/eval/src/run.ts:146-154 builds the partner with no reader and no card maker. The 27 scenarios
+  average 2.81 docs (maximum 7).
+- **Fix.** `--reader stub` in the eval (its own stub in packages/eval; the eval must not import sim/lab) reporting
+  "expected in reader pool" per category; an `oracle` mode only if labelled a proxy on every line and kept out of the
+  headline metrics; refuse or label config flags whose dependency is missing; 3-5 scenarios with 50+ docs and
+  lookalikes. New scenarios move the baseline, so the PR pastes before/after eval JSON. Effort M (verifier).
+- **Status.** `eval-reader-family`.
+
+#### R3-18. Reader latency is a fixed floor plus output decoding (low, S, ceiling)
+
+- **Evidence.** Two run-level fits, both reproduced. Over 10 rows of docs/research/haiku-phase3.md:89-102: p50 = 365
+  ms + 0.006 ms/input token + 4.21 ms/output token (R² 0.988, max error 35 ms). Over 19 runs in
+  packages/sim/lab/haiku/phase3/funnel-reader-cost.txt: p50 = 535 + 3.40/output token + 10.7 per 1k input tokens
+  (the p90 fit has R² 0.164 and is weak). The output is the JSON verdict (reader.ts:340-342). `bun run gate-traffic`:
+  NEW2 reads 436 of 438 messages and 199 pools hold a needed item, so a perfect gate skips at most 54.6%.
+- **Impact.** 3x on reader latency needs an almost empty verdict; input-side levers move latency 24-42 ms; perfect
+  gating gives at most about 2.2x on the mean and about 1x on p90. Both fits are run-level; per-call data settles
+  the floor.
+- **Fix (Stage 1, $0).** Record per-call input, cached input and output tokens, TTFT and ms in reader replay rows
+  where the model result carries them; a refit script; floor and ms/token in COST-MODEL.md; a gate-traffic count of
+  need turns among unread messages. Stage 2 (paid) deferred.
+- **Status.** Stage 1 in `lab-ceilings`.
+
+#### R3-19. No 3x cut in reader calls is left on everyday traffic (low, S, ceiling)
+
+- **Evidence.** `bun packages/sim/src/lab/gate-traffic.ts` (deterministic, about 21 s): NEW2 436 calls on 438
+  messages, 199 pools with a needed item (2.19x); NEWL 66 calls and NEWL-nogate 87 (the gate saves 1.32x); all 5
+  NEWL misses are landlord (missed-binding 1.000 on 5 gated). The cross-session reuse figures (158/438 exact pool
+  repeats and the rest) come from an unpublished scratch copy and are unverified.
+- **Correction.** The 199 counts every `must` fact, most of which are plain information the reader is not for, so
+  2.2x is a lower bound on an oracle gate that skips pools with no constraint item, not a cap.
+- **Fix.** Stage 1: an oracle line over reader-relevant needs and a `--reuse` report in gate-traffic.ts; ceilings in
+  COST-MODEL.md. Stage 2: why landlord binding items fail `constraintLike` (partner.ts:1657-1673 main) and
+  `mayConstrain` (conflict.ts:639), fixed with a gate-traffic test; it touches askGuard (D92), so it needs the eval
+  and the falseFireRate check. Do not build a cross-session verdict cache.
+- **Status.** Stage 1 in `lab-ceilings`; Stage 2 sequenced behind `engine-push-behind-accounting` (partner.ts).
+
+#### R3-20. Every remaining 3x path on cost or latency moves or removes the read (low, S, ceiling)
+
+- **Evidence.** Checked: reader cost is about 74% input (haiku-phase3.md:74-79); prices (pricing.ts:15, :21-22: the
+  cheapest glm endpoint is under 2x cheaper, glm-5.3-flash dearer than Haiku 5.5); push and ask verdicts cannot share
+  a cache (readerKey, reader.ts:262-270); `bun packages/engine/bench/pipeline.bench.ts` steady observe p50 89.5 µs
+  (flat profile); a free Eden cuts total cost at most 1.78x on Hermes (haiku-phase3.md:144) and 2.55x on Pi (:137). A
+  fully cached reader input is about 3.0x per call by arithmetic (3,921 × $0.01/M + 188 × $0.5/M = $0.000133
+  against $0.000401; ignores cache writes and focus-dependent requests). The 656 reader calls, 1,796 against 300
+  background calls and $4e-8 compute per task are unverified.
+- **Fix.** Stage 1: a "where 3x is impossible" section in COST-MODEL.md with this table, the fits and the reuse
+  ceilings, each row naming its command or source, 2.55x as the free-Eden bound, and the terse-reply row as a
+  ceiling, not a recommendation (D96). Stage 2: one pre-registered paid screen of "cached universe + at most 2
+  entries" (deferred).
+- **Status.** Stage 1 in `lab-ceilings` (it also closes R2-18).
+
+#### R3-21. The NEW frontier is priced on hidden tasks only (low, S)
+
+- **Evidence.** haiku-phase3.md:147 labels the cost columns "per thousand hidden tasks" (the label is honest).
+  packages/sim/lab/haiku/phase3/report-pi-h13.txt: Eden $/1k control against hidden, NEW 0.778 against 0.553
+  (1.41x), NEWL 0.532 against 0.388 (1.37x); Eden tool calls per task 1.24 against 0.63; wall p50 NEW 5.39 against
+  3.72 s (ALL3 3.44 s on control). The gap to tools grows 1.62x on control. Hermes is about 1.05x. No verdict
+  changes (NEW fails Bar 5 on hidden tasks alone).
+- **Fix.** pi-ab-report and hermes-ab print a traffic-weighted row for w in {0.1, 0.5}: means and $/1k by
+  weighting, p50/p90 from the pooled per-task samples (a weighted percentile is not a percentile). Recompute the
+  haiku-phase3 frontier with weighted columns; state the w Bar 5 uses in pi-full-benchmark.md, where Bar 5 is
+  defined (:145).
+- **Status.** `reporting-weights-and-notes`.
+
+#### R3-22. Card action triggers cannot fix retrieval misses (low, S, negative)
+
+- **Evidence.** Scratch join (cards-v2.jsonl + cards-train.jsonl, train1-6, seeds 41-42): `requestActions`
+  (cards.ts:1177) fires on 261/384 requests; card actions meet request actions for 52 hidden against 37 decoys; the
+  ALL3 funnel surfaces hidden 214/384; gating on an active DIGEST card surfaces 60 against 25 (2.4x separation) while
+  hidden falls from 214 to 60. NEW2's 83 pool misses (2 meet) are unverified (the reader cache is not checked in).
+- **Fix.** Docs only: record the negative result in docs/research/moon-cards.md and update its INDEX row.
+- **Status.** `reporting-weights-and-notes`.
+
+#### R3-23. Scale: 14 candidates measured, and where 3x is impossible (low, S, note)
+
+- **Evidence.** pipeline.bench observe p50 95-117 µs; put.bench sanitize 23-29 µs, termIds 9-10, addFields+remove
+  21-38, extractTypedEntities 35-54 (no stage dominates); churn.bench releaseTerms off worst put 163-164 ms / 44.1 MB,
+  on 13.6-16.2 ms / 25.9 MB. perf-cli memory builds the sim worlds in the same process (sim/src/server.ts:57) and
+  records only absolute readings (perf-cli.ts:139-160). Unverified: start-up time, conjunctive search ceilings, the
+  perf-cli cold hang.
+- **Fix.** No build. Follow-ups: perf-cli memory reports an Eden-only per-user slope (subtract the zero-user
+  reading); investigate the cold hang.
+- **Status.** The slope in `reporting-weights-and-notes`; the hang stays open.
+
+#### R3-24. Source-map mention rows are never pruned (low, S, deferred)
+
+- **Evidence.** packages/graph/src/source-map.ts:72-77 creates `mention` as a rowid table keyed (scope, entity,
+  source_id); the upsert refreshes `last_seen`, which nothing reads; the only DELETE is in forget() (:233-239).
+  recordMentions (partner.ts:3793-3805 main) writes up to 20 entities per new or changed item. Measured 110-139
+  B/row; WITHOUT ROWID with interned ids about 1.84x smaller (finder). Growth follows distinct (entity, source)
+  pairs, so it levels off; 18 MB/user is an estimate.
+- **Why deferred.** Under the 3x bar, and pruning removes routing evidence for rarely mentioned people (route()
+  ranks by these rows), which the eval cannot see.
+
+### Round 3 work packages
+
+Eight packages. No two share a file; each lists every file it may edit, and a package that needs another file stops
+and reports. Each branches from `audit/2026-11-03b-integration`, ends with `bun run check` green, keeps production
+defaults unchanged (new flags off), makes no paid model call, and reports before/after numbers from commands it ran.
+Engine, server and eval packages paste `bun run eval` JSON and run the `reviewer` subagent.
+
+| Package | Findings | Files (exclusive) |
+|---|---|---|
+| `engine-push-behind-accounting` | R3-3, R3-9 (engine), R3-11 | packages/engine/src/partner.ts, ledger.ts, ledger.test.ts, sync.ts, sync.test.ts, push-behind.test.ts, econ-judge.test.ts, packages/engine/CLAUDE.md |
+| `sources-pages-and-vocab` | R3-4, R3-12 | packages/sources/src/mcp-source.ts, mcp-source.test.ts, schema-args.ts, packages/engine/src/sync-mcp-page.test.ts (new), packages/primitives/src/charclass.ts, vocab.ts, vocab.test.ts, packages/primitives/bench/vocab.bench.ts, packages/primitives/README.md |
+| `server-config-fast-gate` | R3-6 (Stage 1), R3-15, R3-16 | packages/server/src/engine-config.ts, engine-config.test.ts, packages/server/CLAUDE.md, docs/DECISIONS.md, docs/profiles/README.md, scripts/test-select.ts, scripts/test-select.test.ts (new) |
+| `lab-cli-strict-and-funnel` | R3-2, R3-5 (funnel, hidden-funnel, quality-cli), R3-9 (funnel check), R3-10 | packages/engine/src/config-check.ts (new), config-check.test.ts (new), packages/engine/src/index.ts, packages/sim/src/lab/flags.ts (new), flags.test.ts (new), funnel.ts, hidden-funnel.ts, funnel-merge.test.ts (new), packages/sim/src/quality-cli.ts, docs/LAB.md, packages/sim/src/lab/CLAUDE.md |
+| `devloop-speed-and-flakes` | R3-1 (Stage 1), R3-7, R3-13, R3-14 | scripts/typecheck.sh, package.json, bun.lock, docs/TESTING.md, packages/sim/src/lab/funnel-flags.test.ts, reader-stub.test.ts, packages/sim/src/sim.test.ts, packages/primitives/src/deadline.ts, resilience.test.ts, packages/redact/src/warm.test.ts |
+| `lab-ceilings` | R3-18, R3-19, R3-20 (Stage 1 each), R3-5 (gate-traffic) | packages/sim/src/lab/gate-traffic.ts, reader-disk.ts, reader-latency-fit.ts (new), gate-traffic.test.ts (new), docs/COST-MODEL.md |
+| `reporting-weights-and-notes` | R3-21, R3-22, R3-23 (perf-cli slope) | packages/sim/src/lab/pi-ab-report.ts, hermes-ab.ts, pi-ab-weighted.test.ts (new), docs/research/haiku-phase3.md, docs/research/pi-full-benchmark.md, docs/research/moon-cards.md, docs/research/INDEX.md, packages/sim/src/perf-cli.ts |
+| `eval-reader-family` | R3-17, R3-5 (eval) | packages/eval/src/run.ts, cli.ts, run.test.ts, reader-stub.ts (new), packages/eval/scenarios/ (new files only), packages/eval/CLAUDE.md |
+
+Notes on boundaries:
+
+- `lab-cli-strict-and-funnel` owns `checkEngineConfig` and the `flags` helper. `lab-ceilings` (gate-traffic.ts) and
+  `eval-reader-family` (eval cli.ts) do their CLI-strictness step last: they rebase on the integration branch, and if
+  `lab-cli-strict-and-funnel` has merged they call its helpers; if not, they leave that step out and say so in the PR
+  (no copied checker). gate-traffic has no `--config`, only flags.
+- The server's NEEDS_DEP stays in engine-config.ts (`server-config-fast-gate`); making `parseEngineConfig` delegate
+  key, type and range checks to `checkEngineConfig` is a round 4 follow-up once both have merged.
+- `server-config-fast-gate` owns DECISIONS.md: a D104 follow-up row naming readerPushBehind, syncPush* and the sync
+  refusal. Other packages add no decision row and name any decision they would need in their PR.
+- New lab tests must not spawn full funnel runs (R3-7): test parsers and the merge formula in process, with at most
+  one small spawned smoke test per CLI.
+- `devloop-speed-and-flakes` reports the deadline change's numbers in its PR, not in packages/primitives/README.md
+  (owned by `sources-pages-and-vocab`), and changes no package.json script other than the typecheck switch.
+- `sources-pages-and-vocab` must not touch sync.ts; its SyncManager test lives in the new test file.
+- `lab-ceilings` logs only counts and timings (no text) in replay rows; if TTFT needs a change in packages/llm or
+  reader.ts, it stops and reports.
+
+#### Acceptance checks
+
+- **`engine-push-behind-accounting`.** The R3-3 scratch case is a test in push-behind.test.ts and passes (the second
+  takePending contains `mail:hold`); a revised item withdrawn and not re-delivered keeps its earlier ledger version;
+  another session's ledger is unchanged. A test sums trace.sourceCalls against a counting fake source and matches it
+  with syncPollBehind on and off (econ-judge.test.ts). Two concurrent lookups on a stale static source give 0
+  follow-ups and 0 push re-reads; one stored item gives exactly one follow-up; a sweep that stores an item still
+  triggers it; the push-as-waiter ordering under readerPushBehind is covered. `bun run funnel --suite train6 --seeds
+  41 --preset ALL3 --set '{"syncPollBehind":true}'` prints traces summed equal to connectors received. `bun run eval`
+  JSON unchanged (defaults off); reviewer run.
+- **`sources-pages-and-vocab`.** The InMemoryTransport server (10 rows, 4 per page, pageToken only) paged at limit 2
+  lists all 10; a SyncManager poll with page size 2 over it stores every new item; a schema with a limit argument
+  still gets pages of `limit`. vocab.bench and tokenize.bench before/after in the primitives README; a heap test of
+  at most 80 B/term at 100k terms (heapStats slope); stored terms identical to today's foldString output.
+- **`server-config-fast-gate`.** `EDEN_ENGINE_CONFIG='{"readerPushBehind":true}'`, `'{"syncPush":true}'` and
+  `'{"sync":true}'` are each refused at startup with a message naming what is missing; the coverage test fails if a
+  new reader, card or push key is added without a NEEDS_DEP entry or a reasoned allow-list entry; the shipped
+  profiles still load. With `{"fallbakAsks":true}` written into docs/profiles/fallback-asks.json, `bun
+  scripts/test-select.ts changed --base HEAD --dry` selects packages/server (then revert). The profiles README
+  latency column says in-process static sources.
+- **`lab-cli-strict-and-funnel`.** `funnel.ts --presett NEWL`, `hidden-funnel.ts --sed 41` and `quality-cli.ts
+  --bogus` exit 2 without running; `--help` prints usage and exits 0 in under 1 s; `--set '{"fallbackAsk":true}'`
+  exits non-zero naming the key; `--set '{"syncPollBehind":true}'` under a preset with sync off is refused (parent
+  off) and accepted under one that turns sync on. All 11 presets pass. `bun run funnel -- --time 1` with no `--jobs`
+  runs the shards concurrently and prints the concurrency; its stripped perTask rows match a `--jobs 1` run. The
+  merged amortised line for `--suite train1,train2 --seeds 41,42 --set '{"syncPollBehind":true}' --jobs 4` matches
+  the shard mean (about 4.4/task, not 7.0). A shard where traced != received is reported.
+- **`devloop-speed-and-flakes`.** `TYPECHECK=tsgo bun run typecheck` and `bun run typecheck` agree on the clean tree
+  and on five planted error kinds; cold, after-edit and warm timings recorded in TESTING.md; `bun run check` still
+  uses tsc. `bun run test:pkg sim` at most 7 s over three runs (numbers reported), same pass and assertion counts; no
+  /tmp/funnel-flags-* or /tmp/reader-stub-* dir left after a run. A deadline test with a clock that ticks on every
+  read shows child.at <= parent.at. warm.test.ts passes 30 runs beside 8 busy loops. Five consecutive green `bun run
+  test` runs.
+- **`lab-ceilings`.** `bun packages/sim/src/lab/gate-traffic.ts` prints an oracle line over reader-relevant needs and
+  a `--reuse` report, and its existing numbers are unchanged (NEW2 436 calls, NEWL 66); `--bogus` exits 2 if the
+  flags helper has merged. The refit script reproduces fit (a) (365 ms, 4.21 ms/output token) from haiku-phase3.md's
+  rows. COST-MODEL.md has the "where 3x is impossible" table with a command or source per row and unverified rows
+  labelled.
+- **`reporting-weights-and-notes`.** pi-ab-report on report-pi-h13's data prints a w = 0.5 row with NEW Eden cost
+  $0.666/1k (to the cent fraction shown); a test checks that the weighted p50 comes from pooled samples.
+  haiku-phase3.md's frontier has weighted columns; pi-full-benchmark.md states Bar 5's w; moon-cards.md records
+  R3-22 and its INDEX row is updated; perf-cli memory prints an Eden-only per-user slope.
+- **`eval-reader-family`.** `bun run packages/eval/src/cli.ts --config <NEW> --reader stub` reports "expected in
+  reader pool" per category and differs from ALL3; the default run's JSON changes only by the new scenarios, with
+  before/after pasted; any oracle line is labelled a proxy; scenario documents are synthetic.
+
+### Deferred in round 3
+
+Round 2's deferred items not named here (R2-3 Stage 2, R2-7 Stage 2, R2-8, R2-9, R2-15, R2-23, R2-24 and the default
+flips) stand as listed under "Deferred in round 2". R2-18 is closed by R3-20's Stage 1.
+
+| # | Finding | Why | Decision needed from the owner |
+|---|---|---|---|
+| R3-1 | devloop-tsgo-typecheck (Stage 2) | needs a period of parity first | make tsgo the merge gate after a month of parity, or wait for TypeScript 7? |
+| R3-6 | lat-default-path-live-search-vs-warm-index (Stage 2) | the servers cannot list sources yet (M2); decoys rise with recall | after listable connectors and a blind live Pi run, turn `sync` + `syncPollBehind` on by default (a decision row; amends D57/D65)? |
+| R3-8 | scale-index-posting-arena | 2.1-2.8x as specified, under the bar | none (round 4 rework: frozen packed CSR for the synced corpus) |
+| R3-18, R3-20 | reader ceilings (Stage 2) | paid | approve about $0.3-0.5 each for one NEW train screen with per-call timings and one pre-registered "cached universe + at most 2 entries" screen? |
+| R3-19 | landlord bindings fail constraintLike (Stage 2) | shares partner.ts with `engine-push-behind-accounting` | none (round 4; needs the eval and the falseFireRate check) |
+| R3-24 | scale-source-map-mentions-unbounded | under 3x; pruning loses routing evidence | may source-map mentions be capped or aged out per tenant/user (amends D8's persisted metadata)? |
+| R3-5 (server) | parseEngineConfig delegating to checkEngineConfig | needs two round 3 packages merged | none (round 4) |
+| R2-19 | quality-pool-recall-lexical-ceiling | still open; diagnostic in hidden-funnel.ts | none |
