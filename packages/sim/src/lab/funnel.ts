@@ -23,6 +23,10 @@
  * requests (`-- --intent F`); ALL5 needs `-- --intent F --bridge F`. Neither file is checked in (docs/LAB.md).
  * A replayed reader prompt that is not in the cache fails open (the ask answers without the reader), so the run
  * prints the miss count and exits 3 after the score unless `--allow-misses`: such a run is part NEW, part ALL3.
+ * `-- --reader stub` screens the NEW family at $0 with no key: the reader's pool per suite (hidden and decoy in pool,
+ * pool items, prompt size); its delivery counts are not the preset's. `-- --reader oracle[:p_hit,p_false]` is a
+ * ground-truth proxy, every line labelled so. Both shard. `-- --packet-k 10,15,20` prints the planted item in the
+ * ask's top K. With `-- --lead-in clause` and a no-model reader, the draft's pool against the request's (docs/LAB.md).
  */
 import { spawn, spawnSync } from "node:child_process";
 import { closeSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -30,6 +34,7 @@ import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 import { PRESETS } from "./presets";
 import { missGate, MISS_EXIT } from "./reader-disk";
+import { screenLines, STUB_BANNER, type ScreenRow } from "./reader-stub";
 import { parseSuites, UNRUN_BLIND } from "./suites";
 
 const argv = process.argv.slice(2);
@@ -294,13 +299,10 @@ function zeroRow(): Row {
   return { n: 0, returned: 0, cached: 0, delivered: 0, calls: 0, ms: 0 };
 }
 
-interface TaskRow {
+interface TaskRow extends ScreenRow {
   suite: string;
-  variant: "hidden" | "control";
   seed: number;
   template: string;
-  delivered: boolean;
-  askCited?: boolean;
 }
 const tasks = (file: string) => (JSON.parse(readFileSync(file, "utf8")) as { perTask: TaskRow[] }).perTask;
 const readerReplay = (JSON.parse(readFileSync(out, "utf8")) as { reader?: { missed: number } }).reader;
@@ -308,10 +310,15 @@ const surfaced = (t: TaskRow) => Boolean(t.delivered || t.askCited);
 const key = (t: TaskRow) => `${t.suite}|${t.variant}|${t.seed}|${t.template}`;
 
 const rows = tasks(out);
+// `--reader stub|oracle` (no model): stub's delivery is not the preset's; every oracle line says it is a proxy.
+const readerKind = passValue("reader");
+const tag = readerKind.startsWith("oracle") ? `  [${readerKind} proxy]` : "";
 console.log(
   `\nfunnel score (surfaced = delivered or cited by ask), ${presetName}, seeds ${seeds}, ${wall.toFixed(0)} s` +
-    (jobs > 1 ? ` (${jobs} jobs; ms/task in the shards is contended)` : ""),
+    (jobs > 1 ? ` (${jobs} jobs; ms/task in the shards is contended)` : "") +
+    tag,
 );
+if (readerKind === "stub") console.log(`  ${STUB_BANNER}`);
 const bySuite = new Map<string, number[]>();
 for (const t of rows) {
   const a = bySuite.get(t.suite) ?? [0, 0, 0, 0];
@@ -322,10 +329,28 @@ for (const t of rows) {
 }
 const total = [0, 0, 0, 0];
 for (const [suite, a] of [...bySuite].sort()) {
-  console.log(`  ${suite.padEnd(10)} hidden ${a[0]}/${a[1]}  decoys ${a[2]}/${a[3]}`);
+  console.log(`  ${suite.padEnd(10)} hidden ${a[0]}/${a[1]}  decoys ${a[2]}/${a[3]}${tag}`);
   a.forEach((v, i) => (total[i]! += v));
 }
-console.log(`  ${"TOTAL".padEnd(10)} hidden ${total[0]}/${total[1]}  decoys ${total[2]}/${total[3]}`);
+console.log(`  ${"TOTAL".padEnd(10)} hidden ${total[0]}/${total[1]}  decoys ${total[2]}/${total[3]}${tag}`);
+// The reader's pool (any reader), `--packet-k` and the draft's pool (`--lead-in` with a no-model reader), per suite.
+const packetK = passValue("packet-k").split(",").filter(Boolean).map(Number);
+const screen = [...bySuite.keys()].sort().flatMap((suite) =>
+  screenLines(
+    suite,
+    rows.filter((t) => t.suite === suite),
+    packetK,
+  ),
+);
+if (screen.length) {
+  console.log(
+    "reader screen (pool: the ids the reader was given for the request, a measurement of pool content, not a bound; " +
+      "top-K: the ask's ranked candidates; draft: the draft's pool against the request's first read):",
+  );
+  for (const l of [...screen, ...(bySuite.size > 1 ? screenLines("TOTAL", rows, packetK) : [])]) {
+    console.log(`  ${l}${tag}`);
+  }
+}
 if (readerReplay) console.log(`  reader replay misses: ${readerReplay.missed}`);
 if (!opt("json", "")) console.log("  (pass --json FILE to keep the per-task rows, e.g. as a later --baseline)");
 

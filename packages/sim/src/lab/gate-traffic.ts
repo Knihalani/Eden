@@ -42,7 +42,6 @@ import {
   worthCarding,
   worthCardingStrict,
   type EngineConfig,
-  type ReaderMaker,
   type ReaderReport,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
@@ -54,6 +53,7 @@ import { buildWorld } from "../world";
 import { DiskCardMaker } from "./cards-disk";
 import { record, tidy } from "./ledger";
 import { PRESETS } from "./presets";
+import { CountingReader } from "./reader-stub";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -80,15 +80,6 @@ const cardsDir = join(import.meta.dir, "..", "..", "lab", "cards");
 const cardMaker = new DiskCardMaker(join(cardsDir, "cards-v2.jsonl"), undefined, {
   out: join(cardsDir, "cards-train.jsonl"),
 });
-
-/** The reader with no model: counts the calls the engine makes and says nothing binds. */
-class CountingReader implements ReaderMaker {
-  calls = 0;
-  async read() {
-    this.calls++;
-    return { bears: [], rejected: [], costUsd: 0 };
-  }
-}
 
 type Outcome = ReaderReport["outcome"] | "skipped";
 // "budget" (the gate passed but the reader's Budget refused the call) is named here as well as in ReaderReport so the
