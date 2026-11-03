@@ -48,6 +48,10 @@
  *     [--tool-exec parallel|sequential] [--tasks 30] [--offworld 5] [--limit n] [--dry]
  *     [--variant-config '{"name":{...}}'] [--act] [--cards FILE [--cards-out FILE]] [--card-sort price]
  *     [--allow-logging] [--rpm 18] [--max-requests N] [--intent FILE] [--bridge FILE] [--bridge-model m]
+ *     [--replay DIR [--replay-timing] [--replay-only]] [--reuse-arms earlier.json]
+ *
+ * `--replay DIR` replays the reader's and the grader's calls from DIR and appends new ones; `--reuse-arms F` copies the
+ * `none` and `tools` arms from a matching earlier run instead of running them (both at their definitions below).
  *
  * `--templates a,b` runs only those hidden-context templates; `--ask-description guided` gives the agent the MCP
  * server's guided description (`askGuard`, docs/research/edge-ask.md). Free models go through `free.ts` (above).
@@ -68,7 +72,8 @@
  * (`MAX_STEPS` + 1 requests); once it does not, the run stops starting tasks, grades what it has, and says it is
  * partial (`partial` and `requests` in the results file).
  */
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { Agent, type AgentEvent as PiEvent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
 import { Type, type Model as PiModel } from "@earendil-works/pi-ai";
 import { heldResult } from "@eden/client";
@@ -95,17 +100,21 @@ import type { World } from "../world";
 import {
   ASK_DESCRIPTION,
   ASK_DESCRIPTION_GUIDED,
+  chatModel,
   emptyResult,
   grade,
   gradeWith,
   MAX_STEPS,
   OverBudget,
   render,
+  reusableArms,
   searchToolSpec,
   systemPrompt,
   TOOL_ITEMS,
   userPrompt,
   worldOf,
+  type ArmSource,
+  type Background,
   type Meter,
   type RunResult,
   type Task,
@@ -116,7 +125,7 @@ import { DiskCardMaker, samePath } from "./cards-disk";
 import { isAnthropic, isCapError, labAccess, labModel, piModelFor, piRegistry, providerPrefs } from "./free";
 import { parseConditions, parseVariants, type Condition } from "./pi-conditions";
 import { PRESETS } from "./presets";
-import { overBudget, overBudgetLine, type Budgeted } from "./reader-disk";
+import { costAsMade, MISS_EXIT, overBudget, overBudgetLine, ReplayModel, type Budgeted } from "./reader-disk";
 import { parseSuites } from "./suites";
 import { QUESTION_CHARS, UptakeLog } from "./uptake";
 import { sanitizeForStore } from "@eden/redact";
@@ -221,12 +230,80 @@ const BRIDGE_FILE = opt("bridge", "");
 if (BRIDGE_FILE && !existsSync(BRIDGE_FILE)) throw new Error(`--bridge ${BRIDGE_FILE}: no such file`);
 const diskBridge = BRIDGE_FILE ? new DiskBridgeMaker(BRIDGE_FILE) : null;
 
+/** `--replay`'s counts per role, as the results file and the spend line give them. */
+const replaySummary = () =>
+  Object.fromEntries(
+    (
+      [
+        ["reader", readerReplay],
+        ["grader", graderReplay],
+      ] as const
+    )
+      .filter(([, m]) => m)
+      .map(([role, m]) => [role, { replayed: m!.replayed, live: m!.sent, missed: m!.missed, failed: m!.failed }]),
+  );
+const replayLine = () =>
+  `replay ${Object.entries(replaySummary())
+    .map(([role, c]) => `${role} ${c.replayed} replayed / ${c.live} live${c.missed ? ` / ${c.missed} MISSED` : ""}`)
+    .join(", ")}`;
+/** The Pi agent loop this harness runs: part of every replay key and of `--reuse-arms`'s match. */
+const HARNESS_VERSION = "@earendil-works/pi-agent-core@1.3.0";
+/**
+ * `--replay DIR`: the reader's and the grader's calls are kept in `DIR/reader.jsonl` and `DIR/grader.jsonl`
+ * (`ReplayModel`, reader-disk.ts) under a key of the exact prompt, the model id, the harness version, the provider
+ * preferences and the role: a call made before is replayed at no cost, a new one is made live and appended. The agent
+ * itself still runs live. `--replay-timing` sleeps each replayed call's recorded latency, so the critical path stands
+ * for a live run's; without it replayed calls take no time. `--replay-only` makes nothing live: a call with no line is
+ * a miss (the reader then fails open, the grade is left ungraded) and the run exits 3 after writing its results.
+ * Replay freezes one sample per prompt: paired comparisons are sound (common random numbers), but a run-to-run
+ * variance estimate needs `--replay` off.
+ */
+const REPLAY_DIR = opt("replay", "");
+const REPLAY_TIMING = args.includes("--replay-timing");
+const REPLAY_ONLY = args.includes("--replay-only");
+if ((REPLAY_TIMING || REPLAY_ONLY) && !REPLAY_DIR) throw new Error("--replay-timing and --replay-only need --replay");
+if (REPLAY_DIR) mkdirSync(REPLAY_DIR, { recursive: true });
+const replaySalt = (role: string) => ({ role, harness: HARNESS_VERSION, provider: providerPrefs(ACCESS) });
+const readerReplay =
+  REPLAY_DIR && USES_READER
+    ? new ReplayModel(
+        join(REPLAY_DIR, "reader.jsonl"),
+        REPLAY_ONLY
+          ? null
+          : labModel(ACCESS, { apiKey: KEY ?? "", model: READER_MODEL, timeoutMs: 60_000 }, "eden.reader"),
+        READER_MODEL,
+        { salt: replaySalt("eden.reader"), timing: REPLAY_TIMING },
+      )
+    : null;
+const graderReplay = REPLAY_DIR
+  ? new ReplayModel(
+      join(REPLAY_DIR, "grader.jsonl"),
+      REPLAY_ONLY
+        ? null
+        : isAnthropic(GRADER)
+          ? labModel(ACCESS, { apiKey: "", model: GRADER }, "grader")
+          : chatModel(KEY ?? "", GRADER, { fetch: ACCESS.fetch, allowLogging: ACCESS.allowLogging }),
+      GRADER,
+      { salt: replaySalt("grader"), timing: REPLAY_TIMING },
+    )
+  : null;
+/**
+ * `--reuse-arms F`: the arms Eden takes no part in (`none`, `tools`: no partner, no `--act`) are copied from the
+ * results file F (and its timeline's lines) instead of run again, when F's run matches this one (`reusableArms` in
+ * ab-common.ts lists what must match, and refuses with the reason otherwise). Nothing is spent on them; the report
+ * reads them as F recorded them.
+ */
+const REUSE_FILE = opt("reuse-arms", "");
+if (REUSE_FILE && !existsSync(REUSE_FILE)) throw new Error(`--reuse-arms ${REUSE_FILE}: no such file`);
+
 // ---- Spend: one hard cap over every call, reserved before the call at its worst case and settled at its real cost.
 let spent = 0;
 let held = 0;
 const spend = { agent: 0, eden: 0, grader: 0 };
 /** Every lane's reader, cards and bridge, for the calls their `Budget()` refused (the summary's `overBudget:` line). */
 const budgeted: Budgeted = { reader: [], cards: [], bridge: [] };
+/** Each stream's background spend (cards, bridge), for the report's all-in cost columns. */
+const background: Background[] = [];
 /** Reserves `est` dollars, or throws `OverBudget` when that could take the run past `--budget`. */
 function reserve(est: number): void {
   if (spent + held + est > BUDGET) throw new OverBudget(`budget $${BUDGET} reached (spent $${spent.toFixed(4)})`);
@@ -378,7 +455,9 @@ function ownedModel(inner: Model, owner: () => RunResult | null): Model {
       const res = await inner.chat(request);
       if (r) {
         r.edenModelCalls++;
-        r.edenCostUsd += res.costUsd;
+        // A replayed call is charged at its cost as made (the run spends nothing on it): a replayed run's per-task
+        // cost reads as the live run's did.
+        r.edenCostUsd += costAsMade(res);
       }
       return res;
     },
@@ -448,11 +527,20 @@ async function runWorld(
       current?.span("eden.source", "eden", "bg", start, end, { source: id, op, status, items }),
     ),
   );
+  // What this stream's background calls (cards, bridge) cost: booked to Eden's total, charged to no task (Background).
+  const bg = { cardsUsd: 0, bridgeUsd: 0, calls: 0 };
+  const onBg = (what: "cardsUsd" | "bridgeUsd", data: Record<string, unknown>) => {
+    bg.calls++;
+    bg[what] += typeof data.cost === "number" ? data.cost : 0;
+  };
   // `cards`: the enrichment model, metered against the run's cap and booked to Eden's spend like its judge.
   const cardModel = (sort: "" | "price") =>
     meteredModel(
       labModel(ACCESS, { apiKey: KEY!, model: CARD_MODEL, ...(sort ? { sort } : {}) }, "eden.cards"),
-      (start, end, data) => current?.span("eden.cards", "eden", "bg", start, end, data),
+      (start, end, data) => {
+        onBg("cardsUsd", data);
+        current?.span("eden.cards", "eden", "bg", start, end, data);
+      },
     );
   // `--card-sort price` (D66): a batch cut off at the cap is sent again with default routing.
   const liveCards = (): CardMaker =>
@@ -468,9 +556,10 @@ async function runWorld(
   // `bridgeQuery`: replayed queries first, the rest made live (booked to Eden like its judge).
   const liveBridge = () =>
     new ModelBridgeMaker(
-      meteredModel(labModel(ACCESS, { apiKey: KEY!, model: BRIDGE_MODEL }, "eden.bridge"), (start, end, data) =>
-        current?.span("eden.bridge", "eden", "bg", start, end, data),
-      ),
+      meteredModel(labModel(ACCESS, { apiKey: KEY!, model: BRIDGE_MODEL }, "eden.bridge"), (start, end, data) => {
+        onBg("bridgeUsd", data);
+        current?.span("eden.bridge", "eden", "bg", start, end, data);
+      }),
     );
   const bridgeMaker = (): BridgeMaker => {
     if (!diskBridge) return liveBridge();
@@ -502,7 +591,9 @@ async function runWorld(
           maker: new ModelReaderMaker(
             meteredModel(
               ownedModel(
-                labModel(ACCESS, { apiKey: KEY ?? "", model: READER_MODEL, timeoutMs: 60_000 }, "eden.reader"),
+                // `--replay`: one replay cache for every stream (a prompt made by one is replayed by the others).
+                readerReplay ??
+                  labModel(ACCESS, { apiKey: KEY ?? "", model: READER_MODEL, timeoutMs: 60_000 }, "eden.reader"),
                 () => readerTask,
               ),
               (start, end, data) => current?.span("eden.reader", "eden", "path", start, end, data),
@@ -987,8 +1078,10 @@ async function runWorld(
             }
             const meter: Meter = { before: () => {}, after: (c) => (cost = c) };
             const via = { fetch: ACCESS.fetch, allowLogging: ACCESS.allowLogging };
-            r.facts = GRADER_MODEL
-              ? await gradeWith(GRADER_MODEL, task, r.answer, (c) => (cost = c))
+            // `--replay`: the same prompt through the replay cache (a replayed grade costs nothing).
+            const model = graderReplay ?? GRADER_MODEL;
+            r.facts = model
+              ? await gradeWith(model, task, r.answer, (c) => (cost = c))
               : (await grade(KEY!, meter, GRADER, task, r.answer, via)).facts;
           } catch (e) {
             // A failed grading call leaves the result ungraded (reported), never scored as a miss. The status line
@@ -1005,6 +1098,9 @@ async function runWorld(
   }
   await closePrevious();
   current = null;
+  if (cards || bridge) {
+    background.push({ seed, suite: tasks[0]?.suite ?? "", condition, tasks: out.map((r) => r.task), ...bg });
+  }
   return out;
 }
 
@@ -1025,19 +1121,62 @@ console.error(
     (Object.keys(CONFIG_VARIANTS).length ? `, variants ${JSON.stringify(CONFIG_VARIANTS)}` : "") +
     (CARDS_FILE ? `, cards ${CARDS_FILE} (${diskCards!.cards.size} replayed; new → ${CARDS_OUT})` : "") +
     (ACCESS.allowLogging ? ", ALLOW-LOGGING (lab only)" : "") +
-    `, requests ≤${PACER.remaining === Infinity ? "∞" : PACER.remaining}`,
+    `, requests ≤${PACER.remaining === Infinity ? "∞" : PACER.remaining}` +
+    (REPLAY_DIR ? `, replay ${REPLAY_DIR}${REPLAY_ONLY ? " (only)" : ""}${REPLAY_TIMING ? " (timed)" : ""}` : ""),
 );
+/** The arms `--reuse-arms` copies (checked before anything is spent, `--dry` included), with their timeline lines. */
+const reused: { conditions: string[]; results: RunResult[]; records: TaskRecord[] } = {
+  conditions: [],
+  results: [],
+  records: [],
+};
+if (REUSE_FILE) {
+  const prior = JSON.parse(readFileSync(REUSE_FILE, "utf8")) as ArmSource & { timeline?: string };
+  reused.conditions = CONDITIONS.filter((c) => !c.withPartner && !c.act).map((c) => c.name);
+  if (!reused.conditions.length) throw new Error("--reuse-arms: no condition here runs without Eden (none, tools)");
+  reused.results = reusableArms(
+    prior,
+    {
+      model: MODEL,
+      grader: GRADER,
+      harness: "pi",
+      harnessVersion: HARNESS_VERSION,
+      seeds: SEEDS,
+      suites: SUITE_LIST,
+      timeScale: TIME_SCALE,
+      toolExecution: TOOL_EXEC,
+      act: ACT,
+      tasks: worlds.flatMap((w) => w.tasks),
+    },
+    reused.conditions,
+  );
+  const wanted = new Set(reused.results.map((r) => `${r.task}\u0000${r.condition}`));
+  const lines = prior.timeline && existsSync(`${prior.timeline}/tasks.jsonl`) ? `${prior.timeline}/tasks.jsonl` : "";
+  for (const line of lines ? readFileSync(lines, "utf8").split("\n") : []) {
+    if (!line.trim()) continue;
+    const rec = JSON.parse(line) as TaskRecord;
+    if (wanted.has(`${rec.task}\u0000${rec.condition}`)) reused.records.push(rec);
+  }
+  console.error(
+    `reusing ${reused.results.length} results of ${reused.conditions.join(",")} from ${REUSE_FILE}` +
+      ` (${reused.records.length} timeline lines${lines ? "" : ": no timeline found, timing sections omit them"})`,
+  );
+}
 if (DRY) process.exit(0);
 
 mkdirSync(TIMELINE, { recursive: true });
 writeFileSync(`${TIMELINE}/tasks.jsonl`, "");
 writeFileSync(`${TIMELINE}/samples.jsonl`, "");
 const stopSampling = startSampling(`${TIMELINE}/samples.jsonl`);
-const records: TaskRecord[] = [];
+const records: TaskRecord[] = [...reused.records];
 const grading: Promise<void>[] = [];
-const results: RunResult[] = [];
+const results: RunResult[] = [...reused.results];
 const t0 = performance.now();
-const streams = worlds.flatMap((w) => CONDITIONS.map((c) => runWorld(w.world, w.seed, w.tasks, c, records, grading)));
+const streams = worlds.flatMap((w) =>
+  CONDITIONS.filter((c) => !reused.conditions.includes(c.name)).map((c) =>
+    runWorld(w.world, w.seed, w.tasks, c, records, grading),
+  ),
+);
 for (const settled of await Promise.allSettled(streams)) {
   if (settled.status === "fulfilled") results.push(...settled.value);
   else console.error(`stream stopped: ${settled.reason instanceof Error ? settled.reason.message : settled.reason}`);
@@ -1056,7 +1195,7 @@ writeFileSync(
       suites: SUITE_LIST,
       spent,
       harness: "pi",
-      harnessVersion: "@earendil-works/pi-agent-core@1.3.0",
+      harnessVersion: HARNESS_VERSION,
       config: CONFIG,
       ...(Object.keys(CONFIG_VARIANTS).length ? { variantConfig: CONFIG_VARIANTS } : {}),
       ...(ACT ? { act: true } : {}),
@@ -1069,6 +1208,10 @@ writeFileSync(
       toolExecution: TOOL_EXEC,
       askDescription: ASK_DESC,
       spend,
+      // Eden's spend no task is charged for, per stream: the report's backfill and all-in columns (ab-common.ts).
+      background,
+      ...(REPLAY_DIR ? { replay: replaySummary() } : {}),
+      ...(REUSE_FILE ? { reusedArms: { from: REUSE_FILE, conditions: reused.conditions } } : {}),
       overBudget: overBudget(budgeted),
       timeline: TIMELINE,
       wallSeconds: Math.round((performance.now() - t0) / 100) / 10,
@@ -1084,6 +1227,16 @@ console.error(
   `spent $${spent.toFixed(4)} (agent $${spend.agent.toFixed(4)}, eden $${spend.eden.toFixed(4)}, grader ` +
     `$${spend.grader.toFixed(4)}); ${results.length} runs, ${ungraded} ungraded → ${OUT}, timeline ${TIMELINE}, ` +
     `time-scale ${TIME_SCALE}; ${PACER.sent} requests (${PACER.retried} retried, ${JSON.stringify(PACER.statuses)})` +
-    (capStopped || PACER.refused ? `; PARTIAL: request cap reached (${capStopped} streams stopped early)` : ""),
+    (capStopped || PACER.refused ? `; PARTIAL: request cap reached (${capStopped} streams stopped early)` : "") +
+    (REPLAY_DIR ? `; ${replayLine()}` : "") +
+    (REUSE_FILE ? `; reused ${reused.results.length} runs (${reused.conditions.join(",")}) at $0` : ""),
 );
 console.error(overBudgetLine(budgeted));
+const replayMisses = (readerReplay?.missed ?? 0) + (graderReplay?.missed ?? 0);
+if (REPLAY_ONLY && replayMisses > 0) {
+  console.error(
+    `REPLAY MISSES: ${replayMisses} calls had no line in ${REPLAY_DIR} (--replay-only): the reader answered without ` +
+      "them and those grades are missing, so this run is not a replay of the configuration",
+  );
+  process.exit(MISS_EXIT);
+}

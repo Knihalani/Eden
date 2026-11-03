@@ -77,6 +77,7 @@ import {
   userPrompt,
   worldOf,
   type Meter,
+  type Background,
   type RunResult,
   type Task,
 } from "./ab-common";
@@ -174,6 +175,8 @@ let held = 0;
 const spend = { agent: 0, eden: 0, grader: 0 };
 /** Every lane's reader, cards and bridge, for the calls their `Budget()` refused (the summary's `overBudget:` line). */
 const budgeted: Budgeted = { reader: [], cards: [], bridge: [] };
+/** Each stream's background spend (cards, bridge), for the report's all-in cost columns (ab-common.ts). */
+const background: Background[] = [];
 function reserve(est: number): void {
   if (spent + held + est > BUDGET) throw new OverBudget(`budget $${BUDGET} reached (spent $${spent.toFixed(4)})`);
   held += est;
@@ -373,10 +376,17 @@ async function runWorld(
       current?.span("eden.source", "eden", "bg", start, end, { source: s.id, op, status }),
     ),
   );
+  // What this stream's background calls (cards, bridge) cost: booked to Eden's total, charged to no task (Background).
+  const bg = { cardsUsd: 0, bridgeUsd: 0, calls: 0 };
+  const onBg = (what: "cardsUsd" | "bridgeUsd", data: Record<string, unknown>) => {
+    bg.calls++;
+    bg[what] += typeof data.cost === "number" ? data.cost : 0;
+  };
   const cardModel = () =>
-    meteredModel(labModel(ACCESS, { apiKey: KEY!, model: CARD_MODEL }, "eden.cards"), (start, end, data) =>
-      current?.span("eden.cards", "eden", "bg", start, end, data),
-    );
+    meteredModel(labModel(ACCESS, { apiKey: KEY!, model: CARD_MODEL }, "eden.cards"), (start, end, data) => {
+      onBg("cardsUsd", data);
+      current?.span("eden.cards", "eden", "bg", start, end, data);
+    });
   const cardMaker = (): CardMaker =>
     diskCards
       ? new DiskCardMaker(CARDS_FILE, new ModelCardMaker(cardModel()), { out: CARDS_OUT, shared: diskCards })
@@ -388,9 +398,10 @@ async function runWorld(
   if (cards) budgeted.cards.push(cards);
   const liveBridge = () =>
     new ModelBridgeMaker(
-      meteredModel(labModel(ACCESS, { apiKey: KEY!, model: BRIDGE_MODEL }, "eden.bridge"), (start, end, data) =>
-        current?.span("eden.bridge", "eden", "bg", start, end, data),
-      ),
+      meteredModel(labModel(ACCESS, { apiKey: KEY!, model: BRIDGE_MODEL }, "eden.bridge"), (start, end, data) => {
+        onBg("bridgeUsd", data);
+        current?.span("eden.bridge", "eden", "bg", start, end, data);
+      }),
     );
   const bridgeMaker = (): BridgeMaker => {
     if (!diskBridge) return liveBridge();
@@ -708,6 +719,9 @@ async function runWorld(
     worker?.close();
     streams.delete(id);
   }
+  if (cards || bridge) {
+    background.push({ seed, suite: tasks[0]?.suite ?? "", condition, tasks: out.map((r) => r.task), ...bg });
+  }
   return out;
 }
 
@@ -837,6 +851,8 @@ writeFileSync(
       stoppedStreams,
       maxIterations: MAX_ITERATIONS,
       spend,
+      // Eden's spend no task is charged for, per stream: the report's backfill and all-in columns (ab-common.ts).
+      background,
       overBudget: overBudget(budgeted),
       timeline: TIMELINE,
       wallSeconds: Math.round((performance.now() - t0) / 100) / 10,

@@ -6,6 +6,10 @@
  *
  * With no inner model (`--reader replay`), a prompt with no cached line fails, as a model error would: the ask then
  * answers as without the reader, and the run counts it as a miss.
+ *
+ * The live A/B (`pi-ab.ts --replay DIR`) keeps its reader's and its grader's calls here too, with a `salt` in the key
+ * (the role, the harness version, the provider preferences) so a line made under one setup never answers another. A
+ * line holds the reply, usage, cost and latency only: never a key or a request header.
  */
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
@@ -22,7 +26,11 @@ interface Line {
   truncated?: boolean;
 }
 
-export function promptKey(model: string, request: ChatRequest): string {
+/**
+ * The cache key: the model id and everything in the request that shapes the reply. `salt` adds what the request does
+ * not carry; without one the key is the one the funnel's reader caches were written under.
+ */
+export function promptKey(model: string, request: ChatRequest, salt?: Record<string, unknown>): string {
   return createHash("sha256")
     .update(
       JSON.stringify({
@@ -31,15 +39,37 @@ export function promptKey(model: string, request: ChatRequest): string {
         maxTokens: request.maxTokens,
         json: request.json === true,
         reasoning: request.reasoning ?? null,
+        ...(salt ? { salt } : {}),
       }),
     )
     .digest("hex")
     .slice(0, 40);
 }
 
+/** What a `ReplayModel` keys on beyond the request, and how it replays. */
+export interface ReplayOptions {
+  /** Added to every key: what changes the reply but is not in the request (role, harness, provider routing). */
+  salt?: Record<string, unknown>;
+  /** Sleep each replayed call's recorded latency, so a replayed run's timings stand for a live one's. */
+  timing?: boolean;
+}
+
+/**
+ * A replayed reply's cost as it was made. A replay returns `costUsd: 0` (nothing was spent in this run), but a report's
+ * per-task cost columns say what a condition costs, so they read the cost as made: the same in a live run and in its
+ * replay.
+ */
+const madeCost = new WeakMap<ChatResponse, number>();
+export const costAsMade = (res: ChatResponse): number => madeCost.get(res) ?? res.costUsd;
+
 export class ReplayModel implements Model {
   readonly id: string;
   private readonly lines = new Map<string, Line>();
+  /**
+   * A prompt being made live now: the same prompt asked again meanwhile waits for it and replays its line, so a prompt
+   * gets one reply in a run (as it will in the run that replays it) and is paid for once.
+   */
+  private readonly inFlight = new Map<string, Promise<Line>>();
   /** Calls replayed and sent; live and replayed latencies and costs, as OpenRouter reported them when made. */
   replayed = 0;
   sent = 0;
@@ -53,6 +83,7 @@ export class ReplayModel implements Model {
     private readonly file: string,
     private readonly inner: Model | null,
     id?: string,
+    private readonly options: ReplayOptions = {},
   ) {
     this.id = id ?? inner?.id ?? "replay";
     if (file && existsSync(file)) {
@@ -65,26 +96,21 @@ export class ReplayModel implements Model {
   }
 
   async chat(request: ChatRequest): Promise<ChatResponse> {
-    const k = promptKey(this.id, request);
+    const k = promptKey(this.id, request, this.options.salt);
     const held = this.lines.get(k);
-    if (held) {
-      this.replayed++;
-      this.record(held, false);
-      return { ...held, costUsd: 0 };
+    if (held) return this.replay(held, request.signal);
+    // Checked without an await first: the call that makes a prompt live registers it before it yields.
+    const flying = this.inFlight.get(k);
+    if (flying) {
+      const shared = await flying.catch(() => undefined);
+      if (shared) return this.replay(shared, request.signal);
     }
     if (!this.inner) {
       this.missed++;
       throw new Error("reader replay: no cached call for this prompt");
     }
-    let res: ChatResponse;
-    try {
-      res = await this.inner.chat(request);
-    } catch (e) {
-      this.failed++;
-      throw e;
-    }
-    this.sent++;
-    const line: Line = {
+    const made = this.inner.chat(request);
+    const pending = made.then((res): Line => ({
       k,
       text: res.text,
       usage: res.usage,
@@ -93,10 +119,44 @@ export class ReplayModel implements Model {
       model: res.model,
       ...(res.provider ? { provider: res.provider } : {}),
       ...(res.truncated ? { truncated: true } : {}),
-    };
+    }));
+    this.inFlight.set(k, pending);
+    let res: ChatResponse;
+    try {
+      res = await made;
+    } catch (e) {
+      this.failed++;
+      throw e;
+    } finally {
+      this.inFlight.delete(k);
+    }
+    this.sent++;
+    const line = await pending;
     this.lines.set(k, line);
     if (this.file) appendFileSync(this.file, `${JSON.stringify(line)}\n`);
     this.record(line, true);
+    return res;
+  }
+
+  private async replay(held: Line, signal?: AbortSignal): Promise<ChatResponse> {
+    this.replayed++;
+    this.record(held, false);
+    if (this.options.timing && held.latencyMs > 0 && !signal?.aborted) {
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, held.latencyMs);
+        signal?.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          { once: true },
+        );
+      });
+    }
+    const { k: _key, ...reply } = held;
+    const res: ChatResponse = { ...reply, costUsd: 0 };
+    madeCost.set(res, held.costUsd);
     return res;
   }
 
