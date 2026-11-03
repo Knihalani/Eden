@@ -41,7 +41,8 @@ Running this skill is the user's opt-in to multi-agent orchestration: call the W
 8. **Finalize, no loose ends**: every flag or option the run added is measured on against off. It is then made the
    default (with a decision row), removed with its dead code, or kept off only with a recorded reason and a next
    step. Every deferred or unresolved item is resolved or decided in writing. Approved branches left unmerged, new
-   TODO/FIXME lines and docs that disagree with the code are fixed. These fixes get the same fix → review → merge
+   TODO/FIXME lines and docs that disagree with the code are fixed. Production defaults are checked against the best
+   measured preset and promoted where possible, or the blocker is recorded with its fix. These fixes get the same fix → review → merge
    loop, for up to two passes.
 9. **Report**: a plain-language summary goes at the top of the audit file and comes back to you.
 
@@ -84,7 +85,23 @@ Running this skill is the user's opt-in to multi-agent orchestration: call the W
    Say the expected scale in one line before starting. A round runs about 9 finders, up to 2 verifiers per
    finding, 2 agents per package attempt, and a cleanup step that frees finished worktrees.
 4. **While it runs**, stay available. If the user interjects, answer; don't stop the run unless they ask.
-5. **After it returns:**
+   - **Updates at every milestone, and only then.** The milestones are:
+     - a round's findings verified;
+     - a round's audit and packages written;
+     - a round's fixes merged, or a merge failing;
+     - Finalize starting;
+     - the run finishing or failing.
+
+     Watch for them with a background script that tails the run's `journal.jsonl` (the transcript directory the
+     Workflow tool printed). It exits when a new `audit:`, `integrate:`, `finalize-plan:` or `report` agent starts, or
+     a new `find:rN` round begins. Restart it after each update, and report a stop at the time limit.
+   - **Every update uses the update template below.** Pull the numbers from the journal's results: packages, fixers'
+     `measured` fields, reviewers' verdicts, the integrator's checks. Include all the relevant data, formatted.
+5. **Decisions are yours, not the user's.** The user delegates judgement calls. Decide from the measurements, record
+   each in the repo's decision log with its evidence, and report what you decided. Ask the user only about paid spend
+   beyond the agreed budget, an irreversible or external action, or something only they can do, such as a key or
+   access.
+6. **After it returns:**
    - Check every package branch against the integration branch (`git merge-base --is-ancestor <branch>
      audit/<date>-integration`): a fix that was approved but not merged, or published to a stray worktree branch,
      has to be merged now. Treat the workflow's ledger as a claim and git as the truth.
@@ -97,8 +114,41 @@ Running this skill is the user's opt-in to multi-agent orchestration: call the W
      and review has passed.
    - Clean up: once the branches are merged and pushed, remove the run's worktrees (`git worktree list`, then
      `git worktree remove` on each one under the workflow's worktree folder) and `git worktree prune`.
-6. **Report to the user** using the template below. Keep it short and legible: plain words, one idea per line,
+7. **Report to the user** using the template below. Keep it short and legible: plain words, one idea per line,
    numbers with what they mean.
+
+## Scale out across cloud sessions (when the container is small)
+
+A workflow runs at most (CPU cores − 2) agents at once, so a 4-core container fixes packages two at a time. If you can
+create cloud sessions (each runs on its own machine), use them for the fix stage:
+1. Run the workflow with `"planOnly": true`. It maps, finds, verifies and writes the audit, then returns the packages
+   (with `map`, `findings` and `deferred`) without fixing them.
+2. Push the integration branch it created. Then, for each package, or group of packages that share no files, start
+   one cloud session from that branch with a self-contained brief:
+   - the package, its findings and acceptance checks;
+   - the orientation brief, the repo rules and the reviewer's checklist;
+   - the files other sessions are changing, so it avoids them;
+   - "tests first, measure before and after, run the repo's reviewer, push a branch, open a PR, do not merge, then
+     message the parent with the results".
+3. When they report, merge their branches into the integration branch yourself, resolve conflicts, and run the checks
+   and the combined-diff review. Then re-run the workflow with `"finalizeOnly": true` and `"deferred": [...]` to close
+   loose ends, and repeat from step 1 for a new round if material findings remain.
+
+Parallel sessions spend the same tokens sooner. Mention it if the account shows a usage warning.
+
+## Update template (every milestone)
+
+```
+**<Milestone>: <one-line outcome>** (e.g. "Round 2 fixes merged: 7 of 8 approved, all checks green")
+
+1. Outcome: what finished; succeeded / partly / failed.
+2. Numbers: found / confirmed / rejected / packages / approved / sent back / still open (a table).
+3. What changed: one line per fix: what it does, measured before → after with units, why it matters.
+4. Problems: anything rejected, blocked or broken, and what happens next.
+5. Decisions made: one line each, with the evidence.
+6. Health: tests passing / total, eval unchanged or changed, disk free, spend.
+7. Next: the next step and how far through the run it is.
+```
 
 ## Report template
 
@@ -117,11 +167,17 @@ Running this skill is the user's opt-in to multi-agent orchestration: call the W
 | User pain points | … | … | … | … |
 | Bugs | … | … | … | … |
 
-**Biggest fixes** (measured before → after; estimates labelled):
-- …
+**What was achieved** (one row per merged fix; estimates labelled):
+
+| Fix | Before → after (units) | Shipped as |
+|---|---|---|
+| … | … | default / flag with recorded reason / removed |
+
+**Decisions I made:**
+- <decision>: <evidence> → <decision-log row>
 
 **Still open, and what's needed:**
-- <item>: <why open: needs your decision / too big / rejected by review> → <next step>
+- <item>: <why open: needs paid spend beyond budget / external action / rejected by review> → <next step>
 
 **Where it is:** audit <path> · branch <integration branch> · PR <link>
 ```
