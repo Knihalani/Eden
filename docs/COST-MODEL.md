@@ -72,9 +72,8 @@ cache reads at a tenth), p50 1.41 s and p90 1.99 s with thinking off. With `read
 once per user request that acts (an imperative request), whether or not the agent asks: at about $0.00042 a call, $0.42
 per thousand acting requests. Phase 3 (D99): prompt v7 is about 3,900 tokens in and 190 out, $0.00040 a call; the leaner
 operating point (pool 15, 240-character snippets, `readerGate`) about 2,900 in and 180 out, $0.00029 a call (30% less
-Eden cost per task live). `askReaderStanding` 20 adds about 3,000 input tokens, 55–68% of the prompt then read from the
-cache ($0.00043–0.00047 a call). With `askReaderQuestions` and `readerPush` together, the push reads every user message
-(small talk included), not only acting requests: about $0.00040–0.00047 per user message from the push alone. An
+Eden cost per task live; the default's reader, D112). `askReaderStanding` and `askReaderQuestions` were deleted by
+D112 (NEW2 was not adopted): they added about 3,000 input tokens a call and a push read of every user message. An
 `ask_context` the agent then makes about the same request is a second full call unless its question is the request word
 for word: the verdict cache is keyed by the request, the question and the focused pool (`readerKey`), and a paraphrase
 changes all three (the audit's scratch test on the `reader.test.ts` harness, re-run 2026-11-03: 1 call for a verbatim
