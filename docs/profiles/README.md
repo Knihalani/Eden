@@ -50,3 +50,7 @@ not measured against real connectors), run the funnel with `--time 1` and a time
 bun run funnel --jobs 4 --preset none --set "$(cat docs/profiles/<name>.json)" -- --time 1 --timeline t.jsonl
 bun packages/sim/src/lab/timeline-report.ts t.jsonl
 ```
+
+The lab's warm synced index (`sync` with `syncPollBehind`, D57/D65) cuts that simulated time, but no profile can
+use it: the servers refuse `sync` and every `sync*` key off its default (D106), because static sources cannot be
+listed. Measure it in the lab with `--set '{"sync":true,"syncPollBehind":true}'` on the funnel command above.

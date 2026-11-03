@@ -107,6 +107,17 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     expect(() => parseEngineConfig({ sync: true })).toThrow(/"sync" needs sources with a list tool/);
     const path = file("sync.json", JSON.stringify({ probes: true, sync: true }));
     expect(() => engineConfig({ EDEN_ENGINE_CONFIG: path })).toThrow(/EDEN_ENGINE_CONFIG .*"sync" needs sources/);
+    // With sync refused, its sub-settings would start cleanly and do nothing (partner.ts gates them on this.sync).
+    for (const [key, value] of [
+      ["syncPollBehind", true],
+      ["syncOnDemand", false],
+      ["syncWide", true],
+      ["syncPollPageSize", 5],
+      ["syncEveryMs", 60_000],
+      ["syncStaleChance", 1],
+    ] as const) {
+      expect(() => parseEngineConfig({ [key]: value })).toThrow(new RegExp(`"${key}" needs sources with a list tool`));
+    }
     // Their defaults stay accepted.
     const defaults = {
       readerPushBehind: false,
@@ -119,19 +130,21 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     expect(parseEngineConfig(defaults)).toEqual(defaults);
   });
 
-  test("every reader, card, bridge, intent, digest and push key is refused off its default or allow-listed", () => {
+  test("every reader, card, bridge, intent, digest, push and sync key is refused off its default or allow-listed", () => {
     // A new key of these families acts only through something the servers do not wire (a paid model dependency, a
     // push route) unless shown otherwise. Each must be refused at a non-default value, or listed here with the reason
     // it does something from the shipped servers.
     const allowed: Record<string, string> = {};
     const other = (value: unknown): unknown => {
       if (typeof value === "boolean") return !value;
-      if (typeof value === "number") return value === 0 ? 1 : 0;
+      // A legal non-default (`RANGES` is checked first): 0 is illegal for sizes, and a share must stay at most 1.
+      if (typeof value === "number") return value === 0 ? 1 : Number.isInteger(value) ? value + 1 : value / 2;
       if (Array.isArray(value)) return value.length ? [] : ["x"];
       throw new Error(`no non-default value for ${JSON.stringify(value)}`);
     };
-    const keys = Object.keys(DEFAULT_CONFIG).filter((key) => /reader|card|bridge|intent|digest|push/i.test(key));
-    expect(keys.length).toBeGreaterThanOrEqual(36);
+    // Sync is refused while the servers build no listable sources, so every sync sub-setting would be inert too.
+    const keys = Object.keys(DEFAULT_CONFIG).filter((key) => /reader|card|bridge|intent|digest|push|^sync/i.test(key));
+    expect(keys.length).toBeGreaterThanOrEqual(36 + 18);
     const unguarded: string[] = [];
     for (const key of keys) {
       if (allowed[key] !== undefined) continue;
@@ -196,12 +209,11 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     // Legal: nothing, 0 where 0 means off, defaults of dependency-only keys, chances at the bounds, real parts.
     const accepted: Record<string, unknown>[] = [
       {},
-      { syncPollPageSize: 0 },
-      { syncPollPageSize: 5 },
+      { syncPollPageSize: 0, syncPageSize: DEFAULT_CONFIG.syncPageSize },
       { readerPushWaitMs: DEFAULT_CONFIG.readerPushWaitMs, askReaderStanding: 0 },
       { readerPushKinds: [...DEFAULT_CONFIG.readerPushKinds] },
-      { syncStaleChance: 0 },
-      { syncStaleChance: 1 },
+      { syncStaleChance: DEFAULT_CONFIG.syncStaleChance },
+      { probeFreshFloor: 0, probeYieldFloor: 1 },
       { anticipateOff: ["serve", "names"] },
       { confidentScore: 1.25, maxRefreshes: 0 },
     ];

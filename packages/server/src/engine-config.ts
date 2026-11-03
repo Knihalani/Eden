@@ -14,7 +14,7 @@
  * Those deps are paid model roles (cards, the bridge, the reader); ALL3 and the NEW family need them, so they are not
  * runnable from the shipped servers until the deps are wired under a decision with a COST-MODEL.md entry. Two more
  * things the servers lack are refused the same way: a route relaying source watches and change notices (push sync)
- * and sources that can be listed (sync). The judge
+ * and sources that can be listed (sync, with all its `sync*` sub-settings). The judge
  * (`judge*`, `anticipate`) and `askWithModel` use the partner's own model and `Budget`; docs/COST-MODEL.md has their
  * cost.
  */
@@ -51,8 +51,9 @@ const MISSING: Record<Missing, string> = {
  * push and `readerPushBehind` acts only on it (`ask` with `internal.push`), the `intent*` settings are read by
  * `intentFinds`, which needs cards; sync.ts applies the `syncPush*` settings only to a source marked by `pushing`,
  * which only `sourcePushes` calls). `sync` is refused until the servers build listable sources (per-user MCP
- * connectors, roadmap M2); its own sub-settings are then inert, like any off flag's. engine-config.test.ts requires
- * every reader, card, bridge, intent, digest and push key to be here or allow-listed with a reason.
+ * connectors, roadmap M2), and so is every other `sync*` key off its default, since each is inert without it.
+ * engine-config.test.ts requires every reader, card, bridge, intent, digest, push and sync key to be here or
+ * allow-listed with a reason.
  */
 const NEEDS_DEP: Partial<Record<keyof EngineConfig, Missing>> = {
   cards: "cards",
@@ -92,6 +93,25 @@ const NEEDS_DEP: Partial<Record<keyof EngineConfig, Missing>> = {
   syncPushSweepMs: "notify",
   syncPushGapMs: "notify",
   sync: "list",
+  // With `sync` refused, every sync sub-setting is inert (partner.ts and sync.ts read them only with `this.sync`), so
+  // they are refused too: `syncPollBehind`, the latency lever D65 measures, would otherwise start and do nothing.
+  syncMaxItems: "list",
+  syncPageSize: "list",
+  syncPollPageSize: "list",
+  syncEveryMs: "list",
+  syncStaleChance: "list",
+  syncMaxStaleMs: "list",
+  syncActiveMs: "list",
+  syncSweepMs: "list",
+  syncDropMs: "list",
+  syncCallsPerMin: "list",
+  syncOnDemand: "list",
+  syncPollBehind: "list",
+  syncCatchupPages: "list",
+  syncMaxUsersPerTenant: "list",
+  syncLocalAll: "list",
+  syncWide: "list",
+  syncTermProbes: "list",
 };
 
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */

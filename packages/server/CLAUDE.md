@@ -34,8 +34,10 @@ defaults.
   sub-settings (`readerPushBehind` included) set to anything but their default (`NEEDS_DEP`, numbers and lists
   included, D104): the engine would accept them and do nothing. It refuses `syncPush*` (no route relays source
   watches and change notices to `sourcePushes`/`sourceChanged`) and `sync` (the servers build only `StaticSource`s,
-  which cannot be listed) the same way, each with its own message (D106). A new reader, card, bridge, intent, digest
-  or push key fails `engine-config.test.ts` until it is in `NEEDS_DEP` or allow-listed there with a reason. The NEW
+  which cannot be listed) the same way, each with its own message (D106). With `sync` refused, every other `sync*`
+  key (`syncPollBehind` included) is refused off its default too, with the list message: each acts only with sync on.
+  A new reader, card, bridge, intent, digest, push or sync key fails `engine-config.test.ts` until it is in
+  `NEEDS_DEP` or allow-listed there with a reason. The NEW
   family therefore cannot run from the shipped servers; ALL3 minus `cards` and `sync` can (`docs/profiles/`,
   measured there, none recommended). Wire a paid model dep only under a decision with a
   COST-MODEL.md entry, then drop its keys from `NEEDS_DEP`. An explicit `buildPartner({ askWithModel })` (true or
