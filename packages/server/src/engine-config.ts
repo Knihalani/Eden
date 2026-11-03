@@ -1,9 +1,10 @@
 /**
  * EDEN_ENGINE_CONFIG (D103): the path of a JSON file of `EngineConfig` keys, merged over the production defaults for
  * the whole process. Unset, the engine runs on `DEFAULT_CONFIG` exactly (D12). It turns on the flags that need nothing
- * beyond what the shipped servers wire (probes, graph, grounds, compaction, the action firewall, sync, the judge); the
- * lab's presets stay in `@eden/sim` and are not read here, so the file names its flags itself. Checked-in profiles,
- * each with its measured numbers, are in docs/profiles/ (D104).
+ * beyond what the shipped servers wire (probes, graph, grounds, compaction, the action firewall, the judge); the lab's
+ * presets stay in `@eden/sim` and are not read here, so the file names its flags itself. Checked-in profiles, each
+ * with its measured numbers, are in docs/profiles/ (D104). Sync is not among them: it needs listable sources, and the
+ * servers build only `StaticSource`s (connectors.ts), which have no list tool (`NEEDS_DEP`'s "list").
  *
  * Every key is checked at startup against `DEFAULT_CONFIG`: an unknown key (a typo, a flag from another version) or a
  * value of the wrong type stops the server with a message naming it, rather than running silently on the default.
@@ -11,7 +12,9 @@
  * key that acts only through a partner dependency the servers do not wire (`NEEDS_DEP`) to anything but its default:
  * the engine would accept it and do nothing, or (`syncPageSize: 0`, `syncMaxItems: 0`) stop syncing without a word.
  * Those deps are paid model roles (cards, the bridge, the reader); ALL3 and the NEW family need them, so they are not
- * runnable from the shipped servers until the deps are wired under a decision with a COST-MODEL.md entry. The judge
+ * runnable from the shipped servers until the deps are wired under a decision with a COST-MODEL.md entry. Two more
+ * things the servers lack are refused the same way: a route relaying source watches and change notices (push sync)
+ * and sources that can be listed (sync). The judge
  * (`judge*`, `anticipate`) and `askWithModel` use the partner's own model and `Budget`; docs/COST-MODEL.md has their
  * cost.
  */
@@ -22,14 +25,36 @@ import { DEFAULT_CONFIG, type EngineConfig } from "@eden/engine";
 const CHOICES: Partial<Record<keyof EngineConfig, readonly string[]>> = { probeWhen: ["always", "actions"] };
 
 /**
- * Keys that act only when the partner has a dependency `buildPartner` does not wire (partner.ts `PartnerDeps`), with
- * that dependency. Set to anything but their default they would be silent no-ops, so they are refused; the default
- * (off, for a flag) is accepted. The numbers and lists here are read only on their dependency's path (partner.ts:
- * `digestFor`, the only reader of `constraintDigest`, `digestLines` and `digestBytes`, returns nothing without cards,
- * `askReaderStanding` fills the reader's pool, `readerPushWaitMs` bounds the reader's push, the `intent*` settings are
- * read by `intentFinds`, which needs cards).
+ * What a key needs that the shipped servers do not have: a partner dependency `buildPartner` does not wire
+ * (partner.ts `PartnerDeps`), a server route, or a kind of source.
  */
-const NEEDS_DEP: Partial<Record<keyof EngineConfig, "cards" | "bridge" | "reader">> = {
+type Missing = "cards" | "bridge" | "reader" | "notify" | "list";
+
+/** Why each `Missing` thing is absent, for the refusal message; the key's name is put in front. */
+const MISSING: Record<Missing, string> = {
+  cards: "needs the partner's cards dependency, which the shipped servers do not wire",
+  bridge: "needs the partner's bridge dependency, which the shipped servers do not wire",
+  reader: "needs the partner's reader dependency, which the shipped servers do not wire",
+  notify:
+    "needs a server route that relays source watches and change notices to the partner (`sourcePushes`, " +
+    "`sourceChanged`), which the shipped servers do not have",
+  list:
+    "needs sources with a list tool, and the shipped servers build only static sources from EDEN_SOURCES_FILE " +
+    "(connectors.ts), which cannot be listed (sync would start and read nothing)",
+};
+
+/**
+ * Keys that act only through something the servers lack (`Missing`). Set to anything but their default they would be
+ * silent no-ops, so they are refused; the default (off, for a flag) is accepted. The numbers and lists here are read
+ * only on that path (partner.ts: `digestFor`, the only reader of `constraintDigest`, `digestLines` and `digestBytes`,
+ * returns nothing without cards, `askReaderStanding` fills the reader's pool, `readerPushWaitMs` bounds the reader's
+ * push and `readerPushBehind` acts only on it (`ask` with `internal.push`), the `intent*` settings are read by
+ * `intentFinds`, which needs cards; sync.ts applies the `syncPush*` settings only to a source marked by `pushing`,
+ * which only `sourcePushes` calls). `sync` is refused until the servers build listable sources (per-user MCP
+ * connectors, roadmap M2); its own sub-settings are then inert, like any off flag's. engine-config.test.ts requires
+ * every reader, card, bridge, intent, digest and push key to be here or allow-listed with a reason.
+ */
+const NEEDS_DEP: Partial<Record<keyof EngineConfig, Missing>> = {
   cards: "cards",
   cardsEconomy: "cards",
   cardItems: "cards",
@@ -60,7 +85,13 @@ const NEEDS_DEP: Partial<Record<keyof EngineConfig, "cards" | "bridge" | "reader
   readerPushNotes: "reader",
   readerPushKinds: "reader",
   readerPushWaitMs: "reader",
+  readerPushBehind: "reader",
   readerGate: "reader",
+  syncPush: "notify",
+  syncPushMaxStaleMs: "notify",
+  syncPushSweepMs: "notify",
+  syncPushGapMs: "notify",
+  sync: "list",
 };
 
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */
@@ -201,9 +232,8 @@ export function parseEngineConfig(value: unknown, where = "engine config"): Part
     // JSON equality: every such value is a boolean, a number or a list of strings.
     if (dep !== undefined && JSON.stringify(given) !== JSON.stringify(fallback)) {
       throw new Error(
-        `${where}: "${key}" needs the partner's ${dep} dependency, which the shipped servers do not wire, so only ` +
-          `its default (${JSON.stringify(fallback)}) is accepted; run it from an embedding that supplies it ` +
-          "(buildPartner does not)",
+        `${where}: "${key}" ${MISSING[dep]}, so only its default (${JSON.stringify(fallback)}) is accepted; run ` +
+          "it from an embedding that supplies it (buildPartner does not)",
       );
     }
     out[key] = given;
