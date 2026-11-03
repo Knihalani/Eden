@@ -606,6 +606,15 @@ export interface EngineConfig {
    */
   readerPushWaitMs: number;
   /**
+   * With `readerPush`, `syncOnDemand` and `syncPollBehind`: the push's own lookup does not wait for the sync's poll
+   * either (the agent's asks still do). It reads the index as it stands, so its reader starts about one poll sooner
+   * (audit 2026-11-03b, lat-push-read-waits-poll). If the poll then stores anything, the push is ranked once more on
+   * the fresh index with no new source call and read again (a reader cache hit, no call, when its pool is unchanged);
+   * a packet the first reading queued and the agent has not taken is replaced, not joined by a second one. Off by
+   * default; no decision yet.
+   */
+  readerPushBehind: boolean;
+  /**
    * With `askReader`: no reader call when none of the request's candidates could constrain it (no card of a
    * constraint, state-change or already-done kind, no constraint wording). Standing items (`askReaderStanding`) do not
    * open the gate, so with both on, a request whose candidates hold nothing constraint-like is not read even when a
@@ -782,6 +791,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerPushKinds: ["blocks", "limits", "changes", "done"],
   readerPushNotes: false,
   readerPushWaitMs: 60_000,
+  readerPushBehind: false,
   readerGate: false,
   constraintDigest: false,
   digestLines: 12,

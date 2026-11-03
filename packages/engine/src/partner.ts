@@ -1056,6 +1056,33 @@ export class ContextPartner {
   }
 
   /** Work a lookup left running behind its answer (`syncPollBehind`, `judgeBehind`), for harnesses to wait on. */
+  /**
+   * `readerPushBehind`: once the poll the push did not wait for is done, and only if it stored something, the push is
+   * ranked again on the refreshed index and read once more (`again`: no second search, no further re-read). A pool the
+   * poll left as it was reads as the same reader input, a cache hit with no call. Nothing runs for a closed session or
+   * for a request the user has since followed with another. Never throws.
+   */
+  private pushAgain(
+    s: Session,
+    request: AskRequest,
+    internal: AskInternal,
+    polled: Promise<boolean>,
+    searched: SearchedLive,
+    prev: Injection | null,
+  ): void {
+    const work = polled
+      .then(async (fresh) => {
+        if (!fresh || s.closed || this.sessions.get(s.key) !== s) return;
+        if (internal.request !== undefined && internal.request !== s.requests) return;
+        // The calls were the first reading's; the second makes none (nor any plan) of its own.
+        const { plans: _plans, ...rest } = searched;
+        const again = { ...rest, calls: 0, ...(rest.syncCalls !== undefined ? { syncCalls: 0 } : {}) };
+        await this.ask(request, { push: true, request: internal.request, again: { searched: again, prev } });
+      })
+      .catch(() => {});
+    this.addBehind(s, work);
+  }
+
   private addBehind(s: Session, work: Promise<void>): void {
     const all = s.behind ? Promise.all([s.behind, work]).then(() => {}) : work;
     const tracked: Promise<void> = all.finally(() => {
@@ -1289,7 +1316,7 @@ export class ContextPartner {
     }
   }
 
-  async ask(request: AskRequest, internal: { push?: boolean; request?: number } = {}): Promise<AskResponse> {
+  async ask(request: AskRequest, internal: AskInternal = {}): Promise<AskResponse> {
     const t0 = performance.now();
     const spans = this.spans;
     const root = spans?.open("ask", 0, { async: true });
@@ -1307,15 +1334,16 @@ export class ContextPartner {
     );
     if (root) cue.span = root.id;
     const limit = request.maxItems ?? 5;
-    const {
-      calls: sourceCalls,
-      plans,
-      probed,
-      local,
-      syncCalls,
-      consequence,
-      covered,
-    } = await this.searchLive(s, cue, this.config.askSources);
+    // `readerPushBehind`: the push reads the index as it stands while the sync's poll runs behind (the agent's asks
+    // still wait for it). Its second reading, once the poll has stored something, reuses the first one's search.
+    const behind =
+      internal.push === true &&
+      internal.again === undefined &&
+      this.config.readerPushBehind &&
+      this.config.syncPollBehind &&
+      this.config.syncOnDemand;
+    const searched = internal.again?.searched ?? (await this.searchLive(s, cue, this.config.askSources, behind));
+    const { calls: sourceCalls, plans, probed, local, syncCalls, consequence, covered } = searched;
     // `askVerdicts` (docs/research/gen-ask.md): an ask gathers what a lookup gathers (the consequence probe's finds,
     // the graph walk's, the card finds), not only what shares the question's words, and reads each with the verdicts
     // the lookup's rule paths read, so an item the question runs into answers it ahead of a merely similar one.
@@ -1445,9 +1473,26 @@ export class ContextPartner {
       const flagged = reading
         ? chosen.filter((x) => reading.notes.has(x.item.id) && pushes.has(reading.kinds.get(x.item.id) ?? ""))
         : [];
-      const fresh = flagged.filter((x) => s.ledger.isFresh(x.item.id, s.turn));
       // A reading that lands after a newer user message answers a request the agent has moved past: not queued.
       const latest = internal.request === undefined || internal.request === s.requests;
+      // `readerPushBehind`'s second reading, on the index the poll refreshed: the packet the first queued from the
+      // older copies, if the agent has not taken it, gives way to this one (its items count as undelivered here). One
+      // the agent has taken stays taken: only what is new to it, or what the poll changed since, goes out again.
+      const prev = internal.again?.prev;
+      const withdrawn = new Set<string>();
+      if (prev && reading?.read && !s.closed && latest) {
+        const at = s.pending.indexOf(prev);
+        if (at >= 0) {
+          s.pending.splice(at, 1);
+          for (const c of prev.citations) withdrawn.add(c.itemId);
+        }
+      }
+      const fresh = flagged.filter(
+        (x) =>
+          withdrawn.has(x.item.id) ||
+          s.ledger.isFresh(x.item.id, s.turn) ||
+          (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)),
+      );
       const injection =
         fresh.length > 0 && !s.closed && latest
           ? this.config.readerPushNotes
@@ -1477,6 +1522,7 @@ export class ContextPartner {
         itemIds: injection ? injection.citations.map((c) => c.itemId) : [],
       });
       if (root) spans!.close(root, { session: s.id, turn: s.turn, decision: "reader-push", delivered: !!injection });
+      if (behind && cue.polled) this.pushAgain(s, request, internal, cue.polled, searched, injection);
       return { answer: "", citations: [], usedModel: reading?.called === true, costUsd, latencyMs };
     }
     // `askGuard` (docs/research/edge-ask.md): an ask about an action is answered with its verdicts said. What may block
@@ -5608,6 +5654,18 @@ function rebuildVocab(s: Session, maxTerms: number): void {
   s.agentHas = agentHas;
   s.vocab = vocab;
   s.seen = seen;
+}
+
+/** What `searchLive` returns: the calls it made and what the lookup's ranking reads from them. */
+type SearchedLive = Awaited<ReturnType<ContextPartner["searchLive"]>>;
+
+/** `ask`'s second argument, for the engine's own asks (`readerPush`); an embedder's ask passes none. */
+interface AskInternal {
+  push?: boolean;
+  /** The session's request count when the push's request was counted: a later request makes it stale. */
+  request?: number;
+  /** `readerPushBehind`'s second reading: the first one's search, and the packet it queued. */
+  again?: { searched: SearchedLive; prev: Injection | null };
 }
 
 const sessionKey = (e: Scope & { sessionId: string }) => `${scopeKey(e)}#${e.sessionId}`;

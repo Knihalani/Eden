@@ -13,7 +13,7 @@ import { ContextPartner } from "./partner";
 const WORDS = (() => {
   // A fixed vocabulary of a few hundred made-up words, as a mailbox's would be: mail repeats its words.
   let x = 12_345;
-  const rnd = () => ((x = (x * 1_103_515_245 + 12_345) >>> 0) / 2 ** 32);
+  const rnd = () => (x = (x * 1_103_515_245 + 12_345) >>> 0) / 2 ** 32;
   const letters = "abcdefghijklmnopqrstuvwxyz";
   return Array.from({ length: 400 }, () =>
     Array.from({ length: 3 + Math.floor(rnd() * 7) }, () => letters[Math.floor(rnd() * 26)]).join(""),
@@ -23,7 +23,7 @@ const WORDS = (() => {
 /** An 8 KB mail listing: from, subject, date and body words drawn from the vocabulary, seeded per message. */
 function mailListing(seed: number): string {
   let x = seed * 2_654_435_761;
-  const rnd = () => ((x = (x * 1_103_515_245 + 12_345) >>> 0) / 2 ** 32);
+  const rnd = () => (x = (x * 1_103_515_245 + 12_345) >>> 0) / 2 ** 32;
   const word = () => WORDS[Math.floor(rnd() * rnd() * WORDS.length)]!; // Skewed: common words recur.
   const parts: string[] = [];
   let len = 0;
@@ -62,8 +62,7 @@ const partner = () =>
   });
 
 type Held = { terms: Uint32Array | Set<number>; pairs: Float64Array | Set<number> };
-const sessionsOf = (p: ContextPartner) =>
-  (p as unknown as { sessions: Map<string, { agentHas: Held[] }> }).sessions;
+const sessionsOf = (p: ContextPartner) => (p as unknown as { sessions: Map<string, { agentHas: Held[] }> }).sessions;
 
 describe("an open session's held events", () => {
   test("are sorted unique typed arrays, bounded by the window", async () => {
@@ -77,7 +76,7 @@ describe("an open session's held events", () => {
         for (const xs of [held.terms, held.pairs] as (Uint32Array | Float64Array)[]) {
           for (let i = 1; i < xs.length; i++) expect(xs[i]! > xs[i - 1]!).toBe(true);
         }
-        expect(held.terms.length).toBeLessThanOrEqual(512); // MAX_HELD_TERMS
+        expect((held.terms as Uint32Array).length).toBeLessThanOrEqual(512); // MAX_HELD_TERMS
       }
     }
   });
@@ -94,8 +93,8 @@ describe("an open session's held events", () => {
     let pairs = 0;
     for (const s of sessionsOf(p).values()) {
       for (const h of s.agentHas) {
-        terms += "length" in h.terms ? h.terms.length : h.terms.size;
-        pairs += "length" in h.pairs ? h.pairs.length : h.pairs.size;
+        terms += h.terms instanceof Set ? h.terms.size : h.terms.length;
+        pairs += h.pairs instanceof Set ? h.pairs.size : h.pairs.length;
       }
     }
     console.log(
