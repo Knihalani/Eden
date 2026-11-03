@@ -120,6 +120,9 @@ export class ReplayModel implements Model {
       ...(res.provider ? { provider: res.provider } : {}),
       ...(res.truncated ? { truncated: true } : {}),
     }));
+    // Only a concurrent waiter awaits `pending`: with none, a failed live call would leave it rejected and unhandled
+    // (an `unhandledRejection` that exits the run 1). The failure itself reaches the caller through `made`.
+    pending.catch(() => {});
     this.inFlight.set(k, pending);
     let res: ChatResponse;
     try {

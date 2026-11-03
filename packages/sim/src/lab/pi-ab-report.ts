@@ -90,8 +90,8 @@ const flag = (name: string) => {
   return i >= 0 ? argv[i + 1] : undefined;
 };
 if (flag("reconcile")) {
-  reconcile(flag("reconcile")!, flag("ledger") ?? "", flag("run") ?? "");
-  process.exit(0);
+  // Exits 1 when the columns do not add up to the header's Eden total within $0.01, so a script can gate on it.
+  process.exit(reconcile(flag("reconcile")!, flag("ledger") ?? "", flag("run") ?? "") ? 0 : 1);
 }
 const files = argv.filter((a, i) => a.endsWith(".json") && !argv[i - 1]?.startsWith("--"));
 if (!files.length) throw new Error("usage: pi-ab-report.ts pi-ab.json [more.json ...] [--timeline dir]");
@@ -418,9 +418,9 @@ if (samples.length) {
  * spend of the runs named `--run`* is spread evenly over every task run of a condition with a partner (a name with
  * `eden`, or starting `both`: ALL3 and the NEW family all had cards on), as `backfillShares` spreads it per seed: the
  * same share per run when every seed ran the same tasks, as the campaign's did. It then checks that the per-task column
- * plus the backfill, over every row, adds up to the report's own Eden total.
+ * plus the backfill, over every row, adds up to the report's own Eden total, and returns false when it does not.
  */
-function reconcile(reportFile: string, ledgerFile: string, run: string): void {
+function reconcile(reportFile: string, ledgerFile: string, run: string): boolean {
   if (!ledgerFile || !run) throw new Error("--reconcile needs --ledger FILE and --run PREFIX");
   const lines = readFileSync(reportFile, "utf8").split("\n");
   const total = Number(/Eden \$([\d.]+)/.exec(lines[1] ?? "")?.[1] ?? NaN);
@@ -473,4 +473,6 @@ function reconcile(reportFile: string, ledgerFile: string, run: string): void {
       `$${x(allIn, 4)} against the header's Eden $${x(total, 4)}: off by $${x(off, 4)} ` +
       (off <= 0.01 ? "(within $0.01: OK)" : "(MORE THAN $0.01: the columns do not add up)"),
   );
+  // NaN (no Eden total in the header) fails too.
+  return off <= 0.01;
 }

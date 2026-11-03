@@ -377,7 +377,17 @@ async function runWorld(
     ),
   );
   // What this stream's background calls (cards, bridge) cost: booked to Eden's total, charged to no task (Background).
-  const bg = { cardsUsd: 0, bridgeUsd: 0, calls: 0 };
+  // Recorded in the results as the calls happen (below), so a stream that stops early (OverBudget, the request cap)
+  // still reports what its cards and bridge spent.
+  const bg: Background = {
+    seed,
+    suite: tasks[0]?.suite ?? "",
+    condition,
+    tasks: [],
+    cardsUsd: 0,
+    bridgeUsd: 0,
+    calls: 0,
+  };
   const onBg = (what: "cardsUsd" | "bridgeUsd", data: Record<string, unknown>) => {
     bg.calls++;
     bg[what] += typeof data.cost === "number" ? data.cost : 0;
@@ -425,6 +435,7 @@ async function runWorld(
       ? new QueryBridge({ maker: bridgeMaker(), budget: new Budget(), now: () => clock })
       : undefined;
   if (bridge) budgeted.bridge.push(bridge);
+  if (cards || bridge) background.push(bg);
   // `askReader`: one budgeted call per ask about an action, on the running task's timeline and charged to it (D95).
   let readerTask: RunResult | null = null;
   const reader =
@@ -702,6 +713,7 @@ async function runWorld(
       if (r.error) record.error = r.error.slice(0, 200);
       if (partner) Object.assign(record, uptake.fields());
       out.push(r);
+      bg.tasks.push(r.task);
       records.push(record);
       if (!r.error) grading.push(gradeTask(t, r, tl));
       previous = { sessionId, r };
@@ -718,9 +730,6 @@ async function runWorld(
     task = null;
     worker?.close();
     streams.delete(id);
-  }
-  if (cards || bridge) {
-    background.push({ seed, suite: tasks[0]?.suite ?? "", condition, tasks: out.map((r) => r.task), ...bg });
   }
   return out;
 }

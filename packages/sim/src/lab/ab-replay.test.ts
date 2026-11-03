@@ -2,10 +2,11 @@
  * `pi-ab --replay` and `--reuse-arms` (lab only): the reader and the grader behind `ReplayModel` as pi-ab wires them,
  * driven twice through a real `ContextPartner` with the reader on and graded with `gradeWith`. A second run calls no
  * model and gives the same answers, grades and per-task costs; a changed request calls again for that task only. And
- * `reusableArms` refuses an earlier run whose harness or grader differs; `backfillShares` adds up to what was spent.
+ * `reusableArms` refuses an earlier run whose harness, grader or prompts differ; `backfillShares` adds up to what was
+ * spent; a failed live call leaves no unhandled rejection; `--reconcile` exits 1 when the columns do not add up.
  */
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AskReader, ContextPartner, ItemCache, ModelReaderMaker } from "@eden/engine";
@@ -14,6 +15,7 @@ import { Budget, FakeModel, type ChatRequest, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import type { Source } from "@eden/sources";
 import {
+  armPromptsHash,
   backfillShares,
   emptyResult,
   gradeWith,
@@ -213,6 +215,34 @@ describe("pi-ab --replay: the reader and the grader", () => {
     expect(a.costUsd + b.costUsd).toBe(0.001);
     expect(costAsMade(b)).toBe(0.001);
   });
+
+  test("a live call that fails leaves no unhandled rejection, and the same prompt goes live again", async () => {
+    let calls = 0;
+    const failing: Model = {
+      id: "x",
+      async chat() {
+        calls++;
+        throw new Error("reader timeout");
+      },
+    };
+    const unhandled: unknown[] = [];
+    const onUnhandled = (e: unknown) => unhandled.push(e);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const m = new ReplayModel("", failing, "x");
+      const request = { messages: [{ role: "user" as const, content: "same" }], maxTokens: 10 };
+      await expect(m.chat(request)).rejects.toThrow("reader timeout");
+      await expect(m.chat(request)).rejects.toThrow("reader timeout");
+      // An unhandled rejection is reported once the microtasks drain: give it a macrotask to surface.
+      await new Promise((r) => setTimeout(r, 20));
+      expect(calls).toBe(2);
+      expect(m.failed).toBe(2);
+      expect(m.sent).toBe(0);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+    expect(unhandled).toEqual([]);
+  });
 });
 
 describe("pi-ab --reuse-arms", () => {
@@ -225,6 +255,7 @@ describe("pi-ab --reuse-arms", () => {
     grader: "claude-haiku-5-5",
     harness: "pi",
     harnessVersion: "@earendil-works/pi-agent-core@1.3.0",
+    promptsHash: armPromptsHash({ params: "query" }),
     seeds: [41, 42],
     suites: ["test"],
     timeScale: 1,
@@ -247,6 +278,16 @@ describe("pi-ab --reuse-arms", () => {
     expect(() => reusableArms(prior, { ...now, grader: "deepseek/deepseek-v4.1-flash" }, ["none"])).toThrow(
       /grader differs/,
     );
+  });
+
+  test("refuses when the agent's or the grader's prompts differ (promptsHash), or the earlier run has none", () => {
+    // The fingerprint is stable, and moves with what the harness adds (pi-ab: the tool's parameter schema).
+    expect(armPromptsHash({ params: "query" })).toBe(prior.promptsHash!);
+    expect(armPromptsHash({ params: "q" })).not.toBe(prior.promptsHash!);
+    const changed = { ...now, promptsHash: armPromptsHash({ params: "q" }) };
+    expect(() => reusableArms(prior, changed, ["none"])).toThrow(/prompts \(promptsHash\) differs/);
+    const { promptsHash: _old, ...unrecorded } = prior;
+    expect(() => reusableArms(unrecorded, now, ["none"])).toThrow(/promptsHash/);
   });
 
   test("refuses a changed task, a missing arm, an ungraded result and a partial run", () => {
@@ -272,5 +313,43 @@ describe("backfillShares: Eden's background spend per task run", () => {
     expect(shares.get("b\u0000eden~NEW")).toBeCloseTo(0.001, 12);
     expect(shares.get("c\u0000eden")).toBeCloseTo(0.06, 12);
     expect([...shares.values()].reduce((n, x) => n + x, 0)).toBeCloseTo(0.064, 12);
+  });
+});
+
+describe("pi-ab-report --reconcile", () => {
+  const report = (total: string) =>
+    [
+      "harness pi, model x, grader x, time scale 0, tools parallel",
+      `spent $1 (agent $0.5, Eden $${total}, grader $0.1); 20 runs, errors 0, ungraded 0`,
+      "",
+      "== hidden: hidden fact raised",
+      "condition     n   rate   $/1k  (Eden)",
+      "tools        10  0.500  0.300   0.000",
+      "eden~NEW     10  0.700  0.900   0.500",
+      "",
+    ].join("\n");
+  const ledger = [
+    { run: "r-s41", role: "eden.reader", usd: 0.005 },
+    { run: "r-s41", role: "eden.cards", usd: 0.002 },
+    { run: "other", role: "eden.cards", usd: 9 },
+  ]
+    .map((l) => JSON.stringify(l))
+    .join("\n");
+  const reconcile = (total: string) => {
+    const dir = mkdtempSync(join(tmpdir(), "reconcile-"));
+    writeFileSync(join(dir, "report.txt"), report(total));
+    writeFileSync(join(dir, "ledger.jsonl"), ledger);
+    const args = ["--reconcile", join(dir, "report.txt"), "--ledger", join(dir, "ledger.jsonl"), "--run", "r-"];
+    return Bun.spawnSync(["bun", join(import.meta.dir, "pi-ab-report.ts"), ...args]);
+  };
+
+  test("exits 0 when the columns add up to the header's Eden total, 1 when they do not", () => {
+    // (Eden) $0.5/1k x 10 runs = $0.005, plus the run's $0.002 of cards spread over its 10 runs with a partner.
+    const ok = reconcile("0.0070");
+    expect(ok.stdout.toString()).toContain("(within $0.01: OK)");
+    expect(ok.exitCode).toBe(0);
+    const off = reconcile("0.0500");
+    expect(off.stdout.toString()).toContain("MORE THAN $0.01");
+    expect(off.exitCode).toBe(1);
   });
 });

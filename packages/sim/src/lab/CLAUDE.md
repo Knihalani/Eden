@@ -71,13 +71,17 @@ Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-b
   keyed on the exact prompt, model, harness version, provider preferences and role) and appends new ones;
   `--replay-only` exits 3 on a miss; `--replay-timing` sleeps the recorded latency (without it, replayed calls take
   no time and the critical path understates Eden). `--reuse-arms F` copies `none`/`tools` from a matching earlier
-  run (same model, grader, harness version, time scale, seeds, suites, task wording; else it refuses). Both freeze
-  one sample: fine for paired comparisons, but a variance estimate needs them off. The agent itself still runs live,
-  and Hermes has neither yet (ab-replay.test.ts).
+  run (same model, grader, harness version, agent and grader prompts, time scale, seeds, suites, task wording; else
+  it refuses). The prompts are checked by `promptsHash` (`armPromptsHash` in ab-common.ts: the system prompt, user
+  turn, search tool, caps and grader prompt on a fixed probe); a results file without one cannot be reused. Both
+  freeze one sample: fine for paired comparisons, but a variance estimate needs them off. The agent itself still runs
+  live, and Hermes has neither yet (ab-replay.test.ts).
 - **Report cost columns:** `(Eden)` is per-task calls only (reader, judge). Cards and bridge are booked to Eden's
   total but to no task: `bkfill` spreads each seed's background spend over its task runs with cards or bridge on,
-  and `all-in` adds it. Reports from before 2026-11-03 lack it: `pi-ab-report.ts --reconcile report.txt --ledger
-  ledger-summary.jsonl --run PREFIX` recomputes it from the spend ledger (docs/research/haiku-phase3.md).
+  and `all-in` adds it. A stream's background spend is recorded as it happens, so a stream stopped early (budget,
+  request cap) still counts. Reports from before 2026-11-03 lack it: `pi-ab-report.ts --reconcile report.txt
+  --ledger ledger-summary.jsonl --run PREFIX` recomputes it from the spend ledger (docs/research/haiku-phase3.md)
+  and exits 1 when the columns miss the header's Eden total by more than $0.01.
 - Funnel decoys surfaced overstate harm: live agents reject most decoys (docs/research/broad-set.md).
 
 ## Test
