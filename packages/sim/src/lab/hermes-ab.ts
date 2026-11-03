@@ -85,7 +85,7 @@ import { Worker } from "./hermes-worker";
 import { TRAFFIC_WEIGHTS, weightedLines, weightedRow, type WeightedRow } from "./pi-ab-weighted";
 import { parseVariants } from "./pi-conditions";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
-import { PRESETS } from "./presets";
+import { effective, PRESETS } from "./presets";
 import { overBudget, overBudgetLine, type Budgeted } from "./reader-disk";
 import { parseSuites } from "./suites";
 import { QUESTION_CHARS, UptakeLog } from "./uptake";
@@ -124,7 +124,7 @@ const MAX_ITERATIONS = Number(opt("max-iterations", String(MAX_STEPS)));
 const AGENT_MAX_TOKENS = 2_000;
 // `--dump FILE`: every chat completion Hermes sends, as forwarded (sim data only; for checking the prompt and tools).
 const DUMP = opt("dump", "");
-const CONFIG_ARG = opt("config", "ALL3");
+const CONFIG_ARG = opt("config", "default");
 const CONFIG = PRESETS[CONFIG_ARG] ?? (JSON.parse(CONFIG_ARG) as Record<string, unknown>);
 const CARD_MODEL = opt("card-model", "z-ai/glm-5.3-flash");
 const CONFIG_VARIANTS = parseVariants(opt("variant-config", "{}"));
@@ -133,10 +133,10 @@ const CONDITIONS: HermesCondition[] = parseHermesConditions(CONDITION_NAMES, {
   variants: CONFIG_VARIANTS,
   defaults: DEFAULT_CONFIG as unknown as Record<string, unknown>,
 });
-const usesCards = CONDITIONS.some((c) => c.withPartner && c.config.cards === true);
+const usesCards = CONDITIONS.some((c) => c.withPartner && effective(c.config).cards);
 /** `askReader` (D95): the ask-time reader's model, `--reader-model` (default Haiku 5.5, on the spend ledger). */
 const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
-const USES_READER = CONDITIONS.some((c) => c.withPartner && c.config.askReader === true);
+const USES_READER = CONDITIONS.some((c) => c.withPartner && effective(c.config).askReader);
 const ACCESS = labAccess(args, [
   MODEL,
   GRADER,
@@ -391,7 +391,7 @@ async function runWorld(
       ? new DiskCardMaker(CARDS_FILE, new ModelCardMaker(cardModel()), { out: CARDS_OUT, shared: diskCards })
       : new ModelCardMaker(cardModel());
   const cards =
-    withPartner && config.cards === true
+    withPartner && effective(config).cards
       ? new CardEnricher({ maker: cardMaker(), budget: new Budget(), now: () => clock })
       : undefined;
   if (cards) budgeted.cards.push(cards);
@@ -399,7 +399,7 @@ async function runWorld(
   // `askReader`: one budgeted call per ask about an action, on the running task's timeline and charged to it (D95).
   let readerTask: RunResult | null = null;
   const reader =
-    withPartner && config.askReader === true
+    withPartner && effective(config).askReader
       ? new AskReader({
           maker: new ModelReaderMaker(
             meteredModel(

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import { PARTS } from "@eden/engine";
 import { labConfig, parseFlags, type FlagSpec } from "./flags";
 import { PRESETS } from "./presets";
 
@@ -38,21 +39,23 @@ describe("parseFlags (audit 2026-11-03b, devloop-lab-accepts-typos-silently)", (
 
 describe("labConfig: the lab's presets and overrides through checkEngineConfig", () => {
   test("every preset passes as it stands", () => {
-    expect(Object.keys(PRESETS).length).toBe(10);
+    // `default`, `minus-all` and one `minus-<part>` per part (D112).
+    expect(Object.keys(PRESETS).length).toBe(2 + Object.keys(PARTS).length);
     for (const [name, preset] of Object.entries(PRESETS)) {
       expect(() => labConfig(preset, name)).not.toThrow();
     }
   });
 
   test("a child flag is checked on the merged preset and override", () => {
-    // ALL3 turns sync on, so its child is accepted; an override turning sync off leaves the child doing nothing. (The
-    // unified default turns sync and syncPollBehind on, D111, so the child is set off its default here.)
-    expect(labConfig({ ...PRESETS.ALL3, syncPollBehind: true }, "ALL3").syncPollBehind).toBe(true);
-    expect(labConfig({ ...PRESETS.ALL3, syncPollPageSize: 7 }, "ALL3").syncPollPageSize).toBe(7);
-    expect(() => labConfig({ ...PRESETS.H, sync: false, syncPollPageSize: 7 }, "H")).toThrow(
+    // The default turns sync on, so its child is accepted; an override turning sync off leaves a child set on doing
+    // nothing, while minus-sync's own values (the core's) take the part out cleanly.
+    expect(labConfig({ ...PRESETS.default, syncPollBehind: true }, "default").syncPollBehind).toBe(true);
+    expect(labConfig({ ...PRESETS.default, syncPollPageSize: 7 }, "default").syncPollPageSize).toBe(7);
+    expect(() => labConfig({ ...PRESETS["minus-sync"], syncPollPageSize: 7 }, "minus-sync")).toThrow(
       /"syncPollPageSize" acts only/,
     );
-    expect(() => labConfig({ ...PRESETS.ALL3, fallbackAsk: true }, "ALL3")).toThrow(/unknown key "fallbackAsk"/);
+    expect(labConfig({ ...PRESETS["minus-sync"] }, "minus-sync").sync).toBe(false);
+    expect(() => labConfig({ ...PRESETS.default, fallbackAsk: true }, "default")).toThrow(/unknown key "fallbackAsk"/);
   });
 });
 

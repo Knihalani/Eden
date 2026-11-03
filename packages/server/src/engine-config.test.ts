@@ -94,12 +94,24 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
       async list(scope, _cursor, _limit, _signal): Promise<ListPage> {
         listed.push(`${owner} for ${scope.tenantId}/${scope.userId}`);
         return {
-          items: [{ id: `mail:${owner}`, sourceId: "mail", title: `Note for ${owner}`, text: "Globex renewal moved" }],
+          items: [
+            {
+              id: `mail:${owner}`,
+              sourceId: "mail",
+              ref: owner,
+              title: `Note for ${owner}`,
+              text: "Globex renewal moved",
+            },
+          ],
           next: null,
         };
       },
     });
-    const partner = buildPartner({ sources: async (scope) => [lister(scope.userId)], model: null, queryPlanner: "off" });
+    const partner = buildPartner({
+      sources: async (scope) => [lister(scope.userId)],
+      model: null,
+      queryPlanner: "off",
+    });
     partner.stopSync();
     for (const userId of ["alice", "bob"]) {
       const scope = { tenantId: "acme", userId, sessionId: `s-${userId}` };

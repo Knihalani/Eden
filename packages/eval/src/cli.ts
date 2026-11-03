@@ -9,7 +9,7 @@
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { EngineConfig } from "@eden/engine";
+import { DEFAULT_CONFIG, type EngineConfig } from "@eden/engine";
 import { OpenRouterModel } from "@eden/llm";
 import { parseReaderOption, type ReaderKindOption } from "./reader-stub";
 import { proxyOf, runScenarios, unwiredFlags } from "./run";
@@ -49,14 +49,17 @@ if (live && !model) {
   process.exit(1);
 }
 const config = { ...extra } as Partial<EngineConfig>;
-// A flag whose dependency the eval does not wire runs as if off: askReader without a reader is refused (its run would
-// read as the preset's), the rest are labelled in the output and on stderr.
-const unwired = unwiredFlags(config, { reader: reader !== undefined });
+// What runs: the override over the default (D112), whose cards, intent and reader are on. With no model and no
+// dependency they are inert by design, the default's no-model path, which is what `bun run eval` measures; they are
+// labelled in the output and on stderr. An override that names askReader itself without a reader is refused (its run
+// would read as the reader's).
+const run = { ...DEFAULT_CONFIG, ...config };
+const unwired = unwiredFlags(run, { reader: reader !== undefined });
 if (config.askReader && reader === undefined) {
   console.error(`this configuration has askReader: pass --reader stub (or oracle). Unwired: ${unwired.join("; ")}`);
   process.exit(2);
 }
-if (reader !== undefined && !config.askReader) {
+if (reader !== undefined && !run.askReader) {
   console.error("--reader needs a configuration with askReader (e.g. --config '{\"askReader\":true}')");
   process.exit(2);
 }

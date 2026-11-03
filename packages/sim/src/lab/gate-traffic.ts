@@ -10,7 +10,7 @@
  *
  * - reader calls per user message, and how each user message ended at the reader: `read` (a call or a cached
  *   verdict), `gated` (`readerGate` skipped the call), `none` (an empty pool), or `skipped` (not read at all: under
- *   NEWL a request that does not act is never pushed);
+ *   the default a request that does not act is never pushed);
  * - the gated share: gated over the messages that reached the gate (a non-empty pool);
  * - the missed-binding rate: gated messages whose pool held an item stating a fact the turn's ground truth needs
  *   (`must`), over gated messages; and the same over every message whose pool held one;
@@ -81,8 +81,8 @@ const REUSE = args.includes("--reuse");
 
 /** The preset measured with the gate, and without it for the calls the gate saves. */
 const CONFIGS: Record<string, Partial<EngineConfig>> = {
-  NEWL: { ...PRESETS.NEWL },
-  "NEWL-nogate": { ...PRESETS.NEWL, readerGate: false },
+  default: { ...PRESETS.default },
+  "default-nogate": { ...PRESETS.default, readerGate: false },
 };
 
 const UNCAPPED = { callsPerSession: Infinity, usdPerSession: Infinity, usdPerUserDay: Infinity };

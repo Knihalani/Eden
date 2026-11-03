@@ -118,7 +118,7 @@ import { ACTIONS, actionParams, coerceArgs, executed, type ActionRecord } from "
 import { DiskCardMaker, samePath } from "./cards-disk";
 import { isAnthropic, isCapError, labAccess, labModel, piModelFor, piRegistry, providerPrefs } from "./free";
 import { parseConditions, parseVariants, type Condition } from "./pi-conditions";
-import { PRESETS } from "./presets";
+import { effective, PRESETS } from "./presets";
 import { costAsMade, MISS_EXIT, overBudget, overBudgetLine, ReplayModel, type Budgeted } from "./reader-disk";
 import { parseSuites } from "./suites";
 import { QUESTION_CHARS, UptakeLog } from "./uptake";
@@ -169,16 +169,16 @@ const CONDITIONS: Condition[] = parseConditions(CONDITION_NAMES, {
 });
 // A flag whose dependency this harness cannot give it would run a different configuration under the flag's name: a
 // run that says R or ALL must be R or ALL (the review of moon/combined). Cards need a model; the sync, list tools.
-if (CONDITIONS.some((c) => c.withPartner && c.config.cards === true) && !KEY && !DRY)
+if (CONDITIONS.some((c) => c.withPartner && effective(c.config).cards) && !KEY && !DRY)
   throw new Error("config.cards needs OPENROUTER_API_KEY for its enrichment");
 // Every OpenRouter request of the run goes through one pacer: rate, cap, retries, and the logging choice (free.ts).
 /** `askReader` (D95): the ask-time reader's model, `--reader-model` (default Haiku 5.5, on the spend ledger). */
 const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
-const USES_READER = CONDITIONS.some((c) => c.withPartner && c.config.askReader === true);
+const USES_READER = CONDITIONS.some((c) => c.withPartner && effective(c.config).askReader);
 const ACCESS = labAccess(args, [
   MODEL,
   GRADER,
-  ...(CONDITIONS.some((c) => c.withPartner && c.config.cards === true) ? [CARD_MODEL] : []),
+  ...(CONDITIONS.some((c) => c.withPartner && effective(c.config).cards) ? [CARD_MODEL] : []),
   ...(USES_READER ? [READER_MODEL] : []),
 ]);
 const PACER = ACCESS.pacer;
@@ -536,7 +536,7 @@ async function runWorld(
   const cardMaker = (): CardMaker =>
     diskCards ? new DiskCardMaker(CARDS_FILE, liveCards(), { out: CARDS_OUT, shared: diskCards }) : liveCards();
   const cards =
-    withPartner && config.cards === true
+    withPartner && effective(config).cards
       ? new CardEnricher({ maker: cardMaker(), budget: new Budget(), now: () => clock })
       : undefined;
   if (cards) budgeted.cards.push(cards);
@@ -544,7 +544,7 @@ async function runWorld(
   // `askReader`: one budgeted call per ask about an action, on the running task's timeline and charged to it (D95).
   let readerTask: RunResult | null = null;
   const reader =
-    withPartner && config.askReader === true
+    withPartner && effective(config).askReader
       ? new AskReader({
           maker: new ModelReaderMaker(
             meteredModel(

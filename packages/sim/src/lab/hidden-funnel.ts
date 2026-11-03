@@ -110,6 +110,7 @@ import {
 } from "./reader-stub";
 import { packetLine } from "./uptake";
 import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
+import { effective } from "./presets";
 
 const args = process.argv.slice(2);
 const V = "value" as const;
@@ -192,6 +193,8 @@ const CONFIG = ((): Record<string, unknown> => {
     process.exit(2);
   }
 })();
+/** What runs: `--config` over the default (D112). */
+const RUN = effective(CONFIG);
 const LIVE = opt("judge", "none") === "live";
 /**
  * `--wait-ms N`: how long the request's observe waits for its lookup (the client's `waitMs`), default 30,000 with a
@@ -221,7 +224,7 @@ const ASK_Q = opt("ask-question", "request");
 if (ASK_Q !== "request" && ASK_Q !== "narrow") throw new Error("--ask-question must be request or narrow");
 const SERIAL = cli.has("serial");
 const NOOP_SPANS = opt("spans", "") === "noop";
-const REAL_SYNC = CONFIG.sync === true;
+const REAL_SYNC = RUN.sync;
 if (REAL_SYNC && SYNC) throw new Error("--sync (the oracle) and the real sync (config sync) are exclusive");
 /** The real sync's listing calls over the whole run (every suite), and the lookups that answered locally. */
 const syncUse = {
@@ -278,7 +281,7 @@ if (CARD_LOG && cardMaker) {
  * index is inert (no `--intent F`, or a file for other items), and every TOTAL and pool line and the JSON say so.
  */
 const intentUse = { asked: 0, found: 0 };
-if (cardMaker && CONFIG.intent === true) {
+if (cardMaker && RUN.intent) {
   const make = cardMaker.make.bind(cardMaker);
   cardMaker.make = async (items, today, signal, retry, intent) => {
     const got = await make(items, today, signal, retry, intent);
@@ -290,7 +293,7 @@ if (cardMaker && CONFIG.intent === true) {
     return got;
   };
 }
-const intentNow = () => intentState(CONFIG, intentUse);
+const intentNow = () => intentState(RUN, intentUse);
 /** The inert mark for a line, read when the line is printed (the replay's hits so far). */
 const inertTag = () => (intentNow() === "inert" ? `  ${INTENT_INERT}` : "");
 /** Every lane's enrichment counters, summed (`CardStats`): items read by the model and calls, per simulated user. */
@@ -336,7 +339,7 @@ const READER_CACHE = opt("reader-cache", "");
 /** `--reader-thinking adaptive`: a `claude-*` reader thinks (at the reader's low effort); default off. */
 const READER_THINKING = opt("reader-thinking", "off") as "off" | "adaptive";
 const READER_KEY = READER === "live" ? keyFor(READER_MODEL) : undefined;
-if (READER !== "none" && !ASK && CONFIG.readerPush !== true) throw new Error("--reader needs --ask (or readerPush)");
+if (READER !== "none" && !ASK && !RUN.readerPush) throw new Error("--reader needs --ask (or readerPush)");
 const LIMIT = Number(opt("limit", "0"));
 /** `--reader-log out.jsonl`: each reader call's prompt (the items as the model read them) and reply, sim data only. */
 const READER_LOG = opt("reader-log", "");
@@ -1043,7 +1046,7 @@ if (OVERLAP) {
       "differs, so these scores are not comparable with a run without --overlap",
   );
 }
-if (CONFIG.intent === true) {
+if (RUN.intent && RUN.cards) {
   console.log(
     `intent: ${intentNow()} (replayed requests for ${intentUse.found} of ${intentUse.asked} items asked)` + inertTag(),
   );
