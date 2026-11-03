@@ -92,3 +92,12 @@ PRESETS.NEWB = { ...PRESETS.NEW, syncPollBehind: true };
 PRESETS.NEWBB = { ...PRESETS.NEWB, readerPushBehind: true };
 PRESETS.ALL3BG = { ...PRESETS.ALL3B, probeGraceMs: 0 };
 PRESETS.NEWBG = { ...PRESETS.NEWB, probeGraceMs: 0 };
+// Candidate unified default (claude/unify-default, measurement in progress): NEWL plus the audit's speed switches.
+PRESETS.UNI = {
+  ...PRESETS.NEWL,
+  syncPollBehind: true,
+  syncPollPageSize: 5,
+  probeGraceMs: 0,
+  readerPushBehind: true,
+  slowPathQueue: true,
+};
