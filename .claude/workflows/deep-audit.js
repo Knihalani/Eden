@@ -52,6 +52,23 @@ Ground rules for every agent:
 - Never print secrets or API keys. Never weaken a security, privacy or isolation check to make something pass. Never skip, disable or delete a test to get green.
 - Cite evidence as file:line. Be ruthless and concrete; no generic advice.`;
 
+// Agents that run without their own worktree share the user's checkout: they must not change it.
+const READONLY = `
+- You share the user's checkout: do NOT commit, switch branches, stash, reset or leave changed files behind. Write any
+  scratch script or output under a temporary directory and delete it when done. Report findings; do not fix them.`;
+
+// Several worktrees exist at once and git refuses to check out a branch that another worktree holds. So agents never
+// check out a shared branch: they work on a detached HEAD and publish with an explicit ref update.
+const GITREFS = (branch, from) => `
+Git, exactly like this (other agents hold other worktrees at the same time):
+- Start: \`git checkout --detach ${from}\` (never \`git checkout <branch>\` on a shared branch; it fails if another worktree
+  holds it).
+- Commit your work on the detached HEAD.
+- Publish: \`git update-ref refs/heads/${branch} HEAD\` (create or move the branch to your commit). If the branch already
+  existed, first make sure your HEAD contains its old tip (\`git merge-base --is-ancestor <old> HEAD\`); never drop
+  someone else's commits.
+- Report the commit sha you published.`;
+
 const SEVERITY = { type: "string", enum: ["critical", "high", "medium", "low"] };
 const FINDING = {
   type: "object",
@@ -116,9 +133,13 @@ const FIXED = {
     summary: { type: "string" },
     checks: { type: "string", description: "commands run and their results" },
     measured: { type: "string", description: "before/after numbers for the claimed impact" },
-    blocked: { type: "string", description: "empty unless something stopped the fix" },
+    blocked: {
+      type: "string",
+      description: "EMPTY when you produced a fix. Non-empty ONLY if you could not produce any fix at all, and why.",
+    },
+    notes: { type: "string", description: "anything else the reviewer should know (caveats, follow-ups)" },
   },
-  required: ["branch", "commit", "summary", "checks", "measured", "blocked"],
+  required: ["branch", "commit", "summary", "checks", "measured", "blocked", "notes"],
 };
 const REVIEW = {
   type: "object",
@@ -178,7 +199,7 @@ Read the root and per-directory CLAUDE.md files, the docs index, the package lay
 the hot paths (what runs per request/event), how the product is measured (benchmarks, evals, their commands and cost),
 the test and check commands and how long they take (run them), and any recent measurements in docs. Return a compact
 brief (≤ 1,500 words) another agent can use as its only orientation: areas with paths, hot paths, how to measure, how to
-check, rules that constrain changes, and known open problems.${RULES}`,
+check, rules that constrain changes, and known open problems.${RULES}${READONLY}`,
   { label: "map", phase: "Map" },
 );
 
@@ -200,7 +221,7 @@ while (round < MAX_ROUNDS) {
       DIMENSIONS.map(
         (d) => () =>
           agent(
-            `${d.prompt}\n\nScope: ${SCOPE}.${FOCUS}${roundNote}\n\nOrientation brief:\n${map}\n${RULES}\nReturn at most 12 findings, most valuable first.`,
+            `${d.prompt}\n\nScope: ${SCOPE}.${FOCUS}${roundNote}\n\nOrientation brief:\n${map}\n${RULES}${READONLY}\nReturn at most 12 findings, most valuable first.`,
             { label: `find:${d.key}:r${round}`, phase: "Find", schema: FINDINGS },
           ),
       ),
@@ -216,7 +237,7 @@ while (round < MAX_ROUNDS) {
   const deduped = await agent(
     `Merge duplicates in these audit findings (same root cause or same fix → one finding; keep the strongest evidence and
 the highest justified severity; keep ids stable where possible). Drop any finding without file:line evidence. Return the
-merged list.\n\n${JSON.stringify(raw)}`,
+merged list.${READONLY}\n\n${JSON.stringify(raw)}`,
     { label: `dedup:r${round}`, phase: "Dedup", schema: FINDINGS },
   );
   const candidates = (deduped ? deduped.findings : raw).filter((f) => !seen.has(f.id)).sort(byValue);
@@ -240,11 +261,14 @@ merged list.\n\n${JSON.stringify(raw)}`,
               "Is the impact estimate sound and is the fix right (and not harmful)? Recompute the arithmetic; check the fix against the repo rules. Default to real=false if the fix would not deliver the claimed effect.",
             ].map(
               (lens, i) => () =>
-                agent(`Adversarially verify this audit finding. ${lens}\n\nFinding:\n${JSON.stringify(f)}\n${RULES}`, {
-                  label: `verify:${f.id}:${i}`,
-                  phase: "Verify",
-                  schema: VERDICT,
-                }),
+                agent(
+                  `Adversarially verify this audit finding. ${lens}\n\nFinding:\n${JSON.stringify(f)}\n${RULES}${READONLY}`,
+                  {
+                    label: `verify:${f.id}:${i}`,
+                    phase: "Verify",
+                    schema: VERDICT,
+                  },
+                ),
             ),
           ).then((vs) => {
             const ok = vs.filter(Boolean);
@@ -280,8 +304,8 @@ merged list.\n\n${JSON.stringify(raw)}`,
 verified findings ranked by value (severity, then effort), each with evidence, impact, fix and status. Add a round ${round}
 section. Then split the findings into at most ${MAX_PACKAGES} work packages for parallel fixers: packages must not share
 files (merge or sequence them otherwise), each package small enough for one agent, with concrete acceptance checks a
-reviewer can run. Defer findings that need a decision from the user (say what decision). Commit the report on branch
-${INTEGRATION} (create it from ${BASE} if missing).\n\nVerified findings:\n${JSON.stringify(work)}\n${RULES}`,
+reviewer can run. Defer findings that need a decision from the user (say what decision). Commit the report and publish it to
+${INTEGRATION} as described below.\n\nVerified findings:\n${JSON.stringify(work)}\n${RULES}\n${GITREFS(INTEGRATION, `${INTEGRATION} if it exists, else ${BASE}`)}`,
     { label: `audit:r${round}`, phase: "Audit", schema: PACKAGES, isolation: "worktree" },
   );
   if (!audit || !audit.packages.length) break;
@@ -296,13 +320,13 @@ ${INTEGRATION} (create it from ${BASE} if missing).\n\nVerified findings:\n${JSO
     let last = null;
     for (let attempt = 1; attempt <= FIX_ATTEMPTS; attempt++) {
       const fixed = await agent(
-        `Fix this work package completely. Work on git branch ${branch} (create it from ${INTEGRATION}${attempt > 1 ? "; it already exists — check it out and continue" : ""}).
+        `Fix this work package completely. Your branch is ${branch}${attempt > 1 ? " (it already holds your previous attempt; continue from it)" : ` (new, from ${INTEGRATION})`}.
 Tests first for behaviour changes; measure before and after for any claimed performance, cost or quality effect; run
 the repo's checks; commit (no push needed unless the repo requires it). Touch only these files unless unavoidable (say
 why): ${pkg.files.join(", ")}.
 ${issues.length ? `\nThe reviewer rejected the previous attempt. Fix every one of these:\n- ${issues.join("\n- ")}` : ""}
 
-Package: ${JSON.stringify(pkg)}\nFindings: ${JSON.stringify(findings)}\nOrientation brief:\n${map}\n${RULES}`,
+Package: ${JSON.stringify(pkg)}\nFindings: ${JSON.stringify(findings)}\nOrientation brief:\n${map}\n${RULES}\n${GITREFS(branch, attempt > 1 ? branch : INTEGRATION)}\nAn independent reviewer agent runs after you: do not try to start one; just leave the branch ready for review.`,
         { label: `fix:${pkg.id}:${attempt}`, phase: "Fix", isolation: "worktree", schema: FIXED },
       );
       if (!fixed || fixed.blocked)
@@ -311,9 +335,10 @@ Package: ${JSON.stringify(pkg)}\nFindings: ${JSON.stringify(findings)}\nOrientat
         `Review branch ${fixed.branch} (diff against ${INTEGRATION}) as an independent, adversarial reviewer. Assume defects
 until shown otherwise. Check each acceptance item yourself, re-run the checks and any measurement the fixer claims, look
 for regressions, weakened security, skipped tests, and side effects outside the package's files. Approve only if every
-finding below is genuinely resolved.\n\nPackage: ${JSON.stringify(pkg)}\nFindings: ${JSON.stringify(findings)}\nFixer's report: ${JSON.stringify(fixed)}\n${RULES}`,
+finding below is genuinely resolved.\n\nPackage: ${JSON.stringify(pkg)}\nFindings: ${JSON.stringify(findings)}\nFixer's report: ${JSON.stringify(fixed)}\n${RULES}\nWork in your own worktree: run \`git checkout --detach ${fixed.branch}\`, then run the checks there. Do not commit.`,
         {
           label: `review:${pkg.id}:${attempt}`,
+          isolation: "worktree",
           phase: "Fix",
           schema: REVIEW,
           ...(A.reviewerAgent ? { agentType: A.reviewerAgent } : {}),
@@ -341,7 +366,7 @@ finding below is genuinely resolved.\n\nPackage: ${JSON.stringify(pkg)}\nFinding
     `Merge these approved branches into ${INTEGRATION} one at a time (a merge commit each; no history rewriting).
 Resolve conflicts by keeping both packages' intent; if a conflict cannot be resolved safely, leave that branch out and
 say why. After merging, run the repo's full checks and any evals/benchmarks the orientation brief names as no-cost.
-Fix only integration breakage (not new features). Report what is green.\n\nBranches: ${JSON.stringify(approved.map((d) => d.fixed.branch))}\nOrientation brief:\n${map}\n${RULES}`,
+Fix only integration breakage (not new features). Report what is green.\n\nBranches: ${JSON.stringify(approved.map((d) => d.fixed.branch))}\nOrientation brief:\n${map}\n${RULES}\n${GITREFS(INTEGRATION, INTEGRATION)}`,
     { label: `integrate:r${round}`, phase: "Integrate", schema: MERGED, isolation: "worktree" },
   );
   ledger.merges.push(merged);
@@ -355,14 +380,16 @@ Fix only integration breakage (not new features). Report what is green.\n\nBranc
 phase("Report");
 const report = await agent(
   `Write the final summary of a multi-round audit-and-fix run for a non-specialist owner of this repo, and append it to
-the top of ${AUDIT_PATH} on branch ${INTEGRATION} (commit). Make it legible: short sentences, plain words, no jargon
+the top of ${AUDIT_PATH} (commit and publish it to ${INTEGRATION} as described at the end). Make it legible: short sentences, plain words, no jargon
 without a one-line explanation. Structure:
 1. The bottom line in 3–5 sentences (what was wrong, what is fixed, what it changes for users/cost/speed/safety).
 2. A table: dimension × (found, verified, fixed and reviewed, still open).
 3. The most important fixes, each in one or two lines with measured before/after numbers (label estimates).
 4. What is still open and why (needs a decision, too big, rejected by review), with the next step for each.
 5. Where everything is: the audit file, the integration branch, per-package branches.
-Use only facts from the data below; do not invent numbers.\n\nData:\n${JSON.stringify({
+Use only facts from the data below; do not invent numbers. Check each claimed fix against git (is its branch merged in
+${INTEGRATION}?) and say so where the data and git disagree.
+${GITREFS(INTEGRATION, INTEGRATION)}\n\nData:\n${JSON.stringify({
     rounds: round,
     ledger: {
       found: ledger.found.map((f) => ({ id: f.id, dimension: f.dimension, severity: f.severity, title: f.title })),
