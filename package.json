@@ -21,7 +21,8 @@
     "sim:perf": "bun run packages/sim/src/perf-cli.ts",
     "sim:lab:build": "bun run packages/sim/src/lab/build.ts",
     "sim:lab": "bun run packages/sim/src/lab/lab-cli.ts",
-    "funnel": "bun packages/sim/src/lab/funnel.ts"
+    "funnel": "bun packages/sim/src/lab/funnel.ts",
+    "gate-traffic": "bun packages/sim/src/lab/gate-traffic.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
