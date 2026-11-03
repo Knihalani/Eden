@@ -20,7 +20,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { Rng } from "../rng";
-import type { RunResult, Task } from "./ab-common";
+import { backfillShares, type Background, type RunResult, type Task } from "./ab-common";
 import { pairedWith } from "./pi-conditions";
 import { endpointMix, ENDPOINT_PRICES, FIXED_PRICES, repricedUsd } from "./reprice";
 import { uptakeWay } from "./uptake";
@@ -42,6 +42,8 @@ interface RunFile {
   grader: string;
   spent: number;
   spend?: { agent: number; eden: number; grader: number };
+  /** Per stream, Eden's spend no task is charged for (cards, bridge); absent before 2026-11-03. */
+  background?: Background[];
   harness?: string;
   config?: Record<string, unknown>;
   timeScale?: number;
@@ -87,6 +89,10 @@ const flag = (name: string) => {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 ? argv[i + 1] : undefined;
 };
+if (flag("reconcile")) {
+  // Exits 1 when the columns do not add up to the header's Eden total within $0.01, so a script can gate on it.
+  process.exit(reconcile(flag("reconcile")!, flag("ledger") ?? "", flag("run") ?? "") ? 0 : 1);
+}
 const files = argv.filter((a, i) => a.endsWith(".json") && !argv[i - 1]?.startsWith("--"));
 if (!files.length) throw new Error("usage: pi-ab-report.ts pi-ab.json [more.json ...] [--timeline dir]");
 const SECONDS = Number(flag("seconds") ?? "20");
@@ -144,6 +150,18 @@ console.log(
 );
 console.log(`config ${join(runs.map((r) => JSON.stringify(r.config ?? {})))}`);
 
+// ---- Eden's spend no task is charged for (cards, bridge), shared out over the task runs (ab-common.ts states how).
+const hasBackground = runs.every((r) => r.background !== undefined);
+const shares = backfillShares(runs.flatMap((r) => r.background ?? []));
+const backfill = (r: RunResult) => shares.get(key(r.task, r.condition)) ?? 0;
+console.log(
+  "cost columns, $ per 1k tasks: $/1k = agent + Eden's per-task calls; (Eden) = Eden's per-task calls (its reader and " +
+    "judge); bkfill = its background calls (cards, bridge), each seed's spread evenly over that seed's task runs " +
+    "with cards or bridge on (mostly a one-time backfill: an upper bound on the steady state); all-in = (Eden) + " +
+    "bkfill" +
+    (hasBackground ? "" : ". bkfill and all-in: '-', a results file from before they were recorded"),
+);
+
 // ---- Outcomes and cost, per condition and task kind.
 const KINDS = ["hidden", "control", "request", "arrival", "offworld"] as const;
 const what: Record<string, string> = {
@@ -160,7 +178,8 @@ for (const kind of KINDS) {
   if (!rows.length) continue;
   console.log(`\n== ${kind}${what[kind] ? `: ${what[kind]}` : ""}`);
   console.log(
-    "condition     n   rate   $/1k  (Eden)  calls  tools   in tok  out tok   p50 s   p90 s   p99 s  ttft p50 ms",
+    "condition     n   rate   $/1k  (Eden) bkfill all-in  calls  tools   in tok  out tok   p50 s   p90 s   p99 s" +
+      "  ttft p50 ms",
   );
   for (const { c, rs } of rows) {
     const graded = rs.filter((r) => r.facts);
@@ -177,6 +196,8 @@ for (const kind of KINDS) {
       kind === "offworld" ? "    -" : ` ${f(mean(graded.map(recall)))}`,
       m((r) => 1_000 * (r.costUsd + r.edenCostUsd), 3, 6),
       m((r) => 1_000 * r.edenCostUsd, 3, 7),
+      hasBackground ? m((r) => 1_000 * backfill(r), 3, 6) : "     -",
+      hasBackground ? m((r) => 1_000 * (r.edenCostUsd + backfill(r)), 3, 6) : "     -",
       m((r) => r.modelCalls, 2, 6),
       m((r) => r.toolCalls, 2, 6),
       m((r) => r.promptTokens, 0, 8),
@@ -388,4 +409,70 @@ if (samples.length) {
       ` (${f((user + system) / Math.max(1, ok.length), 0)} ms per run); RSS max ${f(Math.max(...samples.map((s) => s.rssMb)), 1)} MB` +
       `; tasks in flight max ${Math.max(...samples.map((s) => s.tasks))}`,
   );
+}
+
+/**
+ * `--reconcile report.txt --ledger ledger-summary.jsonl --run p3-h-h13-`: the cost columns of a report written before
+ * results files recorded background spend, recomputed at $0 from the report's own outcome tables and the spend
+ * ledger's per-run totals (the Haiku campaign's raw results are not kept). The ledger's `eden.cards` and `eden.bridge`
+ * spend of the runs named `--run`* is spread evenly over every task run of a condition with a partner (a name with
+ * `eden`, or starting `both`: ALL3 and the NEW family all had cards on), as `backfillShares` spreads it per seed: the
+ * same share per run when every seed ran the same tasks, as the campaign's did. It then checks that the per-task column
+ * plus the backfill, over every row, adds up to the report's own Eden total, and returns false when it does not.
+ */
+function reconcile(reportFile: string, ledgerFile: string, run: string): boolean {
+  if (!ledgerFile || !run) throw new Error("--reconcile needs --ledger FILE and --run PREFIX");
+  const lines = readFileSync(reportFile, "utf8").split("\n");
+  const total = Number(/Eden \$([\d.]+)/.exec(lines[1] ?? "")?.[1] ?? NaN);
+  const ledger = readFileSync(ledgerFile, "utf8")
+    .split("\n")
+    .filter((l) => l.trim())
+    .map((l) => JSON.parse(l) as { run: string; role: string; usd: number })
+    .filter((l) => l.run.startsWith(run));
+  const usd = (pred: (role: string) => boolean) => ledger.filter((l) => pred(l.role)).reduce((n, l) => n + l.usd, 0);
+  const isBg = (role: string) => role === "eden.cards" || role === "eden.bridge";
+  const bgUsd = usd(isBg);
+  const taskUsd = usd((role) => role.startsWith("eden.") && !isBg(role));
+  // The outcome tables: from a "== <kind>" heading to the next blank line, all before the critical path.
+  const rows: { kind: string; c: string; n: number; perK: number; eden: number }[] = [];
+  let kind = "";
+  for (const line of lines) {
+    if (line.startsWith("== critical path")) break;
+    const head = /^== (hidden|control|request|arrival|offworld)/.exec(line);
+    if (head) kind = head[1]!;
+    else if (!line.trim()) kind = "";
+    else if (kind && !line.startsWith("condition")) {
+      const [c, n, , perK, eden] = line.trim().split(/\s+/);
+      rows.push({ kind, c: c!, n: Number(n), perK: Number(perK), eden: Number(eden) });
+    }
+  }
+  const withPartner = (c: string) => /eden|^both/.test(c);
+  const runsWith = rows.filter((r) => withPartner(r.c)).reduce((n, r) => n + r.n, 0);
+  const perK = runsWith ? (1_000 * bgUsd) / runsWith : 0;
+  const bf = (c: string) => (withPartner(c) ? perK : 0);
+  const x = (v: number, d = 3) => v.toFixed(d);
+  console.log(
+    `${reportFile}: ledger runs ${run}*: Eden per-task calls $${x(taskUsd, 4)}, background (cards, bridge) ` +
+      `$${x(bgUsd, 4)}, spread over ${runsWith} task runs with a partner: $${x(perK)} per 1k`,
+  );
+  console.log(
+    "kind     condition             n  agent+Eden $/1k  Eden reader only  Eden bkfill  Eden all-in  all-in $/1k",
+  );
+  for (const r of rows) {
+    console.log(
+      `${r.kind.padEnd(8)} ${r.c.padEnd(18)} ${String(r.n).padStart(4)} ${x(r.perK).padStart(16)} ` +
+        `${x(r.eden).padStart(17)} ${x(bf(r.c)).padStart(12)} ${x(r.eden + bf(r.c)).padStart(12)} ` +
+        `${x(r.perK + bf(r.c)).padStart(12)}`,
+    );
+  }
+  const column = rows.reduce((n, r) => n + (r.eden * r.n) / 1_000, 0);
+  const allIn = rows.reduce((n, r) => n + ((r.eden + bf(r.c)) * r.n) / 1_000, 0);
+  const off = Math.abs(allIn - total);
+  console.log(
+    `reconcile: Σ (Eden) × n = $${x(column, 4)} (ledger per-task $${x(taskUsd, 4)}); Σ (Eden + bkfill) × n = ` +
+      `$${x(allIn, 4)} against the header's Eden $${x(total, 4)}: off by $${x(off, 4)} ` +
+      (off <= 0.01 ? "(within $0.01: OK)" : "(MORE THAN $0.01: the columns do not add up)"),
+  );
+  // NaN (no Eden total in the header) fails too.
+  return off <= 0.01;
 }

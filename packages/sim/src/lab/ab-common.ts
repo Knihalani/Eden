@@ -4,6 +4,7 @@
  * and result rendering, the `ask_context` description, the grader's prompt and verdict parsing, and one OpenRouter
  * chat call. `agent-ab.ts` (the in-house loop) and `pi-ab.ts` (the Pi harness) both run on these.
  */
+import { createHash } from "node:crypto";
 import { inert } from "@eden/engine";
 import { ASK_CONTEXT_DESCRIPTION, ASK_CONTEXT_GUIDED, type AgentEvent } from "@eden/protocol";
 import type { Model } from "@eden/llm";
@@ -408,3 +409,181 @@ export const emptyResult = (task: string, condition: string): RunResult => ({
   edenCostUsd: 0,
   lateItems: 0,
 });
+
+/**
+ * `chat` (OpenRouter) as a `Model`, so the grader can sit behind a `ReplayModel` (`pi-ab --replay`): `gradeWith` sends
+ * through it the request `grade` sends (same messages, cap and JSON mode) and reads the reply the same way. The key
+ * stays in this closure; nothing it returns carries it.
+ */
+export function chatModel(key: string, model: string, options: ChatOptions = {}): Model {
+  return {
+    id: model,
+    async chat(request) {
+      let cost = 0;
+      const meter: Meter = { before: () => {}, after: (c) => (cost = c) };
+      const start = performance.now();
+      const messages: Msg[] = request.messages.map((m) => ({ role: m.role, content: m.content }));
+      const { msg, usage } = await chat(key, meter, model, messages, undefined, request.json === true, options);
+      return {
+        text: msg.content ?? "",
+        usage: { inputTokens: usage.prompt_tokens, outputTokens: usage.completion_tokens, cachedInputTokens: 0 },
+        costUsd: cost,
+        model,
+        latencyMs: Math.round(performance.now() - start),
+      };
+    },
+  };
+}
+
+/**
+ * Eden's spend that no task is charged for, per stream (one world under one condition): the cards it made (D59) and
+ * its bridge queries, both booked to the run's Eden total but made in the background (`RunResult.edenCostUsd` holds
+ * only what a task's own asks and judge cost). The results file lists them so a report can show Eden's all-in cost.
+ */
+export interface Background {
+  seed: number;
+  suite: string;
+  condition: string;
+  /** The tasks this stream ran: its share of the seed's background spend. */
+  tasks: string[];
+  cardsUsd: number;
+  bridgeUsd: number;
+  calls: number;
+}
+
+/**
+ * Each task run's share of the background spend, by `task\0condition`. The allocation rule (a choice, not a
+ * measurement): every stream of a seed shares that seed's cards (one disk cache, a card made by one stream is replayed
+ * by the others), so a seed's background spend is spread evenly over every task run of the seed's streams that had
+ * cards or bridge on, whichever stream happened to make the call. Most of it is a one-time backfill per user, so this
+ * is an upper bound on a steady-state per-task cost, not an estimate of it.
+ */
+export function backfillShares(background: Background[]): Map<string, number> {
+  const bySeed = new Map<number, { usd: number; runs: number }>();
+  for (const b of background) {
+    const s = bySeed.get(b.seed) ?? { usd: 0, runs: 0 };
+    s.usd += b.cardsUsd + b.bridgeUsd;
+    s.runs += b.tasks.length;
+    bySeed.set(b.seed, s);
+  }
+  const out = new Map<string, number>();
+  for (const b of background) {
+    const s = bySeed.get(b.seed)!;
+    for (const t of b.tasks) out.set(`${t}\u0000${b.condition}`, s.runs ? s.usd / s.runs : 0);
+  }
+  return out;
+}
+
+/**
+ * A fingerprint of what the Eden-free arms see and how they are graded, for `--reuse-arms`: the agent's system prompt
+ * (every option), its user turn, the search tool's name, description and rendered result, the step and item caps, and
+ * the grader's prompt for each task kind, all on a fixed probe. The harness's own version names the agent loop, not
+ * this lab's wording: a change to any of these between two runs would let reused arms answer, or be graded, under a
+ * different prompt from the arms run now, which biases exactly the paired comparison reuse serves. `extra` is what a
+ * harness adds (pi-ab: the tool's parameter schema).
+ */
+export function armPromptsHash(extra: unknown = null): string {
+  const world = { now: Date.UTC(2026, 0, 5, 9), user: { full: "Probe User", email: "probe@example.test" } };
+  const probeWorld = world as unknown as World;
+  const source = { id: "mail", description: "the user's mail" } as unknown as SimSource;
+  const probe = (kind: Task["kind"], event: Task["event"]): Task => ({
+    id: "probe",
+    suite: "probe",
+    kind,
+    type: "probe",
+    event,
+    text: "Pay the probe invoice today.",
+    must: [{ id: "f", detail: "the probe invoice is on hold" }],
+    secrets: [],
+  });
+  const tasks = [
+    probe("hidden", "user_message"),
+    probe("control", "user_message"),
+    probe("request", "user_message"),
+    probe("hidden", "external"),
+  ];
+  const prompts = [false, true].flatMap((lookups) =>
+    [false, true].flatMap((data) => [false, true].map((act) => systemPrompt(probeWorld, { lookups, data, act }))),
+  );
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        prompts,
+        user: tasks.map(userPrompt),
+        tool: searchToolSpec(source),
+        rendered: render([{ title: "Probe", text: "x ".repeat(TOOL_CHARS), sourceId: "mail", ref: "1" }]),
+        caps: { MAX_STEPS, TOOL_ITEMS, TOOL_CHARS },
+        grade: tasks.map((t) => gradeMessages(t, "The probe answer.")),
+        extra,
+      }),
+    )
+    .digest("hex")
+    .slice(0, 16);
+}
+
+/** What a results file says about the run that made it, as far as reusing its Eden-free arms depends on it. */
+export interface ArmSource {
+  model: string;
+  grader: string;
+  harness?: string;
+  harnessVersion?: string;
+  /** `armPromptsHash()` of the run: the agent-visible prompts and tools and the grader's prompt. */
+  promptsHash?: string;
+  seeds: number[];
+  suites: string[];
+  timeScale?: number;
+  toolExecution?: string;
+  act?: boolean;
+  partial?: boolean;
+  tasks: Task[];
+  results: RunResult[];
+}
+
+/**
+ * `pi-ab --reuse-arms F`: the results of `conditions` (arms Eden takes no part in: `none`, `tools`) copied from an
+ * earlier run instead of paid for again. Refused, with the reason, unless that run had the same agent model, grader,
+ * harness and harness version, agent and grader prompts (`armPromptsHash`), time scale, tool execution and mode,
+ * covered every seed and suite of this one, asked every task in the same words with the same needed facts, and holds
+ * a graded, error-free result for each task under each arm. A partial run is never reused. A reused arm is one sample
+ * of the agent: paired comparisons against it are sound (common random numbers), but a run-to-run variance estimate
+ * needs the arms run again.
+ */
+export function reusableArms(prior: ArmSource, now: Omit<ArmSource, "results">, conditions: string[]): RunResult[] {
+  const same = (what: string, there: unknown, here: unknown) => {
+    if (JSON.stringify(there ?? null) !== JSON.stringify(here ?? null))
+      throw new Error(`--reuse-arms: ${what} differs (${JSON.stringify(there)} there, ${JSON.stringify(here)} here)`);
+  };
+  same("agent model", prior.model, now.model);
+  same("grader", prior.grader, now.grader);
+  same("harness", prior.harness, now.harness);
+  same("harness version", prior.harnessVersion, now.harnessVersion);
+  // A run from before the fingerprint was recorded has none, and is refused: its prompts cannot be checked.
+  same("agent and grader prompts (promptsHash)", prior.promptsHash, now.promptsHash);
+  same("time scale", prior.timeScale ?? 0, now.timeScale ?? 0);
+  same("tool execution", prior.toolExecution, now.toolExecution);
+  same("act mode", prior.act === true, now.act === true);
+  if (prior.partial) throw new Error("--reuse-arms: that run was partial (cut off by its request cap)");
+  const seed = now.seeds.find((s) => !prior.seeds.includes(s));
+  if (seed !== undefined) throw new Error(`--reuse-arms: seed ${seed} was not run there`);
+  const suite = now.suites.find((s) => !prior.suites.includes(s));
+  if (suite !== undefined) throw new Error(`--reuse-arms: suite ${suite} was not run there`);
+  const priorTasks = new Map(prior.tasks.map((t) => [t.id, t]));
+  const asked = (t: Task) => ({ text: t.text, event: t.event, kind: t.kind, must: t.must });
+  for (const t of now.tasks) {
+    const p = priorTasks.get(t.id);
+    if (!p) throw new Error(`--reuse-arms: task ${t.id} was not run there`);
+    same(`task ${t.id}`, asked(p), asked(t));
+  }
+  const byKey = new Map(prior.results.map((r) => [`${r.task}\u0000${r.condition}`, r]));
+  const out: RunResult[] = [];
+  for (const condition of conditions) {
+    for (const t of now.tasks) {
+      const r = byKey.get(`${t.id}\u0000${condition}`);
+      if (!r) throw new Error(`--reuse-arms: no ${condition} result for ${t.id} there`);
+      if (r.error) throw new Error(`--reuse-arms: ${condition} on ${t.id} failed there (${r.error.slice(0, 60)})`);
+      if (t.must.length > 0 && !r.facts) throw new Error(`--reuse-arms: ${condition} on ${t.id} was not graded there`);
+      out.push(structuredClone(r));
+    }
+  }
+  return out;
+}

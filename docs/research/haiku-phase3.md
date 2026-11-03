@@ -128,21 +128,42 @@ honest measure.
   about ±6 points.
 - **Held-out 13:** seeds 41–44, Pi and Hermes, the final check.
 
-| Condition (held-out 13) | Hidden | False concern | Wall p50 / p90 s | Eden on critical path ms, connectors at 0 ms (--time-scale 0) | Eden $ / 1k tasks | Agent + Eden $ / 1k tasks |
-|---|---|---|---|---|---|---|
-| Pi none | 0.0% | 0.0% | 2.21 / 3.09 | 0 | 0 | 0.184 |
-| Pi tools | 8.6% | 0.0% | 3.39 / 4.82 | 0 | 0 | 0.345 |
-| Pi eden (ALL3) | 53.1% | 0.0% | 3.29 / 4.38 | 30 | 0 | 0.374 |
-| Pi eden~NEW | 78.9% | 0.8% | 3.72 / 6.72 | 1,857 | 0.553 | 0.814 |
-| Pi eden~NEW2 | 79.7% | 1.6% | 3.65 / 7.19 | 1,999 | 0.596 | 0.861 |
-| Pi eden~NEWL | 75.0% | 2.3% | 3.39 / 6.76 | 1,711 | 0.388 | 0.638 |
-| Pi both~NEW | 67.2% | 0.8% | 4.10 / 5.56 | 1,114 | 0.332 | 0.659 |
-| Pi both~NEW2 | 70.3% | 2.3% | 4.36 / 5.84 | 1,266 | 0.374 | 0.693 |
-| Hermes alone | 8.6% | 0.0% | 3.08 / 4.14 | 0 | 0 | 0.358 |
-| Hermes + ALL3 | 33.6% | 0.8% | 3.09 / 4.75 | 19 | 0 | 0.396 |
-| Hermes + NEW | 71.9% | 0.8% | 3.34 / 6.99 | 1,344 | 0.403 | 0.750 |
-| Hermes + NEW2 | 78.1% | 3.9% | 3.79 / 7.08 | 1,548 | 0.456 | 0.830 |
-| Hermes + NEWL | 71.1% | 0.0% | 3.05 / 6.44 | 1,236 | 0.276 | 0.628 |
+| Condition (held-out 13) | Hidden | False concern | Wall p50 / p90 s | Eden on critical path ms, connectors at 0 ms (--time-scale 0) | Eden $ / 1k, reader only | Eden backfill $ / 1k (cards) | Eden all-in $ / 1k | Agent + Eden (reader only) $ / 1k | Agent + Eden all-in $ / 1k |
+|---|---|---|---|---|---|---|---|---|---|
+| Pi none | 0.0% | 0.0% | 2.21 / 3.09 | 0 | 0 | 0 | 0 | 0.184 | 0.184 |
+| Pi tools | 8.6% | 0.0% | 3.39 / 4.82 | 0 | 0 | 0 | 0 | 0.345 | 0.345 |
+| Pi eden (ALL3) | 53.1% | 0.0% | 3.29 / 4.38 | 30 | 0 | 0.106 | 0.106 | 0.374 | 0.480 |
+| Pi eden~NEW | 78.9% | 0.8% | 3.72 / 6.72 | 1,857 | 0.553 | 0.106 | 0.659 | 0.814 | 0.920 |
+| Pi eden~NEW2 | 79.7% | 1.6% | 3.65 / 7.19 | 1,999 | 0.596 | 0.106 | 0.702 | 0.861 | 0.967 |
+| Pi eden~NEWL | 75.0% | 2.3% | 3.39 / 6.76 | 1,711 | 0.388 | 0.106 | 0.494 | 0.638 | 0.744 |
+| Pi both~NEW | 67.2% | 0.8% | 4.10 / 5.56 | 1,114 | 0.332 | 0.106 | 0.438 | 0.659 | 0.765 |
+| Pi both~NEW2 | 70.3% | 2.3% | 4.36 / 5.84 | 1,266 | 0.374 | 0.106 | 0.480 | 0.693 | 0.799 |
+| Hermes alone | 8.6% | 0.0% | 3.08 / 4.14 | 0 | 0 | 0 | 0 | 0.358 | 0.358 |
+| Hermes + ALL3 | 33.6% | 0.8% | 3.09 / 4.75 | 19 | 0 | 0.165 | 0.165 | 0.396 | 0.561 |
+| Hermes + NEW | 71.9% | 0.8% | 3.34 / 6.99 | 1,344 | 0.403 | 0.165 | 0.568 | 0.750 | 0.915 |
+| Hermes + NEW2 | 78.1% | 3.9% | 3.79 / 7.08 | 1,548 | 0.456 | 0.165 | 0.621 | 0.830 | 0.995 |
+| Hermes + NEWL | 71.1% | 0.0% | 3.05 / 6.44 | 1,236 | 0.276 | 0.165 | 0.441 | 0.628 | 0.793 |
+
+- **Cost columns, relabelled 2026-11-03.** "Reader only" is what the report's per-task "(Eden)" column held: the
+  reader's calls charged to each task. Card calls are booked to Eden's run total but to no task, so that column left
+  them out, and ALL3 (cards on) showed $0. The backfill column adds them back: the campaign ledger's `eden.cards`
+  spend (Pi $0.1629, 20% of Eden's $0.8180; Hermes $0.1688, 36% of $0.4635) spread evenly over every task run of a
+  condition with a partner (1,536 in Pi, 1,024 in Hermes). That spread is an allocation rule, not a measurement:
+  the cards are shared by every condition of a seed. Most of it is first-time backfill (per the ledger, seed 41 made 23–24
+  card calls for $0.003, seeds 42–44 made 137–190 for $0.052–0.056 each), so the backfill column is an
+  upper bound on the steady-state per-task cost, not an estimate of it. Recomputed at $0 from the committed report
+  and ledger; the reader-only column times the tasks plus the backfill adds up to each report's Eden total (Pi off
+  by $0.0000, Hermes by $0.0001):
+
+  ```bash
+  bun packages/sim/src/lab/pi-ab-report.ts --reconcile packages/sim/lab/haiku/phase3/report-pi-h13.txt \
+    --ledger packages/sim/lab/haiku/phase3/ledger-summary.jsonl --run p3-pi-h13-
+  bun packages/sim/src/lab/pi-ab-report.ts --reconcile packages/sim/lab/haiku/phase3/report-h-h13.txt \
+    --ledger packages/sim/lab/haiku/phase3/ledger-summary.jsonl --run p3-h-h13-
+  ```
+
+  New `pi-ab` and `hermes-ab` results files record each stream's background spend, and `pi-ab-report.ts` prints the
+  `bkfill` and `all-in` columns from them.
 
 - The critical-path column is the mean over hidden and control tasks. Every row ran with connectors at 0 ms
   (`--time-scale 0`, the harnesses' default then), so it leaves out Eden's on-demand sync poll; the wall times
@@ -182,14 +203,18 @@ change in what is delivered. Measured with `bun run funnel` (no model, cards rep
 
 ## The frontier, and the recommendation
 
-Points, held-out 13: hidden fact raised, and agent + Eden cost per 1k hidden tasks.
+Points, held-out 13: hidden fact raised, and agent + Eden cost per 1k hidden tasks, with Eden's cost as the reader
+only and all-in (with the cards' backfill, allocated as above).
 
-| Point | Pi hidden | Pi $ / 1k | Hermes hidden | Hermes $ / 1k |
-|---|---|---|---|---|
-| ALL3 | 53.1% | 0.374 | 33.6% | 0.396 |
-| NEWL | 75.0% | 0.638 | 71.1% | 0.628 |
-| NEW | 78.9% | 0.814 | 71.9% | 0.750 |
-| NEW2 | 79.7% | 0.861 | 78.1% | 0.830 |
+| Point | Pi hidden | Pi $ / 1k, reader only | Pi $ / 1k, all-in | Hermes hidden | Hermes $ / 1k, reader only | Hermes $ / 1k, all-in |
+|---|---|---|---|---|---|---|
+| ALL3 | 53.1% | 0.374 | 0.480 | 33.6% | 0.396 | 0.561 |
+| NEWL | 75.0% | 0.638 | 0.744 | 71.1% | 0.628 | 0.793 |
+| NEW | 78.9% | 0.814 | 0.920 | 71.9% | 0.750 | 0.915 |
+| NEW2 | 79.7% | 0.861 | 0.967 | 78.1% | 0.830 | 0.995 |
+
+The backfill is the same for every point of a harness, so the ranking does not change; the gap to the tools arm
+(Pi $0.345, Hermes $0.358) widens by $0.106 (Pi) and $0.165 (Hermes) per 1k.
 
 - **NEW stays the recommended configuration (D98).**
 - **NEWL is the cheaper point.** It gives up a few points (0–4 on blind, up to 8 on train in one arm) for about 30%
