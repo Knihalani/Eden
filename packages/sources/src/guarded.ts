@@ -74,6 +74,16 @@ export interface CountedPlanCalls extends PlanCalls {
   made: number;
 }
 
+/**
+ * Lets a listing skip redacting items the caller already holds unchanged (`SourceFanout.list`'s `reuse`): a sync
+ * re-lists mostly what it has. `held` returns the caller's redacted copy of `raw` only when `raw` is exactly what that
+ * copy was made from, else undefined (the item is redacted as usual); `made` tells it the copy made of `raw`.
+ */
+export interface ListReuse {
+  held(raw: ContextItem): ContextItem | undefined;
+  made(raw: ContextItem, redacted: ContextItem): void;
+}
+
 export interface FanoutOptions {
   /**
    * Redacts items before they are cached or returned. Required: nothing unredacted is held. It may be asynchronous
@@ -229,7 +239,7 @@ export class SourceFanout {
     scope: Scope,
     cursor: string | undefined,
     limit: number,
-    options: { timeoutMs: number; signal?: AbortSignal; reserve?: number },
+    options: { timeoutMs: number; signal?: AbortSignal; reserve?: number; reuse?: ListReuse },
   ): Promise<ListPage | Exclude<FanoutStatus, "ok" | "cached" | "stale">> {
     if (!source.list) return "error";
     const timeout = AbortSignal.timeout(options.timeoutMs);
@@ -259,11 +269,31 @@ export class SourceFanout {
     s.limiter.release("ok");
     s.breaker.success(epoch);
     try {
-      return { items: await this.options.sanitize(page.items, signal), next: page.next };
+      return { items: await this.redactListed(page.items, signal, options.reuse), next: page.next };
     } catch {
       // Our gate failed, not the source: no page, and nothing unredacted held.
       return "error";
     }
+  }
+
+  /**
+   * A listing's items redacted: those `reuse` holds unchanged are its copies, the rest go through the hook. The hook
+   * may leave items out; then its output cannot be paired with its input, nothing is remembered, and the page is
+   * what it returned followed by the held copies.
+   */
+  private async redactListed(raw: ContextItem[], signal: AbortSignal, reuse?: ListReuse): Promise<ContextItem[]> {
+    if (!reuse) return this.options.sanitize(raw, signal);
+    const held = raw.map((r) => reuse.held(r));
+    const fresh = raw.filter((_, i) => held[i] === undefined);
+    const made = fresh.length > 0 ? await this.options.sanitize(fresh, signal) : [];
+    if (made.length !== fresh.length) return [...made, ...held.filter((h) => h !== undefined)];
+    let next = 0;
+    return held.map((h, i) => {
+      if (h !== undefined) return h;
+      const out = made[next++]!;
+      reuse.made(raw[i]!, out);
+      return out;
+    });
   }
 
   /** Drops everything held for a user (cached results and per-source state), or for one of their sources. */

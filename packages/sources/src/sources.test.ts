@@ -55,6 +55,38 @@ describe("searchSources", () => {
     ]);
     expect(out[2]!.items).toHaveLength(1);
   });
+
+  test("an already-aborted signal: no source is called, nothing hangs, and nothing reports ok", async () => {
+    let calls = 0;
+    // Ignores its signal and never settles: before the fix, the race waited for an abort event that had already fired.
+    const deaf: Source = {
+      id: "deaf",
+      kind: "test",
+      description: "",
+      search: () => (calls++, new Promise<ContextItem[]>(() => {})),
+    };
+    const ok = new StaticSource("ok", "", [{ ref: "1", title: "hello", text: "world" }]);
+    const caller = new AbortController();
+    caller.abort();
+    const out = await Promise.race([
+      searchSources([deaf, ok], query("hello"), { timeoutMs: 60_000, signal: caller.signal }),
+      Bun.sleep(1_000).then(() => "hung" as const),
+    ]);
+    expect(out).not.toBe("hung");
+    if (out === "hung") return;
+    expect(out.map((o) => [o.sourceId, o.status, o.items.length])).toEqual([
+      ["deaf", "timeout", 0],
+      ["ok", "timeout", 0],
+    ]);
+    expect(calls).toBe(0);
+  });
+
+  test("a signal aborted while a source runs ends that source's wait with no items", async () => {
+    const caller = new AbortController();
+    setTimeout(() => caller.abort(), 20);
+    const out = await searchSources([slow], query("hello"), { timeoutMs: 60_000, signal: caller.signal });
+    expect(out.map((o) => [o.sourceId, o.status, o.items.length])).toEqual([["slow", "timeout", 0]]);
+  });
 });
 
 /** One real search result from each of eight open-source MCP servers, from the connector lab (synthetic data). */

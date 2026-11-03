@@ -133,7 +133,9 @@ background: a backfill of the newest items across sources, polls when a lookup f
 change rate, a daily sweep that drops what a source has not listed in two sweeps in a row (about 48 h). Synced items have their own cap and TTL in the
 cache. A lookup answers every current synced source (its own search and every probe) from that local index at no
 call, and calls live only the sources that are not synced or still stale. The tick runs on a timer, never on the fast
-path, which only marks the user active. A poll lists `syncPageSize` (100) items a page, as backfill and sweeps do, and
+path, which only marks the user active. A listing redacts only what it brings new or changed: an item the cache holds
+whose raw copy hashes the same field for field (wyhash over every field, per-process seed) gets the held redacted
+copy back (`ItemCache.reuseFor`, `SourceFanout.list`'s `reuse`), so a sweep of an unchanged source costs 3.5-6.3 µs an item instead of 41-44 (`packages/engine/bench/ingest.bench.ts`). A poll lists `syncPageSize` (100) items a page, as backfill and sweeps do, and
 an on-demand poll reads at most `syncCatchupPages` (2) pages. With `syncPollPageSize` (proposed D101, 0 = off) a
 poll's first page is twice what the source's learned change rate expects since its last poll, at least that size and
 at most `syncPageSize`; while no page reaches what was already synced, the next tops the items asked up to the next
