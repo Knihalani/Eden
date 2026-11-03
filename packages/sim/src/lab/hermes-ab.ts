@@ -87,6 +87,7 @@ import { Worker } from "./hermes-worker";
 import { parseVariants } from "./pi-conditions";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
 import { PRESETS } from "./presets";
+import { overBudget, overBudgetLine, type Budgeted } from "./reader-disk";
 import { parseSuites } from "./suites";
 import { QUESTION_CHARS, UptakeLog } from "./uptake";
 
@@ -168,6 +169,8 @@ const diskBridge = BRIDGE_FILE ? new DiskBridgeMaker(BRIDGE_FILE) : null;
 let spent = 0;
 let held = 0;
 const spend = { agent: 0, eden: 0, grader: 0 };
+/** Every lane's reader, cards and bridge, for the calls their `Budget()` refused (the summary's `overBudget:` line). */
+const budgeted: Budgeted = { reader: [], cards: [], bridge: [] };
 function reserve(est: number): void {
   if (spent + held + est > BUDGET) throw new OverBudget(`budget $${BUDGET} reached (spent $${spent.toFixed(4)})`);
   held += est;
@@ -379,6 +382,7 @@ async function runWorld(
     withPartner && config.cards === true
       ? new CardEnricher({ maker: cardMaker(), budget: new Budget(), now: () => clock })
       : undefined;
+  if (cards) budgeted.cards.push(cards);
   const liveBridge = () =>
     new ModelBridgeMaker(
       meteredModel(labModel(ACCESS, { apiKey: KEY!, model: BRIDGE_MODEL }, "eden.bridge"), (start, end, data) =>
@@ -406,6 +410,7 @@ async function runWorld(
     withPartner && config.bridgeQuery === true
       ? new QueryBridge({ maker: bridgeMaker(), budget: new Budget(), now: () => clock })
       : undefined;
+  if (bridge) budgeted.bridge.push(bridge);
   // `askReader`: one budgeted call per ask about an action, on the running task's timeline and charged to it (D95).
   let readerTask: RunResult | null = null;
   const reader =
@@ -424,6 +429,7 @@ async function runWorld(
           now: () => clock,
         })
       : undefined;
+  if (reader) budgeted.reader.push(reader);
   const partner = withPartner
     ? new ContextPartner({
         sources: async () => edenSources,
@@ -826,6 +832,7 @@ writeFileSync(
       stoppedStreams,
       maxIterations: MAX_ITERATIONS,
       spend,
+      overBudget: overBudget(budgeted),
       timeline: TIMELINE,
       wallSeconds: Math.round((performance.now() - t0) / 100) / 10,
       tasks,
@@ -843,3 +850,4 @@ console.error(
     (capStopped || PACER.refused ? `; PARTIAL: request cap reached (${capStopped} streams stopped early)` : "") +
     (stoppedStreams ? `; PARTIAL: ${stoppedStreams} streams stopped on a failure (logged above)` : ""),
 );
+console.error(overBudgetLine(budgeted));

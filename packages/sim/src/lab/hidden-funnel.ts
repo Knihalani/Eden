@@ -64,8 +64,9 @@
  * endpoint; a `:free` model through `free.ts` with `--allow-logging --rpm --max-requests`). `--reader-cache FILE`
  * keeps every call under its prompt's hash (`reader-disk.ts`), so a rerun replays it at no cost; `replay` never
  * calls (a prompt not cached fails open). The run prints the reader's calls, tokens, spend and latency p50/p90 as
- * made, and each task records what the reader did (`reader*`). `--limit N` plays only the first N tasks of each suite,
- * variant and seed (a sample; run the baseline with the same N).
+ * made, and each task records what the reader did (`reader*`). Replay misses are counted and gate the run: with any,
+ * it is not recorded and exits 3 (`MISS_EXIT`) unless `--allow-misses` (docs/LAB.md). `--limit N` plays only the
+ * first N tasks of each suite, variant and seed (a sample; run the baseline with the same N).
  *
  * `--suite` names any suite of `suites.ts`, or several: each gets its own table, then a TOTAL over all of them.
  * Each suite's run is recorded in the benchmark ledger (bench/, `ledger.ts`) unless `--no-record`.
@@ -95,7 +96,7 @@ import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
 import { DiskBridgeMaker } from "./bridge-disk";
 import { DiskCardMaker } from "./cards-disk";
-import { ReplayModel } from "./reader-disk";
+import { missGate, overBudgetLine, ReplayModel } from "./reader-disk";
 import { keyFor, labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
 import { record, tidy } from "./ledger";
@@ -227,6 +228,8 @@ const readerModel =
         READER_MODEL,
       );
 const readerLanes: AskReader[] = [];
+/** `--allow-misses`: accept a replay run some of whose reader prompts were not cached (they fail open). */
+const ALLOW_MISSES = args.includes("--allow-misses");
 const TIMELINE = opt("timeline", "");
 /**
  * `--packets out.jsonl`: each task's packets as the agent would read them (text, reason, cited item ids) and the
@@ -791,6 +794,11 @@ if (readerModel) {
   const r = ACCESS.pacer.summary();
   console.log(`reader requests: ${r.sent} sent, ${r.retried} retried, ${r.refused} refused at the cap`);
 }
+if (readerModel || cardMaker || bridgeMaker) {
+  console.log(overBudgetLine({ reader: readerLanes, cards: cardLanes, bridge: bridgeLanes }));
+}
+const misses = missGate(readerModel?.missed ?? 0, ALLOW_MISSES);
+if (misses.message) console.log(`\n${misses.message}\n`);
 if (LIVE) {
   const tasks = Math.max(1, grand.hidden.n + grand.control.n);
   console.log(
@@ -803,8 +811,9 @@ if (LIVE) {
   console.log(`judge requests: ${r.sent} sent, ${r.retried} retried, ${r.refused} refused at the cap`);
   if (r.refused) console.log("PARTIAL: the request cap refused judge calls; those tasks ran with no judge");
 }
-// A run the cap cut short is not this configuration's result: it stays out of the ledger.
-if (!args.includes("--no-record") && ACCESS.pacer.refused === 0) {
+// A run the cap cut short, or one with reader misses not accepted, is not this configuration's result: it stays out
+// of the ledger.
+if (!args.includes("--no-record") && ACCESS.pacer.refused === 0 && misses.code === 0) {
   for (const { suite, rows, perTask, wall, total: t } of runs) {
     const n = (k: keyof Row, v: "hidden" | "control") => t[v][k] / Math.max(1, t[v].n);
     const metrics: Record<string, number> = {
@@ -868,6 +877,17 @@ if (out) {
         total: grand,
         ...(REAL_SYNC ? { sync: syncUse } : {}),
         ...(cardMaker ? { cards: cardUse } : {}),
+        // The replay's misses (answered without the reader) and failures, for funnel.ts's gate.
+        ...(readerModel
+          ? {
+              reader: {
+                replayed: readerModel.replayed,
+                sent: readerModel.sent,
+                missed: readerModel.missed,
+                failed: readerModel.failed,
+              },
+            }
+          : {}),
         ...(SUITE_LIST.length > 1 ? { suites } : {}),
         // Per task, with the suite: how each planted item was delivered (`why`), for breakdowns by path.
         perTask: runs.flatMap((r) => r.perTask.map((t) => ({ suite: r.suite, ...t }))),
@@ -877,3 +897,4 @@ if (out) {
     ),
   );
 }
+if (misses.code) process.exit(misses.code);
