@@ -30,6 +30,10 @@ const INPUTS = [
   "Wed, 14 Oct 2026 09:14:00 PST",
   "2026-10-14T09:00:00+09:00",
   "2026-10-14T09:00:00Z",
+  "2026-10-14T09:00:00z",
+  "Wed, 14 Oct 2026 09:14:00 GMT+1",
+  "2026-10-14t09:00",
+  "+002026-10-14T09:00:00",
   "Wed, 14 Oct 2026 09:14:00 CEST",
   "not a date",
 ];
@@ -79,6 +83,11 @@ describe("parseWhen: zone-less dates are UTC, whatever the host's zone", () => {
     expect(parseWhen("Wed 14 Oct 2026 09:14:00 -0700")).toBe(Date.UTC(2026, 9, 14, 16, 14));
     expect(parseWhen("Wed 14 Oct 2026 09:14:00 PST")).toBe(Date.UTC(2026, 9, 14, 17, 14));
     expect(parseWhen("2026-10-14T09:00:00+09:00")).toBe(Date.UTC(2026, 9, 14, 0));
+    expect(parseWhen("2026-10-14T09:00:00z")).toBe(Date.UTC(2026, 9, 14, 9)); // RFC 3339 allows a lowercase "z".
+    expect(parseWhen("Wed 14 Oct 2026 09:14:00 GMT+1")).toBe(Date.UTC(2026, 9, 14, 8, 14)); // A one-digit hour offset.
+    // Zone-less forms that a " GMT" suffix breaks reach the wall-clock fallback (run under other zones below).
+    expect(parseWhen("2026-10-14t09:00")).toBe(Date.UTC(2026, 9, 14, 9));
+    expect(parseWhen("+002026-10-14T09:00:00")).toBe(Date.UTC(2026, 9, 14, 9));
     // A zone name outside RFC 2822 does not parse at all (callers fall back: sentAt and datedOf to updatedAt).
     expect(parseWhen("Wed 14 Oct 2026 09:14:00 CEST")).toBeNaN();
     expect(parseWhen("not a date")).toBeNaN();

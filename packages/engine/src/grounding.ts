@@ -138,11 +138,13 @@ export function startMs(item: ContextItem): number {
 }
 
 /**
- * A trailing zone: "Z", "+01:00" or "-0700" right after a time (so the year in "14-Oct-2026" is no offset), or a
- * name ("UTC", "GMT+0100", an RFC 2822 zone); an optional "(comment)" after it.
+ * A trailing zone: "Z" (any case, RFC 3339), "+01:00" or "-0700" right after a time (so the year in "14-Oct-2026" is
+ * no offset), or a name ("UTC", "GMT+1", "GMT+0100", an RFC 2822 zone); an optional "(comment)" after it.
  */
 const HAS_ZONE =
-  /(?:\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?\s*(?:Z|[+-]\d{2}(?::?\d{2})?)|\b(?:UTC?|GMT|[ECMP][SD]T)(?:\s*[+-]\d{2}:?\d{2})?)(?:\s*\([^)]*\))?\s*$/;
+  /(?:\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?\s*(?:Z|[+-]\d{2}(?::?\d{2})?)|\b(?:UTC?|GMT|[ECMP][SD]T)(?:\s*[+-]\d{1,2}(?::?\d{2})?)?)(?:\s*\([^)]*\))?\s*$/i;
+/** Any zone token anywhere (looser than HAS_ZONE): a string with one is never re-read as UTC wall-clock. */
+const ANY_ZONE = /\d[zZ]\b|\b(?:UTC?|GMT|[ECMP][SD]T)\b|\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?\s*[+-]\d{1,2}(?::?\d{2})?/i;
 const ISO_LOCAL = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/;
 
 /**
@@ -158,7 +160,9 @@ export function parseWhen(s: string): number {
   if (/^\d{4}-\d{2}(?:-\d{2})?$/.test(t)) return Date.parse(t);
   const utc = Date.parse(`${t} GMT`);
   if (Number.isFinite(utc)) return utc;
-  // A form the suffix breaks: read it locally, then take its wall-clock fields as UTC.
+  // A form the suffix breaks. A zone token the patterns above missed: the instant is already fixed, keep it.
+  if (ANY_ZONE.test(t)) return Date.parse(t);
+  // No zone at all: read it locally, then take its wall-clock fields as UTC.
   const local = new Date(Date.parse(t));
   if (Number.isNaN(local.getTime())) return Number.NaN;
   return Date.UTC(

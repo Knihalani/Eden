@@ -369,11 +369,12 @@ only through a `WeakRef`, so a cache nobody closes (labs build one per task) is 
 
 Dates in items are read the same on every host: `parseWhen` (`grounding.ts`) reads a zone-less date or date-time (a
 `Date:` header without a zone, a calendar start with no offset, "14 Oct 2026") as UTC, not the server process's local
-zone, and leaves strings with a zone and ISO bare dates to `Date.parse`. An offset counts only right after a time,
-so the year in "14-Oct-2026" is not read as "-2026". A zone name outside the RFC 2822 set ("CEST") does not parse at
-all: `parseWhen` gives NaN and the sent time and card date fall back to the item's `updatedAt`. A mail's sent time (`sentAt`), the date in a
-card prompt (`datedOf`, and so its replay hash), an event's start (`startMs`) and the order of a day's events
-(`ItemCache.timed`, unparseable starts last) all go through it. Tests run with TZ=UTC (`scripts/test-preload.ts`);
+zone, and leaves strings with a zone ("Z" in either case, "+01:00", "GMT+1") and ISO bare dates to `Date.parse`. An
+offset counts only right after a time, so the year in "14-Oct-2026" is not read as "-2026". A zone name outside the
+RFC 2822 set ("CEST") does not parse at all: `parseWhen` gives NaN and the sent time and card date fall back to the
+item's `updatedAt`. A mail's sent time (`sentAt`), the date in a card prompt (`datedOf`, and so its replay hash), an
+event's start (`startMs`) and the order of a day's events (`ItemCache.timed`, unparseable starts last) all go through
+it. Tests run with TZ=UTC (`scripts/test-preload.ts`);
 `tz.test.ts` checks the same answers under Asia/Tokyo and America/Los_Angeles.
 
 ## What is deliberately missing (see ROADMAP.md)
