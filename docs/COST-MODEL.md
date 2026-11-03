@@ -78,8 +78,11 @@ the leaner operating point (pool 15, 240-character snippets, `readerGate`) about
 (30% less Eden cost per task live). `askReaderStanding` 20 adds about 3,000 input tokens, 55–68% of the prompt then
 read from the cache ($0.00043–0.00047 a call). With `askReaderQuestions` and `readerPush` together, the reader is
 called once per user message (small talk included), not per acting request: about $0.00040–0.00047 per user message.
-The reader's calls show in `AskResponse.costUsd` and the traces: an "answer" trace for an ask's read, a "reader-push"
-trace for a push's, each call counted once (`readerCalls`, `readerCostUsd`). A reader given a default `new Budget()`
+The reader's calls show in the traces, each call counted once (`readerCalls`, `readerCostUsd`): an "answer" trace for an
+ask's read, a "reader-push" trace for a push's (the push waits for its reading), and a "reader-late" trace, emitted when
+it lands, for a call an explicit ask started and stopped waiting for at `askReaderWaitMs`. `AskResponse.costUsd` holds
+only a call that answered in time: a late call reports 0 there (and `usedModel` false), so an embedder meters the reader
+from the traces or from `AskReader.stats`, not from `AskResponse` alone. A reader given a default `new Budget()`
 stops after 20 reads a session (`callsPerSession`; settling at the actual cost frees the dollar cap, so the count binds
 first): about 20 user messages when each is read once, fewer when an ask reads a pool its push did not. Refused reads report the
 outcome "budget"; size the reader's own `Budget` for longer sessions. The intent index's requests for every

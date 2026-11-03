@@ -45,7 +45,13 @@ class ScriptedReader implements ReaderMaker {
   calls: ReaderInput[] = [];
   constructor(
     private readonly pick: (input: ReaderInput) => { i: number; kind: ReaderKind; why: string }[] | null,
-    private readonly opts: { delayMs?: number; fail?: boolean; reject?: (input: ReaderInput) => number[] } = {},
+    private readonly opts: {
+      delayMs?: number;
+      fail?: boolean;
+      reject?: (input: ReaderInput) => number[];
+      /** A provider that answers (and bills) a request whose caller has gone away. */
+      ignoreAbort?: boolean;
+    } = {},
   ) {}
   async read(input: ReaderInput, signal: AbortSignal) {
     this.calls.push(input);
@@ -53,6 +59,7 @@ class ScriptedReader implements ReaderMaker {
       await new Promise<void>((resolve, reject) => {
         const t = setTimeout(resolve, this.opts.delayMs);
         signal.addEventListener("abort", () => {
+          if (this.opts.ignoreAbort) return;
           clearTimeout(t);
           reject(new Error("aborted"));
         });
@@ -407,10 +414,11 @@ describe("the reader in the engine (config.askReader)", () => {
       onTrace: (t) => traces.push(t),
     });
     const answers: Record<string, { answer: string; ids: string[]; costUsd: number; usedModel: boolean }[]> = {};
+    let observed: { pending: boolean } | undefined;
     for (const userId of opts.users ?? ["u1"]) {
       const scope = { tenantId: "t", userId };
       const sessionId = "s1";
-      await p.observe(
+      observed = await p.observe(
         { ...scope, sessionId, at: clock, kind: "user_message", text: opts.request ?? REQUEST } as AgentEvent,
         { waitMs: opts.waitMs ?? 1_000 },
       );
@@ -432,7 +440,7 @@ describe("the reader in the engine (config.askReader)", () => {
         });
       }
     }
-    return { answers, maker, reader, reports, traces, sent, partner: p };
+    return { answers, maker, reader, reports, traces, sent, partner: p, observed };
   };
 
   test("flag off: no call, and the binding item is not among the seats", async () => {
@@ -613,6 +621,55 @@ describe("the reader in the engine (config.askReader)", () => {
     expect(later.find((x) => x.reason.startsWith("reader:"))).toBeDefined();
   });
 
+  // The push read waits `readerPushWaitMs`, not the explicit ask's `askReaderWaitMs`: a reading that lands after the
+  // ask's wait but within the caller's is queued, not paid for and dropped. It is queued only while its session is
+  // open and its request is still the session's latest.
+  const PUSH_SLOW = { askReader: true, readerPush: true, askReaderWaitMs: 100, readerPushWaitMs: 3_000 };
+  const ref = { tenantId: "t", userId: "u1", sessionId: "s1" };
+  const isReader = (x: { reason: string }) => x.reason.startsWith("reader:");
+  const slowReader = () => new ScriptedReader(flags("mail:hold"), { delayMs: 300 });
+
+  test("readerPush: a reading slower than askReaderWaitMs lands within the observe's wait and is queued", async () => {
+    const slow = slowReader();
+    const r = await run(PUSH_SLOW, { asks: 0, maker: slow, waitMs: 3_000 });
+    expect(slow.calls.length).toBe(1);
+    expect(r.observed!.pending).toBe(true);
+    expect(r.reports.map((x) => x.outcome)).toEqual(["read"]);
+    expect(r.partner.takePending(ref).find(isReader)).toBeDefined();
+  });
+
+  test("readerPush: a reading that lands after its session closed is not queued", async () => {
+    const slow = slowReader();
+    const r = await run(PUSH_SLOW, { asks: 0, maker: slow, waitMs: 0 });
+    expect(r.observed!.pending).toBe(true);
+    // The close comes while the call is in flight (past the explicit ask's 100 ms wait, before the 300 ms reading).
+    await Bun.sleep(150);
+    await r.partner.observe({ ...ref, at: NOW, kind: "session_end" } as AgentEvent);
+    await Bun.sleep(600);
+    expect(slow.calls.length).toBe(1);
+    expect(r.partner.takePending(ref).find(isReader)).toBeUndefined();
+  });
+
+  test("readerPush: a reading that lands after a newer user message is not queued for the old request", async () => {
+    const slow = slowReader();
+    const r = await run(PUSH_SLOW, { asks: 0, maker: slow, waitMs: 0 });
+    // Not an action, so it starts no push of its own: only the first request's reading is in flight.
+    await Bun.sleep(150);
+    const next = { ...ref, at: NOW, kind: "user_message", text: "thanks, what time is it there?" } as AgentEvent;
+    await r.partner.observe(next);
+    await Bun.sleep(600);
+    expect(slow.calls.length).toBe(1);
+    expect(r.reports.map((x) => x.outcome)).toEqual(["read"]);
+    expect(r.partner.takePending(ref).find(isReader)).toBeUndefined();
+    // Control: the agent's own events after the request (a tool call) do not make the request stale.
+    const kept = await run(PUSH_SLOW, { asks: 0, maker: slowReader(), waitMs: 0 });
+    await kept.partner.observe({ ...ref, at: NOW, kind: "tool_call", tool: "calendar.list", input: {} } as AgentEvent);
+    // Isolation: a user message in another session of the same user does not make this session's request stale.
+    await kept.partner.observe({ ...next, sessionId: "s2" } as AgentEvent);
+    await Bun.sleep(600);
+    expect(kept.partner.takePending(ref).find(isReader)).toBeDefined();
+  });
+
   test("askReaderClear: a read pool with nothing binding says so in fixed words", async () => {
     const { answers } = await run({ askReader: true, askReaderClear: true }, { maker: new ScriptedReader(() => []) });
     expect(answers.u1![0]!.answer).toContain("Checked the 8 items found most related: none reads as blocking");
@@ -677,6 +734,73 @@ describe("the reader in the engine (config.askReader)", () => {
     expect(reader.stats.calls).toBe(1);
     expect(traces.reduce((n, t) => n + t.modelCalls, 0)).toBe(1);
     expect(traces.find((t) => t.decision === "reader-push")!.modelCalls).toBe(1);
+  });
+
+  // A late call (finding cost-late-reader-call-untraced): the reader books it when it lands, and so must the traces.
+  const LATE = { askReader: true, askReaderWaitMs: 100 };
+  const lateReader = (opts: { ignoreAbort?: boolean } = {}) =>
+    new ScriptedReader(flags("mail:hold"), { delayMs: 400, ...opts });
+  const sums = (traces: Trace[]) => ({
+    costUsd: traces.reduce((n, t) => n + t.costUsd, 0),
+    modelCalls: traces.reduce((n, t) => n + t.modelCalls, 0),
+  });
+
+  test("an explicit ask's late reader call is traced when it lands: the traces sum to the reader's stats", async () => {
+    const { answers, traces, reader } = await run(LATE, { maker: lateReader() });
+    // The ask itself made no call it can report: usedModel false and no cost; nothing is traced as late yet.
+    expect(answers.u1![0]!.usedModel).toBe(false);
+    expect(answers.u1![0]!.costUsd).toBe(0);
+    expect(traces.find((t) => t.decision === "reader-late")).toBeUndefined();
+    await Bun.sleep(600);
+    expect(reader.stats.calls).toBe(1);
+    expect(reader.stats.costUsd).toBeCloseTo(0.0002, 10);
+    const sum = sums(traces);
+    expect(sum.costUsd).toBeCloseTo(reader.stats.costUsd, 10);
+    expect(sum.modelCalls).toBe(reader.stats.calls);
+    const late = traces.filter((t) => t.decision === "reader-late");
+    expect(late.length).toBe(1);
+    expect(late[0]).toMatchObject({ event: "ask", sourceCalls: 0, modelCalls: 1, readerCalls: 1, itemIds: [] });
+    expect(late[0]!.costUsd).toBeCloseTo(0.0002, 10);
+    expect(late[0]!.readerCostUsd).toBeCloseTo(0.0002, 10);
+    const asked = traces.find((t) => t.decision === "answer")!;
+    expect([asked.modelCalls, asked.readerCalls, asked.costUsd]).toEqual([0, 0, 0]);
+  });
+
+  test("readerPush with a late explicit ask: the traces sum to the reader's stats, the call counted once", async () => {
+    // The observe waits 0, so the ask joins the push's 400 ms call and stops waiting at 100 ms; the push's trace
+    // carries the call, and the joined ask adds no late trace of its own.
+    for (const waitMs of [0, 1_000]) {
+      const { traces, reader } = await run({ ...LATE, readerPush: true }, { maker: lateReader(), waitMs });
+      await Bun.sleep(600);
+      expect(reader.stats.calls).toBe(1);
+      const sum = sums(traces);
+      expect(sum.costUsd).toBeCloseTo(reader.stats.costUsd, 10);
+      expect(sum.modelCalls).toBe(reader.stats.calls);
+      expect(traces.filter((t) => t.decision === "reader-late").length).toBe(0);
+    }
+  });
+
+  test("readerPush: a push read past askReaderWaitMs is traced as reader-push with its cost and one reader call", async () => {
+    const { traces, reader } = await run({ ...LATE, readerPush: true }, { asks: 0, maker: lateReader() });
+    await Bun.sleep(600);
+    const pushed = traces.filter((t) => t.decision === "reader-push");
+    expect(pushed.length).toBe(1);
+    expect(pushed[0]!.costUsd).toBeGreaterThan(0);
+    expect(pushed[0]!.readerCalls).toBe(1);
+    expect(pushed[0]!.costUsd).toBeCloseTo(reader.stats.costUsd, 10);
+  });
+
+  test("a late call that lands after its session closed is still traced: it was paid for", async () => {
+    const { traces, reader, partner } = await run(LATE, { maker: lateReader({ ignoreAbort: true }) });
+    await partner.observe({
+      ...{ tenantId: "t", userId: "u1", sessionId: "s1" },
+      at: NOW,
+      kind: "session_end",
+    } as AgentEvent);
+    await Bun.sleep(600);
+    expect(reader.stats.costUsd).toBeCloseTo(0.0002, 10);
+    expect(sums(traces).costUsd).toBeCloseTo(reader.stats.costUsd, 10);
+    expect(traces.filter((t) => t.decision === "reader-late").length).toBe(1);
   });
 
   test("readerPush: the traces' source calls are the calls the connector received", async () => {

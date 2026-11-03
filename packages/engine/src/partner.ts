@@ -250,6 +250,11 @@ interface Session {
   /** Tenant, user and session: the only key a session's state is ever looked up by. */
   key: string;
   turn: number;
+  /**
+   * The user messages (not drafts) observed so far. A `readerPush` reading is queued only while its request is still
+   * the latest: the agent's own events move `turn` within one request, a new user message moves this.
+   */
+  requests: number;
   lastActive: number;
   window: string[];
   /**
@@ -688,7 +693,10 @@ export class ContextPartner {
   async observe(event: AgentEvent, options: { waitMs?: number } = {}): Promise<ObserveResult> {
     // `readerPush`: a request that acts is also read by the ask-time reader, as an ask of the engine's own; what it
     // flags is queued as a packet. The observe waits for it within its own wait, so an agent that never calls
-    // `ask_context` gets the reading before its first model request when it is ready in time.
+    // `ask_context` gets the reading before its first model request when it is ready in time. The push's own read is
+    // not cut at `askReaderWaitMs` (that bounds an explicit ask): a reading that lands later is still queued, while its
+    // session is open and its request is the session's latest (`internal.request`, set once `observeEvent` counts it).
+    const internal: { push: true; request?: number } = { push: true };
     const push =
       this.config.readerPush &&
       this.config.askReader &&
@@ -700,12 +708,15 @@ export class ContextPartner {
       (this.config.askReaderQuestions || isImperative(event.text, MORE_VERBS))
         ? // The question as an ask may carry it (`checkAsk`'s cap): the event's own cap is 100 times that, and the
           // ask redacts and tokenizes it before its first await, on the observe's critical path.
-          this.ask({ ...event, question: head(event.text, ASK_QUESTION_CHARS), maxItems: 5 }, { push: true }).catch(
+          this.ask({ ...event, question: head(event.text, ASK_QUESTION_CHARS), maxItems: 5 }, internal).catch(
             () => null,
           )
         : null;
     const t0 = performance.now();
-    const result = await this.observeEvent(event, options);
+    const observing = this.observeEvent(event, options);
+    // `observeEvent` counts the request before its first await, so the session's count now names this request.
+    if (push) internal.request = this.sessions.get(sessionKey(event))?.requests;
+    const result = await observing;
     if (!push) return result;
     let settled = false;
     void push.then(() => (settled = true));
@@ -747,6 +758,7 @@ export class ContextPartner {
     // The user is active: their sources are synced (and polled) while they are (D57). O(1), no I/O.
     this.sync?.track(s.scope, this.now());
     s.turn++;
+    if (event.kind === "user_message") s.requests++;
     const prep = spans?.open("observe.prep", root!.id);
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const text = sanitizeForStore(head(eventText(event), this.config.maxEventChars));
@@ -1195,7 +1207,7 @@ export class ContextPartner {
     }
   }
 
-  async ask(request: AskRequest, internal: { push?: boolean } = {}): Promise<AskResponse> {
+  async ask(request: AskRequest, internal: { push?: boolean; request?: number } = {}): Promise<AskResponse> {
     const t0 = performance.now();
     const spans = this.spans;
     const root = spans?.open("ask", 0, { async: true });
@@ -1329,9 +1341,18 @@ export class ContextPartner {
       chosen = fused.slice(0, Math.min(limit, this.config.askContextItems));
     }
     // `askReader` (D95): one budgeted model call reads the widened pool; the items it says bind lead, with its bearing.
+    // An explicit ask waits `askReaderWaitMs` for it; the push waits for the reading itself (the observe that started
+    // it stops waiting at `readerPushWaitMs`), bounded by the reader's call and the session's close.
     const reading =
       this.config.askReader && this.deps.reader
-        ? await this.readAsk(s, cue, [...order, ...scored], chosen, limit)
+        ? await this.readAsk(
+            s,
+            cue,
+            [...order, ...scored],
+            chosen,
+            limit,
+            internal.push ? Infinity : this.config.askReaderWaitMs,
+          )
         : null;
     if (reading) chosen = reading.chosen;
     // `readerPush`: the ask was the engine's own, for the user's request. What the reader flagged goes to the agent as
@@ -1343,8 +1364,10 @@ export class ContextPartner {
         ? chosen.filter((x) => reading.notes.has(x.item.id) && pushes.has(reading.kinds.get(x.item.id) ?? ""))
         : [];
       const fresh = flagged.filter((x) => s.ledger.isFresh(x.item.id, s.turn));
+      // A reading that lands after a newer user message answers a request the agent has moved past: not queued.
+      const latest = internal.request === undefined || internal.request === s.requests;
       const injection =
-        fresh.length > 0 && !s.closed
+        fresh.length > 0 && !s.closed && latest
           ? this.config.readerPushNotes
             ? this.deliver(s, fresh, "proactive", `reader:${cue.id}`, cue, undefined, undefined, reading!.notes)
             : this.deliver(s, fresh, "proactive", `reader:${cue.id}`, cue)
@@ -1546,7 +1569,9 @@ export class ContextPartner {
    * `askReader` (D95, `reader.ts`): the reader's verdict on an ask about an action (or any ask, with
    * `askReaderQuestions`), over the first `askReaderPool` distinct candidates of `ranked` (the ask's pool in its order,
    * then the rest it scored). The items it says bind lead the answer, at most `limit`, the usual `chosen` fill what is
-   * left. Null when the reader is not asked; `read` false when it gave no verdict in time (fail open: `chosen` as is).
+   * left. Null when the reader is not asked; `read` false when it gave no verdict within `waitMs` (fail open: `chosen`
+   * as is; Infinity waits for the verdict, with no timer). A late call reports `called` false and no cost: the call
+   * this read started is traced as "reader-late" when it lands.
    */
   private async readAsk(
     s: Session,
@@ -1554,6 +1579,7 @@ export class ContextPartner {
     ranked: readonly Scored[],
     chosen: Scored[],
     limit: number,
+    waitMs: number,
   ): Promise<{
     chosen: Scored[];
     notes: Map<string, string>;
@@ -1661,21 +1687,52 @@ export class ContextPartner {
     // (an ask joining its push), makes none. Known before the read, for when this ask's wait runs out first.
     const starts = reader.peek(s.scope, s.key, input) === undefined && !reader.inFlight(s.scope, s.key, input);
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const late = new Promise<"late">((resolve) => {
-      timer = setTimeout(() => resolve("late"), Math.max(0, this.config.askReaderWaitMs));
-    });
+    const reading = reader.read(s.scope, s.key, input, s.abort.signal);
     let got: ReaderRead | "late";
     try {
-      got = await Promise.race([reader.read(s.scope, s.key, input, s.abort.signal), late]);
+      // An explicit ask stops waiting at `waitMs`; the push (Infinity) waits for the reading, with no timer left
+      // pending, bounded by the reader's call and the session's close.
+      got = Number.isFinite(waitMs)
+        ? await Promise.race([
+            reading,
+            new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), Math.max(0, waitMs)))),
+          ])
+        : await reading;
     } catch {
       got = { verdict: null, costUsd: 0, called: false, overBudget: false };
     } finally {
       clearTimeout(timer);
     }
-    // A late call's cost is booked by the reader (its stats and Budget) when it lands, not by this ask; the call is
-    // this ask's if it started it. A read the budget refused, a cached one and a joined one made no call.
+    // A late call is not this ask's to report (its `costUsd` 0, `called` false, so `AskResponse.usedModel` is false):
+    // when the call this ask started lands, it gets a "reader-late" trace of its own with its cost, so a harness that
+    // sums traces counts each call once. Emitted even if the session has closed by then: the call was paid for. A
+    // read that joined another's call (`starts` false) leaves that call to the read that started it. A read the budget
+    // refused, a cached one and a joined one made no call.
+    if (got === "late" && starts) {
+      const turn = s.turn;
+      void reading.then(
+        (r) => {
+          if (!r.called) return;
+          this.trace({
+            sessionId: s.id,
+            turn,
+            event: "ask",
+            decision: "reader-late",
+            reason: cue.id,
+            latencyMs: Math.round(performance.now() - t0),
+            sourceCalls: 0,
+            modelCalls: 1,
+            costUsd: r.costUsd,
+            readerCalls: 1,
+            readerCostUsd: r.costUsd,
+            itemIds: [],
+          });
+        },
+        () => undefined,
+      );
+    }
     const costUsd = got === "late" ? 0 : got.costUsd;
-    const called = got === "late" ? starts : got.called;
+    const called = got === "late" ? false : got.called;
     const unchanged = {
       chosen,
       notes: new Map<string, string>(),
@@ -2045,6 +2102,7 @@ export class ContextPartner {
       id: e.sessionId,
       key,
       turn: 0,
+      requests: 0,
       lastActive: now,
       window: [],
       agentHas: [],
