@@ -52,11 +52,13 @@ JSON file of engine settings (`packages/engine/src/config.ts`); an unknown key, 
 range or a setting that would do nothing stops startup with a message naming it (D103). Only settings the servers can
 run are accepted: the no-model flags, the judge and `askWithModel` (both under the per-session budget; see
 [docs/COST-MODEL.md](docs/COST-MODEL.md)). Settings that need a model role the servers do not wire (`cards`,
-`intent`, `constraintDigest`, `bridgeQuery`, `askReader`, `readerPush` and their numbers) are refused unless at
-their default, so the NEW family is not runnable from the shipped servers. ALL3 minus `cards` is: on the no-model
-train funnel it surfaces as many hidden facts as ALL3 (214 vs 214 of 384), but as many decoys too (210), and it
-lowers the no-model eval's precision from 1 to 0.91. [docs/profiles/](docs/profiles/README.md) has checked-in
-profiles with those numbers (D104); none is recommended yet (no held-out or live check), and the defaults stay the
+`intent`, `constraintDigest`, `bridgeQuery`, `askReader`, `readerPush`, `readerPushBehind` and their numbers) are
+refused unless at their default, so the NEW family is not runnable from the shipped servers. So are `sync` and every
+`sync*` setting (the servers build only static sources, which cannot be listed) and push sync (`syncPush*`: no server
+route relays source watches or change notices) (D106). ALL3 minus `cards` and `sync` is runnable: on the no-model
+train funnel it surfaces 193 of 384 hidden facts against ALL3's 214, with as many decoys (190), and it lowers the
+no-model eval's precision from 1 to 0.91. [docs/profiles/](docs/profiles/README.md) has checked-in profiles with
+their numbers (D104, D106); none is recommended yet (no held-out or live check), and the defaults stay the
 production choice.
 `EDEN_SOURCES_FILE` holds static documents only for now: MCP connectors there are not supported yet, since that file's
 sources are shared by every user; connect MCP sources through `McpSource` in an embedding's resolver.
