@@ -13,7 +13,7 @@ cards-enrich, bridge-enrich, presets, suites, free, spend` (`.ts`): check `git l
 |---|---|
 | `suites.ts` | `SUITES` by name, `parseSuites` (`all`, `heldout-all`, `train`), `UNRUN_BLIND` (left out of `all`) |
 | `hidden-context.ts`, `hidden-*.ts` | The suites: each plants one item (hidden) or a near-miss decoy (control) per template in a world |
-| `presets.ts` | `PRESETS`: H (D55), ALL3 (D80), ALL5 (D92), NEW (D96, recommended D98) |
+| `presets.ts` | `PRESETS`: H (D55), ALL3 (D80), ALL5 (D92), NEW (D96, recommended D98), NEWL (D99), NEW2; ALL3B and NEWB (+ `syncPollBehind`, D72's open run) |
 | `hidden-funnel.ts` | The no-model funnel: each task through Eden alone; returned/cached/delivered, decoys, calls, ms; `--ask`, `--cards`, `--intent`, `--bridge`, `--reader`, `--timeline`, `--json` |
 | `funnel.ts` | `bun run funnel`: the funnel with a preset, replayed cards and `--ask`, and the funnel score; refuses held-out suites without `--blind` |
 | `pi-ab.ts`, `pi-conditions.ts`, `pi-timeline.ts`, `pi-ab-report.ts` | The live A/B on the Pi harness (the standard agent): conditions `none,tools,eden,both[-judge][~variant][+flag][@w<ms>]`, per-task timelines, report |
@@ -55,6 +55,11 @@ Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-b
 - NEW needs `--cards`, `--intent` (requests replayed) and a reader model; the harnesses wait 3,000 ms on the first
   observe (`@w<ms>` changes it; 1 s lost 7.6–18.1 points, D98).
 - Pi's `both` arm gets no `ask_context` (only `eden` does); Hermes gets both.
+- **pi-ab and hermes-ab default to `--time-scale 1`** (since 2026-11-03): sources take their profiles' assumed
+  latency, so the "Eden on the critical path" column includes the on-demand sync poll. Earlier results (every
+  haiku-phase3 row) ran at 0, connectors instant; compare like with like. Use 0 only for a stated quality-only rerun.
+  In the funnel the poll was about 91% of ALL3's critical path at `--time 1`; ALL3B cut ms/task 481.8 to 26.5 on
+  train1–6 seeds 41–42 with an empty task-by-task diff (docs/research/haiku-phase3.md, note of 2026-11-03).
 - `--cards FILE` is only read; new cards go to `--cards-out` (default `<out>.cards.jsonl`): name it in later runs.
 - Hermes needs a hermes-agent checkout with `<src>/.venv` (`uv sync --frozen --no-install-project`); the first task
   of each stream pays worker start-up (exclude it from wall times).

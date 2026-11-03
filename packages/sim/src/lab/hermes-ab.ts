@@ -30,7 +30,10 @@
  *     [--config ALL3] [--variant-config '{"A5":{…}}'] [--model z-ai/glm-5.3-flash] [--grader …] [--budget 0.6]
  *     [--card-model m] [--cards FILE [--cards-out FILE]] [--intent FILE] [--bridge FILE] [--bridge-model m]
  *     [--allow-logging] [--rpm 18] [--max-requests N] [--limit n] [--templates a,b] [--concurrency 4]
- *     [--max-iterations 6] [--out hermes-ab.json] [--timeline dir] [--time-scale 0] [--dump FILE] [--dry]
+ *     [--max-iterations 6] [--out hermes-ab.json] [--timeline dir] [--time-scale 1] [--dump FILE] [--dry]
+ *
+ * `--time-scale` (default 1) gives the sim sources their profiles' assumed latency, as pi-ab does (its header says why,
+ * and when 0, instant connectors, is still acceptable: a stated quality-only rerun). Runs before 2026-11-03 used 0.
  *
  * `--hermes-src` is a hermes-agent checkout with its dependencies in `<src>/.venv` (`uv sync --frozen
  * --no-install-project`); the run records its commit.
@@ -115,7 +118,7 @@ const CONDITION_NAMES = opt("conditions", "hermes,hermes+eden").split(",");
 const OUT = opt("out", "hermes-ab.json");
 const TIMELINE = opt("timeline", `${OUT.replace(/\.json$/, "")}.timeline`);
 const HOMES = `${OUT.replace(/\.json$/, "")}.homes`;
-const TIME_SCALE = Number(opt("time-scale", "0"));
+const TIME_SCALE = Number(opt("time-scale", "1"));
 const LIMITS = { maxTasks: Number(opt("tasks", "30")), maxOffworld: Number(opt("offworld", "5")) };
 const LIMIT = Number(opt("limit", "0"));
 const TEMPLATES = opt("templates", "") ? new Set(opt("templates", "").split(",")) : null;
@@ -774,7 +777,9 @@ const worlds = SEEDS.flatMap((seed) =>
 console.error(
   `hermes-ab: ${worlds.reduce((n, w) => n + w.tasks.length, 0)} tasks × ${CONDITIONS.length} conditions ` +
     `(${CONDITIONS.map((c) => c.name).join(",")}), hermes ${HERMES_COMMIT}, model ${MODEL}, grader ${GRADER}, ` +
-    `cap $${BUDGET}, suites ${SUITE_LIST.join(",")}, config ${CONFIG_ARG in PRESETS ? CONFIG_ARG : "custom"}` +
+    `cap $${BUDGET}, suites ${SUITE_LIST.join(",")}, ` +
+    `time-scale ${TIME_SCALE}${TIME_SCALE === 0 ? " (connectors at 0 ms)" : ""}, ` +
+    `config ${CONFIG_ARG in PRESETS ? CONFIG_ARG : "custom"}` +
     (Object.keys(CONFIG_VARIANTS).length ? `, variants ${JSON.stringify(CONFIG_VARIANTS)}` : "") +
     (CARDS_FILE ? `, cards ${CARDS_FILE} (${diskCards!.cards.size} replayed; new → ${CARDS_OUT})` : "") +
     (ACCESS.allowLogging ? ", ALLOW-LOGGING (lab only)" : "") +
@@ -845,8 +850,9 @@ writeFileSync(
 const ungraded = results.filter((r) => !r.error && !r.facts && tasks.find((t) => t.id === r.task)!.must.length).length;
 console.error(
   `spent $${spent.toFixed(4)} (agent $${spend.agent.toFixed(4)}, eden $${spend.eden.toFixed(4)}, grader ` +
-    `$${spend.grader.toFixed(4)}); ${results.length} runs, ${ungraded} ungraded → ${OUT}, timeline ${TIMELINE}; ` +
-    `${PACER.sent} requests (${PACER.retried} retried, ${JSON.stringify(PACER.statuses)}), ${orphanRequests} orphan` +
+    `$${spend.grader.toFixed(4)}); ${results.length} runs, ${ungraded} ungraded → ${OUT}, timeline ${TIMELINE}, ` +
+    `time-scale ${TIME_SCALE}; ${PACER.sent} requests (${PACER.retried} retried, ${JSON.stringify(PACER.statuses)}), ` +
+    `${orphanRequests} orphan` +
     (capStopped || PACER.refused ? `; PARTIAL: request cap reached (${capStopped} streams stopped early)` : "") +
     (stoppedStreams ? `; PARTIAL: ${stoppedStreams} streams stopped on a failure (logged above)` : ""),
 );
